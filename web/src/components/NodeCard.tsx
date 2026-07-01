@@ -609,6 +609,29 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
           <Repeat size={13} />
         </div>
       )}
+      {/* Config errors read as an inline footer on the card (#13) — the same
+          flush CTA-bar shape as the "Connect" needs-setup banner, in danger
+          red. The pin also recolours red (missingByPort), but that alone can't
+          say WHAT is wrong; this names it in words, always-visible instead of
+          only on pin hover. It also surfaces errors with no pin at all (a
+          required literal, a for_each with an unwired body). */}
+      {d.configErrors?.length ? (
+        <div
+          className="dz-node-setup dz-node-issues"
+          title={d.configErrors.map((e) => e.message).join("\n")}
+          aria-label={i18n.t("nodeCard.configErrorAria", { count: d.configErrors.length })}
+        >
+          <AlertTriangle size={14} className="dz-node-setup-logo" />
+          <span className="dz-node-setup-label">
+            {d.configErrors.length > 1
+              ? i18n.t("nodeCard.configErrorMore", {
+                  message: d.configErrors[0].message,
+                  count: d.configErrors.length - 1,
+                })
+              : d.configErrors[0].message}
+          </span>
+        </div>
+      ) : null}
       {d.setupNeeded &&
         (() => {
           const name = d.setupNeeded.integration;

@@ -4935,6 +4935,28 @@ button.warning:hover:not(:disabled) {
   background: var(--btn-hover);
   text-decoration: none;
 }
+/* Config-error footer: same flush CTA-bar shape as needs-setup, but danger
+   red and informational (not a link) — it names the missing config in words,
+   complementing the red pins. No hover/pointer since it doesn't navigate. */
+.dz-node-issues {
+  background: var(--danger);
+  cursor: default;
+}
+.dz-node-issues:hover {
+  background: var(--danger);
+}
+/* When both a config-error and a needs-setup bar show on one card, stack them
+   flush: the upper (issues) bar drops its rounded bottom + bottom margin, and
+   the setup bar below closes the gap with a hairline divider. */
+.dz-node-issues:not(:last-child) {
+  margin-bottom: 0;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.dz-node-issues + .dz-node-setup {
+  margin-top: 0;
+  border-top: 1px solid var(--surface);
+}
 /* Locked variant: the user can't connect apps (no secret:write). Non-actionable
    "ask an admin" note — muted, no link affordance, default cursor. */
 .dz-node-setup-locked {
