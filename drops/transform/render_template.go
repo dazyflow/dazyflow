@@ -20,7 +20,7 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "render_template",
 			Version:     "1.0",
-			Label:       "Render template",
+			Label:       "Fill a template",
 			Subtitle:    "Fill an HTML template",
 			Color:       "#a78bfa",
 			Icon:        "code",

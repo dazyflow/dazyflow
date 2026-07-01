@@ -18,7 +18,7 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "render_text",
 			Version:     "1.0",
-			Label:       "Render text",
+			Label:       "Make text",
 			Subtitle:    "Make text from items",
 			Icon:        "text",
 			Category:    "transformation",

@@ -19,7 +19,7 @@ func init() {
 		Manifest: core.Manifest{
 			ID:          "render_table",
 			Version:     "1.0",
-			Label:       "Render table",
+			Label:       "Make a table",
 			Subtitle:    "Make an HTML table from rows",
 			Icon:        "table",
 			Category:    "transformation",
