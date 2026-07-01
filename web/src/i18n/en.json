@@ -1732,7 +1732,9 @@
   "renderTableColumns": {
     "title": "Column order",
     "drag": "Drag to reorder",
-    "help": "Drag the handle to reorder columns; swipe a column sideways to hide it. The table shows them left to right in this order.",
+    "rename": "Column name",
+    "addPlaceholder": "Add a column…",
+    "help": "Drag the handle to reorder, tap a column to rename it, or swipe it sideways to remove. The table shows columns left to right in this order.",
     "hiddenTitle": "Hidden columns",
     "restore": "Tap to show this column again",
     "delete": "Delete",

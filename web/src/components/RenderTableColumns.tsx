@@ -66,22 +66,20 @@ const SWIPE_DELETE_PX = 72;
 // Movement (px) before a row-body gesture commits to an axis.
 const AXIS_LOCK_PX = 8;
 
-// RenderTableColumns is the reorder / show-hide editor for a render_table
-// step's `columns` param. The table renders the shown columns left-to-right in
-// this order; a hidden column is simply omitted from `columns` (the drop
-// treats an explicit list as "include exactly these, in order").
+// RenderTableColumns is the full column editor for a render_table step's
+// `columns` param — it replaces the raw array field entirely (that param is
+// omitted from the Inspector's Advanced section), so everything happens here.
 //
-// One list holds everything: shown columns on top (drag the grip to reorder,
-// swipe a row aside to hide it), then any hidden columns below (dimmed, tap to
-// bring back). The column set is discovered, not typed — real columns from the
-// step's last run (exact casing) plus the upstream producer's declared fields.
-// Once a set is curated it's authoritative, so a hidden column stays hidden
-// but is always one tap from returning.
+// One list holds everything: shown columns on top — drag the grip to reorder,
+// tap a column to rename it, swipe it aside to hide it — then a row to add a
+// new column, then any hidden columns (dimmed, tap to bring back). Columns are
+// seeded from discovery (the step's last run, plus the upstream producer's
+// declared fields) but fully editable, so a table can be built by hand before
+// the step has ever run.
 //
-// Drag and swipe are hand-rolled on pointer events (not a DnD library): the
-// dragged row tracks the finger 1:1 by construction, grip-drag is locked to
-// vertical, and the row body owns the horizontal swipe — so the two gestures
-// never fight and there's no fallback-clone speed drift.
+// Drag and swipe are hand-rolled on pointer events: the dragged row tracks the
+// finger 1:1, grip-drag is locked to vertical, and the row body owns the
+// horizontal swipe — so the gestures never fight and there's no clone drift.
 export function RenderTableColumns({
   params,
   onApply,
@@ -103,8 +101,12 @@ export function RenderTableColumns({
     null,
   );
   const [swipe, setSwipe] = useState<{ col: string; dx: number } | null>(null);
-  // True during either gesture — guards the resync effect so an async column
-  // fetch resolving mid-gesture can't yank the list out from under the finger.
+  // Inline rename: the column being edited and the working text.
+  const [editing, setEditing] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [addValue, setAddValue] = useState("");
+  // True during any live interaction (gesture or rename) — guards the resync
+  // effect so an async column fetch can't yank the list mid-edit.
   const busy = useRef(false);
   const listRef = useRef<HTMLUListElement | null>(null);
 
@@ -151,7 +153,7 @@ export function RenderTableColumns({
   const paramCols = useMemo(() => asStringList(params.columns), [params.columns]);
   const discovered = useMemo(() => uniq(runCols, schemaCols), [runCols, schemaCols]);
   // Shown columns: the saved set if the user has curated one (authoritative, so
-  // a hidden column stays gone), else every discovered column in data order.
+  // hidden/renamed columns stick), else every discovered column in data order.
   const shown = useMemo(
     () => (paramCols.length > 0 ? paramCols : discovered),
     [paramCols, discovered],
@@ -161,7 +163,7 @@ export function RenderTableColumns({
   const hidden = useMemo(() => discovered.filter((c) => !shown.includes(c)), [discovered, shown]);
 
   // Mirror the shown list into local state so a drag can reorder live; resync
-  // whenever the underlying set changes and no gesture is in flight.
+  // whenever the underlying set changes and no interaction is in flight.
   useEffect(() => {
     if (!busy.current) setOrder(shown);
   }, [shown]);
@@ -188,6 +190,35 @@ export function RenderTableColumns({
     persist(next);
   };
 
+  const addColumn = () => {
+    const name = addValue.trim();
+    setAddValue("");
+    if (!name || order.includes(name)) return; // blank or already shown
+    const next = [...order, name];
+    setOrder(next);
+    persist(next);
+  };
+
+  const startEdit = (col: string) => {
+    busy.current = true; // don't let a resync reshuffle the list while typing
+    setEditing(col);
+    setEditValue(col);
+  };
+  const cancelEdit = () => {
+    busy.current = false;
+    setEditing(null);
+  };
+  const commitEdit = () => {
+    const col = editing;
+    const name = editValue.trim();
+    busy.current = false;
+    setEditing(null);
+    if (!col || !name || name === col || order.includes(name)) return; // no-op / dup
+    const next = order.map((c) => (c === col ? name : c));
+    setOrder(next);
+    persist(next);
+  };
+
   // --- Reorder drag (grip only; vertical) ---------------------------------
   // rowStep is the on-screen distance between adjacent rows (height + gap),
   // measured at drag start; the dragged row tracks the finger by `dy`, its
@@ -199,8 +230,7 @@ export function RenderTableColumns({
     const kids = listRef.current?.children;
     if (!kids || kids.length < 1) return;
     if (kids.length >= 2) {
-      stepRef.current =
-        kids[1].getBoundingClientRect().top - kids[0].getBoundingClientRect().top;
+      stepRef.current = kids[1].getBoundingClientRect().top - kids[0].getBoundingClientRect().top;
     } else {
       stepRef.current = kids[0].getBoundingClientRect().height + 4;
     }
@@ -240,13 +270,15 @@ export function RenderTableColumns({
     });
   };
 
-  // --- Swipe-to-hide (row body; horizontal) -------------------------------
-  const swipeRef = useRef<{ col: string; x: number; y: number; axis: "" | "x" | "y" } | null>(null);
+  // --- Swipe-to-hide + tap-to-rename (row body) ---------------------------
+  const swipeRef = useRef<{ col: string; x: number; y: number; axis: "" | "x" | "y"; dx: number } | null>(
+    null,
+  );
 
   const onRowDown = (e: React.PointerEvent, col: string) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
     if ((e.target as HTMLElement).closest(".rtc-grip")) return; // grip = reorder
-    swipeRef.current = { col, x: e.clientX, y: e.clientY, axis: "" };
+    swipeRef.current = { col, x: e.clientX, y: e.clientY, axis: "", dx: 0 };
   };
 
   const onRowMove = (e: React.PointerEvent, col: string) => {
@@ -265,6 +297,7 @@ export function RenderTableColumns({
       (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
     }
     e.preventDefault();
+    s.dx = dx;
     setSwipe({ col, dx });
   };
 
@@ -272,40 +305,61 @@ export function RenderTableColumns({
     const s = swipeRef.current;
     swipeRef.current = null;
     busy.current = false;
-    setSwipe((sw) => {
-      const dx = sw?.col === col ? sw.dx : 0;
-      if (s?.axis === "x" && Math.abs(dx) > SWIPE_DELETE_PX) hide(col);
-      return null;
-    });
+    setSwipe(null);
+    if (!s || s.col !== col) return;
+    if (s.axis === "x" && Math.abs(s.dx) > SWIPE_DELETE_PX) hide(col);
+    else if (s.axis === "") startEdit(col); // a tap (no drag) renames the column
   };
 
-  if (order.length === 0 && hidden.length === 0) {
-    return (
-      <div className="rtc">
-        <div className="rtc-label">{t("renderTableColumns.title")}</div>
-        <div className="rtc-hint">{t("renderTableColumns.empty")}</div>
-      </div>
-    );
-  }
-
   const step = stepRef.current || 40;
+  const isEmpty = order.length === 0 && hidden.length === 0;
 
   return (
     <div className="rtc">
       <div className="rtc-label">{t("renderTableColumns.title")}</div>
+      {isEmpty && <div className="rtc-hint">{t("renderTableColumns.empty")}</div>}
       <ul className="rtc-list" ref={listRef}>
         {order.map((col, i) => {
+          const isEditing = editing === col;
           // Reorder transforms: the lifted row follows the finger; the rows
           // between its start and target shift one step to open the gap.
           let ty = 0;
           const lifted = drag?.col === col;
-          if (drag) {
+          if (drag && !isEditing) {
             if (lifted) ty = drag.dy;
             else if (drag.from < drag.to && i > drag.from && i <= drag.to) ty = -step;
             else if (drag.from > drag.to && i >= drag.to && i < drag.from) ty = step;
           }
           const dx = swipe?.col === col ? swipe.dx : 0;
           const swiping = dx !== 0;
+          if (isEditing) {
+            return (
+              <li key={col} className="rtc-item">
+                <div className="rtc-fg rtc-editing">
+                  <span className="rtc-grip rtc-grip-off" aria-hidden="true">
+                    <GripIcon />
+                  </span>
+                  {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
+                  <input
+                    className="rtc-edit-input"
+                    autoFocus
+                    value={editValue}
+                    aria-label={t("renderTableColumns.rename")}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        commitEdit();
+                      } else if (e.key === "Escape") {
+                        cancelEdit();
+                      }
+                    }}
+                    onBlur={commitEdit}
+                  />
+                </div>
+              </li>
+            );
+          }
           return (
             <li
               key={col}
@@ -349,6 +403,28 @@ export function RenderTableColumns({
             </li>
           );
         })}
+        {/* Add a new column by name — works even before the step has run. */}
+        <li className="rtc-item rtc-add-row">
+          <div className="rtc-fg">
+            <span className="rtc-restore" aria-hidden="true">
+              <Plus size={14} />
+            </span>
+            <input
+              className="rtc-edit-input"
+              placeholder={t("renderTableColumns.addPlaceholder")}
+              value={addValue}
+              aria-label={t("renderTableColumns.addPlaceholder")}
+              onChange={(e) => setAddValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addColumn();
+                }
+              }}
+              onBlur={addColumn}
+            />
+          </div>
+        </li>
         {hidden.length > 0 && (
           <li className="rtc-divider" aria-hidden="true">
             {t("renderTableColumns.hiddenTitle")}

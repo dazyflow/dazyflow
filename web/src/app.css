@@ -10182,6 +10182,38 @@ a.pa-card:hover {
   cursor: pointer;
 }
 .rtc-item.rtc-hidden-row .rtc-fg:hover .rtc-restore { color: var(--accent); }
+/* Inline rename + add-column input: reads as the row's text until focused,
+   then shows a field. */
+.rtc-edit-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 1px 4px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+.rtc-edit-input:focus {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+.rtc-edit-input::placeholder { color: var(--faint); }
+.rtc-fg.rtc-editing { border-color: var(--border-strong); }
+/* Grip is shown but inert while a row is being renamed (keeps the layout from
+   jumping). */
+.rtc-grip-off { opacity: 0.35; pointer-events: none; }
+/* Add-column row: a dashed, muted affordance at the end of the shown list. */
+.rtc-item.rtc-add-row .rtc-fg {
+  border-style: dashed;
+  background: transparent;
+}
+.rtc-item.rtc-add-row .rtc-restore { color: var(--muted); }
+.rtc-item.rtc-add-row .rtc-fg:focus-within {
+  border-color: var(--accent);
+}
+.rtc-item.rtc-add-row .rtc-fg:focus-within .rtc-restore { color: var(--accent); }
 .rtc-hint, .rtc-help {
   font-size: var(--text-xs);
   color: var(--muted);

@@ -609,6 +609,11 @@ export function Inspector({
               workspace={workspace}
               accountPicker={accountPicker}
               wiredKeys={wiredPorts}
+              // render_table's `columns` is fully managed by the drag/add/edit
+              // column editor above — don't also surface it as a raw array
+              // field (which is the only thing in its Advanced section, so the
+              // section disappears entirely).
+              omitKeys={d.moduleID === "render_table" ? ["columns"] : undefined}
               resourceLabels={resourceLabels}
               wiredSources={wiredSources}
               references={refCtx}

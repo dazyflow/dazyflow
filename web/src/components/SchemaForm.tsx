@@ -83,6 +83,11 @@ type Props = {
   // is overridden by the wire, so its editor (e.g. the spreadsheet picker)
   // renders disabled — the wire decides the value.
   wiredKeys?: string[];
+  // omitKeys lists param keys the form must not render at all, because a
+  // dedicated editor above the form owns them (e.g. render_table's `columns`,
+  // handled by the drag/add/edit column editor — so it never also appears as a
+  // raw array field in the Advanced disclosure).
+  omitKeys?: string[];
   // resourceLabels maps a picker key → its resolved resource name (traced
   // from upstream when wired), so a disabled picker can name the resource.
   resourceLabels?: Record<string, string>;
@@ -142,6 +147,7 @@ export function SchemaForm({
   accountPicker,
   references,
   wiredKeys,
+  omitKeys,
   resourceLabels,
   wiredSources,
   extraReferenceItems,
@@ -151,6 +157,7 @@ export function SchemaForm({
 }: Props) {
   const { t } = useTranslation();
   const wired = new Set(wiredKeys ?? []);
+  const omit = new Set(omitKeys ?? []);
   const missing = new Set(missingKeys ?? []);
   const formCtx: FormCtx = { workspace, accountPicker, references, extraReferenceItems, tokenLabels, missingKeys: missing, wired, geoRunCoordinate };
   if (schema.type !== "object" || !schema.properties) {
@@ -191,7 +198,7 @@ export function SchemaForm({
   const basic: [string, JSONSchema][] = [];
   const advanced: [string, JSONSchema][] = [];
   for (const [key, propSchema] of Object.entries(props)) {
-    if (HIDDEN_FIELD_KEYS.has(key)) continue;
+    if (HIDDEN_FIELD_KEYS.has(key) || omit.has(key)) continue;
     if (isAdvancedField(key, propSchema, props)) advanced.push([key, propSchema]);
     else basic.push([key, propSchema]);
   }
