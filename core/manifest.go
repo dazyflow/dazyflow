@@ -59,9 +59,9 @@ const (
 // field is just the canonical / suggested one. Note is a short human
 // label the LLM can quote when asking the user.
 type ConnectionRequirement struct {
-	Kind string `json:"kind"`           // "oauth" | "secret"
-	Name string `json:"name"`           // provider ID OR recommended secret name
-	Note string `json:"note,omitempty"` // human-readable, e.g. "Anthropic API key"
+	Kind string `json:"kind" xml:"kind"`                     // "oauth" | "secret"
+	Name string `json:"name" xml:"name"`                     // provider ID OR recommended secret name
+	Note string `json:"note,omitempty" xml:"note,omitempty"` // human-readable, e.g. "Anthropic API key"
 }
 
 // ConnectionField is one input of a multi-field service connection — a
@@ -78,12 +78,12 @@ type ConnectionRequirement struct {
 // its auth shape: RequiresConnections for a single secret / OAuth
 // account, ConnectionFields for an endpoint-plus-credential bundle.
 type ConnectionField struct {
-	Key         string   `json:"key"`                   // param name the drop reads (e.g. "server", "token")
-	Label       string   `json:"label"`                 // human field label
-	Secret      bool     `json:"secret,omitempty"`      // mask + redact (token/password); false = plain (URL/host)
-	Required    bool     `json:"required,omitempty"`    // counts toward "fully connected"
-	Placeholder string   `json:"placeholder,omitempty"` // example value shown in the field
-	Options     []string `json:"options,omitempty"`     // when set, the field is an enum — UI renders a dropdown of these values plus a blank "default"
+	Key         string   `json:"key" xml:"key"`                                     // param name the drop reads (e.g. "server", "token")
+	Label       string   `json:"label" xml:"label"`                                 // human field label
+	Secret      bool     `json:"secret,omitempty" xml:"secret,omitempty"`           // mask + redact (token/password); false = plain (URL/host)
+	Required    bool     `json:"required,omitempty" xml:"required,omitempty"`       // counts toward "fully connected"
+	Placeholder string   `json:"placeholder,omitempty" xml:"placeholder,omitempty"` // example value shown in the field
+	Options     []string `json:"options,omitempty" xml:"options>option,omitempty"`  // when set, the field is an enum — UI renders a dropdown of these values plus a blank "default"
 }
 
 // ParamsExample is one worked params example for a drop. Title is the
@@ -92,26 +92,26 @@ type ConnectionField struct {
 // for non-obvious choices. The catalog API returns these verbatim so
 // an LLM can copy the shape and adjust.
 type ParamsExample struct {
-	Title  string          `json:"title"`
-	Params json.RawMessage `json:"params"`
-	Notes  string          `json:"notes,omitempty"`
+	Title  string          `json:"title" xml:"title"`
+	Params json.RawMessage `json:"params" xml:"params"`
+	Notes  string          `json:"notes,omitempty" xml:"notes,omitempty"`
 }
 
 type Port struct {
-	Port     string   `json:"port"`
-	MIME     []string `json:"mime"`
-	Label    string   `json:"label"`
-	Required bool     `json:"required"`
-	Variadic bool     `json:"variadic"`
-	Min      *int     `json:"min,omitempty"`
-	Max      *int     `json:"max,omitempty"`
+	Port     string   `json:"port" xml:"port"`
+	MIME     []string `json:"mime" xml:"mime>type"`
+	Label    string   `json:"label" xml:"label"`
+	Required bool     `json:"required" xml:"required"`
+	Variadic bool     `json:"variadic" xml:"variadic"`
+	Min      *int     `json:"min,omitempty" xml:"min,omitempty"`
+	Max      *int     `json:"max,omitempty" xml:"max,omitempty"`
 	// List marks a port that carries a LIST of records (an array of
 	// {column: value} objects) rather than a single value. Set on both
 	// outputs that emit a list (a trigger's new responses, a DB query's rows)
 	// and inputs that consume a list (for_each's items, an insert's rows).
 	// Drives the "you wired a list into a one-at-a-time step — wrap it in a
 	// For each loop" hint: a List output into a non-List input is the tell.
-	List bool `json:"list,omitempty"`
+	List bool `json:"list,omitempty" xml:"list,omitempty"`
 }
 
 // PortKind is the value kind a port carries in the simplified data model — the
@@ -174,22 +174,22 @@ func (p Port) Cardinality() Cardinality {
 }
 
 type Manifest struct {
-	ID      string `json:"id"`
-	Version string `json:"version"`
-	Label   string `json:"label"`
+	ID      string `json:"id" xml:"id"`
+	Version string `json:"version" xml:"version"`
+	Label   string `json:"label" xml:"label"`
 	// Subtitle is an optional short action line shown under the Label on the
 	// node card / inspector / palette — e.g. Label "Google Sheets" with
 	// Subtitle "Append rows". Lets several drops share a product name as their
 	// title and disambiguate by action. Empty → no subtitle (title only).
-	Subtitle       string          `json:"subtitle,omitempty"`
-	Color          string          `json:"color"`
-	ExecutionModel ExecutionModel  `json:"execution_model"`
-	ProcessModel   ProcessModel    `json:"process_model"`
-	Inputs         []Port          `json:"inputs"`
-	Outputs        []Port          `json:"outputs"`
-	ParamsSchema   json.RawMessage `json:"params_schema"`
-	Idempotent     bool            `json:"idempotent"`
-	RetryPolicy    RetryPolicy     `json:"retry_policy"`
+	Subtitle       string          `json:"subtitle,omitempty" xml:"subtitle,omitempty"`
+	Color          string          `json:"color" xml:"color"`
+	ExecutionModel ExecutionModel  `json:"execution_model" xml:"execution_model"`
+	ProcessModel   ProcessModel    `json:"process_model" xml:"process_model"`
+	Inputs         []Port          `json:"inputs" xml:"inputs>port"`
+	Outputs        []Port          `json:"outputs" xml:"outputs>port"`
+	ParamsSchema   json.RawMessage `json:"params_schema" xml:"params_schema"`
+	Idempotent     bool            `json:"idempotent" xml:"idempotent"`
+	RetryPolicy    RetryPolicy     `json:"retry_policy" xml:"retry_policy"`
 
 	// MaxRetries lets a module author override the worker-global retry
 	// cap (total attempts) for nodes running this module. Zero means
@@ -197,7 +197,7 @@ type Manifest struct {
 	// set it high ("tolerates 10"); a costly or one-shot module can set
 	// it to 1 (a single attempt, no retry). Only consulted when
 	// RetryPolicy already opts the module into retries.
-	MaxRetries int `json:"max_retries,omitempty"`
+	MaxRetries int `json:"max_retries,omitempty" xml:"max_retries,omitempty"`
 
 	// DedupeWrites opts a NON-idempotent external write (one whose upstream
 	// API has no idempotency key — Twilio SMS, Gmail send, Discord webhook,
@@ -220,9 +220,9 @@ type Manifest struct {
 	// DedupeWrites does not protect writes there — a body re-run can re-fire
 	// them. Keep non-idempotent sends at the top level (auto-fan covers the
 	// common "send to each of a list" case) rather than inside a loop body.
-	DedupeWrites bool `json:"dedupe_writes,omitempty"`
+	DedupeWrites bool `json:"dedupe_writes,omitempty" xml:"dedupe_writes,omitempty"`
 
-	CompatibleWith []string `json:"compatible_with"`
+	CompatibleWith []string `json:"compatible_with" xml:"compatible_with>id"`
 
 	// --- Discovery metadata (introduced for search + categorization) ---
 
@@ -238,7 +238,7 @@ type Manifest struct {
 	//   "system"         — internal / admin
 	// Empty is allowed but discouraged — the search API can't bucket
 	// a module without a category.
-	Category string `json:"category,omitempty"`
+	Category string `json:"category,omitempty" xml:"category,omitempty"`
 
 	// Provider names the org/vendor behind the module. Examples:
 	//   "internal"          — built-in
@@ -247,7 +247,7 @@ type Manifest struct {
 	//   "remote:<host>"     — customer-registered remote module
 	// This is metadata only — the daemon doesn't verify the claim.
 	// Real provider trust requires module signing (out of scope).
-	Provider string `json:"provider,omitempty"`
+	Provider string `json:"provider,omitempty" xml:"provider,omitempty"`
 
 	// Integration is the catalog grouping label — the vendor/service the
 	// node lives under in the palette UI (e.g. "Git", "ntfy",
@@ -255,11 +255,11 @@ type Manifest struct {
 	// surface together under one heading. Leave empty for standard-
 	// library modules (branch, merge, file_read, ...) that don't belong
 	// to a specific vendor; those fall back to Category-based grouping.
-	Integration string `json:"integration,omitempty"`
+	Integration string `json:"integration,omitempty" xml:"integration,omitempty"`
 
 	// Tags are free-form keywords for finer-grained discovery. Search
 	// filters match any tag (OR semantics within the tags slice).
-	Tags []string `json:"tags,omitempty"`
+	Tags []string `json:"tags,omitempty" xml:"tags>tag,omitempty"`
 
 	// SearchBoost nudges this drop's relevance for fuzzy/tag matches
 	// (not exact id/label hits). Default 0. Use it to break ties between
@@ -268,25 +268,25 @@ type Manifest struct {
 	// save-to-a-database default outranks the no-setup KV store, which
 	// matches the same terms. Negative values down-rank without dropping
 	// the match (floored to 1).
-	SearchBoost int `json:"search_boost,omitempty"`
+	SearchBoost int `json:"search_boost,omitempty" xml:"search_boost,omitempty"`
 
 	// Description is a longer human-readable description than Label.
 	// Used for tooltips and as a search target. Label is for chips/
 	// titles (short); Description can be 1–2 sentences.
-	Description string `json:"description,omitempty"`
+	Description string `json:"description,omitempty" xml:"description,omitempty"`
 
 	// Summary is a ~140-character LLM-friendly one-liner: "what does
 	// this drop do, in one sentence." Distinct from Description
 	// (paragraph) and Label (chip text). The catalog API surfaces
 	// this verbatim — keep it concrete and verb-led. Required at
 	// registration; the registry rejects manifests without one.
-	Summary string `json:"summary,omitempty"`
+	Summary string `json:"summary,omitempty" xml:"summary,omitempty"`
 
 	// Examples is at least one worked params example. An LLM
 	// composing a flow reads these to learn the shape; new
 	// integrations must ship with at least one. Authors write them;
 	// the API serves them verbatim. Required at registration.
-	Examples []ParamsExample `json:"examples,omitempty"`
+	Examples []ParamsExample `json:"examples,omitempty" xml:"examples>example,omitempty"`
 
 	// RequiresConnections lists the credentials this drop needs
 	// configured before it will run. Each entry is typed (`oauth` vs
@@ -294,21 +294,21 @@ type Manifest struct {
 	// user through an OAuth dance (start_connection) or ask them to
 	// paste an API key (set_secret) — without trying both. Empty for
 	// drops with no external auth (file IO, transforms, flow-control).
-	RequiresConnections []ConnectionRequirement `json:"requires_connections,omitempty"`
+	RequiresConnections []ConnectionRequirement `json:"requires_connections,omitempty" xml:"requires_connections>connection,omitempty"`
 
 	// ConnectionFields declares a multi-field service connection — the
 	// endpoint + credentials a tenant configures once (on the integration
 	// page) rather than on every node. At run time the engine injects any
 	// configured field into a node param the author left unset, so flows
 	// carry only per-use params. See ConnectionField.
-	ConnectionFields []ConnectionField `json:"connection_fields,omitempty"`
+	ConnectionFields []ConnectionField `json:"connection_fields,omitempty" xml:"connection_fields>field,omitempty"`
 
 	// ConnectionVerifiable reports whether the integration this drop belongs
 	// to has a registered live connection check (engine.ConnectionVerifier).
 	// It is NOT set at registration — the daemon computes it on the way out
 	// (see Service.ListDrops) so the Apps page knows whether to offer a "Test
 	// connection" affordance and to verify credentials before saving them.
-	ConnectionVerifiable bool `json:"connection_verifiable,omitempty"`
+	ConnectionVerifiable bool `json:"connection_verifiable,omitempty" xml:"connection_verifiable,omitempty"`
 
 	// Disabled reports that a platform admin has switched this drop off (a
 	// killswitch, globally or for the caller's tenant). Like
@@ -318,7 +318,7 @@ type Manifest struct {
 	// entirely. The editor uses it to show the drop greyed-out and un-pickable
 	// instead of having it silently vanish from the palette. The engine
 	// resolver still hard-blocks execution if a disabled drop is referenced.
-	Disabled bool `json:"disabled,omitempty"`
+	Disabled bool `json:"disabled,omitempty" xml:"disabled,omitempty"`
 
 	// Egress is the allowlist of external hosts a sandboxed (out-of-process)
 	// drop may reach via the broker's guarded fetch — the drop's *declared*
@@ -328,14 +328,14 @@ type Manifest struct {
 	// refused). Ignored for in-process (trusted) drops, which fall under the
 	// process-wide egress policy instead. This is what bounds exfiltration to a
 	// community drop's stated destinations.
-	Egress []string `json:"egress,omitempty"`
+	Egress []string `json:"egress,omitempty" xml:"egress>host,omitempty"`
 
 	// Icon is a logical icon name the UI maps to a glyph in its icon
 	// set (today: lucide-react). Values are kebab-case lowercase, e.g.
 	// "webhook", "git-branch", "sparkles". When empty the UI falls
 	// back to a category-derived default. Keep this stable across
 	// versions — the UI relies on it for in-canvas node identity.
-	Icon string `json:"icon,omitempty"`
+	Icon string `json:"icon,omitempty" xml:"icon,omitempty"`
 
 	// BrandLogo is an asset path (or URL) for a vendor mark — the
 	// recognizable logo for a third-party service (Excel's green X,
@@ -347,21 +347,21 @@ type Manifest struct {
 	// also accepted but discouraged (offline reliability, brand
 	// guideline drift). Leave empty for first-party modules — Icon
 	// alone is the right choice for built-ins like branch/merge/file_*.
-	BrandLogo string `json:"brand_logo,omitempty"`
+	BrandLogo string `json:"brand_logo,omitempty" xml:"brand_logo,omitempty"`
 
 	// AwaitsApproval signals that this module pauses for external
 	// resume. When true, the engine populates Job.ApprovalURL before
 	// Execute and the worker treats a Result with Status="awaiting"
 	// as a pause (not a terminal write). Only await_approval sets it
 	// today.
-	AwaitsApproval bool `json:"awaits_approval,omitempty"`
+	AwaitsApproval bool `json:"awaits_approval,omitempty" xml:"awaits_approval,omitempty"`
 
 	// SubmitsChildGraph signals that this module returns awaiting plus
 	// child-graph metadata in its Result, and the worker should hand
 	// the result off to the SubGraphRunner to actually submit the
 	// child. The dispatcher will resume the parent when the child
 	// terminates. Only subgraph sets it today.
-	SubmitsChildGraph bool `json:"submits_child_graph,omitempty"`
+	SubmitsChildGraph bool `json:"submits_child_graph,omitempty" xml:"submits_child_graph,omitempty"`
 
 	// NoPassthrough opts a drop OUT of the universal value-passthrough pin
 	// (WithPassthrough). The pin makes sense on linear processing drops that
@@ -372,7 +372,7 @@ type Manifest struct {
 	//   - pure routers (Branch): pass is emitted on every success regardless
 	//     of which port the payload took, so a node wired to it fires on
 	//     BOTH branches — punching a hole straight through the routing.
-	NoPassthrough bool `json:"no_passthrough,omitempty"`
+	NoPassthrough bool `json:"no_passthrough,omitempty" xml:"no_passthrough,omitempty"`
 
 	// ValueSource marks a drop as a literal value source (Text, Number): an
 	// input-less node whose output is authored in a required param, not wired
@@ -384,7 +384,7 @@ type Manifest struct {
 	// gets the pass pin by default, so authors don't set this. Distinct from a
 	// trigger, which originates a flow from an external event rather than a
 	// literal — triggers opt out via Category/ExecutionTrigger instead.
-	ValueSource bool `json:"value_source,omitempty"`
+	ValueSource bool `json:"value_source,omitempty" xml:"value_source,omitempty"`
 }
 
 func (m Manifest) Input(name string) (Port, bool) {

@@ -6,6 +6,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
@@ -1804,6 +1805,31 @@ func isTruthyQuery(v string) bool {
 	return false
 }
 
+// wantsXML reports whether the caller asked for an XML response instead of
+// the default JSON — either explicitly via ?format=xml or by an Accept
+// header that prefers application/xml (or text/xml). JSON stays the default:
+// anything else (including */* and a missing header) is treated as JSON.
+func wantsXML(r *http.Request) bool {
+	switch strings.ToLower(strings.TrimSpace(r.URL.Query().Get("format"))) {
+	case "xml":
+		return true
+	case "json":
+		return false
+	}
+	accept := strings.ToLower(r.Header.Get("Accept"))
+	return strings.Contains(accept, "application/xml") || strings.Contains(accept, "text/xml")
+}
+
+// dropsXML wraps the catalog for an XML response. It mirrors the JSON shape
+// (the same drops, the same field names via the manifests' xml tags) under a
+// <drops><drop>…</drop></drops> root. The JSON body also emits a legacy
+// "modules" alias; XML is a new surface with no legacy clients, so it carries
+// the canonical "drops" name only.
+type dropsXML struct {
+	XMLName xml.Name        `xml:"drops"`
+	Drops   []core.Manifest `xml:"drop"`
+}
+
 func (h *HTTPGateway) listModules(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	q := DropSearch{
 		Query: r.URL.Query().Get("q"),
@@ -1824,6 +1850,12 @@ func (h *HTTPGateway) listModules(rw http.ResponseWriter, r *http.Request, p cor
 	mans, err := h.svc.SearchDrops(r.Context(), p, q)
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
+		return
+	}
+	// XML is opt-in (?format=xml or an XML Accept header); it serves the
+	// same catalog as the JSON path, just in the XML representation.
+	if wantsXML(r) {
+		writeXML(rw, http.StatusOK, dropsXML{Drops: mans})
 		return
 	}
 	// Emit both keys: "drops" is the new canonical name; "modules" is
@@ -2567,6 +2599,17 @@ func writeJSON(rw http.ResponseWriter, status int, body any) {
 	rw.Header().Set("Content-Type", "application/json")
 	rw.WriteHeader(status)
 	_ = json.NewEncoder(rw).Encode(body)
+}
+
+// writeXML is the XML analogue of writeJSON — it emits the XML declaration
+// followed by the marshaled body. Used by endpoints that content-negotiate
+// an XML representation (see wantsXML); the body's xml struct tags decide the
+// element names, mirroring the JSON tags.
+func writeXML(rw http.ResponseWriter, status int, body any) {
+	rw.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	rw.WriteHeader(status)
+	_, _ = io.WriteString(rw, xml.Header)
+	_ = xml.NewEncoder(rw).Encode(body)
 }
 
 // writeJSONError emits the structured ErrorEnvelope with a code derived
