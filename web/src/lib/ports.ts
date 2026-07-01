@@ -77,10 +77,10 @@ export function connectionHint(out?: Port, inp?: Port): string | null {
   const from = portKind(out);
   const to = portKind(inp);
   if (from === "item" && to === "text") {
-    return "Items can’t plug into a Text input — add a “Make text from items” step in between.";
+    return "Items can’t plug into a Text input — add a “Make text from items” drop in between.";
   }
   if (from === "text" && to === "item") {
-    return "Text can’t plug into an Items input — add a “Read fields from text” step in between.";
+    return "Text can’t plug into an Items input — add a “Read fields from text” drop in between.";
   }
   const noun = (k: PortKind) =>
     ({ item: "Items", text: "Text", bool: "a Yes/no", file: "a File", any: "data" })[k];

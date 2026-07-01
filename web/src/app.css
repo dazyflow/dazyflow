@@ -8750,6 +8750,11 @@ a.pa-card:hover {
 .editor-toolbar .editor-save:not(:disabled):hover {
   border-color: var(--accent);
 }
+/* While a save is in flight the icon becomes a spinning loader so the
+   toolbar shows continuous activity rather than a static floppy. */
+.editor-toolbar .editor-save .spin {
+  animation: chat-spin 1s linear infinite;
+}
 /* Idle "all saved" status — a calm confirmation in place of the Save
    button when there's nothing to save. No button chrome; a soft success
    check + muted label, sized to sit flush with the toolbar buttons. */

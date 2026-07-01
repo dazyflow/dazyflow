@@ -38,6 +38,7 @@ import {
   Pause,
   Save,
   Check,
+  Loader2,
   Square,
   Plus,
   Send,
@@ -3708,7 +3709,11 @@ function EditorInner() {
                     : t("editor.save")
                 }
               >
-                <Save size={15} />
+                {saving ? (
+                  <Loader2 size={15} className="spin" />
+                ) : (
+                  <Save size={15} />
+                )}
                 <span className="toolbar-label">
                   {lockedRunID
                     ? t("editor.locked")

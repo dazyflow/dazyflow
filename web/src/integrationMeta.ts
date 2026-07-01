@@ -149,7 +149,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   gmail: {
     name: "Gmail",
     description:
-      "Send email, search your inbox, and read full message bodies. The classic use case: react to incoming emails as they arrive — pair the search step with a polling trigger and the flow remembers which messages it has already processed, so reruns don't repeat work.",
+      "Send email, search your inbox, and read full message bodies. The classic use case: react to incoming emails as they arrive — pair the search drop with a polling trigger and the flow remembers which messages it has already processed, so reruns don't repeat work.",
     technical_notes:
       "Gmail API + Google OAuth. access_type=offline + prompt=consent ride along on authorize so refresh_token persists across runs. Cursor dedupe lives in the encrypted secret store via secret_set + ${secret.…} template substitution; survives daemon restarts.",
     docs_url: "https://developers.google.com/gmail/api/guides",
@@ -160,14 +160,14 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Read rows from a spreadsheet, and append rows to it. Use it to keep a Sheet in sync with a database, log incoming events for non-technical teammates to inspect, or pull a reference table into other flows.",
     technical_notes:
-      "Shares the 'google' OAuth client with Gmail — one consent covers both. The rows + headers shape is interchangeable with the Excel and database steps, so a Sheet can feed straight into a Postgres upsert without intermediate transforms.",
+      "Shares the 'google' OAuth client with Gmail — one consent covers both. The rows + headers shape is interchangeable with the Excel and database drops, so a Sheet can feed straight into a Postgres upsert without intermediate transforms.",
     docs_url: "https://developers.google.com/sheets/api",
     brand_logo: "/brands/sheets.svg",
   },
   "google-forms": {
     name: "Google Forms",
     description:
-      "Fire a flow when a Google Form gets new responses, each keyed by its question title — wire it straight into a Sheets append to log submissions, or into any step that takes records.",
+      "Fire a flow when a Google Form gets new responses, each keyed by its question title — wire it straight into a Sheets append to log submissions, or into any drop that takes records.",
     technical_notes:
       "Shares the 'google' OAuth client with Gmail and Sheets; incremental authorization means connecting Forms only requests the forms.* scopes (responses + body, read-only), without re-consenting Gmail/Sheets. The trigger polls forms.responses.list against a per-flow cursor in the encrypted secret store.",
     docs_url: "https://developers.google.com/forms/api",
@@ -187,7 +187,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "List, download, and upload files in Google Drive. Fetch a file to email as an attachment, archive an incoming document, pull a Doc or Sheet out as a PDF, or drop generated files back into a folder for your team.",
     technical_notes:
-      "Shares the 'google' OAuth client with Gmail, Sheets and Forms — one consent covers them all, and connecting Drive only adds the drive scopes. Google-editor docs (Docs/Sheets/Slides) have no raw bytes, so the Download step exports them to a concrete format (PDF by default). Downloads land in the run's scratch space.",
+      "Shares the 'google' OAuth client with Gmail, Sheets and Forms — one consent covers them all, and connecting Drive only adds the drive scopes. Google-editor docs (Docs/Sheets/Slides) have no raw bytes, so the Download drop exports them to a concrete format (PDF by default). Downloads land in the run's scratch space.",
     docs_url: "https://developers.google.com/drive/api",
     brand_logo: "/brands/google-drive.svg",
   },
@@ -205,7 +205,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Create pages, and query databases. Mirror Notion content into a database for analytics, react to new entries by polling, or write structured data from a flow into a project tracker without anyone leaving Notion.",
     technical_notes:
-      "OAuth + Notion API. Notion-Version pinned to 2022-06-28 so behaviour is stable across deployments. The 'fire on new database row' pattern composes from poll_trigger + notion_query_database + secret_set — same cursor-dedupe shape Gmail uses; no dedicated trigger step needed.",
+      "OAuth + Notion API. Notion-Version pinned to 2022-06-28 so behaviour is stable across deployments. The 'fire on new database row' pattern composes from poll_trigger + notion_query_database + secret_set — same cursor-dedupe shape Gmail uses; no dedicated trigger drop needed.",
     docs_url: "https://developers.notion.com/reference/intro",
     brand_logo: "/brands/notion.svg",
   },
@@ -221,7 +221,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   openweather: {
     name: "OpenWeather",
     description:
-      "Read the weather for any point on the map. Give a step a coordinate — typed in, or wired from a geocode, a form field, or a device's GPS — and get the current conditions (a one-line summary, the temperature, and a Clear/Rain/Snow word you can branch on) or a 5-day forecast. Build a 'text me if it'll rain tomorrow' flow, a morning briefing, or a frost alert for the greenhouse.",
+      "Read the weather for any point on the map. Give a drop a coordinate — typed in, or wired from a geocode, a form field, or a device's GPS — and get the current conditions (a one-line summary, the temperature, and a Clear/Rain/Snow word you can branch on) or a 5-day forecast. Build a 'text me if it'll rain tomorrow' flow, a morning briefing, or a frost alert for the greenhouse.",
     technical_notes:
       "Backed by OpenWeather's free endpoints — Current Weather (GET data/2.5/weather) and the 5-day/3-hour Forecast (GET data/2.5/forecast), which the forecast drop aggregates into per-day min/max + conditions. Works with any standard API key on the free plan — no paid 'One Call by Call' subscription needed. Authenticates with your API key (the appid), stored once on the integration page as a per-tenant connection and injected at run time — no key on the node. Units accept metric (°C, m/s), imperial (°F, mph), or standard (K, m/s).",
     docs_url: "https://openweathermap.org/api",
@@ -239,7 +239,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   "open-meteo": {
     name: "Open-Meteo",
     description:
-      "Read the weather for any point on the map — free for personal, non-commercial use with no account or API key. Give a step a coordinate — typed in, or wired from a geocode, a form field, or a device's GPS — and get the current conditions (a one-line summary, the temperature, and a Clear/Rain/Snow word you can branch on) or a multi-day forecast. Build a 'text me if it'll rain tomorrow' flow, a morning briefing, or a frost alert for the greenhouse. For commercial use, add an API key and it switches to Open-Meteo's paid endpoint.",
+      "Read the weather for any point on the map — free for personal, non-commercial use with no account or API key. Give a drop a coordinate — typed in, or wired from a geocode, a form field, or a device's GPS — and get the current conditions (a one-line summary, the temperature, and a Clear/Rain/Snow word you can branch on) or a multi-day forecast. Build a 'text me if it'll rain tomorrow' flow, a morning briefing, or a frost alert for the greenhouse. For commercial use, add an API key and it switches to Open-Meteo's paid endpoint.",
     technical_notes:
       "Backed by Open-Meteo's Forecast API (GET /v1/forecast) — current conditions select the current= fields, and the forecast drop reads the daily= column arrays (weather_code, temperature_2m_max/min, precipitation_probability_max) with forecast_days and timezone=auto for local days. weather_code values are WMO codes mapped to descriptions and a branchable class word. The free non-commercial host (api.open-meteo.com) needs no key; supplying the optional per-tenant API key routes requests to the commercial host (customer-api.open-meteo.com) with an apikey param. Deciding whether your use is commercial — and providing a key when it is — is your responsibility. Units accept metric (°C, m/s) or imperial (°F, mph).",
     docs_url: "https://open-meteo.com/en/docs",
@@ -248,7 +248,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   smhi: {
     name: "SMHI",
     description:
-      "Free Nordic weather from Sweden's meteorological institute — no account or API key. Give the SMHI Weather drops a coordinate (pick it with a Location step) and get the current conditions or a multi-day forecast for any point in the Nordic region and the surrounding area, in metric units.",
+      "Free Nordic weather from Sweden's meteorological institute — no account or API key. Give the SMHI Weather drops a coordinate (pick it with a Location drop) and get the current conditions or a multi-day forecast for any point in the Nordic region and the surrounding area, in metric units.",
     technical_notes:
       "Backed by SMHI's Open Data forecast API (snow1g v1 point endpoint: GET …/geotype/point/lon/{lon}/lat/{lat}/data.json?parameters=…) — key-less. Always metric (°C, m/s); the symbol_code values (Wsymb2 1–27) map to descriptions, and the forecast drop aggregates the sub-daily steps into per-day min/max + conditions (UTC days). Coverage is SMHI's model domain — a point outside it returns 'out of bounds'.",
     docs_url: "https://opendata.smhi.se/metfcst/",
@@ -262,9 +262,9 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   postgres: {
     name: "Postgres",
     description:
-      "Insert, upsert, and query rows against a Postgres database. Pair it with the Sheets, Excel, or webhook steps to keep your database in sync with whatever source of truth your team uses.",
+      "Insert, upsert, and query rows against a Postgres database. Pair it with the Sheets, Excel, or webhook drops to keep your database in sync with whatever source of truth your team uses.",
     technical_notes:
-      "Per-(tenant, DSN) pgxpool connection registry with lazy idle eviction. Pass the DSN via ${secret.postgres_dsn} from the encrypted secret store rather than embedding it in graph JSON; the secret_set step can rotate it without touching graphs.",
+      "Per-(tenant, DSN) pgxpool connection registry with lazy idle eviction. Pass the DSN via ${secret.postgres_dsn} from the encrypted secret store rather than embedding it in graph JSON; the secret_set drop can rotate it without touching graphs.",
     docs_url: "https://www.postgresql.org/docs/current/sql-commands.html",
     brand_logo: "/brands/postgres.svg",
   },
@@ -273,7 +273,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Insert, upsert, and query rows against MySQL or MariaDB. Works the same way as Postgres — keep a database in sync with a spreadsheet, load a cleaned-up file into it, or pull a reference table into your flows.",
     technical_notes:
-      "Shares the rows + headers contract with the Sheets, Excel and Postgres steps, so the same ETL flow can target MySQL with one node change. *sql.DB connection pool, lazy idle eviction. The upsert step reports separate insert vs update counts via ROW_COUNT() semantics, so downstream notifications can say 'X new + Y updated' instead of a single total.",
+      "Shares the rows + headers contract with the Sheets, Excel and Postgres drops, so the same ETL flow can target MySQL with one node change. *sql.DB connection pool, lazy idle eviction. The upsert drop reports separate insert vs update counts via ROW_COUNT() semantics, so downstream notifications can say 'X new + Y updated' instead of a single total.",
     docs_url: "https://dev.mysql.com/doc/",
     brand_logo: "/brands/mysql.svg",
   },
@@ -291,7 +291,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Read .xlsx workbooks into rows, and write rows back out as a fresh workbook. Useful when someone drops a file into the workspace and you want to clean it, join it against a reference table, or load it into a real database.",
     technical_notes:
-      "Backed by the excelize library. The rows + headers contract matches Sheets and the database steps, so an Excel file can feed straight into a Postgres upsert with one map_rows between.",
+      "Backed by the excelize library. The rows + headers contract matches Sheets and the database drops, so an Excel file can feed straight into a Postgres upsert with one map_rows between.",
     brand_logo: "/brands/excel.svg",
   },
   email: {
@@ -299,7 +299,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Send email through an SMTP server you configure. Pick this when you've got a shared mailbox or a transactional provider with SMTP relay (SendGrid, SES, Postmark), and you'd rather configure a server than walk through OAuth.",
     technical_notes:
-      "The mail server — host, port, security (STARTTLS on 587 / implicit TLS on 465 / none), username, password and From address — is configured once here and injected into every Email step at run time; the password is held in the encrypted secret store. Use 'Test connection' to confirm the server and login before saving.",
+      "The mail server — host, port, security (STARTTLS on 587 / implicit TLS on 465 / none), username, password and From address — is configured once here and injected into every Email drop at run time; the password is held in the encrypted secret store. Use 'Test connection' to confirm the server and login before saving.",
   },
   ntfy: {
     name: "ntfy",
@@ -363,13 +363,13 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Run prompts through ChatGPT, OpenAI's AI assistant. Use it the same way as Claude — summarise text, classify inputs, extract fields, or draft replies — wherever you'd rather use an OpenAI model.",
     technical_notes:
-      "OpenAI Chat Completions API, authenticated with the API key set on this connection — flows pick it up automatically, no key on the node. Structured steps (Extract fields, Classify) use OpenAI function tool-calls.",
+      "OpenAI Chat Completions API, authenticated with the API key set on this connection — flows pick it up automatically, no key on the node. Structured drops (Extract fields, Classify) use OpenAI function tool-calls.",
     docs_url: "https://platform.openai.com/docs",
   },
   git: {
     name: "Git",
     description:
-      "Clone repositories and check out branches inside your workspace. Reach for it when a flow needs to inspect source code, pull templates from a known repo, or stage files before another step works on them.",
+      "Clone repositories and check out branches inside your workspace. Reach for it when a flow needs to inspect source code, pull templates from a known repo, or stage files before another drop works on them.",
     technical_notes:
       "All operations stay confined to the workspace sandbox via path normalization — clones write into the sandbox root, never above. Read-only today; remote write operations aren't supported.",
   },
@@ -381,6 +381,6 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   "standard-library": {
     name: "Standard library",
     description:
-      "Built-in flow primitives that don't belong to any vendor: routing (branch, split_rows, route_rows), waiting (await_approval, sleep), file I/O (read, write), the transform family (map / sort / dedupe / join / group / compute), database steps (Postgres / MySQL / SQLite), and schedule triggers (cron, poll, webhook). The toolkit you reach for between the third-party integrations.",
+      "Built-in flow primitives that don't belong to any vendor: routing (branch, split_rows, route_rows), waiting (await_approval, sleep), file I/O (read, write), the transform family (map / sort / dedupe / join / group / compute), database drops (Postgres / MySQL / SQLite), and schedule triggers (cron, poll, webhook). The toolkit you reach for between the third-party integrations.",
   },
 };
