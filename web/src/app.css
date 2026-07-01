@@ -10095,6 +10095,13 @@ a.pa-card:hover {
   border-color: var(--border-strong);
   background: var(--surface-2);
 }
+/* SortableJS placeholder (the gap the row will drop into): faded + dashed so
+   the drop target reads clearly under the lifted row. */
+.rtc-item.rtc-ghost {
+  opacity: 0.4;
+  border-style: dashed;
+  border-color: var(--accent);
+}
 .rtc-grip {
   flex: 0 0 auto;
   display: inline-flex;

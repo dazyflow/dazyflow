@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Joachim Klahr
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Sortable from "sortablejs";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
@@ -66,6 +67,12 @@ function arrayMove<T>(arr: T[], from: number, to: number): T[] {
 // any order already saved in `columns`. Reordering writes the full order back
 // to `columns`; until the user drags, `columns` is left untouched so the
 // drop's default (every column, in data order) still applies.
+//
+// Reordering runs on SortableJS (same library hazydo's task list uses), not
+// the HTML5 drag API — the latter never fires on touch, so the old version
+// couldn't reorder on mobile at all. SortableJS moves the DOM itself; we let
+// it, then revert that move in onEnd and drive the real reorder through React
+// state so state stays the single source of truth.
 export function RenderTableColumns({
   params,
   onApply,
@@ -82,8 +89,9 @@ export function RenderTableColumns({
   const [schemaCols, setSchemaCols] = useState<string[]>([]);
   const [runCols, setRunCols] = useState<string[]>([]);
   const [order, setOrder] = useState<string[]>([]);
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const [armed, setArmed] = useState<number | null>(null);
+  // True only while a SortableJS drag is in flight — guards the resync effect
+  // so an async column fetch resolving mid-drag can't yank the list.
+  const dragging = useRef(false);
 
   // Primitives (references is a fresh object each render).
   const refToken = references?.token;
@@ -136,17 +144,52 @@ export function RenderTableColumns({
   // Mirror the derived list into local state so a drag can reorder live; resync
   // whenever the underlying set changes and we're not mid-drag.
   useEffect(() => {
-    if (dragIndex === null) setOrder(cols);
-  }, [cols, dragIndex]);
+    if (!dragging.current) setOrder(cols);
+  }, [cols]);
 
-  const commit = (next: string[]) => {
-    setDragIndex(null);
-    setArmed(null);
+  // reorder applies a from→to move to state and persists it. Held in a ref and
+  // refreshed every render so the once-created Sortable instance always calls
+  // the latest closure (fresh `order`/`paramCols`/`onApply`) — no stale reads.
+  const reorderRef = useRef<(from: number, to: number) => void>(() => {});
+  reorderRef.current = (from, to) => {
+    const next = arrayMove(order, from, to);
+    setOrder(next);
     // Only persist once it actually differs from what's saved, so merely
     // opening the editor never pins the column set.
     const same = next.length === paramCols.length && next.every((c, i) => c === paramCols[i]);
     if (!same) onApply({ columns: next });
   };
+
+  // Create SortableJS on the <ul> via a callback ref, so it's set up exactly
+  // when the list mounts (and torn down on unmount) — this survives the
+  // empty-state early return below, which a mount-only useEffect would miss.
+  const sortable = useRef<Sortable | null>(null);
+  const listRef = useCallback((node: HTMLUListElement | null) => {
+    sortable.current?.destroy();
+    sortable.current = null;
+    if (!node) return;
+    sortable.current = Sortable.create(node, {
+      animation: 150,
+      handle: ".rtc-grip", // only the grip starts a drag; the row still scrolls
+      chosenClass: "rtc-dragging",
+      ghostClass: "rtc-ghost",
+      delay: 0, // drag starts immediately; the handle already disambiguates
+      onStart: () => {
+        dragging.current = true;
+      },
+      onEnd: (evt) => {
+        dragging.current = false;
+        const { oldIndex, newIndex, item } = evt;
+        const list = evt.from;
+        if (oldIndex == null || newIndex == null || oldIndex === newIndex) return;
+        // Undo SortableJS's DOM move so React remains authoritative, then apply
+        // the reorder through state; React reconciles the DOM from the new order.
+        item.remove();
+        list.insertBefore(item, list.children[oldIndex] ?? null);
+        reorderRef.current(oldIndex, newIndex);
+      },
+    });
+  }, []);
 
   if (order.length === 0) {
     return (
@@ -160,31 +203,10 @@ export function RenderTableColumns({
   return (
     <div className="rtc">
       <div className="rtc-label">{t("renderTableColumns.title")}</div>
-      <ul className="rtc-list">
-        {order.map((col, i) => (
-          <li
-            key={col}
-            className={"rtc-item" + (dragIndex === i ? " rtc-dragging" : "")}
-            draggable={armed === i}
-            onDragStart={(e) => {
-              setDragIndex(i);
-              e.dataTransfer.effectAllowed = "move";
-              e.dataTransfer.setData("text/plain", col);
-            }}
-            onDragOver={(e) => {
-              e.preventDefault();
-              if (dragIndex !== null && dragIndex !== i) {
-                setOrder((o) => arrayMove(o, dragIndex, i));
-                setDragIndex(i);
-              }
-            }}
-            onDragEnd={() => commit(order)}
-          >
-            <span
-              className="rtc-grip"
-              title={t("renderTableColumns.drag")}
-              onPointerDown={() => setArmed(i)}
-            >
+      <ul className="rtc-list" ref={listRef}>
+        {order.map((col) => (
+          <li key={col} className="rtc-item">
+            <span className="rtc-grip" title={t("renderTableColumns.drag")}>
               <GripIcon />
             </span>
             <span className="rtc-col">{col}</span>

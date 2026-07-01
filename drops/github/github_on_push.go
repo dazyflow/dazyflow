@@ -50,7 +50,7 @@ func init() {
 				// template across several of its fields through ONE wire
 				// (e.g. the push→Slack template renders commits+ref+pusher
 				// together), which the scalar pins can't express.
-				{Port: "event", Label: "Raw event", MIME: []string{"application/json"}},
+				{Port: "event", Label: "Full event", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{"type":"object"}`),
 			Idempotent:   false,

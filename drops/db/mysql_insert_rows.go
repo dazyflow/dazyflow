@@ -56,7 +56,7 @@ func init() {
 				{Port: "rows", Label: "Rows", Required: true, MIME: []string{"application/json"}},
 			},
 			Outputs: []core.Port{
-				{Port: "inserted", Label: "Rows inserted", MIME: []string{"application/json"}},
+				{Port: "inserted", Label: "Rows saved", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

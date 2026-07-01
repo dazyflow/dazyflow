@@ -52,7 +52,7 @@ func init() {
 				// not a pin — undeclared outputs can't be wired and don't
 				// clutter the card. spreadsheet_id is emitted so it can feed
 				// another sheet step's 'spreadsheet_id' input.
-				{Port: "appended_rows", Label: "Rows appended", MIME: []string{"text/plain"}},
+				{Port: "appended_rows", Label: "Rows saved", MIME: []string{"text/plain"}},
 				{Port: "updated_range", Label: "Updated range", MIME: []string{"text/plain"}},
 				{Port: "spreadsheet_id", Label: "Spreadsheet ID", MIME: []string{"text/plain"}},
 			},

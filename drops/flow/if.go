@@ -47,7 +47,7 @@ func init() {
 			// the (optional) comparison operand — wired or typed as a literal.
 			Inputs: []core.Port{
 				{Port: "A", Required: true, Label: "Value"},
-				{Port: "B", Label: "B"},
+				{Port: "B", Label: "Compare to"},
 			},
 			Outputs: []core.Port{
 				{Port: "then", Label: "Yes"},

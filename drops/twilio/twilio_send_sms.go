@@ -46,7 +46,7 @@ func init() {
 				{Port: "body", Label: "Body", Required: true, MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				{Port: "message_sid", Label: "Message SID", MIME: []string{"text/plain"}},
+				{Port: "message_sid", Label: "Message ID", MIME: []string{"text/plain"}},
 				{Port: "status", Label: "Status", MIME: []string{"text/plain"}},
 				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
 			},

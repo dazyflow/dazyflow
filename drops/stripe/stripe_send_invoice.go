@@ -137,7 +137,7 @@ func init() {
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
 				{Port: "customer", Label: "Customer", Required: true, MIME: []string{"text/plain"}},
-				{Port: "amount", Label: "Amount", MIME: []string{"text/plain", "application/json"}},
+				{Port: "amount", Label: "Amount (smallest unit)", MIME: []string{"text/plain", "application/json"}},
 				{Port: "description", Label: "Description", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{

@@ -25,18 +25,18 @@ func init() {
 			Category:    "flow_control",
 			Provider:    "internal",
 			Tags:        []string{"condition", "predicate", "boolean", "test", "compare"},
-			Description: "Compare two values, A and B, and emit true or false on the Result port. Pick the test from a plain-language list — equals, is greater than, contains, is one of, is within range, and more. Wire A and B from upstream nodes, or type a literal default right on the node. Pair the Result with Branch (Result → Branch.condition) to route.",
-			Summary:     "Compare A against B with a chosen operator and emit true or false on the Result port.",
+			Description: "Compare two values, A and B, and emit true or false on the Yes/No output. Pick the test from a plain-language list — equals, is greater than, contains, is one of, is within range, and more. Wire A and B from upstream nodes, or type a literal default right on the node. Pair the Yes/No output with Branch (Yes/No → Branch.condition) to route.",
+			Summary:     "Compare A against B with a chosen operator and emit true or false on the Yes/No output.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Is the value over a threshold?",
 					Params: json.RawMessage(`{"op":"greater_than","B":1000}`),
-					Notes:  "Wire the number into A; B is the literal 1000. Result is true when A > 1000.",
+					Notes:  "Wire the number into A; B is the literal 1000. It's true when A > 1000.",
 				},
 				{
 					Title:  "Status is one of an accepted set",
 					Params: json.RawMessage(`{"op":"one_of","B":[200,201,204]}`),
-					Notes:  "For one_of, B is a list — Result is true when A equals any element.",
+					Notes:  "For one_of, B is a list — it's true when A equals any element.",
 				},
 				{
 					Title:  "Was it a 2xx success? (range)",
@@ -55,7 +55,7 @@ func init() {
 			},
 			Outputs: []core.Port{{
 				Port:  "result",
-				Label: "Result",
+				Label: "Yes/No",
 				MIME:  []string{core.MIMEBool},
 			}},
 			ParamsSchema: json.RawMessage(`{
@@ -291,7 +291,7 @@ func inclusiveFlag(p map[string]any, key string) bool {
 // Scalars (text, numbers, booleans) stringify; nil and containers (lists,
 // objects) are an explicit error rather than silently becoming "" — which
 // would make `contains` evaluate strings.Contains("", "") == true and
-// silently misroute a Branch wired to the Result.
+// silently misroute a Branch wired to the Yes/No output.
 func stringPair(a, b any, op string) (string, string, error) {
 	sa, oka := toStr(a)
 	sb, okb := toStr(b)

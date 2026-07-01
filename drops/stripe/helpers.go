@@ -164,13 +164,13 @@ func numberInputOr(job core.Job, port string, fallback int) (int, bool) {
 func paymentTriggerOutputs() []core.Port {
 	return []core.Port{
 		{Port: "amount_display", Label: "Amount (display)", MIME: []string{"text/plain"}},
-		{Port: "amount", Label: "Amount (minor units)", MIME: []string{"text/plain"}},
+		{Port: "amount", Label: "Amount (smallest unit)", MIME: []string{"text/plain"}},
 		{Port: "currency", Label: "Currency", MIME: []string{"text/plain"}},
 		{Port: "customer_email", Label: "Customer email", MIME: []string{"text/plain"}},
 		{Port: "description", Label: "Description", MIME: []string{"text/plain"}},
 		{Port: "payment_id", Label: "Payment ID", MIME: []string{"text/plain"}},
 		{Port: "payment", Label: "Payment intent", MIME: []string{"application/json"}},
-		{Port: "event", Label: "Raw event", MIME: []string{"application/json"}},
+		{Port: "event", Label: "Full event", MIME: []string{"application/json"}},
 	}
 }
 

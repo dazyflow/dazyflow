@@ -19,7 +19,7 @@ import (
 // the operator as the node's identity instead of a dropdown.
 //
 // They share Compare's shape — two operand pins A and B (wire them, or type a
-// literal default), and a Result port emitting a boolean to feed Branch. The win is
+// literal default), and a Yes/No output emitting a boolean to feed Branch. The win is
 // reading speed: an "A > B" node says what it does at a glance, no need to
 // open it and read the dropdown. The full Compare stays the power node for
 // the long tail (contains, one_of, in_range, exists) — the primitives are
@@ -85,7 +85,7 @@ func registerOperator(o operatorSpec) {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs:         operandPorts(o.numeric),
-			Outputs:        []core.Port{{Port: "result", Label: "Result", MIME: []string{core.MIMEBool}}},
+			Outputs:        []core.Port{{Port: "result", Label: "Yes/No", MIME: []string{core.MIMEBool}}},
 			ParamsSchema:   operandSchema,
 			Idempotent:     true,
 			// Pure predicate: no payload to thread, and on the chip the pass
@@ -102,37 +102,37 @@ func init() {
 	registerOperator(operatorSpec{
 		id: "eq", label: "A = B", icon: "equal", op: "equals",
 		summary: "Emit true when A equals B, else false.",
-		desc:    "Emit true on Result when A equals B, otherwise false. The atomic equality node — wire A and B, or type literal defaults. Pair Result with Branch to route. Reach for Compare instead when you need richer tests (contains, one_of, ranges).",
-		example: core.ParamsExample{Title: "Status equals 200", Params: json.RawMessage(`{"B":200}`), Notes: "Wire the status into A; B is the literal 200. Result is true when A == 200."},
+		desc:    "Emit true on the Yes/No output when A equals B, otherwise false. The atomic equality node — wire A and B, or type literal defaults. Pair the Yes/No output with Branch to route. Reach for Compare instead when you need richer tests (contains, one_of, ranges).",
+		example: core.ParamsExample{Title: "Status equals 200", Params: json.RawMessage(`{"B":200}`), Notes: "Wire the status into A; B is the literal 200. It's true when A == 200."},
 	})
 	registerOperator(operatorSpec{
 		id: "neq", label: "A ≠ B", icon: "equal-not", op: "not_equals",
 		summary: "Emit true when A does not equal B, else false.",
-		desc:    "Emit true on Result when A does not equal B, otherwise false. Pair Result with Branch to route.",
-		example: core.ParamsExample{Title: "State is not idle", Params: json.RawMessage(`{"B":"idle"}`), Notes: `Result is true when A is anything other than "idle".`},
+		desc:    "Emit true on the Yes/No output when A does not equal B, otherwise false. Pair the Yes/No output with Branch to route.",
+		example: core.ParamsExample{Title: "State is not idle", Params: json.RawMessage(`{"B":"idle"}`), Notes: `It's true when A is anything other than "idle".`},
 	})
 	registerOperator(operatorSpec{
 		id: "gt", label: "A > B", icon: "chevron-right", op: "greater_than", numeric: true,
 		summary: "Emit true when A is greater than B, else false.",
-		desc:    "Emit true on Result when numeric A is strictly greater than B, otherwise false. Both operands must be numbers. Pair Result with Branch to route.",
-		example: core.ParamsExample{Title: "Over a threshold", Params: json.RawMessage(`{"B":1000}`), Notes: "Wire the number into A; B is the literal 1000. Result is true when A > 1000."},
+		desc:    "Emit true on the Yes/No output when numeric A is strictly greater than B, otherwise false. Both operands must be numbers. Pair the Yes/No output with Branch to route.",
+		example: core.ParamsExample{Title: "Over a threshold", Params: json.RawMessage(`{"B":1000}`), Notes: "Wire the number into A; B is the literal 1000. It's true when A > 1000."},
 	})
 	registerOperator(operatorSpec{
 		id: "gte", label: "A ≥ B", icon: "chevrons-right", op: "greater_or_equal", numeric: true,
 		summary: "Emit true when A is greater than or equal to B, else false.",
-		desc:    "Emit true on Result when numeric A is greater than or equal to B, otherwise false. Pair Result with Branch to route.",
-		example: core.ParamsExample{Title: "At least N items", Params: json.RawMessage(`{"B":3}`), Notes: "Result is true when A >= 3."},
+		desc:    "Emit true on the Yes/No output when numeric A is greater than or equal to B, otherwise false. Pair the Yes/No output with Branch to route.",
+		example: core.ParamsExample{Title: "At least N items", Params: json.RawMessage(`{"B":3}`), Notes: "It's true when A >= 3."},
 	})
 	registerOperator(operatorSpec{
 		id: "lt", label: "A < B", icon: "chevron-left", op: "less_than", numeric: true,
 		summary: "Emit true when A is less than B, else false.",
-		desc:    "Emit true on Result when numeric A is strictly less than B, otherwise false. Both operands must be numbers. Pair Result with Branch to route.",
-		example: core.ParamsExample{Title: "Under a limit", Params: json.RawMessage(`{"B":100}`), Notes: "Result is true when A < 100."},
+		desc:    "Emit true on the Yes/No output when numeric A is strictly less than B, otherwise false. Both operands must be numbers. Pair the Yes/No output with Branch to route.",
+		example: core.ParamsExample{Title: "Under a limit", Params: json.RawMessage(`{"B":100}`), Notes: "It's true when A < 100."},
 	})
 	registerOperator(operatorSpec{
 		id: "lte", label: "A ≤ B", icon: "chevrons-left", op: "less_or_equal", numeric: true,
 		summary: "Emit true when A is less than or equal to B, else false.",
-		desc:    "Emit true on Result when numeric A is less than or equal to B, otherwise false. Pair Result with Branch to route.",
-		example: core.ParamsExample{Title: "No more than N", Params: json.RawMessage(`{"B":5}`), Notes: "Result is true when A <= 5."},
+		desc:    "Emit true on the Yes/No output when numeric A is less than or equal to B, otherwise false. Pair the Yes/No output with Branch to route.",
+		example: core.ParamsExample{Title: "No more than N", Params: json.RawMessage(`{"B":5}`), Notes: "It's true when A <= 5."},
 	})
 }

@@ -45,7 +45,7 @@ func init() {
 				{Port: "plan", Label: "Plan", MIME: []string{"text/plain"}},
 				{Port: "ended_at", Label: "Ended at", MIME: []string{"text/plain"}},
 				{Port: "subscription", Label: "Subscription", MIME: []string{"application/json"}},
-				{Port: "event", Label: "Raw event", MIME: []string{"application/json"}},
+				{Port: "event", Label: "Full event", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{"type":"object"}`),
 			Idempotent:   false,

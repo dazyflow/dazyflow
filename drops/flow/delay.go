@@ -49,7 +49,7 @@ func init() {
 			// `pass` pin (prepended by WithPassthrough) — Delay no longer
 			// declares its own in/out passthrough ports; it threads through
 			// like any other node.
-			Inputs: []core.Port{{Port: "ms", Label: "Delay (ms)", MIME: []string{"application/json"}}},
+			Inputs: []core.Port{{Port: "ms", Label: "Delay (milliseconds)", MIME: []string{"application/json"}}},
 			ParamsSchema: json.RawMessage(
 				`{"type":"object","properties":{"ms":{"type":"integer","minimum":0}},"required":["ms"]}`,
 			),
