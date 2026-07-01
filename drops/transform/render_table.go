@@ -58,7 +58,7 @@ func init() {
 				"type":"object",
 				"properties":{
 					"columns": {"type":"array","items":{"type":"string"},"x_advanced":true,"description":"Which columns to include, in order. Leave empty to use every column the data has, in its natural order. The inspector's drag-to-reorder editor writes this for you."},
-					"empty":   {"type":"string","description":"HTML (or text) emitted when there are zero input rows. Defaults to an empty string."}
+					"empty":   {"type":"string","title":"If there are no rows","description":"What to show instead of an empty table when the input has zero rows — plain text or HTML, e.g. \"No results yet\". Leave blank to output nothing at all."}
 				}
 			}`),
 			Idempotent: true,
