@@ -94,13 +94,13 @@ func init() {
 			Category:    "flow_control",
 			Provider:    "internal",
 			Tags:        []string{"conditional", "filter", "text", "string", "substring", "search", "routing"},
-			Description: "Check whether the Text on A contains the Substring on B, and send the text down 'Contains it' or 'Doesn't' accordingly. A fixed-test preset of the If drop — the test is always 'contains', so there's nothing to configure but the substring. Wire the text into A and type (or wire) the substring into B. For other tests (equals, ranges, one of), use If or Compare.",
-			Summary:     "Forward the Text down 'Contains it' or 'Doesn't' based on whether it contains the Substring.",
+			Description: "Check whether the Text on A contains the Substring on B, and send the text down Yes or No accordingly. A fixed-test preset of the If drop — the test is always 'contains', so there's nothing to configure but the substring. Wire the text into A and type (or wire) the substring into B. For other tests (equals, ranges, one of), use If or Compare.",
+			Summary:     "Forward the Text down Yes or No based on whether it contains the Substring.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Keep only messages mentioning a word",
 					Params: json.RawMessage(`{"B":"urgent"}`),
-					Notes:  `Wire the message text into A; B is the literal "urgent". The text leaves via "Contains it" when it includes "urgent", otherwise via "Doesn't".`,
+					Notes:  `Wire the message text into A; B is the literal "urgent". The text leaves via Yes when it includes "urgent", otherwise via No.`,
 				},
 			},
 			ExecutionModel: core.ExecutionBatch,
@@ -110,8 +110,8 @@ func init() {
 				{Port: "B", Label: "Substring", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				{Port: "then", Label: "Contains it"},
-				{Port: "else", Label: "Doesn't"},
+				{Port: "then", Label: "Yes"},
+				{Port: "else", Label: "No"},
 			},
 			// Just the substring to look for — no op enum (the node IS contains),
 			// no field/range knobs. Keeping the preset trivial is the point.

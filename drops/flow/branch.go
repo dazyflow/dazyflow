@@ -24,8 +24,8 @@ func init() {
 			Category:    "flow_control",
 			Provider:    "internal",
 			Tags:        []string{"conditional", "routing", "if-else"},
-			Description: "Route the payload on the 'in' port to either the then or else output, based on the boolean 'condition' input. Produce that boolean with a Compare drop (wire its result into condition) — true sends the payload down then, false (or a missing/empty condition) sends it down else. Nodes wired to the unused port stay dormant.",
-			Summary:     "Forward the input down the then or else port based on a boolean condition input.",
+			Description: "Route the payload on the 'in' port to either the Yes or No output, based on the Yes/No value on the 'condition' input. Produce that value with a Compare drop (wire its result into condition) — a Yes value sends the payload down the Yes output; a No value (or a missing/empty condition) sends it down No. Nodes wired to the unused port stay dormant.",
+			Summary:     "Forward the input down the Yes or No port based on a Yes/No value input.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Branch is wired, not configured",
@@ -40,12 +40,12 @@ func init() {
 			// drop or any boolean-emitting node); 'in' is the payload that
 			// continues down the chosen port.
 			Inputs: []core.Port{
-				{Port: "condition", Required: true, Label: "Condition", MIME: []string{core.MIMEBool}},
+				{Port: "condition", Required: true, Label: "Yes/No value", MIME: []string{core.MIMEBool}},
 				{Port: "in", Required: true, Label: "Value"},
 			},
 			Outputs: []core.Port{
-				{Port: "then", Label: "True"},
-				{Port: "else", Label: "False"},
+				{Port: "then", Label: "Yes"},
+				{Port: "else", Label: "No"},
 			},
 			ParamsSchema: json.RawMessage(`{"type":"object"}`),
 			Idempotent:   true,
@@ -74,7 +74,7 @@ func executeBranch(_ context.Context, job core.Job, _ chan<- core.Progress) (cor
 	}
 	condRef, ok := job.Input["condition"]
 	if !ok {
-		return params.Err(job, "missing_input", "input port 'condition' is required — wire a boolean (e.g. a Compare result) into it"), nil
+		return params.Err(job, "missing_input", "input port 'condition' is required — wire a Yes/No value (e.g. a Compare result) into it"), nil
 	}
 	cond, err := asBool(condRef)
 	if err != nil {
