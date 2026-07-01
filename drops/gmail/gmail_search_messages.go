@@ -6,6 +6,7 @@ package gmail
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"strconv"
 	"sync"
@@ -60,6 +61,7 @@ func init() {
 					"account":{"type":"string","default":"default"},
 					"token":{"type":"string","description":"Raw access token; overrides 'account'."},
 					"query":{"type":"string","title":"Search","examples":["from:boss@company.com is:unread"],"description":"Works exactly like Gmail's search box, e.g. 'is:unread', 'newer_than:1d', 'from:someone@example.com'."},
+					"only_new":{"type":"boolean","title":"Only new since last run","default":false,"description":"When on, each run emits only emails that arrived since the previous run — nothing on the first run (it just remembers the newest email as the starting point). Turn this on when a published, polling flow acts on each match (e.g. sends a reply), so it doesn't re-process the same emails on every poll or blast the whole mailbox on publish. Leave off for ad-hoc searches that should return every match."},
 					"max_results":{"type":"integer","title":"Max emails","default":50,"minimum":1,"maximum":500},
 					"page_token":{"type":"string","title":"Page token","x_advanced":true,"description":"Pagination token from a prior run's next_page_token output (advanced)."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
@@ -114,9 +116,11 @@ func executeGmailSearch(ctx context.Context, job core.Job, _ chan<- core.Progres
 	// match into a real email record (date / from / subject / body) with
 	// bounded concurrency, so downstream steps work with emails, never IDs.
 	// A failed fetch degrades that one entry to its stub rather than
-	// failing the whole search.
+	// failing the whole search. dates[i] holds the message's internalDate
+	// (epoch ms) — Gmail's authoritative receive time — for the watermark.
 	timeout := params.IntDefault(job.Params, "timeout_ms", 15000)
 	msgs := make([]any, len(parsed.Messages))
+	dates := make([]string, len(parsed.Messages))
 	sem := make(chan struct{}, 5)
 	var wg sync.WaitGroup
 	for i, m := range parsed.Messages {
@@ -140,10 +144,21 @@ func executeGmailSearch(ctx context.Context, job core.Job, _ chan<- core.Progres
 			if json.Unmarshal(b, &raw) != nil {
 				return
 			}
-			msgs[i] = friendlyMessage(flatten(raw))
+			flat := flatten(raw)
+			dates[i] = str(flat["internal_date_ms"])
+			msgs[i] = friendlyMessage(flat)
 		}(i, id)
 	}
 	wg.Wait()
+
+	// Opt-in watermark: only emit emails newer than the newest one seen on a
+	// previous run. Off by default so an ad-hoc search still returns every
+	// match; on, it turns this into a safe poll source — a published flow
+	// that acts on each match won't re-process the backlog every poll or
+	// blast the whole mailbox the first time it fires after publish.
+	if params.BoolDefault(job.Params, "only_new", false) {
+		return emitOnlyNew(ctx, job, msgs, dates, parsed.NextPageToken), nil
+	}
 
 	return core.Result{
 		JobID:  job.ID,
@@ -153,4 +168,78 @@ func executeGmailSearch(ctx context.Context, job core.Job, _ chan<- core.Progres
 			"next_page_token": {MIME: "text/plain", Inline: parsed.NextPageToken},
 		},
 	}, nil
+}
+
+// emitOnlyNew applies the per-(flow,node) watermark. It filters msgs to those
+// strictly newer than the stored cursor (by internalDate, epoch ms), advances
+// the cursor to the newest email seen, and emits the fresh batch.
+//
+// First run (empty cursor): baseline to the newest email present and emit
+// NOTHING — the flow starts watching from "now", never replaying the existing
+// mailbox. Mirrors google_form_trigger / homeassistant_state_changed.
+//
+// A nothing-new (or first) run emits no output ports, so downstream edges go
+// dormant and the rest of the flow is skipped — an empty poll is a non-event.
+// The cursor write is best-effort/at-least-once: a failed write means at worst
+// the next run re-emits this batch, never a silent drop.
+func emitOnlyNew(ctx context.Context, job core.Job, msgs []any, dates []string, nextPageToken string) core.Result {
+	// cursor.gmail_search.<graph>.<node>: per-(flow,node) watermark = the
+	// newest internalDate we've already emitted. The store hides the
+	// "cursor." prefix from the Credentials UI.
+	cursorName := fmt.Sprintf("cursor.gmail_search.%s.%s", job.GraphID, job.NodeID)
+	last := readCursor(ctx, job.Tenant, cursorName)
+	first := last == ""
+
+	fresh := make([]any, 0, len(msgs))
+	newCursor := last
+	for i, m := range msgs {
+		d := dates[i]
+		if d == "" {
+			continue // couldn't resolve a receive time (expansion failed) — skip
+		}
+		if newerMillis(d, newCursor) {
+			newCursor = d
+		}
+		// On the first run we emit nothing; every match only advances the
+		// baseline above.
+		if !first && newerMillis(d, last) {
+			fresh = append(fresh, m)
+		}
+	}
+
+	if newCursor != "" && newCursor != last {
+		_ = writeCursor(ctx, job.Tenant, cursorName, newCursor)
+	}
+
+	// Nothing new (or first-run baseline) → emit no ports, skipping downstream.
+	if len(fresh) == 0 {
+		return core.Result{JobID: job.ID, Status: core.StatusOK, Output: map[string]core.Ref{}}
+	}
+	return core.Result{
+		JobID:  job.ID,
+		Status: core.StatusOK,
+		Output: map[string]core.Ref{
+			"messages":        {MIME: "application/json", Inline: fresh},
+			"next_page_token": {MIME: "text/plain", Inline: nextPageToken},
+		},
+	}
+}
+
+// newerMillis reports whether epoch-ms timestamp a is strictly after cursor.
+// An empty cursor makes everything newer. Both are Gmail internalDate strings;
+// parse failures fall back to a length-then-lexical compare, correct for the
+// equal-width millisecond values Gmail returns.
+func newerMillis(a, cursor string) bool {
+	if cursor == "" {
+		return true
+	}
+	ai, aerr := strconv.ParseInt(a, 10, 64)
+	ci, cerr := strconv.ParseInt(cursor, 10, 64)
+	if aerr == nil && cerr == nil {
+		return ai > ci
+	}
+	if len(a) != len(cursor) {
+		return len(a) > len(cursor)
+	}
+	return a > cursor
 }

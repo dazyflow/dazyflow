@@ -1776,6 +1776,11 @@ func setupEncryptedSecrets(ctx context.Context, masterKeyB64 string, secrets map
 	exactWrite := func(ctx context.Context, tenant, name, value string) error {
 		return es.Put(ctx, tenant, name, value)
 	}
+	// gmail_search_messages' opt-in "only new since last run" watermark —
+	// same read/write pair on the same store, keyed by the reserved "cursor."
+	// prefix. Lets a polling Gmail flow act on each match without re-processing
+	// the backlog every poll.
+	gmail.SetCursorStore(exactRead, exactWrite)
 	// Adaptive poll backoff: fetcher nodes write a per-flow "found data?"
 	// marker the scheduler reads to widen/tighten the poll cadence.
 	pollstate.SetStore(exactRead, exactWrite)

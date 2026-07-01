@@ -13,6 +13,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"strings"
+	"sync"
 	"unicode/utf8"
 
 	"git.sr.ht/~klahr/dazyflow/core"
@@ -33,6 +34,55 @@ func SetTokenLookup(fn google.TokenLookup) { google.SetTokenLookup(fn) }
 
 func resolveToken(ctx context.Context, job core.Job) (string, error) {
 	return google.ResolveToken(ctx, job)
+}
+
+// --- cursor (watermark) store -----------------------------------------------
+
+// CursorReader returns the stored value for an exact tenant/name, or
+// ("", nil) when nothing has been stored yet (first fire). CursorWriter
+// persists one. The daemon wires these to the encrypted secret store under a
+// reserved "cursor." prefix (hidden from the Credentials UI) via
+// SetCursorStore — mirrors gform.SetCursorStore. gmail_search_messages uses
+// it for its opt-in "only new since last run" watermark.
+type (
+	CursorReader func(ctx context.Context, tenant, name string) (string, error)
+	CursorWriter func(ctx context.Context, tenant, name, value string) error
+)
+
+var (
+	cursorMu     sync.RWMutex
+	cursorReader CursorReader
+	cursorWriter CursorWriter
+)
+
+func SetCursorStore(r CursorReader, w CursorWriter) {
+	cursorMu.Lock()
+	defer cursorMu.Unlock()
+	cursorReader, cursorWriter = r, w
+}
+
+func readCursor(ctx context.Context, tenant, name string) string {
+	cursorMu.RLock()
+	r := cursorReader
+	cursorMu.RUnlock()
+	if r == nil {
+		return ""
+	}
+	v, err := r(ctx, tenant, name)
+	if err != nil {
+		return "" // treat any read failure as "start from the beginning"
+	}
+	return v
+}
+
+func writeCursor(ctx context.Context, tenant, name, value string) error {
+	cursorMu.RLock()
+	w := cursorWriter
+	cursorMu.RUnlock()
+	if w == nil {
+		return nil
+	}
+	return w(ctx, tenant, name, value)
 }
 
 var httpBase = apibase.New("https://gmail.googleapis.com/gmail/v1")

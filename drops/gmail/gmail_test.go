@@ -76,6 +76,142 @@ func TestGmailSearch_ReturnsMessages(t *testing.T) {
 	}
 }
 
+// memCursor installs an in-memory cursor store for the test and returns the
+// backing map so assertions can read the persisted watermark.
+func memCursor(t *testing.T) map[string]string {
+	t.Helper()
+	store := map[string]string{}
+	SetCursorStore(
+		func(_ context.Context, tenant, name string) (string, error) { return store[tenant+"|"+name], nil },
+		func(_ context.Context, tenant, name, value string) error { store[tenant+"|"+name] = value; return nil },
+	)
+	t.Cleanup(func() { SetCursorStore(nil, nil) })
+	return store
+}
+
+// searchServer serves a Gmail search whose per-message expansion carries an
+// internalDate, so the only_new watermark has a real receive time to compare.
+// dateByID maps message id → internalDate (epoch ms string).
+func searchServer(t *testing.T, ids []string, dateByID map[string]string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/messages/") {
+			id := r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"id": id, "threadId": "t-" + id, "internalDate": dateByID[id],
+				"payload": map[string]any{"headers": []any{
+					map[string]any{"name": "Subject", "value": "Hi " + id},
+				}},
+			})
+			return
+		}
+		stubs := make([]any, len(ids))
+		for i, id := range ids {
+			stubs[i] = map[string]any{"id": id}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"messages": stubs})
+	}))
+}
+
+// First run with only_new baselines the watermark to the newest email and
+// emits NOTHING — the flow starts watching from now, never replaying the
+// existing mailbox (the burst-on-publish fix).
+func TestGmailSearch_OnlyNew_FirstFireEmitsNothing(t *testing.T) {
+	store := memCursor(t)
+	srv := searchServer(t, []string{"a", "b"}, map[string]string{
+		"a": "1700000000000", "b": "1700000005000", // b is newer
+	})
+	defer srv.Close()
+	withGmailEnv(t, srv.URL)
+
+	res, err := executeGmailSearch(context.Background(), core.Job{
+		Tenant: "acme", GraphID: "g1", NodeID: "n1",
+		Params: map[string]any{"query": "is:unread", "only_new": true},
+	}, nil)
+	if err != nil || res.Status != core.StatusOK {
+		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
+	}
+	if _, ok := res.Output["messages"]; ok {
+		t.Errorf("first fire should emit no messages port, got %+v", res.Output)
+	}
+	if got := store["acme|cursor.gmail_search.g1.n1"]; got != "1700000005000" {
+		t.Errorf("cursor = %q, want the newest internalDate 1700000005000", got)
+	}
+}
+
+// A later run emits only the emails newer than the stored watermark, and
+// advances it. Older/already-seen matches are dropped.
+func TestGmailSearch_OnlyNew_SubsequentFireEmitsOnlyNewer(t *testing.T) {
+	store := memCursor(t)
+	store["acme|cursor.gmail_search.g1.n1"] = "1700000005000" // as if a prior run baselined here
+	srv := searchServer(t, []string{"a", "b", "c"}, map[string]string{
+		"a": "1700000000000", // older — already seen
+		"b": "1700000005000", // == cursor — already seen
+		"c": "1700000009000", // newer — the only fresh one
+	})
+	defer srv.Close()
+	withGmailEnv(t, srv.URL)
+
+	res, err := executeGmailSearch(context.Background(), core.Job{
+		Tenant: "acme", GraphID: "g1", NodeID: "n1",
+		Params: map[string]any{"query": "is:unread", "only_new": true},
+	}, nil)
+	if err != nil || res.Status != core.StatusOK {
+		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
+	}
+	msgs := res.Output["messages"].Inline.([]any)
+	if len(msgs) != 1 || msgs[0].(map[string]any)["id"] != "c" {
+		t.Fatalf("want only the newer email c, got %+v", msgs)
+	}
+	if got := store["acme|cursor.gmail_search.g1.n1"]; got != "1700000009000" {
+		t.Errorf("cursor should advance to 1700000009000, got %q", got)
+	}
+}
+
+// only_new with no new email since last run emits no ports (downstream skipped)
+// and leaves the watermark untouched.
+func TestGmailSearch_OnlyNew_NothingNew(t *testing.T) {
+	store := memCursor(t)
+	store["acme|cursor.gmail_search.g1.n1"] = "1700000009000"
+	srv := searchServer(t, []string{"a"}, map[string]string{"a": "1700000000000"})
+	defer srv.Close()
+	withGmailEnv(t, srv.URL)
+
+	res, _ := executeGmailSearch(context.Background(), core.Job{
+		Tenant: "acme", GraphID: "g1", NodeID: "n1",
+		Params: map[string]any{"query": "x", "only_new": true},
+	}, nil)
+	if len(res.Output) != 0 {
+		t.Errorf("nothing-new run should emit no ports, got %+v", res.Output)
+	}
+	if got := store["acme|cursor.gmail_search.g1.n1"]; got != "1700000009000" {
+		t.Errorf("cursor should be unchanged, got %q", got)
+	}
+}
+
+// only_new off (default) keeps the classic behavior: every match is returned,
+// no watermark is read or written.
+func TestGmailSearch_OnlyNewOff_ReturnsAll(t *testing.T) {
+	store := memCursor(t)
+	srv := searchServer(t, []string{"a", "b"}, map[string]string{
+		"a": "1700000000000", "b": "1700000005000",
+	})
+	defer srv.Close()
+	withGmailEnv(t, srv.URL)
+
+	res, _ := executeGmailSearch(context.Background(), core.Job{
+		Tenant: "acme", GraphID: "g1", NodeID: "n1",
+		Params: map[string]any{"query": "x"}, // only_new defaults false
+	}, nil)
+	msgs := res.Output["messages"].Inline.([]any)
+	if len(msgs) != 2 {
+		t.Errorf("default mode should return all matches, got %+v", msgs)
+	}
+	if len(store) != 0 {
+		t.Errorf("default mode must not touch the cursor store, got %+v", store)
+	}
+}
+
 func TestGmailGetMessage_FlattensHeadersAndBody(t *testing.T) {
 	bodyData := base64.RawURLEncoding.EncodeToString([]byte("Hello body"))
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
