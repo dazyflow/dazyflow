@@ -1,10 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Joachim Klahr
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Sortable from "sortablejs";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Plus } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import type { Ref } from "../types";
@@ -60,25 +59,29 @@ function arrayMove<T>(arr: T[], from: number, to: number): T[] {
   return next;
 }
 
+const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
+
 // How far (px) a row must be swiped sideways before release deletes it.
 const SWIPE_DELETE_PX = 72;
+// Movement (px) before a row-body gesture commits to an axis.
+const AXIS_LOCK_PX = 8;
 
-// RenderTableColumns is the drag-to-reorder / swipe-to-hide editor for a
-// render_table step's `columns` param. The table renders the shown columns
-// left-to-right in this order; a hidden column is simply omitted from
-// `columns` (the drop treats an explicit list as "include exactly these").
+// RenderTableColumns is the reorder / show-hide editor for a render_table
+// step's `columns` param. The table renders the shown columns left-to-right in
+// this order; a hidden column is simply omitted from `columns` (the drop
+// treats an explicit list as "include exactly these, in order").
 //
-// The column set is discovered, not typed: real columns from the step's last
-// run (exact casing) plus the upstream producer's declared fields. Once the
-// user has curated a set (columns saved), that set is authoritative — any
-// discovered column not in it (one they swiped away, or one that appeared
-// upstream later) lands in the "hidden" tray, tap-to-restore, so a delete is
-// durable but never traps the column.
+// One list holds everything: shown columns on top (drag the grip to reorder,
+// swipe a row aside to hide it), then any hidden columns below (dimmed, tap to
+// bring back). The column set is discovered, not typed — real columns from the
+// step's last run (exact casing) plus the upstream producer's declared fields.
+// Once a set is curated it's authoritative, so a hidden column stays hidden
+// but is always one tap from returning.
 //
-// Reordering runs on SortableJS (same library hazydo's task list uses), not
-// the HTML5 drag API — the latter never fires on touch, so mobile couldn't
-// reorder at all. Drag is grip-only and vertical; the row body is free for
-// the horizontal swipe-to-hide gesture, so the two never collide.
+// Drag and swipe are hand-rolled on pointer events (not a DnD library): the
+// dragged row tracks the finger 1:1 by construction, grip-drag is locked to
+// vertical, and the row body owns the horizontal swipe — so the two gestures
+// never fight and there's no fallback-clone speed drift.
 export function RenderTableColumns({
   params,
   onApply,
@@ -95,11 +98,15 @@ export function RenderTableColumns({
   const [schemaCols, setSchemaCols] = useState<string[]>([]);
   const [runCols, setRunCols] = useState<string[]>([]);
   const [order, setOrder] = useState<string[]>([]);
-  // The row currently mid-swipe and how far it's moved (px). null when idle.
+  // Active reorder drag (grip) and active swipe (row body). Only one at a time.
+  const [drag, setDrag] = useState<{ col: string; from: number; to: number; dy: number } | null>(
+    null,
+  );
   const [swipe, setSwipe] = useState<{ col: string; dx: number } | null>(null);
-  // True only while a SortableJS drag is in flight — guards the resync effect
-  // so an async column fetch resolving mid-drag can't yank the list.
-  const dragging = useRef(false);
+  // True during either gesture — guards the resync effect so an async column
+  // fetch resolving mid-gesture can't yank the list out from under the finger.
+  const busy = useRef(false);
+  const listRef = useRef<HTMLUListElement | null>(null);
 
   // Primitives (references is a fresh object each render).
   const refToken = references?.token;
@@ -144,23 +151,19 @@ export function RenderTableColumns({
   const paramCols = useMemo(() => asStringList(params.columns), [params.columns]);
   const discovered = useMemo(() => uniq(runCols, schemaCols), [runCols, schemaCols]);
   // Shown columns: the saved set if the user has curated one (authoritative, so
-  // a swiped-away column stays gone), else every discovered column in data
-  // order (the default before any edit).
+  // a hidden column stays gone), else every discovered column in data order.
   const shown = useMemo(
     () => (paramCols.length > 0 ? paramCols : discovered),
     [paramCols, discovered],
   );
-  // Hidden tray: discovered columns not in the shown set — the ones swiped away
-  // plus any that appeared upstream after the set was curated.
-  const hidden = useMemo(
-    () => discovered.filter((c) => !shown.includes(c)),
-    [discovered, shown],
-  );
+  // Hidden: discovered columns not in the shown set — hidden by the user, or
+  // appeared upstream after the set was curated. Shown below, tap to restore.
+  const hidden = useMemo(() => discovered.filter((c) => !shown.includes(c)), [discovered, shown]);
 
   // Mirror the shown list into local state so a drag can reorder live; resync
-  // whenever the underlying set changes and we're not mid-drag.
+  // whenever the underlying set changes and no gesture is in flight.
   useEffect(() => {
-    if (!dragging.current) setOrder(shown);
+    if (!busy.current) setOrder(shown);
   }, [shown]);
 
   // Persist the shown order to `columns`, but only when it differs from what's
@@ -168,15 +171,6 @@ export function RenderTableColumns({
   const persist = (next: string[]) => {
     const same = next.length === paramCols.length && next.every((c, i) => c === paramCols[i]);
     if (!same) onApply({ columns: next });
-  };
-
-  // reorder is held in a ref and refreshed every render so the once-created
-  // Sortable instance always calls the latest closure (fresh `order`/`params`).
-  const reorderRef = useRef<(from: number, to: number) => void>(() => {});
-  reorderRef.current = (from, to) => {
-    const next = arrayMove(order, from, to);
-    setOrder(next);
-    persist(next);
   };
 
   const hide = (col: string) => {
@@ -194,80 +188,98 @@ export function RenderTableColumns({
     persist(next);
   };
 
-  // Create SortableJS on the <ul> via a callback ref, so it's set up exactly
-  // when the list mounts (and torn down on unmount) — this survives the
-  // empty-state early return below, which a mount-only useEffect would miss.
-  const sortable = useRef<Sortable | null>(null);
-  const listRef = useCallback((node: HTMLUListElement | null) => {
-    sortable.current?.destroy();
-    sortable.current = null;
-    if (!node) return;
-    sortable.current = Sortable.create(node, {
-      animation: 150,
-      direction: "vertical", // it's a vertical list — reorder is up/down only
-      handle: ".rtc-grip", // only the grip starts a drag; the row stays swipeable
-      chosenClass: "rtc-dragging",
-      ghostClass: "rtc-ghost",
-      fallbackOnBody: true, // clone on <body> so list overflow:hidden can't clip it
-      delay: 0, // drag starts immediately; the handle already disambiguates
-      onStart: () => {
-        dragging.current = true;
-      },
-      onEnd: (evt) => {
-        dragging.current = false;
-        const { oldIndex, newIndex, item } = evt;
-        const list = evt.from;
-        if (oldIndex == null || newIndex == null || oldIndex === newIndex) return;
-        // Undo SortableJS's DOM move so React remains authoritative, then apply
-        // the reorder through state; React reconciles the DOM from the new order.
-        item.remove();
-        list.insertBefore(item, list.children[oldIndex] ?? null);
-        reorderRef.current(oldIndex, newIndex);
-      },
-    });
-  }, []);
+  // --- Reorder drag (grip only; vertical) ---------------------------------
+  // rowStep is the on-screen distance between adjacent rows (height + gap),
+  // measured at drag start; the dragged row tracks the finger by `dy`, its
+  // neighbours shift by one step to open the drop gap.
+  const dragRef = useRef<{ col: string; from: number; startY: number } | null>(null);
+  const stepRef = useRef(40);
 
-  // --- Swipe-to-hide gesture (row body only; grip is reserved for drag) ---
-  // Tracks the active pointer; `axis` locks to horizontal once intent is clear
-  // so a vertical drag scrolls the inspector instead of swiping.
-  const swipeStart = useRef<{ col: string; x: number; y: number; axis: "" | "x" | "y" } | null>(
-    null,
-  );
-
-  const onRowPointerDown = (e: React.PointerEvent, col: string) => {
-    if (e.pointerType === "mouse" && e.button !== 0) return;
-    if ((e.target as HTMLElement).closest(".rtc-grip")) return; // grip = drag
-    swipeStart.current = { col, x: e.clientX, y: e.clientY, axis: "" };
+  const measureStep = () => {
+    const kids = listRef.current?.children;
+    if (!kids || kids.length < 1) return;
+    if (kids.length >= 2) {
+      stepRef.current =
+        kids[1].getBoundingClientRect().top - kids[0].getBoundingClientRect().top;
+    } else {
+      stepRef.current = kids[0].getBoundingClientRect().height + 4;
+    }
   };
 
-  const onRowPointerMove = (e: React.PointerEvent, col: string) => {
-    const s = swipeStart.current;
+  const onGripDown = (e: React.PointerEvent, col: string, index: number) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    e.stopPropagation(); // don't let the row-body swipe handler also fire
+    measureStep();
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+    dragRef.current = { col, from: index, startY: e.clientY };
+    busy.current = true;
+    setDrag({ col, from: index, to: index, dy: 0 });
+  };
+
+  const onGripMove = (e: React.PointerEvent) => {
+    const s = dragRef.current;
+    if (!s) return;
+    e.preventDefault();
+    const dy = e.clientY - s.startY;
+    const step = stepRef.current || 40;
+    const to = clamp(s.from + Math.round(dy / step), 0, order.length - 1);
+    setDrag({ col: s.col, from: s.from, to, dy });
+  };
+
+  const onGripUp = () => {
+    const s = dragRef.current;
+    dragRef.current = null;
+    busy.current = false;
+    setDrag((d) => {
+      if (s && d && d.to !== s.from) {
+        const next = arrayMove(order, s.from, d.to);
+        setOrder(next);
+        persist(next);
+      }
+      return null;
+    });
+  };
+
+  // --- Swipe-to-hide (row body; horizontal) -------------------------------
+  const swipeRef = useRef<{ col: string; x: number; y: number; axis: "" | "x" | "y" } | null>(null);
+
+  const onRowDown = (e: React.PointerEvent, col: string) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    if ((e.target as HTMLElement).closest(".rtc-grip")) return; // grip = reorder
+    swipeRef.current = { col, x: e.clientX, y: e.clientY, axis: "" };
+  };
+
+  const onRowMove = (e: React.PointerEvent, col: string) => {
+    const s = swipeRef.current;
     if (!s || s.col !== col) return;
     const dx = e.clientX - s.x;
     const dy = e.clientY - s.y;
     if (s.axis === "") {
-      // Decide the gesture on first meaningful movement.
-      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      if (Math.abs(dx) < AXIS_LOCK_PX && Math.abs(dy) < AXIS_LOCK_PX) return;
       s.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
       if (s.axis === "y") {
-        swipeStart.current = null; // vertical intent — let the panel scroll
+        swipeRef.current = null; // vertical intent — let the panel scroll
         return;
       }
+      busy.current = true;
       (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
     }
     e.preventDefault();
     setSwipe({ col, dx });
   };
 
-  const onRowPointerUp = (col: string) => {
-    const s = swipeStart.current;
-    swipeStart.current = null;
-    const dx = swipe?.col === col ? swipe.dx : 0;
-    setSwipe(null);
-    if (s?.axis === "x" && Math.abs(dx) > SWIPE_DELETE_PX) hide(col);
+  const onRowUp = (col: string) => {
+    const s = swipeRef.current;
+    swipeRef.current = null;
+    busy.current = false;
+    setSwipe((sw) => {
+      const dx = sw?.col === col ? sw.dx : 0;
+      if (s?.axis === "x" && Math.abs(dx) > SWIPE_DELETE_PX) hide(col);
+      return null;
+    });
   };
 
-  if (order.length === 0) {
+  if (order.length === 0 && hidden.length === 0) {
     return (
       <div className="rtc">
         <div className="rtc-label">{t("renderTableColumns.title")}</div>
@@ -276,60 +288,88 @@ export function RenderTableColumns({
     );
   }
 
+  const step = stepRef.current || 40;
+
   return (
     <div className="rtc">
       <div className="rtc-label">{t("renderTableColumns.title")}</div>
       <ul className="rtc-list" ref={listRef}>
-        {order.map((col) => {
+        {order.map((col, i) => {
+          // Reorder transforms: the lifted row follows the finger; the rows
+          // between its start and target shift one step to open the gap.
+          let ty = 0;
+          const lifted = drag?.col === col;
+          if (drag) {
+            if (lifted) ty = drag.dy;
+            else if (drag.from < drag.to && i > drag.from && i <= drag.to) ty = -step;
+            else if (drag.from > drag.to && i >= drag.to && i < drag.from) ty = step;
+          }
           const dx = swipe?.col === col ? swipe.dx : 0;
-          const willDelete = Math.abs(dx) > SWIPE_DELETE_PX;
+          const swiping = dx !== 0;
           return (
             <li
               key={col}
-              className={
-                "rtc-item" + (dx !== 0 ? " rtc-swiping" : "") + (willDelete ? " rtc-will-delete" : "")
-              }
-              style={
-                dx !== 0
-                  ? { transform: `translateX(${dx}px)`, opacity: Math.max(0.35, 1 - Math.abs(dx) / 320) }
-                  : undefined
-              }
-              onPointerDown={(e) => onRowPointerDown(e, col)}
-              onPointerMove={(e) => onRowPointerMove(e, col)}
-              onPointerUp={() => onRowPointerUp(col)}
-              onPointerCancel={() => {
-                swipeStart.current = null;
-                setSwipe(null);
-              }}
+              className={"rtc-item" + (lifted ? " rtc-lift" : "")}
+              style={ty !== 0 ? { transform: `translateY(${ty}px)` } : undefined}
             >
-              <span className="rtc-grip" title={t("renderTableColumns.drag")}>
-                <GripIcon />
-              </span>
-              <span className="rtc-col">{col}</span>
+              {swiping && (
+                <div
+                  className="rtc-del-bg"
+                  style={{ justifyContent: dx < 0 ? "flex-end" : "flex-start" }}
+                  aria-hidden="true"
+                >
+                  <Trash2 size={14} />
+                  <span>{t("renderTableColumns.delete")}</span>
+                </div>
+              )}
+              <div
+                className={"rtc-fg" + (swiping ? " rtc-swiping" : "")}
+                style={swiping ? { transform: `translateX(${dx}px)` } : undefined}
+                onPointerDown={(e) => onRowDown(e, col)}
+                onPointerMove={(e) => onRowMove(e, col)}
+                onPointerUp={() => onRowUp(col)}
+                onPointerCancel={() => {
+                  swipeRef.current = null;
+                  busy.current = false;
+                  setSwipe(null);
+                }}
+              >
+                <span
+                  className="rtc-grip"
+                  title={t("renderTableColumns.drag")}
+                  onPointerDown={(e) => onGripDown(e, col, i)}
+                  onPointerMove={onGripMove}
+                  onPointerUp={onGripUp}
+                  onPointerCancel={onGripUp}
+                >
+                  <GripIcon />
+                </span>
+                <span className="rtc-col">{col}</span>
+              </div>
             </li>
           );
         })}
+        {hidden.length > 0 && (
+          <li className="rtc-divider" aria-hidden="true">
+            {t("renderTableColumns.hiddenTitle")}
+          </li>
+        )}
+        {hidden.map((col) => (
+          <li key={col} className="rtc-item rtc-hidden-row">
+            <button
+              type="button"
+              className="rtc-fg"
+              title={t("renderTableColumns.restore")}
+              onClick={() => restore(col)}
+            >
+              <span className="rtc-restore" aria-hidden="true">
+                <Plus size={14} />
+              </span>
+              <span className="rtc-col">{col}</span>
+            </button>
+          </li>
+        ))}
       </ul>
-      {hidden.length > 0 && (
-        <>
-          <div className="rtc-sublabel">{t("renderTableColumns.hiddenTitle")}</div>
-          <ul className="rtc-hidden-list">
-            {hidden.map((col) => (
-              <li key={col}>
-                <button
-                  type="button"
-                  className="rtc-hidden-item"
-                  title={t("renderTableColumns.restore")}
-                  onClick={() => restore(col)}
-                >
-                  <Plus size={12} aria-hidden="true" />
-                  <span className="rtc-col">{col}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
       <div className="rtc-help">{t("renderTableColumns.help")}</div>
     </div>
   );

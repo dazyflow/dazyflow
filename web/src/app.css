@@ -10079,10 +10079,36 @@ a.pa-card:hover {
   letter-spacing: 0.03em;
   margin-bottom: var(--space-1);
 }
-/* overflow-hidden clips the swipe-to-hide translate to the list; the drag
-   clone lives on <body> (fallbackOnBody) so it's never clipped by this. */
-.rtc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); overflow: hidden; }
+.rtc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); position: relative; }
+/* Each row is a slot: it translateY-shifts to open a gap during a reorder
+   drag, and clips its own swipe backdrop. The visible surface is .rtc-fg,
+   which slides sideways to reveal the Delete backdrop underneath. */
 .rtc-item {
+  position: relative;
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: transform 0.15s ease;
+}
+/* The lifted row follows the finger with no transition; its neighbours keep
+   the shift transition so the gap opens smoothly. */
+.rtc-item.rtc-lift { z-index: 3; transition: none; }
+/* Red "Delete" backdrop revealed as the row is swiped aside (todo-list style). */
+.rtc-del-bg {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 var(--space-3);
+  background: var(--danger);
+  color: #fff;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.rtc-fg {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -10094,27 +10120,14 @@ a.pa-card:hover {
   /* pan-y lets a vertical drag scroll the inspector while we own horizontal
      swipes; the transition animates the snap-back when a swipe is released. */
   touch-action: pan-y;
-  transition: transform 0.18s ease, opacity 0.18s ease, background 0.12s, border-color 0.12s;
+  transition: transform 0.18s ease, box-shadow 0.12s, border-color 0.12s;
 }
-/* While a finger is actively dragging the row sideways, follow it 1:1 with no
-   transition lag. */
-.rtc-item.rtc-swiping { transition: background 0.12s, border-color 0.12s; }
-/* Past the delete threshold: the row reads as "release to remove". */
-.rtc-item.rtc-will-delete {
-  border-color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 14%, var(--surface));
-}
-.rtc-item.rtc-dragging {
+/* Actively following the finger sideways — no transition lag. */
+.rtc-fg.rtc-swiping { transition: none; }
+.rtc-item.rtc-lift .rtc-fg {
   box-shadow: var(--shadow-pop);
   border-color: var(--border-strong);
   background: var(--surface-2);
-}
-/* SortableJS placeholder (the gap the row will drop into): faded + dashed so
-   the drop target reads clearly under the lifted row. */
-.rtc-item.rtc-ghost {
-  opacity: 0.4;
-  border-style: dashed;
-  border-color: var(--accent);
 }
 .rtc-grip {
   flex: 0 0 auto;
@@ -10128,45 +10141,47 @@ a.pa-card:hover {
   touch-action: none;
   transition: color 0.12s;
 }
-.rtc-item:hover .rtc-grip { color: var(--muted); }
+.rtc-fg:hover .rtc-grip { color: var(--muted); }
 .rtc-grip:active { cursor: grabbing; color: var(--accent); }
 .rtc-col { overflow-wrap: anywhere; }
-/* Hidden-columns tray: swiped-away columns (plus any discovered after the set
-   was curated) as tap-to-restore chips. */
-.rtc-sublabel {
-  font-size: var(--text-xs);
+/* Hidden columns live in the same list, below the shown ones: dimmed, dashed,
+   with a + to bring them back. A faint divider labels the group. */
+.rtc-divider {
+  font-size: var(--text-2xs);
   font-weight: 600;
-  color: var(--muted);
+  color: var(--faint);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
-  margin: var(--space-2) 0 var(--space-1);
+  letter-spacing: 0.04em;
+  margin-top: var(--space-1);
+  padding: 0 var(--space-1);
 }
-.rtc-hidden-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-}
-.rtc-hidden-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px var(--space-2);
-  border: 1px dashed var(--border-strong);
-  border-radius: 999px;
+.rtc-item.rtc-hidden-row .rtc-fg {
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  border-style: dashed;
   background: transparent;
   color: var(--muted);
-  font-size: var(--text-xs);
   cursor: pointer;
-  transition: color 0.12s, border-color 0.12s, background 0.12s;
 }
-.rtc-hidden-item:hover {
-  color: var(--text);
+.rtc-item.rtc-hidden-row .rtc-fg:hover {
   border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--text);
 }
+.rtc-restore {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.rtc-item.rtc-hidden-row .rtc-fg:hover .rtc-restore { color: var(--accent); }
 .rtc-hint, .rtc-help {
   font-size: var(--text-xs);
   color: var(--muted);
