@@ -1784,6 +1784,19 @@ function EditorInner() {
     [nodes, selectedID],
   );
 
+  // inspectorUpstreamRows: for a selected render_text step, the rows its `rows`
+  // producer emitted on the last run — read from that upstream node's OUTPUT in
+  // the run (the resolved node INPUT isn't persisted, so this is the reliable
+  // source, and it covers fixed-shape producers like RSS). Lets the Make-text
+  // editor discover the real columns and seed its preview from real data.
+  const inspectorUpstreamRows = useMemo(() => {
+    if (!inspectorSelected || inspectorSelected.data.moduleID !== "render_text") return undefined;
+    const e = edges.find((x) => x.target === inspectorSelected.id && (x.targetHandle ?? "") === "rows");
+    if (!e) return undefined;
+    const data = runOutputs[e.source]?.[e.sourceHandle ?? "out"]?.data;
+    return Array.isArray(data) ? (data as Record<string, unknown>[]) : undefined;
+  }, [inspectorSelected, edges, runOutputs]);
+
   const onInspectorChange = (id: string, patch: Partial<DazyNodeData>) => {
     setNodes((nds) =>
       nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...patch } } : n)),
@@ -3318,18 +3331,28 @@ function EditorInner() {
     return () => abort.abort();
   };
 
+  // enabledNodes: nodes that will actually run — everything except the ones
+  // switched off AND the ones the engine skips downstream of an off step
+  // (offByCascade). A step that never runs needs no connection/secret/setup,
+  // so the flow-level gates below reason over this set, not every node. This
+  // is why toggling a node off clears its "Connect to run" prompt (matching
+  // the per-node chip in setupNeededByNode, which already skips off steps).
+  const enabledNodes = useMemo(
+    () => nodes.filter((n) => !disabledNodes.has(n.id) && !offByCascade.has(n.id)),
+    [nodes, disabledNodes, offByCascade],
+  );
   // missingConnections: OAuth accounts this graph references but the
   // tenant hasn't connected. Recomputed as nodes/params/providers
   // change so the Run gate always reflects the current canvas.
   const missingConnections = useMemo(
-    () => requiredConnections(nodes, manifestByID, paramsByID, providers),
-    [nodes, manifestByID, paramsByID, providers],
+    () => requiredConnections(enabledNodes, manifestByID, paramsByID, providers),
+    [enabledNodes, manifestByID, paramsByID, providers],
   );
   // missingSecrets: ${secret.NAME} credentials this graph references but
   // that aren't stored yet (excluding ones it writes itself).
   const missingSecrets = useMemo(
-    () => requiredSecrets(nodes, paramsByID, secrets),
-    [nodes, paramsByID, secrets],
+    () => requiredSecrets(enabledNodes, paramsByID, secrets),
+    [enabledNodes, paramsByID, secrets],
   );
   // adminBlockedProviders / adminBlockedSecretRefs: when OAuth or the
   // encrypted secret store are off entirely on this install, the
@@ -3340,27 +3363,27 @@ function EditorInner() {
   // can't fix these themselves — separate UI affordance (no
   // set-up CTA on these rows).
   const adminBlockedProviders = useMemo(
-    () => unavailableProviders(nodes, manifestByID, paramsByID, providers),
-    [nodes, manifestByID, paramsByID, providers],
+    () => unavailableProviders(enabledNodes, manifestByID, paramsByID, providers),
+    [enabledNodes, manifestByID, paramsByID, providers],
   );
   const adminBlockedSecretRefs = useMemo(
-    () => unavailableSecretRefs(nodes, paramsByID, secrets),
-    [nodes, paramsByID, secrets],
+    () => unavailableSecretRefs(enabledNodes, paramsByID, secrets),
+    [enabledNodes, paramsByID, secrets],
   );
   // slackTargets: channels this graph posts to. Drives a pre-run
   // reminder to invite the Slack app — orthogonal to needsSetup (Slack
   // can be connected yet the app still absent from the channel).
   const slackTargets = useMemo(
-    () => slackChannels(nodes, paramsByID),
-    [nodes, paramsByID],
+    () => slackChannels(enabledNodes, paramsByID),
+    [enabledNodes, paramsByID],
   );
   // missingSetups: apps with a "connect once" service connection (Claude,
   // ntfy, SMTP) that isn't configured. OAuth and ${secret.…} are covered by
   // the two checks above; this closes the ConnectionFields gap so the gate
   // catches them too instead of letting the run fail mid-flight.
   const missingSetups = useMemo(
-    () => missingConnectionApps(nodes, manifestByID, paramsByID, secrets),
-    [nodes, manifestByID, paramsByID, secrets],
+    () => missingConnectionApps(enabledNodes, manifestByID, paramsByID, secrets),
+    [enabledNodes, manifestByID, paramsByID, secrets],
   );
   const userFixableSetup =
     missingConnections.length > 0 ||
@@ -4816,6 +4839,7 @@ function EditorInner() {
           nodeDisabled={inspectorSelected ? disabledNodes.has(inspectorSelected.id) : false}
           onToggleDisabled={toggleNodeDisabled}
           onResetState={canEdit ? resetNodeStateAction : undefined}
+          upstreamRows={inspectorUpstreamRows}
           tokenLabels={tokenLabels}
           runCoordinate={
             inspectorSelected && typeof runOutputs[inspectorSelected.id]?.coordinate?.data === "string"

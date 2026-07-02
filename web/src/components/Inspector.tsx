@@ -80,6 +80,10 @@ type Props = {
   // user clicks Run). Used by the inline approval panel for
   // await_approval nodes.
   currentRunID: string | null;
+  // upstreamRows: for a render_text step, the rows its `rows` producer emitted
+  // on the last run — the parent resolves it from the run outputs so the
+  // Make-text editor can discover real columns and seed its preview.
+  upstreamRows?: Record<string, unknown>[];
   // liveLogs streams stdout/stderr lines from the currently-selected
   // node's in-flight run. When non-empty the inspector renders a
   // scrolling console.
@@ -156,6 +160,7 @@ export function Inspector({
   onResetState,
   tokenLabels,
   currentRunID,
+  upstreamRows,
   liveLogs,
   workspace,
   onSample,
@@ -592,6 +597,9 @@ export function Inspector({
             {d.moduleID === "render_text" && (
               <RenderTextPreview
                 params={currentParams}
+                references={refCtx}
+                currentRunID={currentRunID}
+                upstreamRows={upstreamRows}
                 onApply={(patch) =>
                   onParamsChange(selected.id, { ...currentParams, ...patch })
                 }
