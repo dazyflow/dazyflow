@@ -17,6 +17,7 @@ import (
 	_ "git.sr.ht/~klahr/dazyflow/drops/db"
 	_ "git.sr.ht/~klahr/dazyflow/drops/discord"
 	_ "git.sr.ht/~klahr/dazyflow/drops/drive"
+	_ "git.sr.ht/~klahr/dazyflow/drops/elks"
 	_ "git.sr.ht/~klahr/dazyflow/drops/encoding"
 	_ "git.sr.ht/~klahr/dazyflow/drops/excel"
 	_ "git.sr.ht/~klahr/dazyflow/drops/flow"

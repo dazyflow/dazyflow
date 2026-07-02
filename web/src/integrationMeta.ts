@@ -331,6 +331,15 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     docs_url: "https://www.twilio.com/docs/sms",
     brand_logo: "/brands/twilio.svg",
   },
+  "46elks": {
+    name: "46elks",
+    description:
+      "Send SMS text messages straight from a flow via 46elks, a Swedish messaging provider popular across the Nordics. Send from an alphanumeric sender name (like \"Acme\") for one-way alerts — order updates, reminders, verification codes — or from one of your 46elks numbers when you want the recipient to be able to reply. A dry-run switch lets you validate a message without sending or being billed.",
+    technical_notes:
+      "Authenticated with your 46elks API username and password (HTTP Basic), read from the encrypted secret store as ELKS_API_USERNAME and ELKS_API_PASSWORD — no credentials on the node. Sends a form-encoded POST to 46elks' /a1/sms endpoint. 'From' is either E.164 (repliable) or an alphanumeric sender ID (max 11 chars, must contain a letter, no replies). 46elks has no idempotency key, so the drop never auto-retries and the engine dedupes recovered runs — a resend would double-bill.",
+    docs_url: "https://46elks.com/docs",
+    brand_logo: "/brands/46elks.svg",
+  },
   discord: {
     name: "Discord",
     description:
