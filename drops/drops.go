@@ -13,9 +13,11 @@ package drops
 
 import (
 	_ "git.sr.ht/~klahr/dazyflow/drops/claude"
+	_ "git.sr.ht/~klahr/dazyflow/drops/datetime"
 	_ "git.sr.ht/~klahr/dazyflow/drops/db"
 	_ "git.sr.ht/~klahr/dazyflow/drops/discord"
 	_ "git.sr.ht/~klahr/dazyflow/drops/drive"
+	_ "git.sr.ht/~klahr/dazyflow/drops/encoding"
 	_ "git.sr.ht/~klahr/dazyflow/drops/excel"
 	_ "git.sr.ht/~klahr/dazyflow/drops/flow"
 	_ "git.sr.ht/~klahr/dazyflow/drops/gcal"
