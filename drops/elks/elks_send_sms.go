@@ -28,7 +28,7 @@ func init() {
 			Category:    "network",
 			Icon:        "message-square",
 			BrandLogo:   "/brands/46elks.svg",
-			Color:       "#0f5499",
+			Color:       "#15115F",
 			Provider:    "internal",
 			Tags:        []string{"46elks", "elks", "sms", "text", "message", "notify", "sweden", "nordic"},
 			Examples: []core.ParamsExample{
