@@ -36,9 +36,6 @@ func TestPhone_NormalizesSwedishLocal(t *testing.T) {
 	if got := res.Output["type"].Inline; got != "mobile" {
 		t.Errorf("type = %v, want mobile", got)
 	}
-	if got := res.Output["flag"].Inline; got != "🇸🇪" {
-		t.Errorf("flag = %q, want 🇸🇪", got)
-	}
 }
 
 func TestPhone_RegionDefaultsToSE(t *testing.T) {
@@ -63,9 +60,6 @@ func TestPhone_InternationalIgnoresRegion(t *testing.T) {
 	}
 	if got := res.Output["out"].Inline; got != "+442079460958" {
 		t.Errorf("out = %v, want +442079460958", got)
-	}
-	if got := res.Output["flag"].Inline; got != "🇬🇧" {
-		t.Errorf("flag = %q, want 🇬🇧", got)
 	}
 }
 

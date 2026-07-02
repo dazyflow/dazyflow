@@ -23,6 +23,7 @@ import { GeoPointField } from "./GeoPointField";
 import { api } from "../api";
 import { explainApiError } from "../lib/explainApiError";
 import { detectTrackingParams, stripTrackingParams } from "../lib/trackingParams";
+import { telFieldFlag, regionDisplayName } from "../lib/phoneFlag";
 import { useAuth } from "../auth";
 import { Button } from "./Button";
 
@@ -640,6 +641,7 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
           references={references}
           extraReferenceItems={extraReferenceItems}
           tokenLabels={tokenLabels}
+          siblings={siblings}
         />
       );
     }
@@ -1829,6 +1831,7 @@ function PlainStringField({
   references,
   extraReferenceItems,
   tokenLabels,
+  siblings,
 }: {
   name: string;
   schema: JSONSchema;
@@ -1838,6 +1841,7 @@ function PlainStringField({
   references?: ReferenceCtx;
   extraReferenceItems?: { label: string; token: string }[];
   tokenLabels?: TokenLabels;
+  siblings?: Record<string, unknown>;
 }) {
   const { t } = useTranslation();
   // URL fields (schema.format === "uri") get an edit-time hint when the typed
@@ -1846,6 +1850,17 @@ function PlainStringField({
   // URL, so it never blocks; the `url` drop still validates/fails on its own.
   const urlValue = schema.format === "uri" && typeof value === "string" ? value : "";
   const trackers = urlValue ? detectTrackingParams(urlValue) : [];
+  // Phone fields (schema.format === "tel") show a live flag for the region the
+  // number will be read as — its own calling code when international, else the
+  // sibling default_region. Mirrors the `phone` drop's region detection; a
+  // display nicety, never blocks.
+  const telInfo =
+    schema.format === "tel"
+      ? telFieldFlag(
+          value,
+          typeof siblings?.default_region === "string" ? (siblings.default_region as string) : "SE",
+        )
+      : null;
   const footer =
     trackers.length > 0 ? (
       <div className="sf-tracking-hint">
@@ -1857,6 +1872,25 @@ function PlainStringField({
         >
           {t("schemaForm.trackingStrip")}
         </button>
+      </div>
+    ) : telInfo && telInfo.flag ? (
+      <div
+        className="sf-tel-hint"
+        style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, fontSize: "0.85em", opacity: 0.85 }}
+      >
+        <span style={{ fontSize: "1.25em", lineHeight: 1 }} aria-hidden>
+          {telInfo.flag}
+        </span>
+        <span>
+          {telInfo.region
+            ? telInfo.intl
+              ? regionDisplayName(telInfo.region)
+              : t("phone.readAs", {
+                  region: regionDisplayName(telInfo.region),
+                  defaultValue: `Read as ${regionDisplayName(telInfo.region)}`,
+                })
+            : t("phone.international", { defaultValue: "International number" })}
+        </span>
       </div>
     ) : undefined;
   return (

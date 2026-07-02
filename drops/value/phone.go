@@ -67,14 +67,13 @@ func init() {
 			Outputs: []core.Port{
 				{Port: "out", Label: "E.164", MIME: []string{"text/plain"}},
 				{Port: "country", Label: "Country", MIME: []string{"text/plain"}},
-				{Port: "flag", Label: "Flag", MIME: []string{"text/plain"}},
 				{Port: "national", Label: "National number", MIME: []string{"text/plain"}},
 				{Port: "type", Label: "Type", MIME: []string{"text/plain"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"phone":{"type":"string","title":"Phone","description":"A phone number — local (070-123 45 67) or international (+46701234567). Type it here, or wire a string into the 'phone' input."},
+					"phone":{"type":"string","format":"tel","title":"Phone","description":"A phone number — local (070-123 45 67) or international (+46701234567). Type it here, or wire a string into the 'phone' input."},
 					"default_region":{"type":"string","title":"Default region","default":"SE","description":"ISO 3166 alpha-2 country code (SE, NO, DK, FI, GB…) to assume when the number isn't written in +international form. Ignored for a number that already starts with +."}
 				},
 				"required":["phone"]
@@ -116,28 +115,6 @@ func numberTypeLabel(t phonenumbers.PhoneNumberType) string {
 	}
 }
 
-// regionToFlag turns an ISO 3166 alpha-2 region code ("SE") into its flag
-// emoji (🇸🇪) by mapping each letter to its Unicode regional indicator symbol
-// (A→U+1F1E6). Returns "" for anything that isn't exactly two ASCII letters —
-// including the "001" pseudo-region libphonenumber uses for non-geographic
-// numbers (satellite, +800 toll-free), which has no flag. Note: whether the
-// emoji renders as a flag or as two letters depends on the viewer's font —
-// modern browsers (the web UI) show flags; some terminals and Windows don't.
-func regionToFlag(code string) string {
-	if len(code) != 2 {
-		return ""
-	}
-	var flag []rune
-	for i := 0; i < 2; i++ {
-		c := code[i]
-		if c < 'A' || c > 'Z' {
-			return ""
-		}
-		flag = append(flag, 0x1F1E6+rune(c-'A'))
-	}
-	return string(flag)
-}
-
 func executePhone(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	// Wired 'phone' input wins over the inline param (params.TextInputOr), so the
 	// number can be computed upstream or set on the node.
@@ -167,7 +144,6 @@ func executePhone(_ context.Context, job core.Job, _ chan<- core.Progress) (core
 	national := strconv.FormatUint(num.GetNationalNumber(), 10)
 	regionCode := phonenumbers.GetRegionCodeForNumber(num)
 	typeLabel := numberTypeLabel(phonenumbers.GetNumberType(num))
-	flag := regionToFlag(regionCode)
 
 	return core.Result{
 		JobID:  job.ID,
@@ -175,7 +151,6 @@ func executePhone(_ context.Context, job core.Job, _ chan<- core.Progress) (core
 		Output: map[string]core.Ref{
 			"out":      {MIME: "text/plain", Inline: e164},
 			"country":  {MIME: "text/plain", Inline: regionCode},
-			"flag":     {MIME: "text/plain", Inline: flag},
 			"national": {MIME: "text/plain", Inline: national},
 			"type":     {MIME: "text/plain", Inline: typeLabel},
 			// Fuller decomposition for templating: the numeric calling code (46),
@@ -183,7 +158,6 @@ func executePhone(_ context.Context, job core.Job, _ chan<- core.Progress) (core
 			"meta": {MIME: "application/json", Inline: map[string]any{
 				"e164":          e164,
 				"country":       regionCode,
-				"flag":          flag,
 				"calling_code":  int(num.GetCountryCode()),
 				"national":      national,
 				"type":          typeLabel,
