@@ -45,6 +45,13 @@ const builtinStoreRelPath = ".dazyflow-store/data.db"
 // from what it fetched).
 const boardRowLimit = 1000
 
+// boardRowIDKey is the reserved key under which each row's SQLite rowid is
+// returned — the stable handle the delete-a-row endpoint keys off. It's
+// deliberately NOT one of BoardPage.Columns, so the table view never shows it;
+// only the row-delete action reads it. Prefixed to avoid colliding with a real
+// column of the same name.
+const boardRowIDKey = "_dz_rowid"
+
 // Sentinel errors the HTTP layer maps to status codes. Mirrors the
 // not-configured / not-found / bad-input conventions in me_routes.go.
 var (
@@ -210,31 +217,38 @@ func (s *Service) BoardRows(ctx context.Context, p core.Principal, tenant, works
 	}
 
 	// limit/offset are bound as parameters (only the validated, confirmed
-	// table name is spliced). One extra row beyond the page tells us
-	// whether more exist without a second count.
+	// table name is spliced). The leading `rowid AS _dz_rowid` gives each row a
+	// stable handle for the delete endpoint; `*` still expands to just the
+	// user columns, so the displayed table is unchanged.
 	rows, err := db.QueryContext(ctx,
-		"SELECT * FROM "+quoted+" LIMIT ? OFFSET ?", limit, offset)
+		"SELECT rowid AS "+boardRowIDKey+", * FROM "+quoted+" LIMIT ? OFFSET ?", limit, offset)
 	if err != nil {
 		return BoardPage{}, fmt.Errorf("query rows: %w", err)
 	}
 	defer rows.Close()
 
-	columns, err := rows.Columns()
+	scanned, err := rows.Columns()
 	if err != nil {
 		return BoardPage{}, fmt.Errorf("columns: %w", err)
 	}
+	// scanned[0] is the rowid alias; the rest are the real, displayed columns.
+	columns := append([]string(nil), scanned[1:]...)
 	out := make([]map[string]any, 0, limit)
 	for rows.Next() {
-		vals := make([]any, len(columns))
-		ptrs := make([]any, len(columns))
+		vals := make([]any, len(scanned))
+		ptrs := make([]any, len(scanned))
 		for i := range vals {
 			ptrs[i] = &vals[i]
 		}
 		if err := rows.Scan(ptrs...); err != nil {
 			return BoardPage{}, fmt.Errorf("scan row %d: %w", len(out), err)
 		}
-		rec := make(map[string]any, len(columns))
-		for i, c := range columns {
+		rec := make(map[string]any, len(scanned))
+		// The rowid — the delete handle — under its reserved key, kept out of
+		// the displayed columns above.
+		rec[boardRowIDKey] = vals[0]
+		for i := 1; i < len(scanned); i++ {
+			c := scanned[i]
 			// The Collections store stores TEXT, so values arrive as strings;
 			// a stray BLOB column would otherwise marshal to base64 noise.
 			// Render bytes as a string for the friendly table view.
@@ -277,6 +291,34 @@ func (s *Service) ClearBoard(ctx context.Context, p core.Principal, tenant, work
 	defer db.Close()
 	if _, err := db.ExecContext(ctx, "DROP TABLE IF EXISTS "+quoteBoardIdent(name)); err != nil {
 		return fmt.Errorf("drop board: %w", err)
+	}
+	return nil
+}
+
+// DeleteBoardRow removes a single row from a board by its SQLite rowid (the
+// handle BoardRows returns under boardRowIDKey). Idempotent: deleting a row
+// that's already gone succeeds with no effect — a double-click or a stale
+// table view shouldn't error. An absent store or table is a not-found, mirroring
+// the read path. The name is validated and quoted before it touches SQL; the
+// rowid is bound as a parameter.
+func (s *Service) DeleteBoardRow(ctx context.Context, p core.Principal, tenant, workspace, name string, rowID int64) error {
+	if err := validateBoardName(name); err != nil {
+		return err
+	}
+	db, err := s.openBoardStore(tenant, workspace)
+	if err != nil {
+		return err
+	}
+	if db == nil {
+		return errBoardNotFound
+	}
+	defer db.Close()
+	if !s.boardExists(ctx, db, name) {
+		return errBoardNotFound
+	}
+	if _, err := db.ExecContext(ctx,
+		"DELETE FROM "+quoteBoardIdent(name)+" WHERE rowid = ?", rowID); err != nil {
+		return fmt.Errorf("delete row: %w", err)
 	}
 	return nil
 }
@@ -406,5 +448,30 @@ func (h *HTTPGateway) clearBoardMe(rw http.ResponseWriter, r *http.Request, p co
 		return
 	}
 	h.audit(r.Context(), p, "board.clear", name, "tenant="+tenant+" workspace="+workspace)
+	rw.WriteHeader(http.StatusNoContent)
+}
+
+func (h *HTTPGateway) deleteBoardRowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	tenant, workspace, ok := h.boardScope(rw, r, p)
+	if !ok {
+		return
+	}
+	// Deleting a row mutates collected data — same edit-level bar as clearing,
+	// so a read-only viewer can't remove rows.
+	if err := core.Require(p, core.PermGraphEdit); err != nil {
+		writeAPIError(rw, http.StatusForbidden, "forbidden", err.Error())
+		return
+	}
+	name := r.PathValue("name")
+	rowID, err := strconv.ParseInt(r.PathValue("rowid"), 10, 64)
+	if err != nil {
+		writeAPIError(rw, http.StatusBadRequest, "invalid_row", "row id must be an integer")
+		return
+	}
+	if err := h.svc.DeleteBoardRow(r.Context(), p, tenant, workspace, name, rowID); err != nil {
+		writeBoardError(rw, err)
+		return
+	}
+	h.audit(r.Context(), p, "board.row.delete", name, fmt.Sprintf("tenant=%s workspace=%s rowid=%d", tenant, workspace, rowID))
 	rw.WriteHeader(http.StatusNoContent)
 }

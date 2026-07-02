@@ -6996,6 +6996,36 @@ img[src$="/brands/smhi.svg"] {
 .run-table tbody tr:hover {
   background: var(--surface-2);
 }
+/* Per-row delete button in the Collections table — a muted trash icon that
+   stays out of the way until you hover the row, then reads as destructive. */
+.board-row-del {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  background: transparent;
+  border: none;
+  border-radius: var(--r-1);
+  color: var(--faint);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms, color 120ms, background 120ms;
+}
+.run-table tbody tr:hover .board-row-del {
+  opacity: 1;
+}
+.board-row-del:hover {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+.board-row-del:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--danger);
+}
+.board-row-del:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
 /* Lets the runs table scroll horizontally inside its card on narrow
    screens instead of overflowing the viewport. */
 .run-table-scroll {

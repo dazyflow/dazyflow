@@ -1245,6 +1245,26 @@ export const api = {
       `/me/boards/${encodeURIComponent(name)}` + (s ? `?${s}` : ""),
     );
   },
+  // deleteBoardRow removes one row by its rowid (BoardPage rows carry it under
+  // the reserved `_dz_rowid` key). Idempotent server-side.
+  deleteBoardRow: (
+    token: string,
+    name: string,
+    rowid: number,
+    tenant?: string,
+    workspace?: string,
+  ) => {
+    const qs = new URLSearchParams();
+    if (tenant) qs.set("tenant", tenant);
+    if (workspace) qs.set("workspace", workspace);
+    const s = qs.toString();
+    return request<void>(
+      token,
+      "DELETE",
+      `/me/boards/${encodeURIComponent(name)}/rows/${encodeURIComponent(String(rowid))}` +
+        (s ? `?${s}` : ""),
+    );
+  },
   // Billing: plan state for the Usage page, and the two Stripe
   // redirects (Checkout to upgrade, billing portal to manage/cancel).
   getBilling: (token: string, tenant?: string) => {

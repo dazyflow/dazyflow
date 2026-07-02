@@ -256,3 +256,65 @@ func TestClearBoardMe_ForbiddenWithoutEditPerm(t *testing.T) {
 		t.Fatalf("run-only clear = %d (%s), want 403", rw.Code, rw.Body.String())
 	}
 }
+
+func TestDeleteBoardRow(t *testing.T) {
+	svc, sb := newBoardService(t)
+	seedBoardStore(t, sb, "acme", "main")
+
+	page, err := svc.BoardRows(t.Context(), boardPrincipal, "acme", "main", "leads", 0, 0)
+	if err != nil {
+		t.Fatalf("BoardRows: %v", err)
+	}
+	// The rowid handle rides each row under the reserved key, and is NOT one of
+	// the displayed columns.
+	if len(page.Columns) != 2 {
+		t.Errorf("columns = %v, want just the two data columns", page.Columns)
+	}
+	for _, c := range page.Columns {
+		if c == boardRowIDKey {
+			t.Errorf("%s leaked into displayed columns", boardRowIDKey)
+		}
+	}
+	rowID, ok := page.Rows[0][boardRowIDKey].(int64)
+	if !ok {
+		t.Fatalf("row missing int64 %s, got %T", boardRowIDKey, page.Rows[0][boardRowIDKey])
+	}
+	target := page.Rows[0]["email"]
+
+	if err := svc.DeleteBoardRow(t.Context(), boardPrincipal, "acme", "main", "leads", rowID); err != nil {
+		t.Fatalf("DeleteBoardRow: %v", err)
+	}
+	after, err := svc.BoardRows(t.Context(), boardPrincipal, "acme", "main", "leads", 0, 0)
+	if err != nil {
+		t.Fatalf("BoardRows after: %v", err)
+	}
+	if after.Total != 1 {
+		t.Errorf("expected 1 row after delete, got %d", after.Total)
+	}
+	for _, r := range after.Rows {
+		if r["email"] == target {
+			t.Errorf("deleted row (email %v) is still present", target)
+		}
+	}
+	// Idempotent: deleting the same rowid again succeeds with no effect.
+	if err := svc.DeleteBoardRow(t.Context(), boardPrincipal, "acme", "main", "leads", rowID); err != nil {
+		t.Errorf("re-deleting a gone row should be a no-op, got %v", err)
+	}
+}
+
+func TestDeleteBoardRow_UnknownBoardIs404(t *testing.T) {
+	svc, sb := newBoardService(t)
+	seedBoardStore(t, sb, "acme", "main")
+	if err := svc.DeleteBoardRow(t.Context(), boardPrincipal, "acme", "main", "nope", 1); !errors.Is(err, errBoardNotFound) {
+		t.Fatalf("expected errBoardNotFound, got %v", err)
+	}
+}
+
+func TestDeleteBoardRowMe_ForbiddenWithoutEditPerm(t *testing.T) {
+	h := newRunOnlyHarness(t)
+	// Run-only token lacks graph:edit; deleting a row is 403 (same bar as clear).
+	rw := runOnlyDo(t, h, "DELETE", "/api/v1/me/boards/leads/rows/1", nil)
+	if rw.Code != http.StatusForbidden {
+		t.Fatalf("run-only row delete = %d (%s), want 403", rw.Code, rw.Body.String())
+	}
+}

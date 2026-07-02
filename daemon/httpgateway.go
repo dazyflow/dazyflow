@@ -546,6 +546,8 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/me/boards", h.requireAuth(h.listBoardsMe))
 	mux.HandleFunc("GET /api/v1/me/boards/{name}", h.requireAuth(h.getBoardMe))
 	mux.HandleFunc("DELETE /api/v1/me/boards/{name}", h.requireAuth(h.clearBoardMe))
+	// Delete a single row by its rowid (the handle getBoardMe returns per row).
+	mux.HandleFunc("DELETE /api/v1/me/boards/{name}/rows/{rowid}", h.requireAuth(h.deleteBoardRowMe))
 
 	// Git credentials: named, per-org auth bundles (SSH key and/or HTTPS
 	// PAT) a git_checkout node picks by `account` — the OAuth-account

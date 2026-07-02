@@ -26,9 +26,17 @@ export function Results() {
   const [query, setQuery] = useState("");
   const [clearing, setClearing] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
+  // rowPendingDelete holds the rowid a per-row delete is awaiting confirmation
+  // for (null = no dialog). Kept separate from confirmClear so a single row
+  // delete and a whole-collection clear don't share one modal.
+  const [rowPendingDelete, setRowPendingDelete] = useState<number | null>(null);
+  const [deletingRow, setDeletingRow] = useState(false);
 
   const tenant = activeTenant || me?.tenant || undefined;
   const workspace = activeWorkspace || me?.workspace || undefined;
+  // ROWID_KEY mirrors the daemon's boardRowIDKey: each row carries its SQLite
+  // rowid under this reserved key (not a displayed column) as the delete handle.
+  const ROWID_KEY = "_dz_rowid";
 
   // Load the board list. Re-runs when the active workspace changes.
   const reloadBoards = () => {
@@ -124,6 +132,25 @@ export function Results() {
       setError(explainApiError(e, t));
     } finally {
       setClearing(false);
+    }
+  };
+
+  // doDeleteRow removes one row by its rowid once confirmed, then refreshes the
+  // visible rows and the board list (so its count updates).
+  const doDeleteRow = async (rowid: number) => {
+    setRowPendingDelete(null);
+    if (!token || !selected) return;
+    setDeletingRow(true);
+    setError(null);
+    try {
+      await api.deleteBoardRow(token, selected, rowid, tenant, workspace);
+      const p = await api.getBoard(token, selected, { tenant, workspace });
+      setPage(p);
+      reloadBoards();
+    } catch (e) {
+      setError(explainApiError(e, t));
+    } finally {
+      setDeletingRow(false);
     }
   };
 
@@ -297,16 +324,33 @@ export function Results() {
                         {page.columns.map((c) => (
                           <th key={c}>{c}</th>
                         ))}
+                        {/* Trailing action column for the per-row delete. */}
+                        <th aria-label={t("results.deleteRow")} style={{ width: 1 }} />
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredRows.map((row, i) => (
-                        <tr key={i}>
-                          {page.columns.map((c) => (
-                            <td key={c}>{formatCell(row[c])}</td>
-                          ))}
-                        </tr>
-                      ))}
+                      {filteredRows.map((row, i) => {
+                        const rowid = Number(row[ROWID_KEY]);
+                        return (
+                          <tr key={Number.isFinite(rowid) ? rowid : i}>
+                            {page.columns.map((c) => (
+                              <td key={c}>{formatCell(row[c])}</td>
+                            ))}
+                            <td style={{ width: 1, whiteSpace: "nowrap" }}>
+                              <button
+                                type="button"
+                                className="board-row-del"
+                                title={t("results.deleteRow")}
+                                aria-label={t("results.deleteRow")}
+                                disabled={deletingRow || !Number.isFinite(rowid)}
+                                onClick={() => setRowPendingDelete(rowid)}
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                   {filteredRows.length === 0 && (
@@ -344,6 +388,16 @@ export function Results() {
           confirmLabel={t("results.clear")}
           onConfirm={() => void doClearBoard()}
           onCancel={() => setConfirmClear(false)}
+        />
+      )}
+      {rowPendingDelete !== null && (
+        <ConfirmModal
+          danger
+          title={t("results.deleteRowTitle")}
+          message={t("results.deleteRowConfirm")}
+          confirmLabel={t("results.deleteRow")}
+          onConfirm={() => void doDeleteRow(rowPendingDelete)}
+          onCancel={() => setRowPendingDelete(null)}
         />
       )}
     </div>
