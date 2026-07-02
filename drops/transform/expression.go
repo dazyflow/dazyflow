@@ -10,10 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/cel-go/cel"
-
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/internal/celexpr"
 )
 
 func init() {
@@ -78,11 +77,9 @@ func executeExpression(_ context.Context, job core.Job, _ chan<- core.Progress) 
 		return errResult(job, "bad_param", "param 'expr' is required (a CEL formula)"), nil
 	}
 
-	env, err := cel.NewEnv(
-		cel.Variable("input", cel.DynType),
-		cel.Variable("now", cel.TimestampType),
-		cel.CrossTypeNumericComparisons(true),
-	)
+	// Shared with the editor's linter (POST /tools/expression/validate) via
+	// internal/celexpr, so what the linter accepts is exactly what runs here.
+	env, err := celexpr.NewEnv()
 	if err != nil {
 		return errResult(job, "internal", fmt.Sprintf("cel env: %v", err)), nil
 	}

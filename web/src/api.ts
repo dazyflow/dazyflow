@@ -1011,6 +1011,16 @@ export const api = {
       { ...params, rows },
     ),
 
+  // validateExpression is the Expression drop's linter: compile a CEL formula
+  // server-side (same env the drop runs it in) and report the first problem.
+  // valid:true means it'll compile; otherwise `issue` carries the message and
+  // 1-based line/column.
+  validateExpression: (token: string, expr: string) =>
+    request<{
+      valid: boolean;
+      issue?: { message: string; line: number; column: number };
+    }>(token, "POST", "/tools/expression/validate", { expr }),
+
   // assistRenderTemplate turns a plain-English description into an HTML email
   // template using the tenant's connected Claude/ChatGPT key. `fields` are
   // the merge-field names available (from the sample data) so the model uses

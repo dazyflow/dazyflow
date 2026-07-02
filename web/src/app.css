@@ -10178,6 +10178,82 @@ a.pa-card:hover {
 }
 
 /* render_template live preview (Inspector pane). See RenderTemplatePreview.tsx. */
+/* CEL formula editor (CelInput) — a highlight <pre> painted under a
+   transparent-text <textarea>. The two MUST share identical typography, padding
+   and wrapping so the colored tokens sit under the real caret. */
+.cel-input {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.cel-editor {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.cel-editor:focus-within {
+  border-color: var(--accent);
+}
+.cel-highlight,
+.cel-textarea {
+  margin: 0;
+  padding: var(--space-2);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 13px;
+  line-height: 1.5;
+  tab-size: 2;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+.cel-highlight {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  color: var(--text);
+  overflow: auto;
+}
+.cel-textarea {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-height: 3.6em;
+  border: none;
+  outline: none;
+  resize: vertical;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--text);
+}
+.cel-textarea::placeholder {
+  color: var(--faint);
+}
+/* Token colors — readable on the dark surface. */
+.cel-str { color: #7ee787; }
+.cel-num { color: #f0a868; }
+.cel-kw { color: #d2a8ff; }
+.cel-fn { color: #79c0ff; }
+.cel-var { color: #56d4c4; }
+.cel-op { color: var(--muted); }
+.cel-punct { color: var(--faint); }
+/* Linter feedback under the editor. */
+.cel-issue,
+.cel-ok {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-xs);
+}
+.cel-issue {
+  color: var(--danger);
+}
+.cel-ok {
+  color: var(--status-ok, #3fb950);
+  opacity: 0.85;
+}
+
 .rtp {
   margin-top: var(--space-3);
   border-top: 1px solid var(--border);

@@ -20,6 +20,7 @@ import { ApprovalPanel } from "./ApprovalPanel";
 import { RenderTemplatePreview } from "./RenderTemplatePreview";
 import { RenderTextPreview } from "./RenderTextPreview";
 import { RenderTableColumns } from "./RenderTableColumns";
+import { CelInput } from "./CelInput";
 import { ForEachEditor } from "./ForEachEditor";
 import {
   TriggerScheduleField,
@@ -615,6 +616,18 @@ export function Inspector({
                 }
               />
             )}
+            {/* The Expression drop leads with the CEL formula editor
+                (highlighting + live linter); its raw `expr` field is hidden
+                from the form below, same pattern as render_table's columns. */}
+            {d.moduleID === "expression" && (
+              <div className="inspector-section">
+                <h4>{t("celInput.label")}</h4>
+                <CelInput
+                  value={typeof currentParams.expr === "string" ? currentParams.expr : ""}
+                  onChange={(v) => onParamsChange(selected.id, { ...currentParams, expr: v })}
+                />
+              </div>
+            )}
             <SchemaForm
               key={selected.id}
               schema={schema}
@@ -622,11 +635,16 @@ export function Inspector({
               workspace={workspace}
               accountPicker={accountPicker}
               wiredKeys={wiredPorts}
-              // render_table's `columns` is fully managed by the drag/add/edit
-              // column editor above — don't also surface it as a raw array
-              // field (which is the only thing in its Advanced section, so the
-              // section disappears entirely).
-              omitKeys={d.moduleID === "render_table" ? ["columns"] : undefined}
+              // A drop with a dedicated editor above hides its raw field here so
+              // it isn't edited in two places: render_table's `columns` (its
+              // whole Advanced section) and the Expression drop's `expr`.
+              omitKeys={
+                d.moduleID === "render_table"
+                  ? ["columns"]
+                  : d.moduleID === "expression"
+                    ? ["expr"]
+                    : undefined
+              }
               resourceLabels={resourceLabels}
               wiredSources={wiredSources}
               references={refCtx}

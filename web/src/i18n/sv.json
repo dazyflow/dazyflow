@@ -1753,6 +1753,12 @@
     "delete": "Ta bort",
     "empty": "Kolumner visas här när droppen känner sin indata. Kör den en gång, eller koppla en drop vars kolumner är kända."
   },
+  "celInput": {
+    "label": "Formel",
+    "placeholder": "t.ex. input.title  •  input * 1.25  •  input.filter(x, x.paid)",
+    "valid": "Giltig formel",
+    "errorAt": "Rad {{line}}, kol {{col}}: {{message}}"
+  },
   "renderTextPreview": {
     "presets": "Skapa en:",
     "layout": "Layout",

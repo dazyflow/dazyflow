@@ -1751,6 +1751,12 @@
     "delete": "Delete",
     "empty": "Columns show up here once this drop knows its input. Run it once, or connect a drop whose columns are known."
   },
+  "celInput": {
+    "label": "Formula",
+    "placeholder": "e.g. input.title  •  input * 1.25  •  input.filter(x, x.paid)",
+    "valid": "Valid formula",
+    "errorAt": "Line {{line}}, col {{col}}: {{message}}"
+  },
   "renderTextPreview": {
     "presets": "Make a:",
     "layout": "Layout",
