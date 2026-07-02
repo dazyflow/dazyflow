@@ -1,7 +1,9 @@
 # Support tickets + consented read-only access — design TODO
 
-Status: **design only, nothing built yet.** Hand-off doc so this can be
-continued in a fresh session. Written 2026-06-29.
+Status: **design; the prerequisite (redacted support bundle) is now built** —
+`core/support_bundle.go`. Everything else is still design-only. Hand-off doc so
+this can be continued in a fresh session. Written 2026-06-29; bundle shipped
+2026-07-03.
 
 ## Goal
 
@@ -13,15 +15,21 @@ or raw run data.**
 The premise of the product is "the user's stuff is secret," so every part
 of this is built around a redaction boundary and explicit org consent.
 
-## Prerequisite (build first): the redacted support bundle
+## Prerequisite (build first): the redacted support bundle — **DONE**
 
-This was specced in discussion but not yet written down as code. It is the
-foundation for both the ticket attachment and the live read-only view.
+**Shipped** in `core/support_bundle.go` (+ `core/support_bundle_test.go`), pure
+and dependency-free. It is the foundation for both the ticket attachment and the
+live read-only view. Everything specced below was implemented; notes on where it
+deviated from this sketch are inline.
 
-- One pure function in `core`, **redaction by construction** — a separate
-  `SupportBundle` type that physically cannot hold a raw value; you build it
-  *from* `core.Graph` + run records, never serialize the raw structs.
-  - `core/support_bundle.go`: `func BuildSupportBundle(g Graph, run RunSnapshot, issues []LintIssue, mode RedactMode) SupportBundle`
+- `func BuildSupportBundle(g Graph, run *RunSnapshot, issues []LintIssue, mode RedactMode) SupportBundle`
+  — **redaction by construction**: the `SupportBundle` / `BundleNode` /
+  `BundleRef` output types have no field that can hold a raw value (`BundleRef`
+  has no `Inline`), so you build *from* `core.Graph` + a `RunSnapshot`, never
+  serialize the raw structs. Deviation: `run` is `*RunSnapshot` (pointer) so
+  "no run attached" is `nil` rather than a zero-value sentinel. `RunSnapshot` /
+  `NodeRunSnapshot` are the raw INPUT types (they carry raw `core.Ref`); the
+  daemon adapter that fills them from `JobRecord`s is Phase 1 work, not built yet.
 - Redaction boundary (the only 4 danger zones; everything else is safe structure):
   - `Node.Params` values → **redact to shape** (`{"__redacted":"string","len":19}`);
     keep KEYS; keep reference templates verbatim (`${secret.NAME}`, `${node.…}`,
@@ -253,7 +261,8 @@ check, never tenant-crossing.
 
 ## Phasing
 
-1. **Bundle + grant only (no ticket UI):** `BuildSupportBundle`, persist
+1. **Bundle + grant only (no ticket UI):** ~~`BuildSupportBundle`~~ (done),
+   then a daemon adapter `JobRecord`s → `RunSnapshot`, persist
    `SupportBundleRecord`, `AccessGrant` request/approve/expire/revoke,
    `AuthorizeGraphSupportView`, support-view endpoint serving the redacted view,
    audit wiring. Pipe to whatever support channel exists today.
