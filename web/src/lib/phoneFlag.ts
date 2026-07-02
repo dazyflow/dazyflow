@@ -45,29 +45,24 @@ export function regionDisplayName(code: string): string {
   }
 }
 
-// telFieldFlag derives the flag + region to show beside a phone field. A
-// +international number's region comes from its calling code (best-effort map,
-// globe when unrecognised); anything else is read in the default region, so
-// that flag is shown.
-export function telFieldFlag(
-  value: unknown,
-  defaultRegion: string,
-): { flag: string; region: string; intl: boolean } {
-  const fallback = () => {
-    const region = (defaultRegion || "SE").toUpperCase();
-    return { flag: regionFlagEmoji(region), region, intl: false };
-  };
-  if (typeof value !== "string") return fallback();
+// telFieldFlag derives the flag to show beside a phone field — but ONLY for a
+// number written in international form (a leading "+", or the "00" international
+// dialing prefix used across Europe — 0045… is +45, Denmark). The region comes
+// from the number's own calling code (best-effort map; globe when
+// unrecognised). Returns null for a local number, an empty field, or a wired
+// reference: there's no unambiguous country to show, so no flag is rendered
+// (the default region is not surfaced as a flag). A single leading "0" is a
+// national trunk digit (070… is local), so only "00" counts as international.
+export function telFieldFlag(value: unknown): { flag: string; region: string } | null {
+  if (typeof value !== "string") return null;
   const v = value.trim();
-  // A wired reference (${node.out}) isn't a literal number — show the default.
-  if (v === "" || v.startsWith("${")) return fallback();
-  if (v.startsWith("+")) {
-    const digits = v.slice(1).replace(/\D/g, "");
-    for (const len of [3, 2, 1]) {
-      const region = CALLING_CODE_TO_REGION[digits.slice(0, len)];
-      if (region) return { flag: regionFlagEmoji(region), region, intl: true };
-    }
-    return { flag: "🌐", region: "", intl: true };
+  if (v === "" || v.startsWith("${")) return null;
+  const intlBody = v.startsWith("+") ? v.slice(1) : v.startsWith("00") ? v.slice(2) : null;
+  if (intlBody === null) return null;
+  const digits = intlBody.replace(/\D/g, "");
+  for (const len of [3, 2, 1]) {
+    const region = CALLING_CODE_TO_REGION[digits.slice(0, len)];
+    if (region) return { flag: regionFlagEmoji(region), region };
   }
-  return fallback();
+  return { flag: "🌐", region: "" };
 }

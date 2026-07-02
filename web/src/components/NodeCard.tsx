@@ -493,7 +493,6 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
                     value={d.params?.[key] ?? s.default ?? ""}
                     onChange={(v) => d.setParam?.(key, v)}
                     tokenLabels={d.tokenLabels}
-                    region={typeof d.params?.default_region === "string" ? d.params.default_region : undefined}
                   />
                 </label>
               );
@@ -562,7 +561,6 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
                         value={d.params?.[p.port] ?? field.default ?? ""}
                         onChange={(v) => d.setParam?.(p.port, v)}
                         tokenLabels={d.tokenLabels}
-                        region={typeof d.params?.default_region === "string" ? d.params.default_region : undefined}
                       />
                     </div>
                   )}
@@ -709,15 +707,11 @@ function ParamInput({
   value,
   onChange,
   tokenLabels,
-  region,
 }: {
   schema: JSONSchema;
   value: unknown;
   onChange: (v: unknown) => void;
   tokenLabels?: TokenLabels;
-  // region is the sibling default_region param, used to pick the flag for a
-  // format:"tel" field when the number isn't in +international form.
-  region?: string;
 }) {
   // When the whole value is one ${…} reference, show it the way the {}
   // menu words it ("Gmail · Matching emails → first → id") — the raw
@@ -800,22 +794,22 @@ function ParamInput({
       <textarea rows={2} value={String(value ?? "")} onChange={(e) => onChange(e.target.value)} />
     );
   }
-  // format:"tel" shows a live flag right beside the field for the region the
-  // number will be read as — its own calling code when international (+44 →
-  // 🇬🇧), else the sibling default_region. A display cue; the `phone` drop does
-  // the authoritative parse at run time.
+  // format:"tel" shows a live flag beside the field — but only for an
+  // international number (+44 → 🇬🇧, 0045 → 🇩🇰), read from its own calling
+  // code. A local number shows no flag (its country is ambiguous). A display
+  // cue; the `phone` drop does the authoritative parse at run time.
   if (s.type === "string" && s.format === "tel") {
     const text = String(value ?? "");
-    const { flag, region: r, intl } = telFieldFlag(text, region ?? "SE");
+    const info = telFieldFlag(text);
     return (
       <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-        {flag && (
+        {info && (
           <span
             aria-hidden
-            title={r ? regionDisplayName(r) : "International"}
-            style={{ fontSize: "1.15em", lineHeight: 1, opacity: intl || r ? 1 : 0.7 }}
+            title={info.region ? regionDisplayName(info.region) : "International"}
+            style={{ fontSize: "1.15em", lineHeight: 1 }}
           >
-            {flag}
+            {info.flag}
           </span>
         )}
         <input
