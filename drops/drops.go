@@ -33,6 +33,7 @@ import (
 	_ "git.sr.ht/~klahr/dazyflow/drops/notion"
 	_ "git.sr.ht/~klahr/dazyflow/drops/openai"
 	_ "git.sr.ht/~klahr/dazyflow/drops/openmeteo"
+	_ "git.sr.ht/~klahr/dazyflow/drops/rss"
 	_ "git.sr.ht/~klahr/dazyflow/drops/secrets"
 	_ "git.sr.ht/~klahr/dazyflow/drops/sheets"
 	_ "git.sr.ht/~klahr/dazyflow/drops/shell"

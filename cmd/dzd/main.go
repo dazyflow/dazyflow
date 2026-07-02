@@ -55,6 +55,7 @@ import (
 	"git.sr.ht/~klahr/dazyflow/drops/io"
 	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 	"git.sr.ht/~klahr/dazyflow/drops/notion"
+	rssdrop "git.sr.ht/~klahr/dazyflow/drops/rss"
 	secretsdrop "git.sr.ht/~klahr/dazyflow/drops/secrets"
 	"git.sr.ht/~klahr/dazyflow/drops/sheets"
 	"git.sr.ht/~klahr/dazyflow/drops/slack"
@@ -1781,6 +1782,9 @@ func setupEncryptedSecrets(ctx context.Context, masterKeyB64 string, secrets map
 	// prefix. Lets a polling Gmail flow act on each match without re-processing
 	// the backlog every poll.
 	gmail.SetCursorStore(exactRead, exactWrite)
+	// rss's dedupe watermark — the per-(flow,node) window of item ids it has
+	// already emitted, so a polling feed reader fires once per new item.
+	rssdrop.SetCursorStore(exactRead, exactWrite)
 	// Adaptive poll backoff: fetcher nodes write a per-flow "found data?"
 	// marker the scheduler reads to widen/tighten the poll cadence.
 	pollstate.SetStore(exactRead, exactWrite)

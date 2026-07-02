@@ -45,10 +45,11 @@ Notable absences:
 - **Microsoft 365** (Teams, Outlook, OneDrive) — biggest gap for business users
 - **PM / trackers** (Jira, Linear, Asana, Trello, Airtable)
 - **Telegram** (cheap, popular, fits the prosumer / self-hosted lean)
-- Cloud storage (S3 / Dropbox / Box), CRM (HubSpot / Salesforce), support (Zendesk), RSS
+- Cloud storage (S3 / Dropbox / Box), CRM (HubSpot / Salesforce), support (Zendesk)
+- ~~RSS~~ — DONE (`rss` drop; pairs with the Interval trigger)
 
 The Home Assistant + MQTT + SMHI mix suggests a prosumer / self-hosted /
-European audience — if so, rank **Telegram and RSS** above M365 / CRMs.
+European audience — if so, rank **Telegram** above M365 / CRMs.
 
 ## Recommendation
 
@@ -63,8 +64,7 @@ existing app), then treat connectors as continuous demand-led breadth work.
 - [x] **base64** + **hash** (HMAC) drops (`drops/encoding/`)
 - [x] **parse_xml** drop (`drops/transform/`)
 - [x] **regex** drop — extract/replace/split/match (`drops/transform/`)
-- [ ] regex extract/replace/split drop
 - [ ] Telegram connector
-- [ ] RSS trigger
+- [x] **rss** drop — RSS/Atom reader, Interval-paired, cursor dedupe on by default (`drops/rss/`)
 - [ ] Microsoft 365 (Teams / Outlook / OneDrive)
 - [ ] PM trackers (Jira / Linear / Airtable)
