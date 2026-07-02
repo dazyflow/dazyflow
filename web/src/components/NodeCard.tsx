@@ -944,18 +944,25 @@ function OperatorChip({
 //             dot; an unwired port is a faint, thinner hollow ring. (Required
 //             vs optional is shown by an asterisk on the label, not the fill.)
 function dotStyle(color: string, filled: boolean, place?: "in" | "out", missing?: boolean) {
-  // A required input that's neither wired nor filled in is painted with the
-  // danger colour instead of its MIME colour (#13), so the problem reads on
-  // the pin itself rather than only a node-level badge. Missing pins are
-  // always unwired, so they render as a strong red ring.
-  const c = missing ? "var(--danger)" : color;
+  // A required input that's neither wired nor filled in flags the problem on
+  // the pin itself (#13) — but only its BORDER turns red. The fill stays on the
+  // port's MIME colour so the TYPE is still legible: flooding the whole dot red
+  // (the old behaviour) hid the type underneath. Missing pins are always
+  // unwired; bump their fill tint a little so the type reads inside the red ring.
+  const borderColor = missing
+    ? "var(--danger)"
+    : filled
+      ? color
+      : `color-mix(in srgb, ${color} 80%, transparent)`;
   const base = {
     // Empty pins were a faint 1px, half-transparent outline that washed
     // out on the card surface. Give them a tinted fill plus a thicker,
     // higher-contrast ring so an unconnected port is easy to spot and aim
     // at; connected pins stay solid-colour.
-    background: filled ? c : `color-mix(in srgb, ${c} 22%, var(--surface))`,
-    border: filled ? `2px solid ${c}` : `2px solid ${missing ? c : `color-mix(in srgb, ${c} 80%, transparent)`}`,
+    background: filled
+      ? color
+      : `color-mix(in srgb, ${color} ${missing ? 40 : 22}%, var(--surface))`,
+    border: `2px solid ${borderColor}`,
     width: 12,
     height: 12,
   } as const;
