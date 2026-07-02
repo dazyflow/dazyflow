@@ -1564,6 +1564,8 @@
   "schemaForm": {
     "required": "obligatoriskt",
     "requiredHint": "Obligatoriskt",
+    "trackingHint": "Innehåller spårningsparametrar ({{params}}) – går oftast bra att ta bort.",
+    "trackingStrip": "Ta bort dem",
     "rowCond": {
       "opEquals": "är",
       "opNotEquals": "är inte",

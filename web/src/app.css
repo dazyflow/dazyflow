@@ -6280,6 +6280,17 @@ img[src$="/brands/smhi.svg"] {
   font-size: var(--text-sm);
   color: var(--muted);
 }
+/* Tracking-param hint on URL fields: informational, not an error — a muted
+   line + inline "Remove them" action, distinct from the red missing-value cue. */
+.sf-tracking-hint {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  margin-top: var(--space-1h);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
 .sf-ref-hint-title {
   font-weight: 600;
   margin-bottom: var(--space-0);

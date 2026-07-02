@@ -1,10 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Joachim Klahr
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package value contains literal/constant source drops — nodes that
-// take no input and emit a graph-author-supplied value on their
-// output port. Useful for inline prompts, templates, snippets, and
-// other small bits of data that don't deserve a workspace file.
+// Package value contains source-field drops — nodes whose output is a
+// value the graph author supplies inline. Most (Text, Number, JSON) take
+// no input and are pure ValueSources; some (URL) also accept a wired
+// string so the value can be computed upstream, and validate it. Useful
+// for inline prompts, templates, snippets, addresses, and other small
+// bits of data that don't deserve a workspace file.
 package value
 
 import (

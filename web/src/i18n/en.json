@@ -1562,6 +1562,8 @@
   "schemaForm": {
     "required": "required",
     "requiredHint": "Required",
+    "trackingHint": "Contains tracking parameters ({{params}}) — usually safe to remove.",
+    "trackingStrip": "Remove them",
     "rowCond": {
       "opEquals": "is",
       "opNotEquals": "is not",

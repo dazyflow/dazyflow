@@ -22,6 +22,7 @@ import { JsonEditor, isInvalidJSON } from "./JsonEditor";
 import { GeoPointField } from "./GeoPointField";
 import { api } from "../api";
 import { explainApiError } from "../lib/explainApiError";
+import { detectTrackingParams, stripTrackingParams } from "../lib/trackingParams";
 import { useAuth } from "../auth";
 import { Button } from "./Button";
 
@@ -938,6 +939,7 @@ function FieldWrap({
   required,
   stack,
   value,
+  footer,
   children,
 }: {
   name: string;
@@ -951,6 +953,10 @@ function FieldWrap({
   // expression (string inputs) so we can render a plain-language
   // explainer of what each reference pulls in. Omitted elsewhere.
   value?: unknown;
+  // footer is extra, field-specific content rendered inside the field
+  // container below the input (alongside the example / reference hints) —
+  // e.g. the URL tracking-param hint. Omitted for most fields.
+  footer?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const { t } = useTranslation();
@@ -1044,6 +1050,7 @@ function FieldWrap({
           </ul>
         </div>
       )}
+      {footer}
     </div>
   );
 }
@@ -1811,8 +1818,28 @@ function PlainStringField({
   extraReferenceItems?: { label: string; token: string }[];
   tokenLabels?: TokenLabels;
 }) {
+  const { t } = useTranslation();
+  // URL fields (schema.format === "uri") get an edit-time hint when the typed
+  // value carries known tracking / analytics params (utm_source, fbclid, …),
+  // with one-click removal. Purely a nudge — a tracking param is still a valid
+  // URL, so it never blocks; the `url` drop still validates/fails on its own.
+  const urlValue = schema.format === "uri" && typeof value === "string" ? value : "";
+  const trackers = urlValue ? detectTrackingParams(urlValue) : [];
+  const footer =
+    trackers.length > 0 ? (
+      <div className="sf-tracking-hint">
+        <span>{t("schemaForm.trackingHint", { params: trackers.join(", ") })}</span>
+        <button
+          type="button"
+          className="link-button"
+          onClick={() => onChange(stripTrackingParams(urlValue))}
+        >
+          {t("schemaForm.trackingStrip")}
+        </button>
+      </div>
+    ) : undefined;
   return (
-    <FieldWrap name={name} schema={schema} required={required} value={value}>
+    <FieldWrap name={name} schema={schema} required={required} value={value} footer={footer}>
       <TokenInput
         value={value}
         onChange={onChange}
