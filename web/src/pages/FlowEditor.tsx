@@ -117,6 +117,7 @@ import { ConfirmModal } from "../components/ConfirmModal";
 import { PublishCelebration } from "../components/PublishCelebration";
 import { browserTimeZone } from "../components/TriggersModal";
 import { QuickDropPalette } from "../components/QuickDropPalette";
+import { CanvasContextMenu, type ContextMenuItem } from "../components/CanvasContextMenu";
 import { PromptModal } from "../components/PromptModal";
 import { PublishLabelModal } from "../components/PublishLabelModal";
 import { Button } from "../components/Button";
@@ -513,6 +514,16 @@ function EditorInner() {
   }, []);
   // paletteOpen drives the Ctrl/Cmd+K quick-drop search popup.
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // When the palette was opened by a right-click on empty canvas, this holds
+  // the cursor point so the picked drop lands there (Blueprint "add node
+  // here"), rather than the auto-placement used for the toolbar/Ctrl+K path.
+  const [paletteScreen, setPaletteScreen] = useState<{ x: number; y: number } | null>(null);
+  // The right-click actions menu over a node or edge (null = closed).
+  const [ctxMenu, setCtxMenu] = useState<
+    | { kind: "node"; id: string; x: number; y: number }
+    | { kind: "edge"; id: string; x: number; y: number }
+    | null
+  >(null);
   // On a fresh (empty) flow the palette is seeded with just the entry points
   // (trigger drops) — every flow starts with one. paletteShowAll lets the user
   // escape that filter to the full catalog (e.g. a manual-only flow with no
@@ -2183,6 +2194,48 @@ function EditorInner() {
     });
     setDirty(true);
   }, [nodes]);
+
+  // Toggle a breakpoint on a specific node (the right-click target), rather
+  // than the sole selected node — the context-menu counterpart of toggleBreakpoint.
+  const toggleBreakpointFor = useCallback((id: string) => {
+    setBreakpoints((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+    setDirty(true);
+  }, []);
+
+  // Duplicate one node: a fresh id, its params carried over, offset a touch so
+  // the clone doesn't sit exactly on the original. Mirrors the copy/paste clone
+  // (single node, no edges) and leaves the copy selected for immediate nudging.
+  const duplicateNode = useCallback(
+    (id: string) => {
+      const src = nodes.find((n) => n.id === id);
+      if (!src) return;
+      const moduleID = src.data.moduleID;
+      const newID = nextID(nodes, moduleID);
+      const OFFSET = 48;
+      const clone: FlowNode<DazyNodeData> = {
+        id: newID,
+        type: "dazy",
+        position: { x: src.position.x + OFFSET, y: src.position.y + OFFSET },
+        selected: true,
+        data: { label: src.data.label, moduleID, manifest: src.data.manifest },
+      };
+      setNodes((nds) => [...nds.map((n) => ({ ...n, selected: false })), clone]);
+      setParamsByID((p) => ({ ...p, [newID]: { ...(paramsByID[id] ?? {}) } }));
+      setSelectedID(newID);
+      setDirty(true);
+    },
+    [nodes, paramsByID],
+  );
+
+  // The graph is mutable only with edit permission, off a live-run lock, and
+  // on the live graph (not a history preview). Right-click add/edit actions
+  // are gated on this, matching the Save button.
+  const canEdit = hasPerm("graph:edit") && !lockedRunID && !previewRef;
 
   // Continue / Step a paused run (#12).
   const resumeRun = useCallback(
@@ -4279,7 +4332,32 @@ function EditorInner() {
           // fires on mouse-release only when there was no drag — exactly the
           // gesture we want.
           onNodeClick={(_e, node) => setSelectedID(node.id)}
-          onPaneClick={() => setSelectedID(null)}
+          onPaneClick={() => {
+            setSelectedID(null);
+            setCtxMenu(null);
+          }}
+          // Right-click on empty canvas → add-node palette placed at the cursor
+          // (Blueprint "add node here"). paletteShowAll bypasses the empty-flow
+          // entry-point filter so the full catalog is offered.
+          onPaneContextMenu={(e) => {
+            e.preventDefault();
+            setCtxMenu(null);
+            if (!canEdit) return; // read-only: no add-node menu
+            setConnectFrom(null);
+            setPaletteShowAll(true);
+            setPaletteScreen({ x: (e as MouseEvent).clientX, y: (e as MouseEvent).clientY });
+            setPaletteOpen(true);
+          }}
+          // Right-click a node/edge → its actions menu.
+          onNodeContextMenu={(e, node) => {
+            e.preventDefault();
+            setSelectedID(node.id);
+            setCtxMenu({ kind: "node", id: node.id, x: e.clientX, y: e.clientY });
+          }}
+          onEdgeContextMenu={(e, edge) => {
+            e.preventDefault();
+            setCtxMenu({ kind: "edge", id: edge.id, x: e.clientX, y: e.clientY });
+          }}
           onSelectionChange={(s) => {
             // Only collapse on a MULTI-select (no single node to inspect).
             // Don't clear on the empty selection: React Flow fires a transient
@@ -4778,12 +4856,16 @@ function EditorInner() {
           onClose={() => {
             setPaletteOpen(false);
             setConnectFrom(null);
+            setPaletteScreen(null);
             setPaletteShowAll(false);
           }}
           onPick={(m) => {
             if (connectFrom) {
               // Drag-off-pin: place at the drop point and auto-wire.
               spawnDropConnected(m, connectFrom);
+            } else if (paletteScreen) {
+              // Right-click add: place exactly where the cursor was.
+              spawnDrop(m, paletteScreen);
             } else {
               // Predictable placement: right of the rightmost step (or
               // viewport centre on an empty canvas) — see spawnDropAuto.
@@ -4791,9 +4873,47 @@ function EditorInner() {
             }
             setPaletteOpen(false);
             setConnectFrom(null);
+            setPaletteScreen(null);
+            setPaletteShowAll(false);
           }}
         />
       )}
+      {ctxMenu &&
+        (() => {
+          const menu = ctxMenu;
+          const del = (target: { nodes?: { id: string }[]; edges?: { id: string }[] }) =>
+            void rfRef.current?.deleteElements(target);
+          const items: ContextMenuItem[] =
+            menu.kind === "node"
+              ? [
+                  { label: t("editor.ctxDuplicate"), disabled: !canEdit, onClick: () => duplicateNode(menu.id) },
+                  {
+                    label: disabledNodes.has(menu.id) ? t("editor.ctxEnable") : t("editor.ctxDisable"),
+                    disabled: !canEdit,
+                    onClick: () => toggleNodeDisabled(menu.id),
+                  },
+                  {
+                    label: breakpoints.has(menu.id)
+                      ? t("editor.ctxRemoveBreakpoint")
+                      : t("editor.ctxAddBreakpoint"),
+                    disabled: !canEdit,
+                    onClick: () => toggleBreakpointFor(menu.id),
+                  },
+                  { separator: true },
+                  { label: t("editor.ctxDelete"), danger: true, disabled: !canEdit, onClick: () => del({ nodes: [{ id: menu.id }] }) },
+                ]
+              : [
+                  {
+                    label: t("editor.ctxDeleteEdge"),
+                    danger: true,
+                    disabled: !canEdit,
+                    onClick: () => del({ edges: [{ id: menu.id }] }),
+                  },
+                ];
+          return (
+            <CanvasContextMenu x={menu.x} y={menu.y} items={items} onClose={() => setCtxMenu(null)} />
+          );
+        })()}
       {settingsOpen && me && id && (
         <SettingsModal
           graph={settingsGraph}

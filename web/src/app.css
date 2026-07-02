@@ -3990,6 +3990,53 @@ button.warning:hover:not(:disabled) {
 .quick-palette {
   animation: dz-pop-in 150ms cubic-bezier(0.22, 1, 0.36, 1);
 }
+/* Right-click actions menu over a node/edge (Blueprint-style). Fixed to the
+   cursor point; the component clamps it back on-screen at the edges. */
+.canvas-context-menu {
+  position: fixed;
+  z-index: 210;
+  min-width: 168px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  box-shadow: var(--shadow-pop);
+  animation: dz-pop-in 120ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.canvas-context-menu button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  border-radius: calc(var(--r-2) - 2px);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--text-md);
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.canvas-context-menu button:hover:not(:disabled) {
+  background: var(--surface-3);
+}
+.canvas-context-menu button:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+.canvas-context-menu button.danger {
+  color: var(--danger);
+}
+.canvas-context-menu .context-menu-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
+}
+@media (prefers-reduced-motion: reduce) {
+  .canvas-context-menu {
+    animation: none;
+  }
+}
 /* Node cards lift gently on hover — selection keeps its own accent glow, so
    only unselected nodes get the hover shadow (no transform, to keep wired
    edges perfectly aligned). */

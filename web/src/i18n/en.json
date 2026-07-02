@@ -1954,7 +1954,14 @@
     "adminBlockedCta": "View setup status",
     "tidy": "Tidy",
     "tidyTitle": "Auto-arrange the flow into clean columns",
-    "minimap": "Flow minimap"
+    "minimap": "Flow minimap",
+    "ctxDuplicate": "Duplicate",
+    "ctxEnable": "Enable",
+    "ctxDisable": "Disable",
+    "ctxAddBreakpoint": "Add breakpoint",
+    "ctxRemoveBreakpoint": "Remove breakpoint",
+    "ctxDelete": "Delete",
+    "ctxDeleteEdge": "Delete connection"
   },
   "iconUpload": {
     "upload": "Upload image",

@@ -1958,7 +1958,14 @@
     "tidyTitle": "Ordna flödet automatiskt i tydliga kolumner",
     "minimap": "Flödesöversikt",
     "addDrop": "Lägg till drop",
-    "addDropTitle": "Sök och infoga en drop (Ctrl/Cmd+K)"
+    "addDropTitle": "Sök och infoga en drop (Ctrl/Cmd+K)",
+    "ctxDuplicate": "Duplicera",
+    "ctxEnable": "Aktivera",
+    "ctxDisable": "Inaktivera",
+    "ctxAddBreakpoint": "Lägg till brytpunkt",
+    "ctxRemoveBreakpoint": "Ta bort brytpunkt",
+    "ctxDelete": "Ta bort",
+    "ctxDeleteEdge": "Ta bort koppling"
   },
   "iconUpload": {
     "upload": "Ladda upp bild",
