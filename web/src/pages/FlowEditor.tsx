@@ -3742,18 +3742,13 @@ function EditorInner() {
 
           {/* Document state — save status and run history. */}
           <div className="toolbar-group">
-            {!dirty && !saving && !lockedRunID && !previewRef ? (
-              // Everything's saved and we're on the live graph — show a calm
-              // confirmation, not a greyed-out Save button.
-              <span className="editor-saved" title={t("editor.saved")}>
-                <Check size={15} />
-                <span className="toolbar-label">{t("editor.saved")}</span>
-              </span>
-            ) : (
+            {lockedRunID || previewRef || !hasPerm("graph:edit") ? (
+              // Can't edit right now (a run holds the lock, we're peeking at an
+              // old version, or read-only). Autosave won't fire, so keep a
+              // disabled Save button whose title explains why.
               <Button
                 className="editor-save"
-                onClick={() => save()}
-                disabled={!dirty || saving || !hasPerm("graph:edit") || !!lockedRunID || !!previewRef}
+                disabled
                 title={
                   !hasPerm("graph:edit")
                     ? t("editor.readOnly")
@@ -3762,19 +3757,26 @@ function EditorInner() {
                     : t("editor.save")
                 }
               >
-                {saving ? (
-                  <Loader2 size={15} className="spin" />
-                ) : (
-                  <Save size={15} />
-                )}
+                <Save size={15} />
                 <span className="toolbar-label">
-                  {lockedRunID
-                    ? t("editor.locked")
-                    : saving
-                    ? t("editor.saving")
-                    : t("editor.save")}
+                  {lockedRunID ? t("editor.locked") : t("editor.save")}
                 </span>
               </Button>
+            ) : dirty || saving ? (
+              // Edits are pending or a save is in flight — autosave
+              // (AUTOSAVE_DEBOUNCE_MS) persists them on its own, so show a
+              // non-clickable spinner rather than a clickable floppy.
+              <span className="editor-saving" title={t("editor.saving")}>
+                <Loader2 size={15} className="spin" />
+                <span className="toolbar-label">{t("editor.saving")}</span>
+              </span>
+            ) : (
+              // Everything's saved and we're on the live graph — a calm
+              // confirmation.
+              <span className="editor-saved" title={t("editor.saved")}>
+                <Check size={15} />
+                <span className="toolbar-label">{t("editor.saved")}</span>
+              </span>
             )}
             {me && id && (
               <Button
@@ -4896,15 +4898,17 @@ function EditorInner() {
                     label: breakpoints.has(menu.id)
                       ? t("editor.ctxRemoveBreakpoint")
                       : t("editor.ctxAddBreakpoint"),
+                    shortcut: "B",
                     disabled: !canEdit,
                     onClick: () => toggleBreakpointFor(menu.id),
                   },
                   { separator: true },
-                  { label: t("editor.ctxDelete"), danger: true, disabled: !canEdit, onClick: () => del({ nodes: [{ id: menu.id }] }) },
+                  { label: t("editor.ctxDelete"), shortcut: "Del", danger: true, disabled: !canEdit, onClick: () => del({ nodes: [{ id: menu.id }] }) },
                 ]
               : [
                   {
                     label: t("editor.ctxDeleteEdge"),
+                    shortcut: "Del",
                     danger: true,
                     disabled: !canEdit,
                     onClick: () => del({ edges: [{ id: menu.id }] }),

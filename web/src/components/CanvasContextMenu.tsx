@@ -10,7 +10,15 @@ import { useEffect, useRef } from "react";
 // the usual "click away and it's gone" contract.
 export type ContextMenuItem =
   | { separator: true }
-  | { label: string; onClick: () => void; danger?: boolean; disabled?: boolean };
+  | {
+      label: string;
+      onClick: () => void;
+      danger?: boolean;
+      disabled?: boolean;
+      // Keyboard shortcut hint, right-adjusted next to the label (hidden on
+      // narrow screens — see .context-menu-shortcut in app.css).
+      shortcut?: string;
+    };
 
 export function CanvasContextMenu({
   x,
@@ -83,7 +91,8 @@ export function CanvasContextMenu({
               onClose();
             }}
           >
-            {it.label}
+            <span className="context-menu-label">{it.label}</span>
+            {it.shortcut && <span className="context-menu-shortcut">{it.shortcut}</span>}
           </button>
         ),
       )}

@@ -4006,6 +4006,8 @@ button.warning:hover:not(:disabled) {
 .canvas-context-menu button {
   display: flex;
   align-items: center;
+  gap: 24px;
+  justify-content: space-between;
   width: 100%;
   padding: 6px 10px;
   border: none;
@@ -4016,6 +4018,24 @@ button.warning:hover:not(:disabled) {
   text-align: left;
   cursor: pointer;
   white-space: nowrap;
+}
+.canvas-context-menu .context-menu-label {
+  text-align: left;
+}
+/* Keyboard shortcut hint, pushed to the right edge of the row. Hidden on
+   narrow screens where the extra column would crowd the label — revealed at
+   the large-screen breakpoint below. */
+.canvas-context-menu .context-menu-shortcut {
+  display: none;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+@media (min-width: 768px) {
+  .canvas-context-menu .context-menu-shortcut {
+    display: inline;
+  }
 }
 .canvas-context-menu button:hover:not(:disabled) {
   background: var(--surface-3);
@@ -8757,7 +8777,8 @@ a.pa-card:hover {
    and labels line up via flex gap — no per-element vertical-align or
    margin hacks needed in the markup. */
 .editor-toolbar button,
-.editor-toolbar .editor-saved {
+.editor-toolbar .editor-saved,
+.editor-toolbar .editor-saving {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1h);
@@ -8771,7 +8792,8 @@ a.pa-card:hover {
 }
 /* Icons keep their size when horizontal space gets tight. */
 .editor-toolbar button svg,
-.editor-toolbar .editor-saved svg {
+.editor-toolbar .editor-saved svg,
+.editor-toolbar .editor-saving svg {
   flex: 0 0 auto;
 }
 /* The primary action carries the most weight — a touch more padding and
@@ -8797,10 +8819,21 @@ a.pa-card:hover {
 .editor-toolbar .editor-save:not(:disabled):hover {
   border-color: var(--accent);
 }
-/* While a save is in flight the icon becomes a spinning loader so the
+/* While a save is pending or in flight the icon is a spinning loader so the
    toolbar shows continuous activity rather than a static floppy. */
-.editor-toolbar .editor-save .spin {
+.editor-toolbar .editor-save .spin,
+.editor-toolbar .editor-saving .spin {
   animation: chat-spin 1s linear infinite;
+}
+/* The pending/saving status mirrors the calm "saved" chrome — muted, no
+   button affordance — but its spinner takes the accent so it reads as
+   in-progress, not done. */
+.editor-saving {
+  color: var(--muted);
+  user-select: none;
+}
+.editor-saving svg {
+  color: var(--accent);
 }
 /* Idle "all saved" status — a calm confirmation in place of the Save
    button when there's nothing to save. No button chrome; a soft success
