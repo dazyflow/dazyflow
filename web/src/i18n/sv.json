@@ -1608,6 +1608,7 @@
     "accountConnectProvider": "Anslut {{provider}}",
     "accountConnectAnother": "Anslut ett till",
     "example": "Exempel: {{value}}",
+    "celHint": "Skrivs i <celLink>CEL (Common Expression Language)</celLink>.",
     "refTitle": "Det här fältet fylls i automatiskt när flödet körs:",
     "refSecret": "{{name}} — en hemlighet du sparar under Hemligheter",
     "refUpstream": "{{ref}} — utdata från en tidigare drop i flödet",

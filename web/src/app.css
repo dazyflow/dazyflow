@@ -6291,6 +6291,15 @@ img[src$="/brands/smhi.svg"] {
   font-size: var(--text-sm);
   color: var(--muted);
 }
+.sf-docs-hint {
+  margin-top: var(--space-1h);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+.sf-docs-hint a {
+  color: inherit;
+  text-decoration: underline;
+}
 .sf-ref-hint-title {
   font-weight: 600;
   margin-bottom: var(--space-0);

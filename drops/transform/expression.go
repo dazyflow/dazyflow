@@ -55,7 +55,7 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"expr":{"type":"string","format":"multiline","title":"Formula","description":"A CEL expression. The variable 'input' is the wired value and 'now' is the current timestamp; the expression's value is emitted on 'out'."}
+					"expr":{"type":"string","format":"multiline","x_cel":true,"title":"Formula (CEL)","description":"A CEL expression. The variable 'input' is the wired value and 'now' is the current timestamp; the expression's value is emitted on 'out'."}
 				},
 				"required":["expr"]
 			}`),

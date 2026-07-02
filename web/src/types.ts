@@ -299,6 +299,11 @@ export type JSONSchema = {
   // whose value is code/markup (e.g. render_template's HTML template) rather
   // than prose (an email body), so the markup reads correctly.
   x_mono?: boolean;
+  // x_cel marks a field whose value is a CEL formula (the Expression drop, the
+  // calculated-column / row tools). It renders a visible footer hint under the
+  // input linking to the CEL language docs, so the formula language is named
+  // in the form rather than buried in a tooltip.
+  x_cel?: boolean;
   // x_columns_source marks a row-condition filter whose column field should be
   // a dropdown populated from a data source rather than typed free-hand.
   // "collection" lists the columns of the collection named by the sibling

@@ -15,7 +15,7 @@ import {
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { Info, Plus, Upload, X } from "lucide-react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import type { EmailTemplateSummary, JSONSchema, ReferenceGroups, ReferenceItem } from "../types";
 import { type TokenLabels, friendlyTokenText } from "./nodeCardShared";
 import { JsonEditor, isInvalidJSON } from "./JsonEditor";
@@ -596,8 +596,26 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
       // user prompts and system prompts where a single-line input
       // hides anything past the right edge.
       if (schema.format === "multiline") {
+        // CEL fields name their formula language inline (with a docs link)
+        // rather than hiding it in the description tooltip.
+        const celFooter = schema.x_cel ? (
+          <div className="sf-docs-hint">
+            <Trans
+              i18nKey="schemaForm.celHint"
+              components={{
+                celLink: (
+                  <a
+                    href="https://github.com/google/cel-spec/blob/master/doc/langdef.md"
+                    target="_blank"
+                    rel="noreferrer noopener"
+                  />
+                ),
+              }}
+            />
+          </div>
+        ) : undefined;
         return (
-          <FieldWrap name={name} schema={schema} required={required} value={value}>
+          <FieldWrap name={name} schema={schema} required={required} value={value} footer={celFooter}>
             <textarea
               className={schema.x_mono ? "sf-mono" : undefined}
               rows={4}

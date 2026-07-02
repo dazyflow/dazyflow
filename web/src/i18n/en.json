@@ -1606,6 +1606,7 @@
     "accountConnectProvider": "Connect {{provider}}",
     "accountConnectAnother": "Connect another",
     "example": "Example: {{value}}",
+    "celHint": "Written in <celLink>CEL (Common Expression Language)</celLink>.",
     "refTitle": "This field fills in automatically when the flow runs:",
     "refSecret": "{{name}} — a secret you store under Secrets",
     "refUpstream": "{{ref}} — output from an earlier drop in this flow",
