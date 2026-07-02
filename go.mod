@@ -11,6 +11,7 @@ require (
 	github.com/go-sql-driver/mysql v1.10.0
 	github.com/google/cel-go v0.28.1
 	github.com/jackc/pgx/v5 v5.9.2
+	github.com/nyaruka/phonenumbers v1.8.0
 	github.com/openbao/openbao/api/v2 v2.5.1
 	github.com/pquerna/otp v1.5.0
 	github.com/robfig/cron/v3 v3.0.1
