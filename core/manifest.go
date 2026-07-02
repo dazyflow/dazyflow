@@ -385,6 +385,25 @@ type Manifest struct {
 	// trigger, which originates a flow from an external event rather than a
 	// literal — triggers opt out via Category/ExecutionTrigger instead.
 	ValueSource bool `json:"value_source,omitempty" xml:"value_source,omitempty"`
+
+	// NodeState, when set, declares that a node of this drop keeps per-node
+	// state across runs (a dedupe cursor, a poll watermark, an HTTP cache).
+	// Its presence is the signal the editor keys off to show a "Reset state"
+	// action and a "keeps state" indicator on the node — drops without it are
+	// stateless and get neither, so the affordance stays off the majority. The
+	// daemon clears the underlying reserved store keys via the state-reset
+	// registry (engine.RegisterStateReset); this field is only the user-facing
+	// description of what that state is and what resetting does.
+	NodeState *NodeState `json:"node_state,omitempty" xml:"node_state,omitempty"`
+}
+
+// NodeState is the user-facing description of the persisted per-node state a
+// stateful drop carries (see Manifest.NodeState). Label names the state in
+// plain language ("Remembered items"); ResetHint explains what clearing it
+// does, shown on the reset action's confirm.
+type NodeState struct {
+	Label     string `json:"label" xml:"label"`
+	ResetHint string `json:"reset_hint,omitempty" xml:"reset_hint,omitempty"`
 }
 
 func (m Manifest) Input(name string) (Port, bool) {

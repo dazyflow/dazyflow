@@ -1811,6 +1811,7 @@
     "mustBeObject": "måste vara ett JSON-objekt",
     "liveOutput": "Konsol",
     "deleteNode": "Ta bort drop",
+    "resetState": "Återställ {{label}}",
     "deleteConfirm": "Ta bort drop \"{{id}}\" och dess kopplingar?",
     "webhookDevSummary": "För utvecklare — starta flödet via HTTP-anrop",
     "webhookStatus": {
@@ -1966,6 +1967,9 @@
     "ctxDisable": "Inaktivera",
     "ctxAddBreakpoint": "Lägg till brytpunkt",
     "ctxRemoveBreakpoint": "Ta bort brytpunkt",
+    "ctxResetState": "Återställ tillstånd…",
+    "confirmResetStateTitle": "Återställ {{label}}?",
+    "resetState": "Återställ",
     "ctxDelete": "Ta bort",
     "ctxDeleteEdge": "Ta bort koppling"
   },

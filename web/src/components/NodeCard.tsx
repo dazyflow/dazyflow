@@ -338,6 +338,26 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
           {d.manifest?.subtitle && (
             <div className="dz-node-subtitle">{d.manifest.subtitle}</div>
           )}
+          {/* Stateful drops (RSS dedupe, poll watermarks) show a subtle "keeps
+              state" chip so an empty output reads as memory, not breakage —
+              and it signals the right-click "Reset state" action exists. */}
+          {d.manifest?.node_state && (
+            <div
+              className="dz-node-state"
+              title={d.manifest.node_state.reset_hint || d.manifest.node_state.label}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 3,
+                marginTop: 3,
+                fontSize: 10,
+                opacity: 0.6,
+              }}
+            >
+              <Repeat size={10} strokeWidth={2.2} />
+              {d.manifest.node_state.label}
+            </div>
+          )}
         </div>
       </div>
 

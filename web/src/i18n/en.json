@@ -1809,6 +1809,7 @@
     "mustBeObject": "must be a JSON object",
     "liveOutput": "Console",
     "deleteNode": "Delete drop",
+    "resetState": "Reset {{label}}",
     "deleteConfirm": "Delete drop \"{{id}}\" and its connections?",
     "webhookDevSummary": "For developers — trigger this flow by HTTP request",
     "webhookStatus": {
@@ -1962,6 +1963,9 @@
     "ctxDisable": "Disable",
     "ctxAddBreakpoint": "Add breakpoint",
     "ctxRemoveBreakpoint": "Remove breakpoint",
+    "ctxResetState": "Reset state…",
+    "confirmResetStateTitle": "Reset {{label}}?",
+    "resetState": "Reset",
     "ctxDelete": "Delete",
     "ctxDeleteEdge": "Delete connection"
   },

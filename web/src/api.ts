@@ -559,6 +559,22 @@ export const api = {
       }`,
     ),
 
+  // resetNodeState clears one node's persisted per-node state (a dedupe
+  // cursor / poll watermark) — the "Reset state" action. `cleared` counts the
+  // reserved keys removed (0 when the node was never run / already clear).
+  resetNodeState: (
+    token: string,
+    tenant: string,
+    workspace: string,
+    id: string,
+    node: string,
+  ) =>
+    request<{ reset: boolean; node_id: string; cleared: number }>(
+      token,
+      "POST",
+      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/nodes/${encodeURIComponent(node)}/reset-state`,
+    ),
+
   // listInputFields returns the record fields the node feeding `node`'s
   // `port` (default "rows") emits — e.g. a Google Form's structural keys or
   // a hosted form's declared fields — so the Sheets mapping editor can

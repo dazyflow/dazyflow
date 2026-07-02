@@ -73,12 +73,32 @@ func init() {
 			// Stateful: a run advances the dedupe cursor, so it isn't a pure
 			// function of its inputs (matches gmail_search_messages).
 			Idempotent: false,
+			// The dedupe cursor is exactly the kind of hidden per-node memory
+			// the editor's "Reset state" affordance exists for: clearing it
+			// makes the next run baseline afresh.
+			NodeState: &core.NodeState{
+				Label:     "Remembered items",
+				ResetHint: "Forget which items it has already emitted. The next run baselines again (recording current items, emitting none), then fires only for items published after that.",
+			},
 		},
 		Execute: executeRSS,
 	})
+	// Tell the daemon which reserved key holds this node's dedupe cursor, so a
+	// user "Reset state" can clear it. Same key format as dedupeAndEmit — via
+	// the shared cursorName helper so the two can't drift.
+	engine.RegisterStateReset("rss", func(flow, node string) []string {
+		return []string{cursorName(flow, node)}
+	})
 }
 
-func executeRSS(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
+// cursorName is the reserved secret key holding the per-(flow,node) dedupe
+// window. Single source of truth for both the runtime read/write and the
+// state-reset key-builder.
+func cursorName(flow, node string) string {
+	return fmt.Sprintf("cursor.rss.%s.%s", flow, node)
+}
+
+func executeRSS(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
 	url := resolveURL(job)
 	if url == "" {
 		return params.Err(job, "bad_param", "url is required: wire the URL input or set the url param"), nil
@@ -117,9 +137,12 @@ func executeRSS(ctx context.Context, job core.Job, _ chan<- core.Progress) (core
 	}
 
 	if !params.BoolDefault(job.Params, "dedupe", true) {
+		// Dedupe off: the whole feed every run. Say what we got, so an empty
+		// feed reads as "fetched fine, 0 items" rather than "nothing happened".
+		params.EmitProgress(progress, job, 1, fmt.Sprintf("dedupe off: emitting all %d feed item(s)", len(items)))
 		return emitRows(job, allRows(items)), nil
 	}
-	return dedupeAndEmit(ctx, job, items), nil
+	return dedupeAndEmit(ctx, job, items, progress), nil
 }
 
 // resolveURL prefers a wired 'url' input over the param, so the feed can be
@@ -137,8 +160,8 @@ func resolveURL(job core.Job) string {
 // before, then fold the current feed's ids into the stored window. The first
 // run baselines silently (emits nothing) so the flow watches from "now"
 // forward — mirrors gmail_search_messages / google_form_trigger.
-func dedupeAndEmit(ctx context.Context, job core.Job, items []feedItem) core.Result {
-	name := fmt.Sprintf("cursor.rss.%s.%s", job.GraphID, job.NodeID)
+func dedupeAndEmit(ctx context.Context, job core.Job, items []feedItem, progress chan<- core.Progress) core.Result {
+	name := cursorName(job.GraphID, job.NodeID)
 	raw := readCursor(ctx, job.Tenant, name)
 	first := raw == ""
 	prev := decodeIDs(raw)
@@ -163,6 +186,18 @@ func dedupeAndEmit(ctx context.Context, job core.Job, items []feedItem) core.Res
 	// and capped. Best-effort write — a failed write re-emits next run at worst.
 	newWindow := capIDs(dedupeIDs(append(append([]string{}, current...), prev...)), maxSeenIDs)
 	_ = writeCursor(ctx, job.Tenant, name, encodeIDs(newWindow))
+
+	// Explain the outcome in the run log, so an empty Items output reads as a
+	// deliberate non-event (baseline / nothing new) rather than a silent
+	// failure — the case that's indistinguishable from "broken" on the canvas.
+	switch {
+	case first:
+		params.EmitProgress(progress, job, 1, fmt.Sprintf("baseline: recorded %d feed item(s), emitting none — now watching for new items", len(items)))
+	case len(fresh) == 0:
+		params.EmitProgress(progress, job, 1, fmt.Sprintf("no new items (%d in feed, all already seen)", len(items)))
+	default:
+		params.EmitProgress(progress, job, 1, fmt.Sprintf("%d new item(s) (%d in feed)", len(fresh), len(items)))
+	}
 
 	if len(fresh) == 0 {
 		return emitNone(job) // first run, or nothing new → downstream stays dormant

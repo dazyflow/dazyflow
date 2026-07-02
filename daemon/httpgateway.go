@@ -523,6 +523,10 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 		h.requireAuth(h.idempotencyMiddleware("/me/flows/{flow_id}/disable", h.disableFlowMe)))
 	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/run",
 		h.requireAuth(h.idempotencyMiddleware("/me/flows/{flow_id}/run", h.runFlowMe)))
+	// Clear one node's persisted per-node state (dedupe cursor / watermark /
+	// cache) — the editor's "Reset state" action. See resetNodeStateMe.
+	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/nodes/{node_id}/reset-state",
+		h.requireAuth(h.resetNodeStateMe))
 	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/validate", h.requireAuth(h.validateFlowMe))
 	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/test-trigger",
 		h.requireAuth(h.idempotencyMiddleware("/me/flows/{flow_id}/test-trigger", h.testTriggerFlowMe)))

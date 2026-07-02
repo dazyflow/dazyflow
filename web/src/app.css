@@ -7134,6 +7134,34 @@ img[src$="/brands/smhi.svg"] {
   background: color-mix(in srgb, var(--danger) 14%, transparent);
   border-color: var(--danger);
 }
+/* Node actions grouped at the inspector's foot — Reset (neutral) sits above
+   the destructive Delete, sharing the same full-width button shape. */
+.inspector-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+/* Reset persisted node state — same shape as .inspector-delete but neutral,
+   since it's recoverable (re-baseline), not destructive. */
+.inspector-reset {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  justify-content: center;
+  padding: var(--space-2) var(--space-3);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  color: var(--text);
+  font-size: var(--text-md);
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms;
+}
+.inspector-reset:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  border-color: var(--faint);
+}
 
 /* Inline approval panel — same wedge as inspector-section but tinted
  * with the awaiting accent so it pops in a crowded inspector. */

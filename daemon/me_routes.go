@@ -30,6 +30,7 @@ import (
 
 	"git.sr.ht/~klahr/dazyflow/auth"
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 // splitFlowID parses the {flow_id} path parameter back into
@@ -800,6 +801,63 @@ func (h *HTTPGateway) runFlowMe(rw http.ResponseWriter, r *http.Request, p core.
 		return
 	}
 	h.runGraph(rw, r2, p)
+}
+
+// resetNodeStateMe clears the persisted per-node state of one node — the
+// dedupe cursor / poll watermark / cache that the editor surfaces via
+// Manifest.NodeState. It's the first-class replacement for the old
+// "delete the drop and re-add it so the key changes" workaround: same node
+// id, memory wiped, so the next run baselines afresh. The reserved key(s) to
+// delete come from the drop's own registration (engine.StateResetKeys), so the
+// daemon never hard-codes a key format. Gated on graph:edit (a state mutation,
+// not just a run).
+func (h *HTTPGateway) resetNodeStateMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	if err := core.Require(p, core.PermGraphEdit); err != nil {
+		writeAPIError(rw, http.StatusForbidden, "forbidden", err.Error())
+		return
+	}
+	if !h.requireSecretStore(rw, p) {
+		return
+	}
+	tenant, _, id, g, ok := h.loadFlowForRequest(rw, r, p, "")
+	if !ok {
+		return
+	}
+	nodeID := r.PathValue("node_id")
+	var module string
+	found := false
+	for _, n := range g.Nodes {
+		if n.ID == nodeID {
+			module, found = n.Module, true
+			break
+		}
+	}
+	if !found {
+		writeAPIError(rw, http.StatusNotFound, "node_not_found",
+			fmt.Sprintf("no node %q in flow %q", nodeID, id))
+		return
+	}
+	keys := engine.StateResetKeys(module, id, nodeID)
+	if len(keys) == 0 {
+		writeAPIError(rw, http.StatusBadRequest, "no_resettable_state",
+			fmt.Sprintf("node %q (%s) keeps no resettable state", nodeID, module))
+		return
+	}
+	// Delete each reserved key. A missing key is not an error — resetting an
+	// already-clear node (never run, or reset twice) is a no-op success.
+	cleared := 0
+	for _, k := range keys {
+		if err := h.EncryptedSecrets.Delete(r.Context(), tenant, k); err != nil {
+			if errors.Is(err, ErrSecretNotFound) {
+				continue
+			}
+			writeAPIError(rw, http.StatusInternalServerError, "reset_failed", err.Error())
+			return
+		}
+		cleared++
+	}
+	h.audit(r.Context(), p, "flow.node.reset_state", id+"/"+nodeID, module)
+	writeJSON(rw, http.StatusOK, map[string]any{"reset": true, "node_id": nodeID, "cleared": cleared})
 }
 
 func (h *HTTPGateway) testTriggerFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {

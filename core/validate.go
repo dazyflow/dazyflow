@@ -250,6 +250,13 @@ func structuredIntoTextWarnings(g Graph, manifests map[string]Manifest) []LintIs
 		if !hasOut || !hasIn {
 			continue
 		}
+		// The pass pin is an untyped sequencing wildcard — it threads whatever
+		// the author routed through it, so we can't (and shouldn't) judge it as
+		// "structured". Skip it, else a trigger's pass output (now declared,
+		// untyped) wired into a text input would false-positive here.
+		if e.FromPort == PassPort {
+			continue
+		}
 		// A source is "structured" if it's a declared list or JSON, OR it's a
 		// trigger output that isn't plain text — a webhook/form body is an
 		// untyped (wildcard-MIME) object or list, the single most common thing a

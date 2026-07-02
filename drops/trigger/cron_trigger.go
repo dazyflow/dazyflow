@@ -40,6 +40,12 @@ func init() {
 			ExecutionModel: core.ExecutionTrigger,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{
+				// Primary output: the untyped pass pin that snaps to the next
+				// drop's Pass-through input (triangle → triangle) to sequence
+				// the flow, so you don't have to drag the typed Time value into
+				// a generic pin. See poll_trigger for the full rationale; it
+				// carries the fire timestamp too.
+				{Port: core.PassPort, Label: "Pass-through"},
 				{Port: "fired_at", Label: "Time", MIME: []string{"text/plain"}},
 			},
 			// cron + tz live on the node (Phase 2: schedule config is on the
@@ -96,11 +102,15 @@ func executeCronTrigger(_ context.Context, job core.Job, _ chan<- core.Progress)
 			now = now.In(loc)
 		}
 	}
+	stamp := now.Format(time.RFC3339)
 	return core.Result{
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
-			"fired_at": {MIME: "text/plain", Inline: now.Format(time.RFC3339)},
+			// pass mirrors fired_at (see poll_trigger): the sequencing wire
+			// that also forwards the fire moment in the schedule's own zone.
+			core.PassPort: {MIME: "text/plain", Inline: stamp},
+			"fired_at":    {MIME: "text/plain", Inline: stamp},
 		},
 	}, nil
 }

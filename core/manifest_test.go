@@ -30,3 +30,26 @@ func TestConnectionSecretKey(t *testing.T) {
 		t.Errorf("ConnectionSecretKey = %q", got)
 	}
 }
+
+// A trigger that declares its own pass OUTPUT (the sequencing pin, e.g.
+// poll_trigger / cron_trigger) must keep it through WithPassthrough and never
+// gain a pass INPUT — triggers originate flows, so there's nothing upstream to
+// thread from. This is the contract the trigger→Pass-through wiring depends on.
+func TestWithPassthrough_TriggerKeepsPassOutputNoPassInput(t *testing.T) {
+	m := Manifest{
+		ID:             "some_trigger",
+		ExecutionModel: ExecutionTrigger,
+		Category:       "trigger",
+		Outputs: []Port{
+			{Port: PassPort, Label: "Pass-through"},
+			{Port: "fired_at", Label: "Time", MIME: []string{"text/plain"}},
+		},
+	}
+	got := WithPassthrough(m)
+	if _, ok := got.Input(PassPort); ok {
+		t.Errorf("trigger gained a pass INPUT; triggers originate flows and must not")
+	}
+	if _, ok := got.Output(PassPort); !ok {
+		t.Errorf("trigger lost its declared pass OUTPUT")
+	}
+}

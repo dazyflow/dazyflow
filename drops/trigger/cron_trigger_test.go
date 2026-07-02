@@ -30,6 +30,10 @@ func TestCronTrigger_EmitsRFC3339Timestamp(t *testing.T) {
 	if time.Since(parsed) > 5*time.Second {
 		t.Errorf("fired_at %v is older than 5s — clock weirdness?", parsed)
 	}
+	// pass (the primary sequencing output) mirrors fired_at.
+	if got := res.Output[core.PassPort].Inline; got != ts {
+		t.Errorf("pass = %v, want it to mirror fired_at %q", got, ts)
+	}
 }
 
 func TestCronTrigger_NoTimezoneIsUTC(t *testing.T) {

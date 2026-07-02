@@ -5,9 +5,11 @@ package rss
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 const rssSample = `<?xml version="1.0" encoding="UTF-8"?>
@@ -137,7 +139,7 @@ func freshIDs(res core.Result) []string {
 func TestDedupe_FirstRunBaselinesSilently(t *testing.T) {
 	memStore(t)
 	job := core.Job{ID: "j", GraphID: "g", NodeID: "n", Tenant: "t"}
-	res := dedupeAndEmit(context.Background(), job, []feedItem{item("A"), item("B")})
+	res := dedupeAndEmit(context.Background(), job, []feedItem{item("A"), item("B")}, nil)
 	if len(res.Output) != 0 {
 		t.Errorf("first run should emit nothing, got %d ports", len(res.Output))
 	}
@@ -147,9 +149,9 @@ func TestDedupe_EmitsOnlyNewOnSecondRun(t *testing.T) {
 	memStore(t)
 	job := core.Job{ID: "j", GraphID: "g", NodeID: "n", Tenant: "t"}
 	// First run baselines on A, B.
-	dedupeAndEmit(context.Background(), job, []feedItem{item("A"), item("B")})
+	dedupeAndEmit(context.Background(), job, []feedItem{item("A"), item("B")}, nil)
 	// Second run: C is new (feed newest-first), A/B already seen.
-	res := dedupeAndEmit(context.Background(), job, []feedItem{item("C"), item("A"), item("B")})
+	res := dedupeAndEmit(context.Background(), job, []feedItem{item("C"), item("A"), item("B")}, nil)
 	got := freshIDs(res)
 	if len(got) != 1 || got[0] != "C" {
 		t.Errorf("fresh = %v, want [C]", got)
@@ -159,8 +161,8 @@ func TestDedupe_EmitsOnlyNewOnSecondRun(t *testing.T) {
 func TestDedupe_NothingNewEmitsNothing(t *testing.T) {
 	memStore(t)
 	job := core.Job{ID: "j", GraphID: "g", NodeID: "n", Tenant: "t"}
-	dedupeAndEmit(context.Background(), job, []feedItem{item("A"), item("B")})
-	res := dedupeAndEmit(context.Background(), job, []feedItem{item("A"), item("B")})
+	dedupeAndEmit(context.Background(), job, []feedItem{item("A"), item("B")}, nil)
+	res := dedupeAndEmit(context.Background(), job, []feedItem{item("A"), item("B")}, nil)
 	if len(res.Output) != 0 {
 		t.Errorf("no-new run should emit nothing, got %d ports", len(res.Output))
 	}
@@ -175,10 +177,44 @@ func TestDedupe_IndependentPerNode(t *testing.T) {
 	n2.NodeID = "n2"
 	// n1 baselines on A; n2 has never seen anything, so its first run also
 	// baselines (independent cursor) — proving keys don't collide.
-	dedupeAndEmit(context.Background(), n1, []feedItem{item("A")})
-	res := dedupeAndEmit(context.Background(), n2, []feedItem{item("A")})
+	dedupeAndEmit(context.Background(), n1, []feedItem{item("A")}, nil)
+	res := dedupeAndEmit(context.Background(), n2, []feedItem{item("A")}, nil)
 	if len(res.Output) != 0 {
 		t.Errorf("n2 first run should baseline silently, got %d ports", len(res.Output))
+	}
+}
+
+// drainProgress runs fn with a buffered progress channel and returns every
+// message emitted — the run-log lines that explain an empty Items output.
+func drainProgress(job core.Job, items []feedItem) []string {
+	ch := make(chan core.Progress, 8)
+	dedupeAndEmit(context.Background(), job, items, ch)
+	close(ch)
+	var msgs []string
+	for p := range ch {
+		msgs = append(msgs, p.Message)
+	}
+	return msgs
+}
+
+func TestDedupe_LogsExplainEmptyOutput(t *testing.T) {
+	memStore(t)
+	job := core.Job{ID: "j", GraphID: "g", NodeID: "n", Tenant: "t"}
+
+	// First run: baseline line names the count and says it's watching.
+	if msgs := drainProgress(job, []feedItem{item("A"), item("B")}); len(msgs) != 1 ||
+		!strings.Contains(msgs[0], "baseline") || !strings.Contains(msgs[0], "2") {
+		t.Errorf("baseline log = %v, want a 'baseline'/count line", msgs)
+	}
+	// Nothing new: an explicit "no new items" line (not silence).
+	if msgs := drainProgress(job, []feedItem{item("A"), item("B")}); len(msgs) != 1 ||
+		!strings.Contains(msgs[0], "no new items") {
+		t.Errorf("no-new log = %v, want a 'no new items' line", msgs)
+	}
+	// New item: a "1 new item(s)" line accompanies the emitted row.
+	if msgs := drainProgress(job, []feedItem{item("C"), item("A"), item("B")}); len(msgs) != 1 ||
+		!strings.Contains(msgs[0], "1 new item") {
+		t.Errorf("new-item log = %v, want a '1 new item' line", msgs)
 	}
 }
 
@@ -206,5 +242,24 @@ func TestDedupeIDs(t *testing.T) {
 			t.Errorf("got %v, want %v", got, want)
 			break
 		}
+	}
+}
+
+// The reset registry must resolve to exactly the cursor key dedupeAndEmit
+// uses — the contract the daemon's "Reset state" endpoint relies on. If the
+// key format ever drifts from cursorName, a reset would delete the wrong (or
+// no) key, silently leaving the node's memory intact.
+func TestStateResetKeys_MatchesCursorName(t *testing.T) {
+	got := engine.StateResetKeys("rss", "flowA", "rss_1")
+	if len(got) != 1 || got[0] != cursorName("flowA", "rss_1") {
+		t.Fatalf("StateResetKeys = %v, want [%q]", got, cursorName("flowA", "rss_1"))
+	}
+	if got[0] != "cursor.rss.flowA.rss_1" {
+		t.Errorf("cursor key = %q, want cursor.rss.flowA.rss_1", got[0])
+	}
+	// A drop that declares no state resolves to nil — the daemon treats that
+	// as "nothing to reset" (400 no_resettable_state).
+	if got := engine.StateResetKeys("text", "flowA", "text_1"); got != nil {
+		t.Errorf("unregistered module should have no reset keys, got %v", got)
 	}
 }

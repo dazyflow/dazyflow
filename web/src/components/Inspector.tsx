@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import type { Node } from "@xyflow/react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { X, Trash2, Info, Play, Square, BellRing } from "lucide-react";
+import { X, Trash2, Info, Play, Square, BellRing, Repeat } from "lucide-react";
 import { iconFor, dropColor as resolveDropColor } from "../icons";
 import type { DazyNodeData } from "./nodeCardShared";
 import {
@@ -105,6 +105,10 @@ type Props = {
   // only delete affordance on touch devices, where there's no
   // Delete/Backspace key to trigger React Flow's built-in removal.
   onDelete?: (id: string) => void;
+  // onResetState clears the node's persisted per-run state (dedupe cursor /
+  // watermark). Offered only for drops whose manifest declares node_state.
+  // The parent owns the confirm modal (shared with the context-menu action).
+  onResetState?: (id: string) => void;
   // providers + onConnect drive the account dropdown for OAuth drops:
   // the `account` param becomes a picker of connected accounts instead
   // of a free-text box. Omitted/null = plain text (OAuth disabled).
@@ -149,6 +153,7 @@ export function Inspector({
   loopOwnerNodeId,
   nodeDisabled,
   onToggleDisabled,
+  onResetState,
   tokenLabels,
   currentRunID,
   liveLogs,
@@ -714,16 +719,28 @@ export function Inspector({
           </div>
         )}
 
-        {onDelete && (
-          <div className="inspector-section">
-            <Button
-              type="button"
-              className="inspector-delete"
-              onClick={() => setConfirmDelete(true)}
-            >
-              <Trash2 size={14} />
-              {t("inspector.deleteNode")}
-            </Button>
+        {((onResetState && d.manifest?.node_state) || onDelete) && (
+          <div className="inspector-section inspector-actions">
+            {onResetState && d.manifest?.node_state && (
+              <Button
+                type="button"
+                className="inspector-reset"
+                onClick={() => onResetState(selected.id)}
+              >
+                <Repeat size={14} />
+                {t("inspector.resetState", { label: d.manifest.node_state.label })}
+              </Button>
+            )}
+            {onDelete && (
+              <Button
+                type="button"
+                className="inspector-delete"
+                onClick={() => setConfirmDelete(true)}
+              >
+                <Trash2 size={14} />
+                {t("inspector.deleteNode")}
+              </Button>
+            )}
           </div>
         )}
       </div>

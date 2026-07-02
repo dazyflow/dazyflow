@@ -84,7 +84,7 @@ import {
   type MissingConnection,
   type SetupNeed,
 } from "../lib/requiredConnections";
-import { mimeCompatible, pickPort, portsConnectable, connectionHint } from "../lib/ports";
+import { mimeCompatible, pickPort, portsConnectable, connectionHint, PASS_PORT } from "../lib/ports";
 import { suggestNextDrops, topDropsByUsage } from "../lib/suggest";
 import { explainApiError } from "../lib/explainApiError";
 import type {
@@ -426,6 +426,14 @@ function EditorInner() {
     nodes: number;
     edges: number;
     resolve: (ok: boolean) => void;
+  } | null>(null);
+  // Reset-node-state confirm: holds the node whose persisted state (dedupe
+  // cursor / watermark) a "Reset state" click is about to clear, so the app's
+  // ConfirmModal can explain it before we call the endpoint.
+  const [resetStatePending, setResetStatePending] = useState<{
+    nodeId: string;
+    label: string;
+    hint: string;
   } | null>(null);
   // Test-run sample editor: lets the user tweak the JSON payload fed to a
   // webhook flow before firing, so they can exercise edge cases instead of
@@ -1305,14 +1313,27 @@ function EditorInner() {
       ]);
       setParamsByID((p) => ({ ...p, [newID]: {} }));
       const isSource = from.handleType === "source";
+      // Dragging from a pass/exec pin is a pure "run this next" gesture, so it
+      // must land on the spawned drop's pass pin (triangle → triangle) — not on
+      // a data port pickPort would otherwise pick (its untyped source loosely
+      // matches any typed input, e.g. a trigger's timestamp into RSS's URL).
+      // Fall back to pickPort when the new drop has no matching pass pin (a
+      // value source, or a trigger spawned upstream).
+      const fromPass = from.handleId === PASS_PORT;
+      const hasPassIn = m.inputs?.some((p) => p.port === PASS_PORT);
+      const hasPassOut = m.outputs?.some((p) => p.port === PASS_PORT);
       const conn: Connection = {
         source: isSource ? from.nodeId : newID,
         sourceHandle: isSource
           ? from.handleId
-          : pickPort(m.outputs, connectSourceMime, "out"),
+          : fromPass && hasPassOut
+            ? PASS_PORT
+            : pickPort(m.outputs, connectSourceMime, "out"),
         target: isSource ? newID : from.nodeId,
         targetHandle: isSource
-          ? pickPort(m.inputs, connectSourceMime, "in")
+          ? fromPass && hasPassIn
+            ? PASS_PORT
+            : pickPort(m.inputs, connectSourceMime, "in")
           : from.handleId,
       };
       setEdges((eds) =>
@@ -2230,6 +2251,37 @@ function EditorInner() {
       setDirty(true);
     },
     [nodes, paramsByID],
+  );
+
+  // Reset one node's persisted per-node state (a dedupe cursor / poll
+  // watermark) — the context-menu action for stateful drops. Confirms with the
+  // manifest's reset_hint so the user knows exactly what clearing does, then
+  // calls the reset endpoint. Only offered when the node's manifest declares
+  // node_state. Reads the saved graph server-side, so it targets the flow as
+  // last saved (autosave keeps that current).
+  const resetNodeStateAction = useCallback(
+    (nodeId: string) => {
+      const node = nodes.find((n) => n.id === nodeId);
+      const ns = node?.data.manifest?.node_state;
+      if (!ns) return;
+      // Open the app's ConfirmModal; the actual reset runs on confirm below.
+      setResetStatePending({ nodeId, label: ns.label, hint: ns.reset_hint || ns.label });
+    },
+    [nodes],
+  );
+
+  // performResetNodeState is the confirmed side of resetNodeStateAction — the
+  // ConfirmModal's onConfirm calls it. Kept separate so the modal owns the
+  // yes/no and this owns the effect.
+  const performResetNodeState = useCallback(
+    (nodeId: string) => {
+      if (!token || !activeTenant || !activeWorkspace || !id) return;
+      api
+        .resetNodeState(token, activeTenant, activeWorkspace, id, nodeId)
+        .then(() => setError(null))
+        .catch((e) => setError(explainApiError(e, t)));
+    },
+    [token, activeTenant, activeWorkspace, id, t],
   );
 
   // The graph is mutable only with edit permission, off a live-run lock, and
@@ -4751,6 +4803,7 @@ function EditorInner() {
           }
           nodeDisabled={inspectorSelected ? disabledNodes.has(inspectorSelected.id) : false}
           onToggleDisabled={toggleNodeDisabled}
+          onResetState={canEdit ? resetNodeStateAction : undefined}
           tokenLabels={tokenLabels}
           runCoordinate={
             inspectorSelected && typeof runOutputs[inspectorSelected.id]?.coordinate?.data === "string"
@@ -4902,6 +4955,18 @@ function EditorInner() {
                     disabled: !canEdit,
                     onClick: () => toggleBreakpointFor(menu.id),
                   },
+                  // Stateful drops (RSS dedupe, poll watermarks) offer a reset
+                  // that clears their hidden per-node memory — shown only when
+                  // the manifest declares node_state.
+                  ...(nodes.find((n) => n.id === menu.id)?.data.manifest?.node_state
+                    ? [
+                        {
+                          label: t("editor.ctxResetState"),
+                          disabled: !canEdit,
+                          onClick: () => resetNodeStateAction(menu.id),
+                        },
+                      ]
+                    : []),
                   { separator: true },
                   { label: t("editor.ctxDelete"), shortcut: "Del", danger: true, disabled: !canEdit, onClick: () => del({ nodes: [{ id: menu.id }] }) },
                 ]
@@ -4944,6 +5009,22 @@ function EditorInner() {
             deletePending.resolve(false);
             setDeletePending(null);
           }}
+        />
+      )}
+      {/* Reset-state confirm — clears a node's hidden per-run memory (RSS
+          dedupe cursor, poll watermark). The manifest's reset_hint is the
+          message so the wording is drop-specific. */}
+      {resetStatePending && (
+        <ConfirmModal
+          title={t("editor.confirmResetStateTitle", { label: resetStatePending.label })}
+          message={resetStatePending.hint}
+          confirmLabel={t("editor.resetState")}
+          danger
+          onConfirm={() => {
+            performResetNodeState(resetStatePending.nodeId);
+            setResetStatePending(null);
+          }}
+          onCancel={() => setResetStatePending(null)}
         />
       )}
       {/* Orphaned-step warning — a soft gate before a Run when the flow has

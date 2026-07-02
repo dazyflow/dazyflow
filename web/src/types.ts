@@ -225,6 +225,10 @@ export type Manifest = {
   outputs?: Port[];
   params_schema?: JSONSchema;
   idempotent?: boolean;
+  // node_state, when present, means a node of this drop keeps per-node state
+  // across runs (a dedupe cursor, a poll watermark). Drives the "Reset state"
+  // context-menu action and the "keeps state" indicator on the node card.
+  node_state?: { label: string; reset_hint?: string };
   awaits_approval?: boolean;
   submits_child_graph?: boolean;
   // requires_connections lists the credentials a drop needs before it

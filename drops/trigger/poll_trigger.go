@@ -34,6 +34,15 @@ func init() {
 			ExecutionModel: core.ExecutionTrigger,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{
+				// The pass pin is the trigger's primary output: an untyped
+				// sequencing wire that snaps to the next drop's Pass-through
+				// input (triangle → triangle), so "run this next" is a
+				// self-evident connection rather than dragging the typed Time
+				// value into a generic pin. WithPassthrough leaves triggers
+				// alone (they originate flows, so no pass INPUT), so we declare
+				// the pass OUTPUT here and fill it in Execute. It carries the
+				// fire timestamp, so threading it also forwards "when it fired".
+				{Port: core.PassPort, Label: "Pass-through"},
 				{Port: "fired_at", Label: "Time", MIME: []string{"text/plain"}},
 			},
 			// interval_seconds lives on the node (like cron_trigger's schedule),
@@ -73,11 +82,17 @@ func init() {
 // whether the scheduler fired it or the user did, which is the
 // natural mental model for "test this poll workflow now."
 func executePollTrigger(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
+	now := time.Now().UTC().Format(time.RFC3339)
 	return core.Result{
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
-			"fired_at": {MIME: "text/plain", Inline: time.Now().UTC().Format(time.RFC3339)},
+			// pass carries the same fire moment as fired_at — it's the
+			// sequencing wire AND forwards "when it fired" to whatever it
+			// threads into. (ApplyPassthrough can't fill it: a trigger has no
+			// pass INPUT to copy from, so we emit it directly.)
+			core.PassPort: {MIME: "text/plain", Inline: now},
+			"fired_at":    {MIME: "text/plain", Inline: now},
 		},
 	}, nil
 }
