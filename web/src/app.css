@@ -6110,12 +6110,15 @@ img[src$="/brands/smhi.svg"] {
 .sf-field-missing > .label-row label {
   color: var(--danger);
 }
-.sf-required-mark {
+.sf-required-chip {
   flex-shrink: 0;
-  color: var(--danger);
+  font-size: var(--text-xs);
   font-weight: 600;
   line-height: 1;
-  cursor: help;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 12%, transparent);
 }
 .sf-required-flag {
   flex-shrink: 0;

@@ -981,15 +981,10 @@ function FieldWrap({
             {schema.title || humanize(name)}
           </label>
           {/* Always-on required marker so a field that needs a value reads
-              as such while configuring — not only after a failed Run. */}
+              as such while configuring — not only after a failed Run. A muted
+              chip (not the red error pill below) — required but not yet flagged. */}
           {required && !missing && (
-            <span
-              className="sf-required-mark"
-              title={t("schemaForm.requiredHint")}
-              aria-label={t("schemaForm.requiredHint")}
-            >
-              *
-            </span>
+            <span className="sf-required-chip">{t("schemaForm.requiredHint")}</span>
           )}
           {/* Red "needs a value" marker — set when this field is flagged by
               the config check, so jumping from the "N to configure" modal
