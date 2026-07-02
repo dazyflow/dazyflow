@@ -2718,10 +2718,19 @@ function EditorInner() {
       // Lint findings are advisory — the save already succeeded.
       // Show them; the user can fix-and-resave or dismiss.
       setLintIssues(res.lint ?? []);
-      // The draft moved — the publish pill ("unpublished changes") may
-      // need to flip. Cheap status probe; ignored on autosave bursts is
-      // fine since we refresh on the next explicit interaction too.
-      if (!autosave) void loadPublishInfo();
+      // The draft moved — the publish pill ("unpublished changes") must
+      // flip on. A manual save does a real status probe; autosave bursts
+      // skip the network call (it would hammer the endpoint) and instead
+      // flip the pill optimistically, since a successful save means HEAD
+      // now differs from the published revision. Without this the pill
+      // stayed hidden until the next explicit interaction or a reload.
+      if (!autosave) {
+        void loadPublishInfo();
+      } else {
+        setPublishInfo((prev) =>
+          prev && prev.published && !prev.dirty ? { ...prev, dirty: true } : prev,
+        );
+      }
       return true;
     } catch (e) {
       const msg = (e as Error).message;
