@@ -3475,21 +3475,24 @@ function EditorInner() {
   // covers a multi-select delete. Empty selections (nothing to remove) pass
   // through without a prompt.
   //
-  // An untouched drop carries no work worth guarding, so it skips the confirm:
-  // a freshly-added node that was never configured (empty params) and isn't
-  // wired to anything deletes straight away. Any edge in the deletion (wiring
-  // is work), or any node with configured params, keeps the gate.
+  // The confirm guards only real work: deleting a drop that's been configured.
+  // Everything cheap to redo skips it — a connection (edge), on its own or
+  // riding along with a node deletion, is a single re-drag to restore, and an
+  // untouched drop (freshly added, empty params) carries nothing worth a
+  // prompt. So the gate fires solely when a node with configured params is
+  // among the deletion; edge-only deletions and unconfigured drops pass through.
   const confirmDelete = useCallback(
     (params: { nodes: FlowNode[]; edges: FlowEdge[] }): Promise<boolean> => {
-      const nodeCount = params.nodes.length;
-      const edgeCount = params.edges.length;
-      if (nodeCount === 0 && edgeCount === 0) return Promise.resolve(true);
       const anyModified = params.nodes.some(
         (n) => Object.keys(paramsByID[n.id] ?? {}).length > 0,
       );
-      if (edgeCount === 0 && !anyModified) return Promise.resolve(true);
+      if (!anyModified) return Promise.resolve(true);
       return new Promise<boolean>((resolve) => {
-        setDeletePending({ nodes: nodeCount, edges: edgeCount, resolve });
+        setDeletePending({
+          nodes: params.nodes.length,
+          edges: params.edges.length,
+          resolve,
+        });
       });
     },
     [paramsByID],
