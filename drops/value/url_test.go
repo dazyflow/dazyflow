@@ -31,6 +31,31 @@ func TestURL_EmitsAndParsesQuery(t *testing.T) {
 	}
 }
 
+func TestURL_EmitsHostAndPath(t *testing.T) {
+	res, _ := executeURL(t.Context(), core.Job{
+		Params: map[string]any{"url": "https://example.com/blog/post?x=1"},
+	}, nil)
+	if h := res.Output["host"]; h.MIME != "text/plain" || h.Inline != "example.com" {
+		t.Errorf("host = %+v, want example.com", h)
+	}
+	if p := res.Output["path"]; p.MIME != "text/plain" || p.Inline != "/blog/post" {
+		t.Errorf("path = %+v, want /blog/post", p)
+	}
+}
+
+func TestURL_HostKeepsPort_PathEmptyForBareHost(t *testing.T) {
+	// u.Host keeps an explicit port; a bare host with no path yields "".
+	res, _ := executeURL(t.Context(), core.Job{
+		Params: map[string]any{"url": "http://localhost:8080"},
+	}, nil)
+	if h := res.Output["host"].Inline; h != "localhost:8080" {
+		t.Errorf("host = %v, want localhost:8080", h)
+	}
+	if p := res.Output["path"].Inline; p != "" {
+		t.Errorf("path = %q, want empty for a bare host", p)
+	}
+}
+
 func TestURL_WiredInputWinsOverParam(t *testing.T) {
 	res, _ := executeURL(t.Context(), core.Job{
 		Params: map[string]any{"url": "https://from-param.example"},

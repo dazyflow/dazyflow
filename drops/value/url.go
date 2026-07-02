@@ -34,13 +34,13 @@ func init() {
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"url", "link", "uri", "address", "query", "validate"},
-			Description: "Hold a web address — type it inline or wire a string into the 'url' input — and emit it on 'out' only after checking it's a real http(s) URL. A malformed address (no scheme, no host, or a non-http scheme) fails the node up front instead of breaking a later step. Also decodes the query string into a map on 'query' (?a=1&b=2 → {a:\"1\",b:\"2\"}, values URL-decoded, first value wins on a repeated key), so you can branch on or template with a param without string surgery.",
-			Summary:     "Validate a URL (http/https) and emit it plus its query params as a map.",
+			Description: "Hold a web address — type it inline or wire a string into the 'url' input — and emit it on 'out' only after checking it's a real http(s) URL. A malformed address (no scheme, no host, or a non-http scheme) fails the node up front instead of breaking a later step. It also decodes the address so you can act on its parts without string surgery: 'host' (example.com), 'path' (/blog/post), and 'query' as a map (?a=1&b=2 → {a:\"1\",b:\"2\"}, values URL-decoded, first value wins on a repeated key) — so you can branch on the path, template with a param, or rebuild a URL directly.",
+			Summary:     "Validate a URL (http/https) and emit it plus its host, path, and query params.",
 			Examples: []core.ParamsExample{
 				{
-					Title:  "A link with query params",
+					Title:  "A link with a path and query params",
 					Params: json.RawMessage(`{"url":"https://example.com/search?q=hello&page=2"}`),
-					Notes:  "'out' is the URL; 'query' is {\"q\":\"hello\",\"page\":\"2\"}.",
+					Notes:  "'out' is the URL; 'host' is \"example.com\"; 'path' is \"/search\"; 'query' is {\"q\":\"hello\",\"page\":\"2\"}.",
 				},
 			},
 			ExecutionModel: core.ExecutionBatch,
@@ -54,6 +54,8 @@ func init() {
 			},
 			Outputs: []core.Port{
 				{Port: "out", Label: "URL", MIME: []string{"text/plain"}},
+				{Port: "host", Label: "Host", MIME: []string{"text/plain"}},
+				{Port: "path", Label: "Path", MIME: []string{"text/plain"}},
 				{Port: "query", Label: "Query params", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
@@ -108,7 +110,13 @@ func executeURL(_ context.Context, job core.Job, _ chan<- core.Progress) (core.R
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
-			"out":   {MIME: "text/plain", Inline: raw},
+			"out": {MIME: "text/plain", Inline: raw},
+			// Decomposed parts, from the same parse — host (u.Host keeps any
+			// :port) and the decoded path, so downstream can branch/template on
+			// them without re-parsing. Path is "" for a bare host (no trailing
+			// slash), matching net/url.
+			"host":  {MIME: "text/plain", Inline: u.Host},
+			"path":  {MIME: "text/plain", Inline: u.Path},
 			"query": {MIME: "application/json", Inline: q},
 		},
 	}, nil
