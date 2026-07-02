@@ -79,6 +79,14 @@ type OAuthProvider struct {
 	// refresh_token (without them you get an access_token only,
 	// good for one hour and then dead).
 	AuthorizeExtras map[string]string
+
+	// TokenAuthStyle selects how client credentials are presented to the
+	// token endpoint. Empty (the default for every existing provider) means
+	// client_secret_post — client_id + client_secret in the form body.
+	// "basic" means client_secret_basic — an HTTP Basic Authorization header
+	// carrying client_id:client_secret, with neither in the body. Fortnox
+	// requires "basic"; most other providers accept post.
+	TokenAuthStyle string
 }
 
 // OAuthRegistry holds the set of providers the daemon can drive,
@@ -327,6 +335,16 @@ func (r *OAuthRegistry) exchangeCode(ctx context.Context, p OAuthProvider, code 
 // token. Shared by the authorization_code exchange and the
 // refresh_token grant — they differ only in the form they send.
 func (r *OAuthRegistry) postTokenForm(ctx context.Context, p OAuthProvider, form url.Values) (*StoredOAuthToken, error) {
+	// client_secret_basic: the credentials move from the body into an HTTP
+	// Basic header. Strip them from the form first — sending them both ways
+	// makes strict servers (Fortnox) reject the request as ambiguous. The
+	// callers (exchangeCode / refreshAccessToken) always set them in the
+	// form, so this branch is the single place that undoes that for basic.
+	basicAuth := p.TokenAuthStyle == "basic"
+	if basicAuth {
+		form.Del("client_id")
+		form.Del("client_secret")
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.TokenURL,
 		strings.NewReader(form.Encode()))
 	if err != nil {
@@ -334,6 +352,9 @@ func (r *OAuthRegistry) postTokenForm(ctx context.Context, p OAuthProvider, form
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
+	if basicAuth {
+		req.SetBasicAuth(p.ClientID, p.ClientSecret)
+	}
 
 	resp, err := r.httpClient().Do(req)
 	if err != nil {

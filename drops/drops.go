@@ -20,6 +20,7 @@ import (
 	_ "git.sr.ht/~klahr/dazyflow/drops/encoding"
 	_ "git.sr.ht/~klahr/dazyflow/drops/excel"
 	_ "git.sr.ht/~klahr/dazyflow/drops/flow"
+	_ "git.sr.ht/~klahr/dazyflow/drops/fortnox"
 	_ "git.sr.ht/~klahr/dazyflow/drops/gcal"
 	_ "git.sr.ht/~klahr/dazyflow/drops/geo"
 	_ "git.sr.ht/~klahr/dazyflow/drops/git"

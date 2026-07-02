@@ -1173,6 +1173,9 @@ const RESOURCE_PICKERS: Record<
   "stripe-subscription": { provider: "stripe", kind: "subscriptions", noun: "subscription" },
   "stripe-payment-intent": { provider: "stripe", kind: "payment_intents", noun: "payment" },
   "stripe-customer": { provider: "stripe", kind: "customers", noun: "customer" },
+  // Listed via the connected Fortnox account's OAuth token (customer scope).
+  // The dropdown stores the CustomerNumber; the card shows "Name — number".
+  "fortnox-customer": { provider: "fortnox", kind: "customers", noun: "customer" },
   // Listed via the connected workspace's OAuth token (channels:read). The
   // dropdown stores the channel ID (Cxxx); the card shows the #name.
   "slack-channel": { provider: "slack", kind: "channels", noun: "channel" },

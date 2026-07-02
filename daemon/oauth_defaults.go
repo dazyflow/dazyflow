@@ -27,6 +27,10 @@ type OAuthProviderDefault struct {
 	// SetupHelp is one-line operator guidance — "where do I get this
 	// client ID?" — rendered under the paste boxes in the admin UI.
 	SetupHelp string
+	// TokenAuthStyle selects how client credentials reach the token
+	// endpoint: "" (client_secret_post, the default) or "basic"
+	// (client_secret_basic). See OAuthProvider.TokenAuthStyle.
+	TokenAuthStyle string
 }
 
 // KnownOAuthProviderDefaults is the deployment-invariant catalogue of
@@ -110,6 +114,25 @@ var KnownOAuthProviderDefaults = []OAuthProviderDefault{
 		TokenURL:     "https://api.notion.com/v1/oauth/token",
 		Scopes:       nil, // Notion uses workspace-scope, no per-scope list.
 		SetupHelp:    "Create a public integration at notion.so/my-integrations; OAuth client ID + secret appear under Capabilities → OAuth.",
+	},
+	{
+		Name:         "fortnox",
+		DisplayName:  "Fortnox",
+		AuthorizeURL: "https://apps.fortnox.se/oauth-v1/auth",
+		TokenURL:     "https://apps.fortnox.se/oauth-v1/token",
+		// Scopes are per-resource. This set covers the shipped drops:
+		// customer (create/list), invoice (create + the paid-invoice poll),
+		// and companyinformation (a cheap read to verify a connection).
+		// Add more here as the connector grows (article, order, bookkeeping…).
+		Scopes: []string{"customer", "invoice", "companyinformation"},
+		// Fortnox only returns a refresh_token when offline access is
+		// requested — without it the access token dies in ~1h with no
+		// refresh path, exactly like Google.
+		AuthorizeExtras: map[string]string{"access_type": "offline"},
+		// Fortnox's token endpoint demands client_secret_basic — credentials
+		// in an HTTP Basic header, rejected if also sent in the body.
+		TokenAuthStyle: "basic",
+		SetupHelp:      "Create an app in the Fortnox Developer Portal (developer.fortnox.se); copy its Client ID and Client Secret and add the daemon's /api/v1/oauth/fortnox/callback URL as the redirect URI.",
 	},
 }
 
@@ -208,5 +231,6 @@ func (d OAuthProviderDefault) toProvider(clientID, clientSecret string) OAuthPro
 		AuthorizeExtras: d.AuthorizeExtras,
 		ClientID:        clientID,
 		ClientSecret:    clientSecret,
+		TokenAuthStyle:  d.TokenAuthStyle,
 	}
 }

@@ -36,6 +36,7 @@ const PICKER_FORMATS = new Set([
   "stripe-subscription",
   "stripe-payment-intent",
   "stripe-customer",
+  "fortnox-customer",
   "slack-channel",
   "homeassistant-entity",
   "homeassistant-service",

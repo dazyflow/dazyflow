@@ -19,6 +19,7 @@ const RESOURCE_PICKER_KINDS: Record<string, { provider: string; kind: string }> 
   "stripe-subscription": { provider: "stripe", kind: "subscriptions" },
   "stripe-payment-intent": { provider: "stripe", kind: "payment_intents" },
   "stripe-customer": { provider: "stripe", kind: "customers" },
+  "fortnox-customer": { provider: "fortnox", kind: "customers" },
   "slack-channel": { provider: "slack", kind: "channels" },
   "homeassistant-entity": { provider: "homeassistant", kind: "entities" },
   "homeassistant-service": { provider: "homeassistant", kind: "services" },

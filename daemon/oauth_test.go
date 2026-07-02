@@ -6,6 +6,7 @@ package daemon
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -23,10 +24,11 @@ import (
 // register it in the OAuthRegistry, and drive the flow without
 // touching the real Slack/Google/etc. APIs.
 type fakeProvider struct {
-	server       *httptest.Server
-	tokenStatus  int
-	tokenBody    string
-	lastFormBody url.Values
+	server         *httptest.Server
+	tokenStatus    int
+	tokenBody      string
+	lastFormBody   url.Values
+	lastAuthHeader string
 }
 
 func newFakeProvider(t *testing.T) *fakeProvider {
@@ -53,6 +55,7 @@ func newFakeProvider(t *testing.T) *fakeProvider {
 	mux.HandleFunc("/oauth/token", func(w http.ResponseWriter, r *http.Request) {
 		_ = r.ParseForm()
 		fp.lastFormBody = r.PostForm
+		fp.lastAuthHeader = r.Header.Get("Authorization")
 		w.WriteHeader(fp.tokenStatus)
 		_, _ = w.Write([]byte(fp.tokenBody))
 	})
@@ -70,6 +73,15 @@ func (fp *fakeProvider) provider() OAuthProvider {
 		ClientID:     "test-client",
 		ClientSecret: "test-secret",
 	}
+}
+
+// providerBasic is the same fake provider configured for
+// client_secret_basic (the Fortnox style): credentials go in an HTTP
+// Basic header, not the form body.
+func (fp *fakeProvider) providerBasic() OAuthProvider {
+	p := fp.provider()
+	p.TokenAuthStyle = "basic"
+	return p
 }
 
 // newOAuthHarness builds a gateway with EncryptedSecrets +
@@ -537,5 +549,94 @@ func TestOAuth_ExchangeFormBodyShape(t *testing.T) {
 		if fp.lastFormBody.Get(k) != v {
 			t.Errorf("form[%q] = %q, want %q", k, fp.lastFormBody.Get(k), v)
 		}
+	}
+	// The default (post) style must NOT send an Authorization header — the
+	// credentials live in the body, as asserted above.
+	if fp.lastAuthHeader != "" {
+		t.Errorf("post-style exchange set Authorization = %q, want none", fp.lastAuthHeader)
+	}
+}
+
+// wantBasic is the Authorization header a client_secret_basic request must
+// carry for the fake provider's test-client/test-secret credentials.
+var wantBasic = "Basic " + base64.StdEncoding.EncodeToString([]byte("test-client:test-secret"))
+
+// With TokenAuthStyle "basic", the code exchange presents credentials in an
+// HTTP Basic header and drops them from the body — the shape Fortnox's token
+// endpoint requires. The non-credential fields stay in the form.
+func TestOAuth_ExchangeUsesBasicAuthWhenConfigured(t *testing.T) {
+	es, _ := NewEncryptedSecrets(make([]byte, 32), NewMemSecretsStore())
+	fp := newFakeProvider(t)
+	reg := NewOAuthRegistry("https://example.test", es)
+	reg.HTTPClient = fp.server.Client()
+
+	if _, err := reg.exchangeCode(context.Background(), fp.providerBasic(), "the-code"); err != nil {
+		t.Fatalf("exchangeCode: %v", err)
+	}
+
+	if fp.lastAuthHeader != wantBasic {
+		t.Errorf("Authorization = %q, want %q", fp.lastAuthHeader, wantBasic)
+	}
+	// Credentials must not also appear in the body — sending both ways is
+	// what makes Fortnox reject the request.
+	if got := fp.lastFormBody.Get("client_secret"); got != "" {
+		t.Errorf("client_secret leaked into body: %q", got)
+	}
+	if got := fp.lastFormBody.Get("client_id"); got != "" {
+		t.Errorf("client_id leaked into body: %q", got)
+	}
+	// The rest of the grant is unchanged.
+	if got := fp.lastFormBody.Get("grant_type"); got != "authorization_code" {
+		t.Errorf("grant_type = %q, want authorization_code", got)
+	}
+	if got := fp.lastFormBody.Get("code"); got != "the-code" {
+		t.Errorf("code = %q, want the-code", got)
+	}
+	if got := fp.lastFormBody.Get("redirect_uri"); got != "https://example.test/api/v1/oauth/test/callback" {
+		t.Errorf("redirect_uri = %q", got)
+	}
+}
+
+// The refresh path shares postTokenForm, so basic auth must apply there too:
+// a Fortnox-style refresh (new access + rotated refresh token) presents the
+// Basic header, keeps credentials out of the body, and persists the rotated
+// refresh_token.
+func TestOAuth_RefreshUsesBasicAuthWhenConfigured(t *testing.T) {
+	es, _ := NewEncryptedSecrets(make([]byte, 32), NewMemSecretsStore())
+	fp := newFakeProvider(t)
+	reg := NewOAuthRegistry("https://example.test", es)
+	reg.Register(fp.providerBasic())
+	reg.HTTPClient = fp.server.Client()
+
+	past := time.Now().UTC().Add(-time.Minute)
+	if _, err := reg.store(t.Context(), "acme", "test", "main", &StoredOAuthToken{
+		AccessToken:  "old-access",
+		RefreshToken: "rotating-1",
+		ExpiresAt:    &past,
+		ObtainedAt:   past,
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	// Fortnox rotates the refresh_token on every refresh.
+	fp.tokenBody = `{"access_token":"new-access","refresh_token":"rotating-2","token_type":"Bearer","expires_in":3600}`
+
+	got, err := reg.GetOAuthToken(core.WithTenant(t.Context(), "acme"), "test", "main")
+	if err != nil {
+		t.Fatalf("GetOAuthToken: %v", err)
+	}
+	if got.AccessToken != "new-access" {
+		t.Errorf("access_token = %q, want new-access", got.AccessToken)
+	}
+	if got.RefreshToken != "rotating-2" {
+		t.Errorf("refresh_token = %q, want the rotated rotating-2", got.RefreshToken)
+	}
+	if fp.lastAuthHeader != wantBasic {
+		t.Errorf("refresh Authorization = %q, want %q", fp.lastAuthHeader, wantBasic)
+	}
+	if got := fp.lastFormBody.Get("client_secret"); got != "" {
+		t.Errorf("client_secret leaked into refresh body: %q", got)
+	}
+	if got := fp.lastFormBody.Get("refresh_token"); got != "rotating-1" {
+		t.Errorf("sent refresh_token = %q, want rotating-1", got)
 	}
 }

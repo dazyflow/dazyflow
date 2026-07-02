@@ -48,6 +48,7 @@ import (
 	_ "git.sr.ht/~klahr/dazyflow/drops"
 	"git.sr.ht/~klahr/dazyflow/drops/drive"
 	"git.sr.ht/~klahr/dazyflow/drops/gcal"
+	"git.sr.ht/~klahr/dazyflow/drops/fortnox"
 	gitdrop "git.sr.ht/~klahr/dazyflow/drops/git"
 	"git.sr.ht/~klahr/dazyflow/drops/github"
 	"git.sr.ht/~klahr/dazyflow/drops/gmail"
@@ -1865,6 +1866,14 @@ func wireConnectorTokenHooks(reg *daemon.OAuthRegistry) {
 	drive.SetTokenLookup(bind("google"))
 	gform.SetTokenLookup(bind("google"))
 	notion.SetTokenLookup(bind("notion"))
+	fortnox.SetTokenLookup(bind("fortnox"))
+	// Fortnox customer picker: lists the connected account's customers for the
+	// "fortnox-customer" param format (fortnox_create_invoice's customer).
+	// Resolves the OAuth token via the lookup bound just above, so register
+	// after it.
+	daemon.RegisterResourceLister("fortnox", "customers", func(ctx context.Context, account string, _ map[string]string) ([]core.AccountResource, error) {
+		return fortnox.ListCustomers(ctx, core.Job{Params: map[string]any{"account": account}})
+	})
 	// Live Sheets-mapping field hints for the Google Form source: resolve a
 	// form's question titles via the Forms API (gform.FieldNames). Wired here
 	// — where the gform drop is importable — so the daemon package stays
