@@ -5,6 +5,7 @@ package value
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"git.sr.ht/~klahr/dazyflow/core"
@@ -84,6 +85,22 @@ func TestPhone_InvalidFailsNode(t *testing.T) {
 	}
 	if res.Error == nil || res.Error.Code != "bad_param" {
 		t.Errorf("error = %+v, want bad_param", res.Error)
+	}
+}
+
+// An international number (00 prefix → +1, USA) that fails validation must
+// name the country it resolved to, NOT the default region — otherwise the
+// error misleadingly blames "region SE" for a US number.
+func TestPhone_InvalidInternationalNamesResolvedCountry(t *testing.T) {
+	res := runPhone(t, map[string]any{"phone": "0014512345678", "default_region": "SE"}, nil)
+	if res.Status == core.StatusOK {
+		t.Fatal("want an error result for an invalid number")
+	}
+	if res.Error == nil {
+		t.Fatal("want an error")
+	}
+	if strings.Contains(res.Error.Message, "region SE") {
+		t.Errorf("message blames the default region for an international number: %q", res.Error.Message)
 	}
 }
 

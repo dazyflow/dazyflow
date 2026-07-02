@@ -6,6 +6,7 @@ package value
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -137,7 +138,18 @@ func executePhone(_ context.Context, job core.Job, _ chan<- core.Progress) (core
 		return params.Err(job, "bad_param", "not a valid phone number: "+err.Error()+" (for a local number, set Default region to its country, e.g. SE)"), nil
 	}
 	if !phonenumbers.IsValidNumber(num) {
-		return params.Err(job, "bad_param", "not a valid phone number for region "+region+": "+raw), nil
+		// The number parsed but isn't a real, dialable number. Name the country
+		// it actually resolved to — its own calling code when written in
+		// international form (+…/00…), else the default region — so the message
+		// isn't misleadingly about SE for a +1 / 0045 number the user wrote
+		// internationally.
+		where := "region " + region
+		if resolved := phonenumbers.GetRegionCodeForNumber(num); resolved != "" && resolved != "ZZ" {
+			where = "region " + resolved
+		} else if cc := num.GetCountryCode(); cc != 0 {
+			where = fmt.Sprintf("country code +%d", cc)
+		}
+		return params.Err(job, "bad_param", fmt.Sprintf("not a valid phone number for %s: %s", where, raw)), nil
 	}
 
 	e164 := phonenumbers.Format(num, phonenumbers.E164)
