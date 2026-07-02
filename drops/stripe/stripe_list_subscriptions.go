@@ -35,11 +35,9 @@ func init() {
 				{Title: "A customer's active subscriptions", Params: json.RawMessage(`{"customer":"cus_NffrFeUfNV2Hib"}`), Notes: "Wire the customer id in from Search customers; wire 'first_id' into Cancel subscription."},
 				{Title: "Dunning sweep — every past-due subscription", Params: json.RawMessage(`{"status":"past_due","limit":100}`), Notes: "Schedule-trigger this and For-each the 'subscriptions' list into a notify step."},
 			},
-			RequiresConnections: []core.ConnectionRequirement{
-				{Kind: "secret", Name: "STRIPE_API_KEY", Note: "Stripe secret API key (sk_live_… / sk_test_…)."},
-			},
-			ExecutionModel: core.ExecutionBatch,
-			ProcessModel:   core.ProcessLongLived,
+			ConnectionFields: stripeConnectionFields(),
+			ExecutionModel:   core.ExecutionBatch,
+			ProcessModel:     core.ProcessLongLived,
 			Inputs: []core.Port{
 				{Port: "customer", Label: "Customer", MIME: []string{"text/plain"}},
 			},
@@ -51,14 +49,13 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"api_key":{"type":"string","title":"API key","default":"${secret.STRIPE_API_KEY}","x_advanced":true,"description":"Stripe secret key. The default reads the STRIPE_API_KEY secret."},
 					"customer":{"type":"string","format":"stripe-customer","title":"Customer","description":"Pick a customer to list only their subscriptions, or leave empty for the whole account (e.g. a past-due sweep). Listed once the STRIPE_API_KEY secret is set. Overridden by the 'Customer' input."},
 					"status":{"type":"string","title":"Status","default":"active","enum":["active","trialing","past_due","unpaid","paused","canceled","all"],"enumNames":["Active","On trial","Past due","Unpaid","Paused","Canceled","All states"],"description":"Which subscription states to list."},
 					"limit":{"type":"integer","title":"Limit","default":25,"minimum":1,"maximum":100},
 					"base_url":{"type":"string","description":"Override the API host (testing)."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
-				"required":["api_key"]
+				"required":[]
 			}`),
 			Idempotent:  true,
 			RetryPolicy: core.RetryExponentialBackoff,

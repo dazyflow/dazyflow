@@ -112,7 +112,7 @@ func TestExecuteGitLog_CommitterTimeOrder(t *testing.T) {
 	if err := wt.Checkout(&gogit.CheckoutOptions{Branch: plumbing.NewBranchReferenceName("master"), Force: true}); err != nil {
 		t.Fatalf("back to master: %v", err)
 	}
-	h2 := commitAt(t, dir, wt, "f.txt", "m2\n", "m2", base.Add(2*time.Hour))            // t2
+	h2 := commitAt(t, dir, wt, "f.txt", "m2\n", "m2", base.Add(2*time.Hour))                   // t2
 	hM := commitAt(t, dir, wt, "merge.txt", "merge\n", "merge", base.Add(4*time.Hour), h2, hF) // t4, parents m2+f1
 	_ = h1
 

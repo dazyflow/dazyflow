@@ -11,7 +11,6 @@ import (
 	"git.sr.ht/~klahr/dazyflow/core"
 )
 
-
 // sandboxRel cleans rel and rejects absolute paths or "../" escapes so
 // callers can safely join it against job.WorkspaceRoot.
 func sandboxRel(rel string) (string, error) {

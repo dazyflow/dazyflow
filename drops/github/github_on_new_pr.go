@@ -14,17 +14,17 @@ import (
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "github_on_new_pr",
-			Version:        "1.0",
-			Label:          "GitHub",
-			Subtitle:       "On new PR",
-			Color:          "#24292f",
-			Icon:           "git-merge",
-			BrandLogo:      "/brands/github.svg",
-			Category:       "trigger",
-			Provider:       "internal",
-			Integration:    "GitHub",
-			Tags:           []string{"github", "trigger", "pull-request", "pr", "webhook", "events"},
+			ID:          "github_on_new_pr",
+			Version:     "1.0",
+			Label:       "GitHub",
+			Subtitle:    "On new PR",
+			Color:       "#24292f",
+			Icon:        "git-merge",
+			BrandLogo:   "/brands/github.svg",
+			Category:    "trigger",
+			Provider:    "internal",
+			Integration: "GitHub",
+			Tags:        []string{"github", "trigger", "pull-request", "pr", "webhook", "events"},
 			Description: "Starts the flow when a pull request is opened on the connected repo. Reopens and pushed-updates don't fire it — it's specifically the 'new PR' moment. Outputs the PR's number, title, description, author, source/target branches, and a link to it.",
 			Summary:     "Trigger that fires once when a pull request is opened on a connected GitHub repo.",
 			Examples: []core.ParamsExample{

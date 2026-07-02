@@ -197,7 +197,7 @@ func TestRemoteRefName(t *testing.T) {
 
 func TestLooksLikeSHA(t *testing.T) {
 	cases := map[string]bool{
-		"a1b2c3d": true,  // 7 hex
+		"a1b2c3d": true, // 7 hex
 		"0123456789abcdef0123456789abcdef01234567": true, // 40 hex
 		"develop":   false,
 		"v1.4.2":    false,
@@ -218,17 +218,17 @@ func TestLooksLikeSHA(t *testing.T) {
 // at its default (off) for this test.
 func TestGuardRepoURL_BlocksSSRFAndLocalSchemes(t *testing.T) {
 	blocked := []string{
-		"file:///etc/passwd",                 // host-file read
-		"git://internal-host/repo.git",       // internal git daemon
-		"http://example.com/repo.git",        // cleartext + SSRF class
-		"https://169.254.169.254/repo.git",   // cloud metadata IP
-		"https://127.0.0.1/repo.git",         // loopback
-		"https://[::1]/repo.git",             // loopback v6
-		"https://10.0.0.5/repo.git",          // RFC1918
-		"/srv/repos/local.git",               // bare local path
-		"../../etc/passwd",                   // relative local path
-		"git@127.0.0.1:internal/repo.git",    // scp-like to loopback
-		"",                                   // empty
+		"file:///etc/passwd",               // host-file read
+		"git://internal-host/repo.git",     // internal git daemon
+		"http://example.com/repo.git",      // cleartext + SSRF class
+		"https://169.254.169.254/repo.git", // cloud metadata IP
+		"https://127.0.0.1/repo.git",       // loopback
+		"https://[::1]/repo.git",           // loopback v6
+		"https://10.0.0.5/repo.git",        // RFC1918
+		"/srv/repos/local.git",             // bare local path
+		"../../etc/passwd",                 // relative local path
+		"git@127.0.0.1:internal/repo.git",  // scp-like to loopback
+		"",                                 // empty
 	}
 	for _, u := range blocked {
 		if err := guardRepoURL(context.Background(), u); err == nil {

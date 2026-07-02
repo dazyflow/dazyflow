@@ -26,8 +26,8 @@ import (
 	"github.com/creack/pty"
 
 	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/engine"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 func init() {

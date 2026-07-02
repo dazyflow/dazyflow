@@ -15,23 +15,23 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 
 	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/engine"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "git_log",
-			Version:        "1.0",
-			Label:          "Git",
-			Subtitle:       "Log",
-			Color:          "#f05033",
-			Icon:           "git",
-			Category:       "io",
-			Provider:       "internal",
-			Integration:    "Git",
-			Tags:           []string{"git", "log", "history", "vcs"},
+			ID:          "git_log",
+			Version:     "1.0",
+			Label:       "Git",
+			Subtitle:    "Log",
+			Color:       "#f05033",
+			Icon:        "git",
+			Category:    "io",
+			Provider:    "internal",
+			Integration: "Git",
+			Tags:        []string{"git", "log", "history", "vcs"},
 			Description: "List recent commits in a checked-out repo — each with its SHA, author, time, and summary line. Useful for showing release notes, attributing changes, or building 'what landed today' reports.",
 			Summary:     "Walk a checked-out repo's history and return recent commits with SHA, author, timestamp, and summary.",
 			Examples: []core.ParamsExample{

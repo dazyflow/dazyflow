@@ -14,19 +14,19 @@ import (
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "slack_on_mention",
-			Version:        "1.0",
-			Label:          "Slack",
-			Subtitle:       "On mention",
-			Color:          "#4A154B",
-			Icon:           "mail", // fallback; BrandLogo wins in the UI
-			BrandLogo:      "/brands/slack.svg",
-			Category:       "trigger",
-			Provider:       "internal",
-			Integration:    "Slack",
-			Tags:           []string{"slack", "trigger", "mention", "event", "events-api"},
-			Description:    "Starts this flow whenever someone @-mentions your bot in Slack. The message, who sent it, and where it was sent are available as outputs to wire into the next steps — e.g. reply, log the request to a sheet, or forward it by email. Set 'Only in channel' to react in just one room.",
-			Summary:        "Starts the flow when someone @-mentions your bot in Slack.",
+			ID:          "slack_on_mention",
+			Version:     "1.0",
+			Label:       "Slack",
+			Subtitle:    "On mention",
+			Color:       "#4A154B",
+			Icon:        "mail", // fallback; BrandLogo wins in the UI
+			BrandLogo:   "/brands/slack.svg",
+			Category:    "trigger",
+			Provider:    "internal",
+			Integration: "Slack",
+			Tags:        []string{"slack", "trigger", "mention", "event", "events-api"},
+			Description: "Starts this flow whenever someone @-mentions your bot in Slack. The message, who sent it, and where it was sent are available as outputs to wire into the next steps — e.g. reply, log the request to a sheet, or forward it by email. Set 'Only in channel' to react in just one room.",
+			Summary:     "Starts the flow when someone @-mentions your bot in Slack.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Fire on any @-mention in the workspace",

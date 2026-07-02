@@ -35,11 +35,9 @@ func init() {
 				{Title: "Customer by email", Params: json.RawMessage(`{"query":"email:'a@b.com'"}`), Notes: "Wire the email into the 'Query' input as email:'…'; wire 'first_id' into the next step's Customer."},
 				{Title: "By your own metadata", Params: json.RawMessage(`{"query":"metadata['crm_id']:'acct_42'","limit":1}`)},
 			},
-			RequiresConnections: []core.ConnectionRequirement{
-				{Kind: "secret", Name: "STRIPE_API_KEY", Note: "Stripe secret API key (sk_live_… / sk_test_…)."},
-			},
-			ExecutionModel: core.ExecutionBatch,
-			ProcessModel:   core.ProcessLongLived,
+			ConnectionFields: stripeConnectionFields(),
+			ExecutionModel:   core.ExecutionBatch,
+			ProcessModel:     core.ProcessLongLived,
 			Inputs: []core.Port{
 				{Port: "query", Label: "Query", Required: true, MIME: []string{"text/plain"}},
 			},
@@ -56,13 +54,12 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"api_key":{"type":"string","title":"API key","default":"${secret.STRIPE_API_KEY}","x_advanced":true,"description":"Stripe secret key. The default reads the STRIPE_API_KEY secret."},
 					"query":{"type":"string","title":"Query","description":"Stripe search syntax, e.g. email:'a@b.com'. Overridden by the 'Query' input."},
 					"limit":{"type":"integer","title":"Limit","default":10,"minimum":1,"maximum":100},
 					"base_url":{"type":"string","description":"Override the API host (testing)."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
-				"required":["api_key","query"]
+				"required":["query"]
 			}`),
 			Idempotent:  true,
 			RetryPolicy: core.RetryExponentialBackoff,

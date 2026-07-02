@@ -23,7 +23,7 @@ func init() {
 			Label:       "Discord",
 			Subtitle:    "Send message",
 			Summary:     "Post a message to a Discord channel via a webhook.",
-			Description: "Post a message to a Discord channel using a channel webhook. The message ('Content') can be typed on the step or wired in from upstream (the input overrides the param). Optionally override the displayed name and avatar per message. Create the webhook in Discord under Server Settings → Integrations → Webhooks and store its URL as the DISCORD_WEBHOOK_URL secret — no bot or OAuth app needed.",
+			Description: "Post a message to a Discord channel using a channel webhook. The message ('Content') can be typed on the step or wired in from upstream (the input overrides the param). Optionally override the displayed name and avatar per message. Create the webhook in Discord under Server Settings → Integrations → Webhooks then connect it once on the Apps page — no bot or OAuth app needed.",
 			Integration: "Discord",
 			Category:    "network",
 			Icon:        "message-square",
@@ -32,11 +32,15 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"discord", "message", "chat", "notify", "webhook"},
 			Examples: []core.ParamsExample{
-				{Title: "Notify a channel", Params: json.RawMessage(`{"content":"Deploy finished ✅"}`), Notes: "Wire an upstream message into the 'Content' input instead of typing it. webhook_url defaults to the DISCORD_WEBHOOK_URL secret."},
+				{Title: "Notify a channel", Params: json.RawMessage(`{"content":"Deploy finished ✅"}`), Notes: "Wire an upstream message into the 'Content' input instead of typing it. The webhook URL comes from the connected Discord app."},
 				{Title: "With a custom sender name", Params: json.RawMessage(`{"content":"Build broke","username":"CI Bot"}`)},
 			},
-			RequiresConnections: []core.ConnectionRequirement{
-				{Kind: "secret", Name: "DISCORD_WEBHOOK_URL", Note: "Discord channel webhook URL (Server Settings → Integrations → Webhooks → Copy Webhook URL)."},
+			// Per-tenant service connection: the channel webhook URL entered once
+			// on the Apps page (stored as conn.discord.webhook_url), injected at
+			// run time — the URL embeds a token, so it's a secret field and never
+			// lives in the graph.
+			ConnectionFields: []core.ConnectionField{
+				{Key: "webhook_url", Label: "Webhook URL", Secret: true, Required: true, Placeholder: "https://discord.com/api/webhooks/…"},
 			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
@@ -50,14 +54,13 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"webhook_url":{"type":"string","title":"Webhook URL","default":"${secret.DISCORD_WEBHOOK_URL}","x_advanced":true,"description":"Discord channel webhook URL. The default reads the DISCORD_WEBHOOK_URL secret; ${vault./aws./gcp.…} references work too."},
 					"content":{"type":"string","title":"Message","description":"The message text (up to 2000 characters). Overridden by the 'Content' input."},
 					"username":{"type":"string","title":"Sender name","description":"Override the name shown for this message. Leave blank for the webhook's default."},
 					"avatar_url":{"type":"string","title":"Avatar URL","x_advanced":true,"description":"Override the avatar shown for this message."},
 					"thread_id":{"type":"string","title":"Thread ID","x_advanced":true,"description":"Post into an existing thread in the channel instead of the main channel."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
-				"required":["webhook_url","content"]
+				"required":["content"]
 			}`),
 			Idempotent: false,
 			// Discord webhook execution has no generic idempotency header,
@@ -76,7 +79,7 @@ func init() {
 func executeSendMessage(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	webhookURL, _ := params.StringOpt(job.Params, "webhook_url")
 	if strings.TrimSpace(webhookURL) == "" {
-		return params.Err(job, "bad_param", "no Discord webhook: add a DISCORD_WEBHOOK_URL secret (the webhook_url param resolves it by default) or set webhook_url on the step"), nil
+		return params.Err(job, "bad_param", "Discord is not connected: add your channel webhook URL on the Apps page (Discord)"), nil
 	}
 	content, ok := params.TextInputOr(job, "content", params.StringDefault(job.Params, "content", ""))
 	if !ok {

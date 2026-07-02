@@ -6,8 +6,8 @@ package git
 import (
 	"net/http"
 
-	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	gitclient "github.com/go-git/go-git/v5/plumbing/transport/client"
+	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 )
 
 // InstallGuardedHTTPTransport routes go-git's https fetches through the given

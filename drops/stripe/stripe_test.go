@@ -542,7 +542,7 @@ func TestAuthErrors(t *testing.T) {
 		t.Errorf("wrong key res = %+v", res)
 	}
 
-	// Empty key (secret not set): clear setup pointer, no HTTP call.
+	// Empty key (connection not set): clear setup pointer, no HTTP call.
 	drop, _ := engine.Default.Get("stripe_create_customer")
 	r2, err := drop.Execute(context.Background(), core.Job{
 		ID: "j", Params: map[string]any{"api_key": "", "email": "a@b.com"},
@@ -550,14 +550,14 @@ func TestAuthErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}
-	if r2.Status != core.StatusError || !strings.Contains(r2.Error.Message, "STRIPE_API_KEY") {
+	if r2.Status != core.StatusError || !strings.Contains(r2.Error.Message, "not connected") {
 		t.Errorf("empty key res = %+v", r2)
 	}
 }
 
 func TestManifests(t *testing.T) {
-	// All five registered, all carrying the Stripe branding + secret
-	// requirement, so the catalog groups them and the connection gate fires.
+	// All five registered, all carrying the Stripe branding + the api-key
+	// service connection, so the catalog groups them and the connection gate fires.
 	ids := []string{
 		"stripe_create_customer", "stripe_create_payment_link",
 		"stripe_create_refund", "stripe_list_events", "stripe_search_customers",
@@ -571,8 +571,8 @@ func TestManifests(t *testing.T) {
 		if mf.Integration != "Stripe" || mf.BrandLogo != "/brands/stripe.svg" {
 			t.Errorf("%s: integration/brand = %q/%q", id, mf.Integration, mf.BrandLogo)
 		}
-		if len(mf.RequiresConnections) != 1 || mf.RequiresConnections[0].Name != "STRIPE_API_KEY" {
-			t.Errorf("%s: RequiresConnections = %+v", id, mf.RequiresConnections)
+		if len(mf.ConnectionFields) != 1 || mf.ConnectionFields[0].Key != "api_key" {
+			t.Errorf("%s: ConnectionFields = %+v", id, mf.ConnectionFields)
 		}
 		var schema map[string]any
 		if err := json.Unmarshal(mf.ParamsSchema, &schema); err != nil {

@@ -14,23 +14,23 @@ import (
 	gogit "github.com/go-git/go-git/v5"
 
 	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/engine"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "git_diff",
-			Version:        "1.0",
-			Label:          "Git",
-			Subtitle:       "Diff",
-			Color:          "#f05033",
-			Icon:           "git",
-			Category:       "io",
-			Provider:       "internal",
-			Integration:    "Git",
-			Tags:           []string{"git", "diff", "patch", "vcs"},
+			ID:          "git_diff",
+			Version:     "1.0",
+			Label:       "Git",
+			Subtitle:    "Diff",
+			Color:       "#f05033",
+			Icon:        "git",
+			Category:    "io",
+			Provider:    "internal",
+			Integration: "Git",
+			Tags:        []string{"git", "diff", "patch", "vcs"},
 			Description: "Show what changed between two points in a checked-out repo's history, as a unified diff (patch text). By default it shows the most recent commit's changes (HEAD~1..HEAD), but you can compare any two branches, tags, or commits.",
 			Summary:     "Produce a unified diff (patch text) between two git refs in a checked-out workspace repo.",
 			Examples: []core.ParamsExample{

@@ -23,7 +23,7 @@ func init() {
 			Label:       "MQTT",
 			Subtitle:    "Publish",
 			Summary:     "Publish a message to an MQTT topic.",
-			Description: "Publish a message to a topic on an MQTT broker. The topic and payload can be typed on the step or wired in from upstream (the matching input overrides the param). Broker is a tcp:// or ssl:// address (a bare host:port defaults to tcp://…:1883). Username/Password default to the MQTT_USERNAME/MQTT_PASSWORD secrets. Private-network brokers are blocked unless the operator allows private egress.",
+			Description: "Publish a message to a topic on an MQTT broker. The topic and payload can be typed on the step or wired in from upstream (the matching input overrides the param). Broker is a tcp:// or ssl:// address (a bare host:port defaults to tcp://…:1883). The broker address and optional username/password are set once as the MQTT connection on the Apps page. Private-network brokers are blocked unless the operator allows private egress.",
 			Integration: "MQTT",
 			Category:    "network",
 			Icon:        "radio",
@@ -32,12 +32,17 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"mqtt", "publish", "iot", "message", "pubsub"},
 			Examples: []core.ParamsExample{
-				{Title: "Publish a sensor command", Params: json.RawMessage(`{"broker":"tcp://broker.example.com:1883","topic":"home/livingroom/light","payload":"ON","qos":1}`)},
-				{Title: "Retained status over TLS", Params: json.RawMessage(`{"broker":"ssl://broker.example.com:8883","topic":"devices/door/status","payload":"open","retain":true}`)},
+				{Title: "Publish a sensor command", Params: json.RawMessage(`{"topic":"home/livingroom/light","payload":"ON","qos":1}`), Notes: "The broker is set once as the MQTT connection on the Apps page."},
+				{Title: "Retained status over TLS", Params: json.RawMessage(`{"topic":"devices/door/status","payload":"open","retain":true}`)},
 			},
-			RequiresConnections: []core.ConnectionRequirement{
-				{Kind: "secret", Name: "MQTT_USERNAME", Note: "MQTT broker username (optional — omit for anonymous brokers)."},
-				{Kind: "secret", Name: "MQTT_PASSWORD", Note: "MQTT broker password (optional)."},
+			// Per-tenant service connection: the broker endpoint plus optional
+			// credentials, set once on the Apps page (stored as conn.mqtt.*) and
+			// injected at run time. broker is plain (an address); password is a
+			// secret. Mirrors Home Assistant (base_url + token).
+			ConnectionFields: []core.ConnectionField{
+				{Key: "broker", Label: "Broker", Required: true, Placeholder: "tcp://broker.example.com:1883"},
+				{Key: "username", Label: "Username", Placeholder: "(blank for anonymous brokers)"},
+				{Key: "password", Label: "Password", Secret: true},
 			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
@@ -51,17 +56,14 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"broker":{"type":"string","title":"Broker","examples":["tcp://broker.example.com:1883","ssl://broker.example.com:8883"],"description":"Broker address. A bare host:port defaults to tcp://…:1883; ssl:// uses TLS."},
 					"topic":{"type":"string","title":"Topic","examples":["home/livingroom/light"],"description":"Topic to publish to. Overridden by the 'Topic' input."},
 					"payload":{"type":"string","title":"Payload","description":"Message body. Overridden by the 'Payload' input."},
 					"qos":{"type":"integer","title":"QoS","enum":[0,1,2],"default":0,"description":"Delivery guarantee: 0 at-most-once, 1 at-least-once, 2 exactly-once."},
 					"retain":{"type":"boolean","title":"Retain","default":false,"description":"Broker keeps this as the topic's last known message for new subscribers."},
-					"username":{"type":"string","title":"Username","default":"${secret.MQTT_USERNAME}","x_advanced":true,"description":"Broker username. Defaults to the MQTT_USERNAME secret; leave blank for anonymous brokers."},
-					"password":{"type":"string","title":"Password","default":"${secret.MQTT_PASSWORD}","x_advanced":true,"description":"Broker password. Defaults to the MQTT_PASSWORD secret."},
 					"client_id":{"type":"string","title":"Client ID","x_advanced":true,"description":"MQTT client id. Defaults to a dazyflow-derived id."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for connect + publish, in milliseconds."}
 				},
-				"required":["broker","topic","payload"]
+				"required":["topic","payload"]
 			}`),
 			// A publish is a side effect with no dedup key, and each retry
 			// reconnects (a fresh session), so MQTT QoS can't suppress a
@@ -76,7 +78,7 @@ func init() {
 func executePublish(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	broker := normalizeBroker(params.StringDefault(job.Params, "broker", ""))
 	if broker == "" {
-		return params.Err(job, "bad_param", "'broker' is required (e.g. tcp://broker.example.com:1883)"), nil
+		return params.Err(job, "bad_param", "MQTT is not connected: set the broker address on the Apps page (MQTT)"), nil
 	}
 	topic, ok := params.TextInputOr(job, "topic", params.StringDefault(job.Params, "topic", ""))
 	if !ok {

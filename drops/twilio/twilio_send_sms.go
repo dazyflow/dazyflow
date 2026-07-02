@@ -23,7 +23,7 @@ func init() {
 			Label:       "Twilio",
 			Subtitle:    "Send SMS",
 			Summary:     "Send an SMS text message via Twilio.",
-			Description: "Send an SMS via Twilio. The recipient ('To') and message ('Body') can be typed on the step or wired in from upstream (the matching input port overrides the param). Send from one of your Twilio numbers ('From', in E.164 like +15551234567) or set a Messaging Service SID instead. Needs TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN secrets.",
+			Description: "Send an SMS via Twilio. The recipient ('To') and message ('Body') can be typed on the step or wired in from upstream (the matching input port overrides the param). Send from one of your Twilio numbers ('From', in E.164 like +15551234567) or set a Messaging Service SID instead. Connect your Twilio account once on the Apps page.",
 			Integration: "Twilio",
 			Category:    "network",
 			Icon:        "message-square",
@@ -35,9 +35,12 @@ func init() {
 				{Title: "Alert to a phone number", Params: json.RawMessage(`{"to":"+15558675309","from":"+15551234567","body":"Your order has shipped."}`), Notes: "Wire a trigger's phone/message outputs into the 'To'/'Body' pins instead of typing them."},
 				{Title: "Send via a Messaging Service", Params: json.RawMessage(`{"to":"+15558675309","messaging_service_sid":"MGxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx","body":"Your order has shipped."}`)},
 			},
-			RequiresConnections: []core.ConnectionRequirement{
-				{Kind: "secret", Name: "TWILIO_ACCOUNT_SID", Note: "Twilio Account SID (ACxxxx…)."},
-				{Kind: "secret", Name: "TWILIO_AUTH_TOKEN", Note: "Twilio Auth Token (32-character token)."},
+			// Per-tenant service connection: Account SID + Auth Token entered once
+			// on the Apps page (stored as conn.twilio.*), injected at run time —
+			// not node params, so credentials never live in the graph.
+			ConnectionFields: []core.ConnectionField{
+				{Key: "account_sid", Label: "Account SID", Required: true, Placeholder: "ACxxxxxxxx…"},
+				{Key: "auth_token", Label: "Auth token", Secret: true, Required: true},
 			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
@@ -53,8 +56,6 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"account_sid":{"type":"string","title":"Account SID","default":"${secret.TWILIO_ACCOUNT_SID}","x_advanced":true,"description":"Twilio Account SID. The default reads the TWILIO_ACCOUNT_SID secret; ${vault./aws./gcp.…} references work too."},
-					"auth_token":{"type":"string","title":"Auth token","default":"${secret.TWILIO_AUTH_TOKEN}","x_advanced":true,"description":"Twilio Auth Token. The default reads the TWILIO_AUTH_TOKEN secret."},
 					"to":{"type":"string","title":"To","examples":["+15558675309"],"description":"Recipient phone number in E.164 format. Overridden by the 'To' input."},
 					"from":{"type":"string","title":"From","examples":["+15551234567"],"description":"One of your Twilio phone numbers (E.164). Leave blank if using a Messaging Service SID."},
 					"messaging_service_sid":{"type":"string","title":"Messaging Service SID","examples":["MGxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"],"x_advanced":true,"description":"Send via a Twilio Messaging Service instead of a single 'From' number."},
@@ -62,7 +63,7 @@ func init() {
 					"base_url":{"type":"string","description":"Override the API host (testing)."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
-				"required":["account_sid","auth_token","to","body"]
+				"required":["to","body"]
 			}`),
 			Idempotent: false,
 			// Twilio's Messages API has no generic idempotency header, so

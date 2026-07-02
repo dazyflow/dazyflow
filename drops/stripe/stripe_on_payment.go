@@ -39,9 +39,9 @@ func init() {
 			},
 			ExecutionModel: core.ExecutionTrigger,
 			ProcessModel:   core.ProcessLongLived,
-			Outputs:      paymentTriggerOutputs(),
-			ParamsSchema: json.RawMessage(`{"type":"object"}`),
-			Idempotent:   false,
+			Outputs:        paymentTriggerOutputs(),
+			ParamsSchema:   json.RawMessage(`{"type":"object"}`),
+			Idempotent:     false,
 		},
 		Execute: executeStripeOnPayment,
 	})

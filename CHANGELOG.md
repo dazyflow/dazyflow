@@ -19,6 +19,21 @@ Releasing: move the entries below from `[Unreleased]` under a new
 
 ### Added
 
+- **Fortnox connector** (`drops/fortnox/`) — Sweden's dominant SMB accounting:
+  create customer, create invoice, list invoices (paid-invoice poll source),
+  and a customer picker. OAuth 2.0 via `client_secret_basic` (new daemon
+  support, below).
+- **46elks connector** (`drops/elks/`) — send SMS via the Swedish/Nordic 46elks
+  API. Static-credential (HTTP Basic) service connection; no daemon changes.
+- **Phone value drop** (`drops/value/`) — validate and normalize a phone number
+  to E.164 with a default-region setting (libphonenumber), emitting country,
+  national number, and type; the flow editor shows a live country flag beside
+  the field for international input. The SMS-input sibling of the `url` drop.
+- **OAuth `client_secret_basic` support** in the daemon's OAuth registry
+  (`daemon/oauth.go`) — token requests can present client credentials in an
+  HTTP Basic header instead of the form body, selected per provider via
+  `TokenAuthStyle: "basic"`. Fortnox requires it; all existing providers keep
+  the default form-body behavior.
 - **Runs date-range filter.** `GET /api/v1/me/runs` and
   `GET /api/v1/me/flows/{flow_id}/runs` accept `since` and `until` query params
   (RFC3339 timestamp or bare `YYYY-MM-DD`) bounding a run's enqueue time —
@@ -29,6 +44,24 @@ Releasing: move the entries below from `[Unreleased]` under a new
 
 ### Changed
 
+- **Twilio, Discord, MQTT, and Stripe now use a first-class service connection**
+  (`ConnectionFields`) instead of loose secret references, so each gets a proper
+  entry form on the Apps page (the same shape as ntfy / Home Assistant / SMTP)
+  and a "connected / needs setup" state — previously you had to create the
+  secret by hand in the secrets manager. Credentials are entered once and are no
+  longer node params, so they never appear in the graph.
+
+  **BREAKING — re-enter credentials once after upgrading.** The credentials move
+  to per-tenant connection storage; the old secret names are no longer read:
+  - Twilio: `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` → `conn.twilio.*`
+  - Discord: `DISCORD_WEBHOOK_URL` → `conn.discord.webhook_url`
+  - MQTT: `MQTT_USERNAME` / `MQTT_PASSWORD` (and the per-node `broker` param) →
+    `conn.mqtt.*` (broker is now part of the connection)
+  - Stripe: `STRIPE_API_KEY` → `conn.stripe.api_key` (the webhook triggers'
+    `STRIPE_WEBHOOK_SECRET` is unchanged — it's verified server-side)
+
+  Open each integration on the Apps page and enter its credentials once. Flows
+  themselves need no edits.
 - Realigned the OpenAPI definition of `GET /api/v1/me/runs` to the parameters
   the endpoint actually accepts (`status`, `since`, `until`, `limit`, `offset`,
   `workspace`, `tenant`); it had drifted to aspirational `from`/`to` plus

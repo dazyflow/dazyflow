@@ -37,11 +37,9 @@ func init() {
 				{Title: "New successful payments", Params: json.RawMessage(`{"types":["payment_intent.succeeded"]}`), Notes: "Wire ${secret.STRIPE_EVENT_CURSOR} into 'After id' and the 'Last id' output into a Set secret step named STRIPE_EVENT_CURSOR."},
 				{Title: "Billing trouble feed", Params: json.RawMessage(`{"types":["invoice.payment_failed","customer.subscription.deleted"],"limit":50}`)},
 			},
-			RequiresConnections: []core.ConnectionRequirement{
-				{Kind: "secret", Name: "STRIPE_API_KEY", Note: "Stripe secret API key (sk_live_… / sk_test_…)."},
-			},
-			ExecutionModel: core.ExecutionBatch,
-			ProcessModel:   core.ProcessLongLived,
+			ConnectionFields: stripeConnectionFields(),
+			ExecutionModel:   core.ExecutionBatch,
+			ProcessModel:     core.ProcessLongLived,
 			Inputs: []core.Port{
 				{Port: "after_id", Label: "After ID", MIME: []string{"text/plain"}},
 			},
@@ -52,14 +50,13 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"api_key":{"type":"string","title":"API key","default":"${secret.STRIPE_API_KEY}","x_advanced":true,"description":"Stripe secret key. The default reads the STRIPE_API_KEY secret."},
 					"types":{"type":"array","title":"Event types","format":"string-multiselect","items":{"type":"string","enum":["payment_intent.succeeded","payment_intent.payment_failed","charge.refunded","charge.dispute.created","invoice.paid","invoice.payment_failed","customer.subscription.created","customer.subscription.updated","customer.subscription.deleted","customer.created","checkout.session.completed","payout.paid"],"enumNames":["Payment succeeded","Payment failed","Charge refunded","Dispute opened","Invoice paid","Invoice payment failed","Subscription created","Subscription updated","Subscription canceled","Customer created","Checkout completed","Payout paid"]},"description":"Pick the events to watch for. Empty = every event. Need one that's not listed? Add it as a custom type (Stripe's dotted name, e.g. payout.failed)."},
 					"limit":{"type":"integer","title":"Limit","default":25,"minimum":1,"maximum":100,"description":"Max events per poll."},
 					"after_id":{"type":"string","title":"After id","description":"Only events newer than this event id (evt_…). Overridden by the 'After id' input — usually a saved cursor secret."},
 					"base_url":{"type":"string","description":"Override the API host (testing)."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
-				"required":["api_key"]
+				"required":[]
 			}`),
 			Idempotent:  true,
 			RetryPolicy: core.RetryExponentialBackoff,

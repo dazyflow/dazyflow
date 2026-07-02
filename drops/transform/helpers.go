@@ -18,8 +18,8 @@ import (
 
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/limits"
-	"git.sr.ht/~klahr/dazyflow/internal/rowcel"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/rows"
+	"git.sr.ht/~klahr/dazyflow/internal/rowcel"
 )
 
 // capRows rejects an input list that exceeds the per-drop row ceiling, so a

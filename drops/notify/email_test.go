@@ -130,7 +130,6 @@ func TestExecuteEmail_FromDefaultsToUsername(t *testing.T) {
 	}
 }
 
-
 func TestExecuteEmail_ToAcceptsCommaSeparatedString(t *testing.T) {
 	// 'to' is now a comma-separated string param (matching gmail send), so it
 	// gets an inline card editor. Reaching the SSRF guard (host 127.0.0.1)

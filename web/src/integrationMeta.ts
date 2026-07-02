@@ -229,7 +229,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "React to payments the moment they happen — succeeded, failed, or a subscription canceled — and act on them: create a customer, email an invoice, hand out a payment link, or issue a refund. Build a dunning flow that chases a failed charge, a welcome sequence on a customer's first payment, or an instant alert when someone churns.",
     technical_notes:
-      "Actions authenticate with your Stripe secret key, read from the encrypted secret store as STRIPE_API_KEY (${vault./aws./gcp.…} references work too) — no key on the node. The payment, payment-failed, and subscription-canceled triggers are Stripe webhooks: point an endpoint at /api/v1/events/stripe/<tenant>, subscribe it to the matching events (payment_intent.succeeded, payment_intent.payment_failed, customer.subscription.deleted), and save that endpoint's signing secret (whsec_…) as STRIPE_WEBHOOK_SECRET — every delivery's Stripe-Signature is verified against it. Prefer polling to webhooks? Compose Schedule → List events instead.",
+      "Actions authenticate with your Stripe secret key, entered once as the Stripe connection on this page (stored encrypted as conn.stripe.api_key) and injected at run time — no key on the node or in the graph. The payment, payment-failed, and subscription-canceled triggers are Stripe webhooks: point an endpoint at /api/v1/events/stripe/<tenant>, subscribe it to the matching events (payment_intent.succeeded, payment_intent.payment_failed, customer.subscription.deleted), and save that endpoint's signing secret (whsec_…) as STRIPE_WEBHOOK_SECRET — every delivery's Stripe-Signature is verified against it. Prefer polling to webhooks? Compose Schedule → List events instead.",
     docs_url: "https://docs.stripe.com/api",
     brand_logo: "/brands/stripe.svg",
   },
@@ -327,7 +327,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Send SMS text messages to any phone, straight from a flow. Reach for it when an alert needs to land in someone's pocket — an order-shipped or appointment reminder to a customer, a verification code, an on-call page, or a heads-up the moment a trigger fires.",
     technical_notes:
-      "Authenticated with your Twilio Account SID and Auth Token, read from the encrypted secret store as TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN — no credentials on the node. Sends via Twilio's Messages API; the 'From' must be one of your Twilio numbers in E.164 (+15551234567), or set a Messaging Service SID (MG…) instead.",
+      "Authenticated with your Twilio Account SID and Auth Token, entered once as the Twilio connection on this page (stored encrypted as conn.twilio.*) and injected at run time — no credentials on the node or in the graph. Sends via Twilio's Messages API; the 'From' must be one of your Twilio numbers in E.164 (+15551234567), or set a Messaging Service SID (MG…) instead.",
     docs_url: "https://www.twilio.com/docs/sms",
     brand_logo: "/brands/twilio.svg",
   },
@@ -336,7 +336,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Send SMS text messages straight from a flow via 46elks, a Swedish messaging provider popular across the Nordics. Send from an alphanumeric sender name (like \"Acme\") for one-way alerts — order updates, reminders, verification codes — or from one of your 46elks numbers when you want the recipient to be able to reply. A dry-run switch lets you validate a message without sending or being billed.",
     technical_notes:
-      "Authenticated with your 46elks API username and password (HTTP Basic), read from the encrypted secret store as ELKS_API_USERNAME and ELKS_API_PASSWORD — no credentials on the node. Sends a form-encoded POST to 46elks' /a1/sms endpoint. 'From' is either E.164 (repliable) or an alphanumeric sender ID (max 11 chars, must contain a letter, no replies). 46elks has no idempotency key, so the drop never auto-retries and the engine dedupes recovered runs — a resend would double-bill.",
+      "Authenticated with your 46elks API username and password (HTTP Basic), entered once as the 46elks connection on this page (stored encrypted as conn.46elks.*) and injected at run time — no credentials on the node or in the graph. Sends a form-encoded POST to 46elks' /a1/sms endpoint. 'From' is either E.164 (repliable) or an alphanumeric sender ID (max 11 chars, must contain a letter, no replies). 46elks has no idempotency key, so the drop never auto-retries and the engine dedupes recovered runs — a resend would double-bill.",
     docs_url: "https://46elks.com/docs",
     brand_logo: "/brands/46elks.svg",
   },
@@ -345,7 +345,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Post messages into a Discord channel from a flow — a deploy-finished ping, a build-broke alert, a daily summary, or a heads-up to your team the moment something happens. Set the sender name and avatar per message if you like.",
     technical_notes:
-      "Posts through a Discord channel webhook URL, read from the encrypted secret store as DISCORD_WEBHOOK_URL — no bot or OAuth app needed. Create it under Server Settings → Integrations → Webhooks. Optional per-message username and avatar overrides.",
+      "Posts through a Discord channel webhook URL, entered once as the Discord connection on this page (stored encrypted as conn.discord.webhook_url) — no bot or OAuth app needed. Create it under Server Settings → Integrations → Webhooks. Optional per-message username and avatar overrides.",
     docs_url: "https://discord.com/developers/docs/resources/webhook",
     brand_logo: "/brands/discord.svg",
   },
@@ -354,7 +354,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Publish messages to an MQTT broker — the lightweight backbone of most home-automation and IoT setups. Flip a smart light, push a command to a device, or broadcast a status update that anything subscribed to the topic picks up.",
     technical_notes:
-      "Connects to a tcp:// or ssl:// broker (a bare host:port defaults to tcp://…:1883). Optional username/password read from the encrypted secret store as MQTT_USERNAME / MQTT_PASSWORD. Supports QoS levels and the retain flag. Private-network brokers are blocked unless the operator enables private egress (DAZYFLOW_ALLOW_PRIVATE_EGRESS).",
+      "The broker endpoint (tcp:// or ssl://; a bare host:port defaults to tcp://…:1883) and optional username/password are entered once as the MQTT connection on this page (stored encrypted as conn.mqtt.*) and injected at run time. Supports QoS levels and the retain flag. Private-network brokers are blocked unless the operator enables private egress (DAZYFLOW_ALLOW_PRIVATE_EGRESS).",
     docs_url: "https://mqtt.org/",
     brand_logo: "/brands/mqtt.svg",
   },

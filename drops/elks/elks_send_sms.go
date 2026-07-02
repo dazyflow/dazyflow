@@ -23,7 +23,7 @@ func init() {
 			Label:       "46elks",
 			Subtitle:    "Send SMS",
 			Summary:     "Send an SMS text message via 46elks.",
-			Description: "Send an SMS via 46elks. The recipient ('To') and message ('Message') can be typed on the step or wired in from upstream (the matching input port overrides the param). 'From' is either one of your 46elks numbers (E.164 like +46700000000) or an alphanumeric sender name (up to 11 characters, e.g. \"Acme\" — must contain a letter, and recipients can't reply to it). Needs ELKS_API_USERNAME and ELKS_API_PASSWORD secrets. Set 'Dry run' to validate without sending (or being billed).",
+			Description: "Send an SMS via 46elks. The recipient ('To') and message ('Message') can be typed on the step or wired in from upstream (the matching input port overrides the param). 'From' is either one of your 46elks numbers (E.164 like +46700000000) or an alphanumeric sender name (up to 11 characters, e.g. \"Acme\" — must contain a letter, and recipients can't reply to it). Connect your 46elks account once on the Apps page. Set 'Dry run' to validate without sending (or being billed).",
 			Integration: "46elks",
 			Category:    "network",
 			Icon:        "message-square",
@@ -35,9 +35,13 @@ func init() {
 				{Title: "Alert from a sender name", Params: json.RawMessage(`{"to":"+46700000000","from":"Acme","message":"Your order has shipped."}`), Notes: "Wire a trigger's phone/message outputs into the 'To'/'Message' pins instead of typing them."},
 				{Title: "Reply-able, from a number", Params: json.RawMessage(`{"to":"+46700000000","from":"+46700000001","message":"Reply YES to confirm."}`), Notes: "Use one of your 46elks numbers as 'From' so the recipient can reply."},
 			},
-			RequiresConnections: []core.ConnectionRequirement{
-				{Kind: "secret", Name: "ELKS_API_USERNAME", Note: "46elks API username (from the 46elks dashboard)."},
-				{Kind: "secret", Name: "ELKS_API_PASSWORD", Note: "46elks API password."},
+			// A per-tenant service connection: username + password entered once
+			// on the Apps page (stored as conn.46elks.*), injected into the job at
+			// run time — not node params, so credentials never live in the graph.
+			// Mirrors ntfy / Home Assistant / SMTP.
+			ConnectionFields: []core.ConnectionField{
+				{Key: "api_username", Label: "API username", Required: true, Placeholder: "u… (from the 46elks dashboard)"},
+				{Key: "api_password", Label: "API password", Secret: true, Required: true},
 			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
@@ -53,8 +57,6 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"api_username":{"type":"string","title":"API username","default":"${secret.ELKS_API_USERNAME}","x_advanced":true,"description":"46elks API username. The default reads the ELKS_API_USERNAME secret; ${vault./aws./gcp.…} references work too."},
-					"api_password":{"type":"string","title":"API password","default":"${secret.ELKS_API_PASSWORD}","x_advanced":true,"description":"46elks API password. The default reads the ELKS_API_PASSWORD secret."},
 					"to":{"type":"string","title":"To","examples":["+46700000000"],"description":"Recipient phone number in E.164 format. Overridden by the 'To' input."},
 					"from":{"type":"string","title":"From","examples":["Acme","+46700000001"],"description":"A 46elks number (E.164) the recipient can reply to, or an alphanumeric sender name (max 11 chars, must contain a letter; no replies)."},
 					"message":{"type":"string","title":"Message","description":"The text to send. Overridden by the 'Message' input."},
@@ -62,7 +64,7 @@ func init() {
 					"base_url":{"type":"string","description":"Override the API host (testing)."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
-				"required":["api_username","api_password","to","from","message"]
+				"required":["to","from","message"]
 			}`),
 			Idempotent: false,
 			// 46elks has no idempotency header, so a retried POST sends a second

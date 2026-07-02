@@ -6,10 +6,11 @@
 // (list, cancel), webhook triggers (on payment / payment failed /
 // subscription canceled, fed by the daemon's Stripe events handler) and
 // the raw event feed (list events) for polling everything else.
-// Auth is an API key — there's no Stripe OAuth app — resolved from the
-// `api_key` param, which defaults to ${secret.STRIPE_API_KEY} so a fresh
-// node works as soon as that secret exists (built-in store or a BYO
-// manager via ${vault./aws./gcp.…}).
+// Auth is an API key — there's no Stripe OAuth app. The key is a per-tenant
+// service connection (stripeConnectionFields → conn.stripe.api_key), entered
+// once on the Apps page and injected into each action's `api_key` param at run
+// time; it never lives in the graph. (The webhook triggers instead use
+// STRIPE_WEBHOOK_SECRET, verified server-side by the events handler.)
 //
 // "Fire on new payment" has a real trigger (stripe_on_payment, fed by the
 // daemon's Stripe events webhook). Other event reactions ("failed invoice",
@@ -45,14 +46,26 @@ func SetHTTPBase(base string) { httpBase.Set(base) }
 
 func baseURL(job core.Job) string { return httpBase.For(job) }
 
-// resolveAPIKey reads the `api_key` param. The schema defaults it to
-// ${secret.STRIPE_API_KEY}, which the engine resolves before Execute —
-// so an empty value here means the secret isn't set (or the author
-// blanked the param), and the error says exactly that.
+// stripeConnectionFields is the per-tenant Stripe connection: the secret API
+// key, entered once on the Apps page (stored as conn.stripe.api_key) and
+// injected into each action's job at run time. Shared by every action drop so
+// the whole integration configures from one place. The webhook triggers instead
+// use STRIPE_WEBHOOK_SECRET, verified server-side by the daemon's events handler
+// (a separate concern), so they keep their secret requirement.
+func stripeConnectionFields() []core.ConnectionField {
+	return []core.ConnectionField{
+		{Key: "api_key", Label: "Secret API key", Secret: true, Required: true, Placeholder: "sk_live_… / sk_test_…"},
+	}
+}
+
+// resolveAPIKey reads the `api_key` value — the per-tenant Stripe connection
+// (Manifest.ConnectionFields), injected into the job params at run time by the
+// engine. An empty value means the Stripe connection hasn't been set up, and
+// the error says exactly that.
 func resolveAPIKey(job core.Job) (string, error) {
 	key, _ := params.StringOpt(job.Params, "api_key")
 	if key == "" {
-		return "", fmt.Errorf("no Stripe API key: add a STRIPE_API_KEY secret (the api_key param resolves ${secret.STRIPE_API_KEY} by default) or set api_key on the step")
+		return "", fmt.Errorf("Stripe is not connected: add your secret API key on the Apps page (Stripe)")
 	}
 	return key, nil
 }

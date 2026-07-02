@@ -121,4 +121,3 @@ func executeFileRead(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 		Output: map[string]core.Ref{"out": out},
 	}, nil
 }
-

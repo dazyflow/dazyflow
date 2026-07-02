@@ -145,7 +145,7 @@ func TestEgressAllowedFor_PerTenant(t *testing.T) {
 // that fails to compile blocks rather than silently allowing.
 func TestEgressAllowedFor_InvalidTenantPolicyFailsClosed(t *testing.T) {
 	t.Cleanup(func() { SetEgressPolicy(nil); _ = SetEgressAllowlist(nil) })
-	_ = SetEgressAllowlist(nil) // global allows all
+	_ = SetEgressAllowlist(nil)                          // global allows all
 	SetEgressPolicy(fakeTenantPolicy{"acme": {"*.com"}}) // too-broad wildcard → compile error
 	err := EgressAllowedFor(core.WithTenant(context.Background(), "acme"), "https://anything.com/x")
 	if err == nil {

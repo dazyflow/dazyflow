@@ -5,8 +5,8 @@
 //
 //   - "offline" — work against a local workspace Git repo (lint).
 //   - "remote"  — talk to dzd over gRPC via the control API. Configure
-//                  the server URL with --server and the bearer token with
-//                  the DZCTL_TOKEN environment variable.
+//     the server URL with --server and the bearer token with
+//     the DZCTL_TOKEN environment variable.
 package main
 
 import (

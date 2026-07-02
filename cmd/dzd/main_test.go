@@ -13,7 +13,7 @@ import (
 func TestProductionConfigProblems(t *testing.T) {
 	const strongKey = "c3Ryb25nLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9rIQ=="
 	const safeDSN = "postgres://dazyflow:s3cret@db:5432/dazyflow?sslmode=require"
-	const noTLSDSN = "postgres://dazyflow:s3cret@db:5432/dazyflow"               // strong password, sslmode unset
+	const noTLSDSN = "postgres://dazyflow:s3cret@db:5432/dazyflow" // strong password, sslmode unset
 	const defaultDSN = "postgres://dazyflow:dazyflow@db:5432/dazyflow?sslmode=disable"
 
 	cases := []struct {

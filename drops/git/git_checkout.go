@@ -25,24 +25,24 @@ import (
 	"github.com/go-git/go-git/v5/storage/memory"
 
 	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/engine"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "git_checkout",
-			Version:        "1.0",
-			Label:          "Git",
-			Subtitle:       "Checkout",
-			Color:          "#f05033",
-			Icon:           "git",
-			Category:       "io",
-			Provider:       "internal",
-			Integration:    "Git",
-			Tags:           []string{"git", "clone", "checkout", "vcs"},
+			ID:          "git_checkout",
+			Version:     "1.0",
+			Label:       "Git",
+			Subtitle:    "Checkout",
+			Color:       "#f05033",
+			Icon:        "git",
+			Category:    "io",
+			Provider:    "internal",
+			Integration: "Git",
+			Tags:        []string{"git", "clone", "checkout", "vcs"},
 			Description: "Fetch a copy of a git repository into your workspace, optionally switching to a specific branch, tag, or commit. The files become available to the steps after this one — useful for inspecting source code, pulling templates, or staging files for processing.",
 			Summary:     "Clone a remote git repository into the workspace and optionally check out a specific branch, tag, or commit SHA.",
 			Examples: []core.ParamsExample{

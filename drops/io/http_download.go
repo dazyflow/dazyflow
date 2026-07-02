@@ -358,7 +358,6 @@ func downloadHeaders(p map[string]any) (map[string]string, error) {
 	return out, nil
 }
 
-
 func downloadStatusOK(got int, expect []int) bool {
 	if len(expect) == 0 {
 		return got >= 200 && got < 300

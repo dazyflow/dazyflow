@@ -35,11 +35,9 @@ func init() {
 				{Title: "Cancel at period end (default)", Params: json.RawMessage(`{"subscription":"sub_1MowQVLkdIwHu7ixeRlqHVzs"}`), Notes: "Wire the id into the 'Subscription' input from List subscriptions instead of typing it."},
 				{Title: "Cancel immediately", Params: json.RawMessage(`{"subscription":"sub_1MowQVLkdIwHu7ixeRlqHVzs","cancel_timing":"immediately"}`)},
 			},
-			RequiresConnections: []core.ConnectionRequirement{
-				{Kind: "secret", Name: "STRIPE_API_KEY", Note: "Stripe secret API key (sk_live_… / sk_test_…)."},
-			},
-			ExecutionModel: core.ExecutionBatch,
-			ProcessModel:   core.ProcessLongLived,
+			ConnectionFields: stripeConnectionFields(),
+			ExecutionModel:   core.ExecutionBatch,
+			ProcessModel:     core.ProcessLongLived,
 			Inputs: []core.Port{
 				{Port: "subscription", Label: "Subscription", Required: true, MIME: []string{"text/plain"}},
 			},
@@ -50,13 +48,12 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"api_key":{"type":"string","title":"API key","default":"${secret.STRIPE_API_KEY}","x_advanced":true,"description":"Stripe secret key. The default reads the STRIPE_API_KEY secret."},
 					"subscription":{"type":"string","format":"stripe-subscription","title":"Subscription","description":"Pick the subscription to cancel — listed from your account once the STRIPE_API_KEY secret is set. Overridden by the 'Subscription' input when connected."},
 					"cancel_timing":{"type":"string","title":"When to cancel","enum":["period_end","immediately"],"enumNames":["At period end","Immediately"],"default":"period_end","description":"At period end: the subscription stays active until the period the customer already paid for ends. Immediately: cancel right now."},
 					"base_url":{"type":"string","description":"Override the API host (testing)."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
-				"required":["api_key","subscription"]
+				"required":["subscription"]
 			}`),
 			Idempotent:  false,
 			RetryPolicy: core.RetryExponentialBackoff,

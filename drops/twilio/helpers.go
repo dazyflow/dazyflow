@@ -3,11 +3,11 @@
 
 // Package twilio hosts the native Twilio connector (twilio_send_sms). Auth is
 // Twilio's HTTP Basic scheme — Account SID as the username, Auth Token as the
-// password — resolved from the `account_sid` / `auth_token` params, which
-// default to ${secret.TWILIO_ACCOUNT_SID} / ${secret.TWILIO_AUTH_TOKEN} so a
-// fresh node works as soon as those secrets exist. It calls the Twilio REST API
-// directly (form-encoded POST), mirroring the stripe/google connectors rather
-// than vendoring the twilio-go SDK — the SMS send is a single endpoint.
+// password — held as a per-tenant service connection (Manifest.ConnectionFields:
+// account_sid + auth_token), entered once on the Apps page and injected into the
+// job params at run time. It calls the Twilio REST API directly (form-encoded
+// POST), mirroring the stripe/google connectors rather than vendoring the
+// twilio-go SDK — the SMS send is a single endpoint.
 package twilio
 
 import (
@@ -32,15 +32,15 @@ func SetHTTPBase(base string) { httpBase.Set(base) }
 
 func baseURL(job core.Job) string { return httpBase.For(job) }
 
-// resolveCreds reads the account_sid + auth_token params. The schema defaults
-// them to the TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN secrets, which the engine
-// resolves before Execute — so an empty value here means the secret isn't set
-// (or the author blanked the param), and the error says exactly that.
+// resolveCreds reads the account_sid + auth_token values. These are the
+// per-tenant service connection (Manifest.ConnectionFields), injected into the
+// job params at run time by the engine — so an empty value here means the
+// Twilio connection hasn't been set up, and the error says exactly that.
 func resolveCreds(job core.Job) (sid, token string, err error) {
 	sid, _ = params.StringOpt(job.Params, "account_sid")
 	token, _ = params.StringOpt(job.Params, "auth_token")
 	if sid == "" || token == "" {
-		return "", "", fmt.Errorf("no Twilio credentials: add TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN secrets (the account_sid/auth_token params resolve them by default) or set them on the step")
+		return "", "", fmt.Errorf("Twilio is not connected: add your Account SID and Auth Token on the Apps page (Twilio)")
 	}
 	return sid, token, nil
 }

@@ -14,17 +14,17 @@ import (
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "github_on_push",
-			Version:        "1.0",
-			Label:          "GitHub",
-			Subtitle:       "On push",
-			Color:          "#24292f",
-			Icon:           "git-branch",
-			BrandLogo:      "/brands/github.svg",
-			Category:       "trigger",
-			Provider:       "internal",
-			Integration:    "GitHub",
-			Tags:           []string{"github", "trigger", "push", "webhook", "events"},
+			ID:          "github_on_push",
+			Version:     "1.0",
+			Label:       "GitHub",
+			Subtitle:    "On push",
+			Color:       "#24292f",
+			Icon:        "git-branch",
+			BrandLogo:   "/brands/github.svg",
+			Category:    "trigger",
+			Provider:    "internal",
+			Integration: "GitHub",
+			Tags:        []string{"github", "trigger", "push", "webhook", "events"},
 			Description: "Starts the flow when commits are pushed to the connected repo. Outputs the branch (ref), the before/after commit SHAs, the commits list, the repo, and who pushed. Common uses: post a deploy alert when commits land on main, or kick off a CI-shaped pipeline.",
 			Summary:     "Trigger that fires when commits are pushed to a connected GitHub repo, with ref, SHAs, and commit list.",
 			Examples: []core.ParamsExample{

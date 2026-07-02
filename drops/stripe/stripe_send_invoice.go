@@ -97,7 +97,6 @@ func buildSendInvoiceParamsSchema() json.RawMessage {
 	return json.RawMessage(fmt.Sprintf(`{
 		"type":"object",
 		"properties":{
-			"api_key":{"type":"string","title":"API key","default":"${secret.STRIPE_API_KEY}","x_advanced":true,"description":"Stripe secret key. The default reads the STRIPE_API_KEY secret."},
 			"customer":{"type":"string","format":"stripe-customer","title":"Customer","description":"Pick the customer to bill — listed from your account once the STRIPE_API_KEY secret is set. Overridden by the 'Customer' input when connected."},
 			"amount":{"type":"integer","title":"Amount","minimum":1,"description":"In the smallest currency unit (12000 = 120.00). Overridden by the 'Amount' input."},
 			"currency":{"type":"string","title":"Currency","format":"suggest","default":"usd","enum":%s,"enumNames":%s,"description":"Three-letter ISO code (stored lowercase). Pick a common one, type any Stripe-supported code, or use a reference like ${item.currency} for a per-row currency."},
@@ -106,7 +105,7 @@ func buildSendInvoiceParamsSchema() json.RawMessage {
 			"base_url":{"type":"string","description":"Override the API host (testing)."},
 			"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 		},
-		"required":["api_key","customer","amount"]
+		"required":["customer","amount"]
 	}`, enum, names))
 }
 
@@ -130,11 +129,9 @@ func init() {
 				{Title: "Invoice 120.00 USD for consulting", Params: json.RawMessage(`{"customer":"cus_NffrFeUfNV2Hib","amount":12000,"currency":"usd","description":"Consulting — May"}`), Notes: "Wire the customer id in from Search customers and the amount from a sheet row instead of typing them."},
 				{Title: "Net-14 payment terms", Params: json.RawMessage(`{"customer":"cus_NffrFeUfNV2Hib","amount":50000,"currency":"sek","description":"Workshop","days_until_due":14}`)},
 			},
-			RequiresConnections: []core.ConnectionRequirement{
-				{Kind: "secret", Name: "STRIPE_API_KEY", Note: "Stripe secret API key (sk_live_… / sk_test_…)."},
-			},
-			ExecutionModel: core.ExecutionBatch,
-			ProcessModel:   core.ProcessLongLived,
+			ConnectionFields: stripeConnectionFields(),
+			ExecutionModel:   core.ExecutionBatch,
+			ProcessModel:     core.ProcessLongLived,
 			Inputs: []core.Port{
 				{Port: "customer", Label: "Customer", Required: true, MIME: []string{"text/plain"}},
 				{Port: "amount", Label: "Amount (smallest unit)", MIME: []string{"text/plain", "application/json"}},

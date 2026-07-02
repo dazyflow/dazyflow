@@ -47,8 +47,8 @@ import (
 	"git.sr.ht/~klahr/dazyflow/daemon"
 	_ "git.sr.ht/~klahr/dazyflow/drops"
 	"git.sr.ht/~klahr/dazyflow/drops/drive"
-	"git.sr.ht/~klahr/dazyflow/drops/gcal"
 	"git.sr.ht/~klahr/dazyflow/drops/fortnox"
+	"git.sr.ht/~klahr/dazyflow/drops/gcal"
 	gitdrop "git.sr.ht/~klahr/dazyflow/drops/git"
 	"git.sr.ht/~klahr/dazyflow/drops/github"
 	"git.sr.ht/~klahr/dazyflow/drops/gmail"
@@ -380,41 +380,42 @@ func main() {
 	}
 	// Stripe price picker: lists the tenant's active prices for the
 	// "stripe-price" param format. Stripe has no OAuth app — auth is the
-	// tenant's STRIPE_API_KEY secret (same key the drops resolve), read
-	// here because the picker path skips the engine's ${secret.…}
-	// resolution. The account arg is meaningless without OAuth; ignored.
+	// tenant's Stripe connection (conn.stripe.api_key, same key the drops
+	// resolve), read here because the picker path skips the engine's
+	// connection injection. The account arg is meaningless without OAuth;
+	// ignored.
 	if encryptedSecrets != nil {
 		daemon.RegisterResourceLister("stripe", "prices", func(ctx context.Context, _ string, _ map[string]string) ([]core.AccountResource, error) {
-			key, err := encryptedSecrets.Get(ctx, "STRIPE_API_KEY")
+			key, err := encryptedSecrets.Get(ctx, core.ConnectionSecretKey("Stripe", "api_key"))
 			if err != nil {
-				return nil, fmt.Errorf("add a STRIPE_API_KEY secret to list prices: %w", err)
+				return nil, fmt.Errorf("connect Stripe first (add your secret API key on the Apps page) to list prices: %w", err)
 			}
 			return stripe.ListPrices(ctx, core.Job{Params: map[string]any{"api_key": key}})
 		})
 		// Same key, same path: powers the "stripe-subscription" param format
 		// so a cancel step picks the subscription from a dropdown.
 		daemon.RegisterResourceLister("stripe", "subscriptions", func(ctx context.Context, _ string, _ map[string]string) ([]core.AccountResource, error) {
-			key, err := encryptedSecrets.Get(ctx, "STRIPE_API_KEY")
+			key, err := encryptedSecrets.Get(ctx, core.ConnectionSecretKey("Stripe", "api_key"))
 			if err != nil {
-				return nil, fmt.Errorf("add a STRIPE_API_KEY secret to list subscriptions: %w", err)
+				return nil, fmt.Errorf("connect Stripe first (add your secret API key on the Apps page) to list subscriptions: %w", err)
 			}
 			return stripe.ListSubscriptions(ctx, core.Job{Params: map[string]any{"api_key": key}})
 		})
 		// Powers the "stripe-payment-intent" param format so a refund step
 		// picks the payment to refund from a dropdown.
 		daemon.RegisterResourceLister("stripe", "payment_intents", func(ctx context.Context, _ string, _ map[string]string) ([]core.AccountResource, error) {
-			key, err := encryptedSecrets.Get(ctx, "STRIPE_API_KEY")
+			key, err := encryptedSecrets.Get(ctx, core.ConnectionSecretKey("Stripe", "api_key"))
 			if err != nil {
-				return nil, fmt.Errorf("add a STRIPE_API_KEY secret to list payments: %w", err)
+				return nil, fmt.Errorf("connect Stripe first (add your secret API key on the Apps page) to list payments: %w", err)
 			}
 			return stripe.ListPaymentIntents(ctx, core.Job{Params: map[string]any{"api_key": key}})
 		})
 		// Powers the "stripe-customer" param format so steps that scope to a
 		// customer (e.g. List subscriptions) pick one from a dropdown.
 		daemon.RegisterResourceLister("stripe", "customers", func(ctx context.Context, _ string, _ map[string]string) ([]core.AccountResource, error) {
-			key, err := encryptedSecrets.Get(ctx, "STRIPE_API_KEY")
+			key, err := encryptedSecrets.Get(ctx, core.ConnectionSecretKey("Stripe", "api_key"))
 			if err != nil {
-				return nil, fmt.Errorf("add a STRIPE_API_KEY secret to list customers: %w", err)
+				return nil, fmt.Errorf("connect Stripe first (add your secret API key on the Apps page) to list customers: %w", err)
 			}
 			return stripe.ListCustomers(ctx, core.Job{Params: map[string]any{"api_key": key}})
 		})

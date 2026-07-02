@@ -140,4 +140,3 @@ func executeFilePicker(_ context.Context, job core.Job, _ chan<- core.Progress) 
 		},
 	}, nil
 }
-

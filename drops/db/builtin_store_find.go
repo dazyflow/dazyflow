@@ -19,8 +19,8 @@ import (
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/limits"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
-	"git.sr.ht/~klahr/dazyflow/internal/rowcel"
 	"git.sr.ht/~klahr/dazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/internal/rowcel"
 )
 
 func init() {

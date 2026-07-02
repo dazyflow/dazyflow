@@ -20,14 +20,14 @@ func TestValidateColumnType_AcceptsRealTypes(t *testing.T) {
 		"DOUBLE PRECISION",
 		"INT UNSIGNED",
 		"TIMESTAMP WITH TIME ZONE",
-		"DATETIME",   // SQLite/MySQL
-		"jsonb",      // Postgres
-		"uuid",       // Postgres
-		"bool",       // alias
-		"char(1)",    // length spec, lower-case
-		"timestamp",  // bare
+		"DATETIME",           // SQLite/MySQL
+		"jsonb",              // Postgres
+		"uuid",               // Postgres
+		"bool",               // alias
+		"char(1)",            // length spec, lower-case
+		"timestamp",          // bare
 		"double   precision", // collapsed interior whitespace still resolves
-		"", // absent override defaults to TEXT — allowed
+		"",                   // absent override defaults to TEXT — allowed
 	} {
 		t.Run(typ, func(t *testing.T) {
 			if err := validateColumnType(typ); err != nil {

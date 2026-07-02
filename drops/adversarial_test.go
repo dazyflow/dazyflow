@@ -61,9 +61,9 @@ func TestIODrops_NoPathEscape(t *testing.T) {
 		"../../secret.txt",
 		"../../../../../../etc/passwd",
 		"/etc/passwd",
-		secretPath,                 // absolute path to the sentinel
-		"scratch://../secret.txt",  // climb out of the scratch root
-		"ws/../secret.txt",         // normalises back out
+		secretPath,                // absolute path to the sentinel
+		"scratch://../secret.txt", // climb out of the scratch root
+		"ws/../secret.txt",        // normalises back out
 		"....//secret.txt",
 		"..%2fsecret.txt",
 	}
@@ -250,8 +250,8 @@ func TestTransform_PathologicalInputs(t *testing.T) {
 			t.Fatal("render_text not registered")
 		}
 		for _, tmpl := range []string{
-			`undefined_function(row)`,        // unknown func → compile error, not exec
-			`row[row[row]]`,                  // nonsense indexing
+			`undefined_function(row)`,                  // unknown func → compile error, not exec
+			`row[row[row]]`,                            // nonsense indexing
 			strings.Repeat("row.a + ", 5000) + "row.a", // very large expression
 			`"x" + "y"`,
 		} {

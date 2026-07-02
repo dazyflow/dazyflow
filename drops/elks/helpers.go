@@ -11,8 +11,10 @@
 // single endpoint, so there's nothing to gain from an SDK.
 //
 // This is a static-credential connector: unlike the OAuth connectors (fortnox,
-// google, slack), it needs no daemon-side provider entry or token lookup — the
-// credentials live in the encrypted secret store and resolve via ${secret.…}.
+// google, slack), it needs no daemon-side provider entry or token lookup. The
+// username + password are a per-tenant service connection (ConnectionFields),
+// set once on the Apps page and injected into the job at run time — the same
+// shape as ntfy / Home Assistant / SMTP.
 package elks
 
 import (
@@ -37,15 +39,15 @@ func SetHTTPBase(base string) { httpBase.Set(base) }
 
 func baseURL(job core.Job) string { return httpBase.For(job) }
 
-// resolveCreds reads the api_username + api_password params. The schema
-// defaults them to the ELKS_API_USERNAME / ELKS_API_PASSWORD secrets, which the
-// engine resolves before Execute — so an empty value here means the secret
-// isn't set (or the author blanked the param), and the error says exactly that.
+// resolveCreds reads the api_username + api_password values. These are the
+// per-tenant service connection (Manifest.ConnectionFields), injected into the
+// job params at run time by the engine — so an empty value here means the
+// 46elks connection hasn't been set up, and the error says exactly that.
 func resolveCreds(job core.Job) (user, pass string, err error) {
 	user, _ = params.StringOpt(job.Params, "api_username")
 	pass, _ = params.StringOpt(job.Params, "api_password")
 	if user == "" || pass == "" {
-		return "", "", fmt.Errorf("no 46elks credentials: add ELKS_API_USERNAME and ELKS_API_PASSWORD secrets (the api_username/api_password params resolve them by default) or set them on the step")
+		return "", "", fmt.Errorf("46elks is not connected: add your API username and password on the Apps page (46elks)")
 	}
 	return user, pass, nil
 }

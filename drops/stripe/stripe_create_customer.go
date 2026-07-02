@@ -35,11 +35,9 @@ func init() {
 				{Title: "Customer from a form signup", Params: json.RawMessage(`{"email":"new@example.com","name":"New Customer"}`), Notes: "Wire the form's email/name outputs into the matching pins instead of typing them."},
 				{Title: "With your own reference id", Params: json.RawMessage(`{"email":"new@example.com","metadata":{"crm_id":"acct_42"}}`)},
 			},
-			RequiresConnections: []core.ConnectionRequirement{
-				{Kind: "secret", Name: "STRIPE_API_KEY", Note: "Stripe secret API key (sk_live_… / sk_test_…)."},
-			},
-			ExecutionModel: core.ExecutionBatch,
-			ProcessModel:   core.ProcessLongLived,
+			ConnectionFields: stripeConnectionFields(),
+			ExecutionModel:   core.ExecutionBatch,
+			ProcessModel:     core.ProcessLongLived,
 			Inputs: []core.Port{
 				{Port: "email", Label: "Email", Required: true, MIME: []string{"text/plain"}},
 				{Port: "name", Label: "Name", MIME: []string{"text/plain"}},
@@ -51,7 +49,6 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"api_key":{"type":"string","title":"API key","default":"${secret.STRIPE_API_KEY}","x_advanced":true,"description":"Stripe secret key. The default reads the STRIPE_API_KEY secret; ${vault./aws./gcp.…} references work too."},
 					"email":{"type":"string","title":"Email","description":"Customer email. Overridden by the 'Email' input."},
 					"name":{"type":"string","title":"Name","description":"Overridden by the 'Name' input."},
 					"description":{"type":"string","title":"Description","description":"Overridden by the 'Description' input."},
@@ -59,7 +56,7 @@ func init() {
 					"base_url":{"type":"string","description":"Override the API host (testing)."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
-				"required":["api_key","email"]
+				"required":["email"]
 			}`),
 			Idempotent:  false,
 			RetryPolicy: core.RetryExponentialBackoff,

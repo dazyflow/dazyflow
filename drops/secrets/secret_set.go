@@ -9,24 +9,24 @@ import (
 	"fmt"
 
 	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/engine"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:             "secret_set",
-			Version:        "1.0",
-			Label:          "Secrets",
-			Subtitle:       "Set secret",
-			Color:          "#7c3aed",
-			Icon:           "database",
-			Category:       "system",
-			Provider:       "internal",
-			Tags:           []string{"secret", "cursor", "state", "store", "write"},
-			Description:    "Save a value to your tenant's encrypted secret store under the given name. Pair it with template substitution (${secret.name}) to read the value back from later flow runs — the classic use is cursor storage for polling flows that need to remember 'what was the last thing I processed' across restarts.",
-			Summary:        "Write a value to the tenant's encrypted secret store under the given name.",
+			ID:          "secret_set",
+			Version:     "1.0",
+			Label:       "Secrets",
+			Subtitle:    "Set secret",
+			Color:       "#7c3aed",
+			Icon:        "database",
+			Category:    "system",
+			Provider:    "internal",
+			Tags:        []string{"secret", "cursor", "state", "store", "write"},
+			Description: "Save a value to your tenant's encrypted secret store under the given name. Pair it with template substitution (${secret.name}) to read the value back from later flow runs — the classic use is cursor storage for polling flows that need to remember 'what was the last thing I processed' across restarts.",
+			Summary:     "Write a value to the tenant's encrypted secret store under the given name.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Persist a polling cursor",

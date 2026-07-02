@@ -35,11 +35,9 @@ func init() {
 				{Title: "Link for one unit of a price", Params: json.RawMessage(`{"price":"price_1MoC3TLkdIwHu7ixcIbKelAC"}`), Notes: "Wire the 'url' output into Gmail send or Slack message."},
 				{Title: "Quantity from upstream", Params: json.RawMessage(`{"price":"price_1MoC3TLkdIwHu7ixcIbKelAC"}`), Notes: "Wire a number into the 'Quantity' input — e.g. the ordered amount from a sheet row."},
 			},
-			RequiresConnections: []core.ConnectionRequirement{
-				{Kind: "secret", Name: "STRIPE_API_KEY", Note: "Stripe secret API key (sk_live_… / sk_test_…)."},
-			},
-			ExecutionModel: core.ExecutionBatch,
-			ProcessModel:   core.ProcessLongLived,
+			ConnectionFields: stripeConnectionFields(),
+			ExecutionModel:   core.ExecutionBatch,
+			ProcessModel:     core.ProcessLongLived,
 			Inputs: []core.Port{
 				{Port: "price", Label: "Price", MIME: []string{"text/plain"}},
 				{Port: "quantity", Label: "Quantity", MIME: []string{"text/plain", "application/json"}},
@@ -50,13 +48,12 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"api_key":{"type":"string","title":"API key","default":"${secret.STRIPE_API_KEY}","x_advanced":true,"description":"Stripe secret key. The default reads the STRIPE_API_KEY secret."},
 					"price":{"type":"string","format":"stripe-price","title":"Price","description":"One of your Stripe Prices, listed from your account once the STRIPE_API_KEY secret is set (Products → Pricing in the dashboard). Overridden by the 'Price' input when connected."},
 					"quantity":{"type":"integer","title":"Quantity","default":1,"minimum":1,"maximum":999999,"description":"Units of the price (1–999999, Stripe's per-line-item limit). Overridden by the 'Quantity' input."},
 					"base_url":{"type":"string","description":"Override the API host (testing)."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
-				"required":["api_key","price"]
+				"required":["price"]
 			}`),
 			Idempotent:  false,
 			RetryPolicy: core.RetryExponentialBackoff,

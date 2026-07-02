@@ -7,7 +7,6 @@ import (
 	"git.sr.ht/~klahr/dazyflow/core"
 )
 
-
 func emitProgress(ch chan<- core.Progress, job core.Job, pct float64, msg string) {
 	if ch == nil {
 		return
