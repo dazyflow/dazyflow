@@ -378,6 +378,7 @@ var integrationSummaries = map[string]string{
 	"GitHub":           "Create and comment on issues, and trigger flows on pushes or new pull requests.",
 	"Gmail":            "Send email, search the inbox, and read message bodies — often paired with a polling trigger to react to new mail.",
 	"Notion":           "Create pages and query databases.",
+	"Fortnox":          "Manage customers and invoices in Fortnox, Sweden's leading SMB accounting platform — create customers and invoices, and poll invoices by status to react to newly paid or overdue ones.",
 	"Google Sheets":    "Read rows from a spreadsheet, and append rows to it.",
 	"Google Forms":     "Trigger flows when a Google Form receives new responses.",
 	"Postgres":         "Insert, upsert, and query rows against a Postgres database.",

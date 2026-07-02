@@ -97,6 +97,11 @@ export const oauthProviderMeta: Record<string, OAuthProviderMeta> = {
     brand_logo: "/brands/notion.svg",
     blurb: "Create pages and query your databases.",
   },
+  fortnox: {
+    name: "Fortnox",
+    brand_logo: "/brands/fortnox.svg",
+    blurb: "Manage customers and invoices in your Fortnox account.",
+  },
 };
 
 // integrationToProvider maps an integration slug (Manifest.integration,
@@ -113,6 +118,7 @@ const integrationToProvider: Record<string, string> = {
   "google-calendar": "google",
   github: "github",
   notion: "notion",
+  fortnox: "fortnox",
 };
 
 // oauthProviderForIntegration returns the OAuth provider name for a
@@ -208,6 +214,15 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
       "OAuth + Notion API. Notion-Version pinned to 2022-06-28 so behaviour is stable across deployments. The 'fire on new database row' pattern composes from poll_trigger + notion_query_database + secret_set — same cursor-dedupe shape Gmail uses; no dedicated trigger drop needed.",
     docs_url: "https://developers.notion.com/reference/intro",
     brand_logo: "/brands/notion.svg",
+  },
+  fortnox: {
+    name: "Fortnox",
+    description:
+      "Manage customers and invoices in Fortnox, Sweden's leading accounting platform for small businesses. Create a customer from a signup, raise an invoice for them, and pick who to bill from a searchable list of your existing customers. Poll invoices by status to build a flow that reacts to newly paid invoices — a thank-you email, a fulfilment step — or chases overdue ones.",
+    technical_notes:
+      "Fortnox OAuth 2.0 (authorize at apps.fortnox.se/oauth-v1) with per-resource scopes — customer, invoice and companyinformation cover the shipped drops. The token endpoint uses client_secret_basic (credentials in an HTTP Basic header), and refresh tokens rotate on every refresh; the daemon persists the rotated token and refreshes on expiry, so long-running flows keep working — but an account idle past Fortnox's refresh-token window (~31 days) must reconnect. Request and response bodies use Fortnox's singular PascalCase envelope ({\"Customer\":…}, {\"Invoice\":…}). Fortnox has no idempotency key, so the create drops don't auto-retry (a retry would duplicate); and no webhooks, so 'fire on paid invoice' composes as Schedule → List invoices (filter=fullypaid) → For each → dedupe on DocumentNumber.",
+    docs_url: "https://www.fortnox.se/developer",
+    brand_logo: "/brands/fortnox.svg",
   },
   stripe: {
     name: "Stripe",
