@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Trans, useTranslation } from "react-i18next";
 import { AlertCircle, Mail, ShieldCheck } from "lucide-react";
 import { Button } from "../components/Button";
@@ -172,17 +172,26 @@ export function AcceptInvite() {
         )}
         {usable && !me && (
           <div className="invite-cta-row">
-            <Link
-              to={`/signin?email=${encodeURIComponent(details.email)}&invite=${encodeURIComponent(inviteToken)}`}
-              className="primary signin-cta"
+            <Button
+              variant="primary"
+              onClick={() =>
+                navigate(
+                  `/signin?email=${encodeURIComponent(details.email)}&invite=${encodeURIComponent(inviteToken)}`,
+                )
+              }
             >
               {t("acceptInvite.signInToAccept")}
-            </Link>
-            <Link
-              to={`/signup?email=${encodeURIComponent(details.email)}&invite=${encodeURIComponent(inviteToken)}`}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() =>
+                navigate(
+                  `/signup?email=${encodeURIComponent(details.email)}&invite=${encodeURIComponent(inviteToken)}`,
+                )
+              }
             >
               {t("acceptInvite.signUpToAccept")}
-            </Link>
+            </Button>
           </div>
         )}
       </div>
