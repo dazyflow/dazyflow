@@ -881,6 +881,25 @@ func (h *HTTPGateway) acceptInvitation(rw http.ResponseWriter, r *http.Request, 
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
+	// Accepting an invite verifies the email. The invitation was created by
+	// a verified org admin who vouched for this exact address (createInvitation
+	// gates on requireVerifiedInviter), and — when a mailer is wired — the
+	// accept link was emailed to it, so acting on it while signed in as that
+	// address proves control. Stamp VerifiedAt so the new member skips the
+	// redundant verification nag. Best-effort: a failure here shouldn't undo
+	// the membership they just gained.
+	if h.Users != nil {
+		if u, err := h.Users.GetByEmail(r.Context(), p.Subject); err == nil && !u.EmailVerified() {
+			u.VerifiedAt = &now
+			u.VerifyTokenHash = nil
+			u.VerifyExpiresAt = nil
+			if err := h.Users.PutUser(r.Context(), u); err != nil {
+				h.logger.Printf("verify on invite accept for %s: %v", p.Subject, err)
+			} else {
+				h.auditAuth(r.Context(), r, u.Tenant, u.Email, "auth.email_verified", "invite_accept")
+			}
+		}
+	}
 	if err := h.Invitations.MarkAccepted(r.Context(), token, now); err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return

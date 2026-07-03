@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { AlertCircle, ArrowLeft, Ban, ShieldCheck, ShieldOff, ShieldPlus, Trash2, UserCheck } from "lucide-react";
+import { AlertCircle, ArrowLeft, Ban, MailCheck, ShieldCheck, ShieldOff, ShieldPlus, Trash2, UserCheck } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, type PlatformUser } from "../api";
@@ -137,7 +137,32 @@ export function AdminPlatformUserDetail() {
               <dt>{t("admin.platformUserDetail.created")}</dt>
               <dd>{formatDate(user.created_at)}</dd>
               <dt>{t("admin.platformUserDetail.verified")}</dt>
-              <dd>{user.verified ? t("common.yes") : t("common.no")}</dd>
+              <dd>
+                {user.verified ? (
+                  t("common.yes")
+                ) : (
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "var(--space-2)",
+                    }}
+                  >
+                    {t("common.no")}
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      icon={<MailCheck size={14} />}
+                      disabled={busy}
+                      onClick={() =>
+                        void run(() => api.platformVerifyUser(token!, email))
+                      }
+                    >
+                      {t("admin.platformUserDetail.markVerified")}
+                    </Button>
+                  </span>
+                )}
+              </dd>
               {memberships.length > 0 && (
                 <>
                   <dt>{t("admin.platformUserDetail.memberOf")}</dt>

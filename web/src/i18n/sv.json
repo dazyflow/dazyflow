@@ -1124,6 +1124,7 @@
       "homeOrg": "Hemorganisation",
       "created": "Skapad",
       "verified": "E-post verifierad",
+      "markVerified": "Markera som verifierad",
       "memberOf": "Medlem i",
       "reason": "Orsak",
       "adminProtected": "Det här kontot är en plattformsadmin och kan inte modereras här. Återkalla dess plattformsadminroll nedan (eller ta bort det från DAZYFLOW_PLATFORM_ADMINS) först.",

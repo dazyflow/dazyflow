@@ -1142,6 +1142,7 @@
       "homeOrg": "Home org",
       "created": "Created",
       "verified": "Email verified",
+      "markVerified": "Mark verified",
       "memberOf": "Member of",
       "reason": "Reason",
       "adminProtected": "This account is a platform admin and can't be moderated here. Revoke its platform-admin role below (or remove it from DAZYFLOW_PLATFORM_ADMINS) first.",

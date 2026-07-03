@@ -711,6 +711,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/admin/platform/users/{email}", h.requireAuth(h.platformGetUser))
 	mux.HandleFunc("POST /api/v1/admin/platform/users/{email}/suspend", h.requireAuth(h.platformSuspendUser))
 	mux.HandleFunc("POST /api/v1/admin/platform/users/{email}/unsuspend", h.requireAuth(h.platformUnsuspendUser))
+	mux.HandleFunc("POST /api/v1/admin/platform/users/{email}/verify", h.requireAuth(h.platformVerifyUser))
 	mux.HandleFunc("POST /api/v1/admin/platform/users/{email}/ban", h.requireAuth(h.platformBanUser))
 	mux.HandleFunc("POST /api/v1/admin/platform/users/{email}/platform-admin", h.requireAuth(h.platformGrantAdmin))
 	mux.HandleFunc("DELETE /api/v1/admin/platform/users/{email}/platform-admin", h.requireAuth(h.platformRevokeAdmin))

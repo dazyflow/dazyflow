@@ -256,6 +256,34 @@ func (h *HTTPGateway) platformUnsuspendUser(rw http.ResponseWriter, r *http.Requ
 	writeJSON(rw, http.StatusOK, map[string]any{"user": h.toPlatformUserDTO(u, h.tenantNames(r.Context(), []string{u.Tenant})[u.Tenant])})
 }
 
+// platformVerifyUser marks an account's email as verified without the user
+// clicking the emailed link — a support escape hatch for cases the normal
+// flow can't cover (a bounced verification mail, a mailer-less deployment).
+// Idempotent: verifying an already-verified account is a no-op success.
+func (h *HTTPGateway) platformVerifyUser(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	if !h.requirePlatform(rw, p) {
+		return
+	}
+	email := strings.ToLower(strings.TrimSpace(r.PathValue("email")))
+	u, err := h.Users.GetByEmail(r.Context(), email)
+	if err != nil {
+		writeJSONError(rw, http.StatusNotFound, "no such account")
+		return
+	}
+	if !u.EmailVerified() {
+		now := time.Now().UTC()
+		u.VerifiedAt = &now
+		u.VerifyTokenHash = nil
+		u.VerifyExpiresAt = nil
+		if err := h.Users.PutUser(r.Context(), u); err != nil {
+			writeJSONError(rw, http.StatusInternalServerError, err.Error())
+			return
+		}
+		h.audit(r.Context(), p, "platform.user.verify", email, "")
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{"user": h.toPlatformUserDTO(u, h.tenantNames(r.Context(), []string{u.Tenant})[u.Tenant])})
+}
+
 // platformGrantAdmin grants the cross-tenant platform:admin role to an existing
 // account via the runtime grant store (the mutable counterpart to the
 // DAZYFLOW_PLATFORM_ADMINS env allowlist). The role is stamped at session issue,

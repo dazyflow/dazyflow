@@ -80,3 +80,75 @@ func TestAcceptInvitation_Cov(t *testing.T) {
 		t.Fatalf("membership not created: %v", err)
 	}
 }
+
+// TestAcceptInvitation_VerifiesEmail confirms accepting an invite stamps the
+// accepting account as email-verified: the invite was issued by a verified
+// admin who vouched for the address, so the new member skips the redundant
+// verification nag.
+func TestAcceptInvitation_VerifiesEmail(t *testing.T) {
+	h := newGatewayHarness(t)
+	invites, _ := auth.OpenJSONInvitationStore("")
+	h.gw.Invitations = invites
+	h.gw.Memberships = newFakeMembershipStore()
+	users, err := auth.OpenJSONUserStore("")
+	if err != nil {
+		t.Fatalf("open user store: %v", err)
+	}
+	h.gw.Users = users
+
+	// An unverified account that matches the invited address.
+	if err := users.PutUser(t.Context(), auth.User{
+		Email: "newbie@t.test", Subject: "newbie@t.test", Tenant: "acme",
+	}); err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+	if u, _ := users.GetByEmail(t.Context(), "newbie@t.test"); u.EmailVerified() {
+		t.Fatal("precondition: user should start unverified")
+	}
+
+	_ = invites.PutInvitation(t.Context(), auth.Invitation{
+		Token: "welcome", Email: "newbie@t.test", Tenant: "acme", Workspace: "main",
+		Roles: []core.Role{core.TeamRoleEditor()}, ExpiresAt: time.Now().Add(time.Hour),
+	})
+	if rw := emailTokenDo(t, h, "newbie@t.test", "POST", "/api/v1/invitations/welcome/accept"); rw.Code != http.StatusOK {
+		t.Fatalf("accept = %d, want 200; body=%s", rw.Code, rw.Body.String())
+	}
+	u, err := users.GetByEmail(t.Context(), "newbie@t.test")
+	if err != nil {
+		t.Fatalf("reload user: %v", err)
+	}
+	if !u.EmailVerified() {
+		t.Fatalf("accepting an invite should verify the email, got %+v", u)
+	}
+}
+
+// TestPlatformVerifyUser covers the admin support hatch: a platform admin can
+// mark an account verified directly, and it's idempotent.
+func TestPlatformVerifyUser(t *testing.T) {
+	h := newGatewayHarness(t)
+	users, err := auth.OpenJSONUserStore("")
+	if err != nil {
+		t.Fatalf("open user store: %v", err)
+	}
+	h.gw.Users = users
+	if err := users.PutUser(t.Context(), auth.User{
+		Email: "support@t.test", Subject: "support@t.test", Tenant: "acme",
+	}); err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+
+	do := func() *httptest.ResponseRecorder {
+		return h.platformDo(t, "POST", "/api/v1/admin/platform/users/support@t.test/verify", nil)
+	}
+	if rw := do(); rw.Code != http.StatusOK {
+		t.Fatalf("verify = %d, want 200; body=%s", rw.Code, rw.Body.String())
+	}
+	u, _ := users.GetByEmail(t.Context(), "support@t.test")
+	if !u.EmailVerified() {
+		t.Fatalf("verify should set VerifiedAt, got %+v", u)
+	}
+	// Idempotent: verifying again still 200s.
+	if rw := do(); rw.Code != http.StatusOK {
+		t.Fatalf("re-verify = %d, want 200; body=%s", rw.Code, rw.Body.String())
+	}
+}

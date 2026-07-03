@@ -2151,6 +2151,15 @@ export const api = {
       "POST",
       `/admin/platform/users/${encodeURIComponent(email)}/unsuspend`,
     ),
+  // platformVerifyUser marks the account's email verified without the user
+  // clicking the emailed link — a support hatch for bounced mail or a
+  // mailer-less deployment. Idempotent server-side.
+  platformVerifyUser: (token: string, email: string) =>
+    request<{ user: PlatformUser }>(
+      token,
+      "POST",
+      `/admin/platform/users/${encodeURIComponent(email)}/verify`,
+    ),
   // platformBanUser suspends + blocklists the email (or whole domain) so
   // it can't re-register. Account data is kept — use platformDeleteUser to erase.
   platformBanUser: (token: string, email: string, reason: string, domain: boolean) =>
