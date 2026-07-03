@@ -91,6 +91,7 @@ export function Admin() {
             <AdminCard to="/admin/platform/orgs" icon={<Building2 size={18} />} title={t("admin.cardPlatformOrgsTitle")} desc={t("admin.cardPlatformOrgsDesc")} />
             <AdminCard to="/admin/platform/drops" icon={<PowerOff size={18} />} title={t("admin.cardPlatformDropsTitle")} desc={t("admin.cardPlatformDropsDesc")} />
             <AdminCard to="/admin/platform/tiers" icon={<Layers size={18} />} title={t("admin.cardPlatformTiersTitle")} desc={t("admin.cardPlatformTiersDesc")} />
+            <AdminCard to="/admin/platform/support-agents" icon={<LifeBuoy size={18} />} title={t("admin.cardPlatformSupportAgentsTitle", "Support agents")} desc={t("admin.cardPlatformSupportAgentsDesc", "Provision vendor staff who can request read-only access to customer flows.")} />
           </div>
 
           <h2 className="admin-group-label">{t("admin.groupSystem")}</h2>

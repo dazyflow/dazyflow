@@ -3,6 +3,7 @@
 
 import type {
   AccessGrant,
+  SupportAgentGrant,
   APIKeySummary,
   AuditEvent,
   DropAdjacency,
@@ -1924,6 +1925,19 @@ export const api = {
     }),
   revokeSupportGrant: (token: string, id: string) =>
     request<{ status: string }>(token, "POST", `/support/grants/${encodeURIComponent(id)}/revoke`),
+
+  // Support-agent provisioning (platform-admin surface). A 501 means support
+  // isn't enabled on this deployment.
+  platformListSupportAgents: (token: string) =>
+    request<{ agents: SupportAgentGrant[] }>(token, "GET", "/admin/platform/support-agents"),
+  platformGrantSupportAgent: (token: string, email: string) =>
+    request<{ agents: SupportAgentGrant[] }>(token, "POST", "/admin/platform/support-agents", { email }),
+  platformRevokeSupportAgent: (token: string, email: string) =>
+    request<{ agents: SupportAgentGrant[] }>(
+      token,
+      "DELETE",
+      `/admin/platform/support-agents/${encodeURIComponent(email)}`,
+    ),
 
   // Platform signup-invites (platform:admin only): invite a specific
   // email to create its own account on a signup-disabled deployment.

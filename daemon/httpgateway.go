@@ -713,6 +713,10 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/admin/platform/users/{email}/ban", h.requireAuth(h.platformBanUser))
 	mux.HandleFunc("POST /api/v1/admin/platform/users/{email}/platform-admin", h.requireAuth(h.platformGrantAdmin))
 	mux.HandleFunc("DELETE /api/v1/admin/platform/users/{email}/platform-admin", h.requireAuth(h.platformRevokeAdmin))
+	// Support-agent management (cross-tenant vendor staff → support:agent role).
+	mux.HandleFunc("GET /api/v1/admin/platform/support-agents", h.requireAuth(h.listSupportAgents))
+	mux.HandleFunc("POST /api/v1/admin/platform/support-agents", h.requireAuth(h.grantSupportAgent))
+	mux.HandleFunc("DELETE /api/v1/admin/platform/support-agents/{email}", h.requireAuth(h.revokeSupportAgent))
 	mux.HandleFunc("GET /api/v1/admin/platform/orgs", h.requireAuth(h.platformListOrgs))
 	mux.HandleFunc("GET /api/v1/admin/platform/orgs/{tenant}", h.requireAuth(h.platformGetOrg))
 	mux.HandleFunc("POST /api/v1/admin/platform/orgs/{tenant}/suspend", h.requireAuth(h.platformSuspendOrg))

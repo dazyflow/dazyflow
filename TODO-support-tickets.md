@@ -335,9 +335,12 @@ check, never tenant-crossing.
   `SupportAgentStore` (`daemon/supportagent.go`) with Mem + Postgres impls,
   keyed on email, cached snapshot + refresh loop — a 1:1 mirror of
   `platformadmin.go`. NO env-allowlist bootstrap: support staff are managed
-  entirely at runtime. **Still TODO:** wire session-issue elevation (append
-  `core.SupportAgentRole()` when the email is `Granted`, mirroring
-  `elevatePlatformAdmin`), and an admin surface to grant/revoke.
+  entirely at runtime. Session-issue elevation (`elevateSupportAgent`) and the
+  admin surface are both **done**: platform-admin endpoints
+  `GET/POST /api/v1/admin/platform/support-agents` + `DELETE …/{email}`
+  (`daemon/admin_support_agents.go`) and a GUI at
+  `/admin/platform/support-agents` (`AdminPlatformSupportAgents.tsx`, linked
+  from the platform-admin card grid). Provisioning no longer needs manual SQL.
 - **Default grant TTL: 4 hours**, configurable. Apply when the endpoint mints
   an approved grant's `ExpiresAt`.
 - **Consent notification: in-app only** for the first cut — grant requests

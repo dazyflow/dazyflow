@@ -978,3 +978,11 @@ export type AccessGrant = {
   revoked_at?: string;
   revoked_by?: string;
 };
+
+// SupportAgentGrant is one provisioned support-agent (cross-tenant vendor
+// staff), managed on the platform-admin surface. Mirrors daemon.SupportAgentGrant.
+export type SupportAgentGrant = {
+  email: string;
+  granted_by: string;
+  created_at: string;
+};
