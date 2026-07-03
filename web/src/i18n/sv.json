@@ -1284,6 +1284,51 @@
       "reconnecting": "Återansluter…",
       "lineCount_one": "{{count}} rad",
       "lineCount_other": "{{count}} rader"
+    },
+    "cardSupportTitle": "Supportåtkomst",
+    "cardSupportDesc": "Godkänn eller neka skrivskyddade åtkomstförfrågningar för ett flöde.",
+    "cardPlatformSupportAgentsTitle": "Supportagenter",
+    "cardPlatformSupportAgentsDesc": "Ge leverantörspersonal möjlighet att begära skrivskyddad åtkomst till kunders flöden.",
+    "support": {
+      "needAdmin": "Du behöver <0>organization:admin</0> för att hantera supportåtkomst.",
+      "title": "Supportåtkomst",
+      "subtitle": "När supporten behöver titta på ett flöde för att hjälpa dig begär de skrivskyddad åtkomst här. Hemligheter och körningsdata förblir alltid dolda.",
+      "notEnabled": "Supportåtkomst är inte aktiverad i den här installationen.",
+      "pendingHead": "Väntande förfrågningar",
+      "noPending": "Inga väntande åtkomstförfrågningar.",
+      "historyHead": "Aktiva och tidigare",
+      "requestLine": "{{agent}} vill visa '{{flow}}' — skrivskyddat",
+      "requestedAt": "begärd {{date}}",
+      "ticket": "ärende {{id}}",
+      "expiresAt": "löper ut {{date}}",
+      "decidedBy": "av {{who}}",
+      "reassure": "Hemligheter förblir dolda och körningsdata maskeras. Du kan återkalla åtkomsten när som helst.",
+      "approve": "Godkänn",
+      "deny": "Neka",
+      "revoke": "Återkalla",
+      "revokeConfirm": "Återkalla {{agent}}s åtkomst till '{{flow}}' nu?",
+      "status": {
+        "requested": "Väntande",
+        "approved": "Aktiv",
+        "denied": "Nekad",
+        "revoked": "Återkallad",
+        "expired": "Utgången"
+      }
+    },
+    "supportAgents": {
+      "needPlatform": "Du behöver <0>platform:admin</0> för att hantera supportagenter.",
+      "back": "Plattformsadmin",
+      "title": "Supportagenter",
+      "subtitle": "Personer som kan begära skrivskyddad åtkomst till en kunds flöde. De behöver fortfarande att varje organisation godkänner åtkomst per flöde — det här ger bara möjligheten att fråga.",
+      "notEnabled": "Support är inte aktiverat i den här installationen. Ange <0>DAZYFLOW_SUPPORT_ENABLED=1</0> och starta om.",
+      "emailPlaceholder": "agent@leverantor.se",
+      "adding": "Lägger till…",
+      "add": "Lägg till agent",
+      "empty": "Inga supportagenter än.",
+      "grantedBy": "tillagd av {{who}}",
+      "addedAt": "tillagd {{date}}",
+      "remove": "Ta bort",
+      "removeConfirm": "Ta bort supportagentåtkomst för {{email}}?"
     }
   },
   "results": {
@@ -2124,5 +2169,8 @@
     "wiredFollowHint": "Visar den kopplade platsen – den bestämmer platsen vid körning",
     "placeWins": "Nålen följer platsen – rensa den för att välja på kartan",
     "hint": "Sök, eller klicka på kartan för att placera en nål"
+  },
+  "phone": {
+    "international": "Internationellt nummer"
   }
 }

@@ -1310,6 +1310,23 @@
         "revoked": "Revoked",
         "expired": "Expired"
       }
+    },
+    "cardPlatformSupportAgentsTitle": "Support agents",
+    "cardPlatformSupportAgentsDesc": "Provision vendor staff who can request read-only access to customer flows.",
+    "supportAgents": {
+      "needPlatform": "You need <0>platform:admin</0> to manage support agents.",
+      "back": "Platform admin",
+      "title": "Support agents",
+      "subtitle": "People who can request read-only access to a customer's flow. They still need each org to approve access per flow — this only grants the ability to ask.",
+      "notEnabled": "Support is not enabled on this deployment. Set <0>DAZYFLOW_SUPPORT_ENABLED=1</0> and restart.",
+      "emailPlaceholder": "agent@vendor.com",
+      "adding": "Adding…",
+      "add": "Add agent",
+      "empty": "No support agents yet.",
+      "grantedBy": "added by {{who}}",
+      "addedAt": "added {{date}}",
+      "remove": "Remove",
+      "removeConfirm": "Remove support-agent access for {{email}}?"
     }
   },
   "results": {
@@ -2148,5 +2165,8 @@
     "wiredFollowHint": "Showing the wired Place — it sets the location at run time",
     "placeWins": "Pin follows the Place — clear it to pick on the map",
     "hint": "Search, or click the map to drop a pin"
+  },
+  "phone": {
+    "international": "International number"
   }
 }
