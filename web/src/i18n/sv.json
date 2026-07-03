@@ -831,11 +831,11 @@
     },
     "cardOAuthTitle": "Connector-appar",
     "cardOAuthDesc": "Uppgifter för Google, Slack, GitHub, Notion.",
-    "cardPlatformTitle": "Bjud in användare",
-    "cardPlatformDesc": "Bjud in personer att registrera sig när registrering är avstängd.",
+    "cardPlatformTitle": "Plattformsmejl",
+    "cardPlatformDesc": "Skicka ett testmeddelande för att kontrollera att installationens e-postserver levererar.",
     "platform": {
-      "title": "Plattform",
-      "subtitle": "Verktyg för plattformsoperatören som gäller hela installationen.",
+      "title": "Plattformsmejl",
+      "subtitle": "Skicka ett testmeddelande via installationens e-postserver för att bekräfta att det levereras.",
       "needPlatformAdmin": "Du behöver <0>platform:admin</0> för att hantera plattformsinställningar."
     },
     "cardWorkspaceTitle": "Organisation",
@@ -1109,7 +1109,7 @@
     },
     "platformUsers": {
       "title": "Användare",
-      "subtitle": "Alla konton på den här installationen. Öppna ett för att stänga av, bannlysa eller radera det.",
+      "subtitle": "Alla konton på den här installationen, samt väntande registreringsinbjudningar. Öppna en användare för att stänga av, bannlysa eller radera den.",
       "counts": "{{total}} användare · {{suspended}} avstängda",
       "searchPlaceholder": "Sök på e-post eller org…",
       "suspended": "Avstängd",
@@ -1194,7 +1194,7 @@
       "deleteDesc": "Radera organisationen och all dess data permanent. Detta kan inte ångras."
     },
     "cardPlatformUsersTitle": "Användare",
-    "cardPlatformUsersDesc": "Stäng av, bannlys eller radera valfritt konto i plattformen.",
+    "cardPlatformUsersDesc": "Stäng av, bannlys eller radera valfritt konto — eller bjud in nya personer att registrera sig.",
     "cardPlatformOrgsTitle": "Organisationer",
     "cardPlatformOrgsDesc": "Stäng av, bannlys eller radera valfri organisation.",
     "cardPlatformDropsTitle": "Nödstopp för funktioner",

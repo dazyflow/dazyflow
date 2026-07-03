@@ -849,11 +849,11 @@
     },
     "cardOAuthTitle": "Connector apps",
     "cardOAuthDesc": "Credentials for Google, Slack, GitHub, Notion.",
-    "cardPlatformTitle": "Invite users",
-    "cardPlatformDesc": "Invite people to sign up when signup is disabled.",
+    "cardPlatformTitle": "Platform email",
+    "cardPlatformDesc": "Send a test message to check the instance mailer delivers.",
     "platform": {
-      "title": "Platform",
-      "subtitle": "Instance-wide tools for the platform operator.",
+      "title": "Platform email",
+      "subtitle": "Send a test message through the instance mailer to confirm it delivers.",
       "needPlatformAdmin": "You need <0>platform:admin</0> to manage platform settings."
     },
     "cardWorkspaceTitle": "Organization",
@@ -1127,7 +1127,7 @@
     },
     "platformUsers": {
       "title": "Users",
-      "subtitle": "Every account on this deployment. Open one to suspend, ban, or delete it.",
+      "subtitle": "Every account on this deployment, plus pending signup invites. Open a user to suspend, ban, or delete it.",
       "counts": "{{total}} users · {{suspended}} suspended",
       "searchPlaceholder": "Search by email or org…",
       "suspended": "Suspended",
@@ -1212,7 +1212,7 @@
       "deleteDesc": "Permanently erase the org and all its data. This can't be undone."
     },
     "cardPlatformUsersTitle": "Users",
-    "cardPlatformUsersDesc": "Suspend, ban, or delete any account across the platform.",
+    "cardPlatformUsersDesc": "Suspend, ban, or delete any account — or invite new people to sign up.",
     "cardPlatformOrgsTitle": "Organizations",
     "cardPlatformOrgsDesc": "Suspend, ban, or delete any organization.",
     "cardPlatformDropsTitle": "Drop killswitch",
