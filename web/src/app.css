@@ -5860,6 +5860,10 @@ img[src$="/brands/smhi.svg"] {
   flex-direction: column;
   gap: var(--space-3);
   max-width: 560px;
+  /* Sits directly after the System .admin-grid, which has no bottom
+     margin — match the grid's own gap so the Daemon card doesn't collide
+     with the card above it. */
+  margin-top: var(--space-4);
 }
 .admin-system-head {
   display: flex;
