@@ -35,6 +35,8 @@ import { Admin } from "./pages/Admin";
 import { AdminAPIKeys } from "./pages/AdminAPIKeys";
 import { AdminUsers } from "./pages/AdminUsers";
 import { AdminSupport } from "./pages/AdminSupport";
+import { SupportAgentHome } from "./pages/SupportAgentHome";
+import { SupportFlowView } from "./pages/SupportFlowView";
 import { AdminAudit } from "./pages/AdminAudit";
 import { AdminWorkspace } from "./pages/AdminWorkspace";
 import { AdminOrgSSO } from "./pages/AdminOrgSSO";
@@ -121,6 +123,8 @@ export function App() {
         <Route path="/results" element={<Results />} />
         <Route path="/runs/:runID" element={<RunDetail />} />
         <Route path="/approvals" element={<Approvals />} />
+        <Route path="/support" element={<SupportAgentHome />} />
+        <Route path="/support/flows/:tenant/:workspace/:flowId" element={<SupportFlowView />} />
         <Route path="/usage" element={<Usage />} />
         {/* /plans folded into the merged Plan & usage page; keep the path
             as a redirect so old links and the account menu still resolve. */}

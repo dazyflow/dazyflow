@@ -118,6 +118,26 @@ func (h *HTTPGateway) listGrants(rw http.ResponseWriter, r *http.Request, p core
 	writeJSON(rw, http.StatusOK, map[string]any{"grants": grants})
 }
 
+// listMyGrants: a support agent sees every grant THEY requested, across every
+// org — the "flows I can reach" surface that powers one-click open. Keyed on
+// the agent, not a tenant. GET /api/v1/support/grants/mine
+func (h *HTTPGateway) listMyGrants(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	if !h.supportEnabled() {
+		writeAPIError(rw, http.StatusNotImplemented, "support_disabled", "support is not enabled on this deployment")
+		return
+	}
+	if err := core.Require(p, core.PermSupportAgent); err != nil {
+		writeAPIError(rw, http.StatusForbidden, "forbidden", "support agent role required")
+		return
+	}
+	grants, err := h.Grants.ListForAgent(r.Context(), p.Subject)
+	if err != nil {
+		writeAPIError(rw, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{"grants": grants})
+}
+
 // decideGrant: an org admin approves or denies a requested grant.
 // POST /api/v1/support/grants/{id}/decide  {decision: "approve"|"deny"}
 func (h *HTTPGateway) decideGrant(rw http.ResponseWriter, r *http.Request, p core.Principal) {
@@ -238,7 +258,10 @@ func (h *HTTPGateway) supportView(rw http.ResponseWriter, r *http.Request, p cor
 
 	mode := core.RedactMode(r.URL.Query().Get("mode")) // "" → structure-only default
 	manifests := h.svc.manifestsSnapshot()
-	issues := append(core.ValidateGraphFull(graph, manifests), core.LintGraph(graph)...)
+	// ValidateGraphFull already includes LintGraph's findings (see
+	// core/validate.go), so it's the complete set — appending LintGraph again
+	// double-counts every lint issue.
+	issues := core.ValidateGraphFull(graph, manifests)
 	bundle := core.BuildSupportBundle(graph, runPtr, issues, mode)
 
 	h.audit(r.Context(), core.Principal{Tenant: tenant, Subject: p.Subject},

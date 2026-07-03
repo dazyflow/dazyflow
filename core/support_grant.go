@@ -105,4 +105,8 @@ type GrantStore interface {
 	// ListForTenant returns every grant scoped to tenant (any status), for the
 	// org's consent/audit surface.
 	ListForTenant(ctx context.Context, tenant string) ([]AccessGrant, error)
+	// ListForAgent returns every grant (any status) requested by `agent`, newest
+	// first — the agent's own "flows I can reach" surface. Cross-tenant: an agent
+	// works across many orgs, so this is keyed on the agent, not a tenant.
+	ListForAgent(ctx context.Context, agent string) ([]AccessGrant, error)
 }

@@ -129,7 +129,8 @@
     "orgDeletePasswordPlaceholder": "Your account password",
     "orgDeletePasswordRequired": "Enter your password to confirm.",
     "noSubject": "(no subject)",
-    "overview": "Overview"
+    "overview": "Overview",
+    "support": "Support"
   },
   "verifyEmail": {
     "working": "Confirming your email…",
@@ -1568,7 +1569,8 @@
       "secretRead": "Read secrets",
       "secretWrite": "Add & change secrets",
       "orgAdmin": "Manage the organization",
-      "platformAdmin": "Manage the whole platform"
+      "platformAdmin": "Manage the whole platform",
+      "supportAgent": "Request support access"
     },
     "tenantAdminWarning": "<0>Manage the organization</0> lets this key create more keys — only give it to people you fully trust.",
     "expiryLabel": "Expires",
@@ -2168,5 +2170,48 @@
   },
   "phone": {
     "international": "International number"
+  },
+  "supportHome": {
+    "title": "Support",
+    "subtitle": "Open a customer's flow read-only to help debug it. You'll need the flow's coordinates from the support ticket.",
+    "tenant": "Organization (tenant id)",
+    "tenantPlaceholder": "acme",
+    "flow": "Flow id",
+    "flowPlaceholder": "coffee-reorder",
+    "grantsHead": "Your access",
+    "noGrants": "You don't have access to any flows yet. Request access to a flow below.",
+    "ticket": "ticket {{id}}",
+    "expires": "expires {{date}}",
+    "openFlow": "Open",
+    "awaitingApproval": "Waiting for approval",
+    "requestNew": "Request access to a flow",
+    "requestHead": "Request access to a flow",
+    "requestBody": "Enter the flow's organization and id (from the support ticket). The organization approves your request before you can open it.",
+    "ticketOptional": "Ticket id (optional)",
+    "requestSubmit": "Send request",
+    "status": {
+      "approved": "Active",
+      "requested": "Pending",
+      "denied": "Denied",
+      "revoked": "Revoked",
+      "expired": "Expired"
+    }
+  },
+  "supportView": {
+    "notEnabled": "Support access is not enabled on this deployment.",
+    "forbidden": "You need the support-agent role to view customer flows.",
+    "readOnly": "Read-only",
+    "requestHead": "Request access",
+    "requestBody": "You don't have an active grant for <0>{{flow}}</0> in <0>{{tenant}}</0> yet. Request read-only access — the organization approves it before you can view the flow.",
+    "requestPending": "Access requested. Waiting for the organization to approve — they'll see it under Admin → Support access.",
+    "ticketPlaceholder": "Ticket id (optional)",
+    "request": "Request read-only access",
+    "requesting": "Requesting…",
+    "checkAgain": "Check again",
+    "back": "Support",
+    "runStatus": "Run: {{status}}",
+    "issuesHead_one": "{{count}} issue",
+    "issuesHead_other": "{{count}} issues",
+    "noIssues": "No validation issues."
   }
 }

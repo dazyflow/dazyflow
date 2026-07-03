@@ -501,6 +501,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// reads the redacted bundle. All gated + audited into the org's log.
 	mux.HandleFunc("POST /api/v1/support/grants", h.requireAuth(h.requestGrant))
 	mux.HandleFunc("GET /api/v1/support/grants", h.requireAuth(h.listGrants))
+	mux.HandleFunc("GET /api/v1/support/grants/mine", h.requireAuth(h.listMyGrants))
 	mux.HandleFunc("POST /api/v1/support/grants/{id}/decide", h.requireAuth(h.decideGrant))
 	mux.HandleFunc("POST /api/v1/support/grants/{id}/revoke", h.requireAuth(h.revokeGrant))
 	mux.HandleFunc("GET /api/v1/support/flows/{tenant}/{workspace}/{flow_id}", h.requireAuth(h.supportView))

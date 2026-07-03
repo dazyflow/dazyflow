@@ -319,7 +319,10 @@ export type Permission =
   | "secret:read"
   | "secret:write"
   | "organization:admin"
-  | "platform:admin";
+  | "platform:admin"
+  // The deliberately-weak support-agent role — by itself grants no access; it
+  // only lets a provisioned agent request a per-flow, org-approved AccessGrant.
+  | "support:agent";
 
 // ServiceInfo mirrors the GET /api/v1 ServiceDescriptor — the public
 // discovery entry point. The UI only reads the build block (shown in the
@@ -985,4 +988,86 @@ export type SupportAgentGrant = {
   email: string;
   granted_by: string;
   created_at: string;
+};
+
+// SupportBundle is the REDACTED view of a flow a support agent receives from
+// GET /support/flows/{tenant}/{workspace}/{flow_id}. Mirrors core.SupportBundle:
+// structure (nodes/edges/triggers) is verbatim; params carry no secret values,
+// and the optional run keeps statuses + output SHAPE but never payloads.
+export type RedactMode = "" | "structure_only" | "structure_plus_values";
+
+export type SupportBundle = {
+  mode: RedactMode;
+  flow: BundleFlow;
+  nodes: BundleNode[];
+  edges: Edge[];
+  triggers?: BundleTrigger[];
+  run?: BundleRun;
+  issues?: LintIssue[];
+};
+
+export type BundleFlow = {
+  id: string;
+  tenant: string;
+  workspace: string;
+  name?: string;
+  icon?: string;
+  description?: string;
+  visibility?: Visibility;
+  owner?: string;
+  disabled?: boolean;
+  timeout_seconds?: number;
+  notifies_on_failure?: boolean;
+};
+
+export type BundleNode = {
+  id: string;
+  module: string;
+  disabled?: boolean;
+  breakpoint?: boolean;
+  timeout_seconds?: number;
+  position?: Position;
+  params?: Record<string, unknown>;
+  env?: Record<string, unknown>;
+};
+
+export type BundleTrigger = {
+  type: string;
+  cron?: string;
+  tz?: string;
+  interval_seconds?: number;
+  public_form?: boolean;
+  form_fields?: string[];
+  form_title?: string;
+  has_secret?: boolean;
+};
+
+export type BundleRun = {
+  run_id: string;
+  status: JobStatus;
+  error?: JobError;
+  enqueued_at?: string;
+  started_at?: string;
+  finished_at?: string;
+  nodes?: BundleNodeRun[];
+};
+
+export type BundleNodeRun = {
+  node_id: string;
+  status: JobStatus;
+  error?: JobError;
+  attempt?: number;
+  started_at?: string;
+  finished_at?: string;
+  output?: Record<string, BundleRef>;
+};
+
+// BundleRef is a run output port with its payload dropped — MIME, a shape hint,
+// and (in structure_plus_values mode) column names survive; the value never does.
+export type BundleRef = {
+  mime?: string;
+  has_value?: boolean;
+  shape?: string;
+  header_count?: number;
+  headers?: string[];
 };

@@ -4,6 +4,7 @@
 import type {
   AccessGrant,
   SupportAgentGrant,
+  SupportBundle,
   APIKeySummary,
   AuditEvent,
   DropAdjacency,
@@ -1925,6 +1926,42 @@ export const api = {
     }),
   revokeSupportGrant: (token: string, id: string) =>
     request<{ status: string }>(token, "POST", `/support/grants/${encodeURIComponent(id)}/revoke`),
+
+  // listMySupportGrants returns every grant the calling agent has requested,
+  // across orgs — the agent's "flows I can reach" list. 403 if not a support
+  // agent; 501 if support is off.
+  listMySupportGrants: (token: string) =>
+    request<{ grants: AccessGrant[] }>(token, "GET", "/support/grants/mine"),
+  // Support-agent side. requestSupportGrant asks an org for read-only access to
+  // one of its flows (the org still has to approve on /admin/support). A 403
+  // means the caller isn't a provisioned support agent; 501 means support is
+  // off on this deployment.
+  requestSupportGrant: (token: string, tenant: string, flowId: string, ticketId?: string) =>
+    request<AccessGrant>(token, "POST", "/support/grants", {
+      tenant,
+      flow_id: flowId,
+      ...(ticketId ? { ticket_id: ticketId } : {}),
+    }),
+  // viewSupportFlow fetches the REDACTED support bundle for one flow, gated by an
+  // active grant. 404 (no_access) means no approved grant yet; optional runId
+  // overlays that run's node statuses; mode controls redaction depth.
+  viewSupportFlow: (
+    token: string,
+    tenant: string,
+    workspace: string,
+    flowId: string,
+    opts?: { runId?: string; mode?: string },
+  ) => {
+    const params = new URLSearchParams();
+    if (opts?.runId) params.set("run_id", opts.runId);
+    if (opts?.mode) params.set("mode", opts.mode);
+    const qs = params.toString();
+    return request<SupportBundle>(
+      token,
+      "GET",
+      `/support/flows/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/${encodeURIComponent(flowId)}${qs ? `?${qs}` : ""}`,
+    );
+  },
 
   // Support-agent provisioning (platform-admin surface). A 501 means support
   // isn't enabled on this deployment.

@@ -73,6 +73,10 @@ const PERMISSION_LABEL_KEYS: Record<Permission, string> = {
   "secret:write": "issueKey.perm.secretWrite",
   "organization:admin": "issueKey.perm.orgAdmin",
   "platform:admin": "issueKey.perm.platformAdmin",
+  // Not offered in the grant grid (AVAILABLE_PERMISSIONS) — it's a role
+  // provisioned by a platform admin, not something you attach to an API key.
+  // Listed only to keep this label map exhaustive over Permission.
+  "support:agent": "issueKey.perm.supportAgent",
 };
 
 type ExpiryChoice = "never" | "30d" | "90d" | "1y";

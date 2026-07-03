@@ -10,6 +10,7 @@ import {
   Workflow,
   ShieldCheck,
   Activity,
+  LifeBuoy,
   PencilLine,
   Table2,
   Gauge,
@@ -269,7 +270,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   // legacy link still gets the right layout during the one-render redirect.
   // EXCLUDE /flows/new — that's the Create-flow page, a normal padded page, not
   // an editor canvas (without the exclusion it matches :id and loses its margins).
-  const inEditor = /^\/(flows|pipelines)\/(?!new(?:$|\/))[^/]+/.test(location.pathname);
+  // The support-agent flow view is a full-bleed read-only canvas too, so it
+  // wants the same padding-free main as the editor.
+  const inEditor =
+    /^\/(flows|pipelines)\/(?!new(?:$|\/))[^/]+/.test(location.pathname) ||
+    /^\/support\/flows\//.test(location.pathname);
   const showAdmin =
     hasPerm("organization:admin") || hasPerm("graph:admin");
 
@@ -591,6 +596,15 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Table2 size={18} />
             <span className="nav-label">{t("nav.results")}</span>
           </NavLink>
+          {/* Support-agent workspace: cross-tenant vendor staff open a
+              customer's flow read-only from here. Only the weak support:agent
+              role sees it. */}
+          {hasPerm("support:agent") && (
+            <NavLink to="/support" title={t("nav.support")}>
+              <LifeBuoy size={18} />
+              <span className="nav-label">{t("nav.support")}</span>
+            </NavLink>
+          )}
           {/* Files is an authoring surface (workspace inputs/outputs), gated to
               editors/admins like Secrets — viewers (graph:run only) don't see
               it and can't browse/download. */}

@@ -161,6 +161,20 @@ func (s *MemGrantStore) ListForTenant(_ context.Context, tenant string) ([]core.
 	return out, nil
 }
 
+// ListForAgent returns every grant requested by agent, newest request first.
+func (s *MemGrantStore) ListForAgent(_ context.Context, agent string) ([]core.AccessGrant, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]core.AccessGrant, 0)
+	for _, g := range s.byID {
+		if g.AgentSubject == agent {
+			out = append(out, g)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].RequestedAt.After(out[j].RequestedAt) })
+	return out, nil
+}
+
 // ---- Postgres --------------------------------------------------------------
 
 const pgGrantSchema = `
@@ -319,6 +333,24 @@ func (s *PgGrantStore) ActiveGrant(ctx context.Context, agent, tenant, flowID st
 func (s *PgGrantStore) ListForTenant(ctx context.Context, tenant string) ([]core.AccessGrant, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT `+grantCols+` FROM access_grants WHERE tenant=$1 ORDER BY requested_at DESC`, tenant)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]core.AccessGrant, 0)
+	for rows.Next() {
+		g, err := scanGrant(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, g)
+	}
+	return out, rows.Err()
+}
+
+func (s *PgGrantStore) ListForAgent(ctx context.Context, agent string) ([]core.AccessGrant, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+grantCols+` FROM access_grants WHERE agent_subject=$1 ORDER BY requested_at DESC`, agent)
 	if err != nil {
 		return nil, err
 	}

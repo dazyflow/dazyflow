@@ -130,7 +130,8 @@
     "orgDeletePasswordPlaceholder": "Ditt kontolösenord",
     "orgDeletePasswordRequired": "Ange ditt lösenord för att bekräfta.",
     "noSubject": "(inget subjekt)",
-    "overview": "Översikt"
+    "overview": "Översikt",
+    "support": "Support"
   },
   "verifyEmail": {
     "working": "Bekräftar din e-postadress…",
@@ -1570,7 +1571,8 @@
       "secretRead": "Läsa hemligheter",
       "secretWrite": "Lägga till och ändra hemligheter",
       "orgAdmin": "Hantera organisationen",
-      "platformAdmin": "Hantera hela plattformen"
+      "platformAdmin": "Hantera hela plattformen",
+      "supportAgent": "Begär supportåtkomst"
     },
     "tenantAdminWarning": "<0>Hantera organisationen</0> låter den här nyckeln skapa fler nycklar — ge den bara till personer du litar helt på.",
     "expiryLabel": "Går ut",
@@ -2172,5 +2174,48 @@
   },
   "phone": {
     "international": "Internationellt nummer"
+  },
+  "supportHome": {
+    "title": "Support",
+    "subtitle": "Öppna en kunds flöde skrivskyddat för att felsöka det. Du behöver flödets koordinater från supportärendet.",
+    "tenant": "Organisation (tenant-id)",
+    "tenantPlaceholder": "acme",
+    "flow": "Flödes-id",
+    "flowPlaceholder": "coffee-reorder",
+    "grantsHead": "Din åtkomst",
+    "noGrants": "Du har inte åtkomst till några flöden än. Begär åtkomst till ett flöde nedan.",
+    "ticket": "ärende {{id}}",
+    "expires": "löper ut {{date}}",
+    "openFlow": "Öppna",
+    "awaitingApproval": "Väntar på godkännande",
+    "requestNew": "Begär åtkomst till ett flöde",
+    "requestHead": "Begär åtkomst till ett flöde",
+    "requestBody": "Ange flödets organisation och id (från supportärendet). Organisationen godkänner din begäran innan du kan öppna det.",
+    "ticketOptional": "Ärende-id (valfritt)",
+    "requestSubmit": "Skicka begäran",
+    "status": {
+      "approved": "Aktiv",
+      "requested": "Väntande",
+      "denied": "Nekad",
+      "revoked": "Återkallad",
+      "expired": "Utgången"
+    }
+  },
+  "supportView": {
+    "notEnabled": "Supportåtkomst är inte aktiverad i den här installationen.",
+    "forbidden": "Du behöver rollen supportagent för att visa kunders flöden.",
+    "readOnly": "Skrivskyddad",
+    "requestHead": "Begär åtkomst",
+    "requestBody": "Du har ingen aktiv beviljning för <0>{{flow}}</0> i <0>{{tenant}}</0> ännu. Begär skrivskyddad åtkomst — organisationen godkänner den innan du kan visa flödet.",
+    "requestPending": "Åtkomst begärd. Väntar på att organisationen godkänner — de ser den under Admin → Supportåtkomst.",
+    "ticketPlaceholder": "Ärende-id (valfritt)",
+    "request": "Begär skrivskyddad åtkomst",
+    "requesting": "Begär…",
+    "checkAgain": "Kontrollera igen",
+    "back": "Support",
+    "runStatus": "Körning: {{status}}",
+    "issuesHead_one": "{{count}} problem",
+    "issuesHead_other": "{{count}} problem",
+    "noIssues": "Inga valideringsproblem."
   }
 }

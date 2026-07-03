@@ -5851,6 +5851,134 @@ img[src$="/brands/smhi.svg"] {
 /* System section of the admin page — running daemon release vs. the
    latest upstream tag, plus the CLI upgrade hint. A single surface panel
    (not a grid of cards) since it shows status rather than navigation. */
+/* ===== Support-agent flow view =========================================
+   A full-bleed read-only canvas (reuses the editor's node/edge renderers)
+   with a slim header and a right-hand issues rail. Rendered in the padding-
+   free main (see AppShell inEditor). */
+.support-view-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg);
+}
+.support-view-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex: none;
+}
+.support-view-head .back-link {
+  display: inline-flex;
+  align-items: center;
+  color: var(--muted);
+}
+.support-view-flowicon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-2);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  flex: none;
+}
+.support-view-title {
+  min-width: 0;
+  flex: 1;
+}
+.support-view-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+  color: var(--ink);
+}
+.support-view-ro {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  padding: 1px 8px;
+}
+.support-view-meta {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+.support-view-runchip {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
+  padding: 2px 10px;
+  flex: none;
+}
+.support-view-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.support-view-canvas {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+.support-view-issues {
+  width: 280px;
+  flex: none;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+  overflow-y: auto;
+  padding: var(--space-2);
+}
+.support-view-issues-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+  padding: var(--space-2);
+}
+.support-view-issue {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  padding: var(--space-2);
+  border-radius: var(--r-2);
+  font-size: var(--text-md);
+  line-height: 1.4;
+}
+.support-view-issue.is-error {
+  color: var(--danger);
+}
+.support-view-issue.is-warn {
+  color: var(--warning, var(--accent));
+}
+.support-view-issue-msg {
+  color: var(--ink);
+}
+.support-view-issue-detail {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  margin-top: 2px;
+  font-family: var(--font-mono, monospace);
+}
+.support-view-center {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: var(--space-5);
+}
+
 .admin-system {
   background: var(--surface);
   border: 1px solid var(--border);
