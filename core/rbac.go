@@ -21,6 +21,14 @@ const (
 	// organization:admin (which is per-tenant). For SaaS-style hosting
 	// where the operator runs dzd for many customer orgs.
 	PermPlatformAdmin Permission = "platform:admin"
+	// PermSupportAgent is the DELIBERATELY WEAK support role. By itself it
+	// grants only: read the support queue, post to a ticket chat, and request
+	// an access grant. It does NOT cross tenant and does NOT imply
+	// platform:admin — a support agent reaches a specific flow ONLY through an
+	// approved, time-boxed AccessGrant (a capability), and even then sees only
+	// the REDACTED support view. Never add this to RequireTenant's
+	// short-circuit. See AuthorizeGraphSupportView and TODO-support-tickets.md.
+	PermSupportAgent Permission = "support:agent"
 )
 
 type Role struct {
@@ -34,6 +42,16 @@ type Role struct {
 // elevation and the grant store construct the identical role.
 func PlatformAdminRole() Role {
 	return Role{Name: "platform_admin", Permissions: []Permission{PermPlatformAdmin}}
+}
+
+// SupportAgentRole is the role a support agent carries. It holds ONLY
+// PermSupportAgent — the weak, grant-gated support permission — so an agent has
+// no ambient access to any tenant's flows, secrets, or runs; a specific flow is
+// reachable only via an approved AccessGrant (see AuthorizeGraphSupportView).
+// Who fills this role differs per deployment (hosted: vendor staff via an env
+// allowlist; self-host: an org admin helping their own members).
+func SupportAgentRole() Role {
+	return Role{Name: "support_agent", Permissions: []Permission{PermSupportAgent}}
 }
 
 func (r Role) Has(p Permission) bool {

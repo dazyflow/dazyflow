@@ -12,9 +12,9 @@ import (
 	"git.sr.ht/~klahr/dazyflow/auth"
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/daemon"
+	_ "git.sr.ht/~klahr/dazyflow/drops"
 	"git.sr.ht/~klahr/dazyflow/engine"
 	"git.sr.ht/~klahr/dazyflow/engine/jobstore"
-	_ "git.sr.ht/~klahr/dazyflow/drops"
 	"git.sr.ht/~klahr/dazyflow/workspace"
 )
 

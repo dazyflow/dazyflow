@@ -104,9 +104,9 @@ func TestAnalyzeDependent(t *testing.T) {
 		wantDecide dependentDecision
 	}{
 		{
-			name:  "predecessor not recorded → waiting",
-			edges: []core.Edge{{From: "A", To: "D", FromPort: "out"}},
-			seed:  func(core.JobStore) {},
+			name:       "predecessor not recorded → waiting",
+			edges:      []core.Edge{{From: "A", To: "D", FromPort: "out"}},
+			seed:       func(core.JobStore) {},
 			wantDecide: depWaiting,
 		},
 		{

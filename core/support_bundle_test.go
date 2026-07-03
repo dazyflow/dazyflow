@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 )
 
 // sampleGraph builds a flow that exercises every redaction danger zone: a
@@ -281,3 +282,36 @@ func findNodeRun(t *testing.T, b SupportBundle, id string) BundleNodeRun {
 	t.Fatalf("node run %q not in bundle", id)
 	return BundleNodeRun{}
 }
+
+// NewSupportBundleRecord derives metadata from the bundle and stores the
+// REDACTED bundle JSON — a source secret must not survive into the payload.
+func TestNewSupportBundleRecord(t *testing.T) {
+	at := timeFixture()
+	b := BuildSupportBundle(sampleGraph(), sampleRun(), nil, RedactStructureOnly)
+	rec, err := NewSupportBundleRecord("bundle-1", "agent-a", at, b)
+	if err != nil {
+		t.Fatalf("NewSupportBundleRecord: %v", err)
+	}
+	if rec.Tenant != "acme" || rec.FlowID != "daily-invoice" || rec.RunID != "run-42" {
+		t.Errorf("metadata not derived from bundle: %+v", rec)
+	}
+	if rec.Mode != RedactStructureOnly || rec.CreatedBy != "agent-a" || !rec.CreatedAt.Equal(at) {
+		t.Errorf("record fields wrong: %+v", rec)
+	}
+	// The payload is the redacted bundle — no source secret survives.
+	for _, leak := range []string{"sk_live_abcdefgh12345678", "cus_secretCustomerId", "super-secret-bearer-token"} {
+		if strings.Contains(string(rec.Payload), leak) {
+			t.Errorf("stored payload leaked %q", leak)
+		}
+	}
+	// And it round-trips back into a SupportBundle.
+	var back SupportBundle
+	if err := json.Unmarshal(rec.Payload, &back); err != nil {
+		t.Fatalf("payload is not a SupportBundle: %v", err)
+	}
+	if back.Flow.ID != "daily-invoice" {
+		t.Errorf("round-trip flow id wrong: %q", back.Flow.ID)
+	}
+}
+
+func timeFixture() time.Time { return time.Unix(1_700_000_000, 0).UTC() }

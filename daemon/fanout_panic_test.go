@@ -18,7 +18,7 @@ import (
 type panicWorkspaces struct{}
 
 func (panicWorkspaces) Open(string, string) (*workspace.Store, error) { panic("boom: open") }
-func (panicWorkspaces) List(string) ([]string, error)                { panic("boom: workspace list") }
+func (panicWorkspaces) List(string) ([]string, error)                 { panic("boom: workspace list") }
 
 // TestFanoutSeed_RecoversFromPanic is the regression test for the go-live
 // panic-isolation fix: every webhook/event source runs fanoutSeed in a

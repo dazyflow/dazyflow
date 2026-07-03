@@ -194,7 +194,7 @@ func (h *HTTPGateway) signUp(rw http.ResponseWriter, r *http.Request) {
 	// the user on the welcome page without an extra round trip
 	// through the sign-in form. Use the shared sessionTTL() so signup
 	// matches the sign-in/SSO/TOTP legs (one source of the default).
-	sess, token, err := auth.IssueSession(r.Context(), h.Sessions, h.elevatePlatformAdmin(r.Context(), user), h.sessionTTL())
+	sess, token, err := auth.IssueSession(r.Context(), h.Sessions, h.elevateSessionRoles(r.Context(), user), h.sessionTTL())
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("issue session: %v", err))
 		return

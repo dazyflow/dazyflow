@@ -825,6 +825,25 @@ func (s *Service) LoadGraph(ctx context.Context, p core.Principal, tenant, ws, i
 	return core.MigrateGraph(g), nil
 }
 
+// LoadGraphForSupport loads a graph by identity WITHOUT the normal
+// tenant/visibility authorization. The caller MUST have already authorized
+// access through an AccessGrant (core.AuthorizeGraphSupportView) — the grant,
+// not the principal's tenant, is the authority on the support path. This is the
+// only load path that bypasses the ownership/visibility gate; it exists so a
+// support agent (whose own tenant differs) can reach the flow the org consented
+// to. The graph is still migrated to the current data model, like LoadGraph.
+func (s *Service) LoadGraphForSupport(_ context.Context, tenant, ws, id string) (core.Graph, error) {
+	store, err := s.Workspaces.Open(tenant, ws)
+	if err != nil {
+		return core.Graph{}, err
+	}
+	g, err := store.Load(id)
+	if err != nil {
+		return core.Graph{}, err
+	}
+	return core.MigrateGraph(g), nil
+}
+
 // FlowHistory returns the commit history of a flow, newest first. Gated on
 // the same view permission as LoadGraph so private flows don't leak their
 // existence (or edit cadence) to non-viewers.
@@ -1623,6 +1642,20 @@ func (s *Service) ListPendingApprovals(ctx context.Context, p core.Principal, na
 // improvement once tenant-scoped module catalogs land.
 func (s *Service) ListDrops(ctx context.Context, p core.Principal) (map[string]core.Manifest, error) {
 	return s.listDrops(ctx, p, false)
+}
+
+// manifestsSnapshot returns the engine's manifest map with no authz — used by
+// the support-view path to run core.ValidateGraphFull for the bundle's issues
+// (safe by design: validation references node IDs / field names, never values).
+// Returns nil when the resolver exposes no manifests.
+func (s *Service) manifestsSnapshot() map[string]core.Manifest {
+	mp, ok := s.Engine.Resolver.(interface {
+		Manifests() map[string]core.Manifest
+	})
+	if !ok {
+		return nil
+	}
+	return mp.Manifests()
 }
 
 // listDrops is the shared body of ListDrops/SearchDrops. includeDisabled

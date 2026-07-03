@@ -20,6 +20,7 @@ import {
   CircleArrowUp,
   CheckCircle2,
   AlertTriangle,
+  LifeBuoy,
 } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
@@ -74,6 +75,7 @@ export function Admin() {
         <AdminCard to="/admin/git-credentials" icon={<KeyRound size={18} />} title={t("admin.cardGitTitle")} desc={t("admin.cardGitDesc")} />
         <AdminCard to="/admin/sso" icon={<ShieldCheck size={18} />} title={t("admin.cardSSOTitle")} desc={t("admin.cardSSODesc")} />
         <AdminCard to="/admin/audit" icon={<ScrollText size={18} />} title={t("admin.cardAuditTitle")} desc={t("admin.cardAuditDesc")} />
+        <AdminCard to="/admin/support" icon={<LifeBuoy size={18} />} title={t("admin.cardSupportTitle", "Support access")} desc={t("admin.cardSupportDesc", "Approve or deny read-only access support requests for a flow.")} />
       </div>
 
       {/* OAuth provider apps are instance-wide (shared across every org), so

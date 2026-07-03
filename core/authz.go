@@ -6,6 +6,7 @@ package core
 import (
 	"errors"
 	"fmt"
+	"time"
 )
 
 // Principal represents an authenticated identity carried through the system.
@@ -145,6 +146,37 @@ func AuthorizeGraphEdit(p Principal, graph Graph) error {
 		return nil
 	}
 	return fmt.Errorf("%w: flow %q is owned by %q", ErrUnauthorized, graph.ID, graph.Owner)
+}
+
+// AuthorizeGraphSupportView authorizes a support agent to view ONE flow through
+// an approved, time-boxed AccessGrant. This is a CAPABILITY check, deliberately
+// NOT routed through RequireTenant/AuthorizeGraphView — a support agent's own
+// tenant is irrelevant (and often absent), so those would wrongly reject it.
+// The (agent, tenant, flow) tuple in the grant is the sole authority.
+//
+// Read-only ONLY: there is no support equivalent for Run or Edit, and this must
+// never be used to gate them. Even with a valid grant the caller must serve the
+// REDACTED view (BuildSupportBundle) — the grant unlocks freshness/navigation,
+// not plaintext. Returns ErrUnauthorized (wrapped) on any failure.
+func AuthorizeGraphSupportView(p Principal, graph Graph, grant AccessGrant, now time.Time) error {
+	if !p.Has(PermSupportAgent) {
+		return fmt.Errorf("%w: not a support agent", ErrUnauthorized)
+	}
+	// The grant is for a specific named agent — match it to this principal.
+	// Guard against the empty-subject match ("" == "").
+	if p.Subject == "" || grant.AgentSubject != p.Subject {
+		return fmt.Errorf("%w: grant is not for this agent", ErrUnauthorized)
+	}
+	// The grant scopes to exactly one flow in one tenant.
+	if grant.Tenant != graph.Tenant || grant.FlowID != graph.ID {
+		return fmt.Errorf("%w: grant does not cover flow %q in tenant %q",
+			ErrUnauthorized, graph.ID, graph.Tenant)
+	}
+	if !grant.IsActive(now) {
+		return fmt.Errorf("%w: grant is not active (status %q / expired / revoked)",
+			ErrUnauthorized, grant.Status)
+	}
+	return nil
 }
 
 // authorizeVisibility is the shared read-side check used by View and

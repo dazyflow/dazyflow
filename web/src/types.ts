@@ -957,3 +957,24 @@ export type FileEntry = {
   size: number;
   mod_time: string; // RFC3339
 };
+
+// GrantStatus mirrors core.GrantStatus — the lifecycle of a support AccessGrant.
+export type GrantStatus = "requested" | "approved" | "denied" | "revoked" | "expired";
+
+// AccessGrant is one consented, time-boxed, read-only support view of a flow.
+// Mirrors core.AccessGrant's JSON. The org-admin consent surface lists these.
+export type AccessGrant = {
+  id: string;
+  ticket_id: string;
+  tenant: string;
+  flow_id: string;
+  agent_subject: string;
+  status: GrantStatus;
+  requested_at: string;
+  requested_by: string;
+  decided_by?: string;
+  decided_at?: string;
+  expires_at: string;
+  revoked_at?: string;
+  revoked_by?: string;
+};

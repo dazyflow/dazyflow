@@ -136,12 +136,12 @@ func (h *HTTPGateway) createSignupInvite(rw http.ResponseWriter, r *http.Request
 				"The link expires %s. If you weren't expecting this, ignore this email.",
 			signupURL, expFmt)
 		content := emailtheme.Content{
-			Subject:    "You're invited to Dazyflow",
-			Preheader:  "Create your account to get started.",
-			Eyebrow:    "Invitation",
-			Heading:    "Create your Dazyflow account",
-			Intro:      []string{"You've been invited to create an account on Dazyflow. Set a password and you're in."},
-			Button:     &emailtheme.Button{Label: "Set your password", URL: signupURL},
+			Subject:   "You're invited to Dazyflow",
+			Preheader: "Create your account to get started.",
+			Eyebrow:   "Invitation",
+			Heading:   "Create your Dazyflow account",
+			Intro:     []string{"You've been invited to create an account on Dazyflow. Set a password and you're in."},
+			Button:    &emailtheme.Button{Label: "Set your password", URL: signupURL},
 			Outro: []string{fmt.Sprintf(
 				"This link expires %s. If you weren't expecting it, you can ignore this email.",
 				expFmt)},

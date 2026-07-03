@@ -56,8 +56,8 @@ func newLoopHarness(t *testing.T) *loopHarness {
 			ID: "for_each", Version: "1.0", Summary: "loop",
 			Examples:       []core.ParamsExample{{Title: "default"}},
 			ExecutionModel: core.ExecutionBatch, ProcessModel: core.ProcessLongLived,
-			Inputs:         []core.Port{{Port: "items"}},
-			Outputs:        []core.Port{{Port: "body"}, {Port: "results"}, {Port: "errors"}},
+			Inputs:  []core.Port{{Port: "items"}},
+			Outputs: []core.Port{{Port: "body"}, {Port: "results"}, {Port: "errors"}},
 		},
 		Execute: func(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 			return core.Result{JobID: job.ID, Status: core.StatusOK,
@@ -72,8 +72,8 @@ func newLoopHarness(t *testing.T) *loopHarness {
 			ID: "bodyfx", Version: "1.0", Summary: "body fixture",
 			Examples:       []core.ParamsExample{{Title: "default"}},
 			ExecutionModel: core.ExecutionBatch, ProcessModel: core.ProcessLongLived,
-			Inputs:         []core.Port{{Port: "in"}},
-			Outputs:        []core.Port{{Port: "meta"}},
+			Inputs:  []core.Port{{Port: "in"}},
+			Outputs: []core.Port{{Port: "meta"}},
 		},
 		Execute: func(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 			bodyRuns.Add(1)
@@ -88,8 +88,8 @@ func newLoopHarness(t *testing.T) *loopHarness {
 			ID: "after", Version: "1.0", Summary: "after",
 			Examples:       []core.ParamsExample{{Title: "default"}},
 			ExecutionModel: core.ExecutionBatch, ProcessModel: core.ProcessLongLived,
-			Inputs:         []core.Port{{Port: "in"}},
-			Outputs:        []core.Port{{Port: "out"}},
+			Inputs:  []core.Port{{Port: "in"}},
+			Outputs: []core.Port{{Port: "out"}},
 		},
 		Execute: func(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 			return core.Result{JobID: job.ID, Status: core.StatusOK}, nil

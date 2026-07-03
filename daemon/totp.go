@@ -264,7 +264,7 @@ func (h *HTTPGateway) totpVerify(rw http.ResponseWriter, r *http.Request) {
 		writeAPIError(rw, http.StatusForbidden, "suspended", msg)
 		return
 	}
-	sess, token, err := auth.IssueSession(r.Context(), h.Sessions, h.elevatePlatformAdmin(r.Context(), res.User), h.sessionTTL())
+	sess, token, err := auth.IssueSession(r.Context(), h.Sessions, h.elevateSessionRoles(r.Context(), res.User), h.sessionTTL())
 	if err != nil {
 		writeAPIError(rw, http.StatusInternalServerError, "internal_error", "could not create session")
 		return

@@ -88,9 +88,9 @@ func newLoopE2EHarness(t *testing.T, rec *recorder) *loopHarness {
 			ID: "sendfx", Version: "1.0", Summary: "send fixture",
 			Examples:       []core.ParamsExample{{Title: "default"}},
 			ExecutionModel: core.ExecutionBatch, ProcessModel: core.ProcessLongLived,
-			Inputs:         []core.Port{{Port: "in"}},
-			Outputs:        []core.Port{{Port: "meta"}},
-			ParamsSchema:   []byte(`{"type":"object","properties":{"line":{"type":"string"}}}`),
+			Inputs:       []core.Port{{Port: "in"}},
+			Outputs:      []core.Port{{Port: "meta"}},
+			ParamsSchema: []byte(`{"type":"object","properties":{"line":{"type":"string"}}}`),
 		},
 		Execute: func(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 			line, _ := job.Params["line"].(string)
@@ -126,8 +126,8 @@ func newLoopE2EHarness(t *testing.T, rec *recorder) *loopHarness {
 			ID: "mayfail", Version: "1.0", Summary: "conditionally-failing body",
 			Examples:       []core.ParamsExample{{Title: "default"}},
 			ExecutionModel: core.ExecutionBatch, ProcessModel: core.ProcessLongLived,
-			Inputs:         []core.Port{{Port: "in"}},
-			Outputs:        []core.Port{{Port: "meta"}},
+			Inputs:  []core.Port{{Port: "in"}},
+			Outputs: []core.Port{{Port: "meta"}},
 			ParamsSchema: []byte(
 				`{"type":"object","properties":{"name":{"type":"string"},"f":{"type":"string"}}}`),
 		},
@@ -201,9 +201,9 @@ func TestLoopBody_BodyNodesGetParentScratch(t *testing.T) {
 			ID: "scratchfx", Version: "1.0", Summary: "scratch fixture",
 			Examples:       []core.ParamsExample{{Title: "default"}},
 			ExecutionModel: core.ExecutionBatch, ProcessModel: core.ProcessLongLived,
-			Inputs:         []core.Port{{Port: "in"}},
-			Outputs:        []core.Port{{Port: "meta"}},
-			ParamsSchema:   []byte(`{"type":"object","properties":{"name":{"type":"string"}}}`),
+			Inputs:       []core.Port{{Port: "in"}},
+			Outputs:      []core.Port{{Port: "meta"}},
+			ParamsSchema: []byte(`{"type":"object","properties":{"name":{"type":"string"}}}`),
 		},
 		Execute: func(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 			if job.ScratchRoot == "" {

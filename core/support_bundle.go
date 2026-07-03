@@ -5,6 +5,7 @@ package core
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"time"
 )
@@ -395,6 +396,59 @@ func shapeOf(v any) string {
 	default:
 		return "value"
 	}
+}
+
+// ---- Persistence: the stored redacted bundle -------------------------------
+
+// SupportBundleRecord is a persisted SupportBundle: the metadata a store indexes
+// on, plus the redacted bundle JSON in Payload. Payload is ALWAYS a serialized
+// SupportBundle (redacted by construction) — never the raw graph/run — which
+// NewSupportBundleRecord enforces by building it only from a SupportBundle.
+type SupportBundleRecord struct {
+	ID        string     `json:"id"`
+	Tenant    string     `json:"tenant"`
+	FlowID    string     `json:"flow_id"`
+	RunID     string     `json:"run_id,omitempty"` // optional — the run the bundle captured
+	Mode      RedactMode `json:"mode"`
+	Payload   []byte     `json:"payload"` // redacted SupportBundle JSON — never raw
+	CreatedBy string     `json:"created_by"`
+	CreatedAt time.Time  `json:"created_at"`
+}
+
+// NewSupportBundleRecord wraps an already-redacted SupportBundle into a
+// persistable record, deriving the indexed metadata (tenant, flow, run, mode)
+// from the bundle itself so they can't drift from the payload. Because it only
+// accepts a SupportBundle — which cannot hold a raw value — the stored Payload
+// is guaranteed redacted.
+func NewSupportBundleRecord(id, createdBy string, createdAt time.Time, b SupportBundle) (SupportBundleRecord, error) {
+	payload, err := json.Marshal(b)
+	if err != nil {
+		return SupportBundleRecord{}, err
+	}
+	rec := SupportBundleRecord{
+		ID:        id,
+		Tenant:    b.Flow.Tenant,
+		FlowID:    b.Flow.ID,
+		Mode:      b.Mode,
+		Payload:   payload,
+		CreatedBy: createdBy,
+		CreatedAt: createdAt,
+	}
+	if b.Run != nil {
+		rec.RunID = b.Run.RunID
+	}
+	return rec, nil
+}
+
+// BundleStore persists SupportBundleRecords. Implementations live in daemon/
+// (in-memory + Postgres), mirroring GrantStore / JobStore.
+type BundleStore interface {
+	// Create stores a record; a duplicate ID is an error.
+	Create(ctx context.Context, rec SupportBundleRecord) error
+	// Get returns the record, or ErrNotFound.
+	Get(ctx context.Context, id string) (SupportBundleRecord, error)
+	// ListForTenant returns every bundle record in tenant, newest first.
+	ListForTenant(ctx context.Context, tenant string) ([]SupportBundleRecord, error)
 }
 
 // scrubBundleSecrets replaces any known-secret pattern anywhere in the bundle's

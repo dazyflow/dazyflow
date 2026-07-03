@@ -142,6 +142,24 @@ type HTTPGateway struct {
 	// lowercased email → struct{}.
 	platformAdminGranted sync.Map
 
+	// Support feature (see TODO-support-tickets.md). SupportAgents is the
+	// runtime grant store deciding who gets core.SupportAgentRole at session
+	// issue; Grants persists AccessGrants (the consented, time-boxed views);
+	// Bundles persists redacted SupportBundleRecords. All nil-safe: nil leaves
+	// the support endpoints returning 501/empty, and no agent is elevated.
+	SupportAgents SupportAgentStore
+	Grants        core.GrantStore
+	Bundles       core.BundleStore
+	// SupportGrantTTL is how long an approved AccessGrant stays valid. Zero
+	// falls back to defaultSupportGrantTTL (4h).
+	SupportGrantTTL time.Duration
+	// supportAgentGranted mirrors platformAdminGranted: once-per-email audit of
+	// the support-agent elevation.
+	supportAgentGranted sync.Map
+	// supportNow is the clock for grant expiry/decision timestamps; nil = time.Now.
+	// Set in tests for deterministic expiry.
+	supportNow func() time.Time
+
 	// UpdateURL is the canonical deployment's public service descriptor
 	// (GET /api/v1), whose build.version the admin System section reads as
 	// "the latest released version" to compare against this build. No auth
@@ -478,6 +496,14 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// gdpr_http.go.
 	mux.HandleFunc("GET /api/v1/me/export", h.requireAuth(h.exportHandler))
 	mux.HandleFunc("DELETE /api/v1/me/account", h.requireAuth(h.deleteMyAccountHandler))
+	// Support feature (see TODO-support-tickets.md): a support agent requests a
+	// scoped, read-only grant; an org admin approves/denies/revokes; the agent
+	// reads the redacted bundle. All gated + audited into the org's log.
+	mux.HandleFunc("POST /api/v1/support/grants", h.requireAuth(h.requestGrant))
+	mux.HandleFunc("GET /api/v1/support/grants", h.requireAuth(h.listGrants))
+	mux.HandleFunc("POST /api/v1/support/grants/{id}/decide", h.requireAuth(h.decideGrant))
+	mux.HandleFunc("POST /api/v1/support/grants/{id}/revoke", h.requireAuth(h.revokeGrant))
+	mux.HandleFunc("GET /api/v1/support/flows/{tenant}/{workspace}/{flow_id}", h.requireAuth(h.supportView))
 	// Self-service rectification (Art. 16): change own password / email.
 	mux.HandleFunc("POST /api/v1/me/password", h.requireAuth(h.changePasswordHandler))
 	mux.HandleFunc("POST /api/v1/me/email", h.requireAuth(h.changeEmailHandler))
@@ -1307,7 +1333,7 @@ func (h *HTTPGateway) signIn(rw http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	sess, token, err := auth.IssueSession(r.Context(), h.Sessions, h.elevatePlatformAdmin(r.Context(), user), h.sessionTTL())
+	sess, token, err := auth.IssueSession(r.Context(), h.Sessions, h.elevateSessionRoles(r.Context(), user), h.sessionTTL())
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("issue session: %v", err))
 		return
@@ -1363,6 +1389,38 @@ func (h *HTTPGateway) elevatePlatformAdmin(ctx context.Context, u auth.User) aut
 // store (not wired) means no runtime grants exist.
 func (h *HTTPGateway) isPlatformAdminGranted(email string) bool {
 	return h.PlatformAdminGrants != nil && h.PlatformAdminGrants.Granted(email)
+}
+
+// elevateSessionRoles applies every session-issue role elevation in one place,
+// so the ~5 issue sites (sign-in, signup, SSO, TOTP) call a single chokepoint.
+func (h *HTTPGateway) elevateSessionRoles(ctx context.Context, u auth.User) auth.User {
+	return h.elevateSupportAgent(ctx, h.elevatePlatformAdmin(ctx, u))
+}
+
+// elevateSupportAgent stamps core.SupportAgentRole onto a session whose email
+// holds a runtime support-agent grant (there is no env-allowlist layer for
+// support). Mirrors elevatePlatformAdmin: baked in at issue time, so a grant
+// takes effect on the next session issue and a revoke once live sessions drop.
+// No-op when unset or already present. The role itself grants no ambient
+// access — it only unlocks requesting an AccessGrant and the support-view
+// capability (AuthorizeGraphSupportView).
+func (h *HTTPGateway) elevateSupportAgent(ctx context.Context, u auth.User) auth.User {
+	if h.SupportAgents == nil || !h.SupportAgents.Granted(u.Email) {
+		return u
+	}
+	for _, r := range u.Roles {
+		if r.Has(core.PermSupportAgent) {
+			return u
+		}
+	}
+	u.Roles = append(append([]core.Role(nil), u.Roles...), core.SupportAgentRole())
+	// Record the escalation once per email per process (privileged-access event).
+	key := strings.ToLower(strings.TrimSpace(u.Email))
+	if _, seen := h.supportAgentGranted.LoadOrStore(key, struct{}{}); !seen {
+		h.audit(ctx, core.Principal{Tenant: u.Tenant, Subject: u.Email},
+			"support_agent.granted", u.Email, "source=runtime_grant")
+	}
+	return u
 }
 
 // isPlatformAdmin reports whether email is a platform admin by EITHER layer —

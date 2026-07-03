@@ -1282,7 +1282,35 @@
       "removeWarning": "They lose access to this organization. Their account is not deleted."
     },
     "cardEmailTemplatesTitle": "Email templates",
-    "cardEmailTemplatesDesc": "Reusable HTML layouts the email drops wrap messages in."
+    "cardEmailTemplatesDesc": "Reusable HTML layouts the email drops wrap messages in.",
+    "cardSupportTitle": "Support access",
+    "cardSupportDesc": "Approve or deny read-only access support requests for a flow.",
+    "support": {
+      "needAdmin": "You need <0>organization:admin</0> to manage support access.",
+      "title": "Support access",
+      "subtitle": "When support needs to look at a flow to help you, they request read-only access here. Secrets and run data always stay hidden.",
+      "notEnabled": "Support access is not enabled on this deployment.",
+      "pendingHead": "Pending requests",
+      "noPending": "No pending access requests.",
+      "historyHead": "Active & past",
+      "requestLine": "{{agent}} wants to view '{{flow}}' — read-only",
+      "requestedAt": "requested {{date}}",
+      "ticket": "ticket {{id}}",
+      "expiresAt": "expires {{date}}",
+      "decidedBy": "by {{who}}",
+      "reassure": "Secrets stay hidden and run data is redacted. You can revoke access at any time.",
+      "approve": "Approve",
+      "deny": "Deny",
+      "revoke": "Revoke",
+      "revokeConfirm": "Revoke {{agent}}'s access to '{{flow}}' now?",
+      "status": {
+        "requested": "Pending",
+        "approved": "Active",
+        "denied": "Denied",
+        "revoked": "Revoked",
+        "expired": "Expired"
+      }
+    }
   },
   "results": {
     "title": "Collections",

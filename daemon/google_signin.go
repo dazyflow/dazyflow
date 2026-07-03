@@ -417,7 +417,7 @@ func (h *HTTPGateway) googleSignInCallback(rw http.ResponseWriter, r *http.Reque
 		h.redirectToTOTP(rw, r, st, challenge)
 		return
 	}
-	sess, token, err := auth.IssueSession(r.Context(), h.Sessions, h.elevatePlatformAdmin(r.Context(), sessUser), h.sessionTTL())
+	sess, token, err := auth.IssueSession(r.Context(), h.Sessions, h.elevateSessionRoles(r.Context(), sessUser), h.sessionTTL())
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("issue session: %v", err))
 		return

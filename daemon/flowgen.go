@@ -517,7 +517,6 @@ func finalizeTriggers(g core.Graph, tz string) (core.Graph, []core.LintIssue) {
 	return g, warns
 }
 
-
 // formatLintErrors renders the LintError-severity findings as a bullet list for
 // the model's repair turn (warnings are advisory and omitted).
 func formatLintErrors(issues []core.LintIssue) string {

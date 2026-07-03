@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import type {
+  AccessGrant,
   APIKeySummary,
   AuditEvent,
   DropAdjacency,
@@ -1911,6 +1912,18 @@ export const api = {
       "DELETE",
       `/admin/invitations/${encodeURIComponent(inviteToken)}`,
     ),
+
+  // Support feature: the org-admin consent surface. listSupportGrants returns
+  // every access grant scoped to the caller's tenant; decide/revoke act on one.
+  // A 501 means support isn't enabled on this deployment.
+  listSupportGrants: (token: string) =>
+    request<{ grants: AccessGrant[] }>(token, "GET", "/support/grants"),
+  decideSupportGrant: (token: string, id: string, decision: "approve" | "deny") =>
+    request<AccessGrant>(token, "POST", `/support/grants/${encodeURIComponent(id)}/decide`, {
+      decision,
+    }),
+  revokeSupportGrant: (token: string, id: string) =>
+    request<{ status: string }>(token, "POST", `/support/grants/${encodeURIComponent(id)}/revoke`),
 
   // Platform signup-invites (platform:admin only): invite a specific
   // email to create its own account on a signup-disabled deployment.

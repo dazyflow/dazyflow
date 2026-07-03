@@ -85,9 +85,9 @@ func newFailureNotifyHarness(t *testing.T) *Service {
 // the host's internal network. The fake server is on loopback, so an unblocked
 // notifier would POST to it; the guard must stop that.
 func TestFailureNotify_BlocksPrivateWebhook(t *testing.T) {
-	hfnet.SetAllowPrivateEgress(false)              // production default
-	defer hfnet.SetAllowPrivateEgress(true)         // restore the package default
-	fw := newFakeWebhook(t)                          // listens on 127.0.0.1
+	hfnet.SetAllowPrivateEgress(false)      // production default
+	defer hfnet.SetAllowPrivateEgress(true) // restore the package default
+	fw := newFakeWebhook(t)                 // listens on 127.0.0.1
 	svc := newFailureNotifyHarness(t)
 
 	graph := core.Graph{

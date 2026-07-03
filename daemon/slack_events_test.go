@@ -17,8 +17,8 @@ import (
 	"time"
 
 	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/engine"
 	_ "git.sr.ht/~klahr/dazyflow/drops/slack"
+	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
 // signSlackRequest produces the X-Slack-Signature header value Slack

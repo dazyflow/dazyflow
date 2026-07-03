@@ -175,6 +175,20 @@ type GrantStore interface {
 
 ## Auth changes (grounded in existing `core/authz.go` + `core/rbac.go`)
 
+**Status: the auth/grant core layer is DONE** (`core/rbac.go`,
+`core/support_grant.go`, `core/authz.go`; tests in `core/support_grant_test.go`).
+Shipped: `PermSupportAgent` + `SupportAgentRole()` (items 1–2); the `AccessGrant`
+type + `GrantStatus` state machine with `IsActive`/`CanDecide`/`CanRevoke`
+(data-model section); and `AuthorizeGraphSupportView(p, graph, grant, now)`
+(item 3) — capability-based, NOT routed through `RequireTenant`, read-only only.
+Verified: approved+unexpired ok; expired/denied/revoked/requested/wrong-agent/
+wrong-flow/wrong-tenant/not-an-agent all rejected; the expiry boundary is
+exclusive; a support agent has no ambient access (RequireTenant + Run/Edit still
+reject). Items 4–6 (no cross-tenant short-circuit — confirmed by construction;
+serve the redacted view; audit into the org log) are enforced at the daemon
+call sites, still TODO. The `GrantStore`/`TicketStore` implementations are still
+TODO.
+
 Existing model: `core.Principal{Subject,Tenant,Workspace,Roles,Extras}`;
 `PermPlatformAdmin = "platform:admin"` is the cross-tenant super-admin and
 `RequireTenant` (authz.go:72) short-circuits for it. `AuthorizeGraphView/Run/Edit`
@@ -262,10 +276,40 @@ check, never tenant-crossing.
 ## Phasing
 
 1. **Bundle + grant only (no ticket UI):** ~~`BuildSupportBundle`~~ (done),
-   then a daemon adapter `JobRecord`s → `RunSnapshot`, persist
-   `SupportBundleRecord`, `AccessGrant` request/approve/expire/revoke,
-   `AuthorizeGraphSupportView`, support-view endpoint serving the redacted view,
-   audit wiring. Pipe to whatever support channel exists today.
+   ~~`AccessGrant` type + `AuthorizeGraphSupportView` + `PermSupportAgent`~~ (done),
+   ~~`RunSnapshotFromRecords` adapter~~ (done, `daemon/support_bundle.go`),
+   ~~`GrantStore` + `MemGrantStore`~~ (done, `daemon/support_grant_store.go`),
+   ~~`SupportBundleRecord` + `BundleStore` + `MemBundleStore`~~ (done),
+   ~~`SupportAgentStore` (runtime agent provisioning, Mem + Postgres)~~ (done),
+   ~~session elevation (`elevateSupportAgent`/`elevateSessionRoles`)~~ (done),
+   ~~support HTTP endpoints + audit wiring~~ (done, `daemon/support_routes.go`):
+   `POST /api/v1/support/grants` (agent requests), `GET /api/v1/support/grants`
+   (org-admin consent list), `POST …/{id}/decide` (approve/deny, sets a 4h box),
+   `POST …/{id}/revoke` (admin or the agent), and
+   `GET /api/v1/support/flows/{tenant}/{workspace}/{flow_id}` (grant-gated
+   redacted view via `LoadGraphForSupport` + `RunSnapshotFromRecords` +
+   `BuildSupportBundle`). Wired in `main.go` behind **`DAZYFLOW_SUPPORT_ENABLED`**
+   (off by default; inert until an operator grants an agent). Every action audits
+   into the org's log.
+
+   ~~Postgres impls of `GrantStore` + `BundleStore`~~ (done: `PgGrantStore`,
+   `PgBundleStore`; `main.go` now wires all three support stores on Postgres,
+   so approvals survive restart and work multi-node; gated Pg tests mirror the
+   in-memory lifecycle, skipped without `DAZYFLOW_TEST_DB`).
+
+   ~~in-app consent surface (frontend)~~ (done): `web/src/pages/AdminSupport.tsx`
+   at `/admin/support` (org-admin gated), listing grants with approve/deny/revoke,
+   plain-language consent copy, and a "secrets stay hidden" reassurance; wired
+   into the admin nav card grid + `api.ts` (`listSupportGrants`/`decideSupportGrant`/
+   `revokeSupportGrant`) + the `AccessGrant` type + `en.json` `admin.support.*`.
+
+   ~~graph-backed integration test of the support-view endpoint~~ (done:
+   `daemon/support_view_test.go` — over real HTTP + a seeded graph: an active
+   grant unlocks a redacted bundle, the pasted secret never appears, structure
+   survives, and no-grant/wrong-agent/non-support/revoked all reject).
+
+   **Phase 1 is complete.** Phase 2 (tickets + chat) still awaits the
+   native-vs-external-helpdesk decision (see Open decisions).
 2. **Minimal ticket + chat:** `Ticket`/`TicketMessage` stores + endpoints, chat
    with secret-scrub, grant prompt lives on the ticket, bundle auto-attached.
 3. **Support dashboard:** cross-org queue, assignment, role-separation polish.
@@ -284,6 +328,21 @@ check, never tenant-crossing.
 - Bundle redaction tests (see Prerequisite section).
 
 ---
+
+## Decisions taken (2026-07-03)
+
+- **Agent provisioning: runtime grant store** (not an env allowlist). Built:
+  `SupportAgentStore` (`daemon/supportagent.go`) with Mem + Postgres impls,
+  keyed on email, cached snapshot + refresh loop — a 1:1 mirror of
+  `platformadmin.go`. NO env-allowlist bootstrap: support staff are managed
+  entirely at runtime. **Still TODO:** wire session-issue elevation (append
+  `core.SupportAgentRole()` when the email is `Granted`, mirroring
+  `elevatePlatformAdmin`), and an admin surface to grant/revoke.
+- **Default grant TTL: 4 hours**, configurable. Apply when the endpoint mints
+  an approved grant's `ExpiresAt`.
+- **Consent notification: in-app only** for the first cut — grant requests
+  surface on an in-app consent page/badge for org admins; no external delivery
+  (webhook/email) yet.
 
 ## Open decisions (need answers before/while building)
 

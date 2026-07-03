@@ -1346,6 +1346,30 @@ func buildGateway(ctx context.Context, d gatewayDeps) {
 	} else {
 		gw.PlatformAdminGrants = grants
 	}
+	// Support feature (TODO-support-tickets.md): opt-in per deployment. When on,
+	// wire the Postgres-backed support-agent, grant, and bundle stores. Off by
+	// default, so a self-host with no vendor support staff leaves the whole
+	// surface inert: the endpoints return 501 and no session is elevated to
+	// support-agent. Even when enabled, the surface stays dormant until an
+	// operator grants a support agent.
+	if envBool("DAZYFLOW_SUPPORT_ENABLED", false) {
+		agents, err := daemon.NewPgSupportAgentStore(ctx, d.pgPool)
+		if err != nil {
+			log.Fatalf("postgres support-agent store: %v", err)
+		}
+		grantStore, err := daemon.NewPgGrantStore(ctx, d.pgPool)
+		if err != nil {
+			log.Fatalf("postgres support-grant store: %v", err)
+		}
+		bundleStore, err := daemon.NewPgBundleStore(ctx, d.pgPool)
+		if err != nil {
+			log.Fatalf("postgres support-bundle store: %v", err)
+		}
+		gw.SupportAgents = agents
+		gw.Grants = grantStore
+		gw.Bundles = bundleStore
+		log.Print("support feature enabled (DAZYFLOW_SUPPORT_ENABLED)")
+	}
 	// Opt-in (compliance) auditing of secret *reads*. Off by default because
 	// secret resolution runs on every node execution — high volume. When on,
 	// each successful Get emits a "secret.read" event (name + actor, no value).
