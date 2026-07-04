@@ -82,7 +82,8 @@
     "yes": "Yes",
     "no": "No",
     "edit": "Edit",
-    "save": "Save"
+    "save": "Save",
+    "contactSupport": "Contact support"
   },
   "commentNode": {
     "delete": "Delete comment",
@@ -104,6 +105,7 @@
     "files": "Files",
     "approvals": "Approvals",
     "apps": "Apps",
+    "support": "Support",
     "admin": "Admin",
     "toggleNav": "toggle navigation",
     "closeMenu": "Close menu",
@@ -1471,6 +1473,14 @@
     "failedAt": "Failed at \"{{node}}\"",
     "failedAtAfter": "Failed at \"{{node}}\" after {{count}} attempts",
     "needsYou": "This drop won't retry on its own — fix the cause above, then use Retry from failure.",
+    "getHelp": "Get help with this run",
+    "helpSubject": "Dazyflow: help with flow \"{{flow}}\"",
+    "helpIntro": "I need help with a flow run that failed. Please keep the details below — they help support find the exact run.\n\n(Describe what you were trying to do here.)",
+    "helpFlow": "Flow: {{flow}}",
+    "helpRun": "Run ID: {{id}}",
+    "helpStep": "Failed step: {{step}}",
+    "helpCode": "Error code: {{code}}",
+    "helpWhat": "What happened: {{headline}}",
     "willRetry": "Auto-retrying — next attempt in {{when}}",
     "willRetrySoon": "Auto-retrying shortly…",
     "statusAwaiting": "waiting for approval",

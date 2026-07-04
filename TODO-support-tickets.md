@@ -308,10 +308,32 @@ check, never tenant-crossing.
    grant unlocks a redacted bundle, the pasted secret never appears, structure
    survives, and no-grant/wrong-agent/non-support/revoked all reject).
 
-   **Phase 1 is complete.** Phase 2 (tickets + chat) still awaits the
-   native-vs-external-helpdesk decision (see Open decisions).
-2. **Minimal ticket + chat:** `Ticket`/`TicketMessage` stores + endpoints, chat
-   with secret-scrub, grant prompt lives on the ticket, bundle auto-attached.
+   **Phase 1 is complete.**
+2. **Minimal ticket + chat — DONE (native).** The native-vs-external decision
+   was resolved in favour of building it natively (see Open decisions). Shipped:
+   - `core.Ticket`/`TicketMessage`/`TicketStatus`/`AuthorKind` + `core.TicketStore`
+     (`core/ticket.go`); `core.ScrubSecrets` reuses the linter's `knownSecretValue`
+     detector so chat + bundles share one definition of "a secret".
+   - `MemTicketStore` + `PgTicketStore` (`daemon/ticket_store.go`, two tables:
+     `support_tickets` + `support_ticket_messages`); gated Pg test mirrors the
+     in-memory lifecycle (`daemon/ticket_store_test.go`).
+   - HTTP surface (`daemon/ticket_routes.go`), gated by `DAZYFLOW_SUPPORT_ENABLED`:
+     end-user `POST/GET /api/v1/me/support/tickets[/{id}[/messages]]` (own tenant,
+     PermGraphRun); agent `GET /api/v1/support/tickets[/{id}]`,
+     `POST …/{id}/messages`, `POST …/{id}/status` (PermSupportAgent, cross-tenant
+     queue). Chat bodies are secret-scrubbed on ingest; a redacted
+     `SupportBundleRecord` is **auto-attached** on filing when a flow/run is
+     referenced (so support diagnoses the common case WITHOUT a live grant); a
+     grant request anchored to a ticket drops a system note in the thread. Every
+     action audits into the org log. End-to-end HTTP test in
+     `daemon/ticket_routes_test.go`.
+   - `whoami` now returns `support_tickets_enabled` so the UI hides the surface
+     when off.
+   - Frontend: `web/src/pages/SupportTickets.tsx` (user list, agent queue, shared
+     chat thread), `web/src/components/ReportProblemModal.tsx` (filed from the
+     run-failure banner with the failing run referenced), api.ts methods + types
+     + routes (`/support`, `/support/queue[/:id]`, `/support/:id`) + nav entry +
+     en/sv strings.
 3. **Support dashboard:** cross-org queue, assignment, role-separation polish.
 
 ---
@@ -349,10 +371,10 @@ check, never tenant-crossing.
 
 ## Open decisions (need answers before/while building)
 
-- **Build native ticket/chat, or integrate an external helpdesk** (Zendesk/Plain/
-  Intercom) and build ONLY the bundle + consented view natively? (My
-  recommendation in discussion: build the trust primitives natively, defer/avoid
-  rebuilding the inbox. This is the main fork.)
+- ~~**Build native ticket/chat, or integrate an external helpdesk**~~ — RESOLVED
+  (2026-07-04): built natively. The trust primitives (redaction, consent) already
+  lived here, and the ticket/chat layer is small enough that a native inbox beat
+  wiring a third party through the redaction boundary. Phase 2 is now shipped.
 - Where to store bundles/blobs — reuse an existing store or new one?
 - Realtime chat transport — reuse the run SSE `Bus`?
 - How the org is notified of a grant request — reuse `FailureNotify` webhook,

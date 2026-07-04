@@ -19,6 +19,18 @@ Releasing: move the entries below from `[Unreleased]` under a new
 
 ### Added
 
+- **Support tickets + chat** (native, Phase 2 of the Support feature) — an org
+  member can file a ticket about a flow and chat with support in-app; support
+  agents work a cross-tenant queue and reply/resolve. Filing auto-attaches a
+  **redacted** diagnostic bundle for the referenced flow/run (structure + error,
+  no secrets or run data), so support can help the common case without a live
+  read-only grant. Chat bodies are secret-scrubbed on ingest. New "Report a
+  problem" action on the run-failure page and a Support section in the nav.
+  Gated by `DAZYFLOW_SUPPORT_ENABLED`; `whoami` exposes `support_tickets_enabled`.
+- **Actionable "contact support"** — the operator-configured support contact is
+  now a real link beyond the Connections page: on generic errors (flow editor)
+  and, prefilled with run diagnostics, on the run-failure page.
+
 - **Fortnox connector** (`drops/fortnox/`) — Sweden's dominant SMB accounting:
   create customer, create invoice, list invoices (paid-invoice poll source),
   and a customer picker. OAuth 2.0 via `client_secret_basic` (new daemon

@@ -9,6 +9,7 @@ import { explainApiError } from "../lib/explainApiError";
 import { useAuth } from "../auth";
 import { ButtonLink } from "../components/Button";
 import { CredentialsManager } from "../components/CredentialsManager";
+import { supportContactHref } from "../lib/supportContact";
 
 // Secrets is the tenant's credential store: hand-entered values your
 // flows reference as ${secret.NAME} (API keys, database URLs), plus an
@@ -130,27 +131,4 @@ function SetupIncompleteBanner({
       )}
     </div>
   );
-}
-
-// supportContactHref turns an operator-set contact string into the
-// right `href`. We accept three shapes so the operator doesn't have
-// to think about escaping:
-//   - "support@acme.com"          → mailto:support@acme.com
-//   - "https://acme.com/help"     → as-is
-//   - "http://acme.com/help"      → as-is
-// Anything else returns undefined, which falls back to the generic
-// "ask your admin" copy (no clickable link).
-function supportContactHref(raw?: string): string | undefined {
-  const trimmed = raw?.trim();
-  if (!trimmed) return undefined;
-  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-    return trimmed;
-  }
-  if (trimmed.startsWith("mailto:")) return trimmed;
-  // Email heuristic: `local@domain` with no whitespace. Good enough
-  // for the operator-input use case; this isn't an RFC validator.
-  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
-    return `mailto:${trimmed}`;
-  }
-  return undefined;
 }

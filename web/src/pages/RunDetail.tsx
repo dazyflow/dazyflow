@@ -3,7 +3,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, AlertCircle, ChevronDown, ChevronRight, RotateCw, RotateCcw, Square } from "lucide-react";
+import { ArrowLeft, AlertCircle, ChevronDown, ChevronRight, RotateCw, RotateCcw, Square, LifeBuoy } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import { api, APIError } from "../api";
@@ -13,6 +13,8 @@ import { ConfirmModal } from "../components/ConfirmModal";
 import { Callout } from "../components/Callout";
 import { explainRunError } from "../lib/explainRunError";
 import { explainApiError } from "../lib/explainApiError";
+import { supportContactWithContext } from "../lib/supportContact";
+import { ReportProblemModal } from "../components/ReportProblemModal";
 import type { Graph, JobRecord, JobStatus, Manifest, Ref, RunLogEntry } from "../types";
 import { formatDateTime } from "../lib/datetime";
 
@@ -330,6 +332,7 @@ export function RunDetail() {
       {run.Status === "failed" && (
         <RunFailureBanner
           run={run}
+          flowName={graph?.name || run.GraphID}
           failedNodeLabel={failedNode ? nodeLabel(failedNode.NodeID) : undefined}
           failedNodeAttempts={failedNode?.Attempt}
         />
@@ -697,20 +700,51 @@ function SummaryRow({ label, value }: { label: string; value: React.ReactNode })
 //      this layer — no fake headline.
 function RunFailureBanner({
   run,
+  flowName,
   failedNodeLabel,
   failedNodeAttempts,
 }: {
   run: JobRecord;
+  flowName: string | undefined;
   failedNodeLabel: string | undefined;
   failedNodeAttempts: number | undefined;
 }) {
   const { t } = useTranslation();
+  const { me } = useAuth();
+  const [reporting, setReporting] = useState(false);
   const explanation = explainRunError(
     run.Result?.error?.code,
     run.Result?.error?.message,
   );
   const action = explanation?.action;
   const isExternal = action?.href.startsWith("http") || false;
+  // "Get help with this run": when the operator configured a support
+  // contact, offer a real escalation path for the case the fix-it button
+  // above didn't resolve — or when there was no friendly headline at all.
+  // For an email contact we prefill a report with the safe identifiers
+  // support needs to find the run (flow, run ID, failed step, error code,
+  // the plain-English headline) — never raw run data, inputs, or secrets.
+  const errCode = run.Result?.error?.code;
+  const headlineText = explanation
+    ? t(explanation.headlineKey, explanation.headlineValues ?? {})
+    : undefined;
+  const flowLabel = flowName || run.GraphID;
+  const helpBody = [
+    t("runDetail.helpIntro"),
+    "",
+    t("runDetail.helpFlow", { flow: flowLabel }),
+    t("runDetail.helpRun", { id: run.ID }),
+    failedNodeLabel ? t("runDetail.helpStep", { step: failedNodeLabel }) : null,
+    errCode ? t("runDetail.helpCode", { code: errCode }) : null,
+    headlineText ? t("runDetail.helpWhat", { headline: headlineText }) : null,
+  ]
+    .filter((line): line is string => line !== null)
+    .join("\n");
+  const helpHref = supportContactWithContext(me?.support_contact, {
+    subject: t("runDetail.helpSubject", { flow: flowLabel }),
+    body: helpBody,
+  });
+  const helpExternal = helpHref ? !helpHref.startsWith("mailto:") : false;
   // A failed run is terminal — the engine already exhausted any automatic
   // retries (a node that COULD still retry leaves the run "running", not
   // "failed"). Say so, and name how many attempts it took, so the user knows
@@ -773,7 +807,63 @@ function RunFailureBanner({
           </details>
         )}
         <div className="run-error-needsyou">{t("runDetail.needsYou")}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 8, flexWrap: "wrap" }}>
+          {/* Native ticket path (Tier 1): files a ticket with a redacted
+              diagnostic bundle auto-attached. Shown when the deployment wired
+              the ticket surface. */}
+          {me?.support_tickets_enabled && (
+            <button
+              type="button"
+              className="run-error-help"
+              onClick={() => setReporting(true)}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                fontSize: "var(--text-sm)",
+                fontWeight: 600,
+                background: "none",
+                border: "none",
+                padding: 0,
+                cursor: "pointer",
+                color: "inherit",
+              }}
+            >
+              <LifeBuoy size={14} style={{ flexShrink: 0 }} />
+              {t("runDetail.reportProblem", { defaultValue: "Report a problem" })}
+            </button>
+          )}
+          {/* Fallback human channel: the operator-configured support contact
+              (email/URL), prefilled with the run diagnostics. */}
+          {helpHref && (
+            <a
+              className="run-error-help"
+              href={helpHref}
+              {...(helpExternal
+                ? { target: "_blank", rel: "noreferrer noopener" }
+                : {})}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                fontSize: "var(--text-sm)",
+                fontWeight: 600,
+              }}
+            >
+              <LifeBuoy size={14} style={{ flexShrink: 0 }} />
+              {t("runDetail.getHelp")}
+            </a>
+          )}
+        </div>
       </div>
+      {reporting && (
+        <ReportProblemModal
+          flowId={run.GraphID}
+          runId={run.ID}
+          flowName={flowName}
+          onClose={() => setReporting(false)}
+        />
+      )}
     </div>
   );
 }

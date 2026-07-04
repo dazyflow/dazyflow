@@ -11612,3 +11612,147 @@ button:active,
   overflow-wrap: normal;
   overflow-x: auto;
 }
+
+/* ---- Support tickets + chat -------------------------------------------------
+   The native support surface (SupportTickets.tsx / ReportProblemModal.tsx).
+   Reuses the app's card/user-list vocabulary; these rules add the chat thread,
+   the composer, and a couple of form helpers the modals need. */
+.input {
+  width: 100%;
+  box-sizing: border-box;
+}
+.field-label {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: var(--space-1);
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+.ticket-thread {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: var(--space-4) 0;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: var(--space-2);
+}
+.ticket-bubble {
+  align-self: flex-start;
+  max-width: 80%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  padding: var(--space-2) var(--space-3);
+}
+.ticket-bubble.mine {
+  align-self: flex-end;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.ticket-bubble-meta {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+.ticket-bubble-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ticket-system-note {
+  align-self: center;
+  font-size: var(--text-xs);
+  color: var(--muted);
+  font-style: italic;
+}
+.ticket-composer {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-end;
+}
+.ticket-composer textarea {
+  flex: 1;
+  resize: vertical;
+}
+
+/* ---- Support bundle view (BundleView.tsx) --------------------------------- */
+.bundle-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.bundle-note {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border-radius: var(--r-1);
+  padding: var(--space-1) var(--space-2);
+}
+.bundle-section-head {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: var(--space-1);
+}
+.bundle-error {
+  margin-top: var(--space-1);
+}
+.bundle-error-code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--danger);
+}
+.bundle-error-msg {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.bundle-nodes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.bundle-node {
+  border: 1px solid var(--border);
+  border-radius: var(--r-1);
+  padding: var(--space-1) var(--space-2);
+}
+.bundle-node-main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.bundle-node-id {
+  font-weight: 600;
+}
+.bundle-node-module {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+.bundle-node-err {
+  font-size: var(--text-xs);
+  color: var(--danger);
+  margin-top: 2px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.bundle-issues {
+  margin: 0;
+  padding-left: var(--space-4);
+  font-size: var(--text-sm);
+}
+.bundle-raw pre {
+  max-height: 40vh;
+  overflow: auto;
+  font-size: var(--text-xs);
+  background: var(--surface);
+  border-radius: var(--r-1);
+  padding: var(--space-2);
+}

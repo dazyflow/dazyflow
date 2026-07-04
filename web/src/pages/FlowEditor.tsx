@@ -121,6 +121,7 @@ import { CanvasContextMenu, type ContextMenuItem } from "../components/CanvasCon
 import { PromptModal } from "../components/PromptModal";
 import { PublishLabelModal } from "../components/PublishLabelModal";
 import { Button } from "../components/Button";
+import { ContactSupportLink } from "../components/ContactSupportLink";
 import { useResourceResolver } from "./useResourceResolver";
 
 // Custom node-types registry. React Flow caches by reference, so this
@@ -4643,7 +4644,15 @@ function EditorInner() {
               pointerEvents: "auto",
             }}
           >
-            <span style={{ flex: 1 }}>{error}</span>
+            <span style={{ flex: 1 }}>
+              {error}{" "}
+              {/* Turn the "…contact support" this message may carry into a
+                  real link when the operator configured one. Renders nothing
+                  otherwise, so no dead affordance appears. */}
+              <ContactSupportLink
+                style={{ color: "var(--danger)", textDecoration: "underline", whiteSpace: "nowrap" }}
+              />
+            </span>
             <Button
               variant="ghost"
               onClick={() => setError(null)}

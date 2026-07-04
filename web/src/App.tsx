@@ -37,6 +37,7 @@ import { AdminUsers } from "./pages/AdminUsers";
 import { AdminSupport } from "./pages/AdminSupport";
 import { SupportAgentHome } from "./pages/SupportAgentHome";
 import { SupportFlowView } from "./pages/SupportFlowView";
+import { SupportTickets, SupportQueue, TicketThread } from "./pages/SupportTickets";
 import { AdminAudit } from "./pages/AdminAudit";
 import { AdminWorkspace } from "./pages/AdminWorkspace";
 import { AdminOrgSSO } from "./pages/AdminOrgSSO";
@@ -123,8 +124,15 @@ export function App() {
         <Route path="/results" element={<Results />} />
         <Route path="/runs/:runID" element={<RunDetail />} />
         <Route path="/approvals" element={<Approvals />} />
-        <Route path="/support" element={<SupportAgentHome />} />
+        {/* /support is role-sensitive: a support agent lands on their
+            flow-view home (grant-gated redacted views), a regular user on
+            their own tickets. The agent ticket queue lives under /queue; the
+            grant-gated flow view keeps its own deep path. */}
+        <Route path="/support" element={<SupportRoot />} />
+        <Route path="/support/queue" element={<SupportQueue />} />
+        <Route path="/support/queue/:id" element={<TicketThread mode="agent" />} />
         <Route path="/support/flows/:tenant/:workspace/:flowId" element={<SupportFlowView />} />
+        <Route path="/support/:id" element={<TicketThread mode="user" />} />
         <Route path="/usage" element={<Usage />} />
         {/* /plans folded into the merged Plan & usage page; keep the path
             as a redirect so old links and the account menu still resolve. */}
@@ -177,6 +185,15 @@ const HAS_FLOWS_KEY = "dazyflow.hasFlows";
 //     return visit instead of forcing it.
 //   - Otherwise (no flag yet), default to /welcome — the first-run
 //     wizard is the right surface for someone with no flows yet.
+// SupportRoot renders the right /support landing per role: a support agent sees
+// their flow-view home (grant-gated redacted views); everyone else sees their
+// own tickets. Keeping both at /support means upstream's back-links (Support
+// FlowView → /support) and the user's ticket links all resolve unchanged.
+function SupportRoot() {
+  const { hasPerm } = useAuth();
+  return hasPerm("support:agent") ? <SupportAgentHome /> : <SupportTickets />;
+}
+
 function RootRedirect() {
   const loc = useLocation();
   const { me, token, activeTenant, activeWorkspace } = useAuth();

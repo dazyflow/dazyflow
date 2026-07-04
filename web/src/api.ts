@@ -3,8 +3,11 @@
 
 import type {
   AccessGrant,
-  SupportAgentGrant,
+  Ticket,
+  TicketView,
+  TicketStatus,
   SupportBundle,
+  SupportAgentGrant,
   APIKeySummary,
   AuditEvent,
   DropAdjacency,
@@ -1962,6 +1965,48 @@ export const api = {
       `/support/flows/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/${encodeURIComponent(flowId)}${qs ? `?${qs}` : ""}`,
     );
   },
+
+  // Support tickets — end-user surface (own tenant). createTicket optionally
+  // references a flow/run; the server auto-attaches a redacted diagnostic
+  // bundle. Chat bodies are secret-scrubbed server-side. 501 = support off.
+  createTicket: (
+    token: string,
+    body: { subject: string; flow_id?: string; run_id?: string; message?: string },
+  ) => request<Ticket>(token, "POST", "/me/support/tickets", body),
+  listMyTickets: (token: string, status?: TicketStatus) =>
+    request<{ tickets: Ticket[] }>(
+      token,
+      "GET",
+      "/me/support/tickets" + (status ? `?status=${encodeURIComponent(status)}` : ""),
+    ),
+  getMyTicket: (token: string, id: string) =>
+    request<TicketView>(token, "GET", `/me/support/tickets/${encodeURIComponent(id)}`),
+  getMyTicketBundle: (token: string, id: string) =>
+    request<SupportBundle>(token, "GET", `/me/support/tickets/${encodeURIComponent(id)}/bundle`),
+  postMyTicketMessage: (token: string, id: string, message: string) =>
+    request<TicketView>(token, "POST", `/me/support/tickets/${encodeURIComponent(id)}/messages`, {
+      message,
+    }),
+
+  // Support tickets — agent surface (cross-tenant queue).
+  listTicketQueue: (token: string, status?: TicketStatus) =>
+    request<{ tickets: Ticket[] }>(
+      token,
+      "GET",
+      "/support/tickets" + (status ? `?status=${encodeURIComponent(status)}` : ""),
+    ),
+  getSupportTicket: (token: string, id: string) =>
+    request<TicketView>(token, "GET", `/support/tickets/${encodeURIComponent(id)}`),
+  getSupportTicketBundle: (token: string, id: string) =>
+    request<SupportBundle>(token, "GET", `/support/tickets/${encodeURIComponent(id)}/bundle`),
+  postSupportTicketMessage: (token: string, id: string, message: string) =>
+    request<TicketView>(token, "POST", `/support/tickets/${encodeURIComponent(id)}/messages`, {
+      message,
+    }),
+  setSupportTicketStatus: (token: string, id: string, status: TicketStatus) =>
+    request<TicketView>(token, "POST", `/support/tickets/${encodeURIComponent(id)}/status`, {
+      status,
+    }),
 
   // Support-agent provisioning (platform-admin surface). A 501 means support
   // isn't enabled on this deployment.

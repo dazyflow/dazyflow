@@ -417,6 +417,10 @@ export type WhoAmI = {
   // are off. Empty = render a generic "contact your administrator"
   // message with no link.
   support_contact?: string;
+  // support_tickets_enabled is true when the native support-ticket surface is
+  // wired on this deployment (DAZYFLOW_SUPPORT_ENABLED). Drives whether the UI
+  // shows "Report a problem" and the Support page.
+  support_tickets_enabled?: boolean;
   // memberships is every org the signed-in user can act in: their home
   // org (home=true) plus any they've been invited to. Drives the org
   // switcher in the app shell.
@@ -980,6 +984,52 @@ export type AccessGrant = {
   expires_at: string;
   revoked_at?: string;
   revoked_by?: string;
+};
+
+// TicketStatus mirrors core.TicketStatus — the lifecycle of a support ticket.
+export type TicketStatus =
+  | "open"
+  | "awaiting_user"
+  | "awaiting_support"
+  | "resolved"
+  | "closed";
+
+// Ticket mirrors core.Ticket's JSON: one support request scoped to the org that
+// filed it, optionally about a flow/run with a redacted diagnostic bundle attached.
+export type Ticket = {
+  id: string;
+  tenant: string;
+  workspace: string;
+  created_by: string;
+  subject: string;
+  status: TicketStatus;
+  flow_id?: string;
+  run_id?: string;
+  bundle_id?: string;
+  assigned_to?: string;
+  created_at: string;
+  updated_at: string;
+};
+
+// TicketAuthorKind mirrors core.AuthorKind — who wrote a chat message.
+export type TicketAuthorKind = "user" | "support" | "system";
+
+// TicketMessage is one entry in a ticket's chat thread. Bodies are
+// secret-scrubbed server-side before they are ever stored or returned.
+export type TicketMessage = {
+  id: string;
+  ticket_id: string;
+  author?: string;
+  author_kind: TicketAuthorKind;
+  body: string;
+  bundle_id?: string;
+  created_at: string;
+};
+
+// TicketView is a ticket plus its chronological thread (the get-one response).
+export type TicketView = {
+  ticket: Ticket;
+  messages: TicketMessage[];
 };
 
 // SupportAgentGrant is one provisioned support-agent (cross-tenant vendor

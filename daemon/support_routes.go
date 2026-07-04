@@ -96,6 +96,13 @@ func (h *HTTPGateway) requestGrant(rw http.ResponseWriter, r *http.Request, p co
 	// Audit into the ORG's log — the org sees support requesting access.
 	h.audit(r.Context(), core.Principal{Tenant: grant.Tenant, Subject: p.Subject},
 		"support.grant.request", grant.FlowID, "grant="+grant.ID)
+	// When the request is anchored to a ticket, drop a system note in the thread
+	// so the user sees "support asked to view this flow" in context (the grant
+	// prompt lives on the ticket, per TODO-support-tickets.md).
+	if h.ticketsEnabled() && grant.TicketID != "" {
+		_ = h.appendTicketMessage(r.Context(), grant.TicketID, "", core.AuthorSystem,
+			"Support requested read-only access to this flow. An organization admin must approve it.", "", now)
+	}
 	writeJSON(rw, http.StatusCreated, grant)
 }
 

@@ -83,7 +83,8 @@
     "yes": "Ja",
     "no": "Nej",
     "edit": "Redigera",
-    "save": "Spara"
+    "save": "Spara",
+    "contactSupport": "Kontakta support"
   },
   "commentNode": {
     "delete": "Ta bort kommentar",
@@ -105,6 +106,7 @@
     "files": "Filer",
     "approvals": "Godkännanden",
     "apps": "Appar",
+    "support": "Support",
     "admin": "Admin",
     "toggleNav": "växla navigering",
     "closeMenu": "Stäng meny",
@@ -1472,6 +1474,14 @@
     "failed": "Misslyckades",
     "failedAt": "Misslyckades vid \"{{node}}\"",
     "failedAtAfter": "Misslyckades vid \"{{node}}\" efter {{count}} försök",
+    "getHelp": "Få hjälp med den här körningen",
+    "helpSubject": "Dazyflow: hjälp med flödet \"{{flow}}\"",
+    "helpIntro": "Jag behöver hjälp med en flödeskörning som misslyckades. Behåll gärna informationen nedan — den hjälper supporten att hitta rätt körning.\n\n(Beskriv vad du försökte göra här.)",
+    "helpFlow": "Flöde: {{flow}}",
+    "helpRun": "Körnings-ID: {{id}}",
+    "helpStep": "Steg som misslyckades: {{step}}",
+    "helpCode": "Felkod: {{code}}",
+    "helpWhat": "Vad som hände: {{headline}}",
     "needsYou": "Den här droppen försöker inte igen av sig själv — åtgärda orsaken ovan och välj sedan Försök igen från felet.",
     "willRetry": "Försöker igen automatiskt — nästa försök om {{when}}",
     "willRetrySoon": "Försöker igen automatiskt strax…",

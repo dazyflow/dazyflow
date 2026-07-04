@@ -150,6 +150,9 @@ type HTTPGateway struct {
 	SupportAgents SupportAgentStore
 	Grants        core.GrantStore
 	Bundles       core.BundleStore
+	// Tickets persists support tickets + their chat threads (Phase 2). Nil-safe:
+	// nil leaves the ticket endpoints returning 501, same as the grant surface.
+	Tickets core.TicketStore
 	// SupportGrantTTL is how long an approved AccessGrant stays valid. Zero
 	// falls back to defaultSupportGrantTTL (4h).
 	SupportGrantTTL time.Duration
@@ -505,6 +508,18 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/support/grants/{id}/decide", h.requireAuth(h.decideGrant))
 	mux.HandleFunc("POST /api/v1/support/grants/{id}/revoke", h.requireAuth(h.revokeGrant))
 	mux.HandleFunc("GET /api/v1/support/flows/{tenant}/{workspace}/{flow_id}", h.requireAuth(h.supportView))
+	// Support tickets + chat (Phase 2). End-user surface under /me; the
+	// cross-tenant agent queue under /support.
+	mux.HandleFunc("POST /api/v1/me/support/tickets", h.requireAuth(h.createTicket))
+	mux.HandleFunc("GET /api/v1/me/support/tickets", h.requireAuth(h.listMyTickets))
+	mux.HandleFunc("GET /api/v1/me/support/tickets/{id}", h.requireAuth(h.getMyTicket))
+	mux.HandleFunc("GET /api/v1/me/support/tickets/{id}/bundle", h.requireAuth(h.getMyTicketBundle))
+	mux.HandleFunc("POST /api/v1/me/support/tickets/{id}/messages", h.requireAuth(h.postMyTicketMessage))
+	mux.HandleFunc("GET /api/v1/support/tickets", h.requireAuth(h.listTicketQueue))
+	mux.HandleFunc("GET /api/v1/support/tickets/{id}", h.requireAuth(h.getSupportTicket))
+	mux.HandleFunc("GET /api/v1/support/tickets/{id}/bundle", h.requireAuth(h.getSupportTicketBundle))
+	mux.HandleFunc("POST /api/v1/support/tickets/{id}/messages", h.requireAuth(h.postSupportTicketMessage))
+	mux.HandleFunc("POST /api/v1/support/tickets/{id}/status", h.requireAuth(h.setSupportTicketStatus))
 	// Self-service rectification (Art. 16): change own password / email.
 	mux.HandleFunc("POST /api/v1/me/password", h.requireAuth(h.changePasswordHandler))
 	mux.HandleFunc("POST /api/v1/me/email", h.requireAuth(h.changeEmailHandler))
@@ -1549,6 +1564,11 @@ func (h *HTTPGateway) whoami(rw http.ResponseWriter, r *http.Request, p core.Pri
 		// Connections page). Empty = the UI shows a generic "contact
 		// your administrator" message with no link.
 		"support_contact": h.svc.SupportContact,
+		// support_tickets_enabled tells the UI whether the native ticket
+		// surface is wired (DAZYFLOW_SUPPORT_ENABLED). The UI hides "Report
+		// a problem" / the Support page when off, rather than letting the
+		// user hit a 501.
+		"support_tickets_enabled": h.ticketsEnabled(),
 	})
 }
 

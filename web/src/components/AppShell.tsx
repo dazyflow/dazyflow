@@ -188,6 +188,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   // operators see "you have N decisions waiting" without visiting the
   // page. Polled every 30s; updates immediately on visibility change.
   const [pendingCount, setPendingCount] = useState(0);
+  // supportUnread badges the Support nav entry: for a user, tickets now waiting
+  // on them (support replied); for an agent, tickets waiting on support. Closes
+  // the loop — otherwise a reply is invisible until the user thinks to look.
+  const [supportUnread, setSupportUnread] = useState(0);
   // All flows in the active workspace, listed under the "Flows" nav entry.
   const [flows, setFlows] = useState<FlowSummary[]>([]);
   // Global ⌘K command bar (jump to any page/flow). Mounted app-wide but only
@@ -242,6 +246,34 @@ export function AppShell({ children }: { children: ReactNode }) {
       window.clearInterval(t);
     };
   }, [token, location.pathname, activeTenant, activeWorkspace, everHadApproval]);
+  // Support unread count: agents count queue tickets awaiting support; users
+  // count their own tickets awaiting them. Polled slowly (60s) — it only drives
+  // a badge. Skipped entirely when the ticket surface is off.
+  const isAgent = hasPerm("support:agent");
+  const supportOn = !!me?.support_tickets_enabled || isAgent;
+  useEffect(() => {
+    if (!token || !supportOn) {
+      setSupportUnread(0);
+      return;
+    }
+    let cancelled = false;
+    const fetch = () => {
+      const p = isAgent
+        ? api.listTicketQueue(token, "awaiting_support")
+        : api.listMyTickets(token, "awaiting_user");
+      p.then((r) => {
+        if (!cancelled) setSupportUnread(r.tickets?.length ?? 0);
+      }).catch(() => {
+        /* ignore — non-essential */
+      });
+    };
+    fetch();
+    const iv = window.setInterval(fetch, 60000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(iv);
+    };
+  }, [token, supportOn, isAgent, location.pathname]);
   // Load the workspace's flows for the sidebar list.
   const refreshFlows = useCallback(() => {
     if (!token || !activeWorkspace) {
@@ -596,15 +628,6 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Table2 size={18} />
             <span className="nav-label">{t("nav.results")}</span>
           </NavLink>
-          {/* Support-agent workspace: cross-tenant vendor staff open a
-              customer's flow read-only from here. Only the weak support:agent
-              role sees it. */}
-          {hasPerm("support:agent") && (
-            <NavLink to="/support" title={t("nav.support")}>
-              <LifeBuoy size={18} />
-              <span className="nav-label">{t("nav.support")}</span>
-            </NavLink>
-          )}
           {/* Files is an authoring surface (workspace inputs/outputs), gated to
               editors/admins like Secrets — viewers (graph:run only) don't see
               it and can't browse/download. */}
@@ -647,6 +670,19 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Boxes size={18} />
             <span className="nav-label">{t("nav.apps")}</span>
           </NavLink>
+          {/* Support tickets: only when the deployment wired the native
+              ticket surface. A support agent instead gets the cross-tenant
+              queue at the same entry point. */}
+          {supportOn && (
+            <NavLink
+              to={isAgent ? "/support/queue" : "/support"}
+              title={t("nav.support")}
+            >
+              <LifeBuoy size={18} />
+              <span className="nav-label" style={{ flex: 1 }}>{t("nav.support")}</span>
+              {supportUnread > 0 && <span className="nav-badge">{supportUnread}</span>}
+            </NavLink>
+          )}
           <div className="sidebar-spacer" />
           {/* Classical collapse arrow. Duplicates the hamburger's
               collapse action so the affordance sits next to the panel it

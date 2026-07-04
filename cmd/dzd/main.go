@@ -1365,9 +1365,14 @@ func buildGateway(ctx context.Context, d gatewayDeps) {
 		if err != nil {
 			log.Fatalf("postgres support-bundle store: %v", err)
 		}
+		ticketStore, err := daemon.NewPgTicketStore(ctx, d.pgPool)
+		if err != nil {
+			log.Fatalf("postgres support-ticket store: %v", err)
+		}
 		gw.SupportAgents = agents
 		gw.Grants = grantStore
 		gw.Bundles = bundleStore
+		gw.Tickets = ticketStore
 		log.Print("support feature enabled (DAZYFLOW_SUPPORT_ENABLED)")
 	}
 	// Opt-in (compliance) auditing of secret *reads*. Off by default because
