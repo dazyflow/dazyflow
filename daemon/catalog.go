@@ -379,6 +379,7 @@ var integrationSummaries = map[string]string{
 	"Gmail":            "Send email, search the inbox, and read message bodies — often paired with a polling trigger to react to new mail.",
 	"Notion":           "Create pages and query databases.",
 	"Fortnox":          "Manage customers and invoices in Fortnox, Sweden's leading SMB accounting platform — create customers and invoices, and poll invoices by status to react to newly paid or overdue ones.",
+	"Klarna":           "Manage Klarna orders — look one up, capture it (fully or partially) when the goods ship, and refund it, for the Nordic buy-now-pay-later checkout.",
 	"Google Sheets":    "Read rows from a spreadsheet, and append rows to it.",
 	"Google Forms":     "Trigger flows when a Google Form receives new responses.",
 	"Postgres":         "Insert, upsert, and query rows against a Postgres database.",

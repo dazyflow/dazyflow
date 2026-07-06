@@ -233,6 +233,15 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     docs_url: "https://docs.stripe.com/api",
     brand_logo: "/brands/stripe.svg",
   },
+  klarna: {
+    name: "Klarna",
+    description:
+      "Handle your Klarna orders straight from a flow. Klarna is the Nordic 'buy now, pay later' checkout, and this is the back-office side of it: look an order up, take the payment when the goods ship (in full or in part), and refund a return. Pair the refund with an approval step for the classic 'nod in Slack, then refund' flow, or check an order's status before you act on it.",
+    technical_notes:
+      "Authenticated with your Klarna API username and password (HTTP Basic), entered once as the Klarna connection on this page (stored encrypted as conn.klarna.*) and injected at run time — no credentials on the node or in the graph. Pick your data region and environment as part of the connection (EU / North America / Oceania × production or playground), which selects the API host — it defaults to the EU playground so a half-configured connection can't move real money. Backed by Klarna's Order Management API (v1): capture and refund POST JSON to /ordermanagement/v1/orders/{id}/captures|refunds and read the new id from the Capture-ID / Refund-ID (or Location) header. Leave the amount empty to act on the whole outstanding amount (a GET fills it in); amounts are in the currency's smallest unit (öre/cents). Klarna has no reliable idempotency key here, so capture and refund never auto-retry and the engine dedupes recovered runs — a repeat would double-charge or double-refund. No webhooks, so 'fire on new order' composes as Schedule → Get order → branch on status.",
+    docs_url: "https://docs.klarna.com/api/ordermanagement/",
+    brand_logo: "/brands/klarna.svg",
+  },
   openweather: {
     name: "OpenWeather",
     description:
