@@ -37,6 +37,21 @@ Releasing: move the entries below from `[Unreleased]` under a new
   support, below).
 - **46elks connector** (`drops/elks/`) — send SMS via the Swedish/Nordic 46elks
   API. Static-credential (HTTP Basic) service connection; no daemon changes.
+- **Klarna connector** (`drops/klarna/`) — Order Management: get order, capture
+  (full/partial), refund (full/partial). Static-credential (HTTP Basic) service
+  connection, region-hosted (EU/NA/OC × prod/playground); no daemon changes.
+  Money-moving POSTs are retry-off + write-deduped (no upstream idempotency key).
+- **nShift connector** (`drops/nshift/`) — Nordic multi-carrier shipping over the
+  Unifaun ExtAPI: create a shipment (book), get a shipment (status/tracking), and
+  delete an unprinted draft (cancel). Static-credential (Bearer API key) service
+  connection, environment-hosted (integration/production, defaulting to the
+  sandbox); no daemon changes. Booking/delete are retry-off + write-deduped.
+- **Roaring connector** (`drops/roaring/`) — Nordic company-data enrichment:
+  company overview (org number → registered name / status / full record) and
+  company search (name → candidate matches). Uses Roaring's OAuth2
+  client-credentials grant, exchanged for a bearer token by the connector itself
+  and cached in-process — so it's a static-credential (Consumer Key + Secret)
+  service connection with no daemon OAuth changes.
 - **Phone value drop** (`drops/value/`) — validate and normalize a phone number
   to E.164 with a default-region setting (libphonenumber), emitting country,
   national number, and type; the flow editor shows a live country flag beside

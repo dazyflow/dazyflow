@@ -41,7 +41,8 @@ remaining: uuid / random, an explicit `filter` (route_rows mostly covers).
 
 Already covered: Slack, Discord, ntfy, MQTT, Gmail+SMTP, Calendar,
 Drive/Sheets/Excel, Notion, GitHub/git, Postgres/MySQL/SQLite, Stripe,
-Claude/OpenAI, weather, Home Assistant, SMHI, **Fortnox**, **46elks**.
+Claude/OpenAI, weather, Home Assistant, SMHI, **Fortnox**, **46elks**,
+**Klarna**, **nShift**, **Roaring**.
 
 Notable absences:
 - **Microsoft 365** (Teams, Outlook, OneDrive) — biggest gap for business users
@@ -66,10 +67,14 @@ Shipped this session:
 - **phone** value drop — E.164 normalize/validate (feeds the SMS drops), with a
   live country-flag hint on the card for international input.
 
-Next Nordic candidates (ranked, all deferred): Signicat/BankID (eID —
-OAuth + session polling), Klarna (payments — static key, rich domain),
-nShift (shipping), Roaring (org-number enrichment), Visma (all-Nordics
-accounting). **Telegram** still fits the European lean above M365 / CRMs.
+Shipped since: Klarna (payments), nShift (shipping), Roaring (org-number
+enrichment) — all static-key from the platform's view (Roaring self-exchanges
+its client-credentials token, so no daemon OAuth work was needed). Remaining
+Nordic candidates (ranked, deferred): Signicat/BankID (eID — OAuth + session
+polling), Visma (all-Nordics accounting, broadens beyond Fortnox/SE). The
+static-key momentum picks are now spent; the next Nordic step (Signicat) pays
+the OAuth/token tax. **Telegram** still fits the European lean above M365 /
+CRMs.
 
 ## Recommendation
 
@@ -98,8 +103,21 @@ OAuth/token tax only where the market needs it (Fortnox, later Signicat).
   slice: get order, capture (full/partial), refund (full/partial). HTTP Basic +
   region-hosted (EU/NA/OC × prod/playground) as a connection field; no daemon
   change. Money-moving POSTs are RetryNever + DedupeWrites (no reliable idem key).
-- [ ] nShift — Nordic multi-carrier shipping
-- [ ] Roaring — org-number → company/credit enrichment
+- [x] **nShift** — Nordic multi-carrier shipping, static-key (`drops/nshift/`).
+  Unifaun ExtAPI v1 first slice: create_shipment (book), get_shipment
+  (status/tracking), delete_shipment (cancel an unprinted draft). Bearer API key
+  + environment-hosted (integration/production) as connection fields, defaulting
+  to the integration sandbox so a half-configured connection can't book a real
+  consignment; no daemon change. Booking/delete are RetryNever + DedupeWrites
+  (no idem key). Shipment payload is a pass-through JSON object built upstream.
+- [x] **Roaring** — org-number → company enrichment, static-key from the
+  platform's view (`drops/roaring/`). company_overview (org number → name /
+  status / full record) + company_search (name → candidate matches). Roaring's
+  OAuth2 **client-credentials** grant needs NO daemon OAuth provider: the
+  connector exchanges the Consumer Key/Secret for a bearer at POST /token itself
+  and memoises it in-process until near expiry (keyed per connection). Reads —
+  RetryExponentialBackoff. Country segment defaults to `se`, generalizes to the
+  other Nordic registers.
 - [ ] Visma — all-Nordics accounting (broadens beyond Fortnox/SE)
 
 ### Other breadth (demand-led)
