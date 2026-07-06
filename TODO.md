@@ -94,7 +94,10 @@ OAuth/token tax only where the market needs it (Fortnox, later Signicat).
 
 ### Nordic connectors (next, ranked)
 - [ ] Signicat / BankID — eID auth & signing (OAuth + session polling)
-- [ ] Klarna — payments (static key; thin first slice)
+- [x] **Klarna** — payments, static-key (`drops/klarna/`). Order Management first
+  slice: get order, capture (full/partial), refund (full/partial). HTTP Basic +
+  region-hosted (EU/NA/OC × prod/playground) as a connection field; no daemon
+  change. Money-moving POSTs are RetryNever + DedupeWrites (no reliable idem key).
 - [ ] nShift — Nordic multi-carrier shipping
 - [ ] Roaring — org-number → company/credit enrichment
 - [ ] Visma — all-Nordics accounting (broadens beyond Fortnox/SE)

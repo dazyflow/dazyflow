@@ -29,6 +29,7 @@ import (
 	_ "git.sr.ht/~klahr/dazyflow/drops/gmail"
 	_ "git.sr.ht/~klahr/dazyflow/drops/homeassistant"
 	_ "git.sr.ht/~klahr/dazyflow/drops/io"
+	_ "git.sr.ht/~klahr/dazyflow/drops/klarna"
 	_ "git.sr.ht/~klahr/dazyflow/drops/mqtt"
 	_ "git.sr.ht/~klahr/dazyflow/drops/net"
 	_ "git.sr.ht/~klahr/dazyflow/drops/notify"
