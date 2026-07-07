@@ -25,7 +25,7 @@ func init() {
 			Category:    "flow_control",
 			Provider:    "internal",
 			Tags:        []string{"condition", "predicate", "boolean", "test", "compare"},
-			Description: "Compare two values, A and B, and emit true or false on the Yes/No output. Pick the test from a plain-language list — equals, is greater than, contains, is one of, is within range, and more. Wire A and B from upstream nodes, or type a literal default right on the node. Pair the Yes/No output with Branch (Yes/No → Branch.condition) to route.",
+			Description: "Compare two values, A and B, and emit true or false on the Yes/No output. Pick the test from a plain-language list — equals, is greater than, contains, is one of, is within range, and more. Wire A and B from upstream steps, or type a literal default right on the step. Pair the Yes/No output with a Branch step (connect Yes/No into Branch's condition input) to route.",
 			Summary:     "Compare A against B with a chosen operator and emit true or false on the Yes/No output.",
 			Examples: []core.ParamsExample{
 				{

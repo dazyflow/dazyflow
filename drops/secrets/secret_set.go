@@ -31,7 +31,7 @@ func init() {
 				{
 					Title:  "Persist a polling cursor",
 					Params: json.RawMessage(`{"name":"github_last_seen_issue"}`),
-					Notes:  "Wire the upstream node's latest-id output into the 'value' input port; later runs read it back with ${secret.github_last_seen_issue}.",
+					Notes:  "Wire the upstream step's latest-id output into the 'value' input port; later runs read it back with ${secret.github_last_seen_issue}.",
 				},
 				{
 					Title:  "Store a literal value",

@@ -37,7 +37,7 @@ func init() {
 				{
 					Title:  "When the front door opens, check every 30s",
 					Params: json.RawMessage(`{"entity_id":"binary_sensor.front_door","interval_seconds":30}`),
-					Notes:  "The interval lives on the node; the scheduler reads it. Emits 'state'/'previous_state' downstream only when the state actually changes.",
+					Notes:  "Checks on this interval; the new and previous values come out on the 'State' / 'Previous state' outputs, only when the state actually changes.",
 				},
 			},
 			ConnectionFields: []core.ConnectionField{

@@ -32,7 +32,7 @@ func init() {
 				{
 					Title:  "Ask a manager to approve a refund",
 					Params: json.RawMessage(`{"prompt":"Refund $230 to customer #4821 — order shipped damaged. Approve?"}`),
-					Notes:  "Wire pending_url into an email or Slack drop so the approver gets the link.",
+					Notes:  "Wire pending_url into an email or Slack step so the approver gets the link.",
 				},
 				{
 					Title:  "Gate a production deploy",

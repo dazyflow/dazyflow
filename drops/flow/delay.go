@@ -24,7 +24,7 @@ func init() {
 			Category:    "flow_control",
 			Provider:    "internal",
 			Tags:        []string{"timing", "delay", "sleep", "wait", "passthrough"},
-			Description: "Pause for a configurable duration, then forward the threaded value downstream on the pass pin (or emit a control signal when nothing is threaded, so a pure pause still fires the next node).",
+			Description: "Pause for a configurable duration, then forward the threaded value downstream on the pass-through output (or emit a control signal when nothing is threaded, so a pure pause still fires the next step).",
 			Summary:     "Hold the flow for a fixed number of milliseconds before forwarding the input downstream.",
 			Examples: []core.ParamsExample{
 				{
@@ -51,7 +51,7 @@ func init() {
 			// like any other node.
 			Inputs: []core.Port{{Port: "ms", Label: "Delay (milliseconds)", MIME: []string{"application/json"}}},
 			ParamsSchema: json.RawMessage(
-				`{"type":"object","properties":{"ms":{"type":"integer","minimum":0}},"required":["ms"]}`,
+				`{"type":"object","properties":{"ms":{"type":"integer","minimum":0,"title":"Wait (milliseconds)","description":"How long to pause before continuing, in milliseconds (1000 = 1 second)."}},"required":["ms"]}`,
 			),
 			Idempotent:  true,
 			RetryPolicy: core.RetryExponentialBackoff,

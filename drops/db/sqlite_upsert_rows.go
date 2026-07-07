@@ -63,12 +63,12 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"path":             {"type":"string","format":"workspace-path","title":"Database file"},
-					"table":            {"type":"string"},
-					"conflict_columns": {"type":"array","items":{"type":"string"}},
-					"update_columns":   {"type":"array","items":{"type":"string"}},
+					"path":             {"type":"string","format":"workspace-path","title":"Database file","description":"Path to the SQLite database file in your workspace (created if missing)."},
+					"table":            {"type":"string","description":"The table to write rows into."},
+					"conflict_columns": {"type":"array","items":{"type":"string"},"description":"Columns that identify an existing row; a match updates it instead of inserting a duplicate (e.g. [\"email\"])."},
+					"update_columns":   {"type":"array","items":{"type":"string"},"description":"Which columns to overwrite when a row already exists. Empty = leave existing rows untouched (insert-only)."},
 					"create_table":     {"type":"boolean","default":true,"description":"Auto-create the table (with a UNIQUE on conflict_columns) when missing. Defaults true."},
-					"column_types":     {"type":"object","additionalProperties":{"type":"string"}},
+					"column_types":     {"type":"object","additionalProperties":{"type":"string"},"description":"Optional: force a column's SQL type. Columns default to text otherwise."},
 					"field_mapping":    {"type":"object","additionalProperties":{"type":"string"},"title":"Column mapping","description":"Optional. Choose which incoming fields to write and name their columns — {incoming field: column name}. Only listed fields are written (others dropped); blank a column name to skip a field. conflict_columns refer to the mapped (output) names. Leave empty to write every field."}
 				},
 				"required":["path","table","conflict_columns"]

@@ -24,13 +24,13 @@ func init() {
 			Category:    "flow_control",
 			Provider:    "internal",
 			Tags:        []string{"conditional", "routing", "if-else"},
-			Description: "Route the payload on the 'in' port to either the Yes or No output, based on the Yes/No value on the 'condition' input. Produce that value with a Compare drop (wire its result into condition) — a Yes value sends the payload down the Yes output; a No value (or a missing/empty condition) sends it down No. Nodes wired to the unused port stay dormant.",
+			Description: "Route the payload on the 'in' port to either the Yes or No output, based on the Yes/No value on the 'condition' input. Produce that value with a Compare step (wire its result into condition) — a Yes value sends the payload down the Yes output; a No value (or a missing/empty condition) sends it down No. Steps wired to the unused port stay dormant.",
 			Summary:     "Forward the input down the Yes or No port based on a Yes/No value input.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Branch is wired, not configured",
 					Params: json.RawMessage(`{}`),
-					Notes:  "Feed a Compare result into 'condition' and the value to route into 'in'. The test lives in the Compare drop, not here.",
+					Notes:  "Feed a Compare result into 'condition' and the value to route into 'in'. The test lives in the Compare step, not here.",
 				},
 			},
 			ExecutionModel: core.ExecutionBatch,

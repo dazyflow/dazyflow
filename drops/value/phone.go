@@ -42,7 +42,7 @@ func init() {
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"phone", "number", "sms", "e164", "msisdn", "validate", "normalize"},
-			Description: "Hold a phone number — type it inline or wire a string into the 'phone' input — and emit it as clean E.164 (+46701234567) on 'out', but only after checking it's a real, dialable number. Local formats are understood: with Default region SE, \"070-123 45 67\" becomes \"+46701234567\". A number that isn't valid fails the node up front instead of surfacing as a cryptic error when a later SMS step rejects it. It also decomposes the number so you can act on its parts without string surgery: 'country' (SE), 'national' (701234567), and 'type' (mobile / fixed_line / …). Feed 'out' straight into the 46elks or Twilio SMS drops.",
+			Description: "Hold a phone number — type it inline or wire a string into the 'phone' input — and emit it as clean E.164 (+46701234567) on 'out', but only after checking it's a real, dialable number. Local formats are understood: with Default region SE, \"070-123 45 67\" becomes \"+46701234567\". A number that isn't valid fails the step up front instead of surfacing as a cryptic error when a later SMS step rejects it. It also decomposes the number so you can act on its parts without string surgery: 'country' (SE), 'national' (701234567), and 'type' (mobile / fixed_line / …). Feed 'out' straight into the 46elks or Twilio SMS steps.",
 			Summary:     "Validate and normalize a phone number to E.164, and emit its country, national number, and type.",
 			Examples: []core.ParamsExample{
 				{

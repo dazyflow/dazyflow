@@ -21,7 +21,7 @@ func init() {
 			Label:       "Klarna",
 			Subtitle:    "Refund order",
 			Summary:     "Refund a captured Klarna order, fully or partially — pairs with an approval step upstream.",
-			Description: "Refund a captured Klarna order by its order id (typed or wired from upstream). Leave Amount empty to refund the full remaining refundable amount (captured minus already refunded), or set it in the currency's smallest unit (öre/cents) for a partial refund. A short Description shows on the customer's Klarna statement. Put an Approval step before this one for the classic 'approve in Slack → refund' flow.\n\nThe new refund's id comes out on 'refund_id'. Klarna refunds aren't safely repeatable, so this step does NOT auto-retry — a duplicated refund would pay the customer twice; the engine also dedupes a recovered re-run of the same job. Connect your Klarna account once on the Apps page.",
+			Description: "Refund a captured Klarna order by its order id (typed or wired from upstream). Leave Amount empty to refund the full remaining refundable amount (captured minus already refunded), or set it in the currency's smallest unit (öre/cents) for a partial refund. A short Description shows on the customer's Klarna statement. Put an Approval step before this one for the classic 'approve in Slack → refund' flow.\n\nThe new refund's id comes out on 'refund_id'. Refunding pays money back, so this step runs once and is never retried automatically — Dazyflow won't refund the same order twice. Connect your Klarna account once on the Apps page.",
 			Integration: "Klarna",
 			Category:    "network",
 			Icon:        "credit-card",

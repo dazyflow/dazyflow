@@ -26,23 +26,23 @@ func init() {
 			Category:    "flow_control",
 			Provider:    "internal",
 			Tags:        []string{"iterate", "loop", "fan_out", "map"},
-			Description: "Run the loop body — the steps wired to the `body` pin — once per item in an input list. Items execute in parallel up to params.concurrency. Outputs `results` (one entry per item, in order) and `errors` (a list of failed rows: {row, data, error}, row is 1-based). Set fail_fast=true to abort on the first failure; otherwise the iteration continues and failures surface on the errors port.",
+			Description: "Run the loop body — the steps wired to the Loop body input — once per item in an input list. Items execute in parallel up to the concurrency setting. Outputs `results` (one entry per item, in order) and `errors` (a list of failed rows: {row, data, error}, row is 1-based). Set fail_fast=true to abort on the first failure; otherwise the iteration continues and failures surface on the errors port.",
 			Summary:     "Fan out a list and run the wired loop body on every item, optionally in parallel, collecting results in order.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Handle each new form response one at a time",
 					Params: json.RawMessage(`{}`),
-					Notes:  "A trigger like Google Forms emits a LIST of new responses. Wire that list into 'List' here, then wire the steps that handle one response (AI reply → save → notify → send) to the 'Loop body' pin. Inside the body, refer to the current response as ${item.email}, ${item.Message}, etc. Without this, the next step would run once on the whole batch.",
+					Notes:  "A trigger like Google Forms emits a LIST of new responses. Wire that list into 'List' here, then wire the steps that handle one response (AI reply → save → notify → send) to the 'Loop body' input. Inside the body, refer to the current response as ${item.email}, ${item.Message}, etc. Without this, the next step would run once on the whole batch.",
 				},
 				{
 					Title:  "POST each row to a webhook, 5 at a time",
 					Params: json.RawMessage(`{"concurrency":5}`),
-					Notes:  "Wire the 'Loop body' pin to an HTTP step whose body is ${item.} (the whole item as JSON) or ${item.field.subfield} for a nested value. concurrency caps how many run at once.",
+					Notes:  "Wire the 'Loop body' input to an HTTP step whose body is ${item.} (the whole item as JSON) or ${item.field.subfield} for a nested value. concurrency caps how many run at once.",
 				},
 				{
 					Title:  "Send a templated email per recipient, stop on first failure",
 					Params: json.RawMessage(`{"fail_fast":true}`),
-					Notes:  "Wire the 'Loop body' pin to an Email step using ${item.email} / ${item.name}. fail_fast aborts the loop on the first failed item.",
+					Notes:  "Wire the 'Loop body' input to an Email step using ${item.email} / ${item.name}. fail_fast aborts the loop on the first failed item.",
 				},
 			},
 			ExecutionModel: core.ExecutionBatch,
@@ -64,8 +64,8 @@ func init() {
 				`{
 					"type":"object",
 					"properties":{
-						"concurrency":{"type":"integer","minimum":1},
-						"fail_fast":{"type":"boolean","default":false}
+						"concurrency":{"type":"integer","minimum":1,"title":"Concurrency","description":"How many items to process at once. Higher is faster but hits rate limits sooner."},
+						"fail_fast":{"type":"boolean","default":false,"title":"Stop on first error","description":"Stop the whole loop as soon as one item fails, instead of continuing with the rest."}
 					}
 				}`,
 			),

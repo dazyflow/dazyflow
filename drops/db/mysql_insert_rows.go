@@ -28,7 +28,7 @@ func init() {
 			Provider:    "internal",
 			Integration: "MySQL",
 			Tags:        []string{"mysql", "mariadb", "sql", "database", "insert", "etl"},
-			Description: "Insert rows into a MySQL or MariaDB table. Drops in rows from Sheets, Excel, or any transform node — the shape is interchangeable across the family.",
+			Description: "Insert rows into a MySQL or MariaDB table. Accepts rows from Sheets, Excel, or any transform step — the shape is interchangeable across these steps.",
 			Summary:     "Batch-insert rows into a MySQL/MariaDB table inside one transaction; auto-creates the table from headers when missing.",
 			Examples: []core.ParamsExample{
 				{
@@ -61,9 +61,9 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"table":        {"type":"string"},
+					"table":        {"type":"string","description":"The table to write rows into (created automatically if it doesn't exist)."},
 					"create_table": {"type":"boolean","default":true,"description":"Auto-create the table from headers when missing. Defaults true."},
-					"column_types": {"type":"object","additionalProperties":{"type":"string"}},
+					"column_types": {"type":"object","additionalProperties":{"type":"string"},"description":"Optional: force a column's SQL type (e.g. {\"total\":\"DECIMAL(10,2)\"}). Columns default to text otherwise."},
 					"field_mapping":{"type":"object","additionalProperties":{"type":"string"},"title":"Column mapping","description":"Optional. Choose which incoming fields to write and name their columns — {incoming field: column name}. Only listed fields are written (others dropped); blank a column name to skip a field. Leave empty to write every field. For row filtering or defaults, use a Map rows step first."}
 				},
 				"required":["table"]

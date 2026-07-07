@@ -102,7 +102,7 @@ func init() {
 	registerOperator(operatorSpec{
 		id: "eq", label: "A = B", icon: "equal", op: "equals",
 		summary: "Emit true when A equals B, else false.",
-		desc:    "Emit true on the Yes/No output when A equals B, otherwise false. The atomic equality node — wire A and B, or type literal defaults. Pair the Yes/No output with Branch to route. Reach for Compare instead when you need richer tests (contains, one_of, ranges).",
+		desc:    "Emit true on the Yes/No output when A equals B, otherwise false. The atomic equality step — wire A and B, or type literal defaults. Pair the Yes/No output with Branch to route. Reach for Compare instead when you need richer tests (contains, one_of, ranges).",
 		example: core.ParamsExample{Title: "Status equals 200", Params: json.RawMessage(`{"B":200}`), Notes: "Wire the status into A; B is the literal 200. It's true when A == 200."},
 	})
 	registerOperator(operatorSpec{

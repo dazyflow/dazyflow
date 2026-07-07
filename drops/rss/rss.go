@@ -47,7 +47,7 @@ func init() {
 				{
 					Title:  "Fire on each new post",
 					Params: json.RawMessage(`{"url":"https://example.com/blog/feed.xml"}`),
-					Notes:  "Wire an Interval trigger into this node. Dedupe is on, so only new items flow.",
+					Notes:  "Wire an Interval trigger into this step. Dedupe is on, so only new items flow.",
 				},
 				{
 					Title:  "Just parse the current feed (no dedupe)",

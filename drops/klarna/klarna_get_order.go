@@ -21,7 +21,7 @@ func init() {
 			Label:       "Klarna",
 			Subtitle:    "Get order",
 			Summary:     "Look up a Klarna order by id — status and the captured / refunded / remaining amounts.",
-			Description: "Fetch one order from your connected Klarna account by its order id (from Klarna's checkout callback or the Merchant Portal). The order id can be typed on the step or wired in from upstream (the 'Order ID' input overrides the param).\n\nOut come the order 'status' (ORDER_OPEN, PART_CAPTURED, CAPTURED, CANCELLED, EXPIRED, CLOSED), the 'order_amount', 'captured_amount' and 'remaining_authorized_amount' (all in the currency's smallest unit — öre/cents), the 'currency', and the whole order as JSON on the 'order' pin. This is a read — safe to retry. Connect your Klarna account once on the Apps page.",
+			Description: "Fetch one order from your connected Klarna account by its order id (from Klarna's checkout callback or the Merchant Portal). The order id can be typed on the step or wired in from upstream (the 'Order ID' input overrides the param).\n\nOut come the order 'status' (ORDER_OPEN, PART_CAPTURED, CAPTURED, CANCELLED, EXPIRED, CLOSED), the 'order_amount', 'captured_amount' and 'remaining_authorized_amount' (all in the currency's smallest unit — öre/cents), the 'currency', and the whole order as JSON on the 'Order' output. This is a read — safe to retry. Connect your Klarna account once on the Apps page.",
 			Integration: "Klarna",
 			Category:    "network",
 			Icon:        "search",

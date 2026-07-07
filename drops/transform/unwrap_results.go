@@ -30,18 +30,18 @@ func init() {
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"transform", "for_each", "results", "flatten", "unwrap", "rows"},
-			Description: "Flatten a for_each `results` list back into plain rows. for_each runs a body subgraph per item, so each result wraps the body's per-node outputs ({status, nodes:{<id>:{output:{port:val}}}}); the tabular drops downstream want a step's actual output, not the wrapper. unwrap_results pulls one output port of one body node out of every result and emits them as rows — so `gmail_search_messages → for_each(body: gmail_get_message) → unwrap_results → compute_rows` finally lets compute see `row.headers.From`. With a single-node body and a single-output step you can leave both `node` and `port` blank. Failed items are skipped by default (the for_each `errors` port still carries them).",
-			Summary:     "Pull one body node's output port out of each for_each result and emit them as a flat rows list.",
+			Description: "Flatten a For each step's `results` list back into plain rows. For each runs its loop body per item, so each result wraps the body's per-step outputs ({status, nodes:{<id>:{output:{port:val}}}}); the tabular steps downstream want a step's actual output, not the wrapper. unwrap_results pulls one output port of one body step out of every result and emits them as rows — so a chain like Search emails → For each (Get message) → Collect loop results → Add a calculated column finally lets the calculation see `row.headers.From`. With a single-step body and a single-output step you can leave both `node` and `port` blank. Failed items are skipped by default (the For each step's `errors` output still carries them).",
+			Summary:     "Pull one body step's output port out of each for_each result and emit them as a flat rows list.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Unwrap a single-step loop body (node + port inferred)",
 					Params: json.RawMessage(`{}`),
-					Notes:  "for_each's body is one node (e.g. gmail_get_message) with one output (message); unwrap_results uses them without naming either.",
+					Notes:  "for_each's body is one step (e.g. gmail_get_message) with one output (message); unwrap_results uses them without naming either.",
 				},
 				{
 					Title:  "Pick a node and port from a multi-step body",
 					Params: json.RawMessage(`{"node":"get","port":"message"}`),
-					Notes:  "When the body has several nodes, name which one (and which of its output ports) to flatten.",
+					Notes:  "When the body has several steps, name which one (and which of its output ports) to flatten.",
 				},
 				{
 					Title:  "Include failed items as error rows",
@@ -61,11 +61,11 @@ func init() {
 				"properties":{
 					"node": {
 						"type":"string",
-						"description":"Which body node to extract from each result. Optional when the for_each body is a single node."
+						"description":"Which body step to extract from each result. Optional when the for_each body is a single step."
 					},
 					"port": {
 						"type":"string",
-						"description":"Which output port of the body node to extract from each result. Optional when that node has exactly one output port."
+						"description":"Which output port of the body step to extract from each result. Optional when that step has exactly one output port."
 					},
 					"skip_errors": {
 						"type":"boolean",

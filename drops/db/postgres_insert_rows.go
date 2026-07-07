@@ -27,7 +27,7 @@ func init() {
 			Provider:    "internal",
 			Integration: "Postgres",
 			Tags:        []string{"postgres", "postgresql", "sql", "database", "insert", "etl"},
-			Description: "Insert rows into a Postgres table. Drops in rows from Sheets, Excel, or any transform node — the shape is interchangeable across the family, so no extra mapping needed.",
+			Description: "Insert rows into a Postgres table. Accepts rows from Sheets, Excel, or any transform step — the shape is interchangeable across these steps, so no extra mapping needed.",
 			Summary:     "Batch-insert rows into a Postgres table inside one transaction; auto-creates the table from headers when missing.",
 			Examples: []core.ParamsExample{
 				{
@@ -60,10 +60,10 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"schema":       {"type":"string","default":"public"},
-					"table":        {"type":"string"},
+					"schema":       {"type":"string","default":"public","description":"The Postgres schema the table lives in."},
+					"table":        {"type":"string","description":"The table to write rows into (created automatically if it doesn't exist)."},
 					"create_table": {"type":"boolean","default":true,"description":"Auto-create the table from headers when missing. Defaults true."},
-					"column_types": {"type":"object","additionalProperties":{"type":"string"}},
+					"column_types": {"type":"object","additionalProperties":{"type":"string"},"description":"Optional: force a column's SQL type (e.g. {\"id\":\"bigint\"}). Columns default to text otherwise."},
 					"field_mapping":{"type":"object","additionalProperties":{"type":"string"},"title":"Column mapping","description":"Optional. Choose which incoming fields to write and name their columns — {incoming field: column name}. Only listed fields are written (others dropped); blank a column name to skip a field. Leave empty to write every field. For row filtering or defaults, use a Map rows step first."}
 				},
 				"required":["table"]

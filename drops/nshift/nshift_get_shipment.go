@@ -21,7 +21,7 @@ func init() {
 			Label:       "nShift",
 			Subtitle:    "Get shipment",
 			Summary:     "Look up a shipment in your connected nShift account by its id.",
-			Description: "Fetch one shipment from nShift's Unifaun ExtAPI by its shipment id (returned when you created it, or from nShift Delivery). The id can be typed on the step or wired in from upstream (the 'Shipment ID' input overrides the param).\n\nOut come the parcel 'tracking_numbers' (comma-separated) and the whole shipment as JSON on the 'shipment' pin — pair this with a poll trigger to react to a delivery status change. This is a read — safe to retry. Connect your nShift account once on the Apps page.",
+			Description: "Fetch one shipment from nShift by its shipment id (returned when you created it, or from nShift Delivery). The id can be typed on the step or wired in from upstream (the 'Shipment ID' input overrides the param).\n\nOut come the parcel 'tracking_numbers' (comma-separated) and the whole shipment as JSON on the 'Shipment' output — pair this with a poll trigger to react to a delivery status change. This is a read — safe to retry. Connect your nShift account once on the Apps page.",
 			Integration: "nShift",
 			Category:    "network",
 			Icon:        "package-search",

@@ -31,7 +31,7 @@ func init() {
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"transform", "xml", "parse", "rows", "etl", "rss", "soap"},
-			Description: "Turn XML text into rows or a structured value. Feed it an HTTP response, a downloaded file, or an RSS/SOAP payload and it parses into the rows + headers shape the transform family, Sheets, and the DB drops consume. Conversion: an element's attributes become @-prefixed keys (id=\"7\" → \"@id\":\"7\"), child elements become keys (repeated children become a list), and text content is the element's value (or \"#text\" alongside attributes/children). The document's root wrapper is unwrapped, so 'path' is relative to its children — point it at the repeated element to get one row each (e.g. \"channel.item\" for RSS). Namespaces are stripped to their local name. All values are text, like CSV.",
+			Description: "Turn XML text into rows or a structured value. Feed it an HTTP response, a downloaded file, or an RSS/SOAP payload and it parses into the rows + headers shape the transform family, Sheets, and the DB steps consume. Conversion: an element's attributes become @-prefixed keys (id=\"7\" → \"@id\":\"7\"), child elements become keys (repeated children become a list), and text content is the element's value (or \"#text\" alongside attributes/children). The document's root wrapper is unwrapped, so 'path' is relative to its children — point it at the repeated element to get one row each (e.g. \"channel.item\" for RSS). Namespaces are stripped to their local name. All values are text, like CSV.",
 			Summary:     "Parse XML text into rows + a structured value; 'path' digs to a repeated element.",
 			Examples: []core.ParamsExample{
 				{

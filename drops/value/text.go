@@ -38,7 +38,7 @@ func init() {
 				{
 					Title:  "Inline prompt template",
 					Params: json.RawMessage(`{"text":"You are a helpful assistant.\nAnswer the user's question in one sentence."}`),
-					Notes:  "Multi-line strings work fine — useful as a system prompt feeding into a Claude node.",
+					Notes:  "Multi-line strings work fine — useful as a system prompt feeding into a Claude step.",
 				},
 			},
 			ExecutionModel: core.ExecutionBatch,
@@ -48,7 +48,7 @@ func init() {
 			// literal). See core.WithPassthrough / Manifest.ValueSource.
 			ValueSource:  true,
 			Outputs:      []core.Port{{Port: "out", Label: "Text", MIME: []string{"text/plain"}}},
-			ParamsSchema: json.RawMessage(`{"type":"object","properties":{"text":{"type":"string","format":"multiline","title":"Text"}},"required":["text"]}`),
+			ParamsSchema: json.RawMessage(`{"type":"object","properties":{"text":{"type":"string","format":"multiline","title":"Text","description":"The text to emit."}},"required":["text"]}`),
 			Idempotent:   true,
 		},
 		Execute: executeText,

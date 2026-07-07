@@ -21,7 +21,7 @@ func init() {
 			Label:       "Klarna",
 			Subtitle:    "Capture order",
 			Summary:     "Capture a Klarna order when the goods ship — fully, or a partial amount.",
-			Description: "Capture (charge) a Klarna order once you fulfil it — the money-movement step after a purchase is authorized. Give the order id (typed or wired from upstream); leave Amount empty to capture the whole remaining authorized amount, or set it in the currency's smallest unit (öre/cents) for a partial capture. A short Description shows on the customer's Klarna statement.\n\nThe new capture's id comes out on 'capture_id'. Klarna captures aren't safely repeatable, so this step does NOT auto-retry — a duplicated capture would double-charge; the engine also dedupes a recovered re-run of the same job. Connect your Klarna account once on the Apps page.",
+			Description: "Capture (charge) a Klarna order once you fulfil it — the money-movement step after a purchase is authorized. Give the order id (typed or wired from upstream); leave Amount empty to capture the whole remaining authorized amount, or set it in the currency's smallest unit (öre/cents) for a partial capture. A short Description shows on the customer's Klarna statement.\n\nThe new capture's id comes out on 'capture_id'. Capturing an order charges the customer, so this step runs once and is never retried automatically — Dazyflow won't charge the same order twice. Connect your Klarna account once on the Apps page.",
 			Integration: "Klarna",
 			Category:    "network",
 			Icon:        "credit-card",

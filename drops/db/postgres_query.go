@@ -56,9 +56,9 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"sql":    {"type":"string","title":"SQL"},
-					"params": {"type":"array","items":{},"title":"Query values"},
-					"limit":  {"type":"integer","minimum":1,"title":"Row limit"}
+					"sql":    {"type":"string","title":"SQL","description":"The SELECT query to run. Use $1, $2 … placeholders for values and supply them under 'Query values'."},
+					"params": {"type":"array","items":{},"title":"Query values","description":"Values for the $1, $2 … placeholders in the SQL, in order."},
+					"limit":  {"type":"integer","minimum":1,"title":"Row limit","description":"Optional cap on how many rows to return."}
 				},
 				"required":["sql"]
 			}`),

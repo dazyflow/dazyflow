@@ -21,7 +21,7 @@ func init() {
 			Label:       "Fortnox",
 			Subtitle:    "Create customer",
 			Summary:     "Create a customer in Fortnox — the entry point of most billing automations (form signup → customer → invoice).",
-			Description: "Create a customer in your connected Fortnox account. Name (required) and Email can be typed on the step or wired in from upstream (the matching input port overrides the param). The new customer's number comes out on the 'customer_number' pin, ready to wire into 'Create invoice'.\n\nFortnox has no idempotency key, so this step does not auto-retry — a retried create would make a duplicate customer.",
+			Description: "Create a customer in your connected Fortnox account. Name (required) and Email can be typed on the step or wired in from upstream (the matching input port overrides the param). The new customer's number comes out on the 'Customer number' output, ready to wire into 'Create invoice'.\n\nFortnox has no idempotency key, so this step does not auto-retry — a retried create would make a duplicate customer.",
 			Integration: "Fortnox",
 			Category:    "network",
 			Icon:        "user-plus",

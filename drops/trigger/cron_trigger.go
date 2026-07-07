@@ -29,7 +29,7 @@ func init() {
 				{
 					Title:  "Every day at 09:00",
 					Params: json.RawMessage(`{"cron":"0 9 * * *","tz":"Europe/Stockholm"}`),
-					Notes:  "5-field cron, read in the given IANA time zone. Emits 'fired_at' downstream.",
+					Notes:  "5-field cron, read in the given time zone. The fire time comes out on the 'Time' output.",
 				},
 				{
 					Title:  "Every 15 minutes",

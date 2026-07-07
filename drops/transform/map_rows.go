@@ -22,7 +22,7 @@ func init() {
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"transform", "map", "rename", "filter", "select", "etl"},
-			Description: "Reshape a row stream between two drops: select/drop columns, rename, fill missing values, filter rows on equality / inequality / membership. All operations refer to INPUT column names; renames apply last so the output uses the renamed names. Pure config, no expression language — covers the bulk of 'my Excel columns don't match my DB schema' cases.",
+			Description: "Reshape a row stream between two steps: select/drop columns, rename, fill missing values, filter rows on equality / inequality / membership. All operations refer to INPUT column names; renames apply last so the output uses the renamed names. Pure config, no expression language — covers the bulk of 'my Excel columns don't match my DB schema' cases.",
 			Summary:     "Reshape rows: select or drop columns, rename, default missing cells, and filter by equality or membership.",
 			Examples: []core.ParamsExample{
 				{

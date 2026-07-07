@@ -34,7 +34,7 @@ func init() {
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"url", "link", "uri", "address", "query", "validate"},
-			Description: "Hold a web address — type it inline or wire a string into the 'url' input — and emit it on 'out' only after checking it's a real http(s) URL. A malformed address (no scheme, no host, or a non-http scheme) fails the node up front instead of breaking a later step. It also decodes the address so you can act on its parts without string surgery: 'host' (example.com), 'path' (/blog/post), and 'query' as a map (?a=1&b=2 → {a:\"1\",b:\"2\"}, values URL-decoded, first value wins on a repeated key) — so you can branch on the path, template with a param, or rebuild a URL directly.",
+			Description: "Hold a web address — type it inline or wire a string into the 'url' input — and emit it on 'out' only after checking it's a real http(s) URL. A malformed address (no scheme, no host, or a non-http scheme) fails the step up front instead of breaking a later step. It also decodes the address so you can act on its parts without string surgery: 'host' (example.com), 'path' (/blog/post), and 'query' as a map (?a=1&b=2 → {a:\"1\",b:\"2\"}, values URL-decoded, first value wins on a repeated key) — so you can branch on the path, template with a param, or rebuild a URL directly.",
 			Summary:     "Validate a URL (http/https) and emit it plus its host, path, and query params.",
 			Examples: []core.ParamsExample{
 				{

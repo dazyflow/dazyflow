@@ -28,7 +28,7 @@ func init() {
 				{
 					Title:  "Every 5 minutes",
 					Params: json.RawMessage(`{"interval_seconds":300}`),
-					Notes:  "The interval lives on the node; the scheduler reads it. Emits 'fired_at' downstream.",
+					Notes:  "The flow runs on this interval; the fire time comes out on the 'Time' output.",
 				},
 			},
 			ExecutionModel: core.ExecutionTrigger,

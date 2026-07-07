@@ -26,7 +26,7 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"transform", "csv", "parse", "rows", "etl", "import"},
 			Description: "Turn CSV text into rows. Feed it an HTTP response, a downloaded file's contents, or any comma-separated text and it parses into the standard rows + headers shape that Sheets, Excel, Postgres, and the transform family consume. By default the first line is the header row and names the columns; set 'header' false for headerless data (columns become col1, col2, …). 'delimiter' switches the separator — use \"\\t\" or \"tab\" for tab-separated values, \";\" for European CSVs. Rows shorter than the header are padded with empty strings; longer rows keep their extra cells under the padded names.",
-			Summary:     "Parse CSV/TSV text into rows + headers for downstream tabular drops.",
+			Summary:     "Parse CSV/TSV text into rows + headers for downstream tabular steps.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Parse a CSV download straight into rows",

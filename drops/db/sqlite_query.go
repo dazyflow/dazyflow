@@ -53,10 +53,10 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"path":   {"type":"string","format":"workspace-path","title":"Database file"},
-					"sql":    {"type":"string","title":"SQL"},
-					"params": {"type":"array","items":{},"title":"Query values"},
-					"limit":  {"type":"integer","minimum":1,"title":"Row limit"}
+					"path":   {"type":"string","format":"workspace-path","title":"Database file","description":"Path to the SQLite database file in your workspace."},
+					"sql":    {"type":"string","title":"SQL","description":"The SELECT query to run. Use ? placeholders for values and supply them under 'Query values'."},
+					"params": {"type":"array","items":{},"title":"Query values","description":"Values for the ? placeholders in the SQL, in order."},
+					"limit":  {"type":"integer","minimum":1,"title":"Row limit","description":"Optional cap on how many rows to return."}
 				},
 				"required":["path","sql"]
 			}`),

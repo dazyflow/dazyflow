@@ -25,7 +25,7 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"transform", "json", "parse", "rows", "etl"},
 			Description: "Turn JSON text into rows. Feed it the text output of an AI step or an HTTP response and it parses the JSON into the standard rows + headers shape that Sheets, Excel, Postgres, and the transform family consume. A JSON array of objects becomes one row each; a single object becomes one row. Tolerates the wrappers models add: leading/trailing prose and Markdown code fences (```json … ```) are stripped before parsing. Use 'path' to reach an array nested inside an envelope (e.g. \"data.items\").",
-			Summary:     "Parse JSON text (incl. fenced AI output) into rows + headers for downstream tabular drops.",
+			Summary:     "Parse JSON text (incl. fenced AI output) into rows + headers for downstream tabular steps.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Parse an AI step's JSON array straight into rows",

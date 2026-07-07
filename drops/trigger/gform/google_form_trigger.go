@@ -37,7 +37,7 @@ func init() {
 				{
 					Title:  "Every 5 minutes",
 					Params: json.RawMessage(`{"account":"default","form_id":"REPLACE_WITH_YOUR_FORM_ID","interval_seconds":300}`),
-					Notes:  "The interval lives on the node; the scheduler reads it. Emits new 'responses' downstream.",
+					Notes:  "Checks the form on this interval; new submissions come out on the 'New responses' output.",
 				},
 			},
 			RequiresConnections: []core.ConnectionRequirement{
@@ -54,7 +54,7 @@ func init() {
 				"type":"object",
 				"properties":{
 					"account":{"type":"string","default":"default"},
-					"form_id":{"type":"string","format":"google-form","title":"Form"},
+					"form_id":{"type":"string","format":"google-form","title":"Form","description":"The Google Form to watch for new responses."},
 					"interval_seconds":{
 						"type":"integer",
 						"title":"Check every",

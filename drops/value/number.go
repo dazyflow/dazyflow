@@ -22,7 +22,7 @@ func init() {
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"number", "numeric", "constant", "literal", "int", "float"},
-			Description: "Emit a literal numeric value. Downstream consumers see it as a JSON number on the 'out' port — wire it into a comparison (In Range, Compare), an operator, or a numeric input like Delay's ms.",
+			Description: "Emit a literal numeric value. Downstream consumers see it as a JSON number on the 'out' port — wire it into a comparison (In Range, Compare), an operator, or a numeric input like a Delay step's duration.",
 			Summary:     "Emit a graph-author-supplied literal number on the 'out' port.",
 			Examples: []core.ParamsExample{
 				{
@@ -42,7 +42,7 @@ func init() {
 			// literal). See core.WithPassthrough / Manifest.ValueSource.
 			ValueSource:  true,
 			Outputs:      []core.Port{{Port: "out", Label: "Number", MIME: []string{"application/json"}}},
-			ParamsSchema: json.RawMessage(`{"type":"object","properties":{"value":{"type":"number","title":"Number"}},"required":["value"]}`),
+			ParamsSchema: json.RawMessage(`{"type":"object","properties":{"value":{"type":"number","title":"Number","description":"The number to emit (e.g. 200 or 0.95)."}},"required":["value"]}`),
 			Idempotent:   true,
 		},
 		Execute: executeNumber,

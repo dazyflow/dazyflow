@@ -29,7 +29,7 @@ func init() {
 				{
 					Title:  "Slack Block Kit array",
 					Params: json.RawMessage(`{"json":"[{\"type\":\"section\",\"text\":{\"type\":\"mrkdwn\",\"text\":\"*Deploy finished* :rocket:\"}},{\"type\":\"divider\"}]"}`),
-					Notes:  "Wire 'out' into a Send message node's Blocks input.",
+					Notes:  "Wire 'out' into a Send message step's Blocks input.",
 				},
 				{
 					Title:  "A config object",

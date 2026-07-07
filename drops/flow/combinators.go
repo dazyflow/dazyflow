@@ -33,14 +33,14 @@ func init() {
 	registerCombinator(combinatorSpec{
 		id: "and", label: "A AND B", icon: "ampersand", all: true,
 		summary: "Emit true on the Yes/No output only when every wired input is true.",
-		desc:    "Emit true on the Yes/No output when ALL wired boolean inputs are true, otherwise false (logical AND). Variadic — wire two or more Compare results (or any boolean-emitting nodes) and feed the Yes/No output into a single Branch.condition. With a single input it just passes that input through; an empty set errors.",
-		example: core.ParamsExample{Title: "Over threshold AND in stock", Notes: "Wire one Compare (amount > 1000) and another (stock > 0) into the inputs pin. It's true only when both are true."},
+		desc:    "Emit true on the Yes/No output when ALL wired boolean inputs are true, otherwise false (logical AND). Variadic — wire two or more Compare results (or any boolean-emitting steps) and feed the Yes/No output into a single Branch step's condition input. With a single input it just passes that input through; an empty set errors.",
+		example: core.ParamsExample{Title: "Over threshold AND in stock", Notes: "Wire one Compare (amount > 1000) and another (stock > 0) into the inputs. It's true only when both are true."},
 	})
 	registerCombinator(combinatorSpec{
 		id: "or", label: "A OR B", icon: "slash", all: false,
 		summary: "Emit true on the Yes/No output when any wired input is true.",
-		desc:    "Emit true on the Yes/No output when ANY wired boolean input is true, otherwise false (logical OR). Variadic — wire two or more Compare results (or any boolean-emitting nodes) and feed the Yes/No output into a single Branch.condition. With a single input it just passes that input through; an empty set errors.",
-		example: core.ParamsExample{Title: "VIP OR high value", Notes: "Wire one Compare (tier == 'vip') and another (amount > 1000) into the inputs pin. It's true when either is true."},
+		desc:    "Emit true on the Yes/No output when ANY wired boolean input is true, otherwise false (logical OR). Variadic — wire two or more Compare results (or any boolean-emitting steps) and feed the Yes/No output into a single Branch step's condition input. With a single input it just passes that input through; an empty set errors.",
+		example: core.ParamsExample{Title: "VIP OR high value", Notes: "Wire one Compare (tier == 'vip') and another (amount > 1000) into the inputs. It's true when either is true."},
 	})
 
 	// NOT — the unary member. One boolean input, negated onto the Yes/No output.
@@ -53,7 +53,7 @@ func init() {
 			Category:    "logic",
 			Provider:    "internal",
 			Tags:        []string{"condition", "predicate", "boolean", "logic", "combinator", "not", "negate", "invert"},
-			Description: "Emit the logical negation of the wired boolean input on the Yes/No output — true becomes false, false becomes true. Wire a Compare result (or any boolean-emitting node) into the input; feed the Yes/No output into a Branch.condition to flip which port a payload takes without rewiring the branch.",
+			Description: "Emit the logical negation of the wired boolean input on the Yes/No output — true becomes false, false becomes true. Wire a Compare result (or any boolean-emitting step) into the input; feed the Yes/No output into a Branch step's condition input to flip which port a payload takes without rewiring the branch.",
 			Summary:     "Negate the boolean input: emit true when the input is false, and false when it is true.",
 			Examples: []core.ParamsExample{{
 				Title: "Branch when NOT approved",

@@ -23,7 +23,7 @@ func init() {
 			Label:       "Stripe",
 			Subtitle:    "Create customer",
 			Summary:     "Create a Stripe customer — the entry point of most billing automations (form signup → customer).",
-			Description: "Create a customer in your Stripe account. Email, Name and Description can be typed on the step or wired in from upstream (the matching input port overrides the param). The new customer's id comes out on the 'customer_id' pin for downstream Stripe steps; retries reuse the same Idempotency-Key so a flaky run can't create duplicates.",
+			Description: "Create a customer in your Stripe account. Email, Name and Description can be typed on the step or wired in from upstream (the matching input port overrides the param). The new customer's id comes out on the 'Customer ID' output for downstream Stripe steps; retries reuse the same Idempotency-Key so a flaky run can't create duplicates.",
 			Integration: "Stripe",
 			Category:    "network",
 			Icon:        "credit-card",

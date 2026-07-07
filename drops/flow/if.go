@@ -22,7 +22,7 @@ func init() {
 			Category:    "flow_control",
 			Provider:    "internal",
 			Tags:        []string{"conditional", "filter", "if-else", "routing", "predicate"},
-			Description: "Test the value on A and send it down Yes or No in one node. Pick the test from a plain-language list — equals, contains, is greater than, is one of, is within range, and more. A is both the value tested and the payload that flows on: it leaves via Yes when the test passes, via No when it fails. Wire B from upstream or type a literal default. This is Compare + Branch fused for the everyday single-condition case; reach for Compare → Branch when you need to route a different payload than the one you test, or to combine conditions with And/Or/Not.",
+			Description: "Test the value on A and send it down Yes or No in one step. Pick the test from a plain-language list — equals, contains, is greater than, is one of, is within range, and more. A is both the value tested and the payload that flows on: it leaves via Yes when the test passes, via No when it fails. Wire B from upstream or type a literal default. This is Compare + Branch fused for the everyday single-condition case; reach for Compare → Branch when you need to route a different payload than the one you test, or to combine conditions with And/Or/Not.",
 			Summary:     "Test A with a chosen operator and forward it down the Yes or No port.",
 			Examples: []core.ParamsExample{
 				{
@@ -94,7 +94,7 @@ func init() {
 			Category:    "flow_control",
 			Provider:    "internal",
 			Tags:        []string{"conditional", "filter", "text", "string", "substring", "search", "routing"},
-			Description: "Check whether the Text on A contains the Substring on B, and send the text down Yes or No accordingly. A fixed-test preset of the If drop — the test is always 'contains', so there's nothing to configure but the substring. Wire the text into A and type (or wire) the substring into B. For other tests (equals, ranges, one of), use If or Compare.",
+			Description: "Check whether the Text on A contains the Substring on B, and send the text down Yes or No accordingly. A fixed-test preset of the If step — the test is always 'contains', so there's nothing to configure but the substring. Wire the text into A and type (or wire) the substring into B. For other tests (equals, ranges, one of), use If or Compare.",
 			Summary:     "Forward the Text down Yes or No based on whether it contains the Substring.",
 			Examples: []core.ParamsExample{
 				{

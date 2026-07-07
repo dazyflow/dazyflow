@@ -23,7 +23,7 @@ func init() {
 			Category:    "flow_control",
 			Provider:    "internal",
 			Tags:        []string{"compose", "reuse", "subgraph", "nested"},
-			Description: "Run another graph (by ID, in the same workspace) as a single step. Inputs on this node are seeded onto specific child nodes via input_map; specific child node outputs become this node's outputs via output_map. The worker submits the child asynchronously; the parent is parked until the child terminates.",
+			Description: "Run another graph (by ID, in the same workspace) as a single step. Inputs on this step are seeded onto specific child steps via input_map; specific child step outputs become this step's outputs via output_map. The worker submits the child asynchronously; the parent is parked until the child terminates.",
 			Summary:     "Invoke another graph as a reusable step, seeding its inputs and projecting selected child outputs back up.",
 			Examples: []core.ParamsExample{
 				{
@@ -39,10 +39,10 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"graph_id":{"type":"string"},
+					"graph_id":{"type":"string","title":"Flow ID","description":"The ID of the flow to run as a step."},
 					"input_map":{
 						"type":"object",
-						"description":"map of parent input port → child node ID (the node receives the Ref as its only input)",
+						"description":"map of parent input port → child step ID (the step receives the Ref as its only input)",
 						"additionalProperties":{"type":"string"}
 					},
 					"output_map":{

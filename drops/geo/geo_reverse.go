@@ -59,7 +59,7 @@ func init() {
 				"type":"object",
 				"properties":{
 					"point":{"type":"string","format":"geo-point","title":"Location","description":"The map pin as \"lat,lon\". Use the map to set it. Overridden by the Coordinate input."},
-					"show_map":{"type":"boolean","default":true,"title":"Show map on card","description":"Show the interactive map on the node card. Turn off for a compact card — you can still pick in the inspector or drive it with the Coordinate input."},
+					"show_map":{"type":"boolean","default":true,"title":"Show map on card","description":"Show the interactive map on the step card. Turn off for a compact card — you can still pick in the inspector or drive it with the Coordinate input."},
 					"language":{"type":"string","title":"Language","description":"Optional ISO language code for the returned place name (e.g. sv, de)."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				}

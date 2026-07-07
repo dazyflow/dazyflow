@@ -24,13 +24,13 @@ func init() {
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"transform", "text", "render", "format", "join", "reduce", "message", "notify"},
-			Description: "Collapse a list of rows into one text string: render one line per row (a CEL expression or a single column), then join the lines with a separator. This is the bridge between the tabular drops and the message sinks — `slack_send_message`, `gmail_send_email`, `github_create_issue` all want a single string on their `body`/`text` input, not a rows list. Wire `render_text.text` into that port. With zero rows it emits `empty` (default \"\"), so you can post \"No new orders today.\" instead of failing on an empty message.",
+			Description: "Collapse a list of rows into one text string: render one line per row (a CEL expression or a single column), then join the lines with a separator. This is the bridge between the tabular steps and the message-sending steps — Send Slack message, Send email, and Create GitHub issue all want a single line of text in their Body/Text field, not a list of rows. Connect this step's text output into that field. With zero rows it emits `empty` (default \"\"), so you can post \"No new orders today.\" instead of failing on an empty message.",
 			Summary:     "Render rows into one text string — a templated line per row, joined with a separator.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "One Slack line per row",
 					Params: json.RawMessage(`{"template":"'• ' + row.country + ': ' + string(row.orders) + ' orders'"}`),
-					Notes:  "Each row becomes a bullet; lines are joined with a newline. Wire the 'text' output into slack_send_message's 'body' input.",
+					Notes:  "Each row becomes a bullet; lines are joined with a newline. Connect the text output into Slack's Send message step's Body input.",
 				},
 				{
 					Title:  "Join an existing column with commas",

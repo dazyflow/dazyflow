@@ -27,13 +27,13 @@ func init() {
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"transform", "template", "html", "email", "render", "merge", "format"},
-			Summary:     "Fill an HTML template with merge fields, producing a styled HTML string for email_send / gmail_send_email.",
-			Description: "Render an HTML template with merge fields into one HTML string — your own branded layout, filled with dynamic content, ready to wire into an email's Body. The template is Go html/template syntax: {{.name}} pulls a field from the data, {{range .items}}…{{end}} loops, {{if .vip}}…{{end}} branches. Type the template on the step, or wire it in from a workspace file (file_read of a .html). Wire the merge data (a JSON object, e.g. a row from a sheet or a webhook body) into the 'data' input — the template sees it as the root, so {{.customer}} reads data.customer. Values are HTML-escaped automatically, so a customer name containing <script> can't break your markup. The 'html' output drops straight into email_send.body or gmail_send_email.body (set that step's format to HTML).",
+			Summary:     "Fill an HTML template with merge fields, producing a styled HTML string for the Send email steps.",
+			Description: "Render an HTML template with merge fields into one HTML string — your own branded layout, filled with dynamic content, ready to wire into an email's Body. The template is Go html/template syntax: {{.name}} pulls a field from the data, {{range .items}}…{{end}} loops, {{if .vip}}…{{end}} branches. Type the template on the step, or wire it in from a workspace file (a Read file step on a .html). Wire the merge data (a JSON object, e.g. a row from a sheet or a webhook body) into the 'data' input — the template sees it as the root, so {{.customer}} reads data.customer. Values are HTML-escaped automatically, so a customer name containing <script> can't break your markup. The rendered HTML goes straight into a Send email step's Body (set that step's format to HTML).",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Branded greeting",
 					Params: json.RawMessage(`{"template":"<h1>Hi {{.name}},</h1><p>Your order <b>{{.order_id}}</b> shipped.</p>"}`),
-					Notes:  "Wire the data input (e.g. a sheet row with name + order_id) and send the 'html' output into email_send.body with format=HTML.",
+					Notes:  "Wire the data input (e.g. a sheet row with name + order_id) and send the 'Rendered HTML' output into a Send email step's Body with format=HTML.",
 				},
 				{
 					Title:  "Loop over line items",

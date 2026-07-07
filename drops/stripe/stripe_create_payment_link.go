@@ -23,7 +23,7 @@ func init() {
 			Label:       "Stripe",
 			Subtitle:    "Create payment link",
 			Summary:     "Mint a shareable Stripe payment link for a price — wire the URL straight into an email or Slack message.",
-			Description: "Create a payment link for one of your Stripe Prices. Pick the price on the step (listed from your account) or wire a price_… id in from upstream — the input overrides the param, e.g. a per-row price from a sheet. The hosted checkout URL comes out on the 'url' pin — the classic flow is new-order-row → payment link → email/Slack it. Quantity can be wired in too; retries reuse the same Idempotency-Key so a flaky run can't mint duplicate links.",
+			Description: "Create a payment link for one of your Stripe Prices. Pick the price on the step (listed from your account) or wire a price_… id in from upstream — the input overrides the param, e.g. a per-row price from a sheet. The hosted checkout URL comes out on the 'URL' output — the classic flow is new-order-row → payment link → email/Slack it. Quantity can be wired in too; retries reuse the same Idempotency-Key so a flaky run can't mint duplicate links.",
 			Integration: "Stripe",
 			Category:    "network",
 			Icon:        "credit-card",

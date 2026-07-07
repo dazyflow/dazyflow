@@ -31,7 +31,7 @@ func init() {
 				{
 					Title:  "Default — fire on any new PR in the connected repo",
 					Params: json.RawMessage(`{}`),
-					Notes:  "This trigger is webhook-driven; the daemon's GitHub events handler seeds the node when a pull_request:opened event arrives.",
+					Notes:  "This trigger is webhook-driven; the daemon's GitHub events handler seeds the step when a pull_request:opened event arrives.",
 				},
 			},
 			RequiresConnections: []core.ConnectionRequirement{

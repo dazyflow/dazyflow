@@ -21,7 +21,7 @@ func init() {
 			Label:       "Roaring",
 			Subtitle:    "Company search",
 			Summary:     "Find Nordic companies by name via Roaring — resolve a name to candidate org numbers.",
-			Description: "Search Roaring for companies by name — the resolve step before enrichment: turn a typed or upstream company name into candidate matches (each with its organisation number), which you then feed to 'Company overview'. The search text can be typed on the step or wired in from upstream (the 'Query' input overrides the param). Defaults to Sweden ('se').\n\nOut come the match 'count' as text and the whole Roaring search response on the 'results' pin (iterate it with a For Each to enrich each match). This is a read — safe to retry. Connect your Roaring account once on the Apps page (Consumer Key + Secret).",
+			Description: "Search Roaring for companies by name — the resolve step before enrichment: turn a typed or upstream company name into candidate matches (each with its organisation number), which you then feed to 'Company overview'. The search text can be typed on the step or wired in from upstream (the 'Query' input overrides the param). Defaults to Sweden ('se').\n\nOut come the match 'count' as text and the whole Roaring search response on the 'Results' output (iterate it with a For Each to enrich each match). This is a read — safe to retry. Connect your Roaring account once on the Apps page (Consumer Key + Secret).",
 			Integration: "Roaring",
 			Category:    "network",
 			Icon:        "search",

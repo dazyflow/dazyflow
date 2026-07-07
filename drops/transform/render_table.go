@@ -25,13 +25,13 @@ func init() {
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"transform", "table", "html", "render", "format", "email", "message", "report"},
-			Description: "Turn a rows list straight into a ready-to-send HTML table — the column names become the header row and every row becomes a table row. Unlike render_text there is no template to write and no column names to type: the headers come from whatever columns the data actually has, so it can't drift from the source (no \"no such key\" at run time). Wire a rows list into `rows` and the `html` output into a message sink — e.g. gmail_send_email's body. With zero rows it emits `empty` (default \"\") so an empty result yields a chosen fallback instead of a blank table.",
+			Description: "Turn a rows list straight into a ready-to-send HTML table — the column names become the header row and every row becomes a table row. Unlike Make text there is no template to write and no column names to type: the headers come from whatever columns the data actually has, so it can't drift from the source (no \"no such key\" at run time). Wire a rows list into `rows` and the `html` output into a message step — e.g. a Send email step's Body. With zero rows it emits `empty` (default \"\") so an empty result yields a chosen fallback instead of a blank table.",
 			Summary:     "Turn rows into a ready-to-send HTML table — columns become the header row, no template needed.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Email a table of every column",
 					Params: json.RawMessage(`{}`),
-					Notes:  "Zero config: wire a rows list into 'rows' and the 'html' output into gmail_send_email's body. Headers are the data's columns, in order.",
+					Notes:  "Zero config: wire a rows list into 'rows' and the 'html' output into a Send email step's Body. Headers are the data's columns, in order.",
 				},
 				{
 					Title:  "Only some columns, in a chosen order",

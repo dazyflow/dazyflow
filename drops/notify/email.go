@@ -38,7 +38,7 @@ func init() {
 			Integration: "Email",
 			Tags:        []string{"email", "smtp", "notify", "report"},
 			Summary:     "Send an email through any mail server (SMTP) — daily summaries, alerts, or a build's output straight into someone's inbox.",
-			Description: "Send an email through your own mail server (SMTP). To, Subject and Body can be typed on the step or wired in from upstream (the matching input port overrides the param) — handy for per-recipient sends or mailing another step's output. Attach files by wiring file-producing nodes (e.g. sheets_export_pdf) into the variadic 'attachments' input. Configure the mail server (host, security, login, sender) once on the Email integration page.",
+			Description: "Send an email through your own mail server (SMTP). To, Subject and Body can be typed on the step or wired in from upstream (the matching input port overrides the param) — handy for per-recipient sends or mailing another step's output. Attach files by wiring file-producing steps (e.g. Export Sheet as PDF) into the variadic 'attachments' input. Configure the mail server (host, security, login, sender) once on the Email integration page.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Daily report",
@@ -48,7 +48,7 @@ func init() {
 				{
 					Title:  "Alert to multiple recipients",
 					Params: json.RawMessage(`{"to":"oncall@example.com,cto@example.com","subject":"Alert: error rate above threshold"}`),
-					Notes:  "Body left empty here so it can be wired in from an upstream node.",
+					Notes:  "Body left empty here so it can be wired in from an upstream step.",
 				},
 			},
 			ExecutionModel: core.ExecutionBatch,

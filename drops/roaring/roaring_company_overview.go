@@ -20,7 +20,7 @@ func init() {
 			Label:       "Roaring",
 			Subtitle:    "Company overview",
 			Summary:     "Enrich a Nordic organisation number into company data (name, status, address) via Roaring.",
-			Description: "Look up a company in Roaring by its organisation number — the enrichment step that turns a bare org number (e.g. from an order or a form) into structured company data: registered name, status, address and tax info. The org number can be typed on the step or wired in from upstream (the 'Org number' input overrides the param). Defaults to Sweden ('se'); set 'country' for another Nordic market Roaring covers.\n\nOut come the 'name' and 'status' as text and the whole Roaring record on the 'company' pin. This is a read — safe to retry. Connect your Roaring account once on the Apps page (Consumer Key + Secret).",
+			Description: "Look up a company in Roaring by its organisation number — the enrichment step that turns a bare org number (e.g. from an order or a form) into structured company data: registered name, status, address and tax info. The org number can be typed on the step or wired in from upstream (the 'Org number' input overrides the param). Defaults to Sweden ('se'); set 'country' for another Nordic market Roaring covers.\n\nOut come the 'name' and 'status' as text and the whole Roaring record on the 'Company' output. This is a read — safe to retry. Connect your Roaring account once on the Apps page (Consumer Key + Secret).",
 			Integration: "Roaring",
 			Category:    "network",
 			Icon:        "building-2",

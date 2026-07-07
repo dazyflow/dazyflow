@@ -26,13 +26,13 @@ func init() {
 			Category:    "trigger",
 			Provider:    "internal",
 			Tags:        []string{"webhook", "trigger", "http", "event"},
-			Description: "Starts the flow when something is sent to its web address — a submission from the flow's hosted form, or an HTTP request from another system. Data is what was sent (form fields / JSON); Headers carries the request's metadata.",
+			Description: "Starts the flow when something is sent to its web address — a submission from the flow's hosted form, or an HTTP request from another system. Body is what was sent (form fields / JSON); Headers carries the request's metadata.",
 			Summary:     "Starts the flow when its form is submitted or its web address receives data.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Webhook input (no params)",
 					Params: json.RawMessage(`{}`),
-					Notes:  "This node has no params — the trigger URL is provisioned per graph and the body/headers come from the inbound request.",
+					Notes:  "This step has no params — the trigger URL is provisioned per graph and the body/headers come from the inbound request.",
 				},
 			},
 			ExecutionModel: core.ExecutionTrigger,

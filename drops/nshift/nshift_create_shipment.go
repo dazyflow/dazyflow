@@ -21,7 +21,7 @@ func init() {
 			Label:       "nShift",
 			Subtitle:    "Create shipment",
 			Summary:     "Book a shipment with a carrier through your connected nShift account.",
-			Description: "Create (book) a shipment via nShift's Unifaun ExtAPI. Pass the full shipment payload — sender, receiver, parcels and the carrier service — as the 'shipment' object (typed on the step or, more usually, wired in from an upstream step that builds it per order). Its structure follows nShift's /shipments schema.\n\nOut come the new 'shipment_id', the parcel 'tracking_numbers' (comma-separated), and the whole created shipment as JSON on the 'shipment' pin. This is a money-moving write: nShift has no idempotency key on this call, so a blind retry would book a second consignment — retries are therefore OFF and a recovered run is de-duplicated. Connect your nShift account once on the Apps page; leave the connection on 'integration' to test without booking a real consignment.",
+			Description: "Create (book) a shipment with a carrier through nShift. Give it the shipment details — sender, receiver, parcels and the carrier service — as the 'Shipment' input, usually built by an earlier step for each order (you can also type it on the step).\n\nOut come the new 'shipment_id', the parcel 'tracking_numbers' (comma-separated), and the whole created shipment as JSON on the 'Shipment' output. Booking a shipment costs money, so this step runs once and is never retried automatically — Dazyflow won't book the same consignment twice. Connect your nShift account once on the Apps page; leave the connection on 'integration' to test without booking a real consignment.",
 			Integration: "nShift",
 			Category:    "network",
 			Icon:        "truck",

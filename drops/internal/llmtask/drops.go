@@ -21,8 +21,8 @@ func askDrop(cfg Config) engine.NativeDrop {
 	props["prompt"] = map[string]any{"type": "string", "format": "multiline", "title": "Prompt", "description": "Single user message (used when no Prompt input and no messages)."}
 	props["system"] = map[string]any{"type": "string", "format": "multiline", "title": "System prompt", "description": "Optional instruction that frames the reply."}
 	props["messages"] = map[string]any{"type": "array", "items": map[string]any{}, "x_advanced": true, "description": "Full conversation history ({role, content}); overrides the prompt."}
-	props["max_tokens"] = map[string]any{"type": "integer", "default": 1024, "minimum": 1}
-	props["temperature"] = map[string]any{"type": "number", "x_advanced": true}
+	props["max_tokens"] = map[string]any{"type": "integer", "default": 1024, "minimum": 1, "title": "Max tokens", "description": "Cap on how long the reply can be. Higher allows longer answers."}
+	props["temperature"] = map[string]any{"type": "number", "x_advanced": true, "title": "Temperature", "description": "Creativity dial (0–1): lower is more focused and repeatable, higher more varied."}
 	return engine.NativeDrop{
 		Manifest: core.Manifest{
 			ID:          cfg.AskID,
@@ -30,7 +30,7 @@ func askDrop(cfg Config) engine.NativeDrop {
 			Label:       cfg.Integration,
 			Subtitle:    "Ask",
 			Summary:     "Send a prompt and get a single text response back.",
-			Description: "Send a prompt and get a response — summarise upstream text, classify inputs, or generate text. The graph itself is your agent loop.",
+			Description: "Send a prompt and get a response back — summarise upstream text, classify an input, or generate text. Wire the text to work on into the Prompt input, or type a prompt on the step.",
 			Integration: cfg.Integration,
 			Category:    "ai",
 			Icon:        cfg.Icon,
@@ -100,7 +100,7 @@ func summarizeDrop(cfg Config) engine.NativeDrop {
 	props := baseProps(cfg)
 	props["text"] = map[string]any{"type": "string", "format": "multiline", "title": "Text to summarize", "description": "Or wire it into the Text input."}
 	props["style"] = map[string]any{"type": "string", "title": "Style", "enum": []any{"one_line", "paragraph", "bullets"}, "enumNames": []any{"One sentence", "Short paragraph", "Bullet points"}, "default": "paragraph"}
-	props["max_words"] = map[string]any{"type": "integer", "title": "Roughly how many words", "minimum": 5, "maximum": 500, "default": 60}
+	props["max_words"] = map[string]any{"type": "integer", "title": "Roughly how many words", "description": "Rough target length for the summary.", "minimum": 5, "maximum": 500, "default": 60}
 	props["language"] = map[string]any{"type": "string", "title": "Output language", "x_advanced": true, "description": "Leave blank to match the input's language."}
 	return engine.NativeDrop{
 		Manifest: core.Manifest{
@@ -175,7 +175,7 @@ func extractDrop(cfg Config) engine.NativeDrop {
 	props := baseProps(cfg)
 	props["text"] = map[string]any{"type": "string", "format": "multiline", "title": "Text to read", "description": "Or wire it into the Text input."}
 	props["fields"] = map[string]any{
-		"type": "array", "title": "Fields to extract", "minItems": 1,
+		"type": "array", "title": "Fields to extract", "description": "The fields to pull out — give each a name and what it is; the result is one object with those fields.", "minItems": 1,
 		"items": map[string]any{"type": "object", "properties": map[string]any{
 			"name":        map[string]any{"type": "string", "title": "Field name"},
 			"description": map[string]any{"type": "string", "title": "What it is"},
@@ -284,13 +284,13 @@ func classifyDrop(cfg Config) engine.NativeDrop {
 	props := baseProps(cfg)
 	props["text"] = map[string]any{"type": "string", "format": "multiline", "title": "Text to classify", "description": "Or wire it into the Text input."}
 	props["categories"] = map[string]any{
-		"type": "array", "title": "Categories", "minItems": 2,
+		"type": "array", "title": "Categories", "description": "The buckets to sort text into. Give each a name and a short 'when to use it' so the AI picks well.", "minItems": 2,
 		"items": map[string]any{"type": "object", "properties": map[string]any{
 			"name":        map[string]any{"type": "string", "title": "Category"},
 			"description": map[string]any{"type": "string", "title": "When to use it"},
 		}, "required": []any{"name"}},
 	}
-	props["allow_none"] = map[string]any{"type": "boolean", "title": "Allow \"none of these\"", "default": false}
+	props["allow_none"] = map[string]any{"type": "boolean", "title": "Allow \"none of these\"", "description": "Let the AI answer 'none' when no category fits, instead of forcing a pick.", "default": false}
 	return engine.NativeDrop{
 		Manifest: core.Manifest{
 			ID:      taskID(cfg, "classify"),
@@ -395,7 +395,7 @@ func draftReplyDrop(cfg Config) engine.NativeDrop {
 	props["text"] = map[string]any{"type": "string", "format": "multiline", "title": "Message to reply to", "description": "Or wire it into the Message input."}
 	props["tone"] = map[string]any{"type": "string", "title": "Tone", "enum": []any{"friendly", "formal", "concise", "apologetic"}, "enumNames": []any{"Friendly", "Formal", "Concise", "Apologetic"}, "default": "friendly"}
 	props["guidance"] = map[string]any{"type": "string", "format": "multiline", "title": "Anything to include?", "description": "e.g. 'offer a refund', 'point them to the docs'."}
-	props["language"] = map[string]any{"type": "string", "title": "Reply language", "x_advanced": true}
+	props["language"] = map[string]any{"type": "string", "title": "Reply language", "x_advanced": true, "description": "Language to write the reply in. Blank matches the incoming message."}
 	props["signature"] = map[string]any{"type": "string", "format": "multiline", "title": "Signature", "x_advanced": true, "description": "Appended to the end of the reply."}
 	return engine.NativeDrop{
 		Manifest: core.Manifest{
