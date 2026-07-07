@@ -3,6 +3,9 @@
 
 COMPOSE ?= docker compose
 
+# Output directory for the generated step-catalog reference (make docs-reference).
+DOCS_REFERENCE_OUT ?= docs/reference/steps
+
 # Version metadata stamped into the binary (see core/buildinfo). Computed
 # from git so every build carries the same identity: the native `make
 # bin`, the Compose image, and CI all read these. Exported so the
@@ -23,7 +26,7 @@ LDFLAGS := -s -w \
 .DEFAULT_GOAL := help
 
 .PHONY: help up down restart logs ps build rebuild env pg pg-down dev web test vet fmt check ci \
-        bin version major minor patch _bump upgrade
+        docs-reference docs-site docs-dev bin version major minor patch _bump upgrade
 
 help: ## List targets
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sort | \
@@ -98,6 +101,17 @@ vet: ## Run go vet
 
 fmt: ## Format Go sources
 	gofmt -w .
+
+docs-reference: ## Regenerate the step-catalog reference Markdown from the live drop manifests
+	go run ./cmd/docsgen -out $(DOCS_REFERENCE_OUT)
+
+docs-site: docs-reference ## Build the docs site (docs.dazyflow.app) into docs/.vitepress/dist
+	npm --prefix docs install
+	npm --prefix docs run docs:build
+
+docs-dev: docs-reference ## Run the docs site locally with hot reload (http://localhost:5173)
+	npm --prefix docs install
+	npm --prefix docs run docs:dev
 
 ## --- Build & release ---
 # The Compose targets above (build/rebuild/up/restart) already stamp the

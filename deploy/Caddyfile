@@ -23,6 +23,20 @@ dazyflow.app {
 	reverse_proxy dzd:8080
 }
 
+# Documentation site — the static VitePress build (docs.dazyflow.app), served
+# from a read-only volume mounted into this container (see docker-compose.prod.yml:
+# ./docs/.vitepress/dist → /srv/docs). This is an EXPLICIT host block so Caddy
+# gives it a normal managed cert and does NOT route it through the *.dazyflow.app
+# on-demand/`ask` path below (which would refuse a cert — "docs" isn't a claimed
+# org). Build/refresh with `make docs-site`. cleanUrls: try the file, then .html,
+# then a directory index; fall back to VitePress's 404 page.
+docs.dazyflow.app {
+	root * /srv/docs
+	try_files {path} {path}.html {path}/index.html /404.html
+	file_server
+	encode gzip zstd
+}
+
 # Per-org subdomains — one on-demand cert per claimed org host, authorized by
 # the `ask` endpoint above. Same dzd upstream; the sign-in handoff state is
 # in-process, so every *.apex host MUST reach the same dzd (one upstream here

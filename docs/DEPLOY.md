@@ -267,6 +267,41 @@ infrastructure or marketing without colliding with a tenant. Claiming a
 subdomain is self-serve in the UI; the only ops step is the one-time
 wildcard DNS record above.
 
+## Documentation site (docs.dazyflow.app)
+
+The user docs are a static [VitePress](https://vitepress.dev/) site under
+`docs/`: hand-written guide pages (`docs/guide/`) plus a **generated** step
+catalog (`docs/reference/steps/`, produced from the drop manifests by
+`cmd/docsgen`). The generated tree and the build output are git-ignored — the
+site is built fresh at deploy time.
+
+Build it:
+
+```sh
+make docs-site   # runs `make docs-reference` (generate catalog) → npm install → vitepress build
+```
+
+Output lands in `docs/.vitepress/dist/`. In the Compose prod overlay that
+directory is mounted read-only into the Caddy container at `/srv/docs`, and an
+explicit `docs.dazyflow.app` block in `deploy/Caddyfile` serves it as static
+files with a normal managed cert. It is a dedicated host block on purpose: the
+`*.dazyflow.app` on-demand/`ask` path would refuse a cert for `docs` (it isn't a
+claimed org), and `docs` is already a reserved subdomain (above), so it never
+collides with a tenant.
+
+DNS: no extra record needed if the wildcard `*.dazyflow.app` A record from the
+subdomains section already points at the host — `docs` resolves through it, and
+the explicit Caddy block provisions its own HTTP-01 cert on first request.
+
+Kubernetes: the ingress path is different — build the site the same way, then
+serve `docs/.vitepress/dist` from any static file server (an Nginx sidecar, an
+object-storage/CDN bucket, or a `docs.dazyflow.app` Ingress host) instead of the
+Caddy block.
+
+Rebuild the site whenever a drop's manifest text changes (the catalog is
+generated) or a guide page is edited; wire `make docs-site` into CI so the
+published docs can't drift from the code.
+
 ## Durability
 
 `DAZYFLOW_POSTGRES_DSN` is **required** — `dzd` runs on Postgres and

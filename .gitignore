@@ -1,6 +1,8 @@
 # Compiled binaries (build outputs — never commit; rebuild with `make`/`go build`)
 /dzctl
 /dzd
+# docsgen tool binary (from `go build ./cmd/docsgen`); the tool is source-only.
+/docsgen
 # Legacy pre-rename binary names (hazyflow → dazyflow); were tracked by mistake.
 /hzctl
 /hzd
@@ -24,6 +26,14 @@ web/.vite/
 # Generated SBOM artifacts (produced by the CI `sbom` task; attached to releases)
 /sbom.spdx.json
 /sbom.cdx.json
+# Generated step-catalog reference (produced by `make docs-reference` from the
+# drop manifests). Source of truth is the manifests + cmd/docsgen; build in CI.
+/docs/reference/steps/
+# VitePress docs-site build artifacts + deps (docs.dazyflow.app). Built in CI
+# with `make docs-site`; the source (docs/.vitepress/config.mts, guide/) is tracked.
+/docs/.vitepress/dist/
+/docs/.vitepress/cache/
+/docs/node_modules/
 # Local key material (legacy dz-drops signing keys) — never commit
 .keys/
 # Dazy personal API key used by the complete-dazyflow-tasks skill — never commit
