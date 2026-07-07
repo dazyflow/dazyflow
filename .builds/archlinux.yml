@@ -85,6 +85,14 @@ tasks:
       cd dazyflow/web
       npm ci
       npm run build
+  # Build the docs site (docs.dazyflow.app) so the published docs can't drift
+  # from the code: `make docs-site` regenerates the step catalog from the live
+  # drop manifests (go run ./cmd/docsgen) and then runs the VitePress build. A
+  # broken manifest, a bad docsgen change, or a broken guide page fails here.
+  # The generated catalog + dist output are git-ignored (built fresh at deploy).
+  - docs: |
+      cd dazyflow
+      make docs-site
   # Confirm the deployable image actually builds — deploy/ references it
   # but nothing exercised the Dockerfile until now. Rootless podman, no
   # daemon needed in the build VM. Not pushed anywhere; releases tag and
