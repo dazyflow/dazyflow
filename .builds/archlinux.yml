@@ -100,6 +100,9 @@ tasks:
   - docker-image: |
       cd dazyflow
       podman build -t dazyflow/dzd:ci .
+      # The docs site image (docs.dazyflow.app) — deploy/ references it but
+      # nothing exercises Dockerfile.docs otherwise. Same rootless podman.
+      podman build -f Dockerfile.docs -t dazyflow/docs:ci .
 
 triggers:
   - action: email

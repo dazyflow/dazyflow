@@ -3,6 +3,10 @@
 .git
 **/node_modules
 web/dist
+# Docs build output — generated fresh inside Dockerfile.docs (gen + vitepress
+# stages), never copied from the host context.
+docs/.vitepress/dist
+docs/.vitepress/cache
 .dazyflow-workspace
 .dazyflow-sandbox
 .dazyflow-users.json

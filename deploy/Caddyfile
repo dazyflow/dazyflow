@@ -24,17 +24,14 @@ dazyflow.app {
 }
 
 # Documentation site — the static VitePress build (docs.dazyflow.app), served
-# from a read-only volume mounted into this container (see docker-compose.prod.yml:
-# ./docs/.vitepress/dist → /srv/docs). This is an EXPLICIT host block so Caddy
-# gives it a normal managed cert and does NOT route it through the *.dazyflow.app
-# on-demand/`ask` path below (which would refuse a cert — "docs" isn't a claimed
-# org). Build/refresh with `make docs-site`. cleanUrls: try the file, then .html,
-# then a directory index; fall back to VitePress's 404 page.
+# by the dedicated `docs` container (see Dockerfile.docs + docker-compose.prod.yml).
+# Caddy terminates TLS here and reverse-proxies to that nginx container, which
+# owns the static files and clean-URL resolution. This is an EXPLICIT host block
+# so Caddy gives it a normal managed cert and does NOT route it through the
+# *.dazyflow.app on-demand/`ask` path below (which would refuse a cert — "docs"
+# isn't a claimed org). The site is rebuilt by rebuilding the `docs` image.
 docs.dazyflow.app {
-	root * /srv/docs
-	try_files {path} {path}.html {path}/index.html /404.html
-	file_server
-	encode gzip zstd
+	reverse_proxy docs:80
 }
 
 # Per-org subdomains — one on-demand cert per claimed org host, authorized by

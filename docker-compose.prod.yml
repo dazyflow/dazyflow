@@ -17,13 +17,31 @@ services:
       - "443:443"
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
-      # Static docs site (docs.dazyflow.app). Build it first with `make docs-site`
-      # so ./docs/.vitepress/dist exists; Caddy serves it read-only.
-      - ./docs/.vitepress/dist:/srv/docs:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
       - dzd
+      - docs
+
+  # Documentation site (docs.dazyflow.app). Self-contained image: the build
+  # generates the step catalog from the live drop manifests and runs the
+  # VitePress build, then nginx serves the static output. Nothing is built on
+  # the host; Caddy above reverse-proxies docs.dazyflow.app here. Rebuild with
+  # `docker compose ... up -d --build docs` when a drop manifest or guide page
+  # changes.
+  docs:
+    build:
+      context: .
+      dockerfile: Dockerfile.docs
+      # Same host-network + GOPROXY story as the dzd build (docs generation
+      # runs `go mod download`); see docker-compose.yml and Dockerfile.
+      network: host
+      args:
+        GOPROXY: ${GOPROXY:-https://proxy.golang.org,direct}
+    restart: unless-stopped
+    # No host port — only Caddy (same compose network) reaches it as `docs:80`.
+    expose:
+      - "80"
 
 volumes:
   caddy_data:

@@ -273,33 +273,43 @@ The user docs are a static [VitePress](https://vitepress.dev/) site under
 `docs/`: hand-written guide pages (`docs/guide/`) plus a **generated** step
 catalog (`docs/reference/steps/`, produced from the drop manifests by
 `cmd/docsgen`). The generated tree and the build output are git-ignored — the
-site is built fresh at deploy time.
+site is built fresh **inside a container image** at deploy time.
 
-Build it:
+`Dockerfile.docs` is a three-stage build: (1) `go run ./cmd/docsgen` generates
+the step catalog from the live manifests, (2) `vitepress build` renders the
+static site, (3) nginx serves it (`deploy/docs-nginx.conf` handles VitePress's
+clean URLs and 404). The Compose prod overlay builds this as the `docs` service;
+the Caddy container terminates TLS and **reverse-proxies** `docs.dazyflow.app` to
+it. So the deploy is just:
 
 ```sh
-make docs-site   # runs `make docs-reference` (generate catalog) → npm install → vitepress build
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
-Output lands in `docs/.vitepress/dist/`. In the Compose prod overlay that
-directory is mounted read-only into the Caddy container at `/srv/docs`, and an
-explicit `docs.dazyflow.app` block in `deploy/Caddyfile` serves it as static
-files with a normal managed cert. It is a dedicated host block on purpose: the
-`*.dazyflow.app` on-demand/`ask` path would refuse a cert for `docs` (it isn't a
-claimed org), and `docs` is already a reserved subdomain (above), so it never
-collides with a tenant.
+Nothing is built on the host — no `make docs-site`, no bind mount. To publish a
+docs change (edited guide page, or a drop manifest whose catalog text changed),
+rebuild that one image:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build docs
+```
+
+The `docs.dazyflow.app` block in `deploy/Caddyfile` is a dedicated host block on
+purpose: the `*.dazyflow.app` on-demand/`ask` path would refuse a cert for `docs`
+(it isn't a claimed org), and `docs` is already a reserved subdomain (above), so
+it never collides with a tenant.
 
 DNS: no extra record needed if the wildcard `*.dazyflow.app` A record from the
 subdomains section already points at the host — `docs` resolves through it, and
-the explicit Caddy block provisions its own HTTP-01 cert on first request.
+the Caddy block provisions its own HTTP-01 cert on first request.
 
-Kubernetes: the ingress path is different — build the site the same way, then
-serve `docs/.vitepress/dist` from any static file server (an Nginx sidecar, an
-object-storage/CDN bucket, or a `docs.dazyflow.app` Ingress host) instead of the
-Caddy block.
+Kubernetes: build the same `Dockerfile.docs` image, push it, and run it as a
+Deployment + Service with a `docs.dazyflow.app` Ingress host (or serve the
+built `dist` from an object-storage/CDN bucket) instead of the Caddy block.
 
-Rebuild the site whenever a drop's manifest text changes (the catalog is
-generated) or a guide page is edited; wire `make docs-site` into CI so the
+For local iteration without a container, `make docs-dev` still runs VitePress
+with hot reload (and `make docs-site` builds `dist/` on the host); CI builds
+both the site (`make docs-site`) and the image (`Dockerfile.docs`) so the
 published docs can't drift from the code.
 
 ## Durability
