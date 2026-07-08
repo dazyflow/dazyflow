@@ -16,7 +16,15 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Bind-mount the whole deploy/ directory (Caddy reads /etc/caddy/Caddyfile;
+      # the other files sit alongside, unused) rather than the single Caddyfile.
+      # A single-file bind mount pins to the file's inode at container start, so
+      # a `git pull` that replaces deploy/Caddyfile with a new inode is invisible
+      # inside the container until it's recreated — `caddy reload` then reports
+      # "config unchanged". Mounting the directory means the container resolves
+      # the file fresh each read, so `caddy reload` picks up edits with no
+      # recreate. Read-only: Caddy writes only to /data and /config.
+      - ./deploy:/etc/caddy:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
