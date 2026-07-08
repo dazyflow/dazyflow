@@ -36,7 +36,11 @@ export default defineConfig({
   description:
     'Build automations without code — connect your apps and let the repetitive work run itself.',
   cleanUrls: true,
-  lastUpdated: true,
+  // No `lastUpdated`: it shells out to `git log` per page, which needs the git
+  // binary + .git history. The site is built in a hermetic container
+  // (Dockerfile.docs) with neither, and the generated step catalog is rewritten
+  // wholesale every build, so a per-page git timestamp is both unavailable and
+  // meaningless here.
 
   // Operator/legal docs live alongside the user guide in docs/ but are not part
   // of the public docs site.
