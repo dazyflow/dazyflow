@@ -269,18 +269,22 @@ wildcard DNS record above.
 
 ## Documentation site (docs.dazyflow.app)
 
-The user docs are a static [VitePress](https://vitepress.dev/) site under
-`docs/`: hand-written guide pages (`docs/guide/`) plus a **generated** step
-catalog (`docs/reference/steps/`, produced from the drop manifests by
-`cmd/docsgen`). The generated tree and the build output are git-ignored — the
-site is built fresh **inside a container image** at deploy time.
+The user docs are a **React SPA** that reuses the app's shell and design system,
+so docs.dazyflow.app is visually the same product as the app. The source lives
+under `web/src/docs/` (a second Vite entry, `web/docs.html`); the content is
+hand-written guide pages (`docs/guide/`) plus a **generated** step catalog
+(produced from the drop manifests by `cmd/docsgen`). `make docs-content` copies
+the guide + generates the catalog into `web/src/docs/content/` (git-ignored),
+which the SPA bundles. The site is built fresh **inside a container image** at
+deploy time.
 
 `Dockerfile.docs` is a three-stage build: (1) `go run ./cmd/docsgen` generates
-the step catalog from the live manifests, (2) `vitepress build` renders the
-static site, (3) nginx serves it (`deploy/docs-nginx.conf` handles VitePress's
-clean URLs and 404). The Compose prod overlay builds this as the `docs` service;
-the Caddy container terminates TLS and **reverse-proxies** `docs.dazyflow.app` to
-it. So the deploy is just:
+the step-catalog Markdown from the live manifests, (2) Vite builds the docs SPA
+(`npm run build:docs`) with the guide + generated catalog dropped into the
+content dir, (3) nginx serves it with a single-page-app fallback
+(`deploy/docs-nginx.conf`: `try_files $uri /index.html`). The Compose prod
+overlay builds this as the `docs` service; the Caddy container terminates TLS and
+**reverse-proxies** `docs.dazyflow.app` to it. So the deploy is just:
 
 ```sh
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build

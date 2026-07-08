@@ -32,11 +32,11 @@ services:
       - docs
 
   # Documentation site (docs.dazyflow.app). Self-contained image: the build
-  # generates the step catalog from the live drop manifests and runs the
-  # VitePress build, then nginx serves the static output. Nothing is built on
-  # the host; Caddy above reverse-proxies docs.dazyflow.app here. Rebuild with
-  # `docker compose ... up -d --build docs` when a drop manifest or guide page
-  # changes.
+  # generates the step catalog from the live drop manifests, Vite-builds the
+  # docs SPA (React, reusing the app shell), then nginx serves it. Nothing is
+  # built on the host; Caddy above reverse-proxies docs.dazyflow.app here.
+  # Rebuild with `docker compose ... up -d --build docs` when a drop manifest,
+  # guide page, or the docs UI changes.
   docs:
     build:
       context: .

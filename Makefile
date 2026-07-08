@@ -3,8 +3,9 @@
 
 COMPOSE ?= docker compose
 
-# Output directory for the generated step-catalog reference (make docs-reference).
-DOCS_REFERENCE_OUT ?= docs/reference/steps
+# Content dir the docs SPA bundles (web/src/docs/content): the guide pages are
+# copied from docs/guide/, the step catalog is generated there by cmd/docsgen.
+DOCS_CONTENT_OUT ?= web/src/docs/content
 
 # Version metadata stamped into the binary (see core/buildinfo). Computed
 # from git so every build carries the same identity: the native `make
@@ -26,7 +27,7 @@ LDFLAGS := -s -w \
 .DEFAULT_GOAL := help
 
 .PHONY: help up down restart logs ps build rebuild env pg pg-down dev web test vet fmt check ci \
-        docs-reference docs-site docs-dev bin version major minor patch _bump upgrade
+        docs-content docs-site docs-dev bin version major minor patch _bump upgrade
 
 help: ## List targets
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sort | \
@@ -102,16 +103,19 @@ vet: ## Run go vet
 fmt: ## Format Go sources
 	gofmt -w .
 
-docs-reference: ## Regenerate the step-catalog reference Markdown from the live drop manifests
-	go run ./cmd/docsgen -out $(DOCS_REFERENCE_OUT)
+docs-content: ## Populate the docs SPA content (guide pages + generated step catalog)
+	rm -rf $(DOCS_CONTENT_OUT)
+	mkdir -p $(DOCS_CONTENT_OUT)/guide
+	cp docs/guide/*.md $(DOCS_CONTENT_OUT)/guide/
+	go run ./cmd/docsgen -out $(DOCS_CONTENT_OUT)/reference/steps
 
-docs-site: docs-reference ## Build the docs site (docs.dazyflow.app) into docs/.vitepress/dist
-	npm --prefix docs install
-	npm --prefix docs run docs:build
+docs-site: docs-content ## Build the docs SPA (docs.dazyflow.app) into web/dist-docs
+	npm --prefix web ci
+	npm --prefix web run build:docs
 
-docs-dev: docs-reference ## Run the docs site locally with hot reload (http://localhost:5173)
-	npm --prefix docs install
-	npm --prefix docs run docs:dev
+docs-dev: docs-content ## Run the docs SPA locally with hot reload (http://localhost:5173/docs.html)
+	npm --prefix web install
+	npm --prefix web run dev
 
 ## --- Build & release ---
 # The Compose targets above (build/rebuild/up/restart) already stamp the

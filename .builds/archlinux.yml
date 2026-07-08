@@ -87,9 +87,9 @@ tasks:
       npm run build
   # Build the docs site (docs.dazyflow.app) so the published docs can't drift
   # from the code: `make docs-site` regenerates the step catalog from the live
-  # drop manifests (go run ./cmd/docsgen) and then runs the VitePress build. A
-  # broken manifest, a bad docsgen change, or a broken guide page fails here.
-  # The generated catalog + dist output are git-ignored (built fresh at deploy).
+  # drop manifests (go run ./cmd/docsgen) and Vite-builds the docs SPA (which
+  # reuses the app shell). A broken manifest, a bad docsgen change, a type error,
+  # or a broken guide page fails here. Generated content + dist are git-ignored.
   - docs: |
       cd dazyflow
       make docs-site

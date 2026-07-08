@@ -1,22 +1,18 @@
 # syntax=docker/dockerfile:1
 
-# Docs site image for docs.dazyflow.app — the static VitePress build served by
-# nginx. Three stages:
+# Docs site image for docs.dazyflow.app — the public docs SPA (React/Vite),
+# which reuses the app's shell + design system (see web/src/docs/). Three stages:
 #
-#   1. gen   — run cmd/docsgen to generate the step-catalog Markdown from the
-#              live drop manifests (needs the full Go module, like `make
-#              docs-reference`).
-#   2. build — vitepress build → /docs/.vitepress/dist
-#   3. final — nginx serving the static site with clean-URL resolution.
+#   1. gen   — cmd/docsgen generates the step-catalog Markdown from the live drop
+#              manifests (needs the full Go module).
+#   2. build — Vite builds the standalone docs bundle (web `build:docs`) after the
+#              guide + generated catalog Markdown are dropped into the content dir.
+#   3. final — nginx serves the SPA (client-side routing → index.html fallback).
 #
 # Built by the docker-compose prod overlay; the main Caddy reverse-proxies
-# docs.dazyflow.app to this container. Nothing is built on the host — this
-# replaces the old `make docs-site` + bind-mount flow.
+# docs.dazyflow.app to this container. Nothing is built on the host.
 
 # ---- 1. generate the step catalog -----------------------------------
-# docsgen imports the drop packages to read their manifests, so it compiles the
-# whole module. Mirror the main Dockerfile's Go build knobs (pinned toolchain,
-# overridable proxy, cache mounts) so this builds the same way in prod.
 FROM docker.io/library/golang:1.26.3-alpine AS gen
 ENV GOTOOLCHAIN=local
 ARG GOPROXY=https://proxy.golang.org,direct
@@ -26,26 +22,29 @@ COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod \
     go mod download
 COPY . .
-# Same invocation as `make docs-reference`.
+# Same invocation as `make docs-content`'s generate step.
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    go run ./cmd/docsgen -out docs/reference/steps
+    go run ./cmd/docsgen -out /content/reference/steps
 
-# ---- 2. vitepress build ---------------------------------------------
+# ---- 2. build the docs SPA ------------------------------------------
 FROM docker.io/library/node:22-alpine AS build
-WORKDIR /docs
+WORKDIR /web
 # Deps first so this layer caches unless package.json / lock change.
-COPY docs/package.json docs/package-lock.json ./
+COPY web/package.json web/package-lock.json ./
 RUN npm ci
-# Hand-written source (config, guide, index). The generated reference tree is
-# git-ignored, so it does NOT come from the context — it comes from `gen` next,
-# which is the authoritative fresh generation.
-COPY docs/ ./
-COPY --from=gen /src/docs/reference/steps ./reference/steps
-RUN npm run docs:build
+COPY web/ ./
+# Docs content: the hand-written guide (canonical in docs/guide/) plus the
+# generated step catalog from stage 1. Both feed the content glob in
+# src/docs/content.ts. The content dir is git-ignored (built fresh here).
+COPY docs/guide/ ./src/docs/content/guide/
+COPY --from=gen /content/reference/steps ./src/docs/content/reference/steps
+RUN npm run build:docs
+# nginx serves index.html; the Vite entry is docs.html.
+RUN mv dist-docs/docs.html dist-docs/index.html
 
 # ---- 3. runtime ------------------------------------------------------
 FROM docker.io/library/nginx:1-alpine AS final
-COPY --from=build /docs/.vitepress/dist /usr/share/nginx/html
+COPY --from=build /web/dist-docs /usr/share/nginx/html
 COPY deploy/docs-nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80

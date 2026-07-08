@@ -4,6 +4,7 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
+import { resolve } from "node:path";
 
 // The dev server proxies /api/v1 to the daemon so the browser sees a
 // same-origin call (no CORS friction). Override DAZYFLOW_API in your
@@ -11,7 +12,10 @@ import react from "@vitejs/plugin-react";
 // the daemon directly via VITE_API_BASE.
 const target = process.env.DAZYFLOW_API ?? "http://localhost:8080";
 
-export default defineConfig({
+// `--mode docs` builds the standalone public docs SPA (docs.dazyflow.app) from
+// docs.html into dist-docs, instead of the app from index.html into dist. Same
+// React/Vite toolchain and shared components; just a different entry + output.
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
   server: {
     port: 5173,
@@ -30,10 +34,17 @@ export default defineConfig({
       ? process.env.VITE_ALLOWED_HOSTS.split(",").map((h) => h.trim())
       : ["localhost", "127.0.0.1"],
   },
-  build: {
-    outDir: "dist",
-    sourcemap: true,
-  },
+  build:
+    mode === "docs"
+      ? {
+          outDir: "dist-docs",
+          sourcemap: true,
+          rollupOptions: { input: resolve(__dirname, "docs.html") },
+        }
+      : {
+          outDir: "dist",
+          sourcemap: true,
+        },
   test: {
     // jsdom so component tests can render React + query the DOM. Pure-function
     // lib tests are unaffected (jsdom is a superset of the node globals they use).
@@ -42,4 +53,4 @@ export default defineConfig({
     setupFiles: ["./src/test/setup.ts"],
     css: false,
   },
-});
+}));

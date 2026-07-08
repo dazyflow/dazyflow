@@ -1,0 +1,141 @@
+/* SPDX-FileCopyrightText: 2026 Joachim Klahr
+   SPDX-License-Identifier: AGPL-3.0-or-later
+
+   Docs-only styling. The shell (top bar, sidebar, rail, hamburger) is styled
+   entirely by the app's app.css/theme.css — this file only handles the doc
+   content pane and a few docs-specific nav touches. Everything uses the app's
+   design tokens so it stays on-brand. */
+
+/* Content pane owns its own vertical scroll (the shell is a fixed frame). */
+.docs-main {
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--space-6) var(--space-6) var(--space-7);
+}
+
+/* A comfortable reading column, centered like a docs page. */
+.docs-content {
+  max-width: 780px;
+  margin: 0 auto;
+  color: var(--ink);
+  font-size: var(--text-lg);
+  line-height: 1.7;
+}
+
+.docs-content h1,
+.docs-content h2,
+.docs-content h3,
+.docs-content h4 {
+  color: var(--ink);
+  font-weight: 600;
+  line-height: 1.3;
+  scroll-margin-top: var(--space-5);
+}
+.docs-content h1 {
+  font-size: var(--text-3xl);
+  margin: 0 0 var(--space-4);
+}
+.docs-content h2 {
+  font-size: var(--text-2xl);
+  margin: var(--space-6) 0 var(--space-3);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+.docs-content h3 {
+  font-size: var(--text-xl);
+  margin: var(--space-5) 0 var(--space-2);
+}
+.docs-content h4 {
+  font-size: var(--text-lg);
+  margin: var(--space-4) 0 var(--space-2);
+}
+
+.docs-content p,
+.docs-content li {
+  color: var(--ink-soft);
+}
+.docs-content ul,
+.docs-content ol {
+  padding-left: var(--space-5);
+}
+.docs-content li {
+  margin: var(--space-1) 0;
+}
+.docs-content a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.docs-content a:hover {
+  text-decoration: underline;
+}
+
+/* Inline code + fenced blocks reuse the app's copyable-code well. */
+.docs-content code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--code-fg);
+  padding: 0.12em 0.36em;
+  border-radius: var(--r-1);
+}
+.docs-content pre {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  padding: var(--space-3) var(--space-4);
+  overflow-x: auto;
+  margin: var(--space-4) 0;
+}
+.docs-content pre code {
+  background: none;
+  color: var(--code-fg);
+  padding: 0;
+  font-size: var(--text-md);
+}
+
+.docs-content blockquote {
+  margin: var(--space-4) 0;
+  padding: var(--space-1) var(--space-4);
+  border-left: 3px solid var(--accent);
+  color: var(--muted);
+}
+
+.docs-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: var(--space-4) 0;
+  font-size: var(--text-base);
+}
+.docs-content th,
+.docs-content td {
+  border: 1px solid var(--border);
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+}
+.docs-content th {
+  background: var(--surface-2);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.docs-content hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: var(--space-6) 0;
+}
+
+/* Space between sidebar groups; the .group-label + nav rows come from app.css. */
+.docs-nav-group + .docs-nav-group {
+  margin-top: var(--space-4);
+}
+
+/* The invite CTA collapses off the top bar on narrow screens (the hamburger
+   owns that space there). */
+@media (max-width: 768px) {
+  .docs-cta {
+    display: none;
+  }
+  .docs-main {
+    padding: var(--space-4) var(--space-4) var(--space-6);
+  }
+}
