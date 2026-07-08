@@ -131,3 +131,66 @@ body {
 .VPNavBarTitle .title:hover {
 	color: var(--vp-c-brand-1);
 }
+/* Top bar height matches the app's --topbar-h (56px), and the wordmark takes
+   the app's brand-title weight/size. */
+:root {
+	--vp-nav-height: 56px;
+}
+.VPNavBarTitle .title {
+	font-weight: 600;
+	font-size: 16px;
+}
+
+/* ---- Icon+label rows (icons injected via v-html; see config.mts) ---- */
+.dz-navicon {
+	display: inline-flex;
+	align-items: center;
+	flex-shrink: 0;
+}
+.dz-navicon svg {
+	width: 16px;
+	height: 16px;
+	opacity: 0.9;
+}
+/* Lay out icon + label like the app's nav rows (gap ~ --space-3). */
+.VPSidebarItem .text,
+.VPNavBarMenuLink span {
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+}
+
+/* ---- Sidebar: echo the app aside ---- */
+/* Translucent surface + hairline right border (app .sidebar). */
+.VPSidebar {
+	background-color: color-mix(in srgb, var(--vp-c-bg-alt) 70%, transparent) !important;
+	border-right: 1px solid var(--vp-c-divider);
+}
+/* Rows: rounded, muted at rest, soft fill on hover, violet-tinted pill when
+   active — the app's `.sidebar a` / `:hover` / `.active`. */
+.VPSidebarItem > .item:has(> .link) {
+	border-radius: 8px;
+	padding-inline: 8px;
+	transition: background-color 120ms, color 120ms;
+}
+.VPSidebarItem > .item:has(> .link):hover {
+	background-color: var(--vp-c-bg-soft);
+}
+.VPSidebarItem.is-active > .item:has(> .link) {
+	background-color: color-mix(in srgb, var(--vp-c-brand-1) 15%, transparent);
+}
+/* Muted label + dim icon at rest; active row reads as ink (like the app),
+   not brand-coloured text. */
+.VPSidebarItem.level-1 .link .text,
+.VPSidebarItem.level-2 .link .text {
+	color: var(--vp-c-text-2);
+	font-weight: 500;
+}
+.VPSidebarItem > .item:has(> .link):hover .text,
+.VPSidebarItem.is-active > .item > .link .text {
+	color: var(--vp-c-text-1);
+}
+.VPSidebarItem.is-active .dz-navicon svg {
+	opacity: 1;
+	color: var(--vp-c-brand-1);
+}

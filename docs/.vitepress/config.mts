@@ -11,22 +11,48 @@ import { fileURLToPath } from 'node:url'
 const here = path.dirname(fileURLToPath(import.meta.url))
 const referenceDir = path.resolve(here, '../reference/steps')
 
+// Inline lucide icons (MIT) — the same icon set the web app's nav/sidebar use
+// (lucide-react). VitePress renders nav + sidebar `text` via v-html, so we
+// prepend a small SVG to each row to mirror the app's icon+label nav. Paths are
+// lucide's 24-box; custom.css sizes them to 16px and tints them muted.
+const LUCIDE: Record<string, string> = {
+  // "workflow" — the app's Flows glyph; here for Concepts / How Dazyflow works.
+  workflow:
+    '<rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/>',
+  // "book-text" — Glossary.
+  book:
+    '<path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/><path d="M8 7h6"/><path d="M8 11h8"/>',
+  // "boxes" — the app's Step-catalog glyph; here for the catalog index.
+  box:
+    '<path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
+  // "plug" — connectors; each step group in the catalog.
+  plug:
+    '<path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/>',
+}
+function withIcon(icon: keyof typeof LUCIDE, text: string): string {
+  return (
+    `<span class="dz-navicon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" ` +
+    `fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" ` +
+    `stroke-linejoin="round">${LUCIDE[icon]}</svg></span>${text}`
+  )
+}
+
 function referenceSidebar() {
   let files: string[] = []
   try {
     files = fs.readdirSync(referenceDir).filter((f) => f.endsWith('.md') && f !== 'index.md')
   } catch {
-    return [{ text: 'All steps', link: '/reference/steps/' }]
+    return [{ text: withIcon('box', 'All steps'), link: '/reference/steps/' }]
   }
   const groups = files.map((file) => {
     const src = fs.readFileSync(path.join(referenceDir, file), 'utf8')
     const m = src.match(/^title:\s*(.+)$/m)
     const text = (m ? m[1] : file.replace(/\.md$/, '')).trim()
-    return { text, link: `/reference/steps/${file.replace(/\.md$/, '')}` }
+    return { text: withIcon('plug', text), link: `/reference/steps/${file.replace(/\.md$/, '')}` }
   })
   groups.sort((a, b) => a.text.localeCompare(b.text))
   return [
-    { text: 'All steps', link: '/reference/steps/' },
+    { text: withIcon('box', 'All steps'), link: '/reference/steps/' },
     { text: 'By group', collapsed: false, items: groups },
   ]
 }
@@ -62,17 +88,17 @@ export default defineConfig({
     logo: { src: '/logo.svg', alt: 'Dazyflow' },
     siteTitle: 'Dazyflow',
     nav: [
-      { text: 'Concepts', link: '/guide/concepts' },
-      { text: 'Glossary', link: '/guide/glossary' },
-      { text: 'Step catalog', link: '/reference/steps/' },
+      { text: withIcon('workflow', 'Concepts'), link: '/guide/concepts' },
+      { text: withIcon('book', 'Glossary'), link: '/guide/glossary' },
+      { text: withIcon('box', 'Step catalog'), link: '/reference/steps/' },
     ],
     sidebar: {
       '/guide/': [
         {
           text: 'Guide',
           items: [
-            { text: 'How Dazyflow works', link: '/guide/concepts' },
-            { text: 'Glossary', link: '/guide/glossary' },
+            { text: withIcon('workflow', 'How Dazyflow works'), link: '/guide/concepts' },
+            { text: withIcon('book', 'Glossary'), link: '/guide/glossary' },
           ],
         },
       ],
