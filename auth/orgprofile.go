@@ -94,6 +94,24 @@ var reservedSubdomains = map[string]bool{
 	"docs": true, "status": true, "help": true, "support": true,
 }
 
+// servedInfraSubdomains are the reserved infrastructure hosts Dazyflow actually
+// SERVES with their own site block + certificate (as opposed to reserved names
+// we merely block from org claims). The on-demand TLS gate (tlsAllow) must
+// authorize certs for these even though they're reserved and map to no org —
+// otherwise Caddy has no way to obtain a cert for them (a name covered by the
+// on-demand wildcard is excluded from proactive issuance). Keep this a strict
+// subset of reservedSubdomains: only names we truly front.
+var servedInfraSubdomains = map[string]bool{
+	"docs": true,
+}
+
+// IsServedInfraSubdomain reports whether label is a reserved infrastructure
+// subdomain that Dazyflow serves and should be granted an on-demand TLS
+// certificate. Input is normalized (lowercased/trimmed) to match host parsing.
+func IsServedInfraSubdomain(label string) bool {
+	return servedInfraSubdomains[strings.ToLower(strings.TrimSpace(label))]
+}
+
 // ValidateSubdomain normalizes and validates a requested subdomain label.
 // Empty input is valid and normalizes to "" (clearing the subdomain). A
 // non-empty label is lowercased and trimmed, then must be a valid DNS label

@@ -294,14 +294,22 @@ rebuild that one image:
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build docs
 ```
 
-The `docs.dazyflow.app` block in `deploy/Caddyfile` is a dedicated host block on
-purpose: the `*.dazyflow.app` on-demand/`ask` path would refuse a cert for `docs`
-(it isn't a claimed org), and `docs` is already a reserved subdomain (above), so
-it never collides with a tenant.
+The `docs.dazyflow.app` block in `deploy/Caddyfile` uses **on-demand TLS**, the
+same path as the per-org subdomains. This is subtle but necessary: `docs` is a
+subdomain of the apex, so it matches the `*.dazyflow.app` on-demand policy — and
+Caddy excludes any on-demand-covered name from up-front (proactive) certificate
+issuance. A plain explicit block expecting a normal managed cert therefore never
+gets one (no proactive obtain; the managed policy won't obtain at handshake
+either), so every TLS handshake fails with an internal error and the site is
+unreachable. On-demand fixes it, and the `ask` endpoint (`/api/v1/auth/tls-allow`)
+authorizes `docs` via `auth.servedInfraSubdomains` — it's a reserved label (never
+org-claimable) that we nonetheless serve, so it's a closed, non-abusable
+allowlist entry. `docs` staying reserved also means it never collides with a
+tenant.
 
 DNS: no extra record needed if the wildcard `*.dazyflow.app` A record from the
 subdomains section already points at the host — `docs` resolves through it, and
-the Caddy block provisions its own HTTP-01 cert on first request.
+Caddy provisions its cert on-demand on the first request.
 
 Kubernetes: build the same `Dockerfile.docs` image, push it, and run it as a
 Deployment + Service with a `docs.dazyflow.app` Ingress host (or serve the

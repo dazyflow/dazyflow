@@ -1876,7 +1876,17 @@ func (h *HTTPGateway) tlsAllow(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, "not a managed host", http.StatusForbidden)
 		return
 	}
-	label, err := auth.ValidateSubdomain(strings.TrimSuffix(host, suffix))
+	rawLabel := strings.TrimSuffix(host, suffix)
+	// Infrastructure hosts we serve (e.g. docs) are reserved — they never map to
+	// an org, so the claimed-org check below would reject them — but we DO front
+	// them and they need a cert. Authorize those explicitly. (They can't be
+	// abused for rate-limit spam: it's a fixed, closed allowlist of our own
+	// hosts, not attacker-controlled.)
+	if auth.IsServedInfraSubdomain(rawLabel) {
+		rw.WriteHeader(http.StatusOK)
+		return
+	}
+	label, err := auth.ValidateSubdomain(rawLabel)
 	if err != nil || label == "" {
 		http.Error(rw, "invalid label", http.StatusForbidden)
 		return

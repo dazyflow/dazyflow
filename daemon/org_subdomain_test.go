@@ -130,6 +130,11 @@ func TestOrgSubdomain_TLSAllow(t *testing.T) {
 	if rw := h.do(t, "GET", "/api/v1/auth/tls-allow?domain=klahr.dazyflow.app", nil); rw.Code != 200 {
 		t.Errorf("tls-allow claimed = %d, want 200", rw.Code)
 	}
+	// A served infrastructure host (docs) → 2xx even though it's reserved and
+	// maps to no org: we front it, so it needs an on-demand cert.
+	if rw := h.do(t, "GET", "/api/v1/auth/tls-allow?domain=docs.dazyflow.app", nil); rw.Code != 200 {
+		t.Errorf("tls-allow docs (served infra) = %d, want 200", rw.Code)
+	}
 	// Unclaimed / reserved / off-domain hosts → 403 (no cert).
 	for _, host := range []string{
 		"nobody.dazyflow.app", // unclaimed
