@@ -63,6 +63,10 @@ export default defineConfig({
     'Build automations without code — connect your apps and let the repetitive work run itself.',
   cleanUrls: true,
 
+  // The marketing site (../dazyflow-web) renders dark only; match it so the two
+  // are indistinguishable. force-dark drops the light/dark toggle entirely.
+  appearance: 'force-dark',
+
   // Brand favicon (same mark as the app), served from docs/public.
   head: [
     ['link', { rel: 'icon', type: 'image/png', href: '/favicon.png' }],

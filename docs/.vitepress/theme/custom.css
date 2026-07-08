@@ -131,14 +131,15 @@ body {
 .VPNavBarTitle .title:hover {
 	color: var(--vp-c-brand-1);
 }
-/* Top bar height matches the app's --topbar-h (56px), and the wordmark takes
-   the app's brand-title weight/size. */
-:root {
-	--vp-nav-height: 56px;
+/* Top bar sized like the marketing site .topbar (28px mark + 700/1.15rem
+   wordmark in a ~64px bar). */
+.VPNavBarTitle .logo {
+	width: 28px;
+	height: 28px;
 }
 .VPNavBarTitle .title {
-	font-weight: 600;
-	font-size: 16px;
+	font-weight: 700;
+	font-size: 1.15rem;
 }
 
 /* ---- Icon+label rows (icons injected via v-html; see config.mts) ---- */
@@ -193,4 +194,108 @@ body {
 .VPSidebarItem.is-active .dz-navicon svg {
 	opacity: 1;
 	color: var(--vp-c-brand-1);
+}
+
+/* ============================================================
+   Marketing-site chrome — ported from ../dazyflow-web/style.css so the
+   docs read as the same site: gradient announcement strip, a tactile
+   violet CTA in the top bar, and the centered footer. The palette is
+   dark-only there; docs default to dark (see config `appearance`), and
+   these tokens already match the app/marketing dark values.
+   ============================================================ */
+
+/* Body type: the marketing site's larger 17px reading size. */
+.vp-doc {
+	font-size: 16.5px;
+}
+
+/* Announcement strip pinned above the nav (.announce). Fixed to the top; the
+   reserved --vp-layout-top-height offsets the nav + content below it. */
+:root {
+	--vp-layout-top-height: 40px;
+}
+.dz-announce {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	height: var(--vp-layout-top-height);
+	z-index: calc(var(--vp-z-index-nav) + 1);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.35rem;
+	background: linear-gradient(90deg, #470696 0%, #5d09c7 100%);
+	color: #fff;
+	font-size: 0.9rem;
+	border-bottom: 1px solid color-mix(in srgb, black 30%, #470696);
+}
+.dz-announce a {
+	color: #fff;
+	text-decoration: underline;
+	text-underline-offset: 2px;
+	font-weight: 600;
+}
+.dz-announce a:hover {
+	opacity: 0.85;
+}
+
+/* Top-bar CTA (.topbar-nav a.cta): tactile violet gradient with an inner top
+   highlight, sitting after the nav links. */
+.dz-cta {
+	display: inline-flex;
+	align-items: center;
+	margin-left: 8px;
+	padding: 0.4rem 0.95rem;
+	border-radius: 8px;
+	font-weight: 500;
+	white-space: nowrap;
+	color: #fff;
+	background: linear-gradient(
+		180deg,
+		color-mix(in srgb, white 12%, #470696) 0%,
+		#470696 55%,
+		color-mix(in srgb, black 18%, #470696) 100%
+	);
+	border: 1px solid color-mix(in srgb, black 40%, #470696);
+	box-shadow:
+		inset 0 1px 0 rgba(255, 255, 255, 0.12),
+		0 1px 2px rgba(0, 0, 0, 0.35);
+	transition: filter 0.18s ease, transform 0.08s ease;
+}
+.dz-cta:hover {
+	filter: brightness(1.08);
+}
+.dz-cta:active {
+	transform: translateY(1px);
+}
+/* On narrow screens the marketing CTA shrinks; hide it in the mobile nav to
+   avoid crowding the hamburger (the footer still carries the invite links). */
+@media (max-width: 768px) {
+	.dz-cta {
+		display: none;
+	}
+}
+
+/* Footer (.footer): hairline top border, centered link row + muted copyright. */
+.dz-footer {
+	border-top: 1px solid var(--vp-c-divider);
+	padding: 1.75rem 1.25rem 2.5rem;
+	text-align: center;
+	background: var(--vp-c-bg);
+}
+.dz-footer-line {
+	margin: 0.35rem 0;
+	color: var(--vp-c-text-2);
+	font-size: 0.95rem;
+}
+.dz-footer-line a {
+	color: var(--vp-c-text-2);
+}
+.dz-footer-line a:hover {
+	color: var(--vp-c-brand-1);
+}
+.dz-footer-line--muted {
+	color: var(--vp-c-text-3);
+	font-size: 0.85rem;
 }

@@ -3,6 +3,11 @@
 // docs read as part of the product: same violet brand, fonts, surfaces, and a
 // nav bar that echoes the app top bar.
 import DefaultTheme from 'vitepress/theme'
+import Layout from './Layout.vue'
 import './custom.css'
 
-export default DefaultTheme
+export default {
+  extends: DefaultTheme,
+  // Custom Layout adds the marketing announce bar, top-bar CTA, and footer.
+  Layout,
+}
