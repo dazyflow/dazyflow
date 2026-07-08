@@ -36,6 +36,12 @@ export default defineConfig({
   description:
     'Build automations without code — connect your apps and let the repetitive work run itself.',
   cleanUrls: true,
+
+  // Brand favicon (same mark as the app), served from docs/public.
+  head: [
+    ['link', { rel: 'icon', type: 'image/png', href: '/favicon.png' }],
+    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/logo.svg' }],
+  ],
   // No `lastUpdated`: it shells out to `git log` per page, which needs the git
   // binary + .git history. The site is built in a hermetic container
   // (Dockerfile.docs) with neither, and the generated step catalog is rewritten
@@ -52,6 +58,9 @@ export default defineConfig({
   ignoreDeadLinks: true,
 
   themeConfig: {
+    // Brand mark + wordmark in the top bar, echoing the app.
+    logo: { src: '/logo.svg', alt: 'Dazyflow' },
+    siteTitle: 'Dazyflow',
     nav: [
       { text: 'Concepts', link: '/guide/concepts' },
       { text: 'Glossary', link: '/guide/glossary' },
