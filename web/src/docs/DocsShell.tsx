@@ -110,7 +110,19 @@ export function DocsShell({ children }: { children: ReactNode }) {
                     end={item.link.endsWith("/")}
                     title={item.text}
                   >
-                    <Icon size={18} />
+                    {item.brand ? (
+                      // The app's vendor mark (e.g. /brands/gmail.svg).
+                      <img
+                        className="nav-brand-icon"
+                        src={item.brand}
+                        alt=""
+                        width={18}
+                        height={18}
+                        draggable={false}
+                      />
+                    ) : (
+                      <Icon size={18} />
+                    )}
                     <span className="nav-label">{item.text}</span>
                   </NavLink>
                 );

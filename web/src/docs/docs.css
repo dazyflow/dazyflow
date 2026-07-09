@@ -34,6 +34,17 @@
 .docs-content h1 {
   font-size: var(--text-3xl);
   margin: 0 0 var(--space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+/* Brand mark beside a group page's title (app vendor icon). */
+.docs-h1-brand {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  flex-shrink: 0;
+  border-radius: var(--r-1);
 }
 .docs-content h2 {
   font-size: var(--text-2xl);
@@ -127,6 +138,16 @@
 /* Space between sidebar groups; the .group-label + nav rows come from app.css. */
 .docs-nav-group + .docs-nav-group {
   margin-top: var(--space-4);
+}
+
+/* Vendor brand mark in a sidebar row (app icon), sized like the lucide glyphs
+   it sits beside. */
+.sidebar .nav-brand-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  flex-shrink: 0;
+  border-radius: 3px;
 }
 
 /* The invite CTA collapses off the top bar on narrow screens (the hamburger

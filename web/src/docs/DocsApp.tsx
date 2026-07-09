@@ -30,7 +30,7 @@ export function DocsApp() {
     <DocsShell>
       {page ? (
         <article className="docs-content">
-          <Markdown source={page.body} base={page.path} />
+          <Markdown source={page.body} base={page.path} brand={page.icon} />
         </article>
       ) : (
         <div className="docs-content">
