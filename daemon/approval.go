@@ -10,6 +10,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -27,6 +28,19 @@ import (
 // radius of a leaked link.
 const approvalTokenTTL = 14 * 24 * time.Hour
 
+// approvalTokenBucket quantizes the signed expiry so re-signing the same pause
+// yields the same URL. exp is part of the signed payload, so deriving it from a
+// raw clock read made every re-sign mint a different link — see
+// SignApprovalURL. Truncating the clock to a bucket makes the whole URL a pure
+// function of (run, node, bucket).
+//
+// An hour comfortably spans the re-execution window this exists for (an expired
+// lease is reclaimed within a lease duration — tens of seconds — and crash
+// recovery within minutes), and costs only that the effective TTL varies between
+// approvalTokenTTL and one bucket less, which is immaterial for a deliberately
+// generous two-week link.
+const approvalTokenBucket = time.Hour
+
 // ApprovalDecision is the input from the human approver, accepted by
 // Service.Approve and forwarded to the resumed node-record as Result
 // output ports.
@@ -36,11 +50,11 @@ type ApprovalDecision struct {
 	Comment  string
 }
 
-// HMACApprovalSigner mints deterministic per-(graphRunID, nodeID) URLs
-// signed with HMAC-SHA256 over a shared secret. Deterministic so that a
-// retried await_approval Execute (after a lease expiry) re-emits the
-// same URL: external systems that already received the URL by email
-// don't have to be re-notified.
+// HMACApprovalSigner mints per-(graphRunID, nodeID) URLs signed with
+// HMAC-SHA256 over a shared secret. Stable across re-signs within an
+// approvalTokenBucket window so a retried await_approval Execute (after a lease
+// expiry) re-emits the same URL: external systems that already received the URL
+// by email don't have to be re-notified.
 //
 // BaseURL should be the externally-visible address of the approval
 // listener, e.g. "https://dzd.acme.com". Token validation lives in
@@ -48,6 +62,17 @@ type ApprovalDecision struct {
 type HMACApprovalSigner struct {
 	BaseURL string
 	Secret  []byte
+
+	// now is injectable for tests; nil means time.Now. Mirrors the clock seams
+	// on Scheduler and the in-memory write-dedupe store.
+	now func() time.Time
+}
+
+func (s *HMACApprovalSigner) clock() time.Time {
+	if s.now == nil {
+		return time.Now()
+	}
+	return s.now()
 }
 
 // SignApprovalURL builds the absolute URL the approver hits. Format:
@@ -63,10 +88,17 @@ type HMACApprovalSigner struct {
 // capability to decide this pause, and whoever holds it is the approver, so
 // choosing either outcome is exactly the intended action. `approver` is a
 // display label only and must never authorize anything.
-// Deterministic given (run, node, exp): a retried await_approval Execute
-// within the same TTL bucket re-emits the same URL.
+//
+// The clock is truncated to approvalTokenBucket before the TTL is added, so the
+// URL is a pure function of (run, node, bucket): every re-sign inside the same
+// bucket — the retry case this exists for — reproduces it byte for byte. A
+// re-sign that straddles a bucket boundary does mint a fresh link; the
+// previously emailed one keeps working until its own expiry, so the worst case
+// is the pre-bucket behaviour rather than a broken link. Truncate works on the
+// absolute time since the zero instant, so the boundary doesn't move with the
+// server's timezone.
 func (s *HMACApprovalSigner) SignApprovalURL(graphRunID, nodeID string) string {
-	exp := time.Now().Add(approvalTokenTTL).Unix()
+	exp := s.clock().Truncate(approvalTokenBucket).Add(approvalTokenTTL).Unix()
 	token := s.computeToken(graphRunID, nodeID, exp)
 	return fmt.Sprintf("%s/approve/%s/%s?exp=%d&token=%s",
 		s.BaseURL, graphRunID, nodeID, exp, token)
@@ -92,7 +124,7 @@ func (s *HMACApprovalSigner) verifyToken(graphRunID, nodeID string, exp int64, p
 	if subtle.ConstantTimeCompare([]byte(expected), []byte(provided)) != 1 {
 		return false
 	}
-	return time.Now().Unix() <= exp
+	return s.clock().Unix() <= exp
 }
 
 // Approve is the resume path: a human (via ApprovalListener) signals
@@ -118,8 +150,12 @@ func (s *Service) Approve(
 	if err != nil {
 		return fmt.Errorf("get node record: %w", err)
 	}
+	// Wraps ErrConflict so callers classify by sentinel rather than by message
+	// text. The same duplicate-click outcome surfaces here (sequential: the record
+	// already read terminal) or out of Complete below (concurrent: two approves
+	// raced and this one lost the conditional UPDATE) — both must map to 409.
 	if rec.Status != core.JobStatusAwaiting {
-		return fmt.Errorf("node %s is %s, not awaiting", nodeID, rec.Status)
+		return fmt.Errorf("node %s is %s, not awaiting: %w", nodeID, rec.Status, core.ErrConflict)
 	}
 
 	// Build the resume Result. Start from whatever the awaiting Execute
@@ -223,6 +259,14 @@ func (a *ApprovalListener) handle(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, "invalid or expired token", http.StatusUnauthorized)
 		return
 	}
+	// Only after proving possession of the token do we start reporting request
+	// shape: an unsigned caller gets the same generic 401 either way. Service
+	// .Approve guards this too (it serves non-HTTP callers), but rejecting here
+	// turns a client typo into a 400 instead of a 500.
+	if decision != "approve" && decision != "reject" {
+		http.Error(rw, "decision must be approve or reject", http.StatusBadRequest)
+		return
+	}
 	// approver is a display label only; it is NOT part of the signed
 	// payload and must never be trusted to authorize the action.
 	approver := r.URL.Query().Get("approver")
@@ -235,16 +279,20 @@ func (a *ApprovalListener) handle(rw http.ResponseWriter, r *http.Request) {
 	}); err != nil {
 		a.logger.Printf("approve %s/%s: %v", graphRunID, nodeID, err)
 		// Distinguish "wrong state" (409) from "no such record" (404) so
-		// approvers can distinguish a duplicate click from a bad link.
-		if strings.Contains(err.Error(), "not awaiting") {
+		// approvers can tell a duplicate click from a bad link. Classify on the
+		// wrapped SENTINEL, never on message text: matching "not awaiting" caught
+		// only the sequential duplicate and dropped the concurrent one (which
+		// loses at Complete, reporting "job state conflict") through to a 500,
+		// and matching "not found" worked solely because core.ErrNotFound happens
+		// to read "job not found".
+		switch {
+		case errors.Is(err, core.ErrConflict):
 			http.Error(rw, err.Error(), http.StatusConflict)
-			return
-		}
-		if strings.Contains(err.Error(), "not found") {
+		case errors.Is(err, core.ErrNotFound):
 			http.Error(rw, err.Error(), http.StatusNotFound)
-			return
+		default:
+			http.Error(rw, err.Error(), http.StatusInternalServerError)
 		}
-		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	a.logger.Printf("resumed %s/%s decision=%s approver=%s", graphRunID, nodeID, decision, approver)

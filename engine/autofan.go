@@ -113,8 +113,27 @@ func runMaybeFanned(
 		}, nil
 	}
 
+	// Zero items: the node runs zero times, so the aggregation loop below observes
+	// no output ports and would return a Result with NO outputs at all — the
+	// declared ports vanish instead of reading as "zero items". Downstream that
+	// misleads both execution paths: an edge from an absent port classifies as
+	// dormant (classifyEdge), skipping the rest of the branch, and on the
+	// in-process path assembleInput simply omits the input, so a loop-body node
+	// can run with a required input unwired. Emit each declared output port as an
+	// empty list instead — "many" with zero items, the shape for_each already
+	// returns for an empty input.
+	if len(items) == 0 {
+		return core.Result{Status: core.StatusOK, Output: emptyFanOutputs(manifest)}, nil
+	}
+
 	baseMIME := job.Input[fanPort].MIME
 	agg := map[string][]any{}
+	// headers carries a row-list output's column order (Ref.Headers) onto the
+	// aggregate. Every item of the SAME drop emits the same order, so the first
+	// non-empty one wins. Without this a fanned parse_csv / regex /
+	// group_aggregate / sheets_read_range loses the column order its value is
+	// supposed to carry with it.
+	headers := map[string][]string{}
 	order := []string{} // preserve first-seen output-port order for deterministic results
 	for _, item := range items {
 		perItem := make(map[string]core.Ref, len(job.Input))
@@ -136,13 +155,55 @@ func runMaybeFanned(
 			if _, seen := agg[port]; !seen {
 				order = append(order, port)
 			}
-			agg[port] = append(agg[port], ref.Inline)
+			agg[port] = append(agg[port], fannedValue(ref))
+			if len(headers[port]) == 0 && len(ref.Headers) > 0 {
+				headers[port] = ref.Headers
+			}
 		}
 	}
 
 	out := make(map[string]core.Ref, len(order))
 	for _, port := range order {
-		out[port] = core.Ref{MIME: "application/json", Inline: agg[port]}
+		out[port] = core.Ref{MIME: "application/json", Inline: agg[port], Headers: headers[port]}
 	}
 	return core.Result{Status: core.StatusOK, Output: out}, nil
+}
+
+// fannedValue is the value the aggregate carries for one item's output ref.
+//
+// Inline is the common case. An OUT-OF-LINE ref carries its payload in Ref with
+// Inline nil — that's every file-producing drop (http_download, file_write,
+// drive_download, excel_write, sheets_export_pdf), so fall back to the ref and
+// let the aggregate become a list of workspace paths. That matches the
+// path-as-value convention git_checkout already emits (it sets Ref and Inline to
+// the same path). Reading Inline alone aggregated a fanned file-producing node
+// to [nil, nil, …] while still reporting ok — silent data loss.
+func fannedValue(ref core.Ref) any {
+	if ref.Inline != nil {
+		return ref.Inline
+	}
+	if ref.Ref != "" {
+		return ref.Ref
+	}
+	return nil
+}
+
+// emptyFanOutputs is a fanned node's output shape for zero items: every declared
+// output port carrying an empty list.
+//
+// PassPort is deliberately excluded. core.ApplyPassthrough threads the node's
+// pass INPUT onto that output after runMaybeFanned returns, and only when the
+// port isn't already set — so seeding it here would replace the threaded value
+// with an empty list. The manifest reaching this point hasn't been through
+// core.WithPassthrough (which is what adds the pin), so the port isn't in Outputs
+// today; the guard keeps that from becoming a silent trap if it ever is.
+func emptyFanOutputs(manifest core.Manifest) map[string]core.Ref {
+	out := make(map[string]core.Ref, len(manifest.Outputs))
+	for _, p := range manifest.Outputs {
+		if p.Port == core.PassPort {
+			continue
+		}
+		out[p.Port] = core.Ref{MIME: "application/json", Inline: []any{}}
+	}
+	return out
 }

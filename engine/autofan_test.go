@@ -117,6 +117,204 @@ func TestRunMaybeFanned(t *testing.T) {
 	})
 }
 
+// TestRunMaybeFanned_PreservesRefPayload is the regression guard for the two
+// Ref fields the aggregator used to drop on the floor. core.Ref carries its
+// payload in THREE fields (Inline, Ref, Headers); reading only Inline lost the
+// other two while still reporting StatusOK — silent data loss, not a failure.
+func TestRunMaybeFanned_PreservesRefPayload(t *testing.T) {
+	ctx := context.Background()
+
+	// http_download's real port shape: url is text/plain (KindText, One,
+	// non-variadic) so a list landing on it fans; request_body is untyped and
+	// is therefore ignored by detectAutoFan.
+	t.Run("out-of-line file refs survive as a list of paths", func(t *testing.T) {
+		m := core.Manifest{ID: "http_download", Inputs: []core.Port{
+			{Port: "url", MIME: []string{"text/plain"}},
+			{Port: "request_body"},
+		}}
+		// Mirrors executeHTTPDownload's success return: payload in Ref, Inline nil.
+		download := func(_ context.Context, _ core.Transport, job core.Job, _ *secretSet) (core.Result, error) {
+			u, _ := job.Input["url"].Inline.(string)
+			return core.Result{Status: core.StatusOK, Output: map[string]core.Ref{
+				"out": {MIME: "text/csv", Ref: "workspace://imports/" + u},
+			}}, nil
+		}
+		job := core.Job{Input: map[string]core.Ref{
+			"url": {Inline: []any{"a.csv", "b.csv", "c.csv"}},
+		}}
+		res, err := runMaybeFanned(ctx, m, job, nil, nil, download)
+		if err != nil || res.Status != core.StatusOK {
+			t.Fatalf("err=%v status=%s", err, res.Status)
+		}
+		want := []any{
+			"workspace://imports/a.csv",
+			"workspace://imports/b.csv",
+			"workspace://imports/c.csv",
+		}
+		if got, _ := res.Output["out"].Inline.([]any); !reflect.DeepEqual(got, want) {
+			t.Fatalf("out-of-line refs dropped: got %#v, want %#v", got, want)
+		}
+	})
+
+	// parse_csv / regex / group_aggregate / sheets_read_range / excel_read / rss
+	// all emit Headers — the column order the simplified data model says a row
+	// value carries with it.
+	t.Run("row-list column order survives", func(t *testing.T) {
+		m := core.Manifest{ID: "parse_csv", Inputs: []core.Port{
+			{Port: "text", MIME: []string{"text/plain"}},
+		}}
+		parse := func(_ context.Context, _ core.Transport, job core.Job, _ *secretSet) (core.Result, error) {
+			return core.Result{Status: core.StatusOK, Output: map[string]core.Ref{
+				"rows": {
+					MIME:    "application/json",
+					Inline:  []any{map[string]any{"b": 2, "a": 1}},
+					Headers: []string{"a", "b"},
+				},
+			}}, nil
+		}
+		job := core.Job{Input: map[string]core.Ref{
+			"text": {Inline: []any{"a,b\n1,2", "a,b\n3,4"}},
+		}}
+		res, err := runMaybeFanned(ctx, m, job, nil, nil, parse)
+		if err != nil || res.Status != core.StatusOK {
+			t.Fatalf("err=%v status=%s", err, res.Status)
+		}
+		if got := res.Output["rows"].Headers; !reflect.DeepEqual(got, []string{"a", "b"}) {
+			t.Fatalf("column order dropped: got %#v, want [a b]", got)
+		}
+	})
+
+	// A drop that emits BOTH (git_checkout sets Ref and Inline to the same path)
+	// must keep preferring the inline value — the fallback is for Inline == nil
+	// only, so this pins that the fix didn't change the common path.
+	t.Run("inline value still wins over ref", func(t *testing.T) {
+		m := core.Manifest{ID: "both", Inputs: []core.Port{itemInput()}}
+		both := func(_ context.Context, _ core.Transport, job core.Job, _ *secretSet) (core.Result, error) {
+			return core.Result{Status: core.StatusOK, Output: map[string]core.Ref{
+				"path": {MIME: "text/plain", Ref: "ignored", Inline: "chosen"},
+			}}, nil
+		}
+		job := core.Job{Input: map[string]core.Ref{"item": {Inline: []any{
+			map[string]any{"a": 1}, map[string]any{"a": 2},
+		}}}}
+		res, err := runMaybeFanned(ctx, m, job, nil, nil, both)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := res.Output["path"].Inline.([]any); !reflect.DeepEqual(got, []any{"chosen", "chosen"}) {
+			t.Fatalf("expected inline to win, got %#v", got)
+		}
+	})
+
+	// An output ref with neither payload aggregates to nil rather than vanishing,
+	// so the port count still matches the item count.
+	t.Run("empty ref aggregates to nil without losing its slot", func(t *testing.T) {
+		m := core.Manifest{ID: "empty", Inputs: []core.Port{itemInput()}}
+		blank := func(_ context.Context, _ core.Transport, job core.Job, _ *secretSet) (core.Result, error) {
+			return core.Result{Status: core.StatusOK, Output: map[string]core.Ref{
+				"out": {MIME: "text/plain"},
+			}}, nil
+		}
+		job := core.Job{Input: map[string]core.Ref{"item": {Inline: []any{
+			map[string]any{"a": 1}, map[string]any{"a": 2},
+		}}}}
+		res, err := runMaybeFanned(ctx, m, job, nil, nil, blank)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := res.Output["out"].Inline.([]any); len(got) != 2 {
+			t.Fatalf("expected 2 slots, got %#v", got)
+		}
+	})
+}
+
+// TestRunMaybeFanned_EmptyList pins the zero-item shape. A fanned node whose list
+// input is empty runs zero times, and must still emit its declared output ports
+// as empty lists ("many" with zero items). Emitting nothing made the ports vanish:
+// downstream, an edge from an absent port classifies as dormant and skips the
+// branch, and on the in-process path assembleInput omits the input entirely so a
+// loop-body node can run with a required input unwired.
+func TestRunMaybeFanned_EmptyList(t *testing.T) {
+	ctx := context.Background()
+	// Fails the test if the transport is ever invoked — zero items means zero runs.
+	never := func(_ context.Context, _ core.Transport, _ core.Job, _ *secretSet) (core.Result, error) {
+		t.Helper()
+		t.Fatal("exec must not run for an empty item list")
+		return core.Result{}, nil
+	}
+
+	t.Run("declared output ports come back as empty lists", func(t *testing.T) {
+		m := core.Manifest{
+			ID:      "parse_csv",
+			Inputs:  []core.Port{{Port: "text", MIME: []string{"text/plain"}}},
+			Outputs: []core.Port{{Port: "rows"}, {Port: "meta"}},
+		}
+		job := core.Job{Input: map[string]core.Ref{"text": {Inline: []any{}}}}
+
+		res, err := runMaybeFanned(ctx, m, job, nil, nil, never)
+		if err != nil || res.Status != core.StatusOK {
+			t.Fatalf("err=%v status=%s", err, res.Status)
+		}
+		if len(res.Output) != 2 {
+			t.Fatalf("expected both declared ports, got %#v", res.Output)
+		}
+		for _, port := range []string{"rows", "meta"} {
+			ref, ok := res.Output[port]
+			if !ok {
+				t.Fatalf("declared port %q absent after fanning an empty list", port)
+			}
+			got, isList := ref.Inline.([]any)
+			if !isList || len(got) != 0 {
+				t.Fatalf("port %q: want an empty list, got %#v", port, ref.Inline)
+			}
+		}
+	})
+
+	// The pass pin is filled in by core.ApplyPassthrough AFTER runMaybeFanned, and
+	// only when the port isn't already set — so seeding it would silently swap the
+	// threaded value for an empty list.
+	t.Run("pass port is left for ApplyPassthrough", func(t *testing.T) {
+		m := core.Manifest{
+			ID:      "withpass",
+			Inputs:  []core.Port{{Port: "text", MIME: []string{"text/plain"}}},
+			Outputs: []core.Port{{Port: core.PassPort}, {Port: "rows"}},
+		}
+		job := core.Job{Input: map[string]core.Ref{
+			"text":        {Inline: []any{}},
+			core.PassPort: {MIME: "text/plain", Inline: "threaded"},
+		}}
+
+		res, err := runMaybeFanned(ctx, m, job, nil, nil, never)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, seeded := res.Output[core.PassPort]; seeded {
+			t.Fatal("pass port must not be seeded — ApplyPassthrough owns it")
+		}
+		core.ApplyPassthrough(job.Input, &res)
+		if got := res.Output[core.PassPort].Inline; got != "threaded" {
+			t.Fatalf("passthrough value lost: %#v", got)
+		}
+	})
+
+	// A drop with no declared outputs has nothing to seed — must not panic or
+	// invent ports.
+	t.Run("no declared outputs yields no ports", func(t *testing.T) {
+		m := core.Manifest{
+			ID:     "sink",
+			Inputs: []core.Port{{Port: "text", MIME: []string{"text/plain"}}},
+		}
+		job := core.Job{Input: map[string]core.Ref{"text": {Inline: []any{}}}}
+		res, err := runMaybeFanned(ctx, m, job, nil, nil, never)
+		if err != nil || res.Status != core.StatusOK {
+			t.Fatalf("err=%v status=%s", err, res.Status)
+		}
+		if len(res.Output) != 0 {
+			t.Fatalf("expected no ports, got %#v", res.Output)
+		}
+	})
+}
+
 // TestDetectAutoFan_SkipsFlowControl locks in that a flow-control drop
 // (NoPassthrough — a router/predicate like Branch) never auto-fans, even when a
 // list lands on its typed scalar input. Otherwise a list of bools into Branch's

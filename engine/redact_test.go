@@ -13,6 +13,43 @@ import (
 	"git.sr.ht/~klahr/dazyflow/core"
 )
 
+// TestRedactResult_ScrubsHeaders guards the third payload field on core.Ref.
+// Headers holds a row-list's column order — strings the Ref/Inline walk never
+// visits, so a secret echoed as a COLUMN NAME used to survive into durable
+// storage and the run-detail UI.
+func TestRedactResult_ScrubsHeaders(t *testing.T) {
+	set := newSecretSet()
+	set.add("sk_live_supersecret")
+
+	shared := []string{"id", "sk_live_supersecret", "amount"}
+	result := core.Result{
+		Status: core.StatusOK,
+		Output: map[string]core.Ref{
+			"rows": {
+				MIME:    "application/json",
+				Inline:  []any{map[string]any{"id": 1}},
+				Headers: shared,
+			},
+		},
+	}
+
+	redactResult(&result, set)
+
+	blob, _ := json.Marshal(result)
+	if strings.Contains(string(blob), "sk_live_supersecret") {
+		t.Fatalf("secret survived redaction in Headers: %s", blob)
+	}
+	got := result.Output["rows"].Headers
+	if !reflect.DeepEqual(got, []string{"id", redactionMarker, "amount"}) {
+		t.Fatalf("unexpected headers after redaction: %#v", got)
+	}
+	// The caller's slice must be untouched: a Ref's Headers can share a backing
+	// array with a value another reader still holds (a write-dedupe entry).
+	if shared[1] != "sk_live_supersecret" {
+		t.Fatalf("redaction mutated the caller's slice in place: %#v", shared)
+	}
+}
+
 func TestRedactResult_ScrubsOutputAndError(t *testing.T) {
 	set := newSecretSet()
 	set.add("sk_live_supersecret")

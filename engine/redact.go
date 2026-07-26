@@ -116,6 +116,7 @@ func redactResult(result *core.Result, set *secretSet) {
 	for port, ref := range result.Output {
 		ref.Ref = redactString(ref.Ref, set)
 		ref.Inline = redactValue(ref.Inline, set)
+		ref.Headers = redactHeaders(ref.Headers, set)
 		result.Output[port] = ref
 	}
 	if result.Error != nil {
@@ -172,6 +173,25 @@ func redactProgress(ctx context.Context, dst chan<- core.Progress, set *secretSe
 		}
 	}()
 	return in, done
+}
+
+// redactHeaders scrubs a row-list value's column order (Ref.Headers). A secret
+// echoed as a COLUMN NAME — e.g. a row-shaping drop that pivots a resolved param
+// into a header — is a string the Ref/Inline walk never visits, so without this
+// it survives into durable storage and the run-detail UI.
+//
+// Returns a fresh slice instead of editing in place: a Ref's Headers can share
+// its backing array with a value another reader still holds (a write-dedupe
+// entry, the caller's graph), and redaction must not reach back into those.
+func redactHeaders(in []string, set *secretSet) []string {
+	if len(in) == 0 {
+		return in
+	}
+	out := make([]string, len(in))
+	for i, h := range in {
+		out[i] = redactString(h, set)
+	}
+	return out
 }
 
 // redactString replaces every secret plaintext substring in s.

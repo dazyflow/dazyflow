@@ -4,10 +4,13 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	neturl "net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -50,6 +53,92 @@ func TestHMACApprovalSigner_DeterministicAndVerifies(t *testing.T) {
 	}
 }
 
+// TestHMACApprovalSigner_SignIsStableAcrossResigns guards the retry contract:
+// SignApprovalURL must reproduce the same URL when the same pause is re-signed,
+// which is what lets a retried await_approval Execute (after a lease expiry)
+// re-emit a link already emailed to an approver. exp is part of the SIGNED
+// payload, so reading the clock raw made every re-sign mint a different URL and
+// token — the emailed link still worked, but valid links accumulated for the
+// full TTL and any consumer deduping on URL saw a new one each attempt.
+//
+// The existing TestHMACApprovalSigner_DeterministicAndVerifies only covers
+// computeToken for a FIXED exp, so it never exercised this.
+func TestHMACApprovalSigner_SignIsStableAcrossResigns(t *testing.T) {
+	base := time.Date(2026, 7, 26, 14, 5, 0, 0, time.UTC)
+	now := base
+	s := &HMACApprovalSigner{
+		BaseURL: "https://dzd",
+		Secret:  []byte("topsecret"),
+		now:     func() time.Time { return now },
+	}
+
+	first := s.SignApprovalURL("run-1", "node-A")
+
+	t.Run("re-sign later in the same bucket reproduces the URL", func(t *testing.T) {
+		// Far enough apart that an unbucketed clock read would differ, but still
+		// inside the same bucket.
+		for _, advance := range []time.Duration{time.Second, 30 * time.Second, 45 * time.Minute} {
+			now = base.Add(advance)
+			if got := s.SignApprovalURL("run-1", "node-A"); got != first {
+				t.Errorf("re-sign after %s differs:\n first: %s\n got  : %s", advance, first, got)
+			}
+		}
+	})
+
+	t.Run("a different pause still gets a different URL", func(t *testing.T) {
+		now = base
+		if s.SignApprovalURL("run-1", "node-B") == first {
+			t.Error("a different node produced the same URL")
+		}
+		if s.SignApprovalURL("run-2", "node-A") == first {
+			t.Error("a different run produced the same URL")
+		}
+	})
+
+	t.Run("the bucketed token verifies and is still expiry-bound", func(t *testing.T) {
+		now = base
+		url := s.SignApprovalURL("run-1", "node-A")
+		exp, token := parseApprovalURL(t, url)
+
+		if !s.verifyToken("run-1", "node-A", exp, token) {
+			t.Fatal("bucketed token failed to verify")
+		}
+		// The signed expiry is still honoured, and still can't be extended.
+		if s.verifyToken("run-1", "node-A", exp+1, token) {
+			t.Error("verify accepted a tampered (extended) expiry")
+		}
+		now = time.Unix(exp, 0).Add(time.Second)
+		if s.verifyToken("run-1", "node-A", exp, token) {
+			t.Error("verify accepted a token past its expiry")
+		}
+	})
+
+	t.Run("bucketing does not shorten the TTL by more than one bucket", func(t *testing.T) {
+		now = base
+		exp, _ := parseApprovalURL(t, s.SignApprovalURL("run-1", "node-A"))
+		life := time.Unix(exp, 0).Sub(now)
+		if life > approvalTokenTTL || life <= approvalTokenTTL-approvalTokenBucket {
+			t.Errorf("effective TTL %s outside (%s, %s]",
+				life, approvalTokenTTL-approvalTokenBucket, approvalTokenTTL)
+		}
+	})
+}
+
+// parseApprovalURL pulls the exp and token query params out of a signed
+// approval URL.
+func parseApprovalURL(t *testing.T, raw string) (int64, string) {
+	t.Helper()
+	u, err := neturl.Parse(raw)
+	if err != nil {
+		t.Fatalf("parse %q: %v", raw, err)
+	}
+	exp, err := strconv.ParseInt(u.Query().Get("exp"), 10, 64)
+	if err != nil {
+		t.Fatalf("bad exp in %q: %v", raw, err)
+	}
+	return exp, u.Query().Get("token")
+}
+
 func TestHMACApprovalSigner_DifferentSecretsProduceDifferentTokens(t *testing.T) {
 	s1 := &HMACApprovalSigner{BaseURL: "https://dzd", Secret: []byte("aaa")}
 	s2 := &HMACApprovalSigner{BaseURL: "https://dzd", Secret: []byte("bbb")}
@@ -88,6 +177,98 @@ func TestApprove_RejectsBadDecision(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "approve or reject") {
 		t.Fatalf("err = %v", err)
 	}
+}
+
+// conflictOnCompleteStore is the losing side of two concurrent approves: the
+// record still reads as awaiting when Approve fetches it, but the terminal write
+// loses the store's conditional UPDATE to the winner and comes back ErrConflict.
+// Wrapping the real store keeps every other operation honest; only Complete is
+// forced. This is the interleaving a live race produces, made deterministic.
+type conflictOnCompleteStore struct {
+	core.JobStore
+}
+
+func (conflictOnCompleteStore) Complete(context.Context, string, core.JobStatus, *core.Result) error {
+	return core.ErrConflict
+}
+
+// TestApprovalListener_ClassifiesErrorsBySentinel pins the HTTP mapping of the
+// approval outcomes. These were classified with strings.Contains on the error
+// text, which mapped the CONCURRENT duplicate approve to 500: it loses inside
+// Complete and surfaces as "job state conflict", matching neither "not awaiting"
+// nor "not found". The sequential duplicate matched and returned 409, so the
+// endpoint reported two different statuses for the same user-visible event.
+func TestApprovalListener_ClassifiesErrorsBySentinel(t *testing.T) {
+	// awaiting builds a service whose run-1/node-A record is parked awaiting,
+	// with the graph payload Approve needs to advance the run.
+	awaiting := func(t *testing.T, wrap func(core.JobStore) core.JobStore) *Service {
+		t.Helper()
+		store := jobstore.NewMemory()
+		graph := core.Graph{ID: "g", Nodes: []core.Node{{ID: "node-A", Module: "noop"}}}
+		payload, _ := json.Marshal(graph)
+		_ = store.Enqueue(t.Context(), core.JobRecord{
+			ID: "run-1", Kind: core.JobKindGraph, GraphID: "g", NodeID: "*",
+			Status: core.JobStatusRunning, GraphPayload: payload,
+		})
+		_ = store.Enqueue(t.Context(), core.JobRecord{
+			ID: NodeJobID("run-1", "node-A"), Kind: core.JobKindNode,
+			GraphRunID: "run-1", NodeID: "node-A", Status: core.JobStatusAwaiting,
+		})
+		var js core.JobStore = store
+		if wrap != nil {
+			js = wrap(store)
+		}
+		return &Service{Jobs: js, Bus: NewMemoryBus(), Engine: &engine.Engine{
+			Resolver: &engine.NodeResolver{Native: engine.Default},
+		}}
+	}
+
+	// call signs a valid link for run-1/node-A and drives the listener.
+	call := func(t *testing.T, svc *Service, query string) *httptest.ResponseRecorder {
+		t.Helper()
+		signer := &HMACApprovalSigner{BaseURL: "https://x", Secret: []byte("k")}
+		exp := time.Now().Add(time.Hour).Unix()
+		token := signer.computeToken("run-1", "node-A", exp)
+		req := httptest.NewRequest("POST", fmt.Sprintf(
+			"/approve/run-1/node-A?token=%s&exp=%d%s", token, exp, query), nil)
+		rw := httptest.NewRecorder()
+		ServeApprovalForTest(NewApprovalListener(svc, signer), rw, req)
+		return rw
+	}
+
+	t.Run("concurrent duplicate approve is 409", func(t *testing.T) {
+		svc := awaiting(t, func(s core.JobStore) core.JobStore {
+			return conflictOnCompleteStore{JobStore: s}
+		})
+		if rw := call(t, svc, "&decision=approve"); rw.Code != http.StatusConflict {
+			t.Fatalf("status = %d, want 409; body=%s", rw.Code, rw.Body.String())
+		}
+	})
+
+	t.Run("sequential duplicate approve is 409", func(t *testing.T) {
+		svc := awaiting(t, nil)
+		if rw := call(t, svc, "&decision=approve"); rw.Code != http.StatusOK {
+			t.Fatalf("first approve: status = %d, want 200; body=%s", rw.Code, rw.Body.String())
+		}
+		// Second click: the record now reads terminal.
+		if rw := call(t, svc, "&decision=approve"); rw.Code != http.StatusConflict {
+			t.Fatalf("second approve: status = %d, want 409; body=%s", rw.Code, rw.Body.String())
+		}
+	})
+
+	t.Run("unknown run is 404", func(t *testing.T) {
+		svc := &Service{Jobs: jobstore.NewMemory(), Bus: NewMemoryBus()}
+		if rw := call(t, svc, "&decision=approve"); rw.Code != http.StatusNotFound {
+			t.Fatalf("status = %d, want 404; body=%s", rw.Code, rw.Body.String())
+		}
+	})
+
+	t.Run("bogus decision is 400, not 500", func(t *testing.T) {
+		svc := awaiting(t, nil)
+		if rw := call(t, svc, "&decision=maybe"); rw.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400; body=%s", rw.Code, rw.Body.String())
+		}
+	})
 }
 
 func TestApprovalListener_RejectsBadToken(t *testing.T) {
