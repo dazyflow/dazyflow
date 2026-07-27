@@ -61,10 +61,50 @@ tasks:
   - vet: |
       cd dazyflow
       go vet ./...
+  # Vulnerability scan. Two passes, because they have complementary blind spots
+  # and neither alone is enough:
+  #
+  #   1. SOURCE (`./...`) — widest coverage: every package in the module,
+  #      including ones no shipped binary links.
+  #   2. BINARY (-mode binary) — what actually ships. Source-mode reachability
+  #      walks the SSA call graph from our packages and misses a vulnerable
+  #      symbol invoked through an interface: GO-2026-5158 (otel baggage
+  #      parsing) read as "not called" in source mode even though
+  #      daemon/tracing.go registers propagation.Baggage{} and otel dispatches
+  #      Extract through its global propagator on every traced request. The
+  #      binary pass caught it. Also ~70 MiB vs ~4 GiB, so it's the cheap one.
+  #
+  # Keep BOTH at symbol granularity (govulncheck's default). Do NOT "fix" a
+  # failure here by dropping to -scan package/module: golang.org/x/crypto
+  # GO-2026-5932 currently has NO fixed version, and at module granularity it
+  # is reported unconditionally — CI would go permanently red with no remedy.
+  # At symbol granularity it correctly reads as uncalled.
+  #
+  # The swapfile is why this step no longer gets OOM-killed. Source-mode
+  # govulncheck builds a whole-module SSA graph and peaks near 4 GiB on a COLD
+  # build cache (a warm local cache only shows ~1.9 GiB, which is why this is
+  # easy to miss when reproducing by hand), and by this point the VM is also
+  # still hosting the postgres + mariadb daemons the test task left running.
+  # The result was `Killed` — SIGKILL from the OOM killer, with no scan output
+  # at all, which reads nothing like a vulnerability report.
   - vuln: |
       cd dazyflow
+      sudo fallocate -l 4G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=4096
+      sudo chmod 600 /swapfile
+      sudo mkswap /swapfile
+      sudo swapon /swapfile
+      free -h
       go install golang.org/x/vuln/cmd/govulncheck@latest
-      "$(go env GOPATH)/bin/govulncheck" ./...
+      GV="$(go env GOPATH)/bin/govulncheck"
+      "$GV" ./...
+      # Symbol scan of each shipped binary. docsgen is a build-time tool, not
+      # shipped, so it is deliberately out of scope.
+      mkdir -p /tmp/vulnbin
+      for c in dzd dzctl dz-mcp; do
+        go build -o "/tmp/vulnbin/$c" "./cmd/$c"
+        echo "--- govulncheck -mode binary $c"
+        "$GV" -mode binary "/tmp/vulnbin/$c"
+      done
   # Software Bill of Materials (A.8.25 / A.8.29 supply-chain). syft scans the
   # Go module graph and emits SPDX + CycloneDX JSON. CI guarantees the SBOM
   # always generates; releases (tagged + pushed by hand) attach
