@@ -12,6 +12,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"git.sr.ht/~klahr/dazyflow/core"
 )
@@ -20,6 +21,23 @@ import (
 // per-tenant disk cap; this is a per-request safety net so a hostile
 // client can't pin our memory/temp space by streaming forever.
 const maxUploadBytes = 200 << 20 // 200 MiB
+
+// uploadReadTimeout is how long this route gets to read its request body,
+// replacing the server's global ReadTimeout for the duration of the upload.
+//
+// That global (see ServeListener) is 30s and — per net/http — covers reading
+// the ENTIRE request including the body, so it silently capped uploads at
+// whatever fits in 30s: finishing a maxUploadBytes body inside it demands
+// ~6.7 MB/s sustained, well past an ordinary uplink. The limit advertised by
+// the 413 path below was therefore unreachable, and a large upload died as a
+// severed connection rather than any handled error.
+//
+// 10 minutes clears maxUploadBytes at ~340 KB/s, so the byte ceiling is the
+// binding limit again for any realistic connection. It is an absolute
+// deadline, not an idle one, which bounds how long a slow client can hold the
+// connection; the route is authenticated and workspace-edit-gated before we
+// extend anything, so that exposure isn't open to strangers.
+const uploadReadTimeout = 10 * time.Minute
 
 // uploadWorkspaceFile accepts multipart/form-data with one "file" part
 // and optional "path" form field, writes the file into the workspace
@@ -40,6 +58,14 @@ func (h *HTTPGateway) uploadWorkspaceFile(rw http.ResponseWriter, r *http.Reques
 	tenant, workspace, ok := h.requireWorkspaceEdit(rw, r, p)
 	if !ok {
 		return
+	}
+
+	// Lift the server's global ReadTimeout for this request before touching
+	// the body — see uploadReadTimeout. Best-effort: if the writer can't be
+	// unwrapped to the connection we log and carry on under the global
+	// timeout, which is the pre-existing behaviour rather than a new failure.
+	if err := http.NewResponseController(rw).SetReadDeadline(time.Now().Add(uploadReadTimeout)); err != nil {
+		h.logger.Printf("upload %s/%s: extend read deadline: %v (large uploads may time out)", tenant, workspace, err)
 	}
 
 	r.Body = http.MaxBytesReader(rw, r.Body, maxUploadBytes)

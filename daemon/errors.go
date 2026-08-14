@@ -213,3 +213,11 @@ func (w *jsonErrorWriter) Flush() {
 		f.Flush()
 	}
 }
+
+// Unwrap exposes the wrapped writer to http.ResponseController. This is the
+// innermost wrapper in the middleware chain, so it's the one handlers actually
+// receive — without Unwrap every ResponseController call below it fails with
+// http.ErrNotSupported, including the per-request read deadline the upload
+// route needs to outlive the server's global ReadTimeout (see
+// uploadWorkspaceFile). statusRecorder already does the same.
+func (w *jsonErrorWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }

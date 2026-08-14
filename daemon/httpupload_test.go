@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"git.sr.ht/~klahr/dazyflow/auth"
 	"git.sr.ht/~klahr/dazyflow/core"
@@ -170,5 +171,77 @@ func TestUpload_NoSandboxConfigured(t *testing.T) {
 	rw := uploadDo(t, h, h.token, "t", "ws", "x.bin", "", []byte("x"))
 	if rw.Code != http.StatusServiceUnavailable {
 		t.Errorf("status=%d, want 503", rw.Code)
+	}
+}
+
+// TestUpload_OutlivesServerReadTimeout is the regression test for the
+// upload-timeout bug. http.Server.ReadTimeout covers reading the ENTIRE
+// request including the body, and the gateway sets one global 30s value
+// (ServeListener) shared by every route — so an upload was implicitly capped
+// at whatever fits in 30s, not at maxUploadBytes: finishing a 200 MiB body
+// inside it needs ~6.7 MB/s sustained. A large upload over an ordinary uplink
+// died as a severed connection, never reaching the handler's 413.
+//
+// The handler now lifts that ceiling for its own request via
+// http.ResponseController (which also requires jsonErrorWriter to expose
+// Unwrap — it is the writer handlers actually receive). This drives a real
+// server with a deliberately tiny ReadTimeout and a body streamed slower than
+// it, so the request only completes if the deadline was extended.
+func TestUpload_OutlivesServerReadTimeout(t *testing.T) {
+	h, root := newUploadHarness(t)
+
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		ServeForTest(h.gw, rw, r)
+	}))
+	// Stand in for the production 30s: short enough to hit in a unit test,
+	// with the same "covers the whole body" semantics.
+	srv.Config.ReadTimeout = 250 * time.Millisecond
+	srv.Start()
+	defer srv.Close()
+
+	// Stream the multipart body in chunks spread over ~1s — comfortably past
+	// ReadTimeout, comfortably inside uploadReadTimeout.
+	pr, pw := io.Pipe()
+	mw := multipart.NewWriter(pw)
+	go func() {
+		part, err := mw.CreateFormFile("file", "slow.bin")
+		if err != nil {
+			_ = pw.CloseWithError(err)
+			return
+		}
+		for i := 0; i < 5; i++ {
+			if _, err := part.Write([]byte("chunk")); err != nil {
+				_ = pw.CloseWithError(err)
+				return
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+		_ = mw.Close()
+		_ = pw.Close()
+	}()
+
+	req, err := http.NewRequest("POST", srv.URL+"/api/v1/workspaces/t/ws/files", pr)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+h.token)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+
+	resp, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatalf("slow upload failed (read deadline not extended?): %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d body=%s", resp.StatusCode, body)
+	}
+
+	got, err := os.ReadFile(filepath.Join(root, "t", "ws", "slow.bin"))
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if string(got) != "chunkchunkchunkchunkchunk" {
+		t.Errorf("contents = %q", got)
 	}
 }

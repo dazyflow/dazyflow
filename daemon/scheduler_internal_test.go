@@ -5,6 +5,7 @@ package daemon
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -237,5 +238,127 @@ func TestReanchor_AdvancesStaleScheduleAt(t *testing.T) {
 	got := sched.tracked["acme/ws1/g@poll"].scheduleAt
 	if !got.After(now) {
 		t.Errorf("reanchor left a non-future fire: %v (now %v)", got, now)
+	}
+}
+
+// publishPollFlow saves and publishes a flow whose only node is a poll trigger
+// on the given interval, and returns the scheduler key rescan will track it
+// under.
+func publishPollFlow(t *testing.T, ws *workspace.Store, id string, seconds int) string {
+	t.Helper()
+	g := core.Graph{
+		ID: id, Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{{
+			ID:     "tick",
+			Module: "poll_trigger",
+			Params: map[string]any{"interval_seconds": seconds},
+		}},
+	}
+	commit, err := ws.Save(g, "u")
+	if err != nil {
+		t.Fatalf("save %s: %v", id, err)
+	}
+	if err := ws.PromoteToEnvironment(g.ID, workspace.PublishedEnv, commit); err != nil {
+		t.Fatalf("publish %s: %v", id, err)
+	}
+	return "acme/ws1/" + id + "@tick"
+}
+
+// TestReanchor_PreservesPollStagger pins that a leadership takeover keeps poll
+// flows spread out. reanchor recomputes every tracked entry from ONE clock
+// read, so anchoring on a bare nextFireFrom(now) lands every flow sharing a
+// cadence on the identical instant — the thundering herd pollJitter exists to
+// break up, arriving right as a node has gone down. Cron entries carry no
+// interval and must keep their exact wall-clock anchor.
+func TestReanchor_PreservesPollStagger(t *testing.T) {
+	svc, _, _ := fireGraphSvc(t)
+	sched := NewScheduler(svc)
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+
+	cron, err := parseCronInTZ(sched.parser, "0 * * * *", "UTC")
+	if err != nil {
+		t.Fatalf("parse cron: %v", err)
+	}
+	sched.tracked = map[string]*scheduledGraph{
+		"acme/ws1/alpha@tick": {graphID: "alpha", tenant: "acme", workspace: "ws1", interval: 5 * time.Minute},
+		"acme/ws1/beta@tick":  {graphID: "beta", tenant: "acme", workspace: "ws1", interval: 5 * time.Minute},
+		"acme/ws1/hourly@c":   {graphID: "hourly", tenant: "acme", workspace: "ws1", scheduleFn: cron},
+	}
+	sched.reanchor(now)
+
+	a := sched.tracked["acme/ws1/alpha@tick"].scheduleAt
+	b := sched.tracked["acme/ws1/beta@tick"].scheduleAt
+	if a.Equal(b) {
+		t.Errorf("reanchor collapsed both poll flows onto %v; stagger lost", a)
+	}
+	// Still inside one interval of now, and still in the future — the stagger
+	// pulls the fire earlier, it must never delay it or resurrect a past tick.
+	for key, got := range map[string]time.Time{"alpha": a, "beta": b} {
+		if !got.After(now) {
+			t.Errorf("%s: reanchored to a non-future fire %v (now %v)", key, got, now)
+		}
+		if got.After(now.Add(5 * time.Minute)) {
+			t.Errorf("%s: reanchored past one interval: %v (now %v)", key, got, now)
+		}
+	}
+	// A cron entry has no interval, so its wall-clock anchor is exact.
+	if h := sched.tracked["acme/ws1/hourly@c"].scheduleAt; !h.Equal(cron.Next(now)) {
+		t.Errorf("cron entry jittered: got %v, want %v", h, cron.Next(now))
+	}
+}
+
+// TestRun_StartupDoesNotCollapsePollStagger is the regression test for the
+// startup re-anchor bug. Run seeded its leadership tracking with
+// `s.leader == nil`, but NewScheduler always installs a non-nil predicate — so
+// the test was never true, every deploy took the "just took over" branch on its
+// FIRST tick, and re-anchored the entries the initial rescan had just
+// staggered. That collapsed every poll flow sharing a cadence onto one instant
+// permanently: they then fired on the same tick and re-added the same interval
+// forever.
+//
+// Drives the real Run loop with an always-true leader (what single-node gets)
+// and asserts the stagger set up by the initial rescan survives.
+func TestRun_StartupDoesNotCollapsePollStagger(t *testing.T) {
+	svc, ws, _ := fireGraphSvc(t)
+	// Two flows on the same cadence, long enough that nothing is ever due
+	// during the test — we're asserting on scheduling, not firing.
+	keyA := publishPollFlow(t, ws, "alpha", 3600)
+	keyB := publishPollFlow(t, ws, "beta", 3600)
+
+	sched := NewScheduler(svc)
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	sched.SetClock(func() time.Time { return now })
+	// Fast ticks; rescan far enough out that only the initial one runs.
+	sched.SetInterval(time.Millisecond, time.Hour)
+	// Stand in for NewScheduler's always-true single-node predicate, while
+	// counting ticks so the assertion can't pass vacuously on a loop that
+	// never ran.
+	var ticks atomic.Int64
+	sched.SetLeader(func() bool { ticks.Add(1); return true })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); _ = sched.Run(ctx) }()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for ticks.Load() < 3 && time.Now().Before(deadline) {
+		time.Sleep(2 * time.Millisecond)
+	}
+	cancel()
+	<-done
+
+	if n := ticks.Load(); n < 3 {
+		t.Fatalf("scheduler ticked %d times in 5s; test would assert nothing", n)
+	}
+
+	sched.mu.Lock()
+	defer sched.mu.Unlock()
+	a, okA := sched.tracked[keyA]
+	b, okB := sched.tracked[keyB]
+	if !okA || !okB {
+		t.Fatalf("flows not enrolled: %q=%v %q=%v", keyA, okA, keyB, okB)
+	}
+	if a.scheduleAt.Equal(b.scheduleAt) {
+		t.Errorf("startup collapsed both poll flows onto %v; rescan's stagger was re-anchored away", a.scheduleAt)
 	}
 }

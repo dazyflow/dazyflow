@@ -153,6 +153,29 @@ func (e *scheduledGraph) nextFireFrom(now time.Time) time.Time {
 	return now.Add(e.effectiveInterval())
 }
 
+// staggeredNextFire is nextFireFrom with the entry's deterministic poll
+// stagger applied, for the paths that anchor a fire time from a bare clock
+// read rather than carrying one forward: first enrollment and leadership
+// takeover. Both would otherwise land every entry computed in the same pass on
+// the identical instant, which is exactly the alignment pollJitter exists to
+// break up.
+//
+// Cron entries are untouched — their interval is zero, so pollJitter returns 0
+// and their wall-clock anchor stays exact. The offset is subtracted, never
+// added, so the fire stays inside one interval and no latency is introduced;
+// the span is capped at a quarter-interval, so the result is still safely in
+// the future of now.
+func (e *scheduledGraph) staggeredNextFire(key string, now time.Time) time.Time {
+	return e.nextFireFrom(now).Add(-pollJitter(key, e.interval))
+}
+
+// isLeader reports whether this instance may fire triggers. A nil predicate
+// means single-node (only reachable by building a Scheduler literal, as tests
+// do) — NewScheduler always installs one.
+func (s *Scheduler) isLeader() bool {
+	return s.leader == nil || s.leader()
+}
+
 const (
 	// maxPollJitter caps the deterministic spread added to a poll trigger's
 	// first fire. A fraction of the interval de-aligns flows that share a
@@ -264,10 +287,16 @@ func (s *Scheduler) Run(ctx context.Context) error {
 	rescanT := time.NewTicker(s.rescanEvery)
 	defer tickT.Stop()
 	defer rescanT.Stop()
-	// Track leadership so we can re-anchor on takeover. A single-node deploy
-	// (s.leader == nil) is always leader and never transitions, so seed it true
-	// to skip the (harmless) startup re-anchor there.
-	wasLeader := s.leader == nil
+	// Track leadership so we can re-anchor on takeover. Seed from the predicate
+	// itself: NewScheduler always installs a non-nil leader, so the old
+	// `s.leader == nil` test was never true and EVERY deploy — single-node
+	// included — took the takeover branch on its first tick. That re-anchored
+	// entries the initial rescan had just staggered, collapsing every poll flow
+	// sharing a cadence onto one instant, permanently (they then fire on the
+	// same tick and re-add the same interval forever). An instance that starts
+	// as leader has nothing to re-anchor: the rescan above already anchored
+	// from a fresh clock.
+	wasLeader := s.isLeader()
 	for {
 		select {
 		case <-ctx.Done():
@@ -276,7 +305,7 @@ func (s *Scheduler) Run(ctx context.Context) error {
 		case <-tickT.C:
 			// Only the leader fires; followers stay warm via rescan and
 			// take over instantly if the leader dies.
-			isLeader := s.leader == nil || s.leader()
+			isLeader := s.isLeader()
 			if isLeader && !wasLeader {
 				// Just took over from a dead leader. A follower's scheduleAt is
 				// frozen at whatever rescan last computed and was never advanced
@@ -469,10 +498,9 @@ func (s *Scheduler) rescan(ctx context.Context) error {
 					// First enrollment: pull the initial fire EARLIER by a
 					// deterministic per-entry jitter so flows sharing an interval
 					// (a post-deploy mass enrollment) don't all fire on the same
-					// tick. Subtracting (not adding) keeps the first fire within
-					// one interval — it never adds latency, and steady-state
-					// cadence stays the base interval from the staggered first fire.
-					entry.scheduleAt = entry.nextFireFrom(now).Add(-pollJitter(k, entry.interval))
+					// tick. Steady-state cadence stays the base interval, measured
+					// from that staggered first fire. See staggeredNextFire.
+					entry.scheduleAt = entry.staggeredNextFire(k, now)
 				}
 				next[k] = entry
 			}
@@ -484,15 +512,21 @@ func (s *Scheduler) rescan(ctx context.Context) error {
 	return nil
 }
 
-// reanchor resets every tracked entry's next-fire to nextFireFrom(now),
-// discarding a stale frozen scheduleAt inherited as a follower. Called once on
-// leadership takeover so a newly-promoted leader doesn't immediately re-fire a
-// tick the dead leader already handled.
+// reanchor resets every tracked entry's next-fire from now, discarding a stale
+// frozen scheduleAt inherited as a follower. Called once on leadership takeover
+// so a newly-promoted leader doesn't immediately re-fire a tick the dead leader
+// already handled.
+//
+// It re-applies each poll entry's stagger rather than anchoring them all on a
+// bare `now`. Every entry here is recomputed in one pass from a single clock
+// read, so without the offset a promoted leader would fire every poll flow
+// sharing a cadence on the same tick — the thundering herd pollJitter exists to
+// prevent, arriving at the worst moment, right as a node has just gone down.
 func (s *Scheduler) reanchor(now time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, e := range s.tracked {
-		e.scheduleAt = e.nextFireFrom(now)
+	for k, e := range s.tracked {
+		e.scheduleAt = e.staggeredNextFire(k, now)
 	}
 }
 
