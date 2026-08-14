@@ -1149,19 +1149,12 @@ func credentialFromRequest(r *http.Request) string {
 }
 
 func (h *HTTPGateway) withCORSAndLogging(next http.Handler) http.Handler {
-	allowed := "*"
-	allowCreds := false
-	if len(h.AllowedOrigins) > 0 || h.WildcardDomain != "" {
-		allowed = strings.Join(h.AllowedOrigins, ", ")
-		// Cookie-based sessions require an explicit origin and
-		// Access-Control-Allow-Credentials: true. Wildcard "*" is
-		// incompatible with credentials per the CORS spec. With only a
-		// WildcardDomain configured, AllowedOrigins may be empty — the
-		// per-request originAllowed check below still reflects the exact
-		// origin back, so credentials work; the static `allowed` fallback
-		// just stays empty for non-matching origins.
-		allowCreds = true
-	}
+	// Cookie-based sessions require reflecting the EXACT origin plus
+	// Access-Control-Allow-Credentials: true — the wildcard "*" is incompatible
+	// with credentials per the CORS spec. A deployment that configures no
+	// browser origin at all (neither AllowedOrigins nor WildcardDomain) hasn't
+	// opted into browser auth, so it serves "*" without credentials instead.
+	allowCreds := len(h.AllowedOrigins) > 0 || h.WildcardDomain != ""
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		// Wrap the writer to capture the status code, and time the
 		// request for the RED metrics. The recorder delegates Flush so
@@ -1175,12 +1168,28 @@ func (h *HTTPGateway) withCORSAndLogging(next http.Handler) http.Handler {
 			}()
 		}
 		origin := r.Header.Get("Origin")
-		if allowCreds && origin != "" && h.originAllowed(origin) {
+		// Vary on Origin unconditionally. The ACAO value below is
+		// origin-dependent, so announcing it only on the matching branch let a
+		// shared cache store one origin's response — complete with its
+		// Access-Control-Allow-Origin — and replay it to a different origin.
+		// The header has to describe how the response varies whether or not
+		// this particular request matched.
+		rw.Header().Set("Vary", "Origin")
+		switch {
+		case allowCreds && origin != "" && h.originAllowed(origin):
 			rw.Header().Set("Access-Control-Allow-Origin", origin)
 			rw.Header().Set("Access-Control-Allow-Credentials", "true")
-			rw.Header().Set("Vary", "Origin")
-		} else {
-			rw.Header().Set("Access-Control-Allow-Origin", allowed)
+		case !allowCreds:
+			// No browser origin configured: open to any origin, but only
+			// without credentials.
+			rw.Header().Set("Access-Control-Allow-Origin", "*")
+		default:
+			// Credentialed mode with a missing or disallowed Origin. Emit no
+			// ACAO at all. The previous fallback echoed the AllowedOrigins list
+			// joined by commas, which is not a valid ACAO value (the grammar
+			// admits a single origin or "*"), so no browser ever accepted it —
+			// it only muddied caches. A non-browser client (dzctl, curl) never
+			// reads the header; a browser correctly refuses the read.
 		}
 		rw.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
 		rw.Header().Set("Access-Control-Allow-Methods", "GET, PUT, POST, DELETE, OPTIONS")

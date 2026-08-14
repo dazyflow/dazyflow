@@ -515,29 +515,51 @@ func (s *Scheduler) fireDue(ctx context.Context) {
 		}
 		if !e.scheduleAt.After(now) {
 			s.fireGraph(ctx, e)
-			s.mu.Lock()
 			// Adaptive backoff: fold the latest poll outcome into the empty
 			// streak BEFORE computing the next fire, so a consistently-empty
 			// poller widens (and an active one snaps back). The marker reflects
 			// the PREVIOUS fire's run (this fire's run hasn't finished yet),
 			// which is exactly the signal we want for the next interval.
-			s.refreshEmptyStreakLocked(ctx, e)
+			//
+			// The marker READ happens outside the lock. cmd/dzd points
+			// pollState at the Postgres-backed encrypted secret store, so it is
+			// a network round-trip; holding s.mu across it would stall rescan's
+			// map swap, reanchor, and TrackedCount behind an unrelated database
+			// call — and a hung store would wedge them indefinitely. Only the
+			// fold and the next-fire stamp, both pure, run under the lock.
+			// fireGraph is already called outside it for the same reason.
+			marker := s.readPollMarker(ctx, e)
+			s.mu.Lock()
+			s.foldPollOutcomeLocked(e, marker)
 			e.scheduleAt = e.nextFireFrom(now)
 			s.mu.Unlock()
 		}
 	}
 }
 
-// refreshEmptyStreakLocked updates a poll entry's empty streak from its flow's
-// pollstate marker. It only acts on a marker NEWER than the last one folded in
-// (markers are stamped per run), so re-reading the same outcome doesn't inflate
-// the streak. An empty outcome increments; an active one resets to zero,
-// tightening the cadence back to the base interval. Caller holds s.mu.
-func (s *Scheduler) refreshEmptyStreakLocked(ctx context.Context, e *scheduledGraph) {
+// readPollMarker fetches a poll entry's latest outcome marker. This is the I/O
+// half of the empty-streak update and deliberately takes NO lock — see fireDue.
+// Returns nil when the entry isn't poll-driven, no reader is wired, or no
+// marker exists yet.
+//
+// The fields it reads (interval, tenant, graphID) are set when rescan builds
+// the entry and never mutated afterwards; rescan carries state forward into
+// FRESH entries rather than editing live ones, so only scheduleAt/emptyStreak/
+// lastMarkerAt are mutable, and those are the lock's business.
+func (s *Scheduler) readPollMarker(ctx context.Context, e *scheduledGraph) *pollstate.Marker {
 	if e.interval <= 0 || s.pollState == nil {
-		return
+		return nil
 	}
-	m := s.pollState(ctx, e.tenant, e.graphID)
+	return s.pollState(ctx, e.tenant, e.graphID)
+}
+
+// foldPollOutcomeLocked folds a marker read by readPollMarker into a poll
+// entry's empty streak. It only acts on a marker NEWER than the last one folded
+// in (markers are stamped per run), so re-reading the same outcome doesn't
+// inflate the streak. An empty outcome increments; an active one resets to
+// zero, tightening the cadence back to the base interval. Pure — no I/O — so
+// the caller can hold s.mu across it. Caller holds s.mu.
+func (s *Scheduler) foldPollOutcomeLocked(e *scheduledGraph, m *pollstate.Marker) {
 	if m == nil {
 		return
 	}

@@ -15,6 +15,21 @@ uses **envelope encryption**:
 So the master key protects every tenant's DEK, which protects every
 secret. It is the single most sensitive piece of configuration.
 
+Each ciphertext is additionally **bound to the row it lives in** through
+AES-GCM's additional authenticated data — `(tenant, name)` for a secret,
+`tenant` for a wrapped DEK. Without that binding, GCM proves only that a blob
+was sealed under the tenant's DEK, not that it was sealed under *this name*, so
+anyone with write access to the database could relocate a ciphertext (copy
+`conn.stripe.api_key`'s blob into a secret a flow is allowed to read) and
+recover the plaintext through an ordinary `${secret.…}` reference. The binding
+makes that relocation fail to authenticate.
+
+Ciphertext written before binding existed still decrypts — dzd falls back to an
+unbound open — and upgrades to the bound form when the value is next written.
+Every `Put` re-seals, so an OAuth refresh or a re-saved connection upgrades
+itself, and the rotation below upgrades every DEK it touches. A deployment that
+wants the guarantee everywhere immediately can re-save its secrets.
+
 ### Generating it
 
 ```sh

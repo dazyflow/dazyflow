@@ -120,13 +120,27 @@ func (l *ipRateLimiter) Allow(ip string) bool {
 // gcLocked drops buckets that have fully refilled (no outstanding debt)
 // and haven't been touched recently — they're indistinguishable from a
 // fresh bucket, so forgetting them is free. Runs at most once a minute.
+//
+// The refill is recomputed here rather than read off the bucket. b.tokens is
+// only updated inside Allow, so a bucket abandoned while DEPLETED keeps its
+// stale near-zero count forever and would never satisfy a bare
+// `b.tokens >= l.burst` test — which selected against exactly the buckets most
+// worth expiring, since a scanner or credential-stuffer leaves its bucket
+// drained and never returns. Those entries then survived until the map hit
+// maxRateLimiterBuckets and evictOldestLocked started paying an O(n) scan per
+// insert. Judging on what the bucket WOULD hold now reclaims them on the first
+// sweep past their refill time.
 func (l *ipRateLimiter) gcLocked(now time.Time) {
 	if now.Sub(l.lastGC) < time.Minute {
 		return
 	}
 	l.lastGC = now
 	for ip, b := range l.buckets {
-		if b.tokens >= l.burst && now.Sub(b.last) > time.Minute {
+		idle := now.Sub(b.last)
+		if idle <= time.Minute {
+			continue // recently active — keep, debt or not
+		}
+		if b.tokens+idle.Seconds()*l.rate >= l.burst {
 			delete(l.buckets, ip)
 		}
 	}

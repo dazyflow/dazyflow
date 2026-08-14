@@ -208,3 +208,41 @@ func TestIdempotencyStore_EvictLocked(t *testing.T) {
 func keyFor(i int) string {
 	return "k-" + strconv.Itoa(i)
 }
+
+// A bucket abandoned while DEPLETED must still be reclaimed once enough time
+// has passed for it to refill. Tokens are only updated inside Allow, so the
+// stale count on the record says "still in debt" long after the bucket is
+// indistinguishable from a fresh one — and those are precisely the buckets a
+// scanner or credential-stuffer leaves behind, so leaking them defeated the
+// sweep for the traffic it exists to survive.
+func TestIPRateLimiter_GCReclaimsDepletedIdleBucket(t *testing.T) {
+	l := newIPRateLimiter(60, 5) // 1 token/sec, burst 5
+
+	l.mu.Lock()
+	l.lastGC = time.Now().Add(-2 * time.Minute) // force the sweep to run
+	// Drained 10 minutes ago: 600s * 1 tok/s refills far past burst.
+	l.buckets["drained-and-gone"] = &tokenBucket{tokens: 0, last: time.Now().Add(-10 * time.Minute)}
+	l.gcLocked(time.Now())
+	_, kept := l.buckets["drained-and-gone"]
+	l.mu.Unlock()
+	if kept {
+		t.Error("a depleted bucket idle long enough to fully refill should be GC'd")
+	}
+}
+
+// A bucket that is idle but genuinely still in debt (slow refill rate) is kept,
+// so the throttle isn't reset out from under an ongoing abuser.
+func TestIPRateLimiter_GCKeepsIdleButStillIndebtedBucket(t *testing.T) {
+	l := newIPRateLimiter(1, 100) // 1/60 tok/sec, burst 100 — very slow refill
+
+	l.mu.Lock()
+	l.lastGC = time.Now().Add(-2 * time.Minute)
+	// Idle 2 minutes at 1/60 tok/s = ~2 tokens, nowhere near the burst of 100.
+	l.buckets["still-throttled"] = &tokenBucket{tokens: 0, last: time.Now().Add(-2 * time.Minute)}
+	l.gcLocked(time.Now())
+	_, kept := l.buckets["still-throttled"]
+	l.mu.Unlock()
+	if !kept {
+		t.Error("a bucket that has NOT refilled must be kept so its throttle survives")
+	}
+}

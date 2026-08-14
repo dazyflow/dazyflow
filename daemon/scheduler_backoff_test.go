@@ -90,21 +90,21 @@ func TestRefreshEmptyStreak(t *testing.T) {
 	// Three fresh empty markers → streak climbs to 3.
 	for i := 1; i <= 3; i++ {
 		marker = &pollstate.Marker{Empty: true, At: at(time.Duration(i) * time.Second)}
-		s.refreshEmptyStreakLocked(context.Background(), e)
+		s.foldPollOutcomeLocked(e, s.readPollMarker(context.Background(), e))
 		if e.emptyStreak != i {
 			t.Fatalf("after %d empty fires, streak = %d", i, e.emptyStreak)
 		}
 	}
 
 	// Re-reading the SAME (stale) marker must not inflate the streak.
-	s.refreshEmptyStreakLocked(context.Background(), e)
+	s.foldPollOutcomeLocked(e, s.readPollMarker(context.Background(), e))
 	if e.emptyStreak != 3 {
 		t.Fatalf("stale marker inflated streak to %d", e.emptyStreak)
 	}
 
 	// A fresh ACTIVE marker resets the streak.
 	marker = &pollstate.Marker{Empty: false, At: at(10 * time.Second)}
-	s.refreshEmptyStreakLocked(context.Background(), e)
+	s.foldPollOutcomeLocked(e, s.readPollMarker(context.Background(), e))
 	if e.emptyStreak != 0 {
 		t.Fatalf("active marker did not reset streak (got %d)", e.emptyStreak)
 	}
@@ -113,8 +113,61 @@ func TestRefreshEmptyStreak(t *testing.T) {
 func TestRefreshEmptyStreak_NoReaderNoop(t *testing.T) {
 	s := &Scheduler{} // pollState nil
 	e := &scheduledGraph{tenant: "t", graphID: "g", interval: time.Minute, emptyStreak: 2}
-	s.refreshEmptyStreakLocked(context.Background(), e)
+	s.foldPollOutcomeLocked(e, s.readPollMarker(context.Background(), e))
 	if e.emptyStreak != 2 {
 		t.Fatalf("nil reader should be a no-op, streak changed to %d", e.emptyStreak)
+	}
+}
+
+// The poll-outcome marker read is a store round-trip (Postgres-backed in
+// production). fireDue must not hold s.mu across it, or a slow — or hung —
+// store stalls rescan's map swap, reanchor, and TrackedCount behind an
+// unrelated database call.
+//
+// The reader below blocks until the test observes that the scheduler's mutex is
+// still free. If fireDue ever takes the lock before reading again, TrackedCount
+// blocks, the signal never arrives, and this deadlocks into a timeout.
+func TestScheduler_PollMarkerReadDoesNotHoldLock(t *testing.T) {
+	// An empty workspace map makes fireGraph fail its Open and return quietly,
+	// so the test exercises fireDue's locking without needing a real flow.
+	s := NewScheduler(&Service{Workspaces: MapWorkspaces{}})
+
+	lockFree := make(chan struct{})
+	release := make(chan struct{})
+	s.SetPollStateReader(func(context.Context, string, string) *pollstate.Marker {
+		// Prove the lock is available WHILE the reader is in flight.
+		go func() {
+			s.TrackedCount() // would block if fireDue held s.mu
+			close(lockFree)
+		}()
+		<-release
+		return nil
+	})
+
+	e := &scheduledGraph{
+		graphID: "g", tenant: "t", workspace: "ws",
+		interval:   time.Minute,
+		scheduleAt: time.Now().Add(-time.Second), // due
+	}
+	s.tracked["t/ws/g@n"] = e
+
+	done := make(chan struct{})
+	go func() { s.fireDue(context.Background()); close(done) }()
+
+	select {
+	case <-lockFree:
+	case <-time.After(3 * time.Second):
+		close(release)
+		t.Fatal("scheduler mutex was held across the poll-marker read")
+	}
+	close(release)
+
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("fireDue did not return")
+	}
+	if !e.scheduleAt.After(time.Now()) {
+		t.Error("next fire should have been advanced past now")
 	}
 }

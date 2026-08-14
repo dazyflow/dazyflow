@@ -271,36 +271,45 @@ func resolveSlice(ctx context.Context, providers map[string]core.SecretProvider,
 //  1. Inline:        "Bearer ${secret.STRIPE_KEY}"   →  "Bearer sk_live_xyz"
 //  2. Whole-string:  "secret://STRIPE_KEY"           →  "sk_live_xyz"
 //
-// The inline form runs first so we can compose with surrounding literal
-// text (the original motivation: `Authorization: Bearer <token>` headers
-// where the token alone is the secret). The whole-string form is the
-// terse alternative when the entire value is the secret.
+// The whole-string form is checked FIRST, against the raw param — before any
+// substitution runs. That ordering is load-bearing security, not style.
+//
+// Both forms are AUTHOR-written references: they express the flow author's
+// intent to inject a credential here. Resolving the `scheme://NAME` form
+// against POST-substitution text instead would extend that authority to the
+// data, because ${upstream.…} and ${item.…} carry values the flow ingested
+// from the outside world — a webhook body, an HTTP response, a form field, a
+// spreadsheet cell. A value of the literal text "secret://conn.stripe.api_key"
+// would then resolve to the tenant's live Stripe key and hand it to the drop,
+// letting whoever controls that upstream data read any secret in the
+// organization (and, since vault:// / aws:// / gcp:// register into the same
+// provider map, anything in the tenant's cloud secret manager too). Redaction
+// does not save us: it scrubs the persisted Result, but the drop still
+// receives the plaintext in its params and can send it anywhere.
+//
+// So: whole-string form matches only the author's own literal, then inline
+// substitution runs and its output is never re-interpreted as a reference.
+// This mirrors SubstituteString, which likewise does not re-scan its own
+// replacements for further ${…} placeholders.
 //
 // Unknown schemes (e.g. `${item....}` outside for_each, or a literal
 // URL like `http://...`) are left unchanged.
 func resolveString(ctx context.Context, providers map[string]core.SecretProvider, sub Substituter, set *secretSet, s string) (string, error) {
-	resolved, err := SubstituteString(ctx, s, sub)
-	if err != nil {
-		return "", err
-	}
 	// The whole-string `secret://NAME` form is secret-only by design.
 	// Upstream refs don't get this treatment — they're inline-${...}-only
 	// because "upstream://node.field" reads like a URL and would be
 	// ambiguous.
-	scheme, path, ok := splitSecretRef(resolved)
-	if !ok {
-		return resolved, nil
+	if scheme, path, ok := splitSecretRef(s); ok {
+		if provider, ok := providers[scheme]; ok {
+			value, err := provider.Get(ctx, path)
+			if err != nil {
+				return "", fmt.Errorf("%s://%s: %w", scheme, path, err)
+			}
+			set.add(value)
+			return value, nil
+		}
 	}
-	provider, ok := providers[scheme]
-	if !ok {
-		return resolved, nil
-	}
-	value, err := provider.Get(ctx, path)
-	if err != nil {
-		return "", fmt.Errorf("%s://%s: %w", scheme, path, err)
-	}
-	set.add(value)
-	return value, nil
+	return SubstituteString(ctx, s, sub)
 }
 
 func splitSecretRef(s string) (scheme, path string, ok bool) {

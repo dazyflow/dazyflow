@@ -176,8 +176,18 @@ func (e *Engine) runLayer(
 	}
 	wg.Wait()
 
+	// Merge every sibling's result BEFORE inspecting any of them for failure.
+	// Merging and checking in one pass returned on the first bad slot, so the
+	// nodes ordered after it were dropped from `results` entirely — and since
+	// ExecutionLayers sorts a layer by node ID, which successful siblings
+	// survived came down to alphabetical accident. They all ran; the caller
+	// should see all of them. This matters beyond tidiness: Worker.bodyRunner
+	// drives loop bodies through Engine.Run and reads GraphResult.Nodes, so a
+	// body with one failing node was silently losing its siblings' output.
 	for _, s := range out {
 		results[s.id] = s.result
+	}
+	for _, s := range out {
 		if s.err != nil {
 			return fmt.Errorf("node %q: %w", s.id, s.err)
 		}

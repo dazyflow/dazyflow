@@ -197,6 +197,50 @@ type secretsStore interface {
 // it into a SecretProvider-shaped error before bubbling up.
 var ErrSecretNotFound = errors.New("secret not found")
 
+// AES-GCM authenticates its additional data (AAD) without encrypting it, which
+// lets us bind a ciphertext to the ROW it belongs in. Without that binding, GCM
+// only proves a blob was sealed under the tenant's DEK — not that it was sealed
+// under this NAME. An attacker with write access to the secrets table could
+// therefore relocate ciphertext: copy the blob stored for conn.stripe.api_key
+// into the row for some low-value secret their flow is allowed to read, and get
+// the plaintext back out through an ordinary ${secret.…} reference. The same
+// argument applies to a wrapped DEK moved between tenants.
+//
+// Binding (tenant, name) as AAD makes that relocation fail to authenticate. It
+// costs nothing — AAD is hashed, not stored — and it is defense in depth: it
+// only matters once someone already has database write access.
+//
+// The NUL separators plus the versioned prefix keep the encoding unambiguous,
+// so no (tenant, name) pair can be spelled two ways.
+func secretAAD(tenant, name string) []byte {
+	return []byte("dazyflow/secret/v1\x00" + tenant + "\x00" + name)
+}
+
+// dekAAD binds a wrapped DEK to the tenant whose secrets it protects.
+func dekAAD(tenant string) []byte {
+	return []byte("dazyflow/dek/v1\x00" + tenant)
+}
+
+// openBound decrypts data that SHOULD carry the AAD binding above, falling back
+// to an unbound open for ciphertext written before binding existed.
+//
+// The fallback is what makes this change deployable against a live store: every
+// secret and wrapped DEK already on disk was sealed with nil AAD, and without
+// it an upgrade would render all of them undecryptable.
+//
+// Residual risk, stated plainly: a legacy (unbound) ciphertext is still
+// relocatable, because we must accept it. Values upgrade to the bound form as
+// they are rewritten — every Put re-seals, so an OAuth refresh or a re-saved
+// connection upgrades itself, and RewrapDEKs upgrades every DEK it touches. A
+// deployment that wants the guarantee everywhere today can re-save its secrets;
+// a future release can drop the fallback once no legacy ciphertext remains.
+func openBound(aead cipher.AEAD, nonce, ct, aad []byte) ([]byte, error) {
+	if pt, err := aead.Open(nil, nonce, ct, aad); err == nil {
+		return pt, nil
+	}
+	return aead.Open(nil, nonce, ct, nil)
+}
+
 // NewEncryptedSecrets constructs the provider. masterKey must be
 // exactly 32 bytes (AES-256). The caller owns key material — load
 // it from a CLI flag, env var, sealed secret, KMS, whatever. We
@@ -297,7 +341,7 @@ func (e *EncryptedSecrets) getRaw(ctx context.Context, tenant, storageName strin
 	if err != nil {
 		return "", err
 	}
-	pt, err := dek.Open(nil, nonce, ct, nil)
+	pt, err := openBound(dek, nonce, ct, secretAAD(tenant, storageName))
 	if err != nil {
 		return "", fmt.Errorf("tenant secret %q: decryption failed", storageName)
 	}
@@ -322,7 +366,9 @@ func (e *EncryptedSecrets) Put(ctx context.Context, tenant, name, value string) 
 	if _, err := io.ReadFull(e.rng(), nonce); err != nil {
 		return fmt.Errorf("nonce: %w", err)
 	}
-	ct := dek.Seal(nil, nonce, []byte(value), nil)
+	// Bound to (tenant, name) so the ciphertext can't be relocated to another
+	// row and read back through a reference the attacker is allowed to make.
+	ct := dek.Seal(nil, nonce, []byte(value), secretAAD(tenant, name))
 	return e.store.putSecret(ctx, tenant, name, ct, nonce)
 }
 
@@ -369,11 +415,12 @@ func (e *EncryptedSecrets) RewrapDEKs(ctx context.Context, newMasterKey []byte) 
 			return rotated, skipped, fmt.Errorf("read DEK for %q: %w", tenant, err)
 		}
 
-		dekBytes, openErr := e.kek.Open(nil, nonce, wrapped, nil)
+		aad := dekAAD(tenant)
+		dekBytes, openErr := openBound(e.kek, nonce, wrapped, aad)
 		if openErr != nil {
 			// Doesn't unwrap under the current key — maybe a prior run
 			// already rotated it. If the new key opens it, it's done.
-			if _, newErr := newKEK.Open(nil, nonce, wrapped, nil); newErr == nil {
+			if _, newErr := openBound(newKEK, nonce, wrapped, aad); newErr == nil {
 				skipped++
 				continue
 			}
@@ -384,7 +431,9 @@ func (e *EncryptedSecrets) RewrapDEKs(ctx context.Context, newMasterKey []byte) 
 		if _, err := io.ReadFull(e.rng(), newNonce); err != nil {
 			return rotated, skipped, fmt.Errorf("new wrap nonce for %q: %w", tenant, err)
 		}
-		newWrapped := newKEK.Seal(nil, newNonce, dekBytes, nil)
+		// Re-wrapping is also the upgrade path: a legacy unbound DEK comes out
+		// through openBound's fallback and goes back in bound to its tenant.
+		newWrapped := newKEK.Seal(nil, newNonce, dekBytes, aad)
 		if err := e.store.replaceWrappedDEK(ctx, tenant, newWrapped, newNonce); err != nil {
 			return rotated, skipped, fmt.Errorf("persist re-wrapped DEK for %q: %w", tenant, err)
 		}
@@ -442,7 +491,7 @@ func (e *EncryptedSecrets) dekFor(ctx context.Context, tenant string) (cipher.AE
 		if _, err := io.ReadFull(e.rng(), wrapNonce); err != nil {
 			return nil, fmt.Errorf("dek nonce: %w", err)
 		}
-		wrappedDEK := e.kek.Seal(nil, wrapNonce, dekBytes, nil)
+		wrappedDEK := e.kek.Seal(nil, wrapNonce, dekBytes, dekAAD(tenant))
 		wrote, err := e.store.setWrappedDEK(ctx, tenant, wrappedDEK, wrapNonce)
 		if err != nil {
 			return nil, fmt.Errorf("provision DEK for %q: %w", tenant, err)
@@ -464,7 +513,7 @@ func (e *EncryptedSecrets) dekFor(ctx context.Context, tenant string) (cipher.AE
 		return nil, fmt.Errorf("load DEK for %q: %w", tenant, err)
 	}
 
-	dekBytes, err := e.kek.Open(nil, nonce, wrapped, nil)
+	dekBytes, err := openBound(e.kek, nonce, wrapped, dekAAD(tenant))
 	if err != nil {
 		return nil, fmt.Errorf("unwrap DEK for %q (wrong DAZYFLOW_MASTER_KEY?): %w", tenant, err)
 	}

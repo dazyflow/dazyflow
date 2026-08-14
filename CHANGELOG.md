@@ -96,6 +96,39 @@ Releasing: move the entries below from `[Unreleased]` under a new
 
 ### Security
 
+- **Secret references are no longer resolvable out of flow data.** The
+  whole-string `secret://NAME` form was matched AFTER `${upstream.…}` /
+  `${item.…}` substitution, so data a flow ingested from the outside world — a
+  webhook body, an HTTP response, a form field, a spreadsheet cell — was
+  re-interpreted as a credential reference. Anyone able to influence that data
+  could read any secret in the organization by supplying the literal text
+  `secret://NAME`, connection credentials (`conn.<slug>.<field>`) included, and
+  through the `vault://` / `aws://` / `gcp://` schemes anything in the tenant's
+  cloud secret manager. Redaction did not contain it: the drop received the
+  plaintext in its params regardless of what the persisted run detail showed.
+  The reference is now matched against the raw parameter only, before any
+  substitution runs — mirroring `SubstituteString`, which likewise never
+  re-scans its own replacements. Author-written references are unaffected.
+- Stored secrets and wrapped DEKs are now bound to their row with AES-GCM
+  additional authenticated data (`(tenant, name)` for a secret, `tenant` for a
+  DEK). Without the binding, GCM proved only "sealed under this tenant's DEK",
+  so an attacker with database write access could relocate a ciphertext — copy
+  `conn.stripe.api_key`'s blob into a secret their flow may read — and recover
+  the plaintext through an ordinary reference. Existing ciphertext keeps
+  decrypting (an unbound open is attempted as a fallback) and upgrades to the
+  bound form as values are rewritten; `--rotate-master-key` upgrades every DEK.
+- `Vary: Origin` is now sent on every response, not only when the request's
+  Origin matched. A shared cache could otherwise store one origin's
+  `Access-Control-Allow-Origin` and replay it to a different origin. A
+  disallowed origin in credentialed mode now gets no ACAO header at all rather
+  than the comma-joined allowlist, which was never a valid header value.
+- The auth/webhook rate limiter now reclaims per-IP buckets that were left
+  DEPLETED. Token counts are only updated inside `Allow`, so an abandoned
+  bucket kept a stale near-zero count and never satisfied the sweep's
+  "fully refilled" test — selecting against exactly the buckets worth expiring,
+  since a scanner or credential-stuffer leaves its bucket drained and never
+  returns. Those entries survived until the map hit its cap and every insert
+  started paying an O(n) eviction scan.
 - Run quota is now enforced atomically. The monthly run-cap gate was a
   read-then-increment, so concurrent submissions at the limit could all pass
   and exceed the cap; it now reserves a slot in a single atomic step
@@ -121,6 +154,23 @@ Releasing: move the entries below from `[Unreleased]` under a new
 
 ### Fixed
 
+- A graph run can no longer strand permanently when a worker shuts down. Once a
+  node was claimed, some of its bookkeeping still ran on the claim context, so a
+  SIGTERM could land between a terminal write and the dispatch of that node's
+  dependents — leaving the node terminal, the dependents never enqueued, and the
+  run "running" forever, which `ReapStuckGraphRuns` cannot recover because it
+  bails on a MISSING node record. The same exposure let a shutdown fail the
+  graph/predecessor READS and mark a node failed for no reason. All of a claimed
+  job's store I/O now runs on a context detached from the claim loop; lease loss
+  remains the only thing that aborts a claimed job.
+- The scheduler no longer holds its mutex across the poll-outcome marker read,
+  which is a store round-trip in production — a slow or hung secret store stalled
+  rescan's map swap, leader re-anchoring, and `TrackedCount` behind it.
+- `Engine.Run` keeps the results of a failed node's SIBLINGS. Merging and
+  error-checking shared one pass, so nodes ordered after the failing one were
+  dropped from `GraphResult.Nodes` — and since a layer is sorted by node ID,
+  which results survived was decided alphabetically. Loop bodies read that map,
+  so a body with one failing node was silently losing its other nodes' output.
 - Graph/node `timeout_seconds` is clamped against int64 overflow — a hostile
   huge value previously wrapped negative and silently disabled the run/node
   timeout instead of capping it.

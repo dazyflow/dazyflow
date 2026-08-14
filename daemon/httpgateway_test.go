@@ -1699,3 +1699,60 @@ func TestParseRunListOpts_DateRange(t *testing.T) {
 		t.Errorf("malformed since = %v, want zero", bad.Since)
 	}
 }
+
+// The ACAO value depends on the request's Origin, so every response must say
+// so. Announcing Vary only on the matching branch let a shared cache replay one
+// origin's Access-Control-Allow-Origin to a different origin.
+func TestHTTPGateway_CORSAlwaysVariesOnOrigin(t *testing.T) {
+	h := newGatewayHarness(t)
+	h.gw.AllowedOrigins = []string{"https://app.example.com"}
+
+	for _, origin := range []string{"https://app.example.com", "https://evil.example.com", ""} {
+		req := httptest.NewRequest("GET", "/api/v1/modules", nil)
+		if origin != "" {
+			req.Header.Set("Origin", origin)
+		}
+		rw := httptest.NewRecorder()
+		ServeForTest(h.gw, rw, req)
+		if got := rw.Header().Get("Vary"); got != "Origin" {
+			t.Errorf("Origin=%q: Vary = %q, want %q", origin, got, "Origin")
+		}
+	}
+}
+
+// A disallowed origin in credentialed mode gets no ACAO at all — never the
+// comma-joined AllowedOrigins list, which is not a valid header value.
+func TestHTTPGateway_CORSDisallowedOriginGetsNoACAO(t *testing.T) {
+	h := newGatewayHarness(t)
+	h.gw.AllowedOrigins = []string{"https://app.example.com", "https://other.example.com"}
+
+	req := httptest.NewRequest("GET", "/api/v1/modules", nil)
+	req.Header.Set("Origin", "https://evil.example.com")
+	rw := httptest.NewRecorder()
+	ServeForTest(h.gw, rw, req)
+
+	if got := rw.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Errorf("ACAO = %q, want empty for a disallowed origin", got)
+	}
+	if got := rw.Header().Get("Access-Control-Allow-Credentials"); got != "" {
+		t.Errorf("ACAC = %q, want empty for a disallowed origin", got)
+	}
+}
+
+// The allowed origin is reflected exactly, with credentials enabled.
+func TestHTTPGateway_CORSAllowedOriginIsReflected(t *testing.T) {
+	h := newGatewayHarness(t)
+	h.gw.AllowedOrigins = []string{"https://app.example.com"}
+
+	req := httptest.NewRequest("GET", "/api/v1/modules", nil)
+	req.Header.Set("Origin", "https://app.example.com")
+	rw := httptest.NewRecorder()
+	ServeForTest(h.gw, rw, req)
+
+	if got := rw.Header().Get("Access-Control-Allow-Origin"); got != "https://app.example.com" {
+		t.Errorf("ACAO = %q, want the exact origin reflected", got)
+	}
+	if got := rw.Header().Get("Access-Control-Allow-Credentials"); got != "true" {
+		t.Errorf("ACAC = %q, want %q", got, "true")
+	}
+}

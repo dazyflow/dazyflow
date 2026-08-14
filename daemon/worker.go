@@ -169,6 +169,25 @@ func sleepOrDone(ctx context.Context, d time.Duration) bool {
 
 // processNodeJob runs a single node job end-to-end.
 func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
+	// Every store read and write for this job is detached from the claim
+	// context. Once a job is claimed it is OURS to finish: a graceful shutdown
+	// stops the claim loop from taking new work (Run re-checks ctx.Err() before
+	// each Claim), but it must not sever the bookkeeping of a job already in
+	// flight. Letting cancellation through has two failure modes, both bad:
+	//
+	//   - a READ fails (fetchGraph / fetchPredecessors), and the node is
+	//     spuriously marked failed — propagating a fabricated failure through a
+	//     run whose only problem was that we happened to be deploying;
+	//   - a terminal WRITE lands but its dependent dispatch does not, and the
+	//     run strands forever — ReapStuckGraphRuns bails on a MISSING node
+	//     record, so nothing is left that can finish it.
+	//
+	// The only thing that legitimately aborts a claimed job is LEASE LOSS,
+	// which is fenced separately through execCtx/stopLease below. This is the
+	// same reasoning that already governed execCtx; jobCtx extends it from the
+	// node's execution to the node's bookkeeping, so the two can't disagree.
+	jobCtx := context.WithoutCancel(ctx)
+
 	// A panic anywhere in node processing — resolve, template rendering over
 	// untrusted graph data, sandbox setup, connection injection, or a drop —
 	// must NOT crash the whole multi-tenant daemon (only the drop's own Execute
@@ -183,12 +202,11 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 				w.cfg.ID, rec.ID, rec.GraphRunID, r, debug.Stack())
 			jerr := &core.JobError{Code: "panic", Message: "internal error processing this step"}
 			fail := &core.Result{Status: core.StatusError, Error: jerr}
-			recCtx := context.WithoutCancel(ctx)
-			if cerr := w.store.Complete(recCtx, rec.ID, core.JobStatusFailed, fail); cerr != nil {
+			if cerr := w.store.Complete(jobCtx, rec.ID, core.JobStatusFailed, fail); cerr != nil {
 				w.cfg.Logger.Printf("[%s] panic-complete node %s: %v", w.cfg.ID, rec.ID, cerr)
 			}
-			if g, gerr := w.fetchGraph(recCtx, rec.GraphRunID); gerr == nil {
-				w.dispatcher.AdvanceAfterCompletion(recCtx, g, rec.GraphRunID, rec.NodeID, core.JobStatusFailed, jerr)
+			if g, gerr := w.fetchGraph(jobCtx, rec.GraphRunID); gerr == nil {
+				w.dispatcher.AdvanceAfterCompletion(jobCtx, g, rec.GraphRunID, rec.NodeID, core.JobStatusFailed, jerr)
 			}
 		}
 	}()
@@ -210,7 +228,7 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 	// to its natural completion (bounded by its own timeout/lease and the
 	// caller's bounded drain). Lease loss still cancels it via the explicit
 	// cancel() below.
-	execCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	execCtx, cancel := context.WithCancel(jobCtx)
 	defer cancel()
 	// Attach a retry hint the outbound HTTP choke point (drops/net) writes a
 	// server Retry-After / RateLimit-Reset into on a 429, so maybeScheduleRetry
@@ -235,13 +253,13 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 		return leaseLost.Load()
 	}
 
-	graph, fetchErr := w.fetchGraph(ctx, rec.GraphRunID)
+	graph, fetchErr := w.fetchGraph(jobCtx, rec.GraphRunID)
 	if fetchErr != nil {
 		if stopLease() {
 			w.cfg.Logger.Printf("[%s] %s: lease lost; abandoning (reclaimed elsewhere)", w.cfg.ID, rec.ID)
 			return
 		}
-		w.failNode(ctx, rec, "load_graph", fetchErr.Error(), nil)
+		w.failNode(jobCtx, rec, "load_graph", fetchErr.Error(), nil)
 		return
 	}
 
@@ -255,24 +273,24 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 			w.cfg.Logger.Printf("[%s] %s: lease lost; abandoning (reclaimed elsewhere)", w.cfg.ID, rec.ID)
 			return
 		}
-		if cerr := w.completeNode(ctx, rec.ID, core.JobStatusSkipped, nil); cerr != nil {
+		if cerr := w.completeNode(jobCtx, rec.ID, core.JobStatusSkipped, nil); cerr != nil {
 			w.cfg.Logger.Printf("[%s] skip disabled %s: %v", w.cfg.ID, rec.ID, cerr)
 			return
 		}
 		w.cfg.Logger.Printf("[%s] %s skipped (step is switched off)", w.cfg.ID, rec.ID)
 		w.dispatcher.PublishNodeStatus(rec.GraphRunID, rec.NodeID, core.JobStatusSkipped, nil)
-		w.dispatcher.dispatchReady(ctx, graph, rec.GraphRunID, rec.NodeID)
-		w.dispatcher.maybeCompleteGraph(ctx, graph, rec.GraphRunID, rec.NodeID, core.JobStatusSkipped, nil)
+		w.dispatcher.dispatchReady(jobCtx, graph, rec.GraphRunID, rec.NodeID)
+		w.dispatcher.maybeCompleteGraph(jobCtx, graph, rec.GraphRunID, rec.NodeID, core.JobStatusSkipped, nil)
 		return
 	}
 
-	prior, fetchErr := w.fetchPredecessors(ctx, graph, rec)
+	prior, fetchErr := w.fetchPredecessors(jobCtx, graph, rec)
 	if fetchErr != nil {
 		if stopLease() {
 			w.cfg.Logger.Printf("[%s] %s: lease lost; abandoning (reclaimed elsewhere)", w.cfg.ID, rec.ID)
 			return
 		}
-		w.failNode(ctx, rec, "load_predecessors", fetchErr.Error(), &graph)
+		w.failNode(jobCtx, rec, "load_predecessors", fetchErr.Error(), &graph)
 		return
 	}
 
@@ -293,7 +311,7 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 	// resume call (Service.Approve, or — for subgraph nodes — the
 	// dispatcher when the child terminates) is what advances those.
 	if runErr == nil && result.Status == core.StatusAwaiting {
-		cerr := w.completeNode(context.WithoutCancel(ctx), rec.ID, core.JobStatusAwaiting, &result)
+		cerr := w.completeNode(jobCtx, rec.ID, core.JobStatusAwaiting, &result)
 		if errors.Is(cerr, core.ErrConflict) {
 			w.cfg.Logger.Printf("[%s] %s: park fenced (lease lost or already terminal); abandoning", w.cfg.ID, rec.ID)
 			return
@@ -309,7 +327,7 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 		// If the manifest declares it submits a child graph, hand the
 		// result off to the SubGraphRunner now. The dispatcher will
 		// resume the parent when the child terminates.
-		w.maybeSubmitChild(ctx, rec, result)
+		w.maybeSubmitChild(jobCtx, rec, result)
 		return
 	}
 
@@ -337,7 +355,7 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 		if w.cfg.Usage == nil {
 			return
 		}
-		if uerr := w.cfg.Usage.AddNodeExecutions(context.WithoutCancel(ctx), rec.Tenant, 1, time.Now()); uerr != nil {
+		if uerr := w.cfg.Usage.AddNodeExecutions(jobCtx, rec.Tenant, 1, time.Now()); uerr != nil {
 			w.cfg.Logger.Printf("[%s] usage metering [%s]: count node execution: %v", w.cfg.ID, rec.Tenant, uerr)
 		}
 	}
@@ -349,7 +367,7 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 
 	if status == core.JobStatusFailed && !skipRetry {
 		if when, reason := w.maybeScheduleRetry(graph, rec, retryHint.After()); !when.IsZero() {
-			if err := w.store.Requeue(context.WithoutCancel(ctx), rec.ID, when); err == nil {
+			if err := w.store.Requeue(jobCtx, rec.ID, when); err == nil {
 				meterExecution() // this attempt ran under our lease and is being retried
 				w.cfg.Logger.Printf("[%s] retrying %s (attempt %d → next at %v)", w.cfg.ID, rec.ID, rec.Attempt, when.Format(time.RFC3339Nano))
 				return
@@ -361,7 +379,7 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 		}
 	}
 
-	cerr := w.completeNode(context.WithoutCancel(ctx), rec.ID, status, &result)
+	cerr := w.completeNode(jobCtx, rec.ID, status, &result)
 	if errors.Is(cerr, core.ErrConflict) {
 		// Fenced: we lost the lease (reclaimed elsewhere) or the record is
 		// already terminal. Abandon — don't advance dependents off our
@@ -376,14 +394,10 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 		w.cfg.Logger.Printf("[%s] complete %s: %v", w.cfg.ID, rec.ID, cerr)
 	}
 
-	// Dispatch dependents + check graph completion via the shared
-	// dispatcher (used by both worker and approval path). Detached from the
-	// claim ctx (WithoutCancel) so that when a node finishes during a
-	// graceful shutdown its dependents still get enqueued and the graph
-	// completion check still runs — otherwise the run would strand with
-	// dependents never created (and the reaper, which only finalizes runs
-	// whose nodes are all terminal, couldn't recover it).
-	w.dispatcher.AdvanceAfterCompletion(context.WithoutCancel(ctx), graph, rec.GraphRunID, rec.NodeID, status, result.Error)
+	// Dispatch dependents + check graph completion via the shared dispatcher
+	// (used by both worker and approval path). On jobCtx, so a node finishing
+	// during a graceful shutdown still enqueues its dependents — see jobCtx.
+	w.dispatcher.AdvanceAfterCompletion(jobCtx, graph, rec.GraphRunID, rec.NodeID, status, result.Error)
 }
 
 // completeNode writes a node's terminal/awaiting status, fenced on lease
@@ -701,9 +715,15 @@ func (w *Worker) lookupNode(rec core.JobRecord) (core.Node, bool) {
 }
 
 func (w *Worker) failNode(ctx context.Context, rec core.JobRecord, code, msg string, graph *core.Graph) {
+	// Every write below is detached from the claim ctx. The failure has already
+	// happened, so a graceful shutdown must not be able to land between the
+	// terminal write and the dispatch of its dependents: that combination
+	// strands the run permanently (ReapStuckGraphRuns bails on a missing node
+	// record, so it can't finish a run whose dependents were never enqueued).
+	ctx = context.WithoutCancel(ctx)
 	jerr := &core.JobError{Code: code, Message: msg}
 	result := &core.Result{Status: core.StatusError, Error: jerr}
-	if cerr := w.store.Complete(context.WithoutCancel(ctx), rec.ID, core.JobStatusFailed, result); cerr != nil {
+	if cerr := w.store.Complete(ctx, rec.ID, core.JobStatusFailed, result); cerr != nil {
 		w.cfg.Logger.Printf("[%s] complete-failure %s: %v", w.cfg.ID, rec.ID, cerr)
 	}
 	if graph != nil {
@@ -714,7 +734,7 @@ func (w *Worker) failNode(ctx context.Context, rec core.JobRecord, code, msg str
 	// Publish a node-status anyway so the UI still sees the failure;
 	// mark the graph-record as failed best-effort.
 	w.dispatcher.PublishNodeStatus(rec.GraphRunID, rec.NodeID, core.JobStatusFailed, jerr)
-	if cerr := w.store.Complete(context.WithoutCancel(ctx), rec.GraphRunID, core.JobStatusFailed, result); cerr == nil {
+	if cerr := w.store.Complete(ctx, rec.GraphRunID, core.JobStatusFailed, result); cerr == nil {
 		w.bus.Publish(rec.GraphRunID, BusEvent{Terminal: &TerminalEvent{
 			JobID:  rec.GraphRunID,
 			Status: core.JobStatusFailed,
