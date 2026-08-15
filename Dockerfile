@@ -4,7 +4,7 @@
 #
 #   1. web   — build the React/Vite bundle to /web/dist
 #   2. build — compile the static dzd binary (CGO off)
-#   3. final — distroless nonroot runtime with the binary + bundle
+#   3. final — pinned Alpine runtime, nonroot, with the binary + bundle
 #
 # The daemon serves the bundle from the same port as the API when
 # DAZYFLOW_WEB_DIST is set (we set it to /srv/web below).
@@ -54,7 +54,10 @@ ARG VERSION=dev
 ARG COMMIT=unknown
 ARG BUILD_DATE=unknown
 # Static, stripped binary. CGO is off (pure-Go pgx + go-git, no sqlite
-# in the daemon path) so it runs on distroless static-nonroot.
+# in the daemon path), so the binary has no libc dependency and would run
+# on a scratch/distroless base as-is. The runtime stage below is Alpine
+# anyway — a shell and apk are worth the few MB for exec-into-the-container
+# debugging — but nothing in the build depends on that choice.
 #
 # The two cache mounts are the difference between a 2-3 minute build and
 # a few seconds: /root/.cache/go-build persists the COMPILED-package
@@ -77,7 +80,20 @@ RUN mkdir -p /data/workspace /data/sandbox /data/state
 # dzd is a self-contained Go binary — every drop (connectors included) is
 # native Go now, so the runtime image needs no Node. Just the binary, CA roots
 # for outbound HTTPS to vendor APIs, and the web assets.
-FROM alpine:latest AS final
+#
+# Pinned by tag AND digest, for the same reason the build stages are pinned:
+# `alpine:latest` floats, so two builds a month apart silently ship different
+# base layers — and this is the stage that actually reaches production, where
+# an unreviewed base bump is hardest to notice and most expensive to debug.
+# The digest is what's enforced; the tag beside it is there so a human reading
+# this line knows which release they're looking at.
+#
+# To bump: pick the new release, then resolve its digest with
+#   docker pull alpine:<tag> && docker inspect alpine:<tag> --format '{{index .RepoDigests 0}}'
+# and update both halves together. A tag/digest pair that disagrees still
+# builds — Docker resolves the digest and ignores the tag — so they only stay
+# in sync if you change them as a unit.
+FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS final
 RUN apk add --no-cache ca-certificates && adduser -D -u 1000 dazyflow
 WORKDIR /srv
 COPY --from=build /out/dzd /usr/local/bin/dzd

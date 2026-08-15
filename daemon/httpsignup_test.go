@@ -125,6 +125,62 @@ func TestSignup_SetsSessionCookie(t *testing.T) {
 	}
 }
 
+// signupCookie posts a signup and returns the session cookie from the
+// response, failing the test if there isn't one.
+func signupCookie(t *testing.T, h *gatewayHarness, req *http.Request) *http.Cookie {
+	t.Helper()
+	rw := httptest.NewRecorder()
+	ServeForTest(h.gw, rw, req)
+	if rw.Code != http.StatusCreated {
+		t.Fatalf("status=%d body=%s", rw.Code, rw.Body.String())
+	}
+	for _, c := range rw.Result().Cookies() {
+		if c.Name == sessionCookieName {
+			return c
+		}
+	}
+	t.Fatal("session cookie missing from signup response")
+	return nil
+}
+
+// TestSignup_SecureCookieBehindTLSTerminatingProxy pins the Secure flag to
+// requestIsHTTPS rather than a bare r.TLS check. In the shipped topology
+// Caddy terminates TLS and proxies plaintext to dzd:8080, so r.TLS is nil
+// on every production request — keying Secure off it would hand every new
+// account a session cookie that happily rides http://. The sign-in, SSO and
+// TOTP legs already use requestIsHTTPS; signup must match.
+func TestSignup_SecureCookieBehindTLSTerminatingProxy(t *testing.T) {
+	h := newSignupHarness(t)
+	h.gw.TrustProxyHeaders = true
+
+	req := httptest.NewRequest("POST", "/api/v1/auth/signup",
+		bytes.NewBuffer(signupBody("proxied@example.com", "supersecret")))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Forwarded-Proto", "https")
+	if c := signupCookie(t, h, req); !c.Secure {
+		t.Error("session cookie must be Secure when the proxy reports X-Forwarded-Proto: https")
+	}
+}
+
+// TestSignup_NoSecureCookieOverPlainHTTP is the other half: on a genuinely
+// plaintext deployment (localhost trial, no trusted proxy) the flag must
+// stay off, or the browser drops the cookie and signup silently fails to
+// sign anyone in.
+func TestSignup_NoSecureCookieOverPlainHTTP(t *testing.T) {
+	h := newSignupHarness(t)
+	h.gw.TrustProxyHeaders = false
+
+	req := httptest.NewRequest("POST", "/api/v1/auth/signup",
+		bytes.NewBuffer(signupBody("plain@example.com", "supersecret")))
+	req.Header.Set("Content-Type", "application/json")
+	// An untrusted client can forge this header; without TrustProxyHeaders
+	// it must be ignored rather than used to flip the flag.
+	req.Header.Set("X-Forwarded-Proto", "https")
+	if c := signupCookie(t, h, req); c.Secure {
+		t.Error("session cookie must not be Secure over plain HTTP with an untrusted X-Forwarded-Proto")
+	}
+}
+
 func TestSignup_DuplicateEmailRejected(t *testing.T) {
 	h := newSignupHarness(t)
 	// First signup succeeds.

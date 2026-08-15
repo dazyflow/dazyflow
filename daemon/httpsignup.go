@@ -207,7 +207,13 @@ func (h *HTTPGateway) signUp(rw http.ResponseWriter, r *http.Request) {
 		Expires:  sess.ExpiresAt,
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		Secure:   r.TLS != nil,
+		// requestIsHTTPS, NOT r.TLS != nil: in the shipped topology Caddy
+		// terminates TLS and proxies plaintext to dzd:8080, so r.TLS is nil
+		// on every production request and a bare r.TLS check would drop the
+		// Secure flag exactly where it matters most — the freshly minted
+		// session a new user carries away from signup. Matches the sign-in,
+		// SSO and TOTP legs (httpgateway.go, totp.go).
+		Secure: h.requestIsHTTPS(r),
 	})
 	writeJSON(rw, http.StatusCreated, map[string]any{
 		"token":      token,
