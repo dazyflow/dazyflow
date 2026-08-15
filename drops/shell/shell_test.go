@@ -4,6 +4,7 @@
 package shell
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -220,6 +221,121 @@ func TestExecuteShell_ScrubsDazyflowEnv(t *testing.T) {
 	}
 }
 
+// TestPumpStream_LongLineDoesNotTruncate is the regression test for the
+// bug this replaced: pumpStream used a bufio.Scanner with a 64 KiB token
+// cap, and a Scanner stops PERMANENTLY once a token exceeds that cap. A
+// single over-long line therefore discarded every byte after it — silently,
+// since the exit code still reported success.
+func TestPumpStream_LongLineDoesNotTruncate(t *testing.T) {
+	long := strings.Repeat("x", maxLogLineBytes*2+17) // spans 3 chunks
+	src := strings.NewReader("before\n" + long + "\nafter\n")
+
+	dst := &boundedBuffer{}
+	pumpStream(src, dst, nil, core.Job{ID: "j"}, "stdout")
+
+	got := dst.String()
+	// The line that follows the over-long one is the whole point: under the
+	// old Scanner it never appeared.
+	if !strings.Contains(got, "after") {
+		t.Error("output after an over-long line was dropped — Scanner-style truncation is back")
+	}
+	if !strings.Contains(got, "before") {
+		t.Error("output before the over-long line was dropped")
+	}
+	// The long line itself must survive intact, not just partially.
+	if n := strings.Count(got, "x"); n != len(long) {
+		t.Errorf("long line kept %d of %d bytes", n, len(long))
+	}
+	if want := "before\n" + long + "\nafter\n"; got != want {
+		t.Errorf("output is not byte-exact\n got len %d\nwant len %d", len(got), len(want))
+	}
+}
+
+// TestPumpStream_NormalizesCRLF pins the pty line-ending behaviour the old
+// bufio.ScanLines split provided: a command runs on a pty, so complete lines
+// arrive CRLF-terminated, and the CR must not leak into captured output or
+// the streamed progress message.
+func TestPumpStream_NormalizesCRLF(t *testing.T) {
+	ch := make(chan core.Progress, 8)
+	dst := &boundedBuffer{}
+	pumpStream(strings.NewReader("one\r\ntwo\r\n"), dst, ch, core.Job{ID: "j"}, "stdout")
+	close(ch)
+
+	if got := dst.String(); got != "one\ntwo\n" {
+		t.Errorf("captured output = %q, want %q", got, "one\ntwo\n")
+	}
+	var lines []string
+	for p := range ch {
+		lines = append(lines, p.Message)
+	}
+	if len(lines) != 2 || lines[0] != "one" || lines[1] != "two" {
+		t.Errorf("progress lines = %q, want [one two]", lines)
+	}
+}
+
+// TestPumpStream_UnterminatedTail covers output whose final line has no
+// trailing newline — the Scanner emitted it as a last token, and so must we.
+func TestPumpStream_UnterminatedTail(t *testing.T) {
+	dst := &boundedBuffer{}
+	pumpStream(strings.NewReader("a\nb"), dst, nil, core.Job{ID: "j"}, "stdout")
+	if got := dst.String(); got != "a\nb\n" {
+		t.Errorf("output = %q, want %q", got, "a\nb\n")
+	}
+}
+
+// TestPumpStream_Empty covers a command that produces no output at all: no
+// spurious blank line should be synthesized.
+func TestPumpStream_Empty(t *testing.T) {
+	dst := &boundedBuffer{}
+	pumpStream(strings.NewReader(""), dst, nil, core.Job{ID: "j"}, "stdout")
+	if got := dst.String(); got != "" {
+		t.Errorf("output = %q, want empty", got)
+	}
+}
+
+// TestPumpStream_BlankLinesPreserved guards the `len(line) > 0 || err == nil`
+// emit condition: an empty COMPLETE line is real output and must survive,
+// even though it trims to zero bytes.
+func TestPumpStream_BlankLinesPreserved(t *testing.T) {
+	dst := &boundedBuffer{}
+	pumpStream(strings.NewReader("a\n\n\nb\n"), dst, nil, core.Job{ID: "j"}, "stdout")
+	if got := dst.String(); got != "a\n\n\nb\n" {
+		t.Errorf("output = %q, want %q", got, "a\n\n\nb\n")
+	}
+}
+
+// TestExecuteShell_LongLineEndToEnd drives the real drop with a command whose
+// output contains a line far longer than the chunk size, proving the fix holds
+// through the pty path and not just against an in-memory reader.
+func TestExecuteShell_LongLineEndToEnd(t *testing.T) {
+	// printf's zero-padding emits the long line in one write; the sentinel
+	// follows it. (Building the line with a shell/awk concat loop instead is
+	// quadratic and takes ~a minute — this is instant.)
+	const longLineLen = 200000
+	script := fmt.Sprintf("printf '%%0%dd\\n' 0; echo SENTINEL-TAIL", longLineLen)
+	res, err := executeShell(t.Context(), core.Job{
+		ID:            "longline",
+		WorkspaceRoot: t.TempDir(),
+		Params: map[string]any{
+			"command": "sh",
+			"args":    []any{"-c", script},
+			// Well above the ~200 KB the script emits, so the cap isn't what
+			// we're measuring here.
+			"max_output_bytes": 4 << 20,
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	out := stdoutOf(t, res)
+	if !strings.Contains(out, "SENTINEL-TAIL") {
+		t.Errorf("output following a ~200 KB line was lost (captured %d bytes)", len(out))
+	}
+	if n := strings.Count(out, "0"); n < longLineLen {
+		t.Errorf("long line truncated: kept %d padding bytes, want >= %d", n, longLineLen)
+	}
+}
+
 func TestSandboxRel(t *testing.T) {
 	cases := []struct {
 		in      string
@@ -280,6 +396,183 @@ func TestBoundedBuffer(t *testing.T) {
 			t.Errorf("len = %d, want 10000", b.Len())
 		}
 	})
+}
+
+// TestResolveTimeoutMs pins the clamp on the timeout param. As with
+// max_output_bytes, the ParamsSchema's "minimum" is advisory — nothing
+// validates job params against it before Execute — so this is the real check.
+func TestResolveTimeoutMs(t *testing.T) {
+	cases := []struct {
+		name string
+		in   int
+		want int
+	}{
+		{"zero falls back to the default", 0, defaultTimeoutMs},
+		{"negative falls back to the default", -1, defaultTimeoutMs},
+		{"one is honoured", 1, 1},
+		{"ordinary value passes through", 5000, 5000},
+		{"the overflow boundary is honoured", maxTimeoutMs, maxTimeoutMs},
+		{"one past the boundary clamps", maxTimeoutMs + 1, maxTimeoutMs},
+		{"a long run of digits clamps", 999999999999999, maxTimeoutMs},
+		{"a huge power of two clamps", 1 << 62, maxTimeoutMs},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := resolveTimeoutMs(c.in); got != c.want {
+				t.Errorf("resolveTimeoutMs(%d) = %d, want %d", c.in, got, c.want)
+			}
+		})
+	}
+}
+
+// TestResolveTimeoutMs_NeverProducesExpiredDuration is the property that
+// actually matters: whatever the param, converting the resolved value to a
+// Duration must yield a positive deadline.
+//
+// time.Duration is int64 NANOSECONDS, so a large millisecond count overflows.
+// Unclamped, maxTimeoutMs+1 wraps NEGATIVE and 1<<62 wraps to exactly 0 —
+// both of which make context.WithTimeout fire immediately, turning a request
+// for an enormous timeout into an instant kill.
+func TestResolveTimeoutMs_NeverProducesExpiredDuration(t *testing.T) {
+	for _, in := range []int{-1 << 62, -1, 0, 1, 600000, maxTimeoutMs, maxTimeoutMs + 1, 999999999999999, 1 << 62} {
+		got := time.Duration(resolveTimeoutMs(in)) * time.Millisecond
+		if got <= 0 {
+			t.Errorf("timeout_ms=%d resolved to a non-positive deadline %v — the command would be killed instantly", in, got)
+		}
+		// Guard the raw conversion the clamp protects, so this test keeps
+		// documenting *why* the clamp exists.
+		if raw := time.Duration(in) * time.Millisecond; in > maxTimeoutMs && raw > 0 && raw >= got {
+			t.Errorf("timeout_ms=%d: expected the unclamped conversion to be wrong, got %v", in, raw)
+		}
+	}
+}
+
+// TestExecuteShell_ZeroTimeoutUsesDefault is the regression test: timeout_ms:0
+// used to build an already-expired context, so the command was killed the
+// moment it started (or failed to start at all). It must now run normally
+// under the default deadline.
+func TestExecuteShell_ZeroTimeoutUsesDefault(t *testing.T) {
+	res, err := executeShell(t.Context(), core.Job{
+		ID:            "zerotimeout",
+		WorkspaceRoot: t.TempDir(),
+		Params: map[string]any{
+			"command":    "sh",
+			"args":       []any{"-c", "echo alive"},
+			"timeout_ms": 0,
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if res.Status != core.StatusOK || res.Error != nil {
+		t.Fatalf("status = %q, err = %+v; want a normal run under the default timeout", res.Status, res.Error)
+	}
+	if out := strings.TrimSpace(stdoutOf(t, res)); out != "alive" {
+		t.Errorf("stdout = %q, want alive", out)
+	}
+}
+
+// TestExecuteShell_HugeTimeoutDoesNotOverflow covers the inverted-overflow
+// case end to end: an absurdly large timeout_ms wraps to a negative Duration
+// unclamped, which would kill the command instantly — the opposite of the
+// "wait practically forever" the value asks for.
+func TestExecuteShell_HugeTimeoutDoesNotOverflow(t *testing.T) {
+	res, err := executeShell(t.Context(), core.Job{
+		ID:            "hugetimeout",
+		WorkspaceRoot: t.TempDir(),
+		Params: map[string]any{
+			"command":    "sh",
+			"args":       []any{"-c", "echo alive"},
+			"timeout_ms": 1 << 62,
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if res.Status != core.StatusOK || res.Error != nil {
+		t.Fatalf("status = %q, err = %+v; want a normal run, not an instant timeout", res.Status, res.Error)
+	}
+	if out := strings.TrimSpace(stdoutOf(t, res)); out != "alive" {
+		t.Errorf("stdout = %q, want alive", out)
+	}
+}
+
+// TestResolveMaxOutputBytes pins the clamp that keeps the OOM guard from
+// being switched off by a param. Nothing validates job params against the
+// drop's ParamsSchema at run time, so the schema's "minimum" is advisory and
+// this function is the actual enforcement.
+func TestResolveMaxOutputBytes(t *testing.T) {
+	cases := []struct {
+		name string
+		in   int
+		want int
+	}{
+		{"zero falls back to the default", 0, defaultMaxOutputBytes},
+		{"negative falls back to the default", -1, defaultMaxOutputBytes},
+		{"large negative falls back too", -1 << 30, defaultMaxOutputBytes},
+		{"one is honoured", 1, 1},
+		{"ordinary value passes through", 4096, 4096},
+		{"a large explicit value is still allowed", 64 << 20, 64 << 20},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := resolveMaxOutputBytes(c.in); got != c.want {
+				t.Errorf("resolveMaxOutputBytes(%d) = %d, want %d", c.in, got, c.want)
+			}
+		})
+	}
+}
+
+// TestExecuteShell_ZeroMaxOutputDoesNotDisableCap is the regression test:
+// max_output_bytes:0 used to reach boundedBuffer as "no limit", giving a
+// runaway command an unbounded in-memory buffer. It must now be capped at
+// the default instead.
+func TestExecuteShell_ZeroMaxOutputDoesNotDisableCap(t *testing.T) {
+	// Emit comfortably more than the 1 MiB default so an uncapped buffer is
+	// distinguishable from a capped one.
+	script := "for i in $(seq 1 40); do printf '%050000d\\n' 0; done"
+	res, err := executeShell(t.Context(), core.Job{
+		ID:            "zerocap",
+		WorkspaceRoot: t.TempDir(),
+		Params: map[string]any{
+			"command":          "sh",
+			"args":             []any{"-c", script},
+			"max_output_bytes": 0, // the value that used to mean "unlimited"
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	out := stdoutOf(t, res)
+	if len(out) > defaultMaxOutputBytes {
+		t.Errorf("captured %d bytes with max_output_bytes:0 — cap was disabled, want <= %d",
+			len(out), defaultMaxOutputBytes)
+	}
+	// Sanity: the cap engaged rather than the command simply producing nothing.
+	if len(out) == 0 {
+		t.Error("captured no output at all; the test script did not run as expected")
+	}
+}
+
+// TestExecuteShell_MaxOutputBytesHonoured checks the other direction — an
+// explicit small cap still truncates, so the clamp didn't turn every value
+// into the default.
+func TestExecuteShell_MaxOutputBytesHonoured(t *testing.T) {
+	res, err := executeShell(t.Context(), core.Job{
+		ID:            "smallcap",
+		WorkspaceRoot: t.TempDir(),
+		Params: map[string]any{
+			"command":          "sh",
+			"args":             []any{"-c", "printf '%010000d\\n' 0"},
+			"max_output_bytes": 128,
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if out := stdoutOf(t, res); len(out) != 128 {
+		t.Errorf("captured %d bytes, want exactly the 128-byte cap", len(out))
+	}
 }
 
 func TestScrubbedEnv(t *testing.T) {

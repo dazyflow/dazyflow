@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -94,8 +95,8 @@ func init() {
 						"path":{"type":"string","description":"Workspace-relative working directory. Overridden by the path input port if connected."},
 						"command":{"type":"string","description":"Executable to run. Resolved via PATH unless absolute."},
 						"args":{"type":"array","items":{"type":"string"},"description":"Argument vector. Defaults to []."},
-						"timeout_ms":{"type":"integer","default":600000,"minimum":1,"description":"Hard deadline for the command, in milliseconds. Default 10 min."},
-						"max_output_bytes":{"type":"integer","default":1048576,"minimum":0,"x_advanced":true,"description":"Truncate stdout/stderr beyond this. Default 1 MiB."}
+						"timeout_ms":{"type":"integer","default":600000,"minimum":1,"description":"Hard deadline for the command, in milliseconds. Default 10 min. A non-positive value falls back to the default — there is no 'run forever' setting."},
+						"max_output_bytes":{"type":"integer","default":1048576,"minimum":1,"x_advanced":true,"description":"Truncate stdout/stderr beyond this. Default 1 MiB. There is no unlimited setting — output is buffered in memory, so raise the number rather than trying to disable the cap."}
 					},
 					"required":["command"]
 				}`,
@@ -210,8 +211,8 @@ func executeShell(ctx context.Context, job core.Job, progress chan<- core.Progre
 	workdir := filepath.Join(job.WorkspaceRoot, cleanRel)
 
 	args := params.StringSlice(job.Params, "args")
-	timeoutMs := params.IntDefault(job.Params, "timeout_ms", defaultTimeoutMs)
-	maxBytes := params.IntDefault(job.Params, "max_output_bytes", defaultMaxOutputBytes)
+	timeoutMs := resolveTimeoutMs(params.IntDefault(job.Params, "timeout_ms", defaultTimeoutMs))
+	maxBytes := resolveMaxOutputBytes(params.IntDefault(job.Params, "max_output_bytes", defaultMaxOutputBytes))
 
 	runCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
 	defer cancel()
@@ -311,20 +312,137 @@ func executeShell(ctx context.Context, job core.Job, progress chan<- core.Progre
 	}, nil
 }
 
+// maxLogLineBytes bounds how much of a single output line is buffered
+// before it is flushed as one progress event. A line longer than this is
+// split into consecutive chunks rather than dropped, so memory stays
+// bounded without losing output.
+const maxLogLineBytes = 64 * 1024
+
+// pumpStream forwards src to dst (the captured stdout) and to the progress
+// channel, one line at a time.
+//
+// Deliberately NOT built on bufio.Scanner. A Scanner stops permanently the
+// first time a token exceeds its max size — so a single over-long line
+// (minified JS in a build log, a base64 blob, a long stack trace) used to
+// silently swallow the ENTIRE remainder of the command's output while the
+// exit code still reported success, giving no hint anything was lost.
+//
+// bufio.Reader.ReadSlice reports that case as a non-terminal
+// bufio.ErrBufferFull instead: the over-long line is emitted as
+// maxLogLineBytes-sized chunks and reading continues, so output is lossless
+// however a command chooses to format it.
+//
+// Line endings: the command runs on a pty, so complete lines arrive CRLF-
+// terminated. Those are normalized to a single "\n" in the captured output
+// (and stripped entirely from the progress message), matching what the
+// Scanner's ScanLines split used to do. A chunk flushed mid-line is written
+// through verbatim — no newline is synthesized, since the line continues in
+// the next chunk.
 func pumpStream(src io.Reader, dst *boundedBuffer, progress chan<- core.Progress, job core.Job, stream string) {
-	scanner := bufio.NewScanner(src)
-	scanner.Buffer(make([]byte, 4096), 64*1024)
-	for scanner.Scan() {
-		line := scanner.Bytes()
-		dst.Write(line)
-		dst.Write([]byte{'\n'})
-		emitLogProgress(progress, job, stream, string(line))
+	r := bufio.NewReaderSize(src, maxLogLineBytes)
+	for {
+		chunk, err := r.ReadSlice('\n')
+		if errors.Is(err, bufio.ErrBufferFull) {
+			// Mid-line flush: the line is longer than the buffer. Emit what
+			// we have and keep reading — this is the case the old Scanner
+			// treated as fatal.
+			if len(chunk) > 0 {
+				dst.Write(chunk)
+				emitLogProgress(progress, job, stream, string(chunk))
+			}
+			continue
+		}
+		// Either a complete line (err == nil) or the trailing unterminated
+		// remainder at EOF. Both are emitted as one newline-terminated line,
+		// which is what the Scanner produced for them.
+		if line := trimEOL(chunk); len(line) > 0 || err == nil {
+			dst.Write(line)
+			dst.Write([]byte{'\n'})
+			emitLogProgress(progress, job, stream, string(line))
+		}
+		if err != nil {
+			// io.EOF, or the read error a closed pty surfaces once the
+			// command exits. Everything read so far has been emitted.
+			return
+		}
 	}
+}
+
+// trimEOL strips one trailing line terminator — "\r\n", "\n", or a bare
+// "\r" — from a complete line. Mirrors bufio.ScanLines, which dropped the
+// pty's CR along with the LF.
+func trimEOL(b []byte) []byte {
+	b = bytes.TrimSuffix(b, []byte{'\n'})
+	return bytes.TrimSuffix(b, []byte{'\r'})
+}
+
+// maxTimeoutMs is the largest millisecond count that fits in an int64-ns
+// time.Duration without overflow (~292 years). Mirrors the daemon's
+// maxDurationSeconds, in the unit this drop's param uses.
+const maxTimeoutMs = int(math.MaxInt64 / int64(time.Millisecond))
+
+// resolveTimeoutMs turns the untrusted timeout_ms param into a usable
+// deadline. Like resolveMaxOutputBytes, this is the real enforcement — the
+// ParamsSchema's "minimum" is advisory, since nothing validates a job's
+// params against it before Execute.
+//
+// Two hostile shapes to absorb:
+//
+//   - Non-positive. context.WithTimeout with a zero or negative duration is
+//     already expired, so the command is killed the instant it starts (or
+//     never starts at all, surfacing as a confusing "start" error rather
+//     than a timeout). Fall back to the default, matching
+//     resolveMaxOutputBytes: unlike the daemon's secondsToDuration, "no
+//     timeout" is not an option here — a shell step without a deadline pins
+//     a worker indefinitely.
+//
+//   - Over-large. time.Duration is int64 NANOSECONDS, so a big
+//     millisecond count overflows and wraps NEGATIVE — turning a request for
+//     an enormous timeout into an immediate kill, the exact inversion of
+//     what was asked for. This is reachable by typing a long run of digits.
+//     Clamp to the max representable instead.
+//
+// No practical ceiling is imposed beyond the overflow bound: the per-run
+// policy limit is the graph timeout (effectiveGraphTimeout, which clamps to
+// the tenant's MaxTimeoutSeconds), and duplicating a lower cap here would
+// silently break legitimately long builds.
+func resolveTimeoutMs(n int) int {
+	if n <= 0 {
+		return defaultTimeoutMs
+	}
+	if n > maxTimeoutMs {
+		return maxTimeoutMs
+	}
+	return n
+}
+
+// resolveMaxOutputBytes turns the untrusted max_output_bytes param into a
+// usable positive cap.
+//
+// The cap has to be enforced HERE, not by the ParamsSchema's "minimum": the
+// schema drives the UI form, the docs and flowgen, but nothing validates a
+// job's params against it before Execute — there is no JSON-schema validator
+// in the daemon at all. So a schema constraint is documentation, and this is
+// the check.
+//
+// It matters because a non-positive value reaches boundedBuffer as "no
+// limit" and hands a runaway command an unbounded in-memory buffer — exactly
+// the OOM the cap exists to prevent. Falling back to the default is the
+// fail-safe reading: someone writing 0 far more likely means "leave it
+// alone" than "buffer without bound", and unbounded is not a setting this
+// drop offers. To capture more output, raise the number.
+func resolveMaxOutputBytes(n int) int {
+	if n <= 0 {
+		return defaultMaxOutputBytes
+	}
+	return n
 }
 
 // boundedBuffer captures output up to limit bytes, silently discarding
 // the remainder so a runaway command can't OOM the daemon. A zero or
-// negative limit disables the cap.
+// negative limit disables the cap — a primitive convenience for tests that
+// want everything; executeShell never passes one, because a caller-supplied
+// limit goes through resolveMaxOutputBytes first.
 type boundedBuffer struct {
 	bytes.Buffer
 	limit int
