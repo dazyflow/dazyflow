@@ -100,6 +100,14 @@ image.
 
 ### Security
 
+- Bumped `github.com/go-git/go-git/v5` to v5.19.2, clearing GO-2026-6214 (path
+  traversal via crafted reference names) and GO-2026-6213 (worktree operations
+  following symlinks). Both were reachable from our own call graph — the
+  reference paths through `workspace.Store.SetRevisionLabel` /
+  `PromoteToEnvironment`, and the worktree paths through the `git_checkout` /
+  `git_diff` drops — so CI's symbol-granularity `govulncheck` failed on them
+  rather than reading them as uncalled.
+
 - **Secret references are no longer resolvable out of flow data.** The
   whole-string `secret://NAME` form was matched AFTER `${upstream.…}` /
   `${item.…}` substitution, so data a flow ingested from the outside world — a
