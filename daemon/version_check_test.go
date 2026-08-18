@@ -9,6 +9,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -285,4 +288,29 @@ func TestAdminVersion(t *testing.T) {
 			t.Errorf("latest=%q update=%v, want 0.2.0/false (dev not comparable)", vs.Latest, vs.UpdateAvailable)
 		}
 	})
+}
+
+// TestRepoVersionFileIsARelease guards the ./VERSION file the Docker build
+// reads when compose is invoked without a VERSION build arg (the production
+// deploy path — see the Dockerfile ARGs and the Makefile release targets).
+// The stamped value has to be a comparable release: a typo'd, empty, or
+// "dev"-ish file silently ships a build that reports itself as unstamped, so
+// every operator's update check then degrades to "couldn't check" — including
+// on the canonical instance the check reads its answer from.
+func TestRepoVersionFileIsARelease(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "VERSION"))
+	if err != nil {
+		t.Fatalf("read ./VERSION: %v", err)
+	}
+	got := strings.TrimSpace(string(raw))
+	if strings.ContainsAny(got, "\r\n") {
+		t.Errorf("./VERSION = %q, want a single line", got)
+	}
+	v, ok := parseSemver(got)
+	if !ok {
+		t.Fatalf("./VERSION = %q, not a parseable release version", got)
+	}
+	if v == (semver{}) {
+		t.Errorf("./VERSION = %q, want a released version (not 0.0.0)", got)
+	}
 }

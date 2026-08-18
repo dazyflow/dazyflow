@@ -13,7 +13,11 @@ version is stamped into the binary at build time and surfaced on
 
 Releasing: move the entries below from `[Unreleased]` under a new
 `[X.Y.Z] - YYYY-MM-DD` heading, commit, then run `make patch` (or
-`minor` / `major`) to cut the annotated tag against that commit.
+`minor` / `major`) to cut the annotated tag against that commit. That
+target also writes the new number to `./VERSION` and commits it — the
+Docker build reads that file when it isn't handed a `VERSION` build arg,
+so it is what a production `docker compose up --build` stamps into the
+image.
 
 ## [Unreleased]
 
@@ -153,6 +157,38 @@ Releasing: move the entries below from `[Unreleased]` under a new
   per-IP rate-limited, matching the rest of the public surface.
 
 ### Fixed
+
+- The web UI no longer reports its version as `vdev` on a production deploy. The
+  image version was stamped only when `VERSION` was exported into the
+  environment of the `docker compose` call — which the Makefile targets do but
+  the documented production command (`docker compose -f docker-compose.yml -f
+  docker-compose.prod.yml up -d --build`) does not — and compose's `${VERSION:-dev}`
+  default then baked a literal `dev` into the build arg. The build now falls back
+  to a committed `./VERSION` file (kept in step with the tag by `make
+  patch`/`minor`/`major`), so every build path stamps a real release. This also
+  restores the admin System panel's update check for all operators: it reads the
+  canonical instance's reported version, which an unstamped canonical build made
+  unusable.
+- `make upgrade` no longer tears down a production stack. It invoked
+  `docker compose` with no `-f` flags, so on a host running the Caddy + docs
+  overlay it recreated the stack from `docker-compose.yml` alone — dropping TLS
+  termination and the docs site — and it picked the "latest" tag with
+  `git tag --sort=-v:refname | head -1`, which sorts any non-version tag (a
+  `nightly`) above every release. It now takes a `PROD=1` switch that merges the
+  production overlay for every stack target, selects the newest bare `X.Y.Z` tag
+  (skipping pre-releases), and stays on the deployed tag instead of returning to
+  master. It also refuses to recreate the stack when `caddy` is running but the
+  file set it would apply omits it — a check on what is running versus what is
+  about to be applied, so a host that configures the overlay through compose's
+  own `COMPOSE_FILE` (the recommended setup for a permanent production host) is
+  not nagged about a flag it doesn't need. New `make latest` prints the selected
+  tag for use in a deploy script.
+- The sign-in form's submit button is no longer permanently disabled after a
+  session expires. Clearing the token re-ran the identity bootstrap effect, whose
+  cleanup could flip its `cancelled` guard before the in-flight `whoami`
+  settled — so the `.finally()` that clears `loading` never ran and the button
+  stayed gated on a stale `loading: true`, with a full page reload the only way
+  back in.
 
 - A graph run can no longer strand permanently when a worker shuts down. Once a
   node was claimed, some of its bookkeeping still ran on the claim context, so a

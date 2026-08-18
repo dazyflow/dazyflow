@@ -3,6 +3,31 @@
 
 COMPOSE ?= docker compose
 
+# PROD=1 merges the production overlay (Caddy + docs) into every stack target
+# below. Without it compose runs docker-compose.yml alone and auto-merges
+# docker-compose.override.yml (the DEV override: Postgres TLS off) if present —
+# on a prod host that isn't cosmetic, it drops the TLS terminator and the docs
+# site.
+#
+# PROD is the ad-hoc lever: it targets the prod file set for ONE command, from
+# any checkout, touching no config. It is NOT the best way to mark a permanent
+# production host, because it has to be remembered on every invocation and it
+# only reaches make — a bare `docker compose up -d --build` still gets the
+# default resolution. A production host is better off setting compose's own
+# variable once, in .env:
+#
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml
+#
+# which every compose call honours (make included, bare compose included) and
+# which also stops the dev override being merged. With that set, leave PROD
+# unset; passing both is harmless (same two files, one via -f).
+#
+# `override` so this still applies when COMPOSE itself is passed on the command
+# line, which would otherwise win over a plain assignment.
+ifdef PROD
+override COMPOSE += -f docker-compose.yml -f docker-compose.prod.yml
+endif
+
 # Content dir the docs SPA bundles (web/src/docs/content): the guide pages are
 # copied from docs/guide/, the step catalog is generated there by cmd/docsgen.
 DOCS_CONTENT_OUT ?= web/src/docs/content
@@ -12,7 +37,14 @@ DOCS_CONTENT_OUT ?= web/src/docs/content
 # bin`, the Compose image, and CI all read these. Exported so the
 # `docker compose` invoked by up/build/restart/rebuild picks them up as
 # build args (docker-compose.yml maps them onto the Dockerfile ARGs).
-VERSION    ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+#
+# git describe is preferred (it distinguishes a tagged release from N
+# commits past it, and flags a dirty tree); ./VERSION is the fallback for
+# a build from a tarball or a shallow/tagless clone, and is also what the
+# Docker build reads when compose is invoked WITHOUT these exports — see
+# the Dockerfile ARGs. The release targets below keep the file in step
+# with the tag.
+VERSION    ?= $(shell git describe --tags --always --dirty 2>/dev/null || cat VERSION 2>/dev/null || echo dev)
 COMMIT     ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 export VERSION COMMIT BUILD_DATE
@@ -27,7 +59,7 @@ LDFLAGS := -s -w \
 .DEFAULT_GOAL := help
 
 .PHONY: help up down restart logs ps build rebuild env pg pg-down dev web test vet fmt check ci \
-        docs-content docs-site docs-dev bin version major minor patch _bump upgrade
+        docs-content docs-site docs-dev bin version latest major minor patch _bump upgrade
 
 help: ## List targets
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sort | \
@@ -135,8 +167,12 @@ version: ## Print the version that a build would stamp right now
 #
 # Update CHANGELOG.md FIRST — move the [Unreleased] entries under a new
 # [X.Y.Z] - YYYY-MM-DD heading and commit — so the tag points at the
-# commit where the changelog announces the version. The tag is local;
-# the recipe prints the push command.
+# commit where the changelog announces the version. The recipe then writes
+# the new version to ./VERSION and commits that itself, because the Docker
+# build reads the file whenever compose is invoked without the VERSION
+# export (the production deploy path); a stale file there is how a release
+# ends up reporting itself as "dev". The tag is local; the recipe prints
+# the push command.
 #
 #   make patch   0.1.0 -> 0.1.1
 #   make minor   0.1.0 -> 0.2.0
@@ -160,13 +196,52 @@ _bump:
 		*) echo "Use: make major|minor|patch"; exit 1 ;; \
 	esac; \
 	NEW="$$MAJOR.$$MINOR.$$PATCH"; \
+	printf '%s\n' "$$NEW" > VERSION; \
+	git add VERSION; \
+	git commit -q -m "Release $$NEW" -- VERSION; \
 	git tag -a "$$NEW" -m "Release $$NEW"; \
-	echo "$$CUR -> $$NEW"; \
+	echo "$$CUR -> $$NEW (committed ./VERSION, tagged)"; \
 	echo "Push with: git push origin master $$NEW"
 
-upgrade: ## Check out the latest release tag, rebuild the stack, return to master
-	git fetch --tags
-	@LATEST=$$(git tag --sort=-v:refname | head -1); \
+# LATEST_TAG selects the newest RELEASE tag. The three filters each fix a
+# real mis-selection:
+#   -l '[0-9]*...'  drops non-version tags — a plain `git tag --sort=-v:refname`
+#                   sorts anything non-numeric (a `nightly` or `latest-stable`
+#                   tag) ABOVE every version, and would deploy that instead.
+#   grep -Ex        drops pre-releases: version sort puts `1.0.0-rc1` ahead of
+#                   `1.0.0`, so a glob alone would ship an rc as "latest".
+#   --sort=-v:refname  orders numerically, so 0.10.0 beats 0.9.0 (lexical sort
+#                   gets this backwards).
+# Not a $(shell ...) variable: that would run git on every make invocation,
+# including in a fresh clone with no tags. The recipes below expand it.
+LATEST_TAG = git tag -l '[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -Ex '[0-9]+\.[0-9]+\.[0-9]+' | head -1
+
+latest: ## Print the newest release tag (deploy scripts: use `make -s latest`)
+	@$(LATEST_TAG)
+
+upgrade: ## Check out the latest release tag and rebuild the stack (PROD=1 on a production host)
+	# --force updates a tag that was moved upstream; --prune-tags drops one
+	# deleted upstream. Without them a stale local tag can win the selection.
+	git fetch --tags --force --prune-tags
+	# Refuse to recreate a running production stack with a file set that omits
+	# the overlay: that would tear down Caddy (TLS) and the docs site and bring
+	# dzd back bare. The test compares what is RUNNING against what THIS
+	# invocation would apply, rather than testing PROD directly — a host that
+	# configures the overlay through compose's own COMPOSE_FILE is correctly
+	# set up and must not be nagged about a flag it doesn't need. caddy exists
+	# only in the overlay, so it stands in for "the overlay is in play"; we look
+	# for the running one with the overlay merged, since a compose invocation
+	# without it doesn't know the service exists.
+	@if docker compose -f docker-compose.yml -f docker-compose.prod.yml ps \
+	     --services --status running 2>/dev/null | grep -qx caddy && \
+	   ! $(COMPOSE) config --services 2>/dev/null | grep -qx caddy; then \
+		echo "caddy is running, but this invocation would recreate the stack without it,"; \
+		echo "dropping TLS and the docs site. Either:"; \
+		echo "  PROD=1 make upgrade                                          (per invocation)"; \
+		echo "  echo COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml >> .env   (once)"; \
+		exit 1; \
+	fi
+	@LATEST=$$($(LATEST_TAG)); \
 	if [ -z "$$LATEST" ]; then \
 		echo "No release tags yet — nothing to upgrade to."; exit 1; \
 	fi; \
@@ -176,7 +251,11 @@ upgrade: ## Check out the latest release tag, rebuild the stack, return to maste
 	COMMIT="$$(git rev-parse --short HEAD)" \
 	BUILD_DATE="$$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
 	$(COMPOSE) up -d --build; \
-	git checkout master
+	if $(COMPOSE) config --services 2>/dev/null | grep -qx caddy; then \
+		echo "Deployed $$LATEST; staying on the tag so the tree matches the running image."; \
+	else \
+		git checkout master; \
+	fi
 
 ## --- Gates (run locally; CI on builds.sr.ht is advisory, not blocking) ---
 # These mirror .build.yml so a push never lands red. gofmt is intentionally

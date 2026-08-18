@@ -45,14 +45,23 @@ COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod \
     go mod download
 COPY . .
-# Version stamping. These default to "dev"/"unknown" so a bare
-# `docker build` still produces a runnable image; the Makefile
-# (build/up/restart/rebuild) and CI pass real values computed from git
-# via --build-arg. They flow into the linker -X flags below and surface
-# at runtime on GET /api/v1 and in the startup log (see core/buildinfo).
-ARG VERSION=dev
+# Version stamping. The Makefile (build/up/restart/rebuild/upgrade) and CI
+# pass real values computed from git via --build-arg; they flow into the
+# linker -X flags below and surface at runtime on GET /api/v1 and in the
+# startup log (see core/buildinfo).
+#
+# The defaults are EMPTY, not "dev", so the build step below can tell "the
+# caller said nothing" from "the caller said dev" and fall back to the
+# committed ./VERSION file. That fallback is what keeps a bare `docker
+# build` / bare `docker compose up --build` — including the documented
+# production deploy, which invokes compose directly and exports nothing —
+# from shipping an image that reports itself as "dev". `.git` is
+# .dockerignore'd (a lean context), so the file is the only in-context
+# record of the release; the Makefile's release targets keep it in step
+# with the tag.
+ARG VERSION=
 ARG COMMIT=unknown
-ARG BUILD_DATE=unknown
+ARG BUILD_DATE=
 # Static, stripped binary. CGO is off (pure-Go pgx + go-git, no sqlite
 # in the daemon path), so the binary has no libc dependency and would run
 # on a scratch/distroless base as-is. The runtime stage below is Alpine
@@ -69,10 +78,13 @@ ARG BUILD_DATE=unknown
 ENV CGO_ENABLED=0 GOOS=linux
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
+    V="${VERSION:-$(cat VERSION 2>/dev/null || echo dev)}"; \
+    D="${BUILD_DATE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"; \
+    echo "stamping version=$V commit=${COMMIT} date=$D"; \
     go build -trimpath -ldflags="-s -w \
-      -X git.sr.ht/~klahr/dazyflow/core/buildinfo.Version=${VERSION} \
+      -X git.sr.ht/~klahr/dazyflow/core/buildinfo.Version=${V} \
       -X git.sr.ht/~klahr/dazyflow/core/buildinfo.Commit=${COMMIT} \
-      -X git.sr.ht/~klahr/dazyflow/core/buildinfo.Date=${BUILD_DATE}" \
+      -X git.sr.ht/~klahr/dazyflow/core/buildinfo.Date=${D}" \
       -o /out/dzd ./cmd/dzd
 RUN mkdir -p /data/workspace /data/sandbox /data/state
 

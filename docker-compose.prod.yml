@@ -3,6 +3,11 @@
 #
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 #
+# `PROD=1 make upgrade` (or `PROD=1 make restart`) wraps that command with the
+# same -f pair plus the VERSION/COMMIT/BUILD_DATE stamp, so prefer it — a bare
+# invocation stamps only what ./VERSION carries (no commit, no build date). See
+# "Version stamping & upgrades" in docs/DEPLOY.md.
+#
 # Adds Caddy in front of dzd for automatic HTTPS on the apex domain
 # (HTTP-01 challenge — needs ports 80/443 reachable, which the DO firewall allows).
 services:

@@ -131,6 +131,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem(SESSION_MARKER);
       setToken(null);
       setMe(null);
+      // Drop the bootstrap spinner along with the session. The identity
+      // bootstrap below clears its own `loading` in a .finally() guarded by
+      // `cancelled`, and clearing the token here re-runs that effect — so its
+      // cleanup can flip `cancelled` first and the .finally() becomes a no-op,
+      // leaving `loading` stuck true. That disables the sign-in submit button
+      // (`disabled={busy || loading || ...}`) on the page we're about to
+      // navigate to, locking the user out of the app entirely.
+      setLoading(false);
       setError(i18n.t("signIn.sessionExpired"));
       navigate("/signin");
     });
@@ -173,6 +181,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setActiveWorkspaceState("");
       setTenants([]);
       setActiveTenantState("");
+      // No session means nothing is bootstrapping: assert the invariant here
+      // too, so every path that clears the token (401 handler, sign-out, a
+      // failed bootstrap) lands with an interactive sign-in form regardless of
+      // how the in-flight promise and this effect's cleanup interleave.
+      setLoading(false);
       return;
     }
     let cancelled = false;

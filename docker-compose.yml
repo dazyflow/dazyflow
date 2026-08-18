@@ -74,14 +74,19 @@ services:
       # route out ("dial tcp …: network is unreachable"); harmless on a
       # normal host where the bridge works fine.
       network: host
-      # Version stamping. The Makefile (up/build/restart/rebuild) exports
-      # VERSION/COMMIT/BUILD_DATE from git before invoking compose; the
-      # :-dev defaults keep a bare `docker compose build` runnable. See
-      # the Dockerfile ARGs and core/buildinfo.
+      # Version stamping. The Makefile (up/build/restart/rebuild/upgrade)
+      # exports VERSION/COMMIT/BUILD_DATE from git before invoking compose.
+      # When they're unset — a bare `docker compose up --build`, which is
+      # how the production overlay is deployed — these resolve to EMPTY and
+      # the Dockerfile falls back to the committed ./VERSION file plus the
+      # in-container build date. Do NOT put a "dev" default back here: a
+      # literal "dev" build arg SHADOWS that fallback, which is exactly how
+      # every non-Makefile build came to report itself as "dev". See the
+      # Dockerfile ARGs and core/buildinfo.
       args:
-        VERSION: ${VERSION:-dev}
+        VERSION: ${VERSION:-}
         COMMIT: ${COMMIT:-unknown}
-        BUILD_DATE: ${BUILD_DATE:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-}
     restart: unless-stopped
     # env_file forwards every DAZYFLOW_* var the operator sets in .env
     # straight to the container — see .env.example for the full

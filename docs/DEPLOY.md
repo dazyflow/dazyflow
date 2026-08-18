@@ -324,6 +324,95 @@ with hot reload (and `make docs-site` builds `dist/` on the host); CI builds
 both the site (`make docs-site`) and the image (`Dockerfile.docs`) so the
 published docs can't drift from the code.
 
+## Version stamping & upgrades
+
+The running release is stamped into the binary at build time and surfaced on the
+public `GET /api/v1` descriptor (`build.version`), in the startup log, in the web
+UI's account menu, and in the admin **System** panel — which compares it against
+the canonical deployment's reported version to tell you whether an upgrade is
+available.
+
+Two things feed that stamp, in priority order:
+
+1. The `VERSION` / `COMMIT` / `BUILD_DATE` **build args**. The Makefile stack
+   targets (`up`, `build`, `restart`, `rebuild`, `upgrade`) export these from
+   `git describe`, so a build driven through `make` carries the full identity
+   (`0.3.0-2-gabc1234`, the short SHA, the build timestamp).
+2. The committed **`./VERSION`** file, which the Docker build reads when no
+   `VERSION` build arg is supplied. `.git` is excluded from the build context, so
+   this file is the only in-context record of the release — it is what a bare
+   `docker build` or a bare `docker compose up --build` stamps.
+
+Path 2 exists because the production command below deliberately invokes compose
+directly (to control which overlay files merge) and therefore exports nothing. If
+you ever add a `VERSION` default back into `docker-compose.yml`'s `args:` block,
+make it empty rather than `dev`: a literal `dev` build arg **shadows** the file
+fallback, and the image then reports itself as unstamped — which also breaks the
+update check for every operator, since that check reads the canonical instance's
+reported version.
+
+To upgrade a deployment by hand, fetch, check out the newest release tag, and
+rebuild with the stamp exported:
+
+```sh
+git fetch --tags --force --prune-tags
+LATEST=$(make -s latest)          # newest bare X.Y.Z tag; see the note below
+git checkout --force "$LATEST"
+VERSION="$LATEST" \
+COMMIT="$(git rev-parse --short HEAD)" \
+BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+Select the tag with `make latest`, not `git tag --sort=-v:refname | head -1`:
+that sorts any non-version tag (a `nightly`) above every release, and version
+sort also ranks `1.0.0-rc1` above `1.0.0`, so the naive form can deploy a
+nightly or a release candidate. Exporting `VERSION` matters for the same reason
+it does everywhere else — it is also the only way `COMMIT` and `BUILD_DATE` get
+real values, since `.git` is not in the build context.
+
+Confirm what actually shipped — this is the same value the UI shows:
+
+```sh
+curl -s https://your.host/api/v1 | jq .build
+```
+
+`PROD=1 make upgrade` automates all of it — fetch, newest-release-tag selection,
+a stamped rebuild with the overlay merged — and leaves the checkout **on the tag**
+so the tree matches the running image:
+
+```sh
+PROD=1 make upgrade
+```
+
+### Marking a host as production
+
+Something has to tell compose to merge the overlay, or it runs
+`docker-compose.yml` alone and auto-merges `docker-compose.override.yml` if
+present (the dev override, which turns Postgres TLS off) — recreating the stack
+that way drops Caddy and the docs site.
+
+**On a permanent production host, set compose's own variable once in `.env`:**
+
+```ini
+COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml
+```
+
+Every compose call then honours it — `make upgrade`, `make restart`, and a bare
+`docker compose up -d --build` alike — and the dev override is no longer merged.
+Nothing to remember per command, so this is the recommended setup.
+
+`PROD=1` is the ad-hoc alternative: it merges the same two files for one make
+invocation, from any checkout, touching no config. Useful for a one-off, but it
+must be repeated every time and it only affects `make` — a bare `docker compose`
+on that host still gets the default resolution. With `COMPOSE_FILE` set, leave
+`PROD` unset; passing both is harmless.
+
+Either way `make upgrade` checks before acting: if `caddy` is running but the file
+set it is about to apply doesn't include it, it stops and prints both options
+rather than taking TLS down. It also stays on the deployed tag whenever the
+overlay is in play, so the tree keeps matching the running image.
+
 ## Durability
 
 `DAZYFLOW_POSTGRES_DSN` is **required** — `dzd` runs on Postgres and
