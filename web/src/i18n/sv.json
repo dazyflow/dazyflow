@@ -1507,7 +1507,9 @@
     "logs": "Logg",
     "logWaiting": "Väntar på output…",
     "logTruncated": "Loggen trunkerades — körningen producerade fler rader än gränsen per körning. Senare output sparades inte.",
-    "reportProblem": "Rapportera ett problem"
+    "reportProblem": "Rapportera ett problem",
+    "result": "Resultat",
+    "resultFrom": "Från ”{{label}}”"
   },
   "nodeCard": {
     "breakpoint": "brytpunkt",
@@ -2039,7 +2041,11 @@
     "confirmResetStateTitle": "Återställ {{label}}?",
     "resetState": "Återställ",
     "ctxDelete": "Ta bort",
-    "ctxDeleteEdge": "Ta bort koppling"
+    "ctxDeleteEdge": "Ta bort koppling",
+    "publishNeedsSetup": "Flödet kan inte köras än — {{apps}} måste konfigureras. Publicerar du nu kommer de automatiska körningarna att misslyckas.",
+    "runSucceeded": "Klart — flödet kördes.",
+    "runSucceededWith": "Klart — flödet kördes. ”{{label}}” gav:",
+    "runSucceededDetails": "Visa hela körningen"
   },
   "iconUpload": {
     "upload": "Ladda upp bild",

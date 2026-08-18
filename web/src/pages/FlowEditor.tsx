@@ -10,7 +10,7 @@ import {
   type DragEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
-import { useParams, useSearchParams, useNavigate, useLocation } from "react-router-dom";
+import { Link, useParams, useSearchParams, useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useActiveFlow, FLOWS_CHANGED_EVENT } from "../activeFlow";
 import { saveRecentFlow, userScope } from "../recentFlow";
@@ -87,6 +87,7 @@ import {
 import { mimeCompatible, pickPort, portsConnectable, connectionHint, PASS_PORT } from "../lib/ports";
 import { suggestNextDrops, topDropsByUsage } from "../lib/suggest";
 import { explainApiError } from "../lib/explainApiError";
+import { previewOutput } from "../lib/runResult";
 import type {
   DropAdjacency,
   Graph,
@@ -329,6 +330,17 @@ function EditorInner() {
   // Per-node output values from the current run (#10) — nodeId → port → Ref.
   // Populated as nodes finish; surfaced as a hover-peek on output ports.
   const [runOutputs, setRunOutputs] = useState<Record<string, Record<string, Ref>>>({});
+  // runDone reports a SUCCESSFUL run on the canvas. A failure already raises
+  // the error banner, but success used to change nothing except each node's
+  // border tint — so pressing Run and getting a working flow looked identical
+  // to pressing Run and nothing happening, and the result itself was only
+  // reachable by leaving for the run list. This carries the last step's output
+  // so "what did it produce?" is answered where the user is standing.
+  const [runDone, setRunDone] = useState<{
+    runID: string;
+    label: string;
+    preview: string;
+  } | null>(null);
   // Breakpoints (#12): node IDs flagged to pause the run after they finish.
   // Saved with the graph (node.breakpoint). pausedAt is the node the live
   // run is currently holding after; stepping mirrors the run's step mode.
@@ -3183,6 +3195,43 @@ function EditorInner() {
     return () => window.clearInterval(h);
   }, [lockedRunID, refreshLock]);
 
+  // summarizeSuccess builds the "it worked, here's what came out" banner for
+  // a run that finished cleanly. "What came out" means the leaf steps — the
+  // ones no edge leaves — since that's what a person means by the result;
+  // it walks them in order and shows the first that produced anything. Read
+  // off the live React Flow instance rather than the `nodes` closure, which
+  // is stale by the time a terminal frame lands. Any lookup failure just
+  // yields the plain "run finished" form: never let a preview fetch turn a
+  // successful run back into silence.
+  const summarizeSuccess = async (runID: string) => {
+    const inst = rfRef.current;
+    if (!token || !inst) {
+      setRunDone({ runID, label: "", preview: "" });
+      return;
+    }
+    const sources = new Set(inst.getEdges().map((e) => e.source));
+    const leaves = inst
+      .getNodes()
+      .filter((n) => n.type !== "comment" && !sources.has(n.id));
+    for (const leaf of leaves) {
+      try {
+        const rec = await api.getNodeRecord(token, runID, leaf.id);
+        const preview = previewOutput(rec.Result?.output);
+        if (preview) {
+          setRunDone({
+            runID,
+            label: String(leaf.data?.label || leaf.id),
+            preview,
+          });
+          return;
+        }
+      } catch {
+        /* node never materialised (off / skipped) — try the next leaf */
+      }
+    }
+    setRunDone({ runID, label: "", preview: "" });
+  };
+
   // subscribeToRun opens the SSE stream for runID and applies per-node
   // status frames to the canvas. Shared by Run (new run just started)
   // and by the history picker (load an old run). Returns a cancel
@@ -3199,6 +3248,7 @@ function EditorInner() {
     );
     setLiveLogs({});
     setRunOutputs({});
+    setRunDone(null);
     setPausedAt(null);
     setStepping(false);
     const abort = new AbortController();
@@ -3320,6 +3370,10 @@ function EditorInner() {
                 t("editor.runFailedGeneric");
               setError(t("editor.runFailedGraph", { detail }));
             }
+            // Say so when it worked. Without this the only success signal is
+            // a border tint on each node, which reads as "nothing happened"
+            // to anyone who isn't looking for it.
+            if (term.status === "succeeded") void summarizeSuccess(runID);
             abort.abort();
             // The run that just held the lock might be the only active
             // one; ask the server before clearing the editor lock so
@@ -3412,6 +3466,27 @@ function EditorInner() {
       ? `/apps/${[...slugs][0]}`
       : "/apps";
   }, [setupNeededByNode, userFixableSetup, missingSecrets]);
+  // setupBlockerNames lists what's unconfigured in the words the user sees
+  // elsewhere (app display names, ${secret} refs). Feeds the publish gate's
+  // warning so it names the actual gap instead of saying "something is
+  // missing" — same set the Run gate reasons over, admin-blocked included,
+  // because a publish is doomed either way.
+  const setupBlockerNames = useMemo(
+    () => [
+      ...missingConnections.map((m) => oauthProviderDisplay(m.provider).name),
+      ...missingSetups.map((s) => s.integration),
+      ...missingSecrets,
+      ...adminBlockedProviders.map((p) => oauthProviderDisplay(p).name),
+      ...adminBlockedSecretRefs,
+    ],
+    [
+      missingConnections,
+      missingSetups,
+      missingSecrets,
+      adminBlockedProviders,
+      adminBlockedSecretRefs,
+    ],
+  );
 
   // doRun submits the graph and wires up live status. Separated from
   // the gate check so "Run anyway" in the setup modal can bypass the
@@ -4663,6 +4738,69 @@ function EditorInner() {
             </Button>
           </div>
         )}
+        {runDone && (
+          <div
+            role="status"
+            className="editor-run-done"
+            style={{
+              background: "var(--surface)",
+              border: "1px solid var(--success)",
+              padding: "10px 14px",
+              borderRadius: "var(--r-2)",
+              fontSize: "var(--text-md)",
+              color: "var(--ink)",
+              boxShadow: "0 2px 8px color-mix(in srgb, var(--success) 25%, transparent)",
+              pointerEvents: "auto",
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                gap: 8,
+              }}
+            >
+              <strong style={{ color: "var(--success)" }}>
+                {runDone.label
+                  ? t("editor.runSucceededWith", { label: runDone.label })
+                  : t("editor.runSucceeded")}
+              </strong>
+              <Button
+                variant="ghost"
+                onClick={() => setRunDone(null)}
+                style={{ fontSize: "var(--text-xs)", padding: "2px 8px" }}
+                aria-label={t("editor.dismiss")}
+              >
+                {t("editor.dismiss")}
+              </Button>
+            </div>
+            {runDone.preview && (
+              <pre
+                style={{
+                  margin: 0,
+                  maxHeight: 160,
+                  overflow: "auto",
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                  fontSize: "var(--text-sm)",
+                  color: "var(--muted)",
+                }}
+              >
+                {runDone.preview}
+              </pre>
+            )}
+            <Link
+              to={`/runs/${runDone.runID}`}
+              style={{ fontSize: "var(--text-sm)", alignSelf: "flex-start" }}
+            >
+              {t("editor.runSucceededDetails")}
+            </Link>
+          </div>
+        )}
         {lintIssues.length > 0 && (
           <div
             style={{
@@ -5129,6 +5267,25 @@ function EditorInner() {
           }
           confirmLabel={
             publishConfirm === "update" ? t("editor.publishChanges") : t("editor.goLive")
+          }
+          // Going live arms the automatic triggers, so an unconnected app
+          // means every scheduled run fails silently — and nobody watches the
+          // run list for a flow they believe is done. Name the gap here and
+          // make connecting the emphasised action; publishing stays possible
+          // (the detection is the same heuristic the Run gate uses) but only
+          // as a deliberate choice.
+          warning={
+            needsSetup
+              ? t("editor.publishNeedsSetup", {
+                  apps: setupBlockerNames.join(", "),
+                  count: setupBlockerNames.length,
+                })
+              : undefined
+          }
+          connect={
+            needsSetup && canConnect
+              ? { label: t("connGate.connect"), onClick: () => navigate(setupTarget) }
+              : undefined
           }
           onPublish={(label) => {
             const action = publishConfirm;

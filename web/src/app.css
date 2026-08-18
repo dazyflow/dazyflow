@@ -3794,6 +3794,28 @@ button.warning:hover:not(:disabled) {
   font-size: var(--text-xs);
   font-family: var(--font-mono);
 }
+/* Run result: the "what did it produce" card above the timeline on a clean
+   run. Deliberately the plainest thing on the page — the value is the point,
+   so no port names, no MIME, no disclosure to open. */
+.run-result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  border-left: 2px solid var(--success);
+}
+.run-result-head {
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+.run-result-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 320px;
+  overflow: auto;
+}
 .node-port-value {
   font-family: var(--font-mono);
   font-size: var(--text-sm);
@@ -8057,6 +8079,12 @@ a.pa-card:hover {
 .confirm-dialog {
   max-width: 440px;
 }
+/* The publish gate adds a third footer button ("connect" alongside publish /
+   publish-unnamed), which wraps a button label onto two lines at the shared
+   440px. Widen only that variant rather than every confirm. */
+.confirm-dialog.publish-gate {
+  max-width: 520px;
+}
 .confirm-message {
   margin: 0;
   font-size: var(--text-md);
@@ -9067,6 +9095,14 @@ a.pa-card:hover {
 /* Trigger-discoverability nudge: a compact, dismissible tip pinned just
    below the toolbar, centered over the canvas. Calm accent styling (not a
    warning) — it's teaching, not alerting. */
+/* It shares the strip under the toolbar with the banner stack, which is
+   pinned left and painted above it, so a banner wide enough to reach the
+   centre clips this hint's opening words. A banner is always the more
+   urgent, more transient message — stand the teaching tip down while one is
+   up, and it returns when the banner is dismissed. */
+.canvas:has(.editor-banner-stack:not(:empty)) .editor-trigger-hint {
+  display: none;
+}
 .editor-trigger-hint {
   position: absolute;
   top: 62px;

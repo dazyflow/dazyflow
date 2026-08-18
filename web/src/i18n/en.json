@@ -1505,7 +1505,9 @@
     "logs": "Log",
     "logWaiting": "Waiting for output…",
     "logTruncated": "Log truncated — this run produced more lines than the per-run limit. Later output was not recorded.",
-    "reportProblem": "Report a problem"
+    "reportProblem": "Report a problem",
+    "result": "Result",
+    "resultFrom": "From “{{label}}”"
   },
   "nodeCard": {
     "breakpoint": "breakpoint",
@@ -2035,7 +2037,11 @@
     "confirmResetStateTitle": "Reset {{label}}?",
     "resetState": "Reset",
     "ctxDelete": "Delete",
-    "ctxDeleteEdge": "Delete connection"
+    "ctxDeleteEdge": "Delete connection",
+    "publishNeedsSetup": "This flow can't run yet — {{apps}} still needs setting up. Publish now and its automatic runs will fail.",
+    "runSucceeded": "Done — the flow ran.",
+    "runSucceededWith": "Done — the flow ran. “{{label}}” produced:",
+    "runSucceededDetails": "See the full run"
   },
   "iconUpload": {
     "upload": "Upload image",

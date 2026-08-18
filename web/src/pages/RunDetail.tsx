@@ -14,6 +14,7 @@ import { Callout } from "../components/Callout";
 import { explainRunError } from "../lib/explainRunError";
 import { explainApiError } from "../lib/explainApiError";
 import { supportContactWithContext } from "../lib/supportContact";
+import { isResultNode, previewOutput } from "../lib/runResult";
 import { ReportProblemModal } from "../components/ReportProblemModal";
 import type { Graph, JobRecord, JobStatus, Manifest, Ref, RunLogEntry } from "../types";
 import { formatDateTime } from "../lib/datetime";
@@ -261,6 +262,30 @@ export function RunDetail() {
   // Find the first failed node (if any) so the banner can name it.
   const failedNode = orderedNodes.find((n) => n.Status === "failed");
 
+  // resultNode: what the run actually produced. A failed run leads with the
+  // error banner, so this is only for the clean ones — where the page used to
+  // report duration and step counts but never the answer, leaving it folded
+  // inside a step, then inside a port. Prefer the flow's end steps (no edge
+  // leaves them) so intermediate plumbing doesn't get mistaken for the
+  // result; when the graph can't be loaded (a deleted flow) fall back to the
+  // last step that ran, which is the same node in a linear flow.
+  const resultNode =
+    run.Status === "succeeded"
+      ? orderedNodes
+          .filter(
+            (n) =>
+              n.Status === "succeeded" && previewOutput(n.Result?.output) !== "",
+          )
+          .reverse()
+          .find((n) => !graph || isResultNode(n.NodeID, graph.edges)) ??
+        [...orderedNodes]
+          .reverse()
+          .find(
+            (n) =>
+              n.Status === "succeeded" && previewOutput(n.Result?.output) !== "",
+          )
+      : undefined;
+
   return (
     <div className="page run-detail">
       <div className="page-title">
@@ -391,6 +416,23 @@ export function RunDetail() {
           }
         />
       </div>
+
+      {/* The answer first, the machinery below. Mirrors the banner the editor
+          raises after a manual Run, so a run reached from the run list reads
+          the same as one you just watched. */}
+      {resultNode && (
+        <>
+          <h2 style={{ marginTop: "var(--space-4)" }}>{t("runDetail.result")}</h2>
+          <div className="card run-result">
+            <div className="run-result-head">
+              {t("runDetail.resultFrom", { label: nodeLabel(resultNode.NodeID) })}
+            </div>
+            <pre className="run-result-value">
+              {previewOutput(resultNode.Result?.output)}
+            </pre>
+          </div>
+        </>
+      )}
 
       <h2 style={{ marginTop: "var(--space-4)" }}>{t("runDetail.timeline")}</h2>
       {orderedNodes.length === 0 && (
