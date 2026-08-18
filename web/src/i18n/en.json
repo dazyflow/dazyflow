@@ -131,8 +131,7 @@
     "orgDeletePasswordPlaceholder": "Your account password",
     "orgDeletePasswordRequired": "Enter your password to confirm.",
     "noSubject": "(no subject)",
-    "overview": "Overview",
-    "support": "Support"
+    "overview": "Overview"
   },
   "verifyEmail": {
     "working": "Confirming your email…",
@@ -1505,7 +1504,8 @@
     "emptyValue": "(empty)",
     "logs": "Log",
     "logWaiting": "Waiting for output…",
-    "logTruncated": "Log truncated — this run produced more lines than the per-run limit. Later output was not recorded."
+    "logTruncated": "Log truncated — this run produced more lines than the per-run limit. Later output was not recorded.",
+    "reportProblem": "Report a problem"
   },
   "nodeCard": {
     "breakpoint": "breakpoint",
@@ -2224,5 +2224,52 @@
     "issuesHead_one": "{{count}} issue",
     "issuesHead_other": "{{count}} issues",
     "noIssues": "No validation issues."
+  },
+  "support": {
+    "title": "Support",
+    "subtitle": "Ask for help and track your conversations with support.",
+    "new": "New ticket",
+    "notEnabled": "Support isn't set up on this workspace yet.",
+    "empty": "No tickets yet. Open one when you need a hand.",
+    "updated": "updated {{date}}",
+    "subjectLabel": "Subject",
+    "subjectPlaceholder": "What do you need help with?",
+    "messageLabel": "Details",
+    "messagePlaceholder": "Describe what happened…",
+    "send": "Send",
+    "replyPlaceholder": "Write a reply…",
+    "reopenPlaceholder": "Reply to reopen this ticket…",
+    "viewFlow": "Open flow",
+    "viewBundle": "View diagnostic",
+    "resolve": "Mark resolved",
+    "fromSupport": "Support",
+    "fromYou": "You",
+    "agentOnly": "Support agents only.",
+    "queueTitle": "Support queue",
+    "queueSub": "Tickets from every organization.",
+    "queueEmpty": "The queue is empty.",
+    "status": {
+      "open": "Open",
+      "awaiting_user": "Waiting on you",
+      "awaiting_support": "With support",
+      "resolved": "Resolved",
+      "closed": "Closed"
+    }
+  },
+  "report": {
+    "title": "Report a problem",
+    "lede": "We'll attach a diagnostic snapshot of this flow — its structure and the error, with your secrets and data removed.",
+    "defaultSubject": "Problem with \"{{flow}}\"",
+    "messagePlaceholder": "What were you trying to do when it failed?",
+    "send": "Send to support"
+  },
+  "bundle": {
+    "title": "Diagnostic bundle",
+    "redactedNote": "Redacted diagnostic — flow structure and error only. Secrets and run data are removed.",
+    "runHead": "Run outcome",
+    "stepsHead": "Steps",
+    "issuesHead": "Issues",
+    "disabled": "disabled",
+    "rawSummary": "Raw bundle (redacted JSON)"
   }
 }

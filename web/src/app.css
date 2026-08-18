@@ -7478,6 +7478,12 @@ img[src$="/brands/smhi.svg"] {
   font-size: var(--text-sm);
   margin-bottom: var(--space-3);
 }
+/* The margin above spaces .meta from the rows that usually follow it. When
+   nothing does (a support ticket card is subject + meta and nothing else) it
+   would leave dead space at the bottom of the card. */
+.user-card .meta:last-child {
+  margin-bottom: 0;
+}
 .user-card .perm-row {
   display: flex;
   flex-wrap: wrap;
@@ -11628,12 +11634,6 @@ button:active,
   color: var(--muted);
   margin-bottom: var(--space-1);
 }
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-2);
-  margin-top: var(--space-4);
-}
 .ticket-thread {
   display: flex;
   flex-direction: column;
@@ -11641,7 +11641,9 @@ button:active,
   margin: var(--space-4) 0;
   max-height: 60vh;
   overflow-y: auto;
-  padding: var(--space-2);
+  /* Vertical padding only: a horizontal inset would push the bubbles out of
+     line with the ticket header above and the composer below. */
+  padding: var(--space-2) 0;
 }
 .ticket-bubble {
   align-self: flex-start;
@@ -11679,6 +11681,17 @@ button:active,
 .ticket-composer textarea {
   flex: 1;
   resize: vertical;
+}
+
+/* `card error` is used across the app (support modals, admin pages, run detail)
+   but had no rule of its own, so an error card read as an ordinary card. Give
+   it the danger treatment it was always meant to have. */
+.card.error {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+  color: var(--danger);
+  font-size: var(--text-sm);
+  padding: var(--space-2) var(--space-3);
+  box-shadow: none;
 }
 
 /* ---- Support bundle view (BundleView.tsx) --------------------------------- */

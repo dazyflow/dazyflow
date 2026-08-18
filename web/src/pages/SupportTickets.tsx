@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { AlertCircle, LifeBuoy, Send, ArrowLeft, Check } from "lucide-react";
+import { AlertCircle, LifeBuoy, Send, ArrowLeft, Check, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
@@ -28,19 +28,10 @@ const THREAD_POLL_MS = 8000;
 
 const NOTICE_STYLE = { color: "var(--muted)" } as const;
 
-// statusLabel resolves a ticket status to friendly copy.
+// statusLabel resolves a ticket status to friendly copy (support.status.*).
 function useStatusLabel() {
   const { t } = useTranslation();
-  return (s: TicketStatus) =>
-    t(`support.status.${s}`, {
-      defaultValue: {
-        open: "Open",
-        awaiting_user: "Waiting on you",
-        awaiting_support: "With support",
-        resolved: "Resolved",
-        closed: "Closed",
-      }[s],
-    });
+  return (s: TicketStatus) => t(`support.status.${s}`);
 }
 
 // ---- End-user ticket list --------------------------------------------------
@@ -82,17 +73,15 @@ export function SupportTickets() {
         <div>
           <h1>
             <LifeBuoy size={20} style={{ marginRight: 8, verticalAlign: -3 }} />
-            {t("support.title", { defaultValue: "Support" })}
+            {t("support.title")}
           </h1>
           <div className="sub">
-            {t("support.subtitle", {
-              defaultValue: "Ask for help and track your conversations with support.",
-            })}
+            {t("support.subtitle")}
           </div>
         </div>
         {!disabled && (
           <Button variant="primary" onClick={() => setCreating(true)}>
-            {t("support.new", { defaultValue: "New ticket" })}
+            {t("support.new")}
           </Button>
         )}
       </div>
@@ -106,13 +95,13 @@ export function SupportTickets() {
 
       {disabled ? (
         <div className="card" style={NOTICE_STYLE}>
-          {t("support.notEnabled", { defaultValue: "Support isn't set up on this workspace yet." })}
+          {t("support.notEnabled")}
         </div>
       ) : loading && tickets.length === 0 ? (
         <div className="card" style={NOTICE_STYLE}>{t("common.loading")}</div>
       ) : tickets.length === 0 ? (
         <div className="card" style={NOTICE_STYLE}>
-          {t("support.empty", { defaultValue: "No tickets yet. Open one when you need a hand." })}
+          {t("support.empty")}
         </div>
       ) : (
         <div className="user-list">
@@ -122,7 +111,7 @@ export function SupportTickets() {
                 <div className="subject">{tk.subject}</div>
                 <div className="meta">
                   <span className="count-pill" style={{ marginRight: 8 }}>{statusLabel(tk.status)}</span>
-                  {t("support.updated", { defaultValue: "updated {{date}}", date: formatDateTime(tk.updated_at) })}
+                  {t("support.updated", { date: formatDateTime(tk.updated_at) })}
                 </div>
               </div>
             </Link>
@@ -168,31 +157,44 @@ function NewTicketModal({ onClose, onCreated }: { onClose: () => void; onCreated
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
-        <h2>{t("support.new", { defaultValue: "New ticket" })}</h2>
-        <label className="field-label">{t("support.subjectLabel", { defaultValue: "Subject" })}</label>
-        <input
-          className="input"
-          value={subject}
-          onChange={(e) => setSubject(e.target.value)}
-          placeholder={t("support.subjectPlaceholder", { defaultValue: "What do you need help with?" })}
-          autoFocus
-        />
-        <label className="field-label" style={{ marginTop: "var(--space-3)" }}>
-          {t("support.messageLabel", { defaultValue: "Details" })}
-        </label>
-        <textarea
-          className="input"
-          rows={5}
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          placeholder={t("support.messagePlaceholder", { defaultValue: "Describe what happened…" })}
-        />
-        {err && <div className="card error" style={{ marginTop: "var(--space-2)" }}>{err}</div>}
-        <div className="modal-actions">
-          <Button onClick={onClose}>{t("common.cancel")}</Button>
+      <div
+        className="modal"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-label={t("support.new")}
+        style={{ maxWidth: 520 }}
+      >
+        <div className="modal-head">
+          <strong>{t("support.new")}</strong>
+          <Button size="icon" onClick={onClose} aria-label={t("common.close")}>
+            <X size={16} />
+          </Button>
+        </div>
+        <div className="modal-body">
+          <label className="field-label">{t("support.subjectLabel")}</label>
+          <input
+            className="input"
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            placeholder={t("support.subjectPlaceholder")}
+            autoFocus
+          />
+          <label className="field-label" style={{ marginTop: "var(--space-3)" }}>
+            {t("support.messageLabel")}
+          </label>
+          <textarea
+            className="input"
+            rows={5}
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder={t("support.messagePlaceholder")}
+          />
+          {err && <div className="card error" style={{ marginTop: "var(--space-3)" }}>{err}</div>}
+        </div>
+        <div className="modal-foot">
+          <Button variant="ghost" onClick={onClose}>{t("common.cancel")}</Button>
           <Button variant="primary" onClick={() => void submit()} disabled={busy || !subject.trim()}>
-            {t("support.send", { defaultValue: "Send" })}
+            {t("support.send")}
           </Button>
         </div>
       </div>
@@ -229,7 +231,7 @@ export function SupportQueue() {
   }, [refresh]);
 
   if (!hasPerm("support:agent")) {
-    return <div className="card" style={{ color: "var(--danger)" }}>{t("support.agentOnly", { defaultValue: "Support agents only." })}</div>;
+    return <div className="card" style={{ color: "var(--danger)" }}>{t("support.agentOnly")}</div>;
   }
 
   return (
@@ -238,9 +240,9 @@ export function SupportQueue() {
         <div>
           <h1>
             <LifeBuoy size={20} style={{ marginRight: 8, verticalAlign: -3 }} />
-            {t("support.queueTitle", { defaultValue: "Support queue" })}
+            {t("support.queueTitle")}
           </h1>
-          <div className="sub">{t("support.queueSub", { defaultValue: "Tickets from every organization." })}</div>
+          <div className="sub">{t("support.queueSub")}</div>
         </div>
       </div>
       {error && (
@@ -249,7 +251,7 @@ export function SupportQueue() {
       {loading && tickets.length === 0 ? (
         <div className="card" style={NOTICE_STYLE}>{t("common.loading")}</div>
       ) : tickets.length === 0 ? (
-        <div className="card" style={NOTICE_STYLE}>{t("support.queueEmpty", { defaultValue: "The queue is empty." })}</div>
+        <div className="card" style={NOTICE_STYLE}>{t("support.queueEmpty")}</div>
       ) : (
         <div className="user-list">
           {tickets.map((tk) => (
@@ -258,7 +260,7 @@ export function SupportQueue() {
                 <div className="subject">{tk.subject}</div>
                 <div className="meta">
                   <span className="count-pill" style={{ marginRight: 8 }}>{statusLabel(tk.status)}</span>
-                  {t("support.fromOrg", { defaultValue: "{{org}}", org: tk.tenant })}
+                  {tk.tenant}
                   {" · "}
                   {formatDateTime(tk.updated_at)}
                 </div>
@@ -369,13 +371,13 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
           <div className="sub">
             <span className="count-pill" style={{ marginRight: 8 }}>{statusLabel(tk.status)}</span>
             {tk.flow_id && (
-              <Link to={`/flows/${encodeURIComponent(tk.flow_id)}`}>{t("support.viewFlow", { defaultValue: "Open flow" })}</Link>
+              <Link to={`/flows/${encodeURIComponent(tk.flow_id)}`}>{t("support.viewFlow")}</Link>
             )}
             {tk.bundle_id && (
               <>
                 {" · "}
                 <button type="button" className="linklike" onClick={() => setShowBundle(true)}>
-                  {t("support.viewBundle", { defaultValue: "View diagnostic" })}
+                  {t("support.viewBundle")}
                 </button>
               </>
             )}
@@ -384,7 +386,7 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
         {mode === "agent" && !closed && (
           <Button onClick={() => void setStatus("resolved")} disabled={busy}>
             <Check size={12} style={{ marginRight: 4 }} />
-            {t("support.resolve", { defaultValue: "Mark resolved" })}
+            {t("support.resolve")}
           </Button>
         )}
       </div>
@@ -409,13 +411,13 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
           }}
           placeholder={
             closed
-              ? t("support.reopenPlaceholder", { defaultValue: "Reply to reopen this ticket…" })
-              : t("support.replyPlaceholder", { defaultValue: "Write a reply…" })
+              ? t("support.reopenPlaceholder")
+              : t("support.replyPlaceholder")
           }
         />
         <Button variant="primary" onClick={() => void send()} disabled={busy || !draft.trim()}>
           <Send size={14} style={{ marginRight: 4 }} />
-          {t("support.send", { defaultValue: "Send" })}
+          {t("support.send")}
         </Button>
       </div>
 
@@ -443,13 +445,26 @@ function BundleModal({ ticketId, mode, onClose }: { ticketId: string; mode: "use
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 680, maxHeight: "85vh", overflow: "auto" }}>
-        <h2>{t("bundle.title", { defaultValue: "Diagnostic bundle" })}</h2>
-        {error && <div className="card error">{error}</div>}
-        {!bundle && !error && <div style={NOTICE_STYLE}>{t("common.loading")}</div>}
-        {bundle && <BundleView bundle={bundle} />}
-        <div className="modal-actions">
-          <Button onClick={onClose}>{t("common.close")}</Button>
+      <div
+        className="modal"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-label={t("bundle.title")}
+        style={{ maxWidth: 680 }}
+      >
+        <div className="modal-head">
+          <strong>{t("bundle.title")}</strong>
+          <Button size="icon" onClick={onClose} aria-label={t("common.close")}>
+            <X size={16} />
+          </Button>
+        </div>
+        <div className="modal-body">
+          {error && <div className="card error">{error}</div>}
+          {!bundle && !error && <div style={NOTICE_STYLE}>{t("common.loading")}</div>}
+          {bundle && <BundleView bundle={bundle} />}
+        </div>
+        <div className="modal-foot">
+          <Button variant="ghost" onClick={onClose}>{t("common.close")}</Button>
         </div>
       </div>
     </div>
@@ -468,8 +483,8 @@ function ChatBubble({ m, mode }: { m: TicketMessage; mode: "user" | "agent" }) {
   const mine = mode === "agent" ? m.author_kind === "support" : m.author_kind === "user";
   const who =
     m.author_kind === "support"
-      ? t("support.fromSupport", { defaultValue: "Support" })
-      : m.author || t("support.fromYou", { defaultValue: "You" });
+      ? t("support.fromSupport")
+      : m.author || t("support.fromYou");
   return (
     <div className={"ticket-bubble" + (mine ? " mine" : "")}>
       <div className="ticket-bubble-meta">{who} · {formatDateTime(m.created_at)}</div>

@@ -132,8 +132,7 @@
     "orgDeletePasswordPlaceholder": "Ditt kontolösenord",
     "orgDeletePasswordRequired": "Ange ditt lösenord för att bekräfta.",
     "noSubject": "(inget subjekt)",
-    "overview": "Översikt",
-    "support": "Support"
+    "overview": "Översikt"
   },
   "verifyEmail": {
     "working": "Bekräftar din e-postadress…",
@@ -1507,7 +1506,8 @@
     "emptyValue": "(tom)",
     "logs": "Logg",
     "logWaiting": "Väntar på output…",
-    "logTruncated": "Loggen trunkerades — körningen producerade fler rader än gränsen per körning. Senare output sparades inte."
+    "logTruncated": "Loggen trunkerades — körningen producerade fler rader än gränsen per körning. Senare output sparades inte.",
+    "reportProblem": "Rapportera ett problem"
   },
   "nodeCard": {
     "breakpoint": "brytpunkt",
@@ -2228,5 +2228,52 @@
     "issuesHead_one": "{{count}} problem",
     "issuesHead_other": "{{count}} problem",
     "noIssues": "Inga valideringsproblem."
+  },
+  "support": {
+    "title": "Support",
+    "subtitle": "Be om hjälp och följ dina konversationer med supporten.",
+    "new": "Nytt ärende",
+    "notEnabled": "Support är inte uppsatt i den här arbetsytan än.",
+    "empty": "Inga ärenden än. Öppna ett när du behöver hjälp.",
+    "updated": "uppdaterad {{date}}",
+    "subjectLabel": "Ämne",
+    "subjectPlaceholder": "Vad behöver du hjälp med?",
+    "messageLabel": "Detaljer",
+    "messagePlaceholder": "Beskriv vad som hände…",
+    "send": "Skicka",
+    "replyPlaceholder": "Skriv ett svar…",
+    "reopenPlaceholder": "Svara för att öppna ärendet igen…",
+    "viewFlow": "Öppna flöde",
+    "viewBundle": "Visa diagnostik",
+    "resolve": "Markera som löst",
+    "fromSupport": "Support",
+    "fromYou": "Du",
+    "agentOnly": "Endast för supportagenter.",
+    "queueTitle": "Supportkö",
+    "queueSub": "Ärenden från alla organisationer.",
+    "queueEmpty": "Kön är tom.",
+    "status": {
+      "open": "Öppet",
+      "awaiting_user": "Väntar på dig",
+      "awaiting_support": "Hos supporten",
+      "resolved": "Löst",
+      "closed": "Stängt"
+    }
+  },
+  "report": {
+    "title": "Rapportera ett problem",
+    "lede": "Vi bifogar en diagnostisk ögonblicksbild av flödet — dess struktur och felet, utan dina hemligheter och data.",
+    "defaultSubject": "Problem med ”{{flow}}”",
+    "messagePlaceholder": "Vad försökte du göra när det gick fel?",
+    "send": "Skicka till supporten"
+  },
+  "bundle": {
+    "title": "Diagnostikpaket",
+    "redactedNote": "Maskerad diagnostik — endast flödets struktur och felet. Hemligheter och körningsdata är borttagna.",
+    "runHead": "Körningens utfall",
+    "stepsHead": "Steg",
+    "issuesHead": "Problem",
+    "disabled": "inaktiverat",
+    "rawSummary": "Rått paket (maskerad JSON)"
   }
 }

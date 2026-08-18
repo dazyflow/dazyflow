@@ -18,15 +18,13 @@ export function BundleView({ bundle }: { bundle: SupportBundle }) {
   return (
     <div className="bundle-view">
       <div className="bundle-note">
-        {t("bundle.redactedNote", {
-          defaultValue: "Redacted diagnostic — flow structure and error only. Secrets and run data are removed.",
-        })}
+        {t("bundle.redactedNote")}
       </div>
 
       {/* Run outcome first: it's what a failed ticket is usually about. */}
       {run && (
         <div className="bundle-section">
-          <div className="bundle-section-head">{t("bundle.runHead", { defaultValue: "Run outcome" })}</div>
+          <div className="bundle-section-head">{t("bundle.runHead")}</div>
           <div className="bundle-kv">
             <span className={"status-chip " + run.status}>
               <span className={"status-dot " + run.status} /> {run.status}
@@ -44,7 +42,7 @@ export function BundleView({ bundle }: { bundle: SupportBundle }) {
       {/* Steps, with per-node run status when a run is attached. */}
       <div className="bundle-section">
         <div className="bundle-section-head">
-          {t("bundle.stepsHead", { defaultValue: "Steps" })} ({bundle.nodes.length})
+          {t("bundle.stepsHead")} ({bundle.nodes.length})
         </div>
         <div className="bundle-nodes">
           {bundle.nodes.map((n) => {
@@ -54,7 +52,7 @@ export function BundleView({ bundle }: { bundle: SupportBundle }) {
                 <div className="bundle-node-main">
                   <span className="bundle-node-id">{n.id}</span>
                   <span className="bundle-node-module">{n.module}</span>
-                  {n.disabled && <span className="count-pill">{t("bundle.disabled", { defaultValue: "disabled" })}</span>}
+                  {n.disabled && <span className="count-pill">{t("bundle.disabled")}</span>}
                   {nr && (
                     <span className={"status-chip " + nr.status}>
                       <span className={"status-dot " + nr.status} /> {nr.status}
@@ -72,7 +70,7 @@ export function BundleView({ bundle }: { bundle: SupportBundle }) {
       {bundle.issues && bundle.issues.length > 0 && (
         <div className="bundle-section">
           <div className="bundle-section-head">
-            {t("bundle.issuesHead", { defaultValue: "Issues" })} ({bundle.issues.length})
+            {t("bundle.issuesHead")} ({bundle.issues.length})
           </div>
           <ul className="bundle-issues">
             {bundle.issues.map((iss, i) => (
@@ -86,7 +84,7 @@ export function BundleView({ bundle }: { bundle: SupportBundle }) {
       )}
 
       <details className="bundle-raw">
-        <summary>{t("bundle.rawSummary", { defaultValue: "Raw bundle (redacted JSON)" })}</summary>
+        <summary>{t("bundle.rawSummary")}</summary>
         <pre>{JSON.stringify(bundle, null, 2)}</pre>
       </details>
     </div>

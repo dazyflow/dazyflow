@@ -276,7 +276,7 @@ export function RunList() {
     return runs.filter(
       (r) =>
         r.id.toLowerCase().includes(q) ||
-        (flowNames[r.graph_id] ?? r.graph_id).toLowerCase().includes(q),
+        (flowNames[r.graph_id] ?? "").toLowerCase().includes(q),
     );
   }, [runs, query, flowNames]);
 
@@ -476,12 +476,16 @@ export function RunList() {
                     />
                   </td>
                   <td>
-                    {/* Flow name is the primary identifier — it's how a user
-                        thinks about a run ("the order-alert flow"), not the
-                        opaque id. The bold name links to the editor ("make
-                        changes"); the muted run id beneath links to the
-                        run-detail "what happened" surface (T2), so both
-                        destinations stay reachable. */}
+                    {/* Flow name is the only identifier we show — it's how a
+                        user thinks about a run ("the order-alert flow"). The
+                        raw ids (flow and run alike) are plumbing: opaque hex
+                        that means nothing to a non-technical user, so they
+                        stay off the list. The name links to the editor ("make
+                        changes"); the run-detail "what happened" surface stays
+                        reachable via the open-details link at the end of the
+                        row. A flow whose name we couldn't resolve (deleted, or
+                        a failed fetch) shows "(unknown)" rather than leaking
+                        its id. */}
                     <Link
                       to={`/flows/${encodeURIComponent(r.graph_id)}?run=${encodeURIComponent(r.id)}`}
                       style={{
@@ -492,20 +496,7 @@ export function RunList() {
                       }}
                     >
                       <Activity size={12} />
-                      {flowNames[r.graph_id] ?? r.graph_id}
-                    </Link>
-                    <Link
-                      to={`/runs/${encodeURIComponent(r.id)}`}
-                      style={{
-                        display: "block",
-                        marginTop: 2,
-                        fontFamily: "var(--font-mono)",
-                        fontSize: "var(--text-xs)",
-                        color: "var(--muted)",
-                        textDecoration: "none",
-                      }}
-                    >
-                      {r.id.slice(0, 12)}
+                      {flowNames[r.graph_id] ?? t("common.unknownParen")}
                     </Link>
                   </td>
                   <td style={{ color: "var(--muted)", fontSize: "var(--text-sm)" }}>

@@ -3,6 +3,7 @@
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
@@ -30,7 +31,7 @@ export function ReportProblemModal({
   const navigate = useNavigate();
   const [subject, setSubject] = useState(
     flowName
-      ? t("report.defaultSubject", { defaultValue: 'Problem with "{{flow}}"', flow: flowName })
+      ? t("report.defaultSubject", { flow: flowName })
       : "",
   );
   const [message, setMessage] = useState("");
@@ -57,38 +58,46 @@ export function ReportProblemModal({
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
-        <h2>{t("report.title", { defaultValue: "Report a problem" })}</h2>
-        <p style={{ color: "var(--muted)", fontSize: "var(--text-sm)", marginTop: 0 }}>
-          {t("report.lede", {
-            defaultValue:
-              "We'll attach a diagnostic snapshot of this flow — its structure and the error, with your secrets and data removed.",
-          })}
-        </p>
-        <label className="field-label">{t("support.subjectLabel", { defaultValue: "Subject" })}</label>
-        <input
-          className="input"
-          value={subject}
-          onChange={(e) => setSubject(e.target.value)}
-          autoFocus
-        />
-        <label className="field-label" style={{ marginTop: "var(--space-3)" }}>
-          {t("support.messageLabel", { defaultValue: "Details" })}
-        </label>
-        <textarea
-          className="input"
-          rows={5}
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          placeholder={t("report.messagePlaceholder", {
-            defaultValue: "What were you trying to do when it failed?",
-          })}
-        />
-        {err && <div className="card error" style={{ marginTop: "var(--space-2)" }}>{err}</div>}
-        <div className="modal-actions">
-          <Button onClick={onClose}>{t("common.cancel")}</Button>
+      <div
+        className="modal"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-label={t("report.title")}
+        style={{ maxWidth: 520 }}
+      >
+        <div className="modal-head">
+          <strong>{t("report.title")}</strong>
+          <Button size="icon" onClick={onClose} aria-label={t("common.close")}>
+            <X size={16} />
+          </Button>
+        </div>
+        <div className="modal-body">
+          <p style={{ color: "var(--muted)", fontSize: "var(--text-sm)", margin: "0 0 var(--space-3)" }}>
+            {t("report.lede")}
+          </p>
+          <label className="field-label">{t("support.subjectLabel")}</label>
+          <input
+            className="input"
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            autoFocus
+          />
+          <label className="field-label" style={{ marginTop: "var(--space-3)" }}>
+            {t("support.messageLabel")}
+          </label>
+          <textarea
+            className="input"
+            rows={5}
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder={t("report.messagePlaceholder")}
+          />
+          {err && <div className="card error" style={{ marginTop: "var(--space-3)" }}>{err}</div>}
+        </div>
+        <div className="modal-foot">
+          <Button variant="ghost" onClick={onClose}>{t("common.cancel")}</Button>
           <Button variant="primary" onClick={() => void submit()} disabled={busy || !subject.trim()}>
-            {t("report.send", { defaultValue: "Send to support" })}
+            {t("report.send")}
           </Button>
         </div>
       </div>

@@ -830,7 +830,7 @@ function RunFailureBanner({
               }}
             >
               <LifeBuoy size={14} style={{ flexShrink: 0 }} />
-              {t("runDetail.reportProblem", { defaultValue: "Report a problem" })}
+              {t("runDetail.reportProblem")}
             </button>
           )}
           {/* Fallback human channel: the operator-configured support contact
