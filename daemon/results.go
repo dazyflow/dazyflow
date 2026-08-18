@@ -337,39 +337,12 @@ func (s *Service) boardExists(ctx context.Context, db *sql.DB, name string) bool
 
 // --- HTTP handlers ----------------------------------------------------
 
-// boardScope resolves the (tenant, workspace) a /me/boards request targets
-// — ?tenant=/?workspace= with a fallback to the principal's binding, like
-// listFlowsMe. Unlike the flows surface (where the service re-checks
+// boardScope is resolveScope for /me/boards. The cross-scope guard matters
+// most on this surface: unlike the flows surface (where the service re-checks
 // permissions per flow), the board service just opens whatever sandbox dir
-// it's handed, so the cross-scope guard MUST live here: a workspace-bound
-// principal cannot read another workspace's store by passing ?tenant=other.
-// Writes the error envelope and returns ok=false when the handler should
-// stop.
+// it's handed, so this is the only barrier.
 func (h *HTTPGateway) boardScope(rw http.ResponseWriter, r *http.Request, p core.Principal) (string, string, bool) {
-	tenant := r.URL.Query().Get("tenant")
-	workspace := r.URL.Query().Get("workspace")
-	if tenant == "" {
-		tenant = p.Tenant
-	}
-	if workspace == "" {
-		workspace = p.Workspace
-	}
-	if tenant == "" || workspace == "" {
-		writeAPIError(rw, http.StatusBadRequest, "missing_scope",
-			"tenant and workspace required (no principal binding)")
-		return "", "", false
-	}
-	if p.Tenant != "" && tenant != p.Tenant && !isPlatformAdmin(p) {
-		writeAPIError(rw, http.StatusForbidden, "forbidden_scope",
-			fmt.Sprintf("cannot read boards in tenant %q (principal is bound to %q)", tenant, p.Tenant))
-		return "", "", false
-	}
-	if p.Workspace != "" && workspace != p.Workspace && !isPlatformAdmin(p) {
-		writeAPIError(rw, http.StatusForbidden, "forbidden_scope",
-			fmt.Sprintf("cannot read boards in workspace %q (principal is bound to %q)", workspace, p.Workspace))
-		return "", "", false
-	}
-	return tenant, workspace, true
+	return h.resolveScope(rw, r, p, "read boards in")
 }
 
 // writeBoardError maps the board service sentinels onto the structured

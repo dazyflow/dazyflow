@@ -76,12 +76,14 @@ func (h *HTTPGateway) readFlowID(rw http.ResponseWriter, r *http.Request, p core
 	return tenant, workspace, id, true
 }
 
-// resolveTenantWorkspaceScope applies the /me/flows scope rule: ?tenant=
+// resolveScope resolves the (tenant, workspace) a request targets: ?tenant=
 // and ?workspace= override the principal's binding, and both must resolve to
-// non-empty. On a missing binding it writes a 400 "missing_scope" envelope
-// and returns ok=false. Shared by the workspace-scoped /me listings
-// (listFlowsMe, suggestionsMe).
-func (h *HTTPGateway) resolveTenantWorkspaceScope(rw http.ResponseWriter, r *http.Request, p core.Principal) (tenant, workspace string, ok bool) {
+// non-empty (400 "missing_scope" otherwise). A scoped principal cannot widen
+// past its binding — naming another tenant or workspace is a 403
+// "forbidden_scope", where action names the attempt ("act on", "read boards
+// in"). Platform admins carry no binding and are exempt. Writes the error
+// envelope and returns ok=false when the handler should stop.
+func (h *HTTPGateway) resolveScope(rw http.ResponseWriter, r *http.Request, p core.Principal, action string) (tenant, workspace string, ok bool) {
 	tenant = r.URL.Query().Get("tenant")
 	workspace = r.URL.Query().Get("workspace")
 	if tenant == "" {
@@ -95,7 +97,32 @@ func (h *HTTPGateway) resolveTenantWorkspaceScope(rw http.ResponseWriter, r *htt
 			"tenant and workspace required (no principal binding)")
 		return "", "", false
 	}
+	if isPlatformAdmin(p) {
+		return tenant, workspace, true
+	}
+	if p.Tenant != "" && tenant != p.Tenant {
+		writeAPIError(rw, http.StatusForbidden, "forbidden_scope",
+			fmt.Sprintf("cannot %s tenant %q (principal is bound to %q)", action, tenant, p.Tenant))
+		return "", "", false
+	}
+	// p.Workspace is set on workspace-scoped keys but empty on tenant-admin
+	// keys; the latter can act on any workspace in their tenant.
+	if p.Workspace != "" && workspace != p.Workspace {
+		writeAPIError(rw, http.StatusForbidden, "forbidden_scope",
+			fmt.Sprintf("cannot %s workspace %q (principal is bound to %q)", action, workspace, p.Workspace))
+		return "", "", false
+	}
 	return tenant, workspace, true
+}
+
+// resolveTenantWorkspaceScope is resolveScope for the workspace-scoped /me
+// listings (listFlowsMe, suggestionsMe) and the /me/share handlers. Those
+// service methods re-check with core.RequireWorkspace, so the guard here is
+// defense in depth — but rejecting at the boundary keeps the rule in one
+// place, so a future handler that reaches a store directly (as the board
+// service does) can't silently inherit a cross-tenant read.
+func (h *HTTPGateway) resolveTenantWorkspaceScope(rw http.ResponseWriter, r *http.Request, p core.Principal) (string, string, bool) {
+	return h.resolveScope(rw, r, p, "act on")
 }
 
 // loadFlowForRequest resolves the {flow_id} path parameter, loads the flow's
