@@ -135,6 +135,18 @@ func TestPreferences_ThemeAndLanguageRoundTrip(t *testing.T) {
 	if got.Theme != "light" {
 		t.Errorf("language PUT clobbered theme to %q, want light", got.Theme)
 	}
+
+	// "system" (follow the OS) is the web's default choice and must round-trip
+	// like any other value — if it were rejected, or silently stored as "",
+	// picking System would never roam to the user's other devices.
+	rw = bearerDo(t, h, token, "PUT", "/api/v1/me/preferences",
+		map[string]any{"theme": "system"})
+	if rw.Code != http.StatusOK {
+		t.Fatalf("PUT theme=system status=%d body=%s", rw.Code, rw.Body.String())
+	}
+	if got = getPrefs(t, h, token); got.Theme != "system" {
+		t.Errorf("theme=%q, want system", got.Theme)
+	}
 }
 
 // Invalid theme / language values are rejected before anything is

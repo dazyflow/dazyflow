@@ -3,8 +3,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Bell, Moon, ShieldCheck, Sun } from "lucide-react";
-import { applyTheme, getTheme, type ThemeMode } from "../theme";
+import { Bell, Monitor, Moon, ShieldCheck, Sun } from "lucide-react";
+import { applyTheme, getThemeMode, type ThemeMode } from "../theme";
 import { useAuth } from "../auth";
 import { api, APIError, type TOTPSetup, type TOTPStatus } from "../api";
 import { explainApiError } from "../lib/explainApiError";
@@ -29,8 +29,11 @@ export function Settings() {
   const currentLang = i18n.resolvedLanguage ?? i18n.language ?? "en";
 
   // Theme is applied imperatively (data-theme on <html>); keep a local
-  // mirror just to drive the selected-state on the two cards.
-  const [theme, setTheme] = useState<ThemeMode>(getTheme());
+  // mirror just to drive the selected-state on the three cards. This
+  // mirrors the user's CHOICE ("system" included), not the resolved
+  // dark/light — otherwise picking System would light up whichever of
+  // Dark/Light the OS happens to be on.
+  const [theme, setTheme] = useState<ThemeMode>(getThemeMode());
   const pickTheme = (mode: ThemeMode) => {
     // Apply locally first (instant, and refreshes the localStorage boot
     // cache), then persist to the account so the choice roams to other
@@ -60,6 +63,19 @@ export function Settings() {
             <label>{t("appSettings.themeLabel")}</label>
           </div>
           <div className="theme-choice">
+            {/* System first, and the default: it's the option that needs no
+                decision from the user, so it leads. */}
+            <button
+              type="button"
+              className={"theme-option" + (theme === "system" ? " active" : "")}
+              aria-pressed={theme === "system"}
+              onClick={() => pickTheme("system")}
+            >
+              <span className="theme-swatch theme-swatch-system" aria-hidden="true">
+                <Monitor size={16} />
+              </span>
+              <span className="theme-option-label">{t("appSettings.themeSystem")}</span>
+            </button>
             <button
               type="button"
               className={"theme-option" + (theme === "dark" ? " active" : "")}

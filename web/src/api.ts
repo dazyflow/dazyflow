@@ -235,11 +235,14 @@ export type TOTPSetup = {
 // devices. Values are fully resolved (the server flattens its internal
 // "unset = default" notification tri-state); theme/language are "" when
 // the user has made no explicit choice and the client should fall back
-// to its device/browser default.
+// to its device/browser default. "system" is that same fallback made
+// EXPLICIT — a user who deliberately picked "follow my OS" — so it roams
+// like any other choice; "" is only ever what accounts predating the
+// picker still hold.
 export type Preferences = {
   email_on_flow_failure: boolean;
   email_on_support_reply: boolean;
-  theme: "dark" | "light" | "";
+  theme: "system" | "dark" | "light" | "";
   language: string;
 };
 

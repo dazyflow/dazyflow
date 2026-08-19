@@ -25,6 +25,9 @@
   padding-right: env(safe-area-inset-right);
   padding-bottom: env(safe-area-inset-bottom);
   padding-left: env(safe-area-inset-left);
+  /* The sidebar track width .body's grid reads. Flipped to the rail width
+     when the nav is collapsed (below). */
+  --sidebar-current: var(--sidebar-w);
 }
 
 /* Top bar */
@@ -53,15 +56,7 @@
 .topbar .brand:hover .brand-title {
   color: var(--accent);
 }
-.topbar .brand-mark {
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  font-family: var(--font-mono);
-  font-weight: 700;
-  letter-spacing: -0.5px;
-}
+
 .topbar .brand-mark-img {
   display: inline-block;
   width: 24px;
@@ -149,6 +144,10 @@
   gap: var(--space-2);
   color: var(--muted);
   font-size: var(--text-md);
+  /* The right-hand cluster (org switcher, flow menu) must shrink rather than
+     push the topbar past the viewport. min-width:0 lets it compress, and the
+     org-name label ellipsizes instead of forcing the bar wider. */
+  min-width: 0;
 }
 .topbar .user .who {
   font-weight: 500;
@@ -161,12 +160,6 @@
   .topbar .shortcuts-help {
     display: none;
   }
-}
-/* The right-hand cluster (org switcher, flow menu) must shrink rather than
-   push the topbar past the viewport. min-width:0 lets it compress, and the
-   org-name label ellipsizes instead of forcing the bar wider. */
-.topbar .user {
-  min-width: 0;
 }
 .topbar .org-switcher-trigger {
   min-width: 0;
@@ -190,9 +183,6 @@
   grid-template-columns: var(--sidebar-current) minmax(0, 1fr);
   min-height: 0;
   transition: grid-template-columns 180ms ease;
-}
-.app-shell {
-  --sidebar-current: var(--sidebar-w);
 }
 .app-shell[data-nav-collapsed="true"] {
   --sidebar-current: var(--sidebar-rail-w);
@@ -243,6 +233,8 @@
   justify-content: center;
   gap: 0;
   padding: var(--space-2);
+  /* Anchors the approvals badge, which floats over the icon in this mode. */
+  position: relative;
 }
 .sidebar[data-collapsed="true"] .nav-label,
 .sidebar[data-collapsed="true"] .group-label {
@@ -257,9 +249,6 @@
   min-width: 16px;
   padding: 1px var(--space-1);
   line-height: 13px;
-}
-.sidebar[data-collapsed="true"] a {
-  position: relative;
 }
 /* Pushes the collapse-arrow to the bottom of the rail by absorbing the
    remaining flex space above it. */
@@ -397,10 +386,7 @@
   border-radius: 3px;
   flex-shrink: 0;
 }
-.tenant-pop-glyph {
-  display: inline-flex;
-  align-items: center;
-}
+
 /* Shared icon-upload control (flow + org settings). */
 .icon-upload {
   display: flex;
@@ -999,12 +985,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.dash-run-error {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--danger);
-  flex-shrink: 0;
-}
+
 .dash-run-time {
   color: var(--faint);
   font-size: var(--text-xs);
@@ -1079,11 +1060,7 @@
 .flow-schedule.is-paused .flow-schedule-status {
   color: var(--faint);
 }
-.flow-schedule-cadence {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--ink);
-}
+
 .flow-schedule-status {
   flex: 1;
   min-width: 0;
@@ -1127,15 +1104,7 @@
   padding: var(--space-1);
   z-index: 110;
 }
-.workspace-pop-head {
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--text-xs);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--faint);
-  border-bottom: 1px solid var(--border);
-  margin-bottom: var(--space-1);
-}
+
 .workspace-pop-row {
   display: block;
   width: 100%;
@@ -1160,12 +1129,7 @@
   font-family: var(--font-sans);
   display: block;
 }
-.workspace-pop-id {
-  display: block;
-  margin-top: var(--space-0);
-  font-size: var(--text-xs);
-  color: var(--muted);
-}
+
 .workspace-pop-sep {
   height: 1px;
   background: var(--border);
@@ -1275,10 +1239,11 @@
    choice reads visually (a dark swatch vs a light one). */
 .theme-choice {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-3);
 }
 .theme-option {
-  flex: 1;
+  flex: 1 1 8rem;
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -1316,6 +1281,12 @@
 .theme-swatch-light {
   background: #ffffff;
   color: #6d28d9;
+}
+/* System follows the OS, so its swatch shows both canvases split down
+   the middle rather than claiming either one. */
+.theme-swatch-system {
+  background: linear-gradient(105deg, #140d30 0 50%, #ffffff 50% 100%);
+  color: #9f83fe;
 }
 .theme-option-label {
   font-size: var(--text-base);
@@ -1418,26 +1389,7 @@
   border-radius: var(--r-2, 12px);
   object-fit: cover;
 }
-.signin-tabs {
-  display: flex;
-  gap: var(--space-1);
-  margin-bottom: var(--space-3);
-  border-bottom: 1px solid var(--border);
-}
-.signin-tabs button {
-  background: none;
-  border: none;
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--text-md);
-  color: var(--muted);
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-}
-.signin-tabs button.active {
-  color: var(--text);
-  border-bottom-color: var(--accent, currentColor);
-}
+
 .signin label {
   display: block;
   font-size: var(--text-md);
@@ -1630,17 +1582,7 @@
   width: 100%;
   padding: var(--space-5);
 }
-.welcome-sub {
-  color: var(--muted);
-  margin-bottom: var(--space-4);
-}
-.welcome-sub code {
-  background: var(--surface-2, rgba(255,255,255,0.05));
-  padding: 1px var(--space-1h);
-  border-radius: 3px;
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-}
+
 /* "Continue where you left off" resume card — the most-recent flow,
    pulled from localStorage. Reads as a prominent button at the top of
    the welcome screen. */
@@ -1686,135 +1628,17 @@
   color: var(--muted);
   flex-shrink: 0;
 }
-.welcome-goals {
-  margin: var(--space-4) 0 var(--space-3);
-}
-.welcome-goals-head {
-  font-size: var(--text-base);
-  font-weight: 600;
-  margin-bottom: var(--space-2);
-}
+
 .welcome-intro {
   margin: var(--space-4) 0 var(--space-3);
   font-size: var(--text-base);
 }
-/* Featured "fastest start" banner sits above the goal grid and deep-links
-   to the one zero-setup template (daily ntfy push). Accent border + tint
-   so a brand-new owner's eye lands here first — the goal cards below mostly
-   route to integration-gated templates. Layout mirrors .welcome-mcp. */
-.welcome-featured {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  margin: 0 0 var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--accent);
-  border-radius: var(--r-3);
-  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
-  text-decoration: none;
-  color: inherit;
-  cursor: pointer;
-  transition: border-color 120ms, transform 120ms, background 120ms;
-}
-.welcome-featured:hover {
-  transform: translateY(-1px);
-  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
-  text-decoration: none;
-}
-.welcome-featured-icon {
-  display: inline-flex;
-  color: var(--accent);
-  flex-shrink: 0;
-}
-.welcome-featured-body {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-0);
-}
-.welcome-featured-title {
-  font-weight: 600;
-  font-size: var(--text-base);
-}
-.welcome-featured-desc {
-  color: var(--muted);
-  font-size: var(--text-md);
-  line-height: 1.5;
-}
-.welcome-featured-cta {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1h);
-  flex-shrink: 0;
-  font-weight: 600;
-  font-size: var(--text-base);
-  color: var(--accent);
-}
-/* Goal cards mirror the Apps index cards (.integration-card): a surface
-   card with an icon + title head row and a description below. */
-.welcome-goal-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: var(--space-3);
-}
-.welcome-goal {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-4);
-  border: 1px solid var(--border);
-  border-radius: var(--r-3);
-  background: var(--surface);
-  text-decoration: none;
-  color: inherit;
-  cursor: pointer;
-  transition: border-color 120ms, transform 120ms;
-}
-.welcome-goal:hover {
-  border-color: var(--accent);
-  transform: translateY(-1px);
-  text-decoration: none;
-}
-.welcome-goal-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-.welcome-goal-icon {
-  display: inline-flex;
-  color: var(--accent);
-  flex-shrink: 0;
-}
-.welcome-goal-title {
-  font-weight: 600;
-  font-size: var(--text-lg);
-}
-.welcome-goal-desc {
-  font-size: var(--text-md);
-  color: var(--muted);
-  line-height: 1.5;
-}
+
 /* "More for developers →" lives below the three main goal cards as
    a quiet inline link. Visual weight stays low so a non-tech buyer's
    eye still lands on the cards, but a developer can still find the
    tech-flavoured templates without hunting through the whole gallery. */
-.welcome-goal-dev {
-  margin-top: var(--space-2);
-  font-size: var(--text-sm);
-}
-.welcome-goal-dev a {
-  color: var(--muted);
-  text-decoration: none;
-}
-.welcome-goal-dev a:hover {
-  color: var(--accent);
-}
-.welcome-or {
-  color: var(--muted);
-  font-size: var(--text-md);
-  margin: var(--space-3) 0 0;
-}
+
 .welcome-mcp {
   display: flex;
   align-items: center;
@@ -1996,27 +1820,6 @@
   color: var(--muted);
 }
 
-.welcome-steps {
-  list-style: none;
-  padding: 0;
-  margin: var(--space-4) 0;
-}
-.welcome-steps > li {
-  border-top: 1px solid var(--border);
-  padding: var(--space-4) 0;
-}
-.welcome-steps > li:last-child {
-  border-bottom: 1px solid var(--border);
-}
-.welcome-steps h2 {
-  font-size: var(--text-lg);
-  margin: 0 0 var(--space-1);
-}
-.welcome-steps p {
-  color: var(--muted);
-  margin: 0 0 var(--space-3);
-  font-size: var(--text-base);
-}
 /* These CTAs are <Link> anchors, so they don't inherit the global
    button {} rules — mirror those tokens here so they read as the app's
    standard buttons rather than a one-off welcome-only style. */
@@ -2048,11 +1851,6 @@
 .welcome-cta.primary:hover {
   background: var(--btn-hover);
   box-shadow: var(--glow-accent-hover);
-}
-.welcome-foot {
-  color: var(--faint);
-  font-size: var(--text-sm);
-  margin-top: var(--space-3);
 }
 
 /* Templates gallery: a responsive grid of forkable workflows.
@@ -2190,17 +1988,7 @@
 .connections {
   margin: var(--space-4) 0 var(--space-6);
 }
-.connections-head {
-  margin: 0 0 var(--space-1);
-  font-size: var(--text-xl);
-}
-.connections-sub {
-  margin: 0 0 var(--space-4);
-  color: var(--muted);
-  font-size: var(--text-md);
-}
-.connections-disabled,
-.connections-empty,
+
 .credentials-empty {
   color: var(--muted);
   font-size: var(--text-md);
@@ -2228,25 +2016,6 @@
 }
 .connections-setup-incomplete-fallback {
   font-style: italic;
-}
-/* First-time-here tile that names the two integrations most useful
-   to connect first. Visual weight a notch above the other cards via
-   the accent-tinted background, so a brand-new user's eye lands on
-   it before scanning the full provider grid. */
-.connections-first-tile {
-  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-  margin-bottom: var(--space-4);
-}
-.connections-first-tile-title {
-  margin: 0 0 var(--space-1);
-  font-size: var(--text-lg);
-}
-.connections-first-tile-body {
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--text-md);
-  line-height: 1.5;
 }
 
 /* Sign-up form hint under the password field, surfacing the 8-char
@@ -2285,113 +2054,6 @@
 }
 .link-button:hover {
   opacity: 0.8;
-}
-
-.provider-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: var(--space-3);
-}
-.provider-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-3);
-  padding: var(--space-4);
-}
-.provider-card-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-.provider-card-logo,
-.provider-card-fallback {
-  width: 32px;
-  height: 32px;
-  border-radius: 4px;
-  background: var(--surface-2, rgba(255, 255, 255, 0.06));
-  padding: var(--space-1);
-  object-fit: contain;
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--muted);
-}
-.provider-card-title {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-0);
-}
-.provider-card-title h3 {
-  margin: 0;
-  font-size: var(--text-lg);
-}
-.provider-connected {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  font-size: var(--text-xs);
-  color: var(--success);
-}
-.provider-card-blurb {
-  margin: 0;
-  font-size: var(--text-md);
-  color: var(--muted);
-  line-height: 1.5;
-  flex: 1;
-}
-.provider-accounts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1h);
-}
-.provider-account-chip {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  background: var(--surface-2, rgba(255, 255, 255, 0.05));
-  border: 1px solid var(--border);
-  padding: 1px var(--space-1) 1px var(--space-2);
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1h);
-}
-.provider-account-remove {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-0);
-  background: none;
-  border: none;
-  color: var(--faint, #8a8a8a);
-  cursor: pointer;
-  border-radius: 999px;
-}
-.provider-account-remove:hover:not(:disabled) {
-  color: var(--danger, #e5484d);
-  background: color-mix(in srgb, var(--danger, #e5484d) 14%, transparent);
-}
-.provider-account-chip-stale {
-  border-color: var(--warn, #d4a017);
-  background: color-mix(in srgb, var(--warn, #d4a017) 12%, transparent);
-}
-.provider-account-stale-pill {
-  font-family: var(--font-sans);
-  font-size: var(--text-2xs);
-  margin-left: var(--space-1h);
-  padding: 0 var(--space-1h);
-  border-radius: 999px;
-  background: var(--warn, #d4a017);
-  color: white;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.provider-connect {
-  margin-top: auto;
-  align-self: flex-start;
 }
 
 /* ----- Credentials manager ----- */
@@ -3088,21 +2750,7 @@ button.warning:hover:not(:disabled) {
   border-radius: 999px;
   font-family: var(--font-mono);
 }
-.template-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-}
-.template-tag {
-  font-size: var(--text-2xs);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  background: var(--surface-2, rgba(255,255,255,0.05));
-  border: 1px solid var(--border);
-  padding: var(--space-0) var(--space-2);
-  border-radius: 999px;
-  color: var(--faint);
-}
+
 .template-cta {
   margin-top: var(--space-2);
   align-self: flex-start;
@@ -3888,7 +3536,6 @@ button.warning:hover:not(:disabled) {
   font-style: italic;
 }
 
-
 /* Editor layout: canvas | inspector. The catalog used to live to the
    left; it's been replaced by the Ctrl+K quick-drop palette + a toolbar
    button, so this is a two-column grid now. */
@@ -3962,10 +3609,6 @@ button.warning:hover:not(:disabled) {
   background: var(--surface);
   border-left: 1px solid var(--border);
   min-height: 0;
-}
-/* Animate the canvas resize in step with the inspector slide. */
-.editor .canvas > .react-flow {
-  transition: width 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* ===== Motion: professional micro-animations ==============================
@@ -4261,16 +3904,7 @@ button.warning:hover:not(:disabled) {
   height: 15px;
   object-fit: contain;
 }
-.editor-add-drop-kbd {
-  font-family: var(--font-mono);
-  font-size: var(--text-2xs);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 1px 5px;
-  color: var(--faint);
-  margin-left: var(--space-1);
-}
+
 .editor .canvas {
   position: relative;
   min-height: 0;
@@ -4288,10 +3922,12 @@ button.warning:hover:not(:disabled) {
   container: editor-canvas / inline-size;
 }
 /* ReactFlow's outer div is a direct child of .canvas; tell it to fill
-   the space below the toolbar. */
+   the space below the toolbar, and animate its resize in step with the
+   inspector slide. */
 .editor .canvas > .react-flow {
   flex: 1;
   min-height: 0;
+  transition: width 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .panel-head {
@@ -4306,109 +3942,6 @@ button.warning:hover:not(:disabled) {
   text-transform: uppercase;
 }
 
-/* Catalog */
-.catalog-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--space-3);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-.catalog-search {
-  padding: var(--space-3);
-  border-bottom: 1px solid var(--border);
-}
-.catalog-group h3 {
-  margin: 0 0 var(--space-2) 0;
-  font-size: var(--text-xs);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--faint);
-}
-/* Header row wraps the collapse-toggle button and the per-integration
-   "info" link side by side. They can't nest (a <Link> inside a
-   <button> is invalid HTML), so a flex row separates the two. */
-.catalog-group-header-row {
-  display: flex;
-  align-items: center;
-  margin: 0 0 var(--space-2) 0;
-  border-radius: var(--r-2);
-}
-.catalog-group-header-row:hover {
-  background: var(--surface-2);
-}
-.catalog-group-header-row:hover .catalog-group-header {
-  background: transparent; /* the row owns the hover bg now */
-  color: var(--ink);
-}
-.catalog-group-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1h);
-  flex: 1;
-  background: none;
-  border: none;
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--r-2);
-  cursor: pointer;
-  color: var(--muted);
-  text-align: left;
-}
-.catalog-learn-more {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  margin-right: var(--space-2);
-  border-radius: 4px;
-  color: var(--faint);
-  text-decoration: none;
-  flex-shrink: 0;
-}
-.catalog-learn-more:hover {
-  background: var(--surface);
-  color: var(--ink);
-}
-.catalog-group-header:hover {
-  background: var(--surface-2);
-  color: var(--ink);
-}
-.catalog-group-label {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  flex: 1;
-}
-.catalog-group-count {
-  font-size: var(--text-xs);
-  color: var(--faint);
-  background: var(--surface-2);
-  padding: 1px var(--space-1h);
-  border-radius: 999px;
-}
-/* Integration icon in the section header, sized between chevron and
-   label. Keeps branded logos at their natural color. */
-.catalog-integration-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
-}
-/* Sub-headings inside the Standard library group: a small uppercase
-   label that splits Flow control / Files / Triggers apart. */
-.catalog-subhead {
-  font-size: var(--text-2xs);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--faint);
-  margin: var(--space-1) var(--space-1) var(--space-1h);
-}
-.catalog-group-body {
-  padding: 0;
-}
 /* Tiny capability pill on the right of each drop row. */
 .cat-pill {
   font-size: var(--text-2xs);
@@ -4420,43 +3953,6 @@ button.warning:hover:not(:disabled) {
   border-radius: 999px;
   flex-shrink: 0;
   text-transform: lowercase;
-}
-.module-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-2);
-  cursor: grab;
-  user-select: none;
-  transition: border-color 120ms, transform 120ms;
-}
-.module-row:hover {
-  border-color: var(--accent);
-  transform: translateY(-1px);
-}
-.module-row .icon {
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  border-radius: var(--r-2);
-  flex-shrink: 0;
-  color: var(--accent-ink);
-}
-.module-row .name {
-  font-weight: 500;
-  font-size: var(--text-md);
-  color: var(--ink);
-  line-height: 1.2;
-}
-.module-row .meta {
-  color: var(--faint);
-  font-size: var(--text-xs);
-  font-family: var(--font-mono);
-  margin-top: var(--space-0);
 }
 
 /* Inspector */
@@ -4982,21 +4478,7 @@ button.warning:hover:not(:disabled) {
 .dz-node.config-err {
   border-color: var(--danger);
 }
-.dz-node-config {
-  position: absolute;
-  top: -7px;
-  right: 15px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--danger);
-  color: #fff;
-  border: 1px solid var(--surface);
-  z-index: 2;
-}
+
 /* Needs-setup: a drop whose connection (OAuth account / API key / service
    connection) isn't configured yet. Distinct from config-err (missing params,
    red) and lint-warn (amber icon) — an amber dashed border plus a clickable
@@ -5452,7 +4934,6 @@ button.warning:hover:not(:disabled) {
 /* Branded icons (e.g. Git's official orange mark) carry their own
    colour and need no gradient backdrop — render them flush. */
 .dz-node .icon.branded,
-.module-row .icon.branded,
 .config-checklist-item .icon.branded {
   background: transparent !important;
   color: inherit;
@@ -5462,13 +4943,11 @@ button.warning:hover:not(:disabled) {
    constrained to 100% × 100% so a 32×32 source looks right inside
    the 28px node icon box and the 32px module-row box. */
 .dz-node .icon.brand-logo,
-.module-row .icon.brand-logo,
 .config-checklist-item .icon.brand-logo {
   background: transparent !important;
   padding: 0;
 }
 .dz-node .icon.brand-logo img,
-.module-row .icon.brand-logo img,
 .config-checklist-item .icon.brand-logo img {
   width: 100%;
   height: 100%;
@@ -5499,11 +4978,7 @@ img[src$="/brands/smhi.svg"] {
 /* Integration-header logos in the catalog tree sit inside the 20px
    header icon slot. object-fit keeps them readable when the source
    isn't square. */
-.catalog-integration-logo {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
+
 .dz-node .label {
   font-weight: 500;
   color: var(--ink);
@@ -5693,87 +5168,13 @@ img[src$="/brands/smhi.svg"] {
   background: transparent !important;
 }
 
-/* Pipeline log: sits as a flex sibling at the bottom of the canvas so
-   the React Flow area gets `height: 100% - log height` instead of
-   being silently covered by the bar. The earlier absolute-positioned
-   variant ate ~30px of the canvas every render. */
-.pipeline-log {
-  background: var(--surface);
-  border-top: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-}
-.pipeline-log-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--space-1) var(--space-3);
-  background: var(--surface-2);
-  border-bottom: 1px solid var(--border);
-  font-size: var(--text-sm);
-}
-.pipeline-log-bar button {
-  font-size: var(--text-sm);
-}
-.pipeline-log-body {
-  padding: var(--space-2);
-}
-.pipeline-log-body .live-console {
-  height: 240px;
-}
-.pipeline-log .muted {
-  color: var(--faint);
-}
-.pipeline-log-empty {
-  padding: var(--space-3);
-  color: var(--faint);
-  font-size: var(--text-sm);
-  font-style: italic;
-  text-align: center;
-}
-.pipeline-log-bar button[disabled] {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
 /* Admin stub */
 .admin-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: var(--space-4);
 }
-/* Marketplace admin page */
-.mk-grid2 {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-2);
-}
-.mk-grid3 {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: var(--space-2);
-}
-.mk-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1h);
-}
-.mk-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-.mk-id {
-  font-family: var(--font-mono);
-  font-size: var(--text-md);
-}
-.mk-row .sub {
-  flex: 1;
-}
+
 /* Small uppercase section heading that groups the admin cards
    (Organization vs Platform). Carries the scope so the cards don't need
    to spell it out. */
@@ -5791,42 +5192,7 @@ img[src$="/brands/smhi.svg"] {
 /* Advanced disclosure: a full-width header row that toggles the
    rarely-used admin cards. Styled like the group label it replaces, but
    clickable, with a chevron and an inline hint. */
-.admin-advanced-toggle {
-  display: flex;
-  align-items: center;
-  /* The global button{} rule centers flex content; this is a section
-     header, so pin the chevron + label to the left. */
-  justify-content: flex-start;
-  gap: var(--space-2);
-  width: 100%;
-  margin: var(--space-5) 0 var(--space-3);
-  padding: 0;
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--faint);
-  text-align: left;
-}
-.admin-advanced-toggle:hover {
-  color: var(--ink);
-}
-.admin-advanced-label {
-  font-size: var(--text-xs);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.admin-advanced-hint {
-  text-transform: none;
-  letter-spacing: normal;
-  font-weight: 400;
-}
-@media (max-width: 768px) {
-  /* The hint would crowd the row on a phone — the label + chevron carry it. */
-  .admin-advanced-hint {
-    display: none;
-  }
-}
+
 .admin-card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -6480,38 +5846,6 @@ img[src$="/brands/smhi.svg"] {
    doesn't try to click in and type. The Lock glyph + label name
    the credential; Set-up and Replace sit as link-buttons on the
    right. */
-.sf-credential-chip {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) 10px;
-  border-radius: var(--r-2);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-  border: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent);
-  font-size: var(--text-md);
-  color: var(--ink);
-  min-height: 32px;
-}
-.sf-credential-chip-glyph {
-  color: var(--accent);
-  flex-shrink: 0;
-}
-.sf-credential-chip-label {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.sf-credential-chip-label code,
-.sf-credential-chip-label {
-  font-family: inherit;
-}
-.sf-credential-chip-actions {
-  display: inline-flex;
-  gap: var(--space-3);
-  flex-shrink: 0;
-}
 
 .sf-object {
   border: 1px solid var(--border);
@@ -6851,7 +6185,7 @@ img[src$="/brands/smhi.svg"] {
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--text-md);
   line-height: 1;
   border-radius: 3px;
 }
@@ -7215,90 +6549,6 @@ img[src$="/brands/smhi.svg"] {
   }
 }
 
-/* Output preview (Inspector → recent run output for selected node) */
-.output-preview {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-.output-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-.port-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-.port-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-2);
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--text-sm);
-}
-.port-card.port-error {
-  border-color: color-mix(in srgb, var(--danger) 60%, transparent);
-  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
-}
-.port-error-msg {
-  font-size: var(--text-sm);
-  color: var(--ink);
-  line-height: 1.45;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.port-error-details {
-  margin-top: var(--space-2);
-}
-.port-error-details > summary {
-  cursor: pointer;
-  user-select: none;
-  font-size: var(--text-xs);
-  color: var(--faint);
-  font-weight: 500;
-}
-.port-error-details > summary:hover {
-  color: var(--ink);
-}
-.port-error-details > .port-value {
-  margin-top: var(--space-1h);
-}
-.port-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-bottom: var(--space-1);
-}
-.port-name {
-  font-weight: 500;
-  font-size: var(--text-sm);
-  color: var(--ink);
-}
-.port-mime {
-  font-family: var(--font-mono);
-  font-size: var(--text-2xs);
-  color: var(--faint);
-  padding: 1px var(--space-1h);
-  background: var(--surface-2);
-  border-radius: var(--r-pill);
-}
-.port-value {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--ink);
-  background: var(--surface-2);
-  border-radius: var(--r-1);
-  padding: var(--space-2);
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow-x: auto;
-  max-height: 240px;
-  overflow-y: auto;
-}
-
 /* Inspector section header */
 .inspector-section {
   margin-top: var(--space-5);
@@ -7513,12 +6763,7 @@ img[src$="/brands/smhi.svg"] {
 .user-card .meta:last-child {
   margin-bottom: 0;
 }
-.user-card .perm-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-  margin-top: var(--space-2);
-}
+
 .perm-chip {
   font-family: var(--font-mono);
   font-size: var(--text-2xs);
@@ -7539,11 +6784,6 @@ img[src$="/brands/smhi.svg"] {
   gap: var(--space-2);
   align-items: flex-end;
   justify-content: flex-start;
-}
-.user-card .count-pills {
-  display: flex;
-  gap: var(--space-1h);
-  margin-top: var(--space-1);
 }
 
 /* kv-grid: a compact two-column label/value list for the platform-admin
@@ -8021,29 +7261,7 @@ a.pa-card:hover {
   border-bottom-color: var(--accent);
 }
 /* Secret scope switch (Secrets page) + flow-secret reference chips. */
-.secret-scope-switch {
-  display: inline-flex;
-  gap: var(--space-0);
-  margin: var(--space-3) 0 var(--space-2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: var(--space-0);
-  background: var(--surface-2);
-}
-.secret-scope-switch button {
-  background: transparent;
-  border: none;
-  border-radius: 6px;
-  padding: var(--space-1) var(--space-3);
-  color: var(--muted);
-  font-size: var(--text-md);
-  font-weight: 500;
-  cursor: pointer;
-}
-.secret-scope-switch button.active {
-  background: var(--surface);
-  color: var(--ink);
-}
+
 .secret-scope-help {
   color: var(--muted);
   font-size: var(--text-sm);
@@ -8178,58 +7396,6 @@ a.pa-card:hover {
   color: var(--muted);
   user-select: none;
   margin-bottom: var(--space-2);
-}
-.settings-empty {
-  padding: var(--space-4);
-  text-align: center;
-  color: var(--faint);
-  font-size: var(--text-md);
-  font-style: italic;
-  border: 1px dashed var(--border);
-  border-radius: var(--r-2);
-  margin-bottom: var(--space-3);
-}
-.settings-row {
-  display: flex;
-  gap: var(--space-2);
-  margin-top: var(--space-3);
-}
-.trigger-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  margin-bottom: var(--space-3);
-}
-.trigger-row {
-  border: 1px solid var(--border);
-  border-radius: var(--r-2);
-  padding: var(--space-3);
-  background: color-mix(in srgb, var(--surface-2) 50%, transparent);
-}
-.trigger-head {
-  display: flex;
-  align-items: center;
-  margin-bottom: var(--space-2);
-}
-.trigger-chip {
-  display: inline-block;
-  padding: var(--space-0) 10px;
-  border-radius: var(--r-pill);
-  font-size: var(--text-xs);
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-.trigger-chip.webhook {
-  background: color-mix(in srgb, var(--accent) 20%, transparent);
-  color: var(--accent);
-}
-.trigger-chip.cron {
-  background: color-mix(in srgb, var(--status-completed) 18%, transparent);
-  color: var(--status-completed);
-}
-.trigger-row .sf-field {
-  margin-bottom: 0;
 }
 
 /* Cron preset picker — chips for the five cadences, plus per-preset
@@ -8496,11 +7662,6 @@ a.pa-card:hover {
   justify-content: space-between;
   gap: var(--space-2);
   margin-bottom: var(--space-3);
-}
-.trigger-extras-note {
-  margin-top: var(--space-3);
-  padding-top: var(--space-2);
-  border-top: 1px solid var(--border);
 }
 
 .hosted-form-runs {
@@ -9077,7 +8238,7 @@ a.pa-card:hover {
    toolbar shows continuous activity rather than a static floppy. */
 .editor-toolbar .editor-save .spin,
 .editor-toolbar .editor-saving .spin {
-  animation: chat-spin 1s linear infinite;
+  animation: dz-spin 1s linear infinite;
 }
 /* The pending/saving status mirrors the calm "saved" chrome — muted, no
    button affordance — but its spinner takes the accent so it reads as
@@ -9139,14 +8300,7 @@ a.pa-card:hover {
   line-height: 1.35;
   color: var(--text);
 }
-.editor-trigger-hint-cta {
-  flex: 0 0 auto;
-  height: 30px;
-  padding: 0 var(--space-3);
-  font-size: var(--text-md);
-  white-space: nowrap;
-  pointer-events: auto; /* re-enable inside the click-through hint */
-}
+
 .editor-trigger-hint-x {
   flex: 0 0 auto;
   width: 28px;
@@ -9212,17 +8366,7 @@ a.pa-card:hover {
   align-items: center;
   justify-content: center;
 }
-/* The Ctrl+K hint sits inside the Add-drop button as a subtle key cap. */
-.editor-add-drop-kbd {
-  font-family: var(--font-mono);
-  font-size: var(--text-2xs);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 1px 5px;
-  color: var(--faint);
-  margin-left: var(--space-0);
-}
+
 /* Comment frame (#3): a resizable, titled box behind the nodes. The box
    fills its React Flow node wrapper; background/border tints are set
    inline from the frame's color. */
@@ -9410,207 +8554,27 @@ a.pa-card:hover {
   }
 }
 
-/* ───────── AI chat panel ─────────
- * Right-edge sidebar. Fixed positioning rather than flex so it
- * overlays the canvas without re-laying out React Flow (which
- * would force a re-fit and break user pan/zoom). */
-.chat-panel {
-  position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 380px;
-  max-width: 92vw;
-  background: var(--surface);
-  border-left: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  z-index: 50;
-  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.35);
-}
-.chat-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border-bottom: 1px solid var(--border);
-  font-weight: 600;
-  font-size: var(--text-md);
-}
-.chat-scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--space-3);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-.chat-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-2);
-  text-align: center;
-  color: var(--muted);
-  font-size: var(--text-md);
-  padding: var(--space-5);
-}
 /* Example-prompt chips below the empty-state copy. Soft pill style
    reads as a suggestion, not a primary CTA — the user can ignore
    them and type their own prompt. Click pre-fills the textarea. */
-.chat-empty-examples {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  width: 100%;
-  margin-top: var(--space-2);
-}
-.chat-example-chip {
-  text-align: left;
-  padding: var(--space-1h) 10px;
-  border-radius: var(--r-2);
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--muted);
-  font-size: var(--text-sm);
-  line-height: 1.4;
-  cursor: pointer;
-}
-.chat-example-chip:hover {
-  background: var(--surface-2);
-  color: var(--ink);
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
-}
-.chat-example-chip:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.chat-msg {
-  border-radius: 10px;
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--text-md);
-  line-height: 1.45;
-}
-.chat-msg.user {
-  align-self: flex-end;
-  background: color-mix(in srgb, var(--accent) 25%, transparent);
-  max-width: 85%;
-  white-space: pre-wrap;
-}
-.chat-msg.assistant {
-  align-self: flex-start;
-  background: color-mix(in srgb, var(--surface-strong, var(--border)) 35%, transparent);
-  max-width: 92%;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-.chat-msg.assistant .chat-text {
-  white-space: pre-wrap;
-}
-.chat-tool {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1h);
-  font-size: var(--text-xs);
-  color: var(--muted);
-  padding: var(--space-0) var(--space-1h);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--border) 40%, transparent);
-}
-.chat-tool.done {
-  color: var(--status-succeeded, #4a8);
-}
-.chat-tool.error {
-  color: var(--danger);
-}
-.chat-tool .spin {
-  animation: chat-spin 1.2s linear infinite;
-}
-@keyframes chat-spin {
+
+@keyframes dz-spin {
   to {
     transform: rotate(360deg);
   }
 }
-.chat-proposal {
-  border: 1px solid var(--accent);
-  border-radius: 8px;
-  padding: var(--space-3);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-.chat-proposal-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1h);
-  font-weight: 600;
-  font-size: var(--text-sm);
-}
-.chat-proposal-summary {
-  font-size: var(--text-xs);
-  color: var(--muted);
-}
-.chat-proposal-actions {
-  display: flex;
-  gap: var(--space-2);
-}
-.chat-proposal-actions button {
-  font-size: var(--text-sm);
-  padding: var(--space-1) 10px;
-}
-.chat-proposal.applied {
-  border-color: var(--status-succeeded, #4a8);
-  background: color-mix(in srgb, var(--status-succeeded, #4a8) 8%, transparent);
-}
-.chat-proposal.discarded {
-  opacity: 0.6;
-}
-.chat-meta {
-  font-size: var(--text-xs);
-  color: var(--faint);
-  font-style: italic;
-}
-.chat-meta.success {
-  color: var(--status-succeeded, #4a8);
-  font-style: normal;
-}
-.chat-error {
-  font-size: var(--text-sm);
-  color: var(--danger);
-  display: flex;
-  align-items: center;
-  gap: var(--space-1h);
-}
-.chat-input {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border-top: 1px solid var(--border);
-}
-.chat-input textarea {
-  flex: 1;
-  resize: none;
-  font-family: inherit;
-  font-size: var(--text-md);
-  padding: var(--space-2);
-}
-.chat-input button {
-  padding: var(--space-2) var(--space-3);
-}
+
 .dot.pulse {
   display: inline-block;
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: var(--accent);
-  animation: chat-pulse 1s ease-in-out infinite;
+  animation: dz-pulse 1s ease-in-out infinite;
   vertical-align: middle;
   margin-right: var(--space-1h);
 }
-@keyframes chat-pulse {
+@keyframes dz-pulse {
   50% {
     opacity: 0.3;
   }
@@ -9786,14 +8750,7 @@ a.pa-card:hover {
 .quick-palette-row-integration.faint {
   color: var(--faint);
 }
-.quick-palette-row-id {
-  font-family: var(--font-mono);
-  color: var(--faint);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-}
+
 .quick-palette-hint {
   display: flex;
   align-items: center;
@@ -9910,11 +8867,7 @@ a.pa-card:hover {
 
 /* for_each editor: the chosen step's param form sits in a subtly inset block
    under the "Run step" picker, so it reads as "the step this loop runs". */
-.for-each-step-params {
-  margin-top: var(--space-3);
-  padding-top: var(--space-3);
-  border-top: 1px dashed var(--border);
-}
+
 .for-each-hint {
   margin-top: var(--space-2);
   font-size: var(--text-sm);
@@ -10391,7 +9344,7 @@ a.pa-card:hover {
   margin: 0;
   padding: var(--space-2);
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 13px;
+  font-size: var(--text-sm);
   line-height: 1.5;
   tab-size: 2;
   white-space: pre-wrap;
@@ -10459,7 +9412,7 @@ a.pa-card:hover {
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
-.rtp-starters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
+
 /* Layout type picker (render_text) — a compact dropdown of presets. */
 .rtp-type {
   max-width: 18rem;
@@ -10695,7 +9648,7 @@ a.pa-card:hover {
 }
 .ai-step-dot {
   display: inline-flex; width: 18px; height: 18px; align-items: center; justify-content: center;
-  border-radius: 999px; font-size: 11px; flex: 0 0 auto;
+  border-radius: 999px; font-size: var(--text-2xs); flex: 0 0 auto;
   border: 1px solid var(--border);
 }
 .ai-step.done { color: var(--fg, inherit); }
@@ -10798,7 +9751,7 @@ a.pa-card:hover {
 /* AI draft-ready review step: the heads-up issues the generator returns,
    shown before the user lands in the canvas. */
 .create-draft-review { max-width: 560px; }
-.create-draft-sub { color: var(--muted); margin: 0 0 var(--space-3); }
+
 .create-draft-issues {
   list-style: none;
   margin: 0 0 var(--space-4);
@@ -10807,7 +9760,11 @@ a.pa-card:hover {
   flex-direction: column;
   gap: var(--space-2);
 }
+/* Friendly two-line draft issues: plain-language headline + raw detail. */
 .create-draft-issue {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   padding: var(--space-2) var(--space-3);
   border-radius: var(--r-2);
   border: 1px solid var(--border);
@@ -10923,8 +9880,6 @@ a.pa-card:hover {
 }
 .ai-connect-cta svg { width: 15px; height: 15px; }
 
-/* Friendly two-line draft issues: plain-language headline + raw detail. */
-.create-draft-issue { display: flex; flex-direction: column; gap: 2px; }
 .create-draft-issue-head { font-weight: 600; }
 .create-draft-issue-detail { color: var(--muted); font-size: var(--text-sm); line-height: 1.4; }
 
@@ -10998,9 +9953,7 @@ button:active,
 
 /* Loading & list settling: content fades up instead of popping in. Add the
    class to a freshly-loaded container/list. */
-.dz-fade-in {
-  animation: dz-fade-in var(--dur-3) var(--ease-out);
-}
+
 @keyframes dz-fade-in {
   from {
     opacity: 0;
@@ -11567,10 +10520,6 @@ button:active,
 }
 .dz-param-geo .geo-map {
   height: 170px;
-}
-.dz-param-note {
-  font-size: var(--text-xs);
-  color: var(--warning, #d9822b);
 }
 
 /* Email-template picker: action row + the "Preview email" modal iframe, plus

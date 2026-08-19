@@ -278,7 +278,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .getPreferences(token)
       .then((p) => {
         if (cancelled) return;
-        if (p.theme === "dark" || p.theme === "light") applyTheme(p.theme);
+        if (p.theme === "dark" || p.theme === "light" || p.theme === "system") {
+          applyTheme(p.theme);
+        }
         if (p.language && p.language !== i18n.resolvedLanguage) {
           void i18n.changeLanguage(p.language);
         }

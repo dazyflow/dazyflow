@@ -101,8 +101,15 @@ func (h *HTTPGateway) putPreferences(rw http.ResponseWriter, r *http.Request, p 
 	if !ok {
 		return
 	}
-	if body.Theme != nil && *body.Theme != "" && *body.Theme != "dark" && *body.Theme != "light" {
-		writeAPIError(rw, http.StatusBadRequest, "invalid_theme", `theme must be "dark", "light", or ""`)
+	// "system" (follow the OS) is the default choice, so it has to round-trip
+	// like any other — otherwise picking it on one device silently fails to
+	// roam and the next device keeps whatever it had cached. "" stays valid:
+	// it's what accounts predating the theme picker already hold, and the web
+	// reads it as "no explicit choice", i.e. the same thing as system.
+	if body.Theme != nil && *body.Theme != "" && *body.Theme != "system" &&
+		*body.Theme != "dark" && *body.Theme != "light" {
+		writeAPIError(rw, http.StatusBadRequest, "invalid_theme",
+			`theme must be "system", "dark", "light", or ""`)
 		return
 	}
 	if body.Language != nil && *body.Language != "" && !langPattern.MatchString(*body.Language) {

@@ -91,16 +91,27 @@
 
   /* Type scale — every font-size in the app comes from here. A raw px
      font-size in app.css or an inline style is a smell; pick the
-     nearest token instead. */
-  --text-2xs: 10px;
-  --text-xs: 11px;
-  --text-sm: 12px;
-  --text-md: 13px;
-  --text-base: 14px;
-  --text-lg: 16px;
-  --text-xl: 18px;
-  --text-2xl: 24px;
-  --text-3xl: 28px;
+     nearest token instead. (The one deliberate exception is .geo-pin,
+     a map marker glyph sized to its anchor box, not text.)
+
+     In REM, not px: px sizes ignore the reader's browser font-size
+     setting entirely, so "make text bigger" did nothing to this app.
+     Comments give the px equivalent at the 16px default root size.
+
+     The whole ramp sits one step above where it started (10/11/12/13/14
+     → 11/12/13/14/15): the old scale ran at IDE density, which reads as
+     a developer tool rather than something a non-technical user is meant
+     to be comfortable in. Layout tokens below stay in px on purpose —
+     they're structure, not reading matter. */
+  --text-2xs: 0.6875rem; /* 11px */
+  --text-xs: 0.75rem; /*    12px */
+  --text-sm: 0.8125rem; /*  13px */
+  --text-md: 0.875rem; /*   14px */
+  --text-base: 0.9375rem; /* 15px */
+  --text-lg: 1.0625rem; /*  17px */
+  --text-xl: 1.25rem; /*    20px */
+  --text-2xl: 1.5rem; /*    24px */
+  --text-3xl: 1.875rem; /*  30px */
 
   /* Spacing scale — gaps, margins and paddings come from here.
      --space-0 and --space-1h cover the hairline/chip sizes that sat
