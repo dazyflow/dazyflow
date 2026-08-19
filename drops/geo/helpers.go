@@ -61,15 +61,15 @@ var geoConnectionFields = []core.ConnectionField{
 		Placeholder: "nominatim (default)",
 	},
 	{
-		Key:         "base_url",
-		Label:       "Custom API URL",
-		Placeholder: "Optional — your self-hosted Nominatim/Photon/LocationIQ base URL",
+		Key:   "base_url",
+		Label: "Custom API URL",
+		Help:  "Optional — the base URL of your self-hosted Nominatim, Photon or LocationIQ.",
 	},
 	{
-		Key:         "api_key",
-		Label:       "API key",
-		Secret:      true,
-		Placeholder: "Required for LocationIQ; leave blank for Nominatim/Photon",
+		Key:    "api_key",
+		Label:  "API key",
+		Secret: true,
+		Help:   "Required for LocationIQ. Leave blank for Nominatim or Photon.",
 	},
 }
 

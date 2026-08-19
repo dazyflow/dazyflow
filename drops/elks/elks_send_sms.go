@@ -40,7 +40,7 @@ func init() {
 			// run time — not node params, so credentials never live in the graph.
 			// Mirrors ntfy / Home Assistant / SMTP.
 			ConnectionFields: []core.ConnectionField{
-				{Key: "api_username", Label: "API username", Required: true, Placeholder: "u… (from the 46elks dashboard)"},
+				{Key: "api_username", Label: "API username", Required: true, Placeholder: "u…", Help: "From the 46elks dashboard."},
 				{Key: "api_password", Label: "API password", Secret: true, Required: true},
 			},
 			ExecutionModel: core.ExecutionBatch,

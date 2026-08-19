@@ -43,7 +43,7 @@ func init() {
 			},
 			ConnectionFields: []core.ConnectionField{
 				{Key: "base_url", Label: "Instance URL", Required: true, Placeholder: "http://homeassistant.local:8123"},
-				{Key: "token", Label: "Long-lived access token", Secret: true, Required: true, Placeholder: "Create one in HA → Profile → Long-Lived Access Tokens"},
+				{Key: "token", Label: "Long-lived access token", Secret: true, Required: true, Help: "Create one in Home Assistant under Profile → Long-Lived Access Tokens."},
 			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,

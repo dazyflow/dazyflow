@@ -64,7 +64,7 @@ func baseURL(job core.Job) string {
 // job at run time. Shared by every action drop.
 func roaringConnectionFields() []core.ConnectionField {
 	return []core.ConnectionField{
-		{Key: "client_key", Label: "Consumer Key", Required: true, Placeholder: "from Roaring → Development → Access keys"},
+		{Key: "client_key", Label: "Consumer Key", Required: true, Help: "From the Roaring portal under Development → Access keys."},
 		{Key: "client_secret", Label: "Consumer Secret", Secret: true, Required: true},
 	}
 }

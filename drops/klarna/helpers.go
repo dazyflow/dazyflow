@@ -87,7 +87,7 @@ func baseURL(job core.Job) string {
 func klarnaConnectionFields() []core.ConnectionField {
 	return []core.ConnectionField{
 		{Key: "region", Label: "Region", Required: true, Options: regionOptions, Placeholder: "eu-playground"},
-		{Key: "api_username", Label: "API username", Required: true, Placeholder: "PK… (from the Klarna Merchant Portal)"},
+		{Key: "api_username", Label: "API username", Required: true, Placeholder: "PK…", Help: "From the Klarna Merchant Portal."},
 		{Key: "api_password", Label: "API password", Secret: true, Required: true},
 	}
 }

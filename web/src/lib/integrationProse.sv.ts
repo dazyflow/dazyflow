@@ -4,11 +4,10 @@
 import type { DescriptionMap } from "./dropText";
 
 // Swedish prose for the Apps pages: each integration's friendly description
-// and its collapsible technical notes, plus the one-line blurbs on the
-// Connections panel's OAuth providers.
+// and its collapsible technical notes.
 //
-// Keys are '<slug>.description' / '<slug>.technical_notes', and
-// 'provider.<name>.blurb'. `en` is the descriptionFingerprint of the English
+// Keys are '<slug>.description' and '<slug>.technical_notes'. `en` is the
+// descriptionFingerprint of the English
 // in integrationMeta.ts that each translation was made from — same drift guard
 // as the drop descriptions: edit the English there and the reader falls back
 // to it instead of reading a stale Swedish paragraph. That matters more here
@@ -217,26 +216,6 @@ export const SV_INTEGRATION_PROSE: DescriptionMap = {
   "postgres.technical_notes": {
     en: "5c8ce1f4",
     sv: "Anslutningsregister med pgxpool per (organisation, DSN) och lat utrensning av inaktiva anslutningar. Skicka DSN:en via ${secret.postgres_dsn} från det krypterade hemlighetslagret i stället för att bädda in den i flödets JSON; droppen secret_set kan rotera den utan att flödena ändras.",
-  },
-  "provider.fortnox.blurb": {
-    en: "ea4646dd",
-    sv: "Hantera kunder och fakturor i ditt Fortnox-konto.",
-  },
-  "provider.github.blurb": {
-    en: "20d78f18",
-    sv: "Öppna ärenden, kommentera och reagera på händelser i repot.",
-  },
-  "provider.google.blurb": {
-    en: "895dcc0d",
-    sv: "En inloggning täcker både Gmail och Google Sheets.",
-  },
-  "provider.notion.blurb": {
-    en: "0db9348d",
-    sv: "Skapa sidor och sök i dina databaser.",
-  },
-  "provider.slack.blurb": {
-    en: "2fd4fe44",
-    sv: "Lägg upp meddelanden och kör flöden från din arbetsyta.",
   },
   "slack.description": {
     en: "5ab3ab5c",

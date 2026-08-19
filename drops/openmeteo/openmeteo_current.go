@@ -41,7 +41,7 @@ func init() {
 				},
 			},
 			ConnectionFields: []core.ConnectionField{
-				{Key: "api_key", Label: "API key", Secret: true, Placeholder: "Optional — only for Open-Meteo's commercial (paid) plan. Leave blank for free non-commercial use."},
+				{Key: "api_key", Label: "API key", Secret: true, Help: "Optional — only for Open-Meteo's commercial (paid) plan. Leave blank for free non-commercial use."},
 			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,

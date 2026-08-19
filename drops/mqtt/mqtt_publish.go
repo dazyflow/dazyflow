@@ -41,7 +41,7 @@ func init() {
 			// secret. Mirrors Home Assistant (base_url + token).
 			ConnectionFields: []core.ConnectionField{
 				{Key: "broker", Label: "Broker", Required: true, Placeholder: "tcp://broker.example.com:1883"},
-				{Key: "username", Label: "Username", Placeholder: "(blank for anonymous brokers)"},
+				{Key: "username", Label: "Username", Help: "Leave blank for anonymous brokers."},
 				{Key: "password", Label: "Password", Secret: true},
 			},
 			ExecutionModel: core.ExecutionBatch,

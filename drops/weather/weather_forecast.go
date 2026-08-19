@@ -46,7 +46,7 @@ func init() {
 				},
 			},
 			ConnectionFields: []core.ConnectionField{
-				{Key: "api_key", Label: "API key", Secret: true, Required: true, Placeholder: "Your OpenWeather API key — the free plan works, no paid subscription needed"},
+				{Key: "api_key", Label: "API key", Secret: true, Required: true, Help: "Your OpenWeather API key. The free plan works — no paid subscription needed."},
 			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,

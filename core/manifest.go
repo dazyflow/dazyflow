@@ -77,12 +77,23 @@ type ConnectionRequirement struct {
 // A drop uses ConnectionFields OR RequiresConnections, whichever fits
 // its auth shape: RequiresConnections for a single secret / OAuth
 // account, ConnectionFields for an endpoint-plus-credential bundle.
+//
+// Placeholder vs Help — they are different jobs and connectors kept
+// conflating them. A PLACEHOLDER is an example of the value ("sk-ant-…",
+// "smtp.example.com"): it lives inside the input and DISAPPEARS on the first
+// keystroke, so it can only ever show the shape of the answer. HELP is the
+// instruction for finding that answer ("Create one in HA → Profile →
+// Long-Lived Access Tokens"): it renders under the field and stays put while
+// the user types, which is exactly when they need it. Guidance in a
+// placeholder is guidance that vanishes at the moment of use — and gets
+// truncated by the input width before that.
 type ConnectionField struct {
 	Key         string   `json:"key" xml:"key"`                                     // param name the drop reads (e.g. "server", "token")
 	Label       string   `json:"label" xml:"label"`                                 // human field label
 	Secret      bool     `json:"secret,omitempty" xml:"secret,omitempty"`           // mask + redact (token/password); false = plain (URL/host)
 	Required    bool     `json:"required,omitempty" xml:"required,omitempty"`       // counts toward "fully connected"
-	Placeholder string   `json:"placeholder,omitempty" xml:"placeholder,omitempty"` // example value shown in the field
+	Placeholder string   `json:"placeholder,omitempty" xml:"placeholder,omitempty"` // EXAMPLE VALUE shown in the field ("smtp.example.com") — not instructions; see Help
+	Help        string   `json:"help,omitempty" xml:"help,omitempty"`               // one line of setup guidance, rendered UNDER the input and always visible
 	Options     []string `json:"options,omitempty" xml:"options>option,omitempty"`  // when set, the field is an enum — UI renders a dropdown of these values plus a blank "default"
 }
 

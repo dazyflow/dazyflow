@@ -557,8 +557,8 @@ export function nodeStateText(text: string, lang?: string): string {
 }
 
 // integrationProse localizes one Apps-page paragraph — an integration's
-// description or technical notes, or an OAuth provider's blurb. `key` is the
-// entry to look up ("stripe.description", "provider.slack.blurb") and `english`
+// description or its collapsible technical notes. `key` is the entry to look
+// up ("stripe.description", "slack.technical_notes") and `english`
 // the copy integrationMeta.ts carries; the fingerprint guard means editing that
 // English falls back to it rather than showing a translation of the old text.
 export function integrationProse(

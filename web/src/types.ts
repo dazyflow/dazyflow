@@ -197,7 +197,13 @@ export type ConnectionField = {
   label: string;
   secret?: boolean;
   required?: boolean;
+  // An EXAMPLE of the value ("smtp.example.com"). Lives inside the input and
+  // disappears on the first keystroke, so it can only show the shape.
   placeholder?: string;
+  // One line of setup guidance ("Create one in Home Assistant under Profile →
+  // Long-Lived Access Tokens"), rendered under the input and still there while
+  // the user types — which is when they need it. See core.ConnectionField.
+  help?: string;
   // When set, the field is an enum: the UI renders a dropdown of these
   // values (plus a blank "default" choice) instead of a free-text input.
   options?: string[];

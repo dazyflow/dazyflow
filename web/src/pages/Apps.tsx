@@ -437,6 +437,25 @@ export function AppDetail() {
         <IntegrationConnections drops={integrationDrops} slug={slug} name={meta.name} />
       )}
 
+      {/* Operator notes behind a disclosure — OAuth scopes, the daemon env vars
+          and webhook paths a self-hoster has to set, API version pins, token
+          rotation windows. Irrelevant to someone who just wants to connect an
+          account, and unobtainable without reading the source if it isn't
+          here, so it collapses by default rather than being cut. Same
+          shut-by-default pattern as the per-drop "Wiring details". */}
+      {meta.technical_notes && (
+        <details className="integration-notes">
+          <summary>{t("integrations.technicalNotes")}</summary>
+          <p>
+            {integrationProse(
+              `${slug}.technical_notes`,
+              meta.technical_notes,
+              i18n.language,
+            )}
+          </p>
+        </details>
+      )}
+
       <h2 className="integration-drops-head">{t("integrations.dropsHead")}</h2>
       <div className="integration-drops">
         {integrationDrops.map((d) => (
@@ -1170,6 +1189,14 @@ function ConnectionFieldsCard({
                   onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
                   autoComplete="off"
                 />
+              )}
+              {/* Where to GET the value. Under the input, not inside it, so it
+                  survives the first keystroke — this is the moment the user is
+                  off in another product's settings hunting for a token. */}
+              {f.help && (
+                <span className="connection-field-help">
+                  {connectionText(f.help, i18n.language)}
+                </span>
               )}
             </label>
           ))}

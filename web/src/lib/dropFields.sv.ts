@@ -856,7 +856,7 @@ export const SV_ENUM_LABELS: Record<string, string> = {
 // Connection-field labels and help on the Apps pages. Placeholders and
 // example values are deliberately absent — they fall through unchanged.
 export const SV_CONNECTION_TEXT: Record<string, string> = {
-  "(blank for anonymous brokers)": "(lämna tomt för anonyma mäklare)",
+  "Leave blank for anonymous brokers.": "Lämna tomt för anonyma mäklare.",
   "587 (STARTTLS) or 465 (SSL/TLS)": "587 (STARTTLS) eller 465 (SSL/TLS)",
   "API key": "API-nyckel",
   "API password": "API-lösenord",
@@ -866,7 +866,8 @@ export const SV_CONNECTION_TEXT: Record<string, string> = {
   "Broker": "Mäklare",
   "Connection security": "Anslutningssäkerhet",
   "Connection string": "Anslutningssträng",
-  "Create one in HA → Profile → Long-Lived Access Tokens": "Skapa en i HA → Profil → Long-Lived Access Tokens",
+  "Create one in Home Assistant under Profile → Long-Lived Access Tokens.":
+    "Skapa en i Home Assistant under Profil → Long-Lived Access Tokens.",
   "Custom API URL": "Egen API-URL",
   "Environment": "Miljö",
   "From address": "Från-adress",
@@ -875,22 +876,28 @@ export const SV_CONNECTION_TEXT: Record<string, string> = {
   "Long-lived access token": "Långlivad åtkomsttoken",
   "Mail server": "E-postserver",
   "Optional — only for Open-Meteo's commercial (paid) plan. Leave blank for free non-commercial use.": "Valfritt — bara för Open-Meteos kommersiella (betalda) plan. Lämna tomt för kostnadsfri, icke-kommersiell användning.",
-  "Optional — your self-hosted Nominatim/Photon/LocationIQ base URL": "Valfritt — bas-URL till din egen Nominatim/Photon/LocationIQ",
-  "PK… (from the Klarna Merchant Portal)": "PK… (från Klarna Merchant Portal)",
+  "Optional — the base URL of your self-hosted Nominatim, Photon or LocationIQ.":
+    "Valfritt — bas-URL till din egen Nominatim, Photon eller LocationIQ.",
+  "From the Klarna Merchant Portal.": "Från Klarna Merchant Portal.",
   "Password": "Lösenord",
-  "Required for LocationIQ; leave blank for Nominatim/Photon": "Krävs för LocationIQ; lämna tomt för Nominatim/Photon",
+  "Required for LocationIQ. Leave blank for Nominatim or Photon.":
+    "Krävs för LocationIQ. Lämna tomt för Nominatim eller Photon.",
   "Secret API key": "Hemlig API-nyckel",
   "Server URL": "Server-URL",
   "Username": "Användarnamn",
   "Webhook URL": "Webhook-URL",
-  "Your OpenWeather API key — the free plan works, no paid subscription needed": "Din OpenWeather-API-nyckel — den kostnadsfria planen fungerar, ingen betald prenumeration behövs",
-  "from Roaring → Development → Access keys": "från Roaring → Development → Access keys",
-  "generated in nShift Delivery → API settings": "genereras i nShift Delivery → API settings",
-  "mail server password or app password": "lösenord till e-postservern eller ett app-lösenord",
+  "Your OpenWeather API key. The free plan works — no paid subscription needed.":
+    "Din OpenWeather-API-nyckel. Den kostnadsfria planen fungerar — ingen betald prenumeration behövs.",
+  "From the Roaring portal under Development → Access keys.":
+    "Från Roaring-portalen under Development → Access keys.",
+  "Generated in nShift Delivery under API settings.":
+    "Genereras i nShift Delivery under API settings.",
+  "Your mail server password, or an app password if the provider issues one.":
+    "Lösenordet till din e-postserver, eller ett app-lösenord om leverantören utfärdar ett.",
   "starttls, implicit, or none": "starttls, implicit eller none",
   "tk_… (for protected topics)": "tk_… (för skyddade ämnen)",
   "usually your email address": "oftast din e-postadress",
-  "u… (from the 46elks dashboard)": "u… (från 46elks kontrollpanel)",
+  "From the 46elks dashboard.": "Från 46elks kontrollpanel.",
 };
 
 // The "keeps state" chip and its reset explanation on a node card.

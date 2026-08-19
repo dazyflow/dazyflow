@@ -88,7 +88,7 @@ func baseURL(job core.Job) string {
 func nshiftConnectionFields() []core.ConnectionField {
 	return []core.ConnectionField{
 		{Key: "environment", Label: "Environment", Required: true, Options: envOptions, Placeholder: "integration"},
-		{Key: "api_key", Label: "API key", Secret: true, Required: true, Placeholder: "generated in nShift Delivery → API settings"},
+		{Key: "api_key", Label: "API key", Secret: true, Required: true, Help: "Generated in nShift Delivery under API settings."},
 	}
 }
 

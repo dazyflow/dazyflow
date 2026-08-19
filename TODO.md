@@ -58,22 +58,6 @@ These aren't defects. Each needs a direction before any code moves.
       flags them as dead. They were nearly deleted in the i18n sweep. Either
       leave this note in place, or make the lookup literal so the keys are
       greppable. (`web/src/components/ConnectMcpClientModal.tsx`)
-- [ ] **`technical_notes` and `blurb` render nowhere** — `IntegrationMeta`
-      documents a collapsible "Technical details" disclosure and
-      `OAuthProviderMeta.blurb` a one-line pitch in the Connections panel, but
-      no component reads either field: ~11k characters of maintained developer
-      prose (auth schemes, env vars, API versions) and five provider blurbs are
-      dead data. Either wire the disclosure on `/apps/:slug` and the blurb into
-      the Connections panel, or delete the fields and their prose. The Swedish
-      translations exist and are fingerprinted either way, so wiring it later is
-      a render-only change. (`web/src/integrationMeta.ts`, `web/src/pages/Apps.tsx`)
-- [ ] **Connection-field `help` is dropped on the floor** — the daemon sends
-      `help` on each connection field (e.g. "usually your email address",
-      "Create one in HA → Profile → Long-Lived Access Tokens") but the web
-      `ConnectionField` type doesn't declare it and the connect form doesn't
-      render it, so the guidance a user needs mid-setup only exists over the
-      MCP. Add `help?: string` to the type and render it under the input.
-      (`web/src/types.ts`, `web/src/pages/Apps.tsx`)
 - [ ] **Stale CSS token aliases** — ~16 custom properties (`--fg`,
       `--text-muted`, `--r-md`, `--shadow-2`, `--space-2h`, …) are referenced
       only through their `var(…, fallback)` default; nothing defines them. They
@@ -145,6 +129,39 @@ re-raised.
 
 Archive, newest area first. The detail stays because the reasoning is the
 reusable part.
+
+### Apps & connections (2026-08-19)
+- [x] **Connection-field setup guidance now has a home** — the TODO said the
+      daemon sends a `help` field the web drops on the floor. It doesn't: there
+      was **no `help` field anywhere**, and the guidance was being stuffed into
+      `Placeholder` — which lives INSIDE the input and vanishes on the first
+      keystroke, exactly when someone is off in another product's settings
+      hunting for a token. One was 97 characters, so the input truncated it
+      before that. Added `core.ConnectionField.Help` (Go) with a doc comment
+      spelling out placeholder-vs-help, since 11 fields had already made the
+      same mistake; moved those 11 instructions across 14 drop files (Home
+      Assistant, nShift, Roaring, Klarna, 46elks, MQTT, SMTP, Open-Meteo,
+      OpenWeather, geo), splitting the mixed ones so Klarna keeps `PK…` as its
+      placeholder and gains "From the Klarna Merchant Portal." as help; added
+      `help?: string` to the web type and rendered it under the input through
+      the same localization hop as the label. The 14 genuine example values
+      (`sk-ant-…`, `smtp.example.com`) stayed put. Rekeyed all 11 Swedish
+      translations — they were keyed by the OLD English strings and would have
+      silently fallen back once the wording changed.
+- [x] **`technical_notes` wired, `blurb` deleted** — 29 of 33 integrations
+      carry technical notes (~11k chars) and all 29 already had fingerprinted
+      Swedish. It is real operator documentation — daemon env var names, event
+      endpoint paths, API version pins, token-rotation windows, idempotency
+      caveats — and the only way to read it was over MCP or in the source. Now
+      renders on `/apps/:slug` behind a shut-by-default disclosure, the same
+      pattern as the per-drop "Wiring details", so it is out of the way of
+      someone who just wants to connect an account.
+      `blurb` went the other way: 7 of 33 providers, one of them EMPTY, 235
+      characters total, and every provider already has a `description` doing
+      the same job. Half-populated optional prose is the worst state to leave a
+      field in — removed the field, its 6 values, its 5 Swedish translations,
+      the fingerprint-guard loop that covered it, and the stale doc comments
+      naming it.
 
 ### Localization (2026-08-19)
 - [x] **Terminology swept for consistency** — 20 English and 24 Swedish strings

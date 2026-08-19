@@ -25,7 +25,7 @@ import {
   SV_FIELD_HELP,
   SV_FIELD_TITLES,
 } from "./dropFields.sv";
-import { integrationMeta, oauthProviderMeta } from "../integrationMeta";
+import { integrationMeta } from "../integrationMeta";
 import type { Manifest } from "../types";
 
 function drop(label: string, subtitle = "", description = ""): Manifest {
@@ -319,17 +319,17 @@ describe("the params-schema surface", () => {
 });
 
 describe("integration prose", () => {
-  it("translates an integration description and a provider blurb", () => {
+  it("translates an integration description and its technical notes", () => {
     expect(
       integrationProse("stripe.description", integrationMeta.stripe.description, "sv"),
     ).toContain("Reagera på betalningar");
     expect(
       integrationProse(
-        "provider.slack.blurb",
-        oauthProviderMeta.slack.blurb,
+        "slack.technical_notes",
+        integrationMeta.slack.technical_notes as string,
         "sv",
       ),
-    ).toBe("Lägg upp meddelanden och kör flöden från din arbetsyta.");
+    ).not.toBe(integrationMeta.slack.technical_notes);
   });
 
   // This is the drift guard with teeth: integrationMeta.ts lives in this repo,
@@ -349,13 +349,6 @@ describe("integration prose", () => {
         else if (entry.en !== descriptionFingerprint(english)) {
           stale.push(`${slug}.${field}: English changed since translation`);
         }
-      }
-    }
-    for (const [name, provider] of Object.entries(oauthProviderMeta)) {
-      const entry = SV_INTEGRATION_PROSE[`provider.${name}.blurb`];
-      if (!entry) stale.push(`provider.${name}.blurb: no translation`);
-      else if (entry.en !== descriptionFingerprint(provider.blurb)) {
-        stale.push(`provider.${name}.blurb: English changed since translation`);
       }
     }
     expect(stale).toEqual([]);

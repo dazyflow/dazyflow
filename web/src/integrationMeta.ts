@@ -72,35 +72,28 @@ export function displayNameForIntegrationSlug(slug: string): string {
 export type OAuthProviderMeta = {
   name: string;
   brand_logo?: string;
-  // What connecting this unlocks, in the user's words. One short line.
-  blurb: string;
 };
 
 export const oauthProviderMeta: Record<string, OAuthProviderMeta> = {
   slack: {
     name: "Slack",
     brand_logo: "/brands/slack.svg",
-    blurb: "Post messages and run flows from your workspace.",
   },
   google: {
     name: "Google",
     brand_logo: "/brands/gmail.svg",
-    blurb: "One sign-in covers both Gmail and Google Sheets.",
   },
   github: {
     name: "GitHub",
     brand_logo: "/brands/github.svg",
-    blurb: "Open issues, comment, and react to repo events.",
   },
   notion: {
     name: "Notion",
     brand_logo: "/brands/notion.svg",
-    blurb: "Create pages and query your databases.",
   },
   fortnox: {
     name: "Fortnox",
     brand_logo: "/brands/fortnox.svg",
-    blurb: "Manage customers and invoices in your Fortnox account.",
   },
 };
 
@@ -136,7 +129,6 @@ export function oauthProviderDisplay(name: string): OAuthProviderMeta {
   return (
     oauthProviderMeta[name] ?? {
       name: integrationNameFromSlug(name),
-      blurb: "",
     }
   );
 }

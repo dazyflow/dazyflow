@@ -63,7 +63,7 @@ func init() {
 				{Key: "port", Label: "Port", Placeholder: "587 (STARTTLS) or 465 (SSL/TLS)"},
 				{Key: "tls", Label: "Connection security", Placeholder: "starttls, implicit, or none"},
 				{Key: "username", Label: "Username", Placeholder: "usually your email address"},
-				{Key: "password", Label: "Password", Secret: true, Placeholder: "mail server password or app password"},
+				{Key: "password", Label: "Password", Secret: true, Help: "Your mail server password, or an app password if the provider issues one."},
 				{Key: "from", Label: "From address", Required: true, Placeholder: "reports@example.com"},
 			},
 			Inputs: []core.Port{

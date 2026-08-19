@@ -2323,6 +2323,13 @@
   font-size: var(--text-base);
   font-weight: 600;
 }
+/* Setup guidance under a connection input. Sits below the field (not inside
+   it as a placeholder) so it is still on screen while the user types. */
+.connection-field-help {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  line-height: 1.4;
+}
 .connection-field input {
   width: 100%;
 }
@@ -2742,6 +2749,32 @@ button.warning:hover:not(:disabled) {
 /* One disclosure groups ports + params schema together. The
    summary is the only "technical" surface on a drop card by
    default; clicking expands to the full wiring contract. */
+/* Operator notes on an integration page (/apps/:slug). Shut by default and
+   quiet when open — this is reference for whoever deploys the instance, not
+   something the person connecting an account should have to read past. */
+.integration-notes {
+  margin: var(--space-4) 0 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  background: var(--surface);
+  padding: var(--space-3) var(--space-4);
+}
+.integration-notes > summary {
+  cursor: pointer;
+  font-size: var(--text-sm);
+  color: var(--muted);
+  user-select: none;
+}
+.integration-notes > summary:hover {
+  color: var(--ink);
+}
+.integration-notes > p {
+  margin: var(--space-3) 0 0;
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  color: var(--ink-soft);
+  max-width: 78ch;
+}
 .drop-card-wiring {
   margin-top: var(--space-3);
 }
