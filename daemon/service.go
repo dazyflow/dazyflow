@@ -613,12 +613,10 @@ func (s *Service) removeGitCache(tenant, ws, id string) {
 //   - Graph.ID is the handle webhook/trigger URLs and run history key off,
 //     so the copy MUST get its own. It then gets fresh trigger URLs and an
 //     empty run history for free (both are keyed by ID).
-//   - Unpublished flows still fire their triggers at HEAD (the scheduler and
-//     webhook paths fall back to HEAD via Store.LoadPublishedOrHead), so a
-//     copied cron/webhook would start firing the instant it is saved.
-//     Starting Disabled — the scheduler skips it and webhook/form endpoints
-//     reject it — makes "duplicate, then review before it goes live" the
-//     default. The user flips it on from the editor when ready.
+//   - A copy starts unpublished, so nothing fires it until the user
+//     deliberately publishes. Starting Disabled as well makes "duplicate,
+//     then review before it goes live" the default even after a publish —
+//     the user flips it on from the editor when ready.
 //
 // Permission: view on the source (enforced by LoadGraph — a source the
 // caller can't see comes back as ErrNotFound, never 403, so private flows
@@ -1194,12 +1192,11 @@ func (s *Service) PublishFlow(ctx context.Context, p core.Principal, tenant, ws,
 }
 
 // UnpublishFlow clears a flow's published pointer, the inverse of PublishFlow.
-// Scheduler-triggered flows (cron/poll/form-interval) stop firing — the
-// scheduler only enrolls flows with a published commit, so they revert to
-// "needs publish". Webhook/event-triggered flows are NOT taken offline by
-// this: their HTTP endpoints fall back to HEAD when unpublished (the draft
-// becomes what fires), matching the existing "webhook flows stay live while
-// unpublished" rule — use Disable (SetFlowEnabled false) to stop those.
+// It takes the flow fully offline: the scheduler only enrolls flows with a
+// published commit, and the webhook, hosted-form and provider-event paths all
+// reject an unpublished flow (Store.LoadPublished returns ErrNotPublished).
+// The draft is untouched, so the flow reverts to "needs publish" and a manual
+// Run still works.
 // The draft (HEAD) is untouched, so manual/test runs still work and
 // re-publishing promotes HEAD again. Gated on graph:admin, the same bar as
 // PublishFlow. Idempotent — unpublishing a never-published flow succeeds.

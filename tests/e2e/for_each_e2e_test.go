@@ -42,9 +42,7 @@ func TestForEach_E2E_WebhookToIteration(t *testing.T) {
 			{From: "iter", FromPort: "body", To: "step", ToPort: "pass"},
 		},
 	}
-	if _, err := wsStore.Save(g, "test"); err != nil {
-		t.Fatalf("save: %v", err)
-	}
+	savePublished(t, wsStore, g)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/trigger/", func(rw http.ResponseWriter, r *http.Request) {
@@ -175,9 +173,7 @@ func TestForEach_E2E_PerItemHTTPWithTemplatedURL(t *testing.T) {
 			{From: "fan", FromPort: "body", To: "call", ToPort: "pass"},
 		},
 	}
-	if _, err := wsStore.Save(g, "test"); err != nil {
-		t.Fatalf("save: %v", err)
-	}
+	savePublished(t, wsStore, g)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/trigger/", func(rw http.ResponseWriter, r *http.Request) {

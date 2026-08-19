@@ -4991,25 +4991,58 @@ function EditorInner() {
             until it's live, and the only other hint is a hover tooltip. Surface
             it proactively (not dismissible — it self-clears the moment the flow
             goes live). Only shown to those who can actually publish. */}
-        {publishInfo &&
-          !publishInfo.published &&
-          triggers.length > 0 &&
-          hasPerm("graph:admin") && (
-            <div className="editor-conn-banner" role="status">
-              <span className="editor-conn-banner-text">
-                {t("editor.publishNudge")}
-              </span>
-              <span className="editor-conn-banner-actions">
-                <Button
-                  variant="primary"
-                  onClick={() => setPublishConfirm("live")}
-                  disabled={publishing || !!previewRef}
-                >
-                  {t("editor.publishNudgeCta")}
-                </Button>
-              </span>
-            </div>
-          )}
+        {/* "You haven't published this" — gated on runStatus, which counts
+            TRIGGER NODES. It used to be gated on `triggers.length`, the
+            DEPRECATED graph-level trigger array that the runtime mostly
+            ignores, so a flow triggered by a cron_trigger or webhook_input
+            node — i.e. essentially every modern flow — never saw this warning
+            at all. That is the single biggest reason people believed a saved
+            flow was a running flow. */}
+        {runStatus === "needs_publish" && hasPerm("graph:admin") && (
+          <div className="editor-conn-banner" role="status">
+            <span className="editor-conn-banner-text">
+              {t("editor.publishNudge")}
+            </span>
+            <span className="editor-conn-banner-actions">
+              <Button
+                variant="primary"
+                onClick={() => setPublishConfirm("live")}
+                disabled={publishing || !!previewRef}
+              >
+                {t("editor.publishNudgeCta")}
+              </Button>
+            </span>
+          </div>
+        )}
+        {/* And once it IS published, say so continuously rather than making
+            the user infer it from a chip. The draft-differs case is the one
+            that silently bites: edits are saved, autosaved even, and none of
+            them are live. */}
+        {publishInfo?.published && !previewRef && (
+          <div className="editor-live-state" role="status">
+            {publishInfo.dirty ? (
+              <>
+                <span className="editor-live-dot dirty" aria-hidden="true" />
+                {t("editor.liveStateDirty")}
+                {hasPerm("graph:admin") && (
+                  <Button
+                    variant="link"
+                    className="editor-live-action"
+                    onClick={() => setPublishConfirm("update")}
+                    disabled={publishing}
+                  >
+                    {t("editor.publishChanges")}
+                  </Button>
+                )}
+              </>
+            ) : (
+              <>
+                <span className="editor-live-dot" aria-hidden="true" />
+                {t("editor.liveStateCurrent")}
+              </>
+            )}
+          </div>
+        )}
         </div>
       </div>
       <div className="inspector">

@@ -56,9 +56,7 @@ func TestWebhook_FiresWithValidSecret(t *testing.T) {
 			{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}},
 		},
 	}
-	if _, err := wsStore.Save(g, "test"); err != nil {
-		t.Fatalf("save: %v", err)
-	}
+	savePublished(t, wsStore, g)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Wrap the handler so we can dispatch into the listener via
 		// its public handle method through the same mux pattern.
@@ -114,13 +112,13 @@ func TestWebhook_FiresWithValidSecret(t *testing.T) {
 
 func TestWebhook_RejectsBadSecret(t *testing.T) {
 	_, wh, _, _, wsStore := startWebhookHarness(t)
-	_, _ = wsStore.Save(core.Graph{
+	savePublished(t, wsStore, core.Graph{
 		ID: "wh-secret", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{
 			{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"correct"}}},
 			{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}},
 		},
-	}, "test")
+	})
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/trigger/", func(rw http.ResponseWriter, r *http.Request) {
@@ -146,7 +144,7 @@ func TestWebhook_RejectsBadSecret(t *testing.T) {
 // then revoke the old one).
 func TestWebhook_AcceptsAnyOfMultipleKeys(t *testing.T) {
 	_, wh, _, _, wsStore := startWebhookHarness(t)
-	_, _ = wsStore.Save(core.Graph{
+	savePublished(t, wsStore, core.Graph{
 		ID: "wh-rotate", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{
 			{ID: "in", Module: "webhook_input", Params: map[string]any{
@@ -154,7 +152,7 @@ func TestWebhook_AcceptsAnyOfMultipleKeys(t *testing.T) {
 			}},
 			{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}},
 		},
-	}, "test")
+	})
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/trigger/", func(rw http.ResponseWriter, r *http.Request) {
@@ -211,10 +209,10 @@ func TestWebhook_UnknownGraph(t *testing.T) {
 func TestWebhook_GraphWithoutWebhookTriggerRejected(t *testing.T) {
 	_, wh, _, _, wsStore := startWebhookHarness(t)
 	// Graph exists but has no webhook trigger.
-	_, _ = wsStore.Save(core.Graph{
+	savePublished(t, wsStore, core.Graph{
 		ID: "no-trigger", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}}},
-	}, "test")
+	})
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/trigger/", func(rw http.ResponseWriter, r *http.Request) {
@@ -476,13 +474,13 @@ func FuzzBuildWebhookSeed(f *testing.F) {
 func TestWebhook_BodyLimit(t *testing.T) {
 	_, wh, _, _, wsStore := startWebhookHarness(t)
 	wh.MaxBodyBytes = 16 // tiny cap so we don't shovel a megabyte
-	_, _ = wsStore.Save(core.Graph{
+	savePublished(t, wsStore, core.Graph{
 		ID: "lim", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{
 			{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}}},
 			{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}},
 		},
-	}, "test")
+	})
 	mux := http.NewServeMux()
 	mux.HandleFunc("/trigger/", func(rw http.ResponseWriter, r *http.Request) {
 		callPrivateHandler(t, wh, rw, r)
@@ -514,10 +512,10 @@ func TestWebhook_BodyLimit(t *testing.T) {
 // known but off" and doesn't treat it as an unknown-URL retry.
 func TestWebhook_DisabledGraphRejected(t *testing.T) {
 	_, wh, _, _, wsStore := startWebhookHarness(t)
-	_, _ = wsStore.Save(core.Graph{
+	savePublished(t, wsStore, core.Graph{
 		ID: "off", Tenant: "acme", Workspace: "ws1", Disabled: true,
 		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}}}},
-	}, "test")
+	})
 	mux := http.NewServeMux()
 	mux.HandleFunc("/trigger/", func(rw http.ResponseWriter, r *http.Request) {
 		callPrivateHandler(t, wh, rw, r)
@@ -541,10 +539,10 @@ func TestWebhook_DisabledGraphRejected(t *testing.T) {
 // header at all (not just a wrong one) is rejected with 401.
 func TestWebhook_MissingAuthRejected(t *testing.T) {
 	_, wh, _, _, wsStore := startWebhookHarness(t)
-	_, _ = wsStore.Save(core.Graph{
+	savePublished(t, wsStore, core.Graph{
 		ID: "needauth", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}}}},
-	}, "test")
+	})
 	mux := http.NewServeMux()
 	mux.HandleFunc("/trigger/", func(rw http.ResponseWriter, r *http.Request) {
 		callPrivateHandler(t, wh, rw, r)

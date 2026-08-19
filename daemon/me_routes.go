@@ -518,9 +518,9 @@ func (h *HTTPGateway) publishFlowMe(rw http.ResponseWriter, r *http.Request, p c
 }
 
 // unpublishFlowMe is POST /me/flows/{flow_id}/unpublish — clear the published
-// pointer (the inverse of publish). Scheduler-triggered flows stop firing;
-// webhook flows fall back to HEAD (use disable to take those offline). The
-// draft is untouched. Gated on graph:admin inside the service; idempotent.
+// pointer (the inverse of publish). Takes the flow fully offline: schedules,
+// webhooks, hosted forms and provider events all refuse an unpublished flow.
+// The draft is untouched. Gated on graph:admin inside the service; idempotent.
 func (h *HTTPGateway) unpublishFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, workspace, id, ok := h.readFlowID(rw, r, p)
 	if !ok {

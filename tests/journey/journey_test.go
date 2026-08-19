@@ -110,8 +110,9 @@ func TestJourney_LeadIntake_RunsEndToEnd(t *testing.T) {
 		t.Fatalf("app would not call the lead-intake flow ready: %s", issuesJSON(v))
 	}
 
-	// Turn it on, then a lead arrives through the public form/webhook.
+	// Turn it on AND publish it — both are required before anything fires.
 	me.enableFlow(flowID)
+	me.publishFlow(flowID)
 	lead := map[string]any{
 		"name":   "Dana Lee",
 		"email":  "dana@example.com",

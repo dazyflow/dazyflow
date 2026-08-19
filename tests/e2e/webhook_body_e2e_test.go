@@ -49,9 +49,7 @@ func TestWebhookBody_E2E_JSONPropagation(t *testing.T) {
 			{From: "decide", FromPort: "else", To: "queue", ToPort: "in"},
 		},
 	}
-	if _, err := wsStore.Save(g, "test"); err != nil {
-		t.Fatalf("save: %v", err)
-	}
+	savePublished(t, wsStore, g)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/trigger/", func(rw http.ResponseWriter, r *http.Request) {
@@ -137,7 +135,7 @@ func TestWebhookBody_E2E_TextBody(t *testing.T) {
 			{ID: "inbound", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}}},
 		},
 	}
-	_, _ = wsStore.Save(g, "test")
+	savePublished(t, wsStore, g)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/trigger/", func(rw http.ResponseWriter, r *http.Request) {
@@ -187,7 +185,7 @@ func TestWebhookBody_E2E_ManualRunFails(t *testing.T) {
 			{ID: "inbound", Module: "webhook_input", Params: map[string]any{"secrets": []any{"x"}}},
 		},
 	}
-	_, _ = wsStore.Save(g, "test")
+	savePublished(t, wsStore, g)
 
 	role := core.Role{Name: "editor", Permissions: []core.Permission{
 		core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,

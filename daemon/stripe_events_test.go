@@ -124,9 +124,7 @@ func TestStripeEvents_PaymentDispatchesToSubscribedGraphs(t *testing.T) {
 		ID: "payment-alert", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{{ID: "trig", Module: "stripe_on_payment"}},
 	}
-	if _, err := h.ws.Save(g, "test"); err != nil {
-		t.Fatalf("save: %v", err)
-	}
+	savePublished(t, h.ws, g)
 
 	event := map[string]any{
 		"id":   "evt_1",
@@ -191,9 +189,7 @@ func TestStripeEvents_PaymentFailedDispatches(t *testing.T) {
 		ID: "decline-alert", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{{ID: "trig", Module: "stripe_on_payment_failed"}},
 	}
-	if _, err := h.ws.Save(g, "test"); err != nil {
-		t.Fatalf("save: %v", err)
-	}
+	savePublished(t, h.ws, g)
 
 	event := map[string]any{
 		"id":   "evt_f1",
@@ -250,9 +246,7 @@ func TestStripeEvents_SubscriptionCanceledDispatches(t *testing.T) {
 		ID: "churn-alert", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{{ID: "trig", Module: "stripe_on_subscription_canceled"}},
 	}
-	if _, err := h.ws.Save(g, "test"); err != nil {
-		t.Fatalf("save: %v", err)
-	}
+	savePublished(t, h.ws, g)
 
 	event := map[string]any{
 		"id":   "evt_s1",

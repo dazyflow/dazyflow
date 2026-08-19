@@ -2530,6 +2530,36 @@ button.warning:hover:not(:disabled) {
      re-enables pointer-events for its own content. */
   pointer-events: none;
 }
+/* Continuous draft-vs-live readout under the toolbar. The whole point is
+   that it is ALWAYS there when a flow is published — the failure mode this
+   fixes is a user inferring "saved" means "running" from a chip they have
+   to hover. Quiet by default; the dot goes amber when the draft has
+   unpublished changes. */
+.editor-live-state {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1h) var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--muted);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.editor-live-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success);
+}
+.editor-live-dot.dirty {
+  background: var(--warning);
+}
+.editor-live-state .editor-live-action {
+  padding: 0;
+  height: auto;
+  font-size: inherit;
+}
 .editor-conn-banner {
   /* Let canvas taps pass through the banner's text/padding to the node
      underneath (it overlays the top of the canvas, and on a phone a node

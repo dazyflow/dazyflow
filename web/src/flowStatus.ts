@@ -49,6 +49,20 @@ export function webhookKeys(
   return out;
 }
 
+// EVENT_TRIGGER_MODULES mirrors core.EventTriggerModules — trigger drops fired
+// by an inbound provider event rather than the scheduler or the /trigger
+// webhook. Kept in lockstep by TestEventTriggerModulesMatchCatalog on the Go
+// side; add a drop there and mirror it here.
+const EVENT_TRIGGER_MODULES = new Set([
+  "slack_on_mention",
+  "github_on_push",
+  "github_on_new_pr",
+  "stripe_on_payment",
+  "stripe_on_payment_failed",
+  "stripe_on_subscription_canceled",
+  "homeassistant_state_changed",
+]);
+
 // hasConfiguredAutoTrigger reports whether anything will fire the flow
 // without a manual Run. Rules mirror HasConfiguredAutoTrigger in Go.
 export function hasConfiguredAutoTrigger(
@@ -74,6 +88,11 @@ export function hasConfiguredAutoTrigger(
         if (webhookKeys(n.params).length > 0 || n.params?.public_form === true)
           return true;
         break;
+      default:
+        // Provider-event triggers (a Slack mention, a GitHub push, a Stripe
+        // payment). Mirrors core.EventTriggerModules — the node's presence is
+        // enough, since the daemon's fan-out matches on module ID alone.
+        if (EVENT_TRIGGER_MODULES.has(n.module)) return true;
     }
   }
   return false;
@@ -121,11 +140,15 @@ export function flowRunStatus(
 }
 
 // flowRunStatusPublished is the publish-aware classifier (mirrors
-// core.FlowRunStatusPublished). A flow that would be live via a SCHEDULER
-// trigger but isn't published yet is "needs_publish" — the scheduler only
-// runs published flows. `published` is undefined while the editor is still
-// loading publish info; treat undefined as published so the chip doesn't
-// flicker to "needs publish" before we know.
+// core.FlowRunStatusPublished). A flow that would fire on its own but isn't
+// published yet is "needs_publish" — NO automatic path runs an unpublished
+// flow. `published` is undefined while the editor is still loading publish
+// info; treat undefined as published so the chip doesn't flicker to "needs
+// publish" before we know.
+//
+// This used to apply only to scheduler triggers, because the webhook, form
+// and event endpoints fell back to HEAD and so did fire while unpublished.
+// That asymmetry is gone on the Go side; keep the two in lockstep.
 export function flowRunStatusPublished(
   disabled: boolean | undefined,
   triggers: Graph["triggers"],
@@ -133,11 +156,7 @@ export function flowRunStatusPublished(
   published: boolean | undefined,
 ): FlowRunStatus {
   const base = flowRunStatus(disabled, triggers, nodes);
-  if (
-    base === "live" &&
-    published === false &&
-    hasConfiguredSchedulerTrigger(triggers, nodes)
-  ) {
+  if (base === "live" && published === false) {
     return "needs_publish";
   }
   return base;

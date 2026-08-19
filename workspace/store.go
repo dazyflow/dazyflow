@@ -471,10 +471,11 @@ func (s *Store) PromoteToEnvironment(graphID, env, commit string) error {
 
 // ClearEnvironment removes the environment tag (refs/tags/graphs/<id>/<env>),
 // reverting the flow to having no revision pinned for that env. Unpublishing a
-// flow clears the PublishedEnv tag: the scheduler then treats the flow as
-// "not live" (PublishedCommit returns ""), while webhook/event endpoints fall
-// back to HEAD via LoadPublishedOrHead. Idempotent — clearing an env that was
-// never set is a no-op, not an error.
+// flow clears the PublishedEnv tag, which takes it fully offline: the
+// scheduler treats it as "not live" (PublishedCommit returns "") and the
+// webhook/form/event endpoints reject it (LoadPublished returns
+// ErrNotPublished). Idempotent — clearing an env that was never set is a
+// no-op, not an error.
 func (s *Store) ClearEnvironment(graphID, env string) error {
 	if env == "" {
 		return errors.New("env required")
@@ -496,10 +497,10 @@ func (s *Store) ClearEnvironment(graphID, env string) error {
 const PublishedEnv = "published"
 
 // PublishedCommit returns the commit hash the flow's published tag points
-// at, or "" when the flow has never been published. A never-published
-// flow is not an error — the caller falls back to HEAD (today's
-// behaviour) so introducing publish doesn't silently stop existing flows
-// from firing.
+// at, or "" when the flow has never been published. "" is not an error: it is
+// the normal state of a draft. Callers that decide whether something FIRES
+// should prefer LoadPublished, which turns it into ErrNotPublished rather
+// than leaving each caller to remember the check.
 func (s *Store) PublishedCommit(id string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -518,13 +519,24 @@ func (s *Store) publishedCommit(id string) (string, error) {
 	return ref.Hash().String(), nil
 }
 
-// LoadPublishedOrHead reads the flow at its published tag, falling back to
-// HEAD when the flow has never been published. This is the version
-// automatic triggers run: a published flow fires its last published
-// revision, not whatever half-finished draft is at HEAD. The manual-run,
+// ErrNotPublished is returned by LoadPublished for a flow that has never been
+// published. Every automatic-firing path treats it as "this flow does not run
+// yet" rather than an error worth surfacing.
+var ErrNotPublished = errors.New("flow is not published")
+
+// LoadPublished reads the flow at its published tag. This is the version
+// automatic triggers run — a published flow fires its last published
+// revision, never whatever half-finished draft is at HEAD, which is what
+// makes the editor's 1.5s autosave safe on a live flow. The manual-run,
 // sample, and test-trigger paths deliberately keep using Load (HEAD) so an
-// author can test edits before publishing them live.
-func (s *Store) LoadPublishedOrHead(id string) (core.Graph, error) {
+// author can test edits before publishing them.
+//
+// An unpublished flow returns ErrNotPublished and fires NOTHING. This used to
+// be LoadPublishedOrHead, which fell back to HEAD — so a never-published flow
+// with a webhook DID fire (running its draft) while the same flow with a
+// schedule did not, because the scheduler gated on the published commit
+// separately. "Published" now means one thing on every path.
+func (s *Store) LoadPublished(id string) (core.Graph, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	commit, err := s.publishedCommit(id)
@@ -532,11 +544,7 @@ func (s *Store) LoadPublishedOrHead(id string) (core.Graph, error) {
 		return core.Graph{}, err
 	}
 	if commit == "" {
-		head, err := s.repo.Head()
-		if err != nil {
-			return core.Graph{}, fmt.Errorf("head: %w", err)
-		}
-		return s.loadAt(head.Hash(), id)
+		return core.Graph{}, ErrNotPublished
 	}
 	return s.loadAt(plumbing.NewHash(commit), id)
 }

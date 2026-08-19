@@ -35,9 +35,7 @@ func TestForm_GETRendersOptedInForm(t *testing.T) {
 		ID: "contact", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}, "public_form": true, "form_title": "Contact us"}}},
 	}
-	if _, err := wsStore.Save(g, "test"); err != nil {
-		t.Fatalf("save: %v", err)
-	}
+	savePublished(t, wsStore, g)
 	ts := formServer(t, wh)
 
 	res, err := http.Get(ts.URL + "/form/acme/ws1/contact")
@@ -69,9 +67,7 @@ func TestForm_NotOptedInIs404(t *testing.T) {
 		ID: "private-wh", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}}}}, // no public_form
 	}
-	if _, err := wsStore.Save(g, "test"); err != nil {
-		t.Fatalf("save: %v", err)
-	}
+	savePublished(t, wsStore, g)
 	ts := formServer(t, wh)
 
 	res, err := http.Get(ts.URL + "/form/acme/ws1/private-wh")
@@ -164,9 +160,7 @@ func TestForm_POSTSubmitsRun(t *testing.T) {
 		ID: "contact2", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}, "public_form": true}}},
 	}
-	if _, err := wsStore.Save(g, "test"); err != nil {
-		t.Fatalf("save: %v", err)
-	}
+	savePublished(t, wsStore, g)
 	ts := formServer(t, wh)
 
 	form := url.Values{"name": {"Jane"}, "email": {"jane@example.com"}, "message": {"Hello"}}
@@ -201,9 +195,7 @@ func TestForm_DisabledGraphIs404(t *testing.T) {
 		ID: "paused", Tenant: "acme", Workspace: "ws1", Disabled: true,
 		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}, "public_form": true}}},
 	}
-	if _, err := wsStore.Save(g, "test"); err != nil {
-		t.Fatalf("save: %v", err)
-	}
+	savePublished(t, wsStore, g)
 	ts := formServer(t, wh)
 	for _, m := range []string{"GET", "POST"} {
 		req, _ := http.NewRequest(m, ts.URL+"/form/acme/ws1/paused", strings.NewReader("name=x"))
@@ -231,9 +223,7 @@ func TestForm_NoWebhookInputNodeHidden(t *testing.T) {
 		ID: "no-sink", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{{ID: "x", Module: "delay", Params: map[string]any{"ms": 1}}},
 	}
-	if _, err := wsStore.Save(g, "test"); err != nil {
-		t.Fatalf("save: %v", err)
-	}
+	savePublished(t, wsStore, g)
 	ts := formServer(t, wh)
 	res, err := http.PostForm(ts.URL+"/form/acme/ws1/no-sink", url.Values{"name": {"x"}})
 	if err != nil {
@@ -253,9 +243,7 @@ func TestForm_CustomFieldsRendered(t *testing.T) {
 		ID: "custom", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}, "public_form": true, "form_fields": []string{"phone", "company"}}}},
 	}
-	if _, err := wsStore.Save(g, "test"); err != nil {
-		t.Fatalf("save: %v", err)
-	}
+	savePublished(t, wsStore, g)
 	ts := formServer(t, wh)
 	res, err := http.Get(ts.URL + "/form/acme/ws1/custom")
 	if err != nil {
@@ -287,9 +275,7 @@ func TestForm_FieldNameAndTitleEscaped(t *testing.T) {
 			"form_fields": []string{"<img src=x onerror=alert(2)>"},
 		}}},
 	}
-	if _, err := wsStore.Save(g, "test"); err != nil {
-		t.Fatalf("save: %v", err)
-	}
+	savePublished(t, wsStore, g)
 	ts := formServer(t, wh)
 	res, err := http.Get(ts.URL + "/form/acme/ws1/xss")
 	if err != nil {

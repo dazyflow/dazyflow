@@ -81,10 +81,12 @@ func (w *WebhookListener) handleTrigger(rw http.ResponseWriter, r *http.Request)
 		http.Error(rw, unauthorized, http.StatusUnauthorized)
 		return
 	}
-	// Fire the published revision (falls back to HEAD for never-published
-	// flows) so a live webhook runs what was deliberately published, not a
-	// half-finished draft still being edited.
-	g, err := store.LoadPublishedOrHead(graphID)
+	// Fire the PUBLISHED revision — never a draft. An unpublished flow does
+	// not receive: same rule the scheduler enforces, so "published" means one
+	// thing whatever the trigger. ErrNotPublished takes the same generic 401
+	// as every other pre-auth failure below, so the endpoint still doesn't
+	// reveal whether a given flow exists.
+	g, err := store.LoadPublished(graphID)
 	if err != nil {
 		http.Error(rw, unauthorized, http.StatusUnauthorized)
 		return

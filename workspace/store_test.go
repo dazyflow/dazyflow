@@ -4,6 +4,7 @@
 package workspace
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -180,10 +181,10 @@ func TestStore_OpenFS_ReopenExistingRepo(t *testing.T) {
 	}
 }
 
-// TestStore_LoadPublishedOrHead_RawHashTag covers publishedCommit returning a
-// raw hash that LoadPublishedOrHead then loads via plumbing.NewHash (the
+// TestStore_LoadPublished_RawHashTag covers publishedCommit returning a
+// raw hash that LoadPublished then loads via plumbing.NewHash (the
 // commit != "" branch, distinct from the HEAD fallback).
-func TestStore_LoadPublishedOrHead_RawHashTag(t *testing.T) {
+func TestStore_LoadPublished_RawHashTag(t *testing.T) {
 	s, _ := OpenFS("")
 	c1, _ := s.Save(sampleGraph("g", "a"), "anna")
 
@@ -197,9 +198,9 @@ func TestStore_LoadPublishedOrHead_RawHashTag(t *testing.T) {
 	if pub != c1 {
 		t.Errorf("PublishedCommit = %q, want %q", pub, c1)
 	}
-	g, err := s.LoadPublishedOrHead("g")
+	g, err := s.LoadPublished("g")
 	if err != nil {
-		t.Fatalf("LoadPublishedOrHead: %v", err)
+		t.Fatalf("LoadPublished: %v", err)
 	}
 	if g.ID != "g" {
 		t.Errorf("loaded %q, want g", g.ID)
@@ -654,7 +655,7 @@ func TestStore_RevisionLabel_RelabelThenClear(t *testing.T) {
 }
 
 // ----------------------------------------------------------------------
-// Environment guards + LoadPublishedOrHead falls back to HEAD.
+// Environment guards + LoadPublished falls back to HEAD.
 // ----------------------------------------------------------------------
 
 func TestStore_Environment_Guards(t *testing.T) {
@@ -673,7 +674,7 @@ func TestStore_Environment_Guards(t *testing.T) {
 	}
 }
 
-func TestStore_LoadPublishedOrHead_FallsBackToHead(t *testing.T) {
+func TestStore_LoadPublished_FallsBackToHead(t *testing.T) {
 	s, _ := OpenFS("")
 	if _, err := s.Save(sampleGraph("g", "a", "b"), "anna"); err != nil {
 		t.Fatalf("save: %v", err)
@@ -686,16 +687,13 @@ func TestStore_LoadPublishedOrHead_FallsBackToHead(t *testing.T) {
 	if pub != "" {
 		t.Errorf("PublishedCommit = %q, want empty for unpublished flow", pub)
 	}
-	g, err := s.LoadPublishedOrHead("g")
-	if err != nil {
-		t.Fatalf("LoadPublishedOrHead: %v", err)
-	}
-	if g.ID != "g" {
-		t.Errorf("loaded %q, want g", g.ID)
+	// No HEAD fallback: an unpublished flow refuses to load for firing.
+	if _, err := s.LoadPublished("g"); !errors.Is(err, ErrNotPublished) {
+		t.Fatalf("LoadPublished on unpublished flow = %v, want ErrNotPublished", err)
 	}
 }
 
-func TestStore_LoadPublishedOrHead_UsesPublishedTag(t *testing.T) {
+func TestStore_LoadPublished_UsesPublishedTag(t *testing.T) {
 	s, _ := OpenFS("")
 	c1, _ := s.Save(sampleGraph("g", "a"), "anna")
 	// Advance HEAD with a second revision, then publish the first.
@@ -705,9 +703,9 @@ func TestStore_LoadPublishedOrHead_UsesPublishedTag(t *testing.T) {
 	if err := s.PromoteToEnvironment("g", PublishedEnv, c1); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
-	g, err := s.LoadPublishedOrHead("g")
+	g, err := s.LoadPublished("g")
 	if err != nil {
-		t.Fatalf("LoadPublishedOrHead: %v", err)
+		t.Fatalf("LoadPublished: %v", err)
 	}
 	if len(g.Nodes) != 1 {
 		t.Errorf("published load returned %d-node graph, want 1 (the published revision)", len(g.Nodes))

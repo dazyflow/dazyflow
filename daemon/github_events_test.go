@@ -103,9 +103,7 @@ func TestGitHubEvents_PushDispatchesToSubscribedGraphs(t *testing.T) {
 		ID: "deploy-graph", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{{ID: "trig", Module: "github_on_push"}},
 	}
-	if _, err := h.ws.Save(g, "test"); err != nil {
-		t.Fatalf("save: %v", err)
-	}
+	savePublished(t, h.ws, g)
 
 	event := map[string]any{
 		"ref":    "refs/heads/main",
@@ -157,9 +155,7 @@ func TestGitHubEvents_PullRequestOpenedDispatches(t *testing.T) {
 		ID: "triage-graph", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{{ID: "trig", Module: "github_on_new_pr"}},
 	}
-	if _, err := h.ws.Save(g, "test"); err != nil {
-		t.Fatalf("save: %v", err)
-	}
+	savePublished(t, h.ws, g)
 
 	event := map[string]any{
 		"action": "opened",

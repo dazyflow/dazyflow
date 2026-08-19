@@ -1057,6 +1057,13 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 		}()
 	}
 
+	// One-shot upgrade migration: publish flows that were firing through the
+	// old fall-back-to-HEAD behaviour, so tightening the publish rule doesn't
+	// take live webhooks offline. Idempotent, so running it on every boot
+	// costs one ref lookup per flow once the fleet has migrated. Runs BEFORE
+	// the scheduler starts so a migrated flow is enrollable on this same boot.
+	daemon.MigrateWebhookPublish(d.svc, log.Default())
+
 	// Cron scheduler fires graphs that declare cron triggers. Always on.
 	sched := daemon.NewScheduler(d.svc)
 	// Adaptive poll backoff reads the per-flow poll-outcome marker fetcher

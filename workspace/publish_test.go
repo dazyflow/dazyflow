@@ -4,13 +4,14 @@
 package workspace
 
 import (
+	"errors"
 	"testing"
 
 	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // TestStore_PublishAndLoadPublished covers the publish-gating primitives:
-// before publish, LoadPublishedOrHead falls back to HEAD (existing flows
+// before publish, LoadPublished falls back to HEAD (existing flows
 // keep firing); after publish, it pins to the published revision even when
 // HEAD has moved on (a draft edit doesn't go live until republished);
 // re-publishing an older commit is a rollback.
@@ -29,16 +30,14 @@ func TestStore_PublishAndLoadPublished(t *testing.T) {
 	}
 
 	// Never published yet: PublishedCommit is empty (not an error), and
-	// LoadPublishedOrHead falls back to HEAD.
+	// LoadPublished refuses — an unpublished flow fires NOTHING. This used to
+	// fall back to HEAD, which is what let an unpublished webhook flow run its
+	// draft while the same flow on a schedule stayed dark.
 	if pc, err := s.PublishedCommit("flow1"); err != nil || pc != "" {
 		t.Fatalf("PublishedCommit before publish = (%q, %v), want (\"\", nil)", pc, err)
 	}
-	g, err := s.LoadPublishedOrHead("flow1")
-	if err != nil {
-		t.Fatalf("LoadPublishedOrHead (fallback): %v", err)
-	}
-	if g.Nodes[0].ID != "a" {
-		t.Fatalf("fallback loaded node %q, want HEAD node \"a\"", g.Nodes[0].ID)
+	if _, err := s.LoadPublished("flow1"); !errors.Is(err, ErrNotPublished) {
+		t.Fatalf("LoadPublished before publish = %v, want ErrNotPublished", err)
 	}
 
 	// Publish v1, then move HEAD forward to a draft (node "b").
@@ -49,11 +48,11 @@ func TestStore_PublishAndLoadPublished(t *testing.T) {
 		t.Fatalf("save v2 (draft): %v", err)
 	}
 
-	// LoadPublishedOrHead must still return the PUBLISHED v1 (node "a"),
-	// not the draft HEAD (node "b") — the core gating guarantee.
-	pub, err := s.LoadPublishedOrHead("flow1")
+	// LoadPublished must still return the PUBLISHED v1 (node "a"), not the
+	// draft HEAD (node "b") — the core gating guarantee.
+	pub, err := s.LoadPublished("flow1")
 	if err != nil {
-		t.Fatalf("LoadPublishedOrHead (published): %v", err)
+		t.Fatalf("LoadPublished (published): %v", err)
 	}
 	if pub.Nodes[0].ID != "a" {
 		t.Fatalf("published load node %q, want \"a\" (draft must not go live)", pub.Nodes[0].ID)
@@ -75,9 +74,9 @@ func TestStore_PublishAndLoadPublished(t *testing.T) {
 	if err := s.PromoteToEnvironment("flow1", PublishedEnv, "HEAD"); err != nil {
 		t.Fatalf("publish HEAD: %v", err)
 	}
-	pub2, err := s.LoadPublishedOrHead("flow1")
+	pub2, err := s.LoadPublished("flow1")
 	if err != nil {
-		t.Fatalf("LoadPublishedOrHead after republish: %v", err)
+		t.Fatalf("LoadPublished after republish: %v", err)
 	}
 	if pub2.Nodes[0].ID != "b" {
 		t.Fatalf("after republish, live node %q, want \"b\"", pub2.Nodes[0].ID)
@@ -87,9 +86,9 @@ func TestStore_PublishAndLoadPublished(t *testing.T) {
 	if err := s.PromoteToEnvironment("flow1", PublishedEnv, v1); err != nil {
 		t.Fatalf("rollback to v1: %v", err)
 	}
-	rolled, err := s.LoadPublishedOrHead("flow1")
+	rolled, err := s.LoadPublished("flow1")
 	if err != nil {
-		t.Fatalf("LoadPublishedOrHead after rollback: %v", err)
+		t.Fatalf("LoadPublished after rollback: %v", err)
 	}
 	if rolled.Nodes[0].ID != "a" {
 		t.Fatalf("after rollback, live node %q, want \"a\"", rolled.Nodes[0].ID)
@@ -168,7 +167,7 @@ func TestStore_RevisionLabel(t *testing.T) {
 
 // TestStore_ClearEnvironment covers unpublishing: clearing the published tag
 // drops PublishedCommit back to "" (so the scheduler treats the flow as not
-// live) while LoadPublishedOrHead falls back to the current HEAD draft. It's
+// live) while LoadPublished falls back to the current HEAD draft. It's
 // idempotent — clearing a never-published env is a no-op, not an error.
 func TestStore_ClearEnvironment(t *testing.T) {
 	s, err := OpenFS("")
@@ -205,13 +204,11 @@ func TestStore_ClearEnvironment(t *testing.T) {
 	if pc, err := s.PublishedCommit("flow1"); err != nil || pc != "" {
 		t.Fatalf("PublishedCommit after unpublish = (%q, %v), want (\"\", nil)", pc, err)
 	}
-	// With nothing published, LoadPublishedOrHead falls back to HEAD (node "b").
-	g, err := s.LoadPublishedOrHead("flow1")
-	if err != nil {
-		t.Fatalf("LoadPublishedOrHead after unpublish: %v", err)
-	}
-	if g.Nodes[0].ID != "b" {
-		t.Fatalf("after unpublish, fallback node %q, want HEAD \"b\"", g.Nodes[0].ID)
+	// Unpublishing takes the flow fully offline — LoadPublished refuses. It
+	// used to fall back to HEAD here, which meant "unpublish" did not actually
+	// stop a webhook-triggered flow.
+	if _, err := s.LoadPublished("flow1"); !errors.Is(err, ErrNotPublished) {
+		t.Fatalf("LoadPublished after unpublish = %v, want ErrNotPublished", err)
 	}
 
 	// Idempotent: clearing again still succeeds.

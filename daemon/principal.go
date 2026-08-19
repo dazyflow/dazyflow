@@ -5,11 +5,13 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"log"
 	"runtime/debug"
 	"strings"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/workspace"
 )
 
 // SystemPrincipal builds the synthetic principal that trigger- and
@@ -83,10 +85,14 @@ func fanoutSeed(
 		}
 		principal.Workspace = ws
 		for _, id := range ids {
-			// Match + run the published revision (HEAD fallback for
-			// never-published flows): an external event fires the version
-			// that was deliberately published, not a draft.
-			g, err := store.LoadPublishedOrHead(id)
+			// Match + run the PUBLISHED revision: an external event fires the
+			// version that was deliberately published, never a draft. An
+			// unpublished flow is skipped silently — that is a normal state
+			// (a draft being built), not a load failure worth logging.
+			g, err := store.LoadPublished(id)
+			if errors.Is(err, workspace.ErrNotPublished) {
+				continue
+			}
 			if err != nil {
 				logger.Printf("load %s/%s/%s: %v", tenant, ws, id, err)
 				continue

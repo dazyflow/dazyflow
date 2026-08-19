@@ -641,7 +641,7 @@ func (s *Scheduler) fireGraph(ctx context.Context, e *scheduledGraph) {
 	// trigger is paused) is read from HEAD during rescan, so timing + pause
 	// changes still take effect immediately — only the executed graph
 	// content is pinned to the published version.
-	g, err := store.LoadPublishedOrHead(e.graphID)
+	g, err := store.LoadPublished(e.graphID)
 	if err != nil {
 		s.logger.Printf("load %s/%s/%s: %v", e.tenant, e.workspace, e.graphID, err)
 		return

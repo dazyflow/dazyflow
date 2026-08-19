@@ -29,18 +29,6 @@ These aren't defects. Each needs a direction before any code moves.
       grounded on. What needs deciding is whether "drop" is load-bearing brand
       vocabulary worth teaching, or an accident worth dropping. Suggested
       replacement: **step** (sv: *steg*).
-- [ ] **HELD — Four different words for "is this switched on?"** A user has to
-      hold *Save*, *Publish / Go live / Publish changes*, *Enabled / Paused*, a
-      four-state status chip (Live / Manual only / Not live yet / Paused), and
-      *Make live* in version history — five verbs on one axis. The rules also
-      differ by trigger: scheduled and polling triggers only fire when
-      published, but webhooks fire either way, while `editor.confirmPauseBody`
-      tells the user pausing stops "cron, poll, webhook, and forms". Collapsing
-      this to **"Save changes"** plus one **On/Off** switch would change WHEN
-      FLOWS FIRE — daemon semantics, not a copy fix — so it stayed out of the
-      UI pass. Cheapest partial that needs no semantic change: one sentence on
-      the flow header stating the whole truth ("Saved. Your live version is
-      from 3 days ago."). (`web/src/flowStatus.ts`, `core/flowstatus.go`)
 
 ### Templates — thin, and now the front door
 
@@ -69,6 +57,15 @@ pick Dazyflow over Zapier/Make/n8n, and nothing in the gallery shows them off.
       "get notified when X" is the archetypal first automation.
 
 ### Web
+
+- [ ] **Node-level `disabled` on a trigger doesn't stop it firing** — the
+      /trigger endpoint, the hosted form and the provider-event fan-outs only
+      check the whole-flow switch, so disabling just the trigger NODE still
+      accepts inbound requests and starts a run; the worker then records that
+      node as skipped, producing a run that does nothing. Either honour it at
+      the endpoints (and revisit `MigrateWebhookPublish`, which currently
+      preserves the permissive behaviour on purpose) or drop the per-node
+      toggle from trigger nodes so the UI stops implying it works.
 
 - [ ] **Verify the `configPath` keys stay reachable** — the six
       `connectMcp.clients.*.configPath.{macos,windows,linux}` keys resolve
@@ -148,6 +145,58 @@ re-raised.
 
 Archive, newest area first. The detail stays because the reasoning is the
 reusable part.
+
+### Publish semantics unified (2026-08-19)
+- [x] **"Published" now means one thing on every path** — the scheduler
+      required a published commit; the webhook, hosted-form and provider-event
+      paths called `LoadPublishedOrHead` and fell back to HEAD, so the SAME
+      flow was live-when-unpublished with a webhook and dark with a schedule.
+      Replaced with `Store.LoadPublished`, which returns `ErrNotPublished` and
+      fires nothing; all four call sites converted. `UnpublishFlow` now really
+      does take a flow offline (it previously left webhook flows running).
+- [x] **Upgrade migration so live webhooks don't go dark**
+      (`daemon/MigrateWebhookPublish`, wired before the scheduler starts) —
+      publishes HEAD once for every flow with a reachable webhook or a
+      provider-event trigger and no published commit: exactly the revision it
+      was already running, so the upgrade is a no-op from the flow's side.
+      Deliberately does NOT touch unpublished cron/poll drafts (never live —
+      publishing would START them) or paused flows (not firing, and publishing
+      would make an old revision live the moment someone un-pauses).
+      Idempotent, and pinned by a test that it never advances an existing
+      published pointer to a newer HEAD.
+- [x] **BUG: provider-event triggers didn't count as triggers at all** —
+      `HasConfiguredAutoTrigger` only knew about scheduler and webhook nodes,
+      so a flow whose only trigger was "On mention" / "On push" / "On payment"
+      reported as **Manual only** while firing on every event. Added
+      `core.EventTriggerModules` + `HasEventTrigger`, mirrored in
+      `web/src/flowStatus.ts`, with `TestEventTriggerModulesMatchCatalog`
+      failing if a new `category: "trigger"` drop is added and not classified.
+- [x] **BUG: the "you haven't published" nudge almost never appeared** — it
+      was gated on `triggers.length`, the DEPRECATED graph-level trigger array
+      the runtime mostly ignores, so a flow triggered by a `cron_trigger` or
+      `webhook_input` NODE — essentially every modern flow — never saw it.
+      Now gated on `runStatus === "needs_publish"`. This was the single biggest
+      reason people believed a saved flow was a running flow.
+- [x] **Five verbs collapsed to two** — one **Publish** (was Publish / Go live
+      / Make changes live / Make live) and one **On/Off** switch (was
+      Enabled / Paused). Plus a continuously visible draft-vs-live line under
+      the toolbar: "Published — the live version matches your draft" or
+      "Published, but your draft has changes that aren't live yet" with an
+      inline Publish changes action. Both locales.
+- [x] **Tests updated to reflect that a live flow is a published flow** — 18
+      fixtures across webhook/form/Slack/GitHub/Stripe events and the e2e
+      suite saved a graph and expected it to fire; they now use a
+      `savePublished` helper. The user-journey test gained an explicit
+      `publishFlow` step between "turn it on" and "fire the webhook", which is
+      the sequence a real user has to follow.
+
+      **Known gap, deliberately preserved:** node-level `disabled` on a trigger
+      does NOT stop the flow firing — the /trigger endpoint and the event
+      fan-outs only consult the whole-flow switch, and the worker then records
+      the disabled node as skipped. `classifyTriggers` mirrors that rather than
+      pretending otherwise, and the migration preserves it. Whether those paths
+      SHOULD honour a disabled trigger node is a separate question; the
+      migration test pins current behaviour so it fails if that changes.
 
 ### Templates (2026-08-19)
 - [x] **BUG: two of the five templates spammed, forever** — `email-to-sheet`

@@ -156,9 +156,7 @@ func TestSlackEvents_AppMentionFiresSubscribedGraphs(t *testing.T) {
 			{ID: "trig", Module: "slack_on_mention"},
 		},
 	}
-	if _, err := h.ws.Save(g, "test"); err != nil {
-		t.Fatalf("save: %v", err)
-	}
+	savePublished(t, h.ws, g)
 
 	event := map[string]any{
 		"type":    "event_callback",
@@ -232,12 +230,8 @@ func TestSlackEvents_ChannelFilterSkipsMismatchedGraphs(t *testing.T) {
 			Params: map[string]any{"channel_filter": "C222"},
 		}},
 	}
-	if _, err := h.ws.Save(graphA, "test"); err != nil {
-		t.Fatalf("save A: %v", err)
-	}
-	if _, err := h.ws.Save(graphB, "test"); err != nil {
-		t.Fatalf("save B: %v", err)
-	}
+	savePublished(t, h.ws, graphA)
+	savePublished(t, h.ws, graphB)
 
 	event := map[string]any{
 		"type":    "event_callback",
@@ -286,9 +280,7 @@ func TestSlackEvents_EmptyChannelFilterMatchesAll(t *testing.T) {
 		ID: "old-graph", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{{ID: "trig", Module: "slack_on_mention"}},
 	}
-	if _, err := h.ws.Save(g, "test"); err != nil {
-		t.Fatalf("save: %v", err)
-	}
+	savePublished(t, h.ws, g)
 	event := map[string]any{
 		"type":    "event_callback",
 		"team_id": "T",

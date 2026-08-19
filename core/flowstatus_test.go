@@ -130,7 +130,11 @@ func TestFlowRunStatusPublished(t *testing.T) {
 		{"disabled wins", Graph{Disabled: true, Nodes: schedFlow.Nodes}, false, FlowPaused},
 		{"scheduler unpublished needs publish", schedFlow, false, FlowNeedsPublish},
 		{"scheduler published is live", schedFlow, true, FlowLive},
-		{"webhook unpublished stays live", webhookFlow, false, FlowLive},
+		// Was "stays live": the webhook endpoint used to fall back to HEAD, so
+		// an unpublished webhook flow really did fire. Every automatic path
+		// requires publish now, so it reads the same as a schedule.
+		{"webhook unpublished needs publish", webhookFlow, false, FlowNeedsPublish},
+		{"webhook published is live", webhookFlow, true, FlowLive},
 		{"manual", manualFlow, false, FlowManual},
 		{"manual published", manualFlow, true, FlowManual},
 	}

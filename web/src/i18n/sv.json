@@ -18,19 +18,19 @@
   "flowStatus": {
     "live": {
       "label": "Aktiv",
-      "tip": "Det här flödet körs av sig självt — en trigger är konfigurerad (ett schema, ett poll-/formulärintervall eller en webhook) och flödet är aktiverat."
+      "tip": "Det här flödet körs av sig självt — det har en trigger, är publicerat och är påslaget."
     },
     "manual": {
       "label": "Endast manuell",
       "tip": "Det här flödet körs bara när du trycker på Kör. Lägg till en trigger — ett schema, ett intervall eller en webhook — så startar det automatiskt."
     },
     "paused": {
-      "label": "Pausad",
-      "tip": "Det här flödet är inaktiverat och triggas därför aldrig automatiskt. Manuell körning fungerar fortfarande. Aktivera det igen för att återuppta dess triggers."
+      "label": "Av",
+      "tip": "Flödet är avstängt, så ingenting utlöser det. Kör fungerar fortfarande. Slå på det för att återuppta dess triggers."
     },
     "needs_publish": {
-      "label": "Inte live än",
-      "tip": "Det här flödet har ett schema, men bara live-flöden körs av sig själva. Gör det live för att starta det automatiskt. (Kör fungerar fortfarande för test.)"
+      "label": "Inte publicerat",
+      "tip": "Flödet har en trigger, men ingenting kör ett opublicerat flöde — scheman, webhooks och formulär väntar på att du publicerar. (Kör fungerar fortfarande för test.)"
     }
   },
   "explain": {
@@ -1859,10 +1859,10 @@
     "emptyEntryTitle": "Välj vad som startar ditt flöde",
     "emptyEntryBody": "Varje flöde behöver något som sätter igång det — ett schema (till exempel varje morgon), ett inskickat formulär eller ett meddelande från en annan app. Välj ett och lägg sedan till dropparna som följer.",
     "addEntryPoint": "Välj en startpunkt",
-    "enabledState": "Aktiverat",
-    "paused": "Pausat",
-    "pauseTitle": "Pausa flödet — stoppar schemalagda, intervall- och webhook-körningar. Manuell körning fungerar fortfarande.",
-    "resumeTitle": "Flödet är pausat — klicka för att återuppta automatiska körningar.",
+    "enabledState": "På",
+    "paused": "Av",
+    "pauseTitle": "Stäng av flödet — scheman, webhooks och formulär slutar köra. Kör fungerar fortfarande.",
+    "resumeTitle": "Flödet är avstängt — slå på det för att återuppta dess triggers.",
     "pauseSaveFirst": "Spara flödet innan du pausar det.",
     "alignLeft": "Justera vänsterkanter",
     "alignHCenter": "Justera horisontella mittpunkter",
@@ -1906,22 +1906,24 @@
     "noHistory": "Inga sparade versioner än.",
     "publish": "Publicera",
     "publishing": "Publicerar…",
-    "publishChanges": "Gör ändringar live",
-    "goLive": "Gå live",
-    "pause": "Pausa",
+    "publishChanges": "Publicera ändringar",
+    "goLive": "Publicera",
+    "pause": "Stäng av",
+    "liveStateCurrent": "Publicerat — live-versionen matchar ditt utkast.",
+    "liveStateDirty": "Publicerat, men ditt utkast har ändringar som inte är live än.",
     "live": "Live",
     "publishedCheer": "Publicerat!",
-    "currentRelease": "Aktuell version",
-    "publishedTitle": "Den aktuella versionen — den som automatiska triggers kör (när flödet är live).",
+    "currentRelease": "Live-version",
+    "publishedTitle": "Live-versionen — den som automatiska triggers kör.",
     "publishChangesTitle": "Publicera ditt utkast — automatiska triggers kör dessa ändringar.",
-    "publishFirstTitle": "Gå live — publicerar flödet och startar dess automatiska triggers.",
-    "publishNudge": "Flödet har en trigger men är inte live än — det körs inte av sig självt (schema, webhook eller formulär) förrän du gör det live.",
-    "publishNudgeCta": "Gå live",
+    "publishFirstTitle": "Publicera flödet så att dess triggers börjar köra.",
+    "publishNudge": "Flödet har en trigger men är inte publicerat — ingenting kör det förrän du publicerar. (Kör fungerar fortfarande för test.)",
+    "publishNudgeCta": "Publicera",
     "publishPreviewBlocked": "Avsluta versionsförhandsgranskningen innan du publicerar.",
-    "confirmPublishTitle": "Gå live med detta flöde?",
-    "confirmPublishBody": "Automatiska triggers (cron, pollning, webhook, formulär) kör det här flödet. Ditt utkast förblir redigerbart — endast \"Publicera ändringar\" gör nya ändringar live.",
-    "confirmPauseTitle": "Pausa detta flöde?",
-    "confirmPauseBody": "Alla automatiska triggers slutar köras — cron, pollning, webhook och formulär. Manuell körning fungerar fortfarande, och den live-version behålls så att den återställs när du återupptar.",
+    "confirmPublishTitle": "Publicera flödet?",
+    "confirmPublishBody": "Dess triggers börjar köra den här versionen. Ditt utkast förblir redigerbart — bara en ny publicering gör nya ändringar live.",
+    "confirmPauseTitle": "Stäng av flödet?",
+    "confirmPauseBody": "Alla triggers slutar köra — scheman, webhooks, formulär och apphändelser. Kör fungerar fortfarande, och live-versionen behålls så att den återställs när du slår på igen.",
     "confirmUpdateTitle": "Publicera ändringar?",
     "confirmUpdateBody": "Live-versionen uppdateras till ditt aktuella utkast. Automatiska triggers kör den nya versionen från och med nu.",
     "delete": "Ta bort",
@@ -1947,8 +1949,8 @@
     "diffEdgeAdded": "Koppling tillagd",
     "diffEdgeRemoved": "Koppling borttagen",
     "diffMeta": "Inställningar ändrade: {{fields}}",
-    "makeLive": "Gör live",
-    "makeLiveTitle": "Publicera den här versionen — automatiska triggers kör den (återställning).",
+    "makeLive": "Publicera den här versionen",
+    "makeLiveTitle": "Gör den här till live-version — automatiska triggers kör den från och med nu.",
     "label": "Etikett",
     "relabel": "Byt namn på etikett",
     "labelTitle": "Ge den här versionen ett namn (t.ex. \"Black Friday-konfig\") så att den är lätt att hitta senare.",
@@ -1959,7 +1961,7 @@
     "publishLabelField": "Namnge den här versionen (valfritt)",
     "publishLabelPlaceholder": "t.ex. Black Friday-konfig",
     "publishWithoutName": "Publicera utan namn",
-    "confirmMakeLiveTitle": "Gör den här versionen live?",
+    "confirmMakeLiveTitle": "Publicera den här versionen?",
     "confirmMakeLiveBody": "Detta återställer live-versionen till den här revisionen — automatiska triggers kör den från och med nu. Ge den ett namn så att den är lätt att känna igen senare.",
     "testRunHeading": "Testkörning med exempeldata",
     "testRunHelp": "Redigera JSON-datan nedan och skicka den genom flödets webhook-trigger. Körningen använder ditt aktuella utkast.",

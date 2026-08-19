@@ -18,19 +18,19 @@
   "flowStatus": {
     "live": {
       "label": "Live",
-      "tip": "This flow runs on its own — a trigger is configured (a schedule, a poll/form interval, or a webhook) and the flow is enabled."
+      "tip": "This flow runs on its own — it has a trigger, it's published, and it's on."
     },
     "manual": {
       "label": "Manual only",
       "tip": "This flow runs only when you press Run. Add a trigger — a schedule, an interval, or a webhook — to make it start automatically."
     },
     "paused": {
-      "label": "Paused",
-      "tip": "This flow is disabled, so it never fires automatically. Manual Run still works. Re-enable it to resume its triggers."
+      "label": "Off",
+      "tip": "This flow is off, so nothing triggers it. Run still works. Turn it on to resume its triggers."
     },
     "needs_publish": {
-      "label": "Not live yet",
-      "tip": "This flow has a schedule set up, but only live flows run on their own. Make it live to start it running automatically. (Run still works for testing.)"
+      "label": "Not published",
+      "tip": "This flow has a trigger, but nothing runs an unpublished flow — schedules, webhooks and forms all wait for you to publish. (Run still works for testing.)"
     }
   },
   "explain": {
@@ -1861,10 +1861,10 @@
     "emptyEntryTitle": "Choose what starts your flow",
     "emptyEntryBody": "Every flow needs something that kicks it off — a schedule (like every morning), a submitted form, or a message from another app. Pick one, then add the drops that follow.",
     "addEntryPoint": "Choose a starting point",
-    "enabledState": "Enabled",
-    "paused": "Paused",
-    "pauseTitle": "Pause this flow — stops scheduled, interval and webhook runs. Manual Run still works.",
-    "resumeTitle": "This flow is paused — click to resume automatic runs.",
+    "enabledState": "On",
+    "paused": "Off",
+    "pauseTitle": "Turn this flow off — schedules, webhooks and forms all stop. Run still works.",
+    "resumeTitle": "This flow is off — turn it on to resume its triggers.",
     "pauseSaveFirst": "Save the flow before pausing it.",
     "triggerHint": "This flow only runs when you press Run. Add a trigger to start it automatically — on a schedule, from a form, or a webhook.",
     "dismiss": "Dismiss",
@@ -1915,22 +1915,24 @@
     "noHistory": "No saved versions yet.",
     "publish": "Publish",
     "publishing": "Publishing…",
-    "publishChanges": "Make changes live",
-    "goLive": "Go live",
-    "pause": "Pause",
+    "publishChanges": "Publish changes",
+    "goLive": "Publish",
+    "pause": "Turn off",
+    "liveStateCurrent": "Published — the live version matches your draft.",
+    "liveStateDirty": "Published, but your draft has changes that aren't live yet.",
     "live": "Live",
     "publishedCheer": "Published!",
-    "currentRelease": "Current release",
-    "publishedTitle": "The current release — the version automatic triggers run (when the flow is live).",
+    "currentRelease": "Live version",
+    "publishedTitle": "The live version — the one automatic triggers run.",
     "publishChangesTitle": "Publish your draft — automatic triggers will run these changes.",
-    "publishFirstTitle": "Go live — publishes this flow and starts its automatic triggers.",
-    "publishNudge": "This flow has a trigger but isn't live yet — it won't run on its own (on schedule, webhook, or form) until you make it live.",
-    "publishNudgeCta": "Go live",
+    "publishFirstTitle": "Publish this flow so its triggers start running.",
+    "publishNudge": "This flow has a trigger but hasn't been published — nothing runs it until you publish. (Run still works for testing.)",
+    "publishNudgeCta": "Publish",
     "publishPreviewBlocked": "Exit version preview before publishing.",
-    "confirmPublishTitle": "Go live with this flow?",
-    "confirmPublishBody": "Automatic triggers (cron, poll, webhook, form) will run this flow. Your draft stays editable — only \"Publish changes\" pushes new edits live.",
-    "confirmPauseTitle": "Pause this flow?",
-    "confirmPauseBody": "All automatic triggers stop firing — cron, poll, webhook, and forms. Manual Run still works, and the live version is kept so resuming restores it.",
+    "confirmPublishTitle": "Publish this flow?",
+    "confirmPublishBody": "Its triggers will start running this version. Your draft stays editable — only publishing again pushes new edits live.",
+    "confirmPauseTitle": "Turn this flow off?",
+    "confirmPauseBody": "Every trigger stops — schedules, webhooks, forms and app events. Run still works, and the live version is kept so turning it back on restores it.",
     "confirmUpdateTitle": "Publish changes?",
     "confirmUpdateBody": "The live version updates to your current draft. Automatic triggers will run the new version from now on.",
     "delete": "Delete",
@@ -1950,8 +1952,8 @@
     "diffEdgeAdded": "Connection added",
     "diffEdgeRemoved": "Connection removed",
     "diffMeta": "Settings changed: {{fields}}",
-    "makeLive": "Make live",
-    "makeLiveTitle": "Publish this version — automatic triggers will run it (rollback).",
+    "makeLive": "Publish this version",
+    "makeLiveTitle": "Make this the live version — automatic triggers will run it from now on.",
     "label": "Label",
     "relabel": "Rename label",
     "labelTitle": "Name this version (e.g. \"Black Friday config\") so it's easy to find later.",
@@ -1962,7 +1964,7 @@
     "publishLabelField": "Name this release (optional)",
     "publishLabelPlaceholder": "e.g. Black Friday config",
     "publishWithoutName": "Publish without a name",
-    "confirmMakeLiveTitle": "Make this version live?",
+    "confirmMakeLiveTitle": "Publish this version?",
     "confirmMakeLiveBody": "This rolls the live version back to this revision — automatic triggers will run it from now on. Give it a name so it's easy to recognize later.",
     "testRunHeading": "Test run with sample input",
     "testRunHelp": "Edit the JSON payload below, then fire it through this flow's webhook trigger. The run uses your current draft.",

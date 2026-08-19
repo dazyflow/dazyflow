@@ -24,12 +24,14 @@ const (
 	// FlowLive: enabled AND carries at least one configured auto-trigger,
 	// so the daemon will start it without anyone pressing Run.
 	FlowLive FlowRunStatus = "live"
-	// FlowNeedsPublish: enabled and carries a configured SCHEDULER trigger
-	// (cron / poll / form interval) that would fire on its own — but the flow
-	// has never been published, and the scheduler only runs published flows.
-	// Publishing flips it to live. Webhook/event triggers fire from an HTTP
-	// endpoint and don't require publishing, so a flow whose only auto-trigger
-	// is a webhook stays live while unpublished.
+	// FlowNeedsPublish: enabled and carries a configured auto-trigger that
+	// would fire on its own — but the flow has never been published, and NO
+	// automatic path runs an unpublished flow. Publishing flips it to live.
+	//
+	// This used to apply only to scheduler triggers, because the webhook,
+	// form and event endpoints fell back to HEAD and so did fire while
+	// unpublished. That asymmetry is gone: "published" now means the same
+	// thing whatever the trigger.
 	FlowNeedsPublish FlowRunStatus = "needs_publish"
 )
 
@@ -48,33 +50,71 @@ func FlowRunStatusOf(g Graph) FlowRunStatus {
 // FlowRunStatusPublished is the publish-aware classifier used where the
 // caller knows whether the flow has a published revision (the flow list and
 // the editor both track publish state). It's FlowRunStatusOf plus one rule:
-// a flow that would be live via a SCHEDULER trigger but isn't published is
-// "needs publish", because the scheduler only runs published flows.
+// a flow that would fire on its own but isn't published is "needs publish",
+// because no automatic path runs an unpublished flow.
 func FlowRunStatusPublished(g Graph, published bool) FlowRunStatus {
 	s := FlowRunStatusOf(g)
-	if s == FlowLive && !published && HasConfiguredSchedulerTrigger(g) {
+	if s == FlowLive && !published {
 		return FlowNeedsPublish
 	}
 	return s
 }
 
 // HasConfiguredSchedulerTrigger reports whether the flow has a configured
-// trigger that fires via the SCHEDULER (cron / poll / google-form interval) —
-// the subset of auto-triggers gated on publish state. Webhook triggers fire
-// from an HTTP endpoint and are intentionally excluded (they don't require
-// publishing). Mirrors the relevant cases of HasConfiguredAutoTrigger.
+// trigger that fires via the SCHEDULER (cron / poll / google-form interval),
+// as opposed to one that fires from an inbound HTTP request or provider
+// event. Every kind is gated on publish now, so this is no longer a
+// publish-state question — it is still what the scheduler uses to decide
+// what to enroll.
 func HasConfiguredSchedulerTrigger(g Graph) bool {
-	hasScheduler, _ := classifyTriggers(g)
+	hasScheduler, _, _ := classifyTriggers(g)
 	return hasScheduler
 }
 
-// classifyTriggers scans g once and reports whether it carries a configured
-// trigger that fires via the SCHEDULER (graph-level cron, cron_trigger node,
-// or poll_trigger/google_form_trigger node with a valid interval) and,
-// separately, whether it carries a reachable webhook_input node. The two
-// public classifiers are thin views over this: HasConfiguredSchedulerTrigger
-// is hasScheduler, HasConfiguredAutoTrigger is hasScheduler || hasWebhook.
-func classifyTriggers(g Graph) (hasScheduler, hasWebhook bool) {
+// HasConfiguredWebhookTrigger reports whether the flow has a REACHABLE
+// webhook_input — one carrying a secret key or a public hosted form. A
+// webhook node with neither is inert: the /trigger endpoint rejects every
+// inbound call, so it does not make the flow live.
+func HasConfiguredWebhookTrigger(g Graph) bool {
+	_, hasWebhook, _ := classifyTriggers(g)
+	return hasWebhook
+}
+
+// HasEventTrigger reports whether the flow carries an inbound provider-event
+// trigger (a Slack mention, a GitHub push, a Stripe payment …) — the nodes the
+// daemon's event fan-outs pre-complete when a provider calls in. Used by the
+// upgrade migration to identify flows that were firing through the old
+// fall-back-to-HEAD behaviour.
+func HasEventTrigger(g Graph) bool {
+	_, _, hasEvent := classifyTriggers(g)
+	return hasEvent
+}
+
+// EventTriggerModules are the trigger drops fired by an inbound provider
+// event rather than by the scheduler or the /trigger webhook. They carry no
+// interval or secret to check — the node's mere presence makes the flow live,
+// because the daemon's fan-out matches on the module ID alone.
+//
+// Kept in lockstep with the catalog by TestEventTriggerModulesMatchCatalog,
+// which fails if a manifest in category "trigger" is neither listed here nor
+// one of the known scheduler/webhook modules. Add a new *_on_* trigger drop
+// and that test tells you to come here.
+var EventTriggerModules = map[string]bool{
+	"slack_on_mention":                true,
+	"github_on_push":                  true,
+	"github_on_new_pr":                true,
+	"stripe_on_payment":               true,
+	"stripe_on_payment_failed":        true,
+	"stripe_on_subscription_canceled": true,
+	"homeassistant_state_changed":     true,
+}
+
+// classifyTriggers scans g once and reports the three ways a flow can fire on
+// its own: the SCHEDULER (graph-level cron, cron_trigger, or a
+// poll_trigger/google_form_trigger with a valid interval), a reachable
+// webhook_input, and an inbound provider event (EventTriggerModules). The
+// public classifiers are thin views over this.
+func classifyTriggers(g Graph) (hasScheduler, hasWebhook, hasEvent bool) {
 	for _, tr := range g.Triggers {
 		if tr.Type == "cron" && strings.TrimSpace(tr.Cron) != "" {
 			hasScheduler = true
@@ -95,9 +135,21 @@ func classifyTriggers(g Graph) (hasScheduler, hasWebhook bool) {
 			if len(WebhookSecrets(n.Params)) > 0 || publicForm {
 				hasWebhook = true
 			}
+		default:
+			// Provider-event triggers. Node-level Disabled is deliberately NOT
+			// checked, because the runtime doesn't check it either: the event
+			// fan-outs match on module ID alone and the /trigger endpoint only
+			// consults the whole-flow switch, so such a flow really does still
+			// fire (the worker then records the disabled node as skipped).
+			// Mirroring that keeps the chip honest. Whether those paths SHOULD
+			// honour a disabled trigger node is a separate question — see the
+			// note in TODO.md.
+			if EventTriggerModules[n.Module] {
+				hasEvent = true
+			}
 		}
 	}
-	return hasScheduler, hasWebhook
+	return hasScheduler, hasWebhook, hasEvent
 }
 
 // HasConfiguredAutoTrigger reports whether the flow has at least one
@@ -112,11 +164,15 @@ func classifyTriggers(g Graph) (hasScheduler, hasWebhook bool) {
 //   - webhook: a webhook_input node that is reachable — it has a secret or
 //     a public hosted form (otherwise the /trigger endpoint rejects every
 //     inbound call, mirroring lintTriggers' "no secret, no form" warning).
+//   - provider event: an enabled EventTriggerModules node (a Slack mention, a
+//     GitHub push, a Stripe payment …). These were previously NOT counted, so
+//     a flow whose only trigger was "On mention" reported as manual-only in
+//     the UI while firing on every mention.
 //
 // Deprecated graph-level webhook/poll triggers are intentionally NOT counted:
 // the runtime ignores them (see lintTriggers), so a flow carrying only one
 // of those is manual-only in practice.
 func HasConfiguredAutoTrigger(g Graph) bool {
-	hasScheduler, hasWebhook := classifyTriggers(g)
-	return hasScheduler || hasWebhook
+	hasScheduler, hasWebhook, hasEvent := classifyTriggers(g)
+	return hasScheduler || hasWebhook || hasEvent
 }

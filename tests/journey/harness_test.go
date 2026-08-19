@@ -286,6 +286,18 @@ func (n *newcomer) enableFlow(id string) {
 	}
 }
 
+// publishFlow makes the saved draft the live revision — what the editor's
+// Publish button does. Nothing fires until this happens: the scheduler, the
+// /trigger webhook, the hosted form and the provider-event fan-outs all
+// refuse an unpublished flow. The journey covers it because a user who skips
+// it has a flow that looks on and does nothing.
+func (n *newcomer) publishFlow(id string) {
+	r := n.s.call(n.t, "POST", n.flowPath(id)+"/publish", n.token, nil)
+	if r.status != http.StatusOK {
+		n.t.Fatalf("could not publish the flow: status=%d body=%s", r.status, r.body)
+	}
+}
+
 // fireWebhook posts to the public trigger URL with the flow's secret,
 // the way an inbound form/webhook would. Returns the run id.
 func (n *newcomer) fireWebhook(id, secret string, payload any) string {
