@@ -148,9 +148,10 @@ export function ConfigChecklistModal({
           </ul>
         </div>
         <div className="settings-foot">
-          <Button variant="primary" onClick={onClose}>
-            {t("common.close")}
-          </Button>
+          {/* Secondary, not primary: the affirmative actions in this dialog are
+              the jump-to-drop rows above. A purple Close would draw the eye to
+              leaving rather than to the thing the user opened it to fix. */}
+          <Button onClick={onClose}>{t("common.close")}</Button>
         </div>
       </div>
     </div>,

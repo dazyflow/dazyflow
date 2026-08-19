@@ -370,7 +370,7 @@ function OrgProfileEditor() {
           </div>
           <div style={{ marginTop: "var(--space-2)", display: "flex", gap: "var(--space-2)", alignItems: "center" }}>
             <Button
-              className="primary"
+              variant="primary"
               onClick={() => void saveSubdomain()}
               disabled={
                 savingSub ||

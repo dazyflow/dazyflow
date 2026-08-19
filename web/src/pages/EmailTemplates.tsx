@@ -77,7 +77,7 @@ export function EmailTemplates() {
           <div className="email-templates-layout">
         <div className="email-templates-list">
           {canWrite && (
-            <Button variant="secondary" onClick={() => setSelected(NEW_DRAFT)}>
+            <Button variant="primary" onClick={() => setSelected(NEW_DRAFT)}>
               <Plus size={14} /> {t("emailTemplates.new", "New template")}
             </Button>
           )}

@@ -30,6 +30,16 @@ import {
 // (icon + label that drops to icon-only on narrow screens), `block`
 // (full-width), `loading` (shows busy + disables).
 //
+// ONE deliberate exception, because the variant list can't express it: a quiet
+// inline destructive action is `variant="ghost" className="danger"`, which the
+// stylesheet defines as its own compound (`.ghost.danger`, app.css) — ghost's
+// transparent fill with danger's red ink, and NO border. Plain
+// `variant="danger"` is the outlined form and is what a standalone destructive
+// button should use. The compound is used by the row-level delete icons in
+// Files, CredentialsManager, IconUpload and AdminSecretManager. It looks like a
+// call site bypassing the variant API and is not — leaving this note here so
+// the next audit doesn't "fix" six correct call sites into growing a border.
+//
 // Toggle/tab/chip selectors (the `.active` family — theme options, role
 // templates, cron chips, segmented tabs) are *selectable state*, not actions,
 // and deliberately live outside this component.
