@@ -24,6 +24,8 @@ func TestSupportView_EndToEnd(t *testing.T) {
 	h.gw.Grants = NewMemGrantStore()
 	h.gw.SupportAgents = NewMemSupportAgentStore()
 	h.gw.supportNow = func() time.Time { return now }
+	auditLog := NewMemAuditLog()
+	h.gw.Audit = auditLog
 	ctx := context.Background()
 
 	// Seed a flow (tenant t / workspace ws — the harness's MapWorkspaces key)
@@ -85,6 +87,17 @@ func TestSupportView_EndToEnd(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("bundle missing diagnostic %q:\n%s", want, body)
 		}
+	}
+
+	// Every support view is audited into the ORG's OWN log (not some vendor-side
+	// log), naming the agent, the flow, and the grant that authorized it — the
+	// org's guarantee that it can see everything support looked at.
+	viewEvent, ok := auditActions(t, auditLog, "t")["support.view"]
+	if !ok {
+		t.Fatalf("no support.view audit event in the org's log: %v", auditActions(t, auditLog, "t"))
+	}
+	if viewEvent.Actor != "agent-a" || viewEvent.Target != "flow1" || viewEvent.Detail != "grant=g1" {
+		t.Errorf("support.view audit = %+v, want actor agent-a / target flow1 / detail grant=g1", viewEvent)
 	}
 
 	// A different support agent with no grant → 404.

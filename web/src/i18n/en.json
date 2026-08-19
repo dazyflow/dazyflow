@@ -2260,7 +2260,30 @@
       "awaiting_support": "With support",
       "resolved": "Resolved",
       "closed": "Closed"
-    }
+    },
+    "yourAccess": "Your flow access",
+    "searchPlaceholder": "Search subject, organization, flow…",
+    "filterOwner": "Owner",
+    "ownerAll": "Anyone",
+    "ownerUnassigned": "Unassigned",
+    "ownerMine": "Assigned to me",
+    "filterStatus": "Status",
+    "statusAny": "Any status",
+    "noMatches": "No tickets match your search.",
+    "unassigned": "unassigned",
+    "assignedToYou": "assigned to you",
+    "assignedTo": "assigned to {{agent}}",
+    "claim": "Claim",
+    "release": "Release",
+    "close": "Close ticket",
+    "stats": {
+      "unassigned": "Unassigned",
+      "mine": "Assigned to me",
+      "waiting": "Waiting on support",
+      "open": "Open tickets",
+      "ofTotal": "of {{count}} filed"
+    },
+    "noneInView": "No tickets in this view."
   },
   "report": {
     "title": "Report a problem",

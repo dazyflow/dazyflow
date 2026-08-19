@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { AlertCircle, ArrowRight, Info, LifeBuoy, Lock, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
@@ -58,6 +58,8 @@ export function SupportAgentHome() {
           </h1>
           <div className="sub">{t("supportHome.subtitle")}</div>
         </div>
+        {/* The other half of an agent's day: the cross-org ticket queue. */}
+        <Link to="/support/queue" className="dash-panel-link">{t("support.queueTitle")}</Link>
       </div>
 
       {gate === "disabled" && (

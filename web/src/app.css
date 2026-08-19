@@ -11718,6 +11718,26 @@ button:active,
   flex: 1;
   resize: vertical;
 }
+/* Support-queue dashboard tiles. Each tile is also the filter for what it
+   counts, so it's a <button> rather than the Dashboard's <Link> — restate the
+   card surface the global button reset would otherwise flatten, and mark the
+   selected view so the numbers and the list below never look unrelated. */
+.support-stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  text-align: left;
+  align-items: flex-start;
+  padding: var(--space-4);
+  cursor: pointer;
+}
+.support-stat:hover {
+  background: var(--surface);
+  border-color: var(--accent);
+}
+.support-stat.is-active {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
 
 /* `card error` is used across the app (support modals, admin pages, run detail)
    but had no rule of its own, so an error card read as an ordinary card. Give

@@ -9,7 +9,7 @@ import (
 )
 
 // support_grant.go holds the AccessGrant — the trust-critical piece of the
-// Support feature (see TODO-support-tickets.md). A grant is explicit org
+// Support feature (see docs/support-tickets-design.md). A grant is explicit org
 // consent for ONE named support agent to view ONE flow, read-only, until a
 // deadline. It is a capability, never tenant-crossing: possession of an active
 // grant is the sole authority AuthorizeGraphSupportView accepts, and even then

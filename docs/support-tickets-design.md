@@ -1,9 +1,20 @@
-# Support tickets + consented read-only access — design TODO
+# Support tickets + consented read-only access — design record
 
-Status: **design; the prerequisite (redacted support bundle) is now built** —
-`core/support_bundle.go`. Everything else is still design-only. Hand-off doc so
-this can be continued in a fresh session. Written 2026-06-29; bundle shipped
-2026-07-03.
+Status: **BUILT — all three phases shipped.** This file started as a design
+hand-off and is now the feature's design record: the spec below is what got
+built, with inline notes where the implementation deviated. Written 2026-06-29;
+bundle shipped 2026-07-03; Phase 1 (grants + redacted view) and Phase 2 (native
+tickets + chat) 2026-07-04; Phase 3 (support dashboard: assignment, queue
+filters + counts, role-separation polish) 2026-08-19.
+
+Where the code lives: `core/support_bundle.go`, `core/support_grant.go`,
+`core/ticket.go`, `core/rbac.go` + `core/authz.go` (the permission + capability
+check); `daemon/support_routes.go`, `daemon/ticket_routes.go`,
+`daemon/support_grant_store.go`, `daemon/ticket_store.go`,
+`daemon/supportagent.go`, `daemon/admin_support_agents.go`; `web/src/pages/`
+`SupportTickets.tsx` / `SupportAgentHome.tsx` / `SupportFlowView.tsx` /
+`AdminSupport.tsx` / `AdminPlatformSupportAgents.tsx`. Off by default behind
+`DAZYFLOW_SUPPORT_ENABLED`.
 
 ## Goal
 
@@ -80,12 +91,16 @@ type Ticket struct {
     Subject    string
     Status     TicketStatus
     FlowID     string   // optional — the flow this ticket is about
+    RunID      string   // optional — the failing run (added while building)
     BundleID   string   // optional — attached SupportBundleRecord
     AssignedTo string   // optional — support agent subject
     CreatedAt  time.Time
     UpdatedAt  time.Time
 }
 ```
+- `AssignedTo` is support-side only: it is stripped from every user-facing
+  response (`ticketForUser`), as is the author of support messages
+  (`messagesForUser`). See the Phase 3 notes.
 
 ### TicketMessage (chat)
 
@@ -154,8 +169,9 @@ Default TTL: TBD (suggest a few hours, end-of-day cap).
 type TicketStore interface {
     Create(ctx, Ticket) error
     Get(ctx, id string) (Ticket, error)
-    ListForTenant(ctx, tenant string, ...) ([]Ticket, error) // user view
-    ListQueue(ctx, ...) ([]Ticket, error)                    // cross-tenant support queue
+    ListForTenant(ctx, tenant string, opts TicketListOpts) ([]Ticket, error) // user view
+    ListQueue(ctx, opts TicketListOpts) ([]Ticket, error)   // cross-tenant support queue
+    QueueSummary(ctx) (TicketQueueSummary, error)           // dashboard counts (Phase 3)
     Update(ctx, Ticket) error
     AppendMessage(ctx, TicketMessage) error
     ListMessages(ctx, ticketID string) ([]TicketMessage, error)
@@ -184,10 +200,14 @@ type + `GrantStatus` state machine with `IsActive`/`CanDecide`/`CanRevoke`
 Verified: approved+unexpired ok; expired/denied/revoked/requested/wrong-agent/
 wrong-flow/wrong-tenant/not-an-agent all rejected; the expiry boundary is
 exclusive; a support agent has no ambient access (RequireTenant + Run/Edit still
-reject). Items 4–6 (no cross-tenant short-circuit — confirmed by construction;
-serve the redacted view; audit into the org log) are enforced at the daemon
-call sites, still TODO. The `GrantStore`/`TicketStore` implementations are still
-TODO.
+reject). Items 4–6 are DONE too, enforced at the daemon call
+sites: no cross-tenant short-circuit (confirmed by construction —
+`PermSupportAgent` was never added to `RequireTenant`), the view serves
+`BuildSupportBundle` and never the raw graph (`daemon/support_routes.go`
+`supportView`), and every support action audits into the ORG's log (asserted in
+`daemon/support_view_test.go`). The `GrantStore` / `TicketStore` / `BundleStore`
+implementations are all built, in-memory and Postgres
+(`daemon/support_grant_store.go`, `daemon/ticket_store.go`).
 
 Existing model: `core.Principal{Subject,Tenant,Workspace,Roles,Extras}`;
 `PermPlatformAdmin = "platform:admin"` is the cross-tenant super-admin and
@@ -334,20 +354,79 @@ check, never tenant-crossing.
      run-failure banner with the failing run referenced), api.ts methods + types
      + routes (`/support`, `/support/queue[/:id]`, `/support/:id`) + nav entry +
      en/sv strings.
-3. **Support dashboard:** cross-org queue, assignment, role-separation polish.
+3. **Support dashboard — DONE.** The queue became something a team can actually
+   work from, rather than a flat cross-org list.
+   - **Assignment** (`POST /api/v1/support/tickets/{id}/assign` `{assignee}`):
+     `"me"` claims, `""` releases, any other subject hands over — and must be a
+     PROVISIONED agent (`SupportAgentStore.Granted`, keyed on the email that is
+     also the session subject), so assignment can't quietly name an outsider as
+     support staff. Reassignment away from another agent is allowed (teams hand
+     work over) and audited. Replying still auto-claims an unowned ticket.
+   - **Ownership filters** on the queue: `core.TicketListOpts` grew
+     `AssignedTo` + `Unassigned` (`?assignee=me`, `?unassigned=true`, composing
+     with `?status=` and `?limit=`); `Unassigned` wins if both are set. Both
+     store impls filter; Postgres does it in SQL with fixed placeholders (no
+     dynamic SQL) plus an `(assigned_to, updated_at DESC)` index.
+   - **Counts** (`GET /api/v1/support/tickets/summary` → `core.TicketQueueSummary`
+     + the caller's own `mine`): deliberately NOT bounded by the list limit, so a
+     tile can't read "12 unassigned" just because page one holds 12.
+     `by_status`/`total` count every ticket; `open`/`unassigned`/`by_assignee`
+     count only non-terminal ones, so a pile of resolved tickets can't drown the
+     "needs a first responder" signal. Both impls aggregate through
+     `TicketQueueSummary.Add` so their arithmetic can't drift; Postgres does one
+     `GROUP BY status, assigned_to`.
+   - **Role-separation polish**, in BOTH directions. The customer never sees the
+     support organisation's internals: `ticketForUser` strips `AssignedTo` and
+     `messagesForUser` blanks the author of support messages on every user-facing
+     response (the customer's channel for "what did support do" is their own
+     audit log, not the support team's rota) — which is also why claiming leaves
+     NO system note in the thread. Status changes split: the requester may close
+     or reopen their own ticket (`POST /api/v1/me/support/tickets/{id}/status`,
+     restricted to `closed` / `awaiting_support`) but only support may declare it
+     `resolved`. And `platform:admin` still does not imply `support:agent` — the
+     instance operator is not support staff (asserted in
+     `TestSupportQueue_RoleSeparation`).
+   - **Frontend:** `SupportQueue` in `web/src/pages/SupportTickets.tsx` is now the
+     dashboard — four stat tiles that double as saved views (unassigned / mine /
+     waiting on support / open), a search + owner + status toolbar (search is
+     client-side over the loaded page; the API filters on status + ownership),
+     per-row Claim, and Claim/Release in the thread header. The requester gets a
+     Close button. `web/src/pages/SupportQueue.test.tsx` covers the tiles, the
+     filter round-trips, claiming, and search; `daemon/ticket_dashboard_test.go`
+     covers the HTTP surface end to end.
+
+   **Phase 3 is complete — and with it the feature.** What was deliberately left
+   out is listed under "Deferred" below.
 
 ---
 
-## Tests to write
+## Tests — all written
 
-- `AuthorizeGraphSupportView`: approved+unexpired = ok; expired/denied/revoked/
-  wrong-agent/wrong-flow/wrong-tenant = ErrUnauthorized; read-only never gates run/edit.
-- Support agent WITHOUT a grant gets nothing (no ambient cross-tenant access);
-  confirm `RequireTenant` still rejects a support principal for a foreign tenant.
-- Grant TTL expiry boundary (now == ExpiresAt → denied).
-- Chat secret-scrub on ingest + display.
-- Audit event written to the ORG tenant on every support view.
-- Bundle redaction tests (see Prerequisite section).
+Every item on the original list is covered; where it lives:
+
+- `AuthorizeGraphSupportView` (approved+unexpired ok; expired / denied / revoked /
+  requested / wrong-agent / wrong-flow / wrong-tenant / not-an-agent rejected;
+  read-only never gates run/edit) — `core/support_grant_test.go`.
+- Support agent WITHOUT a grant gets nothing, and `RequireTenant` still rejects a
+  support principal for a foreign tenant — `core/support_grant_test.go`;
+  end-to-end over HTTP (no grant / wrong agent / revoked all 404) in
+  `daemon/support_view_test.go`.
+- Grant TTL expiry boundary (`now == ExpiresAt` → denied, exclusive) —
+  `core/support_grant_test.go`.
+- Chat secret-scrub on ingest + display — `core/ticket_test.go` (the detector) and
+  `daemon/ticket_routes_test.go` (a key pasted into the opening message is gone
+  from the stored thread AND from the attached bundle).
+- Audit event written to the ORG tenant on every support view — asserted in
+  `daemon/support_view_test.go` (actor, target flow, and the authorizing grant);
+  assignment audits likewise in `daemon/ticket_dashboard_test.go`.
+- Bundle redaction (golden + property: no `knownSecretValue` match survives,
+  trigger bearer scrubbed) — `core/support_bundle_test.go`.
+- Store conformance for both impls, in-memory and Postgres (gated on
+  `DAZYFLOW_TEST_DB`): `daemon/ticket_store_test.go`,
+  `daemon/support_grant_store_test.go`, `daemon/pgstores_test.go`.
+- Phase 3 surface: assignment, ownership filters, unbounded summary counts, the
+  user-facing redaction, and the role boundaries — `daemon/ticket_dashboard_test.go`
+  plus `web/src/pages/SupportQueue.test.tsx` for the dashboard UI.
 
 ---
 
@@ -369,21 +448,42 @@ check, never tenant-crossing.
   surface on an in-app consent page/badge for org admins; no external delivery
   (webhook/email) yet.
 
-## Open decisions (need answers before/while building)
+## Decisions resolved (nothing open)
 
 - ~~**Build native ticket/chat, or integrate an external helpdesk**~~ — RESOLVED
   (2026-07-04): built natively. The trust primitives (redaction, consent) already
   lived here, and the ticket/chat layer is small enough that a native inbox beat
   wiring a third party through the redaction boundary. Phase 2 is now shipped.
-- Where to store bundles/blobs — reuse an existing store or new one?
-- Realtime chat transport — reuse the run SSE `Bus`?
-- How the org is notified of a grant request — reuse `FailureNotify` webhook,
-  email, in-app?
-- Default grant TTL.
-- Does support ever exceed read-only (propose patches)? Default: no; defer.
+- ~~**Where to store bundles/blobs**~~ — RESOLVED: a dedicated `BundleStore`
+  (`SupportBundleRecord`, Mem + Postgres) rather than reusing a general blob
+  store. The payload is a redacted bundle with its own retention story and its own
+  audience; hanging it off an existing store would have blurred that.
+- ~~**Realtime chat transport**~~ — RESOLVED (2026-08-19): **polling, not SSE.**
+  The thread re-fetches every 8s while open (`THREAD_POLL_MS`) and the nav badge
+  every 60s. A support chat is a handful of messages an hour, and the run `Bus`
+  exists to fan out high-rate run events to a live canvas — borrowing it here
+  would buy sub-second delivery nobody asked for at the cost of a second
+  realtime surface to authorize, scope per tenant, and keep alive across
+  replicas. Revisit only if agents actually complain about latency.
+- ~~**How the org is notified of a grant request**~~ — RESOLVED: in-app only (see
+  "Decisions taken"). Grant requests surface on `/admin/support` for org admins,
+  and when the request is anchored to a ticket a system note lands in the thread
+  so the user sees it in context. No webhook/email delivery yet.
+- ~~**Default grant TTL**~~ — RESOLVED: 4 hours, configurable via
+  `HTTPGateway.SupportGrantTTL` (`defaultSupportGrantTTL`).
+- ~~**Does support ever exceed read-only (propose patches)?**~~ — RESOLVED: **no.**
+  Read-only is the promise the whole feature is built on; a write path would need
+  its own consent model. Deferred indefinitely — see "Deferred" below.
 
-## Note
+## Deferred (deliberately not built)
 
-Unrelated in-flight change on this branch (`parallel-work`): `ValidateWithManifests`
-now ignores disabled nodes for wiring checks (`core/validate.go`). Not part of
-this feature.
+- **Support proposing patches** (`patch_flow` the user approves) — see above.
+  The "getting fixes back to a non-techy user" ladder stops at level 1 (guide +
+  deep link); levels 2–3 (reproduce in a support workspace, offer a patch) are
+  not built.
+- **Realtime chat over SSE** — polling instead (rationale above).
+- **External grant-request notification** (webhook/email) — in-app only.
+- **SLA / first-response timers, canned replies, tags, ticket search across the
+  whole queue** — a helpdesk product's next ten features. The queue's text search
+  is client-side over the loaded page; add server-side search when a real queue
+  outgrows one page.

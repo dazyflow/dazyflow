@@ -6,6 +6,7 @@ import type {
   Ticket,
   TicketView,
   TicketStatus,
+  TicketQueueSummaryResponse,
   SupportBundle,
   SupportAgentGrant,
   APIKeySummary,
@@ -1987,14 +1988,30 @@ export const api = {
     request<TicketView>(token, "POST", `/me/support/tickets/${encodeURIComponent(id)}/messages`, {
       message,
     }),
+  // setMyTicketStatus lets the requester close their own ticket or reopen a
+  // finished one. Declaring a ticket "resolved" is support's call and 400s here.
+  setMyTicketStatus: (token: string, id: string, status: "closed" | "awaiting_support") =>
+    request<TicketView>(token, "POST", `/me/support/tickets/${encodeURIComponent(id)}/status`, {
+      status,
+    }),
 
-  // Support tickets — agent surface (cross-tenant queue).
-  listTicketQueue: (token: string, status?: TicketStatus) =>
-    request<{ tickets: Ticket[] }>(
-      token,
-      "GET",
-      "/support/tickets" + (status ? `?status=${encodeURIComponent(status)}` : ""),
-    ),
+  // Support tickets — agent surface (cross-tenant queue). The queue filters on
+  // status and ownership; assignee "me" resolves to the caller server-side.
+  listTicketQueue: (
+    token: string,
+    opts: { status?: TicketStatus; assignee?: string; unassigned?: boolean } = {},
+  ) => {
+    const qs = new URLSearchParams();
+    if (opts.status) qs.set("status", opts.status);
+    if (opts.assignee) qs.set("assignee", opts.assignee);
+    if (opts.unassigned) qs.set("unassigned", "true");
+    const q = qs.toString();
+    return request<{ tickets: Ticket[] }>(token, "GET", "/support/tickets" + (q ? `?${q}` : ""));
+  },
+  // ticketQueueSummary powers the dashboard tiles. Counted server-side over the
+  // whole queue, so the numbers don't change with the page size.
+  ticketQueueSummary: (token: string) =>
+    request<TicketQueueSummaryResponse>(token, "GET", "/support/tickets/summary"),
   getSupportTicket: (token: string, id: string) =>
     request<TicketView>(token, "GET", `/support/tickets/${encodeURIComponent(id)}`),
   getSupportTicketBundle: (token: string, id: string) =>
@@ -2006,6 +2023,12 @@ export const api = {
   setSupportTicketStatus: (token: string, id: string, status: TicketStatus) =>
     request<TicketView>(token, "POST", `/support/tickets/${encodeURIComponent(id)}/status`, {
       status,
+    }),
+  // assignSupportTicket claims ("me"), hands over (an agent's subject), or
+  // releases ("") a ticket. Only provisioned support agents may be named.
+  assignSupportTicket: (token: string, id: string, assignee: string) =>
+    request<TicketView>(token, "POST", `/support/tickets/${encodeURIComponent(id)}/assign`, {
+      assignee,
     }),
 
   // Support-agent provisioning (platform-admin surface). A 501 means support

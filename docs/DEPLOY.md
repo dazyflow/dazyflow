@@ -481,6 +481,29 @@ the self-serve Checkout/portal buttons (see *Billing / plan gates* in
 `.env.example`); leave it unset and the whole plan/billing surface stays hidden
 in the UI while you still manage entitlements from Admin → Platform.
 
+### Support tickets & consented flow access (optional)
+
+Off by default. Set `DAZYFLOW_SUPPORT_ENABLED=1` to turn on the in-app support
+surface: customers file tickets about a flow and chat with support in-app, support
+agents work a **cross-org queue** (assign/claim, filter by owner and status), and
+an agent can request read-only access to **one** flow that an org admin approves
+for a time-boxed window. Two properties hold no matter what:
+
+- Support only ever sees a **redacted** view — parameter values are replaced by
+  their shape, run payloads are dropped, `${secret.…}` references are kept as
+  references, and a secret-detector sweeps every remaining string. Filing a ticket
+  auto-attaches such a bundle, so most tickets are diagnosable with no live access
+  at all.
+- Access is **consented, scoped, time-boxed and audited**: an approved grant
+  covers one (agent, org, flow) triple for `4h` by default, the org can revoke it
+  at any time from **Admin → Support access**, and every support action is written
+  to the **org's own** audit log.
+
+Enabling the flag is not enough on its own — the surface stays inert until you
+provision a support agent under **Admin → Platform → Support agents** (a
+`platform:admin` is *not* automatically support staff; the two roles are
+deliberately separate). A grant takes effect on that person's next sign-in.
+
 ### Fail-closed config guard
 
 `dzd` **refuses to start** if it would run with a bundled insecure

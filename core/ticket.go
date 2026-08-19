@@ -9,8 +9,8 @@ import (
 )
 
 // ticket.go holds the Support ticket + chat model — Phase 2 of
-// TODO-support-tickets.md. An org files a Ticket about a flow; a thread of
-// TicketMessages carries the conversation between the user and support. Both
+// docs/support-tickets-design.md. An org files a Ticket about a flow; a thread
+// of TicketMessages carries the conversation between the user and support. Both
 // are scoped to the filing org's tenant (that is the security boundary).
 //
 // Two trust properties live here, mirroring the rest of the Support feature:
@@ -96,10 +96,68 @@ type TicketMessage struct {
 }
 
 // TicketListOpts scopes and bounds a ticket listing. The zero value ("any
-// status, default limit") is the common case.
+// status, any assignee, default limit") is the common case.
+//
+// AssignedTo and Unassigned are the two halves of the support dashboard's
+// ownership filter and are mutually exclusive; when both are set, Unassigned
+// wins (it is the narrower "nobody has this" question).
 type TicketListOpts struct {
-	Status TicketStatus // "" = any status
-	Limit  int          // 0 = store default
+	Status     TicketStatus // "" = any status
+	AssignedTo string       // "" = any assignee; else only this agent's tickets
+	Unassigned bool         // true = only tickets no agent has claimed
+	Limit      int          // 0 = store default
+}
+
+// TicketQueueSummary is the support dashboard's headline counts over the whole
+// cross-org queue — the numbers an agent needs before reading a single ticket.
+//
+// Two different questions are being answered, so the fields deliberately count
+// two different sets. ByStatus/Total describe EVERY ticket ever filed (they
+// label the status filter). Open/Unassigned/ByAssignee describe only
+// non-terminal tickets — live work — because a resolved ticket needs no owner
+// and would otherwise drown the "needs a first responder" signal.
+type TicketQueueSummary struct {
+	// ByStatus counts every ticket by status. All five statuses are always
+	// present (zero when empty) so the UI can render a stable set of options.
+	ByStatus map[TicketStatus]int `json:"by_status"`
+	// Total is every ticket in the store, terminal ones included.
+	Total int `json:"total"`
+	// Open is every ticket in a non-terminal status — the actual workload.
+	Open int `json:"open"`
+	// Unassigned counts non-terminal tickets no agent has claimed.
+	Unassigned int `json:"unassigned"`
+	// ByAssignee counts non-terminal tickets per agent subject (claimed work per
+	// agent). Unassigned tickets are NOT keyed under "" here — they're Unassigned.
+	ByAssignee map[string]int `json:"by_assignee"`
+}
+
+// NewTicketQueueSummary returns a zeroed summary with every status key present,
+// so both store implementations emit the same stable shape.
+func NewTicketQueueSummary() TicketQueueSummary {
+	return TicketQueueSummary{
+		ByStatus: map[TicketStatus]int{
+			TicketOpen: 0, TicketAwaitingUser: 0, TicketAwaitingSupport: 0,
+			TicketResolved: 0, TicketClosed: 0,
+		},
+		ByAssignee: map[string]int{},
+	}
+}
+
+// Add folds one ticket into the summary, applying the terminal/non-terminal
+// split described on the type. Both store implementations aggregate through it
+// so their counts can't drift.
+func (s *TicketQueueSummary) Add(status TicketStatus, assignedTo string, n int) {
+	s.ByStatus[status] += n
+	s.Total += n
+	if status.IsTerminal() {
+		return
+	}
+	s.Open += n
+	if assignedTo == "" {
+		s.Unassigned += n
+		return
+	}
+	s.ByAssignee[assignedTo] += n
 }
 
 // TicketStore persists tickets and their chat threads. Implementations live in
@@ -116,6 +174,9 @@ type TicketStore interface {
 	// ListQueue returns tickets across all tenants (the cross-org support queue),
 	// newest first, filtered/bounded by opts.
 	ListQueue(ctx context.Context, opts TicketListOpts) ([]Ticket, error)
+	// QueueSummary returns headline counts over the whole cross-org queue,
+	// unbounded by any list limit (the support dashboard's stat tiles).
+	QueueSummary(ctx context.Context) (TicketQueueSummary, error)
 	// Update writes back a ticket's mutable fields (status, assignment, bundle,
 	// updated_at). The ticket must exist.
 	Update(ctx context.Context, t Ticket) error

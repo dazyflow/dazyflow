@@ -3,7 +3,19 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { AlertCircle, LifeBuoy, Send, ArrowLeft, Check, X } from "lucide-react";
+import {
+  AlertCircle,
+  ArrowLeft,
+  Check,
+  Inbox,
+  LifeBuoy,
+  MessageSquare,
+  Search,
+  Send,
+  UserCheck,
+  UserMinus,
+  X,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
@@ -11,7 +23,15 @@ import { Button } from "../components/Button";
 import { BundleView } from "../components/BundleView";
 import { explainApiError } from "../lib/explainApiError";
 import { formatDateTime } from "../lib/datetime";
-import type { SupportBundle, Ticket, TicketMessage, TicketStatus, TicketView } from "../types";
+import type {
+  SupportBundle,
+  Ticket,
+  TicketMessage,
+  TicketQueueFilter,
+  TicketQueueSummaryResponse,
+  TicketStatus,
+  TicketView,
+} from "../types";
 
 // THREAD_POLL_MS re-fetches an open ticket so a reply from the other party shows
 // up without a manual reload. 8s is responsive enough for a chat without
@@ -21,10 +41,12 @@ const THREAD_POLL_MS = 8000;
 // SupportTickets.tsx is the native ticket + chat surface (Phase 2 of the Support
 // feature). Three views share one file because they share most of the chat UI:
 //   - SupportTickets: an org member's own list of tickets + "New ticket".
-//   - SupportQueue:   the cross-tenant support-agent queue.
+//   - SupportQueue:   the support agent's dashboard over the cross-org queue —
+//                     stat tiles that double as filters, plus per-row claim.
 //   - TicketThread:   one ticket's conversation, reused by user + agent via the
 //                     `mode` prop (which decides the API calls + affordances).
-// Everything a user types is secret-scrubbed server-side before it is stored.
+// Everything a user types is secret-scrubbed server-side before it is stored, and
+// the user-facing responses omit which support agent owns or answered a ticket.
 
 const NOTICE_STYLE = { color: "var(--muted)" } as const;
 
@@ -202,33 +224,87 @@ function NewTicketModal({ onClose, onCreated }: { onClose: () => void; onCreated
   );
 }
 
-// ---- Support-agent queue ---------------------------------------------------
+// ---- Support-agent dashboard (the cross-org queue) -------------------------
+
+// QueueView is one saved view of the queue. Each dashboard tile IS a view, so a
+// tile both reports a number and is the way to reach the tickets behind it —
+// clicking "3 unassigned" shows those three rather than leaving the agent to
+// reconstruct the filter by hand.
+type QueueView = { own: TicketQueueFilter; status: TicketStatus | "all" };
+
+const VIEW_ALL: QueueView = { own: "all", status: "all" };
+const VIEW_UNASSIGNED: QueueView = { own: "unassigned", status: "all" };
+const VIEW_MINE: QueueView = { own: "mine", status: "all" };
+const VIEW_WAITING: QueueView = { own: "all", status: "awaiting_support" };
+
+function sameView(a: QueueView, b: QueueView): boolean {
+  return a.own === b.own && a.status === b.status;
+}
 
 export function SupportQueue() {
   const { t } = useTranslation();
-  const { token, hasPerm } = useAuth();
+  const { token, me, hasPerm } = useAuth();
   const statusLabel = useStatusLabel();
   const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [summary, setSummary] = useState<TicketQueueSummaryResponse | null>(null);
+  const [view, setView] = useState<QueueView>(VIEW_ALL);
+  const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [claiming, setClaiming] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     try {
-      const r = await api.listTicketQueue(token);
-      setTickets(r.tickets ?? []);
+      // The tiles are counted server-side across the WHOLE queue, so they stay
+      // truthful no matter how the list below is filtered or how long it is.
+      const [queue, counts] = await Promise.all([
+        api.listTicketQueue(token, {
+          status: view.status === "all" ? undefined : view.status,
+          assignee: view.own === "mine" ? "me" : undefined,
+          unassigned: view.own === "unassigned",
+        }),
+        api.ticketQueueSummary(token),
+      ]);
+      setTickets(queue.tickets ?? []);
+      setSummary(counts);
       setError(null);
     } catch (e) {
       setError(explainApiError(e, t));
     } finally {
       setLoading(false);
     }
-  }, [token, t]);
+  }, [token, t, view]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Claim from the list: triage without opening every ticket first.
+  const claim = async (id: string) => {
+    if (!token) return;
+    setClaiming(id);
+    try {
+      await api.assignSupportTicket(token, id, "me");
+      await refresh();
+    } catch (e) {
+      setError(explainApiError(e, t));
+    } finally {
+      setClaiming(null);
+    }
+  };
+
+  // Free text is matched client-side over the loaded page: the queue API filters
+  // on status and ownership, not text, and the page is bounded server-side.
+  const q = query.trim().toLowerCase();
+  const visible = q
+    ? tickets.filter((tk) =>
+        [tk.subject, tk.tenant, tk.flow_id ?? "", tk.assigned_to ?? ""].some((field) =>
+          field.toLowerCase().includes(q),
+        ),
+      )
+    : tickets;
 
   if (!hasPerm("support:agent")) {
     return <div className="card" style={{ color: "var(--danger)" }}>{t("support.agentOnly")}</div>;
@@ -244,31 +320,201 @@ export function SupportQueue() {
           </h1>
           <div className="sub">{t("support.queueSub")}</div>
         </div>
+        {/* The agent's other half of the feature: the flows an org has already
+            consented to let them open read-only. */}
+        <Link to="/support" className="dash-panel-link">{t("support.yourAccess")}</Link>
       </div>
+
+      <div className="dash-stats">
+        <QueueTile
+          icon={<Inbox size={18} />}
+          label={t("support.stats.unassigned")}
+          value={summary?.summary.unassigned}
+          tone={summary && summary.summary.unassigned > 0 ? "warn" : "good"}
+          active={sameView(view, VIEW_UNASSIGNED)}
+          onSelect={() => setView(VIEW_UNASSIGNED)}
+        />
+        <QueueTile
+          icon={<UserCheck size={18} />}
+          label={t("support.stats.mine")}
+          value={summary?.mine}
+          active={sameView(view, VIEW_MINE)}
+          onSelect={() => setView(VIEW_MINE)}
+        />
+        <QueueTile
+          icon={<MessageSquare size={18} />}
+          label={t("support.stats.waiting")}
+          value={summary?.summary.by_status?.awaiting_support}
+          active={sameView(view, VIEW_WAITING)}
+          onSelect={() => setView(VIEW_WAITING)}
+        />
+        <QueueTile
+          icon={<LifeBuoy size={18} />}
+          label={t("support.stats.open")}
+          value={summary?.summary.open}
+          sub={summary ? t("support.stats.ofTotal", { count: summary.summary.total }) : undefined}
+          active={sameView(view, VIEW_ALL)}
+          onSelect={() => setView(VIEW_ALL)}
+        />
+      </div>
+
+      <div className="flow-toolbar">
+        <div className="flow-search">
+          <Search size={15} aria-hidden />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t("support.searchPlaceholder")}
+            aria-label={t("support.searchPlaceholder")}
+          />
+        </div>
+        <label className="flow-filter">
+          <span className="flow-filter-label">{t("support.filterOwner")}</span>
+          <select
+            value={view.own}
+            onChange={(e) => setView({ ...view, own: e.target.value as TicketQueueFilter })}
+          >
+            <option value="all">{t("support.ownerAll")}</option>
+            <option value="unassigned">{t("support.ownerUnassigned")}</option>
+            <option value="mine">{t("support.ownerMine")}</option>
+          </select>
+        </label>
+        <label className="flow-filter">
+          <span className="flow-filter-label">{t("support.filterStatus")}</span>
+          <select
+            value={view.status}
+            onChange={(e) =>
+              setView({ ...view, status: e.target.value as TicketStatus | "all" })
+            }
+          >
+            <option value="all">{t("support.statusAny")}</option>
+            <option value="awaiting_support">{t("support.status.awaiting_support")}</option>
+            <option value="awaiting_user">{t("support.status.awaiting_user")}</option>
+            <option value="open">{t("support.status.open")}</option>
+            <option value="resolved">{t("support.status.resolved")}</option>
+            <option value="closed">{t("support.status.closed")}</option>
+          </select>
+        </label>
+      </div>
+
       {error && (
         <div className="card" style={{ color: "var(--danger)", marginBottom: "var(--space-4)" }}>{error}</div>
       )}
       {loading && tickets.length === 0 ? (
         <div className="card" style={NOTICE_STYLE}>{t("common.loading")}</div>
-      ) : tickets.length === 0 ? (
-        <div className="card" style={NOTICE_STYLE}>{t("support.queueEmpty")}</div>
+      ) : visible.length === 0 ? (
+        <div className="card" style={NOTICE_STYLE}>
+          {/* "The queue is empty" is only true of the unfiltered view — a narrowed
+              one that comes back empty means this view, not the whole queue. */}
+          {tickets.length === 0
+            ? sameView(view, VIEW_ALL)
+              ? t("support.queueEmpty")
+              : t("support.noneInView")
+            : t("support.noMatches")}
+        </div>
       ) : (
         <div className="user-list">
-          {tickets.map((tk) => (
-            <Link key={tk.id} to={`/support/queue/${encodeURIComponent(tk.id)}`} className="user-card" style={{ textDecoration: "none" }}>
-              <div style={{ minWidth: 0 }}>
-                <div className="subject">{tk.subject}</div>
-                <div className="meta">
-                  <span className="count-pill" style={{ marginRight: 8 }}>{statusLabel(tk.status)}</span>
-                  {tk.tenant}
-                  {" · "}
-                  {formatDateTime(tk.updated_at)}
-                </div>
-              </div>
-            </Link>
+          {visible.map((tk) => (
+            <QueueRow
+              key={tk.id}
+              ticket={tk}
+              mySubject={me?.subject ?? ""}
+              statusLabel={statusLabel}
+              claiming={claiming === tk.id}
+              onClaim={() => void claim(tk.id)}
+            />
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// QueueTile is a dashboard stat that doubles as the filter for what it counts.
+// A button rather than a Link: it changes the view in place instead of navigating.
+function QueueTile({
+  icon,
+  label,
+  value,
+  sub,
+  tone = "neutral",
+  active,
+  onSelect,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: number | undefined;
+  sub?: string;
+  tone?: "neutral" | "good" | "warn" | "bad";
+  active: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={
+        "card dash-stat dash-stat-" + tone + " support-stat" + (active ? " is-active" : "")
+      }
+      aria-pressed={active}
+      onClick={onSelect}
+    >
+      <span className="dash-stat-icon">{icon}</span>
+      {/* An em dash while the counts load, so the tile never flashes a wrong 0. */}
+      <span className="dash-stat-value">{value === undefined ? "—" : String(value)}</span>
+      <span className="dash-stat-label">{label}</span>
+      {sub && <span className="dash-stat-sub">{sub}</span>}
+    </button>
+  );
+}
+
+// QueueRow is one ticket in the queue: who filed it, who owns it, and — when
+// nobody does yet — a one-click claim.
+function QueueRow({
+  ticket,
+  mySubject,
+  statusLabel,
+  claiming,
+  onClaim,
+}: {
+  ticket: Ticket;
+  mySubject: string;
+  statusLabel: (s: TicketStatus) => string;
+  claiming: boolean;
+  onClaim: () => void;
+}) {
+  const { t } = useTranslation();
+  const owner = ticket.assigned_to ?? "";
+  const mine = owner !== "" && owner === mySubject;
+  return (
+    <div className="user-card">
+      <div style={{ minWidth: 0 }}>
+        <div className="subject">
+          <Link to={`/support/queue/${encodeURIComponent(ticket.id)}`} style={{ textDecoration: "none" }}>
+            {ticket.subject}
+          </Link>
+        </div>
+        <div className="meta">
+          <span className="count-pill" style={{ marginRight: 8 }}>{statusLabel(ticket.status)}</span>
+          {ticket.tenant}
+          {" · "}
+          {owner === ""
+            ? t("support.unassigned")
+            : mine
+              ? t("support.assignedToYou")
+              : t("support.assignedTo", { agent: owner })}
+          {" · "}
+          {formatDateTime(ticket.updated_at)}
+        </div>
+      </div>
+      <div className="user-card-actions">
+        {owner === "" && (
+          <Button onClick={onClaim} disabled={claiming}>
+            <UserCheck size={12} style={{ marginRight: 4 }} />
+            {t("support.claim")}
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
@@ -277,7 +523,7 @@ export function SupportQueue() {
 
 export function TicketThread({ mode }: { mode: "user" | "agent" }) {
   const { t } = useTranslation();
-  const { token } = useAuth();
+  const { token, me } = useAuth();
   const statusLabel = useStatusLabel();
   const { id = "" } = useParams();
   const [view, setView] = useState<TicketView | null>(null);
@@ -347,6 +593,34 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
     }
   };
 
+  // The requester's own status control. They can withdraw a ticket or reopen a
+  // finished one; only support can declare it resolved (the server enforces it).
+  const setMyStatus = async (status: "closed" | "awaiting_support") => {
+    if (!token) return;
+    setBusy(true);
+    try {
+      setView(await api.setMyTicketStatus(token, id, status));
+    } catch (e) {
+      setError(explainApiError(e, t));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Claim ("me") or release ("") the ticket. Assignment is internal to the
+  // support side — the customer's view never shows it.
+  const assign = async (assignee: string) => {
+    if (!token) return;
+    setBusy(true);
+    try {
+      setView(await api.assignSupportTicket(token, id, assignee));
+    } catch (e) {
+      setError(explainApiError(e, t));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const backTo = mode === "agent" ? "/support/queue" : "/support";
 
   if (loading) return <div className="card" style={NOTICE_STYLE}>{t("common.loading")}</div>;
@@ -361,6 +635,10 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
   if (!view) return null;
   const tk = view.ticket;
   const closed = tk.status === "resolved" || tk.status === "closed";
+  // Ownership only exists on the support side; the user surface never receives
+  // assigned_to (the server strips it), so `owner` is always "" in user mode.
+  const owner = tk.assigned_to ?? "";
+  const mine = owner !== "" && owner === (me?.subject ?? "");
 
   return (
     <div style={{ maxWidth: 760 }}>
@@ -370,6 +648,18 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
           <h1 style={{ fontSize: "var(--text-xl)" }}>{tk.subject}</h1>
           <div className="sub">
             <span className="count-pill" style={{ marginRight: 8 }}>{statusLabel(tk.status)}</span>
+            {mode === "agent" && (
+              <>
+                {tk.tenant}
+                {" · "}
+                {owner === ""
+                  ? t("support.unassigned")
+                  : mine
+                    ? t("support.assignedToYou")
+                    : t("support.assignedTo", { agent: owner })}
+                {" · "}
+              </>
+            )}
             {tk.flow_id && (
               <Link to={`/flows/${encodeURIComponent(tk.flow_id)}`}>{t("support.viewFlow")}</Link>
             )}
@@ -383,12 +673,34 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
             )}
           </div>
         </div>
-        {mode === "agent" && !closed && (
-          <Button onClick={() => void setStatus("resolved")} disabled={busy}>
-            <Check size={12} style={{ marginRight: 4 }} />
-            {t("support.resolve")}
-          </Button>
-        )}
+        <div className="user-card-actions">
+          {mode === "agent" && owner === "" && (
+            <Button onClick={() => void assign("me")} disabled={busy}>
+              <UserCheck size={12} style={{ marginRight: 4 }} />
+              {t("support.claim")}
+            </Button>
+          )}
+          {mode === "agent" && mine && (
+            <Button onClick={() => void assign("")} disabled={busy}>
+              <UserMinus size={12} style={{ marginRight: 4 }} />
+              {t("support.release")}
+            </Button>
+          )}
+          {mode === "agent" && !closed && (
+            <Button onClick={() => void setStatus("resolved")} disabled={busy}>
+              <Check size={12} style={{ marginRight: 4 }} />
+              {t("support.resolve")}
+            </Button>
+          )}
+          {/* The requester's own exit: "I don't need this any more". Replying
+              reopens it, so there's no separate Reopen button. */}
+          {mode === "user" && !closed && (
+            <Button onClick={() => void setMyStatus("closed")} disabled={busy}>
+              <X size={12} style={{ marginRight: 4 }} />
+              {t("support.close")}
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="ticket-thread">

@@ -62,3 +62,39 @@ func TestScrubSecrets(t *testing.T) {
 		})
 	}
 }
+
+// TestTicketQueueSummary_Add pins the terminal/non-terminal split the support
+// dashboard's tiles depend on: ByStatus/Total count every ticket, while
+// Open/Unassigned/ByAssignee count only live work. A resolved ticket nobody owns
+// must not inflate "needs a first responder".
+func TestTicketQueueSummary_Add(t *testing.T) {
+	s := NewTicketQueueSummary()
+	// Every status key is present up front so the UI can render stable options.
+	if len(s.ByStatus) != 5 {
+		t.Fatalf("fresh summary should carry all 5 status keys, got %d", len(s.ByStatus))
+	}
+
+	s.Add(TicketAwaitingSupport, "", 2)          // live, unclaimed
+	s.Add(TicketAwaitingUser, "agent@vendor", 1) // live, claimed
+	s.Add(TicketResolved, "", 5)                 // finished, unclaimed
+	s.Add(TicketClosed, "agent@vendor", 3)       // finished, claimed
+
+	if s.Total != 11 {
+		t.Errorf("Total = %d, want 11", s.Total)
+	}
+	if s.Open != 3 {
+		t.Errorf("Open = %d, want 3 (terminal tickets excluded)", s.Open)
+	}
+	if s.Unassigned != 2 {
+		t.Errorf("Unassigned = %d, want 2 (the resolved unclaimed 5 must not count)", s.Unassigned)
+	}
+	if s.ByAssignee["agent@vendor"] != 1 {
+		t.Errorf("ByAssignee = %v, want the agent's live load of 1", s.ByAssignee)
+	}
+	if _, keyed := s.ByAssignee[""]; keyed {
+		t.Error(`unassigned tickets must not be keyed under "" in ByAssignee`)
+	}
+	if s.ByStatus[TicketResolved] != 5 || s.ByStatus[TicketAwaitingSupport] != 2 {
+		t.Errorf("ByStatus = %v, want every ticket counted", s.ByStatus)
+	}
+}

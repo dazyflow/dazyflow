@@ -27,7 +27,8 @@ const (
 	// platform:admin — a support agent reaches a specific flow ONLY through an
 	// approved, time-boxed AccessGrant (a capability), and even then sees only
 	// the REDACTED support view. Never add this to RequireTenant's
-	// short-circuit. See AuthorizeGraphSupportView and TODO-support-tickets.md.
+	// short-circuit. See AuthorizeGraphSupportView and
+	// docs/support-tickets-design.md.
 	PermSupportAgent Permission = "support:agent"
 )
 

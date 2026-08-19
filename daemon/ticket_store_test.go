@@ -100,6 +100,57 @@ func ticketStoreLifecycle(t *testing.T, s core.TicketStore) {
 	if len(msgs) != 2 || msgs[0].ID != "m1" || msgs[1].ID != "m2" {
 		t.Errorf("messages out of order: %+v", msgs)
 	}
+
+	// ---- Ownership filters + queue summary (the support dashboard) -----------
+	// State here: t1 = acme, resolved, assigned to agent@vendor.com;
+	//             t2 = globex, open, unassigned.
+	assigned, _ := s.ListQueue(ctx, core.TicketListOpts{AssignedTo: "agent@vendor.com"})
+	if len(assigned) != 1 || assigned[0].ID != "t1" {
+		t.Errorf("assignee filter = %+v, want [t1]", assigned)
+	}
+	if other, _ := s.ListQueue(ctx, core.TicketListOpts{AssignedTo: "nobody@vendor.com"}); len(other) != 0 {
+		t.Errorf("filter on an agent with no tickets = %d, want 0", len(other))
+	}
+	unassigned, _ := s.ListQueue(ctx, core.TicketListOpts{Unassigned: true})
+	if len(unassigned) != 1 || unassigned[0].ID != "t2" {
+		t.Errorf("unassigned filter = %+v, want [t2]", unassigned)
+	}
+	// Unassigned wins over AssignedTo when both are set (documented in
+	// core.TicketListOpts) — the pair must not silently return nothing.
+	both, _ := s.ListQueue(ctx, core.TicketListOpts{Unassigned: true, AssignedTo: "agent@vendor.com"})
+	if len(both) != 1 || both[0].ID != "t2" {
+		t.Errorf("unassigned+assignee = %+v, want unassigned to win with [t2]", both)
+	}
+	// Filters compose with status, and apply to the tenant listing too.
+	if hit, _ := s.ListQueue(ctx, core.TicketListOpts{Unassigned: true, Status: core.TicketResolved}); len(hit) != 0 {
+		t.Errorf("unassigned+resolved = %d, want 0 (t2 is open, t1 is assigned)", len(hit))
+	}
+	if mine, _ := s.ListForTenant(ctx, "acme", core.TicketListOpts{AssignedTo: "agent@vendor.com"}); len(mine) != 1 {
+		t.Errorf("tenant listing + assignee filter = %d, want 1", len(mine))
+	}
+	// Limit bounds the result set.
+	if one, _ := s.ListQueue(ctx, core.TicketListOpts{Limit: 1}); len(one) != 1 {
+		t.Errorf("limit 1 returned %d rows", len(one))
+	}
+
+	sum, err := s.QueueSummary(ctx)
+	if err != nil {
+		t.Fatalf("queue summary: %v", err)
+	}
+	if sum.Total != 2 {
+		t.Errorf("summary Total = %d, want 2", sum.Total)
+	}
+	// Only t2 is live; t1 is resolved, so it counts in ByStatus but not in
+	// Open/Unassigned/ByAssignee.
+	if sum.Open != 1 || sum.Unassigned != 1 {
+		t.Errorf("summary Open/Unassigned = %d/%d, want 1/1", sum.Open, sum.Unassigned)
+	}
+	if sum.ByStatus[core.TicketResolved] != 1 || sum.ByStatus[core.TicketOpen] != 1 {
+		t.Errorf("summary ByStatus = %v, want one resolved + one open", sum.ByStatus)
+	}
+	if len(sum.ByAssignee) != 0 {
+		t.Errorf("summary ByAssignee = %v, want empty (the only assigned ticket is resolved)", sum.ByAssignee)
+	}
 }
 
 func TestMemTicketStore(t *testing.T) {

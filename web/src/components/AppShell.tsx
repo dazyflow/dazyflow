@@ -259,7 +259,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     let cancelled = false;
     const fetch = () => {
       const p = isAgent
-        ? api.listTicketQueue(token, "awaiting_support")
+        ? api.listTicketQueue(token, { status: "awaiting_support" })
         : api.listMyTickets(token, "awaiting_user");
       p.then((r) => {
         if (!cancelled) setSupportUnread(r.tickets?.length ?? 0);

@@ -87,15 +87,12 @@ func (s *MemTicketStore) ListQueue(_ context.Context, opts core.TicketListOpts) 
 	return s.list(func(core.Ticket) bool { return true }, opts), nil
 }
 
-// list applies a match predicate + status filter, sorts newest-activity-first,
-// and truncates to the opts limit. Caller holds the lock.
+// list applies a match predicate + the opts filters, sorts
+// newest-activity-first, and truncates to the opts limit. Caller holds the lock.
 func (s *MemTicketStore) list(match func(core.Ticket) bool, opts core.TicketListOpts) []core.Ticket {
 	out := make([]core.Ticket, 0)
 	for _, t := range s.byID {
-		if !match(t) {
-			continue
-		}
-		if opts.Status != "" && t.Status != opts.Status {
+		if !match(t) || !ticketMatchesOpts(t, opts) {
 			continue
 		}
 		out = append(out, t)
@@ -119,6 +116,31 @@ func (s *MemTicketStore) Update(_ context.Context, t core.Ticket) error {
 	}
 	s.byID[t.ID] = t
 	return nil
+}
+
+// ticketMatchesOpts applies the status + ownership filters. Unassigned wins over
+// AssignedTo when both are set (see core.TicketListOpts).
+func ticketMatchesOpts(t core.Ticket, opts core.TicketListOpts) bool {
+	if opts.Status != "" && t.Status != opts.Status {
+		return false
+	}
+	if opts.Unassigned {
+		return t.AssignedTo == ""
+	}
+	if opts.AssignedTo != "" && t.AssignedTo != opts.AssignedTo {
+		return false
+	}
+	return true
+}
+
+func (s *MemTicketStore) QueueSummary(_ context.Context) (core.TicketQueueSummary, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sum := core.NewTicketQueueSummary()
+	for _, t := range s.byID {
+		sum.Add(t.Status, t.AssignedTo, 1)
+	}
+	return sum, nil
 }
 
 func (s *MemTicketStore) AppendMessage(_ context.Context, m core.TicketMessage) error {
@@ -167,6 +189,7 @@ CREATE TABLE IF NOT EXISTS support_tickets (
 );
 CREATE INDEX IF NOT EXISTS support_tickets_tenant_idx ON support_tickets (tenant, updated_at DESC);
 CREATE INDEX IF NOT EXISTS support_tickets_queue_idx ON support_tickets (updated_at DESC);
+CREATE INDEX IF NOT EXISTS support_tickets_assignee_idx ON support_tickets (assigned_to, updated_at DESC);
 
 CREATE TABLE IF NOT EXISTS support_ticket_messages (
     id          TEXT PRIMARY KEY,
@@ -244,20 +267,64 @@ func (s *PgTicketStore) Get(ctx context.Context, id string) (core.Ticket, error)
 	return t, err
 }
 
+// ticketFilterSQL is the opts predicate shared by both listings, written with
+// fixed placeholders (no dynamic SQL) so the query plan is stable and no filter
+// value is ever interpolated. $n..$n+2 are status, assigned_to, unassigned.
+const ticketFilterSQL = `($%d='' OR status=$%d)
+	 AND ($%d='' OR assigned_to=$%d)
+	 AND (NOT $%d OR assigned_to='')`
+
+// ticketFilterArgs are the three opts values ticketFilterSQL binds, in order.
+func ticketFilterArgs(opts core.TicketListOpts) []any {
+	// Unassigned wins over AssignedTo (see core.TicketListOpts), so drop the
+	// assignee predicate when it is set rather than returning nothing at all.
+	assignee := opts.AssignedTo
+	if opts.Unassigned {
+		assignee = ""
+	}
+	return []any{string(opts.Status), assignee, opts.Unassigned}
+}
+
 func (s *PgTicketStore) ListForTenant(ctx context.Context, tenant string, opts core.TicketListOpts) ([]core.Ticket, error) {
+	args := append([]any{tenant}, ticketFilterArgs(opts)...)
 	return s.queryTickets(ctx,
 		`SELECT `+ticketCols+` FROM support_tickets
-		 WHERE tenant=$1 AND ($2='' OR status=$2)
-		 ORDER BY updated_at DESC LIMIT $3`,
-		tenant, string(opts.Status), ticketLimit(opts))
+		 WHERE tenant=$1 AND `+fmt.Sprintf(ticketFilterSQL, 2, 2, 3, 3, 4)+`
+		 ORDER BY updated_at DESC LIMIT $5`,
+		append(args, ticketLimit(opts))...)
 }
 
 func (s *PgTicketStore) ListQueue(ctx context.Context, opts core.TicketListOpts) ([]core.Ticket, error) {
+	args := ticketFilterArgs(opts)
 	return s.queryTickets(ctx,
 		`SELECT `+ticketCols+` FROM support_tickets
-		 WHERE ($1='' OR status=$1)
-		 ORDER BY updated_at DESC LIMIT $2`,
-		string(opts.Status), ticketLimit(opts))
+		 WHERE `+fmt.Sprintf(ticketFilterSQL, 1, 1, 2, 2, 3)+`
+		 ORDER BY updated_at DESC LIMIT $4`,
+		append(args, ticketLimit(opts))...)
+}
+
+// QueueSummary aggregates in one GROUP BY — exact counts over every ticket,
+// deliberately unbounded by the list limit (the tiles must not lie when the
+// queue is longer than one page).
+func (s *PgTicketStore) QueueSummary(ctx context.Context) (core.TicketQueueSummary, error) {
+	sum := core.NewTicketQueueSummary()
+	rows, err := s.pool.Query(ctx,
+		`SELECT status, assigned_to, count(*) FROM support_tickets GROUP BY status, assigned_to`)
+	if err != nil {
+		return sum, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			status, assignee string
+			n                int
+		)
+		if err := rows.Scan(&status, &assignee, &n); err != nil {
+			return sum, err
+		}
+		sum.Add(core.TicketStatus(status), assignee, n)
+	}
+	return sum, rows.Err()
 }
 
 func ticketLimit(opts core.TicketListOpts) int {

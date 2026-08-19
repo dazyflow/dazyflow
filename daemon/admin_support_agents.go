@@ -12,7 +12,7 @@ import (
 )
 
 // admin_support_agents.go is the platform-admin management surface for support
-// agents (see TODO-support-tickets.md). Support agents are cross-tenant
+// agents (see docs/support-tickets-design.md). Support agents are cross-tenant
 // vendor/operator staff, so provisioning them is a platform:admin action — the
 // mirror of the platform-admin grant management next door in admin_platform.go.
 // A support agent need NOT have an account here (they may sign in via SSO and be

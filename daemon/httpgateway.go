@@ -142,7 +142,7 @@ type HTTPGateway struct {
 	// lowercased email → struct{}.
 	platformAdminGranted sync.Map
 
-	// Support feature (see TODO-support-tickets.md). SupportAgents is the
+	// Support feature (see docs/support-tickets-design.md). SupportAgents is the
 	// runtime grant store deciding who gets core.SupportAgentRole at session
 	// issue; Grants persists AccessGrants (the consented, time-boxed views);
 	// Bundles persists redacted SupportBundleRecords. All nil-safe: nil leaves
@@ -499,9 +499,9 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// gdpr_http.go.
 	mux.HandleFunc("GET /api/v1/me/export", h.requireAuth(h.exportHandler))
 	mux.HandleFunc("DELETE /api/v1/me/account", h.requireAuth(h.deleteMyAccountHandler))
-	// Support feature (see TODO-support-tickets.md): a support agent requests a
-	// scoped, read-only grant; an org admin approves/denies/revokes; the agent
-	// reads the redacted bundle. All gated + audited into the org's log.
+	// Support feature (see docs/support-tickets-design.md): a support agent
+	// requests a scoped, read-only grant; an org admin approves/denies/revokes;
+	// the agent reads the redacted bundle. All gated + audited into the org's log.
 	mux.HandleFunc("POST /api/v1/support/grants", h.requireAuth(h.requestGrant))
 	mux.HandleFunc("GET /api/v1/support/grants", h.requireAuth(h.listGrants))
 	mux.HandleFunc("GET /api/v1/support/grants/mine", h.requireAuth(h.listMyGrants))
@@ -515,11 +515,16 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/me/support/tickets/{id}", h.requireAuth(h.getMyTicket))
 	mux.HandleFunc("GET /api/v1/me/support/tickets/{id}/bundle", h.requireAuth(h.getMyTicketBundle))
 	mux.HandleFunc("POST /api/v1/me/support/tickets/{id}/messages", h.requireAuth(h.postMyTicketMessage))
+	mux.HandleFunc("POST /api/v1/me/support/tickets/{id}/status", h.requireAuth(h.setMyTicketStatus))
 	mux.HandleFunc("GET /api/v1/support/tickets", h.requireAuth(h.listTicketQueue))
+	// /summary before /{id}: a literal segment outranks a wildcard in ServeMux's
+	// precedence rules, so the dashboard's counts can't be read as a ticket id.
+	mux.HandleFunc("GET /api/v1/support/tickets/summary", h.requireAuth(h.ticketQueueSummary))
 	mux.HandleFunc("GET /api/v1/support/tickets/{id}", h.requireAuth(h.getSupportTicket))
 	mux.HandleFunc("GET /api/v1/support/tickets/{id}/bundle", h.requireAuth(h.getSupportTicketBundle))
 	mux.HandleFunc("POST /api/v1/support/tickets/{id}/messages", h.requireAuth(h.postSupportTicketMessage))
 	mux.HandleFunc("POST /api/v1/support/tickets/{id}/status", h.requireAuth(h.setSupportTicketStatus))
+	mux.HandleFunc("POST /api/v1/support/tickets/{id}/assign", h.requireAuth(h.assignSupportTicket))
 	// Self-service rectification (Art. 16): change own password / email.
 	mux.HandleFunc("POST /api/v1/me/password", h.requireAuth(h.changePasswordHandler))
 	mux.HandleFunc("POST /api/v1/me/email", h.requireAuth(h.changeEmailHandler))

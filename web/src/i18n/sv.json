@@ -2264,7 +2264,30 @@
       "awaiting_support": "Hos supporten",
       "resolved": "Löst",
       "closed": "Stängt"
-    }
+    },
+    "yourAccess": "Din flödesåtkomst",
+    "searchPlaceholder": "Sök ärende, organisation, flöde…",
+    "filterOwner": "Ansvarig",
+    "ownerAll": "Alla",
+    "ownerUnassigned": "Otilldelade",
+    "ownerMine": "Tilldelade mig",
+    "filterStatus": "Status",
+    "statusAny": "Alla statusar",
+    "noMatches": "Inga ärenden matchar din sökning.",
+    "unassigned": "otilldelat",
+    "assignedToYou": "tilldelat dig",
+    "assignedTo": "tilldelat {{agent}}",
+    "claim": "Ta ärendet",
+    "release": "Släpp ärendet",
+    "close": "Stäng ärendet",
+    "stats": {
+      "unassigned": "Otilldelade",
+      "mine": "Tilldelade mig",
+      "waiting": "Väntar på support",
+      "open": "Öppna ärenden",
+      "ofTotal": "av {{count}} inkomna"
+    },
+    "noneInView": "Inga ärenden i den här vyn."
   },
   "report": {
     "title": "Rapportera ett problem",

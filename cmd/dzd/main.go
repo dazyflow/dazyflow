@@ -1346,10 +1346,10 @@ func buildGateway(ctx context.Context, d gatewayDeps) {
 	} else {
 		gw.PlatformAdminGrants = grants
 	}
-	// Support feature (TODO-support-tickets.md): opt-in per deployment. When on,
-	// wire the Postgres-backed support-agent, grant, and bundle stores. Off by
-	// default, so a self-host with no vendor support staff leaves the whole
-	// surface inert: the endpoints return 501 and no session is elevated to
+	// Support feature (docs/support-tickets-design.md): opt-in per deployment.
+	// When on, wire the Postgres-backed support-agent, grant, and bundle stores.
+	// Off by default, so a self-host with no vendor support staff leaves the
+	// whole surface inert: the endpoints return 501 and no session is elevated to
 	// support-agent. Even when enabled, the surface stays dormant until an
 	// operator grants a support agent.
 	if envBool("DAZYFLOW_SUPPORT_ENABLED", false) {

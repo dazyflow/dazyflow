@@ -1027,10 +1027,42 @@ export type TicketMessage = {
 };
 
 // TicketView is a ticket plus its chronological thread (the get-one response).
+//
+// On the end-user surface the server strips the support organisation's internals
+// first: `ticket.assigned_to` is absent and support messages carry no `author`
+// (the customer sees "Support", not the individual who picked it up). The agent
+// surface returns the record as stored.
 export type TicketView = {
   ticket: Ticket;
   messages: TicketMessage[];
 };
+
+// TicketQueueSummary mirrors core.TicketQueueSummary — the support dashboard's
+// counts over the WHOLE cross-org queue, unbounded by any list limit.
+//
+// The two halves count different sets, deliberately: by_status/total cover every
+// ticket ever filed, while open/unassigned/by_assignee cover only non-terminal
+// tickets, so a pile of resolved tickets can't drown the "needs a first
+// responder" signal.
+export type TicketQueueSummary = {
+  by_status: Partial<Record<TicketStatus, number>>;
+  total: number;
+  open: number;
+  unassigned: number;
+  by_assignee: Record<string, number>;
+};
+
+// TicketQueueSummaryResponse is the summary endpoint's body. `mine` is the
+// caller's own live load, resolved server-side so the dashboard never needs to
+// know its own subject.
+export type TicketQueueSummaryResponse = {
+  summary: TicketQueueSummary;
+  mine: number;
+};
+
+// TicketQueueFilter is the ownership half of the queue's filters: every ticket,
+// only unclaimed ones, or only the caller's own ("me" resolves server-side).
+export type TicketQueueFilter = "all" | "unassigned" | "mine";
 
 // SupportAgentGrant is one provisioned support-agent (cross-tenant vendor
 // staff), managed on the platform-admin surface. Mirrors daemon.SupportAgentGrant.

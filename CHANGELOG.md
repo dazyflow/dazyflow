@@ -23,6 +23,21 @@ image.
 
 ### Added
 
+- **Support dashboard** (Phase 3 — the Support feature is now complete) — the
+  cross-org queue grew the tools a support team actually works from: **assignment**
+  (claim a ticket, hand it to a colleague, release it back to the pool — only
+  provisioned support agents can be named), **ownership + status filters** on the
+  queue (`?assignee=me`, `?unassigned=true`, `?status=`), and **stat tiles**
+  counted server-side over the whole queue (`GET /support/tickets/summary`), each
+  tile doubling as the filter for what it counts. **Role separation** was tightened
+  in both directions: the customer's view of a ticket no longer carries the support
+  organisation's internals (who owns it, which individual replied), the requester
+  can close or reopen their own ticket but only support can declare it *resolved*,
+  and a platform admin still isn't support staff (`platform:admin` does not imply
+  `support:agent`). Every assignment is audited into the **org's own** log. The
+  feature is now documented for operators: `DAZYFLOW_SUPPORT_ENABLED` in
+  `.env.example` and a *Support tickets & consented flow access* section in
+  `docs/DEPLOY.md`.
 - **Support tickets + chat** (native, Phase 2 of the Support feature) — an org
   member can file a ticket about a flow and chat with support in-app; support
   agents work a cross-tenant queue and reply/resolve. Filing auto-attaches a
