@@ -153,14 +153,6 @@
   font-weight: 500;
   color: var(--ink);
 }
-/* Keyboard-shortcuts help button: only meaningful with a physical keyboard,
-   so it's hidden on mobile (the 768px cutoff mirrors AppShell's MOBILE_BREAK
-   and the hamburger's 769px complement). */
-@media (max-width: 768px) {
-  .topbar .shortcuts-help {
-    display: none;
-  }
-}
 .topbar .org-switcher-trigger {
   min-width: 0;
 }
@@ -1016,6 +1008,62 @@
 .shortcut-group-label:first-child {
   margin-top: 0;
 }
+/* Help modal: the two "get unstuck" destinations sit above the shortcut
+   tables as tappable rows, so the docs and a human read as the primary
+   content of the dialog and the accelerators as reference below them. */
+.help-links {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+.help-link {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3);
+  text-align: left;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  color: var(--ink);
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-2) var(--ease-out),
+    background var(--dur-2) var(--ease-out);
+}
+.help-link:hover:not(:disabled) {
+  background: var(--surface-3);
+  border-color: var(--accent);
+  /* These are links styled as rows — keep the global a:hover underline off. */
+  text-decoration: none;
+}
+.help-link-icon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--accent);
+}
+.help-link-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0);
+  min-width: 0;
+}
+.help-link-title {
+  font-weight: 600;
+  font-size: var(--text-md);
+}
+.help-link-desc {
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+.help-section {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-md);
+  font-weight: 600;
+}
 .shortcut-row {
   display: flex;
   align-items: center;
@@ -1634,10 +1682,20 @@
   font-size: var(--text-base);
 }
 
-/* "More for developers →" lives below the three main goal cards as
-   a quiet inline link. Visual weight stays low so a non-tech buyer's
-   eye still lands on the cards, but a developer can still find the
-   tech-flavoured templates without hunting through the whole gallery. */
+/* Sub-line under the primary CTA: what pressing it will actually do. */
+.welcome-featured-desc {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+  color: var(--muted);
+  max-width: 46ch;
+}
+/* The other two ways in, kept deliberately quiet — a beginner shouldn't have
+   to weigh three equal-looking options before seeing the product work once. */
+.welcome-alt {
+  margin: var(--space-3) 0 0;
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
 
 .welcome-mcp {
   display: flex;
@@ -1646,7 +1704,7 @@
   margin-top: var(--space-4);
   padding: var(--space-3) var(--space-4);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--r-2);
   background: var(--surface-2);
 }
 .welcome-mcp-body {
@@ -1728,7 +1786,7 @@
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--r-2);
   background: var(--surface);
   cursor: pointer;
   text-align: left;
@@ -2020,6 +2078,38 @@
 
 /* Sign-up form hint under the password field, surfacing the 8-char
    minimum before the user submits and reads it from an error. */
+/* Password input + reveal toggle (PasswordField). The button overlays the
+   right end of the field, and the input reserves room for it so a long value
+   never slides under the icon. */
+.password-field {
+  position: relative;
+  display: block;
+}
+.password-field input {
+  width: 100%;
+  padding-right: calc(var(--space-6) + var(--space-1));
+}
+.password-reveal {
+  position: absolute;
+  top: 50%;
+  right: var(--space-1);
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: var(--r-1);
+}
+.password-reveal:hover:not(:disabled) {
+  background: transparent;
+  color: var(--ink);
+}
 .signup-hint {
   font-size: var(--text-sm);
   color: var(--muted);
@@ -5595,8 +5685,8 @@ img[src$="/brands/smhi.svg"] {
   padding: 0 var(--space-2);
   border: 1px solid var(--border);
   border-left: none;
-  border-top-right-radius: var(--radius);
-  border-bottom-right-radius: var(--radius);
+  border-top-right-radius: var(--r-2);
+  border-bottom-right-radius: var(--r-2);
   background: var(--surface-2, color-mix(in srgb, var(--ink) 5%, transparent));
   color: var(--muted);
   font-family: var(--font-mono);
@@ -8148,19 +8238,35 @@ a.pa-card:hover {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   z-index: 5;
-  /* When the controls can't all fit (small screens, inspector open) the bar
-     scrolls horizontally rather than widening the app. min-width:0 lets it
-     shrink below its content within the column flex layout so the overflow
-     stays inside the toolbar instead of pushing the canvas wider. */
+  min-width: 0;
+}
+/* The scrolling half. When the controls can't all fit (small screens,
+   inspector open) THIS region scrolls horizontally rather than widening the
+   app — the primary actions are its siblings, so they stay put. min-width:0
+   lets it shrink below its content instead of pushing the canvas wider; flex
+   1 makes it absorb the slack, which is what the old .toolbar-spacer did. */
+.editor-toolbar .toolbar-scroll {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
   min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
 }
-/* Hide the horizontal scrollbar — the bar scrolls but reads as a clean
-   single-row toolbar (drag/swipe/wheel still works). */
-.editor-toolbar::-webkit-scrollbar {
+.editor-toolbar .toolbar-scroll::-webkit-scrollbar {
   display: none;
+}
+/* A fade at the right edge of the scroll region: the scrollbar is hidden, so
+   this is the only cue that there is more to the left of the pinned actions.
+   Non-interactive, and it sits inside the scroll region's own stacking. */
+.editor-toolbar .toolbar-scroll {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+}
+.editor-toolbar .toolbar-scroll > * {
+  flex-shrink: 0;
 }
 /* Direct children keep their natural width and overflow into the scroll
    region instead of compressing — so buttons never squish below their
@@ -8184,10 +8290,6 @@ a.pa-card:hover {
   margin: 0 var(--space-1h);
   background: var(--border);
 }
-/* Pushes the primary Run/Test action to the right edge of the bar. */
-.editor-toolbar .toolbar-spacer {
-  flex: 1 1 auto;
-}
 /* One compact, evenly-aligned shape for every toolbar control so icons
    and labels line up via flex gap — no per-element vertical-align or
    margin hacks needed in the markup. */
@@ -8204,6 +8306,25 @@ a.pa-card:hover {
   font-weight: 500;
   line-height: 1;
   white-space: nowrap;
+}
+/* Coarse pointers get real touch targets. 34px tall / 36px square is fine for
+   a mouse but under the ~44px a finger needs, and the editor toolbar is the
+   densest control strip in the app. Only the hit area grows — the icons and
+   type stay put, so the bar reads the same on a desktop. */
+@media (pointer: coarse) {
+  .editor-toolbar {
+    flex: 0 0 60px;
+    height: 60px;
+  }
+  .editor-toolbar button,
+  .editor-toolbar .editor-saved,
+  .editor-toolbar .editor-saving {
+    height: 44px;
+    padding: 0 var(--space-3);
+  }
+  .editor-toolbar button:not(.primary) {
+    min-width: 44px;
+  }
 }
 /* Icons keep their size when horizontal space gets tight. */
 .editor-toolbar button svg,
@@ -8543,13 +8664,10 @@ a.pa-card:hover {
    it as the focal point, and the label would otherwise crowd out the
    status chip and pause toggle on phone widths. */
 @container editor-canvas (max-width: 640px) {
-  .editor-toolbar button.primary .toolbar-label {
-    display: none;
-  }
+  /* The primary label stays at every width now (an unlabelled purple glyph is
+     not a discoverable Run button); only its padding tightens. */
   .editor-toolbar button.primary {
-    width: 36px;
-    padding: 0;
-    gap: 0;
+    padding: 0 var(--space-2);
     justify-content: center;
   }
 }
@@ -9417,7 +9535,7 @@ a.pa-card:hover {
 .rtp-type {
   max-width: 18rem;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--r-2);
   background: var(--surface);
   font-size: var(--text-sm);
   padding: 6px var(--space-2);
@@ -9439,7 +9557,7 @@ a.pa-card:hover {
   font-size: var(--text-xs);
   line-height: 1.5;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--r-2);
   padding: var(--space-2);
   background: var(--code-bg, var(--surface));
   resize: vertical;
@@ -9461,7 +9579,7 @@ a.pa-card:hover {
    which slides sideways to reveal the Delete backdrop underneath. */
 .rtc-item {
   position: relative;
-  border-radius: var(--radius);
+  border-radius: var(--r-2);
   overflow: hidden;
   transition: transform 0.15s ease;
 }
@@ -9490,7 +9608,7 @@ a.pa-card:hover {
   gap: var(--space-2);
   padding: var(--space-1) var(--space-2);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--r-2);
   background: var(--surface);
   font-size: var(--text-sm);
   /* pan-y lets a vertical drag scroll the inspector while we own horizontal
@@ -9598,7 +9716,7 @@ a.pa-card:hover {
 .rtc-hint {
   padding: var(--space-2) var(--space-3);
   background: var(--surface);
-  border-radius: var(--radius);
+  border-radius: var(--r-2);
 }
 .rtp-preview-head { display: flex; align-items: center; gap: var(--space-2); }
 .rtp-busy { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--muted); }
@@ -9606,12 +9724,12 @@ a.pa-card:hover {
   width: 100%;
   height: 280px;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--r-2);
   background: #fff;
 }
 .rtp-hint, .rtp-warn, .rtp-error {
   font-size: var(--text-sm);
-  border-radius: var(--radius);
+  border-radius: var(--r-2);
   padding: var(--space-2) var(--space-3);
 }
 .rtp-hint { color: var(--muted); background: var(--surface); }
@@ -9624,7 +9742,7 @@ a.pa-card:hover {
   overflow: auto;
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--r-2);
   background: var(--surface);
   font-family: ui-monospace, Menlo, monospace;
   font-size: var(--text-sm);

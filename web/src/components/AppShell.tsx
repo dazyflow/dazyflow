@@ -41,7 +41,7 @@ import { Button } from "./Button";
 import { OrgSwitcherModal } from "./OrgSwitcherModal";
 import { ConnectMcpClientModal } from "./ConnectMcpClientModal";
 import { CommandPalette } from "./CommandPalette";
-import { ShortcutsModal } from "./ShortcutsModal";
+import { HelpModal } from "./HelpModal";
 import { FlowIcon } from "../icons";
 import { isImageIcon } from "../lib/iconImage";
 import type { FlowSummary } from "../types";
@@ -197,7 +197,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   // Global ⌘K command bar (jump to any page/flow). Mounted app-wide but only
   // bound to ⌘K OUTSIDE the flow editor, where ⌘K stays "Add step".
   const [cmdOpen, setCmdOpen] = useState(false);
-  // Keyboard-shortcuts reference (header help button + "?" key).
+  // Help (header "?" button + "?" key): docs, support, keyboard shortcuts.
   const [helpOpen, setHelpOpen] = useState(false);
   // everHadApproval is a sticky local flag: once a user has seen ANY
   // pending approval in this browser, the Approvals nav link stays
@@ -455,16 +455,17 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="spacer" />
         {me && (
           <div className="user">
-            {/* Help: keyboard-shortcuts reference (also on "?"). Hidden on
-                mobile — there's no physical keyboard there, so the shortcuts
-                reference is irrelevant. */}
+            {/* Help (also on "?"): docs, support, keyboard shortcuts. Stays
+                visible on mobile now that it carries more than accelerators —
+                the docs and support links are exactly what a stuck user on a
+                phone needs. */}
             <Button
               variant="ghost"
               size="icon"
               className="shortcuts-help"
               onClick={() => setHelpOpen(true)}
-              aria-label={t("shortcuts.title")}
-              title={t("shortcuts.title")}
+              aria-label={t("help.title")}
+              title={t("help.title")}
             >
               <HelpCircle size={18} />
             </Button>
@@ -622,7 +623,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {/* Results — the in-app view of data flows saved to the Built-in
               store. A zero-config "see what my flow produced" surface. */}
           <NavLink
-            to="/results"
+            to="/collections"
             title={t("nav.results")}
           >
             <Table2 size={18} />
@@ -759,7 +760,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         onClose={() => setCmdOpen(false)}
         flows={flows}
       />
-      {helpOpen && <ShortcutsModal onClose={() => setHelpOpen(false)} />}
+      {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
       {connectingMcp && (
         <ConnectMcpClientModal onClose={() => setConnectingMcp(false)} />
       )}

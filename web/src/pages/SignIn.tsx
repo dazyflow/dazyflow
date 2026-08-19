@@ -9,6 +9,7 @@ import { api } from "../api";
 import { orgFromHost } from "../lib/orgFromHost";
 import { isImageIcon } from "../lib/iconImage";
 import { Button, ButtonLink } from "../components/Button";
+import { PasswordField } from "../components/PasswordField";
 import { OtpInput } from "../components/OtpInput";
 
 // SignIn is the email+password sign-in form. It also handles two
@@ -332,9 +333,8 @@ export function SignIn() {
           placeholder="you@example.com"
         />
         <label htmlFor="password">{t("signIn.password")}</label>
-        <input
+        <PasswordField
           id="password"
-          type="password"
           autoComplete="current-password"
           autoFocus={!!presetEmail}
           value={password}

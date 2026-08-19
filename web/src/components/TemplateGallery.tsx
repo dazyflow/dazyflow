@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Joachim Klahr
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { api } from "../api";
@@ -60,6 +60,11 @@ export function TemplateGallery() {
   // the gallery on one template instead of a category list it would
   // otherwise be buried in. Takes precedence over category.
   const templateFilter = searchParams.get("template");
+  // ?start=<id> goes one step further and COPIES that template immediately,
+  // landing the user in the editor with a working flow. Welcome's primary
+  // action uses it for the no-setup starter: the fastest honest answer to
+  // "what is this thing?" is a flow on screen, not a form to fill in.
+  const autoStart = searchParams.get("start");
 
   useEffect(() => {
     api
@@ -170,6 +175,23 @@ export function TemplateGallery() {
       setBusy(null);
     }
   };
+
+  // Auto-start: copy ?start=<id> as soon as the list resolves, once per mount.
+  // The ref (not state) is what makes it once — a re-render mid-copy must not
+  // fire a second saveGraph, and going Back to this URL should not silently
+  // mint another flow, so we also strip the param as we go. An id the index
+  // doesn't know is ignored: the user just sees the normal gallery.
+  const started = useRef(false);
+  useEffect(() => {
+    if (!autoStart || started.current || !templates || !token) return;
+    const tpl = templates.find((x) => x.id === autoStart);
+    started.current = true;
+    const sp = new URLSearchParams(searchParams);
+    sp.delete("start");
+    setSearchParams(sp, { replace: true });
+    if (tpl) void useTemplate(tpl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStart, templates, token]);
 
   if (error && !templates) {
     return <ErrorNotice>{error}</ErrorNotice>;

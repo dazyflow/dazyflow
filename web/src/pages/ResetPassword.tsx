@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "../components/Button";
+import { PasswordField } from "../components/PasswordField";
 import { api } from "../api";
 import { explainApiError } from "../lib/explainApiError";
 
@@ -91,9 +92,8 @@ export function ResetPassword() {
         <label htmlFor="email">{t("resetPassword.email")}</label>
         <input id="email" type="email" value={email} readOnly autoComplete="username" />
         <label htmlFor="password">{t("resetPassword.newPassword")}</label>
-        <input
+        <PasswordField
           id="password"
-          type="password"
           autoComplete="new-password"
           autoFocus
           minLength={8}
@@ -105,9 +105,8 @@ export function ResetPassword() {
           {t("resetPassword.hint")}
         </div>
         <label htmlFor="confirm">{t("resetPassword.confirm")}</label>
-        <input
+        <PasswordField
           id="confirm"
-          type="password"
           autoComplete="new-password"
           value={confirm}
           onChange={(e) => setConfirm(e.target.value)}

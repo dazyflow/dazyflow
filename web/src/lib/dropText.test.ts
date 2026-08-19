@@ -161,13 +161,28 @@ describe("dropCategoryLabel", () => {
     expect(dropCategoryLabel("network", "sv")).toBe("Nätverk");
   });
 
-  it("passes through the ones Swedish already uses as-is", () => {
-    expect(dropCategoryLabel("ai", "sv")).toBe("ai");
-    expect(dropCategoryLabel("trigger", "sv")).toBe("trigger");
+  it("gives Swedish a word for every category, including ai/trigger", () => {
+    expect(dropCategoryLabel("ai", "sv")).toBe("AI");
+    expect(dropCategoryLabel("trigger", "sv")).toBe("Utlösare");
+  });
+
+  // The bug this guards: unmapped, these fell through to the raw engine enum,
+  // so an English reader saw a chip reading "network" or "io".
+  it("renders product words in English, never the engine enum", () => {
+    expect(dropCategoryLabel("network", "en")).toBe("Apps & services");
+    expect(dropCategoryLabel("io", "en")).toBe("Files & data");
+    expect(dropCategoryLabel("transformation", "en")).toBe("Change data");
+    expect(dropCategoryLabel("flow_control", "en")).toBe("Flow control");
+  });
+
+  it("uses the English map for a locale with no vocabulary of its own", () => {
+    expect(dropCategoryLabel("network", "de")).toBe("Apps & services");
+    expect(dropCategoryLabel("network", undefined)).toBe("Apps & services");
   });
 
   it("passes through an unknown category and an empty one", () => {
     expect(dropCategoryLabel("quantum", "sv")).toBe("quantum");
+    expect(dropCategoryLabel("quantum", "en")).toBe("quantum");
     expect(dropCategoryLabel("", "sv")).toBe("");
   });
 });

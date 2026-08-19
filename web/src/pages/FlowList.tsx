@@ -312,14 +312,25 @@ export function FlowList() {
           <Workflow size={28} className="flow-empty-icon" />
           <h2>{t("flowList.emptyTitle")}</h2>
           <p>{t("flowList.emptyBody")}</p>
+          {/* Two buttons, because the copy above offers two paths — a single
+              generic "Create a flow" landed on the AI tab, which is neither of
+              them. Template leads: it's the one that produces a working flow
+              without the user designing anything. */}
           <div className="flow-empty-actions">
             <Button
               variant="primary"
-              onClick={() => navigate("/flows/new")}
+              onClick={() => navigate("/flows/new?tab=template")}
               disabled={!canEdit}
               title={!canEdit ? t("flowList.needEdit") : undefined}
             >
-              {t("flowList.emptyCreateCta")}
+              {t("flowList.emptyTemplateCta")}
+            </Button>
+            <Button
+              onClick={() => navigate("/flows/new?tab=blank")}
+              disabled={!canEdit}
+              title={!canEdit ? t("flowList.needEdit") : undefined}
+            >
+              {t("flowList.emptyBlankCta")}
             </Button>
           </div>
         </div>

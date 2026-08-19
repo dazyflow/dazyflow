@@ -3820,6 +3820,14 @@ function EditorInner() {
         onMouseMove={onCanvasMouseMove}
       >
         <div className="editor-toolbar">
+          {/* Everything up to the spacer lives in a SCROLLING region; the
+              primary actions after it are pinned. The whole bar used to be
+              the scroll container, with the scrollbar hidden for looks — so on
+              a narrow window (or any window with the inspector open) Run and
+              Publish slid off the right edge with nothing on screen to suggest
+              they were still there. Secondary tools may scroll; the action you
+              came to press may not. */}
+          <div className="toolbar-scroll">
           {/* Authoring tools — add nodes, configure how the flow starts. */}
           <div className="toolbar-group">
             <Button
@@ -3827,6 +3835,7 @@ function EditorInner() {
               className="editor-add-drop"
               onClick={() => setPaletteOpen(true)}
               title={t("editor.addDropTitle")}
+              aria-label={t("editor.addDrop")}
             >
               <Plus size={15} />
               <span className="toolbar-label">{t("editor.addDrop")}</span>
@@ -3837,6 +3846,7 @@ function EditorInner() {
               variant="ghost"
               onClick={addFrame}
               title={t("editor.addFrameTitle")}
+              aria-label={t("editor.addFrame")}
             >
               <StickyNote size={15} />
               <span className="toolbar-label">{t("editor.addFrame")}</span>
@@ -3848,6 +3858,7 @@ function EditorInner() {
                 variant="ghost"
                 onClick={autoLayout}
                 title={t("editor.tidyTitle")}
+              aria-label={t("editor.tidy")}
               >
                 <LayoutGrid size={15} />
                 <span className="toolbar-label">{t("editor.tidy")}</span>
@@ -3862,27 +3873,34 @@ function EditorInner() {
             <>
               <span className="toolbar-divider" aria-hidden="true" />
               <div className="toolbar-group toolbar-align">
-                <Button variant="ghost" title={t("editor.alignLeft")} onClick={() => alignNodes("left")}>
+                <Button variant="ghost" title={t("editor.alignLeft")}
+              aria-label={t("editor.alignLeft")} onClick={() => alignNodes("left")}>
                   <AlignStartVertical size={15} />
                 </Button>
-                <Button variant="ghost" title={t("editor.alignHCenter")} onClick={() => alignNodes("hcenter")}>
+                <Button variant="ghost" title={t("editor.alignHCenter")}
+              aria-label={t("editor.alignHCenter")} onClick={() => alignNodes("hcenter")}>
                   <AlignCenterVertical size={15} />
                 </Button>
-                <Button variant="ghost" title={t("editor.alignRight")} onClick={() => alignNodes("right")}>
+                <Button variant="ghost" title={t("editor.alignRight")}
+              aria-label={t("editor.alignRight")} onClick={() => alignNodes("right")}>
                   <AlignEndVertical size={15} />
                 </Button>
-                <Button variant="ghost" title={t("editor.alignTop")} onClick={() => alignNodes("top")}>
+                <Button variant="ghost" title={t("editor.alignTop")}
+              aria-label={t("editor.alignTop")} onClick={() => alignNodes("top")}>
                   <AlignStartHorizontal size={15} />
                 </Button>
-                <Button variant="ghost" title={t("editor.alignVCenter")} onClick={() => alignNodes("vcenter")}>
+                <Button variant="ghost" title={t("editor.alignVCenter")}
+              aria-label={t("editor.alignVCenter")} onClick={() => alignNodes("vcenter")}>
                   <AlignCenterHorizontal size={15} />
                 </Button>
-                <Button variant="ghost" title={t("editor.alignBottom")} onClick={() => alignNodes("bottom")}>
+                <Button variant="ghost" title={t("editor.alignBottom")}
+              aria-label={t("editor.alignBottom")} onClick={() => alignNodes("bottom")}>
                   <AlignEndHorizontal size={15} />
                 </Button>
                 <Button
                   variant="ghost"
                   title={t("editor.distributeH")}
+              aria-label={t("editor.distributeH")}
                   disabled={selectedCount < 3}
                   onClick={() => distributeNodes("h")}
                 >
@@ -3891,6 +3909,7 @@ function EditorInner() {
                 <Button
                   variant="ghost"
                   title={t("editor.distributeV")}
+              aria-label={t("editor.distributeV")}
                   disabled={selectedCount < 3}
                   onClick={() => distributeNodes("v")}
                 >
@@ -3902,6 +3921,7 @@ function EditorInner() {
                 onClick={() => void collapseSelection()}
                 disabled={!hasPerm("graph:edit")}
                 title={t("editor.groupSubgraphTitle")}
+              aria-label={t("editor.groupSubgraph")}
               >
                 <Group size={15} />
                 <span className="toolbar-label">{t("editor.groupSubgraph")}</span>
@@ -3973,6 +3993,7 @@ function EditorInner() {
                 variant="ghost"
                 onClick={openHistory}
                 title={t("editor.historyTitle")}
+              aria-label={t("editor.history")}
               >
                 <History size={15} />
                 <span className="toolbar-label">{t("editor.history")}</span>
@@ -4045,6 +4066,7 @@ function EditorInner() {
                       variant="ghost"
                       onClick={() => void openDiff()}
                       title={t("editor.diffTitle")}
+              aria-label={t("editor.diff")}
                     >
                       <GitCompare size={15} />
                       <span className="toolbar-label">{t("editor.diff")}</span>
@@ -4054,8 +4076,7 @@ function EditorInner() {
               </div>
             )}
           </div>
-
-          <span className="toolbar-spacer" />
+          </div>
 
           {/* Run-status chip: tells the owner at a glance whether this flow
               fires on its own (Live), only on Run (Manual), or is paused. */}
@@ -4225,6 +4246,7 @@ function EditorInner() {
             size="icon"
             className="inspect-fab"
             title={t("editor.inspect")}
+              aria-label={t("editor.inspect")}
             onClick={() => setInspectorExpanded(true)}
           >
             <PanelRight size={18} />

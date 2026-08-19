@@ -121,7 +121,12 @@ export function App() {
         <Route path="/apps/:slug" element={<AppDetail />} />
         <Route path="/files" element={<Files />} />
         <Route path="/runs" element={<RunList />} />
-        <Route path="/results" element={<Results />} />
+        {/* Collections: the nav label and the page title both say
+            "Collections", so the URL does too. /results was the old path —
+            keep it as a redirect for bookmarks, same as /templates and
+            /plans below. */}
+        <Route path="/collections" element={<Results />} />
+        <Route path="/results" element={<Navigate to="/collections" replace />} />
         <Route path="/runs/:runID" element={<RunDetail />} />
         <Route path="/approvals" element={<Approvals />} />
         {/* /support is role-sensitive: a support agent lands on their

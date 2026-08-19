@@ -4,18 +4,23 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { ArrowRight, Plus, Sparkles } from "lucide-react";
+import { ArrowRight, Sparkles } from "lucide-react";
 import { FlowIcon } from "../icons";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { loadRecentFlow, userScope } from "../recentFlow";
 
-// Welcome is the post-signup landing wizard — the "first-run"
-// surface. Intentionally simple: a confirmation of the tenant the user
-// just got, a resume-where-you-left-off link, and a single primary CTA
-// into the unified Create-flow page (blank / AI / template). All the
-// "pick a goal" branching now lives inside that page's template tab,
-// so Welcome stays a one-decision screen.
+// Welcome is the post-signup landing wizard — the "first-run" surface.
+// Intentionally simple: a resume-where-you-left-off link and one primary
+// action, with the other two routes offered as quieter cards below.
+//
+// The primary action opens the no-setup starter flow and lands the user in
+// the editor with something that actually runs. It used to be "Create your
+// first flow" pointing at ?tab=blank — the EMPTY CANVAS, which is the hardest
+// of the three ways in and the one most likely to make a non-technical user
+// close the tab. The starter template needs no account, no connection and no
+// trigger: press Run and output appears, which is the fastest honest answer
+// to "what does this thing do?".
 
 // HAS_FLOWS_KEY mirrors App.tsx's RootRedirect signal. We read it
 // to decide between first-time and returning copy: a user who's
@@ -93,9 +98,20 @@ export function Welcome() {
         <p className="welcome-intro">
           {isReturning ? t("welcome.introReturning") : t("welcome.intro")}
         </p>
-        <Link to="/flows/new?tab=blank" className="primary welcome-cta welcome-create">
-          <Plus size={16} /> {t("welcome.createCta")}
+        {/* The no-setup starter, copied and opened in one click (?start= is
+            handled by TemplateGallery). */}
+        <Link
+          to="/flows/new?tab=template&start=try-it-now"
+          className="primary welcome-cta welcome-create"
+        >
+          <Sparkles size={16} /> {t("welcome.featuredCta")}
         </Link>
+        <p className="welcome-featured-desc">{t("welcome.featuredDesc")}</p>
+        <p className="welcome-alt">
+          <Link to="/flows/new?tab=template">{t("welcome.browseTemplates")}</Link>
+          {" · "}
+          <Link to="/flows/new?tab=blank">{t("welcome.createCta")}</Link>
+        </p>
         {me && (
           <div className="welcome-mcp">
             <div className="welcome-mcp-body">
@@ -107,10 +123,9 @@ export function Welcome() {
                 {t("welcome.aiBuildDesc")}
               </div>
             </div>
-            {/* In-app AI describe-box: /flows/new is AI-first by default, so
-                this lands straight on the "describe what you want" field with
-                no setup. */}
-            <Link to="/flows/new" className="welcome-cta">
+            {/* Explicit ?tab=ai — the create page defaults to templates now,
+                so this has to name the tab it wants. */}
+            <Link to="/flows/new?tab=ai" className="welcome-cta">
               <Sparkles size={14} /> {t("welcome.aiBuildCta")}
             </Link>
           </div>

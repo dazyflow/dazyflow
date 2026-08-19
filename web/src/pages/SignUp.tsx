@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "../components/Button";
+import { PasswordField } from "../components/PasswordField";
 import { useAuth } from "../auth";
 import { api } from "../api";
 
@@ -155,9 +156,8 @@ export function SignUp() {
           placeholder="you@example.com"
         />
         <label htmlFor="password">{t("signUp.password")}</label>
-        <input
+        <PasswordField
           id="password"
-          type="password"
           autoComplete="new-password"
           autoFocus={lockEmail}
           minLength={8}
@@ -174,9 +174,8 @@ export function SignUp() {
           {t("signUp.passwordHint")}
         </div>
         <label htmlFor="confirm">{t("signUp.confirm")}</label>
-        <input
+        <PasswordField
           id="confirm"
-          type="password"
           autoComplete="new-password"
           value={confirm}
           onChange={(e) => setConfirm(e.target.value)}

@@ -81,7 +81,7 @@ export function CommandPalette({
       { id: "nav:overview", label: t("nav.overview"), icon: <Gauge size={16} />, group: "nav", run: () => go("/overview") },
       { id: "nav:flows", label: t("nav.flows"), icon: <Workflow size={16} />, group: "nav", run: () => go("/flows") },
       { id: "nav:runs", label: t("nav.runs"), icon: <Activity size={16} />, group: "nav", run: () => go("/runs") },
-      { id: "nav:results", label: t("nav.results"), icon: <Table2 size={16} />, group: "nav", run: () => go("/results") },
+      { id: "nav:results", label: t("nav.results"), icon: <Table2 size={16} />, group: "nav", run: () => go("/collections") },
       { id: "nav:files", label: t("nav.files"), icon: <FolderTree size={16} />, group: "nav", run: () => go("/files") },
       { id: "nav:approvals", label: t("nav.approvals"), icon: <Inbox size={16} />, group: "nav", run: () => go("/approvals") },
       { id: "nav:apps", label: t("nav.apps"), icon: <Boxes size={16} />, group: "nav", run: () => go("/apps") },

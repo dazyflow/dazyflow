@@ -17,7 +17,14 @@
   --ink: #e9ecf3;
   --ink-soft: #d2caff;
   --muted: #9e9abb;
-  --faint: #706b8e;
+  /* --faint is the third text tier (hints, timestamps, disclaimers). It used
+     to be #706b8e, which measured 2.96:1 on --surface-2 and 2.35:1 on
+     --surface-3 — under the 4.5:1 body-text threshold on exactly the raised
+     surfaces where hint text lives (cards, popovers, the inspector). Lifted
+     until it clears AA on bg/surface/surface-2 while staying a visible step
+     below --muted. --surface-3 is the deepest well and still sits under; keep
+     it for chrome, not for text a user must read. */
+  --faint: #918bb0;
 
   /* Surfaces */
   --bg: #070513;
@@ -170,7 +177,9 @@
   --ink: #1b2233;
   --ink-soft: #39415a;
   --muted: #5b6577;
-  --faint: #8b93a7;
+  /* Same fix as dark, and light was the worse of the two: #8b93a7 measured
+     2.87:1 on --bg and 2.53:1 on --surface-3. */
+  --faint: #656e85;
 
   /* Surfaces — a tinted off-white app canvas with pure-white cards
      floating on top, plus two progressively deeper neutral fills for
@@ -511,6 +520,22 @@ select:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+/* Keyboard focus for everything that isn't a field. Inputs above got a
+   designed ring; buttons, links and anything with tabindex were left on the
+   browser default, which over a near-black violet ground is barely visible in
+   some browsers and inconsistent across all of them. :focus-visible (not
+   :focus) so a mouse click never paints a ring — only keyboard/AT navigation
+   does. outline (not box-shadow) so the ring is never clipped by an ancestor's
+   overflow, and outline-offset keeps it clear of the control's own border. */
+button:focus-visible,
+a:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-1);
 }
 
 ::-webkit-scrollbar {

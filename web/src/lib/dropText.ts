@@ -416,13 +416,33 @@ export function descriptionFingerprint(text: string): string {
 
 // Category chips on the palette and drop cards. Keyed by the raw category the
 // manifest carries.
+//
+// EN_CATEGORIES exists because the raw values are ENGINE vocabulary, not
+// product vocabulary: unmapped, an English reader saw a chip reading
+// "network", "io" or "transformation" — while a Swedish reader, who had a
+// map, got real words. This is the base layer, applied whatever the language,
+// so a locale without its own map still gets human names rather than enum
+// values; SV_CATEGORIES overrides it for Swedish.
+const EN_CATEGORIES: Record<string, string> = {
+  ai: "AI",
+  flow_control: "Flow control",
+  io: "Files & data",
+  logic: "Logic",
+  network: "Apps & services",
+  system: "System",
+  transformation: "Change data",
+  trigger: "Triggers",
+};
+
 const SV_CATEGORIES: Record<string, string> = {
+  ai: "AI",
   flow_control: "Flödesstyrning",
   io: "In/ut",
   logic: "Logik",
   network: "Nätverk",
   system: "System",
   transformation: "Omvandling",
+  trigger: "Utlösare",
 };
 
 // DescriptionMap is keyed by drop id; `en` is the fingerprint of the English
@@ -569,11 +589,13 @@ export function dropLabelIsDefault(
   return false;
 }
 
-// dropCategoryLabel localizes the category chip. "ai" and "trigger" are
-// deliberately absent from the maps: both are used as-is in Swedish product
-// copy, so the fallback is the correct rendering, not a gap.
+// dropCategoryLabel renders the category chip. Resolution is language map →
+// English map → the raw value, so an unmapped locale still reads as product
+// copy instead of falling all the way through to an engine enum. A category
+// the maps don't know is shown as-is, which is the right failure mode: a new
+// engine category surfaces visibly instead of silently rendering blank.
 export function dropCategoryLabel(category: string, lang?: string): string {
   if (!category) return "";
   const v = vocabularyFor(lang);
-  return v?.categories[category] ?? category;
+  return v?.categories[category] ?? EN_CATEGORIES[category] ?? category;
 }

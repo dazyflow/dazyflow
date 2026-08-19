@@ -36,11 +36,16 @@ const AI_STARTERS = [
 type CreateTab = "ai" | "blank" | "template";
 
 // CreateFlow is the single surface for starting a new flow. Three tabs:
-//  - "AI assisted" (default): describe a flow and let AI draft it. AI-first
-//    is the deliberate default — the fastest path for a non-technical user.
+//  - "From a template" (default): the pre-built gallery (TemplateGallery),
+//    copied in one click. It leads because it is the only option that hands a
+//    beginner a WORKING flow without them designing anything, and the only one
+//    with no external dependency. AI used to be the default on the theory that
+//    it was the fastest path for a non-technical user — but it needs a
+//    connected Claude/OpenAI account, so on a fresh or self-hosted workspace
+//    the default tab was a dead end that asked the user to go connect a paid
+//    service before they had seen the product do anything.
+//  - "AI assisted": describe a flow and let AI draft it.
 //  - "Blank": name + description, an empty graph opened in the editor.
-//  - "From a template": the pre-built gallery (TemplateGallery), forked in
-//    one click.
 // It replaces the old standalone /templates page and the three competing
 // create buttons that used to live on the Flows list. The active tab is
 // reflected in ?tab=ai|blank|template so the /templates redirect and any
@@ -50,7 +55,7 @@ export function CreateFlow() {
   const [searchParams, setSearchParams] = useSearchParams();
   const raw = searchParams.get("tab");
   const tab: CreateTab =
-    raw === "blank" ? "blank" : raw === "template" ? "template" : "ai";
+    raw === "blank" ? "blank" : raw === "ai" ? "ai" : "template";
   const setTab = (next: CreateTab) => {
     const sp = new URLSearchParams(searchParams);
     sp.set("tab", next);
@@ -58,9 +63,9 @@ export function CreateFlow() {
   };
 
   const tabs: { key: CreateTab; Icon: typeof Sparkles; label: string }[] = [
+    { key: "template", Icon: LayoutTemplate, label: t("createFlow.tabTemplate") },
     { key: "ai", Icon: Sparkles, label: t("createFlow.tabAI") },
     { key: "blank", Icon: FilePlus2, label: t("createFlow.tabBlank") },
-    { key: "template", Icon: LayoutTemplate, label: t("createFlow.tabTemplate") },
   ];
 
   return (
