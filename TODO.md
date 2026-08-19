@@ -51,6 +51,13 @@ These aren't defects. Each needs a direction before any code moves.
 
 ### Web
 
+- [ ] **Verify the `configPath` keys stay reachable** — the six
+      `connectMcp.clients.*.configPath.{macos,windows,linux}` keys resolve
+      through a VARIABLE key (`` t(`${active.configPathKey}.${os}`) ``), so no
+      literal reference exists anywhere in the source and every static audit
+      flags them as dead. They were nearly deleted in the i18n sweep. Either
+      leave this note in place, or make the lookup literal so the keys are
+      greppable. (`web/src/components/ConnectMcpClientModal.tsx`)
 - [ ] **`technical_notes` and `blurb` render nowhere** — `IntegrationMeta`
       documents a collapsible "Technical details" disclosure and
       `OAuthProviderMeta.blurb` a one-line pitch in the Connections panel, but
@@ -138,6 +145,47 @@ re-raised.
 
 Archive, newest area first. The detail stays because the reasoning is the
 reusable part.
+
+### Localization (2026-08-19)
+- [x] **Locale bundles swept and guarded** — audited both catalogues (2,039
+      keys each) against every `.ts`/`.tsx` source. Parity was already perfect
+      and stayed so; removed **32 dead keys** whose surfaces are gone: the
+      admin "Advanced" group and its secret-manager card, the AI-assist block
+      of `RenderTemplatePreview`, the standalone `/templates` page (folded into
+      CreateFlow, which owns the heading), the old New-flow modal and the three
+      competing create buttons, the `/plans` page headings and plan names
+      (folded into `/usage`), the superseded secret chips, and two run-detail
+      error strings that `explainApiError` replaced. Empty parent objects
+      pruned. DELIBERATELY KEPT the six
+      `connectMcp.clients.*.configPath.{macos,windows,linux}` keys — see the
+      open note above; they resolve through a variable key and every static
+      audit calls them dead.
+- [x] **`connections.secretManager.intro` wired instead of deleted** — it was
+      unused, but it describes a page that still exists and it is the only copy
+      there that tells a non-IT reader "if that means nothing to you, you don't
+      need this". The page opened straight onto a raw
+      `${vault.PATH#FIELD}` heading while the AWS and GCP sections below it
+      each paired a head with an intro; Vault was the odd one out. Now renders
+      as the page lead-in. (`pages/AdminSecretManager.tsx`)
+- [x] **Structural guards on the catalogues** (`src/i18n/catalog.test.ts`, +5
+      tests) — key parity both ways, no empty strings, every `{{interpolation}}`
+      and every `<0>…</0>` Trans placeholder preserved across languages, and
+      plural forms paired (`_one` without `_other` silently renders the key
+      name). These catch what no reviewer can eyeball across 2,000 keys: a
+      Swedish string that loses its `{{count}}` doesn't crash, it renders a
+      sentence with a hole in it, in the language the reviewer doesn't read.
+      Mutation-tested — each guard verified to FAIL on a real violation.
+      Deliberately no "unused key" rule: keys are legitimately built at
+      runtime, so it would produce false positives and get silenced.
+- [x] **Audited the Swedish vocabulary maps — no changes needed.** Dumped the
+      live catalog from the Go registry (145 manifests) and diffed
+      `lib/dropText.ts`, `dropDescriptions.sv.ts`: **0** stale labels, **0**
+      stale subtitles, **0** fingerprint drift, and every one of the 145 drops
+      has a Swedish description. Two earlier scrape-based passes reported
+      "stale" and "102 drifted" — both were extraction bugs on my side (a
+      lowercase struct literal and a `unicode_escape` that mangled the em-dash
+      in every UTF-8 description), not rot. Trust the fingerprints, not a
+      regex over the Go source.
 
 ### Web — UX review, non-technical user's lens (2026-08-19)
 - [x] **First-run leads with a working flow, not an empty canvas** — Welcome's

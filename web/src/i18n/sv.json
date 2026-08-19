@@ -96,7 +96,6 @@
   },
   "nav": {
     "workspaceGroup": "Arbetsyta",
-    "templates": "Mallar",
     "flows": "Flöden",
     "draft": "Utkast – ej publicerad",
     "runs": "Körningar",
@@ -242,11 +241,8 @@
     "planLabel": "Plan",
     "planValueFree": "Gratis",
     "planValuePro": "Pro",
-    "planFree": "Gratisplan",
-    "planPro": "Pro-plan",
     "runsUsed": "{{used}} av {{limit}} gratis körningar",
     "runsLeft": "{{n}} gratis körningar kvar",
-    "subscriptionStatus": "Prenumerationsstatus: {{status}}",
     "cancelsOn": "Avslutas {{date}}",
     "renewsOn": "Förnyas {{date}}",
     "upgrade": "Uppgradera till Pro",
@@ -257,9 +253,7 @@
     "skippedRuns_other": "{{count}} schemalagda körningar hoppades över den här månaden — över ditt körningstak. Uppgradera för att återuppta."
   },
   "plans": {
-    "title": "Planer",
     "compareTitle": "Jämför planer",
-    "currentLine": "Du har {{plan}}-planen · {{used}} flödeskörningar den här månaden.",
     "yourPlan": "Din plan",
     "currentPlan": "Nuvarande plan",
     "upgradeTo": "Uppgradera till {{plan}}",
@@ -455,15 +449,11 @@
   },
   "flowList": {
     "title": "Flöden",
-    "fromTemplate": "Från mall",
     "newFlow": "Nytt flöde",
-    "createWithAI": "Skapa med AI",
     "emptyTitle": "Inga flöden än",
     "emptyBody": "Börja från en färdig mall, eller skapa ett tomt flöde och bygg det själv.",
     "emptyTemplateCta": "Börja från en mall",
     "emptyBlankCta": "Skapa ett tomt flöde",
-    "emptyCreateCta": "Skapa ett flöde",
-    "newModalTitle": "Nytt flöde",
     "nameLabel": "Namn",
     "namePlaceholder": "t.ex. Daglig försäljningsrapport",
     "descLabel": "Beskrivning (valfritt)",
@@ -602,8 +592,6 @@
     }
   },
   "templates": {
-    "title": "Mallar",
-    "intro": "Färdiga arbetsflöden som du kan kopiera med ett klick. Var och en hamnar i din arbetsyta som ett vanligt flöde — redigera, kör eller byt namn på det som vilket annat som helst.",
     "useTemplate": "Använd den här mallen",
     "forking": "Skapar…",
     "notSignedIn": "Inte inloggad.",
@@ -683,7 +671,6 @@
     "deleteSecretTitle": "Ta bort den här hemligheten?",
     "deleteConfirm": "Ta bort hemlighet \"{{name}}\"? Flöden som använder den slutar fungera.",
     "secretManager": {
-      "title": "Hemlighetshanterare (avancerat — för IT-team)",
       "intro": "Avancerat. Om ditt IT-team redan kör ett hemlighetsförråd — OpenBao/Vault, AWS Secrets Manager eller GCP Secret Manager — kan flöden slå upp hemligheter där istället för att lagra dem här. Varje anslutning är oberoende. Om det här inte säger dig något behöver du det inte.",
       "vaultHead": "OpenBao / HashiCorp Vault — ${vault.PATH#FIELD}",
       "awsHead": "AWS Secrets Manager — ${aws.NAME#field}",
@@ -766,8 +753,6 @@
     "needAdmin": "Du behöver <0>organization:admin</0> eller <0>graph:admin</0> för att se den här sidan.",
     "subtitle": "Organisation <0>{{tenant}}</0>",
     "groupOrg": "Organisation",
-    "groupAdvanced": "Avancerat",
-    "advancedHint": "Integrationer, enkel inloggning, granskningslogg och andra inställningar som de flesta team ställer in en gång eller aldrig.",
     "groupPlatform": "Plattform",
     "groupSystem": "System",
     "system": {
@@ -818,8 +803,6 @@
       "disconnect": "Koppla från",
       "addPermission": "Lägg till behörighet"
     },
-    "cardSecretManagerTitle": "Hemlighetshanterare",
-    "cardSecretManagerDesc": "Peka flöden mot er egen OpenBao / Vault.",
     "cardGitTitle": "Git-uppgifter",
     "cardGitDesc": "SSH-nycklar eller åtkomsttoken för att klona privata repon.",
     "secretManager": {
@@ -1169,7 +1152,6 @@
       "tenantId": "Tenant-id",
       "subdomain": "Subdomän",
       "memberCount": "Medlemmar",
-      "members": "Medlemskonton",
       "reason": "Orsak",
       "unsuspend": "Återaktivera",
       "suspend": "Stäng av",
@@ -1458,8 +1440,6 @@
     "cancelTitle": "Stoppa körningen innan den är klar",
     "cancelling": "Stoppar…",
     "cancelFailed": "Kunde inte stoppa körningen: {{error}}",
-    "errNetwork": "kunde inte nå servern — kontrollera anslutningen och försök igen",
-    "errServer": "servern hade ett problem — försök igen om en stund",
     "confirmCancelTitle": "Stoppa körningen?",
     "confirmCancelBody": "Körningen stoppas där den är. Droppar som redan körts förblir klara; resten körs inte. Du kan försöka igen efteråt.",
     "confirmReplayTitle": "Spela upp hela flödet igen?",
@@ -1671,9 +1651,6 @@
     "refSecretSetUp": "Lägg till →",
     "wiredInput": "Kommer från en ansluten drop.",
     "wiredInputNamed": "Kommer från {{source}}.",
-    "secretChipUses": "Använder hemlighet {{name}}",
-    "secretChipSetUp": "Lägg till",
-    "secretChipReplace": "Ersätt",
     "tokenInput": {
       "remove": "Ta bort referens"
     },
@@ -1744,7 +1721,6 @@
     "runsPerRow": "Den här droppen körs en gång per rad. Använd ”Från varje rad” i fältets { }-meny för att infoga en kolumn."
   },
   "createAI": {
-    "title": "Skapa ett flöde med AI",
     "placeholder": "t.ex. Varje vardag kl. 9, mejla mig gårdagens nya registreringar från databasen",
     "providerLabel": "AI-leverantör",
     "generate": "Generera flöde",
@@ -1764,7 +1740,6 @@
     "tabBlank": "Tomt",
     "tabTemplate": "Från en mall",
     "draftReadyTitle": "Ditt utkast är klart",
-    "draftReadyBody": "Kolla punkterna nedan, öppna det sedan — inget körs än.",
     "whatItDoes": "Vad det här flödet gör",
     "beforeItRuns": "Innan det kan köras behöver du:",
     "refineLabel": "Ändra något:",
@@ -1778,12 +1753,6 @@
     "issueHeadsUp": "Att tänka på"
   },
   "renderPreview": {
-    "assistLabel": "Beskriv ditt mejl — AI skriver det",
-    "assistPlaceholder": "t.ex. En vänlig “order skickad”-notis med varorna och totalsumman",
-    "generate": "Generera",
-    "generating": "Skriver…",
-    "providerLabel": "AI-leverantör",
-    "needConnect": "Anslut Claude eller ChatGPT på <0>Appar-sidan</0> för att använda detta.",
     "starters": "Börja med",
     "choose": "Välj en startpunkt…",
     "starter": {
@@ -1815,7 +1784,6 @@
     "errorAt": "Rad {{line}}, kol {{col}}: {{message}}"
   },
   "renderTextPreview": {
-    "presets": "Skapa en:",
     "layout": "Layout",
     "choose": "Välj en layout…",
     "preset": {

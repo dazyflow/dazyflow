@@ -96,7 +96,6 @@
   },
   "nav": {
     "workspaceGroup": "Workspace",
-    "templates": "Templates",
     "flows": "Flows",
     "draft": "Draft — not published",
     "runs": "Runs",
@@ -242,11 +241,8 @@
     "planLabel": "Plan",
     "planValueFree": "Free",
     "planValuePro": "Pro",
-    "planFree": "Free plan",
-    "planPro": "Pro plan",
     "runsUsed": "{{used}} of {{limit}} free runs",
     "runsLeft": "{{n}} free runs left",
-    "subscriptionStatus": "Subscription status: {{status}}",
     "cancelsOn": "Cancels {{date}}",
     "renewsOn": "Renews {{date}}",
     "upgrade": "Upgrade to Pro",
@@ -257,9 +253,7 @@
     "skippedRuns_other": "{{count}} scheduled runs were skipped this month — over your run cap. Upgrade to resume."
   },
   "plans": {
-    "title": "Plans",
     "compareTitle": "Compare plans",
-    "currentLine": "You're on the {{plan}} plan · {{used}} flow runs this month.",
     "yourPlan": "Your plan",
     "currentPlan": "Current plan",
     "upgradeTo": "Upgrade to {{plan}}",
@@ -455,15 +449,11 @@
   },
   "flowList": {
     "title": "Flows",
-    "fromTemplate": "From template",
     "newFlow": "New flow",
-    "createWithAI": "Create with AI",
     "emptyTitle": "No flows yet",
     "emptyBody": "Start from a ready-made template, or create a blank flow and build it yourself.",
     "emptyTemplateCta": "Start from a template",
     "emptyBlankCta": "Create a blank flow",
-    "emptyCreateCta": "Create a flow",
-    "newModalTitle": "New flow",
     "nameLabel": "Name",
     "namePlaceholder": "e.g. Daily sales report",
     "descLabel": "Description (optional)",
@@ -602,8 +592,6 @@
     }
   },
   "templates": {
-    "title": "Templates",
-    "intro": "Ready-made flows you can copy in one click. Each one lands in your workspace as a normal flow — edit, run, or rename it like any other.",
     "useTemplate": "Use this template",
     "forking": "Creating…",
     "notSignedIn": "Not signed in.",
@@ -683,7 +671,6 @@
     "deleteSecretTitle": "Delete this secret?",
     "deleteConfirm": "Delete secret \"{{name}}\"? Flows using it will stop working.",
     "secretManager": {
-      "title": "Secret managers (advanced — for IT teams)",
       "intro": "Advanced. If your IT team already runs a secret store — OpenBao/Vault, AWS Secrets Manager, or GCP Secret Manager — flows can resolve secrets against it instead of storing them here. Each connection is independent. If that means nothing to you, you don't need this.",
       "vaultHead": "OpenBao / HashiCorp Vault — ${vault.PATH#FIELD}",
       "awsHead": "AWS Secrets Manager — ${aws.NAME#field}",
@@ -766,8 +753,6 @@
     "needAdmin": "You need <0>organization:admin</0> or <0>graph:admin</0> to view this page.",
     "subtitle": "Organization <0>{{tenant}}</0>",
     "groupOrg": "Organization",
-    "groupAdvanced": "Advanced",
-    "advancedHint": "Integrations, single sign-on, audit log, and other settings most teams set once or never.",
     "groupPlatform": "Platform",
     "groupSystem": "System",
     "system": {
@@ -838,8 +823,6 @@
       "disconnect": "Disconnect",
       "addPermission": "Add permission"
     },
-    "cardSecretManagerTitle": "Secret manager",
-    "cardSecretManagerDesc": "Point flows at your own OpenBao / Vault.",
     "cardGitTitle": "Git credentials",
     "cardGitDesc": "SSH keys or access tokens for cloning private repos.",
     "secretManager": {
@@ -1189,7 +1172,6 @@
       "tenantId": "Tenant id",
       "subdomain": "Subdomain",
       "memberCount": "Members",
-      "members": "Member accounts",
       "reason": "Reason",
       "unsuspend": "Unsuspend",
       "suspend": "Suspend",
@@ -1458,8 +1440,6 @@
     "cancelTitle": "Stop this run before it finishes",
     "cancelling": "Stopping…",
     "cancelFailed": "Couldn't stop the run: {{error}}",
-    "errNetwork": "couldn't reach the server — check your connection and try again",
-    "errServer": "the server had a problem — try again in a moment",
     "confirmCancelTitle": "Stop this run?",
     "confirmCancelBody": "The run stops where it is. Drops already done stay done; the rest won't run. You can retry it afterwards.",
     "confirmReplayTitle": "Replay the whole flow?",
@@ -1671,9 +1651,6 @@
     "refSecretSetUp": "Set up →",
     "wiredInput": "Comes from a connected drop.",
     "wiredInputNamed": "Comes from {{source}}.",
-    "secretChipUses": "Uses secret {{name}}",
-    "secretChipSetUp": "Set up",
-    "secretChipReplace": "Replace",
     "tokenInput": {
       "remove": "Remove reference"
     },
@@ -1744,7 +1721,6 @@
     "runsPerRow": "This drop runs once per row. Use “From each row” in a field's { } menu to insert a column."
   },
   "createAI": {
-    "title": "Create a flow with AI",
     "placeholder": "e.g. Every weekday at 9am, email me yesterday's new signups from the database",
     "providerLabel": "AI provider",
     "generate": "Generate flow",
@@ -1764,7 +1740,6 @@
     "tabBlank": "Blank",
     "tabTemplate": "From a template",
     "draftReadyTitle": "Your draft is ready",
-    "draftReadyBody": "Check the items below, then open it — nothing runs yet.",
     "whatItDoes": "What this flow does",
     "beforeItRuns": "Before it runs, you'll need to:",
     "refineLabel": "Change something:",
@@ -1778,12 +1753,6 @@
     "issueHeadsUp": "Heads up"
   },
   "renderPreview": {
-    "assistLabel": "Describe your email — AI writes it",
-    "assistPlaceholder": "e.g. A friendly order-shipped note with the items and total",
-    "generate": "Generate",
-    "generating": "Writing…",
-    "providerLabel": "AI provider",
-    "needConnect": "Connect Claude or ChatGPT on the <0>Apps page</0> to use this.",
     "starters": "Start from",
     "choose": "Choose a starting point…",
     "starter": {
@@ -1815,7 +1784,6 @@
     "errorAt": "Line {{line}}, col {{col}}: {{message}}"
   },
   "renderTextPreview": {
-    "presets": "Make a:",
     "layout": "Layout",
     "choose": "Choose a layout…",
     "preset": {

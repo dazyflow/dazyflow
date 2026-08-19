@@ -155,6 +155,15 @@ export function AdminSecretManager() {
     <div>
       {err && <ErrorNotice>{err}</ErrorNotice>}
 
+      {/* One lead-in for the whole page — it covers all three stores, and its
+          "if that means nothing to you, you don't need this" line is the only
+          thing here that tells a non-IT reader they can walk away. The AWS and
+          GCP sections below already pair a head with an intro; Vault was the
+          odd one out, opening straight onto a raw ${vault.PATH#FIELD} heading. */}
+      <p className="sub" style={{ marginBottom: "var(--space-3)" }}>
+        {t("connections.secretManager.intro")}
+      </p>
+
       <h2 className="admin-section-head">
         {t("connections.secretManager.vaultHead")}
       </h2>
