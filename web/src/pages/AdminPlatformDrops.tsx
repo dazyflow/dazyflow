@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertCircle, Power, PowerOff, Search, ShieldCheck } from "lucide-react";
+import { Power, PowerOff, Search, ShieldCheck } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, type PlatformDrop } from "../api";
@@ -10,6 +10,7 @@ import { explainApiError } from "../lib/explainApiError";
 import { Button } from "../components/Button";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { DropGlyph } from "../components/PlatformAvatar";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 // AdminPlatformDrops is the platform-operator killswitch for individual
 // drops. A drop switched off here is refused by the engine on every run
@@ -78,9 +79,9 @@ export function AdminPlatformDrops() {
 
   if (!hasPerm("platform:admin")) {
     return (
-      <div className="card" style={{ color: "var(--danger)" }}>
+      <ErrorNotice>
         <Trans i18nKey="admin.platform.needPlatformAdmin" components={[<code />]} />
-      </div>
+      </ErrorNotice>
     );
   }
 
@@ -97,10 +98,9 @@ export function AdminPlatformDrops() {
       </div>
 
       {error && (
-        <div className="card error" style={{ marginBottom: "var(--space-3)" }}>
-          <AlertCircle size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-          {error}
-        </div>
+        <ErrorNotice style={{ marginBottom: "var(--space-3)" }}>
+{error}
+        </ErrorNotice>
       )}
 
       <div className="sub" style={{ marginBottom: "var(--space-2)" }}>

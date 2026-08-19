@@ -9,6 +9,7 @@ import { api } from "../api";
 import { explainApiError } from "../lib/explainApiError";
 import { Button } from "./Button";
 import type { FileEntry } from "../types";
+import { ErrorNotice } from "./ErrorNotice";
 
 // MoveModal is the interactive "Move to…" folder picker: browse the
 // workspace folder tree, then drop the entry into the folder you land on.
@@ -112,7 +113,7 @@ export function MoveModal({
             })}
           </nav>
 
-          {error && <div className="card error">{error}</div>}
+          {error && <ErrorNotice>{error}</ErrorNotice>}
 
           <div className="move-folder-list">
             {dir !== "" && (

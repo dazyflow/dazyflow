@@ -3,12 +3,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertCircle, Building2, Search } from "lucide-react";
+import { Building2, Search } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, type PlatformOrg } from "../api";
 import { explainApiError } from "../lib/explainApiError";
 import { OrgAvatar } from "../components/PlatformAvatar";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 // AdminPlatformOrgs is the cross-tenant org roster. Each row links to
 // that org's moderation page (suspend / ban / delete). Read-only list;
@@ -54,9 +55,9 @@ export function AdminPlatformOrgs() {
 
   if (!hasPerm("platform:admin")) {
     return (
-      <div className="card" style={{ color: "var(--danger)" }}>
+      <ErrorNotice>
         <Trans i18nKey="admin.platform.needPlatformAdmin" components={[<code />]} />
-      </div>
+      </ErrorNotice>
     );
   }
 
@@ -73,10 +74,9 @@ export function AdminPlatformOrgs() {
       </div>
 
       {error && (
-        <div className="card error" style={{ marginBottom: "var(--space-3)" }}>
-          <AlertCircle size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-          {error}
-        </div>
+        <ErrorNotice style={{ marginBottom: "var(--space-3)" }}>
+{error}
+        </ErrorNotice>
       )}
 
       <div className="sub" style={{ marginBottom: "var(--space-2)" }}>

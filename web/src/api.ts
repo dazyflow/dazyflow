@@ -167,12 +167,26 @@ async function request<T>(
 ): Promise<T> {
   const headers: Record<string, string> = { ...authHeader(token) };
   if (body) headers["Content-Type"] = "application/json";
-  const res = await fetch(API_BASE + path, {
-    method,
-    headers,
-    credentials: "include",
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  // fetch() REJECTS (rather than resolving with a non-ok Response) when the
+  // request never completes: server unreachable, connection refused or reset,
+  // DNS failure, offline, or the request aborted mid-flight. That rejection is
+  // a raw TypeError, and explainApiError turns anything that isn't an APIError
+  // into the vague "something went wrong" — so every genuine connectivity
+  // failure used to blame the app instead of saying "check your connection",
+  // and the apiError.network branch was unreachable for every call made here.
+  let res: Response;
+  try {
+    res = await fetch(API_BASE + path, {
+      method,
+      headers,
+      credentials: "include",
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    // Status 0 is the established "no HTTP response at all" signal — the XHR
+    // upload path already reports connectivity failures this way.
+    throw new APIError(0, "network error");
+  }
   if (!res.ok) {
     const { message, code } = parseAPIErrorBody(await res.text(), res.statusText);
     if (res.status === 401 && token && opts?.signalUnauthorized !== false) {
@@ -224,6 +238,7 @@ export type TOTPSetup = {
 // to its device/browser default.
 export type Preferences = {
   email_on_flow_failure: boolean;
+  email_on_support_reply: boolean;
   theme: "dark" | "light" | "";
   language: string;
 };

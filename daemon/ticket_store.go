@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -213,6 +214,36 @@ func EnsurePgTicketSchema(ctx context.Context, pool *pgxpool.Pool) error {
 // low-volume and every read should be authoritative across nodes.
 type PgTicketStore struct {
 	pool *pgxpool.Pool
+
+	// Cached QueueSummary. The summary is an unindexable GROUP BY over EVERY
+	// ticket ever filed (the tiles must count the whole queue, not a page), so
+	// it costs a full scan — ~30ms at 200k rows single-shot, but p50 111ms /
+	// p95 182ms under 20 concurrent agents, because the parallel scans contend.
+	// The support dashboard calls it on first paint AND on every filter click,
+	// so it dominates the page as the table grows.
+	//
+	// A few seconds of staleness is invisible here: these are headline counts
+	// next to a list that is itself re-queried live, and no decision turns on
+	// "unassigned: 12" vs "13". Per-process, so a multi-node deployment just
+	// caches independently.
+	summaryMu     sync.Mutex
+	summaryVal    core.TicketQueueSummary
+	summaryAt     time.Time
+	summaryWarm   bool
+	summaryInFlgt bool
+}
+
+// queueSummaryTTL bounds how stale a cached tile count may be.
+const queueSummaryTTL = 5 * time.Second
+
+// invalidateSummary drops the cached counts. Called on every write so an
+// agent's OWN action (claim, resolve, file) shows up in the tiles immediately —
+// the TTL is there to absorb read load from many agents, not to make you wait
+// to see what you just did.
+func (s *PgTicketStore) invalidateSummary() {
+	s.summaryMu.Lock()
+	s.summaryWarm = false
+	s.summaryMu.Unlock()
 }
 
 // NewPgTicketStore creates the schema and returns the store.
@@ -256,6 +287,7 @@ func (s *PgTicketStore) Create(ctx context.Context, t core.Ticket) error {
 	if ct.RowsAffected() == 0 {
 		return fmt.Errorf("%w: %s", errTicketExists, t.ID)
 	}
+	s.invalidateSummary()
 	return nil
 }
 
@@ -307,6 +339,40 @@ func (s *PgTicketStore) ListQueue(ctx context.Context, opts core.TicketListOpts)
 // deliberately unbounded by the list limit (the tiles must not lie when the
 // queue is longer than one page).
 func (s *PgTicketStore) QueueSummary(ctx context.Context) (core.TicketQueueSummary, error) {
+	s.summaryMu.Lock()
+	fresh := s.summaryWarm && time.Since(s.summaryAt) < queueSummaryTTL
+	if fresh {
+		cached := s.summaryVal
+		s.summaryMu.Unlock()
+		return cached, nil
+	}
+	// Expired. Exactly ONE caller recomputes; everyone else who arrives during
+	// that window gets the slightly-staler cached value instead of piling a
+	// second full scan onto the database. Without this, every TTL expiry became
+	// a stampede — p50 fell to 2ms but p95 stayed at 116ms because all the
+	// concurrent readers missed at the same instant and each ran the scan.
+	if s.summaryWarm && s.summaryInFlgt {
+		cached := s.summaryVal
+		s.summaryMu.Unlock()
+		return cached, nil
+	}
+	s.summaryInFlgt = true
+	s.summaryMu.Unlock()
+
+	sum, err := s.queueSummaryUncached(ctx)
+
+	s.summaryMu.Lock()
+	s.summaryInFlgt = false
+	if err == nil {
+		s.summaryVal, s.summaryAt, s.summaryWarm = sum, time.Now(), true
+	}
+	s.summaryMu.Unlock()
+	return sum, err
+}
+
+// queueSummaryUncached runs the actual aggregate. Split out so the cache above
+// stays readable and the tests can exercise the query directly.
+func (s *PgTicketStore) queueSummaryUncached(ctx context.Context) (core.TicketQueueSummary, error) {
 	sum := core.NewTicketQueueSummary()
 	rows, err := s.pool.Query(ctx,
 		`SELECT status, assigned_to, count(*) FROM support_tickets GROUP BY status, assigned_to`)
@@ -363,6 +429,7 @@ func (s *PgTicketStore) Update(ctx context.Context, t core.Ticket) error {
 	if ct.RowsAffected() == 0 {
 		return fmt.Errorf("%w: ticket %s", core.ErrNotFound, t.ID)
 	}
+	s.invalidateSummary()
 	return nil
 }
 
@@ -409,4 +476,117 @@ func (s *PgTicketStore) ListMessages(ctx context.Context, ticketID string) ([]co
 		out = append(out, m)
 	}
 	return out, rows.Err()
+}
+
+// DeleteByTenant removes every ticket filed by one org, and the chat messages
+// hanging off them. It satisfies the gdpr.go tenantEraser capability, so
+// deleting an org now takes its support conversations with it — before this,
+// tickets outlived the org that filed them, which is exactly the customer-
+// written content an erasure request is about.
+//
+// Returns the number of TICKETS deleted (not messages): the erase report counts
+// user-visible objects, and a thread is an implementation detail of a ticket.
+func (s *MemTicketStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for id, t := range s.byID {
+		if t.Tenant != tenant {
+			continue
+		}
+		for _, m := range s.messages[id] {
+			delete(s.msgIDs, m.ID)
+		}
+		delete(s.messages, id)
+		delete(s.byID, id)
+		n++
+	}
+	return n, nil
+}
+
+// DeleteByTenant removes an org's tickets and their threads. Messages go first
+// so a failure can't strand a thread whose ticket is already gone; both run in
+// one transaction so the pair is all-or-nothing.
+func (s *PgTicketStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx,
+		`DELETE FROM support_ticket_messages
+		  WHERE ticket_id IN (SELECT id FROM support_tickets WHERE tenant = $1)`,
+		tenant); err != nil {
+		return 0, err
+	}
+	ct, err := tx.Exec(ctx, `DELETE FROM support_tickets WHERE tenant = $1`, tenant)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, err
+	}
+	s.invalidateSummary()
+	return int(ct.RowsAffected()), nil
+}
+
+// Prune deletes CLOSED and RESOLVED tickets (and their threads) last touched
+// before the retention window, oldest first, up to batch rows. Open tickets are
+// never pruned no matter how old — an unanswered ticket is a backlog item, not
+// garbage, and silently deleting one would hide a support failure.
+//
+// Same (olderThan, batch) shape as the audit and run-log pruners so the sweep
+// loop in cmd/dzd treats it identically. olderThan <= 0 is a no-op.
+func (s *PgTicketStore) Prune(ctx context.Context, olderThan time.Duration, batch int) (int, error) {
+	if olderThan <= 0 {
+		return 0, nil
+	}
+	if batch <= 0 {
+		batch = 1000
+	}
+	cutoff := time.Now().UTC().Add(-olderThan)
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	// Pick the victims once, then delete messages and tickets against that same
+	// id set — re-running the predicate for each delete could drift if a ticket
+	// is updated between statements.
+	rows, err := tx.Query(ctx,
+		`SELECT id FROM support_tickets
+		  WHERE status IN ('resolved','closed') AND updated_at < $1
+		  ORDER BY updated_at ASC LIMIT $2`, cutoff, batch)
+	if err != nil {
+		return 0, err
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	if _, err := tx.Exec(ctx,
+		`DELETE FROM support_ticket_messages WHERE ticket_id = ANY($1)`, ids); err != nil {
+		return 0, err
+	}
+	ct, err := tx.Exec(ctx, `DELETE FROM support_tickets WHERE id = ANY($1)`, ids)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, err
+	}
+	s.invalidateSummary()
+	return int(ct.RowsAffected()), nil
 }

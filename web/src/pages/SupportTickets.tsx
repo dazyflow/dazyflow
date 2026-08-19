@@ -4,7 +4,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
-  AlertCircle,
   ArrowLeft,
   Check,
   Inbox,
@@ -23,7 +22,9 @@ import { Button } from "../components/Button";
 import { BundleView } from "../components/BundleView";
 import { explainApiError } from "../lib/explainApiError";
 import { formatDateTime } from "../lib/datetime";
+import { ErrorNotice } from "../components/ErrorNotice";
 import type {
+  FlowSummary,
   SupportBundle,
   Ticket,
   TicketMessage,
@@ -108,12 +109,7 @@ export function SupportTickets() {
         )}
       </div>
 
-      {error && (
-        <div className="card" style={{ color: "var(--danger)", marginBottom: "var(--space-4)" }}>
-          <AlertCircle size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-          {error}
-        </div>
-      )}
+      {error && <ErrorNotice style={{ marginBottom: "var(--space-4)" }}>{error}</ErrorNotice>}
 
       {disabled ? (
         <div className="card" style={NOTICE_STYLE}>
@@ -154,22 +150,81 @@ export function SupportTickets() {
   );
 }
 
-// NewTicketModal files a fresh ticket (no flow context — the RunDetail path
-// supplies that separately via ReportProblemModal).
+// NewTicketModal files a fresh ticket. Picking a flow is optional but strongly
+// worth it: the server then auto-attaches a redacted diagnostic bundle, which is
+// what lets support diagnose WITHOUT asking for a live read-only grant. The
+// RunDetail failure banner reaches the same endpoint via ReportProblemModal,
+// where the flow + run are already known; here the user picks from their flows.
+//
+// We also look up that flow's most recent FAILED run and attach it, because a
+// bundle with a run snapshot carries the per-step outcome and error code — the
+// difference between "here's my flow" and "here's my flow and how it broke".
+// Best effort: no failed run (or a lookup error) just means a structure-only
+// bundle, never a blocked filing.
 function NewTicketModal({ onClose, onCreated }: { onClose: () => void; onCreated: (t: Ticket) => void }) {
   const { t } = useTranslation();
-  const { token } = useAuth();
+  const { token, activeTenant, activeWorkspace } = useAuth();
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
+  const [flowId, setFlowId] = useState("");
+  const [flows, setFlows] = useState<FlowSummary[]>([]);
+  const [runId, setRunId] = useState("");
+  const [runAt, setRunAt] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  // The user's flows populate the picker. A failure here is silent: the picker
+  // just stays hidden and the ticket is filed without flow context.
+  useEffect(() => {
+    if (!token || !activeWorkspace) return;
+    let cancelled = false;
+    api
+      .listGraphs(token, activeTenant, activeWorkspace)
+      .then((r) => {
+        if (!cancelled) setFlows(r.graphs ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setFlows([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, activeTenant, activeWorkspace]);
+
+  // Look up the newest failed run for the chosen flow so the bundle can carry
+  // the run outcome. Cleared when the user picks "no specific flow".
+  useEffect(() => {
+    setRunId("");
+    setRunAt("");
+    if (!token || !flowId || !activeWorkspace) return;
+    let cancelled = false;
+    api
+      .listRuns(token, activeTenant, activeWorkspace, flowId, { status: "failed", limit: 1 })
+      .then((r) => {
+        const run = (r.runs ?? [])[0];
+        if (cancelled || !run) return;
+        setRunId(run.id);
+        setRunAt(run.finished_at || run.enqueued_at || "");
+      })
+      .catch(() => {
+        /* no run context — structure-only bundle */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, flowId, activeTenant, activeWorkspace]);
 
   const submit = async () => {
     if (!token || !subject.trim()) return;
     setBusy(true);
     setErr(null);
     try {
-      const tk = await api.createTicket(token, { subject: subject.trim(), message: message.trim() || undefined });
+      const tk = await api.createTicket(token, {
+        subject: subject.trim(),
+        message: message.trim() || undefined,
+        flow_id: flowId || undefined,
+        run_id: runId || undefined,
+      });
       onCreated(tk);
     } catch (e) {
       setErr(explainApiError(e, t));
@@ -201,6 +256,40 @@ function NewTicketModal({ onClose, onCreated }: { onClose: () => void; onCreated
             placeholder={t("support.subjectPlaceholder")}
             autoFocus
           />
+          {flows.length > 0 && (
+            <>
+              <label className="field-label" htmlFor="ticket-flow" style={{ marginTop: "var(--space-3)" }}>
+                {t("support.flowLabel")}
+              </label>
+              <select
+                id="ticket-flow"
+                className="input"
+                value={flowId}
+                onChange={(e) => setFlowId(e.target.value)}
+              >
+                <option value="">{t("support.flowNone")}</option>
+                {flows.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name || f.id}
+                  </option>
+                ))}
+              </select>
+              {/* Say plainly what leaves the org the moment a flow is picked.
+                  The premise of the product is "your stuff is secret", so the
+                  attachment is never silent. */}
+              <div className="sub" style={{ marginTop: "var(--space-2)" }}>
+                {flowId ? t("support.flowAttachNote") : t("support.flowNoneNote")}
+                {flowId && runId && (
+                  <>
+                    {" "}
+                    {t("support.flowRunNote", {
+                      date: runAt ? formatDateTime(runAt) : "",
+                    })}
+                  </>
+                )}
+              </div>
+            </>
+          )}
           <label className="field-label" style={{ marginTop: "var(--space-3)" }}>
             {t("support.messageLabel")}
           </label>
@@ -211,7 +300,7 @@ function NewTicketModal({ onClose, onCreated }: { onClose: () => void; onCreated
             onChange={(e) => setMessage(e.target.value)}
             placeholder={t("support.messagePlaceholder")}
           />
-          {err && <div className="card error" style={{ marginTop: "var(--space-3)" }}>{err}</div>}
+          {err && <ErrorNotice style={{ marginTop: "var(--space-3)" }}>{err}</ErrorNotice>}
         </div>
         <div className="modal-foot">
           <Button variant="ghost" onClick={onClose}>{t("common.cancel")}</Button>
@@ -307,7 +396,7 @@ export function SupportQueue() {
     : tickets;
 
   if (!hasPerm("support:agent")) {
-    return <div className="card" style={{ color: "var(--danger)" }}>{t("support.agentOnly")}</div>;
+    return <ErrorNotice>{t("support.agentOnly")}</ErrorNotice>;
   }
 
   return (
@@ -399,7 +488,7 @@ export function SupportQueue() {
       </div>
 
       {error && (
-        <div className="card" style={{ color: "var(--danger)", marginBottom: "var(--space-4)" }}>{error}</div>
+        <ErrorNotice style={{ marginBottom: "var(--space-4)" }}>{error}</ErrorNotice>
       )}
       {loading && tickets.length === 0 ? (
         <div className="card" style={NOTICE_STYLE}>{t("common.loading")}</div>
@@ -628,7 +717,7 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
     return (
       <div>
         <Link to={backTo} className="back-link"><ArrowLeft size={14} /> {t("common.back")}</Link>
-        <div className="card" style={{ color: "var(--danger)", marginTop: "var(--space-3)" }}>{error}</div>
+        <ErrorNotice style={{ marginTop: "var(--space-3)" }}>{error}</ErrorNotice>
       </div>
     );
   }
@@ -661,7 +750,20 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
               </>
             )}
             {tk.flow_id && (
-              <Link to={`/flows/${encodeURIComponent(tk.flow_id)}`}>{t("support.viewFlow")}</Link>
+              // The customer's own flow lives at /flows/<id>; an agent is in a
+              // DIFFERENT tenant, where that route resolves to nothing. Their
+              // route into someone else's flow is the grant-gated support view.
+              <Link
+                to={
+                  mode === "agent"
+                    ? `/support/flows/${encodeURIComponent(tk.tenant)}/${encodeURIComponent(
+                        tk.workspace,
+                      )}/${encodeURIComponent(tk.flow_id)}`
+                    : `/flows/${encodeURIComponent(tk.flow_id)}`
+                }
+              >
+                {t("support.viewFlow")}
+              </Link>
             )}
             {tk.bundle_id && (
               <>
@@ -669,6 +771,16 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
                 <button type="button" className="linklike" onClick={() => setShowBundle(true)}>
                   {t("support.viewBundle")}
                 </button>
+              </>
+            )}
+            {/* Tell the agent WHY there's nothing to open, so an unattached
+                ticket reads as "ask them which flow" rather than a broken page. */}
+            {mode === "agent" && !tk.bundle_id && (
+              <>
+                {/* The agent block above already ends in a separator, so only
+                    add one when the flow link sits between them. */}
+                {tk.flow_id && " · "}
+                <span style={NOTICE_STYLE}>{t("support.noBundle")}</span>
               </>
             )}
           </div>
@@ -710,7 +822,7 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
         <div ref={endRef} />
       </div>
 
-      {error && <div className="card error" style={{ marginTop: "var(--space-2)" }}>{error}</div>}
+      {error && <ErrorNotice style={{ marginTop: "var(--space-2)" }}>{error}</ErrorNotice>}
 
       <div className="ticket-composer">
         <textarea
@@ -771,7 +883,7 @@ function BundleModal({ ticketId, mode, onClose }: { ticketId: string; mode: "use
           </Button>
         </div>
         <div className="modal-body">
-          {error && <div className="card error">{error}</div>}
+          {error && <ErrorNotice>{error}</ErrorNotice>}
           {!bundle && !error && <div style={NOTICE_STYLE}>{t("common.loading")}</div>}
           {bundle && <BundleView bundle={bundle} />}
         </div>

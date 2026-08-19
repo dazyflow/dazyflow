@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { APIError } from "../api";
 import { explainApiError } from "../lib/explainApiError";
 import { Button } from "./Button";
+import { ErrorNotice } from "./ErrorNotice";
 
 // DeleteFlowModal is the password-gated confirm dialog for deleting a flow.
 // Deletion is irreversible (it drops the flow's whole history), so — like
@@ -99,7 +100,7 @@ export function DeleteFlowModal({
               }}
             />
           </div>
-          {err && <div className="card error">{err}</div>}
+          {err && <ErrorNotice>{err}</ErrorNotice>}
         </div>
         <div className="settings-foot">
           <Button onClick={onClose} disabled={busy}>

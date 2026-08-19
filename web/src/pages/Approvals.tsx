@@ -11,6 +11,7 @@ import { api, APIError } from "../api";
 import { explainApiError } from "../lib/explainApiError";
 import { absoluteTime, formatDateTime } from "../lib/datetime";
 import type { PendingApproval } from "../types";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 // Approvals is the inbox for await_approval nodes parked across the
 // workspace. Polls every 5s so a freshly-pending node shows up without
@@ -135,9 +136,9 @@ export function Approvals() {
       </div>
 
       {error && (
-        <div className="card" style={{ color: "var(--danger)" }}>
+        <ErrorNotice>
           {error}
-        </div>
+        </ErrorNotice>
       )}
 
       {!error && loading && items.length === 0 && (

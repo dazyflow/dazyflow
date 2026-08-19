@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { AlertCircle, ArrowRight, Info, LifeBuoy, Lock, Plus } from "lucide-react";
+import { ArrowRight, Info, LifeBuoy, Lock, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, isErrorCode, isHTTPStatus } from "../api";
@@ -11,6 +11,7 @@ import { explainApiError } from "../lib/explainApiError";
 import { Button } from "../components/Button";
 import { formatDate } from "../lib/datetime";
 import type { AccessGrant, GrantStatus } from "../types";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 // SupportAgentHome is the support agent's home: the list of flows they've been
 // granted access to (one-click Open), plus a form to request access to a new
@@ -69,16 +70,15 @@ export function SupportAgentHome() {
         </div>
       )}
       {gate === "forbidden" && (
-        <div className="card" style={{ color: "var(--danger)" }}>
+        <ErrorNotice>
           <Lock size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
           {t("supportView.forbidden")}
-        </div>
+        </ErrorNotice>
       )}
       {error && (
-        <div className="card error" style={{ marginBottom: "var(--space-3)" }}>
-          <AlertCircle size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-          {error}
-        </div>
+        <ErrorNotice style={{ marginBottom: "var(--space-3)" }}>
+{error}
+        </ErrorNotice>
       )}
 
       {gate === "none" && !error && (
@@ -235,10 +235,9 @@ function RequestNewFlow({ onRequested }: { onRequested: () => void }) {
         <input value={ticket} onChange={(e) => setTicket(e.target.value)} placeholder={t("supportView.ticketPlaceholder")} style={{ width: "100%" }} />
       </label>
       {err && (
-        <div className="card error">
-          <AlertCircle size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-          {err}
-        </div>
+        <ErrorNotice>
+{err}
+        </ErrorNotice>
       )}
       <div style={{ display: "flex", gap: "var(--space-2)" }}>
         <Button type="submit" variant="primary" disabled={!canSubmit}>

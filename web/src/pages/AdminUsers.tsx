@@ -5,7 +5,6 @@ import { useCallback, useEffect, useState } from "react";
 // useEffect already imported above; no separate hooks needed.
 import { Link } from "react-router-dom";
 import {
-  AlertCircle,
   Check,
   Copy,
   Mail,
@@ -28,6 +27,7 @@ import type {
 } from "../types";
 import { formatDate } from "../lib/datetime";
 import { explainApiError } from "../lib/explainApiError";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 // isAdminMember reports whether a member's role set grants org admin —
 // either a catalog role named "admin" or any role carrying the
@@ -82,9 +82,9 @@ export function AdminUsers() {
 
   if (!hasPerm("organization:admin")) {
     return (
-      <div className="card" style={{ color: "var(--danger)" }}>
+      <ErrorNotice>
         <Trans i18nKey="admin.users.needAdmin" components={[<code />]} />
-      </div>
+      </ErrorNotice>
     );
   }
 
@@ -105,10 +105,9 @@ export function AdminUsers() {
       </div>
 
       {error && (
-        <div className="card" style={{ color: "var(--danger)", marginBottom: "var(--space-4)" }}>
-          <AlertCircle size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-          {error}
-        </div>
+        <ErrorNotice style={{ marginBottom: "var(--space-4)" }}>
+{error}
+        </ErrorNotice>
       )}
 
       {lastIssued && (
@@ -339,9 +338,9 @@ function MemberCard({
         )}
       </div>
       {err && (
-        <div className="card error" style={{ width: "100%", marginTop: "var(--space-2)" }}>
+        <ErrorNotice style={{ width: "100%", marginTop: "var(--space-2)" }}>
           {err}
-        </div>
+        </ErrorNotice>
       )}
       {confirmRemove && (
         <ConfirmModal
@@ -477,9 +476,9 @@ function InvitationCard({
         />
       )}
       {err && (
-        <div className="card error" style={{ width: "100%", marginTop: "var(--space-2)" }}>
+        <ErrorNotice style={{ width: "100%", marginTop: "var(--space-2)" }}>
           {err}
-        </div>
+        </ErrorNotice>
       )}
     </div>
   );

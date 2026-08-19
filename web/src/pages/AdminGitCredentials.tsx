@@ -9,6 +9,7 @@ import { useAuth } from "../auth";
 import { api } from "../api";
 import type { GitCredential } from "../types";
 import { explainApiError } from "../lib/explainApiError";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 // AdminGitCredentials manages the org's named Git credentials — what a
 // git_checkout node picks by `account` to clone private repos. Each
@@ -98,9 +99,9 @@ export function AdminGitCredentials() {
       </div>
 
       {error && (
-        <div className="card" style={{ color: "var(--danger)" }}>
+        <ErrorNotice>
           {error}
-        </div>
+        </ErrorNotice>
       )}
 
       {loading ? (

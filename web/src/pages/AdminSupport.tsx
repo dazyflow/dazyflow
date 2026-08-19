@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertCircle, Check, LifeBuoy, ShieldCheck, X } from "lucide-react";
+import { Check, LifeBuoy, ShieldCheck, X } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
@@ -11,6 +11,7 @@ import { ConfirmModal } from "../components/ConfirmModal";
 import type { AccessGrant } from "../types";
 import { formatDate } from "../lib/datetime";
 import { explainApiError } from "../lib/explainApiError";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 // AdminSupport is the org-admin consent surface for the Support feature (see
 // docs/support-tickets-design.md). Support staff request a scoped, time-boxed,
@@ -52,9 +53,9 @@ export function AdminSupport() {
 
   if (!hasPerm("organization:admin")) {
     return (
-      <div className="card" style={{ color: "var(--danger)" }}>
+      <ErrorNotice>
         <Trans i18nKey="admin.support.needAdmin" components={[<code />]} />
-      </div>
+      </ErrorNotice>
     );
   }
 
@@ -79,10 +80,9 @@ export function AdminSupport() {
       </div>
 
       {error && (
-        <div className="card" style={{ color: "var(--danger)", marginBottom: "var(--space-4)" }}>
-          <AlertCircle size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-          {error}
-        </div>
+        <ErrorNotice style={{ marginBottom: "var(--space-4)" }}>
+{error}
+        </ErrorNotice>
       )}
 
       {disabled ? (
@@ -235,9 +235,9 @@ function GrantCard({ grant, onChanged }: { grant: AccessGrant; onChanged: () => 
         )}
       </div>
       {err && (
-        <div className="card error" style={{ width: "100%", marginTop: "var(--space-2)" }}>
+        <ErrorNotice style={{ width: "100%", marginTop: "var(--space-2)" }}>
           {err}
-        </div>
+        </ErrorNotice>
       )}
       {confirmRevoke && (
         <ConfirmModal

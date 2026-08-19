@@ -69,6 +69,10 @@ func (h *HTTPGateway) createTicket(rw http.ResponseWriter, r *http.Request, p co
 		writeAPIError(rw, http.StatusForbidden, "forbidden", "no tenant in context")
 		return
 	}
+	// Before decoding: filing is the endpoint that persists a bundle per call.
+	if !h.allowSupportWrite(rw, p) {
+		return
+	}
 	var body struct {
 		Subject string `json:"subject"`
 		FlowID  string `json:"flow_id"`
@@ -123,6 +127,7 @@ func (h *HTTPGateway) createTicket(rw http.ResponseWriter, r *http.Request, p co
 	}
 	h.audit(r.Context(), core.Principal{Tenant: t.Tenant, Subject: p.Subject},
 		"support.ticket.create", t.FlowID, "ticket="+t.ID)
+	h.notifyTicketFiled(t)
 	writeJSON(rw, http.StatusCreated, ticketForUser(t))
 }
 
@@ -165,6 +170,9 @@ func (h *HTTPGateway) postMyTicketMessage(rw http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
+	if !h.allowSupportWrite(rw, p) {
+		return
+	}
 	msg, ok := decodeTicketMessageBody(rw, r)
 	if !ok {
 		return
@@ -178,6 +186,7 @@ func (h *HTTPGateway) postMyTicketMessage(rw http.ResponseWriter, r *http.Reques
 	t.Status = core.TicketAwaitingSupport
 	t.UpdatedAt = now
 	_ = h.Tickets.Update(r.Context(), t)
+	h.notifyUserReplied(t)
 	h.writeUserTicketView(rw, r, t)
 }
 
@@ -359,6 +368,9 @@ func (h *HTTPGateway) postSupportTicketMessage(rw http.ResponseWriter, r *http.R
 	if !ok {
 		return
 	}
+	if !h.allowSupportWrite(rw, p) {
+		return
+	}
 	msg, ok := decodeTicketMessageBody(rw, r)
 	if !ok {
 		return
@@ -377,6 +389,7 @@ func (h *HTTPGateway) postSupportTicketMessage(rw http.ResponseWriter, r *http.R
 	_ = h.Tickets.Update(r.Context(), t)
 	h.audit(r.Context(), core.Principal{Tenant: t.Tenant, Subject: p.Subject},
 		"support.ticket.reply", t.FlowID, "ticket="+t.ID)
+	h.notifySupportReplied(t)
 	h.writeTicketView(rw, r, t)
 }
 
@@ -406,6 +419,11 @@ func (h *HTTPGateway) setSupportTicketStatus(rw http.ResponseWriter, r *http.Req
 		"Ticket marked "+string(status)+".", "", now)
 	h.audit(r.Context(), core.Principal{Tenant: t.Tenant, Subject: p.Subject},
 		"support.ticket.status", t.FlowID, "ticket="+t.ID+" status="+string(status))
+	// Only the resolved edge is worth an email — "closed" is the customer's own
+	// action, and awaiting_* flips constantly as the thread goes back and forth.
+	if status == core.TicketResolved {
+		h.notifyTicketResolved(t)
+	}
 	h.writeTicketView(rw, r, t)
 }
 
@@ -643,7 +661,10 @@ func (h *HTTPGateway) buildAndStoreBundle(ctx context.Context, p core.Principal,
 		}
 	}
 	manifests := h.svc.manifestsSnapshot()
-	issues := append(core.ValidateGraphFull(graph, manifests), core.LintGraph(graph)...)
+	// ValidateGraphFull already includes LintGraph's findings (see
+	// core/validate.go), so it's the complete set — appending LintGraph again
+	// double-counts every lint issue.
+	issues := core.ValidateGraphFull(graph, manifests)
 	bundle := core.BuildSupportBundle(graph, runPtr, issues, core.RedactStructureOnly)
 	id, err := newID()
 	if err != nil {

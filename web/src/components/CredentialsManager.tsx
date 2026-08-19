@@ -9,6 +9,7 @@ import { explainApiError } from "../lib/explainApiError";
 import { useAuth } from "../auth";
 import { ConfirmModal } from "./ConfirmModal";
 import { Button } from "./Button";
+import { ErrorNotice } from "./ErrorNotice";
 
 // CredentialsManager lists hand-entered secrets (DB URLs, API tokens) by name
 // — never value, the daemon has no read-back — with delete buttons and an add
@@ -98,7 +99,7 @@ export function CredentialsManager({
 
   return (
     <div className="credentials">
-      {err && <div className="card error">{err}</div>}
+      {err && <ErrorNotice>{err}</ErrorNotice>}
       {loading ? (
         <div className="card">{t("common.loading")}</div>
       ) : secrets.length === 0 ? (

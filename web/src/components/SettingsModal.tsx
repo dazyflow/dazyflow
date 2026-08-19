@@ -13,6 +13,7 @@ import { CredentialsManager } from "./CredentialsManager";
 import { Button } from "./Button";
 import { DeleteFlowModal } from "./DeleteFlowModal";
 import { FlowIcon } from "../icons";
+import { ErrorNotice } from "./ErrorNotice";
 
 // SettingsModal hosts graph-level configuration that doesn't fit in
 // the per-node Inspector. Triggers ("how this flow starts") have their
@@ -421,7 +422,7 @@ function FlowSecretsTab({ graph }: { graph: Graph }) {
           <div className="label-row">
             <label>{t("settings.secrets.manageTitle")}</label>
           </div>
-          {err && <div className="card error">{err}</div>}
+          {err && <ErrorNotice>{err}</ErrorNotice>}
           <CredentialsManager
             secrets={secrets ?? []}
             loading={secrets === null}

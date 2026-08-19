@@ -12,6 +12,7 @@ import { ConfirmModal } from "../components/ConfirmModal";
 import { explainApiError } from "../lib/explainApiError";
 import { formatDateTime } from "../lib/datetime";
 import type { RunSummary, JobStatus } from "../types";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 const PAGE_SIZE = 50;
 
@@ -397,9 +398,9 @@ export function RunList() {
       )}
 
       {error && (
-        <div className="card" style={{ color: "var(--danger)" }}>
+        <ErrorNotice>
           {error}
-        </div>
+        </ErrorNotice>
       )}
       {!error && loading && runs.length === 0 && (
         <div className="card" style={{ color: "var(--muted)" }}>

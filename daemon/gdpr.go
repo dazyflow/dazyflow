@@ -63,6 +63,9 @@ type EraseReport struct {
 	RunLogs        int      `json:"run_logs_deleted"`
 	Shares         int      `json:"shares_deleted"`
 	BusEvents      int      `json:"bus_events_deleted"`
+	Tickets        int      `json:"support_tickets_deleted"`
+	Bundles        int      `json:"support_bundles_deleted"`
+	Grants         int      `json:"access_grants_deleted"`
 	WorkspaceWiped bool     `json:"workspace_wiped,omitempty"`
 	SandboxWiped   bool     `json:"sandbox_wiped,omitempty"`
 	OrgAuthDeleted bool     `json:"org_auth_deleted,omitempty"`
@@ -203,6 +206,13 @@ func (h *HTTPGateway) deleteOrgData(ctx context.Context, tenant string) (EraseRe
 	rep.tallyByTenant(ctx, "invitations", h.Invitations, tenant, func(n int) { rep.Invitations = n })
 	// Public overview share links for the tenant's workspaces.
 	rep.tallyByTenant(ctx, "shares", h.svc.Shares, tenant, func(n int) { rep.Shares = n })
+	// Support surface: the org's tickets (customer-written chat), the redacted
+	// diagnostic bundles built from its flows, and any access grants naming it.
+	// Nil-safe via tallyByTenant's capability probe, so a deployment with the
+	// support feature off just records nothing here.
+	rep.tallyByTenant(ctx, "support_tickets", h.Tickets, tenant, func(n int) { rep.Tickets = n })
+	rep.tallyByTenant(ctx, "support_bundles", h.Bundles, tenant, func(n int) { rep.Bundles = n })
+	rep.tallyByTenant(ctx, "access_grants", h.Grants, tenant, func(n int) { rep.Grants = n })
 	// Org SSO config + display profile.
 	if h.OrgAuth != nil {
 		if err := h.OrgAuth.DeleteOrgAuth(ctx, tenant); err != nil {

@@ -12,6 +12,7 @@ import { Callout } from "../components/Callout";
 import { Button } from "../components/Button";
 import { explainApiError } from "../lib/explainApiError";
 import type { Graph, Manifest } from "../types";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 // GenIssue mirrors core.LintIssue — the heads-up findings the generator
 // returns alongside the draft (a missing sheet ID, an app to connect, a
@@ -335,7 +336,7 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
             </form>
           )}
 
-          {err && <div className="card" style={{ color: "var(--danger)" }}>{err}</div>}
+          {err && <ErrorNotice>{err}</ErrorNotice>}
 
           <div className="create-flow-actions">
             <Button disabled={busy} onClick={() => setPendingDraft(null)}>
@@ -382,7 +383,7 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
             />
           </div>
           {err && (
-            <div className="card" style={{ color: "var(--danger)" }}>{err}</div>
+            <ErrorNotice>{err}</ErrorNotice>
           )}
           <div className="create-flow-actions">
             <Button
@@ -465,7 +466,7 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
               })}
             </ul>
           )}
-          {err && <div className="card" style={{ color: "var(--danger)" }}>{err}</div>}
+          {err && <ErrorNotice>{err}</ErrorNotice>}
           {/* No AI provider connected yet: this is first-run onboarding, not an
               error — show a friendly Connect CTA (same shape as the node
               "Connect X" buttons) in place of the disabled Generate button,

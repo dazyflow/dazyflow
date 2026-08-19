@@ -11,6 +11,7 @@ import { explainApiError } from "../lib/explainApiError";
 import { Button } from "./Button";
 import { ConfirmModal } from "./ConfirmModal";
 import { UserAvatar } from "./PlatformAvatar";
+import { ErrorNotice } from "./ErrorNotice";
 
 const ROLE_NAMES = ["viewer", "editor", "admin"] as const;
 
@@ -99,7 +100,7 @@ export function MembersSection({ tenant }: { tenant: string }) {
   return (
     <div style={{ marginTop: "var(--space-4)" }}>
       <h2 className="admin-section-head">{t("admin.platformMembers.head")}</h2>
-      {error && <div className="card error" style={{ marginBottom: "var(--space-2)" }}>{error}</div>}
+      {error && <ErrorNotice style={{ marginBottom: "var(--space-2)" }}>{error}</ErrorNotice>}
 
       <div className="user-list">
         {members.map((m) => (

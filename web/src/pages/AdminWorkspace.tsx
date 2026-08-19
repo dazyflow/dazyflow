@@ -10,6 +10,7 @@ import { IconUpload } from "../components/IconUpload";
 import { Button } from "../components/Button";
 import type { WorkspaceLimits } from "../types";
 import { explainApiError } from "../lib/explainApiError";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 // AdminWorkspace is a read-only view of the effective limits for the
 // caller's tenant: the per-tenant disk quota plus the daemon-wide graph
@@ -41,9 +42,9 @@ export function AdminWorkspace() {
 
   if (!hasPerm("organization:admin")) {
     return (
-      <div className="card" style={{ color: "var(--danger)" }}>
+      <ErrorNotice>
         <Trans i18nKey="admin.workspace.needAdmin" components={[<code />]} />
-      </div>
+      </ErrorNotice>
     );
   }
 
@@ -60,10 +61,9 @@ export function AdminWorkspace() {
       </div>
 
       {error && (
-        <div className="card" style={{ color: "var(--danger)", marginBottom: "var(--space-4)" }}>
-          <AlertCircle size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-          {error}
-        </div>
+        <ErrorNotice style={{ marginBottom: "var(--space-4)" }}>
+{error}
+        </ErrorNotice>
       )}
       {loading && !limits && (
         <div className="card" style={{ color: "var(--muted)" }}>{t("common.loading")}</div>

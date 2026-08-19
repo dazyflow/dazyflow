@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertCircle, ShieldAlert } from "lucide-react";
+import { ShieldAlert } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
 import type { AuditEvent } from "../types";
 import { formatDateTime } from "../lib/datetime";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 // AdminAudit shows the tenant's administrative trail — graph saves, runs,
 // secret/key changes, approvals, cancels — newest first. Read-only;
@@ -44,9 +45,9 @@ export function AdminAudit() {
 
   if (!hasPerm("organization:admin")) {
     return (
-      <div className="card" style={{ color: "var(--danger)" }}>
+      <ErrorNotice>
         <Trans i18nKey="admin.audit.needAdmin" components={[<code />]} />
-      </div>
+      </ErrorNotice>
     );
   }
 
@@ -63,10 +64,9 @@ export function AdminAudit() {
       </div>
 
       {error && (
-        <div className="card" style={{ color: "var(--danger)", marginBottom: "var(--space-4)" }}>
-          <AlertCircle size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-          {error}
-        </div>
+        <ErrorNotice style={{ marginBottom: "var(--space-4)" }}>
+{error}
+        </ErrorNotice>
       )}
 
       {loading && events.length === 0 && (

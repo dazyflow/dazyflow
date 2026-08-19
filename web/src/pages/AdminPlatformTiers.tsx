@@ -3,13 +3,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { AlertCircle, Layers, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Layers, Pencil, Plus, Trash2, X } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, type PlatformTier } from "../api";
 import { explainApiError } from "../lib/explainApiError";
 import { Button } from "../components/Button";
 import { ConfirmModal } from "../components/ConfirmModal";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 // AdminPlatformTiers manages the reusable limit bundles a platform admin
 // assigns to orgs. Built-in Free/Pro can be edited (their limits) but not
@@ -44,9 +45,9 @@ export function AdminPlatformTiers() {
 
   if (!hasPerm("platform:admin")) {
     return (
-      <div className="card" style={{ color: "var(--danger)" }}>
+      <ErrorNotice>
         <Trans i18nKey="admin.platform.needPlatformAdmin" components={[<code />]} />
-      </div>
+      </ErrorNotice>
     );
   }
 
@@ -95,10 +96,9 @@ export function AdminPlatformTiers() {
       </div>
 
       {error && (
-        <div className="card error" style={{ marginBottom: "var(--space-3)" }}>
-          <AlertCircle size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-          {error}
-        </div>
+        <ErrorNotice style={{ marginBottom: "var(--space-3)" }}>
+{error}
+        </ErrorNotice>
       )}
 
       {loading ? (

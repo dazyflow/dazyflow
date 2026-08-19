@@ -35,6 +35,7 @@ import { userScope } from "../recentFlow";
 import { explainApiError } from "../lib/explainApiError";
 import type { FlowRunStatus } from "../flowStatus";
 import type { FlowSummary, RunSummary, ScheduleEntry } from "../types";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 type SortKey = "recent" | "name" | "status";
 
@@ -305,7 +306,7 @@ export function FlowList() {
         </div>
       </div>
       {loading && <div className="card">{t("common.loading")}</div>}
-      {error && <div className="card" style={{ color: "var(--danger)" }}>{error}</div>}
+      {error && <ErrorNotice>{error}</ErrorNotice>}
       {!loading && !error && flows.length === 0 && (
         <div className="card flow-empty">
           <Workflow size={28} className="flow-empty-icon" />

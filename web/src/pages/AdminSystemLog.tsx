@@ -17,6 +17,7 @@ import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
 import { Button } from "../components/Button";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 // Keep at most this many lines in memory. The terminal's own scrollback is
 // separate; this bounds the buffer we re-render from when the filter changes.
@@ -199,9 +200,9 @@ export function AdminSystemLog() {
 
   if (!isAdmin) {
     return (
-      <div className="card" style={{ color: "var(--danger)" }}>
+      <ErrorNotice>
         <Trans i18nKey="admin.systemLog.needPlatformAdmin" components={[<code />]} />
-      </div>
+      </ErrorNotice>
     );
   }
 

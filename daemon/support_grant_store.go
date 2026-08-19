@@ -365,3 +365,29 @@ func (s *PgGrantStore) ListForAgent(ctx context.Context, agent string) ([]core.A
 	}
 	return out, rows.Err()
 }
+
+// DeleteByTenant removes every access grant naming one org — requested,
+// approved, denied or revoked alike. A grant is a record of consent to read
+// that org's data; with the org gone it has nothing left to authorize, and
+// leaving it behind would let a stale row outlive the tenant it points at.
+func (s *MemGrantStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for id, g := range s.byID {
+		if g.Tenant == tenant {
+			delete(s.byID, id)
+			n++
+		}
+	}
+	return n, nil
+}
+
+// DeleteByTenant removes an org's access grants.
+func (s *PgGrantStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
+	ct, err := s.pool.Exec(ctx, `DELETE FROM access_grants WHERE tenant = $1`, tenant)
+	if err != nil {
+		return 0, err
+	}
+	return int(ct.RowsAffected()), nil
+}

@@ -29,6 +29,13 @@ Object.defineProperty(globalThis, "localStorage", {
   } satisfies Storage,
 });
 
+// jsdom implements no layout, so Element.scrollIntoView is missing entirely —
+// any component that scrolls a chat thread or list to the bottom on mount
+// throws in tests. Stub it once here rather than in each test file.
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
+}
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();

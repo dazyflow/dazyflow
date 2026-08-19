@@ -9,6 +9,7 @@ import { useAuth } from "../auth";
 import { api } from "../api";
 import { Button } from "./Button";
 import { explainApiError } from "../lib/explainApiError";
+import { ErrorNotice } from "./ErrorNotice";
 
 // ReportProblemModal files a support ticket about a specific flow/run — the
 // zero-friction "the ask" path (Tier 1): the server auto-attaches a redacted
@@ -92,7 +93,7 @@ export function ReportProblemModal({
             onChange={(e) => setMessage(e.target.value)}
             placeholder={t("report.messagePlaceholder")}
           />
-          {err && <div className="card error" style={{ marginTop: "var(--space-3)" }}>{err}</div>}
+          {err && <ErrorNotice style={{ marginTop: "var(--space-3)" }}>{err}</ErrorNotice>}
         </div>
         <div className="modal-foot">
           <Button variant="ghost" onClick={onClose}>{t("common.cancel")}</Button>

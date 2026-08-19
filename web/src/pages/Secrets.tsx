@@ -10,6 +10,7 @@ import { useAuth } from "../auth";
 import { ButtonLink } from "../components/Button";
 import { CredentialsManager } from "../components/CredentialsManager";
 import { supportContactHref } from "../lib/supportContact";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 // Secrets is the tenant's credential store: hand-entered values your
 // flows reference as ${secret.NAME} (API keys, database URLs), plus an
@@ -74,7 +75,7 @@ export function Secrets() {
   return (
     <>
       {secretsOff && <SetupIncompleteBanner supportContact={me?.support_contact} />}
-      {error && <div className="card error">{error}</div>}
+      {error && <ErrorNotice>{error}</ErrorNotice>}
 
       {!secretsOff && (
         <>

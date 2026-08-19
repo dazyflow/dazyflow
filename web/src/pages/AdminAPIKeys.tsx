@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertCircle, KeyRound, Plus, Search, ShieldOff, Trash2 } from "lucide-react";
+import { KeyRound, Plus, Search, ShieldOff, Trash2 } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
@@ -12,6 +12,7 @@ import { IssueKeyModal } from "../components/IssueKeyModal";
 import { RevealSecretModal } from "../components/RevealSecretModal";
 import { formatDate } from "../lib/datetime";
 import { explainApiError } from "../lib/explainApiError";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 export function AdminAPIKeys() {
   const { t } = useTranslation();
@@ -67,9 +68,9 @@ export function AdminAPIKeys() {
 
   if (!hasPerm("organization:admin")) {
     return (
-      <div className="card" style={{ color: "var(--danger)" }}>
+      <ErrorNotice>
         <Trans i18nKey="admin.apiKeys.needAdmin" components={[<code />]} />
-      </div>
+      </ErrorNotice>
     );
   }
 
@@ -103,10 +104,9 @@ export function AdminAPIKeys() {
       </div>
 
       {error && (
-        <div className="card" style={{ color: "var(--danger)", marginBottom: "var(--space-4)" }}>
-          <AlertCircle size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-          {error}
-        </div>
+        <ErrorNotice style={{ marginBottom: "var(--space-4)" }}>
+{error}
+        </ErrorNotice>
       )}
 
       {!loading && !error && keys.length === 0 && (

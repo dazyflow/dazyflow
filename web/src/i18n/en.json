@@ -318,7 +318,9 @@
     "title": "Notifications",
     "intro": "Choose which emails we send you. Account and security emails (verification, password resets) are always sent.",
     "flowFailureLabel": "Email me when one of my flows fails",
-    "flowFailureDesc": "Sends a short summary to your account email whenever a flow you own finishes with an error. On by default."
+    "flowFailureDesc": "Sends a short summary to your account email whenever a flow you own finishes with an error. On by default.",
+    "supportReplyLabel": "Email me when support replies",
+    "supportReplyDesc": "Get an email when support answers or resolves one of your tickets. Turn this off and you'll only see replies when you open the Support page."
   },
   "twoFactor": {
     "title": "Two-factor authentication",
@@ -2242,6 +2244,12 @@
     "subjectPlaceholder": "What do you need help with?",
     "messageLabel": "Details",
     "messagePlaceholder": "Describe what happened…",
+    "flowLabel": "Which flow is this about? (optional)",
+    "flowNone": "No specific flow",
+    "flowNoneNote": "Pick a flow and we'll attach a diagnostic — it helps support answer without asking for access to your workspace.",
+    "flowAttachNote": "We'll attach a redacted diagnostic of this flow — its structure and any errors, with your secrets and data removed.",
+    "flowRunNote": "Its most recent failed run ({{date}}) is included.",
+    "noBundle": "no diagnostic attached",
     "send": "Send",
     "replyPlaceholder": "Write a reply…",
     "reopenPlaceholder": "Reply to reopen this ticket…",

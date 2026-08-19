@@ -24,6 +24,7 @@ import { PromptModal } from "../components/PromptModal";
 import { MoveModal } from "../components/MoveModal";
 import { useUploads } from "../uploads";
 import type { FileEntry } from "../types";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 // Files is the workspace file manager: a browsable view of the persistent
 // sandbox that flows read from and write to (git_checkout clones, file_write
@@ -439,7 +440,7 @@ export function Files() {
         )}
       </div>
 
-      {error && <div className="card error">{error}</div>}
+      {error && <ErrorNotice>{error}</ErrorNotice>}
 
       {/* The list card is hidden when the load failed — the error banner
           above explains it, so a stuck "Loading…" or a misleading "empty"

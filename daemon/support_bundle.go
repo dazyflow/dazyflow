@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -208,4 +209,58 @@ func (s *PgBundleStore) ListForTenant(ctx context.Context, tenant string) ([]cor
 		out = append(out, rec)
 	}
 	return out, rows.Err()
+}
+
+// DeleteByTenant removes every stored diagnostic bundle belonging to one org.
+// Bundles are redacted by construction, but they still describe the org's flow
+// structure — so they leave with the org (gdpr.go tenantEraser).
+func (s *MemBundleStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for id, rec := range s.byID {
+		if rec.Tenant == tenant {
+			delete(s.byID, id)
+			n++
+		}
+	}
+	return n, nil
+}
+
+// DeleteByTenant removes an org's stored bundles.
+func (s *PgBundleStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
+	ct, err := s.pool.Exec(ctx, `DELETE FROM support_bundles WHERE tenant = $1`, tenant)
+	if err != nil {
+		return 0, err
+	}
+	return int(ct.RowsAffected()), nil
+}
+
+// Prune deletes stored diagnostic bundles older than the retention window,
+// oldest first, up to batch rows. A bundle is a point-in-time snapshot taken to
+// answer one ticket; once it's past retention it is pure storage cost. Bundles
+// still referenced by a live ticket are kept — the ticket's "View diagnostic"
+// must not turn into a dead link while the conversation is still open.
+func (s *PgBundleStore) Prune(ctx context.Context, olderThan time.Duration, batch int) (int, error) {
+	if olderThan <= 0 {
+		return 0, nil
+	}
+	if batch <= 0 {
+		batch = 1000
+	}
+	cutoff := time.Now().UTC().Add(-olderThan)
+	ct, err := s.pool.Exec(ctx,
+		`DELETE FROM support_bundles
+		  WHERE id IN (
+		      SELECT b.id FROM support_bundles b
+		       WHERE b.created_at < $1
+		         AND NOT EXISTS (
+		             SELECT 1 FROM support_tickets t
+		              WHERE t.bundle_id = b.id
+		                AND t.status NOT IN ('resolved','closed'))
+		       ORDER BY b.created_at ASC LIMIT $2)`, cutoff, batch)
+	if err != nil {
+		return 0, err
+	}
+	return int(ct.RowsAffected()), nil
 }

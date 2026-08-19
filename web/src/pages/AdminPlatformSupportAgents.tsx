@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertCircle, ChevronLeft, LifeBuoy, Plus, Trash2, UserCircle2 } from "lucide-react";
+import { ChevronLeft, LifeBuoy, Plus, Trash2, UserCircle2 } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
@@ -12,6 +12,7 @@ import { ConfirmModal } from "../components/ConfirmModal";
 import type { SupportAgentGrant } from "../types";
 import { formatDate } from "../lib/datetime";
 import { explainApiError } from "../lib/explainApiError";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 // AdminPlatformSupportAgents is the platform-admin surface for provisioning
 // support agents (cross-tenant vendor/operator staff who get the support:agent
@@ -53,13 +54,13 @@ export function AdminPlatformSupportAgents() {
 
   if (!hasPerm("platform:admin")) {
     return (
-      <div className="card" style={{ color: "var(--danger)" }}>
+      <ErrorNotice>
         <Trans
           i18nKey="admin.supportAgents.needPlatform"
           components={[<code />]}
           defaults="You need <0>platform:admin</0> to manage support agents."
         />
-      </div>
+      </ErrorNotice>
     );
   }
 
@@ -105,10 +106,9 @@ export function AdminPlatformSupportAgents() {
       </div>
 
       {error && (
-        <div className="card" style={{ color: "var(--danger)", marginBottom: "var(--space-4)" }}>
-          <AlertCircle size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-          {error}
-        </div>
+        <ErrorNotice style={{ marginBottom: "var(--space-4)" }}>
+{error}
+        </ErrorNotice>
       )}
 
       {disabled ? (

@@ -141,6 +141,13 @@ type NotifyPrefs struct {
 	// pointer is the user's explicit choice. Always read it through
 	// EmailOnFlowFailureEnabled, never dereference the pointer directly.
 	EmailOnFlowFailure *bool `json:"email_on_flow_failure,omitempty"`
+
+	// EmailOnSupportReply controls whether the person who filed a support
+	// ticket is emailed when support replies or resolves it. Same tri-state
+	// opt-out contract as EmailOnFlowFailure: nil means "never set" and
+	// resolves to ON, because a support reply nobody is told about is the
+	// same as no reply. Read it through EmailOnSupportReplyEnabled.
+	EmailOnSupportReply *bool `json:"email_on_support_reply,omitempty"`
 }
 
 // EmailOnFlowFailureEnabled resolves the tri-state pointer to its
@@ -148,6 +155,12 @@ type NotifyPrefs struct {
 // are notified until they explicitly turn it off).
 func (p NotifyPrefs) EmailOnFlowFailureEnabled() bool {
 	return p.EmailOnFlowFailure == nil || *p.EmailOnFlowFailure
+}
+
+// EmailOnSupportReplyEnabled resolves the tri-state pointer: unset defaults
+// to ON, same opt-out model as flow-failure mail.
+func (p NotifyPrefs) EmailOnSupportReplyEnabled() bool {
+	return p.EmailOnSupportReply == nil || *p.EmailOnSupportReply
 }
 
 // EmailVerified reports whether the account's address was confirmed.

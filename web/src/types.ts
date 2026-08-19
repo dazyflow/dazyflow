@@ -1081,8 +1081,12 @@ export type RedactMode = "" | "structure_only" | "structure_plus_values";
 export type SupportBundle = {
   mode: RedactMode;
   flow: BundleFlow;
-  nodes: BundleNode[];
-  edges: Edge[];
+  // nodes/edges are nullable on the wire, NOT just empty: Go marshals a nil
+  // slice as JSON null, so a flow with no edges arrives as `"edges": null`.
+  // Typed honestly so the compiler forces a guard at every consumer — an
+  // unguarded `.map` here crashed the whole support view to a blank page.
+  nodes: BundleNode[] | null;
+  edges: Edge[] | null;
   triggers?: BundleTrigger[];
   run?: BundleRun;
   issues?: LintIssue[];

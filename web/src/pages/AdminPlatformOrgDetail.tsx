@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { AlertCircle, ArrowLeft, Ban, ShieldOff, Trash2, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Ban, ShieldOff, Trash2, CheckCircle2 } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, type PlatformOrg } from "../api";
@@ -14,6 +14,7 @@ import { OrgAvatar } from "../components/PlatformAvatar";
 import { ActionsCard, ActionRow } from "../components/PlatformActions";
 import { PlanLimitsSection } from "../components/OrgPlanLimits";
 import { MembersSection } from "../components/OrgMembers";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 // AdminPlatformOrgDetail is one org's platform-admin moderation page:
 // suspend (halt all its flows + lock out members), ban (suspend +
@@ -72,9 +73,9 @@ export function AdminPlatformOrgDetail() {
 
   if (!hasPerm("platform:admin")) {
     return (
-      <div className="card" style={{ color: "var(--danger)" }}>
+      <ErrorNotice>
         <Trans i18nKey="admin.platform.needPlatformAdmin" components={[<code />]} />
-      </div>
+      </ErrorNotice>
     );
   }
 
@@ -96,10 +97,9 @@ export function AdminPlatformOrgDetail() {
       </div>
 
       {error && (
-        <div className="card error" style={{ marginBottom: "var(--space-3)" }}>
-          <AlertCircle size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-          {error}
-        </div>
+        <ErrorNotice style={{ marginBottom: "var(--space-3)" }}>
+{error}
+        </ErrorNotice>
       )}
 
       {loading || !org ? (

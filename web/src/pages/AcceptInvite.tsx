@@ -11,6 +11,7 @@ import { api } from "../api";
 import { explainApiError } from "../lib/explainApiError";
 import type { InvitationDetails } from "../types";
 import { formatDateTime } from "../lib/datetime";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 // AcceptInvite is the landing page for an invite link. It's reachable
 // without auth so a recipient can read who invited them and to which
@@ -152,7 +153,7 @@ export function AcceptInvite() {
           </Button>
         )}
         {usable && signedInAsOther && (
-          <div className="card" style={{ color: "var(--danger)" }}>
+          <ErrorNotice>
             <Trans
               i18nKey="acceptInvite.wrongAccount"
               values={{ current: me?.subject, invited: details.email }}
@@ -168,7 +169,7 @@ export function AcceptInvite() {
                 {t("acceptInvite.signOutToSwitch")}
               </Button>
             </div>
-          </div>
+          </ErrorNotice>
         )}
         {usable && !me && (
           <div className="invite-cta-row">

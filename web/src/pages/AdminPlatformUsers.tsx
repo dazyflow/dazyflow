@@ -4,7 +4,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  AlertCircle,
   Check,
   Copy,
   Mail,
@@ -23,6 +22,7 @@ import { ConfirmModal } from "../components/ConfirmModal";
 import { Button } from "../components/Button";
 import type { SignupInviteSummary } from "../types";
 import { formatDate } from "../lib/datetime";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 // AdminPlatformUsers is the cross-tenant account roster plus the tools for
 // growing it. The roster lists every existing account, each row linking to
@@ -73,9 +73,9 @@ export function AdminPlatformUsers() {
 
   if (!hasPerm("platform:admin")) {
     return (
-      <div className="card" style={{ color: "var(--danger)" }}>
+      <ErrorNotice>
         <Trans i18nKey="admin.platform.needPlatformAdmin" components={[<code />]} />
-      </div>
+      </ErrorNotice>
     );
   }
 
@@ -92,10 +92,9 @@ export function AdminPlatformUsers() {
       </div>
 
       {error && (
-        <div className="card error" style={{ marginBottom: "var(--space-3)" }}>
-          <AlertCircle size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-          {error}
-        </div>
+        <ErrorNotice style={{ marginBottom: "var(--space-3)" }}>
+{error}
+        </ErrorNotice>
       )}
 
       <div className="sub" style={{ marginBottom: "var(--space-2)" }}>
@@ -267,10 +266,9 @@ function SignupInviteSection() {
         </div>
       )}
       {err && (
-        <div className="card error" style={{ marginTop: "var(--space-2)" }}>
-          <AlertCircle size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-          {err}
-        </div>
+        <ErrorNotice style={{ marginTop: "var(--space-2)" }}>
+{err}
+        </ErrorNotice>
       )}
       {issued && (
         <SignupInviteIssuedCard inv={issued} onDismiss={() => setIssued(null)} />
@@ -432,9 +430,9 @@ function SignupInviteCard({
         />
       )}
       {err && (
-        <div className="card error" style={{ width: "100%", marginTop: "var(--space-2)" }}>
+        <ErrorNotice style={{ width: "100%", marginTop: "var(--space-2)" }}>
           {err}
-        </div>
+        </ErrorNotice>
       )}
     </div>
   );

@@ -27,6 +27,7 @@ import { useAuth } from "../auth";
 import { api } from "../api";
 import type { VersionStatus } from "../types";
 import { orgDisplayName } from "../lib/orgDisplayName";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 // Admin is the gating point for tenant-level configuration. Cards are
 // split into what an org admin manages and what only the platform
@@ -39,9 +40,9 @@ export function Admin() {
   const { me, hasPerm, activeTenant } = useAuth();
   if (!hasPerm("organization:admin") && !hasPerm("graph:admin")) {
     return (
-      <div className="card" style={{ color: "var(--danger)" }}>
+      <ErrorNotice>
         <Trans i18nKey="admin.needAdmin" components={[<code />]} />
-      </div>
+      </ErrorNotice>
     );
   }
   const isPlatform = hasPerm("platform:admin");

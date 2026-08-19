@@ -9,6 +9,7 @@ import { api, APIError } from "../api";
 import { Button } from "../components/Button";
 import type { GoogleAccountsResponse } from "../types";
 import { explainApiError } from "../lib/explainApiError";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 // AdminGoogle is the org-admin page for managing the organization's shared
 // Google connections. Google accounts are org-level credentials (not
@@ -120,9 +121,9 @@ export function AdminGoogle() {
 
   if (!hasPerm("organization:admin")) {
     return (
-      <div className="card" style={{ color: "var(--danger)" }}>
+      <ErrorNotice>
         <Trans i18nKey="admin.google.needAdmin" components={[<code />]} />
-      </div>
+      </ErrorNotice>
     );
   }
 
@@ -157,9 +158,9 @@ export function AdminGoogle() {
       </div>
 
       {error && (
-        <div className="card" style={{ color: "var(--danger)", marginBottom: 12 }}>
+        <ErrorNotice style={{ marginBottom: 12 }}>
           {error}
-        </div>
+        </ErrorNotice>
       )}
 
       {notConfigured ? (

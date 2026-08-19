@@ -121,6 +121,7 @@ function NotificationsCard() {
   const { t } = useTranslation();
   const { token } = useAuth();
   const [emailOnFailure, setEmailOnFailureState] = useState<boolean | null>(null);
+  const [emailOnSupport, setEmailOnSupportState] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -130,7 +131,9 @@ function NotificationsCard() {
     api
       .getPreferences(token)
       .then((p) => {
-        if (!cancelled) setEmailOnFailureState(p.email_on_flow_failure);
+        if (cancelled) return;
+        setEmailOnFailureState(p.email_on_flow_failure);
+        setEmailOnSupportState(p.email_on_support_reply);
       })
       .catch((e) => {
         if (!cancelled) setErr(explainApiError(e, t));
@@ -164,6 +167,27 @@ function NotificationsCard() {
     }
   };
 
+  // Same optimistic-flip + partial-PUT contract as the failure toggle; kept
+  // separate so turning one off never implicitly writes the other.
+  const setEmailOnSupport = async (next: boolean) => {
+    if (emailOnSupport === null || busy) return;
+    const prev = emailOnSupport;
+    setEmailOnSupportState(next);
+    setErr(null);
+    setBusy(true);
+    try {
+      const saved = await api.updatePreferences(token, {
+        email_on_support_reply: next,
+      });
+      setEmailOnSupportState(saved.email_on_support_reply);
+    } catch (e) {
+      setEmailOnSupportState(prev);
+      setErr(explainApiError(e, t));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="card settings-card">
       <div className="sf-field">
@@ -181,6 +205,15 @@ function NotificationsCard() {
             disabled={busy}
             label={t("notifications.flowFailureLabel")}
             description={t("notifications.flowFailureDesc")}
+          />
+        )}
+        {emailOnSupport !== null && (
+          <Switch
+            checked={emailOnSupport}
+            onChange={(v) => void setEmailOnSupport(v)}
+            disabled={busy}
+            label={t("notifications.supportReplyLabel")}
+            description={t("notifications.supportReplyDesc")}
           />
         )}
         {err && <div className="error">{err}</div>}

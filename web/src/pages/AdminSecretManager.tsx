@@ -18,6 +18,7 @@ import type {
   SecretManagerStatus,
 } from "../types";
 import { explainApiError } from "../lib/explainApiError";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 // AdminSecretManager is the tenant-level "point the platform at your own
 // secret manager" config — set-once infrastructure that lives as the
@@ -74,9 +75,9 @@ export function AdminSecretManager() {
 
   if (!hasPerm("organization:admin")) {
     return (
-      <div className="card" style={{ color: "var(--danger)" }}>
+      <ErrorNotice>
         <Trans i18nKey="admin.secretManager.needAdmin" components={[<code />]} />
-      </div>
+      </ErrorNotice>
     );
   }
 
@@ -152,7 +153,7 @@ export function AdminSecretManager() {
 
   return (
     <div>
-      {err && <div className="card error">{err}</div>}
+      {err && <ErrorNotice>{err}</ErrorNotice>}
 
       <h2 className="admin-section-head">
         {t("connections.secretManager.vaultHead")}
@@ -427,7 +428,7 @@ function ProviderShell({
       <div className="sub" style={{ marginBottom: "var(--space-2)" }}>
         {t(introKey)}
       </div>
-      {slot.err && <div className="card error">{slot.err}</div>}
+      {slot.err && <ErrorNotice>{slot.err}</ErrorNotice>}
 
       {configured && !slot.editing && (
         <div className="card secret-manager-status">

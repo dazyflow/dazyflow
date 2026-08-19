@@ -9,6 +9,7 @@ import { api, type BoardSummary, type BoardPage } from "../api";
 import { Button } from "../components/Button";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { explainApiError } from "../lib/explainApiError";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 // Results — the in-app view of Collections. Left: the workspace's
 // boards (tables) with row counts. Right: the selected board as a friendly
@@ -174,9 +175,9 @@ export function Results() {
       </div>
 
       {error && (
-        <div className="card" style={{ color: "var(--danger)" }}>
+        <ErrorNotice>
           {error}
-        </div>
+        </ErrorNotice>
       )}
 
       {!error && loading && boards.length === 0 && (

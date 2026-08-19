@@ -89,6 +89,28 @@ func TestTicketFlow_EndToEnd(t *testing.T) {
 		t.Errorf("bundle missing diagnostic structure:\n%s", rec.Payload)
 	}
 
+	// The lint issues are attached exactly once. ValidateGraphFull already
+	// folds in LintGraph's findings, so a belt-and-braces second LintGraph
+	// append would silently double every issue in the support agent's view.
+	var attached struct {
+		Issues []core.LintIssue `json:"issues"`
+	}
+	if err := json.Unmarshal(rec.Payload, &attached); err != nil {
+		t.Fatalf("decode bundle payload: %v", err)
+	}
+	seenIssue := map[string]int{}
+	for _, is := range attached.Issues {
+		seenIssue[is.Code+"|"+strings.Join(is.NodeIDs, ",")+"|"+strings.Join(is.Fields, ",")]++
+	}
+	if len(attached.Issues) == 0 {
+		t.Error("expected the hardcoded-secret lint issue to be attached")
+	}
+	for k, n := range seenIssue {
+		if n > 1 {
+			t.Errorf("bundle issue %q attached %d times, want 1", k, n)
+		}
+	}
+
 	// The bundle is fetchable over HTTP (owner) and still redacted.
 	rw = do(h.token, "GET", "/api/v1/me/support/tickets/"+created.ID+"/bundle", nil)
 	if rw.Code != 200 {

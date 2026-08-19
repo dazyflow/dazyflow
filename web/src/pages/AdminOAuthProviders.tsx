@@ -10,6 +10,7 @@ import { Button } from "../components/Button";
 import { ServiceIcon } from "../components/ServiceIcon";
 import type { AdminOAuthProvider } from "../types";
 import { explainApiError } from "../lib/explainApiError";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 // AdminOAuthProviders is the paste-client-credentials surface that
 // replaces "edit env vars + restart the daemon" for an operator setting
@@ -49,9 +50,9 @@ export function AdminOAuthProviders() {
 
   if (!hasPerm("organization:admin")) {
     return (
-      <div className="card" style={{ color: "var(--danger)" }}>
+      <ErrorNotice>
         <Trans i18nKey="admin.oauth.needAdmin" components={[<code />]} />
-      </div>
+      </ErrorNotice>
     );
   }
 
@@ -65,10 +66,10 @@ export function AdminOAuthProviders() {
       </div>
 
       {error && (
-        <div className="card error" style={{ marginBottom: "var(--space-4)" }}>
+        <ErrorNotice style={{ marginBottom: "var(--space-4)" }}>
           <AlertCircle size={14} style={{ verticalAlign: -2, marginRight: 6 }} />
           {error}
-        </div>
+        </ErrorNotice>
       )}
 
       {loading && !providers.length ? (

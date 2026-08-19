@@ -17,6 +17,7 @@ import {
   integrationSlug,
   oauthProviderDisplay,
 } from "../integrationMeta";
+import { ErrorNotice } from "../components/ErrorNotice";
 import type {
   ConnectionField,
   ConnectionRequirement,
@@ -131,7 +132,7 @@ export function Apps() {
     return (
       <div className="page">
         <h1>{t("integrations.title")}</h1>
-        <div className="card error">{error}</div>
+        <ErrorNotice>{error}</ErrorNotice>
       </div>
     );
   }
@@ -346,7 +347,7 @@ export function AppDetail() {
     return (
       <div className="page">
         <h1>{meta.name}</h1>
-        <div className="card error">{error}</div>
+        <ErrorNotice>{error}</ErrorNotice>
       </div>
     );
   }
@@ -582,18 +583,20 @@ function IntegrationConnections({
         </div>
       )}
       {oauthBanner?.result === "error" && (
-        <div className="card connections-banner error">
-          <span>
-            {t("integrations.connection.connectFailed", {
-              error: oauthBanner.error || t("connections.unknownError"),
-            })}
-          </span>
-          <Button variant="link" onClick={dismissBanner}>
-            {t("common.dismiss")}
-          </Button>
-        </div>
+        <ErrorNotice
+          className="connections-banner"
+          action={
+            <Button variant="link" onClick={dismissBanner}>
+              {t("common.dismiss")}
+            </Button>
+          }
+        >
+          {t("integrations.connection.connectFailed", {
+            error: oauthBanner.error || t("connections.unknownError"),
+          })}
+        </ErrorNotice>
       )}
-      {error && <div className="card error">{error}</div>}
+      {error && <ErrorNotice>{error}</ErrorNotice>}
       {connectionFields.length > 0 && (
         <ConnectionFieldsCard
           fields={connectionFields}
@@ -765,7 +768,7 @@ function SecretCard({
             <span className="connection-field-label">{fieldLabel}</span>
             <input type="password" value="••••••••••" readOnly aria-label={fieldLabel} />
           </label>
-          {err && <div className="card error">{err}</div>}
+          {err && <ErrorNotice>{err}</ErrorNotice>}
           {canWrite && (
             <div className="connection-card-footer">
               <Button variant="ghost" onClick={() => setEditing(true)}>
@@ -800,7 +803,7 @@ function SecretCard({
               autoComplete="off"
             />
           </label>
-          {err && <div className="card error">{err}</div>}
+          {err && <ErrorNotice>{err}</ErrorNotice>}
           <div className="connection-card-footer">
             <Button type="submit" variant="primary" disabled={busy || !value}>
               {busy ? t("connections.saving") : t("connections.connect")}
@@ -1062,7 +1065,7 @@ function ConnectionFieldsCard({
               </li>
             ))}
           </ul>
-          {err && <div className="card error">{err}</div>}
+          {err && <ErrorNotice>{err}</ErrorNotice>}
           {verifiable && testState.kind === "ok" && (
             <p className="connection-test-result ok">{t("integrations.connection.testOk")}</p>
           )}
@@ -1141,7 +1144,7 @@ function ConnectionFieldsCard({
               )}
             </label>
           ))}
-          {err && <div className="card error">{err}</div>}
+          {err && <ErrorNotice>{err}</ErrorNotice>}
           <div className="connection-card-footer">
             <Button type="submit" variant="primary" disabled={busy}>
               {busy

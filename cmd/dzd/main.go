@@ -1145,13 +1145,18 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 func startRetentionSweeps(ctx context.Context, svc *daemon.Service, jobs core.JobStore, runLogs daemon.RunLogStore, pgPool *pgxpool.Pool, bgWg *sync.WaitGroup) {
 	jobRetention := envDuration("DAZYFLOW_JOB_RETENTION", 30*24*time.Hour)
 	auditRetention := envDuration("DAZYFLOW_AUDIT_RETENTION", 90*24*time.Hour)
+	// Support data outlives a run by design — a ticket is a conversation, not a
+	// log line — so it gets its own, longer window. Only CLOSED/RESOLVED
+	// tickets and unreferenced bundles are ever swept (see PgTicketStore.Prune).
+	supportRetention := envDuration("DAZYFLOW_SUPPORT_RETENTION", 365*24*time.Hour)
 	// Run logs default to the JOB retention: a run's log should outlive
 	// neither the run record it narrates nor the operator's expectations.
 	runLogRetention := envDuration("DAZYFLOW_RUN_LOG_RETENTION", jobRetention)
 	// A free-tier per-tenant retention window keeps the sweep alive even when
 	// every global window is disabled (the per-tenant pass below still runs).
 	perTenantRetention := svc != nil && svc.FreeRetentionDays > 0
-	if jobRetention <= 0 && auditRetention <= 0 && runLogRetention <= 0 && !perTenantRetention {
+	supportSweep := supportRetention > 0 && envBool("DAZYFLOW_SUPPORT_ENABLED", false)
+	if jobRetention <= 0 && auditRetention <= 0 && runLogRetention <= 0 && !perTenantRetention && !supportSweep {
 		return
 	}
 	retentionAudit, err := daemon.NewPgAuditLog(ctx, pgPool)
@@ -1170,6 +1175,26 @@ func startRetentionSweeps(ctx context.Context, svc *daemon.Service, jobs core.Jo
 		PruneTenant(context.Context, string, time.Duration, int) (int, error)
 		RunLogTenants(context.Context) ([]string, error)
 	})
+	// Support pruners are built straight from the pool rather than threaded in
+	// from buildGateway: the gateway's stores are created later in the boot
+	// sequence than this sweep starts, and both constructors only ensure an
+	// idempotent schema over the same pool. Nil when the feature is off.
+	type supportPruner interface {
+		Prune(context.Context, time.Duration, int) (int, error)
+	}
+	var ticketPruner, bundlePruner supportPruner
+	if supportSweep {
+		if ts, err := daemon.NewPgTicketStore(ctx, pgPool); err != nil {
+			log.Printf("retention: support ticket store: %v", err)
+		} else {
+			ticketPruner = ts
+		}
+		if bs, err := daemon.NewPgBundleStore(ctx, pgPool); err != nil {
+			log.Printf("retention: support bundle store: %v", err)
+		} else {
+			bundlePruner = bs
+		}
+	}
 	bgWg.Add(1)
 	go func() {
 		defer bgWg.Done()
@@ -1199,6 +1224,26 @@ func startRetentionSweeps(ctx context.Context, svc *daemon.Service, jobs core.Jo
 					}
 				} else if n > 0 {
 					log.Printf("retention: pruned %d run-log row(s)", n)
+				}
+			}
+			// Support pass: tickets first, then bundles — a bundle is only
+			// collectable once the ticket referencing it is gone or closed.
+			if supportRetention > 0 && ticketPruner != nil {
+				if n, err := ticketPruner.Prune(ctx, supportRetention, 1000); err != nil {
+					if ctx.Err() == nil {
+						log.Printf("retention: prune support tickets: %v", err)
+					}
+				} else if n > 0 {
+					log.Printf("retention: pruned %d closed support ticket(s)", n)
+				}
+			}
+			if supportRetention > 0 && bundlePruner != nil {
+				if n, err := bundlePruner.Prune(ctx, supportRetention, 1000); err != nil {
+					if ctx.Err() == nil {
+						log.Printf("retention: prune support bundles: %v", err)
+					}
+				} else if n > 0 {
+					log.Printf("retention: pruned %d support bundle(s)", n)
 				}
 			}
 			// Per-tenant pass: prune free tenants on their shorter effective
@@ -1242,7 +1287,8 @@ func startRetentionSweeps(ctx context.Context, svc *daemon.Service, jobs core.Jo
 			}
 		}
 	}()
-	log.Printf("retention sweeps: jobs=%s audit=%s run-logs=%s (0 = disabled)", jobRetention, auditRetention, runLogRetention)
+	log.Printf("retention sweeps: jobs=%s audit=%s run-logs=%s support=%s (0 = disabled)",
+		jobRetention, auditRetention, runLogRetention, supportRetention)
 }
 
 // gatewayDeps groups the stores, services, and operator settings the HTTP
@@ -1373,7 +1419,16 @@ func buildGateway(ctx context.Context, d gatewayDeps) {
 		gw.Grants = grantStore
 		gw.Bundles = bundleStore
 		gw.Tickets = ticketStore
+		// Shared inbox for new/unassigned ticket activity. Optional: without it
+		// the customer-facing edges still mail, but the support side relies on
+		// someone watching the queue.
+		gw.SupportInbox = strings.TrimSpace(os.Getenv("DAZYFLOW_SUPPORT_INBOX"))
 		log.Print("support feature enabled (DAZYFLOW_SUPPORT_ENABLED)")
+		if gw.SupportInbox != "" {
+			log.Printf("support inbox: %s (new-ticket notifications)", gw.SupportInbox)
+		} else {
+			log.Print("support inbox: unset (DAZYFLOW_SUPPORT_INBOX) — no new-ticket notifications")
+		}
 	}
 	// Opt-in (compliance) auditing of secret *reads*. Off by default because
 	// secret resolution runs on every node execution — high volume. When on,

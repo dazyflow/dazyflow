@@ -2,13 +2,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useState, type ReactNode } from "react";
-import { AlertCircle, Check, Copy, Terminal } from "lucide-react";
+import { Check, Copy, Terminal } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import { explainApiError } from "../lib/explainApiError";
 import { Button } from "./Button";
 import type { IssuedAPIKey } from "../types";
+import { ErrorNotice } from "./ErrorNotice";
 
 // ConnectMcpClientModal mints an API key scoped to the current
 // principal, then hands the user the right config snippet for their
@@ -196,10 +197,9 @@ function ConfirmStage({
           <div className="desc">{t("connectMcp.scopeDesc")}</div>
         </div>
         {error && (
-          <div className="card" style={{ color: "var(--danger)", marginTop: "var(--space-3)" }}>
-            <AlertCircle size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-            {error}
-          </div>
+          <ErrorNotice style={{ marginTop: "var(--space-3)" }}>
+{error}
+          </ErrorNotice>
         )}
       </div>
       <div className="settings-foot">

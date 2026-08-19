@@ -73,6 +73,13 @@ func (h *HTTPGateway) requestGrant(rw http.ResponseWriter, r *http.Request, p co
 		writeAPIError(rw, http.StatusBadRequest, "bad_request", "tenant and flow_id are required")
 		return
 	}
+	// NOTE: deliberately NOT validating that the tenant exists here. The
+	// obvious oracle (memberships.ListByTenant) is wrong: membership rows only
+	// exist for explicitly-created multi-user orgs, so every personal `usr_*`
+	// tenant looks non-existent and a legitimate request for a real customer
+	// gets refused. Blocking a support agent from helping a paying customer is
+	// far worse than a typo'd grant sitting unapproved, so the request is
+	// permissive and approval — which only the real org can give — is the gate.
 	id, err := newID()
 	if err != nil {
 		writeAPIError(rw, http.StatusInternalServerError, "internal_error", err.Error())

@@ -15,6 +15,7 @@ import {
 import { browserTimeZone } from "./TriggersModal";
 import { Button } from "./Button";
 import type { Graph, OAuthProviderStatus, TemplateSummary } from "../types";
+import { ErrorNotice } from "./ErrorNotice";
 
 // TemplateGallery is the reusable card grid of pre-built workflows. It
 // lives inside the "From a template" tab of the Create-flow page (and is
@@ -171,7 +172,7 @@ export function TemplateGallery() {
   };
 
   if (error && !templates) {
-    return <div className="card error">{error}</div>;
+    return <ErrorNotice>{error}</ErrorNotice>;
   }
   if (!templates) {
     return <div className="card">{t("common.loading")}</div>;
@@ -226,7 +227,7 @@ export function TemplateGallery() {
           </Button>
         </div>
       )}
-      {error && <div className="card error" style={{ marginBottom: 12 }}>{error}</div>}
+      {error && <ErrorNotice style={{ marginBottom: 12 }}>{error}</ErrorNotice>}
       {groups.length === 0 && (
         <div className="card">
           {t("templates.noneInCategory")}{" "}

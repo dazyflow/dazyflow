@@ -37,18 +37,20 @@ func prefsEmail(p core.Principal) string { return p.Subject }
 // values (the server flattens the notification tri-state, and reports
 // theme/language as stored, "" meaning "no explicit choice").
 type preferencesResponse struct {
-	EmailOnFlowFailure bool   `json:"email_on_flow_failure"`
-	Theme              string `json:"theme"`
-	Language           string `json:"language"`
+	EmailOnFlowFailure  bool   `json:"email_on_flow_failure"`
+	EmailOnSupportReply bool   `json:"email_on_support_reply"`
+	Theme               string `json:"theme"`
+	Language            string `json:"language"`
 }
 
 // preferencesUpdate is the PUT body. Pointers distinguish "field
 // present, apply it" from "field absent, leave unchanged" — the partial
 // semantics each independent UI control relies on.
 type preferencesUpdate struct {
-	EmailOnFlowFailure *bool   `json:"email_on_flow_failure"`
-	Theme              *string `json:"theme"`
-	Language           *string `json:"language"`
+	EmailOnFlowFailure  *bool   `json:"email_on_flow_failure"`
+	EmailOnSupportReply *bool   `json:"email_on_support_reply"`
+	Theme               *string `json:"theme"`
+	Language            *string `json:"language"`
 }
 
 // langPattern bounds the language code's shape without hardcoding the
@@ -59,9 +61,10 @@ var langPattern = regexp.MustCompile(`^[A-Za-z]{2}(-[A-Za-z]{2})?$`)
 
 func responseFor(u auth.User) preferencesResponse {
 	return preferencesResponse{
-		EmailOnFlowFailure: u.Notify.EmailOnFlowFailureEnabled(),
-		Theme:              u.UI.Theme,
-		Language:           u.UI.Language,
+		EmailOnFlowFailure:  u.Notify.EmailOnFlowFailureEnabled(),
+		EmailOnSupportReply: u.Notify.EmailOnSupportReplyEnabled(),
+		Theme:               u.UI.Theme,
+		Language:            u.UI.Language,
 	}
 }
 
@@ -118,6 +121,10 @@ func (h *HTTPGateway) putPreferences(rw http.ResponseWriter, r *http.Request, p 
 	if body.EmailOnFlowFailure != nil {
 		v := *body.EmailOnFlowFailure
 		u.Notify.EmailOnFlowFailure = &v
+	}
+	if body.EmailOnSupportReply != nil {
+		v := *body.EmailOnSupportReply
+		u.Notify.EmailOnSupportReply = &v
 	}
 	if body.Theme != nil {
 		u.UI.Theme = *body.Theme

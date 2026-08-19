@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { AlertCircle, ArrowLeft, Ban, MailCheck, ShieldCheck, ShieldOff, ShieldPlus, Trash2, UserCheck } from "lucide-react";
+import { ArrowLeft, Ban, MailCheck, ShieldCheck, ShieldOff, ShieldPlus, Trash2, UserCheck } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, type PlatformUser } from "../api";
@@ -13,6 +13,7 @@ import { ConfirmModal } from "../components/ConfirmModal";
 import { UserAvatar } from "../components/PlatformAvatar";
 import { ActionsCard, ActionRow } from "../components/PlatformActions";
 import { formatDate } from "../lib/datetime";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 // AdminPlatformUserDetail is one account's platform-admin moderation
 // page: suspend (reversible lockout), ban (suspend + block re-signup),
@@ -72,9 +73,9 @@ export function AdminPlatformUserDetail() {
 
   if (!hasPerm("platform:admin")) {
     return (
-      <div className="card" style={{ color: "var(--danger)" }}>
+      <ErrorNotice>
         <Trans i18nKey="admin.platform.needPlatformAdmin" components={[<code />]} />
-      </div>
+      </ErrorNotice>
     );
   }
 
@@ -100,10 +101,9 @@ export function AdminPlatformUserDetail() {
       </div>
 
       {error && (
-        <div className="card error" style={{ marginBottom: "var(--space-3)" }}>
-          <AlertCircle size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-          {error}
-        </div>
+        <ErrorNotice style={{ marginBottom: "var(--space-3)" }}>
+{error}
+        </ErrorNotice>
       )}
 
       {loading || !user ? (

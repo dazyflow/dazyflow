@@ -18,6 +18,7 @@ import { isResultNode, previewOutput } from "../lib/runResult";
 import { ReportProblemModal } from "../components/ReportProblemModal";
 import type { Graph, JobRecord, JobStatus, Manifest, Ref, RunLogEntry } from "../types";
 import { formatDateTime } from "../lib/datetime";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 // RunDetail is the post-failure "what happened" page — and the
 // post-success "yes, here are the values" page. T2 of the PMF
@@ -246,7 +247,7 @@ export function RunDetail() {
             <h1>{t("runDetail.notFoundTitle")}</h1>
           </div>
         </div>
-        <div className="card error">{error ?? t("runDetail.notFoundBody")}</div>
+        <ErrorNotice>{error ?? t("runDetail.notFoundBody")}</ErrorNotice>
       </div>
     );
   }

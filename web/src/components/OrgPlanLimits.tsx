@@ -14,6 +14,7 @@ import {
 } from "../api";
 import { explainApiError } from "../lib/explainApiError";
 import { Button } from "./Button";
+import { ErrorNotice } from "./ErrorNotice";
 
 // PlanLimitsSection shows an org's effective plan + limits and lets a
 // platform admin assign a tier, grant/force a plan (trial, comp, force
@@ -62,7 +63,7 @@ export function PlanLimitsSection({ tenant }: { tenant: string }) {
           {t("admin.platformPlan.edit")}
         </Button>
       </div>
-      {error && <div className="card error">{error}</div>}
+      {error && <ErrorNotice>{error}</ErrorNotice>}
       {eff && (
         <div className="card">
           <dl className="kv-grid">

@@ -34,6 +34,7 @@ import { portColor, type DazyNodeData } from "../components/nodeCardShared";
 import { Button } from "../components/Button";
 import { iconFor } from "../icons";
 import type { JobStatus, Manifest, SupportBundle } from "../types";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 // Reuse the editor's exact node/edge renderers so the read-only canvas looks
 // identical to what the customer sees — just inert.
@@ -225,10 +226,9 @@ function RequestAccessCard({
             />
           )}
           {err && (
-            <div className="card error" style={{ marginBottom: "var(--space-3)" }}>
-              <AlertCircle size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-              {err}
-            </div>
+            <ErrorNotice style={{ marginBottom: "var(--space-3)" }}>
+{err}
+            </ErrorNotice>
           )}
           <div style={{ display: "flex", gap: "var(--space-2)" }}>
             {requested ? (
@@ -313,7 +313,7 @@ function SupportCanvas({
 
   const nodes = useMemo<FlowNode<DazyNodeData>[]>(
     () =>
-      bundle.nodes.map((n, i) => ({
+      (bundle.nodes ?? []).map((n, i) => ({
         id: n.id,
         type: "dazy",
         position: n.position ?? { x: 80 + i * 240, y: 80 },
@@ -337,9 +337,12 @@ function SupportCanvas({
 
   const edges = useMemo<FlowEdge[]>(() => {
     const statusOf = (id: string) => runStatusById.get(id);
-    return bundle.edges.map((e) => {
+    // Both are nullable on the wire: a flow with no edges arrives as
+    // `"edges": null`, and an unguarded .map here blanked the entire
+    // read-only view with a render crash.
+    return (bundle.edges ?? []).map((e) => {
       const out = manifestById
-        .get(bundle.nodes.find((n) => n.id === e.from)?.module ?? "")
+        .get((bundle.nodes ?? []).find((n) => n.id === e.from)?.module ?? "")
         ?.outputs?.find((p) => p.port === e.from_port);
       const active = statusOf(e.from) === "running" || statusOf(e.to) === "running";
       return {

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"git.sr.ht/~klahr/dazyflow/core"
 )
 
 // ipRateLimiter is a tiny per-client-IP token-bucket limiter for the
@@ -33,6 +35,14 @@ const (
 	// Slack event bursts, a flow's own webhook callers), so the steady rate
 	// is higher than auth — but still bounded so a stranger can't brute-force
 	// a per-graph secret or flood the HMAC path. Per source IP.
+	// Support writes are authenticated, so these are generous — they exist to
+	// stop a runaway client or a bored user from filling the ticket table (and,
+	// via flow_id, minting a stored diagnostic bundle per request), not to
+	// police normal conversation. Keyed by SUBJECT, not IP: everyone behind one
+	// office NAT is a different person.
+	defaultSupportRatePerMin = 20
+	defaultSupportRateBurst  = 10
+
 	defaultWebhookRatePerMin = 120
 	defaultWebhookRateBurst  = 40
 	// maxRateLimiterBuckets bounds the per-IP bucket map. Without a cap a
@@ -289,4 +299,29 @@ func (h *HTTPGateway) rateLimitWebhook(next http.HandlerFunc) http.HandlerFunc {
 		}
 		next(rw, r)
 	}
+}
+
+// allowSupportWrite throttles an authenticated support write (filing a ticket,
+// posting a message) per principal subject. Returns false having already written
+// the 429, so callers just return.
+//
+// Ticket creation is the expensive one: naming a flow makes the server build and
+// PERSIST a redacted bundle, so an unthrottled loop is a cheap way to grow the
+// database. Reads (the queue, a thread poll) are deliberately not limited — the
+// UI polls them by design.
+func (h *HTTPGateway) allowSupportWrite(rw http.ResponseWriter, p core.Principal) bool {
+	if h.SupportRateLimit == nil {
+		return true
+	}
+	key := p.Subject
+	if key == "" {
+		key = p.Tenant
+	}
+	if !h.SupportRateLimit.Allow(key) {
+		rw.Header().Set("Retry-After", "60")
+		writeAPIError(rw, http.StatusTooManyRequests, "rate_limited",
+			"you're filing support messages very quickly — wait a moment and try again")
+		return false
+	}
+	return true
 }

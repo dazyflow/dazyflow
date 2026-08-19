@@ -10,6 +10,7 @@ import { Button } from "../components/Button";
 import { ServiceIcon, serviceLabel } from "../components/ServiceIcon";
 import type { OrgAuthConfig } from "../types";
 import { explainApiError } from "../lib/explainApiError";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 // ssoUpcoming lists identity providers we show as placeholders so the
 // surface reads as "SSO providers" rather than "Google" — the monogram
@@ -171,9 +172,9 @@ export function AdminOrgSSO() {
 
   if (!hasPerm("organization:admin")) {
     return (
-      <div className="card" style={{ color: "var(--danger)" }}>
+      <ErrorNotice>
         <Trans i18nKey="admin.sso.needAdmin" components={[<code />]} />
-      </div>
+      </ErrorNotice>
     );
   }
 

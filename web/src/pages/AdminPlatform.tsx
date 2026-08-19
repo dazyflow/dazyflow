@@ -8,6 +8,7 @@ import { useAuth } from "../auth";
 import { api } from "../api";
 import { explainApiError } from "../lib/explainApiError";
 import { Button } from "../components/Button";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 // AdminPlatform is the platform-operator email surface: a single place to
 // confirm the instance mailer actually delivers. (Signup invites — the
@@ -18,9 +19,9 @@ export function AdminPlatform() {
   const { hasPerm } = useAuth();
   if (!hasPerm("platform:admin")) {
     return (
-      <div className="card" style={{ color: "var(--danger)" }}>
+      <ErrorNotice>
         <Trans i18nKey="admin.platform.needPlatformAdmin" components={[<code />]} />
-      </div>
+      </ErrorNotice>
     );
   }
   return (

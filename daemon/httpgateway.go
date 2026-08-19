@@ -156,6 +156,16 @@ type HTTPGateway struct {
 	// SupportGrantTTL is how long an approved AccessGrant stays valid. Zero
 	// falls back to defaultSupportGrantTTL (4h).
 	SupportGrantTTL time.Duration
+	// SupportRateLimit throttles authenticated support WRITES per subject
+	// (filing a ticket, posting a message). Defaulted in the constructor like
+	// WebhookRateLimit — an unset limiter would leave the one endpoint that
+	// persists a bundle per call completely unbounded.
+	SupportRateLimit *ipRateLimiter
+	// SupportInbox is the shared address told about NEW and unassigned-ticket
+	// activity (DAZYFLOW_SUPPORT_INBOX). Empty means those edges send nothing:
+	// there is no single agent to address for an unclaimed ticket, and mailing
+	// every provisioned agent is not a default worth having.
+	SupportInbox string
 	// supportAgentGranted mirrors platformAdminGranted: once-per-email audit of
 	// the support-agent elevation.
 	supportAgentGranted sync.Map
@@ -358,6 +368,9 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// strangers, so they must always be throttled — a generous per-IP
 	// allowance that legitimate webhook senders won't hit but that caps a
 	// brute-force/flood.
+	if h.SupportRateLimit == nil {
+		h.SupportRateLimit = newIPRateLimiter(defaultSupportRatePerMin, defaultSupportRateBurst)
+	}
 	if h.WebhookRateLimit == nil {
 		h.WebhookRateLimit = newIPRateLimiter(defaultWebhookRatePerMin, defaultWebhookRateBurst)
 	}

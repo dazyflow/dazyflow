@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { explainApiError } from "../lib/explainApiError";
 import { Button } from "./Button";
+import { ErrorNotice } from "./ErrorNotice";
 
 // DuplicateFlowModal prompts for the new flow's name before copying. The
 // field is pre-filled with "Copy of <source>" so the common case is a single
@@ -87,7 +88,7 @@ export function DuplicateFlowModal({
               }}
             />
           </div>
-          {err && <div className="card error">{err}</div>}
+          {err && <ErrorNotice>{err}</ErrorNotice>}
         </div>
         <div className="settings-foot">
           <Button onClick={onClose} disabled={busy}>

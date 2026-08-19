@@ -319,7 +319,9 @@
     "title": "Aviseringar",
     "intro": "Välj vilka e-postmeddelanden vi skickar till dig. Konto- och säkerhetsmeddelanden (verifiering, lösenordsåterställning) skickas alltid.",
     "flowFailureLabel": "Mejla mig när ett av mina flöden misslyckas",
-    "flowFailureDesc": "Skickar en kort sammanfattning till din konto-e-post när ett flöde du äger avslutas med ett fel. På som standard."
+    "flowFailureDesc": "Skickar en kort sammanfattning till din konto-e-post när ett flöde du äger avslutas med ett fel. På som standard.",
+    "supportReplyLabel": "Mejla mig när supporten svarar",
+    "supportReplyDesc": "Få ett mejl när supporten svarar på eller löser ett av dina ärenden. Stänger du av detta ser du bara svaren när du öppnar Support-sidan."
   },
   "twoFactor": {
     "title": "Tvåfaktorsautentisering",
@@ -2246,6 +2248,12 @@
     "subjectPlaceholder": "Vad behöver du hjälp med?",
     "messageLabel": "Detaljer",
     "messagePlaceholder": "Beskriv vad som hände…",
+    "flowLabel": "Vilket flöde gäller det? (valfritt)",
+    "flowNone": "Inget särskilt flöde",
+    "flowNoneNote": "Välj ett flöde så bifogar vi en diagnostik — det hjälper supporten att svara utan att behöva åtkomst till din arbetsyta.",
+    "flowAttachNote": "Vi bifogar en maskad diagnostik av flödet — dess struktur och eventuella fel, utan dina hemligheter och data.",
+    "flowRunNote": "Den senaste misslyckade körningen ({{date}}) ingår.",
+    "noBundle": "ingen diagnostik bifogad",
     "send": "Skicka",
     "replyPlaceholder": "Skriv ett svar…",
     "reopenPlaceholder": "Svara för att öppna ärendet igen…",

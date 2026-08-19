@@ -13,6 +13,7 @@ import type { PlansInfo } from "../api";
 import { explainApiError } from "../lib/explainApiError";
 import { formatDate } from "../lib/datetime";
 import type { BillingInfo, UsageCounters } from "../types";
+import { ErrorNotice } from "../components/ErrorNotice";
 
 // Plan & usage (T3): the single account-billing surface, styled after the
 // Overview dashboard — a row of at-a-glance stat cards (plan, runs, step
@@ -173,10 +174,9 @@ export function Usage() {
       </div>
 
       {error && (
-        <div className="card" style={{ color: "var(--danger)", marginBottom: "var(--space-4)" }}>
-          <AlertCircle size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-          {error}
-        </div>
+        <ErrorNotice style={{ marginBottom: "var(--space-4)" }}>
+{error}
+        </ErrorNotice>
       )}
 
       {!loading && !error && (
