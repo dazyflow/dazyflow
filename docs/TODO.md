@@ -32,6 +32,17 @@ detail lives in the code and commit history).
       README updated (one-time `*` A record is the only ops step). Tests across
       auth/daemon/web.
 
+### Platform — found while verifying
+- [ ] **`delete_flow` is unusable over the API/MCP** — `DELETE /me/flows/{id}`
+      re-verifies the caller's account password (`daemon/me_routes.go`
+      `deleteFlowMe`), so an API-key principal — which has no password — always
+      gets 401 `bad_credentials`. The MCP `delete_flow` tool therefore cannot
+      ever succeed, and its description promises the opposite ("Idempotent:
+      deleting a missing flow is a no-op"). Decide: exempt key principals
+      holding a `graph:delete` scope, or say so in the tool description and
+      have it fail with a clear message. Found 2026-08-19 while verifying the
+      round-2 MCP fixes.
+
 ### Web polish — blocked / deferred
 - [ ] Breadcrumbs — DEFERRED: the IA is flat (sidebar + page title); low value.
 - [ ] Editor undo/redo — DEFERRED: needs a real graph history stack
@@ -48,6 +59,23 @@ detail lives in the code and commit history).
 ## Done
 
 ### Web UI/UX polish
+- [x] **Swedish search in the step palette** — the third finding of the Marina
+      walkthrough: "schema", "e-post", "mejl" returned 0 hits because the drop
+      catalog is authored in English on the Go side. Fixed by translating the
+      QUERY instead of the catalog: `web/src/lib/dropSearch.ts` holds a
+      Swedish→catalog alias table (~190 terms, vowel-folded, with a light
+      inflection stripper and prefix expansion so "fakt"/"fakturor" both reach
+      Fortnox's invoice drops), and `scoreDrop` — moved here out of
+      QuickDropPalette so it is unit-testable — scores an alias hit at 0.7x the
+      literal hit it mimics, so English ranking is untouched and aliases can
+      only add results. Brand names are kept out of alias values unless every
+      drop of that brand answers the Swedish word (nShift yes, Fortnox no),
+      which is what stops one word flooding the list with a whole connector.
+      Checked against the live 145-drop catalog: 73 Swedish queries, zero
+      dead ones. Tests: `web/src/lib/dropSearch.test.ts` (37). Verified in the
+      browser: "schema" → Schedule, "mejl" → Email/Gmail.
+      Still English-only, deliberately: drop labels and descriptions
+      themselves (the palette shows "Send email" under a Swedish query).
 - [x] **Per-card flow actions (duplicate / rename / delete)** — delete (password-
       gated, run-locked, audited) and rename (Name is editable metadata; ID is
       the immutable handle) already shipped. Added flow **duplicate**:

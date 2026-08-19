@@ -13,6 +13,7 @@ import { Search, Box } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { iconFor, isBrandedIcon, dropColor } from "../icons";
 import { Button } from "./Button";
+import { scoreDrop } from "../lib/dropSearch";
 import type { Manifest } from "../types";
 
 type Props = {
@@ -41,56 +42,6 @@ type Match = {
   drop: Manifest;
   score: number;
 };
-
-// scoreDrop ranks how well `query` matches `drop`. The query is split on
-// whitespace and every token must hit somewhere; the per-token score
-// rewards field priority (label > integration > tags > description) and
-// match position (exact > start > word-start > anywhere).
-function scoreDrop(drop: Manifest, query: string): number {
-  const q = query.trim().toLowerCase();
-  if (!q) return 1;
-  const tokens = q.split(/\s+/).filter(Boolean);
-  if (tokens.length === 0) return 1;
-
-  const label = drop.label.toLowerCase();
-  const id = drop.id.toLowerCase();
-  const integration = (drop.integration ?? "").toLowerCase();
-  const subtitle = (drop.subtitle ?? "").toLowerCase();
-  const description = (drop.description ?? "").toLowerCase();
-  const tags = (drop.tags ?? []).map((t) => t.toLowerCase());
-
-  let total = 0;
-  for (const tok of tokens) {
-    let s = 0;
-    if (label === tok || id === tok) s = Math.max(s, 1000);
-    else if (label.startsWith(tok)) s = Math.max(s, 500);
-    else if (id.startsWith(tok)) s = Math.max(s, 450);
-    else if (integration.startsWith(tok)) s = Math.max(s, 380);
-    else if (wordStarts(label, tok)) s = Math.max(s, 300);
-    // The subtitle holds the action ("Append rows") when several drops
-    // share a product title, so it ranks close to the label.
-    else if (subtitle.startsWith(tok) || wordStarts(subtitle, tok)) s = Math.max(s, 290);
-    else if (wordStarts(integration, tok)) s = Math.max(s, 250);
-    else if (label.includes(tok)) s = Math.max(s, 200);
-    else if (subtitle.includes(tok)) s = Math.max(s, 170);
-    else if (integration.includes(tok)) s = Math.max(s, 150);
-    else if (tags.some((t) => t.includes(tok))) s = Math.max(s, 110);
-    else if (description.includes(tok)) s = Math.max(s, 60);
-    else if (id.includes(tok)) s = Math.max(s, 40);
-    if (s === 0) return 0;
-    total += s;
-  }
-  return total;
-}
-
-// wordStarts returns true if `tok` is the prefix of any word (split on
-// non-alpha) inside `s`. Lets "send" hit "Gmail send message" without
-// matching "send" inside "ascend".
-function wordStarts(s: string, tok: string): boolean {
-  const parts = s.split(/[^a-z0-9]+/);
-  for (const p of parts) if (p.startsWith(tok)) return true;
-  return false;
-}
 
 // pendingHistoryPop holds a deferred history.back() scheduled when the
 // palette closes. It lives at module scope so React StrictMode's
