@@ -190,6 +190,48 @@ describe("English ranking is unchanged", () => {
   });
 });
 
+describe("searching the localized names", () => {
+  // The palette passes the text the reader SEES; a Swedish user types what is
+  // on the row, which may not be in the alias table at all.
+  const sv = (id: string, label: string, subtitle = "") => {
+    const d = CATALOG.find((x) => x.id === id)!;
+    return { drop: d, localized: { label, subtitle } };
+  };
+
+  it("matches a translated label the alias table never mentions", () => {
+    const { drop: d, localized } = sv("await_approval", "Vänta på godkännande");
+    expect(scoreDrop(d, "vänta", localized)).toBeGreaterThan(0);
+    // Same query without the localized text only lands via the alias table, so
+    // this is really testing the localized surface.
+    expect(scoreDrop(d, "vänta på godkännande", localized)).toBeGreaterThan(
+      scoreDrop(d, "vänta på godkännande"),
+    );
+  });
+
+  it("matches a translated subtitle", () => {
+    const { drop: d, localized } = sv(
+      "fortnox_create_invoice",
+      "Fortnox",
+      "Skapa faktura",
+    );
+    expect(scoreDrop(d, "skapa", localized)).toBeGreaterThan(0);
+    expect(scoreDrop(d, "skapa faktura", localized)).toBeGreaterThan(0);
+  });
+
+  it("keeps the English name searchable in a Swedish UI", () => {
+    const { drop: d, localized } = sv("email_send", "E-post", "Skicka e-post");
+    expect(scoreDrop(d, "email", localized)).toBe(scoreDrop(d, "email"));
+    expect(scoreDrop(d, "send email", localized)).toBe(
+      scoreDrop(d, "send email"),
+    );
+  });
+
+  it("ignores a localized value identical to the English one", () => {
+    const { drop: d, localized } = sv("slack_send_message", "Slack", "Send message");
+    expect(scoreDrop(d, "slack", localized)).toBe(scoreDrop(d, "slack"));
+  });
+});
+
 describe("expandToken", () => {
   it("has no Swedish reading for English catalog words", () => {
     expect(expandToken("slack")).toEqual([]);

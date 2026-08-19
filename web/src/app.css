@@ -2932,6 +2932,13 @@ button.warning:hover:not(:disabled) {
   margin: 0;
   font-size: var(--text-base);
 }
+/* The action half of a drop's name ("Google Sheets · Append rows"): present so
+   the card names the same thing the step palette does, dimmed so the product
+   still reads as the heading. */
+.drop-card-action {
+  color: var(--muted);
+  font-weight: 400;
+}
 .drop-card-id {
   font-family: var(--font-mono);
   font-size: var(--text-xs);

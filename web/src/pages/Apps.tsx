@@ -9,6 +9,15 @@ import { api, APIError } from "../api";
 import { explainApiError } from "../lib/explainApiError";
 import { useAuth } from "../auth";
 import { iconFor, isBrandedIcon, dropColor } from "../icons";
+import {
+  connectionText,
+  integrationProse,
+  dropCategoryLabel,
+  dropDescription,
+  dropLabel,
+  dropSubtitle,
+  portLabel,
+} from "../lib/dropText";
 import { Button } from "../components/Button";
 import { ConfirmModal } from "../components/ConfirmModal";
 import {
@@ -31,7 +40,7 @@ import type {
 // a "Built-in" bucket so the page covers everything the catalog shows in
 // the editor. Cards are grouped into "Ready to use" vs "Needs setup".
 export function Apps() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { token } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [drops, setDrops] = useState<Manifest[] | null>(null);
@@ -121,7 +130,9 @@ export function Apps() {
   const filteredNeedsSetup = categoryFilter
     ? needsSetup.filter(inCategory)
     : needsSetup;
-  const filterLabel = categoryFilter ? categoryLabel(categoryFilter, t) : "";
+  const filterLabel = categoryFilter
+    ? categoryLabel(categoryFilter, t, i18n.language)
+    : "";
   const clearFilter = () => {
     const next = new URLSearchParams(searchParams);
     next.delete("category");
@@ -199,9 +210,17 @@ export function Apps() {
 // categoryLabel maps a drop category to a friendly filter label. Only the
 // curated categories get prose; anything else falls back to the raw value
 // (capitalized) so a new category still renders something sensible.
-function categoryLabel(category: string, t: (k: string) => string): string {
+function categoryLabel(
+  category: string,
+  t: (k: string) => string,
+  lang?: string,
+): string {
   if (category === "ai") return t("integrations.categoryAi");
-  return category.charAt(0).toUpperCase() + category.slice(1);
+  // dropCategoryLabel carries the localized catalog vocabulary; it returns the
+  // raw category for a locale it has no word for, which then gets the same
+  // capitalization as before.
+  const named = dropCategoryLabel(category, lang);
+  return named.charAt(0).toUpperCase() + named.slice(1);
 }
 
 // IntegrationCard is one tile in the index grid. `connected` shows a
@@ -218,7 +237,7 @@ function IntegrationCard({
   drops: Manifest[];
   connected: boolean;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   // Logo fallback chain: curated override → any drop's brand_logo →
   // category-derived lucide glyph from the first drop. Drops carrying
   // their own brand_logo means we render the right vendor mark even for
@@ -257,7 +276,9 @@ function IntegrationCard({
             />
           )}
         </div>
-        <p className="integration-card-desc">{meta.description}</p>
+        <p className="integration-card-desc">
+          {integrationProse(`${slug}.description`, meta.description, i18n.language)}
+        </p>
       </div>
     </Link>
   );
@@ -299,7 +320,7 @@ function appConnectionState(
 // the hero (logo + name + full prose), the Connection card(s), and every
 // drop the app ships with its ports and a collapsed params hint.
 export function AppDetail() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const slugRaw = window.location.pathname.split("/").pop() ?? "";
   const slug = decodeURIComponent(slugRaw);
   const { token, hasPerm } = useAuth();
@@ -394,7 +415,13 @@ export function AppDetail() {
         <div>
           <h1>{meta.name}</h1>
           {meta.description && (
-            <p className="integration-hero-desc">{meta.description}</p>
+            <p className="integration-hero-desc">
+              {integrationProse(
+                `${slug}.description`,
+                meta.description,
+                i18n.language,
+              )}
+            </p>
           )}
           {meta.docs_url && (
             <p className="integration-hero-docs">
@@ -949,7 +976,7 @@ function ConnectionFieldsCard({
   verifiable: boolean;
   onChanged: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { token } = useAuth();
   const [values, setValues] = useState<Record<string, string>>({});
   const [editing, setEditing] = useState(false);
@@ -1054,7 +1081,9 @@ function ConnectionFieldsCard({
           <ul className="connection-fields-summary">
             {fields.map((f) => (
               <li key={f.key}>
-                <span className="connection-field-label">{f.label}</span>
+                <span className="connection-field-label">
+                  {connectionText(f.label, i18n.language)}
+                </span>
                 <span className={isSet(f) ? "credentials-set" : "connection-note"}>
                   {isSet(f)
                     ? f.secret
@@ -1114,7 +1143,7 @@ function ConnectionFieldsCard({
           {fields.map((f) => (
             <label className="connection-field" key={f.key}>
               <span className="connection-field-label">
-                {f.label}
+                {connectionText(f.label, i18n.language)}
                 {isSet(f) && (
                   <span className="connection-field-set-hint"> · {t("integrations.connection.fieldSet")}</span>
                 )}
@@ -1208,7 +1237,7 @@ function dedupeRequirements(drops: Manifest[]): ConnectionRequirement[] {
 // ID, full description, input + output ports, and a collapsed view
 // of the params schema (rendered as a JSON dump under a <details>).
 function DropCard({ drop }: { drop: Manifest }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const Icon = iconFor(drop.icon, drop.category);
   const branded = isBrandedIcon(drop.icon);
   const color = dropColor(drop.category, drop.color);
@@ -1234,12 +1263,19 @@ function DropCard({ drop }: { drop: Manifest }) {
           </div>
         )}
         <div className="drop-card-title">
-          <h3>{drop.label}</h3>
+          <h3>
+            {dropLabel(drop, i18n.language)}
+            {drop.subtitle ? (
+              <span className="drop-card-action">
+                {" · " + dropSubtitle(drop, i18n.language)}
+              </span>
+            ) : null}
+          </h3>
           <code className="drop-card-id">{drop.id}</code>
         </div>
       </div>
       {drop.description && (
-        <p className="drop-card-desc">{drop.description}</p>
+        <p className="drop-card-desc">{dropDescription(drop, i18n.language)}</p>
       )}
       {/* Wiring + params live behind one disclosure so the
           visible-by-default surface is "what this drop is for";
@@ -1261,7 +1297,9 @@ function DropCard({ drop }: { drop: Manifest }) {
                         <span className="port-required"> {t("integrations.required")}</span>
                       )}
                       {p.label && (
-                        <span className="port-label"> — {p.label}</span>
+                        <span className="port-label">
+                          {" — " + portLabel(p.label, i18n.language)}
+                        </span>
                       )}
                     </li>
                   ))}
@@ -1276,7 +1314,9 @@ function DropCard({ drop }: { drop: Manifest }) {
                     <li key={p.port}>
                       <code>{p.port}</code>
                       {p.label && (
-                        <span className="port-label"> — {p.label}</span>
+                        <span className="port-label">
+                          {" — " + portLabel(p.label, i18n.language)}
+                        </span>
                       )}
                     </li>
                   ))}

@@ -9,6 +9,7 @@ import { portTypeLabel } from "../lib/ports";
 import { telFieldFlag, regionDisplayName } from "../lib/phoneFlag";
 import { Switch } from "./Switch";
 import { iconFor, isBrandedIcon, dropColor } from "../icons";
+import { dropSubtitle, nodeStateText, portLabel } from "../lib/dropText";
 import type { Manifest, Port, JSONSchema, Ref } from "../types";
 import {
   type DazyNodeData,
@@ -338,7 +339,9 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
         <div className="dz-node-body">
           <div className="label">{d.label}</div>
           {d.manifest?.subtitle && (
-            <div className="dz-node-subtitle">{d.manifest.subtitle}</div>
+            <div className="dz-node-subtitle">
+              {dropSubtitle(d.manifest, i18n.language)}
+            </div>
           )}
           {/* Stateful drops (RSS dedupe, poll watermarks) show a subtle "keeps
               state" chip so an empty output reads as memory, not breakage —
@@ -346,7 +349,10 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
           {d.manifest?.node_state && (
             <div
               className="dz-node-state"
-              title={d.manifest.node_state.reset_hint || d.manifest.node_state.label}
+              title={nodeStateText(
+                d.manifest.node_state.reset_hint || d.manifest.node_state.label,
+                i18n.language,
+              )}
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -357,7 +363,7 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
               }}
             >
               <Repeat size={10} strokeWidth={2.2} />
-              {d.manifest.node_state.label}
+              {nodeStateText(d.manifest.node_state.label, i18n.language)}
             </div>
           )}
         </div>
@@ -547,7 +553,7 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
                     >
                       {isPass && <PassPinIcon />}
                     </Handle>
-                    {!isPass && (p.label ?? p.port)}
+                    {!isPass && portLabel(p.label ?? p.port, i18n.language)}
                     {!isPass && p.list && (
                       <span className="dz-port-many" title="many items" style={{ opacity: 0.5, marginLeft: 3 }}>
                         ▦
@@ -604,7 +610,7 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
                 >
                   {isPass && <PassPinIcon />}
                 </Handle>
-                {!isPass && (p.label ?? p.port)}
+                {!isPass && portLabel(p.label ?? p.port, i18n.language)}
                 {!isPass && p.list && (
                   <span className="dz-port-many" title="many items" style={{ opacity: 0.5, marginLeft: 3 }}>
                     ▦
@@ -1061,10 +1067,14 @@ function passPinStyle(place: "in" | "out") {
 // browser shows it on hover. Cheap discoverability for single-port
 // nodes where there's no in-card port label to read.
 function portTooltip(port: Port): string {
-  const parts = [port.label ? `${port.label} (${port.port})` : port.port];
+  // The pin name is localized; the raw port id stays as-is, since that is the
+  // handle the templates and the API refer to.
+  const parts = [
+    port.label ? `${portLabel(port.label, i18n.language)} (${port.port})` : port.port,
+  ];
   // Lead with the plain-language kind×cardinality ("Items (a table)", "Text")
   // instead of raw MIME — what's flowing, in words a non-techie reads.
-  parts.push(portTypeLabel(port));
+  parts.push(portTypeLabel(port, (k, d) => i18n.t(k, d)));
   parts.push(port.required ? i18n.t("nodeCard.portRequired") : i18n.t("nodeCard.portOptional"));
   return parts.join(" — ");
 }

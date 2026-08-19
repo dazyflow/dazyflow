@@ -6,6 +6,7 @@ import { Power, PowerOff, Search, ShieldCheck } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, type PlatformDrop } from "../api";
+import { dropLabel } from "../lib/dropText";
 import { explainApiError } from "../lib/explainApiError";
 import { Button } from "../components/Button";
 import { ConfirmModal } from "../components/ConfirmModal";
@@ -19,7 +20,7 @@ import { ErrorNotice } from "../components/ErrorNotice";
 // switches exist in the API too; this page drives the global switch,
 // which is the blunt instrument an operator reaches for first.
 export function AdminPlatformDrops() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { token, hasPerm } = useAuth();
   const [drops, setDrops] = useState<PlatformDrop[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,9 +54,11 @@ export function AdminPlatformDrops() {
       (d) =>
         d.id.toLowerCase().includes(q) ||
         d.label.toLowerCase().includes(q) ||
+        // Match what the admin sees, too — the row renders the localized name.
+        dropLabel(d, i18n.language).toLowerCase().includes(q) ||
         (d.integration ?? "").toLowerCase().includes(q),
     );
-  }, [drops, query]);
+  }, [drops, query, i18n.language]);
 
   const disabledCount = drops.filter((d) => d.globally_disabled).length;
 
@@ -139,7 +142,7 @@ export function AdminPlatformDrops() {
                 />
                 <div style={{ minWidth: 0 }}>
                   <div className="subject">
-                    {d.label || d.id}
+                    {dropLabel(d, i18n.language) || d.id}
                     {d.globally_disabled && (
                       <span
                         className="count-pill"
@@ -220,11 +223,13 @@ function DisableDropModal({
   onConfirm: (reason: string) => void;
   onCancel: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [reason, setReason] = useState("");
   return (
     <ConfirmModal
-      title={t("admin.platformDrops.disableTitle", { drop: drop.label || drop.id })}
+      title={t("admin.platformDrops.disableTitle", {
+        drop: dropLabel(drop, i18n.language) || drop.id,
+      })}
       message={
         <div>
           <p>{t("admin.platformDrops.disableWarning")}</p>

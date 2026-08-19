@@ -334,22 +334,42 @@ export function expandToken(tok: string): string[] {
   return terms;
 }
 
+// LocalizedText is a drop's label/subtitle as the reader currently SEES them
+// (see lib/dropText.ts). Passed in rather than resolved here so this module
+// stays free of locale state, and searched alongside the English original at
+// full weight: someone reading a Swedish palette will type what the row says,
+// while someone who knows the product by its English name still finds it.
+export type LocalizedText = {
+  label?: string;
+  subtitle?: string;
+};
+
 // Fields is a drop's searchable text, lowercased once per scoreDrop call.
+// labels/subtitles hold the English catalog string plus the localized one when
+// it differs — every rung of the ladder below scores the best of them.
 type Fields = {
-  label: string;
+  labels: string[];
   id: string;
   integration: string;
-  subtitle: string;
+  subtitles: string[];
   description: string;
   tags: string[];
 };
 
-function fieldsOf(drop: Manifest): Fields {
+// variants lowercases `base` and appends `extra` when it says something
+// different, so the common all-English case allocates a single-element array.
+function variants(base: string, extra?: string): string[] {
+  const b = base.toLowerCase();
+  const e = (extra ?? "").toLowerCase();
+  return e && e !== b ? [b, e] : [b];
+}
+
+function fieldsOf(drop: Manifest, localized?: LocalizedText): Fields {
   return {
-    label: drop.label.toLowerCase(),
+    labels: variants(drop.label, localized?.label),
     id: drop.id.toLowerCase(),
     integration: (drop.integration ?? "").toLowerCase(),
-    subtitle: (drop.subtitle ?? "").toLowerCase(),
+    subtitles: variants(drop.subtitle ?? "", localized?.subtitle),
     description: (drop.description ?? "").toLowerCase(),
     tags: (drop.tags ?? []).map((t) => t.toLowerCase()),
   };
@@ -359,19 +379,21 @@ function fieldsOf(drop: Manifest): Fields {
 // integration > tags > description) crossed with match position (exact >
 // start > word-start > anywhere).
 function fieldScore(f: Fields, tok: string): number {
+  const anyLabel = (pred: (s: string) => boolean) => f.labels.some(pred);
+  const anySubtitle = (pred: (s: string) => boolean) => f.subtitles.some(pred);
   let s = 0;
-  if (f.label === tok || f.id === tok) s = Math.max(s, 1000);
-  else if (f.label.startsWith(tok)) s = Math.max(s, 500);
+  if (anyLabel((l) => l === tok) || f.id === tok) s = Math.max(s, 1000);
+  else if (anyLabel((l) => l.startsWith(tok))) s = Math.max(s, 500);
   else if (f.id.startsWith(tok)) s = Math.max(s, 450);
   else if (f.integration.startsWith(tok)) s = Math.max(s, 380);
-  else if (wordStarts(f.label, tok)) s = Math.max(s, 300);
+  else if (anyLabel((l) => wordStarts(l, tok))) s = Math.max(s, 300);
   // The subtitle holds the action ("Append rows") when several drops
   // share a product title, so it ranks close to the label.
-  else if (f.subtitle.startsWith(tok) || wordStarts(f.subtitle, tok))
+  else if (anySubtitle((sub) => sub.startsWith(tok) || wordStarts(sub, tok)))
     s = Math.max(s, 290);
   else if (wordStarts(f.integration, tok)) s = Math.max(s, 250);
-  else if (f.label.includes(tok)) s = Math.max(s, 200);
-  else if (f.subtitle.includes(tok)) s = Math.max(s, 170);
+  else if (anyLabel((l) => l.includes(tok))) s = Math.max(s, 200);
+  else if (anySubtitle((sub) => sub.includes(tok))) s = Math.max(s, 170);
   else if (f.integration.includes(tok)) s = Math.max(s, 150);
   else if (f.tags.some((t) => t.includes(tok))) s = Math.max(s, 110);
   else if (f.description.includes(tok)) s = Math.max(s, 60);
@@ -380,16 +402,21 @@ function fieldScore(f: Fields, tok: string): number {
 }
 
 // scoreDrop ranks how well `query` matches `drop`. The query is split on
-// whitespace and every token must hit somewhere — literally, or through its
-// Swedish alias terms at ALIAS_WEIGHT. Higher is better; 0 means "not a
-// match" and the caller drops the row.
-export function scoreDrop(drop: Manifest, query: string): number {
+// whitespace and every token must hit somewhere: literally against the English
+// catalog text, literally against the localized text the reader sees, or
+// through its Swedish alias terms at ALIAS_WEIGHT. Higher is better; 0 means
+// "not a match" and the caller drops the row.
+export function scoreDrop(
+  drop: Manifest,
+  query: string,
+  localized?: LocalizedText,
+): number {
   const q = query.trim().toLowerCase();
   if (!q) return 1;
   const tokens = q.split(/\s+/).filter(Boolean);
   if (tokens.length === 0) return 1;
 
-  const f = fieldsOf(drop);
+  const f = fieldsOf(drop, localized);
   let total = 0;
   for (const tok of tokens) {
     let s = fieldScore(f, tok);

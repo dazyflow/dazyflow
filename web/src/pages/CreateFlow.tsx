@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { Bell, FilePlus2, LayoutTemplate, Mail, MessageSquare, Sheet, Sparkles } from "lucide-react";
 import { useAuth } from "../auth";
 import { api } from "../api";
+import { dropLabel, dropSubtitle } from "../lib/dropText";
 import { TemplateGallery } from "../components/TemplateGallery";
 import { Callout } from "../components/Callout";
 import { Button } from "../components/Button";
@@ -90,7 +91,7 @@ export function CreateFlow() {
 // streams a draft from the server (same grounded+validated path the old modal
 // used) and opens it for review — nothing is run either way.
 function FromScratch({ mode }: { mode: "ai" | "blank" }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { token, me, activeTenant, activeWorkspace, hasPerm } = useAuth();
   const canEdit = hasPerm("graph:edit");
   // Connecting an AI provider needs secret:write. A member who can edit
@@ -266,7 +267,7 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
   // heads-up issues, and let the user refine it in plain English — all before
   // they ever touch the node canvas. This is the non-techy heart of the feature.
   if (pendingDraft) {
-    const summary = flowSummary(pendingDraft.graph, manifests);
+    const summary = flowSummary(pendingDraft.graph, manifests, i18n.language);
     return (
       <div className="create-flow-scratch">
         <div className="card create-draft-review">
@@ -517,12 +518,18 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
 // flowSummary turns a graph into a plain-language, ordered list of what each
 // step does (module id → friendly "Label — subtitle"), so a non-technical user
 // sees what was built without reading the node canvas.
-function flowSummary(graph: Graph, manifests: Manifest[]): string[] {
+function flowSummary(
+  graph: Graph,
+  manifests: Manifest[],
+  lang?: string,
+): string[] {
   const byId = new Map(manifests.map((m) => [m.id, m]));
   return (graph.nodes ?? []).map((n) => {
     const m = byId.get(n.module);
     if (!m) return n.module;
-    return m.subtitle ? `${m.label} — ${m.subtitle}` : m.label;
+    const label = dropLabel(m, lang);
+    const sub = dropSubtitle(m, lang);
+    return sub ? `${label} — ${sub}` : label;
   });
 }
 

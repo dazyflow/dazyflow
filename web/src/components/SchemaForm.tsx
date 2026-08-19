@@ -16,6 +16,8 @@ import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { Info, Plus, Upload, X } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
+import i18n from "../i18n";
+import { enumLabel, fieldHelp, fieldTitle } from "../lib/dropText";
 import type { EmailTemplateSummary, JSONSchema, ReferenceGroups, ReferenceItem } from "../types";
 import { type TokenLabels, friendlyTokenText } from "./nodeCardShared";
 import { JsonEditor, isInvalidJSON } from "./JsonEditor";
@@ -395,7 +397,9 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
           )}
           {schema.enum.map((v, i) => (
             <option key={String(v)} value={String(v)}>
-              {schema.enumNames?.[i] ?? String(v)}
+              {schema.enumNames?.[i]
+                  ? enumLabel(schema.enumNames[i], i18n.language)
+                  : String(v)}
             </option>
           ))}
         </select>
@@ -798,7 +802,9 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
       if (schema.format === "string-multiselect" && schema.items?.enum) {
         const opts = schema.items.enum.map((v, i) => ({
           value: String(v),
-          label: schema.items!.enumNames?.[i] ?? String(v),
+          label: schema.items!.enumNames?.[i]
+            ? enumLabel(schema.items!.enumNames![i], i18n.language)
+            : String(v),
         }));
         return (
           <FieldWrap name={name} schema={schema} required={required}>
@@ -912,7 +918,7 @@ function OneOfBranchInput({
 }
 
 function branchLabel(schema: JSONSchema, idx: number): string {
-  if (schema.title) return schema.title;
+  if (schema.title) return fieldTitle(schema.title, i18n.language);
   if (schema.type) {
     return schema.type.charAt(0).toUpperCase() + schema.type.slice(1);
   }
@@ -1003,7 +1009,9 @@ function FieldWrap({
       <div className="label-row">
         <span className="sf-label-group">
           <label htmlFor={controlId}>
-            {schema.title || humanize(name)}
+            {schema.title
+              ? fieldTitle(schema.title, i18n.language)
+              : humanize(name)}
           </label>
           {/* Always-on required marker so a field that needs a value reads
               as such while configuring — not only after a failed Run. A muted
@@ -1027,8 +1035,8 @@ function FieldWrap({
             <span
               className="inspector-info"
               tabIndex={0}
-              title={schema.description}
-              aria-label={schema.description}
+              title={fieldHelp(schema.description, i18n.language)}
+              aria-label={fieldHelp(schema.description, i18n.language)}
             >
               <Info size={13} aria-hidden="true" />
             </span>
@@ -1417,7 +1425,7 @@ function AccountResourceField({
           tokenLabels={tokenLabels}
           required={required}
           placeholder={t("schemaForm.resourcePicker.exprPlaceholder")}
-          ariaLabel={schema.title ?? humanize(name)}
+          ariaLabel={schema.title ? fieldTitle(schema.title, i18n.language) : humanize(name)}
         />
       ) : (
         <ResourcePickerField
@@ -1674,7 +1682,9 @@ function SuggestField({
   const { t } = useTranslation();
   const opts = (schema.enum ?? []).map((v, i) => ({
     value: String(v),
-    label: schema.enumNames?.[i] ?? String(v),
+    label: schema.enumNames?.[i]
+      ? enumLabel(schema.enumNames[i], i18n.language)
+      : String(v),
   }));
   const cur = typeof value === "string" ? value : "";
   const inList = opts.some((o) => o.value === cur);
@@ -1694,7 +1704,7 @@ function SuggestField({
           tokenLabels={tokenLabels}
           required={required}
           placeholder={schema.default ? String(schema.default) : undefined}
-          ariaLabel={schema.title ?? humanize(name)}
+          ariaLabel={schema.title ? fieldTitle(schema.title, i18n.language) : humanize(name)}
         />
       ) : (
         <select
@@ -1888,7 +1898,7 @@ function PlainStringField({
         tokenLabels={tokenLabels}
         required={required}
         placeholder={schema.default ? String(schema.default) : undefined}
-        ariaLabel={schema.title ?? humanize(name)}
+        ariaLabel={schema.title ? fieldTitle(schema.title, i18n.language) : humanize(name)}
       />
     </FieldWrap>
   );
@@ -2837,7 +2847,9 @@ function ScalarValue({
       >
         {schema.enum.map((v, i) => (
           <option key={String(v)} value={String(v)}>
-            {schema.enumNames?.[i] ?? String(v)}
+            {schema.enumNames?.[i]
+                  ? enumLabel(schema.enumNames[i], i18n.language)
+                  : String(v)}
           </option>
         ))}
       </select>

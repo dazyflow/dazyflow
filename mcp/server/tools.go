@@ -736,9 +736,18 @@ func configureConnection(c *DazydClient) Tool {
 // deleteFlow removes a flow from the workspace. Refuses with 409 if
 // a run is currently in flight on this flow (same lock as save/patch).
 // Idempotent on the wire: a missing flow returns 204.
+//
+// Needs a key with graph:admin — the default `claude-mcp` key is scoped to
+// graph:run + graph:edit, so this tool answers 403 admin_scope_required for
+// the common setup. That is deliberate (deleting drops the flow's git
+// history), and the description says so rather than letting the model
+// discover it by failing.
 func deleteFlow(c *DazydClient, d Defaults) Tool {
 	return scopedTool(c, d, "delete_flow",
-		"Permanently remove a flow. Use this when the user wants to undo a creation or retire a flow. Refuses (HTTP 409) if a run is currently active on the flow. Idempotent: deleting a missing flow is a no-op.",
+		"Permanently remove a flow (this also drops its version history). Use this when the user wants to undo a creation or retire a flow. "+
+			"Requires an API key with the graph:admin permission: the default MCP key has graph:run + graph:edit only and gets 403 admin_scope_required — "+
+			"when that happens, don't retry, tell the user to delete the flow in the web UI (or to mint a key with graph:admin). "+
+			"Refuses (HTTP 409) if a run is currently active on the flow. Idempotent: deleting a missing flow is a no-op.",
 		`{"type":"object","required":["id"],"properties":{
 			"id":        {"type":"string"},
 			"tenant":    {"type":"string"},

@@ -35,6 +35,12 @@ import { Button } from "./Button";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import { explainApiError } from "../lib/explainApiError";
+import {
+  dropDescription,
+  dropLabel,
+  dropSubtitle,
+  nodeStateText,
+} from "../lib/dropText";
 import { oauthProviderForIntegration } from "../integrationMeta";
 import type { SetupNeed } from "../lib/requiredConnections";
 import type { OAuthProviderStatus, Graph, GraphTrigger, Manifest } from "../types";
@@ -177,7 +183,7 @@ export function Inspector({
   missingKeys,
   runCoordinate,
 }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [sampling, setSampling] = useState(false);
   const [sampleError, setSampleError] = useState<string | null>(null);
@@ -370,21 +376,25 @@ export function Inspector({
             <input
               className="inspector-name"
               value={d.label}
-              placeholder={d.manifest?.label || d.moduleID}
+              placeholder={
+                d.manifest ? dropLabel(d.manifest, i18n.language) : d.moduleID
+              }
               spellCheck={false}
               onClick={(e) => e.stopPropagation()}
               onChange={(e) => onChange(selected.id, { label: e.target.value })}
               aria-label={t("inspector.label")}
             />
             {d.manifest?.subtitle && (
-              <span className="inspector-subtitle">{d.manifest.subtitle}</span>
+              <span className="inspector-subtitle">
+                {dropSubtitle(d.manifest, i18n.language)}
+              </span>
             )}
           </span>
           {d.manifest?.description && (
             <span
               className="inspector-info"
-              title={d.manifest.description}
-              aria-label={d.manifest.description}
+              title={dropDescription(d.manifest, i18n.language)}
+              aria-label={dropDescription(d.manifest, i18n.language)}
               onClick={(e) => e.stopPropagation()}
             >
               <Info size={14} />
@@ -754,7 +764,9 @@ export function Inspector({
                 onClick={() => onResetState(selected.id)}
               >
                 <Repeat size={14} />
-                {t("inspector.resetState", { label: d.manifest.node_state.label })}
+                {t("inspector.resetState", {
+                  label: nodeStateText(d.manifest.node_state.label, i18n.language),
+                })}
               </Button>
             )}
             {onDelete && (

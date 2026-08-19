@@ -36,19 +36,33 @@ export function portCardinality(p: Pick<Port, "list">): "one" | "many" {
 // portTypeLabel is the plain-language description shown to the user for what a
 // port carries — kind × cardinality. e.g. "Items" (many records), "Text",
 // "Files". Used in the port tooltip so it's obvious what flows down a wire.
-export function portTypeLabel(p: Pick<Port, "mime" | "list">): string {
+//
+// Unlike a drop's label, this text is OURS rather than the catalog's, so it is
+// translated through i18n. `t` is optional and defaults to the English below:
+// callers that hold a translator (components) pass it; tests and any
+// locale-free caller get the untranslated string rather than a missing-key
+// artifact.
+type Translate = (key: string, defaultValue: string) => string;
+
+export function portTypeLabel(
+  p: Pick<Port, "mime" | "list">,
+  t?: Translate,
+): string {
+  const tr: Translate = t ?? ((_k, d) => d);
   const many = portCardinality(p) === "many";
   switch (portKind(p)) {
     case "item":
-      return many ? "Items (a table)" : "Item";
+      return many
+        ? tr("portType.items", "Items (a table)")
+        : tr("portType.item", "Item");
     case "text":
-      return many ? "Texts" : "Text";
+      return many ? tr("portType.texts", "Texts") : tr("portType.text", "Text");
     case "bool":
-      return "Yes / no";
+      return tr("portType.bool", "Yes / no");
     case "file":
-      return many ? "Files" : "File";
+      return many ? tr("portType.files", "Files") : tr("portType.file", "File");
     default:
-      return "Anything";
+      return tr("portType.any", "Anything");
   }
 }
 

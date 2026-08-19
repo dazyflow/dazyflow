@@ -14,6 +14,7 @@ import { useTranslation } from "react-i18next";
 import { iconFor, isBrandedIcon, dropColor } from "../icons";
 import { Button } from "./Button";
 import { scoreDrop } from "../lib/dropSearch";
+import { dropCategoryLabel, dropLabel, dropSubtitle } from "../lib/dropText";
 import type { Manifest } from "../types";
 
 type Props = {
@@ -54,7 +55,10 @@ type Match = {
 let pendingHistoryPop: ReturnType<typeof setTimeout> | null = null;
 
 export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAll, suggested }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  // Sorting and ranking both read the drop names the user actually sees, so
+  // the language is a dependency of the match memo, not just of the render.
+  const lang = i18n.language;
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -133,7 +137,7 @@ export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAl
         const ai = a.integration ?? "~";
         const bi = b.integration ?? "~";
         if (ai !== bi) return ai.localeCompare(bi);
-        return a.label.localeCompare(b.label);
+        return dropLabel(a, lang).localeCompare(dropLabel(b, lang), lang);
       });
       // Pin suggestions on top (in caller order) and drop them from the main
       // list so they don't appear twice. Suggestions are advisory, so only
@@ -156,7 +160,10 @@ export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAl
     const sugIds = new Set((suggested ?? []).map((d) => d.id));
     const hits: Match[] = [];
     for (const d of drops) {
-      let s = scoreDrop(d, q);
+      let s = scoreDrop(d, q, {
+        label: dropLabel(d, lang),
+        subtitle: dropSubtitle(d, lang),
+      });
       if (s > 0) {
         if (sugIds.has(d.id)) s += 150;
         hits.push({ drop: d, score: s });
@@ -167,10 +174,10 @@ export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAl
       const ai = a.drop.integration ?? "~";
       const bi = b.drop.integration ?? "~";
       if (ai !== bi) return ai.localeCompare(bi);
-      return a.drop.label.localeCompare(b.drop.label);
+      return dropLabel(a.drop, lang).localeCompare(dropLabel(b.drop, lang), lang);
     });
     return { matches: hits, suggestedCount: 0 };
-  }, [drops, query, suggested]);
+  }, [drops, query, suggested, lang]);
 
   // Reset the highlight whenever the result set changes — otherwise an
   // index that was valid for an earlier query can point past the end of
@@ -340,7 +347,8 @@ function QuickRow({
   onHover: () => void;
   onPick: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language;
   const Icon = iconFor(drop.icon, drop.category);
   const color = dropColor(drop.category, drop.color);
   const branded = isBrandedIcon(drop.icon);
@@ -386,7 +394,7 @@ function QuickRow({
         </div>
       )}
       <div className="quick-palette-row-text">
-        <div className="quick-palette-row-name">{drop.label}</div>
+        <div className="quick-palette-row-name">{dropLabel(drop, lang)}</div>
         <div className="quick-palette-row-meta">
           {/* The action subtitle ("Append rows") disambiguates drops that
               share a product title; it stands in for the integration line
@@ -394,7 +402,7 @@ function QuickRow({
               integration, or a stdlib chip. */}
           {drop.subtitle ? (
             <span className="quick-palette-row-integration">
-              {drop.subtitle}
+              {dropSubtitle(drop, lang)}
             </span>
           ) : drop.integration ? (
             <span className="quick-palette-row-integration">
@@ -412,7 +420,11 @@ function QuickRow({
           {t("quickPalette.disabled", "Disabled")}
         </span>
       ) : (
-        drop.category && <span className="cat-pill">{drop.category}</span>
+        drop.category && (
+          <span className="cat-pill">
+            {dropCategoryLabel(drop.category, lang)}
+          </span>
+        )
       )}
     </div>
   );

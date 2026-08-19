@@ -101,6 +101,18 @@ func (a *APIKeyAuthenticator) Authenticate(ctx context.Context, credential strin
 	}, nil
 }
 
+// IsAPIKeyCredential reports whether a credential is an API key (the
+// "dzk_<id>_<secret>" wire format) rather than a session token. Callers use it
+// where policy differs by credential KIND rather than by permission — a
+// password reauth, for instance, only means something for a session, because
+// an API-key holder (a script, dzctl, the MCP server) has no password to
+// re-supply. Prefix-only on purpose: a malformed key still reads as "an API
+// key" so it takes the key policy path and is rejected there by
+// Authenticate, never silently routed down the session path.
+func IsAPIKeyCredential(credential string) bool {
+	return strings.HasPrefix(credential, apiKeyPrefix)
+}
+
 func (a *APIKeyAuthenticator) now() time.Time {
 	if a.Clock != nil {
 		return a.Clock()

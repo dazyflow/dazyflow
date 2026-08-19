@@ -664,31 +664,56 @@ func (h *HTTPGateway) setFlowEnabled(rw http.ResponseWriter, r *http.Request, p 
 // deleteFlowMe is the DELETE /me/flows/{flow_id} handler. Idempotent:
 // missing flow → 204. Active run → 409 with code `flow_locked`.
 //
-// Deleting a flow is irreversible (it drops the flow's whole Git history),
-// so it is password-gated like the other high-consequence self-service ops
-// (TOTP disable, email/password change): the caller must re-supply their
-// account password in the request body, and we bcrypt-verify it here so the
-// gate can't be bypassed by calling the API directly. This mirrors
-// changePasswordHandler's reauth so a hijacked session alone can't wipe work.
+// Deleting a flow is irreversible (it drops the flow's whole Git history), so
+// it carries a second gate beyond the graph:edit DeleteGraph enforces — but
+// WHICH gate depends on the credential kind, because the two credentials fail
+// in different ways:
+//
+//   - A session is ambient: it rides on a cookie, so a hijacked session could
+//     wipe work with no further proof of identity. Those callers re-supply
+//     their account password, bcrypt-verified here so the gate can't be
+//     bypassed by calling the API directly (mirrors changePasswordHandler).
+//   - An API key is not ambient: it is minted deliberately, carries its own
+//     capped role set, is revocable, is audited, and is unreachable by CSRF.
+//     Its holder — dzctl, a script, the MCP server — has NO password to
+//     re-supply, so demanding one didn't make deletion safer, it made it
+//     impossible: every key-authenticated DELETE answered 401, which is why
+//     the MCP `delete_flow` tool could never succeed. Keys are held to
+//     graph:admin instead, which the deliberately narrow `claude-mcp` default
+//     role (graph:run + graph:edit — see defaultSelfIssueRole) does NOT carry.
+//     So an agent's key still cannot destroy a flow's history; a human deletes
+//     from the web UI, or mints a key that says out loud it may delete.
 func (h *HTTPGateway) deleteFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, workspace, id, ok := h.readFlowID(rw, r, p)
 	if !ok {
 		return
 	}
-	if h.Users == nil {
-		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "password auth not configured")
-		return
-	}
-	var body struct {
-		Password string `json:"password"`
-	}
-	// An empty/invalid body falls through to the password check below, which
-	// rejects a blank password — no separate decode-error path needed.
-	_ = json.NewDecoder(r.Body).Decode(&body)
-	email := strings.ToLower(strings.TrimSpace(p.Subject))
-	if _, err := auth.VerifyPassword(r.Context(), h.Users, email, body.Password); err != nil {
-		writeAPIError(rw, http.StatusUnauthorized, "bad_credentials", "password is incorrect")
-		return
+	via := "session"
+	if auth.IsAPIKeyCredential(credentialFromRequest(r)) {
+		via = "api_key"
+		if err := core.Require(p, core.PermGraphAdmin); err != nil {
+			writeAPIError(rw, http.StatusForbidden, "admin_scope_required",
+				"this API key may not delete flows: deleting is permanent (it drops the flow's history), so a key needs the graph:admin permission. "+
+					"The default MCP key carries graph:run + graph:edit only — delete the flow from the web UI, or mint a key with graph:admin.")
+			return
+		}
+	} else {
+		if h.Users == nil {
+			writeAPIError(rw, http.StatusNotImplemented, "not_configured", "password auth not configured")
+			return
+		}
+		var body struct {
+			Password string `json:"password"`
+		}
+		// An empty/invalid body falls through to the password check below,
+		// which rejects a blank password — no separate decode-error path
+		// needed.
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		email := strings.ToLower(strings.TrimSpace(p.Subject))
+		if _, err := auth.VerifyPassword(r.Context(), h.Users, email, body.Password); err != nil {
+			writeAPIError(rw, http.StatusUnauthorized, "bad_credentials", "password is incorrect")
+			return
+		}
 	}
 	if err := h.svc.DeleteGraph(r.Context(), p, tenant, workspace, id); err != nil {
 		if errors.Is(err, core.ErrConflict) {
@@ -698,7 +723,7 @@ func (h *HTTPGateway) deleteFlowMe(rw http.ResponseWriter, r *http.Request, p co
 		writeAPIError(rw, http.StatusForbidden, "forbidden", err.Error())
 		return
 	}
-	h.audit(r.Context(), p, "graph.delete", id, "")
+	h.audit(r.Context(), p, "graph.delete", id, "via="+via)
 	rw.WriteHeader(http.StatusNoContent)
 }
 

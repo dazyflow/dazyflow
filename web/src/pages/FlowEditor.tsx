@@ -118,6 +118,7 @@ import { ConfirmModal } from "../components/ConfirmModal";
 import { PublishCelebration } from "../components/PublishCelebration";
 import { browserTimeZone } from "../components/TriggersModal";
 import { QuickDropPalette } from "../components/QuickDropPalette";
+import { dropLabel, dropLabelIsDefault } from "../lib/dropText";
 import { CanvasContextMenu, type ContextMenuItem } from "../components/CanvasContextMenu";
 import { PromptModal } from "../components/PromptModal";
 import { PublishLabelModal } from "../components/PublishLabelModal";
@@ -264,6 +265,18 @@ function stampScheduleTimezones(
 
 function EditorInner() {
   const { t } = useTranslation();
+  // i18n.language read reactively, so the effect that (re-)derives node names
+  // re-runs on a language switch. Everything else reads i18n.language at call
+  // time — see the note below.
+  const i18nLanguage = i18n.language;
+  // A node's display name defaults to its drop's name (dropLabel below), so it
+  // follows the reader's language. It is display-only state — buildGraph never
+  // writes it back — so localizing here cannot leak a Swedish label into a
+  // saved flow. The language comes off the imported i18n singleton at CALL
+  // time, as it already does for i18n.t further down: the insert callbacks are
+  // deliberately []-dependency and a captured value would keep naming new
+  // nodes in whatever language was active when the editor mounted. Cards
+  // already on the canvas keep their names until the flow is reloaded.
   // Binds the active translator to lintMessage so the badge effect and the
   // warning banner share one Inspector-style formatter.
   const describeLint = useCallback(
@@ -607,7 +620,10 @@ function EditorInner() {
           type: "dazy",
           position: n.position ?? { x: 80 + i * 240, y: 80 },
           data: {
-            label: mm.get(n.module)?.label ?? n.module,
+            label: (() => {
+              const m = mm.get(n.module);
+              return m ? dropLabel(m, i18n.language) : n.module;
+            })(),
             moduleID: n.module,
             manifest: mm.get(n.module),
           },
@@ -944,11 +960,11 @@ function EditorInner() {
   // in/out handles — so edges wired to real ports (rows, body,
   // messages, …) find no matching handle and silently don't render.
   // This patches the manifest in once drops land, which makes the real
-  // handles appear and React Flow draws the edges. We also upgrade the
-  // label from the bare module-ID fallback (set at graph-load time when
-  // manifests hadn't arrived yet) to the manifest's friendly label —
-  // but only when it's still the raw module ID, so a user-edited label
-  // survives untouched.
+  // handles appear and React Flow draws the edges. We also (re-)derive the
+  // display name in the reader's language — from the bare module-ID fallback
+  // set at graph-load time when manifests hadn't arrived yet, and again when
+  // the language changes. dropLabelIsDefault keeps that to names the user
+  // never edited: a hand-typed label is theirs and survives untouched.
   useEffect(() => {
     if (manifests.length === 0) return;
     const mm = new Map(manifests.map((m) => [m.id, m]));
@@ -957,8 +973,9 @@ function EditorInner() {
       const next = nds.map((n) => {
         const m = mm.get(n.data.moduleID);
         if (!m) return n;
-        const label =
-          n.data.label === n.data.moduleID ? m.label ?? n.data.label : n.data.label;
+        const label = dropLabelIsDefault(m, n.data.label)
+          ? dropLabel(m, i18n.language)
+          : n.data.label;
         if (n.data.manifest !== m || label !== n.data.label) {
           changed = true;
           return { ...n, data: { ...n.data, manifest: m, label } };
@@ -967,7 +984,8 @@ function EditorInner() {
       });
       return changed ? next : nds;
     });
-  }, [manifests]);
+    // i18nLanguage is in the deps so a language switch renames the cards.
+  }, [manifests, i18nLanguage]);
 
   // Publish the open flow's label to the top bar. Falls back to the
   // route id until the graph's display name loads. A dedicated
@@ -1321,7 +1339,7 @@ function EditorInner() {
           id: newID,
           type: "dazy",
           position,
-          data: { label: m.label, moduleID: m.id, manifest: m },
+          data: { label: dropLabel(m, i18n.language), moduleID: m.id, manifest: m },
         },
       ]);
       setParamsByID((p) => ({ ...p, [newID]: {} }));
@@ -1529,7 +1547,7 @@ function EditorInner() {
             id: newID,
             type: "dazy",
             position,
-            data: { label: m.label, moduleID: m.id, manifest: m },
+            data: { label: dropLabel(m, i18n.language), moduleID: m.id, manifest: m },
           },
         ];
       });
@@ -1581,7 +1599,7 @@ function EditorInner() {
           id: newID,
           type: "dazy",
           position,
-          data: { label: m.label, moduleID: "ntfy", manifest: m },
+          data: { label: dropLabel(m, i18n.language), moduleID: "ntfy", manifest: m },
         },
       ]);
       setParamsByID((p) => ({
@@ -2620,7 +2638,7 @@ function EditorInner() {
         position: { x: cx, y: cy },
         selected: true,
         data: {
-          label: sgManifest?.label ?? "Reusable flow",
+          label: sgManifest ? dropLabel(sgManifest, i18n.language) : "Reusable flow",
           moduleID: "subgraph",
           manifest: sgManifest,
         },

@@ -26,6 +26,7 @@ import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { useThemeMode } from "../theme";
 import { api, isErrorCode, isHTTPStatus } from "../api";
+import { dropLabel } from "../lib/dropText";
 import { explainApiError } from "../lib/explainApiError";
 import { DazyNode } from "../components/NodeCard";
 import { CommentNode } from "../components/CommentNode";
@@ -282,7 +283,7 @@ function SupportCanvas({
   manifests: Manifest[];
   runId?: string;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const themeMode = useThemeMode();
 
   const manifestById = useMemo(() => {
@@ -319,7 +320,10 @@ function SupportCanvas({
         position: n.position ?? { x: 80 + i * 240, y: 80 },
         draggable: false,
         data: {
-          label: manifestById.get(n.module)?.label ?? n.module,
+          label: (() => {
+            const m = manifestById.get(n.module);
+            return m ? dropLabel(m, i18n.language) : n.module;
+          })(),
           moduleID: n.module,
           manifest: manifestById.get(n.module),
           status: runStatusById.get(n.id),

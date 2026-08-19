@@ -7,6 +7,7 @@ import { ArrowLeft, AlertCircle, ChevronDown, ChevronRight, RotateCw, RotateCcw,
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import { api, APIError } from "../api";
+import { dropLabel, dropSubtitle } from "../lib/dropText";
 import { useAuth } from "../auth";
 import { Button } from "../components/Button";
 import { ConfirmModal } from "../components/ConfirmModal";
@@ -112,7 +113,9 @@ export function RunDetail() {
     if (!moduleID) return nodeID;
     const m = manifests.get(moduleID);
     if (!m) return moduleID;
-    return m.subtitle ? `${m.label} · ${m.subtitle}` : m.label;
+    const label = dropLabel(m, i18n.language);
+    const sub = dropSubtitle(m, i18n.language);
+    return sub ? `${label} · ${sub}` : label;
   };
 
   useEffect(() => {

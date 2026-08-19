@@ -2308,5 +2308,15 @@
     "issuesHead": "Issues",
     "disabled": "disabled",
     "rawSummary": "Raw bundle (redacted JSON)"
+  },
+  "portType": {
+    "items": "Items (a table)",
+    "item": "Item",
+    "texts": "Texts",
+    "text": "Text",
+    "bool": "Yes / no",
+    "files": "Files",
+    "file": "File",
+    "any": "Anything"
   }
 }

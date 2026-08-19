@@ -2312,5 +2312,15 @@
     "issuesHead": "Problem",
     "disabled": "inaktiverat",
     "rawSummary": "Rått paket (maskerad JSON)"
+  },
+  "portType": {
+    "items": "Poster (en tabell)",
+    "item": "Post",
+    "texts": "Texter",
+    "text": "Text",
+    "bool": "Ja / nej",
+    "files": "Filer",
+    "file": "Fil",
+    "any": "Vad som helst"
   }
 }
