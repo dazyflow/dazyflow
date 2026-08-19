@@ -147,6 +147,53 @@ Archive, newest area first. The detail stays because the reasoning is the
 reusable part.
 
 ### Localization (2026-08-19)
+- [x] **Terminology swept for consistency** — 20 English and 24 Swedish strings
+      where the same meaning used a different word than the rest of the app.
+      Counted every competing term per concept rather than going on impression,
+      then fixed the outliers and left the legitimate ones alone.
+      EN: "Drop executions" → "Drop runs" (the sibling metric on the same page
+      already said "Flow runs"; "run" is used 162× against 1 "execution");
+      node/step/module → drop in the six places they leaked (`bundle.stepsHead`,
+      `admin.platformTiers.nodes` — which sat in a row with Runs/Members/Flows —
+      `issueKey.perm.moduleRegister`, `runDetail.helpStep`, and two prose
+      strings); "graph" → "flow" in the two remaining user-facing spots;
+      integration/connector → "app" where it meant a connected service (the nav
+      label and page title are both "Apps"); "tenant id" → "Organization ID";
+      "no login required" → "no sign-in required" ("sign in" 27× vs "login" 1×).
+      Spelling normalised to the house style, which is US English by 73 to 8:
+      organisation→organization, colour→color, recognise→recognize, and
+      canceled→Cancelled to match the in-app 5:1 majority for that word.
+- [x] **BUG: Swedish told users to press a button that doesn't exist** —
+      `flowStatus.manual.tip` and `flowStatus.needs_publish.tip` both said
+      "trycker på Run", but the Swedish Run button is labelled **Kör**. Found by
+      scanning Swedish copy for English control names and checking each against
+      its actual label. (`admin.sso.walkthroughStep2Body` also names a "Save"
+      button and is CORRECT — that one is in Google Cloud Console, not here.)
+- [x] **Swedish settled on *trigger*, not *utlösare*** — the consistency sweep
+      first normalised the other way (*utlösare* was the majority at 13:4), and
+      Joachim corrected it: **trigger** is the right Swedish word here. Swept
+      all 21 strings plus the drop-category chip. The paradigm now in use is
+      *en trigger* / *triggern* / *triggers*, with verb forms *trigga*,
+      *triggas*, *triggade* — the plural follows the existing product voice
+      (`usage.proPitch` and `settings.general.privateVisibleDesc` already said
+      "triggers" before this session). **Open question:** standard Swedish
+      declension would be *triggrar* / *triggrarna* rather than the English
+      plural — say the word and it's a one-line sweep. *utlösare* is kept as a
+      SEARCH synonym in `lib/dropSearch.ts`: that map exists to accept whatever
+      word the user reaches for, so removing a working way in would be a
+      regression, not consistency.
+- [x] **Swedish terminology aligned** — "secrets" → *hemligheter* in the three
+      `issueKey.template*Desc` strings (the word is *hemligheter* 48× elsewhere);
+      *funktion* → *drop* in `admin.platformDrops.subtitle`; *Noder* → *Droppar*;
+      *Grafgränser* → *Flödesgränser*; and the secret-manager remove dialogs now
+      say *hemlighetsförråd*, matching the intro that introduces the term.
+      Left alone: "AWS Secrets Manager", "Client secret", "Secret ID" and
+      friends are proper nouns.
+      Deliberately NOT changed: `graph:admin` is a literal permission scope,
+      `{{node}}` is a variable name that never renders, and "Connector apps" is
+      the admin OAuth-credentials page — a different object from user-facing
+      Apps, and consistently named across all three of its uses.
+
 - [x] **Locale bundles swept and guarded** — audited both catalogues (2,039
       keys each) against every `.ts`/`.tsx` source. Parity was already perfect
       and stayed so; removed **32 dead keys** whose surfaces are gone: the

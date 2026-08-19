@@ -70,6 +70,9 @@ const SV_ALIASES: Record<string, string[]> = {
   dagligen: ["daily", "schedule", "cron"],
   återkommande: ["recurring", "schedule", "cron", "interval"],
   intervall: ["interval", "poll", "schedule"],
+  // Kept as a search synonym even though the UI now says "trigger" throughout:
+  // this map exists to accept whatever word the user reaches for, and someone
+  // who learned the old term should still find the drop.
   utlösare: ["trigger", "webhook", "schedule"],
   händelse: ["event", "trigger", "webhook"],
   händelser: ["events", "trigger", "webhook"],

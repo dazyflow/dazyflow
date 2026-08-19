@@ -442,7 +442,7 @@ const SV_CATEGORIES: Record<string, string> = {
   network: "Nätverk",
   system: "System",
   transformation: "Omvandling",
-  trigger: "Utlösare",
+  trigger: "Triggers",
 };
 
 // DescriptionMap is keyed by drop id; `en` is the fingerprint of the English

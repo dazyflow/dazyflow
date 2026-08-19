@@ -163,7 +163,7 @@ describe("dropCategoryLabel", () => {
 
   it("gives Swedish a word for every category, including ai/trigger", () => {
     expect(dropCategoryLabel("ai", "sv")).toBe("AI");
-    expect(dropCategoryLabel("trigger", "sv")).toBe("Utlösare");
+    expect(dropCategoryLabel("trigger", "sv")).toBe("Triggers");
   });
 
   // The bug this guards: unmapped, these fell through to the raw engine enum,
