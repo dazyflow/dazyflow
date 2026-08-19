@@ -8,18 +8,27 @@
     {
       "id": "poll",
       "module": "poll_trigger",
-      "params": { "interval_seconds": 300 },
-      "position": { "x": 100, "y": 200 }
+      "params": {
+        "interval_seconds": 300
+      },
+      "position": {
+        "x": 100,
+        "y": 200
+      }
     },
     {
       "id": "search",
       "module": "gmail_search_messages",
       "params": {
         "query": "newer_than:6m label:inbox",
+        "only_new": true,
         "max_results": 20,
         "account": "default"
       },
-      "position": { "x": 420, "y": 200 }
+      "position": {
+        "x": 420,
+        "y": 200
+      }
     },
     {
       "id": "render",
@@ -29,17 +38,38 @@
         "prefix": "*New mail*\n",
         "empty": "No new mail."
       },
-      "position": { "x": 740, "y": 200 }
+      "position": {
+        "x": 740,
+        "y": 200
+      }
     },
     {
       "id": "notify",
       "module": "slack_send_message",
-      "params": { "channel": "#inbox", "account": "default" },
-      "position": { "x": 1060, "y": 200 }
+      "params": {
+        "channel": "#inbox",
+        "account": "default"
+      },
+      "position": {
+        "x": 1060,
+        "y": 200
+      }
     }
   ],
   "edges": [
-    { "from": "search", "from_port": "messages", "to": "render", "to_port": "rows", "on_error": "" },
-    { "from": "render", "from_port": "text", "to": "notify", "to_port": "text", "on_error": "" }
+    {
+      "from": "search",
+      "from_port": "messages",
+      "to": "render",
+      "to_port": "rows",
+      "on_error": ""
+    },
+    {
+      "from": "render",
+      "from_port": "text",
+      "to": "notify",
+      "to_port": "text",
+      "on_error": ""
+    }
   ]
 }

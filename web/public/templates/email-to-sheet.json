@@ -8,24 +8,42 @@
     {
       "id": "poll",
       "module": "poll_trigger",
-      "params": { "interval_seconds": 300 },
-      "position": { "x": 100, "y": 200 }
+      "params": {
+        "interval_seconds": 300
+      },
+      "position": {
+        "x": 100,
+        "y": 200
+      }
     },
     {
       "id": "search",
       "module": "gmail_search_messages",
       "params": {
         "query": "newer_than:6m label:inbox",
+        "only_new": true,
         "max_results": 20,
         "account": "default"
       },
-      "position": { "x": 420, "y": 200 }
+      "position": {
+        "x": 420,
+        "y": 200
+      }
     },
     {
       "id": "shape",
       "module": "map_rows",
-      "params": { "select": ["from", "subject", "date"] },
-      "position": { "x": 740, "y": 200 }
+      "params": {
+        "select": [
+          "from",
+          "subject",
+          "date"
+        ]
+      },
+      "position": {
+        "x": 740,
+        "y": 200
+      }
     },
     {
       "id": "append",
@@ -35,11 +53,26 @@
         "range": "Inbox Log",
         "account": "default"
       },
-      "position": { "x": 1060, "y": 200 }
+      "position": {
+        "x": 1060,
+        "y": 200
+      }
     }
   ],
   "edges": [
-    { "from": "search", "from_port": "messages", "to": "shape", "to_port": "rows", "on_error": "" },
-    { "from": "shape", "from_port": "rows", "to": "append", "to_port": "rows", "on_error": "" }
+    {
+      "from": "search",
+      "from_port": "messages",
+      "to": "shape",
+      "to_port": "rows",
+      "on_error": ""
+    },
+    {
+      "from": "shape",
+      "from_port": "rows",
+      "to": "append",
+      "to_port": "rows",
+      "on_error": ""
+    }
   ]
 }

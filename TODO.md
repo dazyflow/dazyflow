@@ -41,13 +41,32 @@ These aren't defects. Each needs a direction before any code moves.
       UI pass. Cheapest partial that needs no semantic change: one sentence on
       the flow header stating the whole truth ("Saved. Your live version is
       from 3 days ago."). (`web/src/flowStatus.ts`, `core/flowstatus.go`)
-- [ ] **CONFIRM — Templates is now the default create tab.** Changed during the
-      UX pass on the grounds that the previous AI-first default needed a
-      connected Claude/OpenAI account, so on a fresh or self-hosted workspace
-      the landing tab asked the user to go connect a paid service before they
-      had seen the product do anything. This reverses a deliberate earlier
-      decision, so it wants a yes/no. Reverting is one ternary in
-      `pages/CreateFlow.tsx`.
+
+### Templates — thin, and now the front door
+
+The create page defaults to the template gallery (confirmed 2026-08-19), so the
+gallery is the first thing a new user sees. It currently holds **5 templates
+touching 3 of 34 integrations** (Gmail, Sheets, Slack). Three of the five are
+under "Spreadsheets"; one needs no setup; the other four all require a Google
+or Slack account, so a self-hoster with neither sees a wall of things they
+can't use.
+
+The gap that matters most: **the Nordic connectors are the stated moat and have
+zero templates.** Fortnox, Klarna, nShift, Roaring and 46elks are the reason to
+pick Dazyflow over Zapier/Make/n8n, and nothing in the gallery shows them off.
+
+- [ ] **Templates for the Nordic connectors** — at minimum a Fortnox one
+      ("New paid invoice → Slack", which the Fortnox notes already describe as
+      Schedule → List invoices (filter=fullypaid) → For each → dedupe on
+      DocumentNumber) and a 46elks one ("Text me when X"). These are the demos
+      that justify the go-to-market.
+- [ ] **A second no-setup template** — `try-it-now` is the only one that runs
+      with nothing connected, and it is now the Welcome CTA's target. One more
+      (a weather or HTTP-fetch → render, both need no account) would give the
+      "Try it now" category something to be a category of.
+- [ ] **Notification breadth beyond Slack** — Discord, ntfy, Twilio and plain
+      email all ship as drops and none appear in a template, even though
+      "get notified when X" is the archetypal first automation.
 
 ### Web
 
@@ -129,6 +148,28 @@ re-raised.
 
 Archive, newest area first. The detail stays because the reasoning is the
 reusable part.
+
+### Templates (2026-08-19)
+- [x] **BUG: two of the five templates spammed, forever** — `email-to-sheet`
+      and `email-to-slack` both poll Gmail every 300s with
+      `max_results: 20` and did NOT set `only_new`, which defaults to false.
+      The `gmail_search_messages` schema documents exactly this trap: "Turn
+      this on when a published, polling flow acts on each match … so it doesn't
+      re-process the same emails on every poll." Both templates are published
+      polling flows that act on each match, so as shipped each one re-emitted
+      the same 20 messages 288 times a day — **5,760 duplicate rows appended to
+      the user's sheet, or 5,760 duplicate Slack posts, per day, forever**. Set
+      `only_new: true` on both. Worth noting these are 40% of the gallery and
+      the two a "get notified" user reaches for first.
+      (First run now correctly emits nothing — the cursor baselines to the
+      newest message — which is the documented behaviour, not a regression.)
+- [x] Checked the other three and they are sound: `sheet-summary-to-slack`
+      carries its 09:00 cron in the top-level `triggers` array rather than a
+      trigger node (I misread this as a missing schedule at first — it is
+      correct); `form-to-sheet` is webhook-driven so has no dedupe exposure;
+      `try-it-now` is manual-only. The `REPLACE_WITH_YOUR_SHEET_ID` placeholders
+      in three templates are deliberate and the editor's `lintPlaceholder` rule
+      already catches them before a run.
 
 ### Apps & connections (2026-08-19)
 - [x] **Connection-field setup guidance now has a home** — the TODO said the
