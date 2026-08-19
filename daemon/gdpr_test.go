@@ -137,6 +137,30 @@ func TestEraseUserIdentity_NoResidual(t *testing.T) {
 	audit := &fakeAuditLog{}
 	_ = audit.Append(ctx, core.AuditEvent{Tenant: "usr_alice", Actor: email, Action: "graph.run", Detail: "ip=1.2.3.4"})
 
+	// Support history: a ticket Alice filed in a SHARED org, with a reply from
+	// someone else. The thread belongs to that org and must survive her
+	// erasure — carrying neither her address nor her words.
+	tickets := NewMemTicketStore()
+	_ = tickets.Create(ctx, core.Ticket{
+		ID: "t1", Tenant: "acme", CreatedBy: email, AssignedTo: "agent@vendor.test",
+		Subject: "Flow broke", Status: core.TicketAwaitingSupport,
+		CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	})
+	_ = tickets.AppendMessage(ctx, core.TicketMessage{
+		ID: "m1", TicketID: "t1", Author: email, AuthorKind: core.AuthorUser,
+		Body: "my card number is 4242 and my flow is broken", CreatedAt: time.Now(),
+	})
+	_ = tickets.AppendMessage(ctx, core.TicketMessage{
+		ID: "m2", TicketID: "t1", Author: "agent@vendor.test", AuthorKind: core.AuthorSupport,
+		Body: "looking into it", CreatedAt: time.Now(),
+	})
+	grants := NewMemGrantStore()
+	_ = grants.Create(ctx, core.AccessGrant{
+		ID: "g1", Tenant: "acme", FlowID: "f", AgentSubject: "agent@vendor.test",
+		Status: core.GrantApproved, RequestedAt: time.Now(), RequestedBy: "agent@vendor.test",
+		DecidedBy: email, ExpiresAt: time.Now().Add(time.Hour),
+	})
+
 	h := &HTTPGateway{
 		svc:         &Service{AdminKeys: keys},
 		Users:       users,
@@ -144,6 +168,8 @@ func TestEraseUserIdentity_NoResidual(t *testing.T) {
 		Memberships: members,
 		Invitations: invites,
 		Audit:       audit,
+		Tickets:     tickets,
+		Grants:      grants,
 	}
 
 	rep, err := h.eraseUserIdentity(ctx, email)
@@ -183,6 +209,49 @@ func TestEraseUserIdentity_NoResidual(t *testing.T) {
 		if e.Detail != "" {
 			t.Errorf("audit detail (with IP) not cleared: %q", e.Detail)
 		}
+	}
+
+	// Support history: same treatment. The ticket and both messages are still
+	// there for the org, with her identity and her words gone and the agent's
+	// side untouched. Before this, the erase report said "done" while her
+	// address sat in created_by and her message body sat in the thread.
+	tkt, err := tickets.Get(ctx, "t1")
+	if err != nil {
+		t.Fatalf("the org's ticket was deleted along with the user: %v", err)
+	}
+	if tkt.CreatedBy == email {
+		t.Error("ticket created_by still carries the erased address")
+	}
+	if tkt.AssignedTo != "agent@vendor.test" {
+		t.Errorf("assignee was scrubbed but isn't the erased user: %q", tkt.AssignedTo)
+	}
+	msgs, _ := tickets.ListMessages(ctx, "t1")
+	if len(msgs) != 2 {
+		t.Fatalf("thread lost messages: %d of 2", len(msgs))
+	}
+	for _, m := range msgs {
+		if m.Author == email {
+			t.Error("message author still carries the erased address")
+		}
+		if m.ID == "m1" && m.Body != "" {
+			t.Errorf("erased user's message body survived: %q", m.Body)
+		}
+		if m.ID == "m2" && m.Body != "looking into it" {
+			t.Errorf("someone else's message was scrubbed: %q", m.Body)
+		}
+	}
+	g, err := grants.Get(ctx, "g1")
+	if err != nil {
+		t.Fatalf("access grant deleted rather than anonymised: %v", err)
+	}
+	if g.DecidedBy == email {
+		t.Error("grant decided_by still carries the erased address")
+	}
+	if g.AgentSubject != "agent@vendor.test" {
+		t.Errorf("the agent's own subject was scrubbed: %q", g.AgentSubject)
+	}
+	if rep.Tickets == 0 || rep.Grants == 0 {
+		t.Errorf("support rows not counted in the report: %+v", rep)
 	}
 }
 

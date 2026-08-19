@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowRight, Info, LifeBuoy, Lock, Plus } from "lucide-react";
+import { ArrowRight, Info, LifeBuoy, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, isErrorCode, isHTTPStatus } from "../api";
@@ -70,14 +70,11 @@ export function SupportAgentHome() {
         </div>
       )}
       {gate === "forbidden" && (
-        <ErrorNotice>
-          <Lock size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-          {t("supportView.forbidden")}
-        </ErrorNotice>
+        <ErrorNotice>{t("supportView.forbidden")}</ErrorNotice>
       )}
       {error && (
         <ErrorNotice style={{ marginBottom: "var(--space-3)" }}>
-{error}
+          {error}
         </ErrorNotice>
       )}
 

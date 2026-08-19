@@ -404,6 +404,13 @@ func (h *HTTPGateway) setSupportTicketStatus(rw http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
+	// No-op guard, mirroring setMyTicketStatus: a double-clicked button or a
+	// retried request must not re-narrate the change, re-bump activity, or
+	// (worse) re-email the customer that their ticket was resolved.
+	if status == t.Status {
+		h.writeTicketView(rw, r, t)
+		return
+	}
 	now := h.supportTime()
 	t.Status = status
 	t.UpdatedAt = now

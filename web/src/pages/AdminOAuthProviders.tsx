@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertCircle, Save, Trash2 } from "lucide-react";
+import { Save, Trash2 } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
@@ -67,7 +67,6 @@ export function AdminOAuthProviders() {
 
       {error && (
         <ErrorNotice style={{ marginBottom: "var(--space-4)" }}>
-          <AlertCircle size={14} style={{ verticalAlign: -2, marginRight: 6 }} />
           {error}
         </ErrorNotice>
       )}

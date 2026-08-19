@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -173,6 +174,32 @@ func (s *MemGrantStore) ListForAgent(_ context.Context, agent string) ([]core.Ac
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].RequestedAt.After(out[j].RequestedAt) })
 	return out, nil
+}
+
+// AnonymizeSubject is the in-memory twin of PgGrantStore.AnonymizeSubject —
+// same contract and reasoning (see there).
+func (s *MemGrantStore) AnonymizeSubject(_ context.Context, ident string) (int, error) {
+	ident = strings.TrimSpace(ident)
+	if ident == "" {
+		return 0, nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for id, g := range s.byID {
+		changed := false
+		for _, f := range []*string{&g.AgentSubject, &g.RequestedBy, &g.DecidedBy, &g.RevokedBy} {
+			if *f == ident {
+				*f = erasedIdentity
+				changed = true
+			}
+		}
+		if changed {
+			s.byID[id] = g
+			n++
+		}
+	}
+	return n, nil
 }
 
 // ---- Postgres --------------------------------------------------------------
@@ -364,6 +391,38 @@ func (s *PgGrantStore) ListForAgent(ctx context.Context, agent string) ([]core.A
 		out = append(out, g)
 	}
 	return out, rows.Err()
+}
+
+// AnonymizeSubject scrubs one person's identifier out of the access-grant trail:
+// every column that can hold it (the agent it was issued to, and whoever
+// requested, decided or revoked it) is replaced by '[erased]'. The grant rows
+// themselves stay, because they are the record that someone looked at a tenant's
+// flow and when — the same reason PgAuditLog.AnonymizeActor keeps its events.
+// Returns the number of rows changed.
+func (s *PgGrantStore) AnonymizeSubject(ctx context.Context, ident string) (int, error) {
+	ident = strings.TrimSpace(ident)
+	if ident == "" {
+		return 0, nil
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	total := 0
+	for _, col := range []string{"agent_subject", "requested_by", "decided_by", "revoked_by"} {
+		// The column name is from this fixed list, never from input.
+		ct, err := tx.Exec(ctx,
+			`UPDATE access_grants SET `+col+` = '`+erasedIdentity+`' WHERE `+col+` = $1`, ident)
+		if err != nil {
+			return 0, err
+		}
+		total += int(ct.RowsAffected())
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, err
+	}
+	return total, nil
 }
 
 // DeleteByTenant removes every access grant naming one org — requested,

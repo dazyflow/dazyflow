@@ -213,6 +213,36 @@ func TestTicketFlow_EndToEnd(t *testing.T) {
 		t.Errorf("expected a system 'resolved' note: %+v", view.Messages)
 	}
 
+	// Resolving an already-resolved ticket is a no-op: a double-clicked button
+	// (or a retried request) must not append a second system note, bump
+	// activity, or re-email the customer that it was resolved.
+	notesBefore := 0
+	for _, m := range view.Messages {
+		if m.AuthorKind == core.AuthorSystem && strings.Contains(m.Body, "resolved") {
+			notesBefore++
+		}
+	}
+	updatedBefore := view.Ticket.UpdatedAt
+	rw = do(agentTok, "POST", "/api/v1/support/tickets/"+created.ID+"/status", map[string]any{
+		"status": string(core.TicketResolved),
+	})
+	if rw.Code != 200 {
+		t.Fatalf("re-resolve = %d: %s", rw.Code, rw.Body)
+	}
+	json.Unmarshal(rw.Body.Bytes(), &view)
+	notesAfter := 0
+	for _, m := range view.Messages {
+		if m.AuthorKind == core.AuthorSystem && strings.Contains(m.Body, "resolved") {
+			notesAfter++
+		}
+	}
+	if notesAfter != notesBefore {
+		t.Errorf("re-resolving added %d system note(s)", notesAfter-notesBefore)
+	}
+	if !view.Ticket.UpdatedAt.Equal(updatedBefore) {
+		t.Error("re-resolving bumped updated_at, which re-sorts the queue for nothing")
+	}
+
 	// Bad status is rejected.
 	if rw := do(agentTok, "POST", "/api/v1/support/tickets/"+created.ID+"/status", map[string]any{
 		"status": "bogus",

@@ -1227,7 +1227,9 @@ func startRetentionSweeps(ctx context.Context, svc *daemon.Service, jobs core.Jo
 				}
 			}
 			// Support pass: tickets first, then bundles — a bundle is only
-			// collectable once the ticket referencing it is gone or closed.
+			// collectable once the ticket referencing it is GONE (closed is not
+			// enough; see PgBundleStore.Prune), so pruning tickets first frees
+			// its bundle in the same pass rather than an hour later.
 			if supportRetention > 0 && ticketPruner != nil {
 				if n, err := ticketPruner.Prune(ctx, supportRetention, 1000); err != nil {
 					if ctx.Err() == nil {

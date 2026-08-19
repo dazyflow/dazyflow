@@ -121,9 +121,14 @@ tasks:
   - dzctl-e2e: |
       cd dazyflow
       bash examples/csv-pipeline/run.sh
+  # `npm run build` is `tsc -b && vite build`, so a type error fails here — but
+  # it does NOT run the unit tests, which meant the whole vitest suite (error
+  # explainers, port typing, the Swedish catalog vocabulary and its drift
+  # guards) was unrun in CI and could rot unnoticed. `npm test` is `vitest run`.
   - web: |
       cd dazyflow/web
       npm ci
+      npm test
       npm run build
   # Build the docs site (docs.dazyflow.app) so the published docs can't drift
   # from the code: `make docs-site` regenerates the step catalog from the live

@@ -149,6 +149,115 @@ func TestMemGrantStore_DeleteByTenant(t *testing.T) {
 // Postgres-backed counterparts, gated on DAZYFLOW_TEST_DB like the other
 // integration tests. The Pg paths carry the real risk here — the ticket erase
 // and prune both span two tables in one transaction.
+// A person's erasure must scrub them out of the support history without taking
+// the org's threads with them — the Postgres side of
+// PgTicketStore.AnonymizeSubject / PgGrantStore.AnonymizeSubject.
+func TestPgSupportAnonymizeSubject(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	ts, err := NewPgTicketStore(ctx, pool)
+	if err != nil {
+		t.Fatalf("ticket store: %v", err)
+	}
+	gs, err := NewPgGrantStore(ctx, pool)
+	if err != nil {
+		t.Fatalf("grant store: %v", err)
+	}
+	for _, q := range []string{
+		"TRUNCATE support_ticket_messages", "TRUNCATE support_tickets", "TRUNCATE access_grants",
+	} {
+		if _, err := pool.Exec(ctx, q); err != nil {
+			t.Fatalf("truncate: %v", err)
+		}
+	}
+	now := time.Now().UTC()
+	const gone = "alice@example.com"
+	const agent = "agent@vendor.test"
+	if err := ts.Create(ctx, core.Ticket{
+		ID: "t1", Tenant: "acme", CreatedBy: gone, AssignedTo: agent, Subject: "s",
+		Status: core.TicketAwaitingSupport, CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("create ticket: %v", err)
+	}
+	for _, m := range []core.TicketMessage{
+		{ID: "m1", TicketID: "t1", Author: gone, AuthorKind: core.AuthorUser, Body: "secret detail", CreatedAt: now},
+		{ID: "m2", TicketID: "t1", Author: agent, AuthorKind: core.AuthorSupport, Body: "on it", CreatedAt: now},
+	} {
+		if err := ts.AppendMessage(ctx, m); err != nil {
+			t.Fatalf("append %s: %v", m.ID, err)
+		}
+	}
+	if err := gs.Create(ctx, core.AccessGrant{
+		ID: "g1", Tenant: "acme", FlowID: "f", AgentSubject: agent,
+		RequestedAt: now, RequestedBy: agent,
+	}); err != nil {
+		t.Fatalf("create grant: %v", err)
+	}
+	// Create only ever writes a 'requested' row; the approver lands in
+	// decided_by through Decide, which is where the erased user's address is.
+	if err := gs.Decide(ctx, "g1", core.GrantApproved, gone, now, now.Add(time.Hour)); err != nil {
+		t.Fatalf("decide grant: %v", err)
+	}
+
+	n, err := ts.AnonymizeSubject(ctx, gone)
+	if err != nil {
+		t.Fatalf("anonymize tickets: %v", err)
+	}
+	if n != 2 { // the ticket's created_by + her one message
+		t.Errorf("ticket rows changed = %d, want 2", n)
+	}
+	gn, err := gs.AnonymizeSubject(ctx, gone)
+	if err != nil {
+		t.Fatalf("anonymize grants: %v", err)
+	}
+	if gn != 1 {
+		t.Errorf("grant rows changed = %d, want 1", gn)
+	}
+
+	tkt, err := ts.Get(ctx, "t1")
+	if err != nil {
+		t.Fatalf("the org's ticket was deleted: %v", err)
+	}
+	if tkt.CreatedBy == gone {
+		t.Error("created_by still carries the erased address")
+	}
+	if tkt.AssignedTo != agent {
+		t.Errorf("assignee scrubbed but isn't the erased user: %q", tkt.AssignedTo)
+	}
+	msgs, err := ts.ListMessages(ctx, "t1")
+	if err != nil || len(msgs) != 2 {
+		t.Fatalf("thread = %d messages, %v", len(msgs), err)
+	}
+	for _, m := range msgs {
+		if m.Author == gone {
+			t.Error("message author still carries the erased address")
+		}
+		if m.ID == "m1" && m.Body != "" {
+			t.Errorf("erased user's body survived: %q", m.Body)
+		}
+		if m.ID == "m2" && m.Body != "on it" {
+			t.Errorf("the agent's body was scrubbed: %q", m.Body)
+		}
+	}
+	g, err := gs.Get(ctx, "g1")
+	if err != nil {
+		t.Fatalf("grant deleted rather than anonymised: %v", err)
+	}
+	if g.DecidedBy == gone {
+		t.Error("decided_by still carries the erased address")
+	}
+	if g.AgentSubject != agent {
+		t.Errorf("the agent's own subject was scrubbed: %q", g.AgentSubject)
+	}
+	// An empty identifier must be a no-op, not a table-wide wipe.
+	if n, err := ts.AnonymizeSubject(ctx, "  "); err != nil || n != 0 {
+		t.Errorf("blank ident = %d, %v; want 0, nil", n, err)
+	}
+	if tkt, _ := ts.Get(ctx, "t1"); tkt.AssignedTo != agent {
+		t.Error("a blank identifier scrubbed rows it should have ignored")
+	}
+}
+
 func TestPgSupportEraseAndPrune(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
@@ -232,20 +341,37 @@ func TestPgSupportEraseAndPrune(t *testing.T) {
 	}
 	mkBundle("b-old", "acme", old)
 	mkBundle("b-live", "acme", old)
+	mkBundle("b-resolved", "acme", old)
 	openT, _ := ts.Get(ctx, "keep-open")
 	openT.BundleID = "b-live"
 	if err := ts.Update(ctx, openT); err != nil {
 		t.Fatalf("attach bundle: %v", err)
+	}
+	// The regression case: a ticket that is RESOLVED but still inside its own
+	// retention window (recent updated_at) attached to an OLD bundle. The two
+	// prunes key on different timestamps, so keying the bundle on "no OPEN
+	// ticket references it" swept this bundle while its ticket lived on — and
+	// the ticket's "View diagnostic" 404'd.
+	resolvedT, _ := ts.Get(ctx, "recent")
+	resolvedT.BundleID = "b-resolved"
+	if err := ts.Update(ctx, resolvedT); err != nil {
+		t.Fatalf("attach bundle to resolved ticket: %v", err)
 	}
 	bn, err := bs.Prune(ctx, 365*24*time.Hour, 100)
 	if err != nil {
 		t.Fatalf("bundle prune: %v", err)
 	}
 	if bn != 1 {
-		t.Errorf("bundles pruned = %d, want 1", bn)
+		t.Errorf("bundles pruned = %d, want 1 (only the unreferenced one)", bn)
 	}
 	if _, err := bs.Get(ctx, "b-live"); err != nil {
 		t.Error("pruned a bundle still referenced by an open ticket — 'View diagnostic' would 404")
+	}
+	if _, err := bs.Get(ctx, "b-resolved"); err != nil {
+		t.Error("pruned a bundle whose resolved ticket is still stored — 'View diagnostic' would 404")
+	}
+	if _, err := bs.Get(ctx, "b-old"); err == nil {
+		t.Error("an unreferenced, past-retention bundle survived the sweep")
 	}
 
 	// --- Erase: the whole org leaves together --------------------------------

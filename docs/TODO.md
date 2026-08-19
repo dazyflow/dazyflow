@@ -50,47 +50,80 @@ detail lives in the code and commit history).
       MCP. Add `help?: string` to the type and render it under the input.
       (`web/src/types.ts:195`, `web/src/pages/Apps.tsx`)
 
-### Support — open review findings (2026-08-19)
-An independent review of `5e754ae` ("Complete support") turned up seven items.
-None are shipped-and-broken today; findings 1, 3 and 4 sit in Postgres-backed
-code CI does not exercise (`DAZYFLOW_TEST_DB` gates those tests).
-- [ ] **Bundle retention can orphan a live ticket's diagnostic link** (medium) —
-      `PgBundleStore.Prune` keys on the bundle's `created_at` while
-      `PgTicketStore.Prune` keys on the ticket's `updated_at`, so a long-running
-      ticket resolved last week loses a 13-month-old bundle while the ticket
-      survives. `bundle_id` stays set → "View diagnostic" 404s. Gate the bundle
-      on the referencing ticket's `updated_at`, or only prune bundles whose
-      ticket row is gone. (`daemon/support_bundle.go:250`)
-- [ ] **Per-user erasure leaves support PII** (medium) — only `deleteOrgData`
-      got the ticket/bundle/grant steps; `eraseUserIdentity` doesn't, so an
-      erased member of a surviving org keeps their email in
-      `support_tickets.created_by`, `support_ticket_messages.author` and
-      `access_grants.agent` — with no `rep.warnf` either, so the erase report
-      reads as complete. (`daemon/gdpr.go:206`)
-- [ ] **Summary cache can lose a write-invalidation** (low) — a scan already in
-      flight writes its pre-write result back after `invalidateSummary` clears
-      the flag, so an agent's own claim can stay invisible for the full 5s TTL
-      — the exact property the comment promises. Capture a generation counter
-      before the scan and compare before storing. (`daemon/ticket_store.go:344`)
-- [ ] **`summaryInFlgt` is not reset via `defer`** (low) — a panic in the query
-      path (recovered by the HTTP middleware) leaves it `true` forever and every
-      later caller gets frozen counts for the life of the process.
-      (`daemon/ticket_store.go:361`)
-- [ ] **Repeated "resolved" mail on a no-op status change** (low) —
-      `setSupportTicketStatus` lacks the same-status guard its customer-side
-      twin `setMyTicketStatus` has, so a double-click re-notifies, re-appends
-      the system note, and re-emails. (`daemon/ticket_routes.go:419`)
-- [ ] **Duplicated error icon after the ErrorNotice migration** (low) —
-      `ErrorNotice` renders its own `AlertCircle` but the hand-pasted one was
-      left in place, so the banner shows two; `SupportAgentHome.tsx:73` shows
-      `AlertCircle` + `Lock`. The nested icon also escapes the `.card.error >
-      svg` rule. (`web/src/pages/AdminOAuthProviders.tsx:69`)
-- [ ] **Literal NUL byte makes a source file binary to git** (low,
-      pre-existing) — `const NEW_DRAFT = "\x00new"` puts a raw 0x00 at byte
-      1092, so git treats `EmailTemplates.tsx` as binary: its diffs are
-      invisible without `--text` and any concurrent edit is an unresolvable
-      binary conflict. Use `"\u0000new"` or a non-NUL sentinel.
-      (`web/src/pages/EmailTemplates.tsx:23`)
+### Support — review findings, all fixed (2026-08-19)
+Kept here as the record of what the independent review of `5e754ae` found and
+what each fix was; the detail lives in the code and in the tests named below.
+(The review also claimed findings 3 and 4 sit in code CI never exercises — that
+was WRONG: `.builds/archlinux.yml` stands up Postgres + MariaDB and exports
+`DAZYFLOW_TEST_DB`, so the gated tests do run. What CI genuinely never ran was
+the whole frontend vitest suite — fixed in the same pass, see the CI note below.)
+- [x] **Bundle retention orphaned a live ticket's diagnostic link** (medium) —
+      the two prunes key on different timestamps (a bundle on `created_at`, a
+      ticket on `updated_at`), and the bundle prune only spared bundles whose
+      ticket was still OPEN. A ticket filed 13 months ago, conversed on for a
+      year and resolved last week therefore kept its row while its bundle was
+      swept, and "View diagnostic" 404'd for customer and agent alike. Now a
+      bundle is kept while ANY ticket references it, whatever its status: the
+      ticket's own retention decides when the pair goes, and since the sweep
+      prunes tickets first the freed bundle is collected in the same pass.
+      Regression test in `daemon/support_prod_test.go` — verified it fails
+      against the old predicate.
+- [x] **Per-user erasure left support PII** (medium) — `eraseUserIdentity`
+      never touched the support stores, so an erased member of a surviving org
+      kept their address in `support_tickets.created_by` / `assigned_to`,
+      `support_ticket_messages.author` and the four identity columns of
+      `access_grants` — with their own message bodies — while the erase report
+      read as complete. Fixed by pseudonymising, not deleting, exactly as the
+      audit trail already does (`actor → '[erased]'`, detail cleared): a support
+      thread is the ORG's record of a problem with the org's flows, so one
+      member leaving must not erase it for everyone else, but it must not carry
+      their identity or their words either. New `AnonymizeSubject` on the ticket
+      and grant stores, Postgres AND in-memory (a self-hosted single-node
+      deployment must erase just as thoroughly), scrubbing both the email and
+      the subject since the two paths write different ones. Tests:
+      `daemon/gdpr_test.go` (whole path, in-memory) +
+      `daemon/support_prod_test.go` (the SQL), both asserting the agent's side
+      of the thread survives untouched.
+- [x] **Summary cache lost a write-invalidation** (low) — a scan already in
+      flight stored its pre-write result after `invalidateSummary` had cleared
+      the flag, so an agent's own claim could stay invisible for the full 5s TTL
+      — the exact opposite of what the cache's comment promises. Fixed with a
+      generation counter captured before the scan and compared before the store.
+- [x] **`summaryInFlgt` was not reset via `defer`** (low) — a panic in the
+      query path (recovered by the HTTP middleware, so the process survives)
+      left it set, after which every caller took the "someone else is scanning"
+      branch and got frozen counts for the life of the process. Now deferred.
+      Both cache fixes are covered by `daemon/ticket_summary_cache_test.go`,
+      which drives the interleavings through an injectable `summaryCompute` —
+      no Postgres needed, so they run in the ordinary `go test`. Verified both
+      tests fail against the old code.
+- [x] **Repeated "resolved" mail on a no-op status change** (low) —
+      `setSupportTicketStatus` lacked the same-status guard its customer-side
+      twin has, so a double-clicked button re-narrated the change, re-bumped
+      `updated_at` (re-sorting the queue) and re-emailed the customer. Guard
+      added; asserted in `daemon/ticket_routes_test.go`.
+- [x] **Duplicated error icon after the ErrorNotice migration** (low) —
+      `ErrorNotice` renders its own `AlertCircle`, but a hand-pasted one
+      remained in `AdminOAuthProviders` and a `Lock` in `SupportAgentHome`, so
+      those banners showed two icons and the nested one escaped the
+      `.card.error > svg` rule. Both removed (a swept repo-wide check found no
+      others), unused imports dropped.
+- [x] **Literal NUL byte made a source file binary to git** (low,
+      pre-existing) — `EmailTemplates.tsx`'s `NEW_DRAFT = "\x00new"` held a raw
+      0x00, so git treated the file as binary: diffs invisible without `--text`,
+      and any concurrent edit an unresolvable binary conflict. Now `"\u0000new"`
+      — identical to the compiler, and the file is text again (this one commit
+      still shows as `Bin`, because HEAD's side of the diff is the binary one).
+
+### CI
+- [x] **The frontend test suite now runs in CI** — the `web` task was
+      `npm ci && npm run build`. `build` is `tsc -b && vite build`, so type
+      errors failed the build, but `npm test` was never invoked: all 340 vitest
+      tests were dead weight in CI, including the drift guards that make the
+      Swedish catalog vocabulary safe to maintain (edit an English string in
+      `integrationMeta.ts` without retranslating and a test is supposed to fail
+      — it can only do that if CI runs it). One line in
+      `.builds/archlinux.yml`.
 
 ### Web polish — blocked / deferred
 - [ ] Breadcrumbs — DEFERRED: the IA is flat (sidebar + page title); low value.

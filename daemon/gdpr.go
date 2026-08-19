@@ -43,6 +43,14 @@ type orgProfileDeleter interface {
 type actorAnonymizer interface {
 	AnonymizeActor(ctx context.Context, actor string) (int, error)
 }
+
+// subjectAnonymizer is the support stores' erasure surface. Support rows are ORG
+// records that happen to carry a person's identity, so a departing member is
+// scrubbed OUT of them rather than taking them along — see
+// PgTicketStore.AnonymizeSubject.
+type subjectAnonymizer interface {
+	AnonymizeSubject(ctx context.Context, ident string) (int, error)
+}
 type tenantDirRemover interface {
 	RemoveTenant(tenant string) error
 }
@@ -151,6 +159,31 @@ func (h *HTTPGateway) eraseUserIdentity(ctx context.Context, email string) (Eras
 		for _, actor := range dedupeNonEmpty(u.Subject, email) {
 			rep.eraseStep("audit", func() (int, error) { return an.AnonymizeActor(ctx, actor) },
 				func(n int) { rep.AuditEvents += n })
+		}
+	}
+	// Support history: a ticket thread belongs to the ORG (it documents a
+	// problem with the org's flows and may involve several people), so erasing
+	// this member must not delete it — but it must not leave their email in
+	// created_by / assigned_to / message author either, nor the messages they
+	// wrote. Same treatment as the audit trail above: pseudonymise, don't
+	// delete. Skipping this was the gap that made an erase report read as
+	// complete while the address stayed in support_tickets and access_grants.
+	//
+	// Both identifiers are scrubbed because these columns are written from
+	// whichever the calling path had: the ticket routes store the email, the
+	// grant store the agent's subject.
+	for _, ident := range dedupeNonEmpty(u.Subject, email) {
+		if ts, ok := h.Tickets.(subjectAnonymizer); ok {
+			rep.eraseStep("support_tickets", func() (int, error) { return ts.AnonymizeSubject(ctx, ident) },
+				func(n int) { rep.Tickets += n })
+		} else if h.Tickets != nil {
+			rep.warnf("support_tickets: store does not support subject anonymisation; scrub manually")
+		}
+		if gs, ok := h.Grants.(subjectAnonymizer); ok {
+			rep.eraseStep("access_grants", func() (int, error) { return gs.AnonymizeSubject(ctx, ident) },
+				func(n int) { rep.Grants += n })
+		} else if h.Grants != nil {
+			rep.warnf("access_grants: store does not support subject anonymisation; scrub manually")
 		}
 	}
 	// Finally the user row itself.

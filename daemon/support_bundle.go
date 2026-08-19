@@ -238,9 +238,23 @@ func (s *PgBundleStore) DeleteByTenant(ctx context.Context, tenant string) (int,
 
 // Prune deletes stored diagnostic bundles older than the retention window,
 // oldest first, up to batch rows. A bundle is a point-in-time snapshot taken to
-// answer one ticket; once it's past retention it is pure storage cost. Bundles
-// still referenced by a live ticket are kept — the ticket's "View diagnostic"
-// must not turn into a dead link while the conversation is still open.
+// answer one ticket; once it's past retention and nothing points at it, it is
+// pure storage cost.
+//
+// A bundle referenced by ANY ticket is kept, whatever that ticket's status. The
+// obvious-looking version of this only spared bundles whose ticket was still
+// open, which quietly broke the pairing: the two prunes key on different
+// timestamps — a bundle on its `created_at`, a ticket on its `updated_at` — so a
+// ticket filed 13 months ago, conversed on for a year and resolved last week
+// stayed (its updated_at is recent) while its bundle was swept (its created_at
+// is not). `bundle_id` was still set, so "View diagnostic" 404'd for both the
+// customer and the agent.
+//
+// The invariant instead: a bundle outlives every ticket that references it. The
+// ticket's own retention decides when the pair goes, and because the sweep
+// prunes tickets before bundles, the freed bundle is collected in the same pass.
+// A bundle no ticket references (a filing that failed halfway) still ages out on
+// its own.
 func (s *PgBundleStore) Prune(ctx context.Context, olderThan time.Duration, batch int) (int, error) {
 	if olderThan <= 0 {
 		return 0, nil
@@ -256,8 +270,7 @@ func (s *PgBundleStore) Prune(ctx context.Context, olderThan time.Duration, batc
 		       WHERE b.created_at < $1
 		         AND NOT EXISTS (
 		             SELECT 1 FROM support_tickets t
-		              WHERE t.bundle_id = b.id
-		                AND t.status NOT IN ('resolved','closed'))
+		              WHERE t.bundle_id = b.id)
 		       ORDER BY b.created_at ASC LIMIT $2)`, cutoff, batch)
 	if err != nil {
 		return 0, err

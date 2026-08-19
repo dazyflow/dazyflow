@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -26,6 +27,11 @@ import (
 // defaultTicketListLimit bounds a listing when the caller passes Limit == 0, so
 // a busy queue can't return an unbounded result set.
 const defaultTicketListLimit = 200
+
+// erasedIdentity is what replaces a person's identifier once they have been
+// erased. Same marker the audit trail uses, so a reader sees one word for
+// "someone was here and is gone" across every surface.
+const erasedIdentity = "[erased]"
 
 var (
 	errTicketExists    = errors.New("ticket already exists")
@@ -171,6 +177,47 @@ func (s *MemTicketStore) ListMessages(_ context.Context, ticketID string) ([]cor
 	return out, nil
 }
 
+// AnonymizeSubject is the in-memory twin of PgTicketStore.AnonymizeSubject —
+// same contract, same reasoning (see there). Needed because a single-node or
+// self-hosted deployment runs the memory store, and an erasure request there
+// must scrub just as thoroughly as on Postgres rather than log a warning.
+func (s *MemTicketStore) AnonymizeSubject(_ context.Context, ident string) (int, error) {
+	ident = strings.TrimSpace(ident)
+	if ident == "" {
+		return 0, nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for id, t := range s.byID {
+		changed := false
+		if t.CreatedBy == ident {
+			t.CreatedBy = erasedIdentity
+			changed = true
+		}
+		if t.AssignedTo == ident {
+			t.AssignedTo = erasedIdentity
+			changed = true
+		}
+		if changed {
+			s.byID[id] = t
+			n++
+		}
+	}
+	for tid, msgs := range s.messages {
+		for i, m := range msgs {
+			if m.Author != ident {
+				continue
+			}
+			m.Author = erasedIdentity
+			m.Body = ""
+			s.messages[tid][i] = m
+			n++
+		}
+	}
+	return n, nil
+}
+
 // ---- Postgres --------------------------------------------------------------
 
 const pgTicketSchema = `
@@ -231,6 +278,16 @@ type PgTicketStore struct {
 	summaryAt     time.Time
 	summaryWarm   bool
 	summaryInFlgt bool
+	// summaryGen counts invalidations. A scan that started before an
+	// invalidation carries pre-write data, so it must not be stored — see
+	// QueueSummary.
+	summaryGen uint64
+
+	// summaryCompute overrides the aggregate query. Nil in production (the real
+	// GROUP BY runs); tests set it to control exactly when a scan starts and
+	// finishes, which is the only way to exercise the interleavings the cache
+	// exists to handle.
+	summaryCompute func(context.Context) (core.TicketQueueSummary, error)
 }
 
 // queueSummaryTTL bounds how stale a cached tile count may be.
@@ -243,6 +300,12 @@ const queueSummaryTTL = 5 * time.Second
 func (s *PgTicketStore) invalidateSummary() {
 	s.summaryMu.Lock()
 	s.summaryWarm = false
+	// Bump the generation so a scan already in flight — which read the table
+	// BEFORE this write — can tell that its result is out of date and drop it
+	// instead of storing it. Without this, an agent's claim landing mid-scan
+	// was immediately overwritten by the pre-claim counts and stayed wrong for
+	// the whole TTL: exactly the "see what you just did" property above.
+	s.summaryGen++
 	s.summaryMu.Unlock()
 }
 
@@ -357,16 +420,33 @@ func (s *PgTicketStore) QueueSummary(ctx context.Context) (core.TicketQueueSumma
 		return cached, nil
 	}
 	s.summaryInFlgt = true
+	gen := s.summaryGen
 	s.summaryMu.Unlock()
+	// Deferred, not inline after the scan: a panic in the query or scan path is
+	// recovered by the HTTP middleware, so the process survives — and would
+	// survive with summaryInFlgt stuck true, after which every caller takes the
+	// "someone else is scanning" branch above and gets frozen counts until the
+	// process restarts.
+	defer func() {
+		s.summaryMu.Lock()
+		s.summaryInFlgt = false
+		s.summaryMu.Unlock()
+	}()
 
-	sum, err := s.queueSummaryUncached(ctx)
-
-	s.summaryMu.Lock()
-	s.summaryInFlgt = false
-	if err == nil {
-		s.summaryVal, s.summaryAt, s.summaryWarm = sum, time.Now(), true
+	compute := s.summaryCompute
+	if compute == nil {
+		compute = s.queueSummaryUncached
 	}
-	s.summaryMu.Unlock()
+	sum, err := compute(ctx)
+	if err == nil {
+		s.summaryMu.Lock()
+		// Only store if nothing was written while we were scanning; otherwise
+		// this snapshot predates that write and the next caller should re-scan.
+		if s.summaryGen == gen {
+			s.summaryVal, s.summaryAt, s.summaryWarm = sum, time.Now(), true
+		}
+		s.summaryMu.Unlock()
+	}
 	return sum, err
 }
 
@@ -528,6 +608,54 @@ func (s *PgTicketStore) DeleteByTenant(ctx context.Context, tenant string) (int,
 	}
 	s.invalidateSummary()
 	return int(ct.RowsAffected()), nil
+}
+
+// AnonymizeSubject scrubs one person's identifiers out of the support history
+// without destroying the org's threads: their email is replaced by '[erased]'
+// wherever it appears as a ticket's author, a ticket's assignee, or a message's
+// author, and the bodies of messages THEY wrote are cleared.
+//
+// Deleting the tickets outright would be wrong — a support conversation is the
+// ORG's record of a problem with the org's flows, and one member leaving must
+// not erase it for everyone else. Deleting nothing would be wrong too: the rows
+// carry the person's email and their own words. So this mirrors exactly what
+// PgAuditLog.AnonymizeActor does for the security trail (actor → '[erased]',
+// detail → empty): keep the shape of what happened, drop the identity and the
+// content. An erased customer's thread therefore reads as agent replies to an
+// anonymous reporter, which is the intended trade.
+//
+// Matches on the identifier as stored, so callers should pass both the email and
+// the subject when they can differ. Returns the number of rows changed.
+func (s *PgTicketStore) AnonymizeSubject(ctx context.Context, ident string) (int, error) {
+	ident = strings.TrimSpace(ident)
+	if ident == "" {
+		return 0, nil
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	total := 0
+	for _, q := range []string{
+		`UPDATE support_tickets SET created_by = '` + erasedIdentity + `' WHERE created_by = $1`,
+		`UPDATE support_tickets SET assigned_to = '` + erasedIdentity + `' WHERE assigned_to = $1`,
+		`UPDATE support_ticket_messages SET author = '` + erasedIdentity + `', body = '' WHERE author = $1`,
+	} {
+		ct, err := tx.Exec(ctx, q, ident)
+		if err != nil {
+			return 0, err
+		}
+		total += int(ct.RowsAffected())
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, err
+	}
+	// The queue-summary tiles count by status per tenant; anonymising doesn't
+	// change a status, but it does change what an agent sees, so drop the cache
+	// rather than reason about which parts stayed true.
+	s.invalidateSummary()
+	return total, nil
 }
 
 // Prune deletes CLOSED and RESOLVED tickets (and their threads) last touched
