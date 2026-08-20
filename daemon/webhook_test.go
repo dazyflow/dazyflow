@@ -573,3 +573,103 @@ func callPrivateHandler(t *testing.T, wh *daemon.WebhookListener, rw http.Respon
 
 // silence unused import lint when this file is compiled in isolation
 var _ = strings.HasPrefix
+
+// webhookPost stands the listener up and posts to a flow's trigger URL,
+// returning the status and body. Factored out of the older tests' inline
+// scaffolding so the disabled-trigger cases below stay readable.
+func webhookPost(t *testing.T, wh *daemon.WebhookListener, tenant, ws, id, secret string) (int, string) {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/trigger/", func(rw http.ResponseWriter, r *http.Request) {
+		callPrivateHandler(t, wh, rw, r)
+	})
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+	req, _ := http.NewRequest("POST", ts.URL+"/trigger/"+tenant+"/"+ws+"/"+id,
+		bytes.NewReader([]byte(`{"event":"hello"}`)))
+	req.Header.Set("Authorization", "Bearer "+secret)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(body)
+}
+
+// TestWebhook_DisabledTriggerNodeRejects is the regression for a trigger whose
+// node is switched off still accepting deliveries. It used to fire the flow,
+// the worker then skipped the very node meant to receive the payload, and the
+// caller got a 202 for a run that did nothing.
+//
+// Both switches are exercised because both mean "this trigger is paused" and
+// they arrive from different places: Node.Disabled is the editor's step toggle,
+// Params["disabled"] is the per-trigger pause the schedules API writes.
+func TestWebhook_DisabledTriggerNodeRejects(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		node core.Node
+	}{
+		{
+			name: "Node.Disabled (editor step toggle)",
+			node: core.Node{ID: "in", Module: "webhook_input", Disabled: true,
+				Params: map[string]any{"secrets": []any{"s3cr3t"}}},
+		},
+		{
+			name: `Params["disabled"] (schedules API pause)`,
+			node: core.Node{ID: "in", Module: "webhook_input",
+				Params: map[string]any{"secrets": []any{"s3cr3t"}, "disabled": true}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, wh, _, _, wsStore := startWebhookHarness(t)
+			savePublished(t, wsStore, core.Graph{
+				ID: "wh-off", Tenant: "acme", Workspace: "ws1",
+				Nodes: []core.Node{tc.node, {ID: "a", Module: "delay", Params: map[string]any{"ms": 1}}},
+			})
+			code, body := webhookPost(t, wh, "acme", "ws1", "wh-off", "s3cr3t")
+			if code != http.StatusForbidden {
+				t.Fatalf("status = %d, want 403; body=%s", code, body)
+			}
+			if !strings.Contains(body, "trigger_disabled") {
+				t.Errorf("body = %s, want a trigger_disabled code", body)
+			}
+		})
+	}
+}
+
+// A flow with SEVERAL webhook steps, only some paused, still accepts — the
+// active ones have work to do. Only "every one is off" is a refusal.
+func TestWebhook_PartiallyDisabledTriggersStillFire(t *testing.T) {
+	_, wh, _, _, wsStore := startWebhookHarness(t)
+	savePublished(t, wsStore, core.Graph{
+		ID: "wh-part", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{
+			{ID: "off", Module: "webhook_input", Disabled: true,
+				Params: map[string]any{"secrets": []any{"s3cr3t"}}},
+			{ID: "on", Module: "webhook_input",
+				Params: map[string]any{"secrets": []any{"s3cr3t"}}},
+			{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}},
+		},
+	})
+	code, body := webhookPost(t, wh, "acme", "ws1", "wh-part", "s3cr3t")
+	if code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202; body=%s", code, body)
+	}
+}
+
+// A flow with no webhook step at all keeps firing: posting here to kick such a
+// flow is a legitimate use of the endpoint, and the disabled check must not
+// have quietly taken it away.
+func TestWebhook_NoWebhookInputStillFiresWhenSecretMatches(t *testing.T) {
+	_, wh, _, _, wsStore := startWebhookHarness(t)
+	savePublished(t, wsStore, core.Graph{
+		ID: "wh-none", Tenant: "acme", Workspace: "ws1",
+		Triggers: []core.GraphTrigger{{Type: "webhook", Secret: "s3cr3t"}},
+		Nodes:    []core.Node{{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}}},
+	})
+	code, body := webhookPost(t, wh, "acme", "ws1", "wh-none", "s3cr3t")
+	if code == http.StatusForbidden && strings.Contains(body, "trigger_disabled") {
+		t.Fatalf("a flow with no webhook step was refused as trigger_disabled: %s", body)
+	}
+}

@@ -559,7 +559,7 @@
 .plan-price {
   font-size: var(--text-lg);
   font-weight: 600;
-  color: var(--text);
+  color: var(--ink);
 }
 /* The CTA sits high (under the price) like a typical pricing table; a fixed
    min-height keeps action-less cards aligned with the ones that have a button. */
@@ -594,7 +594,7 @@
 }
 .plan-feat-val {
   font-weight: 600;
-  color: var(--text);
+  color: var(--ink);
   white-space: nowrap;
 }
 /* The ∞ glyph for an unlimited value — a touch larger and centered on the
@@ -607,7 +607,7 @@
 }
 /* A feature that's an upgrade over the current plan — the "what differs" cue. */
 .plan-feat-up {
-  color: var(--text);
+  color: var(--ink);
 }
 .plan-feat-up .plan-feat-ico,
 .plan-feat-up .plan-feat-val {
@@ -1265,7 +1265,7 @@
   padding: var(--space-1h) 10px var(--space-0);
   font-family: var(--font-mono, monospace);
   font-size: var(--text-xs);
-  color: var(--text-muted, #888);
+  color: var(--muted);
   user-select: text;
 }
 
@@ -1507,7 +1507,7 @@
 }
 .totp-secret {
   align-self: flex-start;
-  font-family: var(--mono, monospace);
+  font-family: var(--font-mono);
   letter-spacing: 1px;
   padding: var(--space-1) var(--space-2);
   border-radius: 6px;
@@ -1525,7 +1525,7 @@
   background: var(--surface-2, rgba(255, 255, 255, 0.06));
 }
 .totp-recovery-codes code {
-  font-family: var(--mono, monospace);
+  font-family: var(--font-mono);
   letter-spacing: 1px;
 }
 .totp-state {
@@ -1587,13 +1587,13 @@
   height: 3.25rem;
   padding: 0;
   text-align: center;
-  font-family: var(--mono, ui-monospace, monospace);
+  font-family: var(--font-mono);
   font-size: var(--text-xl);
   font-weight: 600;
   color: inherit;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 8px);
+  border-radius: var(--r-2);
   transition:
     border-color 0.12s,
     box-shadow 0.12s;
@@ -2345,10 +2345,10 @@
   font-size: var(--text-sm);
 }
 .connection-test-result.ok {
-  color: var(--color-success, #15803d);
+  color: var(--success);
 }
 .connection-test-result.fail {
-  color: var(--color-danger, #b91c1c);
+  color: var(--danger);
 }
 /* Multi-field connection: stack the field inputs, and the connected-state
    summary rows (label + set/unset). */
@@ -3086,7 +3086,7 @@ button.warning:hover:not(:disabled) {
 }
 .btn-ghost:hover:not(:disabled) {
   background: var(--surface-2, rgba(255, 255, 255, 0.05));
-  color: var(--text);
+  color: var(--ink);
 }
 .btn-ghost:disabled {
   opacity: 0.5;
@@ -3348,7 +3348,7 @@ button.warning:hover:not(:disabled) {
   padding: var(--space-0) var(--space-2) var(--space-2);
 }
 .history-label-btn:hover {
-  color: var(--text);
+  color: var(--ink);
 }
 /* Optional release-name field inside the publish/go-live modal. Stacked
    label over input, sitting above the explanatory confirm message. */
@@ -3365,9 +3365,9 @@ button.warning:hover:not(:disabled) {
   width: 100%;
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border);
-  border-radius: var(--r-md);
+  border-radius: var(--r-2);
   background: var(--surface-2);
-  color: var(--text);
+  color: var(--ink);
   font-size: var(--text-base);
   font-weight: 400;
 }
@@ -3440,7 +3440,7 @@ button.warning:hover:not(:disabled) {
   background: color-mix(in srgb, var(--danger, #f85149) 10%, transparent);
 }
 .diff-row.changed {
-  color: var(--text);
+  color: var(--ink);
 }
 .test-sample-input {
   width: 100%;
@@ -3449,7 +3449,7 @@ button.warning:hover:not(:disabled) {
   font-size: var(--text-sm);
   resize: vertical;
   background: var(--surface-2, rgba(255, 255, 255, 0.03));
-  color: var(--text);
+  color: var(--ink);
   border: 1px solid var(--border);
   border-radius: var(--r-2, 6px);
   padding: var(--space-2);
@@ -3838,7 +3838,7 @@ button.warning:hover:not(:disabled) {
   border: none;
   border-radius: calc(var(--r-2) - 2px);
   background: transparent;
-  color: var(--text);
+  color: var(--ink);
   font-size: var(--text-md);
   text-align: left;
   cursor: pointer;
@@ -4515,7 +4515,7 @@ button.warning:hover:not(:disabled) {
   padding: 1px var(--space-1) 1px var(--space-2);
   font-size: var(--text-2xs);
   line-height: 1.6;
-  color: var(--text);
+  color: var(--ink);
   background: color-mix(in srgb, var(--accent) 10%, var(--surface));
   border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
   border-radius: 999px;
@@ -4537,7 +4537,7 @@ button.warning:hover:not(:disabled) {
   cursor: pointer;
 }
 .dz-token-chip-x:hover {
-  color: var(--text);
+  color: var(--ink);
   background: color-mix(in srgb, var(--accent) 20%, var(--surface));
 }
 
@@ -4812,7 +4812,7 @@ button.warning:hover:not(:disabled) {
 .org-switcher-name {
   font-weight: 600;
   font-size: var(--text-md);
-  color: var(--text);
+  color: var(--ink);
 }
 .org-switcher-id {
   font-family: var(--font-mono);
@@ -4879,7 +4879,7 @@ button.warning:hover:not(:disabled) {
   border: 1px solid var(--border);
   border-radius: var(--r-2);
   background: var(--surface-2);
-  color: var(--text);
+  color: var(--ink);
   font-size: var(--text-sm);
   font-weight: 500;
   cursor: pointer;
@@ -5001,7 +5001,7 @@ button.warning:hover:not(:disabled) {
 .config-checklist-name {
   font-weight: 600;
   font-size: var(--text-md);
-  color: var(--text);
+  color: var(--ink);
 }
 .config-checklist-msgs {
   margin: 0;
@@ -5033,7 +5033,7 @@ button.warning:hover:not(:disabled) {
 }
 .config-checklist-item:hover .config-checklist-arrow {
   transform: translateX(2px);
-  color: var(--text);
+  color: var(--ink);
 }
 /* Per-status border/glow on the whole node. Running pulses so it's
    unmistakable mid-canvas; terminal states stay static. Selected wins
@@ -6167,7 +6167,7 @@ img[src$="/brands/smhi.svg"] {
   user-select: none;
 }
 .webhook-dev > summary:hover {
-  color: var(--text);
+  color: var(--ink);
 }
 .webhook-dev-body {
   margin-top: var(--space-3);
@@ -6310,8 +6310,8 @@ img[src$="/brands/smhi.svg"] {
 }
 /* Secrets get the warn palette + a lock glyph, echoing the credential chip. */
 .token-chip--secret {
-  background: color-mix(in srgb, var(--warn, #d4a017) 14%, transparent);
-  border-color: color-mix(in srgb, var(--warn, #d4a017) 50%, transparent);
+  background: color-mix(in srgb, var(--warning) 14%, transparent);
+  border-color: color-mix(in srgb, var(--warning) 50%, transparent);
 }
 .token-chip-label {
   font-family: var(--font-mono, monospace);
@@ -6539,14 +6539,14 @@ img[src$="/brands/smhi.svg"] {
 .sf-dropzone:hover,
 .sf-dropzone:focus-visible {
   border-color: var(--accent, #4a8);
-  color: var(--text);
+  color: var(--ink);
   outline: none;
 }
 .sf-dropzone.drag-over {
   border-color: var(--accent, #4a8);
   border-style: solid;
   background: rgba(74, 136, 136, 0.08);
-  color: var(--text);
+  color: var(--ink);
 }
 .sf-dropzone.uploading {
   pointer-events: none;
@@ -6756,13 +6756,13 @@ img[src$="/brands/smhi.svg"] {
   background: transparent;
   border: 1px solid var(--border);
   border-radius: var(--r-2);
-  color: var(--text);
+  color: var(--ink);
   font-size: var(--text-md);
   cursor: pointer;
   transition: background 120ms, border-color 120ms;
 }
 .inspector-reset:hover {
-  background: color-mix(in srgb, var(--text) 8%, transparent);
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
   border-color: var(--faint);
 }
 
@@ -6772,7 +6772,7 @@ img[src$="/brands/smhi.svg"] {
   border-top-color: var(--status-awaiting);
   background: color-mix(in srgb, var(--status-awaiting) 8%, transparent);
   padding: var(--space-3);
-  border-radius: var(--r-md, 6px);
+  border-radius: var(--r-2);
 }
 .inspector-section.approve-inline h4 {
   color: var(--status-awaiting);
@@ -7031,7 +7031,7 @@ a.pa-card:hover {
    Modelled on the GitHub-style "danger zone". */
 .pa-actions {
   border: 1px solid var(--border);
-  border-radius: var(--radius, 10px);
+  border-radius: var(--r-3);
   overflow: hidden;
 }
 .pa-actions-head {
@@ -7057,7 +7057,7 @@ a.pa-card:hover {
 .pa-action-info {
   display: flex;
   align-items: flex-start;
-  gap: var(--space-2h, var(--space-2));
+  gap: var(--space-2);
   min-width: 0;
 }
 .pa-action-info svg {
@@ -7115,7 +7115,7 @@ a.pa-card:hover {
   flex-direction: row;
   align-items: center;
   gap: var(--space-2);
-  color: var(--text, inherit);
+  color: var(--ink);
 }
 .pa-tier-form label.pa-tier-check input {
   width: auto;
@@ -8473,7 +8473,7 @@ a.pa-card:hover {
   background: var(--surface);
   border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
   border-radius: var(--r-3);
-  box-shadow: var(--shadow-2, 0 6px 20px rgba(0, 0, 0, 0.25));
+  box-shadow: var(--shadow-pop);
 }
 .editor-trigger-hint-icon {
   flex: 0 0 auto;
@@ -8482,7 +8482,7 @@ a.pa-card:hover {
 .editor-trigger-hint-text {
   font-size: var(--text-md);
   line-height: 1.35;
-  color: var(--text);
+  color: var(--ink);
 }
 
 .editor-trigger-hint-x {
@@ -8506,9 +8506,9 @@ a.pa-card:hover {
   padding: var(--space-2) var(--space-2) var(--space-2) 14px;
   background: var(--surface);
   border: 1px solid color-mix(in srgb, var(--warning, #d08700) 55%, var(--border));
-  color: var(--text);
+  color: var(--ink);
   border-radius: var(--r-3);
-  box-shadow: var(--shadow-2, 0 6px 20px rgba(0, 0, 0, 0.25));
+  box-shadow: var(--shadow-pop);
   /* Soft slide+fade in so the explanation arrives gently, not with a pop. */
   animation: dz-conn-hint-in 180ms cubic-bezier(0.2, 0.7, 0.3, 1);
 }
@@ -9061,11 +9061,11 @@ a.pa-card:hover {
   padding: var(--space-2) var(--space-3);
   font-size: var(--text-sm);
   line-height: 1.45;
-  color: var(--text);
+  color: var(--ink);
   background: color-mix(in srgb, var(--accent) 9%, var(--surface));
   border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
   border-left: 3px solid var(--accent);
-  border-radius: var(--radius-sm, 6px);
+  border-radius: var(--r-2);
 }
 /* Error variant: the body pin is unwired (or the loop is illegally nested) and
    was jumped to from the "N to configure" modal. Red echoes the missing-field
@@ -9089,7 +9089,7 @@ a.pa-card:hover {
   background: var(--surface-2, var(--surface));
   border: 1px solid var(--border);
   border-radius: 999px;
-  color: var(--text);
+  color: var(--ink);
 }
 
 /* ── JSON editor (dz-json-editor) ───────────────────────────────────────
@@ -9536,7 +9536,7 @@ a.pa-card:hover {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  color: var(--text);
+  color: var(--ink);
   overflow: auto;
 }
 .cel-textarea {
@@ -9549,7 +9549,7 @@ a.pa-card:hover {
   resize: vertical;
   background: transparent;
   color: transparent;
-  caret-color: var(--text);
+  caret-color: var(--ink);
 }
 .cel-textarea::placeholder {
   color: var(--faint);
@@ -9574,7 +9574,7 @@ a.pa-card:hover {
   color: var(--danger);
 }
 .cel-ok {
-  color: var(--status-ok, #3fb950);
+  color: var(--status-completed);
   opacity: 0.85;
 }
 
@@ -9610,7 +9610,7 @@ a.pa-card:hover {
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--surface);
-  color: var(--fg, inherit);
+  color: var(--ink);
   cursor: pointer;
 }
 .rtp-starter:hover { border-color: var(--accent); color: var(--accent); }
@@ -9723,7 +9723,7 @@ a.pa-card:hover {
 }
 .rtc-item.rtc-hidden-row .rtc-fg:hover {
   border-color: var(--accent);
-  color: var(--text);
+  color: var(--ink);
 }
 .rtc-restore {
   flex: 0 0 auto;
@@ -9746,9 +9746,9 @@ a.pa-card:hover {
   min-width: 0;
   padding: 1px 4px;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm, 6px);
+  border-radius: var(--r-2);
   background: transparent;
-  color: var(--text);
+  color: var(--ink);
   font: inherit;
   outline: none;
 }
@@ -9832,7 +9832,7 @@ a.pa-card:hover {
   border-radius: 999px; font-size: var(--text-2xs); flex: 0 0 auto;
   border: 1px solid var(--border);
 }
-.ai-step.done { color: var(--fg, inherit); }
+.ai-step.done { color: var(--ink); }
 .ai-step.done .ai-step-dot { background: var(--accent); color: var(--accent-ink, #fff); border-color: var(--accent); }
 .ai-step.active .ai-step-dot { color: var(--accent); border-color: var(--accent); animation: ai-pulse 1s ease-in-out infinite; }
 @keyframes ai-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
@@ -10196,7 +10196,7 @@ button:active,
   flex-direction: column;
   gap: clamp(var(--space-4), 2.2vw, var(--space-6));
   padding: clamp(var(--space-5), 3.2vw, 56px);
-  color: var(--text);
+  color: var(--ink);
   overflow: auto;
   background:
     radial-gradient(
@@ -10301,7 +10301,7 @@ button:active,
   font-weight: 650;
   letter-spacing: -0.02em;
   line-height: 1.05;
-  color: var(--text);
+  color: var(--ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -10316,7 +10316,7 @@ button:active,
   font-size: clamp(var(--text-xl), 2.2vw, 34px);
   font-weight: 600;
   letter-spacing: 0.01em;
-  color: var(--text);
+  color: var(--ink);
 }
 /* Live / reconnecting indicator — a glassy pill tinted by the running hue. */
 .tv-pulse {
@@ -10331,12 +10331,12 @@ button:active,
   letter-spacing: 0.12em;
   background: color-mix(in srgb, var(--status-running) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--status-running) 32%, transparent);
-  color: color-mix(in srgb, var(--status-running) 55%, var(--text));
+  color: color-mix(in srgb, var(--status-running) 55%, var(--ink));
 }
 .tv-pulse.stale {
   background: color-mix(in srgb, var(--status-awaiting) 14%, transparent);
   border-color: color-mix(in srgb, var(--status-awaiting) 34%, transparent);
-  color: color-mix(in srgb, var(--status-awaiting) 60%, var(--text));
+  color: color-mix(in srgb, var(--status-awaiting) 60%, var(--ink));
 }
 .tv-fs {
   display: inline-flex;
@@ -10355,7 +10355,7 @@ button:active,
     background 0.15s ease;
 }
 .tv-fs:hover {
-  color: var(--text);
+  color: var(--ink);
   border-color: var(--border-strong);
   background: var(--surface-2);
 }
@@ -10539,7 +10539,7 @@ button:active,
   font-weight: 600;
   letter-spacing: 0.02em;
   background: color-mix(in srgb, var(--pill) 16%, transparent);
-  color: color-mix(in srgb, var(--pill) 50%, var(--text));
+  color: color-mix(in srgb, var(--pill) 50%, var(--ink));
 }
 .tv-pill-failed {
   --pill: var(--status-failed);
@@ -10571,7 +10571,7 @@ button:active,
   font-variant-numeric: tabular-nums;
   font-size: var(--text-sm);
   font-weight: 600;
-  color: color-mix(in srgb, var(--status-running) 60%, var(--text));
+  color: color-mix(in srgb, var(--status-running) 60%, var(--ink));
   white-space: nowrap;
 }
 /* Recent-run health pipes: one thin vertical bar per run, oldest→newest,

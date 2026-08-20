@@ -72,28 +72,53 @@ pick Dazyflow over Zapier/Make/n8n, and nothing in the gallery shows them off.
 
 ### Web
 
-- [ ] **Node-level `disabled` on a trigger doesn't stop it firing** — the
-      /trigger endpoint, the hosted form and the provider-event fan-outs only
-      check the whole-flow switch, so disabling just the trigger NODE still
-      accepts inbound requests and starts a run; the worker then records that
-      node as skipped, producing a run that does nothing. Either honour it at
-      the endpoints (and revisit `MigrateWebhookPublish`, which currently
-      preserves the permissive behaviour on purpose) or drop the per-node
-      toggle from trigger nodes so the UI stops implying it works.
+Nothing open. The three items that lived here are done (2026-08-20); what they
+turned out to be is recorded below, because in each case the entry's diagnosis
+was off and the next person shouldn't re-derive it.
 
-- [ ] **Verify the `configPath` keys stay reachable** — the six
-      `connectMcp.clients.*.configPath.{macos,windows,linux}` keys resolve
-      through a VARIABLE key (`` t(`${active.configPathKey}.${os}`) ``), so no
-      literal reference exists anywhere in the source and every static audit
-      flags them as dead. They were nearly deleted in the i18n sweep. Either
-      leave this note in place, or make the lookup literal so the keys are
-      greppable. (`web/src/components/ConnectMcpClientModal.tsx`)
-- [ ] **Stale CSS token aliases** — ~16 custom properties (`--fg`,
-      `--text-muted`, `--r-md`, `--shadow-2`, `--space-2h`, …) are referenced
-      only through their `var(…, fallback)` default; nothing defines them. They
-      render correctly, so this is tidying rather than a bug — but the same
-      pattern without a fallback is what made `var(--radius)` silently render
-      square corners in 12 places. Point them at real tokens. (`web/src/app.css`)
+- **A switched-off trigger step now refuses deliveries.** The entry said
+  "node-level `disabled` doesn't stop it firing", which conflated two
+  switches. There were three: `graph.Disabled` (honoured everywhere),
+  `Params["disabled"]` (a per-trigger pause the schedules API writes,
+  honoured only by the scheduler), and `Node.Disabled` (the editor's step
+  toggle, honoured only at execution time). So a disabled webhook trigger
+  accepted the POST, started a run, and the worker skipped the very node
+  meant to receive it — a 202 for a run that did nothing. Rather than invent
+  a fourth mechanism, `triggerNodeDisabled` now treats either switch as
+  paused and the inbound endpoints call it. A flow whose webhook steps are
+  ALL paused gets a 403 `trigger_disabled`; partially-paused still fires
+  (the active steps have work); a flow with no webhook step at all still
+  fires, since posting to kick such a flow is a legitimate use. The entry's
+  warning about `MigrateWebhookPublish` was a false lead — its deliberate
+  permissiveness is about published-vs-HEAD, not about disabled.
+
+- **The CSS token drift included two live bugs**, not just tidying. The entry
+  said "they render correctly". `--text` was referenced 36 times with NO
+  fallback and defined nowhere, so every one of those `color:` declarations
+  was invalid at computed-value time and silently inherited — most visibly
+  `.plan-feat-up`, the "what differs" upgrade cue, which inherited `--muted`
+  from `.plan-feat` and so rendered identically to the rows it was supposed
+  to stand out from. `--r-md` rendered one card square. The entry's advice to
+  "point them at real tokens" was also wrong for four of them
+  (`--node-accent`, `--op-color`, `--enter-delay`, `--draw-delay`) which
+  components set inline at run time; defining those in CSS would override
+  per-node values. `web/scripts/check-css-tokens.mjs` now runs from
+  `npm test` and fails on either shape, with an allowlist for the runtime-set
+  four that it also keeps honest.
+
+- **The `configPath` i18n keys are literal now**, so no note is needed to
+  protect them. `t(`${prefix}.${os}`)` meant no static reference existed and
+  every unused-key audit flagged all six as dead — which nearly deleted them.
+
+- [ ] **Redundant fallbacks on tokens that DO exist** — noticed while fixing
+      the above, not part of it. `--warning` is defined, yet carries 13
+      different hardcoded fallbacks scattered through `app.css` (`#c98a2b`,
+      `#d08700`, `#d29922`, `#d97706`, `#d9822b`, `#d99e2b`, …). Each is dead
+      code that also documents a *different* intended amber, so they disagree
+      with each other and with the token. Harmless today — the token always
+      wins — but it is the same drift one step earlier, and the token guard
+      deliberately does NOT flag it (the token exists, so nothing is broken).
+      Sweep them out; check the others while you're there.
 
 ### Connectors — Sweden first, then the Nordics
 

@@ -145,10 +145,25 @@ func (w *WebhookListener) handleTrigger(rw http.ResponseWriter, r *http.Request)
 	// not forbidden — they all receive the same payload.
 	seed := buildWebhookSeed(rawBody, r)
 	seeds := map[string]core.Result{}
+	inputs := 0
 	for _, n := range g.Nodes {
-		if n.Module == webhookInputModuleID {
-			seeds[n.ID] = seed
+		if n.Module != webhookInputModuleID {
+			continue
 		}
+		inputs++
+		if triggerNodeDisabled(n) {
+			continue
+		}
+		seeds[n.ID] = seed
+	}
+	// Every webhook step in this flow is paused. Firing anyway would start a
+	// run whose only trigger node the worker immediately skips — a run that
+	// does nothing, which is a worse answer than a refusal. A flow with NO
+	// webhook step at all is left alone: posting here to kick such a flow is
+	// a legitimate use of this endpoint and stays permitted.
+	if inputs > 0 && len(seeds) == 0 {
+		http.Error(rw, `{"error":{"code":"trigger_disabled","message":"this flow's webhook step is turned off — re-enable the step to accept deliveries"}}`, http.StatusForbidden)
+		return
 	}
 
 	// Fire the graph as a system principal scoped to the graph's

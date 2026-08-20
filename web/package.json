@@ -11,7 +11,7 @@
     "build:docs": "tsc -b && vite build --mode docs",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
-    "test": "vitest run",
+    "test": "node scripts/check-css-tokens.mjs && vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {

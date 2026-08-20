@@ -51,7 +51,13 @@ type ClientDef = {
   vendorKey: string;
   Icon: () => ReactNode;
   instructionsKey: string;
-  configPathKey: string;
+  // Spelled out per OS rather than built as `${prefix}.${os}`. The
+  // interpolated form meant no literal reference to
+  // connectMcp.clients.*.configPath.{macos,windows,linux} existed anywhere,
+  // so every static "unused i18n key" audit flagged all six as dead — and
+  // they were nearly deleted in the i18n sweep on exactly that evidence.
+  // Greppable keys are worth six lines.
+  configPathKeys: Record<OS, string>;
   buildJSON: (env: SnippetEnv) => string;
   // Optional CLI install command — Claude Code has one; Claude
   // Desktop doesn't and the section is hidden when buildCLI is unset.
@@ -67,7 +73,11 @@ const CLIENTS: ClientDef[] = [
     vendorKey: "connectMcp.clients.anthropic",
     Icon: ClaudeLogo,
     instructionsKey: "connectMcp.clients.claudeDesktop.instructions",
-    configPathKey: "connectMcp.clients.claudeDesktop.configPath",
+    configPathKeys: {
+      macos: "connectMcp.clients.claudeDesktop.configPath.macos",
+      windows: "connectMcp.clients.claudeDesktop.configPath.windows",
+      linux: "connectMcp.clients.claudeDesktop.configPath.linux",
+    },
     buildJSON: mcpServersJSON,
   },
   {
@@ -76,7 +86,11 @@ const CLIENTS: ClientDef[] = [
     vendorKey: "connectMcp.clients.anthropic",
     Icon: ClaudeCodeLogo,
     instructionsKey: "connectMcp.clients.claudeCode.instructions",
-    configPathKey: "connectMcp.clients.claudeCode.configPath",
+    configPathKeys: {
+      macos: "connectMcp.clients.claudeCode.configPath.macos",
+      windows: "connectMcp.clients.claudeCode.configPath.windows",
+      linux: "connectMcp.clients.claudeCode.configPath.linux",
+    },
     buildJSON: mcpServersJSON,
     buildCLI: ({ url, secret }) =>
       // Single line with double-quoted KEY=VALUE args so the command
@@ -276,7 +290,7 @@ function RevealStage({ issued, onDone }: { issued: IssuedAPIKey; onDone: () => v
               <label>{t("connectMcp.configPathLabel")}</label>
             </div>
             <input
-              value={t(`${active.configPathKey}.${os}`)}
+              value={t(active.configPathKeys[os])}
               readOnly
               onFocus={(e) => e.currentTarget.select()}
               style={{ fontFamily: "var(--font-mono)" }}

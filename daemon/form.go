@@ -89,7 +89,7 @@ func (w *WebhookListener) handleForm(rw http.ResponseWriter, r *http.Request) {
 		seed := buildFormSeed(values)
 		seeds := map[string]core.Result{}
 		for _, n := range g.Nodes {
-			if n.Module == webhookInputModuleID {
+			if n.Module == webhookInputModuleID && !triggerNodeDisabled(n) {
 				seeds[n.ID] = seed
 			}
 		}
@@ -163,6 +163,12 @@ func collectFormValues(declared []string, posted url.Values) map[string]any {
 func publicFormConfig(g core.Graph) (fields []string, title string, ok bool) {
 	for _, n := range g.Nodes {
 		if n.Module != webhookInputModuleID {
+			continue
+		}
+		// A paused trigger step has no public form. Rendering the form and
+		// then refusing (or worse, accepting into a run that skips the very
+		// node meant to receive it) is a crueller answer than not offering it.
+		if triggerNodeDisabled(n) {
 			continue
 		}
 		if pf, _ := n.Params["public_form"].(bool); !pf {
