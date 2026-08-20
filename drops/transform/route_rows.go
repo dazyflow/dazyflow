@@ -202,7 +202,7 @@ func parseRouteParams(params map[string]any) ([]routeSpec, string, error) {
 		return nil, "", fmt.Errorf("routes: expected array, got %T", raw)
 	}
 	if len(arr) == 0 {
-		return nil, "", fmt.Errorf("routes: at least one route required (otherwise everything routes to default — use a simpler drop)")
+		return nil, "", fmt.Errorf("routes: at least one route required (otherwise everything routes to default — use a simpler step)")
 	}
 	defaultSlot := routeDefaultSlot
 	if v, ok := params["default_slot"]; ok {

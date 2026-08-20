@@ -17,22 +17,32 @@ without them the same suggestions arrive again every review.
 
 ## Open
 
-### Product decisions — blocked on a call, not on work
+### Vocabulary — renamed, with one convention to hold
 
-These aren't defects. Each needs a direction before any code moves.
+The product says **step** (sv: *steg*) everywhere a person can read it, as of
+2026-08-20. The docs already said it; the UI, the MCP tool descriptions, the
+operator docs, `.env.example` and the user-visible Go error strings now agree.
+Swedish moved with it, including gender agreement — *steg* is neuter where
+*dropp* was common, so 49 determiners and adjectives changed (`den här
+droppen` → `det här steget`).
 
-- [ ] **HELD — "Drop" is invented jargon, and it's the most-used noun in the
-      product.** "Add drop", "Search drops…", "Select a drop to edit", "No drop
-      records for this run". Nothing in the UI defines it, so every user has to
-      reverse-engineer that a drop is a step. Worse in Swedish, where it was
-      left untranslated: *droppar* means drips of liquid, so "Sök droppar"
-      reads as "Search drips". The mechanical change is small — rename in the
-      UI vocabulary only (`web/src/lib/dropText.ts` is already the hop that
-      makes this UI-only) and keep `drop` in the Go catalog, the API and the
-      MCP tools where it's a stable contract that non-human consumers are
-      grounded on. What needs deciding is whether "drop" is load-bearing brand
-      vocabulary worth teaching, or an accident worth dropping. Suggested
-      replacement: **step** (sv: *steg*).
+Deliberately still `drop`, and these are the CONVENTION to hold when adding
+code: the Go catalog and package paths, API routes and JSON field names, MCP
+tool NAMES (`list_drops`, `describe_drop`), error codes (`drop_not_found`),
+audit action names, CSS classes, frontend identifiers (`dropText.ts`,
+`DropAdjacency`), and ~900 code comments. Those are the contract every
+non-human consumer is grounded on; renaming them buys nothing a user can see.
+`describe_drop`'s description carries a note telling an assistant to say
+"step" to the user, so the split doesn't leak into a conversation.
+
+Also still `drop`: the VERB, in ~35 places — "drop rows", "drop a pin", "drop
+to upload", "would drop Caddy", and the `drop` param on Choose & rename
+columns. Renaming those was the most likely way to make this look careless.
+
+- [ ] **Hold the line in new copy.** No open work, but the next person writing
+      user-facing text needs the split above. CHANGELOG entries from 0.5.0 on
+      should say step; earlier entries stay as written (a changelog is a
+      record, not documentation).
 
 ### Templates — thin, and now the front door
 

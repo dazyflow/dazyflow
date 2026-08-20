@@ -300,7 +300,7 @@ The user docs are a **React SPA** that reuses the app's shell and design system,
 so docs.dazyflow.app is visually the same product as the app. The source lives
 under `web/src/docs/` (a second Vite entry, `web/docs.html`); the content is
 hand-written guide pages (`docs/guide/`) plus a **generated** step catalog
-(produced from the drop manifests by `cmd/docsgen`). `make docs-content` copies
+(produced from the step manifests by `cmd/docsgen`). `make docs-content` copies
 the guide + generates the catalog into `web/src/docs/content/` (git-ignored),
 which the SPA bundles. The site is built fresh **inside a container image** at
 deploy time.
@@ -318,7 +318,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
 Nothing is built on the host — no `make docs-site`, no bind mount. To publish a
-docs change (edited guide page, or a drop manifest whose catalog text changed),
+docs change (edited guide page, or a step manifest whose catalog text changed),
 rebuild that one image:
 
 ```sh
@@ -499,7 +499,7 @@ Platform** (visible to `platform:admin` accounts) — no SQL required:
   (`free`/`pro`), grant a comp or trial, or override any single limit. The
   effective value resolves *override → tier → global default*, where `0 =
   unlimited/inherit`.
-- **Drops** (`/admin/platform/drops`) — enable/disable connectors globally or
+- **Steps** (`/admin/platform/drops`) — enable/disable connectors globally or
   per-tenant.
 
 Plans/tiers are **independent of Stripe**: a `platform:admin` can comp an org to
@@ -670,11 +670,11 @@ you expose the daemon; see `.env.example` for the detail.
 - The auth rate limiter is fixed at **20/min per IP (burst 10)** on
   `/api/v1/auth/{signin,signup}` — not a knob, but worth knowing it's there.
 - `DAZYFLOW_DEV_KEY` / `DAZYFLOW_DEV` — dev-only; never set in production.
-- `DAZYFLOW_HTTP_EGRESS_ALLOW` — allowlist the hosts outbound HTTP drops may
+- `DAZYFLOW_HTTP_EGRESS_ALLOW` — allowlist the hosts outbound HTTP steps may
   reach (the IP-level SSRF guard blocks private/loopback/metadata regardless).
 - `DAZYFLOW_ALLOW_PRIVATE_EGRESS` — keep **off** on multi-tenant deploys; on,
   it lets flows reach private/loopback/cloud-metadata addresses (and the
-  DB/SMTP drop hosts).
+  DB/SMTP step hosts).
 - `DAZYFLOW_ENABLE_SHELL` — **off** by default; on, it's host RCE for anyone
   who can run a flow. Single-tenant / CI box only. The toggle is **fail-closed**:
   only `1`/`true`/`yes`/`on` enable it — any other value (including `disabled`
@@ -790,12 +790,12 @@ Two paths:
   secret on every node** in a multi-node deployment so a token minted
   by one verifies on another.
 
-## Drops
+## Steps
 
 Every node you drop on the canvas — triggers, transforms, and the connectors
 (Gmail, Slack, Sheets, Notion, GitHub, Claude, Excel, ntfy, webhooks) — is a
-native Go drop compiled into `dzd`. There is no plugin/marketplace install
-step and no separate runtime: the catalog is fixed at build time. Connectors
+native Go step compiled into `dzd`. There is no plugin/marketplace install
+path and no separate runtime: the catalog is fixed at build time. Connectors
 that need credentials use the OAuth providers configured under **Admin →
 Connector apps** (`/admin/oauth`) or a `${secret.…}` token.
 

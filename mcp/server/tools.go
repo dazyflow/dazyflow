@@ -358,7 +358,7 @@ func flowPathTool(c *DazydClient, d Defaults, name, description, schema, verb, s
 func listIntegrations(c *DazydClient) Tool {
 	return Tool{
 		Name:        "list_integrations",
-		Description: "List every integration the daemon offers, grouped by vendor (Slack, Gmail, GitHub, ...). Each entry includes a one-sentence summary and how many drops it exposes. Use this FIRST when composing a new flow — narrow by integration before drilling into individual drops.",
+		Description: "List every integration the daemon offers, grouped by vendor (Slack, Gmail, GitHub, ...). Each entry includes a one-sentence summary and how many steps it exposes. Use this FIRST when composing a new flow — narrow by integration before drilling into individual steps.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{
 			"q":        {"type":"string","description":"Free-text filter against integration label and summary."},
 			"category": {"type":"string","description":"Optional category filter: trigger, transformation, io, ai, network, external, system, flow_control."}
@@ -384,7 +384,7 @@ func listIntegrations(c *DazydClient) Tool {
 func describeIntegration(c *DazydClient) Tool {
 	return Tool{
 		Name:        "describe_integration",
-		Description: "Return one integration's detail page: its auth shape, every drop it exposes with their role (trigger / action / transformation), and example flows. Read this BEFORE describing individual drops — it tells you which drop within the integration to look at.",
+		Description: "Return one integration's detail page: its auth shape, every step it exposes with their role (trigger / action / transformation), and example flows. Read this BEFORE describing individual steps — it tells you which step within the integration to look at.",
 		InputSchema: json.RawMessage(`{"type":"object","required":["id"],"properties":{
 			"id": {"type":"string","description":"Integration ID, e.g. 'Slack' or 'standard-library'. Get the canonical IDs from list_integrations."}
 		}}`),
@@ -409,11 +409,11 @@ func describeIntegration(c *DazydClient) Tool {
 func listDrops(c *DazydClient) Tool {
 	return Tool{
 		Name:        "list_drops",
-		Description: "Search the flat drop catalog. Returns lean per-drop entries (id, label, summary, category, integration). Use the optional filters to narrow — full per-drop detail (params schema, examples) comes from describe_drop.",
+		Description: "Search the flat step catalog. Returns lean per-step entries (id, label, summary, category, integration). Use the optional filters to narrow — full per-step detail (params schema, examples) comes from describe_drop. NOTE: the product calls these STEPS everywhere a person can see them; \"drop\" survives only in these tool names and in API field names, so say \"step\" when you talk to the user.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{
 			"q":           {"type":"string","description":"Free-text filter against label, description, tags."},
 			"category":    {"type":"string"},
-			"integration": {"type":"string","description":"Limit to drops in this integration (e.g. 'Slack')."},
+			"integration": {"type":"string","description":"Limit to steps in this integration (e.g. 'Slack')."},
 			"tag":         {"type":"string"}
 		}}`),
 		Handler: func(ctx context.Context, raw json.RawMessage) (ToolCallResult, error) {
@@ -439,7 +439,7 @@ func listDrops(c *DazydClient) Tool {
 func describeDrop(c *DazydClient) Tool {
 	return Tool{
 		Name:        "describe_drop",
-		Description: "Get the full manifest of one drop — params JSON Schema, worked params examples, I/O ports, execution model, retry policy. THIS is the source of truth when composing the node's params; the examples field gives you concrete shapes to crib from.",
+		Description: "Get the full manifest of one step — params JSON Schema, worked params examples, I/O ports, execution model, retry policy. THIS is the source of truth when composing the node's params; the examples field gives you concrete shapes to crib from.",
 		InputSchema: json.RawMessage(`{"type":"object","required":["id"],"properties":{
 			"id": {"type":"string","description":"Drop ID (e.g. 'http_request', 'slack_send_message'). Find IDs via list_drops or describe_integration."}
 		}}`),

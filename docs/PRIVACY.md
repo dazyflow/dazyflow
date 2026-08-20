@@ -91,7 +91,7 @@ any prompt that may carry personal data.
 
 ### Levers the product gives you
 
-- **Configurable LLM endpoints** — the Claude and OpenAI drops accept a custom
+- **Configurable LLM endpoints** — the Claude and OpenAI steps accept a custom
   base URL, so you can route to an EU-region or self-hosted/proxied model
   instead of the US default.
 - **Egress allowlist** — `DAZYFLOW_HTTP_EGRESS_ALLOW` restricts which hosts
@@ -133,7 +133,7 @@ operational and legal needs. Note: user accounts, memberships, API keys and
 graphs are **not** swept — they persist until explicitly deleted (see Erasure).
 
 **Results boards (built-in store)** are likewise **not** swept by retention.
-Rows a flow saves via the *Built-in store · Save* drop accumulate in the
+Rows a flow saves via the *Built-in store · Save* step accumulate in the
 workspace's store until cleared — by the per-board **Clear** action on the
 Results page or by deleting the workspace/account (the store lives under the
 sandbox subtree, so it rides the erasure cascade; see Erasure). Boards are

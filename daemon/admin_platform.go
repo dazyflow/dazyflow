@@ -688,7 +688,7 @@ func (h *HTTPGateway) platformListDrops(rw http.ResponseWriter, r *http.Request,
 		return
 	}
 	if h.DropSwitches == nil {
-		writeJSONError(rw, http.StatusNotImplemented, "drop killswitch not configured")
+		writeJSONError(rw, http.StatusNotImplemented, "step killswitch not configured")
 		return
 	}
 	mp, ok := h.svc.Engine.Resolver.(interface {
@@ -742,12 +742,12 @@ func (h *HTTPGateway) platformDisableDrop(rw http.ResponseWriter, r *http.Reques
 		return
 	}
 	if h.DropSwitches == nil {
-		writeJSONError(rw, http.StatusNotImplemented, "drop killswitch not configured")
+		writeJSONError(rw, http.StatusNotImplemented, "step killswitch not configured")
 		return
 	}
 	id := strings.TrimSpace(r.PathValue("id"))
 	if id == "" {
-		writeJSONError(rw, http.StatusBadRequest, "drop id required")
+		writeJSONError(rw, http.StatusBadRequest, "step id required")
 		return
 	}
 	body := decodeModerationBody(r)
@@ -772,12 +772,12 @@ func (h *HTTPGateway) platformEnableDrop(rw http.ResponseWriter, r *http.Request
 		return
 	}
 	if h.DropSwitches == nil {
-		writeJSONError(rw, http.StatusNotImplemented, "drop killswitch not configured")
+		writeJSONError(rw, http.StatusNotImplemented, "step killswitch not configured")
 		return
 	}
 	id := strings.TrimSpace(r.PathValue("id"))
 	if id == "" {
-		writeJSONError(rw, http.StatusBadRequest, "drop id required")
+		writeJSONError(rw, http.StatusBadRequest, "step id required")
 		return
 	}
 	body := decodeModerationBody(r)

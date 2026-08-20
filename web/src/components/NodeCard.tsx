@@ -285,7 +285,7 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
       // Identify the card to assistive tech: a labelled group naming the step,
       // its module, and (via aria-selected) whether it's the current selection.
       role="group"
-      aria-label={`${d.label || d.moduleID} (${d.moduleID})${d.disabled ? ", disabled" : ""} flow drop`}
+      aria-label={`${d.label || d.moduleID} (${d.moduleID})${d.disabled ? ", disabled" : ""} flow step`}
       aria-selected={selected}
       style={
         {

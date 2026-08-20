@@ -347,7 +347,7 @@ func (h *HTTPGateway) getDropHandler(rw http.ResponseWriter, r *http.Request, p 
 	}
 	m, ok := manifests[id]
 	if !ok {
-		writeAPIError(rw, http.StatusNotFound, "drop_not_found", "no such drop: "+id)
+		writeAPIError(rw, http.StatusNotFound, "drop_not_found", "no such step: "+id)
 		return
 	}
 	writeJSON(rw, http.StatusOK, m)

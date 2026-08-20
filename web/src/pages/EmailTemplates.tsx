@@ -66,7 +66,7 @@ export function EmailTemplates() {
       <p className="page-sub">
         {t(
           "emailTemplates.intro",
-          "Reusable HTML layouts the email drops wrap a message body in — your branding, header and footer in one place. Built-in templates are read-only; edits to your own apply to every flow that uses them.",
+          "Reusable HTML layouts the email steps wrap a message body in — your branding, header and footer in one place. Built-in templates are read-only; edits to your own apply to every flow that uses them.",
         )}
       </p>
       {off ? (

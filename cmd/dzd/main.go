@@ -517,7 +517,7 @@ func main() {
 			// per node, lock-free from the store's in-memory snapshot.
 			DropGate: func(_ context.Context, dropID, tenant string) error {
 				if dropSwitches.Disabled(dropID, tenant) {
-					return fmt.Errorf("drop %q is disabled by platform policy", dropID)
+					return fmt.Errorf("step %q is disabled by platform policy", dropID)
 				}
 				return nil
 			},
