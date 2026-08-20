@@ -165,14 +165,25 @@ version: ## Print the version that a build would stamp right now
 # existing tag (0.0.0 if none yet). They delegate to the shared _bump
 # recipe so the semver arithmetic lives in one place.
 #
-# Update CHANGELOG.md FIRST — move the [Unreleased] entries under a new
-# [X.Y.Z] - YYYY-MM-DD heading and commit — so the tag points at the
-# commit where the changelog announces the version. The recipe then writes
-# the new version to ./VERSION and commits that itself, because the Docker
-# build reads the file whenever compose is invoked without the VERSION
-# export (the production deploy path); a stale file there is how a release
-# ends up reporting itself as "dev". The tag is local; the recipe prints
-# the push command.
+# The recipe promotes CHANGELOG.md itself: the [Unreleased] entries move
+# under a new [X.Y.Z] - YYYY-MM-DD heading, a fresh empty [Unreleased] is
+# left for the next cycle, and CHANGELOG + VERSION are committed together
+# so the tag points at the commit where the changelog announces the
+# version.
+#
+# This used to be a manual step you were told to do FIRST, and it drifted:
+# 0.3.0, 0.3.1, 0.3.2 and 0.4.0 were all tagged with no changelog entry,
+# because nothing checked. Promotion is mechanical — the curation happens
+# while you write entries under [Unreleased] during development — so the
+# mechanical half is automated and the judgement half is enforced: an
+# EMPTY [Unreleased] aborts the release, since it means nobody wrote down
+# what shipped. Pre-promoted by hand? The recipe detects the heading and
+# leaves the file alone.
+#
+# VERSION is committed because the Docker build reads it whenever compose
+# is invoked without the VERSION export (the production deploy path); a
+# stale file there is how a release ends up reporting itself as "dev".
+# The tag is local; the recipe prints the push command.
 #
 #   make patch   0.1.0 -> 0.1.1
 #   make minor   0.1.0 -> 0.2.0
@@ -196,11 +207,23 @@ _bump:
 		*) echo "Use: make major|minor|patch"; exit 1 ;; \
 	esac; \
 	NEW="$$MAJOR.$$MINOR.$$PATCH"; \
+	if grep -q "^## \[$$NEW\]" CHANGELOG.md; then \
+		echo "CHANGELOG.md already has a [$$NEW] heading — leaving it alone"; \
+	else \
+		if [ "$$(awk '/^## \[Unreleased\]/{f=1;next} /^## \[/{f=0} f' CHANGELOG.md | grep -c '[^[:space:]]')" -eq 0 ]; then \
+			echo "REFUSING: CHANGELOG.md [Unreleased] is empty — nothing to release."; \
+			echo "Write what shipped under [Unreleased] first, or add a [$$NEW] heading by hand."; \
+			exit 1; \
+		fi; \
+		awk -v h="## [$$NEW] - $$(date +%F)" '{print} /^## \[Unreleased\]$$/ && !d {print ""; print h; d=1}' \
+			CHANGELOG.md > CHANGELOG.md.tmp && mv CHANGELOG.md.tmp CHANGELOG.md; \
+		echo "CHANGELOG.md: [Unreleased] promoted to [$$NEW]"; \
+	fi; \
 	printf '%s\n' "$$NEW" > VERSION; \
-	git add VERSION; \
-	git commit -q -m "Release $$NEW" -- VERSION; \
+	git add VERSION CHANGELOG.md; \
+	git commit -q -m "Release $$NEW" -- VERSION CHANGELOG.md; \
 	git tag -a "$$NEW" -m "Release $$NEW"; \
-	echo "$$CUR -> $$NEW (committed ./VERSION, tagged)"; \
+	echo "$$CUR -> $$NEW (committed ./VERSION + CHANGELOG.md, tagged)"; \
 	echo "Push with: git push origin master $$NEW"
 
 # LATEST_TAG selects the newest RELEASE tag. The three filters each fix a
