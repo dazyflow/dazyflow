@@ -44,7 +44,19 @@ func allManifests() []core.Manifest {
 	return out
 }
 
-func manifestMap() map[string]core.Manifest { return engine.Default.Manifests() }
+// manifestMap mirrors what production hands the generator and the validator:
+// SearchDrops → listDrops → the resolver's ManifestsForTenant, which stamps
+// every processing drop with the universal `pass` pin and marks the
+// list-carrying ports. Validating against the bare registry instead would
+// reject a graph that legitimately sequences a step through its pass pin —
+// which the engine resolves fine at run time.
+func manifestMap() map[string]core.Manifest {
+	out := map[string]core.Manifest{}
+	for id, m := range engine.Default.Manifests() {
+		out[id] = core.MarkListPorts(core.WithPassthrough(m))
+	}
+	return out
+}
 
 // describeDrop delegates to the production renderer (describeDropForModel) so
 // the manual dump shows exactly what the agentic loop hands the model.

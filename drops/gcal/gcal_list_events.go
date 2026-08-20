@@ -10,9 +10,11 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/reltime"
 	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
@@ -24,7 +26,7 @@ func init() {
 			Label:       "Google Calendar",
 			Subtitle:    "List events",
 			Summary:     "List events from a Google Calendar in a time window.",
-			Description: "List events from a Google Calendar. Optionally bound by a time window (time_min/time_max, RFC3339) and a text query. Recurring events are expanded into single instances and returned in start-time order. Each event becomes an object with id, summary, start/end, status and attendees.",
+			Description: "List events from a Google Calendar. Bound it to a time window that moves with the schedule — \"tomorrow\" to \"tomorrow+1d\" for tomorrow's bookings, \"-7d\" to \"now\" for last week — or give absolute timestamps; both ends can also be wired in. Recurring events are expanded into single instances and returned in start-time order. Each event becomes an object with id, summary, description, location, start/end, status and attendees.",
 			Integration: "Google Calendar",
 			Category:    "network",
 			Icon:        "calendar",
@@ -34,6 +36,11 @@ func init() {
 			Tags:        []string{"calendar", "google", "events", "list"},
 			Examples: []core.ParamsExample{
 				{Title: "Upcoming events on the primary calendar", Params: json.RawMessage(`{"account":"default","calendar_id":"primary","limit":50}`)},
+				{
+					Title:  "Tomorrow's bookings, for a reminder run",
+					Params: json.RawMessage(`{"account":"default","calendar_id":"primary","time_min":"tomorrow","time_max":"tomorrow+1d","tz":"Europe/Stockholm"}`),
+					Notes:  "Day boundaries are taken in the given timezone, so a nightly schedule always picks up exactly the next day.",
+				},
 			},
 			RequiresConnections: []core.ConnectionRequirement{
 				{Kind: "oauth", Name: "google", Note: "Google OAuth — calendar.readonly scope."},
@@ -44,6 +51,10 @@ func init() {
 				// Optional: wire a calendar id in to override the param, so a
 				// reference can be threaded from an upstream step.
 				{Port: "calendar_id", Label: "Calendar ID", MIME: []string{"text/plain"}},
+				// Both ends of the window take a wire, so a window can also be
+				// computed upstream (a Date step, a row's own field).
+				{Port: "time_min", Label: "Start of window", MIME: []string{"text/plain"}},
+				{Port: "time_max", Label: "End of window", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
 				{Port: "events", Label: "Events", MIME: []string{"application/json"}},
@@ -54,8 +65,9 @@ func init() {
 				"properties":{
 					"account":{"type":"string","default":"default"},
 					"calendar_id":{"type":"string","format":"google-calendar","title":"Calendar","default":"primary","description":"The calendar to read — pick from your account's calendars, or 'primary' for your own."},
-					"time_min":{"type":"string","format":"datetime","title":"Start of window","examples":["2026-06-16T00:00:00Z"],"description":"Only events ending at or after this time. Leave blank for no lower bound."},
-					"time_max":{"type":"string","format":"datetime","title":"End of window","examples":["2026-06-23T00:00:00Z"],"description":"Only events starting before this time. Leave blank for no upper bound."},
+					"time_min":{"type":"string","title":"Start of window","examples":["tomorrow","-7d","2026-06-16T00:00:00Z"],"description":"Only events ending at or after this time. Accepts a relative value — now, today, tomorrow, yesterday, +3d, -2h30m, tomorrow+9h — or an absolute timestamp. Leave blank for no lower bound."},
+					"time_max":{"type":"string","title":"End of window","examples":["tomorrow+1d","now","2026-06-23T00:00:00Z"],"description":"Only events starting before this time. Same forms as the start of the window. Leave blank for no upper bound."},
+					"tz":{"type":"string","format":"timezone","title":"Timezone","description":"IANA timezone the day boundaries of \"today\"/\"tomorrow\" are taken in, e.g. \"Europe/Stockholm\". Empty = UTC. Ignored for absolute timestamps."},
 					"q":{"type":"string","title":"Search text","description":"Free-text search over event fields. Leave blank to match all."},
 					"limit":{"type":"integer","title":"Max events","default":250,"minimum":1,"maximum":2500,"description":"Upper bound on events returned."},
 					"single_events":{"type":"boolean","title":"Expand recurring events","default":true,"description":"Expand recurring events into individual instances."},
@@ -120,11 +132,30 @@ func ListEvents(ctx context.Context, job core.Job) ([]map[string]any, error) {
 	if single {
 		q.Set("orderBy", "startTime")
 	}
-	if v := strings.TrimSpace(params.StringDefault(job.Params, "time_min", "")); v != "" {
-		q.Set("timeMin", v)
+	// The window is resolved here rather than typed as RFC3339, so a nightly
+	// flow can say "tomorrow" and mean it on every run. Either end can also be
+	// wired in from an upstream step.
+	loc := time.UTC
+	if tz := strings.TrimSpace(params.StringDefault(job.Params, "tz", "")); tz != "" {
+		l, lerr := time.LoadLocation(tz)
+		if lerr != nil {
+			return nil, fmt.Errorf("tz: unknown timezone %q", tz)
+		}
+		loc = l
 	}
-	if v := strings.TrimSpace(params.StringDefault(job.Params, "time_max", "")); v != "" {
-		q.Set("timeMax", v)
+	now := time.Now()
+	for param, query := range map[string]string{"time_min": "timeMin", "time_max": "timeMax"} {
+		raw, ok := params.TextInputOr(job, param, params.StringDefault(job.Params, param, ""))
+		if !ok {
+			return nil, fmt.Errorf("%s: input must be text", param)
+		}
+		v, rerr := reltime.ResolveRFC3339(raw, loc, now)
+		if rerr != nil {
+			return nil, fmt.Errorf("%s: %w", param, rerr)
+		}
+		if v != "" {
+			q.Set(query, v)
+		}
 	}
 	if v := strings.TrimSpace(params.StringDefault(job.Params, "q", "")); v != "" {
 		q.Set("q", v)

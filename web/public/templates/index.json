@@ -7,7 +7,12 @@
       "category": "Try it now",
       "description": "A built-in sample table flows into a Render-text step that turns the rows into a tidy summary. No accounts, no triggers, no setup — fork it and hit Run to see output immediately. The ideal first flow.",
       "icon": "sparkles",
-      "tags": ["starter", "no-setup", "demo", "instant"],
+      "tags": [
+        "starter",
+        "no-setup",
+        "demo",
+        "instant"
+      ],
       "integrations": [],
       "no_setup": true,
       "graph_file": "/templates/try-it-now.json"
@@ -19,8 +24,15 @@
       "category": "Spreadsheets",
       "description": "A hosted contact form (you get a public link) appends each submission as a row in a Google Sheet. Paste your sheet's URL into the Append step, choose the tab, and you're collecting.",
       "icon": "sheets",
-      "tags": ["form", "google sheets", "collect", "starter"],
-      "integrations": ["sheets"],
+      "tags": [
+        "form",
+        "google sheets",
+        "collect",
+        "starter"
+      ],
+      "integrations": [
+        "sheets"
+      ],
       "graph_file": "/templates/form-to-sheet.json"
     },
     {
@@ -30,8 +42,15 @@
       "category": "Spreadsheets",
       "description": "Checks Gmail every few minutes for new inbox messages and adds each one to a Google Sheet. Narrow the search query to log only what you care about (invoices, enquiries, receipts).",
       "icon": "mail",
-      "tags": ["gmail", "google sheets", "archive"],
-      "integrations": ["gmail", "sheets"],
+      "tags": [
+        "gmail",
+        "google sheets",
+        "archive"
+      ],
+      "integrations": [
+        "gmail",
+        "sheets"
+      ],
       "graph_file": "/templates/email-to-sheet.json"
     },
     {
@@ -41,8 +60,16 @@
       "category": "Spreadsheets",
       "description": "Every morning at 09:00, reads a Google Sheet and posts one Slack line per row. Edit the schedule, the sheet and tab, and the line format to taste.",
       "icon": "sheets",
-      "tags": ["google sheets", "slack", "daily", "report"],
-      "integrations": ["sheets", "slack"],
+      "tags": [
+        "google sheets",
+        "slack",
+        "daily",
+        "report"
+      ],
+      "integrations": [
+        "sheets",
+        "slack"
+      ],
       "graph_file": "/templates/sheet-summary-to-slack.json"
     },
     {
@@ -52,9 +79,121 @@
       "category": "Notifications",
       "description": "Checks Gmail every few minutes and posts a one-line Slack message (sender + subject) for each new inbox email. Point it at any channel and tighten the search to only what matters.",
       "icon": "mail",
-      "tags": ["gmail", "slack", "notify"],
-      "integrations": ["gmail", "slack"],
+      "tags": [
+        "gmail",
+        "slack",
+        "notify"
+      ],
+      "integrations": [
+        "gmail",
+        "slack"
+      ],
       "graph_file": "/templates/email-to-slack.json"
+    },
+    {
+      "id": "watch-a-page",
+      "title": "Watch a page → ping my phone",
+      "use_case": "Keep an eye on a web page — a tender list, a status page, a price — and get a notification only when what it says actually changes.",
+      "category": "Notifications",
+      "description": "Checks the page every hour and compares the words on it, not the code behind them, so invisible churn doesn't cry wolf. The first check records the page as it is today; only later changes reach your phone. Needs no accounts at all — just pick an ntfy topic.",
+      "icon": "eye",
+      "tags": [
+        "watch",
+        "monitor",
+        "ntfy",
+        "alert",
+        "no-setup"
+      ],
+      "integrations": [
+        "ntfy"
+      ],
+      "graph_file": "/templates/watch-a-page.json"
+    },
+    {
+      "id": "payment-to-thanks-and-log",
+      "title": "Stripe payment → thank-you, team ping, sales log",
+      "use_case": "When someone pays, thank them, tell the team, and record the sale — without anyone retyping an order.",
+      "category": "Sales",
+      "description": "A successful Stripe payment sends the customer a thank-you, posts a line to your sales channel, and appends the sale to a Collection keyed on the payment id — so a webhook retry updates the same row instead of duplicating it.",
+      "icon": "database",
+      "tags": [
+        "stripe",
+        "gmail",
+        "slack",
+        "orders",
+        "log"
+      ],
+      "integrations": [
+        "stripe",
+        "gmail",
+        "slack"
+      ],
+      "graph_file": "/templates/payment-to-thanks-and-log.json"
+    },
+    {
+      "id": "ai-email-triage",
+      "title": "AI reads the inbox and sorts it out",
+      "use_case": "Have AI put each new email in one of your own buckets: text you about the urgent ones, draft replies to the routine ones, flag anything for bookkeeping.",
+      "category": "Email",
+      "description": "Checks the mailbox every few minutes and classifies each new email into categories you write yourself. Urgent ones fire an SMS, routine questions come back as a drafted reply in Slack for a human to send, bookkeeping mail goes to its own channel. Edit the categories and the routing follows them.",
+      "icon": "sparkles",
+      "tags": [
+        "ai",
+        "gmail",
+        "slack",
+        "triage",
+        "support"
+      ],
+      "integrations": [
+        "gmail",
+        "slack",
+        "twilio",
+        "claude"
+      ],
+      "graph_file": "/templates/ai-email-triage.json"
+    },
+    {
+      "id": "invoices-to-drive",
+      "title": "Invoices emailed to you → filed in Drive",
+      "use_case": "File the PDF invoices people email you into a Drive folder and log the vendor, amount and due date in a sheet.",
+      "category": "Documents",
+      "description": "Every hour, finds new mail carrying a PDF invoice, saves the attachment into a Drive folder, and appends a row with the vendor, amount and due date that AI read off the email. Replaces dragging attachments into a folder once a week.",
+      "icon": "paperclip",
+      "tags": [
+        "gmail",
+        "drive",
+        "invoice",
+        "attachment",
+        "bookkeeping"
+      ],
+      "integrations": [
+        "gmail",
+        "google-drive",
+        "google-sheets",
+        "claude"
+      ],
+      "graph_file": "/templates/invoices-to-drive.json"
+    },
+    {
+      "id": "approve-before-refund",
+      "title": "Nothing goes out until someone approves",
+      "use_case": "Take a refund request on a form, pause for a person to approve it, and only then let Stripe issue the refund.",
+      "category": "Approvals",
+      "description": "A hosted form takes the request, the flow parks itself, and whoever holds the approval link decides. Approve and Stripe refunds; reject and nothing happens but a note in the channel. The same shape works for discounts, credit notes, or any customer-facing message that shouldn't go out unchecked.",
+      "icon": "user-check",
+      "tags": [
+        "approval",
+        "stripe",
+        "refund",
+        "human-in-the-loop",
+        "form"
+      ],
+      "integrations": [
+        "stripe",
+        "slack",
+        "ntfy"
+      ],
+      "graph_file": "/templates/approve-before-refund.json"
     }
   ]
 }

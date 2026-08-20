@@ -25,7 +25,7 @@ func init() {
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"regex", "regexp", "extract", "replace", "split", "match", "pattern", "text", "transform"},
-			Description: "Run a regular expression over text. 'mode' picks what to do: extract pulls out every match (with capture groups as columns — the first match also comes out on 'out'), replace substitutes matches (use $1 or ${name} in the replacement), split breaks the text on the pattern into a list, and match tests whether the pattern is found (a boolean for a Branch). Patterns use RE2 syntax; add inline flags like (?i) for case-insensitive. Named groups (?P<name>…) become named columns; unnamed groups become 1, 2, … and the whole match is 'match'.",
+			Description: "Run a regular expression over text — wire the text in, or type it on the step (so inside a For each you can read ${item.description} with no upstream step). 'mode' picks what to do: extract pulls out every match (with capture groups as columns — the first match also comes out on 'out'), replace substitutes matches (use $1 or ${name} in the replacement), split breaks the text on the pattern into a list, and match tests whether the pattern is found (a boolean for a Branch). Patterns use RE2 syntax; add inline flags like (?i) for case-insensitive. Named groups (?P<name>…) become named columns; unnamed groups become 1, 2, … and the whole match is 'match'.",
 			Summary:     "Extract, replace, split, or match text with a regular expression.",
 			Examples: []core.ParamsExample{
 				{
@@ -43,6 +43,11 @@ func init() {
 					Params: json.RawMessage(`{"pattern":"\\s+","mode":"replace","replacement":"-"}`),
 				},
 				{
+					Title:  "Pull the phone number out of the booking (inside For each)",
+					Params: json.RawMessage(`{"pattern":"\\+?[0-9][0-9 ()-]{6,}[0-9]","mode":"extract","text":"${item.description}"}`),
+					Notes:  "No upstream step needed — the text is typed on the step, so this works as the first step of a loop body.",
+				},
+				{
 					Title:  "Does it look like an invoice id?",
 					Params: json.RawMessage(`{"pattern":"^INV-\\d+$","mode":"match"}`),
 				},
@@ -50,7 +55,10 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				{Port: "in", Label: "Text", Required: true, MIME: []string{"text/plain"}},
+				// Not required: the text can equally be typed on the step —
+				// which is how it reaches a step inside a For each, as
+				// "${item.description}". A wired value wins.
+				{Port: "in", Label: "Text", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
 				{Port: "out", Label: "Result"},
@@ -61,7 +69,8 @@ func init() {
 				"properties":{
 					"pattern":{"type":"string","title":"Pattern","description":"RE2 regular expression. Inline flags like (?i) work; capture groups become columns in extract mode."},
 					"mode":{"type":"string","enum":["extract","replace","split","match"],"default":"extract","title":"Mode","description":"extract matches (rows + first on 'out'), replace (text), split by the pattern (list), or match/test (boolean)."},
-					"replacement":{"type":"string","title":"Replacement","description":"For replace mode: the substitution text. $1 / ${name} insert capture groups."}
+					"replacement":{"type":"string","title":"Replacement","description":"For replace mode: the substitution text. $1 / ${name} insert capture groups."},
+					"text":{"type":"string","title":"Text to search","format":"multiline","description":"The text to run the pattern over. Or wire the Text input, which overrides this. Inside a For each, type the field to read — e.g. ${item.description}."}
 				},
 				"required":["pattern"]
 			}`),
@@ -87,6 +96,14 @@ func executeRegex(_ context.Context, job core.Job, _ chan<- core.Progress) (core
 	text, ok := regexText(job.Input["in"])
 	if !ok {
 		return errResult(job, "bad_input", "input port 'in' must be text"), nil
+	}
+	// The wired input wins; the typed param is the fallback — the same shape
+	// as the AI steps' Text, and what lets this step read ${item.…} inside a
+	// loop body, where there is no upstream node to wire from.
+	if text == "" {
+		if v, isStr := job.Params["text"].(string); isStr {
+			text = v
+		}
 	}
 
 	mode := "extract"
@@ -170,6 +187,10 @@ func groupKey(names []string, i int) string {
 // regexText reads a text input, accepting a string or raw []byte.
 func regexText(ref core.Ref) (string, bool) {
 	switch v := ref.Inline.(type) {
+	case nil:
+		// Unwired (or empty) — not a mistake: the text may be typed on the
+		// step instead. The caller falls back to the param.
+		return "", true
 	case string:
 		return v, true
 	case []byte:

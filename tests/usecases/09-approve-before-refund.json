@@ -1,0 +1,120 @@
+{
+  "id": "uc-approve-before-refund",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "Refund request → someone approves → Stripe refunds",
+  "nodes": [
+    {
+      "id": "form",
+      "module": "webhook_input",
+      "params": {
+        "public_form": true,
+        "form_fields": [
+          "payment_intent",
+          "reason"
+        ],
+        "form_title": "Request a refund"
+      }
+    },
+    {
+      "id": "approve",
+      "module": "await_approval",
+      "params": {
+        "prompt": "A refund has been requested. Approve?"
+      }
+    },
+    {
+      "id": "ask_text",
+      "module": "expression",
+      "params": {
+        "expr": "'Refund requested. Approve or reject: ' + input"
+      }
+    },
+    {
+      "id": "ask",
+      "module": "ntfy",
+      "params": {
+        "topic": "acme-alerts-8f2k",
+        "title": "Refund needs approval",
+        "priority": "4"
+      }
+    },
+    {
+      "id": "payment_id",
+      "module": "expression",
+      "params": {
+        "expr": "input.payment_intent"
+      }
+    },
+    {
+      "id": "refund",
+      "module": "stripe_create_refund",
+      "params": {
+        "reason": "requested_by_customer"
+      }
+    },
+    {
+      "id": "confirm",
+      "module": "slack_send_message",
+      "params": {
+        "channel": "#finance",
+        "text": "Refund approved and issued.",
+        "account": "default"
+      }
+    },
+    {
+      "id": "declined",
+      "module": "slack_send_message",
+      "params": {
+        "channel": "#finance",
+        "text": "Refund request was rejected.",
+        "account": "default"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "form",
+      "from_port": "body",
+      "to": "approve",
+      "to_port": "context"
+    },
+    {
+      "from": "approve",
+      "from_port": "pending_url",
+      "to": "ask_text",
+      "to_port": "in"
+    },
+    {
+      "from": "ask_text",
+      "from_port": "out",
+      "to": "ask",
+      "to_port": "message"
+    },
+    {
+      "from": "approve",
+      "from_port": "approved",
+      "to": "payment_id",
+      "to_port": "in"
+    },
+    {
+      "from": "payment_id",
+      "from_port": "out",
+      "to": "refund",
+      "to_port": "payment_intent"
+    },
+    {
+      "from": "refund",
+      "from_port": "refund_id",
+      "to": "confirm",
+      "to_port": "pass"
+    },
+    {
+      "from": "approve",
+      "from_port": "rejected",
+      "to": "declined",
+      "to_port": "pass"
+    }
+  ]
+}

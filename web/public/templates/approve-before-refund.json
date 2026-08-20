@@ -1,0 +1,68 @@
+{
+  "id": "approve-before-refund",
+  "version": "1",
+  "name": "Refund request → someone approves → Stripe refunds",
+  "description": "A hosted form takes the refund request, the flow pauses, and whoever holds the approval link decides. Approve and Stripe issues the refund; reject and nothing happens but a note in the channel. The pattern works for anything that shouldn't go out unchecked — discounts, credit notes, customer-facing emails.",
+  "icon": "user-check",
+  "nodes": [
+    {
+      "id": "form",
+      "module": "webhook_input",
+      "params": {
+        "public_form": true,
+        "form_fields": ["payment_intent", "reason"],
+        "form_title": "Request a refund"
+      },
+      "position": { "x": 120, "y": 220 }
+    },
+    {
+      "id": "approve",
+      "module": "await_approval",
+      "params": { "prompt": "A refund has been requested. Approve?" },
+      "position": { "x": 460, "y": 220 }
+    },
+    {
+      "id": "ask",
+      "module": "ntfy",
+      "params": {
+        "topic": "REPLACE_WITH_YOUR_TOPIC",
+        "title": "Refund needs approval",
+        "priority": "4",
+        "message": "Someone requested a refund. Tap to approve or reject."
+      },
+      "position": { "x": 820, "y": 60 }
+    },
+    {
+      "id": "payment_id",
+      "module": "expression",
+      "params": { "expr": "input.payment_intent" },
+      "position": { "x": 820, "y": 220 }
+    },
+    {
+      "id": "refund",
+      "module": "stripe_create_refund",
+      "params": { "reason": "requested_by_customer" },
+      "position": { "x": 1160, "y": 220 }
+    },
+    {
+      "id": "confirm",
+      "module": "slack_send_message",
+      "params": { "channel": "#finance", "text": "Refund approved and issued.", "account": "default" },
+      "position": { "x": 1500, "y": 220 }
+    },
+    {
+      "id": "declined",
+      "module": "slack_send_message",
+      "params": { "channel": "#finance", "text": "Refund request was rejected.", "account": "default" },
+      "position": { "x": 820, "y": 400 }
+    }
+  ],
+  "edges": [
+    { "from": "form", "from_port": "body", "to": "approve", "to_port": "context", "on_error": "" },
+    { "from": "approve", "from_port": "pending_url", "to": "ask", "to_port": "click", "on_error": "" },
+    { "from": "approve", "from_port": "approved", "to": "payment_id", "to_port": "in", "on_error": "" },
+    { "from": "payment_id", "from_port": "out", "to": "refund", "to_port": "payment_intent", "on_error": "" },
+    { "from": "refund", "from_port": "refund_id", "to": "confirm", "to_port": "pass", "on_error": "" },
+    { "from": "approve", "from_port": "rejected", "to": "declined", "to_port": "pass", "on_error": "" }
+  ]
+}

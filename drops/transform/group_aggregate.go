@@ -69,7 +69,7 @@ func init() {
 					"by":        {"type":"array","items":{"type":"string"},"description":"Columns to group by. Empty list = a single group covering all input rows."},
 					"aggregate": {
 						"type":"object",
-						"description":"Map of output_column_name → {op, column?}. column is required for sum/avg/min/max/first/last/collect; omitted for count.",
+						"description":"Map of output_column_name → {op, column?}. column is required for sum/avg/min/max/first/last/collect; omitted for count. The short form {\"revenue\":\"sum\"} is also accepted: the op alone, with the output name doubling as the source column.",
 						"additionalProperties": {
 							"type":"object",
 							"properties":{
@@ -232,9 +232,19 @@ func parseGroupParams(params map[string]any) ([]string, []aggSpec, error) {
 	}
 	aggs := make([]aggSpec, 0, len(aggsMap))
 	for outName, raw := range aggsMap {
+		// Short form: {"revenue": "sum"} — the op alone, with the output name
+		// doubling as the source column ({"orders": "count"} needs no column).
+		// It's what people write by hand, and the long form's nested objects
+		// are a stumble the editor's form hides but hand-authored graphs don't.
+		if op, isShort := raw.(string); isShort {
+			raw = map[string]any{"op": op, "column": outName}
+			if op == aggCount {
+				raw = map[string]any{"op": op}
+			}
+		}
 		spec, ok := raw.(map[string]any)
 		if !ok {
-			return nil, nil, fmt.Errorf("aggregate %q: expected object, got %T", outName, raw)
+			return nil, nil, fmt.Errorf("aggregate %q: expected object or op name, got %T", outName, raw)
 		}
 		opRaw, ok := spec["op"]
 		if !ok {

@@ -447,3 +447,52 @@ func TestJoinRows_RowsAndHeadersBothEmitted(t *testing.T) {
 		t.Error("rows headers missing")
 	}
 }
+
+// The "which of these are new?" question. A left join answers it only via a
+// null test that reads wrong (present-and-null, not missing), so this kind
+// exists to make the common case unmistakable — and its output must carry no
+// right-side columns at all.
+func TestJoinRows_Anti(t *testing.T) {
+	res, err := executeJoinRows(t.Context(), core.Job{
+		ID:     "test",
+		Params: map[string]any{"on": map[string]any{"email": "email"}, "kind": "anti"},
+		Input: map[string]core.Ref{
+			"left_rows": {Inline: []any{
+				map[string]any{"email": "a@x.se", "name": "Ida"},
+				map[string]any{"email": "b@x.se", "name": "Nils"},
+			}},
+			"right_rows": {Inline: []any{
+				map[string]any{"email": "a@x.se", "synced_at": "2026-08-01"},
+			}},
+		},
+	}, nil)
+	if err != nil || res.Status != core.StatusOK {
+		t.Fatalf("status=%v err=%v error=%+v", res.Status, err, res.Error)
+	}
+	rows, _ := res.Output["rows"].Inline.([]map[string]any)
+	if len(rows) != 1 || rows[0]["email"] != "b@x.se" {
+		t.Fatalf("rows = %v, want only the unmatched left row", res.Output["rows"].Inline)
+	}
+	if _, leaked := rows[0]["synced_at"]; leaked {
+		t.Errorf("anti-join output carries a right-side column: %v", rows[0])
+	}
+	for _, h := range res.Output["rows"].Headers {
+		if h == "synced_at" {
+			t.Errorf("headers carry a right-side column: %v", res.Output["rows"].Headers)
+		}
+	}
+}
+
+func TestJoinRows_AntiEmptyWhenAllMatched(t *testing.T) {
+	res, _ := executeJoinRows(t.Context(), core.Job{
+		ID:     "test",
+		Params: map[string]any{"on": map[string]any{"id": "id"}, "kind": "anti"},
+		Input: map[string]core.Ref{
+			"left_rows":  {Inline: []any{map[string]any{"id": "1"}}},
+			"right_rows": {Inline: []any{map[string]any{"id": "1"}}},
+		},
+	}, nil)
+	if rows, _ := res.Output["rows"].Inline.([]map[string]any); len(rows) != 0 {
+		t.Errorf("rows = %v, want none", rows)
+	}
+}

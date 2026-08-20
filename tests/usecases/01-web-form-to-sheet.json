@@ -1,0 +1,66 @@
+{
+  "id": "uc-web-form-to-sheet",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "Contact form \u2192 Google Sheet + Slack ping",
+  "nodes": [
+    {
+      "id": "form",
+      "module": "webhook_input",
+      "params": {
+        "public_form": true,
+        "form_fields": [
+          "name",
+          "email",
+          "message"
+        ],
+        "form_title": "Get in touch"
+      }
+    },
+    {
+      "id": "append",
+      "module": "sheets_append_row",
+      "params": {
+        "spreadsheet_id": "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789",
+        "range": "Responses",
+        "account": "default"
+      }
+    },
+    {
+      "id": "line",
+      "module": "expression",
+      "params": {
+        "expr": "'New enquiry from ' + input.name + ' <' + input.email + '>: ' + input.message"
+      }
+    },
+    {
+      "id": "ping",
+      "module": "slack_send_message",
+      "params": {
+        "channel": "#leads",
+        "account": "default"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "form",
+      "from_port": "body",
+      "to": "append",
+      "to_port": "rows"
+    },
+    {
+      "from": "form",
+      "from_port": "body",
+      "to": "line",
+      "to_port": "in"
+    },
+    {
+      "from": "line",
+      "from_port": "out",
+      "to": "ping",
+      "to_port": "text"
+    }
+  ]
+}

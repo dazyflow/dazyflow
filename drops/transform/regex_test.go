@@ -170,3 +170,34 @@ func TestRegex_NonStringInput(t *testing.T) {
 		t.Errorf("status/code = %v/%v, want error/bad_input", res.Status, res.Error)
 	}
 }
+
+// Inside a For each there is no upstream node to wire from — the item's
+// fields arrive as ${item.…} in a step's own params. So the text has to be
+// typeable, with a wired input still winning when there is one.
+func TestRegex_TextParam(t *testing.T) {
+	res, err := executeRegex(t.Context(), core.Job{
+		ID: "test",
+		Params: map[string]any{
+			"pattern": `\+?[0-9][0-9 ()-]{6,}[0-9]`,
+			"mode":    "extract",
+			"text":    "Kund: Ida, tel 070-123 45 67",
+		},
+	}, nil)
+	if err != nil || res.Status != core.StatusOK {
+		t.Fatalf("status=%v err=%v error=%+v", res.Status, err, res.Error)
+	}
+	if got := res.Output["out"].Inline; got != "070-123 45 67" {
+		t.Errorf("out = %v, want the phone number", got)
+	}
+}
+
+func TestRegex_WiredInputBeatsTextParam(t *testing.T) {
+	res, _ := executeRegex(t.Context(), core.Job{
+		ID:     "test",
+		Params: map[string]any{"pattern": `[0-9]+`, "mode": "extract", "text": "typed 111"},
+		Input:  map[string]core.Ref{"in": {Inline: "wired 222"}},
+	}, nil)
+	if got := res.Output["out"].Inline; got != "222" {
+		t.Errorf("out = %v, want the wired text to win", got)
+	}
+}

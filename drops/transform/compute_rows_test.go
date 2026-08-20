@@ -4,6 +4,7 @@
 package transform
 
 import (
+	"encoding/json"
 	"reflect"
 	"testing"
 
@@ -327,5 +328,21 @@ func TestComputeRows_FilterMatchesNothing(t *testing.T) {
 		nil)
 	if len(rows) != 0 {
 		t.Errorf("rows = %+v, want empty", rows)
+	}
+}
+
+// A computed column whose formula returns an object must come out as a plain
+// JSON map, not cel-go's map[any]any (which no downstream step accepts).
+func TestComputeRows_ObjectValuedColumnIsJSONShaped(t *testing.T) {
+	res, err := executeComputeRows(t.Context(), core.Job{
+		ID:     "test",
+		Params: map[string]any{"compute": map[string]any{"contact": "{'email': row.email}"}},
+		Input:  map[string]core.Ref{"rows": {Inline: []any{map[string]any{"email": "a@x.se"}}}},
+	}, nil)
+	if err != nil || res.Status != core.StatusOK {
+		t.Fatalf("status = %v err = %v error = %+v", res.Status, err, res.Error)
+	}
+	if _, err := json.Marshal(res.Output["rows"].Inline); err != nil {
+		t.Fatalf("computed rows are not JSON-serialisable: %v", err)
 	}
 }

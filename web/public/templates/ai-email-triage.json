@@ -1,0 +1,97 @@
+{
+  "id": "ai-email-triage",
+  "version": "1",
+  "name": "AI reads the inbox and sorts it out",
+  "description": "Checks the mailbox every few minutes and has AI put each new email in one of your own buckets. Urgent ones text you; routine questions come back as a drafted reply in Slack for a human to send; anything for bookkeeping is flagged in its own channel. Edit the categories to match how you actually sort mail — the routing follows them.",
+  "icon": "sparkles",
+  "triggers": [{ "type": "poll", "interval_seconds": 300 }],
+  "nodes": [
+    {
+      "id": "search",
+      "module": "gmail_search_messages",
+      "params": {
+        "account": "default",
+        "query": "label:inbox",
+        "only_new": true,
+        "max_results": 20
+      },
+      "position": { "x": 120, "y": 240 }
+    },
+    {
+      "id": "each",
+      "module": "for_each",
+      "params": { "concurrency": 2 },
+      "position": { "x": 460, "y": 240 }
+    },
+    {
+      "id": "classify",
+      "module": "claude_classify",
+      "params": {
+        "categories": [
+          { "name": "urgent", "description": "Something is broken, blocked or angry — needs a person now." },
+          { "name": "question", "description": "A routine question a friendly reply can answer." },
+          { "name": "invoice", "description": "An invoice, receipt or anything for bookkeeping." },
+          { "name": "spam", "description": "Cold sales mail or junk." }
+        ],
+        "text": "From: ${item.from}\nSubject: ${item.subject}\n\n${item.body}"
+      },
+      "position": { "x": 800, "y": 240 }
+    },
+    {
+      "id": "route",
+      "module": "switch",
+      "params": {
+        "cases": [
+          { "slot": "case_1", "equals": "urgent" },
+          { "slot": "case_2", "equals": "question" },
+          { "slot": "case_3", "equals": "invoice" }
+        ]
+      },
+      "position": { "x": 1140, "y": 240 }
+    },
+    {
+      "id": "escalate",
+      "module": "twilio_send_sms",
+      "params": {
+        "to": "REPLACE_WITH_YOUR_MOBILE_NUMBER",
+        "body": "Urgent email from ${item.from}: ${item.subject}"
+      },
+      "position": { "x": 1480, "y": 60 }
+    },
+    {
+      "id": "draft",
+      "module": "claude_draft_reply",
+      "params": {
+        "tone": "friendly",
+        "text": "${item.body}",
+        "signature": "— Support"
+      },
+      "position": { "x": 1480, "y": 240 }
+    },
+    {
+      "id": "share_draft",
+      "module": "slack_send_message",
+      "params": { "channel": "#support", "account": "default" },
+      "position": { "x": 1820, "y": 240 }
+    },
+    {
+      "id": "to_bookkeeping",
+      "module": "slack_send_message",
+      "params": {
+        "channel": "#bookkeeping",
+        "text": "Invoice mail from ${item.from}: ${item.subject}",
+        "account": "default"
+      },
+      "position": { "x": 1480, "y": 420 }
+    }
+  ],
+  "edges": [
+    { "from": "search", "from_port": "messages", "to": "each", "to_port": "items", "on_error": "" },
+    { "from": "each", "from_port": "body", "to": "classify", "to_port": "pass", "on_error": "" },
+    { "from": "classify", "from_port": "category", "to": "route", "to_port": "in", "on_error": "" },
+    { "from": "route", "from_port": "case_1", "to": "escalate", "to_port": "pass", "on_error": "" },
+    { "from": "route", "from_port": "case_2", "to": "draft", "to_port": "pass", "on_error": "" },
+    { "from": "draft", "from_port": "reply", "to": "share_draft", "to_port": "text", "on_error": "" },
+    { "from": "route", "from_port": "case_3", "to": "to_bookkeeping", "to_port": "pass", "on_error": "" }
+  ]
+}

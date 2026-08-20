@@ -1,0 +1,20 @@
+{
+  "id": "uc-watch-feed-and-alert",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "Watch a feed, ping my phone on anything new",
+  "nodes": [
+    {"id": "poll", "module": "poll_trigger", "params": {"interval_seconds": 900}},
+    {"id": "feed", "module": "rss", "params": {"url": "https://example.com/tenders.xml", "dedupe": true}},
+    {"id": "line", "module": "render_text", "params": {"template": "'• ' + row.title + ' — ' + row.link", "separator": "\n", "empty": ""}},
+    {"id": "push", "module": "ntfy", "params": {"topic": "acme-alerts-8f2k", "title": "New items"}},
+    {"id": "post", "module": "slack_send_message", "params": {"channel": "#watch", "account": "default"}}
+  ],
+  "edges": [
+    {"from": "poll", "from_port": "pass", "to": "feed", "to_port": "pass"},
+    {"from": "feed", "from_port": "items", "to": "line", "to_port": "rows"},
+    {"from": "line", "from_port": "text", "to": "push", "to_port": "message"},
+    {"from": "line", "from_port": "text", "to": "post", "to_port": "text"}
+  ]
+}

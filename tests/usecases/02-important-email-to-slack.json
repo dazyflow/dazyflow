@@ -1,0 +1,18 @@
+{
+  "id": "uc-important-email-to-slack",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "Important email → Slack",
+  "nodes": [
+    {"id": "poll", "module": "poll_trigger", "params": {"interval_seconds": 300}},
+    {"id": "search", "module": "gmail_search_messages", "params": {"account": "default", "query": "label:inbox (subject:invoice OR from:@bigcustomer.com)", "only_new": true, "max_results": 25}},
+    {"id": "line", "module": "render_text", "params": {"template": "'• ' + row.from + ': ' + row.subject", "prefix": "*Needs a look*\n", "separator": "\n", "empty": "Nothing new."}},
+    {"id": "post", "module": "slack_send_message", "params": {"channel": "#inbox", "account": "default"}}
+  ],
+  "edges": [
+    {"from": "poll", "from_port": "pass", "to": "search", "to_port": "pass"},
+    {"from": "search", "from_port": "messages", "to": "line", "to_port": "rows"},
+    {"from": "line", "from_port": "text", "to": "post", "to_port": "text"}
+  ]
+}

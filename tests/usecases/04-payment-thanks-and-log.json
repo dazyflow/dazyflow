@@ -1,0 +1,97 @@
+{
+  "id": "uc-payment-thanks-and-log",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "Stripe payment → thank-you, team ping, sales log",
+  "nodes": [
+    {
+      "id": "paid",
+      "module": "stripe_on_payment",
+      "params": {}
+    },
+    {
+      "id": "thanks",
+      "module": "gmail_send_email",
+      "params": {
+        "account": "default",
+        "subject": "Thanks for your order",
+        "body": "Thank you! We have received your payment and are getting it ready."
+      }
+    },
+    {
+      "id": "ping_text",
+      "module": "render_template",
+      "params": {
+        "template": "Payment {{.amount}} {{.currency}} from {{.receipt_email}} — {{.description}}"
+      }
+    },
+    {
+      "id": "ping",
+      "module": "slack_send_message",
+      "params": {
+        "channel": "#sales",
+        "account": "default"
+      }
+    },
+    {
+      "id": "row",
+      "module": "map_rows",
+      "params": {
+        "select": [
+          "id",
+          "receipt_email",
+          "amount",
+          "currency",
+          "description"
+        ],
+        "rename": {
+          "id": "payment_id",
+          "receipt_email": "email"
+        }
+      }
+    },
+    {
+      "id": "log",
+      "module": "builtin_store_append",
+      "params": {
+        "table": "sales",
+        "unique_by": [
+          "payment_id"
+        ]
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "paid",
+      "from_port": "customer_email",
+      "to": "thanks",
+      "to_port": "to"
+    },
+    {
+      "from": "paid",
+      "from_port": "payment",
+      "to": "ping_text",
+      "to_port": "data"
+    },
+    {
+      "from": "ping_text",
+      "from_port": "html",
+      "to": "ping",
+      "to_port": "text"
+    },
+    {
+      "from": "paid",
+      "from_port": "payment",
+      "to": "row",
+      "to_port": "rows"
+    },
+    {
+      "from": "row",
+      "from_port": "rows",
+      "to": "log",
+      "to_port": "rows"
+    }
+  ]
+}

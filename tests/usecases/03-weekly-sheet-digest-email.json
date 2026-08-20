@@ -1,0 +1,109 @@
+{
+  "id": "uc-weekly-sheet-digest",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "Monday digest of a Google Sheet, by email",
+  "triggers": [
+    {
+      "type": "cron",
+      "cron": "0 7 * * 1",
+      "tz": "Europe/Stockholm"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "read",
+      "module": "sheets_read_range",
+      "params": {
+        "spreadsheet_id": "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789",
+        "range": "Orders",
+        "headers": true,
+        "account": "default"
+      }
+    },
+    {
+      "id": "lastweek",
+      "module": "compute_rows",
+      "params": {
+        "compute": {
+          "amount": "double(row.amount)"
+        },
+        "filter": "timestamp(row.date) > now - duration('168h')"
+      }
+    },
+    {
+      "id": "totals",
+      "module": "group_aggregate",
+      "params": {
+        "by": [
+          "salesperson"
+        ],
+        "aggregate": {
+          "orders": {
+            "op": "count"
+          },
+          "revenue": {
+            "op": "sum",
+            "column": "amount"
+          }
+        }
+      }
+    },
+    {
+      "id": "ranked",
+      "module": "sort_rows",
+      "params": {
+        "by": "-revenue"
+      }
+    },
+    {
+      "id": "table",
+      "module": "render_table",
+      "params": {
+        "empty": "No orders last week."
+      }
+    },
+    {
+      "id": "send",
+      "module": "email_send",
+      "params": {
+        "to": "team@example.com",
+        "subject": "Last week's sales",
+        "format": "html"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "read",
+      "from_port": "rows",
+      "to": "lastweek",
+      "to_port": "rows"
+    },
+    {
+      "from": "lastweek",
+      "from_port": "rows",
+      "to": "totals",
+      "to_port": "rows"
+    },
+    {
+      "from": "totals",
+      "from_port": "rows",
+      "to": "ranked",
+      "to_port": "rows"
+    },
+    {
+      "from": "ranked",
+      "from_port": "rows",
+      "to": "table",
+      "to_port": "rows"
+    },
+    {
+      "from": "table",
+      "from_port": "html",
+      "to": "send",
+      "to_port": "body"
+    }
+  ]
+}

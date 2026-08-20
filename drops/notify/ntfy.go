@@ -52,6 +52,10 @@ func init() {
 				// boxes (Unreal-style); a wired value overrides the typed one.
 				{Port: "title", Label: "Title", MIME: []string{"text/plain"}},
 				{Port: "message", Label: "Message", MIME: []string{"text/plain"}},
+				// The tap link is usually computed upstream — an approval
+				// step's link, a run's report URL — so it takes a wire, not
+				// just a typed value.
+				{Port: "click", Label: "Link to open", MIME: []string{"text/plain"}},
 			},
 			// No declared outputs: sending a notification is a "do" step —
 			// chain via the pass-through pin. The delivery details are still
@@ -75,7 +79,7 @@ func init() {
 					"title":{"type":"string","title":"Title","description":"Notification title."},
 					"priority":{"type":"string","title":"Priority","enum":["1","2","3","4","5"],"enumNames":["1 — Min","2 — Low","3 — Default","4 — High","5 — Max"],"description":"How urgently it buzzes. Leave unset for the normal level."},
 					"tags":{"type":"array","title":"Tags","items":{"type":"string"},"description":"Emoji/tag shortcodes."},
-					"click":{"type":"string","title":"Link to open","description":"Web address opened when the notification is tapped. Tip: wire an Await approval step's 'Approval link' here so the recipient can approve straight from the notification."},
+					"click":{"type":"string","title":"Link to open","description":"Web address opened when the notification is tapped. Wire an Await approval step's 'Approval link' into the matching input so the recipient can approve straight from the notification."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
 				"required":["topic"]
@@ -167,8 +171,12 @@ func executeNtfy(ctx context.Context, job core.Job, progress chan<- core.Progres
 	if tags := paramTags(job.Params); tags != "" {
 		req.Header.Set("Tags", tags)
 	}
-	if v, _ := params.StringOpt(job.Params, "click"); v != "" {
-		req.Header.Set("Click", v)
+	click, ok := params.TextInputOr(job, "click", params.StringDefault(job.Params, "click", ""))
+	if !ok {
+		return params.Err(job, "bad_input", "'Link to open' input must be text"), nil
+	}
+	if click != "" {
+		req.Header.Set("Click", click)
 	}
 	if v, _ := params.StringOpt(job.Params, "token"); v != "" {
 		req.Header.Set("Authorization", "Bearer "+v)

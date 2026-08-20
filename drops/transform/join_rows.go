@@ -23,6 +23,13 @@ const (
 	joinKindLeft  = "left"
 	joinKindRight = "right"
 	joinKindOuter = "outer"
+	// joinKindAnti answers "which of these haven't I got yet?" — the left
+	// rows with no match on the right, and nothing but their own columns.
+	// A left join can answer it too, but only via a null test that reads
+	// wrong: after a left join the unmatched columns are present-and-null,
+	// so the intuitive has()/is-missing filter matches nothing and the flow
+	// silently does no work. This kind removes that trap.
+	joinKindAnti = "anti"
 )
 
 // rightSuffixDefault is appended to right-side column names when they
@@ -41,7 +48,7 @@ func init() {
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"transform", "join", "merge", "lookup", "etl", "sql"},
-			Description: "SQL JOIN between two row streams. Param `on` maps left columns to right columns ({\"id\": \"user_id\"}). `kind` picks inner / left / right / outer. When the same key matches multiple right rows the output cartesians within that group (standard SQL behavior). Non-key right columns that collide with left column names get suffixed (default \"_right\", overridable via `right_suffix`). The right side's key columns are dropped from the output since they equal the left's by construction.",
+			Description: "SQL JOIN between two row streams. Param `on` maps left columns to right columns ({\"id\": \"user_id\"}). `kind` picks inner / left / right / outer / anti (anti = only the left rows with no match on the right, carrying just their own columns — the \"which of these haven't I processed yet?\" question). When the same key matches multiple right rows the output cartesians within that group (standard SQL behavior). Non-key right columns that collide with left column names get suffixed (default \"_right\", overridable via `right_suffix`). The right side's key columns are dropped from the output since they equal the left's by construction.",
 			Summary:     "SQL-style inner/left/right/outer join between two row streams keyed on one or more columns.",
 			Examples: []core.ParamsExample{
 				{
@@ -52,6 +59,11 @@ func init() {
 					Title:  "Left join with name collisions suffixed",
 					Params: json.RawMessage(`{"on":{"user_id":"id"},"kind":"left","right_suffix":"_user"}`),
 					Notes:  "Right-side columns that share a name with the left (e.g. 'name') become 'name_user' in the output. The right's 'id' key column is dropped since it equals user_id.",
+				},
+				{
+					Title:  "Which rows haven't been synced yet",
+					Params: json.RawMessage(`{"on":{"email":"email"},"kind":"anti"}`),
+					Notes:  "Left = today's rows, right = what you've already recorded. Out come only the ones you haven't, ready to write.",
 				},
 				{
 					Title:  "Multi-column outer join",
@@ -71,7 +83,7 @@ func init() {
 				"type":"object",
 				"properties":{
 					"on":            {"type":"object","description":"Join key mapping {left_col: right_col}. Multiple entries = multi-column key.","additionalProperties":{"type":"string"}},
-					"kind":          {"type":"string","enum":["inner","left","right","outer"],"default":"inner","description":"Join flavor. inner = matched only. left = all left + matched right. right = all right + matched left. outer = full union."},
+					"kind":          {"type":"string","enum":["inner","left","right","outer","anti"],"enumNames":["Only matching rows","All left rows","All right rows","Everything from both","Only left rows with NO match"],"default":"inner","description":"Join flavor. inner = matched only. left = all left + matched right. right = all right + matched left. outer = full union. anti = the left rows that have no match on the right — the \"which of these are new?\" question — emitted with their own columns only."},
 					"right_suffix":  {"type":"string","default":"_right","description":"Suffix appended to right-side column names that collide with left-side column names (key columns excluded — they're dropped from the right output entirely)."}
 				},
 				"required":["on"]
@@ -139,6 +151,11 @@ func executeJoinRows(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 		leftHeaderSet[h] = struct{}{}
 	}
 	outHeaders := append([]string(nil), leftHeaders...)
+	// An anti join emits left rows untouched — no right columns at all, so
+	// "did it match?" is answered by the row being here, not by a null.
+	if kind == joinKindAnti {
+		rightHeaders = nil
+	}
 	// rightOut maps right-side column → output-side column (possibly
 	// suffixed). Built once so each row emit can rename without a
 	// second collision scan.
@@ -179,7 +196,7 @@ func executeJoinRows(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 		if len(matches) == 0 {
 			// No right rows for this key. Inner skips; left/outer
 			// emit the left with nil right-side columns.
-			if kind == joinKindLeft || kind == joinKindOuter {
+			if kind == joinKindLeft || kind == joinKindOuter || kind == joinKindAnti {
 				if len(out) >= maxOut {
 					return joinTooLarge(job, maxOut), nil
 				}
@@ -188,6 +205,9 @@ func executeJoinRows(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 			continue
 		}
 		matchedRightKeys[k] = true
+		if kind == joinKindAnti {
+			continue // matched → already known → not emitted
+		}
 		for _, rr := range matches {
 			if len(out) >= maxOut {
 				return joinTooLarge(job, maxOut), nil
@@ -255,10 +275,10 @@ func parseJoinParams(params map[string]any) (map[string]string, string, string, 
 			return nil, "", "", fmt.Errorf("kind: expected string, got %T", v)
 		}
 		switch s {
-		case joinKindInner, joinKindLeft, joinKindRight, joinKindOuter:
+		case joinKindInner, joinKindLeft, joinKindRight, joinKindOuter, joinKindAnti:
 			kind = s
 		default:
-			return nil, "", "", fmt.Errorf("kind: expected inner|left|right|outer, got %q", s)
+			return nil, "", "", fmt.Errorf("kind: expected inner|left|right|outer|anti, got %q", s)
 		}
 	}
 	rightSuffix := rightSuffixDefault

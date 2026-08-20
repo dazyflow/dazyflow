@@ -4,6 +4,7 @@
 package transform
 
 import (
+	"fmt"
 	"reflect"
 	"sort"
 	"testing"
@@ -479,5 +480,33 @@ func TestGroupAggregate_HeadersSortedRegardlessOfMapOrder(t *testing.T) {
 	sort.Strings(tailCopy)
 	if !reflect.DeepEqual(tail, tailCopy) {
 		t.Errorf("aggregation header tail not sorted: %v", tail)
+	}
+}
+
+// The short form is what people reach for by hand — {"amount":"sum"} rather
+// than {"amount":{"op":"sum","column":"amount"}} — and sort_rows' friendly
+// string syntax trains them to expect it.
+func TestGroupAggregate_ShortOpForm(t *testing.T) {
+	res, err := executeGroupAggregate(t.Context(), core.Job{
+		ID: "test",
+		Params: map[string]any{
+			"by":        []any{"salesperson"},
+			"aggregate": map[string]any{"amount": "sum", "orders": "count"},
+		},
+		Input: map[string]core.Ref{"rows": {Inline: []any{
+			map[string]any{"salesperson": "Ida", "amount": 1200},
+			map[string]any{"salesperson": "Ida", "amount": 800},
+			map[string]any{"salesperson": "Nils", "amount": 300},
+		}}},
+	}, nil)
+	if err != nil || res.Status != core.StatusOK {
+		t.Fatalf("status = %v err = %v error = %+v", res.Status, err, res.Error)
+	}
+	rows, _ := res.Output["rows"].Inline.([]map[string]any)
+	if len(rows) != 2 {
+		t.Fatalf("rows = %v", res.Output["rows"].Inline)
+	}
+	if fmt.Sprint(rows[0]["amount"]) != "2000" || fmt.Sprint(rows[0]["orders"]) != "2" {
+		t.Errorf("first group = %v, want amount 2000 / orders 2", rows[0])
 	}
 }

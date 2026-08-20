@@ -1,0 +1,163 @@
+{
+  "id": "uc-ai-email-triage",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "AI reads the inbox, sorts it, drafts the easy replies",
+  "nodes": [
+    {
+      "id": "poll",
+      "module": "poll_trigger",
+      "params": {
+        "interval_seconds": 300
+      }
+    },
+    {
+      "id": "search",
+      "module": "gmail_search_messages",
+      "params": {
+        "account": "default",
+        "query": "label:inbox",
+        "only_new": true,
+        "max_results": 20
+      }
+    },
+    {
+      "id": "each",
+      "module": "for_each",
+      "params": {
+        "concurrency": 2
+      }
+    },
+    {
+      "id": "classify",
+      "module": "claude_classify",
+      "params": {
+        "categories": [
+          {
+            "name": "urgent",
+            "description": "Something is broken, blocked or angry — needs a person now."
+          },
+          {
+            "name": "question",
+            "description": "A routine question that a friendly reply can answer."
+          },
+          {
+            "name": "invoice",
+            "description": "An invoice, receipt or anything for bookkeeping."
+          },
+          {
+            "name": "spam",
+            "description": "Cold sales mail or junk."
+          }
+        ],
+        "text": "From: ${item.from}\nSubject: ${item.subject}\n\n${item.body}"
+      }
+    },
+    {
+      "id": "route",
+      "module": "switch",
+      "params": {
+        "cases": [
+          {
+            "slot": "case_1",
+            "equals": "urgent"
+          },
+          {
+            "slot": "case_2",
+            "equals": "question"
+          },
+          {
+            "slot": "case_3",
+            "equals": "invoice"
+          }
+        ]
+      }
+    },
+    {
+      "id": "escalate",
+      "module": "twilio_send_sms",
+      "params": {
+        "to": "+46700000000",
+        "body": "Urgent email from ${item.from}: ${item.subject}"
+      }
+    },
+    {
+      "id": "draft",
+      "module": "claude_draft_reply",
+      "params": {
+        "tone": "friendly",
+        "language": "en",
+        "text": "${item.body}",
+        "signature": "— Support"
+      }
+    },
+    {
+      "id": "share_draft",
+      "module": "slack_send_message",
+      "params": {
+        "channel": "#support",
+        "account": "default"
+      }
+    },
+    {
+      "id": "to_bookkeeping",
+      "module": "slack_send_message",
+      "params": {
+        "channel": "#bookkeeping",
+        "text": "Invoice mail from ${item.from}: ${item.subject}",
+        "account": "default"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "poll",
+      "from_port": "pass",
+      "to": "search",
+      "to_port": "pass"
+    },
+    {
+      "from": "search",
+      "from_port": "messages",
+      "to": "each",
+      "to_port": "items"
+    },
+    {
+      "from": "each",
+      "from_port": "body",
+      "to": "classify",
+      "to_port": "pass"
+    },
+    {
+      "from": "classify",
+      "from_port": "category",
+      "to": "route",
+      "to_port": "in"
+    },
+    {
+      "from": "route",
+      "from_port": "case_1",
+      "to": "escalate",
+      "to_port": "pass"
+    },
+    {
+      "from": "route",
+      "from_port": "case_2",
+      "to": "draft",
+      "to_port": "pass"
+    },
+    {
+      "from": "draft",
+      "from_port": "reply",
+      "to": "share_draft",
+      "to_port": "text"
+    },
+    {
+      "from": "route",
+      "from_port": "case_3",
+      "to": "to_bookkeeping",
+      "to_port": "pass"
+    }
+  ]
+}

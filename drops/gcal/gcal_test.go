@@ -9,8 +9,10 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"git.sr.ht/~klahr/dazyflow/core"
 )
@@ -535,5 +537,86 @@ func TestCovListCalendarsErrors(t *testing.T) {
 	withCalEnv(t, srv2.URL)
 	if _, err := ListCalendars(context.Background(), core.Job{Params: map[string]any{}}); err == nil {
 		t.Fatal("bad json should error")
+	}
+}
+
+// A nightly reminder flow has to be able to say "tomorrow" and mean it on
+// every run — an RFC3339-only field can't express a window that moves with
+// the schedule. Day boundaries are taken in the step's timezone.
+func TestListEvents_RelativeWindow(t *testing.T) {
+	var gotQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		_ = json.NewEncoder(w).Encode(map[string]any{"items": []map[string]any{}})
+	}))
+	defer srv.Close()
+	withCalEnv(t, srv.URL)
+
+	if _, err := ListEvents(context.Background(), core.Job{Params: map[string]any{
+		"account": "default", "calendar_id": "primary",
+		"time_min": "tomorrow", "time_max": "tomorrow+1d", "tz": "Europe/Stockholm",
+	}}); err != nil {
+		t.Fatalf("ListEvents: %v", err)
+	}
+
+	q, err := url.ParseQuery(gotQuery)
+	if err != nil {
+		t.Fatalf("parse query: %v", err)
+	}
+	min, max := q.Get("timeMin"), q.Get("timeMax")
+	tMin, err := time.Parse(time.RFC3339, min)
+	if err != nil {
+		t.Fatalf("timeMin %q is not RFC3339: %v", min, err)
+	}
+	tMax, err := time.Parse(time.RFC3339, max)
+	if err != nil {
+		t.Fatalf("timeMax %q is not RFC3339: %v", max, err)
+	}
+	if d := tMax.Sub(tMin); d != 24*time.Hour {
+		t.Errorf("window is %v wide, want exactly 24h (%s → %s)", d, min, max)
+	}
+	sthlm, err := time.LoadLocation("Europe/Stockholm")
+	if err != nil {
+		t.Skipf("no tzdata: %v", err)
+	}
+	local := tMin.In(sthlm)
+	if local.Hour() != 0 || local.Minute() != 0 {
+		t.Errorf("window does not start at local midnight: %s", local)
+	}
+	if want := time.Now().In(sthlm).AddDate(0, 0, 1).Day(); local.Day() != want {
+		t.Errorf("window starts on day %d, want tomorrow (%d)", local.Day(), want)
+	}
+}
+
+// Either end can be computed upstream, so both take a wire that overrides
+// the typed setting.
+func TestListEvents_WindowInputOverridesParam(t *testing.T) {
+	var gotQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		_ = json.NewEncoder(w).Encode(map[string]any{"items": []map[string]any{}})
+	}))
+	defer srv.Close()
+	withCalEnv(t, srv.URL)
+
+	if _, err := ListEvents(context.Background(), core.Job{
+		Params: map[string]any{"account": "default", "time_min": "2020-01-01T00:00:00Z"},
+		Input:  map[string]core.Ref{"time_min": {Inline: "2026-06-16T00:00:00Z"}},
+	}); err != nil {
+		t.Fatalf("ListEvents: %v", err)
+	}
+	q, _ := url.ParseQuery(gotQuery)
+	if got := q.Get("timeMin"); got != "2026-06-16T00:00:00Z" {
+		t.Errorf("timeMin = %q, want the wired value", got)
+	}
+}
+
+func TestListEvents_BadWindowValue(t *testing.T) {
+	withCalEnv(t, "http://127.0.0.1:1")
+	_, err := ListEvents(context.Background(), core.Job{Params: map[string]any{
+		"account": "default", "time_min": "next thursday",
+	}})
+	if err == nil || !strings.Contains(err.Error(), "time_min") {
+		t.Errorf("err = %v, want one naming time_min", err)
 	}
 }

@@ -19,6 +19,7 @@ import (
 
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/reltime"
 	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
@@ -183,56 +184,10 @@ func parseTimeString(s string) (time.Time, error) {
 
 // parseOffset parses a signed duration that, on top of Go's h/m/s, also
 // understands w (weeks) and d (days) — e.g. "3d", "-2h30m", "1w2d". An
-// empty string is a zero offset.
+// empty string is a zero offset. Shared with the relative time windows on
+// steps like Google Calendar's, so "3d" means the same thing everywhere.
 func parseOffset(s string) (time.Duration, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return 0, nil
-	}
-	sign := time.Duration(1)
-	switch s[0] {
-	case '+':
-		s = s[1:]
-	case '-':
-		sign = -1
-		s = s[1:]
-	}
-	var total time.Duration
-	i := 0
-	for i < len(s) {
-		// Read the number.
-		start := i
-		for i < len(s) && s[i] >= '0' && s[i] <= '9' {
-			i++
-		}
-		if i == start {
-			return 0, fmt.Errorf("bad offset %q: expected a number before position %d", s, i)
-		}
-		n, err := strconv.Atoi(s[start:i])
-		if err != nil {
-			return 0, fmt.Errorf("bad offset %q: %v", s, err)
-		}
-		if i >= len(s) {
-			return 0, fmt.Errorf("bad offset %q: number %d has no unit (use w, d, h, m, or s)", s, n)
-		}
-		unit := s[i]
-		i++
-		switch unit {
-		case 'w':
-			total += time.Duration(n) * 7 * 24 * time.Hour
-		case 'd':
-			total += time.Duration(n) * 24 * time.Hour
-		case 'h':
-			total += time.Duration(n) * time.Hour
-		case 'm':
-			total += time.Duration(n) * time.Minute
-		case 's':
-			total += time.Duration(n) * time.Second
-		default:
-			return 0, fmt.Errorf("bad offset %q: unknown unit %q (use w, d, h, m, or s)", s, string(unit))
-		}
-	}
-	return sign * total, nil
+	return reltime.ParseOffset(s)
 }
 
 // loadLocation resolves a timezone name. Empty and "UTC" are UTC; "Local" is

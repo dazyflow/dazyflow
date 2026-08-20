@@ -1,0 +1,32 @@
+{
+  "id": "watch-a-page",
+  "version": "1",
+  "name": "Watch a page → ping my phone",
+  "description": "Checks a web page every hour and notifies you only when what it says has actually changed — a tender list, a status page, a price. The first check quietly records the page as it is today; from then on, only changes reach your phone. Change the address, the interval, and your ntfy topic.",
+  "icon": "eye",
+  "triggers": [{ "type": "poll", "interval_seconds": 3600 }],
+  "nodes": [
+    {
+      "id": "watch",
+      "module": "web_watch",
+      "params": {
+        "url": "https://example.com/the-page-you-care-about",
+        "text_only": true
+      },
+      "position": { "x": 200, "y": 200 }
+    },
+    {
+      "id": "push",
+      "module": "ntfy",
+      "params": {
+        "topic": "REPLACE_WITH_YOUR_TOPIC",
+        "title": "The page changed",
+        "click": "https://example.com/the-page-you-care-about"
+      },
+      "position": { "x": 560, "y": 200 }
+    }
+  ],
+  "edges": [
+    { "from": "watch", "from_port": "on_change", "to": "push", "to_port": "message", "on_error": "" }
+  ]
+}

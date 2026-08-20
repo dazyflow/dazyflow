@@ -123,7 +123,13 @@ func TestShippedTemplatesCompose(t *testing.T) {
 				if !ok {
 					continue // the composition check already flagged the unknown module
 				}
-				for _, issue := range paramSchemaIssues(n.Params, m.ParamsSchema) {
+				wired := map[string]bool{}
+				for _, e := range g.Edges {
+					if e.To == n.ID {
+						wired[e.ToPort] = true
+					}
+				}
+				for _, issue := range paramSchemaIssues(n.Params, m.ParamsSchema, wired) {
 					t.Errorf("node %q (%s): %s", n.ID, n.Module, issue)
 				}
 			}
@@ -179,7 +185,13 @@ var stringSinkPorts = map[string]map[string]bool{
 // composition check can't see. It only inspects declared properties, so
 // a drop whose schema omits a param it accepts won't produce a false
 // positive.
-func paramSchemaIssues(params map[string]any, schema json.RawMessage) []string {
+//
+// wired names the node's connected input ports. A required setting whose
+// matching input is wired is satisfied — that is the product's own model
+// ("fill it in, or connect it"; a connected input overrides the typed
+// value), so demanding a placeholder param alongside the wire would push
+// templates into carrying values that the run ignores.
+func paramSchemaIssues(params map[string]any, schema json.RawMessage, wired map[string]bool) []string {
 	if len(schema) == 0 {
 		return nil
 	}
@@ -194,9 +206,13 @@ func paramSchemaIssues(params map[string]any, schema json.RawMessage) []string {
 	}
 	var issues []string
 	for _, req := range s.Required {
-		if _, ok := params[req]; !ok {
-			issues = append(issues, fmt.Sprintf("missing required param %q", req))
+		if _, ok := params[req]; ok {
+			continue
 		}
+		if wired[req] {
+			continue
+		}
+		issues = append(issues, fmt.Sprintf("missing required param %q (and no input wired to %q)", req, req))
 	}
 	for name, prop := range s.Properties {
 		v, ok := params[name]

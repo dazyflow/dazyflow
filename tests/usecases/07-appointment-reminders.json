@@ -1,0 +1,134 @@
+{
+  "id": "uc-appointment-reminders",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "Text tomorrow's customers a reminder",
+  "triggers": [
+    {
+      "type": "cron",
+      "cron": "0 17 * * *",
+      "tz": "Europe/Stockholm"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "events",
+      "module": "gcal_list_events",
+      "params": {
+        "account": "default",
+        "calendar_id": "primary",
+        "single_events": true,
+        "limit": 250,
+        "time_min": "tomorrow",
+        "time_max": "tomorrow+1d",
+        "tz": "Europe/Stockholm"
+      }
+    },
+    {
+      "id": "with_phone",
+      "module": "compute_rows",
+      "params": {
+        "filter": "row.description.matches('[0-9][0-9 ()+-]{6,}')"
+      }
+    },
+    {
+      "id": "each",
+      "module": "for_each",
+      "params": {
+        "concurrency": 2
+      }
+    },
+    {
+      "id": "find_phone",
+      "module": "regex",
+      "params": {
+        "pattern": "\\+?[0-9][0-9 ()-]{6,}[0-9]",
+        "mode": "extract",
+        "text": "${item.description}"
+      }
+    },
+    {
+      "id": "clean_phone",
+      "module": "phone",
+      "params": {
+        "default_region": "SE"
+      }
+    },
+    {
+      "id": "sms",
+      "module": "twilio_send_sms",
+      "params": {
+        "body": "Hej! Påminnelse om din tid: ${item.summary}, ${item.start}. Svara på detta sms om du behöver boka om."
+      }
+    },
+    {
+      "id": "logged",
+      "module": "map_rows",
+      "params": {
+        "select": [
+          "id",
+          "summary",
+          "start"
+        ],
+        "rename": {
+          "id": "event_id"
+        }
+      }
+    },
+    {
+      "id": "log",
+      "module": "builtin_store_append",
+      "params": {
+        "table": "reminders_sent",
+        "unique_by": [
+          "event_id"
+        ]
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "events",
+      "from_port": "events",
+      "to": "with_phone",
+      "to_port": "rows"
+    },
+    {
+      "from": "with_phone",
+      "from_port": "rows",
+      "to": "each",
+      "to_port": "items"
+    },
+    {
+      "from": "each",
+      "from_port": "body",
+      "to": "find_phone",
+      "to_port": "pass"
+    },
+    {
+      "from": "find_phone",
+      "from_port": "out",
+      "to": "clean_phone",
+      "to_port": "phone"
+    },
+    {
+      "from": "clean_phone",
+      "from_port": "out",
+      "to": "sms",
+      "to_port": "to"
+    },
+    {
+      "from": "with_phone",
+      "from_port": "rows",
+      "to": "logged",
+      "to_port": "rows"
+    },
+    {
+      "from": "logged",
+      "from_port": "rows",
+      "to": "log",
+      "to_port": "rows"
+    }
+  ]
+}

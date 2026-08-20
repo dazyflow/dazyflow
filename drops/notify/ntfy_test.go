@@ -127,3 +127,32 @@ func TestNtfy_ServerError(t *testing.T) {
 		t.Errorf("err = %+v", res.Error)
 	}
 }
+
+// The tap link normally comes from upstream — an approval step's link — so
+// the Click input has to override the typed param, like Title and Message do.
+func TestNtfy_ClickInputOverridesParam(t *testing.T) {
+	hfnet.SetAllowPrivateEgress(true)
+	defer hfnet.SetAllowPrivateEgress(false)
+
+	var gotClick string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotClick = r.Header.Get("Click")
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(`{"id":"x"}`))
+	}))
+	defer srv.Close()
+
+	res, err := executeNtfy(context.Background(), core.Job{
+		Params: map[string]any{"server": srv.URL, "topic": "alerts", "click": "https://typed.example"},
+		Input: map[string]core.Ref{
+			"message": {Inline: "approve me"},
+			"click":   {Inline: "https://dazyflow.example/approve/abc"},
+		},
+	}, nil)
+	if err != nil || res.Status != core.StatusOK {
+		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
+	}
+	if gotClick != "https://dazyflow.example/approve/abc" {
+		t.Errorf("Click = %q, want the wired link", gotClick)
+	}
+}

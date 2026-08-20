@@ -4,6 +4,7 @@
 package transform
 
 import (
+	"encoding/json"
 	"testing"
 
 	"git.sr.ht/~klahr/dazyflow/core"
@@ -111,5 +112,47 @@ func TestExpression_EvalErrorOnNullField(t *testing.T) {
 	res := runExpr(t, "input.name", nil)
 	if res.Status != core.StatusError || res.Error.Code != "eval" {
 		t.Errorf("status/code = %v/%v, want error/eval", res.Status, res.Error)
+	}
+}
+
+// A formula that builds a row or an object is the obvious way to shape data
+// for a "log this" step. cel-go hands maps back as map[any]any, which
+// encoding/json refuses and every row consumer rejects — so this used to
+// validate clean and fail at run time. unwrapCEL normalises them now.
+func TestExpression_ObjectResultIsJSONShaped(t *testing.T) {
+	res := runExpr(t, "{'payment_id': input.id, 'amount': input.amount}",
+		map[string]any{"id": "pi_1", "amount": int64(49900)})
+	got, ok := exprOut(t, res).Inline.(map[string]any)
+	if !ok {
+		t.Fatalf("result = %#v, want map[string]any", exprOut(t, res).Inline)
+	}
+	if got["payment_id"] != "pi_1" || got["amount"] != int64(49900) {
+		t.Errorf("result = %v", got)
+	}
+	if _, err := json.Marshal(got); err != nil {
+		t.Errorf("result is not JSON-serialisable: %v", err)
+	}
+}
+
+func TestExpression_RowListResultIsJSONShaped(t *testing.T) {
+	res := runExpr(t, "input.map(r, {'email': r.email, 'tags': ['a']})",
+		[]any{map[string]any{"email": "a@x.se"}})
+	list, ok := exprOut(t, res).Inline.([]any)
+	if !ok || len(list) != 1 {
+		t.Fatalf("result = %#v, want a one-element list", exprOut(t, res).Inline)
+	}
+	row, ok := list[0].(map[string]any)
+	if !ok {
+		t.Fatalf("row = %#v, want map[string]any", list[0])
+	}
+	if row["email"] != "a@x.se" {
+		t.Errorf("row = %v", row)
+	}
+	// The nested list must survive normalisation too.
+	if tags, ok := row["tags"].([]any); !ok || len(tags) != 1 || tags[0] != "a" {
+		t.Errorf("nested list = %#v", row["tags"])
+	}
+	if _, err := json.Marshal(list); err != nil {
+		t.Errorf("result is not JSON-serialisable: %v", err)
 	}
 }

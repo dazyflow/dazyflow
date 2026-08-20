@@ -1,0 +1,191 @@
+{
+  "id": "uc-keep-two-systems-in-step",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "Google Sheet → database + Notion, without duplicates",
+  "triggers": [
+    {
+      "type": "cron",
+      "cron": "*/30 * * * *",
+      "tz": "Europe/Stockholm"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "read",
+      "module": "sheets_read_range",
+      "params": {
+        "spreadsheet_id": "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789",
+        "range": "Customers",
+        "headers": true,
+        "account": "default"
+      }
+    },
+    {
+      "id": "shape",
+      "module": "map_rows",
+      "params": {
+        "select": [
+          "email",
+          "name",
+          "company"
+        ],
+        "rename": {
+          "company": "organisation"
+        }
+      }
+    },
+    {
+      "id": "clean",
+      "module": "dedupe_rows",
+      "params": {
+        "by": [
+          "email"
+        ],
+        "keep": "last"
+      }
+    },
+    {
+      "id": "upsert",
+      "module": "postgres_upsert_rows",
+      "params": {
+        "table": "customers",
+        "conflict_columns": [
+          "email"
+        ],
+        "update_columns": [
+          "name",
+          "organisation"
+        ],
+        "create_table": true
+      }
+    },
+    {
+      "id": "already",
+      "module": "builtin_store_find",
+      "params": {
+        "table": "notion_synced",
+        "limit": 5000
+      }
+    },
+    {
+      "id": "matched",
+      "module": "join_rows",
+      "params": {
+        "on": {
+          "email": "email"
+        },
+        "kind": "anti"
+      }
+    },
+    {
+      "id": "each",
+      "module": "for_each",
+      "params": {
+        "concurrency": 2
+      }
+    },
+    {
+      "id": "page",
+      "module": "notion_create_page",
+      "params": {
+        "account": "default",
+        "parent_database_id": "2f1c9a5b7d3e4f60a1b2c3d4e5f60718",
+        "title": "${item.name}",
+        "content": "Company: ${item.organisation}\nEmail: ${item.email}"
+      }
+    },
+    {
+      "id": "mark",
+      "module": "compute_rows",
+      "params": {
+        "compute": {
+          "synced_at": "string(now)"
+        }
+      }
+    },
+    {
+      "id": "mark_cols",
+      "module": "map_rows",
+      "params": {
+        "select": [
+          "email",
+          "synced_at"
+        ]
+      }
+    },
+    {
+      "id": "remember",
+      "module": "builtin_store_append",
+      "params": {
+        "table": "notion_synced",
+        "unique_by": [
+          "email"
+        ]
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "read",
+      "from_port": "rows",
+      "to": "shape",
+      "to_port": "rows"
+    },
+    {
+      "from": "shape",
+      "from_port": "rows",
+      "to": "clean",
+      "to_port": "rows"
+    },
+    {
+      "from": "clean",
+      "from_port": "rows",
+      "to": "upsert",
+      "to_port": "rows"
+    },
+    {
+      "from": "clean",
+      "from_port": "rows",
+      "to": "matched",
+      "to_port": "left_rows"
+    },
+    {
+      "from": "already",
+      "from_port": "rows",
+      "to": "matched",
+      "to_port": "right_rows"
+    },
+    {
+      "from": "matched",
+      "from_port": "rows",
+      "to": "each",
+      "to_port": "items"
+    },
+    {
+      "from": "each",
+      "from_port": "body",
+      "to": "page",
+      "to_port": "pass"
+    },
+    {
+      "from": "matched",
+      "from_port": "rows",
+      "to": "mark",
+      "to_port": "rows"
+    },
+    {
+      "from": "mark",
+      "from_port": "rows",
+      "to": "mark_cols",
+      "to_port": "rows"
+    },
+    {
+      "from": "mark_cols",
+      "from_port": "rows",
+      "to": "remember",
+      "to_port": "rows"
+    }
+  ]
+}

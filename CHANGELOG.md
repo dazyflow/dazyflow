@@ -23,7 +23,68 @@ into the image.)
 
 ## [Unreleased]
 
+### Added
+
+- **Attachments can be read off incoming email.** `gmail_get_attachments`
+  (Gmail — Download attachments) saves the files attached to a message and
+  hands them on: `first` is a file ref that wires straight into Upload to
+  Drive / Write file / an email's Attachments, and `files` lists them all with
+  name, type, size and path. "Only these types" takes just the PDFs and ignores
+  signature images, which are skipped anyway (they carry no filename). Files
+  land in the run's scratch area by default, or a workspace folder if one is
+  named; sender-controlled filenames are sanitised, so `../../etc/passwd`
+  cannot escape the sandbox. Dazyflow could already *send* attachments — this
+  closes the other half, and with it the "file the invoices people email me"
+  job, which previously had no path at all.
+- **`web_watch` (Watch a page — tell me when it changes).** Pair it with an
+  Interval trigger and it fetches a page, compares it with what it said last
+  time, and emits `on_change` only when it actually changed — so, like an
+  unused Branch port, everything downstream stays dormant on a quiet check. The
+  first check baselines silently. It compares the visible words rather than the
+  HTML by default, so a rotating CSRF token or an asset hash doesn't cry wolf,
+  and a "Watch just this" pattern narrows it to one price or status line.
+  Watching an arbitrary page previously meant four steps and a hand-rolled
+  collection to diff against.
+- **Five templates**, covering the requested jobs that were buildable but
+  laborious to assemble: Stripe payment → thank-you/team ping/sales log, AI
+  inbox triage, approval before a refund, invoices emailed to you → filed in
+  Drive, and watch a page → ping my phone (which needs no connected account at
+  all).
+- **`join_rows` gained `kind: "anti"`** — the left rows with no match on the
+  right, carrying only their own columns. This is the "which of these haven't I
+  processed yet?" question every sync asks; see the matching fix below for why
+  the left-join answer was a trap.
+- **Relative time windows on Google Calendar.** `time_min`/`time_max` now
+  accept `now`, `today`, `tomorrow`, `yesterday`, `+3d`, `-2h30m`,
+  `tomorrow+9h` as well as absolute timestamps, take a `tz` for the day
+  boundaries, and can be wired from an upstream step. A nightly reminder flow
+  can finally say "tomorrow" and mean it on every run; before, the field took
+  RFC3339 only, so the window had to be left wide open and filtered afterwards.
+  The grammar lives in `drops/internal/reltime`, shared with the Date step's
+  offset parser.
+- **The Regex step's text can be typed on the step.** Inside a For each there
+  is no upstream node to wire from, so `text: "${item.description}"` is now how
+  a loop body reads a field. A wired input still wins.
+
 ### Fixed
+
+- **Formulas can produce rows and objects again.** A CEL expression returning a
+  map — `{'payment_id': input.id}`, or a `map()` over rows — came back from
+  cel-go as `map[any]any`, which `encoding/json` refuses and every row consumer
+  rejects with "expected object, got map[interface {}]interface {}". So the
+  obvious way to shape data for a "log this" step passed every validation and
+  then failed at run time. `unwrapCEL` now normalises composites recursively,
+  which fixes both `expression` and a `compute_rows` column whose formula
+  returns an object.
+- **`group_aggregate` accepts the short form.** `{"revenue": "sum"}` — the op
+  alone, with the output name doubling as the source column — now works
+  alongside `{"revenue": {"op": "sum", "column": "revenue"}}`. `sort_rows`
+  takes a friendly string, so the nested-object requirement next door was a
+  stumble that only the editor's form hid.
+- **ntfy's "Link to open" takes a wire.** Its own help text says to wire an
+  approval step's link into it, but it was a typed setting with no input port,
+  so the link had to be spliced into the message body by an extra step.
+
 
 - **Emailed links now open in the right org.** The "View run details" link in a
   flow-failure email pointed at `/runs/<id>` with no org in it, and the customer

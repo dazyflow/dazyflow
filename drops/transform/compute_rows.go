@@ -259,5 +259,36 @@ func unwrapCEL(v ref.Val) (any, error) {
 	if err != nil {
 		return raw, nil // fall back to the wrapped value; better than dropping
 	}
-	return native, nil
+	return normalizeJSON(native), nil
+}
+
+// normalizeJSON rewrites the value cel-go hands back into something the rest
+// of the system can actually carry. ConvertToNative unwraps a CEL map into a
+// map[any]any, which encoding/json refuses ("unsupported type") and every row
+// consumer rejects ("expected object") — so a formula that builds a row or an
+// object used to validate clean and then fail at run time. Keys are rendered
+// with fmt.Sprint, which is exact for the string keys CEL object literals
+// produce and sane for the numeric ones a map() over indices can produce.
+func normalizeJSON(v any) any {
+	switch t := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(t))
+		for k, val := range t {
+			out[k] = normalizeJSON(val)
+		}
+		return out
+	case map[any]any:
+		out := make(map[string]any, len(t))
+		for k, val := range t {
+			out[fmt.Sprint(k)] = normalizeJSON(val)
+		}
+		return out
+	case []any:
+		out := make([]any, len(t))
+		for i, val := range t {
+			out[i] = normalizeJSON(val)
+		}
+		return out
+	}
+	return v
 }

@@ -1,0 +1,18 @@
+{
+  "id": "uc-watch-page-and-alert",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "Watch a web page, ping me when it changes",
+  "nodes": [
+    {"id": "poll", "module": "poll_trigger", "params": {"interval_seconds": 3600}},
+    {"id": "watch", "module": "web_watch", "params": {"url": "https://example.com/tenders", "text_only": true}},
+    {"id": "push", "module": "ntfy", "params": {"topic": "acme-alerts-8f2k", "title": "The page changed", "click": "https://example.com/tenders"}},
+    {"id": "post", "module": "slack_send_message", "params": {"channel": "#watch", "account": "default"}}
+  ],
+  "edges": [
+    {"from": "poll", "from_port": "pass", "to": "watch", "to_port": "pass"},
+    {"from": "watch", "from_port": "on_change", "to": "push", "to_port": "message"},
+    {"from": "watch", "from_port": "on_change", "to": "post", "to_port": "text"}
+  ]
+}
