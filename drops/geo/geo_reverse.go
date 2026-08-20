@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/geoloc"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 	"git.sr.ht/~klahr/dazyflow/engine"
 )
@@ -97,7 +98,7 @@ func executeReverse(ctx context.Context, job core.Job, _ chan<- core.Progress) (
 			// Echo the queried coordinate (not the backend's snapped one) so
 			// chaining stays faithful to what the user pointed at.
 			"place":      {MIME: "text/plain", Inline: place.DisplayName},
-			"coordinate": {MIME: "text/plain", Inline: fmtCoord(lat, lon)},
+			"coordinate": {MIME: "text/plain", Inline: geoloc.Fmt(lat, lon)},
 			"address":    {MIME: "application/json", Inline: addr},
 			"result":     {MIME: "application/json", Inline: place.Raw},
 		},
@@ -112,11 +113,11 @@ func resolveCoord(job core.Job) (lat, lon float64, err error) {
 		return 0, 0, errors.New(`'Coordinate' input must be text like "59.33,18.07"`)
 	}
 	if s := strings.TrimSpace(txt); s != "" {
-		return parseLatLon(s)
+		return geoloc.Parse(s)
 	}
 	point := strings.TrimSpace(params.StringDefault(job.Params, "point", ""))
 	if point == "" {
 		return 0, 0, errors.New(`pick a point on the map, or wire a "lat,lon" value into the Coordinate input`)
 	}
-	return parseLatLon(point)
+	return geoloc.Parse(point)
 }

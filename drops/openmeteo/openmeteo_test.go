@@ -5,7 +5,6 @@ package openmeteo
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -80,63 +79,6 @@ func textPin(t *testing.T, r core.Result, port string) string {
 		t.Fatalf("output pin %q is %T, want string", port, ref.Inline)
 	}
 	return s
-}
-
-func TestParseCoordinate(t *testing.T) {
-	cases := []struct {
-		in      string
-		wantLat float64
-		wantLon float64
-		wantErr bool
-	}{
-		{"59.33,18.07", 59.33, 18.07, false},
-		{"  40.71 , -74.01 ", 40.71, -74.01, false},
-		{"59.33", 0, 0, true},         // no comma
-		{"a,b", 0, 0, true},           // non-numeric
-		{"59.33,18.07,1", 0, 0, true}, // too many parts
-	}
-	for _, c := range cases {
-		lat, lon, err := parseCoordinate(c.in)
-		if c.wantErr {
-			if err == nil {
-				t.Errorf("parseCoordinate(%q): want error, got (%v,%v)", c.in, lat, lon)
-			}
-			continue
-		}
-		if err != nil {
-			t.Errorf("parseCoordinate(%q): unexpected error %v", c.in, err)
-			continue
-		}
-		if lat != c.wantLat || lon != c.wantLon {
-			t.Errorf("parseCoordinate(%q) = (%v,%v), want (%v,%v)", c.in, lat, lon, c.wantLat, c.wantLon)
-		}
-	}
-}
-
-func TestResolveCoord(t *testing.T) {
-	lat, lon, err := resolveCoord(core.Job{Params: map[string]any{"lat": 59.33, "lon": 18.07}})
-	if err != nil || lat != 59.33 || lon != 18.07 {
-		t.Fatalf("params path: got (%v,%v,%v)", lat, lon, err)
-	}
-	// Coordinate input overrides params.
-	job := core.Job{
-		Params: map[string]any{"lat": 1.0, "lon": 2.0},
-		Input:  map[string]core.Ref{"coordinate": {Inline: "40.71,-74.01"}},
-	}
-	lat, lon, err = resolveCoord(job)
-	if err != nil || lat != 40.71 || lon != -74.01 {
-		t.Fatalf("input override: got (%v,%v,%v)", lat, lon, err)
-	}
-	if _, _, err := resolveCoord(core.Job{Params: map[string]any{}}); err == nil {
-		t.Error("missing coordinate: want error")
-	}
-	// A numeric string param must NOT be accepted as a coordinate.
-	if _, _, err := resolveCoord(core.Job{Params: map[string]any{"lat": "5", "lon": "5"}}); err == nil {
-		t.Error("string lat/lon: want error (numbers only)")
-	}
-	if _, _, err := resolveCoord(core.Job{Params: map[string]any{"lat": 91.0, "lon": 0.0}}); err == nil {
-		t.Error("lat 91: want range error")
-	}
 }
 
 func TestUnitsAndClass(t *testing.T) {
@@ -292,60 +234,6 @@ func TestVerifyOpenMeteo_OK(t *testing.T) {
 	}
 }
 
-func TestCovFloatParam(t *testing.T) {
-	cases := []struct {
-		name string
-		val  any
-		ok   bool
-		want float64
-	}{
-		{"float64", float64(1.5), true, 1.5},
-		{"float32", float32(2), true, 2},
-		{"int", int(3), true, 3},
-		{"int64", int64(4), true, 4},
-		{"jsonNumber", json.Number("5.5"), true, 5.5},
-		{"badJsonNumber", json.Number("x"), false, 0},
-		{"string", "6", false, 0},
-		{"missing", nil, false, 0},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			m := map[string]any{}
-			if c.val != nil {
-				m["k"] = c.val
-			}
-			got, ok := floatParam(m, "k")
-			if ok != c.ok || (ok && got != c.want) {
-				t.Fatalf("floatParam=%v,%v want %v,%v", got, ok, c.want, c.ok)
-			}
-		})
-	}
-}
-
-func TestCovResolveCoordRanges(t *testing.T) {
-	// Non-text coordinate input.
-	if _, _, err := resolveCoord(core.Job{Input: map[string]core.Ref{"coordinate": {Inline: 1}}}); err == nil {
-		t.Fatal("non-text coordinate should error")
-	}
-	// Bad coordinate text.
-	if _, _, err := resolveCoord(core.Job{Input: map[string]core.Ref{"coordinate": {Inline: "nope"}}}); err == nil {
-		t.Fatal("bad coordinate text should error")
-	}
-	// lon out of range (param path).
-	if _, _, err := resolveCoord(core.Job{Params: map[string]any{"lat": 1.0, "lon": 999.0}}); err == nil {
-		t.Fatal("lon out of range should error")
-	}
-}
-
-func TestCovUnitSymbols(t *testing.T) {
-	if tempUnit("imperial") != "°F" || tempUnit("metric") != "°C" {
-		t.Fatal("tempUnit")
-	}
-	if speedUnit("imperial") != "mph" || speedUnit("metric") != "m/s" {
-		t.Fatal("speedUnit")
-	}
-}
-
 func TestCovExtractOMError(t *testing.T) {
 	if got := extractOMError([]byte(`{"reason":"bad lat"}`)); got != "bad lat" {
 		t.Fatalf("reason = %q", got)
@@ -384,12 +272,6 @@ func TestCovHttpFailure(t *testing.T) {
 func TestCovClassForDefault(t *testing.T) {
 	if classFor(123) != "" {
 		t.Fatal("unknown code should be empty class")
-	}
-}
-
-func TestCovCapitalizeFirst(t *testing.T) {
-	if capitalizeFirst("") != "" || capitalizeFirst("rain") != "Rain" || capitalizeFirst("Rain") != "Rain" || capitalizeFirst("9") != "9" {
-		t.Fatal("capitalizeFirst")
 	}
 }
 

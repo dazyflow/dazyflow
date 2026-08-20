@@ -42,6 +42,14 @@ const supportNotifyTimeout = 2 * time.Minute
 // ticketURLFor builds the absolute link to a ticket for the audience that gets
 // the mail. The two sides live at different routes and an agent following the
 // customer's URL would land on a ticket that isn't in their tenant.
+//
+// Only the customer link is pinned to the filing org (see withOrg in
+// orglink.go). The customer's own view is tenant-scoped — loadTicketForTenant
+// refuses a ticket outside the session's org — so a member of several orgs
+// following an unpinned link would be told the ticket doesn't exist. The agent
+// queue resolves tickets cross-tenant on purpose (loadTicketForAgent, gated on
+// the support-agent role), so pinning it there would try to move the agent into
+// the customer's org for no benefit — and agents generally aren't members of it.
 func (h *HTTPGateway) ticketURLFor(t core.Ticket, agent bool) string {
 	base := strings.TrimRight(h.svc.PublicBaseURL, "/")
 	if base == "" {
@@ -50,7 +58,7 @@ func (h *HTTPGateway) ticketURLFor(t core.Ticket, agent bool) string {
 	if agent {
 		return base + "/support/queue/" + t.ID
 	}
-	return base + "/support/" + t.ID
+	return withOrg(base+"/support/"+t.ID, t.Tenant)
 }
 
 // supportMailReady reports whether this deployment can send support mail at all.

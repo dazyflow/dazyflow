@@ -7,13 +7,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/geoloc"
 	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
@@ -41,35 +38,20 @@ func verifyOpenMeteo(ctx context.Context, conn map[string]string) error {
 	q.Set("longitude", "0")
 	q.Set("current", "temperature_2m")
 	q.Set("apikey", key)
-	u := commercialURL + "?" + q.Encode()
 
-	if err := hfnet.EgressAllowedFor(ctx, u); err != nil {
+	status, body, err := geoloc.Probe(ctx, "Open-Meteo", commercialURL+"?"+q.Encode())
+	if err != nil {
 		return err
 	}
 
-	timeout := 10 * time.Second
-	reqCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	req, err := http.NewRequestWithContext(reqCtx, "GET", u, nil)
-	if err != nil {
-		return fmt.Errorf("could not build request: %w", err)
-	}
-
-	resp, err := hfnet.SafeHTTPClient(timeout, hfnet.PrivateEgressAllowed()).Do(req)
-	if err != nil {
-		return fmt.Errorf("could not reach Open-Meteo: %w", err)
-	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
-
 	switch {
-	case resp.StatusCode == 401:
+	case status == 401:
 		if msg := extractOMError(body); msg != "" {
 			return errors.New(msg)
 		}
 		return errors.New("Open-Meteo rejected the API key — check that it's correct (it's only needed for the commercial plan)")
-	case resp.StatusCode < 200 || resp.StatusCode >= 300:
-		return fmt.Errorf("Open-Meteo returned HTTP %d: %s", resp.StatusCode, extractOMError(body))
+	case status < 200 || status >= 300:
+		return fmt.Errorf("Open-Meteo returned HTTP %d: %s", status, extractOMError(body))
 	}
 	return nil
 }

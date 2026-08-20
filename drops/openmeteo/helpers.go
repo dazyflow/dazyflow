@@ -17,20 +17,20 @@
 // The coordinate can be typed on the node as separate Latitude / Longitude
 // numbers, or wired in from another step as a single "lat,lon" text value on
 // the Coordinate input (so a geocode step, a form field, or a device's GPS
-// can drive it). The hosts are fixed (not tenant-supplied), but the dial still
-// goes through the shared SSRF guard (net.Do → SafeHTTPClient).
+// can drive it). Coordinate parsing, unit symbols and number formatting are
+// shared with the other location connectors in drops/internal/geoloc. The
+// hosts are fixed (not tenant-supplied), but the dial still goes through the
+// shared SSRF guard (net.Do → SafeHTTPClient).
 package openmeteo
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/geoloc"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 )
@@ -54,81 +54,6 @@ const maxResponseBytes = 2 << 20 // 2 MiB
 // case — the free non-commercial endpoint needs no key.
 func resolveKey(job core.Job) string {
 	return strings.TrimSpace(params.StringDefault(job.Params, "api_key", ""))
-}
-
-// floatParam reads a numeric param as float64, accepting the Go number types a
-// decoded JSON document can carry. It deliberately does NOT parse numeric
-// strings: a coordinate is a number, and refusing strings keeps a stray text
-// value (e.g. a mis-wired param) from being mistaken for a valid lat/lon.
-func floatParam(p map[string]any, key string) (float64, bool) {
-	v, ok := p[key]
-	if !ok {
-		return 0, false
-	}
-	switch n := v.(type) {
-	case float64:
-		return n, true
-	case float32:
-		return float64(n), true
-	case int:
-		return float64(n), true
-	case int64:
-		return float64(n), true
-	case json.Number:
-		if f, err := n.Float64(); err == nil {
-			return f, true
-		}
-	}
-	return 0, false
-}
-
-// parseCoordinate splits a "lat,lon" string (e.g. "59.33,18.07") into two
-// floats. Whitespace around either part is tolerated. A missing comma or a
-// non-numeric part is a clear user error, reported as such.
-func parseCoordinate(s string) (lat, lon float64, err error) {
-	parts := strings.Split(s, ",")
-	if len(parts) != 2 {
-		return 0, 0, fmt.Errorf("coordinate %q must be \"lat,lon\" — e.g. 59.33,18.07", s)
-	}
-	lat, err = strconv.ParseFloat(strings.TrimSpace(parts[0]), 64)
-	if err != nil {
-		return 0, 0, fmt.Errorf("latitude %q isn't a number", strings.TrimSpace(parts[0]))
-	}
-	lon, err = strconv.ParseFloat(strings.TrimSpace(parts[1]), 64)
-	if err != nil {
-		return 0, 0, fmt.Errorf("longitude %q isn't a number", strings.TrimSpace(parts[1]))
-	}
-	return lat, lon, nil
-}
-
-// resolveCoord determines the target coordinate: the Coordinate input
-// ("lat,lon") wins when wired with text, otherwise the Latitude/Longitude
-// params. The result is range-checked so an obviously bad coordinate fails
-// fast with a readable message instead of a remote 400.
-func resolveCoord(job core.Job) (lat, lon float64, err error) {
-	txt, ok := params.TextInputOr(job, "coordinate", "")
-	if !ok {
-		return 0, 0, errors.New(`'Coordinate' input must be text like "59.33,18.07"`)
-	}
-	if s := strings.TrimSpace(txt); s != "" {
-		if lat, lon, err = parseCoordinate(s); err != nil {
-			return 0, 0, err
-		}
-	} else {
-		var latOK, lonOK bool
-		lat, latOK = floatParam(job.Params, "lat")
-		lon, lonOK = floatParam(job.Params, "lon")
-		if !latOK || !lonOK {
-			return 0, 0, errors.New(`set Latitude and Longitude, or wire a "lat,lon" value into the Coordinate input`)
-		}
-	}
-	if lat < -90 || lat > 90 {
-		return 0, 0, fmt.Errorf("latitude %g is out of range (must be between -90 and 90)", lat)
-	}
-	if lon < -180 || lon > 180 {
-		return 0, 0, fmt.Errorf("longitude %g is out of range (must be between -180 and 180)", lon)
-	}
-	return lat, lon, nil
 }
 
 // normalizeUnits maps the units param to metric or imperial, defaulting to
@@ -155,22 +80,6 @@ func windParam(units string) string {
 		return "mph"
 	}
 	return "ms"
-}
-
-// tempUnit / speedUnit return the display symbols for a units value, so a
-// human-readable summary reads "12.3°C" / "3.4 m/s" rather than a bare number.
-func tempUnit(units string) string {
-	if units == "imperial" {
-		return "°F"
-	}
-	return "°C"
-}
-
-func speedUnit(units string) string {
-	if units == "imperial" {
-		return "mph"
-	}
-	return "m/s"
 }
 
 // baseQuery builds the latitude/longitude/unit query shared by both drops.
@@ -218,14 +127,8 @@ func extractOMError(body []byte) string {
 // happens on the commercial host: the configured key is wrong (or the free
 // endpoint would have answered without one).
 func httpFailure(job core.Job, status int, body []byte, err error) *core.Result {
-	if err != nil {
-		if hfnet.IsSSRFError(err) {
-			r := params.ErrDetails(job, "egress_blocked",
-				"Couldn't reach Open-Meteo — the request was blocked by the egress policy.", err.Error())
-			return &r
-		}
-		r := params.Err(job, "openmeteo_http_error", "Couldn't reach Open-Meteo: "+err.Error())
-		return &r
+	if r := geoloc.TransportFailure(job, "openmeteo", "Open-Meteo", err); r != nil {
+		return r
 	}
 	if status == 401 {
 		msg := "Open-Meteo rejected the API key (401). The key is only for the commercial plan — check that it's correct, or clear it to use the free non-commercial endpoint."
@@ -281,22 +184,4 @@ func classFor(code int) string {
 	default:
 		return ""
 	}
-}
-
-// num1 formats a number to one decimal ("12.3"); num0 rounds to a whole
-// number ("12") for the coarser daily min/max range.
-func num1(f float64) string { return strconv.FormatFloat(f, 'f', 1, 64) }
-func num0(f float64) string { return strconv.FormatFloat(f, 'f', 0, 64) }
-
-// capitalizeFirst upper-cases the first ASCII letter of a phrase so
-// "clear sky" reads "Clear sky" at the start of a summary.
-func capitalizeFirst(s string) string {
-	if s == "" {
-		return s
-	}
-	r := []rune(s)
-	if r[0] >= 'a' && r[0] <= 'z' {
-		r[0] -= 'a' - 'A'
-	}
-	return string(r)
 }

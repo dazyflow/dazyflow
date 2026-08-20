@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/geoloc"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 	"git.sr.ht/~klahr/dazyflow/engine"
 )
@@ -70,7 +71,7 @@ func init() {
 // readable summary, the bare temperature and conditions word, and the full
 // response as JSON.
 func executeCurrent(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	lat, lon, err := resolveCoord(job)
+	lat, lon, err := geoloc.ResolveLatLon(job)
 	if err != nil {
 		return params.Err(job, "bad_param", err.Error()), nil
 	}
@@ -101,7 +102,7 @@ func executeCurrent(ctx context.Context, job core.Job, _ chan<- core.Progress) (
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
 			"summary":     {MIME: "text/plain", Inline: currentSummary(now)},
-			"temperature": {MIME: "text/plain", Inline: num1(temp)},
+			"temperature": {MIME: "text/plain", Inline: geoloc.Num1(temp)},
 			"conditions":  {MIME: "text/plain", Inline: cond},
 			"weather":     {MIME: "application/json", Inline: doc},
 		},
@@ -113,13 +114,13 @@ func executeCurrent(ctx context.Context, job core.Job, _ chan<- core.Progress) (
 func currentSummary(e smhiEntry) string {
 	desc := ""
 	if code, ok := e.num("symbol_code"); ok {
-		desc = capitalizeFirst(wsymb2[int(code)])
+		desc = geoloc.CapitalizeFirst(wsymb2[int(code)])
 	}
 	temp, _ := e.num("air_temperature")
 	hum, _ := e.num("relative_humidity")
 	wind, _ := e.num("wind_speed")
 	if desc == "" {
-		return fmt.Sprintf("%s°C, humidity %s%%, wind %s m/s", num1(temp), num0(hum), num1(wind))
+		return fmt.Sprintf("%s°C, humidity %s%%, wind %s m/s", geoloc.Num1(temp), geoloc.Num0(hum), geoloc.Num1(wind))
 	}
-	return fmt.Sprintf("%s, %s°C, humidity %s%%, wind %s m/s", desc, num1(temp), num0(hum), num1(wind))
+	return fmt.Sprintf("%s, %s°C, humidity %s%%, wind %s m/s", desc, geoloc.Num1(temp), geoloc.Num0(hum), geoloc.Num1(wind))
 }

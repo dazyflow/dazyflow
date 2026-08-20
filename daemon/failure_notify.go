@@ -334,7 +334,7 @@ func recToPayload(graph core.Graph, rec core.JobRecord, baseURL string) FailureP
 	if rec.FinishedAt != nil {
 		p.FinishedAt = rec.FinishedAt.UTC().Format(time.RFC3339)
 	}
-	p.RunURL = buildRunURL(baseURL, rec.ID)
+	p.RunURL = buildRunURL(baseURL, graph.Tenant, rec.ID)
 	return p
 }
 
@@ -353,7 +353,7 @@ func terminalToPayload(graph core.Graph, runID string, t *TerminalEvent, baseURL
 		p.ErrorCode = t.Error.Code
 		p.ErrorMessage = t.Error.Message
 	}
-	p.RunURL = buildRunURL(baseURL, runID)
+	p.RunURL = buildRunURL(baseURL, graph.Tenant, runID)
 	return p
 }
 
@@ -361,9 +361,13 @@ func terminalToPayload(graph core.Graph, runID string, t *TerminalEvent, baseURL
 // when the daemon knows its own public origin. Empty string when
 // PublicBaseURL isn't set — receivers should fall back to the
 // graph_id/run_id fields in that case.
-func buildRunURL(baseURL, runID string) string {
+//
+// The link is pinned to the run's org (see withOrg in orglink.go): a run is
+// only visible inside its own org, so a recipient who last used a different one
+// would otherwise be told the run doesn't exist.
+func buildRunURL(baseURL, tenant, runID string) string {
 	if baseURL == "" {
 		return ""
 	}
-	return strings.TrimRight(baseURL, "/") + "/runs/" + runID
+	return withOrg(strings.TrimRight(baseURL, "/")+"/runs/"+runID, tenant)
 }

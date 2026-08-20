@@ -8,15 +8,43 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
 
 // billingHarness extends the gateway harness with a plan store, usage
 // store, and a Stripe fake.
+// stripeFormRecorder captures the POST form of each call the daemon makes to
+// Stripe, keyed by path, so a test can assert on the success/cancel/return URLs
+// the daemon supplies.
+type stripeFormRecorder struct {
+	mu    sync.Mutex
+	forms map[string]url.Values
+}
+
+func (s *stripeFormRecorder) record(path string, form url.Values) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.forms[path] = form
+}
+
+func (s *stripeFormRecorder) get(path string) url.Values {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.forms[path]
+}
+
 func billingHarness(t *testing.T) (*gatewayHarness, *MemPlanStore, *httptest.Server) {
+	h, plans, srv, _ := billingHarnessWithStripeForms(t)
+	return h, plans, srv
+}
+
+func billingHarnessWithStripeForms(t *testing.T) (*gatewayHarness, *MemPlanStore, *httptest.Server, *stripeFormRecorder) {
 	t.Helper()
+	stripeForms := &stripeFormRecorder{forms: map[string]url.Values{}}
 	h := newGatewayHarness(t)
 	plans := NewMemPlanStore()
 	h.svc.Plans = plans
@@ -24,6 +52,11 @@ func billingHarness(t *testing.T) (*gatewayHarness, *MemPlanStore, *httptest.Ser
 	h.svc.PublicBaseURL = "https://app.example"
 
 	fakeStripe := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		// Record the form so a test can assert on the URLs Stripe will send the
+		// user back to — those are the deployment's own links, not Stripe's, so
+		// nothing else would catch a mistake in them.
+		_ = r.ParseForm()
+		stripeForms.record(r.URL.Path, r.PostForm)
 		switch r.URL.Path {
 		case "/v1/checkout/sessions":
 			fmt.Fprint(rw, `{"id":"cs_1","url":"https://checkout.stripe.com/c/cs_1"}`)
@@ -38,7 +71,52 @@ func billingHarness(t *testing.T) (*gatewayHarness, *MemPlanStore, *httptest.Ser
 	sc := NewStripeClient("sk_test", "price_pro")
 	sc.BaseURL = fakeStripe.URL
 	h.gw.Billing = NewBillingHandler(sc, "whsec_test")
-	return h, plans, fakeStripe
+	return h, plans, fakeStripe, stripeForms
+}
+
+// The /usage page a Stripe round trip returns to is org-scoped, so the return
+// URLs must name the org that was billed: Stripe hands the user back to a
+// browser whose active org may have moved on (switching org in another tab
+// mid-checkout is enough), and an unpinned return would show the wrong org's
+// usage immediately after an upgrade.
+func TestBillingReturnURLsPinTheOrg(t *testing.T) {
+	h, plans, _, forms := billingHarnessWithStripeForms(t)
+
+	rw := h.do(t, "POST", "/api/v1/me/billing/checkout", nil)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("checkout: status = %d (%s)", rw.Code, rw.Body.String())
+	}
+	form := forms.get("/v1/checkout/sessions")
+	if got := form.Get("success_url"); got != "https://app.example/usage?checkout=success&org=t" {
+		t.Errorf("success_url = %q", got)
+	}
+	if got := form.Get("cancel_url"); got != "https://app.example/usage?checkout=cancelled&org=t" {
+		t.Errorf("cancel_url = %q", got)
+	}
+
+	_ = plans.SetPlan(t.Context(), TenantPlan{Tenant: "t", Plan: PlanPro, StripeCustomerID: "cus_1"})
+	rw = h.do(t, "POST", "/api/v1/me/billing/portal", nil)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("portal: status = %d (%s)", rw.Code, rw.Body.String())
+	}
+	if got := forms.get("/v1/billing_portal/sessions").Get("return_url"); got != "https://app.example/usage?org=t" {
+		t.Errorf("return_url = %q", got)
+	}
+}
+
+// A base URL configured with a trailing slash must not yield "//usage" in the
+// redirect Stripe bounces the user through.
+func TestBillingReturnURLsTrimTrailingSlash(t *testing.T) {
+	h, _, _, forms := billingHarnessWithStripeForms(t)
+	h.svc.PublicBaseURL = "https://app.example/"
+
+	rw := h.do(t, "POST", "/api/v1/me/billing/checkout", nil)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("checkout: status = %d (%s)", rw.Code, rw.Body.String())
+	}
+	if got := forms.get("/v1/checkout/sessions").Get("success_url"); got != "https://app.example/usage?checkout=success&org=t" {
+		t.Errorf("success_url = %q", got)
+	}
 }
 
 func TestBillingMe(t *testing.T) {

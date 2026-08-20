@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/geoloc"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 	"git.sr.ht/~klahr/dazyflow/engine"
 )
@@ -89,7 +90,7 @@ type omCurrent struct {
 // and emits a readable summary, the bare temperature and conditions word, and
 // the full response as JSON.
 func executeCurrent(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	lat, lon, err := resolveCoord(job)
+	lat, lon, err := geoloc.ResolveLatLon(job)
 	if err != nil {
 		return params.Err(job, "bad_param", err.Error()), nil
 	}
@@ -117,7 +118,7 @@ func executeCurrent(ctx context.Context, job core.Job, _ chan<- core.Progress) (
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
 			"summary":     {MIME: "text/plain", Inline: currentSummary(cur, units)},
-			"temperature": {MIME: "text/plain", Inline: num1(cur.Current.Temperature)},
+			"temperature": {MIME: "text/plain", Inline: geoloc.Num1(cur.Current.Temperature)},
 			"conditions":  {MIME: "text/plain", Inline: conditions},
 			"weather":     {MIME: "application/json", Inline: doc},
 		},
@@ -127,12 +128,12 @@ func executeCurrent(ctx context.Context, job core.Job, _ chan<- core.Progress) (
 // currentSummary renders the current conditions as one human line, e.g.
 // "Partly cloudy, 12.3°C (feels 11.1°C), humidity 64%, wind 3.4 m/s".
 func currentSummary(c omCurrent, units string) string {
-	desc := capitalizeFirst(wmo[c.Current.WeatherCode])
-	tu, su := tempUnit(units), speedUnit(units)
+	desc := geoloc.CapitalizeFirst(wmo[c.Current.WeatherCode])
+	tu, su := geoloc.TempUnit(units), geoloc.SpeedUnit(units)
 	if desc == "" {
 		return fmt.Sprintf("%s%s (feels %s%s), humidity %s%%, wind %s %s",
-			num1(c.Current.Temperature), tu, num1(c.Current.Apparent), tu, num0(c.Current.Humidity), num1(c.Current.WindSpeed), su)
+			geoloc.Num1(c.Current.Temperature), tu, geoloc.Num1(c.Current.Apparent), tu, geoloc.Num0(c.Current.Humidity), geoloc.Num1(c.Current.WindSpeed), su)
 	}
 	return fmt.Sprintf("%s, %s%s (feels %s%s), humidity %s%%, wind %s %s",
-		desc, num1(c.Current.Temperature), tu, num1(c.Current.Apparent), tu, num0(c.Current.Humidity), num1(c.Current.WindSpeed), su)
+		desc, geoloc.Num1(c.Current.Temperature), tu, geoloc.Num1(c.Current.Apparent), tu, geoloc.Num0(c.Current.Humidity), geoloc.Num1(c.Current.WindSpeed), su)
 }

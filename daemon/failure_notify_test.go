@@ -162,7 +162,9 @@ func TestFailureNotify_FiresOnFailedTerminal(t *testing.T) {
 	if payload.ErrorCode != "timeout" || payload.ErrorMessage != "node 'enrich' exceeded 30s" {
 		t.Errorf("missing error fields: %+v", payload)
 	}
-	if payload.RunURL != "https://app.example.com/runs/run-1" {
+	// The link carries the org, or a recipient whose browser last used a
+	// different org opens it and is told the run doesn't exist.
+	if payload.RunURL != "https://app.example.com/runs/run-1?org=t" {
 		t.Errorf("run_url = %q", payload.RunURL)
 	}
 }
@@ -349,11 +351,42 @@ func TestFailureNotify_TerminalToPayloadShape(t *testing.T) {
 	if got.ErrorCode != "c" || got.ErrorMessage != "m" {
 		t.Errorf("error = %+v", got)
 	}
-	if got.RunURL != "https://app.example.com/runs/r1" {
+	if got.RunURL != "https://app.example.com/runs/r1?org=acme" {
 		t.Errorf("run_url = %q", got.RunURL)
 	}
 	if got.FinishedAt == "" {
 		t.Error("finished_at not stamped")
+	}
+}
+
+func TestBuildRunURL(t *testing.T) {
+	cases := []struct {
+		name          string
+		base          string
+		tenant, runID string
+		want          string
+	}{
+		{"with org", "https://app.example.com", "acme", "r1",
+			"https://app.example.com/runs/r1?org=acme"},
+		{"trailing slash trimmed", "https://app.example.com/", "acme", "r1",
+			"https://app.example.com/runs/r1?org=acme"},
+		// A tenant id with URL-significant characters must not be able to graft
+		// extra params onto the link.
+		{"tenant escaped", "https://app.example.com", "a&b=c d", "r1",
+			"https://app.example.com/runs/r1?org=a%26b%3Dc+d"},
+		// Single-tenant deployments carry no tenant on the graph; the bare link
+		// is still correct there.
+		{"no tenant", "https://app.example.com", "", "r1",
+			"https://app.example.com/runs/r1"},
+		{"no base", "", "acme", "r1", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := buildRunURL(c.base, c.tenant, c.runID); got != c.want {
+				t.Errorf("buildRunURL(%q,%q,%q) = %q, want %q",
+					c.base, c.tenant, c.runID, got, c.want)
+			}
+		})
 	}
 }
 

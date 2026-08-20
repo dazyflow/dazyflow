@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/geoloc"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 )
 
@@ -89,7 +90,7 @@ func nominatimReverse(ctx context.Context, job core.Job, lat, lon float64, svc, 
 		return geoPlace{}, &r
 	}
 	if place.DisplayName == "" {
-		r := params.Err(job, "no_match", "No place found at "+fmtCoord(lat, lon))
+		r := params.Err(job, "no_match", "No place found at "+geoloc.Fmt(lat, lon))
 		return geoPlace{}, &r
 	}
 	return place.toGeoPlace(job, svc, body)
@@ -143,7 +144,7 @@ func (p nominatimPlace) toGeoPlace(job core.Job, svc string, rawBody []byte) (ge
 	return geoPlace{
 		Lat:         lat,
 		Lon:         lon,
-		Coord:       fmtCoord(lat, lon),
+		Coord:       geoloc.Fmt(lat, lon),
 		DisplayName: p.DisplayName,
 		Address:     addr,
 		Raw:         raw,

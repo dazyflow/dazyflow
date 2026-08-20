@@ -23,6 +23,58 @@ into the image.)
 
 ## [Unreleased]
 
+### Fixed
+
+- **Emailed links now open in the right org.** The "View run details" link in a
+  flow-failure email pointed at `/runs/<id>` with no org in it, and the customer
+  side of the support-ticket emails pointed at `/support/<id>` the same way.
+  Because the app's routes carry no org segment — the active org is browser state
+  plus the session's scope — those links opened against whichever org that
+  browser last used, so anyone who belongs to more than one org usually landed in
+  the wrong one and was told the run or ticket did not exist (the tenant-scoped
+  loaders answer `ticket_not_found` / no such run).
+
+  Such links now carry `?org=<tenant>` (the same query key the sign-in page
+  already uses), and the app honours it on boot: it re-scopes the session server
+  side when needed and then lands on the deep-linked page rather than dumping the
+  user at `/`. An `?org=` naming an org the user cannot act in is ignored, so a
+  forwarded or hand-edited link can't disturb a working session.
+
+  The Stripe checkout and billing-portal return URLs are pinned the same way:
+  `/usage` is org-scoped and Stripe hands the user back to a browser whose active
+  org may have moved on (switching org in another tab mid-checkout is enough), so
+  an unpinned return could show the wrong org's usage right after an upgrade.
+  Those two URLs also now trim a trailing slash off the configured base, so a
+  `DAZYFLOW_PUBLIC_BASE_URL` ending in `/` no longer produces `//usage`.
+
+  Only genuinely tenant-scoped links are pinned. The support **agent** queue
+  resolves tickets cross-tenant by design, so its links are deliberately left
+  unpinned — agents generally aren't members of the filing org, and moving them
+  there would be wrong as well as useless. Token-bearing links (invite, email
+  verification, password reset, signup) identify their org through the token and
+  are unaffected.
+
+### Changed
+
+- **Shared the location connectors' coordinate helpers.** `weather`
+  (OpenWeather), `openmeteo`, `smhi` and `geo` each carried their own copy of
+  the same "lat,lon" parser, range check, numeric-param reader, unit symbols,
+  number formatters and SSRF/transport error prologue — four copies whose
+  bodies and user-facing error strings had never diverged. They now live once in
+  `drops/internal/geoloc`, along with the one-shot `Probe` the OpenWeather and
+  Open-Meteo connection verifiers both used to hand-roll. Connector behaviour
+  and every error string are unchanged; the tests that pinned them moved to the
+  shared package as the union of what the four asserted separately.
+- **Split the HTTP gateway by concern.** `daemon/httpgateway.go` had grown to
+  2,822 lines and 71 declarations covering the route table, static asset
+  serving, session cookies, CORS/CSP, sign-in and role elevation, org profile
+  routes, run listing, API keys, run control, SSE streams and the response
+  writers. It is now twelve files named for those concerns, with the route table
+  alone in `daemon/httproutes.go`. No behaviour change. `route_sweep_test.go`
+  now globs the package's source files instead of naming two of them, so the
+  sweep can't go stale when the gateway is split again (it also no longer scans
+  `httpsecrets.go`, which had stopped registering routes).
+
 ## [0.5.0] - 2026-08-20
 
 ### Added

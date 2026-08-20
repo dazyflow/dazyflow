@@ -5,6 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useState, ReactNode 
 import { useNavigate } from "react-router-dom";
 import { api, APIError, setUnauthorizedHandler, COOKIE_SESSION } from "./api";
 import { pickActive } from "./lib/pickActive";
+import { ORG_PARAM, resolveOrgDeepLink } from "./lib/orgDeepLink";
 import { explainApiError } from "./lib/explainApiError";
 import i18n from "./i18n";
 import { applyTheme } from "./theme";
@@ -230,9 +231,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         if (cancelled) return;
         setTenants(tenantList);
+
+        // A mailed link (e.g. a failure notification's "View run details")
+        // carries ?org=<tenant>, because the route itself has no org segment
+        // and the run only exists in one org. Honour it BEFORE pickActive, so
+        // the link wins over whatever org this browser last used — otherwise a
+        // member of several orgs opens the link in the wrong one and is told
+        // the run doesn't exist.
+        const deepLink = resolveOrgDeepLink({
+          requested: new URLSearchParams(window.location.search).get(ORG_PARAM) ?? "",
+          available: tenantList,
+          sessionTenant: w.tenant ?? "",
+          loc: window.location,
+        });
+        if (deepLink.kind === "switch") {
+          // The session is scoped to another org, so re-scope it server-side
+          // first — reloading before that lands the cold boot back in the OLD
+          // scope. Then navigate to the deep link itself (not "/", which is
+          // where a manual org switch goes) so the user arrives at the page the
+          // mail pointed at. localStorage is set first so the cold boot picks
+          // the same org up.
+          localStorage.setItem(TENANT_STORAGE_KEY, deepLink.tenant);
+          setActiveTenantState(deepLink.tenant);
+          api
+            .switchOrg(token, deepLink.tenant)
+            .then(() => window.location.assign(deepLink.url))
+            .catch(() => {
+              // The server refused to re-scope. Staying put in the old org
+              // would show a misleading "run not found", so send them to the
+              // switcher-visible root with the org selected locally and let the
+              // normal switch path report any problem.
+              window.location.assign("/");
+            });
+          return;
+        }
+        if (deepLink.kind === "adopt") {
+          // Already in the right org — nothing to reload. Just drop the param
+          // so it can't re-assert this org after a later manual switch.
+          window.history.replaceState(null, "", deepLink.url);
+        }
         const chosenTenant = pickActive(
           tenantList,
-          localStorage.getItem(TENANT_STORAGE_KEY) ?? "",
+          deepLink.kind === "adopt"
+            ? deepLink.tenant
+            : localStorage.getItem(TENANT_STORAGE_KEY) ?? "",
           w.tenant ?? "",
         );
         setActiveTenantState(chosenTenant);

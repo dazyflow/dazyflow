@@ -43,6 +43,7 @@ import (
 	"strings"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/geoloc"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 )
@@ -151,37 +152,6 @@ func connAPIKey(job core.Job) string {
 	return strings.TrimSpace(params.StringDefault(job.Params, "api_key", ""))
 }
 
-// parseLatLon splits a "lat,lon" string into two range-checked floats. Shared
-// by the picker (parsing its stored point), the Place override, and reverse
-// geocode (parsing the Coordinate input).
-func parseLatLon(s string) (lat, lon float64, err error) {
-	parts := strings.Split(s, ",")
-	if len(parts) != 2 {
-		return 0, 0, fmt.Errorf("coordinate %q must be \"lat,lon\" — e.g. 59.33,18.07", s)
-	}
-	lat, err = strconv.ParseFloat(strings.TrimSpace(parts[0]), 64)
-	if err != nil {
-		return 0, 0, fmt.Errorf("latitude %q isn't a number", strings.TrimSpace(parts[0]))
-	}
-	lon, err = strconv.ParseFloat(strings.TrimSpace(parts[1]), 64)
-	if err != nil {
-		return 0, 0, fmt.Errorf("longitude %q isn't a number", strings.TrimSpace(parts[1]))
-	}
-	if lat < -90 || lat > 90 {
-		return 0, 0, fmt.Errorf("latitude %g is out of range (must be between -90 and 90)", lat)
-	}
-	if lon < -180 || lon > 180 {
-		return 0, 0, fmt.Errorf("longitude %g is out of range (must be between -180 and 180)", lon)
-	}
-	return lat, lon, nil
-}
-
-// fmtCoord renders a "lat,lon" string, trimming trailing zeros so a tidy point
-// stays tidy ("59.3293,18.0686", not "59.32930000,18.06860000").
-func fmtCoord(lat, lon float64) string {
-	return strconv.FormatFloat(lat, 'f', -1, 64) + "," + strconv.FormatFloat(lon, 'f', -1, 64)
-}
-
 // acceptLanguage returns the optional `language` param, used both as a query
 // hint (Photon) and the Accept-Language header (Nominatim).
 func acceptLanguage(job core.Job) string {
@@ -211,14 +181,8 @@ func geoFetch(ctx context.Context, job core.Job, fullURL string) (int, []byte, e
 // backends. svc names the service; rateHint is appended to the 403/429 message
 // so each backend can point at its own self-host knob.
 func geoHTTPFailure(job core.Job, svc, rateHint string, status int, body []byte, err error) *core.Result {
-	if err != nil {
-		if hfnet.IsSSRFError(err) {
-			r := params.ErrDetails(job, "egress_blocked",
-				"Couldn't reach "+svc+" — the request was blocked by the egress policy.", err.Error())
-			return &r
-		}
-		r := params.Err(job, "geocoder_http_error", "Couldn't reach "+svc+": "+err.Error())
-		return &r
+	if r := geoloc.TransportFailure(job, "geocoder", svc, err); r != nil {
+		return r
 	}
 	if status == 403 || status == 429 {
 		r := params.Err(job, "rate_limited",

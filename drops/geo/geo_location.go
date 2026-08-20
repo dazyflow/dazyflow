@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/geoloc"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 	"git.sr.ht/~klahr/dazyflow/engine"
 )
@@ -101,11 +102,11 @@ func executeLocation(ctx context.Context, job core.Job, _ chan<- core.Progress) 
 		if point == "" {
 			return params.Err(job, "bad_param", "set a Place (a city or address) or pick a point on the map"), nil
 		}
-		lat, lon, perr := parseLatLon(point)
+		lat, lon, perr := geoloc.Parse(point)
 		if perr != nil {
 			return params.Err(job, "bad_param", perr.Error()), nil
 		}
-		coord = fmtCoord(lat, lon)
+		coord = geoloc.Fmt(lat, lon)
 	}
 
 	parts := strings.SplitN(coord, ",", 2)

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"regexp"
 	"runtime/debug"
 	"strings"
@@ -55,13 +56,24 @@ type route struct {
 // moment it's registered — no test edit required.
 var routePattern = regexp.MustCompile(`HandleFunc\(\s*"([A-Z]+) (/[^"]+)"`)
 
-// enumerateRoutes reads the gateway source files and returns every
-// registered (method, path) pair. Test cwd is the package dir, so the
+// enumerateRoutes reads every non-test source file in the package and returns
+// every registered (method, path) pair. Test cwd is the package dir, so the
 // files resolve relatively.
+//
+// It globs rather than naming files so the sweep survives the gateway being
+// split across files (the route table lives in httproutes.go today) and can't
+// go stale by pointing at a file that no longer registers anything.
 func enumerateRoutes(t *testing.T) []route {
 	t.Helper()
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatalf("glob: %v", err)
+	}
 	var out []route
-	for _, f := range []string{"httpgateway.go", "httpsecrets.go"} {
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
 		src, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatalf("read %s: %v", f, err)

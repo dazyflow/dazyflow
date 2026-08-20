@@ -422,14 +422,27 @@ func TestSupportQueueRecipient(t *testing.T) {
 
 func TestTicketURLFor_AudienceRoutes(t *testing.T) {
 	h := &HTTPGateway{svc: &Service{PublicBaseURL: "https://app.example.com/"}}
-	tk := core.Ticket{ID: "abc123"}
+	tk := core.Ticket{ID: "abc123", Tenant: "acme"}
 	// An agent following the customer's URL would land on a ticket outside
 	// their tenant, so the two audiences get different routes.
-	if got := h.ticketURLFor(tk, false); got != "https://app.example.com/support/abc123" {
+	//
+	// The customer's view is tenant-scoped, so their link is pinned to the
+	// filing org — without it, a member of several orgs opens the mail in the
+	// wrong one and loadTicketForTenant answers "no ticket with that id".
+	if got := h.ticketURLFor(tk, false); got != "https://app.example.com/support/abc123?org=acme" {
 		t.Errorf("user URL = %q", got)
 	}
+	// The agent queue is cross-tenant by design, so it is NOT pinned: agents
+	// generally aren't members of the filing org, and moving them there would
+	// be wrong as well as useless.
 	if got := h.ticketURLFor(tk, true); got != "https://app.example.com/support/queue/abc123" {
 		t.Errorf("agent URL = %q", got)
+	}
+	// A single-tenant deployment carries no tenant on the ticket; the bare link
+	// is unambiguous there.
+	solo := core.Ticket{ID: "abc123"}
+	if got := h.ticketURLFor(solo, false); got != "https://app.example.com/support/abc123" {
+		t.Errorf("tenantless user URL = %q", got)
 	}
 	// No public base URL configured: no link rather than a broken relative one.
 	bare := &HTTPGateway{svc: &Service{}}

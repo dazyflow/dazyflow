@@ -161,88 +161,6 @@ func TestExecuteForecast_Success(t *testing.T) {
 	}
 }
 
-func TestCovParseLatLon(t *testing.T) {
-	cases := []struct {
-		name    string
-		in      string
-		wantErr bool
-	}{
-		{"ok", "59.33,18.07", false},
-		{"spaces", "  59.33 , 18.07 ", false},
-		{"too few parts", "59.33", true},
-		{"too many parts", "1,2,3", true},
-		{"bad lat", "x,18.07", true},
-		{"bad lon", "59.33,y", true},
-		{"lat out of range", "91,18", true},
-		{"lon out of range", "59,181", true},
-		{"lat neg out", "-91,18", true},
-		{"lon neg out", "59,-181", true},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			_, _, err := parseLatLon(c.in)
-			if (err != nil) != c.wantErr {
-				t.Fatalf("parseLatLon(%q) err=%v wantErr=%v", c.in, err, c.wantErr)
-			}
-		})
-	}
-}
-
-func TestCovNumParam(t *testing.T) {
-	cases := []struct {
-		name string
-		val  any
-		ok   bool
-		want float64
-	}{
-		{"float64", float64(1.5), true, 1.5},
-		{"float32", float32(2), true, 2},
-		{"int", int(3), true, 3},
-		{"int64", int64(4), true, 4},
-		{"jsonNumber", json.Number("5.5"), true, 5.5},
-		{"badJsonNumber", json.Number("nope"), false, 0},
-		{"string", "6", false, 0},
-		{"missing", nil, false, 0},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			m := map[string]any{}
-			if c.val != nil {
-				m["k"] = c.val
-			}
-			got, ok := numParam(m, "k")
-			if ok != c.ok || (ok && got != c.want) {
-				t.Fatalf("numParam=%v,%v want %v,%v", got, ok, c.want, c.ok)
-			}
-		})
-	}
-}
-
-func TestCovResolveCoord(t *testing.T) {
-	// Non-text coordinate input → error.
-	job := core.Job{Input: map[string]core.Ref{"coordinate": {Inline: 123}}}
-	if _, _, err := resolveCoord(job); err == nil {
-		t.Fatal("non-text coordinate should error")
-	}
-	// Missing lat/lon, blank coordinate → error.
-	if _, _, err := resolveCoord(core.Job{Params: map[string]any{}}); err == nil {
-		t.Fatal("missing lat/lon should error")
-	}
-	// lat out of range param path.
-	if _, _, err := resolveCoord(core.Job{Params: map[string]any{"lat": 99.0, "lon": 1.0}}); err == nil {
-		t.Fatal("lat out of range should error")
-	}
-	// lon out of range param path.
-	if _, _, err := resolveCoord(core.Job{Params: map[string]any{"lat": 1.0, "lon": 999.0}}); err == nil {
-		t.Fatal("lon out of range should error")
-	}
-	// Coordinate text wins.
-	lat, lon, err := resolveCoord(core.Job{Input: map[string]core.Ref{"coordinate": {Inline: "10,20"}}})
-	if err != nil || lat != 10 || lon != 20 {
-		t.Fatalf("coordinate text path: %v %v %v", lat, lon, err)
-	}
-}
-
 func TestCovHTTPFailureSSRF(t *testing.T) {
 	// Plain transport error → smhi_http_error.
 	f := httpFailure(core.Job{}, 0, nil, context.DeadlineExceeded)
@@ -271,21 +189,6 @@ func TestCovEntryNumJSONNumber(t *testing.T) {
 	}
 	if _, ok := e.num("c"); ok {
 		t.Fatal("string should be !ok")
-	}
-}
-
-func TestCovCapitalizeFirst(t *testing.T) {
-	if capitalizeFirst("") != "" {
-		t.Fatal("empty")
-	}
-	if capitalizeFirst("rain") != "Rain" {
-		t.Fatal("lower")
-	}
-	if capitalizeFirst("Rain") != "Rain" {
-		t.Fatal("already upper")
-	}
-	if capitalizeFirst("123") != "123" {
-		t.Fatal("non-letter")
 	}
 }
 

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/geoloc"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 	"git.sr.ht/~klahr/dazyflow/engine"
 )
@@ -83,7 +84,7 @@ type smhiDay struct {
 }
 
 func executeForecast(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	lat, lon, err := resolveCoord(job)
+	lat, lon, err := geoloc.ResolveLatLon(job)
 	if err != nil {
 		return params.Err(job, "bad_param", err.Error()), nil
 	}
@@ -186,10 +187,10 @@ func forecastSummary(days []smhiDay) string {
 			label = t.Format("Mon Jan 2")
 		}
 		fmt.Fprintf(&b, "%s: ", label)
-		if desc := capitalizeFirst(d.Description); desc != "" {
+		if desc := geoloc.CapitalizeFirst(d.Description); desc != "" {
 			fmt.Fprintf(&b, "%s, ", desc)
 		}
-		fmt.Fprintf(&b, "%s–%s°C\n", num0(d.TempMin), num0(d.TempMax))
+		fmt.Fprintf(&b, "%s–%s°C\n", geoloc.Num0(d.TempMin), geoloc.Num0(d.TempMax))
 	}
 	return strings.TrimRight(b.String(), "\n")
 }

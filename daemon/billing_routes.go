@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"git.sr.ht/~klahr/dazyflow/core"
@@ -305,7 +306,9 @@ func (h *HTTPGateway) billingCheckout(rw http.ResponseWriter, r *http.Request, p
 	if !ok {
 		return
 	}
-	base := h.svc.PublicBaseURL
+	// Trimmed so a base configured with a trailing slash can't produce
+	// "https://host//usage" in the redirect Stripe sends the user back to.
+	base := strings.TrimRight(h.svc.PublicBaseURL, "/")
 	if base == "" {
 		writeAPIError(rw, http.StatusInternalServerError, "not_configured",
 			"DAZYFLOW_PUBLIC_BASE_URL must be set for Checkout redirects")
@@ -332,8 +335,14 @@ func (h *HTTPGateway) billingCheckout(rw http.ResponseWriter, r *http.Request, p
 		}
 		customerID = plan.StripeCustomerID
 	}
+	// The return trip is pinned to the tenant we just billed (see withOrg in
+	// orglink.go). /usage is org-scoped, and Stripe hands the user back to a
+	// browser whose active org may have moved on — switching org in another tab
+	// mid-checkout is enough — so an unpinned return would show the wrong org's
+	// usage right after a successful upgrade.
 	u, err := h.Billing.Stripe.CreateCheckoutSession(r.Context(), tenant, customerID,
-		base+"/usage?checkout=success", base+"/usage?checkout=cancelled")
+		withOrg(base+"/usage?checkout=success", tenant),
+		withOrg(base+"/usage?checkout=cancelled", tenant))
 	if err != nil {
 		writeAPIError(rw, http.StatusBadGateway, "stripe_error", err.Error())
 		return
@@ -369,8 +378,10 @@ func (h *HTTPGateway) billingPortal(rw http.ResponseWriter, r *http.Request, p c
 			"this organization has no billing account yet — upgrade first")
 		return
 	}
+	// Pinned to the tenant whose billing account this portal manages, for the
+	// same reason as checkout above.
 	u, err := h.Billing.Stripe.CreatePortalSession(r.Context(), plan.StripeCustomerID,
-		h.svc.PublicBaseURL+"/usage")
+		withOrg(strings.TrimRight(h.svc.PublicBaseURL, "/")+"/usage", tenant))
 	if err != nil {
 		writeAPIError(rw, http.StatusBadGateway, "stripe_error", err.Error())
 		return

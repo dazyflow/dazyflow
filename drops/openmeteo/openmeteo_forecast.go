@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/geoloc"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 	"git.sr.ht/~klahr/dazyflow/engine"
 )
@@ -103,7 +104,7 @@ type dayEntry struct {
 // requested number of days, and emits a readable summary plus the daily array
 // (and the full raw response).
 func executeForecast(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	lat, lon, err := resolveCoord(job)
+	lat, lon, err := geoloc.ResolveLatLon(job)
 	if err != nil {
 		return params.Err(job, "bad_param", err.Error()), nil
 	}
@@ -174,19 +175,19 @@ func forecastSummary(days []dayEntry, units string) string {
 	if len(days) == 0 {
 		return "No forecast available."
 	}
-	tu := tempUnit(units)
+	tu := geoloc.TempUnit(units)
 	var b strings.Builder
 	for _, d := range days {
 		label := d.Date
 		if t, err := time.Parse("2006-01-02", d.Date); err == nil {
 			label = t.Format("Mon Jan 2")
 		}
-		desc := capitalizeFirst(d.Description)
+		desc := geoloc.CapitalizeFirst(d.Description)
 		fmt.Fprintf(&b, "%s: ", label)
 		if desc != "" {
 			fmt.Fprintf(&b, "%s, ", desc)
 		}
-		fmt.Fprintf(&b, "%s–%s%s, rain %s%%\n", num0(d.TempMin), num0(d.TempMax), tu, num0(d.Pop*100))
+		fmt.Fprintf(&b, "%s–%s%s, rain %s%%\n", geoloc.Num0(d.TempMin), geoloc.Num0(d.TempMax), tu, geoloc.Num0(d.Pop*100))
 	}
 	return strings.TrimRight(b.String(), "\n")
 }

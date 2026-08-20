@@ -51,17 +51,6 @@ func textPin(t *testing.T, r core.Result, port string) string {
 	return s
 }
 
-func TestParseLatLon(t *testing.T) {
-	if lat, lon, err := parseLatLon(" 59.33 , 18.07 "); err != nil || lat != 59.33 || lon != 18.07 {
-		t.Fatalf("got (%v,%v,%v)", lat, lon, err)
-	}
-	for _, bad := range []string{"59.33", "a,b", "91,0", "0,200", "1,2,3"} {
-		if _, _, err := parseLatLon(bad); err == nil {
-			t.Errorf("parseLatLon(%q): want error", bad)
-		}
-	}
-}
-
 // --- Location (geo_location) --------------------------------------------------
 
 func TestExecuteLocation_Point(t *testing.T) {
@@ -183,43 +172,6 @@ func errCode(r core.Result) string {
 }
 
 // --- parseLatLon edge cases --------------------------------------------------
-
-func TestParseLatLon_Table(t *testing.T) {
-	cases := []struct {
-		name     string
-		in       string
-		wantErr  bool
-		lat, lon float64
-	}{
-		{"ok", "59.33,18.07", false, 59.33, 18.07},
-		{"ok_negative", "-12.5,-77.0", false, -12.5, -77.0},
-		{"wrong_arity", "1,2,3", true, 0, 0},
-		{"single", "59.33", true, 0, 0},
-		{"lat_nan", "abc,18.07", true, 0, 0},
-		{"lon_nan", "59.33,xyz", true, 0, 0},
-		{"lat_out_of_range", "91,0", true, 0, 0},
-		{"lat_under_range", "-91,0", true, 0, 0},
-		{"lon_out_of_range", "0,200", true, 0, 0},
-		{"lon_under_range", "0,-200", true, 0, 0},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			lat, lon, err := parseLatLon(c.in)
-			if c.wantErr {
-				if err == nil {
-					t.Fatalf("parseLatLon(%q): want error, got (%v,%v)", c.in, lat, lon)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("parseLatLon(%q): unexpected err %v", c.in, err)
-			}
-			if lat != c.lat || lon != c.lon {
-				t.Errorf("parseLatLon(%q) = (%v,%v), want (%v,%v)", c.in, lat, lon, c.lat, c.lon)
-			}
-		})
-	}
-}
 
 // --- executeLocation input/precedence paths ----------------------------------
 

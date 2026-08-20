@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/geoloc"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 	"git.sr.ht/~klahr/dazyflow/engine"
 )
@@ -98,7 +99,7 @@ type owmObservation struct {
 // and emits a readable summary, the bare temperature and conditions word, and
 // the full observation as JSON.
 func executeCurrent(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	lat, lon, err := resolveCoord(job)
+	lat, lon, err := geoloc.ResolveLatLon(job)
 	if err != nil {
 		return params.Err(job, "bad_param", err.Error()), nil
 	}
@@ -129,7 +130,7 @@ func executeCurrent(ctx context.Context, job core.Job, _ chan<- core.Progress) (
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
 			"summary":     {MIME: "text/plain", Inline: currentSummary(obs, units)},
-			"temperature": {MIME: "text/plain", Inline: num1(obs.Main.Temp)},
+			"temperature": {MIME: "text/plain", Inline: geoloc.Num1(obs.Main.Temp)},
 			"conditions":  {MIME: "text/plain", Inline: conditions},
 			"weather":     {MIME: "application/json", Inline: doc},
 		},
@@ -141,13 +142,13 @@ func executeCurrent(ctx context.Context, job core.Job, _ chan<- core.Progress) (
 func currentSummary(o owmObservation, units string) string {
 	desc := ""
 	if len(o.Weather) > 0 {
-		desc = capitalizeFirst(o.Weather[0].Description)
+		desc = geoloc.CapitalizeFirst(o.Weather[0].Description)
 	}
-	tu, su := tempUnit(units), speedUnit(units)
+	tu, su := geoloc.TempUnit(units), geoloc.SpeedUnit(units)
 	if desc == "" {
 		return fmt.Sprintf("%s%s (feels %s%s), humidity %d%%, wind %s %s",
-			num1(o.Main.Temp), tu, num1(o.Main.FeelsLike), tu, o.Main.Humidity, num1(o.Wind.Speed), su)
+			geoloc.Num1(o.Main.Temp), tu, geoloc.Num1(o.Main.FeelsLike), tu, o.Main.Humidity, geoloc.Num1(o.Wind.Speed), su)
 	}
 	return fmt.Sprintf("%s, %s%s (feels %s%s), humidity %d%%, wind %s %s",
-		desc, num1(o.Main.Temp), tu, num1(o.Main.FeelsLike), tu, o.Main.Humidity, num1(o.Wind.Speed), su)
+		desc, geoloc.Num1(o.Main.Temp), tu, geoloc.Num1(o.Main.FeelsLike), tu, o.Main.Humidity, geoloc.Num1(o.Wind.Speed), su)
 }

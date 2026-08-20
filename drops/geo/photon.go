@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/geoloc"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 )
 
@@ -68,7 +69,7 @@ func (g photonGeocoder) reverse(ctx context.Context, job core.Job, lat, lon floa
 	if f := g.fail(job, status, body, err); f != nil {
 		return geoPlace{}, f
 	}
-	return g.firstFeature(job, body, "No place found at "+fmtCoord(lat, lon))
+	return g.firstFeature(job, body, "No place found at "+geoloc.Fmt(lat, lon))
 }
 
 // firstFeature decodes a Photon FeatureCollection and maps its first feature
@@ -91,7 +92,7 @@ func (g photonGeocoder) firstFeature(job core.Job, body []byte, noMatch string) 
 	}
 	lon, lat := f.Geometry.Coordinates[0], f.Geometry.Coordinates[1]
 	if lat < -90 || lat > 90 || lon < -180 || lon > 180 {
-		r := params.ErrDetails(job, "geocoder_error", "Photon returned an out-of-range coordinate.", fmtCoord(lat, lon))
+		r := params.ErrDetails(job, "geocoder_error", "Photon returned an out-of-range coordinate.", geoloc.Fmt(lat, lon))
 		return geoPlace{}, &r
 	}
 	var raw any
@@ -99,7 +100,7 @@ func (g photonGeocoder) firstFeature(job core.Job, body []byte, noMatch string) 
 	return geoPlace{
 		Lat:         lat,
 		Lon:         lon,
-		Coord:       fmtCoord(lat, lon),
+		Coord:       geoloc.Fmt(lat, lon),
 		DisplayName: photonDisplayName(f.Properties),
 		Address:     f.Properties, // flat OSM address fields: name, city, state, country, …
 		Raw:         raw,

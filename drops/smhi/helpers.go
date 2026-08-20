@@ -22,12 +22,11 @@ package smhi
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strconv"
-	"strings"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/geoloc"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 )
@@ -44,72 +43,6 @@ const maxResponseBytes = 8 << 20 // 8 MiB
 
 // fmtCoord6 formats a coordinate to 6 decimals (the model snaps it to its grid).
 func fmtCoord6(v float64) string { return strconv.FormatFloat(v, 'f', 6, 64) }
-
-// parseLatLon splits a "lat,lon" string into two range-checked floats.
-func parseLatLon(s string) (lat, lon float64, err error) {
-	parts := strings.Split(s, ",")
-	if len(parts) != 2 {
-		return 0, 0, fmt.Errorf("coordinate %q must be \"lat,lon\" — e.g. 59.33,18.07", s)
-	}
-	lat, err = strconv.ParseFloat(strings.TrimSpace(parts[0]), 64)
-	if err != nil {
-		return 0, 0, fmt.Errorf("latitude %q isn't a number", strings.TrimSpace(parts[0]))
-	}
-	lon, err = strconv.ParseFloat(strings.TrimSpace(parts[1]), 64)
-	if err != nil {
-		return 0, 0, fmt.Errorf("longitude %q isn't a number", strings.TrimSpace(parts[1]))
-	}
-	if lat < -90 || lat > 90 {
-		return 0, 0, fmt.Errorf("latitude %g is out of range (must be between -90 and 90)", lat)
-	}
-	if lon < -180 || lon > 180 {
-		return 0, 0, fmt.Errorf("longitude %g is out of range (must be between -180 and 180)", lon)
-	}
-	return lat, lon, nil
-}
-
-// numParam reads a numeric param as float64 — never a numeric string.
-func numParam(p map[string]any, key string) (float64, bool) {
-	switch n := p[key].(type) {
-	case float64:
-		return n, true
-	case float32:
-		return float64(n), true
-	case int:
-		return float64(n), true
-	case int64:
-		return float64(n), true
-	case json.Number:
-		if f, err := n.Float64(); err == nil {
-			return f, true
-		}
-	}
-	return 0, false
-}
-
-// resolveCoord determines the coordinate: the Coordinate input ("lat,lon") wins
-// when wired with text, otherwise the Latitude/Longitude params.
-func resolveCoord(job core.Job) (lat, lon float64, err error) {
-	txt, ok := params.TextInputOr(job, "coordinate", "")
-	if !ok {
-		return 0, 0, errors.New(`'Coordinate' input must be text like "59.33,18.07"`)
-	}
-	if s := strings.TrimSpace(txt); s != "" {
-		return parseLatLon(s)
-	}
-	la, laOK := numParam(job.Params, "lat")
-	lo, loOK := numParam(job.Params, "lon")
-	if !laOK || !loOK {
-		return 0, 0, errors.New(`set Latitude and Longitude, or wire a "lat,lon" value into the Coordinate input`)
-	}
-	if la < -90 || la > 90 {
-		return 0, 0, fmt.Errorf("latitude %g is out of range (must be between -90 and 90)", la)
-	}
-	if lo < -180 || lo > 180 {
-		return 0, 0, fmt.Errorf("longitude %g is out of range (must be between -180 and 180)", lo)
-	}
-	return la, lo, nil
-}
 
 // smhiGet fetches the point forecast for a coordinate. SMHI puts lon BEFORE lat
 // in the path. currentOnly adds &timeseries=1 to return just the current step;
@@ -129,14 +62,8 @@ func smhiGet(ctx context.Context, job core.Job, lat, lon float64, currentOnly bo
 // returning nil on success. A 404 means the coordinate is outside SMHI's model
 // domain (the API answers "Requested point is out of bounds").
 func httpFailure(job core.Job, status int, body []byte, err error) *core.Result {
-	if err != nil {
-		if hfnet.IsSSRFError(err) {
-			r := params.ErrDetails(job, "egress_blocked",
-				"Couldn't reach SMHI — the request was blocked by the egress policy.", err.Error())
-			return &r
-		}
-		r := params.Err(job, "smhi_http_error", "Couldn't reach SMHI: "+err.Error())
-		return &r
+	if r := geoloc.TransportFailure(job, "smhi", "SMHI", err); r != nil {
+		return r
 	}
 	if status == 404 {
 		r := params.Err(job, "out_of_domain",
@@ -209,19 +136,4 @@ func classFor(code int) string {
 	default: // 8–10, 18–20
 		return "Rain"
 	}
-}
-
-func num1(f float64) string { return strconv.FormatFloat(f, 'f', 1, 64) }
-func num0(f float64) string { return strconv.FormatFloat(f, 'f', 0, 64) }
-
-// capitalizeFirst upper-cases the first ASCII letter of a phrase.
-func capitalizeFirst(s string) string {
-	if s == "" {
-		return s
-	}
-	r := []rune(s)
-	if r[0] >= 'a' && r[0] <= 'z' {
-		r[0] -= 'a' - 'A'
-	}
-	return string(r)
 }
