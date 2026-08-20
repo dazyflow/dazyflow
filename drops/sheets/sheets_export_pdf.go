@@ -51,6 +51,7 @@ func init() {
 				// rows and gmail). spreadsheet_id is re-emitted so any sheet
 				// step downstream can target the same spreadsheet by wire.
 				{Port: "spreadsheet_id", Label: "Spreadsheet ID", MIME: []string{"text/plain"}},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

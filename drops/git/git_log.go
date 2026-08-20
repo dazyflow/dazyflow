@@ -9,13 +9,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"path/filepath"
+	"os"
 
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/sandbox"
 	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
@@ -58,6 +59,7 @@ func init() {
 				// count, truncated) is still EMITTED under "meta" so run
 				// records keep it for debugging — it's just not a pin.
 				{Port: "commits", Label: "Commits", MIME: []string{"application/json"}},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(
 				`{
@@ -87,8 +89,14 @@ func executeGitLog(_ context.Context, job core.Job, progress chan<- core.Progres
 			relPath = input.Ref
 		}
 	}
-	cleanRel, err := sandboxRel(relPath)
+	// Root-confined resolve (not a string clean) so a symlink inside the
+	// workspace can't point go-git at a repository outside it.
+	repoDir, _, err := sandbox.ResolveDir(job.WorkspaceRoot, relPath)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return params.Err(job, "bad_param",
+				fmt.Sprintf("folder %q doesn't exist in the workspace", relPath)), nil
+		}
 		return params.Err(job, "sandbox_escape", err.Error()), nil
 	}
 	ref := params.StringDefault(job.Params, "ref", "HEAD")
@@ -100,7 +108,7 @@ func executeGitLog(_ context.Context, job core.Job, progress chan<- core.Progres
 		limit = 1000
 	}
 
-	repo, err := gogit.PlainOpen(filepath.Join(job.WorkspaceRoot, cleanRel))
+	repo, err := gogit.PlainOpen(repoDir)
 	if err != nil {
 		return params.Err(job, "open", err.Error()), nil
 	}

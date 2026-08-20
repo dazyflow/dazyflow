@@ -204,6 +204,23 @@ func main() {
 		log.Printf("plan gate enabled: free tier retention=%dd concurrency=%d members=%d (0 = unlimited; pro bypasses)",
 			freeRetentionDays, freeMaxConcurrency, freeMaxMembers)
 	}
+	// dzd runs on Postgres — there is no in-memory mode. Fail fast and
+	// clearly when the DSN is missing, before the insecure-defaults guard
+	// (which would otherwise complain about the master key first).
+	//
+	// Ordered ahead of the mailer deliberately: NewMailerFromURL exits on a
+	// malformed DAZYFLOW_SMTP_URL, so building it first meant an operator
+	// with both problems got an SMTP parse error and no hint that the thing
+	// actually stopping the boot was a missing DSN.
+	if postgresDSN == "" {
+		log.Fatal("DAZYFLOW_POSTGRES_DSN is required — dzd runs on Postgres. For local development, `make pg` starts the bundled database and `make dev` points at it (see the README).")
+	}
+
+	// Refuse to boot with the bundled insecure defaults (default DB
+	// password, empty master key, a dev admin token on a public host).
+	// DAZYFLOW_DEV=1 opts out (and is logged) for local development.
+	validateProductionConfig(devMode, devKey, postgresDSN, masterKeyB64, publicBaseURL)
+
 	// Transactional mailer (invitation links, failure-notification email).
 	// Off without DAZYFLOW_SMTP_URL; everything degrades to links/webhooks.
 	mailer, err := daemon.NewMailerFromURL(envStr("DAZYFLOW_SMTP_URL", ""), envStr("DAZYFLOW_SMTP_FROM", ""))
@@ -234,18 +251,6 @@ func main() {
 	}
 
 	applyNetworkPolicy(httpEgressAllow, devMode)
-
-	// dzd runs on Postgres — there is no in-memory mode. Fail fast and
-	// clearly when the DSN is missing, before the insecure-defaults guard
-	// (which would otherwise complain about the master key first).
-	if postgresDSN == "" {
-		log.Fatal("DAZYFLOW_POSTGRES_DSN is required — dzd runs on Postgres. For local development, `make pg` starts the bundled database and `make dev` points at it (see the README).")
-	}
-
-	// Refuse to boot with the bundled insecure defaults (default DB
-	// password, empty master key). DAZYFLOW_DEV=1 opts out (and is logged)
-	// for local development.
-	validateProductionConfig(devMode, postgresDSN, masterKeyB64)
 
 	// Durable stores: keys / sessions / users / jobs all persist to one
 	// shared pgxpool and survive a restart. Declared as interfaces so a
@@ -716,7 +721,13 @@ func main() {
 		if err != nil {
 			log.Fatalf("postgres org-profile store: %v", err)
 		}
-		memberships, invitations, orgAuthStore, orgProfileStore = pgMembers, pgInvites, pgOrgAuth, pgOrgProfile
+		// Keep the org's Google OAuth client secret out of the org_auth row:
+		// the decorator stores it under a per-tenant DEK in the encrypted
+		// secret store and migrates legacy plaintext rows on first read. A
+		// no-op when this install has no master key (see
+		// NewEncryptedOrgAuthStore).
+		orgAuthStore = daemon.NewEncryptedOrgAuthStore(pgOrgAuth, encryptedSecrets)
+		memberships, invitations, orgProfileStore = pgMembers, pgInvites, pgOrgProfile
 		// Let the public overview title the TV board with the org display name.
 		svc.OrgProfiles = orgProfileStore
 		// Email-sending drops resolve a referenced email-template ID to its
@@ -751,7 +762,7 @@ func main() {
 	}
 
 	if httpListen != "" {
-		buildGateway(ctx, gatewayDeps{
+		buildGateway(ctx, &bgWg, gatewayDeps{
 			svc:              svc,
 			logTail:          logTail,
 			users:            users,
@@ -842,9 +853,11 @@ func main() {
 	// gRPC has drained (GracefulStop returned). Now drain the background
 	// goroutines: their claim loops have already seen ctx cancel and stopped
 	// taking new work; wait for any in-flight node to finish writing its
-	// result before the process exits. Bounded so a stuck node can't block
-	// shutdown forever — an unfinished node's lease expires and another
-	// instance reclaims it.
+	// result before the process exits. The HTTP gateway's serve goroutine is
+	// in this group too, so its srv.Shutdown gets to finish in-flight
+	// requests — SSE streams and uploads included — instead of being cut off
+	// by process exit. Bounded so a stuck node can't block shutdown forever
+	// — an unfinished node's lease expires and another instance reclaims it.
 	grace := envDuration("DAZYFLOW_SHUTDOWN_GRACE", 25*time.Second)
 	if waitForGroup(&bgWg, grace) {
 		log.Println("workers drained cleanly")
@@ -1340,7 +1353,12 @@ type gatewayDeps struct {
 // buildGateway configures the HTTP gateway from d, binds its listener, and
 // serves it in a background goroutine tied to ctx. Fatal on a bind error or
 // a set-but-broken TOTP / audit configuration.
-func buildGateway(ctx context.Context, d gatewayDeps) {
+//
+// bgWg registers the serve goroutine so shutdown actually WAITS for the
+// listener to drain. It used to be fire-and-forget, so main could return —
+// and the process exit — while srv.Shutdown was still finishing in-flight
+// requests, cutting long-lived SSE streams and uploads mid-flight.
+func buildGateway(ctx context.Context, bgWg *sync.WaitGroup, d gatewayDeps) {
 	gw := daemon.NewHTTPGateway(d.svc)
 	gw.LogTail = d.logTail // nil leaves GET /admin/system/log returning 501
 	gw.Users = d.users
@@ -1530,7 +1548,9 @@ func buildGateway(ctx context.Context, d gatewayDeps) {
 	if err != nil {
 		log.Fatalf("http gateway: cannot bind %s: %v", d.httpListen, err)
 	}
+	bgWg.Add(1)
 	go func() {
+		defer bgWg.Done()
 		if err := gw.ServeListener(ctx, gwLn); err != nil && err != http.ErrServerClosed {
 			log.Printf("http gateway stopped: %v", err)
 		}
@@ -1643,8 +1663,8 @@ const defaultInsecurePassword = "dazyflow"
 // validateProductionConfig fails closed on the bundled insecure defaults
 // (default DB password, empty master key). DAZYFLOW_DEV=1 turns these into
 // warnings so local development with the shipped defaults still boots.
-func validateProductionConfig(devMode bool, postgresDSN, masterKeyB64 string) {
-	problems := productionConfigProblems(postgresDSN, masterKeyB64)
+func validateProductionConfig(devMode, devKey bool, postgresDSN, masterKeyB64, publicBaseURL string) {
+	problems := productionConfigProblems(devKey, postgresDSN, masterKeyB64, publicBaseURL)
 	if len(problems) == 0 {
 		return
 	}
@@ -1663,7 +1683,7 @@ func validateProductionConfig(devMode bool, postgresDSN, masterKeyB64 string) {
 // productionConfigProblems returns human-readable descriptions of every
 // bundled-insecure-default still in effect. Empty when the config is safe.
 // Pure so it can be unit-tested without exiting the process.
-func productionConfigProblems(postgresDSN, masterKeyB64 string) []string {
+func productionConfigProblems(devKey bool, postgresDSN, masterKeyB64, publicBaseURL string) []string {
 	var problems []string
 	if cfg, err := pgxpool.ParseConfig(postgresDSN); err == nil {
 		if cfg.ConnConfig.Password == defaultInsecurePassword {
@@ -1686,7 +1706,49 @@ func productionConfigProblems(postgresDSN, masterKeyB64 string) []string {
 	if masterKeyB64 == "" {
 		problems = append(problems, "DAZYFLOW_MASTER_KEY is empty — stored-secret encryption is DISABLED; set a stable 32-byte base64 key (`openssl rand -base64 32`)")
 	}
+	// DAZYFLOW_DEV_KEY mints a well-known admin bearer token on every boot.
+	// It was previously guarded by documentation alone ("never set in
+	// production"), which is the weakest possible control for a credential
+	// that grants full admin. Fail closed whenever the deployment doesn't
+	// look local — a public base URL or a remote database are both strong
+	// signals this is not somebody's laptop.
+	if devKey {
+		var signals []string
+		if publicBaseURL != "" {
+			if u, err := url.Parse(publicBaseURL); err == nil && !hostIsLocal(u.Hostname()) {
+				signals = append(signals, "DAZYFLOW_PUBLIC_BASE_URL is "+publicBaseURL)
+			}
+		}
+		if cfg, err := pgxpool.ParseConfig(postgresDSN); err == nil && !hostIsLocal(cfg.ConnConfig.Host) {
+			signals = append(signals, "the Postgres host is "+cfg.ConnConfig.Host)
+		}
+		if len(signals) > 0 {
+			problems = append(problems, "DAZYFLOW_DEV_KEY is set, which mints a publicly-known admin bearer token at every boot — but this deployment is not local ("+
+				strings.Join(signals, "; ")+"). Unset DAZYFLOW_DEV_KEY.")
+		}
+	}
 	return problems
+}
+
+// hostIsLocal reports whether host names the machine dzd is running on.
+// Used to decide whether a dev-only credential is tolerable. A unix socket
+// path counts as local by construction. Anything unrecognized is treated as
+// NOT local, so the guard errs toward refusing to boot.
+func hostIsLocal(host string) bool {
+	host = strings.ToLower(strings.TrimSpace(host))
+	host = strings.Trim(host, "[]")
+	switch {
+	case host == "":
+		return false
+	case strings.HasPrefix(host, "/"): // unix socket
+		return true
+	case host == "localhost" || strings.HasSuffix(host, ".localhost"):
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
 }
 
 // dsnSSLMode extracts the sslmode from a Postgres DSN in either URL form
@@ -1706,8 +1768,21 @@ func dsnSSLMode(dsn string) string {
 
 // Config knobs come from DAZYFLOW_* env vars. The helpers below give a
 // uniform read-with-default surface; an empty/unset var means "use the
-// default", and an unparseable value silently falls back to the default
-// rather than failing startup (matches the prior flag-default behavior).
+// default", and an unparseable value falls back to the default rather than
+// failing startup (matches the prior flag-default behavior).
+//
+// A fallback is LOGGED, though. Silently ignoring a set-but-unparseable value
+// meant DAZYFLOW_WORKER_COUNT=two booted a server with the default worker
+// count and no indication anywhere that the operator's setting had been
+// discarded — asymmetric with the strictness elsewhere in this file, where a
+// malformed DAZYFLOW_MASTER_KEY is fatal.
+
+// warnBadEnv reports a set-but-unusable value. Deliberately not fatal: these
+// knobs have safe defaults and an install that has been running fine should
+// not start refusing to boot because of a typo in an optional tuning var.
+func warnBadEnv(key, raw, using string) {
+	log.Printf("WARNING: %s=%q could not be parsed — using %s instead", key, raw, using)
+}
 
 func envStr(key, def string) string {
 	if v := os.Getenv(key); v != "" {
@@ -1718,9 +1793,11 @@ func envStr(key, def string) string {
 
 func envInt(key string, def int) int {
 	if v := os.Getenv(key); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
+		n, err := strconv.Atoi(v)
+		if err == nil {
 			return n
 		}
+		warnBadEnv(key, v, strconv.Itoa(def))
 	}
 	return def
 }
@@ -1728,20 +1805,26 @@ func envInt(key string, def int) int {
 // envBool accepts 1/true/yes/on and 0/false/no/off (case-insensitive,
 // trimmed). Anything else, including empty, returns def.
 func envBool(key string, def bool) bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {
+	raw := os.Getenv(key)
+	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "1", "true", "yes", "on":
 		return true
 	case "0", "false", "no", "off":
 		return false
+	case "":
+		return def
 	}
+	warnBadEnv(key, raw, strconv.FormatBool(def))
 	return def
 }
 
 func envDuration(key string, def time.Duration) time.Duration {
 	if v := os.Getenv(key); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
+		d, err := time.ParseDuration(v)
+		if err == nil {
 			return d
 		}
+		warnBadEnv(key, v, def.String())
 	}
 	return def
 }

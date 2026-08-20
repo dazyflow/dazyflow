@@ -28,22 +28,18 @@ import (
 )
 
 // HTTPGateway exposes Service over JSON/HTTP so browsers and other
-// non-gRPC clients can drive Dazyflow. The endpoint surface is small
-// on purpose — just enough to power a visual editor:
+// non-gRPC clients can drive Dazyflow.
 //
-//	GET    /api/v1/drops                                      — list drop manifests
-//	GET    /api/v1/modules                                    — alias of /drops (legacy)
-//	GET    /api/v1/graphs?tenant=X&workspace=Y                — list graph IDs
-//	GET    /api/v1/graphs/{tenant}/{workspace}/{id}           — load graph (head)
-//	PUT    /api/v1/graphs/{tenant}/{workspace}/{id}           — save graph
-//	POST   /api/v1/graphs/{tenant}/{workspace}/{id}/run       — submit run
-//	GET    /api/v1/jobs/{jobID}                               — job-record snapshot
-//	GET    /api/v1/jobs/{jobID}/events                        — SSE stream of bus events
-//	GET    /healthz                                           — liveness
+// The route list that used to live in this comment named
+// /api/v1/graphs/... endpoints that are no longer mounted, which made it
+// worse than no list at all. mountRoutes is the authoritative surface —
+// read it there, and note that route_sweep_test.go scrapes those
+// registrations so every mounted route stays covered without a doc edit.
 //
 // Auth is bearer token in `Authorization: Bearer <api-key>` — the same
-// API-key chain the gRPC server uses. CORS is permissive in V1; tighten
-// per-deployment via AllowedOrigins.
+// API-key chain the gRPC server uses — or a session cookie for browser
+// clients. Cross-origin access is restricted per-deployment via
+// AllowedOrigins.
 type HTTPGateway struct {
 	svc            *Service
 	logger         *log.Logger
@@ -329,6 +325,17 @@ func NewHTTPGateway(svc *Service) *HTTPGateway {
 		svc:         svc,
 		logger:      log.New(log.Writer(), "http-api: ", log.LstdFlags),
 		idempotency: newIdempotencyStore(),
+		// Defaulted here rather than in mountRoutes. These endpoints
+		// (support + provider events) are reachable by strangers, so they
+		// must always be throttled — a generous per-IP allowance that
+		// legitimate webhook senders won't hit but that caps a
+		// brute-force/flood. Defaulting them as a mountRoutes side effect
+		// meant the fields were MUTATED during route mounting, which races
+		// if mountRoutes ever runs twice concurrently (ServeForTest does
+		// call it per invocation). Construction is the right place: the
+		// gateway is never usable without them.
+		SupportRateLimit: newIPRateLimiter(defaultSupportRatePerMin, defaultSupportRateBurst),
+		WebhookRateLimit: newIPRateLimiter(defaultWebhookRatePerMin, defaultWebhookRateBurst),
 	}
 }
 
@@ -363,17 +370,6 @@ func (h *HTTPGateway) ServeListener(ctx context.Context, ln net.Listener) error 
 }
 
 func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
-	// Default the unauthenticated-surface limiter when the operator hasn't
-	// set one. These endpoints (trigger + provider events) are reachable by
-	// strangers, so they must always be throttled — a generous per-IP
-	// allowance that legitimate webhook senders won't hit but that caps a
-	// brute-force/flood.
-	if h.SupportRateLimit == nil {
-		h.SupportRateLimit = newIPRateLimiter(defaultSupportRatePerMin, defaultSupportRateBurst)
-	}
-	if h.WebhookRateLimit == nil {
-		h.WebhookRateLimit = newIPRateLimiter(defaultWebhookRatePerMin, defaultWebhookRateBurst)
-	}
 	// Liveness: the process is up and serving. Never touches deps.
 	mux.HandleFunc("GET /healthz", func(rw http.ResponseWriter, _ *http.Request) {
 		rw.WriteHeader(http.StatusOK)
@@ -1225,6 +1221,7 @@ func (h *HTTPGateway) withCORSAndLogging(next http.Handler) http.Handler {
 		if !strings.HasPrefix(r.URL.Path, "/form/") {
 			rw.Header().Set("X-Frame-Options", "DENY")
 			rw.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+			rw.Header().Set("Content-Security-Policy", appCSP)
 		}
 		if r.Method == http.MethodOptions {
 			rw.WriteHeader(http.StatusNoContent)
@@ -1233,6 +1230,40 @@ func (h *HTTPGateway) withCORSAndLogging(next http.Handler) http.Handler {
 		next.ServeHTTP(rw, r)
 	})
 }
+
+// appCSP is the Content-Security-Policy for the authenticated app surface
+// (everything except the deliberately-embeddable /form/ pages, which set
+// their own). Cheap defense-in-depth given the cookie-auth model: it was the
+// one standard header missing here, so an injected <script> or a stolen
+// stylesheet origin had nothing standing in its way.
+//
+// Each directive is tied to something the built bundle actually does:
+//
+//   - script-src 'self' — web/dist/index.html loads exactly one external
+//     module script and no inline script, so no 'unsafe-inline' is needed.
+//     This is the directive that matters; keep it inline-free.
+//   - style-src ... 'unsafe-inline' — the app uses ~550 React style={{…}}
+//     props, which are inline style attributes. Unavoidable without a
+//     rewrite, and far less dangerous than inline script.
+//   - img-src data: blob: — the CSS inlines small assets as data: URIs, and
+//     generated previews/downloads use blob:.
+//   - connect-src 'self' — no code path fetches a cross-origin API; SSE and
+//     the JSON API are same-origin.
+//   - frame-ancestors 'none' — the modern equivalent of the X-Frame-Options
+//     DENY set above; both are sent so older browsers are covered too.
+//   - form-action 'self', base-uri 'self', object-src 'none' — close the
+//     usual injection escape hatches.
+const appCSP = "default-src 'self'; " +
+	"script-src 'self'; " +
+	"style-src 'self' 'unsafe-inline'; " +
+	"img-src 'self' data: blob:; " +
+	"font-src 'self' data:; " +
+	"connect-src 'self'; " +
+	"media-src 'self' blob:; " +
+	"object-src 'none'; " +
+	"base-uri 'self'; " +
+	"form-action 'self'; " +
+	"frame-ancestors 'none'"
 
 // requestIsHTTPS reports whether the request reached the user over TLS.
 // Directly: r.TLS is set. Behind a TLS-terminating reverse proxy the
@@ -2007,7 +2038,11 @@ func (h *HTTPGateway) listRuns(rw http.ResponseWriter, r *http.Request, p core.P
 		writeJSONError(rw, http.StatusNotFound, err.Error())
 		return
 	}
-	opts := parseRunListOpts(r)
+	opts, err := parseRunListOpts(r)
+	if err != nil {
+		writeJSONError(rw, http.StatusBadRequest, err.Error())
+		return
+	}
 	opts.Workspace = workspace
 	opts.GraphID = id
 	h.writeRunList(rw, r, p, opts)
@@ -2017,10 +2052,18 @@ func (h *HTTPGateway) listRuns(rw http.ResponseWriter, r *http.Request, p core.P
 // the principal (Service.ListGraphRuns overrides any client-supplied
 // values), so this endpoint takes no path params — just query filters.
 func (h *HTTPGateway) listAllRuns(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	h.writeRunList(rw, r, p, parseRunListOpts(r))
+	opts, err := parseRunListOpts(r)
+	if err != nil {
+		writeJSONError(rw, http.StatusBadRequest, err.Error())
+		return
+	}
+	h.writeRunList(rw, r, p, opts)
 }
 
-func parseRunListOpts(r *http.Request) core.ListGraphRunsOpts {
+// parseRunListOpts reads the shared run-list query filters. Returns an error
+// for a filter value the caller can't have meant, which the handlers surface
+// as a 400 rather than an empty list.
+func parseRunListOpts(r *http.Request) (core.ListGraphRunsOpts, error) {
 	opts := core.ListGraphRunsOpts{Limit: 20}
 	if s := r.URL.Query().Get("limit"); s != "" {
 		if n, err := strconv.Atoi(s); err == nil && n > 0 {
@@ -2036,7 +2079,15 @@ func parseRunListOpts(r *http.Request) core.ListGraphRunsOpts {
 		}
 	}
 	if s := r.URL.Query().Get("status"); s != "" {
-		opts.Status = core.JobStatus(s)
+		// Reject an unknown status instead of casting it through. The cast
+		// itself is harmless, but the result — an empty list that looks
+		// exactly like "no runs match" — makes a typo'd filter
+		// (?status=succeded) indistinguishable from a genuine empty result.
+		st := core.JobStatus(s)
+		if !st.Valid() {
+			return opts, fmt.Errorf("unknown status %q", s)
+		}
+		opts.Status = st
 	}
 	// Date range over a run's enqueue time. ?since= is an inclusive lower
 	// bound, ?until= an exclusive upper bound (so a UI day-picker passing
@@ -2059,7 +2110,7 @@ func parseRunListOpts(r *http.Request) core.ListGraphRunsOpts {
 	if s := r.URL.Query().Get("tenant"); s != "" {
 		opts.Tenant = s
 	}
-	return opts
+	return opts, nil
 }
 
 // parseRunListTime parses a run-list ?since=/?until= bound. It accepts a full
@@ -2182,21 +2233,25 @@ func (h *HTTPGateway) revokeAPIKey(rw http.ResponseWriter, r *http.Request, p co
 }
 
 // adminError maps known Service errors to HTTP statuses without
-// duplicating the message inspection at every handler.
+// duplicating the classification at every handler.
+//
+// Classifies on typed sentinels, not on message substrings. The substring
+// form was fragile in both directions: rewording a user-facing message
+// silently changed the status code, and any authorization error that wrapped
+// core.ErrUnauthorized without also containing the literal phrase "requires
+// permission" — e.g. the platform-admin-only role grant, or a key-id
+// collision — fell through to 500 when it should have been 403.
 func adminError(rw http.ResponseWriter, err error) {
 	msg := err.Error()
 	switch {
-	case strings.Contains(msg, "requires permission"),
-		strings.Contains(msg, "cannot act on tenant"):
+	case errors.Is(err, core.ErrUnauthorized):
 		writeJSONError(rw, http.StatusForbidden, msg)
-	case strings.Contains(msg, "not configured"):
+	case errors.Is(err, errAdminNotConfigured):
 		writeJSONError(rw, http.StatusNotImplemented, msg)
-	case strings.Contains(msg, "is required"):
-		writeJSONError(rw, http.StatusBadRequest, msg)
-	case errors.Is(err, auth.ErrInvalidCredential):
+	case errors.Is(err, errAdminBadRequest),
 		// A malformed / unparseable key id is bad client input, not a
 		// server fault — e.g. DELETE /admin/api-keys/{id} with a junk id.
-		// Map it to 400 instead of letting it fall through to 500.
+		errors.Is(err, auth.ErrInvalidCredential):
 		writeJSONError(rw, http.StatusBadRequest, msg)
 	default:
 		writeJSONError(rw, http.StatusInternalServerError, msg)
@@ -2262,19 +2317,22 @@ func (h *HTTPGateway) approveAuthed(rw http.ResponseWriter, r *http.Request, p c
 		Approver: p.Subject,
 		Comment:  r.URL.Query().Get("comment"),
 	}); err != nil {
-		if strings.Contains(err.Error(), "not awaiting") {
+		// Sentinels, not substrings: Approve documents exactly which errors
+		// it returns (ErrConflict when the node isn't awaiting, ErrNotFound
+		// when the record is unknown, errBadApprovalDecision for a malformed
+		// decision), and matching on message text meant any reword flipped
+		// the status — including "not found" appearing incidentally inside an
+		// unrelated wrapped error.
+		switch {
+		case errors.Is(err, core.ErrConflict):
 			writeJSONError(rw, http.StatusConflict, err.Error())
-			return
-		}
-		if strings.Contains(err.Error(), "not found") {
+		case errors.Is(err, core.ErrNotFound):
 			writeJSONError(rw, http.StatusNotFound, err.Error())
-			return
-		}
-		if strings.Contains(err.Error(), "approve or reject") {
+		case errors.Is(err, errBadApprovalDecision):
 			writeJSONError(rw, http.StatusBadRequest, err.Error())
-			return
+		default:
+			writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		}
-		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
 	h.audit(r.Context(), p, "approval", runID+"/"+nodeID, decision)

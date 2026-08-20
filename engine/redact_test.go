@@ -335,3 +335,56 @@ func TestRedactProgress_ConsumerGone_Cov(t *testing.T) {
 	close(in)
 	<-done // must complete without deadlock
 }
+
+// TestRedactString_OverlappingSecrets is the regression for a leak that map
+// iteration order made intermittent: when one secret contains another,
+// replacing the shorter one first cut it out of the middle of the longer one,
+// so the longer secret's remaining tail stopped matching and survived into
+// the persisted run record in cleartext.
+//
+// The loop runs many times because the bug only showed up on the iteration
+// orders where the short secret came first — a single pass passed by luck
+// roughly half the time.
+func TestRedactString_OverlappingSecrets(t *testing.T) {
+	const (
+		short = "tok_abcdef"
+		long  = short + "_with_a_longer_tail"
+	)
+	for i := 0; i < 200; i++ {
+		set := newSecretSet()
+		set.add(short)
+		set.add(long)
+
+		got := redactString("Authorization: Bearer "+long, set)
+		if strings.Contains(got, "_with_a_longer_tail") {
+			t.Fatalf("iteration %d: leaked the tail of the longer secret: %q", i, got)
+		}
+		if got != "Authorization: Bearer "+redactionMarker {
+			t.Fatalf("iteration %d: got %q, want the whole secret replaced once", i, got)
+		}
+	}
+}
+
+// TestRedactString_PrefixAndSuffixOverlap covers the other two overlap
+// shapes: the shared value sitting at the end of the longer secret, and one
+// secret embedded in the middle of another.
+func TestRedactString_PrefixAndSuffixOverlap(t *testing.T) {
+	for _, tc := range []struct{ name, a, b, in string }{
+		{"suffix overlap", "secret_tail_value", "tail_value", "x secret_tail_value y"},
+		{"embedded", "outer_MIDDLE_outer", "MIDDLE_out", "z outer_MIDDLE_outer z"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for i := 0; i < 100; i++ {
+				set := newSecretSet()
+				set.add(tc.a)
+				set.add(tc.b)
+				got := redactString(tc.in, set)
+				for _, s := range []string{tc.a, tc.b} {
+					if strings.Contains(got, s) {
+						t.Fatalf("iteration %d: %q still present in %q", i, s, got)
+					}
+				}
+			}
+		})
+	}
+}

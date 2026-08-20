@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/sandbox"
 )
 
 // mkdirSub creates a subdirectory under root.
@@ -354,12 +355,12 @@ func TestSandboxRel(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.in, func(t *testing.T) {
-			got, err := sandboxRel(c.in)
+			got, err := sandbox.Rel(c.in)
 			if (err != nil) != c.wantErr {
-				t.Fatalf("sandboxRel(%q) err = %v, wantErr = %v", c.in, err, c.wantErr)
+				t.Fatalf("sandbox.Rel(%q) err = %v, wantErr = %v", c.in, err, c.wantErr)
 			}
 			if !c.wantErr && got != c.want {
-				t.Errorf("sandboxRel(%q) = %q, want %q", c.in, got, c.want)
+				t.Errorf("sandbox.Rel(%q) = %q, want %q", c.in, got, c.want)
 			}
 		})
 	}

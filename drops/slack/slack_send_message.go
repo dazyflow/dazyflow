@@ -58,7 +58,9 @@ func init() {
 			// EMITTED under "meta" (see the Execute result) so run records
 			// keep them for debugging; they're just not pins. Re-expose ts as
 			// a named port if a reply-in-thread feature ever needs to wire it.
-			Outputs: []core.Port{},
+			Outputs: []core.Port{
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
+			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
@@ -79,6 +81,11 @@ func init() {
 			// twice. This drop is a terminal leaf, which the engine
 			// auto-retries on backoff — so retries must be off here.
 			RetryPolicy: core.RetryNever,
+			// A non-idempotent external write: opt into engine-side dedupe so an
+			// expired-lease reclaim or crash recovery replays the recorded result
+			// instead of firing the write a second time. Matches the other
+			// send-style drops (discord/gmail/sheets/twilio/klarna/nshift/elks).
+			DedupeWrites: true,
 		},
 		Execute: executeSlackSendMessage,
 	})

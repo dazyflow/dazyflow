@@ -70,6 +70,7 @@ func init() {
 				{Port: "country", Label: "Country", MIME: []string{"text/plain"}},
 				{Port: "national", Label: "National number", MIME: []string{"text/plain"}},
 				{Port: "type", Label: "Type", MIME: []string{"text/plain"}},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

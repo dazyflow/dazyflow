@@ -16,6 +16,21 @@ import (
 	"github.com/google/cel-go/cel"
 )
 
+// MaxExpressionLen caps the source length of a formula we are willing to
+// parse. cel-go's eval side is bounded by rowcel.CostLimit, but COMPILE is
+// not: parse + type-check cost grows with nesting depth and term count, and
+// POST /tools/expression/validate compiles whatever the caller sends. A
+// deeply nested expression is cheap to transmit and expensive to type-check,
+// so without a cap one authenticated request can burn CPU out of proportion
+// to its size. 4 KiB is far past any hand-written formula — the editor's
+// field is a single line — while cutting the pathological cases off early.
+const MaxExpressionLen = 4 << 10
+
+// ErrExpressionTooLong is returned by Validate (and the drop) when a formula
+// exceeds MaxExpressionLen. Surfaced as an Issue rather than an error so the
+// editor renders it next to the field like any other compile problem.
+const errExpressionTooLongMsg = "formula is too long to check (limit is 4096 characters)"
+
 // NewEnv builds the Expression drop's CEL environment: the wired value as
 // `input` (dynamic — it can be anything) and the current time as `now`, with
 // cross-type numeric comparisons so `input > 100` works whether input arrives
@@ -46,6 +61,12 @@ type Issue struct {
 func Validate(expr string) (*Issue, error) {
 	if strings.TrimSpace(expr) == "" {
 		return nil, nil
+	}
+	// Length gate BEFORE Compile — the point is to not hand an unbounded
+	// expression to the parser. Reported as an Issue (not a Go error) so the
+	// caller renders it inline like any other problem with the formula.
+	if len(expr) > MaxExpressionLen {
+		return &Issue{Message: errExpressionTooLongMsg}, nil
 	}
 	env, err := NewEnv()
 	if err != nil {

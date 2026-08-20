@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/url"
 	"strconv"
 	"sync"
@@ -135,6 +136,16 @@ func executeGmailSearch(ctx context.Context, job core.Job, _ chan<- core.Progres
 		go func(i int, id string) {
 			defer wg.Done()
 			defer func() { <-sem }()
+			// A panic in here would take down the whole daemon, not just this
+			// job: the engine's recover wraps Execute on the calling
+			// goroutine and cannot see a panic raised on one we spawned. Drop
+			// the message instead — the caller already tolerates a stub-only
+			// entry for a fetch that failed.
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("gmail_search_messages: recovered while hydrating message %s: %v", id, r)
+				}
+			}()
 			ep := baseURL(job) + "/users/me/messages/" + url.PathEscape(id) + "?format=full"
 			st, b, ferr := gmailDo(ctx, "GET", ep, token, "", nil, timeout)
 			if ferr != nil || st < 200 || st >= 300 {

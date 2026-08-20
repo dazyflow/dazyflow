@@ -66,6 +66,7 @@ func init() {
 				// in — downstream steps (shell, file_read) read it from here.
 				{Port: "path", Label: "Repository folder", MIME: []string{"text/plain"}},
 				{Port: "sha", Label: "Commit SHA", MIME: []string{"text/plain"}},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(
 				`{

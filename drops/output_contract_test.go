@@ -75,6 +75,12 @@ func TestAllDrops_EmittedOutputsAreDeclared(t *testing.T) {
 			// few (delay) hand-roll emitting on it while opting the auto-pin
 			// out. Always allowed.
 			declared[core.PassPort] = true
+			// NOTE: "meta" is NOT exempt. 31 drops used to emit it without
+			// declaring it, which this check never caught because it only
+			// asserts on StatusOK runs and a connector never reaches StatusOK
+			// under the one-value spray. They now declare it like the six that
+			// always did — see baseline_mutation_test.go, which corrupts one
+			// param of a VALID example at a time and does reach those paths.
 			for _, v := range nastyValues() {
 				job := jobWithValue(v, ws, scratch)
 				out := runDropSafely(t.Context(), d.transport, job, 1500*time.Millisecond)

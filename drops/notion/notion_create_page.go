@@ -54,6 +54,7 @@ func init() {
 				{Port: "title", Label: "Title", MIME: []string{"text/plain"}},
 				{Port: "url", Label: "Page URL", MIME: []string{"text/plain"}},
 				{Port: "id", Label: "Page ID", MIME: []string{"text/plain"}},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
@@ -74,6 +75,11 @@ func init() {
 			// genuinely creates a duplicate page — delivery is fire-once
 			// (same as gmail/sheets/slack send).
 			RetryPolicy: core.RetryNever,
+			// A non-idempotent external write: opt into engine-side dedupe so an
+			// expired-lease reclaim or crash recovery replays the recorded result
+			// instead of firing the write a second time. Matches the other
+			// send-style drops (discord/gmail/sheets/twilio/klarna/nshift/elks).
+			DedupeWrites: true,
 		},
 		Execute: executeNotionCreatePage,
 	})

@@ -60,6 +60,7 @@ func init() {
 				// result) so run records keep it for debugging — it's just not
 				// a pin (same as gmail send / sheets append).
 				{Port: "response_body", Label: "Response"},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(
 				`{
@@ -154,6 +155,13 @@ func executeHTTPUpload(ctx context.Context, job core.Job, _ chan<- core.Progress
 		mw := multipart.NewWriter(pw)
 		contentType = mw.FormDataContentType()
 		go func() {
+			// Without this a panic here would both kill the daemon and leave
+			// the request body's reader blocked on a pipe nobody closes.
+			defer func() {
+				if r := recover(); r != nil {
+					_ = pw.CloseWithError(fmt.Errorf("internal error building upload body: %v", r))
+				}
+			}()
 			part, perr := mw.CreateFormFile(field, filename)
 			if perr == nil {
 				_, perr = io.Copy(part, f)

@@ -4,6 +4,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"git.sr.ht/~klahr/dazyflow/engine"
@@ -34,7 +35,7 @@ func TestProductionConfigProblems(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := productionConfigProblems(tc.dsn, tc.masterKey)
+			got := productionConfigProblems(false, tc.dsn, tc.masterKey, "")
 			if len(got) != tc.wantCount {
 				t.Errorf("problems = %v (n=%d), want %d", got, len(got), tc.wantCount)
 			}
@@ -74,6 +75,70 @@ func TestRegisterMCPServers_Errors(t *testing.T) {
 	for _, bad := range []string{"noequals", "name="} {
 		if err := registerMCPServers(cat, bad); err == nil {
 			t.Errorf("registerMCPServers(%q): want error", bad)
+		}
+	}
+}
+
+// TestProductionConfigProblems_DevKeyGuard covers the DAZYFLOW_DEV_KEY
+// fail-closed rule: the flag mints a publicly-known admin bearer token, so it
+// must be refused wherever the deployment doesn't look like somebody's
+// laptop. Previously it was guarded only by a line in the docs.
+func TestProductionConfigProblems_DevKeyGuard(t *testing.T) {
+	const strongKey = "c3Ryb25nLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9rIQ=="
+	localDSN := "postgres://dazyflow:s3cret@localhost:5432/dazyflow?sslmode=require"
+	remoteDSN := "postgres://dazyflow:s3cret@db.internal:5432/dazyflow?sslmode=require"
+
+	cases := []struct {
+		name              string
+		devKey            bool
+		dsn               string
+		baseURL           string
+		wantDevKeyProblem bool
+	}{
+		{"dev key off is never flagged", false, remoteDSN, "https://app.example.com", false},
+		{"local dsn, no public url", true, localDSN, "", false},
+		{"local dsn, localhost url", true, localDSN, "http://localhost:8080", false},
+		{"loopback ip counts as local", true, "postgres://dazyflow:s3cret@127.0.0.1:5432/dazyflow?sslmode=require", "http://127.0.0.1:8080", false},
+		{"public base url is flagged", true, localDSN, "https://app.example.com", true},
+		{"remote database is flagged", true, remoteDSN, "", true},
+		{"both signals still one problem", true, remoteDSN, "https://app.example.com", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := productionConfigProblems(tc.devKey, tc.dsn, strongKey, tc.baseURL)
+			var found bool
+			for _, p := range got {
+				if strings.Contains(p, "DAZYFLOW_DEV_KEY") {
+					found = true
+				}
+			}
+			if found != tc.wantDevKeyProblem {
+				t.Errorf("dev-key problem = %v, want %v (problems: %v)", found, tc.wantDevKeyProblem, got)
+			}
+		})
+	}
+}
+
+func TestHostIsLocal(t *testing.T) {
+	for _, tc := range []struct {
+		host string
+		want bool
+	}{
+		{"localhost", true},
+		{"LOCALHOST", true},
+		{"dz.localhost", true},
+		{"127.0.0.1", true},
+		{"127.5.5.5", true},
+		{"::1", true},
+		{"[::1]", true},
+		{"/var/run/postgresql", true}, // unix socket
+		{"db.internal", false},
+		{"10.0.0.5", false},
+		{"app.example.com", false},
+		{"", false},
+	} {
+		if got := hostIsLocal(tc.host); got != tc.want {
+			t.Errorf("hostIsLocal(%q) = %v, want %v", tc.host, got, tc.want)
 		}
 	}
 }

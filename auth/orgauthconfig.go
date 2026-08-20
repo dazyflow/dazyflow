@@ -12,11 +12,15 @@ import (
 
 // OrgAuthConfig is the per-tenant sign-in policy. Today it carries
 // Google Workspace SSO config; future providers (Microsoft Entra,
-// Okta, SAML) extend the same record. ClientSecret is intentionally
-// stored alongside the public ClientID rather than in EncryptedSecrets
-// because the org-auth store is admin-only and the secret lifecycle
-// matches the org's lifecycle. Production deployments running
-// Postgres get the Pg variant which can layer at-rest encryption.
+// Okta, SAML) extend the same record.
+//
+// GoogleClientSecret is plaintext ON THIS STRUCT but must never be
+// persisted that way. daemon.EncryptedOrgAuthStore decorates every
+// OrgAuthStore and keeps the secret in the per-tenant encrypted secret
+// store, writing an empty string to the org_auth column — so a database
+// dump exposes no client secrets. Implementations of this interface should
+// therefore treat the field as "whatever the decorator handed me" and not
+// assume the column is the system of record.
 //
 // WorkspaceDomain restricts which Google accounts can sign into this
 // org: the hd= claim on Google's response must match. Empty means

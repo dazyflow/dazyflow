@@ -401,12 +401,30 @@ func (s *Store) Delete(graphID, author string) (string, error) {
 	return hash.String(), nil
 }
 
-// Load reads graphs/<id>.json from HEAD.
+// ErrGraphNotFound is returned by Load/LoadAt when the commit resolves but
+// holds no graphs/<id>.json — i.e. the flow genuinely does not exist yet.
+// It exists to be distinguishable: callers that branch on "new flow" vs
+// "existing flow" (saveGraph most importantly, where the two paths run
+// different authorization) must fail closed on every OTHER error rather
+// than treating a corrupt object, an I/O fault or an unreadable commit as
+// an invitation to take the create path.
+var ErrGraphNotFound = errors.New("graph not found")
+
+// Load reads graphs/<id>.json from HEAD. Returns ErrGraphNotFound when the
+// flow does not exist; any other error means the store could not be read
+// and says nothing about whether the flow exists.
 func (s *Store) Load(id string) (core.Graph, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	head, err := s.repo.Head()
 	if err != nil {
+		// An unborn HEAD is a repo with no commits — openMemory (and any
+		// freshly created workspace before its first save) starts there. No
+		// commits means no graphs, so this is a genuine not-found and not a
+		// store fault: the caller's create path is the correct branch.
+		if errors.Is(err, plumbing.ErrReferenceNotFound) {
+			return core.Graph{}, fmt.Errorf("graph %q: %w", id, ErrGraphNotFound)
+		}
 		return core.Graph{}, fmt.Errorf("head: %w", err)
 	}
 	return s.loadAt(head.Hash(), id)
@@ -435,6 +453,15 @@ func (s *Store) loadAt(hash plumbing.Hash, id string) (core.Graph, error) {
 	}
 	file, err := tree.File(graphPath(id))
 	if err != nil {
+		// Distinguish "this flow has never been saved" from "the store is
+		// broken". Callers authorize differently on the two — see
+		// ErrGraphNotFound — so collapsing them into one opaque error is a
+		// security-relevant loss of information, not just poor ergonomics.
+		if errors.Is(err, object.ErrFileNotFound) ||
+			errors.Is(err, object.ErrDirectoryNotFound) ||
+			errors.Is(err, object.ErrEntryNotFound) {
+			return core.Graph{}, fmt.Errorf("graph %q at %s: %w", id, hash, ErrGraphNotFound)
+		}
 		return core.Graph{}, fmt.Errorf("graph %q at %s: %w", id, hash, err)
 	}
 	contents, err := file.Contents()

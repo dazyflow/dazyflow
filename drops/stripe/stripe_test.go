@@ -697,20 +697,49 @@ func TestFormatPriceAmount(t *testing.T) {
 	}
 }
 
-func TestCurrencyEnumJSON(t *testing.T) {
-	enum, names := currencyEnumJSON()
-	var codes, labels []string
-	if err := json.Unmarshal([]byte(enum), &codes); err != nil {
-		t.Fatalf("enum json: %v", err)
-	}
-	if err := json.Unmarshal([]byte(names), &labels); err != nil {
-		t.Fatalf("names json: %v", err)
-	}
+func TestStripeCurrencyLists(t *testing.T) {
+	codes, labels := stripeCurrencyLists()
 	if len(codes) != len(labels) || len(codes) == 0 {
 		t.Fatalf("codes/labels len = %d/%d", len(codes), len(labels))
 	}
 	if codes[0] != "usd" || !strings.HasPrefix(labels[0], "USD — ") {
 		t.Errorf("first = %q / %q", codes[0], labels[0])
+	}
+}
+
+// TestSendInvoiceParamsSchema_IsValidJSON pins that the marshalled schema is
+// well-formed and carries the currency enum — the property the old Sprintf
+// construction could silently break.
+func TestSendInvoiceParamsSchema_IsValidJSON(t *testing.T) {
+	var parsed struct {
+		Type       string `json:"type"`
+		Properties struct {
+			Currency struct {
+				Enum      []string `json:"enum"`
+				EnumNames []string `json:"enumNames"`
+				Default   string   `json:"default"`
+			} `json:"currency"`
+		} `json:"properties"`
+		Required []string `json:"required"`
+	}
+	if err := json.Unmarshal(sendInvoiceParamsSchema, &parsed); err != nil {
+		t.Fatalf("schema is not valid JSON: %v", err)
+	}
+	if parsed.Type != "object" {
+		t.Errorf("type = %q, want object", parsed.Type)
+	}
+	codes, labels := stripeCurrencyLists()
+	if len(parsed.Properties.Currency.Enum) != len(codes) {
+		t.Errorf("enum len = %d, want %d", len(parsed.Properties.Currency.Enum), len(codes))
+	}
+	if len(parsed.Properties.Currency.EnumNames) != len(labels) {
+		t.Errorf("enumNames len = %d, want %d", len(parsed.Properties.Currency.EnumNames), len(labels))
+	}
+	if parsed.Properties.Currency.Default != "usd" {
+		t.Errorf("default currency = %q", parsed.Properties.Currency.Default)
+	}
+	if len(parsed.Required) != 2 {
+		t.Errorf("required = %v", parsed.Required)
 	}
 }
 

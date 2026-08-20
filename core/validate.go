@@ -130,6 +130,16 @@ func ValidateWithManifests(g Graph, manifests map[string]Manifest) error {
 		incoming[inputKey{e.To, e.ToPort}]++
 	}
 
+	// Reject an unrecognized on_error before any of the policy-specific
+	// reasoning below trusts it.
+	for i, e := range g.Edges {
+		if !e.OnError.Valid() {
+			errs = append(errs, fmt.Errorf(
+				"edge %d (%s→%s): unknown on_error %q (expected one of abort, skip, retry, fallback)",
+				i, e.From, e.To, string(e.OnError)))
+		}
+	}
+
 	// Per-edge OnError sanity check: retrying a non-idempotent module is a
 	// foot-gun (the partial side effects from a failed run may not be safe
 	// to replay). The spec flags this at validation time.

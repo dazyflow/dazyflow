@@ -45,6 +45,7 @@ func init() {
 			Outputs: []core.Port{
 				{Port: "refund_id", Label: "Refund ID", MIME: []string{"text/plain"}},
 				{Port: "status", Label: "Status", MIME: []string{"text/plain"}},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
@@ -59,6 +60,11 @@ func init() {
 			}`),
 			Idempotent:  false,
 			RetryPolicy: core.RetryExponentialBackoff,
+			// A non-idempotent external write: opt into engine-side dedupe so an
+			// expired-lease reclaim or crash recovery replays the recorded result
+			// instead of firing the write a second time. Matches the other
+			// send-style drops (discord/gmail/sheets/twilio/klarna/nshift/elks).
+			DedupeWrites: true,
 		},
 		Execute: executeCreateRefund,
 	})

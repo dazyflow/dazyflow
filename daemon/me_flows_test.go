@@ -91,14 +91,29 @@ func TestPublishFlowMe_OK_WithLabel(t *testing.T) {
 	}
 }
 
-func TestPublishFlowMe_MalformedBodyStillPublishesHead(t *testing.T) {
+// TestPublishFlowMe_MalformedBodyIsRejected pins that a body we cannot parse
+// is a 400. It used to be logged and ignored, which published HEAD instead of
+// the ref the client asked for — a successful publish of the WRONG commit,
+// with only a server-side log line recording that anything went wrong.
+func TestPublishFlowMe_MalformedBodyIsRejected(t *testing.T) {
 	h := newGatewayHarness(t)
 	covSeedFlow(t, h, "f1")
-	// Malformed JSON body is logged and ignored; HEAD still publishes.
 	req := newRawReq(t, h, "POST", "/api/v1/me/flows/"+cov3FlowID+"/publish", "{not json")
 	rw := serveRaw(h, req)
+	if rw.Code != http.StatusBadRequest {
+		t.Fatalf("malformed body publish = %d (%s), want 400", rw.Code, rw.Body.String())
+	}
+}
+
+// An absent body still means "publish HEAD, no label" — the optional-body
+// contract is unchanged.
+func TestPublishFlowMe_EmptyBodyPublishesHead(t *testing.T) {
+	h := newGatewayHarness(t)
+	covSeedFlow(t, h, "f1")
+	req := newRawReq(t, h, "POST", "/api/v1/me/flows/"+cov3FlowID+"/publish", "")
+	rw := serveRaw(h, req)
 	if rw.Code != http.StatusOK {
-		t.Fatalf("malformed body publish = %d (%s), want 200", rw.Code, rw.Body.String())
+		t.Fatalf("empty body publish = %d (%s), want 200", rw.Code, rw.Body.String())
 	}
 }
 

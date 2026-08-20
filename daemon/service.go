@@ -12,6 +12,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -395,9 +396,19 @@ type Service struct {
 	// and in tests), so suggestCache is created lazily on first write — but
 	// always under suggestMu, and the nil-map read in DropSuggestions is also
 	// taken under suggestMu, so the lazy init is race-free.
+	// Bounded FIFO (suggestOrder + suggestCacheMax): the key includes the
+	// principal's subject for private-flow visibility, so the key space is
+	// tenants × users and entries were never evicted — a long-lived process
+	// with many users accumulated one entry per user per workspace forever.
+	// Mirrors the eviction the idempotency store already does.
 	suggestMu    sync.Mutex
 	suggestCache map[string]suggestEntry
+	suggestOrder []string
 }
+
+// suggestCacheMax caps the DropSuggestions memo. Generous — the entries are
+// small and the point is only to stop unbounded growth, not to be frugal.
+const suggestCacheMax = 512
 
 type suggestEntry struct {
 	head string
@@ -560,11 +571,17 @@ func (s *Service) DeleteGraph(ctx context.Context, p core.Principal, tenant, ws,
 	if err != nil {
 		return err
 	}
-	// Load to enforce edit permission on the existing flow. ErrNotFound
-	// is OK — we exit early with success (idempotent delete).
+	// Load to enforce edit permission on the existing flow. A genuine
+	// not-found is OK — we exit early with success (idempotent delete).
+	// Any other error must surface: reporting a successful delete because
+	// the store was unreadable tells the caller the flow is gone when it
+	// is still there, and skips AuthorizeGraphEdit on the way out.
 	existing, loadErr := store.Load(id)
 	if loadErr != nil {
-		return nil
+		if errors.Is(loadErr, workspace.ErrGraphNotFound) {
+			return nil
+		}
+		return fmt.Errorf("load flow %q: %w", id, loadErr)
 	}
 	if err := core.AuthorizeGraphEdit(p, existing); err != nil {
 		return err
@@ -717,9 +734,20 @@ func (s *Service) saveGraph(ctx context.Context, p core.Principal, g core.Graph,
 		return "", err
 	}
 	// Look up the existing flow (if any) so we can run the per-flow
-	// edit gate. ErrNotFound is the new-flow case and falls through to
-	// the owner-stamp below.
+	// edit gate. Only workspace.ErrGraphNotFound is the new-flow case;
+	// it falls through to the owner-stamp below.
+	//
+	// Every other error has to fail closed. The create path deliberately
+	// skips AuthorizeGraphEdit (there is no prior record to authorize
+	// against) and the active-run lock, and enforces only the weaker
+	// PermGraphEdit — so treating "the store could not be read" as "the
+	// flow doesn't exist" hands a non-owner a write to an existing private
+	// flow whenever a transient git or I/O fault makes Load fail. Now that
+	// the store returns a typed not-found, anything else is an error.
 	prior, loadErr := store.Load(g.ID)
+	if loadErr != nil && !errors.Is(loadErr, workspace.ErrGraphNotFound) {
+		return "", fmt.Errorf("load flow %q: %w", g.ID, loadErr)
+	}
 	if loadErr == nil {
 		// Update path: enforce edit + ownership + visibility on the
 		// EXISTING flow's record. A client-supplied Owner / Visibility
@@ -1123,7 +1151,17 @@ func (s *Service) DropSuggestions(ctx context.Context, p core.Principal, tenant,
 	if s.suggestCache == nil {
 		s.suggestCache = map[string]suggestEntry{}
 	}
+	// Track insertion order only for keys that are genuinely new, so a
+	// refreshed entry doesn't get a second slot in the queue.
+	if _, existed := s.suggestCache[cacheKey]; !existed {
+		s.suggestOrder = append(s.suggestOrder, cacheKey)
+	}
 	s.suggestCache[cacheKey] = suggestEntry{head: head, data: out}
+	for len(s.suggestOrder) > suggestCacheMax {
+		oldest := s.suggestOrder[0]
+		s.suggestOrder = s.suggestOrder[1:]
+		delete(s.suggestCache, oldest)
+	}
 	s.suggestMu.Unlock()
 	return out, nil
 }
@@ -1463,13 +1501,19 @@ func graphResultFromRecord(rec core.JobRecord) engine.GraphResult {
 	return out
 }
 
-// GetJob fetches a job record, enforcing tenant AND workspace isolation.
-// Using RequireWorkspace (not just RequireTenant) stops a workspace-scoped
-// principal — e.g. an API key issued for workspace A — from reading or acting
-// on runs in workspace B of the same tenant by supplying their run ID. This
-// gates every /me/runs/* route (loadRunScoped) plus run-log read/delete.
-// Tenant-scoped principals (no workspace binding) and org admins are
-// unaffected, matching the platform's workspace model.
+// GetJob fetches a job record, enforcing TENANT isolation. This gates every
+// /me/runs/* route (loadRunScoped) plus run-log read/delete.
+//
+// Despite the name, core.RequireWorkspace does not check the workspace: the
+// platform settled on exactly one workspace per org, so workspace stopped
+// being an authorization dimension and the parameter is retained only to
+// spare ~25 call sites (see core/authz.go). An earlier version of this
+// comment claimed workspace isolation was enforced here, which was never
+// true — a workspace-scoped API key can read sibling-workspace runs of the
+// same tenant. That is currently unreachable (no org has two workspaces),
+// but the claim was the dangerous part: it invited callers to rely on a
+// boundary that doesn't exist. If per-workspace scoping is ever
+// reintroduced, RequireWorkspace and this method are where it lands.
 func (s *Service) GetJob(ctx context.Context, p core.Principal, jobID string) (core.JobRecord, error) {
 	rec, err := s.Jobs.Get(ctx, jobID)
 	if err != nil {
@@ -1481,13 +1525,19 @@ func (s *Service) GetJob(ctx context.Context, p core.Principal, jobID string) (c
 	return rec, nil
 }
 
+// ErrRunLogsDisabled means this deployment has no persistent run-log store
+// wired, so the run-log endpoints cannot work here at all — a 501, distinct
+// from "that run id is unknown" (404). Typed so runStoreError classifies it
+// by sentinel rather than by matching "not enabled" in the message.
+var ErrRunLogsDisabled = errors.New("run logs are not enabled on this deployment")
+
 // RunLogPage returns a page of a run's persisted log, authorized the
 // same way GetJob is: the run record's tenant must be the caller's.
 // The Get also distinguishes "no such run" (NotFound) from "run exists,
 // log empty" for the callers.
 func (s *Service) RunLogPage(ctx context.Context, p core.Principal, runID string, afterSeq int64, limit int) ([]RunLogEntry, error) {
 	if s.RunLogs == nil {
-		return nil, fmt.Errorf("run logs are not enabled on this deployment")
+		return nil, ErrRunLogsDisabled
 	}
 	if _, err := s.GetJob(ctx, p, runID); err != nil {
 		return nil, err
@@ -1503,7 +1553,7 @@ func (s *Service) RunLogPage(ctx context.Context, p core.Principal, runID string
 // support deletion.
 func (s *Service) DeleteRunLog(ctx context.Context, p core.Principal, runID string) (int, error) {
 	if s.RunLogs == nil {
-		return 0, fmt.Errorf("run logs are not enabled on this deployment")
+		return 0, ErrRunLogsDisabled
 	}
 	if _, err := s.GetJob(ctx, p, runID); err != nil {
 		return 0, err

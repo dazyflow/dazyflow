@@ -45,6 +45,22 @@ type JobRecord struct {
 	ParentNodeRecID string
 }
 
+// Valid reports whether s is a defined job status. Empty is valid and means
+// "no status filter / unset".
+//
+// Job statuses are written by this package and read back from storage, so
+// they are not attacker-controlled — but they DO arrive as free strings on
+// the list-runs query filter, where an unrecognized value used to produce a
+// silently empty result set rather than an error.
+func (s JobStatus) Valid() bool {
+	switch s {
+	case "", JobStatusQueued, JobStatusRunning, JobStatusSucceeded,
+		JobStatusFailed, JobStatusCancelled, JobStatusSkipped, JobStatusAwaiting:
+		return true
+	}
+	return false
+}
+
 // IsTerminalStatus reports whether s represents a final state — used by
 // the JobStore to make Complete idempotent and by callers polling for end.
 func IsTerminalStatus(s JobStatus) bool {

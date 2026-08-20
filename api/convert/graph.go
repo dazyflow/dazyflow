@@ -72,10 +72,20 @@ func GraphFromPB(g *controlpb.Graph) (core.Graph, error) {
 		})
 	}
 	for _, e := range g.Edges {
+		// on_error travels the wire as a free string (see control.proto), so
+		// the cast has to be checked. Rejecting it here gives a clear
+		// conversion error naming the edge, instead of a graph that validates
+		// later with a less specific message — or, before this, one that was
+		// accepted outright and silently ignored the requested policy.
+		onErr := core.OnError(e.OnError)
+		if !onErr.Valid() {
+			return core.Graph{}, fmt.Errorf("edge %s→%s: unknown on_error %q (expected one of abort, skip, retry, fallback)",
+				e.From, e.To, e.OnError)
+		}
 		out.Edges = append(out.Edges, core.Edge{
 			From: e.From, FromPort: e.FromPort,
 			To: e.To, ToPort: e.ToPort,
-			OnError: core.OnError(e.OnError),
+			OnError: onErr,
 		})
 	}
 	for _, t := range g.Triggers {

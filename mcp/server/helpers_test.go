@@ -236,3 +236,61 @@ func TestErrorResultOrErr_NonHTTP(t *testing.T) {
 		t.Errorf("non-HTTP error should pass through, got %v", err)
 	}
 }
+
+// TestIdempotencyKeyFor_CanonicalizesArgs is the regression for a duplicated
+// side effect on retry: an MCP host that re-serializes the arguments (key
+// order, whitespace, number formatting held constant) must still land on the
+// same idempotency key, or the gateway treats the retry as a new request.
+func TestIdempotencyKeyFor_CanonicalizesArgs(t *testing.T) {
+	same := []string{
+		`{"flow":"a","tenant":"acme"}`,
+		`{"tenant":"acme","flow":"a"}`,
+		`{ "tenant" : "acme" ,  "flow" : "a" }`,
+		"{\n  \"flow\": \"a\",\n  \"tenant\": \"acme\"\n}",
+	}
+	want := idempotencyKeyFor("run_flow", json.RawMessage(same[0]))
+	for _, in := range same[1:] {
+		if got := idempotencyKeyFor("run_flow", json.RawMessage(in)); got != want {
+			t.Errorf("key for %s = %s, want %s (same call, retried)", in, got, want)
+		}
+	}
+
+	// Genuinely different args must NOT collide — a false match would
+	// silently suppress a distinct action.
+	for _, in := range []string{
+		`{"flow":"b","tenant":"acme"}`,
+		`{"flow":"a","tenant":"acme","dry_run":true}`,
+		`{"flow":"a"}`,
+	} {
+		if got := idempotencyKeyFor("run_flow", json.RawMessage(in)); got == want {
+			t.Errorf("key for %s collided with the baseline", in)
+		}
+	}
+	// Different tool, same args, must differ.
+	if idempotencyKeyFor("delete_flow", json.RawMessage(same[0])) == want {
+		t.Error("tool name is not namespacing the key")
+	}
+}
+
+// TestIdempotencyKeyFor_PreservesNumericPrecision pins the UseNumber choice:
+// two int64 arguments that differ only beyond float64's 53-bit mantissa must
+// still produce different keys.
+func TestIdempotencyKeyFor_PreservesNumericPrecision(t *testing.T) {
+	a := idempotencyKeyFor("t", json.RawMessage(`{"n":9007199254740993}`))
+	b := idempotencyKeyFor("t", json.RawMessage(`{"n":9007199254740992}`))
+	if a == b {
+		t.Error("large ints collapsed onto one key — a distinct call would be wrongly deduped")
+	}
+}
+
+// TestIdempotencyKeyFor_InvalidJSONIsStable covers the fallback: args that
+// aren't valid JSON still hash deterministically rather than panicking.
+func TestIdempotencyKeyFor_InvalidJSONIsStable(t *testing.T) {
+	const bad = `{"flow":`
+	if idempotencyKeyFor("t", json.RawMessage(bad)) != idempotencyKeyFor("t", json.RawMessage(bad)) {
+		t.Error("invalid JSON should still hash deterministically")
+	}
+	if idempotencyKeyFor("t", nil) != idempotencyKeyFor("t", json.RawMessage("")) {
+		t.Error("nil and empty args should agree")
+	}
+}

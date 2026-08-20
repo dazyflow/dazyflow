@@ -41,6 +41,16 @@ func lintTriggers(g Graph) []LintIssue {
 	issues := make([]LintIssue, 0)
 
 	for _, tr := range g.Triggers {
+		// A literal trigger secret is stored in cleartext: the graph JSON is
+		// committed to the workspace git repo and travels the control plane
+		// as-is. A ${secret.NAME} reference is resolved at run time from the
+		// encrypted per-tenant store instead, so the plaintext never lands in
+		// either. Warn rather than reject — graphs predating secret references
+		// still carry raw values and must keep working.
+		if raw := strings.TrimSpace(tr.Secret); raw != "" && !strings.HasPrefix(raw, "${secret.") {
+			issues = append(issues, triggerIssue("trigger_secret_plaintext",
+				"This trigger's secret is stored as plain text, which means it's written into the flow's saved history. Store it as a secret and reference it with ${secret.NAME} instead."))
+		}
 		switch tr.Type {
 		case "cron":
 			expr := strings.TrimSpace(tr.Cron)

@@ -55,6 +55,20 @@ type IssuedAPIKey struct {
 	Secret string `json:"secret"`
 }
 
+// Sentinels the admin surface returns so handlers classify by TYPE, never by
+// message text. adminError used to substring-match these strings, which meant
+// rewording a user-facing message silently changed the HTTP status — and
+// errors that wrapped core.ErrUnauthorized instead of using the exact phrase
+// "requires permission" already fell through to 500 where they should have
+// been 403.
+var (
+	// errAdminNotConfigured: the deployment has no API-key admin store
+	// wired, so the endpoint cannot work here at all (501, not 500).
+	errAdminNotConfigured = errors.New("api key admin not configured")
+	// errAdminBadRequest: the caller's input is missing or malformed (400).
+	errAdminBadRequest = errors.New("invalid request")
+)
+
 // ListAPIKeys returns every key in the scoped tenant. Requires
 // organization:admin (within own tenant) or platform:admin (which can pass
 // any tenant). When tenant=="", uses the principal's own tenant.
@@ -64,7 +78,7 @@ func (s *Service) ListAPIKeys(ctx context.Context, p core.Principal, tenant stri
 		return nil, err
 	}
 	if s.AdminKeys == nil {
-		return nil, errors.New("api key admin not configured")
+		return nil, errAdminNotConfigured
 	}
 	scope, err := resolveAdminTenant(p, tenant)
 	if err != nil {
@@ -91,13 +105,13 @@ func (s *Service) IssueAPIKey(ctx context.Context, p core.Principal, params Issu
 		return IssuedAPIKey{}, err
 	}
 	if s.AdminKeys == nil {
-		return IssuedAPIKey{}, errors.New("api key admin not configured")
+		return IssuedAPIKey{}, errAdminNotConfigured
 	}
 	if params.Subject == "" {
-		return IssuedAPIKey{}, errors.New("subject is required")
+		return IssuedAPIKey{}, fmt.Errorf("%w: subject is required", errAdminBadRequest)
 	}
 	if len(params.Roles) == 0 {
-		return IssuedAPIKey{}, errors.New("at least one role is required")
+		return IssuedAPIKey{}, fmt.Errorf("%w: at least one role is required", errAdminBadRequest)
 	}
 	tenant, err := resolveAdminTenant(p, params.Tenant)
 	if err != nil {
@@ -171,13 +185,13 @@ var defaultSelfIssueRole = core.Role{
 // for Claude without needing organization:admin on the AdminAPIKeys page.
 func (s *Service) IssueOwnAPIKey(ctx context.Context, p core.Principal, params SelfIssueAPIKeyParams) (IssuedAPIKey, error) {
 	if s.AdminKeys == nil {
-		return IssuedAPIKey{}, errors.New("api key admin not configured")
+		return IssuedAPIKey{}, errAdminNotConfigured
 	}
 	if p.Subject == "" {
-		return IssuedAPIKey{}, errors.New("principal has no subject")
+		return IssuedAPIKey{}, fmt.Errorf("%w: principal has no subject", errAdminBadRequest)
 	}
 	if p.Tenant == "" {
-		return IssuedAPIKey{}, errors.New("principal has no tenant")
+		return IssuedAPIKey{}, fmt.Errorf("%w: principal has no tenant", errAdminBadRequest)
 	}
 
 	callerPerms := principalPermissions(p)
@@ -196,7 +210,7 @@ func (s *Service) IssueOwnAPIKey(ctx context.Context, p core.Principal, params S
 			}
 		}
 		if len(capped) == 0 {
-			return IssuedAPIKey{}, errors.New("your account has no permissions an assistant could use")
+			return IssuedAPIKey{}, fmt.Errorf("%w: your account has no permissions an assistant could use", errAdminBadRequest)
 		}
 		roles = []core.Role{{Name: defaultSelfIssueRole.Name, Permissions: capped}}
 	} else {
@@ -207,7 +221,7 @@ func (s *Service) IssueOwnAPIKey(ctx context.Context, p core.Principal, params S
 		for _, r := range roles {
 			for _, perm := range r.Permissions {
 				if _, ok := callerPerms[perm]; !ok {
-					return IssuedAPIKey{}, fmt.Errorf("requested permission %q exceeds caller's own permissions", perm)
+					return IssuedAPIKey{}, fmt.Errorf("%w: requested permission %q exceeds caller's own permissions", core.ErrUnauthorized, perm)
 				}
 			}
 		}
@@ -289,14 +303,14 @@ func principalPermissions(p core.Principal) map[core.Permission]struct{} {
 func resolveAdminTenant(p core.Principal, requested string) (string, error) {
 	if requested == "" {
 		if p.Tenant == "" {
-			return "", errors.New("tenant is required (principal has no tenant binding)")
+			return "", fmt.Errorf("%w: tenant is required (principal has no tenant binding)", errAdminBadRequest)
 		}
 		return p.Tenant, nil
 	}
 	if isPlatformAdmin(p) || requested == p.Tenant {
 		return requested, nil
 	}
-	return "", fmt.Errorf("principal cannot act on tenant %q (not own tenant, not platform admin)", requested)
+	return "", fmt.Errorf("%w: principal cannot act on tenant %q (not own tenant, not platform admin)", core.ErrUnauthorized, requested)
 }
 
 // UserSummary is the per-subject roll-up the Admin users view uses.
@@ -328,7 +342,7 @@ func (s *Service) ListUsers(ctx context.Context, p core.Principal, tenant string
 		return nil, err
 	}
 	if s.AdminKeys == nil {
-		return nil, errors.New("api key admin not configured")
+		return nil, errAdminNotConfigured
 	}
 	scope, err := resolveAdminTenant(p, tenant)
 	if err != nil {
@@ -393,10 +407,10 @@ func (s *Service) RevokeAPIKey(ctx context.Context, p core.Principal, id string)
 		return err
 	}
 	if s.AdminKeys == nil {
-		return errors.New("api key admin not configured")
+		return errAdminNotConfigured
 	}
 	if id == "" {
-		return errors.New("id is required")
+		return fmt.Errorf("%w: id is required", errAdminBadRequest)
 	}
 	// Revoke() keys only on id — the row's tenant isn't in its WHERE — so
 	// scope the revoke to the caller's tenant here, otherwise a tenant
@@ -425,10 +439,10 @@ func (s *Service) RevokeAPIKey(ctx context.Context, p core.Principal, id string)
 // method walks the key store to surface them. Sorted alphabetically.
 func (s *Service) ListTenants(ctx context.Context, p core.Principal) ([]string, error) {
 	if !isPlatformAdmin(p) {
-		return nil, fmt.Errorf("requires permission %q", core.PermPlatformAdmin)
+		return nil, fmt.Errorf("%w: requires permission %q", core.ErrUnauthorized, core.PermPlatformAdmin)
 	}
 	if s.AdminKeys == nil {
-		return nil, errors.New("api key admin not configured")
+		return nil, errAdminNotConfigured
 	}
 	keys, err := s.AdminKeys.ListAll(ctx)
 	if err != nil {
@@ -456,7 +470,7 @@ func requireAdmin(p core.Principal) error {
 	if core.CanAdminOrg(p) {
 		return nil
 	}
-	return fmt.Errorf("requires permission %q", core.PermOrganizationAdmin)
+	return fmt.Errorf("%w: requires permission %q", core.ErrUnauthorized, core.PermOrganizationAdmin)
 }
 
 // requirePlatformAdmin gates instance-wide settings that every tenant
@@ -468,7 +482,7 @@ func requirePlatformAdmin(p core.Principal) error {
 	if p.Has(core.PermPlatformAdmin) {
 		return nil
 	}
-	return fmt.Errorf("requires permission %q", core.PermPlatformAdmin)
+	return fmt.Errorf("%w: requires permission %q", core.ErrUnauthorized, core.PermPlatformAdmin)
 }
 
 // isPlatformAdmin is the override used by admin Service methods to

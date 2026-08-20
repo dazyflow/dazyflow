@@ -4,6 +4,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -22,18 +23,52 @@ import (
 // the action twice. Distinct tool calls (different name or args)
 // produce distinct keys and run normally.
 //
-// We hash both the name (namespacing) and the canonical args bytes.
-// The MCP framing passes args as raw JSON, so we use those bytes
-// directly — no canonicalization is needed because the LLM sends the
-// exact same JSON on retry. Hash is SHA-256 hex-truncated to 32 chars
-// (128 bits) — same collision resistance as a UUIDv4 in less space,
-// and well under the gateway's 128-char cap.
+// We hash both the name (namespacing) and the args in a CANONICAL form.
+// Hashing the raw bytes assumed the retry carries byte-identical JSON, which
+// is not something the protocol guarantees: an MCP host that re-serializes
+// the arguments between attempts (different key order, different whitespace,
+// a re-encoded nested object) produces a different key for the same call —
+// so the gateway sees a fresh request and the side effect fires twice, in
+// exactly the retry scenario the key exists to make safe.
+//
+// Hash is SHA-256 hex-truncated to 32 chars (128 bits) — same collision
+// resistance as a UUIDv4 in less space, and well under the gateway's
+// 128-char cap.
 func idempotencyKeyFor(toolName string, args json.RawMessage) string {
 	h := sha256.New()
 	h.Write([]byte(toolName))
 	h.Write([]byte{0}) // separator so {"name":"x","args":"y"} ≠ {"name":"xy","args":""}
-	h.Write(args)
+	h.Write(canonicalJSON(args))
 	return hex.EncodeToString(h.Sum(nil))[:32]
+}
+
+// canonicalJSON re-encodes a JSON value so semantically identical arguments
+// produce identical bytes: encoding/json emits object keys sorted, and drops
+// insignificant whitespace, so key order and formatting stop mattering.
+//
+// UseNumber keeps numeric literals as their exact source text instead of
+// round-tripping through float64. That matters here: decoding into float64
+// would map two DIFFERENT large int64 arguments onto the same value, and for
+// an idempotency key a false match is worse than a missed one — it would
+// silently suppress a distinct action.
+//
+// Input that isn't valid JSON is hashed verbatim; it can't be canonicalized,
+// and it's the gateway's job to reject it.
+func canonicalJSON(raw json.RawMessage) []byte {
+	if len(raw) == 0 {
+		return nil
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	var v any
+	if err := dec.Decode(&v); err != nil {
+		return raw
+	}
+	out, err := json.Marshal(v)
+	if err != nil {
+		return raw
+	}
+	return out
 }
 
 // Defaults captures the tenant/workspace the MCP server falls back to

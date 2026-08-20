@@ -82,7 +82,9 @@ func init() {
 			// success. The delivery details are still EMITTED under "meta"
 			// (see the Execute result) so run records keep them for debugging;
 			// they're just not a pin (same as gmail send / ntfy).
-			Outputs: []core.Port{},
+			Outputs: []core.Port{
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
+			},
 			// Only the per-message fields are params now; the server connection
 			// lives in ConnectionFields above and is injected at run time.
 			ParamsSchema: json.RawMessage(
@@ -105,6 +107,11 @@ func init() {
 			// delivers the email twice. This drop is a terminal leaf the
 			// engine auto-retries on backoff, so retries must be off here.
 			RetryPolicy: core.RetryNever,
+			// A non-idempotent external write: opt into engine-side dedupe so an
+			// expired-lease reclaim or crash recovery replays the recorded result
+			// instead of firing the write a second time. Matches the other
+			// send-style drops (discord/gmail/sheets/twilio/klarna/nshift/elks).
+			DedupeWrites: true,
 		},
 		Execute: executeEmail,
 	})

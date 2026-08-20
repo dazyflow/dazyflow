@@ -637,12 +637,17 @@ func (s *PgTicketStore) AnonymizeSubject(ctx context.Context, ident string) (int
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	total := 0
+	// Bound as a parameter, not concatenated. erasedIdentity is a compile-time
+	// constant so the old form was not injectable — but it was the one place
+	// in this file that built SQL by concatenation while the same statements
+	// bound $1 properly two characters away, and that inconsistency is what
+	// eventually gets copied to a value that ISN'T a constant.
 	for _, q := range []string{
-		`UPDATE support_tickets SET created_by = '` + erasedIdentity + `' WHERE created_by = $1`,
-		`UPDATE support_tickets SET assigned_to = '` + erasedIdentity + `' WHERE assigned_to = $1`,
-		`UPDATE support_ticket_messages SET author = '` + erasedIdentity + `', body = '' WHERE author = $1`,
+		`UPDATE support_tickets SET created_by = $2 WHERE created_by = $1`,
+		`UPDATE support_tickets SET assigned_to = $2 WHERE assigned_to = $1`,
+		`UPDATE support_ticket_messages SET author = $2, body = '' WHERE author = $1`,
 	} {
-		ct, err := tx.Exec(ctx, q, ident)
+		ct, err := tx.Exec(ctx, q, ident, erasedIdentity)
 		if err != nil {
 			return 0, err
 		}

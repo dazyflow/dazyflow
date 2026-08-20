@@ -998,7 +998,7 @@ func (h *HTTPGateway) putOrgAuthConfig(rw http.ResponseWriter, r *http.Request, 
 	})
 }
 
-func (h *HTTPGateway) deleteOrgAuthConfig(rw http.ResponseWriter, _ *http.Request, p core.Principal) {
+func (h *HTTPGateway) deleteOrgAuthConfig(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.OrgAuth == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "org SSO config not configured")
 		return
@@ -1007,11 +1007,15 @@ func (h *HTTPGateway) deleteOrgAuthConfig(rw http.ResponseWriter, _ *http.Reques
 		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}
-	if err := h.OrgAuth.DeleteOrgAuth(context.Background(), p.Tenant); err != nil {
+	// r.Context(), not context.Background(): every other handler in this file
+	// propagates cancellation, and a background context here meant a
+	// disconnected client left the delete (and its audit write) running
+	// against the database with no deadline.
+	if err := h.OrgAuth.DeleteOrgAuth(r.Context(), p.Tenant); err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
-	h.audit(context.Background(), p, "org_auth.delete", p.Tenant, "")
+	h.audit(r.Context(), p, "org_auth.delete", p.Tenant, "")
 	rw.WriteHeader(http.StatusNoContent)
 }
 

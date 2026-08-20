@@ -70,6 +70,11 @@ func init() {
 			// duplicate. Never auto-retry — matches the other send-drops.
 			Idempotent:  false,
 			RetryPolicy: core.RetryNever,
+			// A non-idempotent external write: opt into engine-side dedupe so an
+			// expired-lease reclaim or crash recovery replays the recorded result
+			// instead of firing the write a second time. Matches the other
+			// send-style drops (discord/gmail/sheets/twilio/klarna/nshift/elks).
+			DedupeWrites: true,
 		},
 		Execute: executePublish,
 	})

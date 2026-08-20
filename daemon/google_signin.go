@@ -6,6 +6,7 @@ package daemon
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -54,10 +55,21 @@ var (
 // verifier does OIDC discovery + JWKS fetch once and then refreshes keys in
 // the background, so we must not rebuild one per callback. Keyed by
 // client_id because the audience check is client-id-specific.
+// Bounded: each entry holds a verifier that refreshes JWKS in the
+// background, so an unbounded map of them is an unbounded set of background
+// refreshers. Entries were never evicted — not even when an org deleted its
+// SSO config — so a long-lived process accumulated one per client_id ever
+// seen. FIFO is the right policy here: verifiers are interchangeable and
+// rebuilding one costs a single discovery round-trip.
 var googleVerifierCache = struct {
-	mu sync.Mutex
-	m  map[string]auth.IDTokenVerifier
+	mu    sync.Mutex
+	m     map[string]auth.IDTokenVerifier
+	order []string
 }{m: map[string]auth.IDTokenVerifier{}}
+
+// googleVerifierCacheMax caps the verifier memo. One entry per org with
+// Google SSO configured; well past any real tenant count on one instance.
+const googleVerifierCacheMax = 256
 
 // googleIDTokenVerifier returns a cached (or freshly built) OIDC verifier
 // that validates a Google ID token's signature against Google's JWKS and
@@ -77,6 +89,12 @@ func googleIDTokenVerifier(ctx context.Context, clientID string) (auth.IDTokenVe
 		return nil, err
 	}
 	googleVerifierCache.m[clientID] = v
+	googleVerifierCache.order = append(googleVerifierCache.order, clientID)
+	for len(googleVerifierCache.order) > googleVerifierCacheMax {
+		oldest := googleVerifierCache.order[0]
+		googleVerifierCache.order = googleVerifierCache.order[1:]
+		delete(googleVerifierCache.m, oldest)
+	}
 	return v, nil
 }
 
@@ -106,11 +124,84 @@ type googleSignInState struct {
 	// admin SSO page can render a friendly diagnosis. Real (member-
 	// initiated) sign-in failures keep the existing JSON behavior.
 	Test bool
+	// Binding ties this flow to the browser that started it, via a cookie
+	// holding the same nonce (see googleSignInCookie). Without it the
+	// callback would accept any state/code pair from any browser, which is
+	// login CSRF: an attacker starts a sign-in, keeps the callback URL, and
+	// gets a victim to load it — the victim's browser is then holding a
+	// session for the ATTACKER's account, and every flow, connection and
+	// secret the victim goes on to create lands in the attacker's org.
+	//
+	// Unlike the integrations OAuth flow (httpoauth.go), which has a manual
+	// JSON path where the authorize link is opened in another browser and so
+	// legitimately carries no binding, sign-in has exactly one start path.
+	// The binding is therefore mandatory here — an empty one is rejected
+	// rather than skipped, so there is no bypass to find.
+	Binding string
+}
+
+// googleSignInCookie carries the sign-in browser-binding nonce. Distinct
+// from oauthStateCookie: different path scope, different flow, and mixing
+// them would let a connector-authorize binding satisfy a sign-in.
+const googleSignInCookie = "dz_signin_state"
+
+// setGoogleSignInCookie writes the sign-in binding cookie.
+//
+// Domain: the callback always lands on PublicBaseURL (a single registered
+// redirect_uri at Google), but the flow may START on an org subdomain when
+// WildcardDomain is configured. A host-only cookie set on
+// acme.dazyflow.app would never be sent to the apex callback, so the check
+// could never pass for those orgs. Scoping to the wildcard apex keeps the
+// cookie reaching the callback. That does mean a sibling subdomain can
+// overwrite it — which is a far smaller exposure than the no-binding-at-all
+// it replaces, and it requires subdomain takeover to reach.
+func (h *HTTPGateway) setGoogleSignInCookie(rw http.ResponseWriter, binding, startHost string) {
+	c := &http.Cookie{
+		Name:     googleSignInCookie,
+		Value:    binding,
+		Path:     "/api/v1/auth/google",
+		MaxAge:   int(googleSignInStateTTL / time.Second),
+		HttpOnly: true,
+		Secure:   strings.HasPrefix(h.svc.PublicBaseURL, "https"),
+		SameSite: http.SameSiteLaxMode,
+	}
+	if h.WildcardDomain != "" && startHost != "" && !sameHost(startHost, h.svc.PublicBaseURL) {
+		c.Domain = h.WildcardDomain
+	}
+	http.SetCookie(rw, c)
+}
+
+// clearGoogleSignInCookie expires the binding cookie once the callback has
+// consumed or rejected it, so a stale nonce can't be replayed.
+func (h *HTTPGateway) clearGoogleSignInCookie(rw http.ResponseWriter) {
+	http.SetCookie(rw, &http.Cookie{
+		Name:     googleSignInCookie,
+		Value:    "",
+		Path:     "/api/v1/auth/google",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   strings.HasPrefix(h.svc.PublicBaseURL, "https"),
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+// signInBindingOK reports whether the request's binding cookie matches the
+// nonce recorded when the flow started. Constant-time compare so the check
+// itself leaks nothing.
+func signInBindingOK(r *http.Request, st googleSignInState) bool {
+	if st.Binding == "" {
+		return false
+	}
+	c, err := r.Cookie(googleSignInCookie)
+	if err != nil {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(c.Value), []byte(st.Binding)) == 1
 }
 
 const googleSignInStateTTL = 10 * time.Minute
 
-func mintGoogleState(tenant, returnTo, host string, test bool) (string, error) {
+func mintGoogleState(tenant, returnTo, host, binding string, test bool) (string, error) {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
@@ -130,6 +221,7 @@ func mintGoogleState(tenant, returnTo, host string, test bool) (string, error) {
 		ReturnTo: returnTo,
 		Host:     host,
 		Test:     test,
+		Binding:  binding,
 	}
 	return s, nil
 }
@@ -178,11 +270,21 @@ func (h *HTTPGateway) googleSignInStart(rw http.ResponseWriter, r *http.Request)
 	// otherwise leave it empty and the callback sets the cookie inline as
 	// before (the non-wildcard path).
 	startHost := h.signInStartHost(r)
-	state, err := mintGoogleState(tenant, returnTo, startHost, test)
+	// Mint the browser binding and record it both in the server-side state
+	// and in a cookie on this browser. The callback requires the two to
+	// match, which is what stops an attacker-initiated sign-in from being
+	// completed in someone else's browser. See googleSignInState.Binding.
+	binding, err := newOAuthBinding()
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
+	state, err := mintGoogleState(tenant, returnTo, startHost, binding, test)
+	if err != nil {
+		writeJSONError(rw, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.setGoogleSignInCookie(rw, binding, startHost)
 	q := url.Values{}
 	q.Set("client_id", cfg.GoogleClientID)
 	q.Set("redirect_uri", h.googleRedirectURI())
@@ -336,6 +438,18 @@ func (h *HTTPGateway) googleSignInCallback(rw http.ResponseWriter, r *http.Reque
 		writeJSONError(rw, http.StatusBadRequest, "invalid or expired state")
 		return
 	}
+	// Browser-binding gate. The state token proves "some browser started a
+	// sign-in for this org"; only the cookie proves it was THIS browser.
+	// Checked before the code is exchanged so an attacker's authorization
+	// code is never redeemed against a victim's session. Mandatory, not
+	// conditional on a binding being present — see googleSignInState.Binding.
+	if !signInBindingOK(r, st) {
+		h.clearGoogleSignInCookie(rw)
+		h.signInError(rw, r, st, "state_mismatch", http.StatusBadRequest,
+			"This sign-in was started in a different browser or has expired. Please sign in again.")
+		return
+	}
+	h.clearGoogleSignInCookie(rw)
 	if code == "" {
 		writeJSONError(rw, http.StatusBadRequest, "missing code")
 		return

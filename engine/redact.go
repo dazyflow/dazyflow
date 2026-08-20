@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 
@@ -38,6 +39,16 @@ const minRedactableSecretLen = 6
 type secretSet struct {
 	mu     sync.Mutex
 	values map[string]struct{}
+	// ordered is values sorted by descending length, rebuilt lazily after
+	// an add. Redaction has to replace the LONGEST secret first: when one
+	// secret contains another (an API key, and that same key with a suffix
+	// or prefix — common when a connector stores both a token and a
+	// "Bearer <token>" header value), replacing the shorter one first cuts
+	// it out of the middle of the longer one, so the longer secret's tail
+	// no longer matches and survives into the persisted run record in
+	// cleartext. Map iteration order is random, so without this the leak
+	// was intermittent rather than absent.
+	ordered []string
 }
 
 func newSecretSet() *secretSet { return &secretSet{values: map[string]struct{}{}} }
@@ -51,7 +62,28 @@ func (s *secretSet) add(v string) {
 	}
 	s.mu.Lock()
 	s.values[v] = struct{}{}
+	s.ordered = nil // invalidate; rebuilt on next redaction
 	s.mu.Unlock()
+}
+
+// sortedLocked returns the secrets longest-first, building the cache on
+// demand. Caller must hold s.mu.
+func (s *secretSet) sortedLocked() []string {
+	if s.ordered == nil && len(s.values) > 0 {
+		s.ordered = make([]string, 0, len(s.values))
+		for v := range s.values {
+			s.ordered = append(s.ordered, v)
+		}
+		// Descending length; ties broken bytewise so the order is
+		// deterministic for a given set (keeps tests reproducible).
+		sort.Slice(s.ordered, func(i, j int) bool {
+			if len(s.ordered[i]) != len(s.ordered[j]) {
+				return len(s.ordered[i]) > len(s.ordered[j])
+			}
+			return s.ordered[i] < s.ordered[j]
+		})
+	}
+	return s.ordered
 }
 
 func (s *secretSet) empty() bool {
@@ -201,7 +233,7 @@ func redactString(s string, set *secretSet) string {
 	}
 	set.mu.Lock()
 	defer set.mu.Unlock()
-	for secret := range set.values {
+	for _, secret := range set.sortedLocked() {
 		if strings.Contains(s, secret) {
 			s = strings.ReplaceAll(s, secret, redactionMarker)
 		}

@@ -46,6 +46,7 @@ func init() {
 			Outputs: []core.Port{
 				{Port: "invoices", Label: "Invoices", MIME: []string{"application/json"}},
 				{Port: "has_more", Label: "Has more", MIME: []string{"text/plain"}},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

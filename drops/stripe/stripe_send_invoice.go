@@ -6,7 +6,6 @@ package stripe
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -75,38 +74,70 @@ var stripeCurrencies = []struct{ code, name string }{
 // (lowercase codes) and `enumNames` ("USD — US Dollar"), built from
 // stripeCurrencies so the 130-odd entries live in a reviewable Go table
 // instead of a giant inline schema literal.
-func currencyEnumJSON() (enum, names string) {
-	codes := make([]string, len(stripeCurrencies))
-	labels := make([]string, len(stripeCurrencies))
+func stripeCurrencyLists() (codes, labels []string) {
+	codes = make([]string, len(stripeCurrencies))
+	labels = make([]string, len(stripeCurrencies))
 	for i, c := range stripeCurrencies {
 		codes[i] = c.code
 		labels[i] = strings.ToUpper(c.code) + " — " + c.name
 	}
-	e, _ := json.Marshal(codes)
-	n, _ := json.Marshal(labels)
-	return string(e), string(n)
+	return codes, labels
 }
 
 // sendInvoiceParamsSchema is the drop's ParamsSchema with the currency
-// enum/enumNames spliced in from stripeCurrencies. Built once at package load
+// enum/enumNames filled in from stripeCurrencies. Built once at package load
 // (before init registers the drop).
 var sendInvoiceParamsSchema = buildSendInvoiceParamsSchema()
 
 func buildSendInvoiceParamsSchema() json.RawMessage {
-	enum, names := currencyEnumJSON()
-	return json.RawMessage(fmt.Sprintf(`{
-		"type":"object",
-		"properties":{
-			"customer":{"type":"string","format":"stripe-customer","title":"Customer","description":"Pick the customer to bill — listed from your account once the STRIPE_API_KEY secret is set. Overridden by the 'Customer' input when connected."},
-			"amount":{"type":"integer","title":"Amount","minimum":1,"description":"In the smallest currency unit (12000 = 120.00). Overridden by the 'Amount' input."},
-			"currency":{"type":"string","title":"Currency","format":"suggest","default":"usd","enum":%s,"enumNames":%s,"description":"Three-letter ISO code (stored lowercase). Pick a common one, type any Stripe-supported code, or use a reference like ${item.currency} for a per-row currency."},
-			"description":{"type":"string","title":"Description","description":"The invoice's single line item, shown to the customer. Overridden by the 'Description' input."},
-			"days_until_due":{"type":"integer","title":"Days until due","default":30,"minimum":1,"description":"Payment terms — when the invoice falls due."},
-			"base_url":{"type":"string","description":"Override the API host (testing)."},
-			"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
+	// Marshalled from a map rather than spliced into a format string. The
+	// values are static today, so the Sprintf form was safe — but it was the
+	// one schema in the catalog built by string interpolation, and a schema
+	// that can be malformed by its own inputs is a footgun waiting for the
+	// day a currency label contains a quote. Marshalling makes that
+	// impossible by construction.
+	currencies, currencyNames := stripeCurrencyLists()
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"customer": map[string]any{
+				"type": "string", "format": "stripe-customer", "title": "Customer",
+				"description": "Pick the customer to bill — listed from your account once the STRIPE_API_KEY secret is set. Overridden by the 'Customer' input when connected.",
+			},
+			"amount": map[string]any{
+				"type": "integer", "title": "Amount", "minimum": 1,
+				"description": "In the smallest currency unit (12000 = 120.00). Overridden by the 'Amount' input.",
+			},
+			"currency": map[string]any{
+				"type": "string", "title": "Currency", "format": "suggest", "default": "usd",
+				"enum": currencies, "enumNames": currencyNames,
+				"description": "Three-letter ISO code (stored lowercase). Pick a common one, type any Stripe-supported code, or use a reference like ${item.currency} for a per-row currency.",
+			},
+			"description": map[string]any{
+				"type": "string", "title": "Description",
+				"description": "The invoice's single line item, shown to the customer. Overridden by the 'Description' input.",
+			},
+			"days_until_due": map[string]any{
+				"type": "integer", "title": "Days until due", "default": 30, "minimum": 1,
+				"description": "Payment terms — when the invoice falls due.",
+			},
+			"base_url": map[string]any{
+				"type": "string", "description": "Override the API host (testing).",
+			},
+			"timeout_ms": map[string]any{
+				"type": "integer", "default": 15000, "minimum": 1,
+				"description": "Hard deadline for the request, in milliseconds.",
+			},
 		},
-		"required":["customer","amount"]
-	}`, enum, names))
+		"required": []string{"customer", "amount"},
+	}
+	raw, err := json.Marshal(schema)
+	if err != nil {
+		// Unreachable: the map holds only JSON-native values. Panicking at
+		// package load beats registering a drop with a broken schema.
+		panic("stripe_send_invoice: build params schema: " + err.Error())
+	}
+	return raw
 }
 
 func init() {
@@ -141,10 +172,16 @@ func init() {
 				{Port: "invoice_id", Label: "Invoice ID", MIME: []string{"text/plain"}},
 				{Port: "hosted_invoice_url", Label: "Invoice URL", MIME: []string{"text/plain"}},
 				{Port: "status", Label: "Status", MIME: []string{"text/plain"}},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: sendInvoiceParamsSchema,
 			Idempotent:   false,
 			RetryPolicy:  core.RetryExponentialBackoff,
+			// A non-idempotent external write: opt into engine-side dedupe so an
+			// expired-lease reclaim or crash recovery replays the recorded result
+			// instead of firing the write a second time. Matches the other
+			// send-style drops (discord/gmail/sheets/twilio/klarna/nshift/elks).
+			DedupeWrites: true,
 		},
 		Execute: executeSendInvoice,
 	})

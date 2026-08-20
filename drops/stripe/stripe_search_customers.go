@@ -50,6 +50,7 @@ func init() {
 				{Port: "first_id", Label: "First ID", MIME: []string{"text/plain"}},
 				{Port: "first_email", Label: "First email", MIME: []string{"text/plain"}},
 				{Port: "count", Label: "Count", MIME: []string{"application/json"}},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

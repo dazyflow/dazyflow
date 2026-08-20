@@ -15,10 +15,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -28,6 +28,7 @@ import (
 
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/sandbox"
 	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
@@ -87,6 +88,7 @@ func init() {
 				{Port: "stdout", Label: "Standard output", MIME: []string{"text/plain"}},
 				{Port: "stderr", Label: "Standard error", MIME: []string{"text/plain"}},
 				{Port: "exit_code", Label: "Exit code", MIME: []string{"text/plain"}},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(
 				`{
@@ -204,11 +206,22 @@ func executeShell(ctx context.Context, job core.Job, progress chan<- core.Progre
 			relPath = input.Ref
 		}
 	}
-	cleanRel, err := sandboxRel(relPath)
+	// Resolve the working directory THROUGH an os.Root handle rather than
+	// string-cleaning it. Cleaning alone never touches the filesystem, so a
+	// symlink planted inside the workspace and pointing outside it was
+	// accepted and then followed by cmd.Dir — the command would run outside
+	// the sandbox. The io drops already resolve through a root; this brings
+	// the shell drop up to the same standard.
+	workdir, cleanRel, err := sandbox.ResolveDir(job.WorkspaceRoot, relPath)
 	if err != nil {
+		// Separate "you pointed outside the sandbox" from "that folder isn't
+		// there" — same rejection, very different thing for a user to fix.
+		if errors.Is(err, os.ErrNotExist) {
+			return params.Err(job, "bad_param",
+				fmt.Sprintf("working folder %q doesn't exist in the workspace", relPath)), nil
+		}
 		return params.Err(job, "sandbox_escape", err.Error()), nil
 	}
-	workdir := filepath.Join(job.WorkspaceRoot, cleanRel)
 
 	args := params.StringSlice(job.Params, "args")
 	timeoutMs := resolveTimeoutMs(params.IntDefault(job.Params, "timeout_ms", defaultTimeoutMs))
@@ -262,8 +275,17 @@ func executeShell(ctx context.Context, job core.Job, progress chan<- core.Progre
 
 	doneRead := make(chan struct{})
 	go func() {
+		// close(doneRead) is deferred so a panic in the pump can't leave the
+		// Execute goroutine blocked forever on <-doneRead, and the recover
+		// keeps a pump panic from killing the daemon (the engine's recover
+		// only covers the calling goroutine).
+		defer close(doneRead)
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("shell: recovered while pumping command output: %v", r)
+			}
+		}()
 		pumpStream(ptmx, combined, progress, job, "stdout")
-		close(doneRead)
 	}()
 	runErr := cmd.Wait()
 	<-doneRead

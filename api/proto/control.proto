@@ -37,10 +37,22 @@ message Graph {
 }
 
 message GraphTrigger {
-    string type   = 1; // "cron", "poll", or "webhook"
+    // Graph-level triggers are legacy: only type="cron" is still honoured at
+    // runtime. "webhook" and "poll" moved onto their own nodes
+    // (webhook_input, poll_trigger) and a graph-level one is ignored — the
+    // save-time lint flags both (see core/trigger_lint.go).
+    string type   = 1; // "cron" (or legacy "poll" / "webhook")
     string cron   = 2;
+    // PREFER a "${secret.NAME}" reference over a literal value.
+    //
+    // This field travels the control plane, and lands in the graph JSON
+    // committed to the workspace git repo, in cleartext. A reference is
+    // resolved at run time from the per-tenant encrypted secret store, so the
+    // plaintext never enters either. The engine accepts a raw value for
+    // backwards compatibility with graphs saved before secret references
+    // existed; new writers should not produce one.
     string secret = 3;
-    int32  interval_seconds = 4; // for type=poll; seconds between fires
+    int32  interval_seconds = 4; // legacy type=poll; seconds between fires
 }
 
 message GraphProgress {

@@ -77,6 +77,12 @@ func executeExpression(_ context.Context, job core.Job, _ chan<- core.Progress) 
 		return errResult(job, "bad_param", "param 'expr' is required (a CEL formula)"), nil
 	}
 
+	// Same length gate the linter applies, so the two stay in lockstep: a
+	// formula the linter refuses to check must not compile here either.
+	if len(exprStr) > celexpr.MaxExpressionLen {
+		return errResult(job, "bad_param", fmt.Sprintf(
+			"formula is %d characters; the limit is %d", len(exprStr), celexpr.MaxExpressionLen)), nil
+	}
 	// Shared with the editor's linter (POST /tools/expression/validate) via
 	// internal/celexpr, so what the linter accepts is exactly what runs here.
 	env, err := celexpr.NewEnv()

@@ -15,6 +15,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/sandbox"
 )
 
 // newRepo initialises a git repo in a fresh temp dir and returns the dir
@@ -371,12 +372,12 @@ func TestSandboxRel(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.in, func(t *testing.T) {
-			got, err := sandboxRel(c.in)
+			got, err := sandbox.Rel(c.in)
 			if (err != nil) != c.wantErr {
 				t.Fatalf("err = %v, wantErr = %v", err, c.wantErr)
 			}
 			if !c.wantErr && got != c.want {
-				t.Errorf("sandboxRel(%q) = %q, want %q", c.in, got, c.want)
+				t.Errorf("sandbox.Rel(%q) = %q, want %q", c.in, got, c.want)
 			}
 		})
 	}

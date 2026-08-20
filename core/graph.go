@@ -12,6 +12,24 @@ const (
 	OnErrorFallback OnError = "fallback"
 )
 
+// Valid reports whether o is one of the four defined policies. Empty is
+// valid and means "unset" — the engine's default abort behaviour.
+//
+// This is checked in Validate rather than only at a wire boundary because
+// OnError arrives as a free string from every entry path (proto conversion
+// casts it, JSON unmarshals it, MCP passes it through). An unrecognized
+// value used to be accepted silently and then fall through the engine's
+// switch, so a typo like "fallbcak" quietly downgraded a fallback edge to
+// abort — the failure-handling the author asked for simply didn't happen,
+// with nothing anywhere reporting it.
+func (o OnError) Valid() bool {
+	switch o {
+	case "", OnErrorAbort, OnErrorSkip, OnErrorRetry, OnErrorFallback:
+		return true
+	}
+	return false
+}
+
 type Node struct {
 	ID     string            `json:"id"`
 	Module string            `json:"module"`

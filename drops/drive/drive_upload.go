@@ -73,6 +73,12 @@ func init() {
 			// RetryPolicy is set, so the engine only retries this via an
 			// explicit OnErrorRetry edge, not the auto-backoff path — we
 			// leave the policy unset rather than forcing RetryNever.
+			// A non-idempotent external write: opt into engine-side dedupe so an
+			// expired-lease reclaim or crash recovery replays the recorded result
+			// instead of firing the write a second time. Independent of
+			// RetryPolicy — dedupe covers re-execution of the SAME job record,
+			// which a reclaim causes regardless of the retry setting.
+			DedupeWrites: true,
 		},
 		Execute: executeUpload,
 	})

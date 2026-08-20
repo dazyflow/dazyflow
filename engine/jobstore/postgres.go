@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"git.sr.ht/~klahr/dazyflow/core"
@@ -629,9 +630,26 @@ func scanRecord(r row) (core.JobRecord, error) {
 	return rec, nil
 }
 
+// pgUniqueViolation is SQLSTATE 23505 — unique_violation. Enqueue's only
+// realistic constraint failure is the jobs primary key, i.e. "this job ID is
+// already enqueued", which is exactly core.ErrConflict.
+const pgUniqueViolation = "23505"
+
+// wrapPgErr normalizes a pgx error into the store-agnostic sentinels callers
+// branch on, falling back to an opaque wrap.
+//
+// Mapping unique_violation is what keeps the two JobStore backends
+// behaviourally identical: Memory.Enqueue returns core.ErrConflict for a
+// duplicate ID, so without this errors.Is(err, core.ErrConflict) was true on
+// the in-memory store and false on Postgres for the same operation — a
+// divergence the conformance suite missed because it only asserted err != nil.
 func wrapPgErr(err error) error {
 	if err == nil {
 		return nil
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation {
+		return fmt.Errorf("postgres: %w: %v", core.ErrConflict, err)
 	}
 	return fmt.Errorf("postgres: %w", err)
 }

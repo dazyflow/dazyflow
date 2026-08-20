@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -192,6 +193,45 @@ func (p *PgAuditLog) List(ctx context.Context, q core.AuditQuery) ([]core.AuditE
 // audit records an administrative action. Best-effort: a write failure is
 // logged but never fails the user action being audited, and a nil Audit
 // store (auditing disabled) is a no-op.
+// auditFieldLimit caps a single audit field. A caller-supplied value (a tried
+// email, a flow id) shouldn't be able to bloat the trail.
+const auditFieldLimit = 512
+
+// sanitizeAuditField strips control characters from a value destined for the
+// audit trail and caps its length.
+//
+// The failed-sign-in path records the email the caller TYPED — it has to, that
+// address is the whole signal for credential-stuffing detection — and at that
+// point nothing has validated it. A newline in that value forges a second,
+// fake line in a compliance-relevant log, which is exactly the log-injection
+// A.8.15 asks us to prevent. Sanitizing at the sink covers every caller
+// rather than relying on each one to remember.
+func sanitizeAuditField(v string) string {
+	if v == "" {
+		return v
+	}
+	var b strings.Builder
+	b.Grow(len(v))
+	for _, r := range v {
+		switch {
+		case r == '\n' || r == '\r' || r == '\t':
+			b.WriteByte(' ')
+		case r < 0x20 || r == 0x7f:
+			// Other C0 controls and DEL: drop entirely.
+		default:
+			b.WriteRune(r)
+		}
+		if b.Len() >= auditFieldLimit {
+			break
+		}
+	}
+	out := strings.TrimSpace(b.String())
+	if len(out) > auditFieldLimit {
+		out = out[:auditFieldLimit]
+	}
+	return out
+}
+
 func (h *HTTPGateway) audit(ctx context.Context, p core.Principal, action, target, detail string) {
 	if h.Audit == nil {
 		return
@@ -199,10 +239,10 @@ func (h *HTTPGateway) audit(ctx context.Context, p core.Principal, action, targe
 	if err := h.Audit.Append(ctx, core.AuditEvent{
 		Time:   time.Now(),
 		Tenant: p.Tenant,
-		Actor:  p.Subject,
+		Actor:  sanitizeAuditField(p.Subject),
 		Action: action,
-		Target: target,
-		Detail: detail,
+		Target: sanitizeAuditField(target),
+		Detail: sanitizeAuditField(detail),
 	}); err != nil {
 		log.Printf("audit append (%s %s): %v", action, target, err)
 	}
@@ -236,11 +276,11 @@ func (h *HTTPGateway) auditAuth(ctx context.Context, r *http.Request, tenant, ac
 	}
 	if err := h.Audit.Append(ctx, core.AuditEvent{
 		Time:   time.Now(),
-		Tenant: tenant,
-		Actor:  actor,
+		Tenant: sanitizeAuditField(tenant),
+		Actor:  sanitizeAuditField(actor),
 		Action: action,
-		Target: actor,
-		Detail: detail,
+		Target: sanitizeAuditField(actor),
+		Detail: sanitizeAuditField(detail),
 	}); err != nil {
 		log.Printf("audit append (%s %s): %v", action, actor, err)
 	}

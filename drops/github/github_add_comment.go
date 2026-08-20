@@ -48,6 +48,7 @@ func init() {
 				// (id, node_id, …) is still EMITTED under "meta" so run records
 				// keep it for debugging — it's just not a pin.
 				{Port: "comment_url", Label: "Comment link", MIME: []string{"text/plain"}},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
@@ -64,6 +65,11 @@ func init() {
 			}`),
 			Idempotent:  false,
 			RetryPolicy: core.RetryExponentialBackoff,
+			// A non-idempotent external write: opt into engine-side dedupe so an
+			// expired-lease reclaim or crash recovery replays the recorded result
+			// instead of firing the write a second time. Matches the other
+			// send-style drops (discord/gmail/sheets/twilio/klarna/nshift/elks).
+			DedupeWrites: true,
 		},
 		Execute: executeGitHubAddComment,
 	})

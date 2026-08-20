@@ -70,6 +70,7 @@ func init() {
 			// records (emitted-but-undeclared convention); chain control via pass.
 			Outputs: []core.Port{
 				{Port: "entity_id", Label: "Entity", MIME: []string{"text/plain"}},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

@@ -99,11 +99,17 @@ func (h *HTTPGateway) signUp(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Existence check is best-effort — the per-store implementation
-	// decides whether GetByEmail returns ErrUnknownUser or a custom
-	// error type. Treat any non-nil result as "user exists" to be
-	// safe; the duplicate-rejection happens at PutUser time too.
-	if existing, err := h.Users.GetByEmail(r.Context(), email); err == nil && existing.Email != "" {
+	// A store error here is NOT evidence that the email is free. Treating it
+	// that way sent signup on to PutUser, which then raced to a duplicate-key
+	// 500 — an incoherent response to what is really "the database is
+	// briefly unavailable". Only a genuine not-found continues.
+	existing, lookupErr := h.Users.GetByEmail(r.Context(), email)
+	if lookupErr != nil && !errors.Is(lookupErr, auth.ErrUnknownUser) {
+		writeJSONError(rw, http.StatusServiceUnavailable,
+			"could not check that email right now — please try again in a moment")
+		return
+	}
+	if lookupErr == nil && existing.Email != "" {
 		// "email already in use" is a real fact a malicious enumeration
 		// attempt would mine for. Signup stays instant-try even with
 		// verification active (the session is issued before the link is

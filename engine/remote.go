@@ -29,7 +29,17 @@ type RemoteDescriptor struct {
 	Endpoint string
 	Insecure bool // explicit opt-in to cleartext for dev/test
 	TLS      *RemoteTLS
+	// RecvTimeout bounds the gap between two events on an Execute stream.
+	// Zero means defaultRemoteRecvTimeout. See RemoteTransport.Execute for
+	// why this is a gap and not a total duration.
+	RecvTimeout time.Duration
 }
+
+// defaultRemoteRecvTimeout is how long a remote node may stay silent
+// mid-stream before we give up on it. Generous, because it has to
+// accommodate a node doing real work between progress events; the point is
+// to bound an infinite hang, not to police slowness.
+const defaultRemoteRecvTimeout = 5 * time.Minute
 
 // RemoteTLS configures mTLS for a remote module. Callers build the
 // *tls.Config from cert/key/CA files (or any other source) and hand it
@@ -56,16 +66,50 @@ func (t *RemoteTransport) Execute(ctx context.Context, job core.Job, progress ch
 	if err != nil {
 		return core.Result{}, fmt.Errorf("marshal job: %w", err)
 	}
-	stream, err := t.client.Execute(ctx, pbJob)
+	// Idle watchdog. A node server that accepts the stream and then goes
+	// silent — deadlocked, swapping, or behind a network black hole that
+	// keeps the connection nominally open — would otherwise pin this worker
+	// until the job lease expires, and the reclaim then re-executes the
+	// node. Remote drops carry no write dedupe, so that re-execution is a
+	// duplicated side effect, which makes this a correctness bound and not
+	// just a liveness one.
+	//
+	// It bounds the GAP between events, not the total duration: a node that
+	// legitimately runs for hours stays alive as long as it keeps emitting
+	// progress. Cancelling our own derived context (rather than leaning on
+	// gRPC keepalive) keeps the policy client-side — keepalive pings below a
+	// server's EnforcementPolicy.MinTime earn a GOAWAY, which would have
+	// broken conforming servers to catch broken ones.
+	idle := t.Descriptor.RecvTimeout
+	if idle <= 0 {
+		idle = defaultRemoteRecvTimeout
+	}
+	streamCtx, cancelStream := context.WithCancel(ctx)
+	defer cancelStream()
+	watchdog := time.AfterFunc(idle, cancelStream)
+	defer watchdog.Stop()
+
+	// Wraps a stream error so an operator can tell "the node went quiet"
+	// apart from "the caller cancelled" — the gRPC error text is identical.
+	timedOut := func() bool { return streamCtx.Err() != nil && ctx.Err() == nil }
+
+	stream, err := t.client.Execute(streamCtx, pbJob)
 	if err != nil {
+		if timedOut() {
+			return core.Result{}, fmt.Errorf("remote node %q did not accept the job within %s", t.Descriptor.ID, idle)
+		}
 		return core.Result{}, fmt.Errorf("Execute RPC: %w", err)
 	}
 	for {
 		event, err := stream.Recv()
+		watchdog.Reset(idle)
 		if err == io.EOF {
 			return core.Result{}, fmt.Errorf("stream closed before result")
 		}
 		if err != nil {
+			if timedOut() {
+				return core.Result{}, fmt.Errorf("remote node %q sent nothing for %s", t.Descriptor.ID, idle)
+			}
 			return core.Result{}, fmt.Errorf("stream recv: %w", err)
 		}
 		switch payload := event.Payload.(type) {

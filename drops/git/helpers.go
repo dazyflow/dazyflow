@@ -5,33 +5,12 @@ package git
 
 import (
 	"fmt"
-	"path/filepath"
-	"strings"
 
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 
 	"git.sr.ht/~klahr/dazyflow/core"
 )
-
-// sandboxRel cleans rel and rejects absolute paths or "../" escapes so
-// callers can safely join it against job.WorkspaceRoot. go-git and
-// os/exec both demand absolute paths, so the os.Root sandbox file_read
-// uses isn't available here — we validate by hand.
-func sandboxRel(rel string) (string, error) {
-	rel = strings.TrimSpace(rel)
-	if rel == "" {
-		return ".", nil
-	}
-	cleaned := filepath.Clean(rel)
-	if filepath.IsAbs(cleaned) {
-		return "", fmt.Errorf("absolute path %q not allowed", rel)
-	}
-	if cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("path %q escapes workspace", rel)
-	}
-	return cleaned, nil
-}
 
 // resolveRevision resolves ref to a commit hash, extending go-git's
 // ResolveRevision with the remote-tracking fallback it omits. go-git's

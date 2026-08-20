@@ -449,6 +449,14 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 		if err == nil {
 			t.Errorf("duplicate Enqueue accepted (want error)")
 		}
+		// Assert the SENTINEL, not just non-nil. Asserting only err != nil is
+		// what let the two backends drift: Memory returned core.ErrConflict
+		// and Postgres returned an opaque wrap of SQLSTATE 23505, so callers
+		// branching on errors.Is(err, core.ErrConflict) behaved differently
+		// depending on which store was configured.
+		if !errors.Is(err, core.ErrConflict) {
+			t.Errorf("duplicate Enqueue = %v, want core.ErrConflict", err)
+		}
 	})
 
 	t.Run("Enqueue_preserves_seed_result", func(t *testing.T) {

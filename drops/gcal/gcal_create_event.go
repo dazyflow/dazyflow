@@ -72,6 +72,12 @@ func init() {
 			// forcing RetryNever. If auto-retry is ever wanted here, thread
 			// a request id (events.insert accepts a client-supplied id)
 			// before turning on backoff.
+			// A non-idempotent external write: opt into engine-side dedupe so an
+			// expired-lease reclaim or crash recovery replays the recorded result
+			// instead of firing the write a second time. Independent of
+			// RetryPolicy — dedupe covers re-execution of the SAME job record,
+			// which a reclaim causes regardless of the retry setting.
+			DedupeWrites: true,
 		},
 		Execute: executeCreateEvent,
 	})

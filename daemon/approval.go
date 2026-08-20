@@ -127,6 +127,11 @@ func (s *HMACApprovalSigner) verifyToken(graphRunID, nodeID string, exp int64, p
 	return s.clock().Unix() <= exp
 }
 
+// errBadApprovalDecision marks a malformed decision value (400). Typed so
+// the HTTP layer classifies it by sentinel instead of substring-matching the
+// message, which is what the rest of the error surface does.
+var errBadApprovalDecision = errors.New("invalid approval decision")
+
 // Approve is the resume path: a human (via ApprovalListener) signals
 // their decision and the daemon transitions the awaiting node-record to
 // Succeeded with the decision recorded in the Result. Downstream nodes
@@ -143,7 +148,8 @@ func (s *Service) Approve(
 	decision ApprovalDecision,
 ) error {
 	if decision.Decision != "approve" && decision.Decision != "reject" {
-		return fmt.Errorf("decision must be approve or reject, got %q", decision.Decision)
+		return fmt.Errorf("%w: decision must be approve or reject, got %q",
+			errBadApprovalDecision, decision.Decision)
 	}
 	nodeRecID := NodeJobID(graphRunID, nodeID)
 	rec, err := s.Jobs.Get(ctx, nodeRecID)

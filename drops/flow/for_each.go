@@ -202,6 +202,25 @@ func runForEachItems(
 		go func(idx int, value core.Ref) {
 			defer wg.Done()
 			defer func() { <-sem }()
+			// The engine's recover wraps Execute on the CALLING goroutine, so
+			// it cannot catch a panic raised here — an unrecovered one takes
+			// the whole daemon down instead of failing one row. Convert it
+			// into an ordinary per-item failure, which the caller already
+			// knows how to report.
+			defer func() {
+				if r := recover(); r != nil {
+					errsMu.Lock()
+					failures = append(failures, failure{idx: idx, entry: map[string]any{
+						"row":   idx + 1,
+						"data":  value.Inline,
+						"error": fmt.Sprintf("internal error while processing this item: %v", r),
+					}})
+					errsMu.Unlock()
+					if failFast {
+						cancel()
+					}
+				}
+			}()
 			if runCtx.Err() != nil {
 				return
 			}

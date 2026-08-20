@@ -1685,7 +1685,10 @@ func TestParseRunListTime(t *testing.T) {
 func TestParseRunListOpts_DateRange(t *testing.T) {
 	req := httptest.NewRequest("GET",
 		"/api/v1/me/runs?since=2026-06-01&until=2026-06-27T00:00:00Z&junk=x", nil)
-	opts := parseRunListOpts(req)
+	opts, err := parseRunListOpts(req)
+	if err != nil {
+		t.Fatalf("parseRunListOpts: %v", err)
+	}
 	if want := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC); !opts.Since.Equal(want) {
 		t.Errorf("Since = %v, want %v", opts.Since, want)
 	}
@@ -1694,9 +1697,23 @@ func TestParseRunListOpts_DateRange(t *testing.T) {
 	}
 
 	// A malformed since is ignored (zero), not an error.
-	bad := parseRunListOpts(httptest.NewRequest("GET", "/api/v1/me/runs?since=nonsense", nil))
+	bad, err := parseRunListOpts(httptest.NewRequest("GET", "/api/v1/me/runs?since=nonsense", nil))
+	if err != nil {
+		t.Fatalf("a malformed since should not error: %v", err)
+	}
 	if !bad.Since.IsZero() {
 		t.Errorf("malformed since = %v, want zero", bad.Since)
+	}
+
+	// An unknown ?status=, by contrast, IS an error — silently returning an
+	// empty list would be indistinguishable from "no runs match".
+	if _, err := parseRunListOpts(httptest.NewRequest("GET", "/api/v1/me/runs?status=succeded", nil)); err == nil {
+		t.Error("unknown status accepted; want an error")
+	}
+	for _, ok := range []string{"queued", "running", "succeeded", "failed", "cancelled", "skipped"} {
+		if _, err := parseRunListOpts(httptest.NewRequest("GET", "/api/v1/me/runs?status="+ok, nil)); err != nil {
+			t.Errorf("status=%s rejected: %v", ok, err)
+		}
 	}
 }
 

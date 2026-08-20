@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -205,8 +206,25 @@ func VerifyPassword(ctx context.Context, store UserStore, email, password string
 	if bcrypt.CompareHashAndPassword(u.PasswordHash, []byte(password)) != nil {
 		return User{}, ErrInvalidCredential
 	}
+	// Opportunistic cost upgrade. This is the only point where a correct
+	// plaintext is available, so it's the only place a hash minted at an
+	// older, weaker cost can be strengthened without user involvement.
+	// Failures are logged and swallowed: the credential is valid and the
+	// login must succeed regardless.
+	if err := UpgradePasswordCost(ctx, store, u, password); err != nil {
+		log.Printf("WARNING: could not re-hash password for %q at cost %d: %v", email, PasswordHashCost, err)
+	}
 	return u, nil
 }
+
+// PasswordHashCost is the bcrypt work factor for new hashes. bcrypt's
+// DefaultCost is 10, which has drifted below current guidance (12+) as
+// hardware got faster; 12 is ~4x the work per guess.
+//
+// Raising it is safe without a migration because a bcrypt hash encodes its
+// own cost, so every existing cost-10 hash keeps verifying. UpgradePasswordCost
+// then re-hashes them opportunistically on successful login.
+const PasswordHashCost = 12
 
 // HashPassword wraps bcrypt so callers don't have to import the package
 // (and keeps the cost choice in one place).
@@ -214,7 +232,38 @@ func HashPassword(password string) ([]byte, error) {
 	if password == "" {
 		return nil, fmt.Errorf("password required")
 	}
-	return bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	return bcrypt.GenerateFromPassword([]byte(password), PasswordHashCost)
+}
+
+// NeedsPasswordRehash reports whether hash was produced with a weaker cost
+// than PasswordHashCost. An unparseable hash returns false: it isn't
+// something we can improve by re-hashing, and it will fail verification
+// anyway.
+func NeedsPasswordRehash(hash []byte) bool {
+	cost, err := bcrypt.Cost(hash)
+	if err != nil {
+		return false
+	}
+	return cost < PasswordHashCost
+}
+
+// UpgradePasswordCost re-hashes a verified password at the current cost and
+// persists it. Called from the login path, where the plaintext is in hand and
+// already known-correct — the only moment a stored hash can be strengthened
+// without asking the user to do anything.
+//
+// Best-effort by design: a failure here must never fail a login that has
+// already succeeded, so the error is returned for logging and nothing more.
+func UpgradePasswordCost(ctx context.Context, store UserStore, u User, password string) error {
+	if !NeedsPasswordRehash(u.PasswordHash) {
+		return nil
+	}
+	fresh, err := HashPassword(password)
+	if err != nil {
+		return err
+	}
+	u.PasswordHash = fresh
+	return store.PutUser(ctx, u)
 }
 
 // JSONUserStore persists users to a single JSON file. Mutations rewrite

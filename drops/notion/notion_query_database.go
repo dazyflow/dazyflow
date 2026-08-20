@@ -55,6 +55,7 @@ func init() {
 				// declared: raw Notion JSON and hand-rolled pagination are
 				// dev plumbing.
 				{Port: "rows", Label: "Rows", MIME: []string{"application/json"}},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

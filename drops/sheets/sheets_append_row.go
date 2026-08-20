@@ -55,6 +55,7 @@ func init() {
 				{Port: "appended_rows", Label: "Rows saved", MIME: []string{"text/plain"}},
 				{Port: "updated_range", Label: "Updated range", MIME: []string{"text/plain"}},
 				{Port: "spreadsheet_id", Label: "Spreadsheet ID", MIME: []string{"text/plain"}},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

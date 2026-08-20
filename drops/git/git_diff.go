@@ -8,13 +8,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"path/filepath"
+	"os"
 	"strings"
 
 	gogit "github.com/go-git/go-git/v5"
 
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/sandbox"
 	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
@@ -59,6 +60,7 @@ func init() {
 				// "meta" so run records keep it for debugging — it's just
 				// not a pin.
 				{Port: "diff", Label: "Diff", MIME: []string{"text/plain"}},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(
 				`{
@@ -96,15 +98,21 @@ func executeGitDiff(ctx context.Context, job core.Job, progress chan<- core.Prog
 			relPath = input.Ref
 		}
 	}
-	cleanRel, err := sandboxRel(relPath)
+	// Root-confined resolve (not a string clean) so a symlink inside the
+	// workspace can't point go-git at a repository outside it.
+	repoDir, _, err := sandbox.ResolveDir(job.WorkspaceRoot, relPath)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return params.Err(job, "bad_param",
+				fmt.Sprintf("folder %q doesn't exist in the workspace", relPath)), nil
+		}
 		return params.Err(job, "sandbox_escape", err.Error()), nil
 	}
 	from := params.StringDefault(job.Params, "from", "HEAD~1")
 	to := params.StringDefault(job.Params, "to", "HEAD")
 	mergeBase := params.BoolDefault(job.Params, "merge_base", false)
 
-	repo, err := gogit.PlainOpen(filepath.Join(job.WorkspaceRoot, cleanRel))
+	repo, err := gogit.PlainOpen(repoDir)
 	if err != nil {
 		return params.Err(job, "open", err.Error()), nil
 	}

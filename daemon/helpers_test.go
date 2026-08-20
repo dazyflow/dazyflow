@@ -10,7 +10,7 @@ import (
 )
 
 func TestGoogleStateRoundTrip(t *testing.T) {
-	s, err := mintGoogleState("acme", "/dash", "acme.example.com", true)
+	s, err := mintGoogleState("acme", "/dash", "acme.example.com", "bind-nonce", true)
 	if err != nil {
 		t.Fatalf("mintGoogleState: %v", err)
 	}
@@ -21,7 +21,8 @@ func TestGoogleStateRoundTrip(t *testing.T) {
 	if !ok {
 		t.Fatal("consumeGoogleState: not found")
 	}
-	if st.Tenant != "acme" || st.ReturnTo != "/dash" || st.Host != "acme.example.com" || !st.Test {
+	if st.Tenant != "acme" || st.ReturnTo != "/dash" || st.Host != "acme.example.com" ||
+		!st.Test || st.Binding != "bind-nonce" {
 		t.Fatalf("state = %+v", st)
 	}
 	// Single-use: a second consume misses.

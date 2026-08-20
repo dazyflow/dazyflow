@@ -92,12 +92,12 @@ func TestValidateProductionConfig_DevModeWarnsOnly(t *testing.T) {
 	// In dev mode, even an all-insecure config must NOT call log.Fatal; the
 	// function should return normally after logging warnings.
 	defaultDSN := "postgres://dazyflow:dazyflow@db:5432/dazyflow?sslmode=disable"
-	validateProductionConfig(true, defaultDSN, "")
+	validateProductionConfig(true, false, defaultDSN, "", "")
 
 	// A clean config returns immediately regardless of dev flag (no problems).
 	safeDSN := "postgres://dazyflow:s3cret@db:5432/dazyflow?sslmode=require"
 	strongKey := "c3Ryb25nLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9rIQ=="
-	validateProductionConfig(false, safeDSN, strongKey)
+	validateProductionConfig(false, false, safeDSN, strongKey, "")
 }
 
 func TestRegisterMCPServers_ParseErrors(t *testing.T) {

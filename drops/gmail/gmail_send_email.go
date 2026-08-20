@@ -57,7 +57,9 @@ func init() {
 			// the Execute result) so run records keep it for debugging; it's
 			// just not a pin. Re-expose it as a named port if a reply-in-thread
 			// feature ever needs to wire it.
-			Outputs: []core.Port{},
+			Outputs: []core.Port{
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
+			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{

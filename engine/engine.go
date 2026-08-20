@@ -259,12 +259,20 @@ func (e *Engine) RunNode(
 			// Scrub secrets a drop might echo into live progress events before
 			// they leave the engine — redactResult only covers the final Result.
 			redactedProgress, progressDone := redactProgress(execCtx, progress, secrets)
-			result, execErr := transport.Execute(execCtx, job, redactedProgress)
-			if redactedProgress != nil {
-				close(redactedProgress)
-				<-progressDone
-			}
-			return result, execErr
+			// Deferred, not inline: a panic out of Execute must still close the
+			// channel and drain the forwarder. Native drops recover inside their
+			// own transport, but the remote transport doesn't, so an inline close
+			// leaked the redaction goroutine for the life of the process every
+			// time a gRPC node server misbehaved. The defer runs before control
+			// returns to the caller, so every progress event is still forwarded
+			// before the Result is observed — the ordering the inline form gave.
+			defer func() {
+				if redactedProgress != nil {
+					close(redactedProgress)
+					<-progressDone
+				}
+			}()
+			return transport.Execute(execCtx, job, redactedProgress)
 		})
 }
 
@@ -597,8 +605,13 @@ func (e *Engine) populateSandbox(job *core.Job, graph core.Graph, runID string) 
 	return nil
 }
 
+// newJobID mints a run/job identifier. 16 bytes to match the entropy the
+// rest of the system uses for opaque identifiers (session tokens, invite
+// tokens, OAuth state) — 8 bytes left job IDs guessable enough to be worth
+// tightening, even though every read path authorizes on the record's tenant
+// rather than trusting the ID.
 func newJobID() (string, error) {
-	buf := make([]byte, 8)
+	buf := make([]byte, 16)
 	if _, err := rand.Read(buf); err != nil {
 		return "", err
 	}

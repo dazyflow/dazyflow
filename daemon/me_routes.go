@@ -143,20 +143,18 @@ func (h *HTTPGateway) loadFlowForRequest(rw http.ResponseWriter, r *http.Request
 	return tenant, workspace, id, g, true
 }
 
-// runStoreError maps a run-store error onto the right status: a store that's
-// not enabled / not configured / unsupported is a 501 "not_configured"
-// (operator hasn't wired persistent run logs); anything else is a 404
-// "run_not_found" (the run id is unknown or cross-tenant). Centralizes the
-// substring branching the run-log handlers share.
+// runStoreError maps a run-store error onto the right status: no run-log
+// store wired is a 501 "not_configured" (the operator hasn't enabled
+// persistent run logs); anything else is a 404 "run_not_found" (the run id is
+// unknown or cross-tenant). Classifies on the sentinel, not on message text —
+// the substring form it replaced would have turned any unrelated error that
+// happened to contain "not configured" into a 501.
 func runStoreError(rw http.ResponseWriter, err error) {
-	msg := err.Error()
-	if strings.Contains(msg, "not enabled") ||
-		strings.Contains(msg, "not configured") ||
-		strings.Contains(msg, "does not support") {
-		writeAPIError(rw, http.StatusNotImplemented, "not_configured", msg)
+	if errors.Is(err, ErrRunLogsDisabled) {
+		writeAPIError(rw, http.StatusNotImplemented, "not_configured", err.Error())
 		return
 	}
-	writeAPIError(rw, http.StatusNotFound, "run_not_found", msg)
+	writeAPIError(rw, http.StatusNotFound, "run_not_found", err.Error())
 }
 
 // --- /me/flows --------------------------------------------------------
@@ -483,13 +481,16 @@ func (h *HTTPGateway) publishFlowMe(rw http.ResponseWriter, r *http.Request, p c
 		Ref   string `json:"ref"`
 		Label string `json:"label"`
 	}
-	// Body is optional — an empty POST publishes HEAD with no label. An empty
-	// body decodes to io.EOF, which we ignore; a *malformed* body is logged
-	// (we still fall back to publishing HEAD) so a client sending a bad ref
-	// isn't silently treated as "no ref".
+	// Body is optional — an empty POST publishes HEAD with no label, and an
+	// empty body decodes to io.EOF which we ignore. A *malformed* body is a
+	// 400: swallowing it published HEAD instead of the ref the client asked
+	// for, so a client with a serialization bug got a successful publish of
+	// the wrong commit and only a server-side log line to say so.
 	if r.Body != nil {
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
-			h.logger.Printf("publishFlowMe: ignoring malformed optional body for %s/%s/%s: %v", tenant, workspace, id, err)
+			writeAPIError(rw, http.StatusBadRequest, "bad_request",
+				fmt.Sprintf("could not read the request body: %v", err))
+			return
 		}
 	}
 	label := strings.TrimSpace(body.Label)
