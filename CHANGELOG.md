@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-20
+
 ### Added
 
 - **Attachments can be read off incoming email.** `gmail_get_attachments`
