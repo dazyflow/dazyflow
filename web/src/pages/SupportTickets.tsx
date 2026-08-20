@@ -4,7 +4,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
-  ArrowLeft,
   Check,
   Inbox,
   LifeBuoy,
@@ -18,6 +17,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
+import { BackLink } from "../components/BackLink";
 import { Button } from "../components/Button";
 import { BundleView } from "../components/BundleView";
 import { explainApiError } from "../lib/explainApiError";
@@ -711,12 +711,15 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
   };
 
   const backTo = mode === "agent" ? "/support/queue" : "/support";
+  // Name the parent, per the BackLink convention — which parent depends on
+  // where this thread was opened from.
+  const backLabel = mode === "agent" ? t("support.queueTitle") : t("nav.support");
 
   if (loading) return <div className="card" style={NOTICE_STYLE}>{t("common.loading")}</div>;
   if (error && !view) {
     return (
       <div>
-        <Link to={backTo} className="back-link"><ArrowLeft size={14} /> {t("common.back")}</Link>
+        <BackLink to={backTo} label={backLabel} />
         <ErrorNotice style={{ marginTop: "var(--space-3)" }}>{error}</ErrorNotice>
       </div>
     );
@@ -731,7 +734,7 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
 
   return (
     <div style={{ maxWidth: 760 }}>
-      <Link to={backTo} className="back-link"><ArrowLeft size={14} /> {t("common.back")}</Link>
+      <BackLink to={backTo} label={backLabel} />
       <div className="page-title" style={{ marginTop: "var(--space-2)" }}>
         <div>
           <h1 style={{ fontSize: "var(--text-xl)" }}>{tk.subject}</h1>

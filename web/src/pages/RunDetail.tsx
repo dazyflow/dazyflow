@@ -3,12 +3,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, AlertCircle, ChevronDown, ChevronRight, RotateCw, RotateCcw, Square, LifeBuoy } from "lucide-react";
+import { AlertCircle, ChevronDown, ChevronRight, RotateCw, RotateCcw, Square, LifeBuoy } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import { api, APIError } from "../api";
 import { dropLabel, dropSubtitle } from "../lib/dropText";
 import { useAuth } from "../auth";
+import { BackLink } from "../components/BackLink";
 import { Button } from "../components/Button";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { Callout } from "../components/Callout";
@@ -244,9 +245,7 @@ export function RunDetail() {
       <div className="page">
         <div className="page-title">
           <div>
-            <Link to="/runs" className="back-link">
-              <ArrowLeft size={14} /> {t("runDetail.backToRuns")}
-            </Link>
+            <BackLink to="/runs" label={t("nav.runs")} />
             <h1>{t("runDetail.notFoundTitle")}</h1>
           </div>
         </div>
@@ -294,9 +293,7 @@ export function RunDetail() {
     <div className="page run-detail">
       <div className="page-title">
         <div>
-          <Link to="/runs" className="back-link">
-            <ArrowLeft size={14} /> {t("runDetail.backToRuns")}
-          </Link>
+          <BackLink to="/runs" label={t("nav.runs")} />
           <h1 style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span className={"status-dot " + run.Status} />
             {graph?.name || run.GraphID}

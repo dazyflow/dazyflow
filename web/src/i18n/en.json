@@ -1424,7 +1424,6 @@
   },
   "runDetail": {
     "loading": "Loading run…",
-    "backToRuns": "Back to runs",
     "notFoundTitle": "Run not found",
     "notFoundBody": "No run with that ID.",
     "runIdLabel": "Run",

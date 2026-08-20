@@ -112,7 +112,27 @@ are now spent, so the next Nordic step costs more than the last few did.
 
 ### Deferred — decided, not forgotten
 
-- [ ] **Breadcrumbs** — the IA is flat (sidebar + page title); low value.
+- [ ] **Breadcrumbs in the header** — deferred, but not for the reason this
+      entry used to give. "The IA is flat" is only true of the customer-facing
+      app, where every sidebar destination is one level deep and a trail would
+      render a redundant `Home > Flows` above a title that already says Flows.
+      The operator surfaces are three and four levels deep
+      (`/admin/platform/orgs/:tenant`, `/support/flows/:tenant/:workspace/:id`)
+      and are absent from the sidebar entirely — that is where a trail would
+      earn its place.
+      The real reason not to build it: those pages already have per-page
+      `← <parent>` links (AdminPlatformOrgDetail, AdminPlatformUserDetail,
+      RunDetail, SupportTickets, FlowEditor), so a breadcrumb system would
+      REPLACE five working affordances rather than fill a gap — a refactor,
+      not a new capability.
+      What is worth doing instead is much smaller: those five links have
+      drifted. Two admin pages override the `.back-link` class with a
+      copy-pasted inline style that re-declares what the class already gives,
+      and hardcode `gap: 4` / `--space-2` against the class's `--space-1`; and
+      the labels follow three conventions at once (name the parent, "Back to
+      runs", bare "Back"). One shared `<BackLink to label>` component fixes
+      the drift and settles the labelling convention at a fraction of the
+      cost. Do that; revisit breadcrumbs only if the operator IA gets deeper.
 
 ---
 

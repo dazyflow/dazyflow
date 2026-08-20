@@ -3,11 +3,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Ban, MailCheck, ShieldCheck, ShieldOff, ShieldPlus, Trash2, UserCheck } from "lucide-react";
+import { Ban, MailCheck, ShieldCheck, ShieldOff, ShieldPlus, Trash2, UserCheck } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, type PlatformUser } from "../api";
 import { explainApiError } from "../lib/explainApiError";
+import { BackLink } from "../components/BackLink";
 import { Button } from "../components/Button";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { UserAvatar } from "../components/PlatformAvatar";
@@ -87,9 +88,7 @@ export function AdminPlatformUserDetail() {
 
   return (
     <div>
-      <Link to="/admin/platform/users" className="back-link" style={{ display: "inline-flex", alignItems: "center", gap: 4, marginBottom: "var(--space-2)" }}>
-        <ArrowLeft size={14} /> {t("admin.platformUsers.title")}
-      </Link>
+      <BackLink to="/admin/platform/users" label={t("admin.platformUsers.title")} />
       <div className="page-title">
         <div className="pa-detail-head">
           <UserAvatar email={email} size={48} />

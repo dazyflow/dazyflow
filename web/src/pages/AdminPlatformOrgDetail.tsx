@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Ban, ShieldOff, Trash2, CheckCircle2 } from "lucide-react";
+import { useNavigate, useParams } from "react-router-dom";
+import { Ban, ShieldOff, Trash2, CheckCircle2 } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, type PlatformOrg } from "../api";
 import { explainApiError } from "../lib/explainApiError";
+import { BackLink } from "../components/BackLink";
 import { Button } from "../components/Button";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { OrgAvatar } from "../components/PlatformAvatar";
@@ -83,9 +84,7 @@ export function AdminPlatformOrgDetail() {
 
   return (
     <div>
-      <Link to="/admin/platform/orgs" className="back-link" style={{ display: "inline-flex", alignItems: "center", gap: 4, marginBottom: "var(--space-2)" }}>
-        <ArrowLeft size={14} /> {t("admin.platformOrgs.title")}
-      </Link>
+      <BackLink to="/admin/platform/orgs" label={t("admin.platformOrgs.title")} />
       <div className="page-title">
         <div className="pa-detail-head">
           <OrgAvatar name={org?.display_name || tenant} icon={org?.icon} seed={tenant} size={48} />
