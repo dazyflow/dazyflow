@@ -113,9 +113,6 @@ are now spent, so the next Nordic step costs more than the last few did.
 ### Deferred — decided, not forgotten
 
 - [ ] **Breadcrumbs** — the IA is flat (sidebar + page title); low value.
-- [ ] **Editor undo/redo** — needs a real graph history stack (snapshot +
-      coalesce, and an interplay with autosave). Version snapshots already
-      cover coarse rollback, so this buys less than it costs today.
 
 ---
 

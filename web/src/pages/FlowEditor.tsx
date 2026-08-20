@@ -66,6 +66,8 @@ import {
   CircleOff,
   PanelRight,
   Tag,
+  Undo2,
+  Redo2,
 } from "lucide-react";
 import { useAuth } from "../auth";
 import { useThemeMode } from "../theme";
@@ -85,6 +87,17 @@ import {
   type SetupNeed,
 } from "../lib/requiredConnections";
 import { mimeCompatible, pickPort, portsConnectable, connectionHint, PASS_PORT } from "../lib/ports";
+import {
+  canRedo as historyCanRedo,
+  canUndo as historyCanUndo,
+  emptyHistory,
+  rebase as rebaseHistory,
+  record as recordHistory,
+  redo as redoHistory,
+  undo as undoHistory,
+  type HistoryState,
+} from "../lib/graphHistory";
+import { reconcileByID, samePosition, sameData } from "../lib/graphReconcile";
 import { suggestNextDrops, topDropsByUsage } from "../lib/suggest";
 import { explainApiError } from "../lib/explainApiError";
 import { previewOutput } from "../lib/runResult";
@@ -406,6 +419,24 @@ function EditorInner() {
   // ESC/backdrop dismissal).
   const [showConfigList, setShowConfigList] = useState(false);
   const [dirty, setDirty] = useState(false);
+  // Undo/redo. Whole-document snapshots rather than a command stack — see
+  // lib/graphHistory.ts for why, and for why the server's version snapshots
+  // can't back this. Kept in state (not a ref) because the toolbar buttons
+  // need canUndo/canRedo at render time; `record` returns the same object
+  // when nothing changed, so the constant stream of selection-only updates
+  // doesn't re-render.
+  const [history, setHistory] = useState<HistoryState>(emptyHistory);
+  // fenceHistory asks the observer to REBASE rather than record on its next
+  // run: the document changed underneath the editor and the existing stack no
+  // longer describes states the user can return to. Set on load, flow switch,
+  // restore, history preview, and an external edit arriving over the flow-
+  // watch — undoing past someone else's change would silently clobber it.
+  const fenceHistoryRef = useRef(true);
+  // The document the last undo/redo asked for. Belt-and-braces: `undo` already
+  // moves its own `present`, so a spurious observation classifies as "none"
+  // and no-ops anyway. This just stops a near-miss apply from being recorded
+  // as if the user had made it.
+  const pendingHistoryApplyRef = useRef<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -666,6 +697,14 @@ function EditorInner() {
     setTimeoutSeconds(g.timeout_seconds);
     setDisabled(g.disabled ?? false);
     setDirty(false);
+    // Fence the undo stack. Every path that replaces the document from
+    // outside the user's own editing lands here — the initial load, a flow
+    // switch, a restore, a history-revision preview, and an external edit
+    // arriving over the MCP flow-watch (applyGraphAnimated calls this) — and
+    // in each case the existing stack describes states that are no longer
+    // reachable. The assistant case is the one that matters: undoing past
+    // someone else's edit would silently discard it.
+    fenceHistoryRef.current = true;
   }, []);
 
   // applyGraphAnimated hydrates a graph the way hydrateGraph does, but plays
@@ -2730,6 +2769,221 @@ function EditorInner() {
     ...overrides,
   });
 
+  // --- Undo / redo -----------------------------------------------------
+  //
+  // The document is snapshotted from buildGraph, with two adjustments:
+  //
+  //   `disabled` is dropped. Enabling/disabling a flow goes through its own
+  //   endpoint, so letting undo flip it locally would desync the editor from
+  //   the server with nothing to reconcile it.
+  //
+  //   Positions are rounded. React Flow writes fractional coordinates and a
+  //   snapshot round-trips through JSON, so without rounding a re-applied
+  //   snapshot could differ from the live state by a fraction of a pixel —
+  //   which the observer would then dutifully record as an edit the user never
+  //   made, on every undo.
+  const buildHistoryDoc = (): Graph => {
+    const g = buildGraph();
+    const { disabled: _ignoredLifecycleFlag, ...doc } = g;
+    return {
+      ...doc,
+      nodes: (doc.nodes ?? []).map((n) => ({
+        ...n,
+        position: n.position
+          ? { x: Math.round(n.position.x), y: Math.round(n.position.y) }
+          : n.position,
+      })),
+      frames: doc.frames?.map((f) => ({ ...f, x: Math.round(f.x), y: Math.round(f.y) })),
+    } as Graph;
+  };
+  const buildHistoryDocRef = useRef(buildHistoryDoc);
+  buildHistoryDocRef.current = buildHistoryDoc;
+
+  // applyHistoryDoc restores a snapshot.
+  //
+  // It reconciles rather than rebuilding (unlike hydrateGraph, which is the
+  // right thing on load where everything is new anyway). displayNodes
+  // memoises each card on the node object BY REFERENCE, so handing it fresh
+  // objects would rebuild and re-render every card on the canvas — an undo
+  // that visibly flashes the whole graph. Reconciling keeps the object for
+  // everything that didn't change, so undoing one node's drag re-renders one
+  // card.
+  //
+  // It also sets dirty, which hydrateGraph deliberately clears. Without that
+  // an undo would leave the server holding the state the user just undid, and
+  // autosave would never fire to correct it.
+  const applyHistoryDoc = useCallback(
+    (g: Graph) => {
+      const targetNodes = g.nodes ?? [];
+      setNodes(
+        (current) =>
+          reconcileByID(current, targetNodes, {
+            idOfExisting: (n) => n.id,
+            idOfTarget: (t) => t.id,
+            isUnchanged: (n, t) =>
+              n.data.moduleID === t.module && samePosition(n.position, t.position),
+            build: (t, prev) => {
+              const m = manifestByID.get(t.module);
+              return {
+                ...(prev ?? {}),
+                id: t.id,
+                type: "dazy",
+                position: t.position ?? { x: 80, y: 80 },
+                data: {
+                  label: m ? dropLabel(m, i18n.language) : t.module,
+                  moduleID: t.module,
+                  manifest: m,
+                },
+              } as FlowNode<DazyNodeData>;
+            },
+          }).items,
+      );
+      setEdges(
+        (current) =>
+          reconcileByID(current, g.edges ?? [], {
+            idOfExisting: (e) => e.id,
+            idOfTarget: (t) => `${t.from}.${t.from_port}->${t.to}.${t.to_port}`,
+            isUnchanged: (e, t) => sameData(e.data?.waypoints ?? [], t.waypoints ?? []),
+            build: (t) => ({
+              id: `${t.from}.${t.from_port}->${t.to}.${t.to_port}`,
+              source: t.from,
+              target: t.to,
+              sourceHandle: t.from_port,
+              targetHandle: t.to_port,
+              data: { waypoints: t.waypoints ?? [] },
+              style: { stroke: "var(--accent)", strokeWidth: 1.5 },
+            }),
+          }).items,
+      );
+      setFrameNodes(
+        (current) =>
+          reconcileByID(current, g.frames ?? [], {
+            idOfExisting: (f) => f.id,
+            idOfTarget: (t) => t.id,
+            isUnchanged: (f, t) =>
+              samePosition(f.position, { x: t.x, y: t.y }) &&
+              f.width === t.width &&
+              f.height === t.height &&
+              (f.data?.title ?? "") === t.title &&
+              (f.data?.color ?? "") === t.color,
+            build: (t) => ({
+              id: t.id,
+              type: "comment",
+              position: { x: t.x, y: t.y },
+              width: t.width,
+              height: t.height,
+              data: { title: t.title, color: t.color },
+              zIndex: -1,
+              connectable: false,
+            }),
+          }).items,
+      );
+      setParamsByID(Object.fromEntries(targetNodes.map((n) => [n.id, n.params ?? {}])));
+      setBreakpoints(new Set(targetNodes.filter((n) => n.breakpoint).map((n) => n.id)));
+      setDisabledNodes(new Set(targetNodes.filter((n) => n.disabled).map((n) => n.id)));
+      setTriggers(g.triggers ?? []);
+      setVisibility(g.visibility);
+      setOwner(g.owner);
+      setName(g.name);
+      setIcon(g.icon);
+      setDescription(g.description);
+      setTimeoutSeconds(g.timeout_seconds);
+      // An undo IS an edit as far as persistence is concerned.
+      setDirty(true);
+    },
+    [manifestByID],
+  );
+
+  // Observer. Records the document whenever it changes, instead of asking each
+  // of the ~24 mutation sites to remember to snapshot. That's the property
+  // that keeps this from rotting: a new feature that edits the graph is
+  // undoable the moment buildGraph serializes it, with no history code to
+  // update. The deps are the editable state — the same list autosave watches,
+  // plus the three it omits (frames, breakpoints, disabled steps).
+  useEffect(() => {
+    // Don't record while the canvas doesn't represent the user's document.
+    if (graphLoading || loadFailed || previewRef) return;
+    if (loadedIDRef.current !== null && loadedIDRef.current !== id) return;
+
+    const doc = buildHistoryDocRef.current();
+    const json = JSON.stringify(doc);
+
+    const pending = pendingHistoryApplyRef.current;
+    pendingHistoryApplyRef.current = null;
+    if (pending !== null && pending === json) return; // our own undo/redo landing
+
+    if (fenceHistoryRef.current) {
+      fenceHistoryRef.current = false;
+      setHistory(rebaseHistory(doc, Date.now()));
+      return;
+    }
+    setHistory((h) => recordHistory(h, doc, Date.now()));
+  }, [
+    nodes,
+    edges,
+    frameNodes,
+    paramsByID,
+    triggers,
+    breakpoints,
+    disabledNodes,
+    visibility,
+    owner,
+    name,
+    icon,
+    description,
+    timeoutSeconds,
+    graphLoading,
+    loadFailed,
+    previewRef,
+    id,
+  ]);
+
+  const canUndo = historyCanUndo(history) && !lockedRunID && hasPerm("graph:edit");
+  const canRedo = historyCanRedo(history) && !lockedRunID && hasPerm("graph:edit");
+
+  const doUndo = useCallback(() => {
+    if (lockedRunID || !hasPerm("graph:edit")) return;
+    const step = undoHistory(history);
+    if (!step) return;
+    pendingHistoryApplyRef.current = JSON.stringify(step.doc);
+    setHistory(step.state);
+    applyHistoryDoc(step.doc);
+  }, [history, applyHistoryDoc, lockedRunID, hasPerm]);
+
+  const doRedo = useCallback(() => {
+    if (lockedRunID || !hasPerm("graph:edit")) return;
+    const step = redoHistory(history);
+    if (!step) return;
+    pendingHistoryApplyRef.current = JSON.stringify(step.doc);
+    setHistory(step.state);
+    applyHistoryDoc(step.doc);
+  }, [history, applyHistoryDoc, lockedRunID, hasPerm]);
+
+  // Cmd/Ctrl+Z undoes, Cmd/Ctrl+Shift+Z and Ctrl+Y redo (Shift+Z is the
+  // Mac/Adobe convention, Ctrl+Y the Windows one — both are muscle memory for
+  // somebody). Skipped while focus is in a text field so the browser's own
+  // per-field undo keeps working while typing a param.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+      const el = document.activeElement as HTMLElement | null;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) {
+        return;
+      }
+      const k = e.key.toLowerCase();
+      if (k === "z") {
+        e.preventDefault();
+        if (e.shiftKey) doRedo();
+        else doUndo();
+      } else if (k === "y" && !e.shiftKey) {
+        e.preventDefault();
+        doRedo();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [doUndo, doRedo]);
+
   const save = async (autosave = false): Promise<boolean> => {
     if (!token || !me || !id) return false;
     // Never PUT over a graph we failed to load — the in-memory state is the
@@ -3828,6 +4082,30 @@ function EditorInner() {
               they were still there. Secondary tools may scroll; the action you
               came to press may not. */}
           <div className="toolbar-scroll">
+          {/* Undo / redo. Always mounted rather than conditional on
+              availability: a disabled button is how the feature — and its
+              keyboard shortcut, via the tooltip — is discoverable at all. */}
+          <div className="toolbar-group">
+            <Button
+              variant="ghost"
+              onClick={doUndo}
+              disabled={!canUndo}
+              title={t("editor.undoTitle")}
+              aria-label={t("editor.undo")}
+            >
+              <Undo2 size={15} />
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={doRedo}
+              disabled={!canRedo}
+              title={t("editor.redoTitle")}
+              aria-label={t("editor.redo")}
+            >
+              <Redo2 size={15} />
+            </Button>
+          </div>
+          <span className="toolbar-divider" aria-hidden="true" />
           {/* Authoring tools — add nodes, configure how the flow starts. */}
           <div className="toolbar-group">
             <Button
