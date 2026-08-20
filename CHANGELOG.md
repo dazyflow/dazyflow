@@ -11,15 +11,170 @@ Versions here correspond to git tags `X.Y.Z` on
 version is stamped into the binary at build time and surfaced on
 `GET /api/v1` (the `build` block) and in the web UI's account menu.
 
-Releasing: move the entries below from `[Unreleased]` under a new
-`[X.Y.Z] - YYYY-MM-DD` heading, commit, then run `make patch` (or
-`minor` / `major`) to cut the annotated tag against that commit. That
-target also writes the new number to `./VERSION` and commits it — the
-Docker build reads that file when it isn't handed a `VERSION` build arg,
-so it is what a production `docker compose up --build` stamps into the
-image.
+Releasing: write what shipped under `[Unreleased]` as you go, then run
+`make patch` (or `minor` / `major`). That target promotes `[Unreleased]`
+under a new `[X.Y.Z] - YYYY-MM-DD` heading, leaves a fresh empty
+`[Unreleased]`, and commits the changelog together with `./VERSION`
+before tagging — so the tag lands on the commit that announces the
+version. An empty `[Unreleased]` aborts the release. (`VERSION` matters
+because the Docker build reads that file when it isn't handed a `VERSION`
+build arg, so it is what a production `docker compose up --build` stamps
+into the image.)
 
 ## [Unreleased]
+
+### Added
+
+- **Undo/redo in the flow editor** — `Cmd/Ctrl+Z`, `Cmd/Ctrl+Shift+Z` and
+  `Ctrl+Y`, plus toolbar buttons that stay visible (disabled) so the feature
+  and its shortcut are discoverable before you need them. Built on
+  whole-document snapshots rather than a command stack: the editor already
+  maintains a complete serializer and deserializer that saving and loading
+  depend on, so history cannot fall behind the document the way a stack of
+  per-action inverses would. Snapshots are applied by reconciling the node and
+  edge arrays, preserving object identity for everything unchanged, so undoing
+  one step's move re-renders one card instead of the whole canvas. Continuous
+  gestures coalesce — a drag or a run of keystrokes in one field is a single
+  undo — and the stack is fenced whenever the document is replaced from
+  outside the editor, including an edit arriving over the MCP flow-watch, so
+  undo can never silently discard an assistant's change.
+
+### Changed
+
+- **"Drop" is now "step" (Swedish: *steg*) everywhere a person can read it.**
+  The documentation already said step — 38 uses, a glossary entry, a "Step
+  catalog" — while the UI said drop in 106 strings, so this closed a
+  docs/UI mismatch rather than choosing new vocabulary. 104 English and 96
+  Swedish strings changed, along with the MCP tool descriptions, the operator
+  docs, `.env.example`, and the user-visible Go error strings. Swedish gender
+  agreement moved with it: *steg* is neuter where *dropp* was common, so 49
+  determiners and adjectives shifted (`den här droppen` → `det här steget`).
+  Deliberately unchanged, and now the convention: the Go catalog and package
+  paths, API routes and JSON field names, MCP tool *names* (`list_drops`,
+  `describe_drop`), error codes (`drop_not_found`), audit action names, CSS
+  classes, frontend identifiers — the contract every non-human consumer is
+  grounded on — and the verb "to drop" ("drop rows", "drop a pin", "drop to
+  upload"). `describe_drop`'s description now tells an assistant to say
+  "step" to the user, so the split doesn't leak into a conversation.
+
+- **`make patch` / `minor` / `major` promote the changelog themselves.** The
+  release recipe moves `[Unreleased]` under the new version heading, leaves a
+  fresh empty one, and commits it with `./VERSION` before tagging. This was
+  previously a manual step the Makefile only *documented*, and it drifted:
+  0.3.0, 0.3.1, 0.3.2 and 0.4.0 were all tagged with no changelog entry
+  because nothing checked. An empty `[Unreleased]` now aborts the release,
+  and a hand-written version heading is detected and left alone.
+
+- Detail pages share one `BackLink` component instead of five hand-rolled
+  copies. Two admin pages had been overriding the shared `.back-link` class
+  with a duplicated inline style, putting them at double the bottom margin of
+  every other detail page; labels now consistently name the parent
+  ("Organizations") rather than mixing that with "Back to runs" and a bare
+  "Back", which also reads better to a screen reader.
+
+### Security
+
+- **A store read failure could no longer be mistaken for "this flow doesn't
+  exist".** `saveGraph` treated *any* error from the workspace store as the
+  new-flow case, and the new-flow path skips the per-flow ownership gate and
+  the active-run lock and enforces only the weaker `graph:edit`. A corrupt
+  object or a transient I/O fault was therefore enough to let a non-owner
+  overwrite an existing private flow. The store now returns a typed
+  `ErrGraphNotFound` and every other error fails closed. The same fail-open
+  shape in the delete path — which reported success without checking edit
+  permission — was fixed with it.
+
+- **Google sign-in is bound to the browser that started it.** The callback
+  consumed its state token with no cookie check, so an attacker could complete
+  a sign-in in a victim's browser for the attacker's account, and anything the
+  victim went on to create or connect landed in the attacker's organization.
+  The integrations OAuth flow already had the correct binding pattern; it had
+  simply never been applied to the sign-in leg. The binding is mandatory here
+  rather than skipped when absent, because sign-in has exactly one start path.
+
+- **Org Google OAuth client secrets are encrypted at rest.**
+  `org_auth.google_client_secret` was a plain `TEXT` column while every
+  comparable secret in the system was encrypted, so a database dump exposed
+  every organization's live client secret. Secrets now live in the per-tenant
+  encrypted store under a per-tenant DEK, the column is written empty, and
+  rows written before this migrate on first read with no operator step.
+
+- **Secret redaction no longer leaks when one secret contains another.**
+  Replacement ran in map-iteration order, so replacing a shorter secret first
+  cut it out of the middle of a longer one and the longer secret's tail
+  survived into the persisted run record in cleartext — intermittently, which
+  is worse than always. Secrets are now replaced longest-first.
+
+- The `DAZYFLOW_DEV_KEY` dev admin token is refused when the deployment
+  doesn't look local (a public base URL or a remote database). It mints a
+  publicly-known admin bearer token at every boot and was previously guarded
+  only by a line in the documentation.
+
+- bcrypt cost raised from 10 to 12, with an opportunistic re-hash on
+  successful login — the only moment a correct plaintext is available, so the
+  only place an old hash can be strengthened without involving the user.
+
+- The audit trail no longer accepts forged entries. The failed-sign-in path
+  records the email as typed — it must, that address is the credential-stuffing
+  signal — and nothing had validated it, so a newline forged a second line in
+  a compliance-relevant log.
+
+- A Content-Security-Policy is set on the authenticated app surface, and the
+  `shell` and `git` steps resolve their working directory through an
+  `os.Root` handle instead of cleaning the path as a string, so a symlink
+  planted inside the workspace can no longer be followed out of it.
+
+### Fixed
+
+- Postgres and the in-memory job store now agree on `core.ErrConflict` for a
+  duplicate enqueue; they had diverged because the conformance test only
+  asserted that *some* error came back.
+
+- Error-to-HTTP-status mapping uses typed sentinels instead of matching
+  substrings of user-facing messages, so rewording a message can no longer
+  change a status code. Authorization failures that wrapped
+  `core.ErrUnauthorized` without the exact phrase the matcher looked for had
+  been returning 500 instead of 403.
+
+- 27 steps that perform non-idempotent external writes now opt into
+  engine-side write dedupe, up from 10 — so an expired-lease reclaim replays
+  the recorded result instead of posting, charging or sending twice. Slack,
+  Notion, Fortnox, GitHub, Stripe, Drive, calendar, MQTT, email, ntfy and
+  webhook sends were all uncovered.
+
+- MCP idempotency keys are hashed over canonical JSON. The key was hashed over
+  raw argument bytes on the assumption that a retry sends byte-identical JSON,
+  which the protocol doesn't guarantee — so a host that re-serialized its
+  arguments produced a new key and a duplicated side effect, in exactly the
+  situation the key exists to make safe.
+
+- `on_error` is validated when a graph is saved, so an unrecognized value can
+  no longer be accepted and then silently ignored, quietly downgrading a
+  fallback edge to abort.
+
+- Panics in drop-spawned goroutines are recovered instead of taking down the
+  daemon — notably `for_each`, which runs arbitrary per-item node execution.
+  The engine's recover only covers the calling goroutine.
+
+- 31 steps declared no `meta` output port while emitting one, so a third of
+  the catalog produced data the editor could not wire and an assistant reading
+  the manifest could not see. A new contract sweep mutates one parameter of a
+  valid worked example at a time, which reaches the connector code paths the
+  previous adversarial sweep could never get past parameter validation.
+
+- Unparseable `DAZYFLOW_*` values log the fallback instead of discarding the
+  operator's setting silently; a missing database DSN is reported before a
+  malformed SMTP URL can kill the process; and the HTTP listener's drain is
+  awaited before exit so in-flight SSE streams and uploads aren't cut.
+
+## [0.4.0] - 2026-08-19
+
+Everything below shipped between 0.2.0 and 0.4.0. The 0.3.0, 0.3.1 and 0.3.2
+tags were same-day interim cuts rather than distinct milestones, and none of
+the four carried a changelog entry at the time — the release recipe only
+documented the step instead of performing it (fixed in `[Unreleased]` above).
+They are folded into this one heading rather than split retroactively, because
+the boundaries can no longer be reconstructed accurately from the entries.
 
 ### Added
 
