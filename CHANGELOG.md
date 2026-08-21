@@ -23,6 +23,45 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-08-21
+
+### Added
+
+- **Reconnect, per account.** An app's connection card now lists each
+  connected account on its own row, with its own state and its own
+  **Reconnect** button, which re-authorises *that* account in place instead of
+  adding a second one. Previously the card could only say "connected" and the
+  only action on offer was "Connect another" — which, confusingly, was the
+  reconnect people needed all along, just labelled as though it weren't.
+
+### Fixed
+
+- **A dead OAuth grant showed as connected.** When a Google (or any OAuth)
+  grant is revoked, expires, or is invalidated by a password change, every run
+  fails with a 401 from the provider — while the Apps page went on reporting
+  the account as connected, because all it could see was whether a token
+  existed. Nothing anywhere said the one thing that mattered: sign in again.
+  The daemon now records the rejection at the moment it happens — a refused
+  token refresh is the point where the grant is known to be dead rather than
+  the call merely unlucky — and clears it as soon as a refresh works or a new
+  token is stored. `GET /oauth/providers` reports those accounts as
+  `needs_reconnect`, and the app's card marks them and offers the fix. This is
+  distinct from the existing `stale_accounts`, which is about scopes added
+  since; that check is deliberately skipped for providers authorised
+  incrementally (Google), which is exactly where this gap bit.
+
+  Known limit: the signal comes from a rejected *refresh*. A token stored
+  without an expiry or a refresh token is never refreshed, so a grant that
+  dies in that state is still only visible as a failing run. Marking on a 401
+  from the API call itself is the remaining half.
+- **A failed run's fix-it link went to the Apps index.** "Reconnect" on a
+  failed run dropped the user on the list of every app, leaving them to work
+  out which one broke — and then, on the right app, to work out which account.
+  The error text can't say: "Gmail returned 401" names neither. The failing
+  step does, though — its module gives the app and its settings give the
+  account — so the button now lands on that app with that account called out
+  (`/apps/gmail?reconnect=default`).
+
 ## [0.7.0] - 2026-08-21
 
 ### Added
