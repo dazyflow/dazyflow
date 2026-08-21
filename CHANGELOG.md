@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-08-21
+
 ### Added
 
 - **Mirror your flows to your own git.** A workspace's flows have always been
