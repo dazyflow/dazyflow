@@ -579,7 +579,9 @@
       "ownerDesc": "Stämplas av daemonen när flödet sparas första gången. Endast organisation-admins kan överföra ägarskap.",
       "dangerZone": "Riskzon",
       "deleteFlow": "Ta bort flöde",
-      "deleteFlowDesc": "Tar bort flödet och hela dess historik permanent. Detta kan inte ångras."
+      "deleteFlowDesc": "Tar bort flödet och hela dess historik permanent. Detta kan inte ångras.",
+      "storedInGit": "Alla flöden i den här arbetsytan lagras i git, med en commit för varje sparning.",
+      "mirrorLink": "Spegla till din egen git"
     }
   },
   "triggers": {
@@ -808,8 +810,8 @@
       "disconnect": "Koppla från",
       "addPermission": "Lägg till behörighet"
     },
-    "cardGitTitle": "Git-uppgifter",
-    "cardGitDesc": "SSH-nycklar eller åtkomsttoken för att klona privata repon.",
+    "cardGitTitle": "Git-uppgifter och spegling",
+    "cardGitDesc": "SSH-nycklar för att klona privata arkiv — och spegling av dina flöden till ett git-arkiv du äger.",
     "secretManager": {
       "needAdmin": "Du behöver <0>organization:admin</0> för att konfigurera hemlighetshanteraren."
     },
@@ -1376,7 +1378,7 @@
     "noMatches": "Inga körningar matchar din sökning."
   },
   "gitCreds": {
-    "title": "Git-uppgifter",
+    "title": "Git-uppgifter och spegling",
     "subtitle": "Namngivna uppgifter för att klona privata repon. Var och en kan ha en SSH-nyckel (för git@/ssh://-URL:er) och/eller en åtkomsttoken (för https://-URL:er). Ett git_checkout-steg väljer en via konto — som att välja ett anslutet konto.",
     "empty": "Inga Git-uppgifter ännu. Lägg till en nedan för att klona privata repon.",
     "colAccount": "Konto",
@@ -1404,6 +1406,45 @@
     "atLeastOne": "Ange en åtkomsttoken, en SSH-nyckel, eller båda.",
     "manageLink": "Hantera Git-uppgifter",
     "addLink": "Lägg till en Git-uppgift"
+  },
+  "gitMirror": {
+    "title": "Spegla till din egen git",
+    "subtitle": "Skicka den här arbetsytans flöden till ett git-arkiv som du äger — hela historiken, alla flöden och vilken version som är live. Spegeln är en riktig klon: du kan granska den, se ändringar och återställa från den.",
+    "needSSHKey": "Speglingen skickar över SSH och behöver därför en uppgift med en privat SSH-nyckel. Ingen av uppgifterna ovan har någon — lägg till en deploy-nyckel för målarkivet.",
+    "addCredential": "Lägg till en ovan",
+    "remoteLabel": "Fjärradress",
+    "remoteDesc": "En SSH-adress hos valfri git-värd — GitHub, GitLab, Gitea, sr.ht eller din egen server. Använd ett tomt arkiv: den första pushen skriver hela historiken. https://-adresser accepteras inte; speglingen autentiserar med nyckel, inte med token.",
+    "accountLabel": "Uppgift",
+    "accountPlaceholder": "Välj en uppgift…",
+    "accountDesc": "Den git-uppgift vars SSH-nyckel autentiserar pushen. Bara uppgifter med nyckel listas. En deploy-nyckel med läs- och skrivrätt till målarkivet är det minsta som fungerar — pushen listar fjärrens referenser innan den överför, så läsrätt behövs också.",
+    "pushOnLabel": "Spegla när",
+    "pushOnPublish": "Ett flöde publiceras eller tas offline",
+    "pushOnSave": "Varje ändring sparas",
+    "pushOnPublishDesc": "Speglar det du faktiskt har satt i drift. Publicering, avpublicering, pausning och borttagning pushar; utkastsändringar gör det inte.",
+    "pushOnSaveDesc": "Speglar löpande, utkast inkluderade. Upprepade ändringar samlas till en push några sekunder efter att du slutat, så att autospar inte pushar per tangenttryck.",
+    "replicaWarning": "Fjärren är en replik, inte en delad gren. Dazyflow tvingar pushen, så allt som committas direkt där skrivs över vid nästa push — och referenser som tas bort här tas bort där. Peka på ett arkiv som inget annat skriver till.",
+    "enabledLabel": "Spegla automatiskt",
+    "enabledDesc": "Av betyder att inget pushas av sig självt — Pusha nu fungerar ändå.",
+    "saveFirst": "Spara speglingen först.",
+    "saving": "Sparar…",
+    "saveBtn": "Spara spegling",
+    "pushNow": "Pusha nu",
+    "pushNowTitle": "Skicka nuvarande läge till fjärren och visa resultatet. Fungerar oavsett om automatisk spegling är på — använd det för att testa en ny fjärr eller en roterad nyckel.",
+    "pushOk": "Speglat. Fjärren står nu på {{commit}}.",
+    "pushUpToDate": "Fjärren var redan uppdaterad.",
+    "remove": "Sluta spegla",
+    "removeTitle": "Glöm den här speglingen. Fjärrarkivet lämnas orört.",
+    "removeConfirmTitle": "Sluta spegla?",
+    "removeConfirmBody": "Dazyflow slutar pusha och glömmer fjärradressen. Inget tas bort på fjärren — kopian som redan finns där ligger kvar precis som den är.",
+    "refresh": "Uppdatera status",
+    "neverPushed": "Inte pushat än. Använd Pusha nu för att kontrollera fjärren och nyckeln.",
+    "statusOk": "Speglat",
+    "statusFailing": "Senaste pushen misslyckades",
+    "lastSuccess": "Senaste lyckade push: {{when}}",
+    "atCommit": "Fjärren står på {{commit}}.",
+    "unrelatedTitle": "Skriv över den här fjärren?",
+    "unrelatedBody": "Arkivet på den adressen delar ingen historik med den här arbetsytan, så en spegling skulle ersätta allt i det. Oftast betyder det att adressen pekar någon annanstans än du tänkt — eller att den här arbetsytan är tom och att fjärren är den säkerhetskopia den borde återställas från. Skriv bara över om du är säker på att det är det arkivet du vill ersätta.",
+    "unrelatedConfirm": "Skriv över fjärren"
   },
   "schedules": {
     "paused": "Pausad",
@@ -2027,7 +2068,9 @@
     "goTo": "Gå till",
     "flowSublabel": "Flöde",
     "noResults": "Inget matchar ”{{query}}”.",
-    "hintOpen": "öppna"
+    "hintOpen": "öppna",
+    "settingsGroup": "Inställningar och administration",
+    "account": "Kontoinställningar"
   },
   "dashboard": {
     "title": "Översikt",

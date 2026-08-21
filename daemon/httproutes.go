@@ -258,6 +258,15 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/v1/git/credentials/{account}", h.requireAuth(h.putGitCredMe))
 	mux.HandleFunc("DELETE /api/v1/git/credentials/{account}", h.requireAuth(h.deleteGitCredMe))
 
+	// /git/mirror — push this workspace's flow repository to a git remote
+	// the customer owns (SSH only; the key comes from one of the
+	// credentials above). /push is the synchronous "push now / test this
+	// remote" action.
+	mux.HandleFunc("GET /api/v1/git/mirror", h.requireAuth(h.getGitMirrorMe))
+	mux.HandleFunc("PUT /api/v1/git/mirror", h.requireAuth(h.putGitMirrorMe))
+	mux.HandleFunc("DELETE /api/v1/git/mirror", h.requireAuth(h.deleteGitMirrorMe))
+	mux.HandleFunc("POST /api/v1/git/mirror/push", h.requireAuth(h.pushGitMirrorMe))
+
 	mux.HandleFunc("GET /api/v1/me/runs", h.requireAuth(h.listRunsMe))
 	mux.HandleFunc("GET /api/v1/me/runs/{run_id}", h.requireAuth(h.getRunMe))
 	mux.HandleFunc("GET /api/v1/me/runs/{run_id}/nodes", h.requireAuth(h.listRunNodesMe))

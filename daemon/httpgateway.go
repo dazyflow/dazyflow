@@ -224,6 +224,14 @@ type HTTPGateway struct {
 	// display name.
 	Profiles auth.OrgProfileStore
 
+	// GitMirrors stores each workspace's git-mirror config + last-push
+	// status; MirrorPusher performs the pushes. Both nil leaves the
+	// /api/v1/git/mirror endpoints returning 501 — the feature is simply
+	// off, which is the state of any deployment without Postgres or
+	// without the encrypted secret store the SSH key lives in.
+	GitMirrors   GitMirrorStore
+	MirrorPusher *MirrorPusher
+
 	// Blocklist is the platform-admin ban list. The signup path checks it
 	// to refuse a banned email/domain re-registering, and the platform
 	// admin endpoints manage it. Nil = nothing is banned (and bans can't

@@ -42,6 +42,8 @@ import type {
   ScheduleEntry,
   PublishInfo,
   GitCredential,
+  GitMirror,
+  MirrorPushResult,
   ReferenceGroups,
   ResourceDef,
   EmailTemplateSummary,
@@ -975,6 +977,38 @@ export const api = {
     ),
   deleteGitCredential: (token: string, account: string) =>
     request<void>(token, "DELETE", `/git/credentials/${encodeURIComponent(account)}`),
+  // getGitMirror reads the workspace's git-mirror config + last-push status.
+  // Answers `configured: false` (not a 404) when no mirror is set up.
+  getGitMirror: (token: string) => request<GitMirror>(token, "GET", "/git/mirror"),
+  // putGitMirror creates or replaces the mirror. The remote must be an SSH
+  // URL and the named credential must hold an SSH private key — the server
+  // rejects an https:// remote or a token-only credential with a 400, so the
+  // form can surface the reason instead of the user discovering it from a
+  // failed push later.
+  putGitMirror: (
+    token: string,
+    body: {
+      remote_url: string;
+      account: string;
+      enabled: boolean;
+      push_on: "publish" | "save";
+    },
+  ) => request<GitMirror>(token, "PUT", "/git/mirror", body),
+  // deleteGitMirror stops mirroring and forgets the target. The remote
+  // repository itself is never touched.
+  deleteGitMirror: (token: string) => request<GitMirror>(token, "DELETE", "/git/mirror"),
+  // pushGitMirror pushes now, synchronously, ignoring the enabled flag and
+  // the push_on trigger — this is the "test this remote and key" action. A
+  // failure comes back as the git error verbatim ("permission denied
+  // (publickey)", "host key mismatch"), which is what the user needs.
+  // overwriteUnrelated answers the 409 "mirror_unrelated_remote" refusal: the
+  // server declines to force-push over a repository that shares no history
+  // with this workspace (a wrong URL, or a restored deployment about to erase
+  // its own backup), and only a confirmed user action may override it.
+  pushGitMirror: (token: string, overwriteUnrelated = false) =>
+    request<MirrorPushResult>(token, "POST", "/git/mirror/push", {
+      overwrite_unrelated: overwriteUnrelated,
+    }),
   // testTrigger fires a webhook flow with a synthetic JSON payload so a
   // user can verify it end-to-end without wiring an external caller.
   // The daemon seeds webhook_input nodes with `sample` exactly as a real

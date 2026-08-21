@@ -579,7 +579,9 @@
       "ownerDesc": "Stamped by the daemon when the flow is first saved. Only organization admins can transfer ownership.",
       "dangerZone": "Danger zone",
       "deleteFlow": "Delete flow",
-      "deleteFlowDesc": "Permanently deletes this flow and its entire history. This cannot be undone."
+      "deleteFlowDesc": "Permanently deletes this flow and its entire history. This cannot be undone.",
+      "storedInGit": "Every flow in this workspace is stored in git, with a commit for each save.",
+      "mirrorLink": "Mirror to your own git"
     }
   },
   "triggers": {
@@ -828,8 +830,8 @@
       "disconnect": "Disconnect",
       "addPermission": "Add permission"
     },
-    "cardGitTitle": "Git credentials",
-    "cardGitDesc": "SSH keys or access tokens for cloning private repos.",
+    "cardGitTitle": "Git credentials & mirroring",
+    "cardGitDesc": "SSH keys for cloning private repos — and mirroring your flows to a git repository you own.",
     "secretManager": {
       "needAdmin": "You need <0>organization:admin</0> to configure the secret manager."
     },
@@ -1376,7 +1378,7 @@
     "noMatches": "No runs match your search."
   },
   "gitCreds": {
-    "title": "Git credentials",
+    "title": "Git credentials & mirroring",
     "subtitle": "Named credentials for cloning private repositories. Each can hold an SSH key (for git@/ssh:// URLs) and/or an access token (for https:// URLs). A git_checkout step picks one by account — like choosing a connected account.",
     "empty": "No Git credentials yet. Add one below to clone private repos.",
     "colAccount": "Account",
@@ -1404,6 +1406,45 @@
     "atLeastOne": "Provide an access token, an SSH key, or both.",
     "manageLink": "Manage Git credentials",
     "addLink": "Add a Git credential"
+  },
+  "gitMirror": {
+    "title": "Mirror to your own git",
+    "subtitle": "Push this workspace's flows to a git repository you own — full history, every flow, and which revision is live. The mirror is a real clone: you can inspect it, review changes, and restore from it.",
+    "needSSHKey": "Mirroring pushes over SSH, so it needs a credential with an SSH private key. None of the credentials above has one — add a deploy key for the target repository.",
+    "addCredential": "Add one above",
+    "remoteLabel": "Remote URL",
+    "remoteDesc": "An SSH remote on any git host — GitHub, GitLab, Gitea, sr.ht, or your own server. Use an empty repository: the first push writes the full history. https:// URLs are not accepted; the mirror authenticates with a key, not a token.",
+    "accountLabel": "Credential",
+    "accountPlaceholder": "Pick a credential…",
+    "accountDesc": "The git credential whose SSH key authenticates the push. Only credentials with a key are listed. A deploy key with read and write access to the target repository is the narrowest thing that works — the push lists the remote's refs before transferring, so read access is needed too.",
+    "pushOnLabel": "Mirror when",
+    "pushOnPublish": "A flow is published or taken offline",
+    "pushOnSave": "Any change is saved",
+    "pushOnPublishDesc": "Mirrors what you have actually shipped. Publishing, unpublishing, pausing and deleting all push; draft edits don't.",
+    "pushOnSaveDesc": "Mirrors continuously, drafts included. Repeated edits are grouped into one push a few seconds after you stop, so autosave doesn't push per keystroke.",
+    "replicaWarning": "The remote is a replica, not a shared branch. Dazyflow force-pushes, so anything committed there directly is overwritten by the next push — and refs deleted here are deleted there. Point this at a repository nothing else writes to.",
+    "enabledLabel": "Mirror automatically",
+    "enabledDesc": "Off means nothing pushes on its own — Push now still works.",
+    "saveFirst": "Save the mirror first.",
+    "saving": "Saving…",
+    "saveBtn": "Save mirror",
+    "pushNow": "Push now",
+    "pushNowTitle": "Push the current state to the remote and report the result. Works whether or not automatic mirroring is on — use it to test a new remote or a rotated key.",
+    "pushOk": "Mirrored. The remote is now at {{commit}}.",
+    "pushUpToDate": "The remote was already up to date.",
+    "remove": "Stop mirroring",
+    "removeTitle": "Forget this mirror. The remote repository is left untouched.",
+    "removeConfirmTitle": "Stop mirroring?",
+    "removeConfirmBody": "Dazyflow will stop pushing and forget the remote URL. Nothing is deleted on the remote — the copy already there stays exactly as it is.",
+    "refresh": "Refresh status",
+    "neverPushed": "Not pushed yet. Use Push now to check the remote and the key.",
+    "statusOk": "Mirrored",
+    "statusFailing": "Last push failed",
+    "lastSuccess": "Last successful push: {{when}}",
+    "atCommit": "Remote is at {{commit}}.",
+    "unrelatedTitle": "Overwrite this remote?",
+    "unrelatedBody": "The repository at that address shares no history with this workspace, so mirroring would replace everything in it. That usually means the URL points somewhere unintended — or that this workspace is empty and the remote is the backup it should be restored from. Overwrite only if you are certain this is the repository you want to replace.",
+    "unrelatedConfirm": "Overwrite the remote"
   },
   "schedules": {
     "paused": "Paused",
@@ -2027,7 +2068,9 @@
     "goTo": "Go to",
     "flowSublabel": "Flow",
     "noResults": "Nothing matches “{{query}}”.",
-    "hintOpen": "open"
+    "hintOpen": "open",
+    "settingsGroup": "Settings & administration",
+    "account": "Account settings"
   },
   "dashboard": {
     "title": "Overview",

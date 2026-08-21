@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Joachim Klahr
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { KeyRound, Plus, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../components/Button";
@@ -10,6 +10,7 @@ import { api } from "../api";
 import type { GitCredential } from "../types";
 import { explainApiError } from "../lib/explainApiError";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { GitMirrorPanel } from "../components/GitMirrorPanel";
 
 // AdminGitCredentials manages the org's named Git credentials — what a
 // git_checkout node picks by `account` to clone private repos. Each
@@ -32,6 +33,9 @@ export function AdminGitCredentials() {
   const [pat, setPat] = useState("");
   const [username, setUsername] = useState("");
   const [saving, setSaving] = useState(false);
+  // The add-credential card, so the mirror panel's "add a credential" link
+  // can bring it into view instead of duplicating the form.
+  const addFormRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(() => {
     if (!token) return;
@@ -151,7 +155,7 @@ export function AdminGitCredentials() {
         </div>
       )}
 
-      <div className="card" style={{ marginTop: "var(--space-4)" }}>
+      <div className="card" style={{ marginTop: "var(--space-4)" }} ref={addFormRef}>
         <h2 style={{ marginTop: 0 }}>{t("gitCreds.addTitle")}</h2>
         <div className="sf-field">
           <label>{t("gitCreds.accountLabel")}</label>
@@ -228,6 +232,15 @@ export function AdminGitCredentials() {
         </Button>
         <div className="desc" style={{ marginTop: 6 }}>{t("gitCreds.atLeastOne")}</div>
       </div>
+
+      {/* Mirroring uses one of the credentials above, so it belongs on this
+          page rather than a settings screen of its own. */}
+      <GitMirrorPanel
+        credentials={creds}
+        onNeedCredential={() =>
+          addFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+        }
+      />
     </div>
   );
 }

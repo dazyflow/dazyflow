@@ -93,6 +93,47 @@ func sshURLParts(rawURL string) (user, host string, isSSH bool) {
 	return "", "", false
 }
 
+// IsSSHURL reports whether rawURL is a git-over-SSH remote — either the
+// ssh:// scheme or scp-like syntax (git@host:path). Exported for callers
+// outside this package that must reject non-SSH remotes up front (the
+// workspace git mirror, which is SSH-key-only by design).
+func IsSSHURL(rawURL string) bool {
+	_, _, ok := sshURLParts(rawURL)
+	return ok
+}
+
+// SSHAuth builds public-key auth plus strict host-key verification for an
+// SSH git remote. It is the SSH half of authForURL, split out so callers
+// that hold credential material directly — rather than a core.Job — reuse
+// the same key parsing, bundled known_hosts and host-key-algorithm pinning
+// instead of growing a second, weaker copy. The daemon's workspace mirror
+// is the other caller.
+//
+// Returns an error for a non-SSH URL: this path has no unauthenticated or
+// password fallback, so a caller that hands it an https:// remote has a
+// bug, not a public repo.
+func SSHAuth(rawURL, privateKey, passphrase, knownHosts string) (gogittransport.AuthMethod, error) {
+	user, host, isSSH := sshURLParts(rawURL)
+	if !isSSH {
+		return nil, fmt.Errorf("not an SSH remote: %q (expected ssh://host/path or git@host:path)", rawURL)
+	}
+	auth, err := gitssh.NewPublicKeys(user, []byte(privateKey), passphrase)
+	if err != nil {
+		return nil, fmt.Errorf("parse SSH private key: %w (a passphrase-protected key needs its passphrase set on the credential)", err)
+	}
+	db, err := hostKeyDB(knownHosts)
+	if err != nil {
+		return nil, fmt.Errorf("host-key verification setup for %q: %w", host, err)
+	}
+	auth.HostKeyCallback = db.HostKeyCallback()
+	hostPort := host + ":22"
+	if u, perr := url.Parse(rawURL); perr == nil && u.Port() != "" {
+		hostPort = host + ":" + u.Port()
+	}
+	auth.HostKeyAlgorithms = db.HostKeyAlgorithms(hostPort)
+	return auth, nil
+}
+
 // resolveCred picks the credential for this clone: inline params (used by
 // tests / programmatic callers) win; otherwise the named `account` (default
 // "default") is looked up in the org's credential store via the wired hook.
@@ -138,26 +179,11 @@ func authForURL(ctx context.Context, job core.Job, rawURL string) (gogittranspor
 		return nil, fmt.Errorf("look up git credential %q: %w", account, err)
 	}
 
-	user, host, isSSH := sshURLParts(rawURL)
-	if isSSH {
+	if IsSSHURL(rawURL) {
 		if cred.PrivateKey == "" {
 			return nil, fmt.Errorf("ssh clone needs an SSH key, but the selected git credential has none (add one under Git credentials, or use an https URL with an access token)")
 		}
-		auth, err := gitssh.NewPublicKeys(user, []byte(cred.PrivateKey), cred.Passphrase)
-		if err != nil {
-			return nil, fmt.Errorf("parse SSH private key: %w (a passphrase-protected key needs its passphrase set on the credential)", err)
-		}
-		db, err := hostKeyDB(cred.KnownHosts)
-		if err != nil {
-			return nil, fmt.Errorf("host-key verification setup for %q: %w", host, err)
-		}
-		auth.HostKeyCallback = db.HostKeyCallback()
-		hostPort := host + ":22"
-		if u, perr := url.Parse(rawURL); perr == nil && u.Port() != "" {
-			hostPort = host + ":" + u.Port()
-		}
-		auth.HostKeyAlgorithms = db.HostKeyAlgorithms(hostPort)
-		return auth, nil
+		return SSHAuth(rawURL, cred.PrivateKey, cred.Passphrase, cred.KnownHosts)
 	}
 
 	// https — authenticate with the access token (PAT) when present. GitHub,

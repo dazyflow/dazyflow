@@ -23,7 +23,87 @@ into the image.)
 
 ## [Unreleased]
 
+### Added
+
+- **Mirror your flows to your own git.** A workspace's flows have always been
+  stored as a real git repository — `graphs/<id>.json`, one commit per save
+  with the author in the message, the live revision as a tag — but that
+  repository only existed inside the daemon. It can now be pushed to a remote
+  you own: GitHub, GitLab, Gitea, sr.ht, or a bare repo on your own box.
+  Configure it under **Git credentials → Mirror to your own git**.
+
+  The mirror is a real clone, not an export: full history, every flow, and the
+  published-revision tags, so you can read it, diff it, review changes in a
+  pull request, and restore from it. Choose whether it pushes when a flow is
+  published (the default — the mirror tracks what you have actually shipped)
+  or on every saved change.
+
+  Authentication is an **SSH key only**, from one of the Git credentials you
+  already manage; the credential picker lists only the ones that have a key.
+  A PAT would work at the protocol level and the credential store holds one,
+  but a deploy key is scoped to a single repository, which is what an
+  unattended continuous push should be — it needs read *and* write access,
+  since the push lists the remote's refs before transferring to work out
+  which are stale. Host keys are verified against the same pinned set the
+  `git_checkout` step uses — github.com, gitlab.com and git.sr.ht are built
+  in; anything else needs a `known_hosts` line on the credential.
+
+  The remote is treated as a **replica**: the push forces every ref and
+  deletes the ones that no longer exist locally, so a commit made directly on
+  the remote is overwritten by the next push. Forcing isn't incidental —
+  editor autosaves amend the previous commit, so a workspace's history is
+  legitimately rewritten during ordinary editing and a non-forced mirror
+  would start rejecting pushes almost immediately. Point it at a repository
+  nothing else writes to.
+
+  Because that push is destructive, it will not touch a remote it shares no
+  history with. The case that matters: a deployment whose data volume was
+  lost comes back with an empty workspace and would otherwise mirror it over
+  the very repository it should have been restored *from*, deleting every
+  flow. A wrong URL and a repository someone else's project owns fail the
+  same way. Automatic mirroring can never override this; **Push now** offers
+  an explicit "overwrite the remote" confirmation for the case where
+  repointing a mirror really is what you meant. One recognised ref is enough
+  to count as shared history, so an ordinary push and an amended autosave
+  both pass without a prompt.
+
+  A failed push never fails the save or publish that triggered it. The
+  outcome is recorded per workspace and shown on the settings panel, with the
+  git error verbatim ("permission denied (publickey)", "host key mismatch")
+  and the last time a push actually succeeded — so a mirror that quietly
+  stopped working three weeks ago reads differently from one that failed a
+  minute ago. **Push now** runs a push synchronously and reports the result,
+  ignoring the automatic-mirroring switch, which is how you test a new remote
+  or a rotated key before turning it on.
+
+  One caveat worth knowing before pointing this at a **public** repository:
+  webhook trigger keys live in a flow's JSON by design (the `/trigger`
+  endpoint authenticates callers against them), so they travel to the mirror
+  with everything else. Real credentials don't — those are `${secret.…}`
+  references resolved at run time — and the existing lint still flags a
+  provider token pasted into a step. Mirror to a private repository.
+
+- **⌘K reaches settings and administration.** The command bar indexed
+  workspace pages and flows only, so everything *configured* rather than
+  browsed — credentials, secrets, API keys, the audit log, the new git mirror —
+  could not be reached from it at all. Those destinations are listed now
+  (behind the same permission bar the Admin index itself uses), each with
+  search terms that don't appear in its name: "backup", "mirror" or "sync"
+  find git mirroring, "logs" finds run history, "members" finds People. The
+  aliases carry English and Swedish together, since matching is a substring
+  test and the active locale is irrelevant — the same reasoning as the step
+  palette's Swedish aliases.
+
 ### Fixed
+
+- **The git page was unfindable for what most people want it for.** Its Admin
+  card read "SSH keys or access tokens for cloning private repos", which says
+  nothing about mirroring, so someone looking to back their flows up to git
+  had no reason to click it — and no other route in except the `git_checkout`
+  step's account picker. The card and the page are now "Git credentials &
+  mirroring", and the editor's Settings → General points at it from the
+  tenant/workspace field, where "where does this flow live?" is already the
+  question on screen.
 
 - **nShift and Roaring had blank app pages.** Both connectors shipped without
   the curated prose their `/apps/:slug` page renders, so the page showed a

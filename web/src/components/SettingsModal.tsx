@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useEffect, useMemo, useState } from "react";
-import { X } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { GitBranch, X } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import type { Graph } from "../types";
 import { api, APIError } from "../api";
@@ -36,6 +37,7 @@ type Tab = "notifications" | "general" | "secrets";
 export function SettingsModal({ graph, onClose, onSave, onDelete }: Props) {
   const { t } = useTranslation();
   const { hasPerm } = useAuth();
+  const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("notifications");
   // Local working copy: edits only commit to the parent on Save.
   // Cancel discards by simply not calling onSave.
@@ -245,6 +247,27 @@ export function SettingsModal({ graph, onClose, onSave, onDelete }: Props) {
                   value={`${draft.tenant} / ${draft.workspace}`}
                   disabled
                 />
+                {/* "Where does this flow live" is exactly the question the
+                    mirror answers, so the pointer belongs here rather than in
+                    a section of its own. Hidden without secret:read — the
+                    mirror panel needs it, and offering a link into a 403 is
+                    worse than offering nothing. */}
+                {hasPerm("secret:read") && (
+                  <div className="desc">
+                    {t("settings.general.storedInGit")}{" "}
+                    <button
+                      type="button"
+                      className="linklike"
+                      onClick={() => {
+                        onClose();
+                        navigate("/admin/git-credentials");
+                      }}
+                    >
+                      <GitBranch size={12} style={{ marginRight: 3, verticalAlign: "-1px" }} />
+                      {t("settings.general.mirrorLink")}
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="sf-field">
                 <div className="label-row">

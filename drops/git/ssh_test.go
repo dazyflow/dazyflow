@@ -177,6 +177,67 @@ func TestAuthForURL_SSHAndHTTPSAndPublic(t *testing.T) {
 	}
 }
 
+// TestSSHAuth covers the exported builder the workspace git mirror uses.
+// authForURL delegates its SSH branch here, so this is the shared path: key
+// parsing, the pinned host-key database, and the host-key-algorithm
+// constraint that keeps a mirror push from silently accepting a new host key.
+func TestSSHAuth(t *testing.T) {
+	keyPEM := genKeyPEM(t)
+	// A real known_hosts line for the self-hosted case — the parser rejects a
+	// placeholder, so build one from a generated public key.
+	pub, _, _ := ed25519.GenerateKey(rand.Reader)
+	hostKey, _ := gossh.NewPublicKey(pub)
+	knownHosts := "git.internal " + hostKey.Type() + " " + base64Key(hostKey)
+
+	for _, url := range []string{
+		"git@github.com:acme/flows.git",
+		"ssh://git@git.sr.ht/~acme/flows",
+		"ssh://git@git.internal:2222/acme/flows.git",
+	} {
+		auth, err := SSHAuth(url, keyPEM, "", knownHosts)
+		if err != nil {
+			t.Errorf("SSHAuth(%q) = %v, want an auth method", url, err)
+			continue
+		}
+		if auth == nil {
+			t.Errorf("SSHAuth(%q) returned a nil auth method", url)
+		}
+	}
+
+	// An https URL has no key-based path — this builder has no
+	// unauthenticated or password fallback, so it must refuse rather than
+	// hand back something that silently won't authenticate.
+	if _, err := SSHAuth("https://github.com/acme/flows.git", keyPEM, "", ""); err == nil {
+		t.Error("SSHAuth on an https URL should error")
+	}
+	// Garbage key material fails at parse time, where the message can say so.
+	if _, err := SSHAuth("git@github.com:acme/flows.git", "not a key", "", ""); err == nil {
+		t.Error("SSHAuth with an unparseable key should error")
+	}
+}
+
+func TestIsSSHURL(t *testing.T) {
+	for _, in := range []string{
+		"git@github.com:acme/flows.git",
+		"ssh://git@git.sr.ht/~acme/flows",
+		"user@host:path",
+	} {
+		if !IsSSHURL(in) {
+			t.Errorf("IsSSHURL(%q) = false, want true", in)
+		}
+	}
+	for _, in := range []string{
+		"https://github.com/acme/flows.git",
+		"http://git.internal/acme/flows",
+		"file:///srv/git/flows.git",
+		"",
+	} {
+		if IsSSHURL(in) {
+			t.Errorf("IsSSHURL(%q) = true, want false", in)
+		}
+	}
+}
+
 func genKeyPEM(t *testing.T) string {
 	t.Helper()
 	_, priv, err := ed25519.GenerateKey(rand.Reader)

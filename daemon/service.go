@@ -404,6 +404,32 @@ type Service struct {
 	suggestMu    sync.Mutex
 	suggestCache map[string]suggestEntry
 	suggestOrder []string
+
+	// OnWorkspaceCommit, when set, is called after any change that lands a
+	// commit or moves a ref in a workspace's git store — save, delete,
+	// publish, unpublish, label, environment promotion.
+	//
+	// It exists so the git mirror has ONE place to hook. The alternative
+	// (calling the pusher from each HTTP handler) silently misses every
+	// path that doesn't have a handler of its own — the MCP save path,
+	// duplicate, restore, the publish migration — and "my mirror is missing
+	// last Tuesday" is a bug nobody can reproduce. Every store write in
+	// this file routes through here instead.
+	//
+	// trigger is PushOnPublish or PushOnSave, letting a consumer honour a
+	// "mirror on publish only" preference. Contract: fire-and-forget and
+	// non-blocking — the caller has already committed, so an implementation
+	// must never block the request or turn its own failure into the user's.
+	OnWorkspaceCommit func(tenant, workspace, trigger string)
+}
+
+// workspaceCommitted fans a store write out to OnWorkspaceCommit. Nil-safe
+// so every call site is a plain one-liner.
+func (s *Service) workspaceCommitted(tenant, ws, trigger string) {
+	if s.OnWorkspaceCommit == nil || tenant == "" || ws == "" {
+		return
+	}
+	s.OnWorkspaceCommit(tenant, ws, trigger)
 }
 
 // suggestCacheMax caps the DropSuggestions memo. Generous — the entries are
@@ -554,7 +580,14 @@ func (s *Service) SetFlowEnabled(ctx context.Context, p core.Principal, tenant, 
 		return "", nil // idempotent no-op
 	}
 	g.Disabled = !enabled
-	return store.Save(g, p.Subject)
+	commit, err := store.Save(g, p.Subject)
+	if err != nil {
+		return "", err
+	}
+	// Pausing/resuming a flow changes what fires, so it counts as a publish
+	// -level change even though it lands as an ordinary commit.
+	s.workspaceCommitted(tenant, ws, PushOnPublish)
+	return commit, nil
 }
 
 // DeleteGraph removes a flow from the workspace's git-backed store.
@@ -600,6 +633,10 @@ func (s *Service) DeleteGraph(ctx context.Context, p core.Principal, tenant, ws,
 	// so clones don't orphan in the workspace after the flow is gone.
 	// Best-effort: a cleanup failure must not fail the delete.
 	s.removeGitCache(tenant, ws, id)
+	// A deletion is a commit like any other, and mirroring it is the point:
+	// the mirror's history is where a flow deleted by mistake is recovered
+	// from. PushOnPublish because a delete also takes a live flow offline.
+	s.workspaceCommitted(tenant, ws, PushOnPublish)
 	return nil
 }
 
@@ -816,6 +853,9 @@ func (s *Service) saveGraph(ctx context.Context, p core.Principal, g core.Graph,
 			Autosave: coalesce,
 		},
 	})
+	// Same fan-out for the git mirror. Autosaves come through here too, so
+	// the consumer debounces rather than pushing per keystroke pause.
+	s.workspaceCommitted(g.Tenant, g.Workspace, PushOnSave)
 	return commit, nil
 }
 
@@ -1226,6 +1266,7 @@ func (s *Service) PublishFlow(ctx context.Context, p core.Principal, tenant, ws,
 			return "", err
 		}
 	}
+	s.workspaceCommitted(tenant, ws, PushOnPublish)
 	return commit, nil
 }
 
@@ -1258,7 +1299,13 @@ func (s *Service) UnpublishFlow(ctx context.Context, p core.Principal, tenant, w
 	if core.AuthorizeGraphView(p, g) != nil {
 		return fmt.Errorf("graph %q: %w", id, core.ErrNotFound)
 	}
-	return store.ClearEnvironment(id, workspace.PublishedEnv)
+	if err := store.ClearEnvironment(id, workspace.PublishedEnv); err != nil {
+		return err
+	}
+	// The published TAG is gone; a mirror that misses this keeps advertising
+	// the flow as live (see workspace.Push's delete refspecs).
+	s.workspaceCommitted(tenant, ws, PushOnPublish)
+	return nil
 }
 
 // PublishedInfo reports the flow's draft-vs-published state. Gated on the
@@ -1347,6 +1394,7 @@ func (s *Service) LabelRevision(ctx context.Context, p core.Principal, tenant, w
 	if err := store.SetRevisionLabel(id, commit, label); err != nil {
 		return "", err
 	}
+	s.workspaceCommitted(tenant, ws, PushOnSave)
 	return commit, nil
 }
 
@@ -1362,7 +1410,11 @@ func (s *Service) PromoteGraph(ctx context.Context, p core.Principal, tenant, ws
 	if err != nil {
 		return err
 	}
-	return store.PromoteToEnvironment(graphID, env, commit)
+	if err := store.PromoteToEnvironment(graphID, env, commit); err != nil {
+		return err
+	}
+	s.workspaceCommitted(tenant, ws, PushOnPublish)
+	return nil
 }
 
 // SubmitGraph creates a graph-record (status=running) plus a queued

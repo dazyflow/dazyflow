@@ -696,6 +696,37 @@ func main() {
 		workerCount: workerCount,
 	}, &bgWg)
 
+	// Git mirror: push each workspace's flow repository to a remote the
+	// customer owns. The pusher is the single consumer of
+	// svc.OnWorkspaceCommit, which every store write in daemon/service.go
+	// fans out to — so a mirror can't miss a path (MCP saves, duplicate,
+	// restore) the way per-handler hooks would.
+	//
+	// Requires the encrypted secret store: the SSH key that authenticates
+	// the push lives there. Without it the pusher is left nil and the
+	// /api/v1/git/mirror endpoints report the feature as unconfigured
+	// rather than accepting settings that could never work.
+	var mirrorPusher *daemon.MirrorPusher
+	if encryptedSecrets != nil && stores.mirrors != nil {
+		mirrorPusher = &daemon.MirrorPusher{
+			Mirrors:    stores.mirrors,
+			Workspaces: svc.Workspaces,
+			Secrets:    encryptedSecrets,
+			Logger:     log.New(log.Writer(), "git-mirror: ", log.LstdFlags),
+		}
+		svc.OnWorkspaceCommit = mirrorPusher.Notify
+		// Drain scheduled/in-flight pushes on shutdown so a push either
+		// finishes and records its status or never starts — an abandoned
+		// push would leave the UI showing a stale green "last success".
+		bgWg.Add(1)
+		go func() {
+			defer bgWg.Done()
+			<-ctx.Done()
+			mirrorPusher.Stop()
+		}()
+		log.Print("git mirror enabled (configure per workspace under Git credentials)")
+	}
+
 	// Membership / invitation / per-org-auth / per-org-profile stores all
 	// live in Postgres tables (managed by auth.EnsurePgOrgsSchema).
 	var (
@@ -776,6 +807,8 @@ func main() {
 			blocklist:        blocklist,
 			dropSwitches:     dropSwitches,
 			encryptedSecrets: encryptedSecrets,
+			mirrors:          stores.mirrors,
+			mirrorPusher:     mirrorPusher,
 			oauth:            oauthRegistry,
 			approval:         approvalListener,
 			metrics:          appMetrics,
@@ -928,6 +961,7 @@ type coreStores struct {
 	plans    daemon.PlanStore
 	runLogs  daemon.RunLogStore
 	shares   daemon.ShareStore
+	mirrors  daemon.GitMirrorStore
 }
 
 // openCoreStores connects the shared pgxpool and opens the key / user /
@@ -1013,6 +1047,10 @@ func openCoreStores(ctx context.Context, dsn string, maxConns, minConns int, ses
 	if err != nil {
 		log.Fatalf("postgres share store: %v", err)
 	}
+	pgMirrors, err := daemon.NewPgGitMirrorStore(ctx, pool)
+	if err != nil {
+		log.Fatalf("postgres git-mirror store: %v", err)
+	}
 	if sessionCacheTTL > 0 {
 		log.Printf("session lookup cache: ttl=%s", sessionCacheTTL)
 	}
@@ -1028,6 +1066,7 @@ func openCoreStores(ctx context.Context, dsn string, maxConns, minConns int, ses
 		plans:    cachedPlans,
 		runLogs:  pgRunLogs,
 		shares:   pgShares,
+		mirrors:  pgMirrors,
 	}
 }
 
@@ -1329,6 +1368,8 @@ type gatewayDeps struct {
 	blocklist        auth.BlocklistStore
 	dropSwitches     daemon.DropSwitchStore
 	encryptedSecrets *daemon.EncryptedSecrets
+	mirrors          daemon.GitMirrorStore
+	mirrorPusher     *daemon.MirrorPusher
 	oauth            *daemon.OAuthRegistry
 	approval         *daemon.ApprovalListener
 	metrics          *daemon.Metrics
@@ -1385,12 +1426,14 @@ func buildGateway(ctx context.Context, bgWg *sync.WaitGroup, d gatewayDeps) {
 	gw.Blocklist = d.blocklist               // nil = nothing banned (bans unavailable)
 	gw.DropSwitches = d.dropSwitches         // nil disables drop-killswitch endpoints
 	gw.EncryptedSecrets = d.encryptedSecrets // nil disables /api/v1/secrets endpoints
-	gw.OAuth = d.oauth                       // nil disables /api/v1/oauth/* endpoints
-	gw.Approval = d.approval                 // nil leaves POST /approve/ unregistered
-	gw.EnableSignup = d.enableSignup         // false disables POST /api/v1/auth/signup
-	gw.EnableMetrics = d.enableMetrics       // false disables GET /metrics
-	gw.Metrics = d.metrics                   // HTTP RED + per-node latency series
-	gw.DBPool = d.pgPool                     // nil = no pool-saturation metrics (dev)
+	gw.GitMirrors = d.mirrors                // nil disables /api/v1/git/mirror endpoints
+	gw.MirrorPusher = d.mirrorPusher
+	gw.OAuth = d.oauth                 // nil disables /api/v1/oauth/* endpoints
+	gw.Approval = d.approval           // nil leaves POST /approve/ unregistered
+	gw.EnableSignup = d.enableSignup   // false disables POST /api/v1/auth/signup
+	gw.EnableMetrics = d.enableMetrics // false disables GET /metrics
+	gw.Metrics = d.metrics             // HTTP RED + per-node latency series
+	gw.DBPool = d.pgPool               // nil = no pool-saturation metrics (dev)
 	if d.enableMetrics {
 		log.Print("metrics endpoint enabled at GET /metrics (unauthenticated — restrict scrape access)")
 	}

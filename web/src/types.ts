@@ -826,6 +826,41 @@ export type GitCredential = {
   username?: string;
 };
 
+// GitMirror is GET /git/mirror: where this workspace's flow repository is
+// mirrored, plus how the last push went. `configured: false` is the normal
+// state of a workspace with no mirror — the endpoint answers 200 with that
+// rather than 404, so the panel renders the same either way.
+//
+// No secret material: `account` names a git credential, whose SSH key stays
+// in the encrypted store and is resolved server-side at push time.
+export type GitMirror = {
+  configured: boolean;
+  remote_url?: string;
+  account?: string;
+  enabled: boolean;
+  // "publish" mirrors when a flow goes live; "save" also mirrors drafts.
+  push_on?: "publish" | "save";
+  updated_at?: string;
+  updated_by?: string;
+  // last_attempt_at is set whether the push worked or not; last_success_at
+  // only advances on success. Both together answer "has this EVER worked"
+  // and "how long have we been unmirrored".
+  last_attempt_at?: string;
+  last_success_at?: string;
+  last_commit?: string;
+  last_error?: string;
+};
+
+// MirrorPushResult is POST /git/mirror/push: what one manual push did.
+// `changed: false` means the remote already matched — a success, not a no-op
+// worth warning about.
+export type MirrorPushResult = {
+  pushed: number;
+  deleted: number;
+  changed: boolean;
+  commit: string;
+};
+
 // OAuthProviderStatus is one entry from GET /oauth/providers: a
 // registered provider plus the account names the tenant has already
 // connected (empty = not connected yet). stale_accounts lists the
