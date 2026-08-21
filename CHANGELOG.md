@@ -23,7 +23,7 @@ into the image.)
 
 ## [Unreleased]
 
-## [0.7.2] - 2026-08-21
+## [0.7.3] - 2026-08-21
 
 ### Fixed
 
@@ -36,6 +36,11 @@ into the image.)
   just sooner: a rejected refresh marks the account, a successful one clears it
   and stores the fresh token. An account whose token is still valid costs
   nothing — no network call, nothing to report.
+
+## [0.7.2] - 2026-08-21
+
+### Fixed
+
 - **The fix-it link in the run timeline still went to the Apps index.** 0.7.1
   deep-linked the failure banner at the top of a run, but each step expanded in
   the timeline renders its error through its own component, which was still
