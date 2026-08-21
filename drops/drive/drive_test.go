@@ -814,3 +814,39 @@ func TestListForPicker_BadJSON_Cov(t *testing.T) {
 		t.Fatalf("want decode error, got %v", err)
 	}
 }
+
+// A backup names its file after the date it ran, so the name has to be
+// computable upstream rather than typed once and frozen.
+func TestUpload_WiredNameOverridesParam(t *testing.T) {
+	var gotName string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, p, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
+		mr := multipart.NewReader(r.Body, p["boundary"])
+		part, _ := mr.NextPart()
+		var meta struct {
+			Name string `json:"name"`
+		}
+		_ = json.NewDecoder(part).Decode(&meta)
+		gotName = meta.Name
+		_, _ = w.Write([]byte(`{"id":"w1"}`))
+	}))
+	defer srv.Close()
+	withDriveEnv(t, srv.URL)
+
+	ws := t.TempDir()
+	_ = os.WriteFile(filepath.Join(ws, "data.bin"), []byte("x"), 0o644)
+	res, err := executeUpload(context.Background(), core.Job{
+		WorkspaceRoot: ws,
+		Params:        map[string]any{"name": "typed.bin"},
+		Input: map[string]core.Ref{
+			"in":   {Ref: "data.bin"},
+			"name": {Inline: "backup-2026-08-20.bin"},
+		},
+	}, nil)
+	if err != nil || res.Status != core.StatusOK {
+		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
+	}
+	if gotName != "backup-2026-08-20.bin" {
+		t.Errorf("name = %q, want the wired name", gotName)
+	}
+}

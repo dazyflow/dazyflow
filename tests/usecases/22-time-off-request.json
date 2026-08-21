@@ -1,0 +1,34 @@
+{
+  "id": "uc-time-off-request",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "Time off: request → manager approves → calendar and team",
+  "nodes": [
+    {"id": "form", "module": "webhook_input", "params": {"public_form": true, "form_fields": ["name", "email", "from_date", "to_date", "reason"], "form_title": "Request time off"}},
+    {"id": "approve", "module": "await_approval", "params": {"prompt": "Time-off request — approve?"}},
+    {"id": "ask", "module": "ntfy", "params": {"topic": "acme-chef-8f2k", "title": "Time-off request", "message": "Someone has asked for time off. Tap to approve or reject.", "priority": "4"}},
+    {"id": "title", "module": "expression", "params": {"expr": "input.name + ' — time off'"}},
+    {"id": "from_day", "module": "expression", "params": {"expr": "input.from_date"}},
+    {"id": "to_day", "module": "expression", "params": {"expr": "input.to_date"}},
+    {"id": "book", "module": "gcal_create_event", "params": {"account": "default", "calendar_id": "primary"}},
+    {"id": "notice", "module": "render_template", "params": {"template": "{{.name}} is off from {{.from_date}} to {{.to_date}}."}},
+    {"id": "tell_team", "module": "slack_send_message", "params": {"channel": "#general", "account": "default"}},
+    {"id": "sorry_to", "module": "expression", "params": {"expr": "input.email"}},
+    {"id": "sorry", "module": "email_send", "params": {"subject": "About your time-off request", "body": "Your request wasn't approved this time — your manager will explain. Do come and talk it through.", "format": "text"}}
+  ],
+  "edges": [
+    {"from": "form", "from_port": "body", "to": "approve", "to_port": "context"},
+    {"from": "approve", "from_port": "pending_url", "to": "ask", "to_port": "click"},
+    {"from": "approve", "from_port": "approved", "to": "title", "to_port": "in"},
+    {"from": "approve", "from_port": "approved", "to": "from_day", "to_port": "in"},
+    {"from": "approve", "from_port": "approved", "to": "to_day", "to_port": "in"},
+    {"from": "title", "from_port": "out", "to": "book", "to_port": "summary"},
+    {"from": "from_day", "from_port": "out", "to": "book", "to_port": "start"},
+    {"from": "to_day", "from_port": "out", "to": "book", "to_port": "end"},
+    {"from": "approve", "from_port": "approved", "to": "notice", "to_port": "data"},
+    {"from": "notice", "from_port": "html", "to": "tell_team", "to_port": "text"},
+    {"from": "approve", "from_port": "rejected", "to": "sorry_to", "to_port": "in"},
+    {"from": "sorry_to", "from_port": "out", "to": "sorry", "to_port": "to"}
+  ]
+}

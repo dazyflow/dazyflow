@@ -1,0 +1,29 @@
+{
+  "id": "uc-feedback-sentiment",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "Read the feedback, escalate the unhappy ones",
+  "nodes": [
+    {"id": "form", "module": "webhook_input", "params": {"public_form": true, "form_fields": ["name", "email", "how_was_it"], "form_title": "How did we do?"}},
+    {"id": "as_text", "module": "render_template", "params": {"template": "{{.name}} <{{.email}}> said:\n\n{{.how_was_it}}"}},
+    {"id": "mood", "module": "claude_classify", "params": {"categories": [{"name": "happy", "description": "Pleased, complimentary, would recommend."}, {"name": "neutral", "description": "Matter-of-fact, mixed, or just an observation."}, {"name": "unhappy", "description": "Disappointed, frustrated, or reporting something that went wrong."}]}},
+    {"id": "row", "module": "expression", "params": {"expr": "[{'name': input.name, 'email': input.email, 'said': input.how_was_it}]"}},
+    {"id": "with_mood", "module": "compute_rows", "params": {"compute": {"received_on": "string(now)"}}},
+    {"id": "file_it", "module": "builtin_store_append", "params": {"table": "feedback"}},
+    {"id": "is_unhappy", "module": "compare", "params": {"op": "equals", "B": "unhappy"}},
+    {"id": "gate", "module": "branch", "params": {}},
+    {"id": "escalate", "module": "slack_send_message", "params": {"channel": "#customer-care", "account": "default"}}
+  ],
+  "edges": [
+    {"from": "form", "from_port": "body", "to": "as_text", "to_port": "data"},
+    {"from": "as_text", "from_port": "html", "to": "mood", "to_port": "text"},
+    {"from": "form", "from_port": "body", "to": "row", "to_port": "in"},
+    {"from": "row", "from_port": "out", "to": "with_mood", "to_port": "rows"},
+    {"from": "with_mood", "from_port": "rows", "to": "file_it", "to_port": "rows"},
+    {"from": "mood", "from_port": "category", "to": "is_unhappy", "to_port": "A"},
+    {"from": "is_unhappy", "from_port": "result", "to": "gate", "to_port": "condition"},
+    {"from": "as_text", "from_port": "html", "to": "gate", "to_port": "in"},
+    {"from": "gate", "from_port": "then", "to": "escalate", "to_port": "text"}
+  ]
+}

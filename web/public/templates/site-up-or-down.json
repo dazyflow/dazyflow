@@ -1,0 +1,38 @@
+{
+  "id": "site-up-or-down",
+  "version": "1",
+  "name": "Tell me when the website goes down — and when it's back",
+  "description": "Checks your site every five minutes and messages you once when it stops answering, then once more when it recovers — not every five minutes in between. Point it at any address; optionally give a word that must appear on the page, which catches a server answering 200 with an error page. Needs no accounts, just an ntfy topic.",
+  "icon": "eye",
+  "nodes": [
+    {
+      "id": "every",
+      "module": "poll_trigger",
+      "params": { "interval_seconds": 300 },
+      "position": { "x": 120, "y": 220 }
+    },
+    {
+      "id": "check",
+      "module": "site_check",
+      "params": { "url": "https://example.com/", "timeout_ms": 10000 },
+      "position": { "x": 460, "y": 220 }
+    },
+    {
+      "id": "page_me",
+      "module": "ntfy",
+      "params": { "topic": "REPLACE_WITH_YOUR_TOPIC", "title": "Site down", "priority": "5" },
+      "position": { "x": 820, "y": 120 }
+    },
+    {
+      "id": "all_clear",
+      "module": "ntfy",
+      "params": { "topic": "REPLACE_WITH_YOUR_TOPIC", "title": "Back up", "priority": "3" },
+      "position": { "x": 820, "y": 330 }
+    }
+  ],
+  "edges": [
+    { "from": "every", "from_port": "pass", "to": "check", "to_port": "pass", "on_error": "" },
+    { "from": "check", "from_port": "on_down", "to": "page_me", "to_port": "message", "on_error": "" },
+    { "from": "check", "from_port": "on_up", "to": "all_clear", "to_port": "message", "on_error": "" }
+  ]
+}

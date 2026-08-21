@@ -23,6 +23,67 @@ into the image.)
 
 ## [Unreleased]
 
+### Added
+
+- **`sheets_update_cells` (Google Sheets — Update cells), plus row numbers on
+  Read range.** A spreadsheet could be read and appended to, never changed —
+  so no flow could mark a row done, and every "handle the new rows" job had to
+  keep a private ledger of what it had already processed and filter against it.
+  Read range can now include each row's real position in the sheet (`_row`,
+  opt-in), and Update cells writes values back into exactly those rows, adding
+  a column with its header when the sheet doesn't have it yet. Read what's
+  outstanding → act → mark it done → skip it next time.
+- **`gmail_get_thread` (Gmail — Read conversation).** "Has anyone answered?" is
+  a question about a conversation, and every mail step worked on single
+  messages; Gmail has no "unanswered" search operator either. This returns a
+  thread's messages and answers the question directly — Replied is No while the
+  newest message in the thread is still one of yours — plus a one-row Summary
+  per conversation for collecting a table of what's outstanding.
+- **`site_check` (Is it up?).** Watches a site and fires only on the
+  transitions: once when it breaks, once when it recovers, nothing in between,
+  so an outage pages you once rather than twelve times an hour. A site already
+  down on the first check does fire. Optionally requires a phrase on the page,
+  which catches a server answering 200 with an error page. Distinct from
+  `web_watch`, which compares content and treats a bad response as a failure.
+- **`stripe_get_customer` (Stripe — Get customer).** Every payment and
+  subscription event names the customer by `cus_…` id, and Stripe's search
+  cannot look up by id — so "email whoever just cancelled" had no path at all.
+- **String helpers in formulas.** `substring`, `split`, `join`, `replace`,
+  `trim`, `lowerAscii`, `upperAscii`, `indexOf`, `charAt` are now in scope for
+  the row formulas (calculated columns, filters, routing) and the Expression
+  step alike. Without them "the first ten characters of the date", "tidy these
+  addresses" and "shorten this into a title" needed an extra step, or couldn't
+  be said.
+- **Steps can be marked non-critical** (`continue_on_error` on a node). The
+  tolerate-this-failure policies live on connections, so a step at the end of a
+  branch — a notification, a final write — had nowhere to hang one and always
+  failed the whole run. In a fan-out that's wrong: Discord being down is no
+  reason for the Slack post and the email not to count.
+- **More fields take a wire.** Create event's start, end, description, location
+  and attendees (start/end also accept relative values like `tomorrow+9h`, while
+  an absolute plain date still means an all-day event); Slack's
+  reply-in-thread, so a bot can answer under the message that summoned it;
+  Drive's file name, so a weekly backup can be dated instead of overwriting
+  itself.
+
+### Fixed
+
+- **Compare reads numeric text as a number.** Steps report counts, status codes
+  and spreadsheet cells as text, so "is this count greater than 0" failed with
+  `non-numeric operand in <,> comparison: string vs float64` — a message the
+  author can act on only by giving up, since no step converts text to a number.
+  Numeric text is now read as the number it plainly is, on either side of the
+  comparison; text that isn't a number still fails rather than counting as zero.
+- **A loop can hand a step structured data.** A For each body's steps see the
+  current item only through `${item.…}` in their own settings, and those were
+  resolved as text — so a step needing an object or a list (a shipment address,
+  an email template's merge data, a set of invoice lines) received JSON as a
+  *string* and couldn't read it. "One X per row" only worked when X needed
+  nothing but scalars. A setting whose whole value is one `${item.…}` reference
+  now keeps the value's real shape, exactly as `${resource.…}` already did;
+  inline references and scalars are unchanged.
+
+
 ## [0.6.0] - 2026-08-20
 
 ### Added

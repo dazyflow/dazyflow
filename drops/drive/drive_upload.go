@@ -50,6 +50,9 @@ func init() {
 				// A wired file (e.g. from drive_download / file_write) overrides
 				// the 'path' param.
 				{Port: "in", Label: "File"},
+				// The name is usually computed — a dated backup, a customer's
+				// own reference — so it takes a wire as well as a typed value.
+				{Port: "name", Label: "Name in Drive", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
 				{Port: "file_id", Label: "File ID", MIME: []string{"text/plain"}},
@@ -61,7 +64,7 @@ func init() {
 				"properties":{
 					"account":{"type":"string","default":"default"},
 					"path":{"type":"string","title":"File to upload","format":"workspace-path","description":"The workspace file to send (or wire the File input). scratch:// supported."},
-					"name":{"type":"string","title":"Name in Drive","description":"What to call the file in Drive. Defaults to the source file's own name."},
+					"name":{"type":"string","title":"Name in Drive","description":"What to call the file in Drive. Wire the Name input to compute it — a dated backup, say. Defaults to the source file's own name."},
 					"folder_id":{"type":"string","format":"google-drive-folder","title":"Into folder","description":"Folder to upload into — pick from your account's folders. Leave blank for the account's My Drive root."},
 					"mime_type":{"type":"string","title":"Content type","x_advanced":true,"description":"Content type to store. Defaults to a guess from the file extension."},
 					"timeout_ms":{"type":"integer","default":120000,"minimum":1,"description":"Hard deadline for the upload, in milliseconds."}
@@ -116,7 +119,11 @@ func executeUpload(ctx context.Context, job core.Job, _ chan<- core.Progress) (c
 		return params.Err(job, "too_large", fmt.Sprintf("file exceeds the %d byte upload limit", maxResponseBytes)), nil
 	}
 
-	name := strings.TrimSpace(params.StringDefault(job.Params, "name", ""))
+	name, ok := params.TextInputOr(job, "name", params.StringDefault(job.Params, "name", ""))
+	if !ok {
+		return params.Err(job, "bad_input", "the 'Name in Drive' input must be text"), nil
+	}
+	name = strings.TrimSpace(name)
 	if name == "" {
 		name = path.Base(rel)
 	}

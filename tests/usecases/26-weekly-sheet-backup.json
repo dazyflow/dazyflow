@@ -1,0 +1,23 @@
+{
+  "id": "uc-weekly-sheet-backup",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "Back the spreadsheet up to Drive every Sunday",
+  "triggers": [{"type": "cron", "cron": "0 23 * * 0", "tz": "Europe/Stockholm"}],
+  "nodes": [
+    {"id": "export", "module": "sheets_export_pdf", "params": {"spreadsheet_id": "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789", "account": "default"}},
+    {"id": "today", "module": "date", "params": {"format": "date", "tz": "Europe/Stockholm"}},
+    {"id": "filename", "module": "expression", "params": {"expr": "'Bokforing-' + input + '.pdf'"}},
+    {"id": "upload", "module": "drive_upload", "params": {"account": "default", "folder_id": "1FoLdErIdFrOmYoUrDrIvE"}},
+    {"id": "confirm", "module": "expression", "params": {"expr": "'Backup saved: ' + input"}},
+    {"id": "tell", "module": "slack_send_message", "params": {"channel": "#ops", "account": "default"}}
+  ],
+  "edges": [
+    {"from": "export", "from_port": "pdf", "to": "upload", "to_port": "in"},
+    {"from": "today", "from_port": "out", "to": "filename", "to_port": "in"},
+    {"from": "filename", "from_port": "out", "to": "upload", "to_port": "name"},
+    {"from": "upload", "from_port": "web_view_link", "to": "confirm", "to_port": "in"},
+    {"from": "confirm", "from_port": "out", "to": "tell", "to_port": "text"}
+  ]
+}

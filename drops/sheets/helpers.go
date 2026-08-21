@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"git.sr.ht/~klahr/dazyflow/core"
@@ -500,4 +501,47 @@ func normalizeHeaders(inline any) []string {
 		return out
 	}
 	return nil
+}
+
+// RowNumberColumn is the column sheets_read_range adds when asked for row
+// numbers, and the one sheets_update_cells reads to know which row to write
+// back to. Underscored so it can't collide with a real header.
+const RowNumberColumn = "_row"
+
+// firstDataRow is the sheet row number of the first row a read returns.
+// Reading a whole tab starts at row 1 (row 2 when the first row is headers);
+// an offset cell range (A5:D20) starts wherever it says.
+func firstDataRow(cells string, useHeaders bool) int {
+	start := 1
+	if cells = strings.TrimSpace(cells); cells != "" {
+		if m := a1StartRow.FindStringSubmatch(cells); m != nil {
+			if n, err := strconv.Atoi(m[1]); err == nil && n > 0 {
+				start = n
+			}
+		}
+	}
+	if useHeaders {
+		start++
+	}
+	return start
+}
+
+// a1StartRow pulls the row number out of the left-hand side of an A1 range
+// ("B5:D20" → 5). A range with no row number ("B:D") leaves the default.
+var a1StartRow = regexp.MustCompile(`^[A-Za-z]*([0-9]+)`)
+
+// columnLetter converts a 0-based column index to its spreadsheet letter
+// (0 → A, 25 → Z, 26 → AA).
+func columnLetter(i int) string {
+	if i < 0 {
+		return ""
+	}
+	out := ""
+	for {
+		out = string(rune('A'+i%26)) + out
+		i = i/26 - 1
+		if i < 0 {
+			return out
+		}
+	}
 }

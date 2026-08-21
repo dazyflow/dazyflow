@@ -57,7 +57,8 @@ func init() {
 					"account":{"type":"string","default":"default"},
 					"spreadsheet_id":{"type":"string","format":"google-spreadsheet","title":"Spreadsheet","description":"The spreadsheet to read."},
 					"range":{"type":"string","format":"google-sheet-tab","title":"Tab","default":"Sheet1","description":"The sheet tab or named range to read."},
-						"cells":{"type":"string","title":"Cells","examples":["A1:D5"],"description":"Optional cell range within the tab (A1 notation). Leave blank to read the whole tab."},
+						"row_numbers":{"type":"boolean","title":"Include row numbers","default":false,"description":"Add a _row column holding each row's real position in the sheet. Feed those rows to Update cells to write a value back to the row it came from — how you mark something done."},
+					"cells":{"type":"string","title":"Cells","examples":["A1:D5"],"description":"Optional cell range within the tab (A1 notation). Leave blank to read the whole tab."},
 					"headers":{"type":"boolean","title":"First row is headers","default":true,"description":"Treat the first row as column headers."},
 					"value_render_option":{"type":"string","title":"Value format","enum":["FORMATTED_VALUE","UNFORMATTED_VALUE","FORMULA"],"enumNames":["As displayed","Raw values","Formulas"],"default":"FORMATTED_VALUE"},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
@@ -130,6 +131,18 @@ func ReadRange(ctx context.Context, job core.Job) (headers []string, rows []map[
 		Values [][]any `json:"values"`
 	}
 	_ = json.Unmarshal(body, &parsed)
-	headers, rows = flattenValues(parsed.Values, params.BoolDefault(job.Params, "headers", true))
+	useHeaders := params.BoolDefault(job.Params, "headers", true)
+	headers, rows = flattenValues(parsed.Values, useHeaders)
+	// Row numbers make the read round-trippable: the rows can be handed to
+	// Update cells, which writes back to the row each one came from. Counted
+	// in the sheet's own numbering, so an offset read (cells: A5:D20) still
+	// reports where the row really is.
+	if params.BoolDefault(job.Params, "row_numbers", false) {
+		first := firstDataRow(params.StringDefault(job.Params, "cells", ""), useHeaders)
+		for i := range rows {
+			rows[i][RowNumberColumn] = first + i
+		}
+		headers = append([]string{RowNumberColumn}, headers...)
+	}
 	return headers, rows, nil
 }

@@ -1,0 +1,24 @@
+{
+  "id": "uc-subscription-cancelled",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "Someone cancelled → log the churn, say goodbye",
+  "nodes": [
+    {"id": "cancelled", "module": "stripe_on_subscription_canceled", "params": {}},
+    {"id": "who", "module": "stripe_get_customer", "params": {}},
+    {"id": "goodbye", "module": "gmail_send_email", "params": {"account": "default", "subject": "Sorry to see you go", "body": "Thanks for having been with us. Your subscription has ended and you won't be charged again. If there's something we could have done better, just reply to this — a real person reads it."}},
+    {"id": "ping_text", "module": "render_template", "params": {"template": "Churn: {{.id}} ({{.status}}) ended {{.canceled_at}} — reason: {{if .cancellation_details.reason}}{{.cancellation_details.reason}}{{else}}not given{{end}}"}},
+    {"id": "ping", "module": "slack_send_message", "params": {"channel": "#churn", "account": "default"}},
+    {"id": "row", "module": "map_rows", "params": {"select": ["id", "customer", "status", "canceled_at"], "rename": {"id": "subscription_id"}}},
+    {"id": "log", "module": "builtin_store_append", "params": {"table": "churn", "unique_by": ["subscription_id"]}}
+  ],
+  "edges": [
+    {"from": "cancelled", "from_port": "customer", "to": "who", "to_port": "customer"},
+    {"from": "who", "from_port": "email", "to": "goodbye", "to_port": "to"},
+    {"from": "cancelled", "from_port": "subscription", "to": "ping_text", "to_port": "data"},
+    {"from": "ping_text", "from_port": "html", "to": "ping", "to_port": "text"},
+    {"from": "cancelled", "from_port": "subscription", "to": "row", "to_port": "rows"},
+    {"from": "row", "from_port": "rows", "to": "log", "to_port": "rows"}
+  ]
+}

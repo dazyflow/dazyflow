@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"git.sr.ht/~klahr/dazyflow/core"
@@ -334,6 +335,16 @@ func looseEqual(a, b any) bool {
 
 func toFloat(v any) (float64, bool) {
 	switch x := v.(type) {
+	case string:
+		// Plenty of steps report a number as text — a count pin, a status
+		// code, a spreadsheet cell. Comparing one of those against a number
+		// is the obvious thing to do, and failing it with "string vs
+		// float64" is an error the person who wired it can do nothing with.
+		f, err := strconv.ParseFloat(strings.TrimSpace(x), 64)
+		return f, err == nil
+	case []byte:
+		f, err := strconv.ParseFloat(strings.TrimSpace(string(x)), 64)
+		return f, err == nil
 	case int:
 		return float64(x), true
 	case int32:

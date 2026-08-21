@@ -9,9 +9,11 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/reltime"
 	"git.sr.ht/~klahr/dazyflow/engine"
 )
 
@@ -40,8 +42,16 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				// Optional: wire a summary in from an upstream step.
+				// Every field a booking actually varies by takes a wire, not
+				// just a typed value: the whole point of creating an event
+				// from a flow is that the when/who/where came from the form,
+				// the row or the message that started it.
 				{Port: "summary", Label: "Summary", MIME: []string{"text/plain"}},
+				{Port: "start", Label: "Start", MIME: []string{"text/plain"}},
+				{Port: "end", Label: "End", MIME: []string{"text/plain"}},
+				{Port: "description", Label: "Description", MIME: []string{"text/plain"}},
+				{Port: "location", Label: "Location", MIME: []string{"text/plain"}},
+				{Port: "attendees", Label: "Attendees", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
 				{Port: "event_id", Label: "Event ID", MIME: []string{"text/plain"}},
@@ -56,8 +66,8 @@ func init() {
 					"summary":{"type":"string","title":"Title","description":"Event title."},
 					"description":{"type":"string","title":"Description","description":"Optional event details."},
 					"location":{"type":"string","title":"Location","description":"Optional location text."},
-					"start":{"type":"string","title":"Start","examples":["2026-06-16T15:00:00Z","2026-06-16"],"description":"RFC3339 timestamp for a timed event, or a plain date for an all-day event."},
-					"end":{"type":"string","title":"End","examples":["2026-06-16T16:00:00Z","2026-06-17"],"description":"RFC3339 timestamp, or a plain date (exclusive) for an all-day event."},
+					"start":{"type":"string","title":"Start","examples":["2026-06-16T15:00:00Z","2026-06-16","tomorrow+9h"],"description":"When it starts: a timestamp, a plain date for an all-day event, or a relative value like \"tomorrow+9h\". Overridden by the Start input when wired."},
+					"end":{"type":"string","title":"End","examples":["2026-06-16T16:00:00Z","2026-06-17","tomorrow+10h"],"description":"When it ends: a timestamp, a plain date (exclusive) for an all-day event, or a relative value. Overridden by the End input when wired."},
 					"time_zone":{"type":"string","title":"Time zone","examples":["America/New_York","UTC"],"description":"IANA time zone for timed events. Optional when the timestamp carries an offset."},
 					"attendees":{"type":"string","title":"Attendees","description":"Comma-separated attendee email addresses."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
@@ -88,10 +98,59 @@ func executeCreateEvent(ctx context.Context, job core.Job, _ chan<- core.Progres
 	if summary == "" {
 		return params.Err(job, "bad_param", "'summary' is required"), nil
 	}
-	start := strings.TrimSpace(params.StringDefault(job.Params, "start", ""))
-	end := strings.TrimSpace(params.StringDefault(job.Params, "end", ""))
+	// Each field: the wired input wins, the typed setting is the fallback.
+	field := func(port string) (string, *core.Result) {
+		v, ok := params.TextInputOr(job, port, params.StringDefault(job.Params, port, ""))
+		if !ok {
+			r := params.Err(job, "bad_input", fmt.Sprintf("the %q input must be text", port))
+			return "", &r
+		}
+		return strings.TrimSpace(v), nil
+	}
+	start, bad := field("start")
+	if bad != nil {
+		return *bad, nil
+	}
+	end, bad := field("end")
+	if bad != nil {
+		return *bad, nil
+	}
 	if start == "" || end == "" {
 		return params.Err(job, "bad_param", "'start' and 'end' are required"), nil
+	}
+	// A relative value ("tomorrow+9h") becomes a concrete timestamp; an
+	// absolute one is left exactly as written, so a plain date still means an
+	// all-day event rather than midnight.
+	loc := time.UTC
+	if tzName := strings.TrimSpace(params.StringDefault(job.Params, "time_zone", "")); tzName != "" {
+		if l, lerr := time.LoadLocation(tzName); lerr == nil {
+			loc = l
+		} else {
+			return params.Err(job, "bad_param", fmt.Sprintf("time_zone: unknown timezone %q", tzName)), nil
+		}
+	}
+	now := time.Now()
+	for name, val := range map[string]*string{"start": &start, "end": &end} {
+		if !reltime.IsRelative(*val) {
+			continue
+		}
+		resolved, rerr := reltime.ResolveRFC3339(*val, loc, now)
+		if rerr != nil {
+			return params.Err(job, "bad_param", fmt.Sprintf("%s: %v", name, rerr)), nil
+		}
+		*val = resolved
+	}
+	descr, bad := field("description")
+	if bad != nil {
+		return *bad, nil
+	}
+	location, bad := field("location")
+	if bad != nil {
+		return *bad, nil
+	}
+	attendeesRaw, bad := field("attendees")
+	if bad != nil {
+		return *bad, nil
 	}
 
 	token, err := resolveToken(ctx, job)
@@ -105,13 +164,13 @@ func executeCreateEvent(ctx context.Context, job core.Job, _ chan<- core.Progres
 		"start":   eventTimeField(start, tz),
 		"end":     eventTimeField(end, tz),
 	}
-	if d := strings.TrimSpace(params.StringDefault(job.Params, "description", "")); d != "" {
-		event["description"] = d
+	if descr != "" {
+		event["description"] = descr
 	}
-	if loc := strings.TrimSpace(params.StringDefault(job.Params, "location", "")); loc != "" {
-		event["location"] = loc
+	if location != "" {
+		event["location"] = location
 	}
-	if att := parseAttendees(params.StringDefault(job.Params, "attendees", "")); len(att) > 0 {
+	if att := parseAttendees(attendeesRaw); len(att) > 0 {
 		event["attendees"] = att
 	}
 

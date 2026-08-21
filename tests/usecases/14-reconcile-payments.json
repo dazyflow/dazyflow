@@ -1,0 +1,31 @@
+{
+  "id": "uc-reconcile-payments",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "Does what we were paid match what we invoiced?",
+  "triggers": [{"type": "cron", "cron": "0 7 * * 1", "tz": "Europe/Stockholm"}],
+  "nodes": [
+    {"id": "events", "module": "stripe_list_events", "params": {"types": ["payment_intent.succeeded"], "limit": 100}},
+    {"id": "payments", "module": "compute_rows", "params": {"compute": {"invoice_no": "row.data.object.description", "paid_amount": "double(row.data.object.amount) / 100.0"}, "filter": "row.data.object.description != ''"}},
+    {"id": "paid_only", "module": "map_rows", "params": {"select": ["invoice_no", "paid_amount"]}},
+    {"id": "invoices", "module": "sheets_read_range", "params": {"spreadsheet_id": "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789", "range": "Invoices", "headers": true, "account": "default"}},
+    {"id": "billed", "module": "map_rows", "params": {"select": ["invoice_no", "customer", "amount"]}},
+    {"id": "both", "module": "join_rows", "params": {"on": {"invoice_no": "invoice_no"}, "kind": "outer"}},
+    {"id": "judge", "module": "compute_rows", "params": {"compute": {"problem": "row.paid_amount == null ? 'invoiced but not paid' : (row.amount == null ? 'paid but never invoiced' : (double(row.amount) != double(row.paid_amount) ? 'amount differs' : ''))"}}},
+    {"id": "problems", "module": "compute_rows", "params": {"filter": "row.problem != ''"}},
+    {"id": "table", "module": "render_table", "params": {"columns": ["invoice_no", "customer", "amount", "paid_amount", "problem"], "empty": "Everything matches — nothing to look at."}},
+    {"id": "send", "module": "email_send", "params": {"to": "ekonomi@example.com", "subject": "Payments vs invoices — this week's mismatches", "format": "html"}}
+  ],
+  "edges": [
+    {"from": "events", "from_port": "events", "to": "payments", "to_port": "rows"},
+    {"from": "payments", "from_port": "rows", "to": "paid_only", "to_port": "rows"},
+    {"from": "invoices", "from_port": "rows", "to": "billed", "to_port": "rows"},
+    {"from": "billed", "from_port": "rows", "to": "both", "to_port": "left_rows"},
+    {"from": "paid_only", "from_port": "rows", "to": "both", "to_port": "right_rows"},
+    {"from": "both", "from_port": "rows", "to": "judge", "to_port": "rows"},
+    {"from": "judge", "from_port": "rows", "to": "problems", "to_port": "rows"},
+    {"from": "problems", "from_port": "rows", "to": "table", "to_port": "rows"},
+    {"from": "table", "from_port": "html", "to": "send", "to_port": "body"}
+  ]
+}

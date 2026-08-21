@@ -220,6 +220,15 @@ func resolveMap(ctx context.Context, providers map[string]core.SecretProvider, s
 				m[k] = val
 				continue
 			}
+			// Same rule for a loop item: a param that is exactly ${item.…}
+			// keeps the item's real shape, so a body step can be handed a
+			// list or an object rather than its JSON text.
+			if val, ok, err := itemWholeValue(ctx, tv); err != nil {
+				return fmt.Errorf("%s: %w", k, err)
+			} else if ok {
+				m[k] = val
+				continue
+			}
 			resolved, err := resolveString(ctx, providers, sub, set, tv)
 			if err != nil {
 				return fmt.Errorf("%s: %w", k, err)
@@ -243,6 +252,12 @@ func resolveSlice(ctx context.Context, providers map[string]core.SecretProvider,
 		switch tv := v.(type) {
 		case string:
 			if val, ok, err := rr.wholeValue(ctx, tv); err != nil {
+				return fmt.Errorf("[%d]: %w", i, err)
+			} else if ok {
+				items[i] = val
+				continue
+			}
+			if val, ok, err := itemWholeValue(ctx, tv); err != nil {
 				return fmt.Errorf("[%d]: %w", i, err)
 			} else if ok {
 				items[i] = val

@@ -1,0 +1,138 @@
+{
+  "id": "uc-heating-before-first-booking",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "Heating on an hour before the first booking",
+  "nodes": [
+    {
+      "id": "every",
+      "module": "poll_trigger",
+      "params": {
+        "interval_seconds": 900
+      }
+    },
+    {
+      "id": "soon",
+      "module": "gcal_list_events",
+      "params": {
+        "account": "default",
+        "calendar_id": "primary",
+        "single_events": true,
+        "limit": 5,
+        "time_min": "now",
+        "time_max": "now+1h",
+        "tz": "Europe/Stockholm"
+      }
+    },
+    {
+      "id": "any_booking",
+      "module": "compare",
+      "params": {
+        "op": "greater_than",
+        "B": "0"
+      }
+    },
+    {
+      "id": "heating",
+      "module": "homeassistant_get_state",
+      "params": {
+        "entity_id": "climate.salongen"
+      }
+    },
+    {
+      "id": "is_off",
+      "module": "compare",
+      "params": {
+        "op": "equals",
+        "B": "off"
+      }
+    },
+    {
+      "id": "both",
+      "module": "and",
+      "params": {}
+    },
+    {
+      "id": "gate",
+      "module": "branch",
+      "params": {}
+    },
+    {
+      "id": "turn_on",
+      "module": "homeassistant_call_service",
+      "params": {
+        "service": "climate.set_temperature",
+        "entity_id": "climate.salongen",
+        "data": {
+          "temperature": 21
+        }
+      }
+    },
+    {
+      "id": "note",
+      "module": "slack_send_message",
+      "params": {
+        "channel": "#salongen",
+        "text": "Heating on — first booking is within the hour.",
+        "account": "default"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "every",
+      "from_port": "pass",
+      "to": "soon",
+      "to_port": "pass"
+    },
+    {
+      "from": "soon",
+      "from_port": "count",
+      "to": "any_booking",
+      "to_port": "A"
+    },
+    {
+      "from": "heating",
+      "from_port": "state",
+      "to": "is_off",
+      "to_port": "A"
+    },
+    {
+      "from": "any_booking",
+      "from_port": "result",
+      "to": "both",
+      "to_port": "in"
+    },
+    {
+      "from": "is_off",
+      "from_port": "result",
+      "to": "both",
+      "to_port": "in"
+    },
+    {
+      "from": "both",
+      "from_port": "result",
+      "to": "gate",
+      "to_port": "condition"
+    },
+    {
+      "from": "soon",
+      "from_port": "events",
+      "to": "gate",
+      "to_port": "in"
+    },
+    {
+      "from": "gate",
+      "from_port": "then",
+      "to": "turn_on",
+      "to_port": "pass"
+    },
+    {
+      "from": "turn_on",
+      "from_port": "entity_id",
+      "to": "note",
+      "to_port": "pass"
+    }
+  ]
+}

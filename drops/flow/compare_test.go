@@ -238,3 +238,48 @@ func TestCompare_OpDefaultsToEquals(t *testing.T) {
 		t.Error("missing op should default to equals; x == x is 1")
 	}
 }
+
+// Steps report counts, status codes and spreadsheet cells as text, and
+// comparing one of those against a number is the obvious thing to wire. It
+// used to fail with "non-numeric operand … string vs float64", which the
+// person who wired it can do nothing about.
+func TestCompare_NumericTextOperands(t *testing.T) {
+	cases := []struct {
+		name string
+		op   string
+		a    any
+		b    any
+		want bool
+	}{
+		{"count as text > 0", "greater_than", "2", float64(0), true},
+		{"zero count is not > 0", "greater_than", "0", float64(0), false},
+		{"padded text", "greater_than", " 42 ", float64(7), true},
+		{"bytes", "less_than", []byte("3"), float64(10), true},
+		{"text on both sides", "greater_or_equal", "10", "10", true},
+		{"decimal text", "less_or_equal", "9.5", float64(9.5), true},
+	}
+	for _, c := range cases {
+		res, err := executeCompare(t.Context(), core.Job{
+			ID:     "test",
+			Params: map[string]any{"op": c.op},
+			Input:  map[string]core.Ref{"A": {Inline: c.a}, "B": {Inline: c.b}},
+		}, nil)
+		if err != nil || res.Status != core.StatusOK {
+			t.Errorf("%s: status=%v error=%+v", c.name, res.Status, res.Error)
+			continue
+		}
+		if got := res.Output["result"].Inline; got != c.want {
+			t.Errorf("%s: result = %v, want %v", c.name, got, c.want)
+		}
+	}
+
+	// Text that isn't a number is still a clear error rather than a silent 0.
+	res, _ := executeCompare(t.Context(), core.Job{
+		ID:     "test",
+		Params: map[string]any{"op": "greater_than"},
+		Input:  map[string]core.Ref{"A": {Inline: "banana"}, "B": {Inline: float64(1)}},
+	}, nil)
+	if res.Status == core.StatusOK {
+		t.Error("comparing non-numeric text with > should still fail")
+	}
+}

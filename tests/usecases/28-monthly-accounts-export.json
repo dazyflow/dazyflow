@@ -1,0 +1,17 @@
+{
+  "id": "uc-monthly-accounts-export",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "Email the bookkeeper last month's numbers",
+  "triggers": [{"type": "cron", "cron": "0 6 1 * *", "tz": "Europe/Stockholm"}],
+  "nodes": [
+    {"id": "query", "module": "postgres_query", "params": {"sql": "SELECT invoice_no, customer, issued_on, amount, vat, status FROM invoices WHERE issued_on >= date_trunc('month', now() - interval '1 month') AND issued_on < date_trunc('month', now()) ORDER BY issued_on"}},
+    {"id": "workbook", "module": "excel_write", "params": {"path": "scratch://forra-manaden.xlsx", "sheet": "Fakturor", "autosize": true, "freezeRow": 1}},
+    {"id": "send", "module": "email_send", "params": {"to": "bokforing@example.com", "subject": "Förra månadens fakturor", "body": "Hej! Förra månadens fakturor ligger i den bifogade filen. Hör av dig om något ser konstigt ut.", "format": "text"}}
+  ],
+  "edges": [
+    {"from": "query", "from_port": "rows", "to": "workbook", "to_port": "rows"},
+    {"from": "workbook", "from_port": "out", "to": "send", "to_port": "attachments"}
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "id": "uc-clean-the-mailing-list",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "Tidy the mailing list",
+  "nodes": [
+    {"id": "read", "module": "sheets_read_range", "params": {"spreadsheet_id": "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789", "range": "Contacts", "headers": true, "account": "default"}},
+    {"id": "normalise", "module": "compute_rows", "params": {"compute": {"email": "row.email.trim().lowerAscii()", "name": "row.name.trim()"}, "filter": "row.email.trim() != '' && row.email.contains('@')"}},
+    {"id": "unique", "module": "dedupe_rows", "params": {"by": ["email"], "keep": "last"}},
+    {"id": "tidy", "module": "map_rows", "params": {"select": ["name", "email", "phone"]}},
+    {"id": "write_back", "module": "sheets_append_row", "params": {"spreadsheet_id": "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789", "range": "Contacts clean", "account": "default"}},
+    {"id": "report", "module": "expression", "params": {"expr": "'Mailing list tidied — ' + string(input) + ' duplicate(s) dropped, plus anything without a real address.'"}},
+    {"id": "tell", "module": "slack_send_message", "params": {"channel": "#ops", "account": "default"}}
+  ],
+  "edges": [
+    {"from": "read", "from_port": "rows", "to": "normalise", "to_port": "rows"},
+    {"from": "normalise", "from_port": "rows", "to": "unique", "to_port": "rows"},
+    {"from": "unique", "from_port": "rows", "to": "tidy", "to_port": "rows"},
+    {"from": "tidy", "from_port": "rows", "to": "write_back", "to_port": "rows"},
+    {"from": "unique", "from_port": "dropped", "to": "report", "to_port": "in"},
+    {"from": "report", "from_port": "out", "to": "tell", "to_port": "text"}
+  ]
+}

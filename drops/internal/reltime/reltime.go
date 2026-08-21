@@ -88,6 +88,27 @@ func ParseOffset(s string) (time.Duration, error) {
 	return sign * total, nil
 }
 
+// IsRelative reports whether s is written in the relative form — a leading
+// sign ("+3d"), or one of the named days, with or without an offset. Callers
+// that must preserve the exact shape of an absolute value (a plain date meaning
+// an all-day calendar event, say) use this to resolve ONLY the relative ones.
+func IsRelative(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+	if s[0] == '+' || s[0] == '-' {
+		_, err := ParseOffset(s)
+		return err == nil
+	}
+	base, _ := splitBase(s)
+	switch strings.ToLower(strings.TrimSpace(base)) {
+	case "now", "today", "tomorrow", "yesterday":
+		return true
+	}
+	return false
+}
+
 // Resolve turns s into a concrete time. loc anchors the day boundaries of the
 // named days (nil means UTC); now is the reference instant. An empty s returns
 // the zero time and ok=false so callers can treat "unset" as "no bound".

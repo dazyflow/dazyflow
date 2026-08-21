@@ -1,0 +1,110 @@
+{
+  "id": "uc-alert-intake",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "Alert comes in → page the person on call, wait for an ack",
+  "nodes": [
+    {
+      "id": "hook",
+      "module": "webhook_input",
+      "params": {
+        "secrets": [
+          "${secret.ALERT_WEBHOOK_TOKEN}"
+        ]
+      }
+    },
+    {
+      "id": "ack",
+      "module": "await_approval",
+      "params": {
+        "prompt": "Acknowledge this alert?"
+      }
+    },
+    {
+      "id": "page",
+      "module": "ntfy",
+      "params": {
+        "topic": "acme-oncall-primary",
+        "title": "Alert",
+        "message": "Something needs attention — tap to acknowledge.",
+        "priority": "5"
+      }
+    },
+    {
+      "id": "pending",
+      "module": "expression",
+      "params": {
+        "expr": "[{'alert_id': input.id, 'summary': input.summary, 'raised_at': int(now), 'acked': '', 'escalated': ''}]"
+      }
+    },
+    {
+      "id": "save",
+      "module": "builtin_store_append",
+      "params": {
+        "table": "alerts",
+        "unique_by": [
+          "alert_id"
+        ],
+        "column_types": {
+          "raised_at": "INTEGER"
+        }
+      }
+    },
+    {
+      "id": "acked_row",
+      "module": "expression",
+      "params": {
+        "expr": "[{'alert_id': input.id, 'acked': string(now)}]"
+      }
+    },
+    {
+      "id": "mark_acked",
+      "module": "builtin_store_append",
+      "params": {
+        "table": "alerts",
+        "unique_by": [
+          "alert_id"
+        ]
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "hook",
+      "from_port": "body",
+      "to": "ack",
+      "to_port": "context"
+    },
+    {
+      "from": "ack",
+      "from_port": "pending_url",
+      "to": "page",
+      "to_port": "click"
+    },
+    {
+      "from": "hook",
+      "from_port": "body",
+      "to": "pending",
+      "to_port": "in"
+    },
+    {
+      "from": "pending",
+      "from_port": "out",
+      "to": "save",
+      "to_port": "rows"
+    },
+    {
+      "from": "ack",
+      "from_port": "approved",
+      "to": "acked_row",
+      "to_port": "in"
+    },
+    {
+      "from": "acked_row",
+      "from_port": "out",
+      "to": "mark_acked",
+      "to_port": "rows"
+    }
+  ]
+}

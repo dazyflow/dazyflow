@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/google/cel-go/cel"
+	"github.com/google/cel-go/ext"
 )
 
 // CostLimit caps the abstract evaluation cost of a single expression. CEL has
@@ -46,6 +47,11 @@ func Env(extra ...cel.EnvOption) (*cel.Env, error) {
 		// double-vs-int type error; without this, the builder's own output
 		// wouldn't compile.
 		cel.CrossTypeNumericComparisons(true),
+		// The string helpers people reach for the moment they write a formula
+		// by hand: substring, split/join, replace, trim, lowerAscii/upperAscii,
+		// indexOf, charAt. Without them even "the first ten characters of the
+		// date" has no expression, and the answer was a second step.
+		ext.Strings(),
 	}
 	return cel.NewEnv(append(opts, extra...)...)
 }

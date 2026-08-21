@@ -6,6 +6,7 @@ package slack
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
@@ -51,6 +52,10 @@ func init() {
 				{Port: "channel", Label: "Channel", MIME: []string{"text/plain"}},
 				{Port: "text", Label: "Message", MIME: []string{"text/plain"}},
 				{Port: "blocks", Label: "Blocks"},
+				// Replying under a message means the parent's timestamp came
+				// from upstream — a mention trigger, an earlier post — so it
+				// takes a wire, not just a typed value.
+				{Port: "thread_ts", Label: "Reply in thread", MIME: []string{"text/plain"}},
 			},
 			// No declared outputs: sending a message is a "do" step — "after
 			// it sends, do X" chains through the pass-through pin, which fires
@@ -69,7 +74,7 @@ func init() {
 					"token":{"type":"string","description":"Raw bot token (xoxb-…). Overrides 'account'."},
 					"channel":{"type":"string","format":"slack-channel","title":"Channel","description":"Pick a channel from your connected workspace, or type a name like #general / a channel ID. The bot must already be a member. Overridden by the 'Channel' input."},
 					"text":{"type":"string","title":"Message","description":"The text to send. Overridden by the 'Message' input."},
-					"thread_ts":{"type":"string","title":"Reply in thread","x_advanced":true,"description":"Timestamp of a parent message to reply under."},
+					"thread_ts":{"type":"string","title":"Reply in thread","x_advanced":true,"description":"Timestamp of a parent message to reply under. Wire the Reply-in-thread input to answer the message that started the flow — an On mention trigger's Timestamp, say."},
 					"blocks":{"type":"array","items":{},"title":"Blocks","x_advanced":true,"description":"Slack Block Kit layout for rich messages; replaces the plain text rendering."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
@@ -127,7 +132,11 @@ func executeSlackSendMessage(ctx context.Context, job core.Job, _ chan<- core.Pr
 	if text != "" {
 		payload["text"] = text
 	}
-	if ts, _ := params.StringOpt(job.Params, "thread_ts"); ts != "" {
+	threadTS, tsOK := params.TextInputOr(job, "thread_ts", params.StringDefault(job.Params, "thread_ts", ""))
+	if !tsOK {
+		return params.Err(job, "bad_input", "the 'Reply in thread' input must be text"), nil
+	}
+	if ts := strings.TrimSpace(threadTS); ts != "" {
 		payload["thread_ts"] = ts
 	}
 	if blocks != nil {

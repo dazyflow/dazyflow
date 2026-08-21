@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/google/cel-go/cel"
+	"github.com/google/cel-go/ext"
 )
 
 // MaxExpressionLen caps the source length of a formula we are willing to
@@ -40,6 +41,9 @@ func NewEnv() (*cel.Env, error) {
 		cel.Variable("input", cel.DynType),
 		cel.Variable("now", cel.TimestampType),
 		cel.CrossTypeNumericComparisons(true),
+		// Same string helpers as the row formulas (see rowcel.Env), so one
+		// grammar is learned once and works in both places.
+		ext.Strings(),
 	)
 }
 

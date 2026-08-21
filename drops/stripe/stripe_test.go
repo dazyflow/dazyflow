@@ -60,6 +60,14 @@ func newFakeStripe(t *testing.T) *fakeStripe {
 				return
 			}
 			fmt.Fprint(rw, `{"id":"re_1","status":"succeeded","amount":500}`)
+		case r.Method == "GET" && strings.HasPrefix(r.URL.Path, "/customers/cus_"):
+			id := strings.TrimPrefix(r.URL.Path, "/customers/")
+			if id == "cus_missing" {
+				rw.WriteHeader(404)
+				fmt.Fprint(rw, `{"error":{"message":"No such customer: cus_missing","code":"resource_missing"}}`)
+				return
+			}
+			fmt.Fprintf(rw, `{"id":%q,"email":"ida@example.com","name":"Ida Karlsson"}`, id)
 		case r.Method == "GET" && r.URL.Path == "/events":
 			if r.Form.Get("ending_before") == "evt_2" {
 				fmt.Fprint(rw, `{"data":[{"id":"evt_3","type":"payment_intent.succeeded"}]}`)
@@ -1143,6 +1151,37 @@ func TestStripeDo_NonPositiveTimeoutDefaults(t *testing.T) {
 	res := run(t, f, "stripe_search_customers",
 		map[string]any{"query": "email:'a@b.com'", "timeout_ms": 0}, nil)
 	if res.Status != core.StatusOK {
+		t.Errorf("res = %+v", res)
+	}
+}
+
+// Every subscription and payment event carries a cus_… id, not an email, and
+// Stripe's search can't look up by id — so this is the step that gets you
+// someone to write to.
+func TestGetCustomer(t *testing.T) {
+	f := newFakeStripe(t)
+	res := run(t, f, "stripe_get_customer", nil, map[string]core.Ref{"customer": {Inline: "cus_42"}})
+	if res.Status != core.StatusOK {
+		t.Fatalf("res = %+v", res)
+	}
+	if res.Output["email"].Inline != "ida@example.com" {
+		t.Errorf("email = %v", res.Output["email"].Inline)
+	}
+	if res.Output["name"].Inline != "Ida Karlsson" {
+		t.Errorf("name = %v", res.Output["name"].Inline)
+	}
+	cust, _ := res.Output["customer"].Inline.(map[string]any)
+	if cust["id"] != "cus_42" {
+		t.Errorf("customer = %v", res.Output["customer"].Inline)
+	}
+}
+
+func TestGetCustomer_MissingAndUnset(t *testing.T) {
+	f := newFakeStripe(t)
+	if res := run(t, f, "stripe_get_customer", map[string]any{"customer": "cus_missing"}, nil); res.Status != core.StatusError {
+		t.Errorf("a missing customer should surface Stripe's error: %+v", res)
+	}
+	if res := run(t, f, "stripe_get_customer", map[string]any{}, nil); res.Status != core.StatusError || res.Error.Code != "bad_param" {
 		t.Errorf("res = %+v", res)
 	}
 }

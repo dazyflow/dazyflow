@@ -1,0 +1,17 @@
+{
+  "id": "uc-standup-digest",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "Standup: post the digest in the afternoon",
+  "triggers": [{"type": "cron", "cron": "0 16 * * 1-5", "tz": "Europe/Stockholm"}],
+  "nodes": [
+    {"id": "today", "module": "builtin_store_query", "params": {"sql": "SELECT name, yesterday, today, blockers FROM standup WHERE at > strftime('%s','now','start of day') ORDER BY name", "limit": 100}},
+    {"id": "digest", "module": "render_text", "params": {"template": "'*' + row.name + '*\\n• igår: ' + row.yesterday + '\\n• idag: ' + row.today + (row.blockers != '' ? '\\n• stopp: ' + row.blockers : '')", "separator": "\n\n", "prefix": "*Dagens standup*\n\n", "empty": "Nobody filled it in today."}},
+    {"id": "post", "module": "slack_send_message", "params": {"channel": "#standup", "account": "default"}}
+  ],
+  "edges": [
+    {"from": "today", "from_port": "rows", "to": "digest", "to_port": "rows"},
+    {"from": "digest", "from_port": "text", "to": "post", "to_port": "text"}
+  ]
+}

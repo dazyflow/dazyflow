@@ -1,0 +1,38 @@
+{
+  "id": "uc-new-starter-onboarding",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "New starter → welcome mail, intro meeting, checklist, team notice",
+  "nodes": [
+    {"id": "form", "module": "webhook_input", "params": {"public_form": true, "form_fields": ["name", "email", "role", "start_date"], "form_title": "New starter"}},
+    {"id": "address", "module": "expression", "params": {"expr": "input.email"}},
+    {"id": "letter", "module": "render_template", "params": {"template": "<p>Welcome {{.name}}!</p><p>You're starting with us as {{.role}} on {{.start_date}}. Your first meeting is at 09:00 that day — the invite is in your calendar.</p><p>Anything you need before then, just reply to this.</p>"}},
+    {"id": "welcome", "module": "gmail_send_email", "params": {"account": "default", "subject": "Welcome — your first day", "format": "html"}},
+    {"id": "meeting_title", "module": "expression", "params": {"expr": "'Intro: ' + input.name + ' (' + input.role + ')'"}},
+    {"id": "meeting_start", "module": "expression", "params": {"expr": "input.start_date + 'T09:00:00Z'"}},
+    {"id": "meeting_end", "module": "expression", "params": {"expr": "input.start_date + 'T09:45:00Z'"}},
+    {"id": "intro", "module": "gcal_create_event", "params": {"account": "default", "calendar_id": "primary", "time_zone": "Europe/Stockholm"}},
+    {"id": "checklist", "module": "expression", "params": {"expr": "['Laptop and accounts', 'Introduction to the team', 'Walk through how we work', 'Payroll paperwork'].map(t, {'person': input.name, 'task': t, 'due': input.start_date, 'done': ''})"}},
+    {"id": "save_checklist", "module": "builtin_store_append", "params": {"table": "onboarding"}},
+    {"id": "notice", "module": "render_template", "params": {"template": "{{.name}} joins as {{.role}} on {{.start_date}} — say hello."}},
+    {"id": "tell_team", "module": "slack_send_message", "params": {"channel": "#general", "account": "default"}}
+  ],
+  "edges": [
+    {"from": "form", "from_port": "body", "to": "address", "to_port": "in"},
+    {"from": "form", "from_port": "body", "to": "letter", "to_port": "data"},
+    {"from": "address", "from_port": "out", "to": "welcome", "to_port": "to"},
+    {"from": "letter", "from_port": "html", "to": "welcome", "to_port": "body"},
+    {"from": "form", "from_port": "body", "to": "meeting_title", "to_port": "in"},
+    {"from": "form", "from_port": "body", "to": "meeting_start", "to_port": "in"},
+    {"from": "form", "from_port": "body", "to": "meeting_end", "to_port": "in"},
+    {"from": "meeting_title", "from_port": "out", "to": "intro", "to_port": "summary"},
+    {"from": "meeting_start", "from_port": "out", "to": "intro", "to_port": "start"},
+    {"from": "meeting_end", "from_port": "out", "to": "intro", "to_port": "end"},
+    {"from": "address", "from_port": "out", "to": "intro", "to_port": "attendees"},
+    {"from": "form", "from_port": "body", "to": "checklist", "to_port": "in"},
+    {"from": "checklist", "from_port": "out", "to": "save_checklist", "to_port": "rows"},
+    {"from": "form", "from_port": "body", "to": "notice", "to_port": "data"},
+    {"from": "notice", "from_port": "html", "to": "tell_team", "to_port": "text"}
+  ]
+}

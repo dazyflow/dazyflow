@@ -5,6 +5,7 @@ package slack
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -345,4 +346,26 @@ func TestCovListChannelsPicker(t *testing.T) {
 			t.Fatal("want http error")
 		}
 	})
+}
+
+// Answering the message that started the flow: the parent's timestamp comes
+// from the trigger, so it has to be wireable.
+func TestSlackSend_ThreadTSInput(t *testing.T) {
+	var got map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&got)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "ts": "1.2"})
+	}))
+	defer srv.Close()
+
+	res, err := executeSlackSendMessage(context.Background(), core.Job{
+		Params: map[string]any{"base_url": srv.URL, "token": "xoxb-test", "channel": "C1", "text": "done"},
+		Input:  map[string]core.Ref{"thread_ts": {Inline: "1714060800.000100"}},
+	}, nil)
+	if err != nil || res.Status != core.StatusOK {
+		t.Fatalf("status=%q err=%v error=%+v", res.Status, err, res.Error)
+	}
+	if got["thread_ts"] != "1714060800.000100" {
+		t.Errorf("thread_ts = %v, want the wired parent timestamp", got["thread_ts"])
+	}
 }

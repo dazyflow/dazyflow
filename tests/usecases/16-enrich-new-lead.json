@@ -1,0 +1,30 @@
+{
+  "id": "uc-enrich-new-lead",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "New lead → look up their company → CRM",
+  "nodes": [
+    {"id": "form", "module": "webhook_input", "params": {"public_form": true, "form_fields": ["name", "email", "org_number"], "form_title": "Talk to sales"}},
+    {"id": "org_number", "module": "expression", "params": {"expr": "input.org_number"}},
+    {"id": "company", "module": "roaring_company_overview", "params": {"country": "SE"}},
+    {"id": "both", "module": "merge", "params": {}},
+    {"id": "lead_row", "module": "expression", "params": {"expr": "[{'name': input[0].name, 'email': input[0].email, 'org_number': input[0].org_number, 'company': input[1].companyName, 'company_status': input[1].status, 'town': input[1].town}]"}},
+    {"id": "store", "module": "builtin_store_append", "params": {"table": "leads", "unique_by": ["email"]}},
+    {"id": "card", "module": "render_template", "params": {"template": "<b>{{.companyName}}</b> ({{.status}})<br>{{.town}}"}},
+    {"id": "crm", "module": "notion_create_page", "params": {"account": "default", "parent_database_id": "2f1c9a5b7d3e4f60a1b2c3d4e5f60718"}},
+    {"id": "ping", "module": "slack_send_message", "params": {"channel": "#leads", "account": "default"}}
+  ],
+  "edges": [
+    {"from": "form", "from_port": "body", "to": "org_number", "to_port": "in"},
+    {"from": "org_number", "from_port": "out", "to": "company", "to_port": "company_id"},
+    {"from": "form", "from_port": "body", "to": "both", "to_port": "items"},
+    {"from": "company", "from_port": "company", "to": "both", "to_port": "items"},
+    {"from": "both", "from_port": "out", "to": "lead_row", "to_port": "in"},
+    {"from": "lead_row", "from_port": "out", "to": "store", "to_port": "rows"},
+    {"from": "company", "from_port": "company", "to": "card", "to_port": "data"},
+    {"from": "company", "from_port": "name", "to": "crm", "to_port": "title"},
+    {"from": "card", "from_port": "html", "to": "crm", "to_port": "content"},
+    {"from": "crm", "from_port": "url", "to": "ping", "to_port": "text"}
+  ]
+}

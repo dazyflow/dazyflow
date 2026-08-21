@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"testing"
 
@@ -47,10 +48,21 @@ type paramSchema struct {
 	Items      *paramSchema            `json:"items"`
 }
 
+// wholeReference matches a setting that is exactly one ${scheme.path}
+// reference — an item field inside a loop body, a secret, a resource.
+var wholeReference = regexp.MustCompile(`^\s*\$\{[a-z0-9_-]+\.[^}]*\}\s*$`)
+
 // checkValue reports type/enum/required violations of v against s.
 // Best-effort: an absent or unmodelled type is not an error.
 func checkValue(path string, s *paramSchema, v any) []string {
 	if s == nil {
+		return nil
+	}
+	// A setting whose whole value is a ${…} reference is a string in the
+	// graph JSON no matter what the field's declared type is — the engine
+	// resolves it at run time, and a whole-value reference keeps the real
+	// shape (a list stays a list). So it satisfies any type.
+	if str, isStr := v.(string); isStr && wholeReference.MatchString(str) {
 		return nil
 	}
 	var out []string

@@ -194,6 +194,25 @@
         "ntfy"
       ],
       "graph_file": "/templates/approve-before-refund.json"
+    },
+    {
+      "id": "site-up-or-down",
+      "title": "Tell me when the website goes down",
+      "use_case": "Get a message the moment your site stops answering — and another when it comes back — without being pinged every five minutes in between.",
+      "category": "Notifications",
+      "description": "Checks the address every five minutes and fires only on the change: once when it breaks, once when it recovers. Optionally require a word that must appear on the page, which catches a server answering 200 with an error page. Needs no connected account — just pick an ntfy topic.",
+      "icon": "eye",
+      "tags": [
+        "uptime",
+        "monitor",
+        "ntfy",
+        "alert",
+        "no-setup"
+      ],
+      "integrations": [
+        "ntfy"
+      ],
+      "graph_file": "/templates/site-up-or-down.json"
     }
   ]
 }

@@ -94,3 +94,37 @@ func TestCostLimit_Constant(t *testing.T) {
 		t.Error("CostLimit must be non-zero")
 	}
 }
+
+// The string helpers are what a person reaches for the first time they write
+// a formula by hand — without them, "the first ten characters" or "upper-case
+// it" needs a second step, or can't be said at all.
+func TestEnv_StringHelpers(t *testing.T) {
+	env, err := Env()
+	if err != nil {
+		t.Fatalf("env: %v", err)
+	}
+	cases := map[string]any{
+		`row.text.substring(0, 7)`:                               "printer",
+		`row.name.upperAscii()`:                                  "IDA",
+		`row.messy.trim()`:                                       "spaced",
+		`row.text.split(" ")[0]`:                                 "printer",
+		`row.text.replace("jamed", "jammed").contains("jammed")`: true,
+		`row.text.indexOf("floor")`:                              int64(11),
+	}
+	row := map[string]any{"text": "printer on floor 2 is jamed", "name": "ida", "messy": "  spaced  "}
+	for expr, want := range cases {
+		prog, cerr := Compile(env, expr, "test")
+		if cerr != nil {
+			t.Errorf("%s: %v", expr, cerr)
+			continue
+		}
+		out, _, eerr := prog.Eval(Vars(row))
+		if eerr != nil {
+			t.Errorf("%s: %v", expr, eerr)
+			continue
+		}
+		if out.Value() != want {
+			t.Errorf("%s = %v (%T), want %v", expr, out.Value(), out.Value(), want)
+		}
+	}
+}

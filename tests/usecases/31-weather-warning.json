@@ -1,0 +1,21 @@
+{
+  "id": "uc-weather-warning",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "Warn the crew if tomorrow looks bad",
+  "triggers": [{"type": "cron", "cron": "0 18 * * 0-4", "tz": "Europe/Stockholm"}],
+  "nodes": [
+    {"id": "forecast", "module": "smhi_forecast", "params": {"lat": 55.6050, "lon": 13.0038, "days": 2}},
+    {"id": "tomorrow", "module": "compute_rows", "params": {"filter": "row.date == string(now + duration('24h')).substring(0, 10) && (row.temp_min < 0.0 || row.conditions.lowerAscii().contains('rain') || row.conditions.lowerAscii().contains('snow'))"}},
+    {"id": "warning", "module": "render_text", "params": {"template": "'Tomorrow (' + row.date + '): ' + row.description + ', ' + string(row.temp_min) + '–' + string(row.temp_max) + '°C. Dress for it and check the site before you start.'", "empty": ""}},
+    {"id": "tell_crew", "module": "slack_send_message", "params": {"channel": "#jobs", "account": "default"}},
+    {"id": "push", "module": "ntfy", "params": {"topic": "acme-crew-8f2k", "title": "Weather warning"}}
+  ],
+  "edges": [
+    {"from": "forecast", "from_port": "daily", "to": "tomorrow", "to_port": "rows"},
+    {"from": "tomorrow", "from_port": "rows", "to": "warning", "to_port": "rows"},
+    {"from": "warning", "from_port": "text", "to": "tell_crew", "to_port": "text"},
+    {"from": "warning", "from_port": "text", "to": "push", "to_port": "message"}
+  ]
+}

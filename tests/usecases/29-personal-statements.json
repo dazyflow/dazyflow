@@ -1,0 +1,21 @@
+{
+  "id": "uc-personal-statements",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "One statement per customer, only their own rows",
+  "triggers": [{"type": "cron", "cron": "0 7 1 * *", "tz": "Europe/Stockholm"}],
+  "nodes": [
+    {"id": "read", "module": "sheets_read_range", "params": {"spreadsheet_id": "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789", "range": "Charges", "headers": true, "account": "default"}},
+    {"id": "per_customer", "module": "group_aggregate", "params": {"by": ["customer", "email"], "aggregate": {"total": {"op": "sum", "column": "amount"}, "lines": {"op": "collect", "column": "description"}, "amounts": {"op": "collect", "column": "amount"}, "count": {"op": "count"}}}},
+    {"id": "each", "module": "for_each", "params": {"concurrency": 3}},
+    {"id": "statement", "module": "render_template", "params": {"template": "<p>Hej {{.customer}},</p><p>Here's what we billed you this month:</p><ul>{{range .lines}}<li>{{.}}</li>{{end}}</ul><p><b>Total: {{.total}} kr</b> across {{.count}} item(s).</p>", "data": "${item.}"}},
+    {"id": "send", "module": "email_send", "params": {"to": "${item.email}", "subject": "Your monthly statement", "format": "html"}}
+  ],
+  "edges": [
+    {"from": "read", "from_port": "rows", "to": "per_customer", "to_port": "rows"},
+    {"from": "per_customer", "from_port": "rows", "to": "each", "to_port": "items"},
+    {"from": "each", "from_port": "body", "to": "statement", "to_port": "pass"},
+    {"from": "statement", "from_port": "html", "to": "send", "to_port": "body"}
+  ]
+}

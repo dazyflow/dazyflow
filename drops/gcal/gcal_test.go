@@ -620,3 +620,80 @@ func TestListEvents_BadWindowValue(t *testing.T) {
 		t.Errorf("err = %v, want one naming time_min", err)
 	}
 }
+
+// Creating an event from a flow means the when/who/where came from whatever
+// started it — a form, a row, a message — so those fields have to take a wire,
+// not just a typed value.
+func TestCreateEvent_WiredFields(t *testing.T) {
+	var got map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&got)
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": "ev1", "htmlLink": "https://cal/ev1"})
+	}))
+	defer srv.Close()
+	withCalEnv(t, srv.URL)
+
+	res, err := executeCreateEvent(context.Background(), core.Job{
+		Params: map[string]any{"account": "default", "summary": "typed", "start": "2020-01-01T00:00:00Z", "end": "2020-01-01T01:00:00Z"},
+		Input: map[string]core.Ref{
+			"summary":     {Inline: "Intro with Ida"},
+			"start":       {Inline: "2026-06-16T09:00:00Z"},
+			"end":         {Inline: "2026-06-16T09:30:00Z"},
+			"description": {Inline: "First-day welcome"},
+			"location":    {Inline: "Room 2"},
+			"attendees":   {Inline: "ida@example.com, chef@example.com"},
+		},
+	}, nil)
+	if err != nil || res.Status != core.StatusOK {
+		t.Fatalf("status=%q error=%+v", res.Status, res.Error)
+	}
+	if got["summary"] != "Intro with Ida" || got["description"] != "First-day welcome" || got["location"] != "Room 2" {
+		t.Errorf("event = %v", got)
+	}
+	start, _ := got["start"].(map[string]any)
+	if start["dateTime"] != "2026-06-16T09:00:00Z" {
+		t.Errorf("start = %v, want the wired value", got["start"])
+	}
+	att, _ := got["attendees"].([]any)
+	if len(att) != 2 {
+		t.Errorf("attendees = %v, want both", got["attendees"])
+	}
+}
+
+// A relative start/end becomes a concrete timestamp; an absolute one is left
+// exactly as written so a plain date still means an all-day event.
+func TestCreateEvent_RelativeAndAllDay(t *testing.T) {
+	var got map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&got)
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": "ev1"})
+	}))
+	defer srv.Close()
+	withCalEnv(t, srv.URL)
+
+	if _, err := executeCreateEvent(context.Background(), core.Job{Params: map[string]any{
+		"account": "default", "summary": "Intro", "start": "tomorrow+9h", "end": "tomorrow+10h",
+		"time_zone": "Europe/Stockholm",
+	}}, nil); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	start, _ := got["start"].(map[string]any)
+	ts, _ := start["dateTime"].(string)
+	parsed, perr := time.Parse(time.RFC3339, ts)
+	if perr != nil {
+		t.Fatalf("start %q is not a timestamp: %v", ts, perr)
+	}
+	if !parsed.After(time.Now()) {
+		t.Errorf("relative start resolved into the past: %s", ts)
+	}
+
+	if _, err := executeCreateEvent(context.Background(), core.Job{Params: map[string]any{
+		"account": "default", "summary": "Semester", "start": "2026-07-01", "end": "2026-07-15",
+	}}, nil); err != nil {
+		t.Fatalf("create all-day: %v", err)
+	}
+	start, _ = got["start"].(map[string]any)
+	if start["date"] != "2026-07-01" {
+		t.Errorf("all-day start = %v, want an untouched plain date", got["start"])
+	}
+}

@@ -27,6 +27,10 @@ var knownBrokenTemplates = map[string]string{}
 // base name, so we normalize before validating.
 var variadicIndex = regexp.MustCompile(`\[\d+\]$`)
 
+// wholeReference matches a setting that is exactly one ${scheme.path}
+// reference — a loop item's field, a secret, a resource.
+var wholeReference = regexp.MustCompile(`^\s*\$\{[a-z0-9_-]+\.[^}]*\}\s*$`)
+
 // normalizeVariadicPorts rewrites edge ToPorts of the form name[N] to
 // name when the destination's base port exists and is variadic, so a
 // graph the editor produces (and the engine runs) isn't flagged as a
@@ -227,10 +231,14 @@ func paramSchemaIssues(params map[string]any, schema json.RawMessage, wired map[
 }
 
 // jsonTypeMatches reports whether v (decoded by encoding/json, so numbers
-// are float64) matches a JSON-Schema primitive type. A ${...} placeholder
-// is always a string, which is what schema-typed string params expect, so
-// no special-casing is needed for the values templates actually carry.
+// are float64) matches a JSON-Schema primitive type. A setting that is
+// exactly one ${...} reference is a string in the JSON whatever the field's
+// declared type — the engine resolves it at run time, and a whole-value
+// reference keeps the real shape — so it satisfies any type.
 func jsonTypeMatches(t string, v any) bool {
+	if s, isStr := v.(string); isStr && wholeReference.MatchString(s) {
+		return true
+	}
 	switch t {
 	case "string":
 		_, ok := v.(string)

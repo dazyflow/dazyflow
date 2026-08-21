@@ -48,3 +48,11 @@ func TestValidate_MatchesDropEnv(t *testing.T) {
 		t.Errorf("cross-type numeric comparison should validate, got %+v", issue)
 	}
 }
+
+// The Expression drop shares the row formulas' string helpers, so one grammar
+// is learned once and works in both places.
+func TestNewEnv_StringHelpers(t *testing.T) {
+	if issue, _ := Validate(`input.substring(0, 3).upperAscii() + input.split(" ")[1].trim()`); issue != nil {
+		t.Errorf("string helpers should compile: %+v", issue)
+	}
+}

@@ -1,0 +1,24 @@
+{
+  "id": "uc-job-done-invoice",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "Job marked Done → invoice it, mark the row",
+  "triggers": [{"type": "cron", "cron": "0 8 * * 1-5", "tz": "Europe/Stockholm"}],
+  "nodes": [
+    {"id": "read", "module": "sheets_read_range", "params": {"spreadsheet_id": "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789", "range": "Jobs", "headers": true, "row_numbers": true, "account": "default"}},
+    {"id": "todo", "module": "compute_rows", "params": {"filter": "row.status == 'Done' && row.invoiced_on == ''"}},
+    {"id": "each", "module": "for_each", "params": {"concurrency": 1}},
+    {"id": "invoice", "module": "fortnox_create_invoice", "params": {"account": "default", "customer_number": "${item.customer_number}", "rows": [{"Description": "${item.description}", "DeliveredQuantity": "1", "Price": "${item.amount}"}]}},
+    {"id": "mark", "module": "compute_rows", "params": {"compute": {"invoiced_on": "string(now)"}}},
+    {"id": "write_back", "module": "sheets_update_cells", "params": {"spreadsheet_id": "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789", "range": "Jobs", "columns": ["invoiced_on"], "account": "default"}}
+  ],
+  "edges": [
+    {"from": "read", "from_port": "rows", "to": "todo", "to_port": "rows"},
+    {"from": "todo", "from_port": "rows", "to": "each", "to_port": "items"},
+    {"from": "each", "from_port": "body", "to": "invoice", "to_port": "pass"},
+    {"from": "todo", "from_port": "rows", "to": "mark", "to_port": "rows"},
+    {"from": "each", "from_port": "results", "to": "mark", "to_port": "pass"},
+    {"from": "mark", "from_port": "rows", "to": "write_back", "to_port": "rows"}
+  ]
+}

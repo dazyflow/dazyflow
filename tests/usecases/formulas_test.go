@@ -6,6 +6,7 @@ package usecases
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -162,5 +163,124 @@ func TestLogRowShaping(t *testing.T) {
 	}
 	if _, leaked := rows[0]["livemode"]; leaked {
 		t.Fatalf("unselected column leaked into the log row: %v", rows[0])
+	}
+}
+
+// Use case 14: "does what we were paid match what we invoiced?" — one formula
+// has to name all three kinds of mismatch off a full outer join, where either
+// side may be missing. The lazy ternary is what keeps double(null) from
+// blowing up on the rows where the other side is absent.
+func TestReconciliationClassifier(t *testing.T) {
+	const classify = "row.paid_amount == null ? 'invoiced but not paid' : " +
+		"(row.amount == null ? 'paid but never invoiced' : " +
+		"(double(row.amount) != double(row.paid_amount) ? 'amount differs' : ''))"
+
+	out := runDrop(t, "compute_rows", map[string]any{
+		"compute": map[string]any{"problem": classify},
+	}, map[string]core.Ref{"rows": jsonRef([]any{
+		map[string]any{"invoice_no": "A1", "amount": 1000, "paid_amount": 1000},
+		map[string]any{"invoice_no": "A2", "amount": 500, "paid_amount": nil},
+		map[string]any{"invoice_no": "A3", "amount": nil, "paid_amount": 250},
+		map[string]any{"invoice_no": "A4", "amount": 300, "paid_amount": 299},
+	})})
+	rows := rowsOf(t, out["rows"])
+	want := []string{"", "invoiced but not paid", "paid but never invoiced", "amount differs"}
+	for i, w := range want {
+		if rows[i]["problem"] != w {
+			t.Errorf("row %d: problem = %q, want %q", i, rows[i]["problem"], w)
+		}
+	}
+}
+
+// Use case 29: each customer's own rows, collected into their own statement.
+// The grouping has to carry the lines along, not just the totals — that list
+// is what the template walks.
+func TestPerCustomerStatement(t *testing.T) {
+	grouped := runDrop(t, "group_aggregate", map[string]any{
+		"by": []any{"customer", "email"},
+		"aggregate": map[string]any{
+			"total": map[string]any{"op": "sum", "column": "amount"},
+			"lines": map[string]any{"op": "collect", "column": "description"},
+			"count": map[string]any{"op": "count"},
+		},
+	}, map[string]core.Ref{"rows": jsonRef([]any{
+		map[string]any{"customer": "Acme", "email": "a@x.se", "description": "Klippning", "amount": 450},
+		map[string]any{"customer": "Acme", "email": "a@x.se", "description": "Färg", "amount": 900},
+		map[string]any{"customer": "Bolaget", "email": "b@x.se", "description": "Konsultation", "amount": 1200},
+	})})
+	rows := rowsOf(t, grouped["rows"])
+	if len(rows) != 2 {
+		t.Fatalf("groups = %v, want one per customer", rows)
+	}
+	lines, _ := rows[0]["lines"].([]any)
+	if len(lines) != 2 {
+		t.Fatalf("Acme's lines = %v, want both charges", rows[0]["lines"])
+	}
+
+	// That group is what a loop hands the template as ${item.} — see
+	// engine.TestItemWholeValue_KeepsStructure for the handover itself.
+	out := runDrop(t, "render_template", map[string]any{
+		"template": "<p>Hej {{.customer}},</p><ul>{{range .lines}}<li>{{.}}</li>{{end}}</ul><p>Total: {{.total}} kr</p>",
+	}, map[string]core.Ref{"data": jsonRef(rows[0])})
+	html, _ := out["html"].Inline.(string)
+	for _, want := range []string{"Hej Acme", "<li>Klippning</li>", "<li>Färg</li>", "1350"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("statement is missing %q:\n%s", want, html)
+		}
+	}
+}
+
+// Use cases 24 and 27 lean on the string helpers: a title trimmed out of a
+// Slack message, and addresses tidied before they're deduplicated. Without
+// them neither is expressible in a formula at all.
+func TestStringHelpersInScenarios(t *testing.T) {
+	out := runDrop(t, "compute_rows", map[string]any{
+		"compute": map[string]any{
+			"email": "row.email.trim().lowerAscii()",
+			"name":  "row.name.trim()",
+		},
+		"filter": "row.email.trim() != '' && row.email.contains('@')",
+	}, map[string]core.Ref{"rows": jsonRef([]any{
+		map[string]any{"name": " Ida ", "email": " IDA@Example.SE "},
+		map[string]any{"name": "Tom", "email": ""},
+		map[string]any{"name": "Nils", "email": "not-an-email"},
+	})})
+	rows := rowsOf(t, out["rows"])
+	if len(rows) != 1 || rows[0]["email"] != "ida@example.se" || rows[0]["name"] != "Ida" {
+		t.Fatalf("cleaned rows = %v", rows)
+	}
+
+	long := runDrop(t, "expression", map[string]any{
+		"expr": "input.size() > 60 ? input.substring(0, 60).trim() + '…' : input.trim()",
+	}, map[string]core.Ref{"in": {MIME: "text/plain",
+		Inline: " printer on floor 2 is jammed again and nobody can print the delivery notes"}})
+	title, _ := long["out"].Inline.(string)
+	if !strings.HasSuffix(title, "…") || len([]rune(title)) > 61 {
+		t.Errorf("title = %q, want it trimmed to 60 characters plus an ellipsis", title)
+	}
+}
+
+// Use case 31: only tomorrow, and only when tomorrow is actually bad.
+func TestTomorrowsWeatherFilter(t *testing.T) {
+	const filter = "row.date == string(now + duration('24h')).substring(0, 10) && " +
+		"(row.temp_min < 0.0 || row.conditions.lowerAscii().contains('rain'))"
+	today := time.Now().UTC().Format("2006-01-02")
+	tomorrow := time.Now().UTC().AddDate(0, 0, 1).Format("2006-01-02")
+
+	out := runDrop(t, "compute_rows", map[string]any{"filter": filter},
+		map[string]core.Ref{"rows": jsonRef([]any{
+			map[string]any{"date": today, "temp_min": -5.0, "conditions": "Snow"},
+			map[string]any{"date": tomorrow, "temp_min": 12.0, "conditions": "Clear"},
+			map[string]any{"date": tomorrow, "temp_min": -3.0, "conditions": "Clear"},
+			map[string]any{"date": tomorrow, "temp_min": 8.0, "conditions": "Rain"},
+		})})
+	rows := rowsOf(t, out["rows"])
+	if len(rows) != 2 {
+		t.Fatalf("kept %d row(s), want tomorrow's frost and rain only: %v", len(rows), rows)
+	}
+	for _, r := range rows {
+		if r["date"] != tomorrow {
+			t.Errorf("kept a row for %v", r["date"])
+		}
 	}
 }

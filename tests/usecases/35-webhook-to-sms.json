@@ -1,0 +1,25 @@
+{
+  "id": "uc-webhook-to-sms",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "Another system calls us → the right person gets a text",
+  "nodes": [
+    {"id": "hook", "module": "webhook_input", "params": {"secrets": ["${secret.PARTNER_WEBHOOK_TOKEN}"]}},
+    {"id": "number", "module": "expression", "params": {"expr": "input.phone"}},
+    {"id": "clean_phone", "module": "phone", "params": {"default_region": "SE"}},
+    {"id": "wording", "module": "expression", "params": {"expr": "input.subject + ': ' + input.body"}},
+    {"id": "sms", "module": "twilio_send_sms", "params": {}},
+    {"id": "log_row", "module": "expression", "params": {"expr": "[{'phone': input.phone, 'subject': input.subject, 'at': int(now)}]"}},
+    {"id": "log", "module": "builtin_store_append", "params": {"table": "partner_messages", "column_types": {"at": "INTEGER"}}}
+  ],
+  "edges": [
+    {"from": "hook", "from_port": "body", "to": "number", "to_port": "in"},
+    {"from": "number", "from_port": "out", "to": "clean_phone", "to_port": "phone"},
+    {"from": "clean_phone", "from_port": "out", "to": "sms", "to_port": "to"},
+    {"from": "hook", "from_port": "body", "to": "wording", "to_port": "in"},
+    {"from": "wording", "from_port": "out", "to": "sms", "to_port": "body"},
+    {"from": "hook", "from_port": "body", "to": "log_row", "to_port": "in"},
+    {"from": "log_row", "from_port": "out", "to": "log", "to_port": "rows"}
+  ]
+}

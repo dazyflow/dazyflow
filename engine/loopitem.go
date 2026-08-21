@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -59,6 +60,47 @@ func itemSubstituter(ctx context.Context) Substituter {
 		}
 		return stringifyItemValue(value), true, nil
 	}
+}
+
+// wholeItemPattern matches a param whose ENTIRE value is one ${item.…}
+// reference (leading/trailing space tolerated), which is the form that keeps
+// its structured shape — see itemWholeValue.
+var wholeItemPattern = regexp.MustCompile(`^\s*\$\{item\.([^}]*)\}\s*$`)
+
+// itemWholeValue resolves s when it is exactly one ${item.…} reference,
+// returning the item's value with its real type intact — a list stays a list,
+// an object stays an object. ok=false means s isn't a whole-string item ref
+// (or there is no item on the context), and the caller falls through to
+// ordinary string substitution.
+//
+// Why this exists: a loop body's steps see the current item ONLY through
+// ${item.…} in their own settings, because the body subgraph has no upstream
+// node to wire from. Without this, every such value arrived as text — so a
+// step wanting structured data (a shipment object, an email template's merge
+// data, a list of invoice lines) got a JSON *string* it could not read, and
+// "one X per row" was unbuildable for exactly the steps that need more than a
+// scalar. Mirrors the identical rule for ${resource.…}.
+func itemWholeValue(ctx context.Context, s string) (any, bool, error) {
+	item, hasItem := loopItemFromContext(ctx)
+	if !hasItem {
+		return nil, false, nil
+	}
+	m := wholeItemPattern.FindStringSubmatch(s)
+	if m == nil {
+		return nil, false, nil
+	}
+	v, err := traverseItemPath(item, m[1])
+	if err != nil {
+		return nil, true, err
+	}
+	// Scalars are handed back through the ordinary string path so a param
+	// declared as text keeps getting text (e.g. a number splices as "42",
+	// not float64) — only genuinely structured values need the shortcut.
+	switch v.(type) {
+	case map[string]any, []any:
+		return v, true, nil
+	}
+	return nil, false, nil
 }
 
 // traverseItemPath walks a dot-separated path into the item (maps by key,

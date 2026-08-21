@@ -1,0 +1,138 @@
+{
+  "id": "uc-contact-form-spam-filter",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "Contact form, minus the junk",
+  "nodes": [
+    {
+      "id": "form",
+      "module": "webhook_input",
+      "params": {
+        "public_form": true,
+        "form_fields": [
+          "name",
+          "email",
+          "message"
+        ],
+        "form_title": "Get in touch"
+      }
+    },
+    {
+      "id": "as_text",
+      "module": "render_template",
+      "params": {
+        "template": "From: {{.name}} <{{.email}}>\n\n{{.message}}"
+      }
+    },
+    {
+      "id": "judge",
+      "module": "claude_classify",
+      "params": {
+        "categories": [
+          {
+            "name": "genuine",
+            "description": "A real person asking about our work, a quote, support, or a partnership."
+          },
+          {
+            "name": "spam",
+            "description": "Bulk SEO/marketing outreach, crypto, link-building offers, or gibberish."
+          }
+        ]
+      }
+    },
+    {
+      "id": "is_spam",
+      "module": "compare",
+      "params": {
+        "op": "equals",
+        "B": "spam"
+      }
+    },
+    {
+      "id": "gate",
+      "module": "branch",
+      "params": {}
+    },
+    {
+      "id": "keep",
+      "module": "sheets_append_row",
+      "params": {
+        "spreadsheet_id": "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789",
+        "range": "Enquiries",
+        "account": "default"
+      }
+    },
+    {
+      "id": "tell_us",
+      "module": "slack_send_message",
+      "params": {
+        "channel": "#leads",
+        "account": "default"
+      }
+    },
+    {
+      "id": "binned",
+      "module": "builtin_store_append",
+      "params": {
+        "table": "spam_seen"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "form",
+      "from_port": "body",
+      "to": "as_text",
+      "to_port": "data"
+    },
+    {
+      "from": "as_text",
+      "from_port": "html",
+      "to": "judge",
+      "to_port": "text"
+    },
+    {
+      "from": "judge",
+      "from_port": "category",
+      "to": "is_spam",
+      "to_port": "A"
+    },
+    {
+      "from": "is_spam",
+      "from_port": "result",
+      "to": "gate",
+      "to_port": "condition"
+    },
+    {
+      "from": "form",
+      "from_port": "body",
+      "to": "gate",
+      "to_port": "in"
+    },
+    {
+      "from": "gate",
+      "from_port": "else",
+      "to": "keep",
+      "to_port": "rows"
+    },
+    {
+      "from": "as_text",
+      "from_port": "html",
+      "to": "tell_us",
+      "to_port": "text"
+    },
+    {
+      "from": "keep",
+      "from_port": "updated_range",
+      "to": "tell_us",
+      "to_port": "pass"
+    },
+    {
+      "from": "gate",
+      "from_port": "then",
+      "to": "binned",
+      "to_port": "rows"
+    }
+  ]
+}

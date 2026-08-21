@@ -1,0 +1,18 @@
+{
+  "id": "uc-purchase-log",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "Remember every purchase (so we can follow up later)",
+  "nodes": [
+    {"id": "paid", "module": "stripe_on_payment", "params": {}},
+    {"id": "row", "module": "map_rows", "params": {"select": ["id", "receipt_email"], "rename": {"id": "payment_id", "receipt_email": "email"}}},
+    {"id": "stamp", "module": "compute_rows", "params": {"compute": {"bought_at": "int(now)", "asked_on": "''"}}},
+    {"id": "log", "module": "builtin_store_append", "params": {"table": "purchases", "unique_by": ["payment_id"], "column_types": {"bought_at": "INTEGER"}}}
+  ],
+  "edges": [
+    {"from": "paid", "from_port": "payment", "to": "row", "to_port": "rows"},
+    {"from": "row", "from_port": "rows", "to": "stamp", "to_port": "rows"},
+    {"from": "stamp", "from_port": "rows", "to": "log", "to_port": "rows"}
+  ]
+}

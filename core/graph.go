@@ -60,6 +60,20 @@ type Node struct {
 	// aid (e.g. don't actually send emails while testing the rest of a
 	// flow). Honored by the worker; see daemon/worker.go.
 	Disabled bool `json:"disabled,omitempty"`
+
+	// ContinueOnError marks this step as non-critical: if it fails, the run
+	// carries on and finishes with its other branches instead of being
+	// marked failed. The step's own dependents are still skipped (there is
+	// no output to feed them) — the same skip cascade a disabled node
+	// causes.
+	//
+	// It exists for the "announce it everywhere" shape: several independent
+	// notifications hang off one source, and Discord being down is no reason
+	// for the Slack post and the email not to go out. Without it, a terminal
+	// step (one with no outgoing edges) always propagates its failure — the
+	// on_error policies live on EDGES, so a step at the end of a branch has
+	// nowhere to hang one.
+	ContinueOnError bool `json:"continue_on_error,omitempty"`
 }
 
 // Position is a canvas X/Y coordinate. Pixels in the UI's coordinate
@@ -182,6 +196,20 @@ type Graph struct {
 	// rather than passive firing. Pair with the enable_flow /
 	// disable_flow MCP tools to pause a flow without deleting it.
 	Disabled bool `json:"disabled,omitempty"`
+
+	// ContinueOnError marks this step as non-critical: if it fails, the run
+	// carries on and finishes with its other branches instead of being
+	// marked failed. The step's own dependents are still skipped (there is
+	// no output to feed them) — the same skip cascade a disabled node
+	// causes.
+	//
+	// It exists for the "announce it everywhere" shape: several independent
+	// notifications hang off one source, and Discord being down is no reason
+	// for the Slack post and the email not to go out. Without it, a terminal
+	// step (one with no outgoing edges) always propagates its failure — the
+	// on_error policies live on EDGES, so a step at the end of a branch has
+	// nowhere to hang one.
+	ContinueOnError bool `json:"continue_on_error,omitempty"`
 }
 
 // Visibility enumerates the access modes a flow can have. Values are

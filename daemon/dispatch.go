@@ -327,6 +327,13 @@ func classifyEdge(predRec core.JobRecord, edge core.Edge) edgeOutcome {
 }
 
 func (d *Dispatcher) failurePropagates(graph core.Graph, nodeID string) bool {
+	// A step marked non-critical never fails the run — the author has said
+	// this one is allowed to fail. Checked first because it must hold for a
+	// TERMINAL step too, which by the edge rules below would always
+	// propagate (it has no outgoing edge to carry a policy).
+	if n, ok := graph.Node(nodeID); ok && n.ContinueOnError {
+		return false
+	}
 	var hasOutgoing, hasFallback, hasNonTolerant bool
 	for _, edge := range graph.Edges {
 		if edge.From != nodeID {

@@ -1,0 +1,106 @@
+{
+  "id": "uc-slack-mention-to-ticket",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "Mention the bot in Slack → a real ticket",
+  "nodes": [
+    {
+      "id": "mention",
+      "module": "slack_on_mention",
+      "params": {}
+    },
+    {
+      "id": "strip",
+      "module": "regex",
+      "params": {
+        "pattern": "<@[^>]+>",
+        "mode": "replace",
+        "replacement": ""
+      }
+    },
+    {
+      "id": "title",
+      "module": "expression",
+      "params": {
+        "expr": "input.size() > 60 ? input.substring(0, 60).trim() + '…' : input.trim()"
+      }
+    },
+    {
+      "id": "ticket",
+      "module": "github_create_issue",
+      "params": {
+        "account": "default",
+        "owner": "acme",
+        "repo": "support",
+        "labels": [
+          "from-slack"
+        ]
+      }
+    },
+    {
+      "id": "reply_text",
+      "module": "expression",
+      "params": {
+        "expr": "'Ticket opened: ' + input"
+      }
+    },
+    {
+      "id": "reply",
+      "module": "slack_send_message",
+      "params": {
+        "account": "default"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "mention",
+      "from_port": "text",
+      "to": "strip",
+      "to_port": "in"
+    },
+    {
+      "from": "strip",
+      "from_port": "out",
+      "to": "title",
+      "to_port": "in"
+    },
+    {
+      "from": "title",
+      "from_port": "out",
+      "to": "ticket",
+      "to_port": "title"
+    },
+    {
+      "from": "mention",
+      "from_port": "text",
+      "to": "ticket",
+      "to_port": "body"
+    },
+    {
+      "from": "ticket",
+      "from_port": "issue_url",
+      "to": "reply_text",
+      "to_port": "in"
+    },
+    {
+      "from": "reply_text",
+      "from_port": "out",
+      "to": "reply",
+      "to_port": "text"
+    },
+    {
+      "from": "mention",
+      "from_port": "channel",
+      "to": "reply",
+      "to_port": "channel"
+    },
+    {
+      "from": "mention",
+      "from_port": "ts",
+      "to": "reply",
+      "to_port": "thread_ts"
+    }
+  ]
+}

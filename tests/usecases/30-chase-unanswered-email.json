@@ -1,0 +1,27 @@
+{
+  "id": "uc-chase-unanswered-email",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "Emails nobody answered",
+  "triggers": [{"type": "cron", "cron": "0 8 * * 1-5", "tz": "Europe/Stockholm"}],
+  "nodes": [
+    {"id": "sent", "module": "gmail_search_messages", "params": {"account": "default", "query": "in:sent -in:chats newer_than:14d older_than:3d", "max_results": 50}},
+    {"id": "each", "module": "for_each", "params": {"concurrency": 3}},
+    {"id": "thread", "module": "gmail_get_thread", "params": {"account": "default", "id": "${item.threadId}"}},
+    {"id": "collected", "module": "unwrap_results", "params": {"node": "thread", "port": "summary", "skip_errors": true}},
+    {"id": "waiting", "module": "compute_rows", "params": {"filter": "row.replied == false"}},
+    {"id": "unique", "module": "dedupe_rows", "params": {"by": ["thread_id"], "keep": "first"}},
+    {"id": "list", "module": "render_text", "params": {"template": "'• ' + row.subject + ' — last written ' + row.last_date", "separator": "\n", "prefix": "Nobody has come back on these:\n", "empty": "Everything you sent has had a reply."}},
+    {"id": "remind_me", "module": "email_send", "params": {"to": "me@example.com", "subject": "Waiting on a reply", "format": "text"}}
+  ],
+  "edges": [
+    {"from": "sent", "from_port": "messages", "to": "each", "to_port": "items"},
+    {"from": "each", "from_port": "body", "to": "thread", "to_port": "pass"},
+    {"from": "each", "from_port": "results", "to": "collected", "to_port": "results"},
+    {"from": "collected", "from_port": "rows", "to": "waiting", "to_port": "rows"},
+    {"from": "waiting", "from_port": "rows", "to": "unique", "to_port": "rows"},
+    {"from": "unique", "from_port": "rows", "to": "list", "to_port": "rows"},
+    {"from": "list", "from_port": "text", "to": "remind_me", "to_port": "body"}
+  ]
+}

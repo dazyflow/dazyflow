@@ -1,0 +1,110 @@
+{
+  "id": "uc-escalate-unacked",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "Nobody picked it up → escalate to the next person",
+  "nodes": [
+    {
+      "id": "every",
+      "module": "poll_trigger",
+      "params": {
+        "interval_seconds": 300
+      }
+    },
+    {
+      "id": "stale",
+      "module": "builtin_store_query",
+      "params": {
+        "sql": "SELECT alert_id, summary FROM alerts WHERE acked = '' AND escalated = '' AND raised_at < strftime('%s','now') - 600",
+        "limit": 50
+      }
+    },
+    {
+      "id": "wording",
+      "module": "render_text",
+      "params": {
+        "template": "'• ' + row.summary + ' (' + row.alert_id + ')'",
+        "separator": "\n",
+        "prefix": "Nobody has picked these up:\n",
+        "empty": ""
+      }
+    },
+    {
+      "id": "escalate",
+      "module": "ntfy",
+      "params": {
+        "topic": "acme-oncall-backup",
+        "title": "Unacknowledged alert",
+        "priority": "5"
+      }
+    },
+    {
+      "id": "mark",
+      "module": "compute_rows",
+      "params": {
+        "compute": {
+          "escalated": "string(now)"
+        }
+      }
+    },
+    {
+      "id": "keys",
+      "module": "map_rows",
+      "params": {
+        "select": [
+          "alert_id",
+          "escalated"
+        ]
+      }
+    },
+    {
+      "id": "remember",
+      "module": "builtin_store_append",
+      "params": {
+        "table": "alerts",
+        "unique_by": [
+          "alert_id"
+        ]
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "every",
+      "from_port": "pass",
+      "to": "stale",
+      "to_port": "pass"
+    },
+    {
+      "from": "stale",
+      "from_port": "rows",
+      "to": "wording",
+      "to_port": "rows"
+    },
+    {
+      "from": "wording",
+      "from_port": "text",
+      "to": "escalate",
+      "to_port": "message"
+    },
+    {
+      "from": "stale",
+      "from_port": "rows",
+      "to": "mark",
+      "to_port": "rows"
+    },
+    {
+      "from": "mark",
+      "from_port": "rows",
+      "to": "keys",
+      "to_port": "rows"
+    },
+    {
+      "from": "keys",
+      "from_port": "rows",
+      "to": "remember",
+      "to_port": "rows"
+    }
+  ]
+}

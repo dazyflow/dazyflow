@@ -1,0 +1,22 @@
+{
+  "id": "uc-announce-everywhere",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "Announce it once, post it everywhere",
+  "nodes": [
+    {"id": "form", "module": "webhook_input", "params": {"public_form": true, "form_fields": ["headline", "message"], "form_title": "Announcement"}},
+    {"id": "wording", "module": "render_template", "params": {"template": "*{{.headline}}*\n\n{{.message}}"}},
+    {"id": "slack", "module": "slack_send_message", "params": {"channel": "#general", "account": "default"}, "continue_on_error": true},
+    {"id": "discord", "module": "discord_send_message", "params": {}, "continue_on_error": true},
+    {"id": "mail", "module": "email_send", "params": {"to": "alla@example.com", "subject": "Announcement", "format": "text"}, "continue_on_error": true},
+    {"id": "push", "module": "ntfy", "params": {"topic": "acme-alla-8f2k", "title": "Announcement"}, "continue_on_error": true}
+  ],
+  "edges": [
+    {"from": "form", "from_port": "body", "to": "wording", "to_port": "data"},
+    {"from": "wording", "from_port": "html", "to": "slack", "to_port": "text"},
+    {"from": "wording", "from_port": "html", "to": "discord", "to_port": "content"},
+    {"from": "wording", "from_port": "html", "to": "mail", "to_port": "body"},
+    {"from": "wording", "from_port": "html", "to": "push", "to_port": "message"}
+  ]
+}

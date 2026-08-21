@@ -1,0 +1,24 @@
+{
+  "id": "uc-ask-for-a-review",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "Ask for a review three days after the purchase",
+  "triggers": [{"type": "cron", "cron": "0 10 * * *", "tz": "Europe/Stockholm"}],
+  "nodes": [
+    {"id": "ripe", "module": "builtin_store_query", "params": {"sql": "SELECT payment_id, email FROM purchases WHERE asked_on = '' AND bought_at < strftime('%s','now') - 259200", "limit": 200}},
+    {"id": "each", "module": "for_each", "params": {"concurrency": 2}},
+    {"id": "ask", "module": "email_send", "params": {"to": "${item.email}", "subject": "How did we do?", "body": "Hi! You bought from us a few days ago — if you have half a minute, we'd love a short review: https://example.com/review\n\nAnd if something wasn't right, just reply to this and we'll sort it.", "format": "text"}},
+    {"id": "mark", "module": "compute_rows", "params": {"compute": {"asked_on": "string(now)"}}},
+    {"id": "keep_key", "module": "map_rows", "params": {"select": ["payment_id", "asked_on"]}},
+    {"id": "remember", "module": "builtin_store_append", "params": {"table": "purchases", "unique_by": ["payment_id"]}}
+  ],
+  "edges": [
+    {"from": "ripe", "from_port": "rows", "to": "each", "to_port": "items"},
+    {"from": "each", "from_port": "body", "to": "ask", "to_port": "pass"},
+    {"from": "ripe", "from_port": "rows", "to": "mark", "to_port": "rows"},
+    {"from": "each", "from_port": "results", "to": "mark", "to_port": "pass"},
+    {"from": "mark", "from_port": "rows", "to": "keep_key", "to_port": "rows"},
+    {"from": "keep_key", "from_port": "rows", "to": "remember", "to_port": "rows"}
+  ]
+}

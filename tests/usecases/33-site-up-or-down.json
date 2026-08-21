@@ -1,0 +1,76 @@
+{
+  "id": "uc-site-up-or-down",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "Tell me when the website breaks — and when it's back",
+  "nodes": [
+    {
+      "id": "every",
+      "module": "poll_trigger",
+      "params": {
+        "interval_seconds": 300
+      }
+    },
+    {
+      "id": "check",
+      "module": "site_check",
+      "params": {
+        "url": "https://example.com/",
+        "expect_text": "Välkommen",
+        "timeout_ms": 10000
+      }
+    },
+    {
+      "id": "page_me",
+      "module": "ntfy",
+      "params": {
+        "topic": "acme-oncall-primary",
+        "title": "Site down",
+        "priority": "5"
+      }
+    },
+    {
+      "id": "tell_team",
+      "module": "slack_send_message",
+      "params": {
+        "channel": "#ops",
+        "account": "default"
+      }
+    },
+    {
+      "id": "all_clear",
+      "module": "slack_send_message",
+      "params": {
+        "channel": "#ops",
+        "account": "default"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "every",
+      "from_port": "pass",
+      "to": "check",
+      "to_port": "pass"
+    },
+    {
+      "from": "check",
+      "from_port": "on_down",
+      "to": "page_me",
+      "to_port": "message"
+    },
+    {
+      "from": "check",
+      "from_port": "on_down",
+      "to": "tell_team",
+      "to_port": "text"
+    },
+    {
+      "from": "check",
+      "from_port": "on_up",
+      "to": "all_clear",
+      "to_port": "text"
+    }
+  ]
+}

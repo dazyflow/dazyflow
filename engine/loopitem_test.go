@@ -150,3 +150,98 @@ func TestWithBodyRunner_Cov(t *testing.T) {
 		t.Error("runner closure was not invoked")
 	}
 }
+
+// A loop body's steps see the item only through ${item.…} in their own
+// settings. A setting that is exactly one such reference must keep the
+// value's real shape — otherwise a step wanting an object or a list (a
+// shipment, an email template's merge data, a set of invoice lines) is
+// handed JSON text it can't read.
+func TestItemWholeValue_KeepsStructure(t *testing.T) {
+	item := map[string]any{
+		"customer": "Ida",
+		"lines":    []any{map[string]any{"desc": "Klippning", "amount": float64(450)}},
+		"address":  map[string]any{"street": "Storgatan 1", "city": "Malmö"},
+		"count":    float64(2),
+	}
+	ctx := WithLoopItem(context.Background(), item)
+
+	v, ok, err := itemWholeValue(ctx, "${item.lines}")
+	if err != nil || !ok {
+		t.Fatalf("lines: ok=%v err=%v", ok, err)
+	}
+	list, isList := v.([]any)
+	if !isList || len(list) != 1 {
+		t.Fatalf("lines = %#v, want a one-element list", v)
+	}
+
+	v, ok, _ = itemWholeValue(ctx, "  ${item.address}  ")
+	if !ok {
+		t.Fatal("a padded whole-value reference should still resolve")
+	}
+	if _, isMap := v.(map[string]any); !isMap {
+		t.Fatalf("address = %#v, want a map", v)
+	}
+
+	// The whole item.
+	if v, ok, _ = itemWholeValue(ctx, "${item.}"); !ok {
+		t.Fatal("${item.} should resolve to the whole item")
+	} else if m, isMap := v.(map[string]any); !isMap || m["customer"] != "Ida" {
+		t.Fatalf("whole item = %#v", v)
+	}
+}
+
+// Scalars keep going through the ordinary string path, so a text setting
+// still gets text and an inline reference inside a sentence is untouched.
+func TestItemWholeValue_ScalarsAndInlineFallThrough(t *testing.T) {
+	ctx := WithLoopItem(context.Background(), map[string]any{
+		"customer": "Ida", "count": float64(2),
+		"lines": []any{"a"},
+	})
+	for _, s := range []string{"${item.customer}", "${item.count}", "Hi ${item.customer}", "${item.lines} and more"} {
+		if _, ok, err := itemWholeValue(ctx, s); ok || err != nil {
+			t.Errorf("%q: ok=%v err=%v, want (false, nil)", s, ok, err)
+		}
+	}
+}
+
+func TestItemWholeValue_NoItemOnContext(t *testing.T) {
+	if _, ok, err := itemWholeValue(context.Background(), "${item.lines}"); ok || err != nil {
+		t.Errorf("ok=%v err=%v, want (false, nil) outside a loop", ok, err)
+	}
+}
+
+// End-to-end through the param resolver the worker actually uses: a body
+// step's structured setting comes out structured, while text settings keep
+// splicing as text.
+func TestResolveParams_StructuredItemValue(t *testing.T) {
+	job := core.Job{Params: map[string]any{
+		"shipment": "${item.address}",
+		"rows":     "${item.lines}",
+		"subject":  "Order for ${item.customer}",
+		"nested":   map[string]any{"to": "${item.customer}", "lines": "${item.lines}"},
+	}}
+	ctx := WithLoopItem(context.Background(), map[string]any{
+		"customer": "Ida",
+		"address":  map[string]any{"city": "Malmö"},
+		"lines":    []any{map[string]any{"desc": "Klippning"}},
+	})
+	if _, err := resolveTemplatesCollecting(ctx, nil, nil, nil, &job); err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if _, ok := job.Params["shipment"].(map[string]any); !ok {
+		t.Errorf("shipment = %#v, want a map", job.Params["shipment"])
+	}
+	if _, ok := job.Params["rows"].([]any); !ok {
+		t.Errorf("rows = %#v, want a list", job.Params["rows"])
+	}
+	if job.Params["subject"] != "Order for Ida" {
+		t.Errorf("subject = %#v", job.Params["subject"])
+	}
+	nested, _ := job.Params["nested"].(map[string]any)
+	if nested["to"] != "Ida" {
+		t.Errorf("nested.to = %#v", nested["to"])
+	}
+	if _, ok := nested["lines"].([]any); !ok {
+		t.Errorf("nested.lines = %#v, want a list — nested settings resolve too", nested["lines"])
+	}
+}

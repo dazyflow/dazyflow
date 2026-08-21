@@ -161,3 +161,41 @@ func TestAnalyzeDependent(t *testing.T) {
 		})
 	}
 }
+
+// A run with several independent notifications hanging off one source is the
+// "announce it everywhere" shape: Discord being down is no reason for the
+// Slack post and the email not to count. The on_error policies live on edges,
+// so a terminal step has nowhere to hang one — hence the per-node flag.
+func TestFailurePropagates_ContinueOnError(t *testing.T) {
+	d := &Dispatcher{}
+	graph := core.Graph{
+		Nodes: []core.Node{
+			{ID: "src", Module: "webhook_input"},
+			{ID: "slack", Module: "slack_send_message"},
+			{ID: "discord", Module: "discord_send_message", ContinueOnError: true},
+			{ID: "middle", Module: "render_text", ContinueOnError: true},
+			{ID: "after", Module: "slack_send_message"},
+		},
+		Edges: []core.Edge{
+			{From: "src", FromPort: "body", To: "slack", ToPort: "text"},
+			{From: "src", FromPort: "body", To: "discord", ToPort: "content"},
+			{From: "src", FromPort: "body", To: "middle", ToPort: "rows"},
+			{From: "middle", FromPort: "text", To: "after", ToPort: "text"},
+		},
+	}
+	if !d.failurePropagates(graph, "slack") {
+		t.Error("an ordinary terminal step failing must still fail the run")
+	}
+	if d.failurePropagates(graph, "discord") {
+		t.Error("a terminal step marked non-critical must not fail the run")
+	}
+	// The flag also wins over an ordinary (non-tolerant) outgoing edge: the
+	// author has said this step is allowed to fail.
+	if d.failurePropagates(graph, "middle") {
+		t.Error("a non-critical step with dependents must not fail the run either")
+	}
+	// An unknown node keeps the old behaviour rather than silently tolerating.
+	if !d.failurePropagates(graph, "nope") {
+		t.Error("an unknown node should propagate, as before")
+	}
+}

@@ -1,0 +1,27 @@
+{
+  "id": "uc-failed-payment-dunning",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "Payment bounced → chase the customer, tell finance",
+  "nodes": [
+    {"id": "failed", "module": "stripe_on_payment_failed", "params": {}},
+    {"id": "letter", "module": "render_template", "params": {"template": "<p>Hi,</p><p>Your payment of {{.amount}} {{.currency}} didn't go through — the bank said: <em>{{.last_payment_error.message}}</em>.</p><p>You can try again from your account page. If the card has changed, updating it there is all that's needed.</p>"}},
+    {"id": "chase", "module": "gmail_send_email", "params": {"account": "default", "subject": "Your payment didn't go through", "format": "html"}},
+    {"id": "ping_text", "module": "render_template", "params": {"template": "Payment failed: {{.amount}} {{.currency}} from {{.receipt_email}} — {{.last_payment_error.message}}"}},
+    {"id": "ping", "module": "slack_send_message", "params": {"channel": "#finance", "account": "default"}},
+    {"id": "row", "module": "map_rows", "params": {"select": ["id", "receipt_email", "amount", "currency"], "rename": {"id": "payment_id", "receipt_email": "email"}}},
+    {"id": "stamp", "module": "compute_rows", "params": {"compute": {"chased_on": "string(now)"}}},
+    {"id": "log", "module": "builtin_store_append", "params": {"table": "dunning", "unique_by": ["payment_id"]}}
+  ],
+  "edges": [
+    {"from": "failed", "from_port": "payment", "to": "letter", "to_port": "data"},
+    {"from": "failed", "from_port": "customer_email", "to": "chase", "to_port": "to"},
+    {"from": "letter", "from_port": "html", "to": "chase", "to_port": "body"},
+    {"from": "failed", "from_port": "payment", "to": "ping_text", "to_port": "data"},
+    {"from": "ping_text", "from_port": "html", "to": "ping", "to_port": "text"},
+    {"from": "failed", "from_port": "payment", "to": "row", "to_port": "rows"},
+    {"from": "row", "from_port": "rows", "to": "stamp", "to_port": "rows"},
+    {"from": "stamp", "from_port": "rows", "to": "log", "to_port": "rows"}
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "id": "uc-standup-prompt",
+  "version": "1",
+  "tenant": "dev",
+  "workspace": "default",
+  "name": "Standup: ask the team every weekday morning",
+  "triggers": [
+    {
+      "type": "cron",
+      "cron": "0 9 * * 1-5",
+      "tz": "Europe/Stockholm"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "ask",
+      "module": "slack_send_message",
+      "params": {
+        "channel": "#standup",
+        "account": "default",
+        "text": "God morgon! Two minutes please: what you did yesterday, what you're on today, and anything in your way → https://flows.example.com/form/dev/default/uc-standup-collect"
+      }
+    }
+  ],
+  "edges": []
+}
