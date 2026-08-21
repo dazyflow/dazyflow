@@ -66,8 +66,28 @@ into the image.)
   Drive's file name, so a weekly backup can be dated instead of overwriting
   itself.
 
+- **A generator eval built on the scenario corpus** (`make flowgen-eval`). The
+  thirty-five plain-language asks in `/SCENARIOS.md` are each already paired
+  with a known-good graph, which makes them an eval set for the AI flow
+  generator: feed each scenario's own words to the same generator the editor
+  calls, and score the draft on whether it passes the save gate, picks the same
+  kind of trigger, and reaches the services the job needs. The three are scored
+  separately because a flow that does nothing passes the gate. Live runs are
+  opt-in (they cost money and aren't deterministic) and report rather than
+  fail; two parts run in ordinary CI with no model — one checks the corpus and
+  the scorer stay honest, the other drives the whole eval against a scripted
+  model so the live path can't rot.
+
 ### Fixed
 
+- **The flow generator's instructions couldn't build a loop.** Its hand-written
+  guidance said to "wire for_each.body into the per-item step's input" — the
+  documented footgun, since the body pin is a control pin and pointing it at a
+  typed input injects the whole row where a string was expected — and never
+  mentioned `${item.…}`, so nothing told the model how a step inside a loop
+  reads the current item. A model could only recover by choosing to call
+  describe_drop on for_each. The guidance now states the mechanism, including
+  that a param whose whole value is one reference keeps the value's real type.
 - **Compare reads numeric text as a number.** Steps report counts, status codes
   and spreadsheet cells as text, so "is this count greater than 0" failed with
   `non-numeric operand in <,> comparison: string vs float64` — a message the

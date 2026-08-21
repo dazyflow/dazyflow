@@ -45,3 +45,6 @@ hazy-key
 /docker-compose.override.yml
 /bin
 /memory
+
+# Flow-generator eval reports (make flowgen-eval)
+.flowgen-eval/

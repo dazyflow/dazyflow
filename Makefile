@@ -132,6 +132,12 @@ test: ## Run the Go test suite with the race detector
 vet: ## Run go vet
 	go vet ./...
 
+flowgen-eval: ## Score the AI flow generator against every scenario in SCENARIOS.md (needs FLOWGEN_EVAL_KEY; writes a report)
+	@test -n "$$FLOWGEN_EVAL_KEY" || { echo "set FLOWGEN_EVAL_KEY=<provider api key> (it calls a real model, which costs money)"; exit 1; }
+	FLOWGEN_EVAL_OUT=$${FLOWGEN_EVAL_OUT:-.flowgen-eval} \
+		go test ./daemon -run TestFlowGenScenarios -v -timeout 60m
+	@echo "report: $${FLOWGEN_EVAL_OUT:-.flowgen-eval}/flowgen-eval.md"
+
 fmt: ## Format Go sources
 	gofmt -w .
 

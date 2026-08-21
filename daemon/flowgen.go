@@ -155,9 +155,14 @@ func flowGenSystemPrompt(catalog string) string {
 		"step the matching trigger node from the catalog (e.g. webhook_input). Otherwise use trigger.type=\"none\".\n" +
 		"- Every turn, answer by calling the `act` tool (see HOW TO WORK below).\n\n" +
 		"PATTERNS (compose these from catalog steps — they are not single steps):\n" +
-		"- Process a list one item at a time (each email, each row): wire the list into for_each.items; " +
-		"wire for_each.body into the per-item step's input; that step's output is collected on for_each.results; " +
-		"then add unwrap_results {node:<per-item step id>, port:<that step's output port>} to flatten results into rows.\n" +
+		"- Process a list one item at a time (each email, each row): wire the list into for_each.items, then " +
+		"wire for_each.body to the FIRST step of the body. `body` is a control pin — it marks that step and " +
+		"everything downstream of it as the loop body — so wire it to that step's `pass` pin, NEVER to a typed " +
+		"input. Inside the body there is no upstream node to wire from: each step reads the current item through " +
+		"${item.field} IN ITS OWN PARAMS (${item.} is the whole item, ${item.a.b} a nested value). A param whose " +
+		"WHOLE value is ${item.field} keeps that value's real type, so a step wanting a list or an object can be " +
+		"handed one. Each run's output is collected on for_each.results; add unwrap_results {node:<per-item step " +
+		"id>, port:<that step's output port>} to flatten them into rows.\n" +
 		"- gmail_search_messages already returns full email records (from, subject, date, body) on its `messages` " +
 		"port — wire that straight into map_rows / render_text. Only reach for gmail_get_message + a for_each when " +
 		"you have a bare message id from somewhere else.\n" +
