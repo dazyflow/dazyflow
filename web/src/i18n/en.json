@@ -650,7 +650,8 @@
       "testFailed": "Couldn't connect: {{error}}",
       "needsReconnect": "{{name}} needs reconnecting",
       "accountNeedsReconnect": "Sign in again — this account stopped working"
-    }
+    },
+    "needsReconnectTip": "Connected, but an account needs reconnecting"
   },
   "connections": {
     "scopeHelp": "To connect an app like Slack or Gmail, use the Apps page — most people never need this one. Secrets are for storing a password or key a flow needs directly. They're available to every flow in your organization; a single flow can override one with its own under the flow's Settings → Secrets.",

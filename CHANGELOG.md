@@ -23,6 +23,15 @@ into the image.)
 
 ## [Unreleased]
 
+### Fixed
+
+- **The Apps index showed a green dot for a broken connection.** The grid
+  only knew "set up" or "not set up", so an app whose account had stopped
+  working sat under *Connected* with the same green dot as a healthy one —
+  and the index is the first place someone looks when a flow starts failing.
+  A connected app with an account that needs reconnecting now shows amber,
+  with a tooltip saying so, matching what its own page reports.
+
 ## [0.7.3] - 2026-08-21
 
 ### Fixed

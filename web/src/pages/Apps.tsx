@@ -107,16 +107,18 @@ export function Apps() {
   // isn't configured yet). connectedSlugs drives the green dot, so a
   // connected app still reads distinctly from an always-available one
   // within the Ready section. Re-buckets once secrets/providers load.
-  const { ready, needsSetup, connectedSlugs } = useMemo(() => {
+  const { ready, needsSetup, connectedSlugs, ailingSlugs } = useMemo(() => {
     const ready: typeof groups = [];
     const needsSetup: typeof groups = [];
     const connectedSlugs = new Set<string>();
+    const ailingSlugs = new Set<string>();
     for (const g of groups) {
       const st = appConnectionState(g.slug, g.drops, secrets, providers);
       (st.needsSetup ? needsSetup : ready).push(g);
       if (st.connected) connectedSlugs.add(g.slug);
+      if (st.ailing) ailingSlugs.add(g.slug);
     }
-    return { ready, needsSetup, connectedSlugs };
+    return { ready, needsSetup, connectedSlugs, ailingSlugs };
   }, [groups, secrets, providers]);
 
   // Optional ?category= filter narrows the index to integrations whose
@@ -188,7 +190,12 @@ export function Apps() {
           <h2 className="integrations-section-head">{t("integrations.readyHead")}</h2>
           <div className="integration-grid">
             {filteredReady.map((g) => (
-              <IntegrationCard key={g.slug} {...g} connected={connectedSlugs.has(g.slug)} />
+              <IntegrationCard
+                key={g.slug}
+                {...g}
+                connected={connectedSlugs.has(g.slug)}
+                ailing={ailingSlugs.has(g.slug)}
+              />
             ))}
           </div>
         </>
@@ -198,7 +205,7 @@ export function Apps() {
           <h2 className="integrations-section-head">{t("integrations.needsSetupHead")}</h2>
           <div className="integration-grid">
             {filteredNeedsSetup.map((g) => (
-              <IntegrationCard key={g.slug} {...g} connected={false} />
+              <IntegrationCard key={g.slug} {...g} connected={false} ailing={false} />
             ))}
           </div>
         </>
@@ -231,11 +238,16 @@ function IntegrationCard({
   meta,
   drops,
   connected,
+  ailing,
 }: {
   slug: string;
   meta: { name: string; description: string; brand_logo?: string };
   drops: Manifest[];
   connected: boolean;
+  // ailing: connected, but an account needs reconnecting. Amber, not green —
+  // "set up" and "working" are different claims, and only the second one is
+  // what someone scanning this page is actually asking.
+  ailing: boolean;
 }) {
   const { t, i18n } = useTranslation();
   // Logo fallback chain: curated override → any drop's brand_logo →
@@ -271,8 +283,14 @@ function IntegrationCard({
           </h2>
           {connected && (
             <span
-              className="connection-dot on integration-card-dot"
-              title={t("integrations.connectedTip")}
+              className={
+                "connection-dot integration-card-dot " + (ailing ? "ailing" : "on")
+              }
+              title={
+                ailing
+                  ? t("integrations.needsReconnectTip")
+                  : t("integrations.connectedTip")
+              }
             />
           )}
         </div>
@@ -295,17 +313,25 @@ function appConnectionState(
   drops: Manifest[],
   secrets: string[] | null,
   providers: OAuthProviderStatus[] | null,
-): { needsSetup: boolean; connected: boolean } {
+): { needsSetup: boolean; connected: boolean; ailing: boolean } {
   const reqs = dedupeRequirements(drops);
   const fields = drops.find((d) => d.connection_fields?.length)?.connection_fields ?? [];
   if (reqs.length === 0 && fields.length === 0) {
-    return { needsSetup: false, connected: false };
+    return { needsSetup: false, connected: false, ailing: false };
   }
   const reqsOk = reqs.every((req) =>
     req.kind === "secret"
       ? (secrets ?? []).includes(req.name)
       : ((providers ?? []).find((p) => p.name === req.name)?.accounts.length ?? 0) > 0,
   );
+  // Set up, but not working: an account whose grant is dead or whose scopes
+  // fell behind. Green here would be a lie — this is the app the user's flow
+  // is failing on, and the index is where they look first.
+  const ailing = reqs.some((req) => {
+    if (req.kind === "secret") return false;
+    const p = (providers ?? []).find((x) => x.name === req.name);
+    return ((p?.needs_reconnect?.length ?? 0) + (p?.stale_accounts?.length ?? 0)) > 0;
+  });
   let fieldsOk = true;
   if (fields.length > 0) {
     const required = fields.filter((f) => f.required);
@@ -313,7 +339,7 @@ function appConnectionState(
     fieldsOk = required.length > 0 ? required.every(isSet) : fields.some(isSet);
   }
   const connected = reqsOk && fieldsOk;
-  return { needsSetup: !connected, connected };
+  return { needsSetup: !connected, connected, ailing: connected && ailing };
 }
 
 // AppDetail is /apps/:slug — the per-app "profile" page. Shows

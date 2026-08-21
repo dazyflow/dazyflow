@@ -650,7 +650,8 @@
     "categoryAi": "AI",
     "filterClear": "Visa alla",
     "filterEmpty": "Inga {{label}}-appar är tillgängliga.",
-    "filterShowing": "Visar {{label}}-appar"
+    "filterShowing": "Visar {{label}}-appar",
+    "needsReconnectTip": "Ansluten, men ett konto behöver anslutas igen"
   },
   "connections": {
     "scopeHelp": "För att ansluta en app som Slack eller Gmail, använd sidan Appar — de flesta behöver aldrig den här sidan. Hemligheter är till för att lagra ett lösenord eller en nyckel som ett flöde behöver direkt. De är tillgängliga för alla flöden i din organisation; ett enskilt flöde kan åsidosätta en med sin egen under flödets Inställningar → Hemligheter.",

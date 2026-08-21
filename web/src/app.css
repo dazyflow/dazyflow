@@ -2355,6 +2355,11 @@
 .connection-dot.off {
   background: var(--muted);
 }
+/* Set up, but not working. Distinct from both green ("fine") and grey ("not
+   set up yet") — it is the state that needs a person to do something. */
+.connection-dot.ailing {
+  background: var(--warning);
+}
 .connection-field {
   display: flex;
   flex-direction: column;
