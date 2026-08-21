@@ -527,7 +527,7 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
   },
   stripe_create_payment_link: {
     en: "e3ed8ae1",
-    sv: "Skapa en betallänk för ett av dina Stripe-priser. Välj priset på steget (hämtat från ditt konto) eller koppla in ett price_…-id från ett tidigare steg — ingången vinner över parametern, t.ex. ett pris per rad från ett kalkylblad. Den hostade kassa-URL:en kommer ut på utgången URL — det klassiska flödet är ny orderrad → betallänk → mejla/slacka den. Antal kan också kopplas in; omförsök återanvänder samma Idempotency-Key, så en skakig körning kan inte skapa dubbletter av länken.",
+    sv: "Skapa en betallänk för ett av dina Stripe-priser. Välj priset på steget (hämtat från ditt konto) eller koppla in ett price_…-id från ett tidigare steg — ingången vinner över parametern, t.ex. ett pris per rad från ett kalkylblad. URL:en till Stripes kassasida kommer ut på utgången URL — det klassiska flödet är ny orderrad → betallänk → mejla/slacka den. Antal kan också kopplas in; omförsök återanvänder samma Idempotency-Key, så en skakig körning kan inte skapa dubbletter av länken.",
   },
   stripe_create_refund: {
     en: "aa3cdf26",
@@ -559,7 +559,7 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
   },
   stripe_send_invoice: {
     en: "728f097d",
-    sv: "Skapa en faktura med en rad för en kund och låt Stripe mejla den (en hostad sida där kunden kan betala med kort eller överföring). Ett steg täcker hela API-sekvensen — utkast, fakturarad, slutför, skicka — och en omkörning spelar upp redan klara delsteg i stället för att fakturera dubbelt. Beloppet anges i valutans minsta enhet (12000 = 120,00); kund, belopp och beskrivning kan alla kopplas in från ett tidigare steg, t.ex. en ny rad i ett orderblad. Det klassiska flödet: ny orderrad → Sök kunder (eller Skapa kund) → Skicka faktura → avisera. Observera: Stripe levererar bara fakturamejl i skarpt läge; i testläge får du kolla kontrollpanelen.",
+    sv: "Skapa en faktura med en rad för en kund och låt Stripe mejla den (en sida hos Stripe där kunden kan betala med kort eller överföring). Ett steg täcker hela API-sekvensen — utkast, fakturarad, slutför, skicka — och en omkörning spelar upp redan klara delsteg i stället för att fakturera dubbelt. Beloppet anges i valutans minsta enhet (12000 = 120,00); kund, belopp och beskrivning kan alla kopplas in från ett tidigare steg, t.ex. en ny rad i ett orderblad. Det klassiska flödet: ny orderrad → Sök kunder (eller Skapa kund) → Skicka faktura → avisera. Observera: Stripe levererar bara fakturamejl i skarpt läge; i testläge får du kolla kontrollpanelen.",
   },
   subgraph: {
     en: "314d96a2",
@@ -595,7 +595,7 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
   },
   webhook_input: {
     en: "793f69eb",
-    sv: "Startar flödet när något skickas till dess webbadress — ett inskickat svar från flödets hostade formulär, eller en HTTP-förfrågan från ett annat system. Innehåll är det som skickades (formulärfält / JSON); Rubriker bär förfrågans metadata.",
+    sv: "Startar flödet när något skickas till dess webbadress — ett inskickat svar från flödets publicerade formulär, eller en HTTP-förfrågan från ett annat system. Innehåll är det som skickades (formulärfält / JSON); Rubriker bär förfrågans metadata.",
   },
   webhook_send: {
     en: "fc3b9104",

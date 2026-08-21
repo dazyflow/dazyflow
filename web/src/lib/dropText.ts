@@ -434,14 +434,17 @@ const EN_CATEGORIES: Record<string, string> = {
   trigger: "Triggers",
 };
 
+// Mirrors EN_CATEGORIES' product vocabulary, not the raw enum: the English
+// chips deliberately read "Files & data" rather than "io", so the Swedish ones
+// say "Filer och data" rather than "In/ut".
 const SV_CATEGORIES: Record<string, string> = {
   ai: "AI",
   flow_control: "Flödesstyrning",
-  io: "In/ut",
+  io: "Filer och data",
   logic: "Logik",
-  network: "Nätverk",
+  network: "Appar och tjänster",
   system: "System",
-  transformation: "Omvandling",
+  transformation: "Ändra data",
   trigger: "Triggers",
 };
 

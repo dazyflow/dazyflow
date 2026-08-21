@@ -156,9 +156,9 @@ describe("dropDescription", () => {
 
 describe("dropCategoryLabel", () => {
   it("translates the curated categories", () => {
-    expect(dropCategoryLabel("transformation", "sv")).toBe("Omvandling");
+    expect(dropCategoryLabel("transformation", "sv")).toBe("Ändra data");
     expect(dropCategoryLabel("flow_control", "sv")).toBe("Flödesstyrning");
-    expect(dropCategoryLabel("network", "sv")).toBe("Nätverk");
+    expect(dropCategoryLabel("network", "sv")).toBe("Appar och tjänster");
   });
 
   it("gives Swedish a word for every category, including ai/trigger", () => {
