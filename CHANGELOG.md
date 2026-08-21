@@ -23,6 +23,22 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-08-21
+
+### Fixed
+
+- **The fix-it link in the run timeline still went to the Apps index.** 0.7.1
+  deep-linked the failure banner at the top of a run, but each step expanded in
+  the timeline renders its error through its own component, which was still
+  sending people to the list of every app. It now deep-links too — and more
+  precisely than the banner, because it knows which step you opened rather than
+  which step failed first.
+- **Two undefined CSS variables broke the build.** The connection-account rows
+  added in 0.7.1 referenced `--radius-md` and `--text-muted`, neither of which
+  exists — they render as nothing, which is what `check-css-tokens` fails the
+  build over. Now `--r-2` and `--warning`, the tokens the rest of the
+  stylesheet uses.
+
 ## [0.7.1] - 2026-08-21
 
 ### Added
@@ -36,11 +52,6 @@ into the image.)
 
 ### Fixed
 
-- **Two undefined CSS variables broke the build.** The new connection-account
-  rows referenced `--radius-md` and `--text-muted`, neither of which exists —
-  they render as nothing, which is why `check-css-tokens` fails the build over
-  them. Now `--r-2` and `--warning`, the tokens the rest of the stylesheet
-  uses.
 - **A dead OAuth grant showed as connected.** When a Google (or any OAuth)
   grant is revoked, expires, or is invalidated by a password change, every run
   fails with a 401 from the provider — while the Apps page went on reporting
@@ -65,9 +76,7 @@ into the image.)
   The error text can't say: "Gmail returned 401" names neither. The failing
   step does, though — its module gives the app and its settings give the
   account — so the button now lands on that app with that account called out
-  (`/apps/gmail?reconnect=default`). Both places a run surfaces an error do
-  this: the failure banner at the top, and each step expanded in the timeline
-  — the latter more precisely still, since it knows which step you opened.
+  (`/apps/gmail?reconnect=default`).
 
 ## [0.7.0] - 2026-08-21
 
