@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-21
+
 ### Added
 
 - **The scenario corpus is now RUN, not just validated** (`tests/journey/usecases_run_test.go`).
