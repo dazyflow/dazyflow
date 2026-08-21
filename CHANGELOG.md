@@ -23,6 +23,17 @@ into the image.)
 
 ## [Unreleased]
 
+### Fixed
+
+- **nShift and Roaring had blank app pages.** Both connectors shipped without
+  the curated prose their `/apps/:slug` page renders, so the page showed a
+  title and nothing else — no explanation of what the app does, how it
+  authenticates, or what it costs you to get wrong (nShift books billable
+  consignments). Both are written now, in English and Swedish. A new test
+  fails the build when a connector is added without them, checked against a
+  generated list of what the catalog actually ships (`make integration-catalog`),
+  so the next one can't slip through the same way.
+
 ## [0.7.4] - 2026-08-21
 
 ### Fixed

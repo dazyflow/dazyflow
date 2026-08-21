@@ -136,6 +136,10 @@ GO_TEST_TIMEOUT ?= 30m
 test: ## Run the Go test suite with the race detector
 	go test -race -timeout $(GO_TEST_TIMEOUT) ./...
 
+integration-catalog: ## Refresh the list of apps the description guard checks (run after adding a connector)
+	go run ./scripts/integrations.go > web/src/integrationMeta.catalog.json
+	@echo "wrote web/src/integrationMeta.catalog.json"
+
 vet: ## Run go vet
 	go vet ./...
 

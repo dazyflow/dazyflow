@@ -323,6 +323,24 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
       "Push notifications to your phone via ntfy.sh or a self-hosted ntfy server. Quick to wire up — no app to install, just subscribe to a topic — so it's a great fit for ops alerts that need to reach someone fast.",
     docs_url: "https://docs.ntfy.sh/",
   },
+  nshift: {
+    name: "nShift",
+    description:
+      "Book parcel shipments with your carriers and get the tracking numbers back. nShift (formerly Unifaun/Consignor) sits in front of the carriers — PostNord, DHL, Bring, Schenker and the rest — so one connection covers all of them. The natural flow is: an order is marked shipped, book the consignment, then text or email the customer the tracking link. You can also look a shipment up again, or delete one you booked by mistake.",
+    technical_notes:
+      "Authenticated with your nShift API key (Bearer), entered once as the nShift connection on this page (stored encrypted as conn.nshift.*) and injected at run time — no credential on the node or in the graph. The connection also picks the environment: it defaults to **integration**, nShift's sandbox, so a half-finished flow can't book a real, billable consignment; switch it to production when you're ready. Backed by the ExtAPI (POST /rs-extapi/v1/shipments and friends). The Shipment input is nShift's own shipment object — sender, receiver, parcels, service — usually built per order by an earlier step. Booking costs money and nShift has no idempotency key, so the create drop never auto-retries and the engine dedupes recovered runs; tracking numbers come out comma-separated on their own port.",
+    docs_url: "https://docs.unifaun.com/",
+    brand_logo: "/brands/nshift.svg",
+  },
+  roaring: {
+    name: "Roaring",
+    description:
+      "Look a company up by its organisation number and get back who they actually are — registered name, status, address and tax details. The everyday use is enriching a lead or an order: a form gives you an org number, this turns it into a real company record you can file in the CRM, or check the status of before you extend credit. If you only have a name, search first to find the org number, then enrich each match.",
+    technical_notes:
+      "Authenticated with your Roaring Consumer Key and Secret, entered once as the Roaring connection on this page (stored encrypted as conn.roaring.*) and exchanged for an OAuth2 access token at run time — the token is cached until shortly before it expires, so a For-each over many companies doesn't re-authenticate per row. Backed by Roaring's company endpoints (GET /{country}/company/overview/{version}/{orgnr} and the company search). Defaults to Sweden ('se'); set 'country' for another Nordic market Roaring covers. Both drops are reads, so they retry safely.",
+    docs_url: "https://developers.roaring.io/",
+    brand_logo: "/brands/roaring.svg",
+  },
   twilio: {
     name: "Twilio",
     description:

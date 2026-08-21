@@ -181,6 +181,22 @@ export const SV_INTEGRATION_PROSE: DescriptionMap = {
     en: "bfba3b27",
     sv: "OAuth + Notions API. Notion-Version är låst till 2022-06-28 så att beteendet är stabilt mellan installationer. Mönstret 'utlös vid ny databasrad' byggs av poll_trigger + notion_query_database + secret_set — samma markörbaserade dubblettrensning som Gmail använder; ingen egen triggerdrop behövs.",
   },
+  "nshift.description": {
+    en: "fab8dbd0",
+    sv: "Boka paketförsändelser hos dina transportörer och få tillbaka spårningsnumren. nShift (tidigare Unifaun/Consignor) ligger framför transportörerna — PostNord, DHL, Bring, Schenker och de övriga — så en anslutning täcker allihop. Det naturliga flödet är: en order markeras som skickad, försändelsen bokas, och sedan får kunden spårningslänken via sms eller e-post. Du kan också slå upp en försändelse igen, eller radera en som blivit felbokad.",
+  },
+  "nshift.technical_notes": {
+    en: "7b56a9a9",
+    sv: "Autentiseras med din nShift-API-nyckel (Bearer), som anges en gång som nShift-anslutningen på den här sidan (lagras krypterat som conn.nshift.*) och matas in vid körning — inga uppgifter på noden eller i flödet. Anslutningen väljer även miljö: den står som standard på **integration**, nShifts sandlåda, så att ett halvfärdigt flöde inte kan boka en riktig, fakturerbar försändelse; byt till produktion när du är redo. Bygger på ExtAPI (POST /rs-extapi/v1/shipments med flera). Shipment-indata är nShifts eget shipment-objekt — avsändare, mottagare, kolli, tjänst — som vanligtvis byggs per order av ett tidigare steg. Bokning kostar pengar och nShift har ingen idempotensnyckel, så create-droppen gör aldrig automatiska omförsök och motorn rensar dubbletter i återupptagna körningar; spårningsnumren kommer ut kommaseparerade på en egen port.",
+  },
+  "roaring.description": {
+    en: "88cc9b65",
+    sv: "Slå upp ett företag på organisationsnummer och få tillbaka vilka de faktiskt är — registrerat namn, status, adress och skatteuppgifter. Vardagsnyttan är att berika en lead eller en order: ett formulär ger dig ett organisationsnummer, det här gör det till en riktig företagspost du kan lägga i CRM:et, eller kontrollera statusen på innan du ger kredit. Har du bara ett namn söker du först för att hitta organisationsnumret, och berikar sedan varje träff.",
+  },
+  "roaring.technical_notes": {
+    en: "7daa6aa7",
+    sv: "Autentiseras med din Consumer Key och Consumer Secret från Roaring, som anges en gång som Roaring-anslutningen på den här sidan (lagras krypterat som conn.roaring.*) och växlas mot en OAuth2-åtkomsttoken vid körning — token cachas tills strax innan den går ut, så en For-each över många företag inte autentiserar om per rad. Bygger på Roarings företagsändpunkter (GET /{country}/company/overview/{version}/{orgnr} samt företagssökningen). Standard är Sverige ('se'); sätt 'country' för en annan nordisk marknad som Roaring täcker. Båda dropparna är läsningar och kan därför göra säkra omförsök.",
+  },
   "ntfy.description": {
     en: "c402aadf",
     sv: "Push-notiser till din telefon via ntfy.sh eller en egen ntfy-server. Snabbt att koppla upp — ingen app att installera, du prenumererar bara på ett ämne — så det passar utmärkt för driftaviseringar som snabbt måste nå någon.",
