@@ -199,3 +199,28 @@ func TestFailurePropagates_ContinueOnError(t *testing.T) {
 		t.Error("an unknown node should propagate, as before")
 	}
 }
+
+// A step that parks has published what it could — an approval link — and that
+// link is only any use while the run is still waiting. So its emitted ports go
+// live at once, while the ports that only arrive with the decision keep the
+// branch waiting rather than skipping it.
+func TestClassifyEdge_AwaitingPublishesWhatItHas(t *testing.T) {
+	parked := core.JobRecord{
+		Status: core.JobStatusAwaiting,
+		Result: &core.Result{Output: map[string]core.Ref{
+			"pending_url": {Inline: "https://host/approve/run/node?sig=x"},
+		}},
+	}
+	if got := classifyEdge(parked, core.Edge{FromPort: "pending_url"}); got != edgeActive {
+		t.Errorf("the approval link should reach its notifier while parked, got %v", got)
+	}
+	for _, port := range []string{"approved", "rejected"} {
+		if got := classifyEdge(parked, core.Edge{FromPort: port}); got != edgeBlocking {
+			t.Errorf("%q must not fire before the decision, got %v", port, got)
+		}
+	}
+	// "run after this step" means after it finishes, which it hasn't.
+	if got := classifyEdge(parked, core.Edge{FromPort: core.PassPort}); got != edgeBlocking {
+		t.Errorf("the pass pin should wait for the step to finish, got %v", got)
+	}
+}

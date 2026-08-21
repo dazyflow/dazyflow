@@ -25,6 +25,18 @@ into the image.)
 
 ### Added
 
+- **The scenario corpus is now RUN, not just validated** (`tests/journey/usecases_run_test.go`).
+  Eleven shapes — a loop handing a step structured data, a read-act-write-back
+  round trip (on three different services), collecting loop results,
+  transition-only firing, tolerating a dead channel, surviving an upstream
+  outage and recovering from it, pausing for a person and resuming, an AI
+  judgement routing the original submission, and dedupe across runs — are
+  saved through the real API,
+  published, fired and waited on, with every outside service mocked by a
+  stateful fake (`fakesaas_test.go`, including a small SMTP server). The
+  assertions are on what the world received. Every applicable test runs its
+  flow a second time, because eleven scenarios promise nothing happens twice,
+  and two inject faults. That layer found the two fixes below.
 - **`sheets_update_cells` (Google Sheets — Update cells), plus row numbers on
   Read range.** A spreadsheet could be read and appended to, never changed —
   so no flow could mark a row done, and every "handle the new rows" job had to
@@ -80,6 +92,25 @@ into the image.)
 
 ### Fixed
 
+- **The approval link never reached anyone.** The await-approval step tells you
+  to put it before the step that notifies a person and wire its link into that
+  notification — but the dispatcher treated a parked step as having produced
+  nothing, so the notification only went out *after* the approval. Nobody was
+  ever told there was something to approve. A parked step's emitted ports are
+  now live at once, while the ports that arrive with the decision keep their
+  branches waiting rather than skipping them; re-dispatch on resume is a no-op,
+  so nobody is notified twice. Affects every approval flow and the
+  `approve-before-refund` template.
+- **A loop where every item failed now fails.** Carrying on past a bad row is
+  right for one row among many; reporting success when nothing worked is an
+  outage dressed up as a result — and a following step that records the work as
+  done then records work that never happened. Partial failures continue and
+  surface on the `errors` port exactly as before.
+- **`make test` could not finish.** The daemon package takes about 13 minutes
+  under the race detector, past Go's default 10-minute per-package ceiling, so
+  the suite failed on a timeout and blamed whichever test was running when the
+  alarm fired. `make test`, `make ci` and CI now allow 30 minutes (per package,
+  so it is headroom for the slowest one, not a slow-suite allowance).
 - **The flow generator's instructions couldn't build a loop.** Its hand-written
   guidance said to "wire for_each.body into the per-item step's input" — the
   documented footgun, since the body pin is a control pin and pointing it at a

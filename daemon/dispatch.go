@@ -132,7 +132,13 @@ func (d *Dispatcher) AdvanceAfterCompletion(
 		}})
 		return
 	}
-	if status == core.JobStatusSucceeded ||
+	// A node that parked has published its pause-time outputs (the approval
+	// link), so its dependents are considered now — classifyEdge lets through
+	// only the ports it actually emitted. Enqueue is keyed on the node's
+	// stable record id and tolerates a conflict, so re-dispatching these same
+	// dependents when the node finally resumes is a no-op rather than a
+	// second notification.
+	if status == core.JobStatusSucceeded || status == core.JobStatusAwaiting ||
 		(status == core.JobStatusFailed && !d.failurePropagates(graph, nodeID)) {
 		d.dispatchReady(ctx, graph, graphRunID, nodeID)
 	}
@@ -249,7 +255,12 @@ func (d *Dispatcher) analyzeDependent(ctx context.Context, graph core.Graph, gra
 		if err != nil {
 			return depWaiting, fmt.Sprintf("predecessor %q not yet recorded", edge.From)
 		}
-		if !core.IsTerminalStatus(predRec.Status) {
+		// A parked step is the one non-terminal state worth looking past: it
+		// has published what it can (an approval link) and will publish no
+		// more until something outside the run happens. Its EMITTED ports are
+		// usable now; everything else it feeds keeps waiting.
+		parked := predRec.Status == core.JobStatusAwaiting
+		if !core.IsTerminalStatus(predRec.Status) && !parked {
 			return depWaiting, fmt.Sprintf("predecessor %q is %s", edge.From, predRec.Status)
 		}
 		switch outcome := classifyEdge(predRec, edge); outcome {
@@ -258,6 +269,11 @@ func (d *Dispatcher) analyzeDependent(ctx context.Context, graph core.Graph, gra
 		case edgeDormant:
 			// dormant: doesn't activate, doesn't block
 		case edgeBlocking:
+			if parked {
+				// Not "skip this branch" — "not yet". The decision ports
+				// arrive when the step resumes.
+				return depWaiting, fmt.Sprintf("predecessor %q is still waiting for its decision", edge.From)
+			}
 			if !anyBlocked {
 				firstReason = fmt.Sprintf("predecessor %q is %s via %q edge",
 					edge.From, predRec.Status, edge.OnError)
@@ -321,6 +337,30 @@ func classifyEdge(predRec core.JobRecord, edge core.Edge) edgeOutcome {
 		default:
 			return edgeBlocking
 		}
+	case core.JobStatusAwaiting:
+		// A parked step has already published what it could — an approval
+		// link, most importantly — and the whole point of that link is to
+		// reach somebody WHILE the run waits. So an edge from a port it has
+		// actually emitted is live now; the ports that only arrive with the
+		// decision (approved / rejected) stay blocked until it resumes.
+		//
+		// Without this the documented pattern cannot work: "put the approval
+		// step before the step that notifies a person" produced a
+		// notification that only fired after the approval, so nobody was ever
+		// told there was something to approve.
+		//
+		// The pass pin means "run after this step", which a parked step has
+		// not done, so it keeps waiting.
+		if edge.FromPort == core.PassPort {
+			return edgeBlocking
+		}
+		if predRec.Result == nil || predRec.Result.Output == nil {
+			return edgeBlocking
+		}
+		if _, ok := predRec.Result.Output[edge.FromPort]; !ok {
+			return edgeBlocking
+		}
+		return edgeActive
 	default:
 		return edgeBlocking
 	}

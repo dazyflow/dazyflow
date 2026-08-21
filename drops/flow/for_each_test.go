@@ -6,6 +6,7 @@ package flow
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -271,5 +272,38 @@ func TestForEach_EmptyListReturnsEmptyResults(t *testing.T) {
 	results, _ := res.Output["results"].Inline.([]core.Ref)
 	if len(results) != 0 {
 		t.Errorf("len = %d, want 0", len(results))
+	}
+}
+
+// One bad row among many is a partial success — carry on and surface it. But
+// when EVERY item fails, the service on the other end is down, and calling
+// that a success is how a flow ends up marking work done that never happened.
+func TestForEach_EveryItemFailingIsAFailure(t *testing.T) {
+	job := core.Job{
+		Input: map[string]core.Ref{"items": {Inline: []any{"bad", "bad", "bad"}}},
+	}
+	res, err := executeForEach(withRunner(failRunner), job, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if res.Status != core.StatusError {
+		t.Fatalf("status = %q, want error when nothing worked", res.Status)
+	}
+	if res.Error == nil || res.Error.Code != "all_items_failed" {
+		t.Fatalf("error = %+v, want all_items_failed", res.Error)
+	}
+	if !strings.Contains(res.Error.Message, "3/3") {
+		t.Errorf("the message should say how many failed: %q", res.Error.Message)
+	}
+}
+
+// The partial case must keep working the way it is documented to.
+func TestForEach_PartialFailureStillSucceeds(t *testing.T) {
+	job := core.Job{
+		Input: map[string]core.Ref{"items": {Inline: []any{"good", "bad"}}},
+	}
+	res, _ := executeForEach(withRunner(failRunner), job, nil)
+	if res.Status != core.StatusOK {
+		t.Fatalf("status = %q, want ok — one bad row among several is not an outage", res.Status)
 	}
 }

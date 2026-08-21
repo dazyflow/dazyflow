@@ -4,28 +4,152 @@
   "tenant": "dev",
   "workspace": "default",
   "name": "Order marked Shipped → book it and text the tracking link",
-  "triggers": [{"type": "cron", "cron": "*/30 8-17 * * 1-5", "tz": "Europe/Stockholm"}],
+  "triggers": [
+    {
+      "type": "cron",
+      "cron": "*/30 8-17 * * 1-5",
+      "tz": "Europe/Stockholm"
+    }
+  ],
   "nodes": [
-    {"id": "read", "module": "sheets_read_range", "params": {"spreadsheet_id": "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789", "range": "Orders", "headers": true, "row_numbers": true, "account": "default"}},
-    {"id": "ready", "module": "compute_rows", "params": {"filter": "row.status == 'Shipped' && row.notified_on == ''"}},
-    {"id": "each", "module": "for_each", "params": {"concurrency": 1}},
-    {"id": "book", "module": "nshift_create_shipment", "params": {"shipment": {"reference": "${item.order_no}", "receiver": {"name": "${item.customer}", "street": "${item.street}", "postcode": "${item.postcode}", "city": "${item.city}", "country": "SE", "phone": "${item.phone}"}}}},
-    {"id": "message", "module": "expression", "params": {"expr": "'Hej! Ditt paket är på väg. Spårnummer: ' + input"}},
-    {"id": "clean_phone", "module": "phone", "params": {"phone": "${item.phone}", "default_region": "SE"}},
-    {"id": "sms", "module": "elks_send_sms", "params": {"from": "Butiken"}},
-    {"id": "mark", "module": "compute_rows", "params": {"compute": {"notified_on": "string(now)"}}},
-    {"id": "write_back", "module": "sheets_update_cells", "params": {"spreadsheet_id": "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789", "range": "Orders", "columns": ["notified_on"], "account": "default"}}
+    {
+      "id": "read",
+      "module": "sheets_read_range",
+      "params": {
+        "spreadsheet_id": "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789",
+        "range": "Orders",
+        "headers": true,
+        "row_numbers": true,
+        "account": "default"
+      }
+    },
+    {
+      "id": "ready",
+      "module": "compute_rows",
+      "params": {
+        "filter": "row.status == 'Shipped' && row.notified_on == ''"
+      }
+    },
+    {
+      "id": "each",
+      "module": "for_each",
+      "params": {
+        "concurrency": 1
+      }
+    },
+    {
+      "id": "book",
+      "module": "nshift_create_shipment",
+      "params": {
+        "shipment": {
+          "reference": "${item.order_no}",
+          "receiver": {
+            "name": "${item.customer}",
+            "street": "${item.street}",
+            "postcode": "${item.postcode}",
+            "city": "${item.city}",
+            "country": "SE",
+            "phone": "${item.phone}"
+          }
+        }
+      }
+    },
+    {
+      "id": "message",
+      "module": "expression",
+      "params": {
+        "expr": "'Hej! Ditt paket är på väg. Spårnummer: ' + input"
+      }
+    },
+    {
+      "id": "clean_phone",
+      "module": "phone",
+      "params": {
+        "phone": "${item.phone}",
+        "default_region": "SE"
+      }
+    },
+    {
+      "id": "sms",
+      "module": "elks_send_sms",
+      "params": {
+        "from": "Butiken"
+      }
+    },
+    {
+      "id": "mark_row",
+      "module": "expression",
+      "params": {
+        "expr": "[{'_row': ${item._row}, 'notified_on': string(now)}]"
+      }
+    },
+    {
+      "id": "write_back",
+      "module": "sheets_update_cells",
+      "params": {
+        "spreadsheet_id": "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789",
+        "range": "Orders",
+        "columns": [
+          "notified_on"
+        ],
+        "account": "default"
+      }
+    }
   ],
   "edges": [
-    {"from": "read", "from_port": "rows", "to": "ready", "to_port": "rows"},
-    {"from": "ready", "from_port": "rows", "to": "each", "to_port": "items"},
-    {"from": "each", "from_port": "body", "to": "book", "to_port": "pass"},
-    {"from": "book", "from_port": "tracking_numbers", "to": "message", "to_port": "in"},
-    {"from": "book", "from_port": "shipment_id", "to": "clean_phone", "to_port": "pass"},
-    {"from": "clean_phone", "from_port": "out", "to": "sms", "to_port": "to"},
-    {"from": "message", "from_port": "out", "to": "sms", "to_port": "message"},
-    {"from": "ready", "from_port": "rows", "to": "mark", "to_port": "rows"},
-    {"from": "each", "from_port": "results", "to": "mark", "to_port": "pass"},
-    {"from": "mark", "from_port": "rows", "to": "write_back", "to_port": "rows"}
+    {
+      "from": "read",
+      "from_port": "rows",
+      "to": "ready",
+      "to_port": "rows"
+    },
+    {
+      "from": "ready",
+      "from_port": "rows",
+      "to": "each",
+      "to_port": "items"
+    },
+    {
+      "from": "each",
+      "from_port": "body",
+      "to": "book",
+      "to_port": "pass"
+    },
+    {
+      "from": "book",
+      "from_port": "tracking_numbers",
+      "to": "message",
+      "to_port": "in"
+    },
+    {
+      "from": "book",
+      "from_port": "shipment_id",
+      "to": "clean_phone",
+      "to_port": "pass"
+    },
+    {
+      "from": "clean_phone",
+      "from_port": "out",
+      "to": "sms",
+      "to_port": "to"
+    },
+    {
+      "from": "message",
+      "from_port": "out",
+      "to": "sms",
+      "to_port": "message"
+    },
+    {
+      "from": "sms",
+      "from_port": "message_id",
+      "to": "mark_row",
+      "to_port": "in"
+    },
+    {
+      "from": "mark_row",
+      "from_port": "out",
+      "to": "write_back",
+      "to_port": "rows"
+    }
   ]
 }

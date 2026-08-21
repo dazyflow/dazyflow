@@ -52,6 +52,20 @@ func rowsOf(t *testing.T, r core.Ref) []map[string]any {
 
 func jsonRef(v any) core.Ref { return core.Ref{MIME: "application/json", Inline: v} }
 
+// awaitStableUTCDay waits out the last moments before UTC midnight. A test
+// that computes a date in Go and compares it against a date the drop computes
+// from its own clock is otherwise flaky for one second a day — rare enough to
+// pass review and land in CI, common enough to fail eventually.
+func awaitStableUTCDay(t *testing.T) {
+	t.Helper()
+	now := time.Now().UTC()
+	nextDay := now.Truncate(24 * time.Hour).Add(24 * time.Hour)
+	if margin := nextDay.Sub(now); margin < 5*time.Second {
+		t.Logf("waiting %s for the UTC day to roll over before comparing dates", margin)
+		time.Sleep(margin + 100*time.Millisecond)
+	}
+}
+
 // nowPlus is an RFC3339 timestamp h hours from now — the scenarios filter on
 // a window relative to the run, so fixed dates would rot.
 func nowPlus(t *testing.T, h int) string {
@@ -264,6 +278,9 @@ func TestStringHelpersInScenarios(t *testing.T) {
 func TestTomorrowsWeatherFilter(t *testing.T) {
 	const filter = "row.date == string(now + duration('24h')).substring(0, 10) && " +
 		"(row.temp_min < 0.0 || row.conditions.lowerAscii().contains('rain'))"
+	// The filter reads its own clock inside the drop, so the test's idea of
+	// "tomorrow" and the drop's must not straddle a UTC midnight.
+	awaitStableUTCDay(t)
 	today := time.Now().UTC().Format("2006-01-02")
 	tomorrow := time.Now().UTC().AddDate(0, 0, 1).Format("2006-01-02")
 

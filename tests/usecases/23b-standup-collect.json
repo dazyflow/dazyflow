@@ -5,14 +5,65 @@
   "workspace": "default",
   "name": "Standup: collect the answers",
   "nodes": [
-    {"id": "form", "module": "webhook_input", "params": {"public_form": true, "form_fields": ["name", "yesterday", "today", "blockers"], "form_title": "Standup"}},
-    {"id": "row", "module": "expression", "params": {"expr": "[{'name': input.name, 'yesterday': input.yesterday, 'today': input.today, 'blockers': input.blockers}]"}},
-    {"id": "stamp", "module": "compute_rows", "params": {"compute": {"day": "string(now).substring(0, 10)", "at": "int(now)"}}},
-    {"id": "save", "module": "builtin_store_append", "params": {"table": "standup", "column_types": {"at": "INTEGER"}}}
+    {
+      "id": "form",
+      "module": "webhook_input",
+      "params": {
+        "public_form": true,
+        "form_fields": [
+          "name",
+          "yesterday",
+          "today",
+          "blockers"
+        ],
+        "form_title": "Standup"
+      }
+    },
+    {
+      "id": "row",
+      "module": "expression",
+      "params": {
+        "expr": "[{'name': input.name, 'yesterday': input.yesterday, 'today': input.today, 'blockers': input.blockers}]"
+      }
+    },
+    {
+      "id": "stamp",
+      "module": "compute_rows",
+      "params": {
+        "compute": {
+          "at": "int(now)"
+        }
+      }
+    },
+    {
+      "id": "save",
+      "module": "builtin_store_append",
+      "params": {
+        "table": "standup",
+        "column_types": {
+          "at": "INTEGER"
+        }
+      }
+    }
   ],
   "edges": [
-    {"from": "form", "from_port": "body", "to": "row", "to_port": "in"},
-    {"from": "row", "from_port": "out", "to": "stamp", "to_port": "rows"},
-    {"from": "stamp", "from_port": "rows", "to": "save", "to_port": "rows"}
+    {
+      "from": "form",
+      "from_port": "body",
+      "to": "row",
+      "to_port": "in"
+    },
+    {
+      "from": "row",
+      "from_port": "out",
+      "to": "stamp",
+      "to_port": "rows"
+    },
+    {
+      "from": "stamp",
+      "from_port": "rows",
+      "to": "save",
+      "to_port": "rows"
+    }
   ]
 }

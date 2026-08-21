@@ -126,8 +126,15 @@ dev: pg ## Run dzd locally against the bundled Postgres (make pg). Sources .env 
 web: ## Run the Vite dev server (http://localhost:5173)
 	cd web && npm install && npm run dev
 
+# The race detector multiplies runtime, and the daemon package (the HTTP API,
+# the dispatcher, the worker, and their end-to-end tests) runs well past Go's
+# default 10-minute per-package ceiling under it — the whole suite failed on a
+# timeout, not on a test. The limit is per package, so this is headroom for the
+# slowest one, not a licence for a slow suite.
+GO_TEST_TIMEOUT ?= 30m
+
 test: ## Run the Go test suite with the race detector
-	go test -race ./...
+	go test -race -timeout $(GO_TEST_TIMEOUT) ./...
 
 vet: ## Run go vet
 	go vet ./...
@@ -300,5 +307,5 @@ check: ## Fast local gate before pushing: build, vet, tests
 ci: ## Full local mirror of CI (.build.yml): build, vet, race tests, web build
 	@echo "==> go build"; go build ./...
 	@echo "==> go vet"; go vet ./...
-	@echo "==> go test -race"; go test -race ./...
+	@echo "==> go test -race"; go test -race -timeout $(GO_TEST_TIMEOUT) ./...
 	@echo "==> web build"; cd web && npm ci && npm run build

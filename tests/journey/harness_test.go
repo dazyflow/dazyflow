@@ -22,18 +22,24 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"git.sr.ht/~klahr/dazyflow/auth"
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/daemon"
+	_ "git.sr.ht/~klahr/dazyflow/drops" // register every native drop
+	"git.sr.ht/~klahr/dazyflow/drops/gmail"
+	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	rssdrop "git.sr.ht/~klahr/dazyflow/drops/rss"
 	"git.sr.ht/~klahr/dazyflow/engine"
 	"git.sr.ht/~klahr/dazyflow/engine/jobstore"
-	_ "git.sr.ht/~klahr/dazyflow/drops" // register every native drop
+	"git.sr.ht/~klahr/dazyflow/pollstate"
 )
 
 // stack is a self-contained Dazyflow install: the HTTP API the web UI
@@ -80,7 +86,15 @@ func newStack(t *testing.T) *stack {
 		Bus:        bus,
 		AdminKeys:  ks,
 	}
+	// The approval link. Without a signer the await-approval step hands out
+	// no URL and POST /approve/ isn't registered, so the "someone taps the
+	// link in the notification" half of every approval flow would be
+	// untestable — and a harness that can't see it can't notice it breaking.
+	signer := &daemon.HMACApprovalSigner{BaseURL: "http://localhost:8080", Secret: []byte("journey-approval-secret-0123456789")}
+	eng.ApprovalSigner = signer
+
 	gw := daemon.NewHTTPGateway(svc)
+	gw.Approval = daemon.NewApprovalListener(svc, signer)
 	gw.Users = users
 	gw.Sessions = sessions
 	gw.EnableSignup = true
@@ -112,7 +126,42 @@ func newStack(t *testing.T) *stack {
 	}, jobs, eng, bus)
 	go func() { _ = w.Run(workerCtx) }()
 
+	wireNodeState(t)
 	return &stack{gw: gw}
+}
+
+// wireNodeState gives the drops that REMEMBER something between runs the
+// store the real daemon gives them (cmd/dzd wires the same pairs against the
+// encrypted secret store). Without it every run looks like a first run:
+// "only new since last run" re-emits the whole mailbox, a feed re-fires every
+// item, and an up/down watch alerts on every check. A harness that quietly
+// disables the dedupe every scheduled flow depends on cannot test it, so it
+// is wired here for every journey.
+func wireNodeState(t *testing.T) {
+	t.Helper()
+	var mu sync.Mutex
+	kv := map[string]string{}
+	read := func(_ context.Context, tenant, name string) (string, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		return kv[tenant+"/"+name], nil
+	}
+	write := func(_ context.Context, tenant, name, value string) error {
+		mu.Lock()
+		defer mu.Unlock()
+		kv[tenant+"/"+name] = value
+		return nil
+	}
+	gmail.SetCursorStore(read, write)
+	rssdrop.SetCursorStore(read, write)
+	hfnet.SetHTTPCacheStore(read, write)
+	pollstate.SetStore(read, write)
+	t.Cleanup(func() {
+		gmail.SetCursorStore(nil, nil)
+		rssdrop.SetCursorStore(nil, nil)
+		hfnet.SetHTTPCacheStore(nil, nil)
+		pollstate.SetStore(nil, nil)
+	})
 }
 
 // resp is a tiny view over an HTTP response: status + raw body, with a
@@ -314,6 +363,70 @@ func (n *newcomer) fireWebhook(id, secret string, payload any) string {
 		n.t.Fatalf("trigger returned no run id: %s", r.body)
 	}
 	return out.JobID
+}
+
+// eventually polls until cond holds, or fails with what was still wrong.
+// Needed wherever a run's side effect happens CONCURRENTLY with the state the
+// test can observe: a parked run publishes "awaiting" the moment it parks,
+// while the notification carrying its approval link is dispatched just after.
+func eventually(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(journeyWaitCeiling)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %s", what)
+}
+
+// tapApprovalLink follows the URL a notification carried, the way the person
+// who received it would: an unauthenticated POST carrying the signature.
+// Only the path+query are used — the run is served by this stack's own mux,
+// not the public host the link names.
+func (n *newcomer) tapApprovalLink(link, decision, approver string) {
+	n.t.Helper()
+	u, err := url.Parse(link)
+	if err != nil {
+		n.t.Fatalf("approval link %q is not a URL: %v", link, err)
+	}
+	q := u.Query()
+	q.Set("decision", decision)
+	q.Set("approver", approver)
+	path := u.Path + "?" + q.Encode()
+	if r := n.s.call(n.t, "POST", path, "", nil); r.status != http.StatusOK {
+		n.t.Fatalf("tapping the approval link failed: status=%d body=%s", r.status, r.body)
+	}
+}
+
+// waitForPending polls until the run parks on an approval, returning the node
+// it is waiting on. A run that finishes without ever asking is a failure —
+// that would mean the gate did not hold.
+func (n *newcomer) waitForPending(runID string) string {
+	n.t.Helper()
+	deadline := time.Now().Add(journeyWaitCeiling)
+	for time.Now().Before(deadline) {
+		r := n.s.call(n.t, "GET", "/api/v1/approvals/pending", n.token, nil)
+		if r.status == http.StatusOK {
+			var out struct {
+				Approvals []struct {
+					RunID  string `json:"run_id"`
+					NodeID string `json:"node_id"`
+					URL    string `json:"url"`
+				} `json:"approvals"`
+			}
+			r.decode(&out)
+			for _, p := range out.Approvals {
+				if p.RunID == runID {
+					return p.NodeID
+				}
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	n.t.Fatalf("run %s never parked waiting for approval", runID)
+	return ""
 }
 
 // runFlow triggers a manual run (the editor's Run button) and returns

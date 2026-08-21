@@ -26,7 +26,7 @@ func init() {
 			Category:    "flow_control",
 			Provider:    "internal",
 			Tags:        []string{"iterate", "loop", "fan_out", "map"},
-			Description: "Run the loop body — the steps wired to the Loop body input — once per item in an input list. Items execute in parallel up to the concurrency setting. Outputs `results` (one entry per item, in order) and `errors` (a list of failed rows: {row, data, error}, row is 1-based). Set fail_fast=true to abort on the first failure; otherwise the iteration continues and failures surface on the errors port.",
+			Description: "Run the loop body — the steps wired to the Loop body input — once per item in an input list. Items execute in parallel up to the concurrency setting. Outputs `results` (one entry per item, in order) and `errors` (a list of failed rows: {row, data, error}, row is 1-based). Set fail_fast=true to abort on the first failure; otherwise the iteration continues and failures surface on the errors port. If EVERY item fails the step fails anyway — that is an outage, not a partial success, and a later step shouldn't record the work as done.",
 			Summary:     "Fan out a list and run the wired loop body on every item, optionally in parallel, collecting results in order.",
 			Examples: []core.ParamsExample{
 				{
@@ -252,11 +252,23 @@ func runForEachItems(
 
 	status := core.StatusOK
 	var jobErr *core.JobError
-	if len(failures) > 0 && failFast {
+	switch {
+	case len(failures) > 0 && failFast:
 		status = core.StatusError
 		jobErr = &core.JobError{
 			Code:    "item_failed",
 			Message: fmt.Sprintf("for_each aborted: %d/%d items failed", len(failures), len(items)),
+		}
+	case len(failures) == len(items):
+		// Nothing worked. "Carry on past a failed item" is a reasonable
+		// default for one bad row among many; reporting SUCCESS when every
+		// single item failed is not — that is an outage, and a flow whose
+		// next step marks the work done would mark work that never happened.
+		// A partial failure still continues and surfaces on `errors`.
+		status = core.StatusError
+		jobErr = &core.JobError{
+			Code:    "all_items_failed",
+			Message: fmt.Sprintf("every item failed (%d/%d) — see the failed rows", len(failures), len(items)),
 		}
 	}
 

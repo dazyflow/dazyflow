@@ -305,11 +305,14 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 		return
 	}
 
-	// Pause path: the module asked to be parked until an external
-	// resume call. Write status=awaiting, drop the lease, and stop —
-	// do NOT dispatch dependents or check graph completion. The
-	// resume call (Service.Approve, or — for subgraph nodes — the
-	// dispatcher when the child terminates) is what advances those.
+	// Pause path: the module asked to be parked until an external resume
+	// call. Write status=awaiting and drop the lease. The steps that need the
+	// DECISION wait for the resume call (Service.Approve, or — for subgraph
+	// nodes — the dispatcher when the child terminates); but the ones fed by
+	// a port the pause already emitted go now, because an approval link is
+	// only any use while the run is still waiting. classifyEdge draws that
+	// line, and the enqueue is keyed on the node's stable record id, so
+	// re-dispatching the same dependents on resume is a no-op.
 	if runErr == nil && result.Status == core.StatusAwaiting {
 		cerr := w.completeNode(jobCtx, rec.ID, core.JobStatusAwaiting, &result)
 		if errors.Is(cerr, core.ErrConflict) {
@@ -324,6 +327,15 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 		// Park is a real status transition — the UI wants to show
 		// "awaiting" on this node while it sits.
 		w.dispatcher.PublishNodeStatus(rec.GraphRunID, rec.NodeID, core.JobStatusAwaiting, nil)
+		// Let the pause-time outputs reach whoever is wired to them — the
+		// notification carrying the approval link, above all. Graph
+		// completion can't fire off the back of this: the parked node is
+		// not terminal, so the completion check simply finds it unfinished.
+		if graph, gerr := w.fetchGraph(jobCtx, rec.GraphRunID); gerr == nil {
+			w.dispatcher.AdvanceAfterCompletion(jobCtx, graph, rec.GraphRunID, rec.NodeID, core.JobStatusAwaiting, nil)
+		} else {
+			w.cfg.Logger.Printf("[%s] park %s: could not load graph to notify dependents: %v", w.cfg.ID, rec.ID, gerr)
+		}
 		// If the manifest declares it submits a child graph, hand the
 		// result off to the SubGraphRunner now. The dispatcher will
 		// resume the parent when the child terminates.
