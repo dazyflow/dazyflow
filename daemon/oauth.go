@@ -481,6 +481,32 @@ func (r *OAuthRegistry) clearReconnectNeeded(ctx context.Context, tenant, provid
 	_ = r.secrets.Delete(ctx, tenant, reconnectNeededName(provider, account))
 }
 
+// RefreshStaleAccounts gives every account whose access token has already
+// expired the refresh the next run would do anyway — just sooner. A rejected
+// refresh records the dead grant, a successful one clears it and stores the
+// fresh token, so the caller can then report the truth.
+//
+// It exists because the marker alone is only written when something USES the
+// token. That left the Apps page saying "connected" until the next scheduled
+// run happened to fail, which is precisely the moment the user is on the page
+// asking why their flow is broken. An account whose token is still valid
+// costs nothing here: no network call, nothing to say.
+func (r *OAuthRegistry) RefreshStaleAccounts(ctx context.Context, tenant, provider string, accounts []string) {
+	for _, a := range accounts {
+		tok, err := r.loadToken(ctx, tenant, provider, a)
+		if err != nil || !tokenNeedsRefresh(tok) {
+			// No token, or one that is still good — the next use would not
+			// refresh either, so there is nothing to learn.
+			continue
+		}
+		if _, rerr := r.refreshAccessToken(ctx, tenant, provider, a, tok); rerr != nil {
+			r.noteReconnectNeeded(ctx, tenant, provider, a, rerr)
+			continue
+		}
+		r.clearReconnectNeeded(ctx, tenant, provider, a)
+	}
+}
+
 // ReconnectNeeded reports which of the given accounts have a dead grant.
 func (r *OAuthRegistry) ReconnectNeeded(ctx context.Context, tenant, provider string, accounts []string) []string {
 	if r.secrets == nil || len(accounts) == 0 {

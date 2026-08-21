@@ -27,6 +27,15 @@ into the image.)
 
 ### Fixed
 
+- **The Apps page waited for a run to notice a dead connection.** 0.7.1 could
+  only learn that a grant was dead when something used the token, so the page
+  went on saying "connected" until the next scheduled run happened to fail —
+  which is precisely when someone is standing on that page wondering why their
+  flow broke. Listing the connections now refreshes any account whose access
+  token has already expired, which is the same work the next run would do,
+  just sooner: a rejected refresh marks the account, a successful one clears it
+  and stores the fresh token. An account whose token is still valid costs
+  nothing — no network call, nothing to report.
 - **The fix-it link in the run timeline still went to the Apps index.** 0.7.1
   deep-linked the failure banner at the top of a run, but each step expanded in
   the timeline renders its error through its own component, which was still

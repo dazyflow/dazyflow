@@ -221,3 +221,44 @@ func TestOAuth_SuccessfulRefreshClearsTheFlag(t *testing.T) {
 		t.Errorf("a working refresh should clear the flag: %v", got)
 	}
 }
+
+// The Apps page must not have to wait for a scheduled run to discover a dead
+// grant — that is exactly when someone is standing on the page wondering why
+// their flow broke. Listing accounts refreshes any whose token has already
+// expired, which is the same work the next run would do.
+func TestOAuth_RefreshStaleAccounts_FindsDeadGrantWithoutARun(t *testing.T) {
+	reg, fp := refreshHarness(t)
+	past := time.Now().UTC().Add(-time.Minute)
+	seedToken(t, reg, &StoredOAuthToken{
+		AccessToken: "old", RefreshToken: "revoked", ExpiresAt: &past, ObtainedAt: past,
+	})
+	ctx := core.WithTenant(t.Context(), "acme")
+
+	fp.tokenStatus = 400
+	fp.tokenBody = `{"error":"invalid_grant"}`
+	reg.RefreshStaleAccounts(ctx, "acme", "test", []string{"main"})
+
+	if got := reg.ReconnectNeeded(ctx, "acme", "test", []string{"main"}); len(got) != 1 {
+		t.Fatalf("listing should have discovered the dead grant, got %v", got)
+	}
+}
+
+// An account whose token is still valid costs nothing: no refresh call, and
+// nothing to report.
+func TestOAuth_RefreshStaleAccounts_LeavesHealthyTokensAlone(t *testing.T) {
+	reg, fp := refreshHarness(t)
+	future := time.Now().UTC().Add(time.Hour)
+	seedToken(t, reg, &StoredOAuthToken{
+		AccessToken: "good", RefreshToken: "r", ExpiresAt: &future, ObtainedAt: time.Now().UTC(),
+	})
+	ctx := core.WithTenant(t.Context(), "acme")
+
+	fp.lastFormBody = nil
+	reg.RefreshStaleAccounts(ctx, "acme", "test", []string{"main"})
+	if fp.lastFormBody != nil {
+		t.Errorf("a valid token should not be refreshed on a page load: %v", fp.lastFormBody)
+	}
+	if got := reg.ReconnectNeeded(ctx, "acme", "test", []string{"main"}); len(got) != 0 {
+		t.Errorf("a healthy account was flagged: %v", got)
+	}
+}

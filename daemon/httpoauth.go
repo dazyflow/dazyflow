@@ -352,6 +352,10 @@ func (h *HTTPGateway) oauthListProviders(rw http.ResponseWriter, r *http.Request
 				row["stale_accounts"] = stale
 			}
 		}
+		// Check before reporting, rather than waiting for the next run to
+		// discover it. Only accounts whose token has already expired cost a
+		// round-trip, and that refresh is work the next run would do anyway.
+		h.OAuth.RefreshStaleAccounts(r.Context(), p.Tenant, n, connected[n])
 		// needs_reconnect: accounts whose grant is DEAD — the refresh
 		// exchange was definitively rejected (access revoked, password
 		// changed, grant expired). Distinct from stale_accounts, which is
