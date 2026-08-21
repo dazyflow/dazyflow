@@ -836,6 +836,13 @@ export type OAuthProviderStatus = {
   name: string;
   accounts: string[];
   stale_accounts?: string[];
+  // needs_reconnect lists accounts whose grant is DEAD — the token refresh
+  // was definitively rejected (access revoked, password changed, grant
+  // expired). Distinct from stale_accounts, which is about scopes added
+  // since. This is the one that catches a provider authorized incrementally
+  // (Google), where the scope check is deliberately skipped — without it a
+  // dead Google account reads as connected while every run 401s.
+  needs_reconnect?: string[];
 };
 
 // GoogleAccount is one connected Google account from

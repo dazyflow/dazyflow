@@ -13,7 +13,8 @@ import { BackLink } from "../components/BackLink";
 import { Button } from "../components/Button";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { Callout } from "../components/Callout";
-import { explainRunError } from "../lib/explainRunError";
+import { explainRunError, type AppContext } from "../lib/explainRunError";
+import { integrationSlug } from "../integrationMeta";
 import { explainApiError } from "../lib/explainApiError";
 import { supportContactWithContext } from "../lib/supportContact";
 import { isResultNode, previewOutput } from "../lib/runResult";
@@ -109,6 +110,25 @@ export function RunDetail() {
 
   // nodeLabel resolves a timeline row's display name: the node's module
   // manifest label when known ("Send notification"), else the raw id.
+  // failedApp is which app the failing step was talking to, and as which
+  // account. The error text doesn't say — "Gmail returned 401" names no
+  // account and no page — but the graph and the catalog between them do, so
+  // the fix-it button can land on that app with that account rather than on
+  // the Apps index.
+  const failedApp = (nodeID: string | undefined): AppContext | undefined => {
+    if (!nodeID) return undefined;
+    const node = graph?.nodes?.find((n) => n.id === nodeID);
+    const integration = node?.module ? manifests.get(node.module)?.integration : undefined;
+    if (!integration) return undefined;
+    const acct = node?.params?.account;
+    return {
+      slug: integrationSlug(integration),
+      // Unset means the connector uses the account literally named
+      // "default", which is the one to offer reconnecting.
+      account: typeof acct === "string" && acct.trim() !== "" ? acct.trim() : "default",
+    };
+  };
+
   const nodeLabel = (nodeID: string): string => {
     const moduleID = graph?.nodes?.find((n) => n.id === nodeID)?.module;
     if (!moduleID) return nodeID;
@@ -361,6 +381,7 @@ export function RunDetail() {
           flowName={graph?.name || run.GraphID}
           failedNodeLabel={failedNode ? nodeLabel(failedNode.NodeID) : undefined}
           failedNodeAttempts={failedNode?.Attempt}
+          failedApp={failedApp(failedNode?.NodeID)}
         />
       )}
 
@@ -746,11 +767,13 @@ function RunFailureBanner({
   flowName,
   failedNodeLabel,
   failedNodeAttempts,
+  failedApp,
 }: {
   run: JobRecord;
   flowName: string | undefined;
   failedNodeLabel: string | undefined;
   failedNodeAttempts: number | undefined;
+  failedApp?: AppContext;
 }) {
   const { t } = useTranslation();
   const { me } = useAuth();
@@ -758,6 +781,7 @@ function RunFailureBanner({
   const explanation = explainRunError(
     run.Result?.error?.code,
     run.Result?.error?.message,
+    failedApp,
   );
   const action = explanation?.action;
   const isExternal = action?.href.startsWith("http") || false;

@@ -181,3 +181,36 @@ describe("explainRunError", () => {
     expect(r!.headlineValues).toEqual({ name: "API_KEY" });
   });
 });
+
+describe("app-specific fix-it destination", () => {
+  const gmail401 =
+    "Gmail returned 401: Request had invalid authentication credentials. " +
+    "Expected OAuth 2 access token, login cookie or other valid authentication credential.";
+
+  it("sends you to the app that broke, and names the account", () => {
+    // The real production error: nothing in the text says "Gmail" as an app
+    // or which account, but the caller knows both from the failing step.
+    const r = explainRunError("gmail_error", gmail401, {
+      slug: "gmail",
+      account: "default",
+    });
+    expect(r?.action?.href).toBe("/apps/gmail?reconnect=default");
+  });
+
+  it("falls back to the Apps index when the app isn't known", () => {
+    expect(explainRunError("gmail_error", gmail401)?.action?.href).toBe("/apps");
+  });
+
+  it("links to the app even without an account name", () => {
+    const r = explainRunError("gmail_error", gmail401, { slug: "gmail" });
+    expect(r?.action?.href).toBe("/apps/gmail");
+  });
+
+  it("does the same for a provider that was never connected", () => {
+    const r = explainRunError("auth", 'no Gmail token: pass `token` directly', {
+      slug: "gmail",
+      account: "default",
+    });
+    expect(r?.action?.href).toBe("/apps/gmail?reconnect=default");
+  });
+});

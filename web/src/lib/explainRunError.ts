@@ -36,9 +36,32 @@ export type RunErrorExplanation = {
 // explainRunError matches against the message + code surface the
 // daemon emits. Returns null when no pattern matches; callers fall
 // back to showing the raw text in a details disclosure.
+// AppContext is what the caller knows about the step that failed but the
+// error text does not say: which app it was talking to, and as which account.
+// It turns "go to the Apps page" into "go to Gmail's page and reconnect the
+// account this flow uses" — the difference between a signpost and a fix.
+export type AppContext = {
+  // slug is the integration's /apps/:slug segment, e.g. "gmail".
+  slug?: string;
+  // account is the connected-account name the step used, e.g. "default".
+  account?: string;
+};
+
+// appsHref points at the specific app when we know it, and carries the
+// account so the page can offer to reconnect that one rather than making the
+// user work out which of several is broken.
+function appsHref(app?: AppContext): string {
+  if (!app?.slug) return "/apps";
+  const base = `/apps/${encodeURIComponent(app.slug)}`;
+  return app.account
+    ? `${base}?reconnect=${encodeURIComponent(app.account)}`
+    : base;
+}
+
 export function explainRunError(
   code: string | undefined,
   message: string | undefined,
+  app?: AppContext,
 ): RunErrorExplanation | null {
   const msg = (message ?? "").trim();
   if (!msg && !code) return null;
@@ -57,7 +80,7 @@ export function explainRunError(
       headlineValues: { provider, account: acctMatch[2] },
       action: {
         labelKey: "explain.actionReconnect",
-        href: "/apps",
+        href: appsHref(app),
       },
     };
   }
@@ -73,7 +96,7 @@ export function explainRunError(
       headlineValues: { provider: capitalise(noTokenMatch[1]) },
       action: {
         labelKey: "explain.actionConnect",
-        href: "/apps",
+        href: appsHref(app),
       },
     };
   }
@@ -109,7 +132,7 @@ export function explainRunError(
       headlineKey: "explain.slackInvalidAuth",
       action: {
         labelKey: "explain.actionReconnect",
-        href: "/apps",
+        href: appsHref(app),
       },
     };
   }
@@ -159,7 +182,7 @@ export function explainRunError(
   ) {
     return {
       headlineKey: "explain.permissionDenied",
-      action: { labelKey: "explain.actionReconnect", href: "/apps" },
+      action: { labelKey: "explain.actionReconnect", href: appsHref(app) },
     };
   }
 
@@ -174,7 +197,7 @@ export function explainRunError(
   ) {
     return {
       headlineKey: "explain.authExpired",
-      action: { labelKey: "explain.actionReconnect", href: "/apps" },
+      action: { labelKey: "explain.actionReconnect", href: appsHref(app) },
     };
   }
 

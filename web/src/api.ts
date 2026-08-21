@@ -1629,6 +1629,7 @@ export const api = {
         // array so callers can `.length` and `.includes()` without
         // optional-chain-and-default-everywhere boilerplate.
         stale_accounts: p.stale_accounts ?? [],
+        needs_reconnect: p.needs_reconnect ?? [],
       })),
     };
   },

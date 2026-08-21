@@ -145,3 +145,79 @@ func TestOAuth_GetToken_RefreshFailureFallsBackToStored(t *testing.T) {
 		t.Errorf("access_token = %q, want the stored old-access on refresh failure", got.AccessToken)
 	}
 }
+
+// A refresh the provider definitively rejects means the GRANT is dead — the
+// user revoked access, changed their password, or it simply expired. That is
+// the only moment the daemon knows, and it is what lets the Apps page offer
+// "reconnect this account" instead of showing it as healthy while every run
+// comes back 401.
+func TestOAuth_DeadGrantIsRecordedForReconnect(t *testing.T) {
+	reg, fp := refreshHarness(t)
+	past := time.Now().UTC().Add(-time.Minute)
+	seedToken(t, reg, &StoredOAuthToken{
+		AccessToken:  "old-access",
+		RefreshToken: "revoked",
+		ExpiresAt:    &past,
+		ObtainedAt:   past,
+	})
+	ctx := core.WithTenant(t.Context(), "acme")
+
+	// Storing a token clears any previous marker, so we start clean.
+	if got := reg.ReconnectNeeded(ctx, "acme", "test", []string{"main"}); len(got) != 0 {
+		t.Fatalf("a freshly stored token should not need reconnecting: %v", got)
+	}
+
+	fp.tokenStatus = 400
+	fp.tokenBody = `{"error":"invalid_grant","error_description":"Token has been expired or revoked."}`
+	// The lookup still hands back the stored token — the API call is what
+	// surfaces the authoritative 401 — but the account is now flagged.
+	if _, err := reg.GetOAuthToken(ctx, "test", "main"); err != nil {
+		t.Fatalf("GetOAuthToken should degrade, not fail: %v", err)
+	}
+	dead := reg.ReconnectNeeded(ctx, "acme", "test", []string{"main"})
+	if len(dead) != 1 || dead[0] != "main" {
+		t.Fatalf("the dead account was not flagged: %v", dead)
+	}
+	// Another account of the same provider is unaffected.
+	if got := reg.ReconnectNeeded(ctx, "acme", "test", []string{"other"}); len(got) != 0 {
+		t.Errorf("an unrelated account was flagged: %v", got)
+	}
+
+	// Reconnecting is the fix: storing a working token forgets the flag.
+	fp.tokenStatus = 200
+	if _, err := reg.store(ctx, "acme", "test", "main", &StoredOAuthToken{
+		AccessToken: "fresh", RefreshToken: "good", ObtainedAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	if got := reg.ReconnectNeeded(ctx, "acme", "test", []string{"main"}); len(got) != 0 {
+		t.Fatalf("reconnecting should clear the flag, still: %v", got)
+	}
+}
+
+// A refresh that WORKS clears a previous flag too — the account healed
+// itself (a transient provider outage, say) and shouldn't keep nagging.
+func TestOAuth_SuccessfulRefreshClearsTheFlag(t *testing.T) {
+	reg, fp := refreshHarness(t)
+	past := time.Now().UTC().Add(-time.Minute)
+	seedToken(t, reg, &StoredOAuthToken{
+		AccessToken: "old", RefreshToken: "r", ExpiresAt: &past, ObtainedAt: past,
+	})
+	ctx := core.WithTenant(t.Context(), "acme")
+
+	fp.tokenStatus = 500
+	fp.tokenBody = `{"error":"server_error"}`
+	_, _ = reg.GetOAuthToken(ctx, "test", "main")
+	if got := reg.ReconnectNeeded(ctx, "acme", "test", []string{"main"}); len(got) != 1 {
+		t.Fatalf("a failed refresh should flag the account: %v", got)
+	}
+
+	fp.tokenStatus = 200
+	fp.tokenBody = `{"access_token":"new","token_type":"Bearer","expires_in":3600}`
+	if _, err := reg.GetOAuthToken(ctx, "test", "main"); err != nil {
+		t.Fatalf("GetOAuthToken: %v", err)
+	}
+	if got := reg.ReconnectNeeded(ctx, "acme", "test", []string{"main"}); len(got) != 0 {
+		t.Errorf("a working refresh should clear the flag: %v", got)
+	}
+}

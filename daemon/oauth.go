@@ -431,7 +431,68 @@ func (r *OAuthRegistry) store(ctx context.Context, tenant, provider, account str
 	if err := r.secrets.Put(ctx, tenant, name, string(payload)); err != nil {
 		return "", err
 	}
+	// A freshly stored token is the fix for a dead grant — forget the marker
+	// so the account stops asking to be reconnected.
+	r.clearReconnectNeeded(ctx, tenant, provider, account)
 	return name, nil
+}
+
+// reconnectNeededPrefix marks an account whose stored grant no longer works:
+// the refresh exchange came back with a definitive rejection (the user revoked
+// access, changed their password, or the grant simply expired). Written the
+// moment we learn it, cleared as soon as a token is stored or refreshed again.
+//
+// Without it the Apps page can only report whether a token EXISTS, so a dead
+// Google grant reads as "connected" and the one thing the user needs to do —
+// reconnect that account — is the one thing the page doesn't offer.
+const reconnectNeededPrefix = "oauthfail."
+
+func reconnectNeededName(provider, account string) string {
+	if account == "" {
+		account = "default"
+	}
+	return reconnectNeededPrefix + provider + "." + account
+}
+
+// noteReconnectNeeded records that this account's grant is dead. Best effort:
+// failing to write the marker must never turn a degraded flow into a broken
+// one, so errors are logged and swallowed.
+func (r *OAuthRegistry) noteReconnectNeeded(ctx context.Context, tenant, provider, account string, cause error) {
+	if r.secrets == nil {
+		return
+	}
+	payload, merr := json.Marshal(map[string]any{
+		"at":    time.Now().UTC().Format(time.RFC3339),
+		"error": cause.Error(),
+	})
+	if merr != nil {
+		return
+	}
+	if err := r.secrets.Put(ctx, tenant, reconnectNeededName(provider, account), string(payload)); err != nil {
+		log.Printf("oauth: could not record that %s/%s needs reconnecting (tenant %s): %v", provider, account, tenant, err)
+	}
+}
+
+// clearReconnectNeeded forgets the marker once the account works again.
+func (r *OAuthRegistry) clearReconnectNeeded(ctx context.Context, tenant, provider, account string) {
+	if r.secrets == nil {
+		return
+	}
+	_ = r.secrets.Delete(ctx, tenant, reconnectNeededName(provider, account))
+}
+
+// ReconnectNeeded reports which of the given accounts have a dead grant.
+func (r *OAuthRegistry) ReconnectNeeded(ctx context.Context, tenant, provider string, accounts []string) []string {
+	if r.secrets == nil || len(accounts) == 0 {
+		return nil
+	}
+	var out []string
+	for _, a := range accounts {
+		if v, err := r.secrets.GetExact(ctx, tenant, reconnectNeededName(provider, a)); err == nil && v != "" {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 // refreshSkew is how far before the stored expiry we proactively
@@ -469,8 +530,14 @@ func (r *OAuthRegistry) GetOAuthToken(ctx context.Context, provider, account str
 		// Best-effort: hand back what we have. The downstream API call
 		// returns the authoritative 401, and the user can reconnect.
 		log.Printf("oauth refresh failed for %s/%s (tenant %s): %v; using stored token", provider, account, tenant, err)
+		// Remember it, though. This is the moment — and the only moment —
+		// where we know the grant itself is dead rather than the call being
+		// unlucky, so it is what lets the Apps page say "reconnect this
+		// account" instead of showing it as healthy.
+		r.noteReconnectNeeded(ctx, tenant, provider, account, err)
 		return tok, nil
 	}
+	r.clearReconnectNeeded(ctx, tenant, provider, account)
 	return refreshed, nil
 }
 

@@ -643,7 +643,9 @@
       "test": "Testa anslutning",
       "testing": "Testar…",
       "testOk": "Anslutningen fungerar.",
-      "testFailed": "Kunde inte ansluta: {{error}}"
+      "testFailed": "Kunde inte ansluta: {{error}}",
+      "needsReconnect": "{{name}} behöver anslutas igen",
+      "accountNeedsReconnect": "Logga in igen — det här kontot slutade fungera"
     },
     "categoryAi": "AI",
     "filterClear": "Visa alla",
@@ -705,7 +707,8 @@
       "save": "Spara & testa anslutning",
       "saving": "Testar anslutning…",
       "unavailable": "Den här installationen har inget hemlighetslager aktiverat, så en egen hemlighetshanterare kan inte konfigureras."
-    }
+    },
+    "reconnect": "Anslut igen"
   },
   "connGate": {
     "title": "Konfigurera flödet först",

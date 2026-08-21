@@ -352,6 +352,16 @@ func (h *HTTPGateway) oauthListProviders(rw http.ResponseWriter, r *http.Request
 				row["stale_accounts"] = stale
 			}
 		}
+		// needs_reconnect: accounts whose grant is DEAD — the refresh
+		// exchange was definitively rejected (access revoked, password
+		// changed, grant expired). Distinct from stale_accounts, which is
+		// about scopes we have since added. This is the one that matters for
+		// a provider authorized incrementally (Google): it is skipped by the
+		// scope check above, so without this a dead Google account reads as
+		// perfectly connected while every run 401s.
+		if dead := h.OAuth.ReconnectNeeded(r.Context(), p.Tenant, n, connected[n]); len(dead) > 0 {
+			row["needs_reconnect"] = dead
+		}
 		out = append(out, row)
 	}
 	writeJSON(rw, http.StatusOK, map[string]any{"providers": out})

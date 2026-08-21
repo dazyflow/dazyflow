@@ -647,7 +647,9 @@
       "test": "Test connection",
       "testing": "Testing…",
       "testOk": "Connection works.",
-      "testFailed": "Couldn't connect: {{error}}"
+      "testFailed": "Couldn't connect: {{error}}",
+      "needsReconnect": "{{name}} needs reconnecting",
+      "accountNeedsReconnect": "Sign in again — this account stopped working"
     }
   },
   "connections": {
@@ -705,7 +707,8 @@
       "save": "Save & test connection",
       "saving": "Testing connection…",
       "unavailable": "This deployment doesn't have a secret store enabled, so a custom secret manager can't be configured."
-    }
+    },
+    "reconnect": "Reconnect"
   },
   "connGate": {
     "title": "Set up this flow first",

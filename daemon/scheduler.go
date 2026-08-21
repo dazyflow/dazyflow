@@ -138,16 +138,16 @@ func paramSeconds(params map[string]any, key string) int {
 //
 // TWO switches mean the same thing here, and both count:
 //
-//   Params["disabled"] — the per-trigger pause the schedules API writes
-//   (see setScheduleDisabled). Stored in node Params as a plain JSON bool so
-//   no Node struct / schema change was needed, and it round-trips through the
-//   normal graph save path.
+//	Params["disabled"] — the per-trigger pause the schedules API writes
+//	(see setScheduleDisabled). Stored in node Params as a plain JSON bool so
+//	no Node struct / schema change was needed, and it round-trips through the
+//	normal graph save path.
 //
-//   Node.Disabled — the editor's generic "disable this step" toggle. It was
-//   honoured only at execution time (worker.go marks the node skipped), so on
-//   a TRIGGER node it used to be a no-op at the inbound endpoints: a
-//   disabled webhook trigger still accepted the POST, started a run, and
-//   then skipped the node — an empty run instead of a refusal.
+//	Node.Disabled — the editor's generic "disable this step" toggle. It was
+//	honoured only at execution time (worker.go marks the node skipped), so on
+//	a TRIGGER node it used to be a no-op at the inbound endpoints: a
+//	disabled webhook trigger still accepted the POST, started a run, and
+//	then skipped the node — an empty run instead of a refusal.
 //
 // Checking both means whichever switch the user reached for does what it
 // looks like it does. Absent/false on both = active.

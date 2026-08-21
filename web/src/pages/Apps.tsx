@@ -914,26 +914,80 @@ function OAuthCard({
 }) {
   const { t } = useTranslation();
   const meta = oauthProviderDisplay(req.name);
-  const connected = (status?.accounts.length ?? 0) > 0;
-  const connect = () => {
+  const accounts = status?.accounts ?? [];
+  const connected = accounts.length > 0;
+  // An account whose grant is dead (the refresh was rejected) or whose
+  // scopes no longer cover what we ask for. Both mean the same thing to the
+  // person reading the page: this one needs reconnecting.
+  const broken = new Set([
+    ...(status?.needs_reconnect ?? []),
+    ...(status?.stale_accounts ?? []),
+  ]);
+  // A run that failed on this app links here with ?reconnect=<account>, so
+  // the account that actually broke is the one called out.
+  const flagged = new URLSearchParams(window.location.search).get("reconnect");
+  const healthy = connected && broken.size === 0;
+
+  // account undefined = connect a new one; a name re-authorizes that account
+  // in place rather than adding a second.
+  const connect = (account?: string) => {
     // Pass the integration so the consent screen requests only this
     // service's scopes (incremental authorization) — e.g. connecting from
     // the Google Sheets page won't ask for Gmail/Forms.
     window.location.assign(
-      api.oauthAuthorizeUrl(req.name, `/apps/${encodeURIComponent(slug)}`, undefined, integration),
+      api.oauthAuthorizeUrl(req.name, `/apps/${encodeURIComponent(slug)}`, account, integration),
     );
   };
 
   return (
     <div className="connection-card">
       <ConnectionStatus
-        connected={connected}
+        connected={healthy}
         title={
-          connected
+          !connected
+            ? t("integrations.connection.connectPrompt", { name: meta.name })
+            : healthy
             ? t("integrations.connection.connectedTo", { name: meta.name })
-            : t("integrations.connection.connectPrompt", { name: meta.name })
+            : t("integrations.connection.needsReconnect", { name: meta.name })
         }
       />
+      {/* The accounts themselves, each with its own state and its own fix.
+          Without this the card could only say "connected", so a dead grant
+          looked healthy and the only button on offer added a SECOND account
+          instead of repairing the broken one. */}
+      {connected && (
+        <ul className="connection-accounts">
+          {accounts.map((acct) => {
+            const needsFixing = broken.has(acct);
+            return (
+              <li
+                key={acct}
+                className={
+                  "connection-account" +
+                  (needsFixing ? " needs-reconnect" : "") +
+                  (acct === flagged ? " flagged" : "")
+                }
+              >
+                <span className={"connection-dot " + (needsFixing ? "off" : "on")} />
+                <span className="connection-account-name">{acct}</span>
+                {needsFixing && (
+                  <span className="connection-account-note">
+                    {t("integrations.connection.accountNeedsReconnect")}
+                  </span>
+                )}
+                {canWrite && (
+                  <Button
+                    variant={needsFixing ? "primary" : "ghost"}
+                    onClick={() => connect(acct)}
+                  >
+                    {t("connections.reconnect")}
+                  </Button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
       {off ? (
         <p className="connection-note">{t("integrations.connection.oauthOff")}</p>
       ) : errored ? (
@@ -949,7 +1003,7 @@ function OAuthCard({
         <p className="connection-note">{t("common.loading")}</p>
       ) : canWrite ? (
         <div className="connection-card-footer">
-          <Button variant="primary" onClick={connect}>
+          <Button variant={connected ? "ghost" : "primary"} onClick={() => connect()}>
             {connected ? t("connections.connectAnother") : t("connections.connect")}
           </Button>
         </div>
