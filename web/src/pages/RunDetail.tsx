@@ -504,7 +504,10 @@ export function RunDetail() {
               {isOpen && (
                 <div className="node-body">
                   {n.Result?.error && (
-                    <NodeError error={n.Result.error} />
+                    // The expanded step knows exactly which app it was
+                    // talking to, so its fix-it button is more precise than
+                    // the banner's: this node's app, this node's account.
+                    <NodeError error={n.Result.error} app={failedApp(n.NodeID)} />
                   )}
                   {n.Job?.Input && Object.keys(n.Job.Input).length > 0 && (
                     <div className="node-output">
@@ -947,11 +950,13 @@ function RunFailureBanner({
 // code/message stays inline (it's all we have to show).
 function NodeError({
   error,
+  app,
 }: {
   error: { code?: string; message?: string; details?: string };
+  app?: AppContext;
 }) {
   const { t } = useTranslation();
-  const explanation = explainRunError(error.code, error.message);
+  const explanation = explainRunError(error.code, error.message, app);
   const action = explanation?.action;
   const isExternal = action?.href.startsWith("http") || false;
   const hasRaw = !!(error.code || error.message);

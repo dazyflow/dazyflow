@@ -2329,28 +2329,28 @@
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border-radius: var(--r-2);
 }
 .connection-account-name {
   font-weight: 600;
 }
 .connection-account-note {
-  color: var(--warning, var(--text-muted));
+  color: var(--warning);
   font-size: var(--text-sm);
 }
 .connection-account .btn {
   margin-left: auto;
 }
 .connection-account.needs-reconnect {
-  border-color: var(--warning, var(--border));
+  border-color: var(--warning);
 }
 /* Grey would read as "not set up yet". This account IS set up — it stopped
    working, which is a different thing to say and a different thing to do. */
 .connection-account.needs-reconnect .connection-dot.off {
-  background: var(--warning, var(--muted));
+  background: var(--warning);
 }
 .connection-account.flagged {
-  box-shadow: 0 0 0 2px var(--warning, var(--accent));
+  box-shadow: 0 0 0 2px var(--warning);
 }
 .connection-dot.off {
   background: var(--muted);
