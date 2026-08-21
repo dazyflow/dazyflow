@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.7.4] - 2026-08-21
+
 ### Fixed
 
 - **The Apps index showed a green dot for a broken connection.** The grid
