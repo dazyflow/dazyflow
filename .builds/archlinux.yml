@@ -124,6 +124,15 @@ tasks:
   - dzctl-e2e: |
       cd dazyflow
       bash examples/csv-pipeline/run.sh
+  # The two catalogues the web guards read (the app list behind the integration
+  # description guard, the drop text behind the Swedish coverage guard) are
+  # generated from the live drop registry and committed. A stale one makes its
+  # guard pass vacuously — "every drop has a Swedish description" is only true
+  # of the drops the snapshot remembers — so regenerate and diff before the web
+  # task runs the guards against them.
+  - catalogs: |
+      cd dazyflow
+      make catalogs-check
   # `npm run build` is `tsc -b && vite build`, so a type error fails here — but
   # it does NOT run the unit tests, which meant the whole vitest suite (error
   # explainers, port typing, the Swedish catalog vocabulary and its drift

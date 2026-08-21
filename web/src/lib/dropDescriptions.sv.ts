@@ -158,8 +158,8 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     sv: "Spara inkommande data som en fil i arbetsytan. Koppla in vad som helst i ingången Data — text, JSON eller en fil från ett annat steg — och det skrivs till den sökväg du väljer. Arbetsytans lagringsgränser respekteras.",
   },
   for_each: {
-    en: "ad6d9883",
-    sv: "Kör loopens innehåll — de steg som är kopplade till ingången Loopens innehåll — en gång per post i en inkommande lista. Posterna körs parallellt upp till inställningen för samtidighet. Skickar ut `results` (en post per element, i ordning) och `errors` (en lista med misslyckade rader: {row, data, error}, där row börjar på 1). Sätt fail_fast=true för att avbryta vid första felet; annars fortsätter körningen och felen kommer ut på errors-porten.",
+    en: "8dfb01e2",
+    sv: "Kör Loopens innehåll — de steg som är kopplade till utgången Loopens innehåll — en gång per post i en inkommande lista. Posterna körs parallellt upp till inställningen för samtidighet. Skickar ut `results` (en post per element, i ordning) och `errors` (en lista med misslyckade rader: {row, data, error}, där row börjar på 1). Sätt fail_fast=true för att avbryta vid första felet; annars fortsätter körningen och felen kommer ut på errors-porten. Om VARJE post misslyckas misslyckas steget ändå — det är ett driftavbrott, inte en delvis lyckad körning, och ett senare steg ska inte registrera arbetet som utfört.",
   },
   fortnox_create_customer: {
     en: "d7b477d9",
@@ -178,8 +178,8 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     sv: "Skapa en händelse i en Google-kalender. Ange en rubrik samt start- och sluttid. Använd RFC3339-tidsstämplar (2026-06-16T15:00:00Z) för en händelse med klockslag, eller enkla datum (2026-06-16) för en heldagshändelse. Deltagare är en valfri kommaseparerad lista med e-postadresser.",
   },
   gcal_list_events: {
-    en: "383543d2",
-    sv: "Lista händelser från en Google-kalender. Du kan avgränsa med ett tidsfönster (time_min/time_max, RFC3339) och en textfråga. Återkommande händelser expanderas till enskilda tillfällen och returneras i starttidsordning. Varje händelse blir ett objekt med id, summary, start/end, status och attendees.",
+    en: "d61d1ffd",
+    sv: "Lista händelser från en Google-kalender. Avgränsa med ett tidsfönster som följer med schemat — \"tomorrow\" till \"tomorrow+1d\" för morgondagens bokningar, \"-7d\" till \"now\" för förra veckan — eller ange absoluta tidsstämplar; båda ändarna kan också kopplas in. Återkommande händelser expanderas till enskilda tillfällen och returneras i starttidsordning. Varje händelse blir ett objekt med id, summary, description, location, start/end, status och attendees.",
   },
   geo_location: {
     en: "5452cf43",
@@ -221,9 +221,17 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     en: "f48ba20a",
     sv: "Startar flödet när commits pushas till det anslutna repot. Skickar ut grenen (ref), commit-SHA före och efter, listan med commits, repot och vem som pushade. Vanliga användningar: lägg upp en driftsättningsavisering när commits landar på main, eller starta en CI-liknande kedja.",
   },
+  gmail_get_attachments: {
+    en: "4ec719a6",
+    sv: "Ta filerna som är bifogade till ett mejl och spara dem, färdiga att lämna vidare till ett steg som lägger dem någonstans — Google Drive · Ladda upp fil, Skriv fil, eller ett eget mejl. Koppla Matchande mejl från Sök mejl in i en För varje och lägg det här steget i Loopens innehåll med E-post = radens id. Använd 'Bara dessa typer' för att bara ta PDF:erna och strunta i signaturbilderna. Utgången Första filen är den du kopplar när varje mejl bär ett enda dokument; listan Filer bär alla.",
+  },
   gmail_get_message: {
     en: "997edb48",
     sv: "Läs ett mejl som lättlästa värden för Datum / Avsändare / Ämne / Innehåll. Koppla Sök mejls utgång Matchande mejl direkt till Meddelande-ID för att läsa DEN FÖRSTA träffen — eller, för att läsa varje träff, koppla Matchande mejl till ett För varje och lägg det här steget i loopens innehåll med Meddelande-ID = radens id.",
+  },
+  gmail_get_thread: {
+    en: "441d2474",
+    sv: "Läs alla meddelanden i en konversation, äldst först, och — det användbara — få veta om någon har svarat än. Besvarad är Nej så länge det nyaste meddelandet i tråden fortfarande är ditt eget, vilket är precis det \"de har inte hört av sig\"-test ett uppföljningsflöde behöver. Koppla Matchande mejl från Sök mejl in i en För varje och lägg det här steget i Loopens innehåll med Konversation = radens threadId. Sammanfattning är en rad per konversation (ämne, vem som skrev sist, när, hur många meddelanden, besvarad) — samla dem med Samla resultat från loopen för att få en tabell över vad som är obesvarat.",
   },
   gmail_search_messages: {
     en: "2096a808",
@@ -298,8 +306,8 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     sv: "Testa värdet på A och skicka det ut på Ja eller Nej i ett och samma steg. Välj testet i en lista på vanlig svenska — är lika med, innehåller, är större än, är någon av, ligger inom intervall och mer. A är både värdet som testas och nyttolasten som går vidare: den lämnar steget via Ja när testet stämmer, via Nej när det inte gör det. Koppla in B från ett tidigare steg eller skriv ett fast standardvärde. Det här är Jämför + Förgrening sammanslaget för det vanliga fallet med ett enda villkor; ta Jämför → Förgrening när du behöver dirigera en annan nyttolast än den du testar, eller kombinera villkor med Och/Eller/Inte.",
   },
   join_rows: {
-    en: "af3bb5eb",
-    sv: "SQL JOIN mellan två radströmmar. Parametern `on` kopplar vänstra kolumner till högra ({\"id\": \"user_id\"}). `kind` väljer inner / left / right / outer. När samma nyckel matchar flera högra rader blir utdatat en kartesisk produkt inom den gruppen (som i vanlig SQL). Högra kolumner som inte är nycklar och krockar med vänstra kolumnnamn får ett suffix (standard \"_right\", ändras med `right_suffix`). Den högra sidans nyckelkolumner tas bort ur utdatat eftersom de per definition är lika med den vänstras.",
+    en: "e9b3181a",
+    sv: "SQL JOIN mellan två radströmmar. Parametern `on` kopplar vänstra kolumner till högra ({\"id\": \"user_id\"}). `kind` väljer inner / left / right / outer / anti (anti = bara de vänstra raderna som saknar matchning på högersidan, med enbart sina egna kolumner — frågan \"vilka av de här har jag inte behandlat än?\"). När samma nyckel matchar flera högra rader blir utdatat en kartesisk produkt inom den gruppen (som i vanlig SQL). Högra kolumner som inte är nycklar och krockar med vänstra kolumnnamn får ett suffix (standard \"_right\", ändras med `right_suffix`). Den högra sidans nyckelkolumner tas bort ur utdatat eftersom de per definition är lika med den vänstras.",
   },
   json: {
     en: "43de2254",
@@ -430,8 +438,8 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     sv: "Infoga eller uppdatera (upsert) rader i en Postgres-tabell. Ange konfliktkolumnerna — Postgres matchar befintliga rader på dem och uppdaterar dem på plats, medan nya rader infogas. Välj vilka kolumner som uppdateras vid en träff om du vill bevara några befintliga värden.",
   },
   regex: {
-    en: "ca215d28",
-    sv: "Kör ett reguljärt uttryck över text. 'mode' väljer vad som ska göras: extract plockar ut varje träff (med grupper som kolumner — den första träffen kommer också ut på 'out'), replace ersätter träffar (använd $1 eller ${name} i ersättningen), split delar texten på mönstret till en lista, och match testar om mönstret finns (ett Ja/Nej för ett Förgrening-steg). Mönstren använder RE2-syntax; lägg till inbyggda flaggor som (?i) för skiftlägesokänslighet. Namngivna grupper (?P<name>…) blir namngivna kolumner; onamngivna blir 1, 2, … och hela träffen är 'match'.",
+    en: "f10f79b0",
+    sv: "Kör ett reguljärt uttryck över text — koppla in texten, eller skriv den på steget (så att du inuti en För varje kan läsa ${item.description} utan något föregående steg). 'mode' väljer vad som ska göras: extract plockar ut varje träff (med grupper som kolumner — den första träffen kommer också ut på 'out'), replace ersätter träffar (använd $1 eller ${name} i ersättningen), split delar texten på mönstret till en lista, och match testar om mönstret finns (ett Ja/Nej för ett Förgrening-steg). Mönstren använder RE2-syntax; lägg till inbyggda flaggor som (?i) för skiftlägesokänslighet. Namngivna grupper (?P<name>…) blir namngivna kolumner; onamngivna blir 1, 2, … och hela träffen är 'match'.",
   },
   render_table: {
     en: "fb94bf45",
@@ -476,6 +484,14 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
   sheets_read_range: {
     en: "77fb3445",
     sv: "Läs ett område i ett Google-kalkylblad. Första raden blir kolumnrubriker (om inte headers=false), och varje följande rad blir ett objekt med rubrikerna som nycklar. Klistra in bladets URL eller dess ID.",
+  },
+  sheets_update_cells: {
+    en: "87a5df6a",
+    sv: "Ändra celler i rader som redan finns i bladet, i stället för att lägga till nya. Slå på 'Ta med radnummer' i steget Läs område, behåll raderna du agerat på och skicka hit dem tillsammans med de kolumner du vill ändra — varje rad skrivs tillbaka till den rad den kom från. Så här markerar ett flöde arbete som utfört (Status = Fakturerad, Påmind = idag) så att nästa körning hoppar över det. Kolumner som inte listas lämnas orörda, och en kolumn som bladet inte har ännu läggs till sist.",
+  },
+  site_check: {
+    en: "a58e1975",
+    sv: "Bevaka en sajt och få veta det bara när något faktiskt ändras. Kombinera med en Intervall-trigger: Gick ner utlöses vid den kontroll där sajten slutar svara ordentligt, Kom tillbaka när den svarar igen, och ingenting utlöses medan läget är oförändrat — så en sajt som varit nere i en timme larmar inte tolv gånger. En sajt som redan är nere vid allra första kontrollen utlöser dock, för det är en nyhet. Du kan också kräva att en viss fras finns på sidan, vilket fångar servern som svarar 200 med en felsida.",
   },
   slack_list_channels: {
     en: "a890ecbb",
@@ -532,6 +548,10 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
   stripe_create_refund: {
     en: "aa3cdf26",
     sv: "Återbetala en betalning med dess payment_intent-id (pi_…). Lämna Belopp tomt för full återbetalning, eller ange det i valutans minsta enhet (cent/öre) för en delvis — både id och belopp kan kopplas in från ett tidigare steg, t.ex. fälten i ett supportformulär. Lägg ett godkännandesteg före det här för det klassiska flödet 'godkänn i Slack → återbetala'. Omförsök återanvänder samma Idempotency-Key, så en skakig körning inte kan återbetala två gånger.",
+  },
+  stripe_get_customer: {
+    en: "852d7634",
+    sv: "Hämta en enskild kund med dess Stripe-id. Varje prenumerations- och betalningshändelse bär ett cus_…-id i stället för en e-postadress, så det här är steget som ger dig någon att skriva till: koppla triggerns Kund rakt in i Kund här, och dess E-post in i ett Skicka e-post-steg. (Vill du söka på e-post i stället? Använd Sök kunder — Stripes sökning kan inte slå upp på id.)",
   },
   stripe_list_events: {
     en: "5ae7c226",
@@ -592,6 +612,10 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
   weather_forecast: {
     en: "560c07e0",
     sv: "Se några dagar framåt för en punkt på kartan. Ge den en koordinat — skriv Latitud och Longitud, eller koppla in ett \"lat,lon\"-värde från ett annat steg — och välj antal dagar (1–5). Du får en läsbar Sammanfattning dag för dag plus arrayen Per dygn som JSON (min-/maxtemperatur, väderläge och regnrisk per dag), sammanställd från OpenWeathers kostnadsfria 5-dygnsprognos i 3-timmarssteg. Vilken vanlig nyckel som helst fungerar, ingen betald prenumeration.",
+  },
+  web_watch: {
+    en: "f93f3f66",
+    sv: "Håll ett öga på en webbsida och låt flödet köra bara när den faktiskt ändras — ett pris, en statussida, en upphandlingslista, en jobbannonssida. Kombinera med en Intervall-trigger. Första kontrollen registrerar tyst vad sidan säger idag; från och med då jämför varje kontroll. Steg som är kopplade till Vid ändring ligger vilande så länge inget ändras, så ett larm går bara ut när det finns något att säga. Som standard jämförs orden på sidan, inte HTML:en bakom dem, vilket hindrar osynliga ändringar i markup från att slå falskt alarm. Vill du bevaka ett enda tal i stället för hela sidan anger du ett mönster i 'Bevaka bara detta'.",
   },
   webhook_input: {
     en: "793f69eb",

@@ -140,9 +140,13 @@ describe("dropDescription", () => {
     expect(dropDescription(drop("Email"), "sv")).toBe("");
   });
 
-  it("covers the whole catalog with non-empty, distinct-from-English text", () => {
+  // Per-entry quality. Whether the map COVERS the catalog — and whether any
+  // entry has gone stale against the English — is dropTextCoverage.test.ts,
+  // which diffs against the live drop registry. A hardcoded count used to
+  // stand in for that and only ever measured its own last update.
+  it("has non-empty, well-formed text in every entry", () => {
     const ids = Object.keys(SV_DESCRIPTIONS);
-    expect(ids.length).toBe(145);
+    expect(ids.length).toBeGreaterThan(0);
     for (const id of ids) {
       const entry = SV_DESCRIPTIONS[id];
       expect(entry.sv.trim(), id).not.toBe("");

@@ -59,6 +59,7 @@ LDFLAGS := -s -w \
 .DEFAULT_GOAL := help
 
 .PHONY: help up down restart logs ps build rebuild env pg pg-down dev web test vet fmt check ci \
+        integration-catalog drop-catalog catalogs catalogs-check flowgen-eval \
         docs-content docs-site docs-dev bin version latest major minor patch _bump upgrade
 
 help: ## List targets
@@ -139,6 +140,38 @@ test: ## Run the Go test suite with the race detector
 integration-catalog: ## Refresh the list of apps the description guard checks (run after adding a connector)
 	go run ./scripts/integrations.go > web/src/integrationMeta.catalog.json
 	@echo "wrote web/src/integrationMeta.catalog.json"
+
+drop-catalog: ## Refresh the drop text the Swedish coverage guard checks (run after adding or rewording a drop)
+	go run ./scripts/droptext.go > web/src/lib/dropText.catalog.json
+	@echo "wrote web/src/lib/dropText.catalog.json"
+
+catalogs: integration-catalog drop-catalog ## Refresh both generated catalogues the web guards read
+
+# The web guards check the Swedish against these committed snapshots, so a
+# snapshot that is itself out of date makes them pass vacuously: add a drop,
+# forget `make drop-catalog`, and "every drop has a description" is true only
+# of the drops the snapshot remembers. Regenerating and diffing is what makes
+# the guards mean anything. CI runs this before the web task.
+#
+# Deliberately does NOT regenerate in place and ask git what changed: that
+# couples the answer to whether you happen to have committed yet — a correct
+# but uncommitted catalogue reads as stale, and a brand-new untracked one
+# reads as clean, which is backwards. Regenerating into a temp dir and diffing
+# answers the actual question ("would regenerating change anything?") in any
+# checkout state, and prints the drift instead of merely asserting it.
+catalogs-check: ## Fail if a generated catalogue is out of date (CI)
+	@tmp=$$(mktemp -d); rc=0; \
+	go run ./scripts/integrations.go > $$tmp/integrations.json; \
+	go run ./scripts/droptext.go    > $$tmp/droptext.json; \
+	diff -u web/src/integrationMeta.catalog.json $$tmp/integrations.json || rc=1; \
+	diff -u web/src/lib/dropText.catalog.json    $$tmp/droptext.json    || rc=1; \
+	rm -rf $$tmp; \
+	if [ $$rc -ne 0 ]; then \
+	  echo; \
+	  echo "Generated catalogue is out of date — run 'make catalogs' and commit the result."; \
+	  exit 1; \
+	fi; \
+	echo "catalogues up to date"
 
 vet: ## Run go vet
 	go vet ./...
@@ -312,4 +345,6 @@ ci: ## Full local mirror of CI (.build.yml): build, vet, race tests, web build
 	@echo "==> go build"; go build ./...
 	@echo "==> go vet"; go vet ./...
 	@echo "==> go test -race"; go test -race -timeout $(GO_TEST_TIMEOUT) ./...
-	@echo "==> web build"; cd web && npm ci && npm run build
+	@echo "==> catalogues"; $(MAKE) --no-print-directory catalogs-check
+	@echo "==> web test"; cd web && npm ci && npm test
+	@echo "==> web build"; cd web && npm run build
