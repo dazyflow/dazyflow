@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-08-22
+
 ### Added
 
 - **A flow waiting on a person now emails the people who can decide.** The
