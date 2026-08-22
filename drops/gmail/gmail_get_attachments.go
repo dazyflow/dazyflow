@@ -30,7 +30,7 @@ func init() {
 			Label:       "Gmail",
 			Subtitle:    "Download attachments",
 			Summary:     "Save the files attached to an email so a later step can file them.",
-			Description: "Take the files attached to an email and save them, ready to hand to a step that files them somewhere — Upload to Drive, Write file, or an email of your own. Wire Search emails' Matching emails into a For each and put this step in the loop body with Email = the row's id. Use 'Only these types' to take just the PDFs and ignore signature images. The First file output is the one to wire when each email carries a single document; the Files list carries them all.",
+			Description: "Take the files attached to an email and save them, ready to hand to a step that files them somewhere — Upload to Drive, Write file, or an email of your own. Connect Search emails' Matching emails into a For each and put this step in the loop body with Email = the row's id. Use 'Only these types' to take just the PDFs and ignore signature images. The First file output is the one to connect when each email carries a single document; the Files list carries them all.",
 			Integration: "Gmail",
 			Category:    "network",
 			Icon:        "paperclip",
@@ -42,7 +42,7 @@ func init() {
 				{
 					Title:  "Take the PDF off each invoice email (inside For each)",
 					Params: json.RawMessage(`{"account":"default","id":"${item.id}","only":"pdf"}`),
-					Notes:  "Wire First file into Upload to Drive's File input to file it.",
+					Notes:  "Connect First file into Upload to Drive's File input to file it.",
 				},
 			},
 			RequiresConnections: []core.ConnectionRequirement{
@@ -66,7 +66,7 @@ func init() {
 					"base_url":{"type":"string","description":"Override the API host (testing)."},
 					"account":{"type":"string","default":"default"},
 					"token":{"type":"string","description":"Raw access token; overrides 'account'."},
-					"id":{"type":"string","title":"Email","description":"Which email to take the files from. Overridden by the Email input when wired."},
+					"id":{"type":"string","title":"Email","description":"Which email to take the files from. Overridden by the Email input when connected."},
 					"only":{"type":"string","title":"Only these types","examples":["pdf","pdf,png"],"description":"Comma-separated file extensions to keep, e.g. \"pdf\". Leave blank to take every attachment. Inline signature images are always skipped."},
 					"folder":{"type":"string","title":"Save into","format":"workspace-path","description":"Workspace folder to save the files in, so they outlive the run. Leave blank to keep them in the run's scratch area — fine when a later step files them somewhere else."},
 					"timeout_ms":{"type":"integer","default":60000,"minimum":1,"description":"Hard deadline for each download, in milliseconds."}

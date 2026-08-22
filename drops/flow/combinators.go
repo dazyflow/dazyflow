@@ -32,15 +32,15 @@ import (
 func init() {
 	registerCombinator(combinatorSpec{
 		id: "and", label: "A AND B", icon: "ampersand", all: true,
-		summary: "Emit true on the Yes/No output only when every wired input is true.",
-		desc:    "Emit true on the Yes/No output when ALL wired boolean inputs are true, otherwise false (logical AND). Variadic — wire two or more Compare results (or any boolean-emitting steps) and feed the Yes/No output into a single Branch step's condition input. With a single input it just passes that input through; an empty set errors.",
-		example: core.ParamsExample{Title: "Over threshold AND in stock", Notes: "Wire one Compare (amount > 1000) and another (stock > 0) into the inputs. It's true only when both are true."},
+		summary: "Emit true on the Yes/No output only when every connected input is true.",
+		desc:    "Emit true on the Yes/No output when ALL connected boolean inputs are true, otherwise false (logical AND). Variadic — connect two or more Compare results (or any boolean-emitting steps) and feed the Yes/No output into a single Branch step's condition input. With a single input it just passes that input through; an empty set errors.",
+		example: core.ParamsExample{Title: "Over threshold AND in stock", Notes: "Connect one Compare (amount > 1000) and another (stock > 0) into the inputs. It's true only when both are true."},
 	})
 	registerCombinator(combinatorSpec{
 		id: "or", label: "A OR B", icon: "slash", all: false,
-		summary: "Emit true on the Yes/No output when any wired input is true.",
-		desc:    "Emit true on the Yes/No output when ANY wired boolean input is true, otherwise false (logical OR). Variadic — wire two or more Compare results (or any boolean-emitting steps) and feed the Yes/No output into a single Branch step's condition input. With a single input it just passes that input through; an empty set errors.",
-		example: core.ParamsExample{Title: "VIP OR high value", Notes: "Wire one Compare (tier == 'vip') and another (amount > 1000) into the inputs. It's true when either is true."},
+		summary: "Emit true on the Yes/No output when any connected input is true.",
+		desc:    "Emit true on the Yes/No output when ANY connected boolean input is true, otherwise false (logical OR). Variadic — connect two or more Compare results (or any boolean-emitting steps) and feed the Yes/No output into a single Branch step's condition input. With a single input it just passes that input through; an empty set errors.",
+		example: core.ParamsExample{Title: "VIP OR high value", Notes: "Connect one Compare (tier == 'vip') and another (amount > 1000) into the inputs. It's true when either is true."},
 	})
 
 	// NOT — the unary member. One boolean input, negated onto the Yes/No output.
@@ -53,11 +53,11 @@ func init() {
 			Category:    "logic",
 			Provider:    "internal",
 			Tags:        []string{"condition", "predicate", "boolean", "logic", "combinator", "not", "negate", "invert"},
-			Description: "Emit the logical negation of the wired boolean input on the Yes/No output — true becomes false, false becomes true. Wire a Compare result (or any boolean-emitting step) into the input; feed the Yes/No output into a Branch step's condition input to flip which port a payload takes without rewiring the branch.",
+			Description: "Emit the logical negation of the connected boolean input on the Yes/No output — true becomes false, false becomes true. Connect a Compare result (or any boolean-emitting step) into the input; feed the Yes/No output into a Branch step's condition input to flip which port a payload takes without rewiring the branch.",
 			Summary:     "Negate the boolean input: emit true when the input is false, and false when it is true.",
 			Examples: []core.ParamsExample{{
 				Title: "Branch when NOT approved",
-				Notes: "Wire a Compare (status == 'approved') into the input; it's true for every status that isn't 'approved'.",
+				Notes: "Connect a Compare (status == 'approved') into the input; it's true for every status that isn't 'approved'.",
 			}},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
@@ -131,7 +131,7 @@ func registerCombinator(c combinatorSpec) {
 func combine(job core.Job, all bool) (core.Result, error) {
 	refs := core.VariadicInputs(job.Input, "in")
 	if len(refs) == 0 {
-		return params.Err(job, "missing_input", "wire at least one Yes/No value into the inputs pin"), nil
+		return params.Err(job, "missing_input", "connect at least one Yes/No value into the inputs pin"), nil
 	}
 	result := all
 	for _, ref := range refs {
@@ -151,7 +151,7 @@ func combine(job core.Job, all bool) (core.Result, error) {
 func executeNot(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	ref, ok := job.Input["in"]
 	if !ok {
-		return params.Err(job, "missing_input", "input port 'in' is required — wire a Yes/No value (e.g. a Compare result) into it"), nil
+		return params.Err(job, "missing_input", "input port 'in' is required — connect a Yes/No value (e.g. a Compare result) into it"), nil
 	}
 	b, err := asBool(ref)
 	if err != nil {

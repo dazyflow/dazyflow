@@ -55,13 +55,13 @@ func init() {
 			Category:    "io",
 			Provider:    "internal",
 			Tags:        []string{"build", "exec", "shell", "command", "ci"},
-			Description: "Run a shell command inside a workspace-relative directory (commonly fed by git_checkout). Captures stdout/stderr and the exit code. Always returns ok so downstream notification steps still fire on failure — branch on the 'Exit code' output (0 = success).",
+			Description: "Run a shell command inside a workspace-relative directory (commonly fed by git_checkout). Captures stdout/stderr and the exit code. Always returns ok so later notification steps still fire on failure — branch on the 'Exit code' output (0 = success).",
 			Summary:     "Run a command in a workspace directory and capture its output and exit code.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Run the test suite",
 					Params: json.RawMessage(`{"command":"go","args":["test","./..."],"timeout_ms":600000}`),
-					Notes:  "Wire git_checkout's path output into the 'path' input so the command runs against the freshly checked-out tree.",
+					Notes:  "Connect git_checkout's path output into the 'path' input so the command runs against the freshly checked-out tree.",
 				},
 				{
 					Title:  "List files in a subdirectory",

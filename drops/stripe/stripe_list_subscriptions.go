@@ -23,7 +23,7 @@ func init() {
 			Label:       "Stripe",
 			Subtitle:    "List subscriptions",
 			Summary:     "List a customer's Stripe subscriptions (or sweep all of them by status) — the lookup step before a cancel.",
-			Description: "List subscriptions, scoped to one customer (wire a cus_… id in from Search customers) or across the whole account when Customer is empty — e.g. a daily past_due sweep. The matches come out as a JSON list on 'subscriptions'; 'first_id' carries the first match's sub_… id so the common one-subscription case wires straight into Cancel subscription without a For-each.",
+			Description: "List subscriptions, scoped to one customer (connect a cus_… id in from Search customers) or across the whole account when Customer is empty — e.g. a daily past_due sweep. The matches come out as a JSON list on 'subscriptions'; 'first_id' carries the first match's sub_… id so the common one-subscription case connects straight into Cancel subscription without a For-each.",
 			Integration: "Stripe",
 			Category:    "network",
 			Icon:        "credit-card",
@@ -32,7 +32,7 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"stripe", "subscription", "billing", "lookup"},
 			Examples: []core.ParamsExample{
-				{Title: "A customer's active subscriptions", Params: json.RawMessage(`{"customer":"cus_NffrFeUfNV2Hib"}`), Notes: "Wire the customer id in from Search customers; wire 'first_id' into Cancel subscription."},
+				{Title: "A customer's active subscriptions", Params: json.RawMessage(`{"customer":"cus_NffrFeUfNV2Hib"}`), Notes: "Connect the customer id in from Search customers; connect 'first_id' into Cancel subscription."},
 				{Title: "Dunning sweep — every past-due subscription", Params: json.RawMessage(`{"status":"past_due","limit":100}`), Notes: "Schedule-trigger this and For-each the 'subscriptions' list into a notify step."},
 			},
 			ConnectionFields: stripeConnectionFields(),

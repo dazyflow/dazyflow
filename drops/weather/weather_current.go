@@ -22,7 +22,7 @@ func init() {
 			Label:       "Weather",
 			Subtitle:    "Current conditions",
 			Summary:     "Get the current weather at a latitude/longitude from OpenWeather.",
-			Description: "Look up the weather right now for a point on the map. Give it a coordinate — type the Latitude and Longitude, or wire a \"lat,lon\" value in from another step (a geocode, a form field, a device's GPS) — and it returns a one-line Summary plus the Temperature and a Conditions word (Clear, Rain, Snow…) you can branch on, and the full observation as JSON. Uses OpenWeather's free Current Weather API — any standard key works, no paid subscription.",
+			Description: "Look up the weather right now for a point on the map. Give it a coordinate — type the Latitude and Longitude, or connect a \"lat,lon\" value in from another step (a geocode, a form field, a device's GPS) — and it returns a one-line Summary plus the Temperature and a Conditions word (Clear, Rain, Snow…) you can branch on, and the full observation as JSON. Uses OpenWeather's free Current Weather API — any standard key works, no paid subscription.",
 			Integration: "OpenWeather",
 			Category:    "network",
 			Icon:        "cloud-sun",

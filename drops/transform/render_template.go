@@ -28,12 +28,12 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"transform", "template", "html", "email", "render", "merge", "format"},
 			Summary:     "Fill an HTML template with merge fields, producing a styled HTML string for the Send email steps.",
-			Description: "Render an HTML template with merge fields into one HTML string — your own branded layout, filled with dynamic content, ready to wire into an email's Body. The template is Go html/template syntax: {{.name}} pulls a field from the data, {{range .items}}…{{end}} loops, {{if .vip}}…{{end}} branches. Type the template on the step, or wire it in from a workspace file (a Read file step on a .html). Wire the merge data (a JSON object, e.g. a row from a sheet or a webhook body) into the 'data' input — the template sees it as the root, so {{.customer}} reads data.customer. Values are HTML-escaped automatically, so a customer name containing <script> can't break your markup. The rendered HTML goes straight into a Send email step's Body (set that step's format to HTML).",
+			Description: "Render an HTML template with merge fields into one HTML string — your own branded layout, filled with dynamic content, ready to connect into an email's Body. The template is Go html/template syntax: {{.name}} pulls a field from the data, {{range .items}}…{{end}} loops, {{if .vip}}…{{end}} branches. Type the template on the step, or connect it in from a workspace file (a Read file step on a .html). Connect the merge data (a JSON object, e.g. a row from a sheet or a webhook body) into the 'data' input — the template sees it as the root, so {{.customer}} reads data.customer. Values are HTML-escaped automatically, so a customer name containing <script> can't break your markup. The rendered HTML goes straight into a Send email step's Body (set that step's format to HTML).",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Branded greeting",
 					Params: json.RawMessage(`{"template":"<h1>Hi {{.name}},</h1><p>Your order <b>{{.order_id}}</b> shipped.</p>"}`),
-					Notes:  "Wire the data input (e.g. a sheet row with name + order_id) and send the 'Rendered HTML' output into a Send email step's Body with format=HTML.",
+					Notes:  "Connect the data input (e.g. a sheet row with name + order_id) and send the 'Rendered HTML' output into a Send email step's Body with format=HTML.",
 				},
 				{
 					Title:  "Loop over line items",
@@ -79,7 +79,7 @@ func init() {
 						"type":"object",
 						"title":"Data",
 						"x_advanced":true,
-						"description":"Merge data the template sees as the root context, so {{.name}} reads data.name. Usually wired in via the 'Data' input (which overrides this); set here for fixed or test content."
+						"description":"Merge data the template sees as the root context, so {{.name}} reads data.name. Usually connected in via the 'Data' input (which overrides this); set here for fixed or test content."
 					}
 				}
 			}`),
@@ -107,7 +107,7 @@ func executeRenderTemplate(_ context.Context, job core.Job, _ chan<- core.Progre
 		return errResult(job, "bad_input", "the 'Template' input must be text"), nil
 	}
 	if strings.TrimSpace(tmplText) == "" {
-		return errResult(job, "bad_param", "render_template needs a 'template' — type one or wire the 'Template' input"), nil
+		return errResult(job, "bad_param", "render_template needs a 'template' — type one or connect the 'Template' input"), nil
 	}
 
 	data, err := resolveTemplateData(job)

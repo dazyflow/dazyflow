@@ -23,7 +23,7 @@ func init() {
 			Label:       "Home Assistant",
 			Subtitle:    "Call service",
 			Summary:     "Run a Home Assistant service — turn a light on/off, run a script, set a scene.",
-			Description: "Tell Home Assistant to do something: turn a light or switch on or off, run a script, activate a scene, set a thermostat. Pick the service (like light.turn_on) and the entity it acts on; both can be typed on the step or wired in from another step. Extra options (brightness, temperature, …) go in 'Service data'.",
+			Description: "Tell Home Assistant to do something: turn a light or switch on or off, run a script, activate a scene, set a thermostat. Pick the service (like light.turn_on) and the entity it acts on; both can be typed on the step or connected in from another step. Extra options (brightness, temperature, …) go in 'Service data'.",
 			Integration: "Home Assistant",
 			Category:    "network",
 			Icon:        "house",
@@ -113,7 +113,7 @@ func executeCallService(ctx context.Context, job core.Job, _ chan<- core.Progres
 	}
 	service = strings.TrimSpace(service)
 	if service == "" {
-		return params.Err(job, "bad_param", "'service' is required — set it (e.g. light.turn_on) or wire the 'Service' input"), nil
+		return params.Err(job, "bad_param", "'service' is required — set it (e.g. light.turn_on) or connect the 'Service' input"), nil
 	}
 	domain, svc, found := strings.Cut(service, ".")
 	if !found || domain == "" || svc == "" {

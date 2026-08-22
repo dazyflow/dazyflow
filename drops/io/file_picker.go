@@ -43,7 +43,7 @@ func init() {
 				{
 					Title:  "Pin a MIME and inline bytes for a remote module",
 					Params: json.RawMessage(`{"path":"workspace://uploads/report.pdf","mime":"application/pdf","inline":true}`),
-					Notes:  "inline=true reads the file into memory now — only use for files small enough to ship across the wire.",
+					Notes:  "inline=true reads the file into memory now — only use for files small enough to ship across the connect.",
 				},
 			},
 			ExecutionModel: core.ExecutionBatch,

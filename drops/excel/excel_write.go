@@ -25,7 +25,7 @@ func init() {
 			Label:       "Excel",
 			Subtitle:    "Write sheet",
 			Summary:     "Write rows to an Excel file, matching each row's fields to columns by header.",
-			Description: "Write rows to an Excel (.xlsx) file in the workspace. Wire a rows list into the 'Rows' input; columns are taken from the 'Headers' input or derived from the row fields. Turn on 'Add to existing sheet' to add the rows under what's already there instead of starting the file over.",
+			Description: "Write rows to an Excel (.xlsx) file in the workspace. Connect a rows list into the 'Rows' input; columns are taken from the 'Headers' input or derived from the row fields. Turn on 'Add to existing sheet' to add the rows under what's already there instead of starting the file over.",
 			Integration: "Excel",
 			Category:    "io",
 			Icon:        "file-spreadsheet",
@@ -56,7 +56,7 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"path":{"type":"string","title":"File","examples":["reports/sales.xlsx"],"description":"Where to save the .xlsx in the workspace. Ignored when a 'File' input is wired."},
+					"path":{"type":"string","title":"File","examples":["reports/sales.xlsx"],"description":"Where to save the .xlsx in the workspace. Ignored when a 'File' input is connected."},
 					"sheet":{"type":"string","title":"Sheet","default":"Sheet1","description":"The sheet (tab) to write."},
 					"append":{"type":"boolean","title":"Add to existing sheet","default":false,"description":"Add the rows under what's already on the sheet instead of replacing it."},
 					"autosize":{"type":"boolean","description":"Accepted for compatibility; not applied.","x_advanced":true},

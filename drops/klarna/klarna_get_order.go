@@ -21,7 +21,7 @@ func init() {
 			Label:       "Klarna",
 			Subtitle:    "Get order",
 			Summary:     "Look up a Klarna order by id — status and the captured / refunded / remaining amounts.",
-			Description: "Fetch one order from your connected Klarna account by its order id (from Klarna's checkout callback or the Merchant Portal). The order id can be typed on the step or wired in from upstream (the 'Order ID' input overrides the param).\n\nOut come the order 'status' (ORDER_OPEN, PART_CAPTURED, CAPTURED, CANCELLED, EXPIRED, CLOSED), the 'order_amount', 'captured_amount' and 'remaining_authorized_amount' (all in the currency's smallest unit — öre/cents), the 'currency', and the whole order as JSON on the 'Order' output. This is a read — safe to retry. Connect your Klarna account once on the Apps page.",
+			Description: "Fetch one order from your connected Klarna account by its order id (from Klarna's checkout callback or the Merchant Portal). The order id can be typed on the step or connected from an earlier step (the 'Order ID' input overrides the param).\n\nOut come the order 'status' (ORDER_OPEN, PART_CAPTURED, CAPTURED, CANCELLED, EXPIRED, CLOSED), the 'order_amount', 'captured_amount' and 'remaining_authorized_amount' (all in the currency's smallest unit — öre/cents), the 'currency', and the whole order as JSON on the 'Order' output. This is a read — safe to retry. Connect your Klarna account once on the Apps page.",
 			Integration: "Klarna",
 			Category:    "network",
 			Icon:        "search",
@@ -30,7 +30,7 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"klarna", "order", "payment", "bnpl", "checkout", "sweden", "nordic"},
 			Examples: []core.ParamsExample{
-				{Title: "Look up an order", Params: json.RawMessage(`{"order_id":"3d4f2b1a-1234-4a5b-9c8d-0e1f2a3b4c5d"}`), Notes: "Wire the 'Order ID' input from a checkout callback instead of typing it."},
+				{Title: "Look up an order", Params: json.RawMessage(`{"order_id":"3d4f2b1a-1234-4a5b-9c8d-0e1f2a3b4c5d"}`), Notes: "Connect the 'Order ID' input from a checkout callback instead of typing it."},
 			},
 			ConnectionFields: klarnaConnectionFields(),
 			ExecutionModel:   core.ExecutionBatch,
@@ -68,7 +68,7 @@ func executeGetOrder(ctx context.Context, job core.Job, _ chan<- core.Progress) 
 		return params.Err(job, "bad_input", "'Order ID' input must be text"), nil
 	}
 	if orderID == "" {
-		return params.Err(job, "bad_param", "'order_id' is required — set it or wire the 'Order ID' input"), nil
+		return params.Err(job, "bad_param", "'order_id' is required — set it or connect the 'Order ID' input"), nil
 	}
 
 	status, body, _, err := klarnaDo(ctx, job, http.MethodGet, orderPath(job, orderID), nil)

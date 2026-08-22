@@ -22,7 +22,7 @@ func init() {
 			Label:       "Notion",
 			Subtitle:    "Query database",
 			Summary:     "Read rows from a Notion database — each row comes out as simple column → value pairs.",
-			Description: "Read rows from a Notion database. Each matching page becomes a simple record of its columns (Name, Status, dates, tags…) as plain values, plus its id and url — ready to log to a sheet, loop over with For each, or wire into Notion · Create page. Narrow or order the results with raw Notion JSON in the advanced Filter and Sort fields.",
+			Description: "Read rows from a Notion database. Each matching page becomes a simple record of its columns (Name, Status, dates, tags…) as plain values, plus its id and url — ready to log to a sheet, loop over with For each, or connect into Notion · Create page. Narrow or order the results with raw Notion JSON in the advanced Filter and Sort fields.",
 			Integration: "Notion",
 			Category:    "network",
 			Icon:        "database",
@@ -62,7 +62,7 @@ func init() {
 				"properties":{
 					"account":{"type":"string","default":"default"},
 					"token":{"type":"string","description":"Raw Notion token; overrides 'account'."},
-					"database_id":{"type":"string","title":"Database ID","description":"Which database to read — paste its ID. Overridden by the 'Database ID' input when wired."},
+					"database_id":{"type":"string","title":"Database ID","description":"Which database to read — paste its ID. Overridden by the 'Database ID' input when connected."},
 					"page_size":{"type":"integer","title":"Max results","minimum":1,"maximum":100,"description":"How many rows to return at most (Notion caps this at 100)."},
 					"filter":{"type":"object","title":"Filter (Notion JSON)","x_advanced":true,"description":"Raw Notion filter object, passed through verbatim (advanced)."},
 					"sorts":{"type":"array","items":{},"title":"Sort (Notion JSON)","x_advanced":true,"description":"Raw Notion sorts array, passed through verbatim (advanced)."},
@@ -84,7 +84,7 @@ func executeNotionQueryDatabase(ctx context.Context, job core.Job, _ chan<- core
 		return params.Err(job, "bad_input", "'Database ID' input must be text"), nil
 	}
 	if dbID == "" {
-		return params.Err(job, "bad_param", "'database_id' is required — set it or wire the 'Database ID' input"), nil
+		return params.Err(job, "bad_param", "'database_id' is required — set it or connect the 'Database ID' input"), nil
 	}
 	token, err := resolveToken(ctx, job)
 	if err != nil {

@@ -31,7 +31,7 @@ func init() {
 				{
 					Title:  "Default — fire on every push to the connected repo",
 					Params: json.RawMessage(`{}`),
-					Notes:  "Filter to a specific branch downstream by checking `ref == \"refs/heads/main\"`.",
+					Notes:  "Filter to a specific branch later by checking `ref == \"refs/heads/main\"`.",
 				},
 			},
 			RequiresConnections: []core.ConnectionRequirement{
@@ -68,7 +68,7 @@ func executeGitHubOnPush(_ context.Context, job core.Job, _ chan<- core.Progress
 		Status: core.StatusError,
 		Error: &core.JobError{
 			Code:    "no_trigger_data",
-			Message: "This GitHub push trigger only fires when a real push webhook arrives. To test it, push to your connected repo; running the graph manually leaves the trigger with no event to feed downstream.",
+			Message: "This GitHub push trigger only fires when a real push webhook arrives. To test it, push to your connected repo; running the flow manually leaves the trigger with no event to feed the steps after it.",
 			Details: "github_on_push is pre-completed by the daemon's GitHub events handler when a push event arrives. Standalone execution has no event payload to emit.",
 		},
 	}, nil

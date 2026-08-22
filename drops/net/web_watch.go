@@ -44,12 +44,12 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"watch", "monitor", "change", "poll", "scrape", "price", "diff", "alert"},
 			Summary:     "Fetch a page on a schedule and fire only when what it says has changed.",
-			Description: "Keep an eye on a web page and let the flow run only when it actually changes — a price, a status page, a tender list, a job board. Pair it with an Interval trigger. The first check quietly records what the page says today; from then on, every check compares. Steps wired to 'On change' stay dormant while nothing changes, so an alert only goes out when there's something to say. By default it compares the words on the page, not the HTML behind them, which keeps invisible markup churn from crying wolf. To watch one number rather than the whole page, give a 'Watch just this' pattern.",
+			Description: "Keep an eye on a web page and let the flow run only when it actually changes — a price, a status page, a tender list, a job board. Pair it with an Interval trigger. The first check quietly records what the page says today; from then on, every check compares. Steps connected to 'On change' stay dormant while nothing changes, so an alert only goes out when there's something to say. By default it compares the words on the page, not the HTML behind them, which keeps invisible markup churn from crying wolf. To watch one number rather than the whole page, give a 'Watch just this' pattern.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Alert when a page changes at all",
 					Params: json.RawMessage(`{"url":"https://example.com/tenders"}`),
-					Notes:  "Wire an Interval trigger in, and On change → a Slack or ntfy step.",
+					Notes:  "Connect an Interval trigger in, and On change → a Slack or ntfy step.",
 				},
 				{
 					Title:  "Watch one price on the page",
@@ -74,7 +74,7 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"url":{"type":"string","title":"Page address","description":"The page to watch. Can also be wired into the Page address input."},
+					"url":{"type":"string","title":"Page address","description":"The page to watch. Can also be connected into the Page address input."},
 					"pattern":{"type":"string","title":"Watch just this","examples":["Price:\\s*([0-9]+)"],"description":"Optional. A pattern picking out the one part of the page to compare — the first bracketed group, or the whole match if there are no brackets. Leave blank to compare the whole page."},
 					"text_only":{"type":"boolean","title":"Compare the words, not the code","default":true,"description":"On: strip the HTML and compare the visible text, so invisible markup churn doesn't count as a change. Off: compare the raw response exactly as it arrives (right for JSON or a plain-text endpoint)."},
 					"timeout_ms":{"type":"integer","default":20000,"minimum":1,"description":"Hard deadline for the fetch, in milliseconds."}

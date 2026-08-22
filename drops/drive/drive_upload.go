@@ -30,7 +30,7 @@ func init() {
 			Label:       "Google Drive",
 			Subtitle:    "Upload file",
 			Summary:     "Upload a workspace file to Google Drive.",
-			Description: "Upload a workspace file to Google Drive. Wire a file in (e.g. from Download file, an export step, or HTTP download), or give a workspace path. Optionally drop it into a specific folder. Returns the new file's id and a shareable link.",
+			Description: "Upload a workspace file to Google Drive. Connect a file in (e.g. from Download file, an export step, or HTTP download), or give a workspace path. Optionally drop it into a specific folder. Returns the new file's id and a shareable link.",
 			Integration: "Google Drive",
 			Category:    "network",
 			Icon:        "upload",
@@ -63,8 +63,8 @@ func init() {
 				"type":"object",
 				"properties":{
 					"account":{"type":"string","default":"default"},
-					"path":{"type":"string","title":"File to upload","format":"workspace-path","description":"The workspace file to send (or wire the File input). scratch:// supported."},
-					"name":{"type":"string","title":"Name in Drive","description":"What to call the file in Drive. Wire the Name input to compute it — a dated backup, say. Defaults to the source file's own name."},
+					"path":{"type":"string","title":"File to upload","format":"workspace-path","description":"The workspace file to send (or connect the File input). scratch:// supported."},
+					"name":{"type":"string","title":"Name in Drive","description":"What to call the file in Drive. Connect the Name input to compute it — a dated backup, say. Defaults to the source file's own name."},
 					"folder_id":{"type":"string","format":"google-drive-folder","title":"Into folder","description":"Folder to upload into — pick from your account's folders. Leave blank for the account's My Drive root."},
 					"mime_type":{"type":"string","title":"Content type","x_advanced":true,"description":"Content type to store. Defaults to a guess from the file extension."},
 					"timeout_ms":{"type":"integer","default":120000,"minimum":1,"description":"Hard deadline for the upload, in milliseconds."}

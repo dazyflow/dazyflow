@@ -779,6 +779,10 @@ func main() {
 		// suspended. svc.Auth feeds both the gRPC interceptors and the HTTP
 		// gateway, so this one wrap covers the whole surface.
 		svc.Auth = &auth.ModerationGate{Inner: authChain, Users: users, Orgs: orgProfileStore}
+		// Approval mail's default audience: when an await_approval step names
+		// no approvers, it asks the org who can act on one. Set here rather
+		// than in the svc literal because the store isn't built until now.
+		svc.Memberships = memberships
 		log.Print("memberships + invitations + org-auth + org-profile stores: postgres-backed")
 
 		// One-time, idempotent: migrate pre-rename "tenant:admin" roles to
@@ -1095,6 +1099,10 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 			ID:      fmt.Sprintf("dzd-dev-w%d", i),
 			Metrics: d.metrics,
 			Usage:   d.usage,
+			// Email the approvers the moment a run parks on an approval.
+			// Best-effort inside the Service; a dead mailer can't stop a
+			// flow from pausing.
+			OnNodeAwaiting: d.svc.HandleNodeAwaiting,
 		}, d.jobs, d.eng, d.bus)
 		// Enable subgraph execution: the worker hands a parked subgraph
 		// node's child graph to the Service to submit and run. Without this,
@@ -1453,6 +1461,12 @@ func buildGateway(ctx context.Context, bgWg *sync.WaitGroup, d gatewayDeps) {
 		log.Fatalf("postgres audit log: %v", err)
 	}
 	gw.Audit = auditLog
+	// The link-based approval path has no principal to audit through, so it
+	// carries its own writer. Without this, decisions taken from an approval
+	// email were the only ones missing from the trail.
+	if d.approval != nil {
+		d.approval.Audit = auditLog
+	}
 	// Runtime platform-admin grants: the mutable layer over the env allowlist,
 	// so a platform admin can grant/revoke the role from the UI without a
 	// restart. Nil leaves the grant/revoke endpoints at 501 (env allowlist

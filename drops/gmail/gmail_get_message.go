@@ -22,7 +22,7 @@ func init() {
 			Label:       "Gmail",
 			Subtitle:    "Read email",
 			Summary:     "Read one email — who sent it, the subject, the date, and the body.",
-			Description: "Read one email as friendly Date / From / Subject / Body values. Wire Search emails' Matching emails straight into Message ID to read the FIRST match — or, to read every match, wire Matching emails into a For each and put this step in the loop body with Message ID = the row's id.",
+			Description: "Read one email as friendly Date / From / Subject / Body values. Connect Search emails' Matching emails straight into Message ID to read the FIRST match — or, to read every match, connect Matching emails into a For each and put this step in the loop body with Message ID = the row's id.",
 			Integration: "Gmail",
 			Category:    "network",
 			Icon:        "mail-open",
@@ -63,7 +63,7 @@ func init() {
 					"base_url":{"type":"string","description":"Override the API host (testing)."},
 					"account":{"type":"string","default":"default"},
 					"token":{"type":"string","description":"Raw access token; overrides 'account'."},
-					"id":{"type":"string","title":"Message ID","description":"Which email to read. Overridden by the Message ID input when wired."},
+					"id":{"type":"string","title":"Message ID","description":"Which email to read. Overridden by the Message ID input when connected."},
 					"format":{"type":"string","title":"Fetch detail","x_advanced":true,"enum":["full","metadata","minimal"],"default":"full","description":"How much of the message to fetch (advanced)."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},

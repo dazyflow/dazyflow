@@ -28,8 +28,8 @@ func init() {
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"text", "string", "constant", "literal"},
-			Description: "Emit a literal string value. The 'text' param can be multi-line; downstream consumers see it as text/plain on the 'out' port.",
-			Summary:     "Emit a graph-author-supplied literal string on the 'out' port.",
+			Description: "Emit a literal string value. The 'text' param can be multi-line; later steps see it as text/plain on the 'out' port.",
+			Summary:     "Emit a fixed string you type on the step, on the 'out' port.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Short constant",

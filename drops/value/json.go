@@ -23,13 +23,13 @@ func init() {
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"json", "object", "array", "constant", "literal", "blocks"},
-			Description: "Emit a literal JSON value, decoded. Type a JSON array or object and it parses once at run time, emitting the real value (not a string) on the 'out' port — so it wires straight into ports that want structured JSON, like a Slack message's Blocks. Distinct from Text, which emits its content as a plain string.",
-			Summary:     "Emit a graph-author-supplied JSON value, parsed into a real array/object on the 'out' port.",
+			Description: "Emit a literal JSON value, decoded. Type a JSON array or object and it parses once at run time, emitting the real value (not a string) on the 'out' port — so it connects straight into ports that want structured JSON, like a Slack message's Blocks. Distinct from Text, which emits its content as a plain string.",
+			Summary:     "Emit a JSON value you type on the step, parsed into a real array/object on the 'out' port.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Slack Block Kit array",
 					Params: json.RawMessage(`{"json":"[{\"type\":\"section\",\"text\":{\"type\":\"mrkdwn\",\"text\":\"*Deploy finished* :rocket:\"}},{\"type\":\"divider\"}]"}`),
-					Notes:  "Wire 'out' into a Send message step's Blocks input.",
+					Notes:  "Connect 'out' into a Send message step's Blocks input.",
 				},
 				{
 					Title:  "A config object",

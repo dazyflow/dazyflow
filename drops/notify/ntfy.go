@@ -28,7 +28,7 @@ func init() {
 			Label:       "ntfy",
 			Subtitle:    "Send notification",
 			Summary:     "Send a push notification to your phone via an ntfy topic.",
-			Description: "Send a push notification to an ntfy topic — subscribe to the same topic in the free ntfy app to receive it on your phone. The message can be typed on the step or wired in from another step; title, priority, tags and a tap link are optional. Defaults to the public ntfy.sh server; to use a self-hosted ntfy server, set its Server URL (and a token for protected topics) once via the ntfy connection (Apps page, or the configure_connection tool) — flows then only carry the per-notification topic and message.",
+			Description: "Send a push notification to an ntfy topic — subscribe to the same topic in the free ntfy app to receive it on your phone. The message can be typed on the step or connected in from another step; title, priority, tags and a tap link are optional. Defaults to the public ntfy.sh server; to use a self-hosted ntfy server, set its Server URL (and a token for protected topics) once via the ntfy connection (Apps page, or the configure_connection tool) — flows then only carry the per-notification topic and message.",
 			Integration: "ntfy",
 			Category:    "network",
 			Icon:        "ntfy",
@@ -79,7 +79,7 @@ func init() {
 					"title":{"type":"string","title":"Title","description":"Notification title."},
 					"priority":{"type":"string","title":"Priority","enum":["1","2","3","4","5"],"enumNames":["1 — Min","2 — Low","3 — Default","4 — High","5 — Max"],"description":"How urgently it buzzes. Leave unset for the normal level."},
 					"tags":{"type":"array","title":"Tags","items":{"type":"string"},"description":"Emoji/tag shortcodes."},
-					"click":{"type":"string","title":"Link to open","description":"Web address opened when the notification is tapped. Wire an Await approval step's 'Approval link' into the matching input so the recipient can approve straight from the notification."},
+					"click":{"type":"string","title":"Link to open","description":"Web address opened when the notification is tapped. Connect an Await approval step's 'Approval link' into the matching input so the recipient can approve straight from the notification."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
 				"required":["topic"]
@@ -139,7 +139,7 @@ func executeNtfy(ctx context.Context, job core.Job, progress chan<- core.Progres
 		}
 		body = body[:cut] + "…"
 		emitProgress(progress, job, 0.3, fmt.Sprintf(
-			"message was %d bytes; ntfy caps notifications at ~%d, so it was shortened — wire a summary instead of a full document if you need the whole thing.",
+			"message was %d bytes; ntfy caps notifications at ~%d, so it was shortened — connect a summary instead of a full document if you need the whole thing.",
 			origBytes, ntfyMaxMessage))
 	}
 

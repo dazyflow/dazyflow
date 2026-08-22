@@ -26,13 +26,13 @@ func init() {
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"expression", "formula", "cel", "code", "compute", "logic", "transform"},
-			Description: "Compute a single value from a formula — the value-level companion to the calculated-column step. Write one CEL expression (the same formula language the row tools use) with the wired 'in' value available as `input` and the current time as `now`. Use it to reshape a value mid-flow: pull a field (`input.user.email`), do arithmetic (`input * 1.25`), build a string (`\"Hi \" + input.name`), test a condition (`input.status == \"paid\"`), or transform a list (`input.map(x, x.id)`). The result is emitted on 'out', typed by what the formula returns (text, boolean, or JSON). For running real OS commands or scripts, use the Shell step instead — this is a safe, sandboxed expression evaluator, not a general code runtime.",
+			Description: "Compute a single value from a formula — the value-level companion to the calculated-column step. Write one CEL expression (the same formula language the row tools use) with the connected 'in' value available as `input` and the current time as `now`. Use it to reshape a value mid-flow: pull a field (`input.user.email`), do arithmetic (`input * 1.25`), build a string (`\"Hi \" + input.name`), test a condition (`input.status == \"paid\"`), or transform a list (`input.map(x, x.id)`). The result is emitted on 'out', typed by what the formula returns (text, boolean, or JSON). For running real OS commands or scripts, use the Shell step instead — this is a safe, sandboxed expression evaluator, not a general code runtime.",
 			Summary:     "Evaluate one CEL formula over the input value and emit the result.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Multiply a number",
 					Params: json.RawMessage(`{"expr":"input * 1.25"}`),
-					Notes:  "Wire a number into 'in'; this adds 25%.",
+					Notes:  "Connect a number into 'in'; this adds 25%.",
 				},
 				{
 					Title:  "Pull a nested field out of an object",
@@ -41,7 +41,7 @@ func init() {
 				{
 					Title:  "Build a yes/no condition",
 					Params: json.RawMessage(`{"expr":"input.status == 'paid' && input.total > 100"}`),
-					Notes:  "Returns a boolean on 'out' — wire it into a Branch.",
+					Notes:  "Returns a boolean on 'out' — connect it into a Branch.",
 				},
 			},
 			ExecutionModel: core.ExecutionBatch,
@@ -55,7 +55,7 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"expr":{"type":"string","format":"multiline","x_cel":true,"title":"Formula (CEL)","description":"A CEL expression. The variable 'input' is the wired value and 'now' is the current timestamp; the expression's value is emitted on 'out'."}
+					"expr":{"type":"string","format":"multiline","x_cel":true,"title":"Formula (CEL)","description":"A CEL expression. The variable 'input' is the connected value and 'now' is the current timestamp; the expression's value is emitted on 'out'."}
 				},
 				"required":["expr"]
 			}`),

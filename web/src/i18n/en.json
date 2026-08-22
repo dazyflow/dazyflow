@@ -47,7 +47,7 @@
     "quotaExceeded": "Your workspace has run out of storage. Free up space or ask an admin to raise the limit.",
     "timeout": "This step took too long and was stopped. It may be doing too much work, or a service it depends on is slow.",
     "cancelled": "This run was cancelled before this step could finish.",
-    "missingInput": "This step needs an input that isn't connected. Open the flow and wire the missing input.",
+    "missingInput": "This step needs an input that isn't connected. Open the flow and connect the missing input.",
     "badInput": "The data coming into this step wasn't in the shape it expected. Check the step that feeds it.",
     "badParam": "A setting on this step is missing or invalid. Open the step and check its fields.",
     "evalFailed": "A formula in this step couldn't be evaluated. Open the step and check the expression.",
@@ -237,7 +237,7 @@
     "nodeExecutions": "Step runs",
     "historyTitle": "Recent months",
     "month": "Month",
-    "notConfigured": "Usage metering is not enabled on this deployment.",
+    "notConfigured": "Usage tracking isn't switched on for this server, so there are no figures to show.",
     "planLabel": "Plan",
     "planValueFree": "Free",
     "planValuePro": "Pro",
@@ -394,7 +394,7 @@
     "titleReturning": "Welcome back to Dazyflow",
     "introReturning": "Pick up where you left off, or start a new flow from a template.",
     "aiBuildTitle": "Or just describe what you want",
-    "aiBuildDesc": "Tell Dazyflow what to build in plain English and it drafts the flow for you, ready to review — no steps to wire up by hand.",
+    "aiBuildDesc": "Tell Dazyflow what to build in plain English and it drafts the flow for you, ready to review — no steps to connect by hand.",
     "aiBuildCta": "Describe your flow"
   },
   "connectMcp": {
@@ -565,7 +565,7 @@
       "description": "Description",
       "descriptionPlaceholder": "What does this flow do?",
       "timeout": "Wall-time timeout (seconds)",
-      "timeoutDesc": "Auto-cancel the run if it hasn't finished by then. 0 / blank = no cap (the daemon's default still applies if one is set).",
+      "timeoutDesc": "Auto-cancel the run if it hasn't finished by then. Leave blank (or 0) for no limit — though your administrator may have set a server-wide one that still applies.",
       "flowId": "Flow ID",
       "flowIdDesc": "Changing the ID would orphan past runs; rename by creating a new flow and copying steps.",
       "tenantWorkspace": "Organization / Workspace",
@@ -576,11 +576,11 @@
       "privateVisibleDesc": "Only you (and organization admins, for recovery) can see the flow. Triggers still fire it.",
       "owner": "Owner",
       "ownerPlaceholder": "(set on first save)",
-      "ownerDesc": "Stamped by the daemon when the flow is first saved. Only organization admins can transfer ownership.",
+      "ownerDesc": "Set automatically when the flow is first saved. Only organization admins can transfer ownership.",
       "dangerZone": "Danger zone",
       "deleteFlow": "Delete flow",
       "deleteFlowDesc": "Permanently deletes this flow and its entire history. This cannot be undone.",
-      "storedInGit": "Every flow in this workspace is stored in git, with a commit for each save.",
+      "storedInGit": "Every save is kept as a version you can go back to — stored as a git repository behind the scenes.",
       "mirrorLink": "Mirror to your own git"
     }
   },
@@ -623,7 +623,7 @@
     "officialDocs": "Official documentation ↗",
     "technicalNotes": "Technical details — for whoever set this up",
     "dropsHead": "Steps",
-    "wiringDetails": "Wiring details",
+    "wiringDetails": "Inputs, outputs and settings",
     "inputs": "Inputs",
     "outputs": "Outputs",
     "paramsSchema": "Params schema",
@@ -1538,7 +1538,7 @@
     "needsSetupAria": "needs setup",
     "pickerUnset": "Not set",
     "pickerLoading": "…",
-    "pickerWired": "From upstream",
+    "pickerWired": "From an earlier step",
     "channelAny": "Any channel",
     "portRequired": "required",
     "portOptional": "optional",
@@ -1550,12 +1550,12 @@
     "needsSetup": "Connect {{name}} to use this step",
     "connect": "Connect {{name}}",
     "askAdmin": "Ask an admin to connect {{name}}",
-    "unwiredRequired": "Required input not wired: {{name}}",
-    "loopBodyUnwired": "Wire the Loop body pin to the step you want to run for each row.",
+    "unwiredRequired": "Required input isn't connected: {{name}}",
+    "loopBodyUnwired": "Connect the Loop body output to the step you want to run for each row.",
     "loopNested": "A loop can't run inside another loop yet — move this step out of the outer loop's body.",
     "off": "Off",
     "offTitle": "This step is switched off — it and everything after it are skipped when the flow runs.",
-    "passThrough": "Pass-through value — wire a value in to thread it unchanged out the matching pin",
+    "passThrough": "Pass-through value — connect a value here and it comes back out unchanged on the matching output",
     "schedule": {
       "manual": "Manual — runs when you press Run",
       "daily": "Every day at {{time}}",
@@ -1573,7 +1573,7 @@
       "days_one": "Every day",
       "days_other": "Every {{count}} days"
     },
-    "geoWired": "Set by the wired input",
+    "geoWired": "Set by the connected input",
     "geoUnset": "No location set"
   },
   "issueKey": {
@@ -1679,7 +1679,7 @@
     "uploading": "Uploading…",
     "dropOrBrowse": "Drop a file here or click to browse",
     "workspacePathPlaceholder": "workspace-relative path",
-    "fallbackHint": "Top-level schema isn't a property bag; using JSON editor instead.",
+    "fallbackHint": "This step's settings can't be shown as a form — edit them as JSON below.",
     "advanced": "Advanced",
     "accountChoose": "(choose a connected account)",
     "accountNotConnected": "{{account}} (not connected)",
@@ -1750,10 +1750,11 @@
       "minutes": "minutes",
       "hours": "hours",
       "days": "days"
-    }
+    },
+    "aboutField": "About this field"
   },
   "forEach": {
-    "bodyHint": "Wire the Loop body pin to the first step you want to run for each row. Every step after it runs once per row too.",
+    "bodyHint": "Connect the Loop body output to the first step you want to run for each row. Every step after it runs once per row too.",
     "rowColumns": "Each row's columns",
     "noColumns": "Connect a list to the items input to see its columns here.",
     "concurrency": "Rows at a time",
@@ -1842,10 +1843,6 @@
     "rendering": "updating…",
     "pickPreset": "Pick a layout above to build it from your columns and see it here."
   },
-  "approval": {
-    "notifyNtfy": "Notify me on ntfy with the approval link",
-    "notifyNtfyHint": "Adds an ntfy step wired to this approval's link, so the approver gets a tappable notification. Then drag the Approved output to the step that should run once it's approved (e.g. Send email)."
-  },
   "ntfy": {
     "subscribeTitle": "Receive these on your phone",
     "subscribeLabel": "Subscribe link",
@@ -1870,7 +1867,7 @@
     "stepOff": "Off",
     "stepOnHint": "This step runs. Switch off to skip it (and everything after it) while setting up.",
     "stepOffHint": "This step is switched off — it and everything after it are skipped when the flow runs.",
-    "sampleTitle": "Run this step and its upstream chain — skip everything downstream. Useful when wiring fields against real upstream data.",
+    "sampleTitle": "Run this step and the steps before it — skip everything after. Useful when you're filling in fields against real data from earlier steps.",
     "sample": "Run this step",
     "connectHint": "This step won't run until the app is connected.",
     "connectAdminHint": "{{name}} isn't connected. Ask an org admin to connect it — you don't have permission to add app connections.",
@@ -1896,7 +1893,8 @@
       "form": "Receiving — anyone with the form link can start this flow.",
       "secret": "Receiving — systems that send the secret key can start this flow.",
       "both": "Receiving — via the form link, and via the secret key for other systems."
-    }
+    },
+    "aboutStep": "What this step does"
   },
   "editor": {
     "loadFailedBlocked": "This flow couldn't be loaded, so saving is paused to avoid overwriting it. Reload the page to try again.",
@@ -2029,7 +2027,7 @@
     "lintPlaceholder": "The “{{field}}” field still has example text from the template — fill in your own value before running, or this step will fail.",
     "lintHardcoded": "The “{{field}}” field looks like it has a secret pasted straight into it. Anyone who can open this flow can read it — store it in the secret store and pick it with the secret picker instead.",
     "lintDangling": "The “{{field}}” field points to a step that's no longer in this flow — re-point it with the {} picker, or the run will fail when it tries to read it.",
-    "lintSecretPersist": "This step uses a secret and feeds its data into a later step that saves output, where the secret could end up stored in plain text. Check the wiring, or add a step that removes the secret before it's saved.",
+    "lintSecretPersist": "This step uses a secret and feeds its data into a later step that saves output, where the secret could end up stored in plain text. Check the connections, or add a step that removes the secret before it's saved.",
     "connNeededLead": "Connect to run this flow:",
     "connNeededCta": "Connect",
     "connNeededAskAdmin": "Ask an org admin to connect these.",
@@ -2202,10 +2200,10 @@
     "placeNotFound": "Couldn't locate that place",
     "locating": "Locating {{q}}…",
     "followingPlace": "Showing Place: {{name}}",
-    "followingWired": "Showing wired Place: {{name}}",
-    "wiredInput": "Location comes from the wired input — set at run time",
-    "wiredHint": "The wired Place sets the location at run time",
-    "wiredFollowHint": "Showing the wired Place — it sets the location at run time",
+    "followingWired": "Showing connected Place: {{name}}",
+    "wiredInput": "Location comes from the connected input — set at run time",
+    "wiredHint": "The connected Place sets the location at run time",
+    "wiredFollowHint": "Showing the connected Place — it sets the location at run time",
     "placeWins": "Pin follows the Place — clear it to pick on the map",
     "hint": "Search, or click the map to drop a pin"
   },

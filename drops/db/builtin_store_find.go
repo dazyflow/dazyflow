@@ -61,7 +61,7 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"table":    {"type":"string","format":"collection","title":"Collection","description":"Name of the collection to read from, e.g. leads or invoices. Overridden by a value wired into the Collection input."},
+					"table":    {"type":"string","format":"collection","title":"Collection","description":"Name of the collection to read from, e.g. leads or invoices. Overridden by a value connected into the Collection input."},
 					"filter":   {"type":"string","format":"row-condition","x_columns_source":"collection","title":"Where","description":"Keep only rows that match these conditions. Leave empty to return every row."},
 					"sort_by":  {"type":"string","format":"collection-column","title":"Sort by","description":"Column to sort by. Leave blank to keep the order rows were saved in."},
 					"sort_dir": {"type":"string","enum":["asc","desc"],"enumNames":["Ascending (A→Z, low→high)","Descending (Z→A, high→low)"],"default":"asc","title":"Direction","description":"Sort direction. Only applies when a sort column is set."},
@@ -210,7 +210,7 @@ func resolveTable(job core.Job) (string, error) {
 		name = strings.TrimSpace(params.StringDefault(job.Params, "table", ""))
 	}
 	if name == "" {
-		return "", errors.New("pick a collection to read from, or wire a collection name into the Collection input")
+		return "", errors.New("pick a collection to read from, or connect a collection name into the Collection input")
 	}
 	// Validate the identifier on the read path too — the write path already does
 	// (executeBuiltinStoreAppend). quoteIdent makes injection impossible either

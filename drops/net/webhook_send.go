@@ -25,7 +25,7 @@ func init() {
 			Label:       "Webhook",
 			Subtitle:    "Send to a URL",
 			Summary:     "Send data to a webhook URL — tell another service that something happened.",
-			Description: "Send data to a webhook URL — the outbound counterpart to the webhook trigger. The URL and Body can be typed on the step or wired in from upstream (the matching input overrides the param); text is sent as-is, an object or list is sent as JSON. Private-network addresses are blocked by default.",
+			Description: "Send data to a webhook URL — the outbound counterpart to the webhook trigger. The URL and Body can be typed on the step or connected from an earlier step (the matching input overrides the param); text is sent as-is, an object or list is sent as JSON. Private-network addresses are blocked by default.",
 			Integration: "Webhook",
 			Category:    "network",
 			Icon:        "webhook",
@@ -81,7 +81,7 @@ func executeWebhookSend(ctx context.Context, job core.Job, _ chan<- core.Progres
 	// http_request) — so the destination can be computed by an upstream node.
 	url := resolveURL(job)
 	if url == "" {
-		return params.Err(job, "bad_param", "'url' is required — set it or wire the URL input"), nil
+		return params.Err(job, "bad_param", "'url' is required — set it or connect the URL input"), nil
 	}
 	method := strings.ToUpper(params.StringDefault(job.Params, "method", "POST"))
 	if method != "POST" && method != "PUT" && method != "PATCH" {

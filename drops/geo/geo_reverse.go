@@ -22,8 +22,8 @@ func init() {
 			Version:     "1.0",
 			Label:       "Look up a place",
 			Subtitle:    "Map coordinate → place",
-			Summary:     "Pick a point on a map (or wire a coordinate) and get its place name.",
-			Description: "The inverse of Location: name a point on the map. Drop a pin on the OpenStreetMap map right on the card — or wire a \"lat,lon\" Coordinate in from another step (a Location pick, a device's GPS) to override it — and it returns the human Place name (\"Stockholm, Södermanland, Sweden\") plus the structured Address. Handy for labelling an alert: 'Rain expected near <place>'. Uses OpenStreetMap — no account or key.",
+			Summary:     "Pick a point on a map (or connect a coordinate) and get its place name.",
+			Description: "The inverse of Location: name a point on the map. Drop a pin on the OpenStreetMap map right on the card — or connect a \"lat,lon\" Coordinate in from another step (a Location pick, a device's GPS) to override it — and it returns the human Place name (\"Stockholm, Södermanland, Sweden\") plus the structured Address. Handy for labelling an alert: 'Rain expected near <place>'. Uses OpenStreetMap — no account or key.",
 			Integration: "OpenStreetMap",
 			Category:    "network",
 			Icon:        "map-pin",
@@ -37,9 +37,9 @@ func init() {
 					Params: json.RawMessage(`{"point":"59.3293,18.0686"}`),
 				},
 				{
-					Title:  "From a wired coordinate",
+					Title:  "From a connected coordinate",
 					Params: json.RawMessage(`{"point":"40.7484,-73.9857"}`),
-					Notes:  "The 'Coordinate' input (\"lat,lon\") overrides the map pin — wire a Location step into it.",
+					Notes:  "The 'Coordinate' input (\"lat,lon\") overrides the map pin — connect a Location step into it.",
 				},
 			},
 			// Per-tenant geocoding backend (shared with Location); all optional.

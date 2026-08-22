@@ -66,8 +66,8 @@ func init() {
 					"summary":{"type":"string","title":"Title","description":"Event title."},
 					"description":{"type":"string","title":"Description","description":"Optional event details."},
 					"location":{"type":"string","title":"Location","description":"Optional location text."},
-					"start":{"type":"string","title":"Start","examples":["2026-06-16T15:00:00Z","2026-06-16","tomorrow+9h"],"description":"When it starts: a timestamp, a plain date for an all-day event, or a relative value like \"tomorrow+9h\". Overridden by the Start input when wired."},
-					"end":{"type":"string","title":"End","examples":["2026-06-16T16:00:00Z","2026-06-17","tomorrow+10h"],"description":"When it ends: a timestamp, a plain date (exclusive) for an all-day event, or a relative value. Overridden by the End input when wired."},
+					"start":{"type":"string","title":"Start","examples":["2026-06-16T15:00:00Z","2026-06-16","tomorrow+9h"],"description":"When it starts: a timestamp, a plain date for an all-day event, or a relative value like \"tomorrow+9h\". Overridden by the Start input when connected."},
+					"end":{"type":"string","title":"End","examples":["2026-06-16T16:00:00Z","2026-06-17","tomorrow+10h"],"description":"When it ends: a timestamp, a plain date (exclusive) for an all-day event, or a relative value. Overridden by the End input when connected."},
 					"time_zone":{"type":"string","title":"Time zone","examples":["America/New_York","UTC"],"description":"IANA time zone for timed events. Optional when the timestamp carries an offset."},
 					"attendees":{"type":"string","title":"Attendees","description":"Comma-separated attendee email addresses."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}

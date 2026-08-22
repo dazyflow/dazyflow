@@ -22,7 +22,7 @@ func init() {
 			Label:       "Home Assistant",
 			Subtitle:    "Get state",
 			Summary:     "Read an entity's current state and attributes from Home Assistant.",
-			Description: "Look up where something is right now — is the door open, what's the temperature, is the light on. Give it an entity (like sensor.kitchen_temperature) and it returns the current State plus all its Attributes, ready to wire into a notification, a condition, or a sheet. The entity can be typed on the step or wired in from another step.",
+			Description: "Look up where something is right now — is the door open, what's the temperature, is the light on. Give it an entity (like sensor.kitchen_temperature) and it returns the current State plus all its Attributes, ready to connect into a notification, a condition, or a sheet. The entity can be typed on the step or connected in from another step.",
 			Integration: "Home Assistant",
 			Category:    "network",
 			Icon:        "house",
@@ -82,7 +82,7 @@ func executeGetState(ctx context.Context, job core.Job, _ chan<- core.Progress) 
 	}
 	entityID = strings.TrimSpace(entityID)
 	if entityID == "" {
-		return params.Err(job, "bad_param", "'entity_id' is required — set it (e.g. sensor.kitchen_temperature) or wire the 'Entity' input"), nil
+		return params.Err(job, "bad_param", "'entity_id' is required — set it (e.g. sensor.kitchen_temperature) or connect the 'Entity' input"), nil
 	}
 
 	status, body, err := haDo(ctx, job, "GET", "/api/states/"+url.PathEscape(entityID), nil)

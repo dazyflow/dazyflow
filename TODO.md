@@ -72,9 +72,10 @@ pick Dazyflow over Zapier/Make/n8n, and nothing in the gallery shows them off.
 
 ### Web
 
-Nothing open. The three items that lived here are done (2026-08-20); what they
-turned out to be is recorded below, because in each case the entry's diagnosis
-was off and the next person shouldn't re-derive it.
+One token-drift item open, plus the plain-language review below. The three
+items that used to lead this section are done (2026-08-20); what they turned
+out to be is recorded below, because in each case the entry's diagnosis was off
+and the next person shouldn't re-derive it.
 
 - **A switched-off trigger step now refuses deliveries.** The entry said
   "node-level `disabled` doesn't stop it firing", which conflated two
@@ -120,6 +121,36 @@ was off and the next person shouldn't re-derive it.
       deliberately does NOT flag it (the token exists, so nothing is broken).
       Sweep them out; check the others while you're there.
 
+### Plain language — what a non-technical reader actually meets
+
+From a read-through of every page a Viewer/Editor can reach (2026-08-22). The
+groundwork is done and should not be redone: *drop→step*, *graph→flow*,
+*node→step*, the category chips off their enum values, `explain.*` errors that
+name a cause and link the fix, and progressive disclosure that already hides
+cron behind "Custom", webhook setup behind "For developers", embed code behind
+"Put this form on my own website", and raw params JSON behind an explicit
+toggle. Admin is permission-gated, so a plain Editor never meets a daemon log.
+What follows is what leaks through that. Three of the four items found are
+done (2026-08-22): the (i) affordance is a real popover, the canvas no longer
+says *wire* / *pin* / *upstream*, and *daemon* / *metering* / *property bag*
+are gone from copy a business user reads. Two of that third item's six strings
+turned out not to be defects at all — see **Corrections to the record**.
+
+The same day, the vocabulary sweep was carried through every remaining
+user-facing surface: the 151 Go drop descriptions and their params help, the
+runtime error strings, and the Apps page, which had never had the
+drop→step / node→step / graph→flow rename at all. `wire` / `upstream` /
+`downstream` and the old product nouns now return zero across the catalogue,
+the manifests and both locales. Three uses of *drop* survive on purpose and
+must stay — "Drop a meeting onto a calendar", "drop generated files back into
+a folder", "someone drops a file into the workspace" are the verb.
+
+- [ ] **Two judgement calls, deliberately not decided here.** "Inspector" is
+      Figma/devtools vocabulary and *Step settings* would read plainer, but
+      renaming a panel mid-flight has its own cost. "Jump to it on the canvas"
+      (`editor.configModalLead_*`) is probably fine in a visual editor. Both
+      are listed so the next review does not re-raise them as findings.
+
 ### Connectors — Sweden first, then the Nordics
 
 The catalog is ~130 drops across 38 integrations, which is on par with n8n's
@@ -147,6 +178,22 @@ are now spent, so the next Nordic step costs more than the last few did.
 
 ### Deferred — decided, not forgotten
 
+- [ ] **Do NOT put `Manifest.Summary` in the step tooltip** — raised in the
+      2026-08-22 plain-language review as the cheap fix for 131-word hover
+      text, and declined on inspection. Summary is the right length (median
+      78 chars, never empty, required at registration) and the frontend does
+      not read it, so the idea is tempting. What it costs: Summary has no
+      Swedish, so surfacing it would drop 151 English one-liners into a
+      localized UI, add a THIRD fingerprint-guarded translation surface
+      beside descriptions and integration prose, and import fresh jargon —
+      15 Summaries say *wired* / *downstream* / *graph-author-supplied*, the
+      last being the pre-rename vocabulary this backlog spends a section
+      holding the line on. The actual problems were the container, not the
+      length: a native `title=` never fires on touch and cannot scroll.
+      HelpPopover fixes both for every locale at once, with no new prose.
+      Summary stays what its doc comment says it is — for the API and the
+      flow generator.
+
 - [ ] **Breadcrumbs in the header** — deferred, but not for the reason this
       entry used to give. "The IA is flat" is only true of the customer-facing
       app, where every sidebar destination is one level deep and a trail would
@@ -172,6 +219,28 @@ are now spent, so the next Nordic step costs more than the last few did.
 ---
 
 ## Corrections to the record
+
+- **`settings.notifications.webhookDesc` naming `graph_id` is correct, not a
+  vocabulary leak.** The 2026-08-22 review flagged it as the last survivor of
+  the step/flow rename. It is not: `graph_id`, `failed_node`, `error_code` and
+  the rest are the literal JSON keys `daemon/failure_notify.go` POSTs, pinned
+  by `failure_notify_test.go`. The copy documents a wire format, so renaming it
+  in the UI would make the documentation wrong and renaming it in the payload
+  would break every existing consumer. It is also already behind "Advanced:
+  send to Slack, Teams, or another service", i.e. shown only to someone who
+  asked for the payload shape. Leave it.
+
+- **`schemaForm.fallbackHint` is unreachable, so it was never the UX problem it
+  looked like.** The review called it "the worst of the set — it replaces the
+  form, so it is the only thing on screen when the user is already stuck."
+  Tracing it: Inspector gates on `supportsSchemaForm`, which asserts precisely
+  the condition the branch tests; both recursive call sites check
+  `schema.properties` first; and the ten drops whose schema is an object with
+  no properties (`branch`, `merge`, `and`/`or`/`not`, five event triggers) hit
+  Inspector's `noSettings` and render an empty panel instead. Only a unit test
+  constructing `{type:"string"}` reaches it. The wording was still replaced —
+  a defensive branch should degrade into a sentence, not jargon — but nobody
+  should spend time on it as a user-facing bug.
 
 Findings raised by a review and then disproved. Kept so they don't get
 re-raised.

@@ -54,7 +54,7 @@ func init() {
 				{
 					Title:  "Capture form submissions",
 					Params: json.RawMessage(`{"table":"leads"}`),
-					Notes:  "Wire a form/webhook body straight into the rows port — a single object is wrapped into a one-row list automatically.",
+					Notes:  "Connect a form/webhook body straight into the rows port — a single object is wrapped into a one-row list automatically.",
 				},
 				{
 					Title:  "Save with a typed column",

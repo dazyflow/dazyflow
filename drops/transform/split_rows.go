@@ -28,7 +28,7 @@ func init() {
 				{
 					Title:  "Split valid vs invalid records",
 					Params: json.RawMessage(`{"filter":"row.email != '' && row.age >= 18"}`),
-					Notes:  "Use the unmatched port to wire rows into a dead-letter table or review queue.",
+					Notes:  "Use the unmatched port to connect rows into a dead-letter table or review queue.",
 				},
 				{
 					Title:  "Active premium customers vs everyone else",

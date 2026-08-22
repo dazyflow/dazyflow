@@ -21,7 +21,7 @@ func init() {
 			Label:       "nShift",
 			Subtitle:    "Delete shipment",
 			Summary:     "Delete an unprinted draft shipment from your connected nShift account.",
-			Description: "Delete a shipment from nShift by its id — the way to cancel a draft consignment you booked in error. nShift only allows deleting a shipment that has not been printed/confirmed; a printed one is rejected and the reason is surfaced. The id can be typed on the step or wired in from upstream (the 'Shipment ID' input overrides the param).\n\nOut comes 'deleted' (true) on success. Deleting can't be undone, so this step runs once and is never retried automatically. Connect your nShift account once on the Apps page.",
+			Description: "Delete a shipment from nShift by its id — the way to cancel a draft consignment you booked in error. nShift only allows deleting a shipment that has not been printed/confirmed; a printed one is rejected and the reason is surfaced. The id can be typed on the step or connected from an earlier step (the 'Shipment ID' input overrides the param).\n\nOut comes 'deleted' (true) on success. Deleting can't be undone, so this step runs once and is never retried automatically. Connect your nShift account once on the Apps page.",
 			Integration: "nShift",
 			Category:    "network",
 			Icon:        "trash-2",
@@ -67,7 +67,7 @@ func executeDeleteShipment(ctx context.Context, job core.Job, _ chan<- core.Prog
 		return params.Err(job, "bad_input", "'Shipment ID' input must be text"), nil
 	}
 	if id == "" {
-		return params.Err(job, "bad_param", "'shipment_id' is required — set it or wire the 'Shipment ID' input"), nil
+		return params.Err(job, "bad_param", "'shipment_id' is required — set it or connect the 'Shipment ID' input"), nil
 	}
 
 	status, body, _, err := nshiftDo(ctx, job, http.MethodDelete, shipmentPath(job, id), nil)

@@ -63,7 +63,7 @@ func init() {
 				{
 					Title:  "Route an order by status",
 					Params: json.RawMessage(`{"field":"status","cases":[{"slot":"case_1","equals":"paid"},{"slot":"case_2","equals":"refunded"},{"slot":"case_3","equals":"failed"}]}`),
-					Notes:  "Wire the order into 'in'. A paid order rides out case_1; anything not paid/refunded/failed goes to default. The whole order travels — field only selects what to match on.",
+					Notes:  "Connect the order into 'in'. A paid order rides out case_1; anything not paid/refunded/failed goes to default. The whole order travels — field only selects what to match on.",
 				},
 				{
 					Title:  "Group HTTP statuses, match-any per case",
@@ -95,7 +95,7 @@ func init() {
 							"required":["slot","equals"]
 						}
 					},
-					"field":{"type":"string","title":"Key field","description":"Optional dot-path into the input to match on (e.g. status). Empty matches the whole input value. The full payload rides downstream regardless.","x_advanced":true}
+					"field":{"type":"string","title":"Key field","description":"Optional dot-path into the input to match on (e.g. status). Empty matches the whole input value. The full payload rides through regardless.","x_advanced":true}
 				},
 				"required":["cases"]
 			}`),

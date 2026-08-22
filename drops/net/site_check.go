@@ -36,7 +36,7 @@ func init() {
 				{
 					Title:  "Alert when the site stops answering",
 					Params: json.RawMessage(`{"url":"https://example.com/"}`),
-					Notes:  "Wire an Interval trigger in, and Went down / Came back to a notification step.",
+					Notes:  "Connect an Interval trigger in, and Went down / Came back to a notification step.",
 				},
 				{
 					Title:  "Require a phrase, to catch a 200 that's really an error page",
@@ -58,7 +58,7 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"url":{"type":"string","title":"Address","description":"The address to check. Can also be wired into the Address input."},
+					"url":{"type":"string","title":"Address","description":"The address to check. Can also be connected into the Address input."},
 					"expect_status":{"type":"integer","title":"Expected status","minimum":100,"maximum":599,"description":"Require this exact response code. Leave blank to accept any success (200–299)."},
 					"expect_text":{"type":"string","title":"Must contain","description":"Optional. Text the response must contain — catches a server that answers 200 with an error page."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"How long to wait before calling it down, in milliseconds."}

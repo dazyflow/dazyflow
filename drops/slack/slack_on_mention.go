@@ -25,7 +25,7 @@ func init() {
 			Provider:    "internal",
 			Integration: "Slack",
 			Tags:        []string{"slack", "trigger", "mention", "event", "events-api"},
-			Description: "Starts this flow whenever someone @-mentions your bot in Slack. The message, who sent it, and where it was sent are available as outputs to wire into the next steps — e.g. reply, log the request to a sheet, or forward it by email. Set 'Only in channel' to react in just one room.",
+			Description: "Starts this flow whenever someone @-mentions your bot in Slack. The message, who sent it, and where it was sent are available as outputs to connect into the next steps — e.g. reply, log the request to a sheet, or forward it by email. Set 'Only in channel' to react in just one room.",
 			Summary:     "Starts the flow when someone @-mentions your bot in Slack.",
 			Examples: []core.ParamsExample{
 				{
@@ -85,7 +85,7 @@ func executeSlackOnMention(_ context.Context, job core.Job, _ chan<- core.Progre
 		Status: core.StatusError,
 		Error: &core.JobError{
 			Code:    "no_trigger_data",
-			Message: "This Slack mention trigger only fires when @-mentioned in Slack. To test it, send a mention from your connected Slack workspace; running the graph manually leaves the trigger with no event to feed downstream.",
+			Message: "This Slack mention trigger only fires when @-mentioned in Slack. To test it, send a mention from your connected Slack workspace; running the flow manually leaves the trigger with no event to feed the steps after it.",
 			Details: "slack_on_mention is pre-completed by the daemon's Slack events handler when an app_mention event arrives. Standalone execution has no event payload to emit.",
 		},
 	}, nil

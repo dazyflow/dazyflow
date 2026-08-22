@@ -237,7 +237,7 @@
     "nodeExecutions": "Stegkörningar",
     "historyTitle": "Senaste månaderna",
     "month": "Månad",
-    "notConfigured": "Användningsmätning är inte aktiverad i den här installationen.",
+    "notConfigured": "Användningsmätning är inte påslagen på den här servern, så det finns inga siffror att visa.",
     "planLabel": "Plan",
     "planValueFree": "Gratis",
     "planValuePro": "Pro",
@@ -565,7 +565,7 @@
       "description": "Beskrivning",
       "descriptionPlaceholder": "Vad gör det här flödet?",
       "timeout": "Tidsgräns för körning (sekunder)",
-      "timeoutDesc": "Avbryt körningen automatiskt om den inte är klar innan dess. 0 / tomt = ingen gräns (daemonens standardgräns gäller fortfarande om en sådan är satt).",
+      "timeoutDesc": "Avbryt körningen automatiskt om den inte är klar innan dess. Lämna tomt (eller 0) för ingen gräns — men din administratör kan ha satt en gräns för hela servern som ändå gäller.",
       "flowId": "Flödes-ID",
       "flowIdDesc": "Om ID:t ändras tappar tidigare körningar sin koppling; byt namn genom att skapa ett nytt flöde och kopiera över stegen.",
       "tenantWorkspace": "Organisation / Arbetsyta",
@@ -576,11 +576,11 @@
       "privateVisibleDesc": "Bara du (och organisationens administratörer, för återställning) kan se flödet. Triggers kör det fortfarande.",
       "owner": "Ägare",
       "ownerPlaceholder": "(anges när flödet sparas första gången)",
-      "ownerDesc": "Stämplas av daemonen när flödet sparas första gången. Bara organisationens administratörer kan överföra ägarskapet.",
+      "ownerDesc": "Sätts automatiskt när flödet sparas första gången. Bara organisationens administratörer kan överföra ägarskapet.",
       "dangerZone": "Riskzon",
       "deleteFlow": "Ta bort flöde",
       "deleteFlowDesc": "Tar bort flödet och hela dess historik permanent. Detta kan inte ångras.",
-      "storedInGit": "Alla flöden i den här arbetsytan lagras i git, med en commit varje gång du sparar.",
+      "storedInGit": "Varje sparning behålls som en version du kan gå tillbaka till — tekniskt sett lagras de i ett git-repo.",
       "mirrorLink": "Spegla till din egen git"
     }
   },
@@ -619,7 +619,7 @@
     "officialDocs": "Officiell dokumentation ↗",
     "technicalNotes": "Tekniska detaljer — för den som satt upp det här",
     "dropsHead": "Steg",
-    "wiringDetails": "Kopplingsdetaljer",
+    "wiringDetails": "Indata, utdata och inställningar",
     "inputs": "Indata",
     "outputs": "Utdata",
     "paramsSchema": "Parameterschema",
@@ -1679,7 +1679,7 @@
     "uploading": "Laddar upp…",
     "dropOrBrowse": "Släpp en fil här eller klicka för att bläddra",
     "workspacePathPlaceholder": "sökväg relativt arbetsytan",
-    "fallbackHint": "Schemat på översta nivån är inte en uppsättning egenskaper; använder JSON-redigeraren i stället.",
+    "fallbackHint": "Det här stegets inställningar kan inte visas som ett formulär — redigera dem som JSON nedan.",
     "advanced": "Avancerat",
     "accountChoose": "(välj ett anslutet konto)",
     "accountNotConnected": "{{account}} (ej ansluten)",
@@ -1750,7 +1750,8 @@
       "minutes": "minuter",
       "hours": "timmar",
       "days": "dagar"
-    }
+    },
+    "aboutField": "Om det här fältet"
   },
   "forEach": {
     "bodyHint": "Koppla utgången Loopens innehåll till det första steget du vill köra för varje rad. Alla steg efter det körs också en gång per rad.",
@@ -1842,10 +1843,6 @@
     "rendering": "uppdaterar…",
     "pickPreset": "Välj en layout ovan för att bygga den från dina kolumner och se den här."
   },
-  "approval": {
-    "notifyNtfy": "Avisera mig på ntfy med godkännandelänken",
-    "notifyNtfyHint": "Lägger till ett ntfy-steg kopplat till godkännandets länk, så att godkännaren får en avisering att trycka på. Dra sedan utgången Godkänt till steget som ska köras när det godkänts (t.ex. Skicka e-post)."
-  },
   "ntfy": {
     "subscribeTitle": "Ta emot dessa i telefonen",
     "subscribeLabel": "Prenumerationslänk",
@@ -1896,7 +1893,8 @@
       "form": "Tar emot — alla med formulärlänken kan starta det här flödet.",
       "secret": "Tar emot — system som skickar den hemliga nyckeln kan starta det här flödet.",
       "both": "Tar emot — via formulärlänken, och via den hemliga nyckeln för andra system."
-    }
+    },
+    "aboutStep": "Vad det här steget gör"
   },
   "editor": {
     "loadFailedBlocked": "Det här flödet kunde inte läsas in, så sparandet är pausat för att inte skriva över det. Ladda om sidan för att försöka igen.",

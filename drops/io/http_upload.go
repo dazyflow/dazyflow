@@ -67,7 +67,7 @@ func init() {
 					"type":"object",
 					"properties":{
 						"url":{"type":"string","title":"URL","description":"The web address to upload to."},
-						"path":{"type":"string","title":"File to upload","format":"workspace-path","description":"The workspace file to send (or wire the File input). scratch:// supported."},
+						"path":{"type":"string","title":"File to upload","format":"workspace-path","description":"The workspace file to send (or connect the File input). scratch:// supported."},
 						"multipart":{"type":"boolean","title":"Send as form upload","default":false,"description":"Off = send the file bytes directly (what upload links expect). On = send as a form attachment for services that ask for one."},
 						"method":{"type":"string","title":"Method","enum":["PUT","POST"],"description":"Defaults to PUT for a direct upload, POST for a form upload."},
 						"field_name":{"type":"string","title":"Form field name","default":"file","x_advanced":true,"description":"Field name used for a form upload."},

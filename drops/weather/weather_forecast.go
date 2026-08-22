@@ -27,7 +27,7 @@ func init() {
 			Label:       "Weather",
 			Subtitle:    "Daily forecast",
 			Summary:     "Get a multi-day daily forecast for a latitude/longitude from OpenWeather.",
-			Description: "Look ahead a few days for a point on the map. Give it a coordinate — type the Latitude and Longitude, or wire a \"lat,lon\" value in from another step — and choose how many days (1–5). It returns a readable day-by-day Summary plus the Daily array as JSON (min/max temperature, conditions, and chance of rain per day), aggregated from OpenWeather's free 5-day/3-hour forecast. Any standard key works, no paid subscription.",
+			Description: "Look ahead a few days for a point on the map. Give it a coordinate — type the Latitude and Longitude, or connect a \"lat,lon\" value in from another step — and choose how many days (1–5). It returns a readable day-by-day Summary plus the Daily array as JSON (min/max temperature, conditions, and chance of rain per day), aggregated from OpenWeather's free 5-day/3-hour forecast. Any standard key works, no paid subscription.",
 			Integration: "OpenWeather",
 			Category:    "network",
 			Icon:        "cloud-sun",

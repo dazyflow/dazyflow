@@ -22,7 +22,7 @@ func init() {
 			Label:       "Stripe",
 			Subtitle:    "Get customer",
 			Summary:     "Look a customer up by their Stripe id — the step that turns cus_… into an email address.",
-			Description: "Fetch one customer by their Stripe id. Every subscription and payment event carries a cus_… id rather than an email, so this is the step that gets you someone to write to: wire the trigger's Customer straight into Customer here, and its Email into a Send email step. (Searching by email instead? Use Search customers — Stripe's search can't look up by id.)",
+			Description: "Fetch one customer by their Stripe id. Every subscription and payment event carries a cus_… id rather than an email, so this is the step that gets you someone to write to: connect the trigger's Customer straight into Customer here, and its Email into a Send email step. (Searching by email instead? Use Search customers — Stripe's search can't look up by id.)",
 			Integration: "Stripe",
 			Category:    "network",
 			Icon:        "credit-card",
@@ -34,7 +34,7 @@ func init() {
 				{
 					Title:  "Who cancelled?",
 					Params: json.RawMessage(`{}`),
-					Notes:  "Wire the On subscription canceled trigger's Customer into Customer, then Email into a Send email step.",
+					Notes:  "Connect the On subscription canceled trigger's Customer into Customer, then Email into a Send email step.",
 				},
 			},
 			ConnectionFields: stripeConnectionFields(),
@@ -70,7 +70,7 @@ func executeGetCustomer(ctx context.Context, job core.Job, _ chan<- core.Progres
 		return params.Err(job, "bad_input", "'Customer' input must be text"), nil
 	}
 	if id == "" {
-		return params.Err(job, "bad_param", "'customer' is required — set it or wire the Customer input"), nil
+		return params.Err(job, "bad_param", "'customer' is required — set it or connect the Customer input"), nil
 	}
 
 	status, body, err := stripeDo(ctx, job, http.MethodGet, baseURL(job)+"/customers/"+url.PathEscape(id), "")

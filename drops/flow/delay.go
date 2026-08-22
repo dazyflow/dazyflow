@@ -24,15 +24,15 @@ func init() {
 			Category:    "flow_control",
 			Provider:    "internal",
 			Tags:        []string{"timing", "delay", "sleep", "wait", "passthrough"},
-			Description: "Pause for a configurable duration, then forward the threaded value downstream on the pass-through output (or emit a control signal when nothing is threaded, so a pure pause still fires the next step).",
-			Summary:     "Hold the flow for a fixed number of milliseconds before forwarding the input downstream.",
+			Description: "Pause for a configurable duration, then forward the threaded value on the pass-through output (or emit a control signal when nothing is threaded, so a pure pause still fires the next step).",
+			Summary:     "Hold the flow for a fixed number of milliseconds before passing the input on to the next step.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Throttle a polling loop by one second",
 					Params: json.RawMessage(`{"ms":1000}`),
 				},
 				{
-					Title:  "Wait 30 seconds before retrying a downstream call",
+					Title:  "Wait 30 seconds before retrying a later call",
 					Params: json.RawMessage(`{"ms":30000}`),
 				},
 			},
@@ -63,7 +63,7 @@ func init() {
 func executeDelay(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
 	ms, ok := resolveDelayMs(job)
 	if !ok {
-		return params.Err(job, "bad_param", "ms is required: wire the Delay (ms) input or set the ms param"), nil
+		return params.Err(job, "bad_param", "ms is required: connect the Delay (ms) input or set the ms param"), nil
 	}
 	if ms < 0 {
 		return params.Err(job, "bad_param", "ms must be non-negative"), nil

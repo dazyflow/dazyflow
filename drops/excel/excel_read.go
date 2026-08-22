@@ -26,7 +26,7 @@ func init() {
 			Label:       "Excel",
 			Subtitle:    "Read sheet",
 			Summary:     "Read an Excel file into rows + headers.",
-			Description: "Read an Excel (.xlsx) file from the workspace. The first row becomes the column headers (unless 'First row is headers' is off), and each following row becomes an object keyed by header. Type the file path on the step or wire it in from an earlier step.",
+			Description: "Read an Excel (.xlsx) file from the workspace. The first row becomes the column headers (unless 'First row is headers' is off), and each following row becomes an object keyed by header. Type the file path on the step or connect it in from an earlier step.",
 			Integration: "Excel",
 			Category:    "io",
 			Icon:        "file-spreadsheet",
@@ -54,7 +54,7 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"path":{"type":"string","title":"File","examples":["reports/sales.xlsx"],"description":"The .xlsx file in the workspace. Ignored when a 'File' input is wired."},
+					"path":{"type":"string","title":"File","examples":["reports/sales.xlsx"],"description":"The .xlsx file in the workspace. Ignored when a 'File' input is connected."},
 					"sheet":{"type":"string","title":"Sheet","description":"The sheet (tab) to read. Leave blank for the first sheet."},
 					"headers":{"type":"boolean","title":"First row is headers","default":true,"description":"Treat the first row as column headers."},
 					"range":{"type":"string","title":"Cells","examples":["A1:D100"],"description":"Optional cell range within the sheet. Leave blank to read the whole sheet."},

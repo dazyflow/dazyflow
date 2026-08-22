@@ -32,7 +32,7 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"fortnox", "invoice", "trigger", "poll", "accounting", "sweden"},
 			Examples: []core.ParamsExample{
-				{Title: "Newly paid invoices", Params: json.RawMessage(`{"filter":"fullypaid"}`), Notes: "Dedupe downstream on DocumentNumber against a saved 'seen' secret so each invoice fires once."},
+				{Title: "Newly paid invoices", Params: json.RawMessage(`{"filter":"fullypaid"}`), Notes: "Dedupe later on DocumentNumber against a saved 'seen' secret so each invoice fires once."},
 				{Title: "Overdue dunning feed", Params: json.RawMessage(`{"filter":"unpaidoverdue","limit":100}`)},
 			},
 			RequiresConnections: []core.ConnectionRequirement{

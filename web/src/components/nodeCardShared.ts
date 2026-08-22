@@ -127,6 +127,13 @@ export type DazyNodeData = {
   // "nodeId.port" → friendly step·port names, for rendering ${upstream.…}
   // tokens in inline editors the way the {} menu words them.
   tokenLabels?: TokenLabels;
+  // Approve/reject straight from the canvas, injected by FlowEditor only for
+  // an await_approval node parked in `awaiting` during a live run. The
+  // Inspector's ApprovalPanel is still the richer surface (it carries the
+  // comment box); this exists because the common case — "the flow is waiting
+  // on me, right there on screen" — shouldn't require selecting the step and
+  // reading a side panel first.
+  onApprove?: (decision: "approve" | "reject") => Promise<void>;
   // Breakpoint set on this node (#12) — shows a red breakpoint dot.
   breakpoint?: boolean;
   // The live run is currently paused after this node (#12).

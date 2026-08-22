@@ -29,7 +29,7 @@ func init() {
 			Label:       "SMHI Weather",
 			Subtitle:    "Daily forecast",
 			Summary:     "Get a multi-day daily forecast at a coordinate from SMHI — no API key.",
-			Description: "Look ahead up to 10 days for a point in the Nordic region (and the surrounding area) using SMHI's free Open Data forecast — no account or API key. Give it a coordinate — type the Latitude and Longitude, or wire a \"lat,lon\" value in from a Location/Geocode step — and choose how many days. It returns a readable day-by-day Summary plus the Daily array as JSON (min/max temperature and conditions per day), in metric units.",
+			Description: "Look ahead up to 10 days for a point in the Nordic region (and the surrounding area) using SMHI's free Open Data forecast — no account or API key. Give it a coordinate — type the Latitude and Longitude, or connect a \"lat,lon\" value in from a Location/Geocode step — and choose how many days. It returns a readable day-by-day Summary plus the Daily array as JSON (min/max temperature and conditions per day), in metric units.",
 			Integration: "SMHI",
 			Category:    "network",
 			Icon:        "cloud-sun",

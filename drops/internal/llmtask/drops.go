@@ -30,7 +30,7 @@ func askDrop(cfg Config) engine.NativeDrop {
 			Label:       cfg.Integration,
 			Subtitle:    "Ask",
 			Summary:     "Send a prompt and get a single text response back.",
-			Description: "Send a prompt and get a response back — summarise upstream text, classify an input, or generate text. Wire the text to work on into the Prompt input, or type a prompt on the step.",
+			Description: "Send a prompt and get a response back — summarise text from an earlier step, classify an input, or generate text. Connect the text to work on into the Prompt input, or type a prompt on the step.",
 			Integration: cfg.Integration,
 			Category:    "ai",
 			Icon:        cfg.Icon,
@@ -39,7 +39,7 @@ func askDrop(cfg Config) engine.NativeDrop {
 			Provider:    "internal",
 			Tags:        tags(cfg, "prompt", "llm", "ask"),
 			Examples: []core.ParamsExample{
-				{Title: "One-shot summary", Params: json.RawMessage(`{"prompt":"Summarize the upstream text in one sentence."}`), Notes: "Wire the text into the Prompt input. The API key comes from the connection — leave api_key unset."},
+				{Title: "One-shot summary", Params: json.RawMessage(`{"prompt":"Summarize the text from an earlier step in one sentence."}`), Notes: "Connect the text into the Prompt input. The API key comes from the connection — leave api_key unset."},
 			},
 			ConnectionFields: connFields(cfg),
 			ExecutionModel:   core.ExecutionBatch,
@@ -98,7 +98,7 @@ func askDrop(cfg Config) engine.NativeDrop {
 
 func summarizeDrop(cfg Config) engine.NativeDrop {
 	props := baseProps(cfg)
-	props["text"] = map[string]any{"type": "string", "format": "multiline", "title": "Text to summarize", "description": "Or wire it into the Text input."}
+	props["text"] = map[string]any{"type": "string", "format": "multiline", "title": "Text to summarize", "description": "Or connect it into the Text input."}
 	props["style"] = map[string]any{"type": "string", "title": "Style", "enum": []any{"one_line", "paragraph", "bullets"}, "enumNames": []any{"One sentence", "Short paragraph", "Bullet points"}, "default": "paragraph"}
 	props["max_words"] = map[string]any{"type": "integer", "title": "Roughly how many words", "description": "Rough target length for the summary.", "minimum": 5, "maximum": 500, "default": 60}
 	props["language"] = map[string]any{"type": "string", "title": "Output language", "x_advanced": true, "description": "Leave blank to match the input's language."}
@@ -113,7 +113,7 @@ func summarizeDrop(cfg Config) engine.NativeDrop {
 			Integration: cfg.Integration, Category: "ai", Icon: cfg.Icon, Color: cfg.Color, BrandLogo: cfg.BrandLogo,
 			Provider: "internal", Tags: tags(cfg, "summary", "summarize", "text", "tldr"),
 			Examples: []core.ParamsExample{
-				{Title: "One-sentence summary", Params: json.RawMessage(`{"style":"one_line"}`), Notes: "Wire the text to summarize into the Text input; leave api_key unset."},
+				{Title: "One-sentence summary", Params: json.RawMessage(`{"style":"one_line"}`), Notes: "Connect the text to summarize into the Text input; leave api_key unset."},
 			},
 			ConnectionFields: connFields(cfg),
 			ExecutionModel:   core.ExecutionBatch, ProcessModel: core.ProcessLongLived,
@@ -129,7 +129,7 @@ func summarizeDrop(cfg Config) engine.NativeDrop {
 			}
 			text := resolveText(job)
 			if strings.TrimSpace(text) == "" {
-				return params.Err(job, "bad_input", "no text — wire the Text input or fill the text field"), nil
+				return params.Err(job, "bad_input", "no text — connect the Text input or fill the text field"), nil
 			}
 			temp := 0.3
 			out, jerr := cfg.Provider.Call(ctx, apiKey, Request{
@@ -173,7 +173,7 @@ func summarizeSystem(style string, maxWords int, language string) string {
 
 func extractDrop(cfg Config) engine.NativeDrop {
 	props := baseProps(cfg)
-	props["text"] = map[string]any{"type": "string", "format": "multiline", "title": "Text to read", "description": "Or wire it into the Text input."}
+	props["text"] = map[string]any{"type": "string", "format": "multiline", "title": "Text to read", "description": "Or connect it into the Text input."}
 	props["fields"] = map[string]any{
 		"type": "array", "title": "Fields to extract", "description": "The fields to pull out — give each a name and what it is; the result is one object with those fields.", "minItems": 1,
 		"items": map[string]any{"type": "object", "properties": map[string]any{
@@ -193,7 +193,7 @@ func extractDrop(cfg Config) engine.NativeDrop {
 			Integration: cfg.Integration, Category: "ai", Icon: cfg.Icon, Color: cfg.Color, BrandLogo: cfg.BrandLogo,
 			Provider: "internal", Tags: tags(cfg, "extract", "parse", "structured", "fields", "json"),
 			Examples: []core.ParamsExample{
-				{Title: "Parse an invoice email", Params: json.RawMessage(`{"fields":[{"name":"amount","description":"Total due","type":"number"},{"name":"vendor","description":"Who sent it"}]}`), Notes: "Wire the email body into Text. Output 'data' is {amount, vendor}."},
+				{Title: "Parse an invoice email", Params: json.RawMessage(`{"fields":[{"name":"amount","description":"Total due","type":"number"},{"name":"vendor","description":"Who sent it"}]}`), Notes: "Connect the email body into Text. Output 'data' is {amount, vendor}."},
 			},
 			ConnectionFields: connFields(cfg),
 			ExecutionModel:   core.ExecutionBatch, ProcessModel: core.ProcessLongLived,
@@ -209,7 +209,7 @@ func extractDrop(cfg Config) engine.NativeDrop {
 			}
 			text := resolveText(job)
 			if strings.TrimSpace(text) == "" {
-				return params.Err(job, "bad_input", "no text — wire the Text input or fill the text field"), nil
+				return params.Err(job, "bad_input", "no text — connect the Text input or fill the text field"), nil
 			}
 			fields := paramObjList(job.Params, "fields")
 			tool := buildExtractTool(fields, params.StringDefault(job.Params, "on_missing", "null"))
@@ -282,7 +282,7 @@ func buildExtractTool(fields []map[string]any, onMissing string) *Tool {
 
 func classifyDrop(cfg Config) engine.NativeDrop {
 	props := baseProps(cfg)
-	props["text"] = map[string]any{"type": "string", "format": "multiline", "title": "Text to classify", "description": "Or wire it into the Text input."}
+	props["text"] = map[string]any{"type": "string", "format": "multiline", "title": "Text to classify", "description": "Or connect it into the Text input."}
 	props["categories"] = map[string]any{
 		"type": "array", "title": "Categories", "description": "The buckets to sort text into. Give each a name and a short 'when to use it' so the AI picks well.", "minItems": 2,
 		"items": map[string]any{"type": "object", "properties": map[string]any{
@@ -297,11 +297,11 @@ func classifyDrop(cfg Config) engine.NativeDrop {
 			Version: "1.0",
 			Label:   cfg.Integration, Subtitle: "Classify",
 			Summary:     "Sort text into one of your categories so you can route it.",
-			Description: "Give AI a list of categories and it picks the single best match — route support emails, tag leads, flag spam. Wire the Category output into a Branch.",
+			Description: "Give AI a list of categories and it picks the single best match — route support emails, tag leads, flag spam. Connect the Category output into a Branch.",
 			Integration: cfg.Integration, Category: "ai", Icon: cfg.Icon, Color: cfg.Color, BrandLogo: cfg.BrandLogo,
 			Provider: "internal", Tags: tags(cfg, "classify", "categorize", "route", "label", "tag"),
 			Examples: []core.ParamsExample{
-				{Title: "Route a support email", Params: json.RawMessage(`{"categories":[{"name":"billing","description":"Payments, refunds"},{"name":"technical","description":"Bugs and how-to"}]}`), Notes: "Wire the email into Text; wire Category into a Branch."},
+				{Title: "Route a support email", Params: json.RawMessage(`{"categories":[{"name":"billing","description":"Payments, refunds"},{"name":"technical","description":"Bugs and how-to"}]}`), Notes: "Connect the email into Text; connect Category into a Branch."},
 			},
 			ConnectionFields: connFields(cfg),
 			ExecutionModel:   core.ExecutionBatch, ProcessModel: core.ProcessLongLived,
@@ -320,7 +320,7 @@ func classifyDrop(cfg Config) engine.NativeDrop {
 			}
 			text := resolveText(job)
 			if strings.TrimSpace(text) == "" {
-				return params.Err(job, "bad_input", "no text — wire the Text input or fill the text field"), nil
+				return params.Err(job, "bad_input", "no text — connect the Text input or fill the text field"), nil
 			}
 			names, descLines := categoryNames(paramObjList(job.Params, "categories"))
 			if len(names) < 2 {
@@ -392,7 +392,7 @@ func categoryNames(cats []map[string]any) (names []string, descLines string) {
 
 func draftReplyDrop(cfg Config) engine.NativeDrop {
 	props := baseProps(cfg)
-	props["text"] = map[string]any{"type": "string", "format": "multiline", "title": "Message to reply to", "description": "Or wire it into the Message input."}
+	props["text"] = map[string]any{"type": "string", "format": "multiline", "title": "Message to reply to", "description": "Or connect it into the Message input."}
 	props["tone"] = map[string]any{"type": "string", "title": "Tone", "enum": []any{"friendly", "formal", "concise", "apologetic"}, "enumNames": []any{"Friendly", "Formal", "Concise", "Apologetic"}, "default": "friendly"}
 	props["guidance"] = map[string]any{"type": "string", "format": "multiline", "title": "Anything to include?", "description": "e.g. 'offer a refund', 'point them to the docs'."}
 	props["language"] = map[string]any{"type": "string", "title": "Reply language", "x_advanced": true, "description": "Language to write the reply in. Blank matches the incoming message."}
@@ -407,7 +407,7 @@ func draftReplyDrop(cfg Config) engine.NativeDrop {
 			Integration: cfg.Integration, Category: "ai", Icon: cfg.Icon, Color: cfg.Color, BrandLogo: cfg.BrandLogo,
 			Provider: "internal", Tags: tags(cfg, "reply", "draft", "email", "response", "message"),
 			Examples: []core.ParamsExample{
-				{Title: "Friendly support reply", Params: json.RawMessage(`{"tone":"friendly","guidance":"Apologize for the delay."}`), Notes: "Wire the incoming message into Message; wire Reply into Await approval, then a send step."},
+				{Title: "Friendly support reply", Params: json.RawMessage(`{"tone":"friendly","guidance":"Apologize for the delay."}`), Notes: "Connect the incoming message into Message; connect Reply into Await approval, then a send step."},
 			},
 			ConnectionFields: connFields(cfg),
 			ExecutionModel:   core.ExecutionBatch, ProcessModel: core.ProcessLongLived,
@@ -423,7 +423,7 @@ func draftReplyDrop(cfg Config) engine.NativeDrop {
 			}
 			text := resolveText(job)
 			if strings.TrimSpace(text) == "" {
-				return params.Err(job, "bad_input", "no message — wire the Message input or fill the field"), nil
+				return params.Err(job, "bad_input", "no message — connect the Message input or fill the field"), nil
 			}
 			temp := 0.5
 			out, jerr := cfg.Provider.Call(ctx, apiKey, Request{

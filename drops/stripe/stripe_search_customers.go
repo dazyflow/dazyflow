@@ -23,7 +23,7 @@ func init() {
 			Label:       "Stripe",
 			Subtitle:    "Search customers",
 			Summary:     "Find Stripe customers with the dashboard's search syntax — the lookup step before a refund or update.",
-			Description: "Search your customers with Stripe's query syntax, e.g. email:'a@b.com' or metadata['crm_id']:'acct_42'. Wire a value into the 'Query' input for per-run lookups (a support form's email field, a sheet column). All matches come out as a JSON list on 'customers' (For-each it to act on each); 'first_id' carries the first match's cus_… id so the common one-match lookup wires straight into a Customer input (Send invoice, List subscriptions) without a For-each, and 'first_email' is handy for a notify step.",
+			Description: "Search your customers with Stripe's query syntax, e.g. email:'a@b.com' or metadata['crm_id']:'acct_42'. Connect a value into the 'Query' input for per-run lookups (a support form's email field, a sheet column). All matches come out as a JSON list on 'customers' (For-each it to act on each); 'first_id' carries the first match's cus_… id so the common one-match lookup connects straight into a Customer input (Send invoice, List subscriptions) without a For-each, and 'first_email' is handy for a notify step.",
 			Integration: "Stripe",
 			Category:    "network",
 			Icon:        "credit-card",
@@ -32,7 +32,7 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"stripe", "customer", "search", "lookup", "billing"},
 			Examples: []core.ParamsExample{
-				{Title: "Customer by email", Params: json.RawMessage(`{"query":"email:'a@b.com'"}`), Notes: "Wire the email into the 'Query' input as email:'…'; wire 'first_id' into the next step's Customer."},
+				{Title: "Customer by email", Params: json.RawMessage(`{"query":"email:'a@b.com'"}`), Notes: "Connect the email into the 'Query' input as email:'…'; connect 'first_id' into the next step's Customer."},
 				{Title: "By your own metadata", Params: json.RawMessage(`{"query":"metadata['crm_id']:'acct_42'","limit":1}`)},
 			},
 			ConnectionFields: stripeConnectionFields(),
@@ -75,7 +75,7 @@ func executeSearchCustomers(ctx context.Context, job core.Job, _ chan<- core.Pro
 		return params.Err(job, "bad_input", "'Query' input must be text"), nil
 	}
 	if query == "" {
-		return params.Err(job, "bad_param", "'query' is required — set it or wire the 'Query' input"), nil
+		return params.Err(job, "bad_param", "'query' is required — set it or connect the 'Query' input"), nil
 	}
 	limit := params.IntDefault(job.Params, "limit", 10)
 	if limit < 1 {

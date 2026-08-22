@@ -37,7 +37,7 @@ func init() {
 				{
 					Title:  "Mark the rows you just invoiced",
 					Params: json.RawMessage(`{"account":"default","spreadsheet_id":"REPLACE_WITH_YOUR_SHEET_ID","range":"Jobs","columns":["status","invoiced_on"]}`),
-					Notes:  "Read the tab with row numbers on, keep the rows you handled, add the two columns with a calculated column, and wire them in here.",
+					Notes:  "Read the tab with row numbers on, keep the rows you handled, add the two columns with a calculated column, and connect them in here.",
 				},
 			},
 			RequiresConnections: []core.ConnectionRequirement{

@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Joachim Klahr
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { memo } from "react";
+import { memo, useState } from "react";
 import { Handle, Position, useStore, type NodeProps } from "@xyflow/react";
-import { AlertTriangle, ChevronRight, Repeat } from "lucide-react";
+import { AlertTriangle, Check, ChevronRight, Repeat, X } from "lucide-react";
 import i18n from "../i18n";
 import { portTypeLabel } from "../lib/ports";
 import { telFieldFlag, regionDisplayName } from "../lib/phoneFlag";
@@ -660,6 +660,11 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
           </span>
         </div>
       ) : null}
+      {/* The flow is parked on this step waiting for a human. Same flush
+          footer-bar shape as the Connect/issues banners, so it reads as the
+          card's call to action rather than a floating control. The Inspector
+          panel stays the place to add a comment with the decision. */}
+      {d.onApprove && <NodeApproveBar onApprove={d.onApprove} />}
       {d.setupNeeded &&
         (() => {
           const name = d.setupNeeded.integration;
@@ -1077,4 +1082,52 @@ function portTooltip(port: Port): string {
   parts.push(portTypeLabel(port, (k, d) => i18n.t(k, d)));
   parts.push(port.required ? i18n.t("nodeCard.portRequired") : i18n.t("nodeCard.portOptional"));
   return parts.join(" — ");
+}
+
+// NodeApproveBar is the canvas-side approve/reject pair. It owns only the
+// in-flight flag: the decision itself flips the node's status over SSE, which
+// removes this bar, so there is no success state to render. Both buttons
+// disable together — a double-click that raced would 409 anyway (the record
+// is no longer `awaiting`), but showing the click landed is clearer than
+// letting the second one error.
+function NodeApproveBar({
+  onApprove,
+}: {
+  onApprove: (decision: "approve" | "reject") => Promise<void>;
+}) {
+  const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
+  const decide = (decision: "approve" | "reject") => async (e: React.MouseEvent) => {
+    // nodrag handles the pointer drag; this stops the click selecting the node
+    // and bubbling to the canvas behind it.
+    e.stopPropagation();
+    if (busy) return;
+    setBusy(decision);
+    try {
+      await onApprove(decision);
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <div className="dz-node-approve nodrag">
+      <button
+        type="button"
+        className="dz-node-approve-btn approve"
+        onClick={decide("approve")}
+        disabled={busy !== null}
+      >
+        <Check size={13} />
+        {i18n.t(busy === "approve" ? "approvals.approving" : "approvals.approve")}
+      </button>
+      <button
+        type="button"
+        className="dz-node-approve-btn reject"
+        onClick={decide("reject")}
+        disabled={busy !== null}
+      >
+        <X size={13} />
+        {i18n.t(busy === "reject" ? "approvals.rejecting" : "approvals.reject")}
+      </button>
+    </div>
+  );
 }

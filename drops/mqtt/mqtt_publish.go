@@ -23,7 +23,7 @@ func init() {
 			Label:       "MQTT",
 			Subtitle:    "Publish",
 			Summary:     "Publish a message to an MQTT topic.",
-			Description: "Publish a message to a topic on an MQTT broker. The topic and payload can be typed on the step or wired in from upstream (the matching input overrides the param). Broker is a tcp:// or ssl:// address (a bare host:port defaults to tcp://…:1883). The broker address and optional username/password are set once as the MQTT connection on the Apps page. Private-network brokers are blocked unless the operator allows private egress.",
+			Description: "Publish a message to a topic on an MQTT broker. The topic and payload can be typed on the step or connected from an earlier step (the matching input overrides the param). Broker is a tcp:// or ssl:// address (a bare host:port defaults to tcp://…:1883). The broker address and optional username/password are set once as the MQTT connection on the Apps page. Private-network brokers are blocked unless the operator allows private egress.",
 			Integration: "MQTT",
 			Category:    "network",
 			Icon:        "radio",
@@ -90,7 +90,7 @@ func executePublish(ctx context.Context, job core.Job, _ chan<- core.Progress) (
 		return params.Err(job, "bad_input", "'Topic' input must be text"), nil
 	}
 	if strings.TrimSpace(topic) == "" {
-		return params.Err(job, "bad_param", "'topic' is required — set it or wire the 'Topic' input"), nil
+		return params.Err(job, "bad_param", "'topic' is required — set it or connect the 'Topic' input"), nil
 	}
 	payload, ok := params.TextInputOr(job, "payload", params.StringDefault(job.Params, "payload", ""))
 	if !ok {

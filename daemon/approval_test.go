@@ -361,3 +361,95 @@ func TestApprovalListener_ValidTokenResumes(t *testing.T) {
 		t.Errorf("rejected port should be absent on approve: %+v", rec.Result.Output)
 	}
 }
+
+// The link path has no principal, so it audits through its own writer. Before
+// that existed, a decision taken from an approval email left nothing in the
+// trail at all — only a stdout line — which made the one approval route that
+// carries no proven identity also the one route with no record of who used it.
+func TestApprovalListener_AuditsTheDecision(t *testing.T) {
+	store := jobstore.NewMemory()
+	graph := core.Graph{ID: "g", Nodes: []core.Node{{ID: "node-A", Module: "noop"}}}
+	payload, _ := json.Marshal(graph)
+	_ = store.Enqueue(t.Context(), core.JobRecord{
+		ID: "run-1", Kind: core.JobKindGraph, GraphID: "g", NodeID: "*", Tenant: "acme",
+		Status: core.JobStatusRunning, GraphPayload: payload,
+	})
+	_ = store.Enqueue(t.Context(), core.JobRecord{
+		ID: NodeJobID("run-1", "node-A"), Kind: core.JobKindNode,
+		GraphRunID: "run-1", NodeID: "node-A", Status: core.JobStatusAwaiting,
+	})
+	svc := &Service{Jobs: store, Bus: NewMemoryBus(), Engine: &engine.Engine{
+		Resolver: &engine.NodeResolver{Native: engine.Default},
+	}}
+	signer := &HMACApprovalSigner{BaseURL: "https://x", Secret: []byte("k")}
+	audit := NewMemAuditLog()
+	listener := NewApprovalListener(svc, signer)
+	listener.Audit = audit
+
+	exp := time.Now().Add(time.Hour).Unix()
+	token := signer.computeToken("run-1", "node-A", exp)
+	req := httptest.NewRequest("POST", fmt.Sprintf(
+		"/approve/run-1/node-A?token=%s&exp=%d&decision=approve&approver=manager@acme.se",
+		token, exp), nil)
+	rw := httptest.NewRecorder()
+	ServeApprovalForTest(listener, rw, req)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("approve = %d, body %s", rw.Code, rw.Body.String())
+	}
+
+	events, err := audit.List(t.Context(), core.AuditQuery{Tenant: "acme", Limit: 10})
+	if err != nil {
+		t.Fatalf("list audit: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("want 1 audit event, got %d: %+v", len(events), events)
+	}
+	e := events[0]
+	if e.Action != "approval" || e.Target != "run-1/node-A" || e.Detail != "approve" {
+		t.Errorf("event = %+v", e)
+	}
+	// Tenant is read off the graph record, since there is no principal here.
+	if e.Tenant != "acme" {
+		t.Errorf("tenant = %q, want acme", e.Tenant)
+	}
+	// The name came off a query string. Recording it as if it were an
+	// authenticated subject would make the trail claim more than it knows.
+	if !strings.Contains(e.Actor, "manager@acme.se") || !strings.Contains(e.Actor, "self-declared") {
+		t.Errorf("actor = %q, want the name marked self-declared", e.Actor)
+	}
+}
+
+// No ?approver= at all: still audited, still marked as unverified.
+func TestApprovalListener_AuditsAnonymousDecision(t *testing.T) {
+	store := jobstore.NewMemory()
+	graph := core.Graph{ID: "g", Nodes: []core.Node{{ID: "node-A", Module: "noop"}}}
+	payload, _ := json.Marshal(graph)
+	_ = store.Enqueue(t.Context(), core.JobRecord{
+		ID: "run-1", Kind: core.JobKindGraph, GraphID: "g", NodeID: "*", Tenant: "acme",
+		Status: core.JobStatusRunning, GraphPayload: payload,
+	})
+	_ = store.Enqueue(t.Context(), core.JobRecord{
+		ID: NodeJobID("run-1", "node-A"), Kind: core.JobKindNode,
+		GraphRunID: "run-1", NodeID: "node-A", Status: core.JobStatusAwaiting,
+	})
+	svc := &Service{Jobs: store, Bus: NewMemoryBus(), Engine: &engine.Engine{
+		Resolver: &engine.NodeResolver{Native: engine.Default},
+	}}
+	signer := &HMACApprovalSigner{BaseURL: "https://x", Secret: []byte("k")}
+	audit := NewMemAuditLog()
+	listener := NewApprovalListener(svc, signer)
+	listener.Audit = audit
+	exp := time.Now().Add(time.Hour).Unix()
+	token := signer.computeToken("run-1", "node-A", exp)
+	req := httptest.NewRequest("POST", fmt.Sprintf(
+		"/approve/run-1/node-A?token=%s&exp=%d&decision=reject", token, exp), nil)
+	ServeApprovalForTest(listener, httptest.NewRecorder(), req)
+
+	events, _ := audit.List(t.Context(), core.AuditQuery{Tenant: "acme", Limit: 10})
+	if len(events) != 1 || events[0].Detail != "reject" {
+		t.Fatalf("events = %+v", events)
+	}
+	if !strings.Contains(events[0].Actor, "unidentified") {
+		t.Errorf("actor = %q, want it flagged as unidentified", events[0].Actor)
+	}
+}

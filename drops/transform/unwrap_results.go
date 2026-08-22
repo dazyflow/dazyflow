@@ -30,16 +30,16 @@ func init() {
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"transform", "for_each", "results", "flatten", "unwrap", "rows"},
-			Description: "Flatten a For each step's `results` list back into plain rows. For each runs its loop body per item, so each result wraps the body's per-step outputs ({status, nodes:{<id>:{output:{port:val}}}}); the tabular steps downstream want a step's actual output, not the wrapper. unwrap_results pulls one output port of one body step out of every result and emits them as rows — so a chain like Search emails → For each (Get message) → Collect loop results → Add a calculated column finally lets the calculation see `row.headers.From`. With a single-step body and a single-output step you can leave both `node` and `port` blank. Failed items are skipped by default (the For each step's `errors` output still carries them).",
+			Description: "Flatten a For each step's `results` list back into plain rows. For each runs its loop body per item, so each result wraps the body's per-step outputs ({status, nodes:{<id>:{output:{port:val}}}}); the tabular steps that follow want a step's actual output, not the wrapper. unwrap_results pulls one output port of one body step out of every result and emits them as rows — so a chain like Search emails → For each (Get message) → Collect loop results → Add a calculated column finally lets the calculation see `row.headers.From`. With a single-step body and a single-output step you can leave both `node` and `port` blank. Failed items are skipped by default (the For each step's `errors` output still carries them).",
 			Summary:     "Pull one body step's output port out of each for_each result and emit them as a flat rows list.",
 			Examples: []core.ParamsExample{
 				{
-					Title:  "Unwrap a single-step loop body (node + port inferred)",
+					Title:  "Unwrap a single-step loop body (step + port inferred)",
 					Params: json.RawMessage(`{}`),
 					Notes:  "for_each's body is one step (e.g. gmail_get_message) with one output (message); unwrap_results uses them without naming either.",
 				},
 				{
-					Title:  "Pick a node and port from a multi-step body",
+					Title:  "Pick a step and port from a multi-step body",
 					Params: json.RawMessage(`{"node":"get","port":"message"}`),
 					Notes:  "When the body has several steps, name which one (and which of its output ports) to flatten.",
 				},
@@ -147,7 +147,7 @@ func executeUnwrapResults(_ context.Context, job core.Job, _ chan<- core.Progres
 		nodes, ok := asAnyMap(payload["nodes"])
 		if !ok {
 			return errResult(job, "bad_input",
-				fmt.Sprintf("result %d has no nodes map — is the for_each `body` pin wired?", i)), nil
+				fmt.Sprintf("result %d has no nodes map — is the for_each `body` output connected?", i)), nil
 		}
 		nodeEntry, err := selectNode(nodes, node)
 		if err != nil {
@@ -156,12 +156,12 @@ func executeUnwrapResults(_ context.Context, job core.Job, _ chan<- core.Progres
 		nodeMap, ok := asAnyMap(nodeEntry)
 		if !ok {
 			return errResult(job, "bad_input",
-				fmt.Sprintf("result %d: body node is not a result map (got %T)", i, nodeEntry)), nil
+				fmt.Sprintf("result %d: body step is not a result map (got %T)", i, nodeEntry)), nil
 		}
 		outputs, ok := asAnyMap(nodeMap["output"])
 		if !ok {
 			return errResult(job, "bad_input",
-				fmt.Sprintf("result %d: body node has no output map", i)), nil
+				fmt.Sprintf("result %d: body step has no output map", i)), nil
 		}
 
 		chosen, err := selectPort(outputs, port)
@@ -194,7 +194,7 @@ func selectNode(nodes map[string]any, node string) (any, error) {
 	if node != "" {
 		v, ok := nodes[node]
 		if !ok {
-			return nil, fmt.Errorf("body node %q not found (available: %s)", node, strings.Join(sortedKeys(nodes), ", "))
+			return nil, fmt.Errorf("body step %q not found (available: %s)", node, strings.Join(sortedKeys(nodes), ", "))
 		}
 		return v, nil
 	}
@@ -206,7 +206,7 @@ func selectNode(nodes map[string]any, node string) (any, error) {
 			return v, nil
 		}
 	}
-	return nil, fmt.Errorf("the for_each body has %d nodes (%s); set 'node' to pick one", len(nodes), strings.Join(sortedKeys(nodes), ", "))
+	return nil, fmt.Errorf("the for_each body has %d steps (%s); set 'node' to pick one", len(nodes), strings.Join(sortedKeys(nodes), ", "))
 }
 
 // selectPort returns the chosen output port's Ref. When port is named it

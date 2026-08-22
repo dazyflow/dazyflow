@@ -14,7 +14,8 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
-import { Info, Plus, Upload, X } from "lucide-react";
+import { Plus, Upload, X } from "lucide-react";
+import { HelpPopover } from "./HelpPopover";
 import { Trans, useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import { enumLabel, fieldHelp, fieldTitle } from "../lib/dropText";
@@ -164,6 +165,14 @@ export function SchemaForm({
   const omit = new Set(omitKeys ?? []);
   const missing = new Set(missingKeys ?? []);
   const formCtx: FormCtx = { workspace, accountPicker, references, extraReferenceItems, tokenLabels, missingKeys: missing, wired, geoRunCoordinate };
+  // Defensive, and unreachable in the product as it stands: the only external
+  // caller (Inspector) gates on supportsSchemaForm, which asserts exactly this,
+  // and both recursive call sites below check `schema.properties` first. A drop
+  // whose schema is an object with NO properties never reaches here either —
+  // Inspector's `noSettings` renders nothing for it, which is why Branch, Merge
+  // and the event triggers show a clean empty panel rather than this. Kept so a
+  // future caller that skips the guard degrades to something a person can read
+  // instead of a blank div; worded for that person, not for us.
   if (schema.type !== "object" || !schema.properties) {
     return (
       <div className="sf-fallback-hint">
@@ -1032,14 +1041,10 @@ function FieldWrap({
               info icon on the inspector header — so guidance is one click
               away without an inline wall of text under every input. */}
           {schema.description && (
-            <span
-              className="inspector-info"
-              tabIndex={0}
-              title={fieldHelp(schema.description, i18n.language)}
-              aria-label={fieldHelp(schema.description, i18n.language)}
-            >
-              <Info size={13} aria-hidden="true" />
-            </span>
+            <HelpPopover
+              label={t("schemaForm.aboutField")}
+              body={fieldHelp(schema.description, i18n.language)}
+            />
           )}
         </span>
       </div>

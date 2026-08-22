@@ -22,8 +22,8 @@ func init() {
 			Version:     "1.0",
 			Label:       "Stripe",
 			Subtitle:    "Create refund",
-			Summary:     "Refund a Stripe payment, fully or partially — pairs naturally with an approval step upstream.",
-			Description: "Refund a payment by its payment_intent id (pi_…). Leave Amount empty for a full refund, or set it in the smallest currency unit (cents/öre) for a partial one — the id and the amount can both be wired in from upstream, e.g. a support form's fields. Put an Approval step before this one for the classic 'approve in Slack → refund' flow. Retries reuse the same Idempotency-Key, so a flaky run can't refund twice.",
+			Summary:     "Refund a Stripe payment, fully or partially — pairs naturally with an approval step before it.",
+			Description: "Refund a payment by its payment_intent id (pi_…). Leave Amount empty for a full refund, or set it in the smallest currency unit (cents/öre) for a partial one — the id and the amount can both be connected from an earlier step, e.g. a support form's fields. Put an Approval step before this one for the classic 'approve in Slack → refund' flow. Retries reuse the same Idempotency-Key, so a flaky run can't refund twice.",
 			Integration: "Stripe",
 			Category:    "network",
 			Icon:        "credit-card",
@@ -32,7 +32,7 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"stripe", "refund", "payment", "billing", "support"},
 			Examples: []core.ParamsExample{
-				{Title: "Full refund", Params: json.RawMessage(`{"payment_intent":"pi_3MtwBwLkdIwHu7ix28a3tqPa"}`), Notes: "Wire the id into the 'Payment intent' input from a form or webhook instead of typing it."},
+				{Title: "Full refund", Params: json.RawMessage(`{"payment_intent":"pi_3MtwBwLkdIwHu7ix28a3tqPa"}`), Notes: "Connect the id into the 'Payment intent' input from a form or webhook instead of typing it."},
 				{Title: "Partial refund, marked as requested by the customer", Params: json.RawMessage(`{"payment_intent":"pi_3MtwBwLkdIwHu7ix28a3tqPa","amount":500,"reason":"requested_by_customer"}`), Notes: "amount is in the smallest currency unit — 500 = €5.00 / $5.00."},
 			},
 			ConnectionFields: stripeConnectionFields(),
@@ -76,7 +76,7 @@ func executeCreateRefund(ctx context.Context, job core.Job, _ chan<- core.Progre
 		return params.Err(job, "bad_input", "'Payment intent' input must be text"), nil
 	}
 	if pi == "" {
-		return params.Err(job, "bad_param", "'payment_intent' is required — set it or wire the 'Payment intent' input"), nil
+		return params.Err(job, "bad_param", "'payment_intent' is required — set it or connect the 'Payment intent' input"), nil
 	}
 
 	amount, ok := numberInputOr(job, "amount", params.IntDefault(job.Params, "amount", 0))

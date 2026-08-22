@@ -359,6 +359,13 @@ type Service struct {
 	// same store the HTTP gateway authenticates against.
 	Users auth.UserStore
 
+	// Memberships, when set, is the org membership store. Approval mail
+	// reads it to work out who can act on a pending approval when the step
+	// names no explicit approvers. Nil narrows that default to the tenant
+	// owner (resolved through Users), which is the safe direction to fail:
+	// under-mailing is recoverable, blasting an org is not.
+	Memberships auth.MembershipStore
+
 	// RunLogs, when set, is the persisted run-log store (written by the
 	// RecordingBus, read by `dzctl job logs` / the logs endpoints). Nil
 	// = logs aren't persisted on this deployment.

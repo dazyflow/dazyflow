@@ -50,6 +50,13 @@ type WorkerConfig struct {
 	// never affects the node's outcome.
 	Usage UsageStore
 
+	// OnNodeAwaiting, when set, is called once a node has actually been
+	// parked as awaiting — after the status write commits, so it can never
+	// announce a pause that didn't take. Approval mail hangs off it. Runs on
+	// the worker goroutine and must not block: implementations do their own
+	// fan-out. Nil disables it.
+	OnNodeAwaiting func(ctx context.Context, graph core.Graph, runID, nodeID string, result core.Result)
+
 	// DefaultNodeTimeout is the wall-time backstop applied to a node that
 	// sets no explicit TimeoutSeconds. Without it, a node that honors
 	// cancellation but never finishes on its own — a remote gRPC call to a
@@ -332,6 +339,13 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 		// completion can't fire off the back of this: the parked node is
 		// not terminal, so the completion check simply finds it unfinished.
 		if graph, gerr := w.fetchGraph(jobCtx, rec.GraphRunID); gerr == nil {
+			// Tell whoever is meant to decide, before dispatching the
+			// pause-time dependents. Both are best-effort notification paths;
+			// ordering them this way means the email goes out even if a wired
+			// notify step is misconfigured and blows up the dispatch.
+			if w.cfg.OnNodeAwaiting != nil {
+				w.cfg.OnNodeAwaiting(jobCtx, graph, rec.GraphRunID, rec.NodeID, result)
+			}
 			w.dispatcher.AdvanceAfterCompletion(jobCtx, graph, rec.GraphRunID, rec.NodeID, core.JobStatusAwaiting, nil)
 		} else {
 			w.cfg.Logger.Printf("[%s] park %s: could not load graph to notify dependents: %v", w.cfg.ID, rec.ID, gerr)

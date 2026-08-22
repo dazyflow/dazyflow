@@ -21,7 +21,7 @@ func init() {
 			Label:       "Fortnox",
 			Subtitle:    "Create invoice",
 			Summary:     "Create an invoice in Fortnox for a customer — the headline billing step (customer → invoice).",
-			Description: "Create an invoice in your connected Fortnox account. Pick the customer (or wire the 'Customer number' input from 'Create customer'), and supply the invoice rows.\n\nRows are Fortnox InvoiceRow objects — each an object with the Fortnox field names, e.g. {\"Description\":\"Consulting\",\"Price\":1500,\"DeliveredQuantity\":\"2\"}. Wire an array into the 'Rows' input, or set the 'rows' param. The created invoice's document number comes out on 'document_number'.\n\nFortnox has no idempotency key, so this step does not auto-retry — a retried create would make a duplicate invoice.",
+			Description: "Create an invoice in your connected Fortnox account. Pick the customer (or connect the 'Customer number' input from 'Create customer'), and supply the invoice rows.\n\nRows are Fortnox InvoiceRow objects — each an object with the Fortnox field names, e.g. {\"Description\":\"Consulting\",\"Price\":1500,\"DeliveredQuantity\":\"2\"}. Connect an array into the 'Rows' input, or set the 'rows' param. The created invoice's document number comes out on 'document_number'.\n\nFortnox has no idempotency key, so this step does not auto-retry — a retried create would make a duplicate invoice.",
 			Integration: "Fortnox",
 			Category:    "network",
 			Icon:        "file-text",
@@ -30,7 +30,7 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"fortnox", "invoice", "accounting", "invoicing", "sweden"},
 			Examples: []core.ParamsExample{
-				{Title: "One-line consulting invoice", Params: json.RawMessage(`{"customer_number":"1","rows":[{"Description":"Consulting","Price":1500,"DeliveredQuantity":"2"}]}`), Notes: "Wire 'Customer number' from a preceding Create customer step instead of typing it."},
+				{Title: "One-line consulting invoice", Params: json.RawMessage(`{"customer_number":"1","rows":[{"Description":"Consulting","Price":1500,"DeliveredQuantity":"2"}]}`), Notes: "Connect 'Customer number' from a preceding Create customer step instead of typing it."},
 			},
 			RequiresConnections: []core.ConnectionRequirement{
 				{Kind: "oauth", Name: "fortnox", Note: "Connect a Fortnox account (invoice + customer scopes) under Apps."},
@@ -73,7 +73,7 @@ func executeCreateInvoice(ctx context.Context, job core.Job, _ chan<- core.Progr
 		return params.Err(job, "bad_input", "'Customer number' input must be text"), nil
 	}
 	if customer == "" {
-		return params.Err(job, "bad_param", "'customer_number' is required — pick a customer or wire the 'Customer number' input"), nil
+		return params.Err(job, "bad_param", "'customer_number' is required — pick a customer or connect the 'Customer number' input"), nil
 	}
 
 	rows, err := resolveRows(job)
@@ -81,7 +81,7 @@ func executeCreateInvoice(ctx context.Context, job core.Job, _ chan<- core.Progr
 		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	if len(rows) == 0 {
-		return params.Err(job, "bad_param", "at least one invoice row is required — set 'rows' or wire the 'Rows' input"), nil
+		return params.Err(job, "bad_param", "at least one invoice row is required — set 'rows' or connect the 'Rows' input"), nil
 	}
 
 	// Fortnox wraps the request body in a singular "Invoice" envelope.

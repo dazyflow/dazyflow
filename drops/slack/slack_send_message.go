@@ -21,7 +21,7 @@ func init() {
 			Label:       "Slack",
 			Subtitle:    "Send message",
 			Summary:     "Send a message to a Slack channel as your connected bot.",
-			Description: "Send a message to a Slack channel. Channel and Message can be typed on the step or wired in from another step (a wired input overrides the typed value) — handy for sending a sheet row, an email summary, or any upstream text straight into Slack.",
+			Description: "Send a message to a Slack channel. Channel and Message can be typed on the step or connected in from another step (a connected input overrides the typed value) — handy for sending a sheet row, an email summary, or any text from an earlier step straight into Slack.",
 			Integration: "Slack",
 			Category:    "network",
 			Icon:        "message-square",
@@ -74,7 +74,7 @@ func init() {
 					"token":{"type":"string","description":"Raw bot token (xoxb-…). Overrides 'account'."},
 					"channel":{"type":"string","format":"slack-channel","title":"Channel","description":"Pick a channel from your connected workspace, or type a name like #general / a channel ID. The bot must already be a member. Overridden by the 'Channel' input."},
 					"text":{"type":"string","title":"Message","description":"The text to send. Overridden by the 'Message' input."},
-					"thread_ts":{"type":"string","title":"Reply in thread","x_advanced":true,"description":"Timestamp of a parent message to reply under. Wire the Reply-in-thread input to answer the message that started the flow — an On mention trigger's Timestamp, say."},
+					"thread_ts":{"type":"string","title":"Reply in thread","x_advanced":true,"description":"Timestamp of a parent message to reply under. Connect the Reply-in-thread input to answer the message that started the flow — an On mention trigger's Timestamp, say."},
 					"blocks":{"type":"array","items":{},"title":"Blocks","x_advanced":true,"description":"Slack Block Kit layout for rich messages; replaces the plain text rendering."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
@@ -111,7 +111,7 @@ func executeSlackSendMessage(ctx context.Context, job core.Job, _ chan<- core.Pr
 		return params.Err(job, "bad_input", "'Channel' input must be text"), nil
 	}
 	if channel == "" {
-		return params.Err(job, "bad_param", "'channel' is required — set it or wire the 'Channel' input"), nil
+		return params.Err(job, "bad_param", "'channel' is required — set it or connect the 'Channel' input"), nil
 	}
 
 	text, ok := params.TextInputOr(job, "text", params.StringDefault(job.Params, "text", ""))
@@ -125,7 +125,7 @@ func executeSlackSendMessage(ctx context.Context, job core.Job, _ chan<- core.Pr
 	}
 
 	if text == "" && blocks == nil {
-		return params.Err(job, "bad_input", "This Slack message has no content. Type a message, wire the 'Message' input, or provide blocks."), nil
+		return params.Err(job, "bad_input", "This Slack message has no content. Type a message, connect the 'Message' input, or provide blocks."), nil
 	}
 
 	payload := map[string]any{"channel": channel}

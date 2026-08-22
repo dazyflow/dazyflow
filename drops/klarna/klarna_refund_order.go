@@ -20,8 +20,8 @@ func init() {
 			Version:     "1.0",
 			Label:       "Klarna",
 			Subtitle:    "Refund order",
-			Summary:     "Refund a captured Klarna order, fully or partially — pairs with an approval step upstream.",
-			Description: "Refund a captured Klarna order by its order id (typed or wired from upstream). Leave Amount empty to refund the full remaining refundable amount (captured minus already refunded), or set it in the currency's smallest unit (öre/cents) for a partial refund. A short Description shows on the customer's Klarna statement. Put an Approval step before this one for the classic 'approve in Slack → refund' flow.\n\nThe new refund's id comes out on 'refund_id'. Refunding pays money back, so this step runs once and is never retried automatically — Dazyflow won't refund the same order twice. Connect your Klarna account once on the Apps page.",
+			Summary:     "Refund a captured Klarna order, fully or partially — pairs with an approval step before it.",
+			Description: "Refund a captured Klarna order by its order id (typed or connected from an earlier step). Leave Amount empty to refund the full remaining refundable amount (captured minus already refunded), or set it in the currency's smallest unit (öre/cents) for a partial refund. A short Description shows on the customer's Klarna statement. Put an Approval step before this one for the classic 'approve in Slack → refund' flow.\n\nThe new refund's id comes out on 'refund_id'. Refunding pays money back, so this step runs once and is never retried automatically — Dazyflow won't refund the same order twice. Connect your Klarna account once on the Apps page.",
 			Integration: "Klarna",
 			Category:    "network",
 			Icon:        "credit-card",
@@ -73,7 +73,7 @@ func executeRefundOrder(ctx context.Context, job core.Job, _ chan<- core.Progres
 		return params.Err(job, "bad_input", "'Order ID' input must be text"), nil
 	}
 	if orderID == "" {
-		return params.Err(job, "bad_param", "'order_id' is required — set it or wire the 'Order ID' input"), nil
+		return params.Err(job, "bad_param", "'order_id' is required — set it or connect the 'Order ID' input"), nil
 	}
 	amount, ok := wholeNumberInputOr(job, "amount", params.IntDefault(job.Params, "amount", 0))
 	if !ok {

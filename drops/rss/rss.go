@@ -47,7 +47,7 @@ func init() {
 				{
 					Title:  "Fire on each new post",
 					Params: json.RawMessage(`{"url":"https://example.com/blog/feed.xml"}`),
-					Notes:  "Wire an Interval trigger into this step. Dedupe is on, so only new items flow.",
+					Notes:  "Connect an Interval trigger into this step. Dedupe is on, so only new items flow.",
 				},
 				{
 					Title:  "Just parse the current feed (no dedupe)",
@@ -65,7 +65,7 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"url":{"type":"string","title":"Feed URL","description":"The RSS or Atom feed URL. Can also be wired into the 'url' input."},
+					"url":{"type":"string","title":"Feed URL","description":"The RSS or Atom feed URL. Can also be connected into the 'url' input."},
 					"dedupe":{"type":"boolean","default":true,"title":"Only new items","description":"On: remember what's been emitted and fire only for new items (the first poll baselines silently). Off: emit the whole current feed every run."}
 				},
 				"required":["url"]
@@ -101,7 +101,7 @@ func cursorName(flow, node string) string {
 func executeRSS(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
 	url := resolveURL(job)
 	if url == "" {
-		return params.Err(job, "bad_param", "url is required: wire the URL input or set the url param"), nil
+		return params.Err(job, "bad_param", "url is required: connect the URL input or set the url param"), nil
 	}
 	// Operator egress allowlist, then the guarded (SSRF-blocking) client —
 	// the same defense-in-depth http_request uses.

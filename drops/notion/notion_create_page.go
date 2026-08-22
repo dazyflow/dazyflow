@@ -21,7 +21,7 @@ func init() {
 			Label:       "Notion",
 			Subtitle:    "Create page",
 			Summary:     "Add a page to Notion — a row in a database or a subpage — with a title and body text.",
-			Description: "Add a page to Notion. Type a Title and an optional Page body (blank lines start new paragraphs), then pick where it goes: a database (the page becomes a row) or a parent page (it becomes a subpage). Title and Page body can also be wired in from upstream — a wire overrides the typed value. Extra database columns (Status, dates, tags…) go in the advanced 'properties' field as raw Notion JSON.",
+			Description: "Add a page to Notion. Type a Title and an optional Page body (blank lines start new paragraphs), then pick where it goes: a database (the page becomes a row) or a parent page (it becomes a subpage). Title and Page body can also be connected from an earlier step — a connection overrides the typed value. Extra database columns (Status, dates, tags…) go in the advanced 'properties' field as raw Notion JSON.",
 			Integration: "Notion",
 			Category:    "network",
 			Icon:        "file-output",
@@ -61,8 +61,8 @@ func init() {
 				"properties":{
 					"account":{"type":"string","default":"default"},
 					"token":{"type":"string","description":"Raw Notion token; overrides 'account'."},
-					"title":{"type":"string","title":"Title","description":"The page title. Overridden by the 'Title' input when wired."},
-					"content":{"type":"string","title":"Page body","description":"Plain text for the page body — blank lines start a new paragraph. Overridden by the 'Page body' input when wired."},
+					"title":{"type":"string","title":"Title","description":"The page title. Overridden by the 'Title' input when connected."},
+					"content":{"type":"string","title":"Page body","description":"Plain text for the page body — blank lines start a new paragraph. Overridden by the 'Page body' input when connected."},
 					"parent_database_id":{"type":"string","title":"Add to database","description":"The database the page goes into (as a new row) — paste its ID. Set this or 'Add under page', not both."},
 					"parent_page_id":{"type":"string","title":"Add under page","description":"The page the new page goes under (as a subpage) — paste its ID. Set this or 'Add to database', not both."},
 					"properties":{"type":"object","title":"Properties (Notion JSON)","x_advanced":true,"description":"Raw Notion properties object for extra database columns, passed through verbatim and merged with Title (advanced)."},
@@ -179,7 +179,7 @@ func mergedProperties(job core.Job, title string) (props any, errMsg string) {
 		merged["title"] = map[string]any{"title": richTextChunks(title)}
 	}
 	if len(merged) == 0 {
-		return nil, "give the page a Title — set the param, wire the 'Title' input, or set 'properties'"
+		return nil, "give the page a Title — set the param, connect the 'Title' input, or set 'properties'"
 	}
 	return merged, ""
 }

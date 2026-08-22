@@ -37,7 +37,7 @@ func init() {
 				{
 					Title:  "Parse XML into a structured value",
 					Params: json.RawMessage(`{}`),
-					Notes:  "Wire the XML text into 'in'. Read the tree on 'value'; a single top-level record also comes out as one row.",
+					Notes:  "Connect the XML text into 'in'. Read the tree on 'value'; a single top-level record also comes out as one row.",
 				},
 				{
 					Title:  "Pull RSS items into rows",

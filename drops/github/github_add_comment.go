@@ -22,7 +22,7 @@ func init() {
 			Label:       "GitHub",
 			Subtitle:    "Add comment",
 			Summary:     "Add a comment to a GitHub issue or pull request.",
-			Description: "Comment on a GitHub issue or PR (they share a number space). The comment can be typed on the step or wired in from another step (the input overrides the typed value); Markdown works. Outputs a link to the posted comment.",
+			Description: "Comment on a GitHub issue or PR (they share a number space). The comment can be typed on the step or connected in from another step (the input overrides the typed value); Markdown works. Outputs a link to the posted comment.",
 			Integration: "GitHub",
 			Category:    "network",
 			Icon:        "git-branch",

@@ -66,7 +66,7 @@ func executeGitHubOnNewPR(_ context.Context, job core.Job, _ chan<- core.Progres
 		Status: core.StatusError,
 		Error: &core.JobError{
 			Code:    "no_trigger_data",
-			Message: "This GitHub new-PR trigger only fires when a real pull_request:opened webhook arrives. To test it, open a PR in your connected repo; running the graph manually leaves the trigger with no event to feed downstream.",
+			Message: "This GitHub new-PR trigger only fires when a real pull_request:opened webhook arrives. To test it, open a PR in your connected repo; running the flow manually leaves the trigger with no event to feed the steps after it.",
 			Details: "github_on_new_pr is pre-completed by the daemon's GitHub events handler when a pull_request opened event arrives. Standalone execution has no event payload to emit.",
 		},
 	}, nil

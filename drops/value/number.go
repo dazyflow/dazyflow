@@ -22,8 +22,8 @@ func init() {
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"number", "numeric", "constant", "literal", "int", "float"},
-			Description: "Emit a literal numeric value. Downstream consumers see it as a JSON number on the 'out' port — wire it into a comparison (In Range, Compare), an operator, or a numeric input like a Delay step's duration.",
-			Summary:     "Emit a graph-author-supplied literal number on the 'out' port.",
+			Description: "Emit a literal numeric value. Later steps see it as a JSON number on the 'out' port — connect it into a comparison (In Range, Compare), an operator, or a numeric input like a Delay step's duration.",
+			Summary:     "Emit a fixed number you type on the step, on the 'out' port.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Integer constant",

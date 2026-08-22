@@ -23,7 +23,7 @@ func init() {
 			Label:       "Google Sheets",
 			Subtitle:    "Append rows",
 			Summary:     "Append rows to a Google Sheet, matching each object's fields to columns by header.",
-			Description: "Append rows to a Google Sheet. Wire a rows list into the 'rows' input; columns are taken from the 'headers' input or derived from the row keys. Each object becomes a row. Set a 'mapping' to pick which incoming field fills which sheet column (e.g. a Google Form response's question titles → your sheet's columns) — both sides are chosen from dropdowns (the upstream record's fields and the sheet's own columns), and the mapping's columns then define the row, in order.",
+			Description: "Append rows to a Google Sheet. Connect a rows list into the 'rows' input; columns are taken from the 'headers' input or derived from the row keys. Each object becomes a row. Set a 'mapping' to pick which incoming field fills which sheet column (e.g. a Google Form response's question titles → your sheet's columns) — both sides are chosen from dropdowns (the incoming record's fields and the sheet's own columns), and the mapping's columns then define the row, in order.",
 			Integration: "Google Sheets",
 			Category:    "network",
 			Icon:        "file-output",
@@ -69,7 +69,7 @@ func init() {
 						"type":"array",
 						"title":"Column mapping",
 						"format":"sheet-mapping",
-						"description":"Map each incoming field to a sheet column. Both sides are picked from dropdowns — the sheet's own columns and the upstream record's fields. Each value is written under the column you choose (the row order here doesn't matter); a column the sheet doesn't have yet is added at the end. When set, this replaces the 'headers' input. Leave empty to use the row keys / 'headers' input.",
+						"description":"Map each incoming field to a sheet column. Both sides are picked from dropdowns — the sheet's own columns and the incoming record's fields. Each value is written under the column you choose (the row order here doesn't matter); a column the sheet doesn't have yet is added at the end. When set, this replaces the 'headers' input. Leave empty to use the row keys / 'headers' input.",
 						"items":{
 							"type":"object",
 							"properties":{

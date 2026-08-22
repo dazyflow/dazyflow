@@ -28,7 +28,7 @@ func init() {
 			Category:    "io",
 			Provider:    "internal",
 			Tags:        []string{"filesystem", "write", "sandbox"},
-			Description: "Save incoming data as a file in the workspace. Wire anything into the Data input — text, JSON, or a file from another step — and it's written to the path you choose. Workspace storage limits are respected.",
+			Description: "Save incoming data as a file in the workspace. Connect anything into the Data input — text, JSON, or a file from another step — and it's written to the path you choose. Workspace storage limits are respected.",
 			Summary:     "Save incoming data as a workspace file.",
 			Examples: []core.ParamsExample{
 				{

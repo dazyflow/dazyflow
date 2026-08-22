@@ -23,7 +23,7 @@ func init() {
 			Label:       "Google Sheets",
 			Subtitle:    "Export PDF",
 			Summary:     "Turn a Google Sheet into a PDF file.",
-			Description: "Turn a Google Sheet into a PDF file. Wire the 'PDF' output into a step that takes files — e.g. Gmail's Attachments to email it. The file lives in the run's scratch space (advanced: override the file name via 'path').",
+			Description: "Turn a Google Sheet into a PDF file. Connect the 'PDF' output into a step that takes files — e.g. Gmail's Attachments to email it. The file lives in the run's scratch space (advanced: override the file name via 'path').",
 			Integration: "Google Sheets",
 			Category:    "network",
 			Icon:        "file-output",

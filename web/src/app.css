@@ -250,6 +250,12 @@
 .sidebar-collapse-toggle {
   display: flex;
   align-items: center;
+  /* Expanded, this is a full-width nav row: chevron then label, left-aligned
+     like the items above it. Without this the global button{} rule centers
+     the pair (text-align below does nothing to flex children), and the
+     collapsed override further down — which sets center deliberately for the
+     icon-only rail — had nothing to override. */
+  justify-content: flex-start;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
   margin-top: var(--space-2);
@@ -1020,6 +1026,12 @@
 .help-link {
   display: flex;
   align-items: flex-start;
+  /* These rows come in two flavours — the docs row is an <a>, the support row
+     is a <button> — and the global button{} rule centers flex content. Without
+     this the button row alone centered its icon + text in a full-width row,
+     reading as a stray left margin next to the anchor above it. Same trap the
+     account menu rows document. */
+  justify-content: flex-start;
   gap: var(--space-3);
   width: 100%;
   padding: var(--space-3);
@@ -11029,4 +11041,98 @@ button:active,
   background: var(--surface);
   border-radius: var(--r-1);
   padding: var(--space-2);
+}
+
+/* ---- (i) help popover (HelpPopover.tsx) -------------------------------- */
+/* Replaces the native `title=` tooltip that carried step and field guidance.
+   A native tooltip never fires on touch, so this content was unreachable on a
+   tablet; and it cannot scroll, which a 131-word drop description needs. */
+.help-pop-wrap {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+}
+/* The trigger reuses .inspector-info for colour and sizing; it is a <button>
+   now rather than a <span>, so the UA button chrome has to come back off. */
+.help-pop-wrap .inspector-info {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+.help-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 120;
+  display: block;
+  width: max-content;
+  /* Wide enough for a paragraph, never wider than a narrow inspector or a
+     phone. max-height + scroll is what the native tooltip could not do. */
+  max-width: min(34ch, calc(100vw - var(--space-4)));
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: var(--space-2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  box-shadow: var(--shadow-pop);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  line-height: 1.5;
+  white-space: normal;
+  text-align: left;
+  /* Inherited centring from the node/field header would otherwise letterbox
+     the text; and a header sets its own tighter tracking. */
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+/* ---- await_approval: decide from the canvas -------------------------- */
+/* Same flush footer bar as .dz-node-setup (Connect) and .dz-node-issues, so a
+   card that is waiting on a person reads with the same weight as one that is
+   waiting on configuration. Split down the middle: approve is the affirmative
+   action and takes the accent, reject stays quiet — this is a decision, not a
+   confirm dialog, so neither is styled as a danger. */
+.dz-node-approve {
+  display: flex;
+  gap: 1px;
+  margin-top: var(--space-2);
+  border-top: 1px solid var(--border);
+  background: var(--border);
+  border-radius: 0 0 var(--r-2) var(--r-2);
+  overflow: hidden;
+}
+.dz-node-approve-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: 0;
+  border-radius: 0;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--surface-2);
+  transition: background 120ms, color 120ms;
+}
+.dz-node-approve-btn.approve {
+  color: var(--accent);
+}
+.dz-node-approve-btn.reject {
+  color: var(--muted);
+}
+.dz-node-approve-btn:hover:not(:disabled) {
+  background: var(--surface-3);
+}
+.dz-node-approve-btn.reject:hover:not(:disabled) {
+  color: var(--ink);
+}
+.dz-node-approve-btn:disabled {
+  cursor: default;
+  opacity: 0.6;
 }

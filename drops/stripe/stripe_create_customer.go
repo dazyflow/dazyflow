@@ -23,7 +23,7 @@ func init() {
 			Label:       "Stripe",
 			Subtitle:    "Create customer",
 			Summary:     "Create a Stripe customer — the entry point of most billing automations (form signup → customer).",
-			Description: "Create a customer in your Stripe account. Email, Name and Description can be typed on the step or wired in from upstream (the matching input port overrides the param). The new customer's id comes out on the 'Customer ID' output for downstream Stripe steps; retries reuse the same Idempotency-Key so a flaky run can't create duplicates.",
+			Description: "Create a customer in your Stripe account. Email, Name and Description can be typed on the step or connected from an earlier step (the matching input port overrides the param). The new customer's id comes out on the 'Customer ID' output for the Stripe steps that follow; retries reuse the same Idempotency-Key so a flaky run can't create duplicates.",
 			Integration: "Stripe",
 			Category:    "network",
 			Icon:        "credit-card",
@@ -32,7 +32,7 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"stripe", "customer", "billing", "payments"},
 			Examples: []core.ParamsExample{
-				{Title: "Customer from a form signup", Params: json.RawMessage(`{"email":"new@example.com","name":"New Customer"}`), Notes: "Wire the form's email/name outputs into the matching pins instead of typing them."},
+				{Title: "Customer from a form signup", Params: json.RawMessage(`{"email":"new@example.com","name":"New Customer"}`), Notes: "Connect the form's email/name outputs into the matching pins instead of typing them."},
 				{Title: "With your own reference id", Params: json.RawMessage(`{"email":"new@example.com","metadata":{"crm_id":"acct_42"}}`)},
 			},
 			ConnectionFields: stripeConnectionFields(),
@@ -77,7 +77,7 @@ func executeCreateCustomer(ctx context.Context, job core.Job, _ chan<- core.Prog
 		return params.Err(job, "bad_input", "'Email' input must be text"), nil
 	}
 	if email == "" {
-		return params.Err(job, "bad_param", "'email' is required — set it or wire the 'Email' input"), nil
+		return params.Err(job, "bad_param", "'email' is required — set it or connect the 'Email' input"), nil
 	}
 	name, ok := params.TextInputOr(job, "name", params.StringDefault(job.Params, "name", ""))
 	if !ok {

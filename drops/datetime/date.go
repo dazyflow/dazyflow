@@ -35,13 +35,13 @@ func init() {
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"date", "time", "datetime", "now", "timestamp", "format", "timezone"},
-			Description: "Work with a date/time: read the current time, parse a timestamp that came in as text, shift it by an offset, convert it to a timezone, and render it in the format you want. Wire a value into 'in' (an ISO-8601 string, a Unix timestamp, or common date text) or leave it unwired to use the current time. 'add' shifts by an offset like \"3d\", \"-2h30m\", or \"1w\"; 'tz' names an IANA timezone (e.g. \"Europe/Stockholm\") for the output; 'format' picks a preset (iso, date, time, datetime, unix, rfc1123, kitchen) or a custom Go layout. Emits the formatted string on 'out' and the broken-out parts (year, month, weekday, …) on 'value'.",
+			Description: "Work with a date/time: read the current time, parse a timestamp that came in as text, shift it by an offset, convert it to a timezone, and render it in the format you want. Connect a value into 'in' (an ISO-8601 string, a Unix timestamp, or common date text) or leave it unwired to use the current time. 'add' shifts by an offset like \"3d\", \"-2h30m\", or \"1w\"; 'tz' names an IANA timezone (e.g. \"Europe/Stockholm\") for the output; 'format' picks a preset (iso, date, time, datetime, unix, rfc1123, kitchen) or a custom Go layout. Emits the formatted string on 'out' and the broken-out parts (year, month, weekday, …) on 'value'.",
 			Summary:     "Read/parse a date, shift and re-timezone it, and render it in a chosen format.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Today's date as YYYY-MM-DD",
 					Params: json.RawMessage(`{"format":"date"}`),
-					Notes:  "No input wired → uses the current time. Great for datestamped filenames or subjects.",
+					Notes:  "No input connected → uses the current time. Great for datestamped filenames or subjects.",
 				},
 				{
 					Title:  "Deadline 3 days from now, Stockholm time",
@@ -50,7 +50,7 @@ func init() {
 				{
 					Title:  "Reformat an incoming timestamp",
 					Params: json.RawMessage(`{"format":"rfc1123"}`),
-					Notes:  "Wire an ISO-8601 string or Unix seconds into 'in'; it's parsed then re-rendered.",
+					Notes:  "Connect an ISO-8601 string or Unix seconds into 'in'; it's parsed then re-rendered.",
 				},
 			},
 			ExecutionModel: core.ExecutionBatch,

@@ -25,7 +25,7 @@ func init() {
 			Label:       "Google Forms",
 			Subtitle:    "New responses",
 			Summary:     "Fires when a Google Form gets new responses, emitting each answer keyed by its question title.",
-			Description: "Watches a Google Form and fires when new responses arrive (each response exactly once). `responses` is a list of objects keyed by question title — wire it straight into a Sheets append. Each response also carries `email` (the respondent's address) when the form collects email addresses, so you can reply to them. When a check finds nothing new, the rest of the flow is skipped. Publish the flow so it runs automatically on the schedule below — pressing Run only checks once, for testing.",
+			Description: "Watches a Google Form and fires when new responses arrive (each response exactly once). `responses` is a list of objects keyed by question title — connect it straight into a Sheets append. Each response also carries `email` (the respondent's address) when the form collects email addresses, so you can reply to them. When a check finds nothing new, the rest of the flow is skipped. Publish the flow so it runs automatically on the schedule below — pressing Run only checks once, for testing.",
 			Integration: "Google Forms",
 			Category:    "trigger",
 			Icon:        "clipboard-list",

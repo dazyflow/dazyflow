@@ -23,7 +23,7 @@ func init() {
 			Label:       "Discord",
 			Subtitle:    "Send message",
 			Summary:     "Post a message to a Discord channel via a webhook.",
-			Description: "Post a message to a Discord channel using a channel webhook. The message ('Content') can be typed on the step or wired in from upstream (the input overrides the param). Optionally override the displayed name and avatar per message. Create the webhook in Discord under Server Settings → Integrations → Webhooks then connect it once on the Apps page — no bot or OAuth app needed.",
+			Description: "Post a message to a Discord channel using a channel webhook. The message ('Content') can be typed on the step or connected from an earlier step (the input overrides the param). Optionally override the displayed name and avatar per message. Create the webhook in Discord under Server Settings → Integrations → Webhooks then connect it once on the Apps page — no bot or OAuth app needed.",
 			Integration: "Discord",
 			Category:    "network",
 			Icon:        "message-square",
@@ -32,7 +32,7 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"discord", "message", "chat", "notify", "webhook"},
 			Examples: []core.ParamsExample{
-				{Title: "Notify a channel", Params: json.RawMessage(`{"content":"Deploy finished ✅"}`), Notes: "Wire an upstream message into the 'Content' input instead of typing it. The webhook URL comes from the connected Discord app."},
+				{Title: "Notify a channel", Params: json.RawMessage(`{"content":"Deploy finished ✅"}`), Notes: "Connect a message from an earlier step into the 'Content' input instead of typing it. The webhook URL comes from the connected Discord app."},
 				{Title: "With a custom sender name", Params: json.RawMessage(`{"content":"Build broke","username":"CI Bot"}`)},
 			},
 			// Per-tenant service connection: the channel webhook URL entered once
@@ -86,7 +86,7 @@ func executeSendMessage(ctx context.Context, job core.Job, _ chan<- core.Progres
 		return params.Err(job, "bad_input", "'Content' input must be text"), nil
 	}
 	if strings.TrimSpace(content) == "" {
-		return params.Err(job, "bad_param", "'content' is required — set it or wire the 'Content' input"), nil
+		return params.Err(job, "bad_param", "'content' is required — set it or connect the 'Content' input"), nil
 	}
 	if len(content) > maxContentLen {
 		return params.Err(job, "bad_param", fmt.Sprintf("'content' is %d characters; Discord allows at most %d", len(content), maxContentLen)), nil

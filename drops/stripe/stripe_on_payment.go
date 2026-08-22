@@ -31,7 +31,7 @@ func init() {
 				{
 					Title:  "Default — fire on every successful payment",
 					Params: json.RawMessage(`{}`),
-					Notes:  "Wire 'Amount (display)' and 'Customer email' into a notify step (ntfy push / email / Slack) for a payment alert.",
+					Notes:  "Connect 'Amount (display)' and 'Customer email' into a notify step (ntfy push / email / Slack) for a payment alert.",
 				},
 			},
 			RequiresConnections: []core.ConnectionRequirement{
@@ -52,7 +52,7 @@ func init() {
 // Mirrors github_on_push / webhook_input.
 func executeStripeOnPayment(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	return noPaymentTriggerData(job,
-		"This Stripe payment trigger only fires when a real payment_intent.succeeded webhook arrives. To test it, send a test event from the Stripe dashboard's webhook page (or make a test-mode payment); running the graph manually leaves the trigger with no event to feed downstream.",
+		"This Stripe payment trigger only fires when a real payment_intent.succeeded webhook arrives. To test it, send a test event from the Stripe dashboard's webhook page (or make a test-mode payment); running the flow manually leaves the trigger with no event to feed the steps after it.",
 		"stripe_on_payment is pre-completed by the daemon's Stripe events handler when a payment event arrives. Standalone execution has no event payload to emit.",
 	)
 }

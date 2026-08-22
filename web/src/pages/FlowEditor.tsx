@@ -1608,62 +1608,23 @@ function EditorInner() {
     [spawnDropFlow, screenToFlowPosition],
   );
 
-  // addApprovalNtfy is the one-click "notify me on ntfy with the approval
-  // link" from an await_approval node's inspector. It creates an ntfy step to
-  // the right of the approval step and wires it up so the approver gets a
-  // tappable link:
-  //   - edge  await_approval.pending_url → ntfy.message  (orders execution so
-  //     ntfy fires once the link exists, and shows the link in the body)
-  //   - param ntfy.click = ${upstream.<approval>.pending_url}  (the whole
-  //     notification opens the approval page when tapped — ntfy's `click` is a
-  //     param, not a port, so it can't be an edge)
-  // The remaining wire (the approval's Approved port → your send step) stays a
-  // manual drag — it's flow-specific and already explained on await_approval.
-  const addApprovalNtfy = useCallback(
-    (approvalNodeID: string) => {
-      const m = manifestByID.get("ntfy");
-      if (!m) return;
-      const src = nodes.find((n) => n.id === approvalNodeID);
-      const width = src?.measured?.width ?? 280;
-      const position = src
-        ? { x: src.position.x + width + 80, y: src.position.y }
-        : screenToFlowPosition({
-            x: window.innerWidth / 2,
-            y: window.innerHeight / 2,
-          });
-      const newID = nextID(nodes, "ntfy");
-      setNodes((nds) => [
-        ...nds,
-        {
-          id: newID,
-          type: "dazy",
-          position,
-          data: { label: dropLabel(m, i18n.language), moduleID: "ntfy", manifest: m },
-        },
-      ]);
-      setParamsByID((p) => ({
-        ...p,
-        [newID]: {
-          title: "Approval needed",
-          click: `\${upstream.${approvalNodeID}.pending_url}`,
-        },
-      }));
-      setEdges((eds) =>
-        addEdge(
-          {
-            id: `${approvalNodeID}.pending_url->${newID}.message`,
-            source: approvalNodeID,
-            target: newID,
-            sourceHandle: "pending_url",
-            targetHandle: "message",
-            style: { stroke: "var(--accent)", strokeWidth: 1.5 },
-          },
-          eds,
-        ),
-      );
-      setDirty(true);
+  // approveFromCard resolves an await_approval step straight from its canvas
+  // card. Same endpoint the Inspector's ApprovalPanel and the Approvals inbox
+  // call; the decision flips the node status over SSE and dispatches
+  // downstream, so there is nothing to refresh here. Errors surface on the
+  // editor's existing error bar rather than on the card, which is about to be
+  // replaced by the resumed state anyway.
+  const approveFromCard = useCallback(
+    async (nodeID: string, decision: "approve" | "reject") => {
+      const runID = lockedRunID || currentRunID;
+      if (!token || !runID) return;
+      try {
+        await api.approveNode(token, runID, nodeID, decision);
+      } catch (e) {
+        setError(explainApiError(e, t));
+      }
     },
-    [manifestByID, nodes, screenToFlowPosition],
+    [token, lockedRunID, currentRunID, t],
   );
 
   // spawnDropAuto places a palette-inserted step predictably: to the
@@ -2214,6 +2175,11 @@ function EditorInner() {
         canConnect,
         tokenLabels,
         setNodeParam,
+        // Status is already part of `n`, but the cache compares `n` by
+        // reference — list it so a node flipping into (or out of) `awaiting`
+        // rebuilds its data and the approve bar appears/disappears.
+        n.data.status,
+        approveFromCard,
         enterDelay,
       ];
       const hit = cache.get(n.id);
@@ -2235,6 +2201,12 @@ function EditorInner() {
           setupNeeded,
           loopHint,
           canConnect,
+          // Only for the step the run is actually parked on: an await_approval
+          // node in `awaiting`. Absent otherwise, so the card renders no bar.
+          onApprove:
+            n.data.moduleID === "await_approval" && n.data.status === "awaiting"
+              ? (decision: "approve" | "reject") => approveFromCard(n.id, decision)
+              : undefined,
           resourceLabels,
           loopOwned,
           disabled,
@@ -2269,6 +2241,7 @@ function EditorInner() {
     tokenLabels,
     breakpoints,
     pausedAt,
+    approveFromCard,
     animApply,
   ]);
 
@@ -5329,7 +5302,6 @@ function EditorInner() {
           onChange={onInspectorChange}
           paramsByID={paramsByID}
           onParamsChange={onParamsChange}
-          onAddApprovalNtfy={addApprovalNtfy}
           manifests={manifests}
           wiredPorts={
             inspectorSelected ? connectedInputsByNode.get(inspectorSelected.id) ?? [] : []

@@ -31,7 +31,7 @@ func init() {
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"hash", "checksum", "hmac", "sha256", "md5", "signature", "transform"},
-			Description: "Compute a hash of the input — a plain digest for a checksum/dedupe key, or a keyed HMAC for verifying (or signing) a webhook. 'algo' picks sha256 (default), sha512, sha1, or md5. Set 'key' to switch from a plain hash to HMAC with that secret (wire a ${secret.…} in). 'encoding' renders the digest as hex (default) or base64. sha1/md5 are for compatibility and checksums only — use sha256+ for anything security-sensitive.",
+			Description: "Compute a hash of the input — a plain digest for a checksum/dedupe key, or a keyed HMAC for verifying (or signing) a webhook. 'algo' picks sha256 (default), sha512, sha1, or md5. Set 'key' to switch from a plain hash to HMAC with that secret (connect a ${secret.…} in). 'encoding' renders the digest as hex (default) or base64. sha1/md5 are for compatibility and checksums only — use sha256+ for anything security-sensitive.",
 			Summary:     "Hash or HMAC the input value; output hex or Base64 (sha256/sha512/sha1/md5).",
 			Examples: []core.ParamsExample{
 				{
@@ -56,7 +56,7 @@ func init() {
 				"type":"object",
 				"properties":{
 					"algo":{"type":"string","enum":["sha256","sha512","sha1","md5"],"default":"sha256","title":"Algorithm","description":"Hash algorithm. Use sha256 or stronger for security; sha1/md5 are for checksums/compatibility only."},
-					"key":{"type":"string","title":"HMAC key","description":"When set, compute a keyed HMAC with this secret instead of a plain hash. Wire a ${secret.NAME} in rather than pasting the key."},
+					"key":{"type":"string","title":"HMAC key","description":"When set, compute a keyed HMAC with this secret instead of a plain hash. Connect a ${secret.NAME} in rather than pasting the key."},
 					"encoding":{"type":"string","enum":["hex","base64"],"default":"hex","title":"Output encoding","description":"Render the digest as lowercase hex (default) or standard Base64."}
 				}
 			}`),

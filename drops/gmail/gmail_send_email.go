@@ -24,7 +24,7 @@ func init() {
 			Label:       "Gmail",
 			Subtitle:    "Send email",
 			Summary:     "Send an email as the connected Gmail account, with optional CC/BCC, HTML, and file attachments.",
-			Description: "Send an email from the connected mailbox. To, Subject and Body can be typed as params or wired in from upstream (the matching input port overrides the param) — handy for per-recipient sends. Attach files by wiring file-producing steps (e.g. Export Sheet as PDF) into the variadic 'attachments' input.",
+			Description: "Send an email from the connected mailbox. To, Subject and Body can be typed as params or connected from an earlier step (the matching input port overrides the param) — handy for per-recipient sends. Attach files by connecting file-producing steps (e.g. Export Sheet as PDF) into the variadic 'attachments' input.",
 			Integration: "Gmail",
 			Category:    "network",
 			Icon:        "mail",
@@ -34,7 +34,7 @@ func init() {
 			Tags:        []string{"gmail", "email", "send", "smtp"},
 			Examples: []core.ParamsExample{
 				{Title: "Plain-text alert", Params: json.RawMessage(`{"to":"oncall@example.com","subject":"Build failed","body":"main is red","token":"${secret.GMAIL_OAUTH}"}`)},
-				{Title: "Daily report with a PDF attachment", Params: json.RawMessage(`{"to":"me@example.com","subject":"Yesterday's comments","body":"Comments digest attached.","token":"${secret.GMAIL_OAUTH}"}`), Notes: "Wire a file-producing step (e.g. Export Sheet as PDF) into the variadic 'attachments' input."},
+				{Title: "Daily report with a PDF attachment", Params: json.RawMessage(`{"to":"me@example.com","subject":"Yesterday's comments","body":"Comments digest attached.","token":"${secret.GMAIL_OAUTH}"}`), Notes: "Connect a file-producing step (e.g. Export Sheet as PDF) into the variadic 'attachments' input."},
 			},
 			RequiresConnections: []core.ConnectionRequirement{
 				{Kind: "oauth", Name: "google", Note: "Google OAuth — gmail.send scope."},
@@ -102,7 +102,7 @@ func executeGmailSend(ctx context.Context, job core.Job, _ chan<- core.Progress)
 		return params.Err(job, "bad_input", "'To' input must be text"), nil
 	}
 	if to == "" {
-		return params.Err(job, "bad_param", "'to' is required — set it or wire the 'To' input"), nil
+		return params.Err(job, "bad_param", "'to' is required — set it or connect the 'To' input"), nil
 	}
 	token, err := resolveToken(ctx, job)
 	if err != nil {

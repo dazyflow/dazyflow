@@ -28,7 +28,7 @@ func init() {
 			Label:       "Open-Meteo",
 			Subtitle:    "Daily forecast",
 			Summary:     "Get a multi-day daily forecast at a coordinate from Open-Meteo — no API key for non-commercial use.",
-			Description: "Look ahead up to 16 days for any point on the map using Open-Meteo's free forecast — no account or API key for personal, non-commercial use. Give it a coordinate — type the Latitude and Longitude, or wire a \"lat,lon\" value in from a Location/Geocode step — and choose how many days. It returns a readable day-by-day Summary plus the Daily array as JSON (min/max temperature, conditions, and chance of rain per day). For commercial use, add your Open-Meteo API key on the integration page and it switches to the paid endpoint.",
+			Description: "Look ahead up to 16 days for any point on the map using Open-Meteo's free forecast — no account or API key for personal, non-commercial use. Give it a coordinate — type the Latitude and Longitude, or connect a \"lat,lon\" value in from a Location/Geocode step — and choose how many days. It returns a readable day-by-day Summary plus the Daily array as JSON (min/max temperature, conditions, and chance of rain per day). For commercial use, add your Open-Meteo API key on the integration page and it switches to the paid endpoint.",
 			Integration: "Open-Meteo",
 			Category:    "network",
 			Icon:        "cloud-sun",

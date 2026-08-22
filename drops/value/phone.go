@@ -42,7 +42,7 @@ func init() {
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"phone", "number", "sms", "e164", "msisdn", "validate", "normalize"},
-			Description: "Hold a phone number — type it inline or wire a string into the 'phone' input — and emit it as clean E.164 (+46701234567) on 'out', but only after checking it's a real, dialable number. Local formats are understood: with Default region SE, \"070-123 45 67\" becomes \"+46701234567\". A number that isn't valid fails the step up front instead of surfacing as a cryptic error when a later SMS step rejects it. It also decomposes the number so you can act on its parts without string surgery: 'country' (SE), 'national' (701234567), and 'type' (mobile / fixed_line / …). Feed 'out' straight into the 46elks or Twilio SMS steps.",
+			Description: "Hold a phone number — type it inline or connect a string into the 'phone' input — and emit it as clean E.164 (+46701234567) on 'out', but only after checking it's a real, dialable number. Local formats are understood: with Default region SE, \"070-123 45 67\" becomes \"+46701234567\". A number that isn't valid fails the step up front instead of surfacing as a cryptic error when a later SMS step rejects it. It also decomposes the number so you can act on its parts without string surgery: 'country' (SE), 'national' (701234567), and 'type' (mobile / fixed_line / …). Feed 'out' straight into the 46elks or Twilio SMS steps.",
 			Summary:     "Validate and normalize a phone number to E.164, and emit its country, national number, and type.",
 			Examples: []core.ParamsExample{
 				{
@@ -75,7 +75,7 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"phone":{"type":"string","format":"tel","title":"Phone","description":"A phone number — local (070-123 45 67) or international (+46701234567). Type it here, or wire a string into the 'phone' input."},
+					"phone":{"type":"string","format":"tel","title":"Phone","description":"A phone number — local (070-123 45 67) or international (+46701234567). Type it here, or connect a string into the 'phone' input."},
 					"default_region":{"type":"string","title":"Default region","default":"SE","description":"ISO 3166 alpha-2 country code (SE, NO, DK, FI, GB…) to assume when the number isn't written in +international form. Ignored for a number that already starts with +."}
 				},
 				"required":["phone"]
@@ -122,11 +122,11 @@ func executePhone(_ context.Context, job core.Job, _ chan<- core.Progress) (core
 	// number can be computed upstream or set on the node.
 	raw, ok := params.TextInputOr(job, "phone", params.StringDefault(job.Params, "phone", ""))
 	if !ok {
-		return params.Err(job, "bad_input", "the wired 'phone' input must be text"), nil
+		return params.Err(job, "bad_input", "the connected 'phone' input must be text"), nil
 	}
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return params.Err(job, "bad_param", "phone is required: wire the 'phone' input or set the phone param"), nil
+		return params.Err(job, "bad_param", "phone is required: connect the 'phone' input or set the phone param"), nil
 	}
 
 	// Uppercase the region: libphonenumber expects "SE", not "se". An empty

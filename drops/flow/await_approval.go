@@ -21,18 +21,18 @@ func init() {
 			Category:    "flow_control",
 			Provider:    "internal",
 			Tags:        []string{"human_in_the_loop", "approval", "pause", "wait"},
-			Description: "Pause the flow until someone approves. Order of wiring: put this step BEFORE the step that notifies a person — it hands you an `Approval link` (the `pending_url` output) to put in that notification (e.g. ntfy's 'Link to open', or an email body). Anyone who has the link can approve or reject — there's no per-person targeting, so send it only to the people who should decide; the flow records who clicked on the `Approver` output. The person taps the link to approve or reject; only then does the rest of the flow continue. On resume, the input `Value` comes out the `Approved` or `Rejected` port matching the decision (wire each to its follow-up — no separate Branch needed), alongside the `Approver` who decided and their `Comment`.",
-			Summary:     "Pause until a person approves: hand a link to your notify step, then continue on their decision.",
+			Description: "Pause the flow until someone approves. Fill in 'Email these people' and Dazyflow mails them the approval link when the flow gets here, and tells them the outcome once it is decided; leave it blank and everyone in the organization who can approve is emailed instead. To notify some other way as well, put this step BEFORE a notify step — it hands you an `Approval link` (the `pending_url` output) to put in that message (e.g. ntfy's 'Link to open', or an email body). Anyone who has the link can approve or reject — there's no per-person targeting, so send it only to the people who should decide; the flow records who clicked on the `Approver` output. The person taps the link to approve or reject; only then does the rest of the flow continue. On resume, the input `Value` comes out the `Approved` or `Rejected` port matching the decision (connect each to its follow-up — no separate Branch needed), alongside the `Approver` who decided and their `Comment`.",
+			Summary:     "Pause until a person approves: email the approvers a link, then continue on their decision.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Notify on ntfy, then approve before sending",
 					Params: json.RawMessage(`{"prompt":"A reply is ready to send. Approve?"}`),
-					Notes:  "Wire the draft into Value; wire pending_url (Approval link) into the ntfy step's 'Link to open'; wire the Approved port into your send step.",
+					Notes:  "Connect the draft into Value; connect pending_url (Approval link) into the ntfy step's 'Link to open'; connect the Approved port into your send step.",
 				},
 				{
 					Title:  "Ask a manager to approve a refund",
 					Params: json.RawMessage(`{"prompt":"Refund $230 to customer #4821 — order shipped damaged. Approve?"}`),
-					Notes:  "Wire pending_url into an email or Slack step so the approver gets the link.",
+					Notes:  "Connect pending_url into an email or Slack step so the approver gets the link.",
 				},
 				{
 					Title:  "Gate a production deploy",
@@ -78,6 +78,12 @@ func init() {
 						"title":"Question to ask",
 						"description":"The question shown on the approval page — e.g. 'A reply is ready to send. Approve?'. Note: anyone who opens the Approval link can approve or reject; the link is the only key, so share it only with the people who should decide. The flow records who clicked on the Approver output.",
 						"examples":["A reply is ready to send. Approve?"]
+					},
+					"approvers":{
+						"type":"string",
+						"title":"Email these people",
+						"description":"Comma-separated email addresses to notify when the flow reaches this step, and again once someone decides. Leave blank to email everyone in the organization who can approve (editors and admins). The email carries the same Approval link the pending_url output does — anyone who opens it can decide, so list only the people who should.",
+						"examples":["ops@acme.se, manager@acme.se"]
 					}
 				}
 			}`),

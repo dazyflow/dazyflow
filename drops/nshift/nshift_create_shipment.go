@@ -30,7 +30,7 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"nshift", "unifaun", "consignor", "shipping", "logistics", "parcel", "carrier", "sweden", "nordic"},
 			Examples: []core.ParamsExample{
-				{Title: "Book a parcel", Params: json.RawMessage(`{"shipment":{"sender":{"quickId":"1"},"receiver":{"name":"Ada Andersson","address1":"Storgatan 1","zipcode":"11122","city":"Stockholm","country":"SE"},"parcels":[{"copies":1,"weight":2.5}],"service":{"id":"DAOL"}}}`), Notes: "Wire the 'shipment' input from an upstream step that builds the payload per order instead of typing it."},
+				{Title: "Book a parcel", Params: json.RawMessage(`{"shipment":{"sender":{"quickId":"1"},"receiver":{"name":"Ada Andersson","address1":"Storgatan 1","zipcode":"11122","city":"Stockholm","country":"SE"},"parcels":[{"copies":1,"weight":2.5}],"service":{"id":"DAOL"}}}`), Notes: "Connect the 'shipment' input from an earlier step that builds the payload per order instead of typing it."},
 			},
 			ConnectionFields: nshiftConnectionFields(),
 			ExecutionModel:   core.ExecutionBatch,
@@ -69,7 +69,7 @@ func executeCreateShipment(ctx context.Context, job core.Job, _ chan<- core.Prog
 		return params.Err(job, "bad_input", err.Error()), nil
 	}
 	if len(shipment) == 0 {
-		return params.Err(job, "bad_param", "'shipment' is required — set it or wire the 'Shipment' input"), nil
+		return params.Err(job, "bad_param", "'shipment' is required — set it or connect the 'Shipment' input"), nil
 	}
 	body, err := json.Marshal(shipment)
 	if err != nil {

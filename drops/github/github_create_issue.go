@@ -22,7 +22,7 @@ func init() {
 			Label:       "GitHub",
 			Subtitle:    "Create issue",
 			Summary:     "Open a new issue on a GitHub repo with title, body, labels and assignees.",
-			Description: "Open a new issue on a GitHub repo. Title and Body can be typed on the step or wired in from another step (the matching input overrides the typed value); the body supports Markdown. Outputs the new issue's link and number so a follow-up step can post it somewhere or comment on it.",
+			Description: "Open a new issue on a GitHub repo. Title and Body can be typed on the step or connected in from another step (the matching input overrides the typed value); the body supports Markdown. Outputs the new issue's link and number so a follow-up step can post it somewhere or comment on it.",
 			Integration: "GitHub",
 			Category:    "network",
 			Icon:        "git-branch",
@@ -94,7 +94,7 @@ func executeGitHubCreateIssue(ctx context.Context, job core.Job, _ chan<- core.P
 		return params.Err(job, "bad_input", "'Title' input must be text"), nil
 	}
 	if title == "" {
-		return params.Err(job, "bad_param", "title must not be empty — set it or wire the 'Title' input"), nil
+		return params.Err(job, "bad_param", "title must not be empty — set it or connect the 'Title' input"), nil
 	}
 	token, err := resolveToken(ctx, job)
 	if err != nil {

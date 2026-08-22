@@ -23,7 +23,7 @@ func init() {
 			Label:       "Twilio",
 			Subtitle:    "Send SMS",
 			Summary:     "Send an SMS text message via Twilio.",
-			Description: "Send an SMS via Twilio. The recipient ('To') and message ('Body') can be typed on the step or wired in from upstream (the matching input port overrides the param). Send from one of your Twilio numbers ('From', in E.164 like +15551234567) or set a Messaging Service SID instead. Connect your Twilio account once on the Apps page.",
+			Description: "Send an SMS via Twilio. The recipient ('To') and message ('Body') can be typed on the step or connected from an earlier step (the matching input port overrides the param). Send from one of your Twilio numbers ('From', in E.164 like +15551234567) or set a Messaging Service SID instead. Connect your Twilio account once on the Apps page.",
 			Integration: "Twilio",
 			Category:    "network",
 			Icon:        "message-square",
@@ -32,7 +32,7 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"twilio", "sms", "text", "message", "notify"},
 			Examples: []core.ParamsExample{
-				{Title: "Alert to a phone number", Params: json.RawMessage(`{"to":"+15558675309","from":"+15551234567","body":"Your order has shipped."}`), Notes: "Wire a trigger's phone/message outputs into the 'To'/'Body' pins instead of typing them."},
+				{Title: "Alert to a phone number", Params: json.RawMessage(`{"to":"+15558675309","from":"+15551234567","body":"Your order has shipped."}`), Notes: "Connect a trigger's phone/message outputs into the 'To'/'Body' pins instead of typing them."},
 				{Title: "Send via a Messaging Service", Params: json.RawMessage(`{"to":"+15558675309","messaging_service_sid":"MGxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx","body":"Your order has shipped."}`)},
 			},
 			// Per-tenant service connection: Account SID + Auth Token entered once
@@ -85,14 +85,14 @@ func executeSendSMS(ctx context.Context, job core.Job, _ chan<- core.Progress) (
 		return params.Err(job, "bad_input", "'To' input must be text"), nil
 	}
 	if strings.TrimSpace(to) == "" {
-		return params.Err(job, "bad_param", "'to' is required — set it or wire the 'To' input"), nil
+		return params.Err(job, "bad_param", "'to' is required — set it or connect the 'To' input"), nil
 	}
 	body, ok := params.TextInputOr(job, "body", params.StringDefault(job.Params, "body", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'Body' input must be text"), nil
 	}
 	if strings.TrimSpace(body) == "" {
-		return params.Err(job, "bad_param", "'body' is required — set it or wire the 'Body' input"), nil
+		return params.Err(job, "bad_param", "'body' is required — set it or connect the 'Body' input"), nil
 	}
 
 	from := strings.TrimSpace(params.StringDefault(job.Params, "from", ""))

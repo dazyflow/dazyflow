@@ -24,7 +24,7 @@ func init() {
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"transform", "csv", "export", "rows", "etl", "serialize"},
-			Description: "Turn rows into CSV text — the inverse of Read CSV. Wire in the rows from a DB query, a Sheets/Excel read, or any transform, and get a single CSV string you can attach to an email, write to a file, or POST to an API. Columns follow the rows' own column order; set 'columns' to pick or reorder a subset. 'delimiter' switches the separator (\"\\t\"/\"tab\" for TSV, \";\" for European CSVs), and 'header' toggles the header line.",
+			Description: "Turn rows into CSV text — the inverse of Read CSV. Connect in the rows from a DB query, a Sheets/Excel read, or any transform, and get a single CSV string you can attach to an email, write to a file, or POST to an API. Columns follow the rows' own column order; set 'columns' to pick or reorder a subset. 'delimiter' switches the separator (\"\\t\"/\"tab\" for TSV, \";\" for European CSVs), and 'header' toggles the header line.",
 			Summary:     "Serialize rows into a CSV/TSV string for files, email attachments, or APIs.",
 			Examples: []core.ParamsExample{
 				{

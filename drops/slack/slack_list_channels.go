@@ -23,7 +23,7 @@ func init() {
 			Label:       "Slack",
 			Subtitle:    "List channels",
 			Summary:     "Get the list of Slack channels your connected bot can see.",
-			Description: "Get the list of channels your Slack bot can see, as one row per channel. Wire the Channels output into a For each to do something per channel — for example, send the same announcement to every room the bot is in.",
+			Description: "Get the list of channels your Slack bot can see, as one row per channel. Connect the Channels output into a For each to do something per channel — for example, send the same announcement to every room the bot is in.",
 			Integration: "Slack",
 			Category:    "network",
 			Icon:        "globe",

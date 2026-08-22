@@ -30,7 +30,7 @@ func init() {
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"base64", "encode", "decode", "transform", "bytes", "data-uri"},
-			Description: "Encode text to Base64 or decode Base64 back to text. Reach for it to stuff a payload into a JSON field, build a Basic-auth header (base64 of \"user:pass\"), or read a Base64 blob an API handed back. 'mode' picks encode (default) or decode; 'variant' switches between standard Base64 and the URL-safe alphabet (- and _ instead of + and /). Wire the value into 'in'; the result comes out on 'out'.",
+			Description: "Encode text to Base64 or decode Base64 back to text. Reach for it to stuff a payload into a JSON field, build a Basic-auth header (base64 of \"user:pass\"), or read a Base64 blob an API handed back. 'mode' picks encode (default) or decode; 'variant' switches between standard Base64 and the URL-safe alphabet (- and _ instead of + and /). Connect the value into 'in'; the result comes out on 'out'.",
 			Summary:     "Base64-encode text, or decode Base64 back to text (standard or URL-safe).",
 			Examples: []core.ParamsExample{
 				{

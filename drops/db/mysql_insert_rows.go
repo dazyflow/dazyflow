@@ -34,7 +34,7 @@ func init() {
 				{
 					Title:  "Load Excel rows into a new table",
 					Params: json.RawMessage(`{"table":"signups"}`),
-					Notes:  "create_table defaults to true, so the table is built from the upstream headers on first run. The connection comes from your MySQL connection, set once under Apps.",
+					Notes:  "create_table defaults to true, so the table is built from the earlier headers on first run. The connection comes from your MySQL connection, set once under Apps.",
 				},
 				{
 					Title:  "Append into a pre-existing schema",

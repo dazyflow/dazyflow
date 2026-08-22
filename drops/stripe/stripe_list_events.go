@@ -25,7 +25,7 @@ func init() {
 			Label:       "Stripe",
 			Subtitle:    "List events",
 			Summary:     "Read recent Stripe events — the building block for 'fire on new payment / failed invoice / new subscription' flows.",
-			Description: "List your account's recent events (newest first), optionally filtered to specific types like payment_intent.succeeded or invoice.payment_failed. For a trigger, compose: Schedule/Poll → this step (wire the saved cursor into 'After id') → For each event → … → Set secret with 'Last id'. Only events newer than the cursor are returned, so each poll sees each event once. With no cursor it returns the most recent events.",
+			Description: "List your account's recent events (newest first), optionally filtered to specific types like payment_intent.succeeded or invoice.payment_failed. For a trigger, compose: Schedule/Poll → this step (connect the saved cursor into 'After id') → For each event → … → Set secret with 'Last id'. Only events newer than the cursor are returned, so each poll sees each event once. With no cursor it returns the most recent events.",
 			Integration: "Stripe",
 			Category:    "network",
 			Icon:        "credit-card",
@@ -34,7 +34,7 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"stripe", "events", "trigger", "poll", "webhook", "billing"},
 			Examples: []core.ParamsExample{
-				{Title: "New successful payments", Params: json.RawMessage(`{"types":["payment_intent.succeeded"]}`), Notes: "Wire ${secret.STRIPE_EVENT_CURSOR} into 'After id' and the 'Last id' output into a Set secret step named STRIPE_EVENT_CURSOR."},
+				{Title: "New successful payments", Params: json.RawMessage(`{"types":["payment_intent.succeeded"]}`), Notes: "Connect ${secret.STRIPE_EVENT_CURSOR} into 'After id' and the 'Last id' output into a Set secret step named STRIPE_EVENT_CURSOR."},
 				{Title: "Billing trouble feed", Params: json.RawMessage(`{"types":["invoice.payment_failed","customer.subscription.deleted"],"limit":50}`)},
 			},
 			ConnectionFields: stripeConnectionFields(),

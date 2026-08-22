@@ -26,13 +26,13 @@ func init() {
 			Category:    "flow_control",
 			Provider:    "internal",
 			Tags:        []string{"condition", "predicate", "boolean", "test", "compare"},
-			Description: "Compare two values, A and B, and emit true or false on the Yes/No output. Pick the test from a plain-language list — equals, is greater than, contains, is one of, is within range, and more. Wire A and B from upstream steps, or type a literal default right on the step. Pair the Yes/No output with a Branch step (connect Yes/No into Branch's condition input) to route.",
+			Description: "Compare two values, A and B, and emit true or false on the Yes/No output. Pick the test from a plain-language list — equals, is greater than, contains, is one of, is within range, and more. Connect A and B from earlier steps, or type a literal default right on the step. Pair the Yes/No output with a Branch step (connect Yes/No into Branch's condition input) to route.",
 			Summary:     "Compare A against B with a chosen operator and emit true or false on the Yes/No output.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Is the value over a threshold?",
 					Params: json.RawMessage(`{"op":"greater_than","B":1000}`),
-					Notes:  "Wire the number into A; B is the literal 1000. It's true when A > 1000.",
+					Notes:  "Connect the number into A; B is the literal 1000. It's true when A > 1000.",
 				},
 				{
 					Title:  "Status is one of an accepted set",
@@ -42,7 +42,7 @@ func init() {
 				{
 					Title:  "Was it a 2xx success? (range)",
 					Params: json.RawMessage(`{"op":"in_range","B":[200,299]}`),
-					Notes:  "in_range matches a contiguous numeric range; both ends inclusive by default. Wire the status into A.",
+					Notes:  "in_range matches a contiguous numeric range; both ends inclusive by default. Connect the status into A.",
 				},
 			},
 			ExecutionModel: core.ExecutionBatch,
@@ -70,8 +70,8 @@ func init() {
 						"enum":["equals","not_equals","greater_than","greater_or_equal","less_than","less_or_equal","contains","not_contains","one_of","not_one_of","in_range","not_in_range","exists","not_exists"],
 						"enumNames":["A equals B","A does not equal B","A is greater than B","A is greater than or equal to B","A is less than B","A is less than or equal to B","A contains B","A does not contain B","A is one of B","A is not one of B","A is within range B","A is outside range B","A has a value","A is empty"]
 					},
-					"A":{"type":"string","title":"A","description":"Literal value for A when the A input isn't wired. Parsed as JSON when possible (e.g. 200, true), otherwise treated as text."},
-					"B":{"type":"string","title":"B","description":"Literal value for B when the B input isn't wired. Parsed as JSON when possible — a number, or a list like [200,201,204] for one_of, or [min,max] for in_range."},
+					"A":{"type":"string","title":"A","description":"Literal value for A when the A input isn't connected. Parsed as JSON when possible (e.g. 200, true), otherwise treated as text."},
+					"B":{"type":"string","title":"B","description":"Literal value for B when the B input isn't connected. Parsed as JSON when possible — a number, or a list like [200,201,204] for one_of, or [min,max] for in_range."},
 					"field":{"type":"string","title":"Field in A","description":"Optional dot-path into A when A is a JSON object (e.g. priority). Empty compares the whole value.","x_advanced":true},
 					"inclusive_min":{"type":"boolean","default":true,"description":"For in_range: include the lower bound. Defaults to true (like Unreal's InRange).","x_advanced":true},
 					"inclusive_max":{"type":"boolean","default":true,"description":"For in_range: include the upper bound. Defaults to true (like Unreal's InRange).","x_advanced":true}

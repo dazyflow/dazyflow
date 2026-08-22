@@ -148,7 +148,7 @@ func init() {
 			Label:       "Stripe",
 			Subtitle:    "Send invoice",
 			Summary:     "Bill a Stripe customer a one-off amount and email them the invoice — draft, line item, finalize and send in one step.",
-			Description: "Create a one-line invoice for a customer and have Stripe email it (a hosted page where they can pay by card or transfer). One step covers the whole API sequence — draft invoice, line item, finalize, send — and a retried run replays already-completed steps instead of double-billing. Amount is in the smallest currency unit (12000 = 120.00); customer, amount and description can all be wired in from upstream, e.g. a new row in an orders sheet. The classic flow: new-order-row → Search customers (or Create customer) → Send invoice → notify. Note: Stripe only delivers invoice emails in live mode; in test mode check the dashboard.",
+			Description: "Create a one-line invoice for a customer and have Stripe email it (a hosted page where they can pay by card or transfer). One step covers the whole API sequence — draft invoice, line item, finalize, send — and a retried run replays already-completed steps instead of double-billing. Amount is in the smallest currency unit (12000 = 120.00); customer, amount and description can all be connected from an earlier step, e.g. a new row in an orders sheet. The classic flow: new-order-row → Search customers (or Create customer) → Send invoice → notify. Note: Stripe only delivers invoice emails in live mode; in test mode check the dashboard.",
 			Integration: "Stripe",
 			Category:    "network",
 			Icon:        "credit-card",
@@ -157,7 +157,7 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"stripe", "invoice", "billing", "email", "payments"},
 			Examples: []core.ParamsExample{
-				{Title: "Invoice 120.00 USD for consulting", Params: json.RawMessage(`{"customer":"cus_NffrFeUfNV2Hib","amount":12000,"currency":"usd","description":"Consulting — May"}`), Notes: "Wire the customer id in from Search customers and the amount from a sheet row instead of typing them."},
+				{Title: "Invoice 120.00 USD for consulting", Params: json.RawMessage(`{"customer":"cus_NffrFeUfNV2Hib","amount":12000,"currency":"usd","description":"Consulting — May"}`), Notes: "Connect the customer id in from Search customers and the amount from a sheet row instead of typing them."},
 				{Title: "Net-14 payment terms", Params: json.RawMessage(`{"customer":"cus_NffrFeUfNV2Hib","amount":50000,"currency":"sek","description":"Workshop","days_until_due":14}`)},
 			},
 			ConnectionFields: stripeConnectionFields(),
@@ -204,14 +204,14 @@ func executeSendInvoice(ctx context.Context, job core.Job, _ chan<- core.Progres
 		return params.Err(job, "bad_input", "'Customer' input must be text (a cus_… id)"), nil
 	}
 	if customer == "" {
-		return params.Err(job, "bad_param", "'customer' is required — set it or wire the 'Customer' input"), nil
+		return params.Err(job, "bad_param", "'customer' is required — set it or connect the 'Customer' input"), nil
 	}
 	amount, ok := numberInputOr(job, "amount", params.IntDefault(job.Params, "amount", 0))
 	if !ok {
 		return params.Err(job, "bad_input", "'Amount' input must be a whole number (smallest currency unit, e.g. 12000 = 120.00)"), nil
 	}
 	if amount < 1 {
-		return params.Err(job, "bad_param", "'amount' is required — set it or wire the 'Amount' input (smallest currency unit)"), nil
+		return params.Err(job, "bad_param", "'amount' is required — set it or connect the 'Amount' input (smallest currency unit)"), nil
 	}
 	description, ok := params.TextInputOr(job, "description", params.StringDefault(job.Params, "description", ""))
 	if !ok {

@@ -32,7 +32,7 @@ func init() {
 				{
 					Title:  "Webhook input (no params)",
 					Params: json.RawMessage(`{}`),
-					Notes:  "This step has no params — the trigger URL is provisioned per graph and the body/headers come from the inbound request.",
+					Notes:  "This step has no params — the trigger URL is provisioned per flow and the body/headers come from the inbound request.",
 				},
 			},
 			ExecutionModel: core.ExecutionTrigger,

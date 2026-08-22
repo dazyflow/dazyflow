@@ -23,7 +23,7 @@ func init() {
 			Label:       "Gmail",
 			Subtitle:    "Read conversation",
 			Summary:     "Read a whole email conversation and tell whether the other side has replied.",
-			Description: "Read every message in one conversation, oldest first, and — the useful part — say whether anyone has answered yet. 'Replied' is No while the newest message in the thread is still one of yours, which is exactly the 'they haven't got back to me' test a follow-up flow needs. Wire Search emails' Matching emails into a For each and put this step in the loop body with Conversation = the row's threadId. 'Summary' is one row per conversation (subject, who last wrote, when, how many messages, replied) — collect those with Collect loop results to get a table of what's outstanding.",
+			Description: "Read every message in one conversation, oldest first, and — the useful part — say whether anyone has answered yet. 'Replied' is No while the newest message in the thread is still one of yours, which is exactly the 'they haven't got back to me' test a follow-up flow needs. Connect Search emails' Matching emails into a For each and put this step in the loop body with Conversation = the row's threadId. 'Summary' is one row per conversation (subject, who last wrote, when, how many messages, replied) — collect those with Collect loop results to get a table of what's outstanding.",
 			Integration: "Gmail",
 			Category:    "network",
 			Icon:        "mail-open",
@@ -62,7 +62,7 @@ func init() {
 					"base_url":{"type":"string","description":"Override the API host (testing)."},
 					"account":{"type":"string","default":"default"},
 					"token":{"type":"string","description":"Raw access token; overrides 'account'."},
-					"id":{"type":"string","title":"Conversation","description":"The conversation to read. Overridden by the Conversation input when wired."},
+					"id":{"type":"string","title":"Conversation","description":"The conversation to read. Overridden by the Conversation input when connected."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
 				"required":["id"]

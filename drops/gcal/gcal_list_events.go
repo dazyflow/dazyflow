@@ -26,7 +26,7 @@ func init() {
 			Label:       "Google Calendar",
 			Subtitle:    "List events",
 			Summary:     "List events from a Google Calendar in a time window.",
-			Description: "List events from a Google Calendar. Bound it to a time window that moves with the schedule — \"tomorrow\" to \"tomorrow+1d\" for tomorrow's bookings, \"-7d\" to \"now\" for last week — or give absolute timestamps; both ends can also be wired in. Recurring events are expanded into single instances and returned in start-time order. Each event becomes an object with id, summary, description, location, start/end, status and attendees.",
+			Description: "List events from a Google Calendar. Bound it to a time window that moves with the schedule — \"tomorrow\" to \"tomorrow+1d\" for tomorrow's bookings, \"-7d\" to \"now\" for last week — or give absolute timestamps; both ends can also be connected in. Recurring events are expanded into single instances and returned in start-time order. Each event becomes an object with id, summary, description, location, start/end, status and attendees.",
 			Integration: "Google Calendar",
 			Category:    "network",
 			Icon:        "calendar",

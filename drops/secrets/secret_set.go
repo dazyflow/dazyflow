@@ -31,7 +31,7 @@ func init() {
 				{
 					Title:  "Persist a polling cursor",
 					Params: json.RawMessage(`{"name":"github_last_seen_issue"}`),
-					Notes:  "Wire the upstream step's latest-id output into the 'value' input port; later runs read it back with ${secret.github_last_seen_issue}.",
+					Notes:  "Connect the earlier step's latest-id output into the 'value' input port; later runs read it back with ${secret.github_last_seen_issue}.",
 				},
 				{
 					Title:  "Store a literal value",
@@ -101,20 +101,20 @@ func executeSecretSet(ctx context.Context, job core.Job, _ chan<- core.Progress)
 			value = string(v)
 		default:
 			return params.ErrDetails(job, "bad_input",
-				"secret_set's 'value' input needs a string, but the upstream node is sending a structured value. Wire a transform between them that renders the value as a string (e.g. a Template node, or a JSON-encode step).",
+				"secret_set's 'value' input needs a string, but the earlier step is sending a structured value. Connect a transform between them that renders the value as a string (e.g. a Fill a template step, or a JSON-encode step).",
 				fmt.Sprintf("Received type %T on input port 'value'; expected string or []byte.", v)), nil
 		}
 		hasParamValue = true
 	}
 	if !hasParamValue {
 		return params.Err(job, "bad_input",
-			"secret_set has nothing to store: wire something into its 'value' input or set the 'value' param."), nil
+			"secret_set has nothing to store: connect something into its 'value' input or set the 'value' param."), nil
 	}
 
 	write := currentWriter()
 	if write == nil {
 		return params.Err(job, "not_configured",
-			"This deployment doesn't have an encrypted secret store wired up, so secret_set can't write anything. Start dzd with --master-key (or $DAZYFLOW_MASTER_KEY) to enable the encrypted secret store."), nil
+			"This deployment doesn't have an encrypted secret store connected up, so secret_set can't write anything. Start dzd with --master-key (or $DAZYFLOW_MASTER_KEY) to enable the encrypted secret store."), nil
 	}
 	if err := write(ctx, job.Tenant, name, value); err != nil {
 		return params.ErrDetails(job, "write_failed",

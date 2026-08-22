@@ -22,7 +22,7 @@ func init() {
 			Label:       "Location",
 			Subtitle:    "Place → map coordinate",
 			Summary:     "Pick a point on a map, or look up a place, and emit its coordinate.",
-			Description: "Choose a location and emit its Coordinate (\"lat,lon\") for a Weather lookup. Drop a pin on the OpenStreetMap map right on the card (search, click, or drag). Or give it a Place — a city or address — typed in or wired from another step (a form field, a message): when a Place is set it's geocoded and OVERRIDES the map pin. So the map is the default, and the Place input wins when present. Uses OpenStreetMap — no account or key.",
+			Description: "Choose a location and emit its Coordinate (\"lat,lon\") for a Weather lookup. Drop a pin on the OpenStreetMap map right on the card (search, click, or drag). Or give it a Place — a city or address — typed in or connected from another step (a form field, a message): when a Place is set it's geocoded and OVERRIDES the map pin. So the map is the default, and the Place input wins when present. Uses OpenStreetMap — no account or key.",
 			Integration: "OpenStreetMap",
 			Category:    "network",
 			Icon:        "map-pin",
@@ -38,7 +38,7 @@ func init() {
 				{
 					Title:  "Look up a place instead",
 					Params: json.RawMessage(`{"place":"Paris, France"}`),
-					Notes:  "When Place is set (typed here or wired into the Place input) it's geocoded and overrides the map pin.",
+					Notes:  "When Place is set (typed here or connected into the Place input) it's geocoded and overrides the map pin.",
 				},
 			},
 			// Optional per-tenant geocoding backend. All fields optional —

@@ -23,7 +23,7 @@ func init() {
 			Label:       "46elks",
 			Subtitle:    "Send SMS",
 			Summary:     "Send an SMS text message via 46elks.",
-			Description: "Send an SMS via 46elks. The recipient ('To') and message ('Message') can be typed on the step or wired in from upstream (the matching input port overrides the param). 'From' is either one of your 46elks numbers (E.164 like +46700000000) or an alphanumeric sender name (up to 11 characters, e.g. \"Acme\" — must contain a letter, and recipients can't reply to it). Connect your 46elks account once on the Apps page. Set 'Dry run' to validate without sending (or being billed).",
+			Description: "Send an SMS via 46elks. The recipient ('To') and message ('Message') can be typed on the step or connected from an earlier step (the matching input port overrides the param). 'From' is either one of your 46elks numbers (E.164 like +46700000000) or an alphanumeric sender name (up to 11 characters, e.g. \"Acme\" — must contain a letter, and recipients can't reply to it). Connect your 46elks account once on the Apps page. Set 'Dry run' to validate without sending (or being billed).",
 			Integration: "46elks",
 			Category:    "network",
 			Icon:        "message-square",
@@ -32,7 +32,7 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"46elks", "elks", "sms", "text", "message", "notify", "sweden", "nordic"},
 			Examples: []core.ParamsExample{
-				{Title: "Alert from a sender name", Params: json.RawMessage(`{"to":"+46700000000","from":"Acme","message":"Your order has shipped."}`), Notes: "Wire a trigger's phone/message outputs into the 'To'/'Message' pins instead of typing them."},
+				{Title: "Alert from a sender name", Params: json.RawMessage(`{"to":"+46700000000","from":"Acme","message":"Your order has shipped."}`), Notes: "Connect a trigger's phone/message outputs into the 'To'/'Message' pins instead of typing them."},
 				{Title: "Reply-able, from a number", Params: json.RawMessage(`{"to":"+46700000000","from":"+46700000001","message":"Reply YES to confirm."}`), Notes: "Use one of your 46elks numbers as 'From' so the recipient can reply."},
 			},
 			// A per-tenant service connection: username + password entered once
@@ -85,14 +85,14 @@ func executeSendSMS(ctx context.Context, job core.Job, _ chan<- core.Progress) (
 		return params.Err(job, "bad_input", "'To' input must be text"), nil
 	}
 	if strings.TrimSpace(to) == "" {
-		return params.Err(job, "bad_param", "'to' is required — set it or wire the 'To' input"), nil
+		return params.Err(job, "bad_param", "'to' is required — set it or connect the 'To' input"), nil
 	}
 	message, ok := params.TextInputOr(job, "message", params.StringDefault(job.Params, "message", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'Message' input must be text"), nil
 	}
 	if strings.TrimSpace(message) == "" {
-		return params.Err(job, "bad_param", "'message' is required — set it or wire the 'Message' input"), nil
+		return params.Err(job, "bad_param", "'message' is required — set it or connect the 'Message' input"), nil
 	}
 	from := strings.TrimSpace(params.StringDefault(job.Params, "from", ""))
 	if from == "" {

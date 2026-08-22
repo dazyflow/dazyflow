@@ -25,7 +25,7 @@ func init() {
 			Label:       "Gmail",
 			Subtitle:    "Search emails",
 			Summary:     "Find emails in the connected mailbox, using the same search you'd type in Gmail.",
-			Description: "Find emails in the connected mailbox. The search works exactly like Gmail's own search box (e.g. 'from:boss@company.com is:unread' or 'newer_than:1d'). Each match comes out as a real email — date, sender, subject and body — ready to log to a sheet, loop over with For each, or wire into Gmail · Read email to take the newest one.",
+			Description: "Find emails in the connected mailbox. The search works exactly like Gmail's own search box (e.g. 'from:boss@company.com is:unread' or 'newer_than:1d'). Each match comes out as a real email — date, sender, subject and body — ready to log to a sheet, loop over with For each, or connect into Gmail · Read email to take the newest one.",
 			Integration: "Gmail",
 			Category:    "network",
 			Icon:        "search",

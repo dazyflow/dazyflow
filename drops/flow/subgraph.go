@@ -23,8 +23,8 @@ func init() {
 			Category:    "flow_control",
 			Provider:    "internal",
 			Tags:        []string{"compose", "reuse", "subgraph", "nested"},
-			Description: "Run another graph (by ID, in the same workspace) as a single step. Inputs on this step are seeded onto specific child steps via input_map; specific child step outputs become this step's outputs via output_map. The worker submits the child asynchronously; the parent is parked until the child terminates.",
-			Summary:     "Invoke another graph as a reusable step, seeding its inputs and projecting selected child outputs back up.",
+			Description: "Run another flow (by ID, in the same workspace) as a single step. Inputs on this step are seeded onto specific child steps via input_map; specific child step outputs become this step's outputs via output_map. The worker submits the child asynchronously; the parent is parked until the child terminates.",
+			Summary:     "Invoke another flow as a reusable step, seeding its inputs and projecting selected child outputs back up.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Call a shared customer-lookup subgraph",

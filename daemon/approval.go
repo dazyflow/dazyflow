@@ -214,6 +214,11 @@ func (s *Service) Approve(
 	}
 	disp := NewDispatcher(s.Jobs, s.bus(), s.Engine, log.New(log.Writer(), "approve: ", log.LstdFlags))
 	disp.AdvanceAfterCompletion(ctx, g, graphRunID, nodeID, core.JobStatusSucceeded, nil)
+	// Close the loop with the same people who were asked. After the resume is
+	// committed and dispatched, so the mail can't describe a decision that
+	// then failed to apply — and best-effort, so a dead mailer never turns a
+	// successful approval into an error the approver sees.
+	s.NotifyApprovalDecided(ctx, g, graphRunID, nodeID, decision)
 	return nil
 }
 
@@ -226,6 +231,13 @@ type ApprovalListener struct {
 	svc    *Service
 	signer *HMACApprovalSigner
 	logger *log.Logger
+
+	// Audit, when set, records who decided. The authenticated inbox path
+	// audits through the gateway's principal; this path has no session, so
+	// without its own write the link-based decisions — the ones taken from an
+	// email, by whoever holds the URL — were the only approvals absent from
+	// the trail. They are also the ones most worth having in it.
+	Audit core.AuditLog
 }
 
 func NewApprovalListener(svc *Service, signer *HMACApprovalSigner) *ApprovalListener {
@@ -233,6 +245,36 @@ func NewApprovalListener(svc *Service, signer *HMACApprovalSigner) *ApprovalList
 		svc:    svc,
 		signer: signer,
 		logger: log.New(log.Writer(), "approve: ", log.LstdFlags),
+	}
+}
+
+// auditDecision records an HMAC-path decision. The tenant comes off the graph
+// record rather than a principal, and the actor is whatever the link carried:
+// self-declared, so it is stored with an explicit marker rather than passed
+// off as a verified identity.
+func (a *ApprovalListener) auditDecision(ctx context.Context, graphRunID, nodeID, decision, approver string) {
+	if a.Audit == nil {
+		return
+	}
+	tenant := ""
+	if rec, err := a.svc.Jobs.Get(ctx, graphRunID); err == nil {
+		tenant = rec.Tenant
+	}
+	actor := strings.TrimSpace(approver)
+	if actor == "" {
+		actor = "(unidentified link holder)"
+	} else {
+		actor += " (self-declared, via approval link)"
+	}
+	if err := a.Audit.Append(ctx, core.AuditEvent{
+		Time:   time.Now(),
+		Tenant: tenant,
+		Actor:  sanitizeAuditField(actor),
+		Action: "approval",
+		Target: sanitizeAuditField(graphRunID + "/" + nodeID),
+		Detail: sanitizeAuditField(decision),
+	}); err != nil {
+		a.logger.Printf("audit append (approval %s/%s): %v", graphRunID, nodeID, err)
 	}
 }
 
@@ -301,6 +343,7 @@ func (a *ApprovalListener) handle(rw http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	a.auditDecision(r.Context(), graphRunID, nodeID, decision, approver)
 	a.logger.Printf("resumed %s/%s decision=%s approver=%s", graphRunID, nodeID, decision, approver)
 	rw.Header().Set("Content-Type", "application/json")
 	rw.WriteHeader(http.StatusOK)

@@ -23,7 +23,7 @@ func init() {
 			Label:       "Stripe",
 			Subtitle:    "Cancel subscription",
 			Summary:     "Cancel a Stripe subscription — at period end by default, so the customer keeps what they paid for.",
-			Description: "Cancel a subscription by its sub_… id. By default it stays active until the current billing period ends (the customer keeps what they paid for); set 'When to cancel' to Immediately to cancel right now. Wire the id in from List subscriptions ('first_id') or a support form, and put an Approval step before this one for the classic 'approve in Slack → cancel' flow. 'Ends at' comes out as a date for the confirmation message.",
+			Description: "Cancel a subscription by its sub_… id. By default it stays active until the current billing period ends (the customer keeps what they paid for); set 'When to cancel' to Immediately to cancel right now. Connect the id in from List subscriptions ('first_id') or a support form, and put an Approval step before this one for the classic 'approve in Slack → cancel' flow. 'Ends at' comes out as a date for the confirmation message.",
 			Integration: "Stripe",
 			Category:    "network",
 			Icon:        "credit-card",
@@ -32,7 +32,7 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"stripe", "subscription", "cancel", "billing", "support"},
 			Examples: []core.ParamsExample{
-				{Title: "Cancel at period end (default)", Params: json.RawMessage(`{"subscription":"sub_1MowQVLkdIwHu7ixeRlqHVzs"}`), Notes: "Wire the id into the 'Subscription' input from List subscriptions instead of typing it."},
+				{Title: "Cancel at period end (default)", Params: json.RawMessage(`{"subscription":"sub_1MowQVLkdIwHu7ixeRlqHVzs"}`), Notes: "Connect the id into the 'Subscription' input from List subscriptions instead of typing it."},
 				{Title: "Cancel immediately", Params: json.RawMessage(`{"subscription":"sub_1MowQVLkdIwHu7ixeRlqHVzs","cancel_timing":"immediately"}`)},
 			},
 			ConnectionFields: stripeConnectionFields(),
@@ -74,7 +74,7 @@ func executeCancelSubscription(ctx context.Context, job core.Job, _ chan<- core.
 		return params.Err(job, "bad_input", "'Subscription' input must be text (a sub_… id)"), nil
 	}
 	if sub == "" {
-		return params.Err(job, "bad_param", "'subscription' is required — set it or wire the 'Subscription' input"), nil
+		return params.Err(job, "bad_param", "'subscription' is required — set it or connect the 'Subscription' input"), nil
 	}
 
 	// Two API shapes for one intent: at-period-end is an UPDATE

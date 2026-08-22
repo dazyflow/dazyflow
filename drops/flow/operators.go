@@ -34,8 +34,8 @@ import (
 var operandSchema = json.RawMessage(`{
 	"type":"object",
 	"properties":{
-		"A":{"type":"string","title":"A","description":"Literal value for A when the A input isn't wired. Parsed as JSON when possible (e.g. 200, true), otherwise treated as text."},
-		"B":{"type":"string","title":"B","description":"Literal value for B when the B input isn't wired. Parsed as JSON when possible (e.g. 1000)."}
+		"A":{"type":"string","title":"A","description":"Literal value for A when the A input isn't connected. Parsed as JSON when possible (e.g. 200, true), otherwise treated as text."},
+		"B":{"type":"string","title":"B","description":"Literal value for B when the B input isn't connected. Parsed as JSON when possible (e.g. 1000)."}
 	}
 }`)
 
@@ -102,8 +102,8 @@ func init() {
 	registerOperator(operatorSpec{
 		id: "eq", label: "A = B", icon: "equal", op: "equals",
 		summary: "Emit true when A equals B, else false.",
-		desc:    "Emit true on the Yes/No output when A equals B, otherwise false. The atomic equality step — wire A and B, or type literal defaults. Pair the Yes/No output with Branch to route. Reach for Compare instead when you need richer tests (contains, one_of, ranges).",
-		example: core.ParamsExample{Title: "Status equals 200", Params: json.RawMessage(`{"B":200}`), Notes: "Wire the status into A; B is the literal 200. It's true when A == 200."},
+		desc:    "Emit true on the Yes/No output when A equals B, otherwise false. The atomic equality step — connect A and B, or type literal defaults. Pair the Yes/No output with Branch to route. Reach for Compare instead when you need richer tests (contains, one_of, ranges).",
+		example: core.ParamsExample{Title: "Status equals 200", Params: json.RawMessage(`{"B":200}`), Notes: "Connect the status into A; B is the literal 200. It's true when A == 200."},
 	})
 	registerOperator(operatorSpec{
 		id: "neq", label: "A ≠ B", icon: "equal-not", op: "not_equals",
@@ -115,7 +115,7 @@ func init() {
 		id: "gt", label: "A > B", icon: "chevron-right", op: "greater_than", numeric: true,
 		summary: "Emit true when A is greater than B, else false.",
 		desc:    "Emit true on the Yes/No output when numeric A is strictly greater than B, otherwise false. Both operands must be numbers. Pair the Yes/No output with Branch to route.",
-		example: core.ParamsExample{Title: "Over a threshold", Params: json.RawMessage(`{"B":1000}`), Notes: "Wire the number into A; B is the literal 1000. It's true when A > 1000."},
+		example: core.ParamsExample{Title: "Over a threshold", Params: json.RawMessage(`{"B":1000}`), Notes: "Connect the number into A; B is the literal 1000. It's true when A > 1000."},
 	})
 	registerOperator(operatorSpec{
 		id: "gte", label: "A ≥ B", icon: "chevrons-right", op: "greater_or_equal", numeric: true,

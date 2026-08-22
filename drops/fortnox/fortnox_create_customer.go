@@ -21,7 +21,7 @@ func init() {
 			Label:       "Fortnox",
 			Subtitle:    "Create customer",
 			Summary:     "Create a customer in Fortnox — the entry point of most billing automations (form signup → customer → invoice).",
-			Description: "Create a customer in your connected Fortnox account. Name (required) and Email can be typed on the step or wired in from upstream (the matching input port overrides the param). The new customer's number comes out on the 'Customer number' output, ready to wire into 'Create invoice'.\n\nFortnox has no idempotency key, so this step does not auto-retry — a retried create would make a duplicate customer.",
+			Description: "Create a customer in your connected Fortnox account. Name (required) and Email can be typed on the step or connected from an earlier step (the matching input port overrides the param). The new customer's number comes out on the 'Customer number' output, ready to connect into 'Create invoice'.\n\nFortnox has no idempotency key, so this step does not auto-retry — a retried create would make a duplicate customer.",
 			Integration: "Fortnox",
 			Category:    "network",
 			Icon:        "user-plus",
@@ -30,7 +30,7 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"fortnox", "customer", "accounting", "invoicing", "sweden"},
 			Examples: []core.ParamsExample{
-				{Title: "Customer from a form signup", Params: json.RawMessage(`{"name":"Acme AB","email":"faktura@acme.se"}`), Notes: "Wire the form's name/email outputs into the matching pins instead of typing them."},
+				{Title: "Customer from a form signup", Params: json.RawMessage(`{"name":"Acme AB","email":"faktura@acme.se"}`), Notes: "Connect the form's name/email outputs into the matching pins instead of typing them."},
 			},
 			RequiresConnections: []core.ConnectionRequirement{
 				{Kind: "oauth", Name: "fortnox", Note: "Connect a Fortnox account (customer scope) under Apps."},
@@ -73,7 +73,7 @@ func executeCreateCustomer(ctx context.Context, job core.Job, _ chan<- core.Prog
 		return params.Err(job, "bad_input", "'Name' input must be text"), nil
 	}
 	if name == "" {
-		return params.Err(job, "bad_param", "'name' is required — set it or wire the 'Name' input"), nil
+		return params.Err(job, "bad_param", "'name' is required — set it or connect the 'Name' input"), nil
 	}
 	email, ok := params.TextInputOr(job, "email", params.StringDefault(job.Params, "email", ""))
 	if !ok {

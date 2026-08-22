@@ -147,7 +147,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   gmail: {
     name: "Gmail",
     description:
-      "Send email, search your inbox, and read full message bodies. The classic use case: react to incoming emails as they arrive — pair the search drop with a polling trigger and the flow remembers which messages it has already processed, so reruns don't repeat work.",
+      "Send email, search your inbox, and read full message bodies. The classic use case: react to incoming emails as they arrive — pair the search step with a polling trigger and the flow remembers which messages it has already processed, so reruns don't repeat work.",
     technical_notes:
       "Gmail API + Google OAuth. access_type=offline + prompt=consent ride along on authorize so refresh_token persists across runs. Cursor dedupe lives in the encrypted secret store via secret_set + ${secret.…} template substitution; survives daemon restarts.",
     docs_url: "https://developers.google.com/gmail/api/guides",
@@ -158,14 +158,14 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Read rows from a spreadsheet, and append rows to it. Use it to keep a Sheet in sync with a database, log incoming events for non-technical teammates to inspect, or pull a reference table into other flows.",
     technical_notes:
-      "Shares the 'google' OAuth client with Gmail — one consent covers both. The rows + headers shape is interchangeable with the Excel and database drops, so a Sheet can feed straight into a Postgres upsert without intermediate transforms.",
+      "Shares the 'google' OAuth client with Gmail — one consent covers both. The rows + headers shape is interchangeable with the Excel and database steps, so a Sheet can feed straight into a Postgres upsert without intermediate transforms.",
     docs_url: "https://developers.google.com/sheets/api",
     brand_logo: "/brands/sheets.svg",
   },
   "google-forms": {
     name: "Google Forms",
     description:
-      "Fire a flow when a Google Form gets new responses, each keyed by its question title — wire it straight into a Sheets append to log submissions, or into any drop that takes records.",
+      "Fire a flow when a Google Form gets new responses, each keyed by its question title — connect it straight into a Sheets append to log submissions, or into any step that takes records.",
     technical_notes:
       "Shares the 'google' OAuth client with Gmail and Sheets; incremental authorization means connecting Forms only requests the forms.* scopes (responses + body, read-only), without re-consenting Gmail/Sheets. The trigger polls forms.responses.list against a per-flow cursor in the encrypted secret store.",
     docs_url: "https://developers.google.com/forms/api",
@@ -185,7 +185,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "List, download, and upload files in Google Drive. Fetch a file to email as an attachment, archive an incoming document, pull a Doc or Sheet out as a PDF, or drop generated files back into a folder for your team.",
     technical_notes:
-      "Shares the 'google' OAuth client with Gmail, Sheets and Forms — one consent covers them all, and connecting Drive only adds the drive scopes. Google-editor docs (Docs/Sheets/Slides) have no raw bytes, so the Download drop exports them to a concrete format (PDF by default). Downloads land in the run's scratch space.",
+      "Shares the 'google' OAuth client with Gmail, Sheets and Forms — one consent covers them all, and connecting Drive only adds the drive scopes. Google-editor docs (Docs/Sheets/Slides) have no raw bytes, so the Download step exports them to a concrete format (PDF by default). Downloads land in the run's scratch space.",
     docs_url: "https://developers.google.com/drive/api",
     brand_logo: "/brands/google-drive.svg",
   },
@@ -203,7 +203,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Create pages, and query databases. Mirror Notion content into a database for analytics, react to new entries by polling, or write structured data from a flow into a project tracker without anyone leaving Notion.",
     technical_notes:
-      "OAuth + Notion API. Notion-Version pinned to 2022-06-28 so behaviour is stable across deployments. The 'fire on new database row' pattern composes from poll_trigger + notion_query_database + secret_set — same cursor-dedupe shape Gmail uses; no dedicated trigger drop needed.",
+      "OAuth + Notion API. Notion-Version pinned to 2022-06-28 so behaviour is stable across deployments. The 'fire on new database row' pattern composes from poll_trigger + notion_query_database + secret_set — same cursor-dedupe shape Gmail uses; no dedicated trigger step needed.",
     docs_url: "https://developers.notion.com/reference/intro",
     brand_logo: "/brands/notion.svg",
   },
@@ -212,7 +212,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Manage customers and invoices in Fortnox, Sweden's leading accounting platform for small businesses. Create a customer from a signup, raise an invoice for them, and pick who to bill from a searchable list of your existing customers. Poll invoices by status to build a flow that reacts to newly paid invoices — a thank-you email, a fulfilment step — or chases overdue ones.",
     technical_notes:
-      "Fortnox OAuth 2.0 (authorize at apps.fortnox.se/oauth-v1) with per-resource scopes — customer, invoice and companyinformation cover the shipped drops. The token endpoint uses client_secret_basic (credentials in an HTTP Basic header), and refresh tokens rotate on every refresh; the daemon persists the rotated token and refreshes on expiry, so long-running flows keep working — but an account idle past Fortnox's refresh-token window (~31 days) must reconnect. Request and response bodies use Fortnox's singular PascalCase envelope ({\"Customer\":…}, {\"Invoice\":…}). Fortnox has no idempotency key, so the create drops don't auto-retry (a retry would duplicate); and no webhooks, so 'fire on paid invoice' composes as Schedule → List invoices (filter=fullypaid) → For each → dedupe on DocumentNumber.",
+      "Fortnox OAuth 2.0 (authorize at apps.fortnox.se/oauth-v1) with per-resource scopes — customer, invoice and companyinformation cover the shipped steps. The token endpoint uses client_secret_basic (credentials in an HTTP Basic header), and refresh tokens rotate on every refresh; the daemon persists the rotated token and refreshes on expiry, so long-running flows keep working — but an account idle past Fortnox's refresh-token window (~31 days) must reconnect. Request and response bodies use Fortnox's singular PascalCase envelope ({\"Customer\":…}, {\"Invoice\":…}). Fortnox has no idempotency key, so the create steps don't auto-retry (a retry would duplicate); and no webhooks, so 'fire on paid invoice' composes as Schedule → List invoices (filter=fullypaid) → For each → dedupe on DocumentNumber.",
     docs_url: "https://www.fortnox.se/developer",
     brand_logo: "/brands/fortnox.svg",
   },
@@ -221,7 +221,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "React to payments the moment they happen — succeeded, failed, or a subscription canceled — and act on them: create a customer, email an invoice, hand out a payment link, or issue a refund. Build a dunning flow that chases a failed charge, a welcome sequence on a customer's first payment, or an instant alert when someone churns.",
     technical_notes:
-      "Actions authenticate with your Stripe secret key, entered once as the Stripe connection on this page (stored encrypted as conn.stripe.api_key) and injected at run time — no key on the node or in the graph. The payment, payment-failed, and subscription-canceled triggers are Stripe webhooks: point an endpoint at /api/v1/events/stripe/<tenant>, subscribe it to the matching events (payment_intent.succeeded, payment_intent.payment_failed, customer.subscription.deleted), and save that endpoint's signing secret (whsec_…) as STRIPE_WEBHOOK_SECRET — every delivery's Stripe-Signature is verified against it. Prefer polling to webhooks? Compose Schedule → List events instead.",
+      "Actions authenticate with your Stripe secret key, entered once as the Stripe connection on this page (stored encrypted as conn.stripe.api_key) and injected at run time — no key on the step or in the flow. The payment, payment-failed, and subscription-canceled triggers are Stripe webhooks: point an endpoint at /api/v1/events/stripe/<tenant>, subscribe it to the matching events (payment_intent.succeeded, payment_intent.payment_failed, customer.subscription.deleted), and save that endpoint's signing secret (whsec_…) as STRIPE_WEBHOOK_SECRET — every delivery's Stripe-Signature is verified against it. Prefer polling to webhooks? Compose Schedule → List events instead.",
     docs_url: "https://docs.stripe.com/api",
     brand_logo: "/brands/stripe.svg",
   },
@@ -230,43 +230,43 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Handle your Klarna orders straight from a flow. Klarna is the Nordic 'buy now, pay later' checkout, and this is the back-office side of it: look an order up, take the payment when the goods ship (in full or in part), and refund a return. Pair the refund with an approval step for the classic 'nod in Slack, then refund' flow, or check an order's status before you act on it.",
     technical_notes:
-      "Authenticated with your Klarna API username and password (HTTP Basic), entered once as the Klarna connection on this page (stored encrypted as conn.klarna.*) and injected at run time — no credentials on the node or in the graph. Pick your data region and environment as part of the connection (EU / North America / Oceania × production or playground), which selects the API host — it defaults to the EU playground so a half-configured connection can't move real money. Backed by Klarna's Order Management API (v1): capture and refund POST JSON to /ordermanagement/v1/orders/{id}/captures|refunds and read the new id from the Capture-ID / Refund-ID (or Location) header. Leave the amount empty to act on the whole outstanding amount (a GET fills it in); amounts are in the currency's smallest unit (öre/cents). Klarna has no reliable idempotency key here, so capture and refund never auto-retry and the engine dedupes recovered runs — a repeat would double-charge or double-refund. No webhooks, so 'fire on new order' composes as Schedule → Get order → branch on status.",
+      "Authenticated with your Klarna API username and password (HTTP Basic), entered once as the Klarna connection on this page (stored encrypted as conn.klarna.*) and injected at run time — no credentials on the step or in the flow. Pick your data region and environment as part of the connection (EU / North America / Oceania × production or playground), which selects the API host — it defaults to the EU playground so a half-configured connection can't move real money. Backed by Klarna's Order Management API (v1): capture and refund POST JSON to /ordermanagement/v1/orders/{id}/captures|refunds and read the new id from the Capture-ID / Refund-ID (or Location) header. Leave the amount empty to act on the whole outstanding amount (a GET fills it in); amounts are in the currency's smallest unit (öre/cents). Klarna has no reliable idempotency key here, so capture and refund never auto-retry and the engine dedupes recovered runs — a repeat would double-charge or double-refund. No webhooks, so 'fire on new order' composes as Schedule → Get order → branch on status.",
     docs_url: "https://docs.klarna.com/api/ordermanagement/",
     brand_logo: "/brands/klarna.svg",
   },
   openweather: {
     name: "OpenWeather",
     description:
-      "Read the weather for any point on the map. Give a drop a coordinate — typed in, or wired from a geocode, a form field, or a device's GPS — and get the current conditions (a one-line summary, the temperature, and a Clear/Rain/Snow word you can branch on) or a 5-day forecast. Build a 'text me if it'll rain tomorrow' flow, a morning briefing, or a frost alert for the greenhouse.",
+      "Read the weather for any point on the map. Give a step a coordinate — typed in, or connected from a geocode, a form field, or a device's GPS — and get the current conditions (a one-line summary, the temperature, and a Clear/Rain/Snow word you can branch on) or a 5-day forecast. Build a 'text me if it'll rain tomorrow' flow, a morning briefing, or a frost alert for the greenhouse.",
     technical_notes:
-      "Backed by OpenWeather's free endpoints — Current Weather (GET data/2.5/weather) and the 5-day/3-hour Forecast (GET data/2.5/forecast), which the forecast drop aggregates into per-day min/max + conditions. Works with any standard API key on the free plan — no paid 'One Call by Call' subscription needed. Authenticates with your API key (the appid), stored once on the integration page as a per-tenant connection and injected at run time — no key on the node. Units accept metric (°C, m/s), imperial (°F, mph), or standard (K, m/s).",
+      "Backed by OpenWeather's free endpoints — Current Weather (GET data/2.5/weather) and the 5-day/3-hour Forecast (GET data/2.5/forecast), which the forecast step aggregates into per-day min/max + conditions. Works with any standard API key on the free plan — no paid 'One Call by Call' subscription needed. Authenticates with your API key (the appid), stored once on the integration page as a per-tenant connection and injected at run time — no key on the step. Units accept metric (°C, m/s), imperial (°F, mph), or standard (K, m/s).",
     docs_url: "https://openweathermap.org/api",
     brand_logo: "/brands/openweather.svg",
   },
   openstreetmap: {
     name: "OpenStreetMap",
     description:
-      "Work with places and coordinates. The Location drop lets you pick a point on a map (or look up a city/address) and emit its coordinate; Reverse geocode turns a coordinate back into a place name. Pairs naturally with OpenWeather — pick or look up a spot, then wire the coordinate into a weather lookup.",
+      "Work with places and coordinates. The Location step lets you pick a point on a map (or look up a city/address) and emit its coordinate; Reverse geocode turns a coordinate back into a place name. Pairs naturally with OpenWeather — pick or look up a spot, then connect the coordinate into a weather lookup.",
     technical_notes:
-      "Both drops show an OpenStreetMap map picker on the card (toggle it off with 'Show map on card' for a lean node). Location geocodes a typed or wired Place; Reverse geocode reverse-geocodes the picked or wired coordinate. Geocoding hits OpenStreetMap's Nominatim service at run time through the SSRF-guarded HTTP client with an identifying User-Agent — no account or key. Nominatim's public service is rate-limited (~1 request/second); for heavier use, self-host and set DAZYFLOW_NOMINATIM_URL. © OpenStreetMap contributors.",
+      "Both steps show an OpenStreetMap map picker on the card (toggle it off with 'Show map on card' for a lean step). Location geocodes a typed or connected Place; Reverse geocode reverse-geocodes the picked or connected coordinate. Geocoding hits OpenStreetMap's Nominatim service at run time through the SSRF-guarded HTTP client with an identifying User-Agent — no account or key. Nominatim's public service is rate-limited (~1 request/second); for heavier use, self-host and set DAZYFLOW_NOMINATIM_URL. © OpenStreetMap contributors.",
     docs_url: "https://nominatim.org/release-docs/latest/api/Overview/",
     brand_logo: "/brands/openstreetmap.svg",
   },
   "open-meteo": {
     name: "Open-Meteo",
     description:
-      "Read the weather for any point on the map — free for personal, non-commercial use with no account or API key. Give a drop a coordinate — typed in, or wired from a geocode, a form field, or a device's GPS — and get the current conditions (a one-line summary, the temperature, and a Clear/Rain/Snow word you can branch on) or a multi-day forecast. Build a 'text me if it'll rain tomorrow' flow, a morning briefing, or a frost alert for the greenhouse. For commercial use, add an API key and it switches to Open-Meteo's paid endpoint.",
+      "Read the weather for any point on the map — free for personal, non-commercial use with no account or API key. Give a step a coordinate — typed in, or connected from a geocode, a form field, or a device's GPS — and get the current conditions (a one-line summary, the temperature, and a Clear/Rain/Snow word you can branch on) or a multi-day forecast. Build a 'text me if it'll rain tomorrow' flow, a morning briefing, or a frost alert for the greenhouse. For commercial use, add an API key and it switches to Open-Meteo's paid endpoint.",
     technical_notes:
-      "Backed by Open-Meteo's Forecast API (GET /v1/forecast) — current conditions select the current= fields, and the forecast drop reads the daily= column arrays (weather_code, temperature_2m_max/min, precipitation_probability_max) with forecast_days and timezone=auto for local days. weather_code values are WMO codes mapped to descriptions and a branchable class word. The free non-commercial host (api.open-meteo.com) needs no key; supplying the optional per-tenant API key routes requests to the commercial host (customer-api.open-meteo.com) with an apikey param. Deciding whether your use is commercial — and providing a key when it is — is your responsibility. Units accept metric (°C, m/s) or imperial (°F, mph).",
+      "Backed by Open-Meteo's Forecast API (GET /v1/forecast) — current conditions select the current= fields, and the forecast step reads the daily= column arrays (weather_code, temperature_2m_max/min, precipitation_probability_max) with forecast_days and timezone=auto for local days. weather_code values are WMO codes mapped to descriptions and a branchable class word. The free non-commercial host (api.open-meteo.com) needs no key; supplying the optional per-tenant API key routes requests to the commercial host (customer-api.open-meteo.com) with an apikey param. Deciding whether your use is commercial — and providing a key when it is — is your responsibility. Units accept metric (°C, m/s) or imperial (°F, mph).",
     docs_url: "https://open-meteo.com/en/docs",
     brand_logo: "/brands/openmeteo.svg",
   },
   smhi: {
     name: "SMHI",
     description:
-      "Free Nordic weather from Sweden's meteorological institute — no account or API key. Give the SMHI Weather drops a coordinate (pick it with a Location drop) and get the current conditions or a multi-day forecast for any point in the Nordic region and the surrounding area, in metric units.",
+      "Free Nordic weather from Sweden's meteorological institute — no account or API key. Give the SMHI Weather steps a coordinate (pick it with a Location step) and get the current conditions or a multi-day forecast for any point in the Nordic region and the surrounding area, in metric units.",
     technical_notes:
-      "Backed by SMHI's Open Data forecast API (snow1g v1 point endpoint: GET …/geotype/point/lon/{lon}/lat/{lat}/data.json?parameters=…) — key-less. Always metric (°C, m/s); the symbol_code values (Wsymb2 1–27) map to descriptions, and the forecast drop aggregates the sub-daily steps into per-day min/max + conditions (UTC days). Coverage is SMHI's model domain — a point outside it returns 'out of bounds'.",
+      "Backed by SMHI's Open Data forecast API (snow1g v1 point endpoint: GET …/geotype/point/lon/{lon}/lat/{lat}/data.json?parameters=…) — key-less. Always metric (°C, m/s); the symbol_code values (Wsymb2 1–27) map to descriptions, and the forecast step aggregates the sub-daily readings into per-day min/max + conditions (UTC days). Coverage is SMHI's model domain — a point outside it returns 'out of bounds'.",
     docs_url: "https://opendata.smhi.se/metfcst/",
     brand_logo: "/brands/smhi.svg",
   },
@@ -278,9 +278,9 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   postgres: {
     name: "Postgres",
     description:
-      "Insert, upsert, and query rows against a Postgres database. Pair it with the Sheets, Excel, or webhook drops to keep your database in sync with whatever source of truth your team uses.",
+      "Insert, upsert, and query rows against a Postgres database. Pair it with the Sheets, Excel, or webhook steps to keep your database in sync with whatever source of truth your team uses.",
     technical_notes:
-      "Per-(tenant, DSN) pgxpool connection registry with lazy idle eviction. Pass the DSN via ${secret.postgres_dsn} from the encrypted secret store rather than embedding it in graph JSON; the secret_set drop can rotate it without touching graphs.",
+      "Per-(tenant, DSN) pgxpool connection registry with lazy idle eviction. Pass the DSN via ${secret.postgres_dsn} from the encrypted secret store rather than embedding it in the flow's JSON; the secret_set step can rotate it without touching flows.",
     docs_url: "https://www.postgresql.org/docs/current/sql-commands.html",
     brand_logo: "/brands/postgres.svg",
   },
@@ -289,7 +289,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Insert, upsert, and query rows against MySQL or MariaDB. Works the same way as Postgres — keep a database in sync with a spreadsheet, load a cleaned-up file into it, or pull a reference table into your flows.",
     technical_notes:
-      "Shares the rows + headers contract with the Sheets, Excel and Postgres drops, so the same ETL flow can target MySQL with one node change. *sql.DB connection pool, lazy idle eviction. The upsert drop reports separate insert vs update counts via ROW_COUNT() semantics, so downstream notifications can say 'X new + Y updated' instead of a single total.",
+      "Shares the rows + headers contract with the Sheets, Excel and Postgres steps, so the same ETL flow can target MySQL with one step change. *sql.DB connection pool, lazy idle eviction. The upsert step reports separate insert vs update counts via ROW_COUNT() semantics, so later notifications can say 'X new + Y updated' instead of a single total.",
     docs_url: "https://dev.mysql.com/doc/",
     brand_logo: "/brands/mysql.svg",
   },
@@ -307,7 +307,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Read .xlsx workbooks into rows, and write rows back out as a fresh workbook. Useful when someone drops a file into the workspace and you want to clean it, join it against a reference table, or load it into a real database.",
     technical_notes:
-      "Backed by the excelize library. The rows + headers contract matches Sheets and the database drops, so an Excel file can feed straight into a Postgres upsert with one map_rows between.",
+      "Backed by the excelize library. The rows + headers contract matches Sheets and the database steps, so an Excel file can feed straight into a Postgres upsert with one map_rows between.",
     brand_logo: "/brands/excel.svg",
   },
   email: {
@@ -315,12 +315,12 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Send email through an SMTP server you configure. Pick this when you've got a shared mailbox or a transactional provider with SMTP relay (SendGrid, SES, Postmark), and you'd rather configure a server than walk through OAuth.",
     technical_notes:
-      "The mail server — host, port, security (STARTTLS on 587 / implicit TLS on 465 / none), username, password and From address — is configured once here and injected into every Email drop at run time; the password is held in the encrypted secret store. Use 'Test connection' to confirm the server and login before saving.",
+      "The mail server — host, port, security (STARTTLS on 587 / implicit TLS on 465 / none), username, password and From address — is configured once here and injected into every Email step at run time; the password is held in the encrypted secret store. Use 'Test connection' to confirm the server and login before saving.",
   },
   ntfy: {
     name: "ntfy",
     description:
-      "Push notifications to your phone via ntfy.sh or a self-hosted ntfy server. Quick to wire up — no app to install, just subscribe to a topic — so it's a great fit for ops alerts that need to reach someone fast.",
+      "Push notifications to your phone via ntfy.sh or a self-hosted ntfy server. Quick to set up — no app to install, just subscribe to a topic — so it's a great fit for ops alerts that need to reach someone fast.",
     docs_url: "https://docs.ntfy.sh/",
   },
   nshift: {
@@ -328,7 +328,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Book parcel shipments with your carriers and get the tracking numbers back. nShift (formerly Unifaun/Consignor) sits in front of the carriers — PostNord, DHL, Bring, Schenker and the rest — so one connection covers all of them. The natural flow is: an order is marked shipped, book the consignment, then text or email the customer the tracking link. You can also look a shipment up again, or delete one you booked by mistake.",
     technical_notes:
-      "Authenticated with your nShift API key (Bearer), entered once as the nShift connection on this page (stored encrypted as conn.nshift.*) and injected at run time — no credential on the node or in the graph. The connection also picks the environment: it defaults to **integration**, nShift's sandbox, so a half-finished flow can't book a real, billable consignment; switch it to production when you're ready. Backed by the ExtAPI (POST /rs-extapi/v1/shipments and friends). The Shipment input is nShift's own shipment object — sender, receiver, parcels, service — usually built per order by an earlier step. Booking costs money and nShift has no idempotency key, so the create drop never auto-retries and the engine dedupes recovered runs; tracking numbers come out comma-separated on their own port.",
+      "Authenticated with your nShift API key (Bearer), entered once as the nShift connection on this page (stored encrypted as conn.nshift.*) and injected at run time — no credential on the step or in the flow. The connection also picks the environment: it defaults to **integration**, nShift's sandbox, so a half-finished flow can't book a real, billable consignment; switch it to production when you're ready. Backed by the ExtAPI (POST /rs-extapi/v1/shipments and friends). The Shipment input is nShift's own shipment object — sender, receiver, parcels, service — usually built per order by an earlier step. Booking costs money and nShift has no idempotency key, so the create step never auto-retries and the engine dedupes recovered runs; tracking numbers come out comma-separated on their own port.",
     docs_url: "https://docs.unifaun.com/",
     brand_logo: "/brands/nshift.svg",
   },
@@ -337,7 +337,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Look a company up by its organisation number and get back who they actually are — registered name, status, address and tax details. The everyday use is enriching a lead or an order: a form gives you an org number, this turns it into a real company record you can file in the CRM, or check the status of before you extend credit. If you only have a name, search first to find the org number, then enrich each match.",
     technical_notes:
-      "Authenticated with your Roaring Consumer Key and Secret, entered once as the Roaring connection on this page (stored encrypted as conn.roaring.*) and exchanged for an OAuth2 access token at run time — the token is cached until shortly before it expires, so a For-each over many companies doesn't re-authenticate per row. Backed by Roaring's company endpoints (GET /{country}/company/overview/{version}/{orgnr} and the company search). Defaults to Sweden ('se'); set 'country' for another Nordic market Roaring covers. Both drops are reads, so they retry safely.",
+      "Authenticated with your Roaring Consumer Key and Secret, entered once as the Roaring connection on this page (stored encrypted as conn.roaring.*) and exchanged for an OAuth2 access token at run time — the token is cached until shortly before it expires, so a For-each over many companies doesn't re-authenticate per row. Backed by Roaring's company endpoints (GET /{country}/company/overview/{version}/{orgnr} and the company search). Defaults to Sweden ('se'); set 'country' for another Nordic market Roaring covers. Both steps are reads, so they retry safely.",
     docs_url: "https://developers.roaring.io/",
     brand_logo: "/brands/roaring.svg",
   },
@@ -346,7 +346,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Send SMS text messages to any phone, straight from a flow. Reach for it when an alert needs to land in someone's pocket — an order-shipped or appointment reminder to a customer, a verification code, an on-call page, or a heads-up the moment a trigger fires.",
     technical_notes:
-      "Authenticated with your Twilio Account SID and Auth Token, entered once as the Twilio connection on this page (stored encrypted as conn.twilio.*) and injected at run time — no credentials on the node or in the graph. Sends via Twilio's Messages API; the 'From' must be one of your Twilio numbers in E.164 (+15551234567), or set a Messaging Service SID (MG…) instead.",
+      "Authenticated with your Twilio Account SID and Auth Token, entered once as the Twilio connection on this page (stored encrypted as conn.twilio.*) and injected at run time — no credentials on the step or in the flow. Sends via Twilio's Messages API; the 'From' must be one of your Twilio numbers in E.164 (+15551234567), or set a Messaging Service SID (MG…) instead.",
     docs_url: "https://www.twilio.com/docs/sms",
     brand_logo: "/brands/twilio.svg",
   },
@@ -355,7 +355,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Send SMS text messages straight from a flow via 46elks, a Swedish messaging provider popular across the Nordics. Send from an alphanumeric sender name (like \"Acme\") for one-way alerts — order updates, reminders, verification codes — or from one of your 46elks numbers when you want the recipient to be able to reply. A dry-run switch lets you validate a message without sending or being billed.",
     technical_notes:
-      "Authenticated with your 46elks API username and password (HTTP Basic), entered once as the 46elks connection on this page (stored encrypted as conn.46elks.*) and injected at run time — no credentials on the node or in the graph. Sends a form-encoded POST to 46elks' /a1/sms endpoint. 'From' is either E.164 (repliable) or an alphanumeric sender ID (max 11 chars, must contain a letter, no replies). 46elks has no idempotency key, so the drop never auto-retries and the engine dedupes recovered runs — a resend would double-bill.",
+      "Authenticated with your 46elks API username and password (HTTP Basic), entered once as the 46elks connection on this page (stored encrypted as conn.46elks.*) and injected at run time — no credentials on the step or in the flow. Sends a form-encoded POST to 46elks' /a1/sms endpoint. 'From' is either E.164 (repliable) or an alphanumeric sender ID (max 11 chars, must contain a letter, no replies). 46elks has no idempotency key, so the step never auto-retries and the engine dedupes recovered runs — a resend would double-bill.",
     docs_url: "https://46elks.com/docs",
     brand_logo: "/brands/46elks.svg",
   },
@@ -389,16 +389,16 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   http: {
     name: "HTTP",
     description:
-      "Make HTTP requests to any API. Use this for services that don't have a dedicated connector here yet — slot in the URL, set headers if you need auth, and the response body comes back as the node's output.",
+      "Make HTTP requests to any API. Use this for services that don't have a dedicated connector here yet — slot in the URL, set headers if you need auth, and the response body comes back as the step's output.",
     technical_notes:
       "SSRF protection blocks loopback, RFC1918, link-local (incl. AWS instance metadata at 169.254.169.254). Configurable body-size cap, status-code filter, and request timeout. JSON / text MIME detection on the response.",
   },
   claude: {
     name: "Claude",
     description:
-      "Run prompts through Claude, Anthropic's AI assistant. Useful for summarising upstream text, classifying inputs, generating responses, or any spot in your flow where you want a language model in the loop.",
+      "Run prompts through Claude, Anthropic's AI assistant. Useful for summarising text from an earlier step, classifying inputs, generating responses, or any spot in your flow where you want a language model in the loop.",
     technical_notes:
-      "Authenticated with the API key set on this connection — flows pick it up automatically, no key on the node. For local development without a key, the dzd --claude-cli flag routes through a local `claude -p` CLI plus an MCP server so flows can exercise the chat path against your already-logged-in CLI.",
+      "Authenticated with the API key set on this connection — flows pick it up automatically, no key on the step. For local development without a key, the dzd --claude-cli flag routes through a local `claude -p` CLI plus an MCP server so flows can exercise the chat path against your already-logged-in CLI.",
     docs_url: "https://docs.anthropic.com/",
   },
   chatgpt: {
@@ -406,13 +406,13 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Run prompts through ChatGPT, OpenAI's AI assistant. Use it the same way as Claude — summarise text, classify inputs, extract fields, or draft replies — wherever you'd rather use an OpenAI model.",
     technical_notes:
-      "OpenAI Chat Completions API, authenticated with the API key set on this connection — flows pick it up automatically, no key on the node. Structured drops (Extract fields, Classify) use OpenAI function tool-calls.",
+      "OpenAI Chat Completions API, authenticated with the API key set on this connection — flows pick it up automatically, no key on the step. Structured steps (Extract fields, Classify) use OpenAI function tool-calls.",
     docs_url: "https://platform.openai.com/docs",
   },
   git: {
     name: "Git",
     description:
-      "Clone repositories and check out branches inside your workspace. Reach for it when a flow needs to inspect source code, pull templates from a known repo, or stage files before another drop works on them.",
+      "Clone repositories and check out branches inside your workspace. Reach for it when a flow needs to inspect source code, pull templates from a known repo, or stage files before another step works on them.",
     technical_notes:
       "All operations stay confined to the workspace sandbox via path normalization — clones write into the sandbox root, never above. Read-only today; remote write operations aren't supported.",
   },
@@ -424,6 +424,6 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   "standard-library": {
     name: "Standard library",
     description:
-      "Built-in flow primitives that don't belong to any vendor: routing (branch, split_rows, route_rows), waiting (await_approval, sleep), file I/O (read, write), the transform family (map / sort / dedupe / join / group / compute), database drops (Postgres / MySQL / SQLite), and schedule triggers (cron, poll, webhook). The toolkit you reach for between the third-party integrations.",
+      "Built-in flow primitives that don't belong to any vendor: routing (branch, split_rows, route_rows), waiting (await_approval, sleep), file I/O (read, write), the transform family (map / sort / dedupe / join / group / compute), database steps (Postgres / MySQL / SQLite), and schedule triggers (cron, poll, webhook). The toolkit you reach for between the third-party integrations.",
   },
 };

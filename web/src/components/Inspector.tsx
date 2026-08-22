@@ -5,7 +5,8 @@ import { useEffect, useState } from "react";
 import type { Node } from "@xyflow/react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { X, Trash2, Info, Play, Square, BellRing, Repeat } from "lucide-react";
+import { X, Trash2, Play, Square, BellRing, Repeat } from "lucide-react";
+import { HelpPopover } from "./HelpPopover";
 import { iconFor, dropColor as resolveDropColor } from "../icons";
 import type { DazyNodeData } from "./nodeCardShared";
 import {
@@ -53,10 +54,6 @@ type Props = {
   // round-trip through React Flow's internal state.
   paramsByID: Record<string, Record<string, unknown>>;
   onParamsChange: (id: string, params: Record<string, unknown>) => void;
-  // onAddApprovalNtfy is the one-click "notify me on ntfy with the approval
-  // link" action on an await_approval node: it creates a wired ntfy step
-  // (pending_url → message + click). Undefined when the ntfy drop is absent.
-  onAddApprovalNtfy?: (approvalNodeID: string) => void;
   // manifests is the full drop catalog — the for_each editor uses it to
   // populate its "Run step" picker and render the chosen step's form.
   manifests?: Manifest[];
@@ -156,7 +153,6 @@ export function Inspector({
   onChange,
   paramsByID,
   onParamsChange,
-  onAddApprovalNtfy,
   manifests,
   wiredPorts,
   resourceLabels,
@@ -391,14 +387,10 @@ export function Inspector({
             )}
           </span>
           {d.manifest?.description && (
-            <span
-              className="inspector-info"
-              title={dropDescription(d.manifest, i18n.language)}
-              aria-label={dropDescription(d.manifest, i18n.language)}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <Info size={14} />
-            </span>
+            <HelpPopover
+              label={t("inspector.aboutStep")}
+              body={dropDescription(d.manifest, i18n.language)}
+            />
           )}
         </span>
         <span className="inspector-head-right">
@@ -698,26 +690,6 @@ export function Inspector({
             )}
           </div>
         )}
-
-        {d.moduleID === "await_approval" &&
-          onAddApprovalNtfy &&
-          manifests?.some((m) => m.id === "ntfy") && (
-            // One-click: create an ntfy step wired to this approval's link, so
-            // the approver gets a tappable notification. (The Approved-port →
-            // send-step wire stays a manual drag — it's flow-specific.)
-            <div className="inspector-section">
-              <Button
-                type="button"
-                variant="primary"
-                className="inspector-run-step"
-                onClick={() => onAddApprovalNtfy(selected.id)}
-              >
-                <BellRing size={15} />
-                {t("approval.notifyNtfy")}
-              </Button>
-              <div className="desc">{t("approval.notifyNtfyHint")}</div>
-            </div>
-          )}
 
         {d.moduleID === "ntfy" && (
           // Discovery: a topic alone delivers nothing until you subscribe to

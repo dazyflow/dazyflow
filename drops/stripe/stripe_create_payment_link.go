@@ -22,8 +22,8 @@ func init() {
 			Version:     "1.0",
 			Label:       "Stripe",
 			Subtitle:    "Create payment link",
-			Summary:     "Mint a shareable Stripe payment link for a price — wire the URL straight into an email or Slack message.",
-			Description: "Create a payment link for one of your Stripe Prices. Pick the price on the step (listed from your account) or wire a price_… id in from upstream — the input overrides the param, e.g. a per-row price from a sheet. The hosted checkout URL comes out on the 'URL' output — the classic flow is new-order-row → payment link → email/Slack it. Quantity can be wired in too; retries reuse the same Idempotency-Key so a flaky run can't mint duplicate links.",
+			Summary:     "Mint a shareable Stripe payment link for a price — connect the URL straight into an email or Slack message.",
+			Description: "Create a payment link for one of your Stripe Prices. Pick the price on the step (listed from your account) or connect a price_… id in from an earlier step — the input overrides the param, e.g. a per-row price from a sheet. The hosted checkout URL comes out on the 'URL' output — the classic flow is new-order-row → payment link → email/Slack it. Quantity can be connected in too; retries reuse the same Idempotency-Key so a flaky run can't mint duplicate links.",
 			Integration: "Stripe",
 			Category:    "network",
 			Icon:        "credit-card",
@@ -32,8 +32,8 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"stripe", "payment", "link", "checkout", "billing"},
 			Examples: []core.ParamsExample{
-				{Title: "Link for one unit of a price", Params: json.RawMessage(`{"price":"price_1MoC3TLkdIwHu7ixcIbKelAC"}`), Notes: "Wire the 'url' output into Gmail send or Slack message."},
-				{Title: "Quantity from upstream", Params: json.RawMessage(`{"price":"price_1MoC3TLkdIwHu7ixcIbKelAC"}`), Notes: "Wire a number into the 'Quantity' input — e.g. the ordered amount from a sheet row."},
+				{Title: "Link for one unit of a price", Params: json.RawMessage(`{"price":"price_1MoC3TLkdIwHu7ixcIbKelAC"}`), Notes: "Connect the 'url' output into Gmail send or Slack message."},
+				{Title: "Quantity from an earlier step", Params: json.RawMessage(`{"price":"price_1MoC3TLkdIwHu7ixcIbKelAC"}`), Notes: "Connect a number into the 'Quantity' input — e.g. the ordered amount from a sheet row."},
 			},
 			ConnectionFields: stripeConnectionFields(),
 			ExecutionModel:   core.ExecutionBatch,
@@ -74,7 +74,7 @@ func executeCreatePaymentLink(ctx context.Context, job core.Job, _ chan<- core.P
 		return params.Err(job, "bad_input", "'Price' input must be text (a price_… id)"), nil
 	}
 	if price == "" {
-		return params.Err(job, "bad_param", "'price' is required — pick one on the step or wire the 'Price' input"), nil
+		return params.Err(job, "bad_param", "'price' is required — pick one on the step or connect the 'Price' input"), nil
 	}
 	quantity, ok := numberInputOr(job, "quantity", params.IntDefault(job.Params, "quantity", 1))
 	if !ok {

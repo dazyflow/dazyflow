@@ -122,7 +122,7 @@ const (
 func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
 	url := resolveURL(job)
 	if strings.TrimSpace(url) == "" {
-		return params.Err(job, "bad_param", "url is required: wire the URL input or set the url param"), nil
+		return params.Err(job, "bad_param", "url is required: connect the URL input or set the url param"), nil
 	}
 	// Operator egress allowlist (above the IP-level SSRF guard). No-op
 	// when no allowlist is configured.

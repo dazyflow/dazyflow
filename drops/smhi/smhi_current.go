@@ -22,7 +22,7 @@ func init() {
 			Label:       "SMHI Weather",
 			Subtitle:    "Current conditions",
 			Summary:     "Get the current weather at a coordinate from SMHI — no API key.",
-			Description: "Look up the weather right now for a point in the Nordic region (and the surrounding area) using SMHI's free Open Data forecast — no account or API key. Give it a coordinate — type the Latitude and Longitude, or wire a \"lat,lon\" value in from a Location/Geocode step — and it returns a one-line Summary plus the Temperature and a Conditions word (Clear, Rain, Snow…) you can branch on, all in metric units.",
+			Description: "Look up the weather right now for a point in the Nordic region (and the surrounding area) using SMHI's free Open Data forecast — no account or API key. Give it a coordinate — type the Latitude and Longitude, or connect a \"lat,lon\" value in from a Location/Geocode step — and it returns a one-line Summary plus the Temperature and a Conditions word (Clear, Rain, Snow…) you can branch on, all in metric units.",
 			Integration: "SMHI",
 			Category:    "network",
 			Icon:        "cloud-sun",

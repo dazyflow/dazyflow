@@ -93,7 +93,7 @@ func normalizeBlocks(v any) (any, *core.JobError) {
 	default:
 		return nil, &core.JobError{
 			Code:    "bad_input",
-			Message: "Slack Block Kit needs an array of block objects like [ {…}, {…} ]. This step is sending a different shape — wire a JSON array (or a single block) into 'Blocks'.",
+			Message: "Slack Block Kit needs an array of block objects like [ {…}, {…} ]. This step is sending a different shape — connect a JSON array (or a single block) into 'Blocks'.",
 			Details: fmt.Sprintf("Received type %T on 'blocks'; expected an array, a {\"blocks\":[…]} object, a single block object, or JSON text of one of those.", v),
 		}
 	}
