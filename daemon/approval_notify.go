@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"sort"
 	"strings"
 
 	"git.sr.ht/~klahr/dazyflow/core"
@@ -22,18 +21,17 @@ import (
 // the outcome — a second approver never goes hunting for an item somebody
 // already resolved.
 //
-// The rule, in order:
+// The rule: the step's "Email these people" field, and nothing else. Blank
+// means Dazyflow sends no mail and the step behaves exactly as it did before
+// this existed — you deliver the `pending_url` link yourself, or people work
+// the Approvals inbox.
 //
-//  1. The step's "Email these people" param, if filled in. Explicit beats
-//     inferred, and it's the only way to reach someone who ISN'T a member
-//     (an external reviewer, a shared ops alias).
-//  2. Otherwise every member of the org who could actually act on it —
-//     editors and admins. Viewers are excluded: PermGraphRun lets them start
-//     a flow, but the inbox they'd be mailed about is one they can resolve,
-//     so including them would be mail about a decision they may not be meant
-//     to make. Approving is not permission-gated today (anyone in the
-//     workspace can), which is exactly why the DEFAULT is narrowed here
-//     rather than blasted at everyone.
+// Defaulting to "everyone in the org who could act on it" was the other
+// option and was rejected: approving is not permission-gated (anyone with the
+// workspace can), so that set is wide, and it would have turned every
+// already-deployed approval step into a mailshot the moment the daemon was
+// upgraded — a behaviour change nobody asked for, on a channel that is hard
+// to take back. Opt-in costs one field and surprises no one.
 //
 // Everything here is best-effort: an unreachable mailer must never block a
 // flow from parking, and must never fail the decision that resumes it.
@@ -61,73 +59,15 @@ func approvalParamApprovers(params map[string]any) []string {
 	return out
 }
 
-// orgApprovers lists the members of a tenant who can act on an approval:
-// editors and admins. The tenant OWNER is included explicitly — a
-// person-owned org keeps the owner's access on User.Tenant/User.Roles, not in
-// the membership table, so listing memberships alone silently omits the one
-// person guaranteed to be able to decide.
-func (s *Service) orgApprovers(ctx context.Context, tenant string) []string {
-	if tenant == "" {
-		return nil
-	}
-	seen := map[string]bool{}
-	var out []string
-	add := func(email string) {
-		email = strings.ToLower(strings.TrimSpace(email))
-		if email == "" || seen[email] {
-			return
-		}
-		seen[email] = true
-		out = append(out, email)
-	}
-	if s.Memberships != nil {
-		rows, err := s.Memberships.ListByTenant(ctx, tenant)
-		if err != nil {
-			log.Printf("approval-notify: list members of %s: %v", tenant, err)
-		}
-		for _, m := range rows {
-			for _, r := range m.Roles {
-				if r.Has(core.PermGraphEdit) || r.Has(core.PermOrganizationAdmin) {
-					add(m.UserEmail)
-					break
-				}
-			}
-		}
-	}
-	if s.Users != nil {
-		users, err := s.Users.ListUsers(ctx)
-		if err != nil {
-			log.Printf("approval-notify: list users: %v", err)
-		}
-		for _, u := range users {
-			if u.Tenant != tenant {
-				continue
-			}
-			for _, r := range u.Roles {
-				if r.Has(core.PermGraphEdit) || r.Has(core.PermOrganizationAdmin) {
-					add(u.Email)
-					break
-				}
-			}
-		}
-	}
-	// Stable order so a test — and a log line — reads the same every run.
-	sort.Strings(out)
-	return out
-}
-
-// approvalRecipients resolves the addresses for one await_approval node.
-func (s *Service) approvalRecipients(ctx context.Context, graph core.Graph, nodeID string) []string {
+// approvalRecipients resolves the addresses for one await_approval node:
+// whatever its "Email these people" field names, and nothing if it is blank.
+func (s *Service) approvalRecipients(_ context.Context, graph core.Graph, nodeID string) []string {
 	for _, n := range graph.Nodes {
-		if n.ID != nodeID {
-			continue
+		if n.ID == nodeID {
+			return approvalParamApprovers(n.Params)
 		}
-		if explicit := approvalParamApprovers(n.Params); len(explicit) > 0 {
-			return explicit
-		}
-		break
 	}
-	return s.orgApprovers(ctx, graph.Tenant)
+	return nil
 }
 
 // approvalNodePrompt returns the author's question for a node, if any.

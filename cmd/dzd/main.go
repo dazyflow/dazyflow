@@ -779,10 +779,6 @@ func main() {
 		// suspended. svc.Auth feeds both the gRPC interceptors and the HTTP
 		// gateway, so this one wrap covers the whole surface.
 		svc.Auth = &auth.ModerationGate{Inner: authChain, Users: users, Orgs: orgProfileStore}
-		// Approval mail's default audience: when an await_approval step names
-		// no approvers, it asks the org who can act on one. Set here rather
-		// than in the svc literal because the store isn't built until now.
-		svc.Memberships = memberships
 		log.Print("memberships + invitations + org-auth + org-profile stores: postgres-backed")
 
 		// One-time, idempotent: migrate pre-rename "tenant:admin" roles to

@@ -46,39 +46,13 @@ func TestApprovalParamApprovers(t *testing.T) {
 	}
 }
 
-// approvalFixture builds an org with one of each role plus an owner, and a
-// graph carrying a single await_approval node.
-func approvalFixture(t *testing.T, nodeParams map[string]any) *Service {
+// approvalFixture builds a Service with the stores the notifier touches. The
+// recipient rule reads the step and nothing else, so there is no org here to
+// fall back to — that is the property the tests below pin.
+func approvalFixture(t *testing.T) *Service {
 	t.Helper()
-	ctx := context.Background()
 	users, _ := auth.OpenJSONUserStore("")
-	// The tenant OWNER holds their access on the user row, not in the
-	// membership table — the case that made "list the members" wrong.
-	if err := users.PutUser(ctx, auth.User{
-		Email: "owner@acme.se", Subject: "owner@acme.se", Tenant: "t1",
-		Roles: []core.Role{core.TeamRoleAdmin()},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	// A user in a DIFFERENT org must never be swept in.
-	if err := users.PutUser(ctx, auth.User{
-		Email: "stranger@other.se", Subject: "stranger@other.se", Tenant: "t2",
-		Roles: []core.Role{core.TeamRoleAdmin()},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	mem := newFakeMembershipStore()
-	for _, m := range []auth.Membership{
-		{UserEmail: "editor@acme.se", Tenant: "t1", Roles: []core.Role{core.TeamRoleEditor()}},
-		{UserEmail: "admin@acme.se", Tenant: "t1", Roles: []core.Role{core.TeamRoleAdmin()}},
-		{UserEmail: "viewer@acme.se", Tenant: "t1", Roles: []core.Role{core.TeamRoleViewer()}},
-		{UserEmail: "elsewhere@acme.se", Tenant: "t2", Roles: []core.Role{core.TeamRoleAdmin()}},
-	} {
-		if err := mem.PutMembership(ctx, m); err != nil {
-			t.Fatal(err)
-		}
-	}
-	return &Service{Users: users, Memberships: mem}
+	return &Service{Users: users}
 }
 
 func approvalGraph(nodeParams map[string]any) core.Graph {
@@ -88,8 +62,8 @@ func approvalGraph(nodeParams map[string]any) core.Graph {
 	}
 }
 
-func TestApprovalRecipients_ExplicitListWins(t *testing.T) {
-	svc := approvalFixture(t, nil)
+func TestApprovalRecipients_ExplicitList(t *testing.T) {
+	svc := approvalFixture(t)
 	g := approvalGraph(map[string]any{"approvers": "manager@acme.se, external@vendor.com"})
 	got := svc.approvalRecipients(context.Background(), g, "gate")
 	want := []string{"manager@acme.se", "external@vendor.com"}
@@ -98,46 +72,42 @@ func TestApprovalRecipients_ExplicitListWins(t *testing.T) {
 	}
 }
 
-func TestApprovalRecipients_DefaultsToEditorsAndAdmins(t *testing.T) {
-	svc := approvalFixture(t, nil)
-	g := approvalGraph(nil)
-	got := svc.approvalRecipients(context.Background(), g, "gate")
-	// Sorted: admin, editor, owner. Viewers are excluded (they can start a
-	// flow, not decide one), and neither the other org's admin nor the
-	// other org's member appears.
-	want := []string{"admin@acme.se", "editor@acme.se", "owner@acme.se"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("got %v, want %v", got, want)
+// The whole point of the opt-in rule: a step nobody configured mails nobody.
+// Upgrading a deployment full of existing approval steps must not turn them
+// into a mailshot.
+func TestApprovalRecipients_BlankMeansNobody(t *testing.T) {
+	svc := approvalFixture(t)
+	for _, params := range []map[string]any{
+		nil,
+		{},
+		{"approvers": ""},
+		{"approvers": "   "},
+		{"prompt": "Refund 230 kr?"},
+		// Nothing that parses as an address — same as blank.
+		{"approvers": "the ops team"},
+	} {
+		if got := svc.approvalRecipients(context.Background(), approvalGraph(params), "gate"); len(got) != 0 {
+			t.Errorf("params %v should mail nobody, got %v", params, got)
+		}
 	}
 }
 
-// A blank param is the same as an absent one — an author who clears the field
-// gets the org default back, not silence.
-func TestApprovalRecipients_BlankParamFallsBack(t *testing.T) {
-	svc := approvalFixture(t, nil)
-	g := approvalGraph(map[string]any{"approvers": "   "})
-	if got := svc.approvalRecipients(context.Background(), g, "gate"); len(got) != 3 {
-		t.Fatalf("blank param should fall back to the org, got %v", got)
-	}
-}
-
-// Without a membership store the default must NARROW to whoever the user
-// store can vouch for, never widen or panic.
-func TestApprovalRecipients_NoMembershipStore(t *testing.T) {
-	svc := approvalFixture(t, nil)
-	svc.Memberships = nil
-	got := svc.approvalRecipients(context.Background(), approvalGraph(nil), "gate")
-	if !reflect.DeepEqual(got, []string{"owner@acme.se"}) {
-		t.Fatalf("got %v, want just the owner", got)
+// A node id that isn't in the graph resolves to nobody rather than panicking
+// or falling through to some wider set.
+func TestApprovalRecipients_UnknownNode(t *testing.T) {
+	svc := approvalFixture(t)
+	g := approvalGraph(map[string]any{"approvers": "manager@acme.se"})
+	if got := svc.approvalRecipients(context.Background(), g, "nope"); len(got) != 0 {
+		t.Errorf("unknown node = %v, want none", got)
 	}
 }
 
 // Both notify paths must be inert with no mailer — a deployment without SMTP
 // still has to be able to park and resume approvals.
 func TestApprovalNotify_NoMailerIsInert(t *testing.T) {
-	svc := approvalFixture(t, nil)
+	svc := approvalFixture(t)
 	svc.Mailer = nil
-	g := approvalGraph(nil)
+	g := approvalGraph(map[string]any{"approvers": "ops@acme.se"})
 	svc.NotifyApprovalRequested(context.Background(), g, "run-1", "gate", "https://app/approve/x")
 	svc.NotifyApprovalDecided(context.Background(), g, "run-1", "gate",
 		ApprovalDecision{Decision: "approve", Approver: "admin@acme.se"})
@@ -146,7 +116,7 @@ func TestApprovalNotify_NoMailerIsInert(t *testing.T) {
 // A subgraph node parks as awaiting too, but carries no approval link. The
 // hook has to ignore it rather than mail an empty URL.
 func TestHandleNodeAwaiting_IgnoresNonApprovalPauses(t *testing.T) {
-	svc := approvalFixture(t, nil)
+	svc := approvalFixture(t)
 	svc.Mailer = nil // the assertion is that we return before touching it
 	svc.HandleNodeAwaiting(context.Background(), approvalGraph(nil), "run-1", "gate",
 		core.Result{Output: map[string]core.Ref{"child_run": {Inline: "run-2"}}})

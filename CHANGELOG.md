@@ -23,6 +23,146 @@ into the image.)
 
 ## [Unreleased]
 
+### Added
+
+- **A flow waiting on a person now emails the people who can decide.** The
+  `await_approval` step has always handed you an approval link on
+  `pending_url` and left delivering it to you: you wired an ntfy or email step
+  after it, or the run sat there until someone happened to look at the
+  Approvals inbox. It now mails the approvers itself, when the run parks and
+  again once a decision lands — so the same people who were asked are the
+  people told the outcome, and a second approver doesn't go hunting for an
+  item somebody already resolved.
+
+  Who gets it is the step's new **Email these people** field: comma-separated
+  addresses (semicolons and newlines are accepted too — a list that silently
+  notified nobody because of the wrong separator is the worst failure this
+  could have). It is also the only way to reach someone who isn't a member —
+  an external reviewer, a shared ops alias.
+
+  **Leave it blank and nothing is sent.** Existing approval steps are
+  therefore untouched by the upgrade: they park and resume exactly as before,
+  and you deliver the `pending_url` link yourself or let people work the
+  Approvals inbox. Defaulting to "everyone in the organization who could act
+  on it" was the other option and was rejected — approving is not
+  permission-gated, so that set is wide, and it would have turned every
+  already-deployed approval step into a mailshot the moment the daemon was
+  upgraded. Opt-in costs one field and surprises nobody.
+
+  Each message goes to one address at a time. A shared `To`/`Cc` would leak
+  the organization's member list to every approver, including any external
+  reviewer named on the step.
+
+- **Approve or reject straight from the canvas.** An `await_approval` card
+  that the run is parked on now carries the two buttons itself, in the same
+  flush footer bar as the Connect and "needs configuration" banners. The
+  Inspector panel stays — it is still where you add a comment with the
+  decision — but the common case, "the flow is waiting on me, right there on
+  screen", no longer needs you to select the step and read a side panel first.
+
+- **Step and field help is reachable on a tablet.** Both the (i) on a step
+  header and the one on every form field were native `title=` tooltips. A
+  native tooltip does not fire on touch **at all**, so on a tablet every word
+  of that guidance — 151 step descriptions and 605 field help texts — was
+  simply absent; and it cannot be scrolled, which a 131-word step description
+  needs. Both are now click-to-open popovers that stay put, scroll when they
+  have to, close on Escape or an outside click, and hand focus back.
+
+### Changed
+
+- **The Swedish translation reads like Swedish software.** Around 270 strings
+  across the UI catalogue were rewritten from a literal translation into the
+  vocabulary Swedish applications actually use: *Redigerare* not *Redaktör*
+  for the Editor role, *Läsare* not *Granskare* for Viewer, *Användning* not
+  *Förbrukning*, *Blockera* not *Bannlysa*, *Logghistorik* not *Loggretention*,
+  and *publicera* in place of the Swenglish *hosta*. Terms that had drifted
+  into two, three and four different Swedish words — secret store, Reconnect,
+  Retry, Copied, Delete, output, notification — were each settled on one. The
+  step-catalogue category chips were translated from the raw engine enum
+  (*In/ut*, *Nätverk*, *Omvandling*) rather than the product wording English
+  shows, and now mirror it: *Filer och data*, *Appar och tjänster*,
+  *Ändra data*.
+
+- **Plain language across every surface a non-technical person reads.** A
+  read-through of every page a viewer or editor can reach turned up two
+  clusters and both are gone. The canvas talked like a circuit diagram —
+  *wire*, *pin*, *upstream*, *downstream* — in the 151 step descriptions, the
+  605 params-schema help texts, the runtime error strings and the UI
+  catalogue; it now says *connect*, *input*/*output*, and *earlier*/*later
+  steps*. And the Apps pages had never had the drop→step / node→step /
+  graph→flow rename at all: "the Download drop exports them", "no key on the
+  node", "embedding it in graph JSON". Both languages moved together. Genuine
+  other senses were left alone on purpose — "Drop a meeting onto a calendar",
+  "drop rows", a map pin, and `node`/`nodes` where they name an actual param
+  key or JSON shape.
+
+- **Implementation words are out of copy a business user reads.** Flow
+  Settings → General no longer mentions the *daemon* ("the daemon's default
+  still applies", "Stamped by the daemon"); Plan & usage no longer says
+  "Usage metering is not enabled on this deployment"; and the form's
+  last-resort message no longer reads "Top-level schema isn't a property bag".
+
+### Removed
+
+- **The "notify me on ntfy with the approval link" button.** It was a
+  one-click shortcut that built an ntfy step next to an `await_approval` step
+  and wired it up. Now that the step emails its approvers directly, the
+  shortcut points at the harder path — and the manual route it automated is
+  unchanged: `pending_url` still carries the link into any notify step you
+  want.
+
+### Fixed
+
+- **Approvals taken from an email link were never recorded in the audit
+  trail.** The authenticated inbox path audited through the caller's
+  principal, but the HMAC `/approve/{run}/{node}` path — the one used from a
+  notification, by whoever holds the URL, and therefore the one with no proven
+  identity — wrote nothing but a line to the daemon log. It now appends to the
+  same trail, with the tenant read off the graph record and the name recorded
+  as `"someone@example.com (self-declared, via approval link)"` rather than
+  passed off as a verified subject.
+
+- **The Swedish UI documented a broken secret reference.** Flow Settings →
+  Secrets told Swedish readers to write `${secret.NAMN}` — the code literal
+  had been translated along with the prose, so the documented syntax simply
+  did not work. It is `${secret.NAME}` again.
+
+- **Engine vocabulary was showing on an admin page.** The organization's flow
+  limits listed "Max antal grafnoder" (max graph nodes) where English said
+  "Max steps per flow".
+
+- **Two full-width buttons were centred when they should have been
+  left-aligned.** The global `button {}` rule sets `justify-content: center`,
+  and both `.help-link` and `.sidebar-collapse-toggle` set `display: flex`
+  without overriding it — so Help → Contact support (a `<button>`) sat
+  centred beside Documentation (an `<a>`, which defaults to `flex-start`),
+  and the expanded sidebar's collapse row sat centred under nav items that
+  were not. `text-align: left` was already on both, which does nothing to
+  flex children.
+
+- **Swedish gender agreement, and an email header where an account should
+  be.** Around fifteen neuter/common errors (*ett stegtyp*, *steget … den*,
+  *Steg tillagd*, *avstängd* for a step) are corrected, and the account menu's
+  fallback no longer reads "(inget subjekt)" — the email-header sense of
+  *subject* — where it means an unknown account.
+
+- **Two English typos.** The file drop zones read "**Step** files to upload"
+  and "**Step** a file here or click to browse", collateral from a global
+  drop→step replace; both are drag-and-drop targets and say **Drop** again.
+
+### Developer
+
+- **The Swedish drop catalogue can no longer rot silently.** Every lookup in
+  `dropText.ts` falls back to the English it was handed, so a missing or stale
+  translation renders perfectly good English and nothing says so — which is
+  how six untranslated step descriptions and four that had gone stale against
+  reworded English sat unnoticed. `make catalogs` regenerates a snapshot of
+  the live registry, `make catalogs-check` fails if it is out of date (CI runs
+  it), and a new test names every step or app whose Swedish is missing, stale
+  or orphaned. Coverage is 151/151 steps and 35/35 apps. `make ci` also runs
+  the web test suite now, which it had skipped while calling itself a full
+  mirror of CI.
+
 ## [0.8.0] - 2026-08-21
 
 ### Added
