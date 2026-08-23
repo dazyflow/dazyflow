@@ -23,6 +23,28 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-08-23
+
+### Added
+
+- **Approve or reject from the run page.** A run parked on an approval now
+  shows the decision controls directly under its header, one per awaiting
+  step, with the step's question. Previously the run page's only action on an
+  awaiting run was "Stop run" — you could see what the flow was waiting for
+  and had no way to answer it, which made it a dead end for anyone arriving
+  from an approval email without a signed one-click link. The existing live
+  poll already covers `awaiting`, so a resolved approval clears itself.
+
+### Fixed
+
+- **The approval email's fallback link led somewhere you couldn't approve.**
+  0.9.1 sent the request mail without a signed link by pointing the button at
+  the flow's run page — on the belief that the run page carried Approve/Reject.
+  It did not: its only action on an awaiting run was "Stop run", so the email
+  delivered you to a page showing the thing waiting on you with no way to
+  answer it. The button now points at the Approvals inbox, and the run page
+  has gained the controls too (above), so both destinations work.
+
 ## [0.9.1] - 2026-08-23
 
 ### Fixed
