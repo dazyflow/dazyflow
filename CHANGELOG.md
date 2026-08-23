@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-08-23
+
 ### Fixed
 
 - **The "approval needed" email never sent unless approval links were
