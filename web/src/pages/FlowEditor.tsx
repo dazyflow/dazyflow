@@ -1621,7 +1621,7 @@ function EditorInner() {
       try {
         await api.approveNode(token, runID, nodeID, decision);
       } catch (e) {
-        setError(explainApiError(e, t));
+        setError(explainApiError(e, t, "approval"));
       }
     },
     [token, lockedRunID, currentRunID, t],

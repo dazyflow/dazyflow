@@ -129,3 +129,17 @@ describe("explainApiError", () => {
     );
   });
 });
+
+// A 409 means different things per surface. On an approval it is benign — the
+// decision was already made — and the generic "it conflicts with something
+// that already exists or is in use" reads like a fault the user must fix.
+describe("approval conflicts", () => {
+  it("reads as already-decided on an approval surface", () => {
+    expect(explainApiError(new APIError(409, "node is succeeded, not awaiting"), t, "approval"))
+      .toBe("apiError.approvalDecided");
+  });
+
+  it("keeps the generic conflict message everywhere else", () => {
+    expect(explainApiError(new APIError(409, "name taken"), t)).toBe("apiError.conflict");
+  });
+});

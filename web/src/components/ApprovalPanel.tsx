@@ -41,7 +41,7 @@ export function ApprovalPanel({
       setComment("");
       // SSE delivers the status flip + downstream dispatch; no local refresh.
     } catch (e) {
-      setError(explainApiError(e, t));
+      setError(explainApiError(e, t, "approval"));
     } finally {
       setBusy(null);
     }

@@ -23,6 +23,64 @@ into the image.)
 
 ## [Unreleased]
 
+### Fixed
+
+- **The "approval needed" email never sent unless approval links were
+  configured.** 0.9.0 shipped approval mail in both directions, but the
+  request half was gated on the signed one-click link being available — and
+  that link only exists when `DAZYFLOW_APPROVAL_HMAC_SECRET` is set, because
+  `engine.ApprovalSigner` is nil otherwise and the step emits an empty
+  `pending_url`. On every deployment without that secret the result was the
+  worst possible shape: silence when a flow parked and needed you, followed by
+  a perfectly good email once somebody found it in the inbox and decided.
+
+  The request mail no longer depends on the link. With the secret set it still
+  leads with the one-click URL; without it the button points at the flow's run
+  page in the app, which needs a sign-in — a fine second best, and where the
+  Approve/Reject controls already are. The "anyone with this link can approve,
+  so don't forward it" warning is dropped in that case, because it is only
+  true of the signed link and attaching it to an access-controlled page would
+  teach people to ignore it where it matters.
+
+  Setting `DAZYFLOW_APPROVAL_HMAC_SECRET` (with `DAZYFLOW_PUBLIC_BASE_URL`) is
+  still worth doing — it is what makes approving straight from the email work
+  at all.
+
+- **`make env` no longer reports correct production settings as orphans.**
+  `sync-env.sh` used one index to answer two different questions — "is this
+  key set?" and "is this key documented?" — and a commented-out line in
+  `.env.example` answers no to the first but yes to the second. The result was
+  that `COMPOSE_FILE`, which the example ships commented BECAUSE a dev host
+  must not merge the production overlay, was flagged as undocumented on every
+  run of every prod host that had correctly set it. Documentation in a comment
+  now counts for the orphan check; a genuinely unknown key is still reported,
+  and commented keys are still never appended.
+
+- **`ACME_EMAIL` is documented.** Read by Caddy from `deploy/Caddyfile` as the
+  Let's Encrypt registration address, never by dzd, so it had never made it
+  into `.env.example` — and every production host was told it was an orphan.
+
+- **Approving something already decided no longer reads as a fault.** 0.9.0
+  put a second approve control on the canvas card, next to the Inspector panel
+  that already had one — so a step can now be resolved from two places on the
+  same screen, and hitting the second after the first has landed returns a
+  409. That surfaced as "it conflicts with something that already exists or is
+  in use", which describes a collision the user has to go and fix. Nothing is
+  wrong: the decision was simply already made, here or by someone holding the
+  approval link. All three approve surfaces — canvas, Inspector and the
+  Approvals inbox — now say "That was already decided — the flow has moved
+  on." The generic conflict wording is unchanged everywhere else.
+
+- **Approval mail now logs one line per notification.** Duplicate approval
+  emails were reported and could not be reproduced: the recipient list
+  dedupes, `Approve` refuses a second decision on an already-terminal record
+  (verified under concurrent double-approve), the SMTP layer issues one DATA
+  per call with no retry, and an end-to-end test counts exactly one message on
+  the wire per decision. That left no way to tell an application double-send
+  from a duplicate delivery downstream. `approval-notify(<kind>) <org>/<flow>:
+  sending to N recipient(s)` is written before the sends, so the log answers
+  it: one line for one decision means Dazyflow sent once.
+
 ## [0.9.0] - 2026-08-22
 
 ### Added

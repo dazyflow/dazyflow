@@ -108,7 +108,7 @@ export function Approvals() {
         await refresh();
         return;
       }
-      setError(explainApiError(e, t));
+      setError(explainApiError(e, t, "approval"));
     } finally {
       setActing((s) => {
         const next = { ...s };

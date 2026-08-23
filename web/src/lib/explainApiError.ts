@@ -25,7 +25,7 @@ type TFunc = (k: string, o?: Record<string, unknown>) => string;
 
 // ApiErrorContext disambiguates auth surfaces where the same status carries a
 // different meaning. Omit it for the generic mapping.
-export type ApiErrorContext = "signin" | "signup" | "totp";
+export type ApiErrorContext = "signin" | "signup" | "totp" | "approval";
 
 export function explainApiError(
   err: unknown,
@@ -73,6 +73,11 @@ export function explainApiError(
   if (status === 401) return t("apiError.sessionExpired");
   if (status === 403) return t("apiError.forbidden");
   if (status === 404) return t("apiError.notFound");
+  // An approval that 409s is not a collision the user needs to fix — the
+  // decision was simply already made, most often by the other approve control
+  // on the same screen or by someone else holding the link. "It conflicts with
+  // something that already exists or is in use" reads like a fault; it isn't.
+  if (status === 409 && context === "approval") return t("apiError.approvalDecided");
   if (status === 409) return t("apiError.conflict");
   if (status === 429) return t("apiError.rateLimited");
   // Payload too large (an oversized upload, or a body that trips the global

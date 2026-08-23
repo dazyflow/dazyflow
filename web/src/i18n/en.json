@@ -13,7 +13,8 @@
     "signinInvalid": "That email or password isn't right. Please check and try again.",
     "signupExists": "An account with that email already exists. Try signing in instead.",
     "signupBad": "We couldn't create your account with those details. Please check them and try again.",
-    "totpInvalid": "That code isn't right or has expired. Enter a fresh code from your authenticator app."
+    "totpInvalid": "That code isn't right or has expired. Enter a fresh code from your authenticator app.",
+    "approvalDecided": "That was already decided — the flow has moved on."
   },
   "flowStatus": {
     "live": {

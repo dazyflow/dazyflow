@@ -13,7 +13,8 @@
     "signinInvalid": "E-postadressen eller lösenordet stämmer inte. Kontrollera och försök igen.",
     "signupExists": "Ett konto med den e-postadressen finns redan. Prova att logga in i stället.",
     "signupBad": "Vi kunde inte skapa ditt konto med de uppgifterna. Kontrollera dem och försök igen.",
-    "totpInvalid": "Koden stämmer inte eller har gått ut. Ange en ny kod från din autentiseringsapp."
+    "totpInvalid": "Koden stämmer inte eller har gått ut. Ange en ny kod från din autentiseringsapp.",
+    "approvalDecided": "Det var redan beslutat — flödet har gått vidare."
   },
   "flowStatus": {
     "live": {

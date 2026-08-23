@@ -54,9 +54,35 @@ index_keys() {
 	done < "$file"
 }
 
-declare -A have example_keys
+# index_documented is index_keys' counterpart for the ORPHAN check, and the
+# distinction matters: "is this key set?" and "is this key documented?" are
+# different questions, and a commented-out example line answers no to the
+# first and yes to the second. Sharing one indexer meant every key the example
+# ships commented — COMPOSE_FILE, which MUST stay commented so a dev host
+# doesn't merge the prod overlay — was reported as an undocumented orphan on
+# every run of every production host that correctly set it.
+index_documented() {
+	local -n out="$1"
+	local file="$2"
+	local line
+	while IFS= read -r line || [ -n "$line" ]; do
+		# Strip leading blanks, one '#', then blanks again, so both
+		# "#KEY=v" and "#   KEY=v" are recognised.
+		line="${line#"${line%%[![:space:]]*}"}"
+		line="${line#\#}"
+		line="${line#"${line%%[![:space:]]*}"}"
+		# Only lines that actually look like an assignment — prose in a
+		# comment can contain '=' and must not register as a key.
+		if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)= ]]; then
+			out["${BASH_REMATCH[1]}"]=1
+		fi
+	done < "$file"
+}
+
+declare -A have example_keys documented
 index_keys have "$target"
 index_keys example_keys "$example"
+index_documented documented "$example"
 
 # Walk the example, capture missing entries plus their preceding
 # section header (the most recent `# ---- ... ----` line).
@@ -86,10 +112,11 @@ while IFS= read -r line || [ -n "$line" ]; do
 	fi
 done < "$example"
 
-# Orphan keys: in target but missing from example.
+# Orphan keys: set in target but not documented anywhere in the example —
+# commented-out documentation counts (see index_documented).
 orphans=()
 for k in "${!have[@]}"; do
-	if [ -z "${example_keys[$k]+x}" ]; then
+	if [ -z "${documented[$k]+x}" ]; then
 		orphans+=("$k")
 	fi
 done
