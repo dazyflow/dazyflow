@@ -81,6 +81,19 @@ func approvalNodePrompt(graph core.Graph, nodeID string) string {
 	return ""
 }
 
+// buildApprovalsURL points at the Approvals inbox, org-scoped the same way
+// buildRunURL scopes a run link. This is the fallback destination when there is
+// no signed one-click link — NOT the run page, which shows an awaiting node but
+// offers no way to decide it (RunDetail can only stop a run). Sending someone to
+// a page where they can see the thing waiting on them and do nothing about it is
+// worse than sending no link at all.
+func buildApprovalsURL(baseURL, tenant string) string {
+	if baseURL == "" {
+		return ""
+	}
+	return withOrg(strings.TrimRight(baseURL, "/")+"/approvals", tenant)
+}
+
 // HandleNodeAwaiting is the WorkerConfig.OnNodeAwaiting adapter: it pulls the
 // signed approval link off the parked result and mails the approvers. Lives
 // here rather than in the wiring so cmd/dzd stays a declaration of what is
@@ -124,12 +137,15 @@ func (s *Service) NotifyApprovalRequested(ctx context.Context, graph core.Graph,
 	// deployment sets DAZYFLOW_APPROVAL_HMAC_SECRET — engine.ApprovalSigner is
 	// nil otherwise and the step emits an empty pending_url. Requiring it here
 	// meant every deployment without that secret sent no request mail at all,
-	// silently, while still sending the decision mail. The in-app run page is
-	// the fallback: it needs a sign-in, which is a fine second-best and is
-	// where the Approve/Reject controls already live.
+	// silently, while still sending the decision mail.
+	//
+	// The fallback is the Approvals inbox, which needs a sign-in but does carry
+	// Approve/Reject. It is deliberately not the run page: that shows the node
+	// parked and gives you no way to act on it.
+	approvalsURL := buildApprovalsURL(s.PublicBaseURL, graph.Tenant)
 	link, linkLabel, shareWarning := approvalURL, "Open the approval", true
 	if link == "" {
-		link, linkLabel, shareWarning = runURL, "Open the flow run", false
+		link, linkLabel, shareWarning = approvalsURL, "Open Approvals", false
 	}
 
 	var b strings.Builder
@@ -140,10 +156,13 @@ func (s *Service) NotifyApprovalRequested(ctx context.Context, graph core.Graph,
 	if approvalURL != "" {
 		fmt.Fprintf(&b, "Approve or reject:  %s\n", approvalURL)
 	}
+	if approvalURL == "" && approvalsURL != "" {
+		fmt.Fprintf(&b, "Approve or reject:  %s\n", approvalsURL)
+	}
 	if runURL != "" {
 		fmt.Fprintf(&b, "Run details:        %s\n", runURL)
 	}
-	if approvalURL == "" && runURL == "" {
+	if approvalURL == "" && approvalsURL == "" {
 		b.WriteString("Open Approvals in Dazyflow to approve or reject.\n")
 	}
 

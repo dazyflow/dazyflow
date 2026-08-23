@@ -16,6 +16,7 @@ import { Callout } from "../components/Callout";
 import { explainRunError, type AppContext } from "../lib/explainRunError";
 import { integrationSlug } from "../integrationMeta";
 import { explainApiError } from "../lib/explainApiError";
+import { ApprovalPanel } from "../components/ApprovalPanel";
 import { supportContactWithContext } from "../lib/supportContact";
 import { isResultNode, previewOutput } from "../lib/runResult";
 import { ReportProblemModal } from "../components/ReportProblemModal";
@@ -368,6 +369,28 @@ export function RunDetail() {
           </Button>
         </div>
       </div>
+
+      {/* Approve/reject, for every node this run is parked on. Placed here
+          rather than inside a collapsed timeline row because the person most
+          likely to be on this page followed an "approval needed" email — and
+          until now the run page could only STOP a run, so that link led
+          somewhere you could see the thing waiting on you and do nothing
+          about it. The live poll above covers `awaiting`, so resolving one
+          makes it disappear on the next tick without a manual reload. */}
+      {nodes
+        .filter((n) => n.Status === "awaiting")
+        .map((n) => (
+          <ApprovalPanel
+            key={n.NodeID}
+            runID={run.ID}
+            nodeID={n.NodeID}
+            prompt={
+              typeof n.Result?.output?.prompt?.data === "string"
+                ? n.Result.output.prompt.data
+                : undefined
+            }
+          />
+        ))}
 
       {/* Failure banner — the most-important real estate on this
           page when something broke. Names the failing node and, when

@@ -171,8 +171,12 @@ func TestNotifyApprovalRequested_SendsWithoutSignedLink(t *testing.T) {
 					t.Errorf("email missing %q", want)
 				}
 			}
-			// No signed link, so the CTA points at the in-app run page and the
-			// don't-forward warning — true only of a bearer link — is absent.
+			// No signed link, so the CTA must point at the Approvals inbox —
+			// the run page shows the parked node but cannot decide it.
+			if !strings.Contains(data, "/approvals") {
+				t.Error("fallback CTA does not point at the Approvals inbox")
+			}
+			// The don't-forward warning is true only of a bearer link.
 			// Phrase chosen without an apostrophe: the HTML part escapes it
 			// to &#39;, so "don't forward" never matches and the check would
 			// pass no matter what the mail said.
@@ -265,5 +269,40 @@ func TestApprove_SendsExactlyOneDecisionEmail(t *testing.T) {
 	}
 	if len(to) != 1 {
 		t.Errorf("RCPT TO issued %d times: %v", len(to), to)
+	}
+}
+
+// The fallback destination must be somewhere the recipient can actually
+// decide. It previously pointed at the run page, which renders an awaiting
+// node and offers only "Stop run" — so the email led to a dead end.
+func TestNotifyApprovalRequested_FallbackIsNotTheRunPage(t *testing.T) {
+	srv := newFakeSMTP(t)
+	mailer, _ := NewMailerFromURL("smtp://"+srv.addr+"?tls=none", "noreply@example.com")
+	svc := approvalFixture(t)
+	svc.Mailer = mailer
+	svc.PublicBaseURL = "https://app.example"
+
+	svc.NotifyApprovalRequested(context.Background(),
+		approvalGraph(map[string]any{"approvers": "ops@acme.se"}), "run-1", "gate", "")
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		_, _, raw, _ := srv.snapshot()
+		if raw != "" {
+			data := mailText(raw)
+			if !strings.Contains(data, "https://app.example/approvals") {
+				t.Error("CTA should be the Approvals inbox")
+			}
+			// The run link may still appear as context under "Run details",
+			// but never as the thing the button sends you to.
+			if strings.Contains(data, `"https://app.example/runs/run-1`) {
+				t.Error("run page must not be the CTA target")
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("no email")
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
