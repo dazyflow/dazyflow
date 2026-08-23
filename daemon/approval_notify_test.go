@@ -5,11 +5,16 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 
 	"git.sr.ht/~klahr/dazyflow/auth"
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/engine/jobstore"
 )
 
 func TestApprovalParamApprovers(t *testing.T) {
@@ -129,5 +134,136 @@ func TestApprovalNodePrompt(t *testing.T) {
 	}
 	if got := approvalNodePrompt(g, "missing"); got != "" {
 		t.Errorf("unknown node should have no prompt, got %q", got)
+	}
+}
+
+// Bodies are quoted-printable, which soft-wraps at 76 columns with "=\r\n" —
+// so a phrase can be split mid-word and a naive Contains check silently
+// passes (or silently fails). Un-wrap before asserting on prose.
+func mailText(raw string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(raw, "=\r\n", ""), "=\n", "")
+}
+
+// Regression: the request mail used to require the signed approval link, so a
+// deployment without DAZYFLOW_APPROVAL_HMAC_SECRET — where engine.ApprovalSigner
+// is nil and the step emits an empty pending_url — sent no "please approve"
+// mail at all, silently, while still sending the decision mail afterwards.
+func TestNotifyApprovalRequested_SendsWithoutSignedLink(t *testing.T) {
+	srv := newFakeSMTP(t)
+	mailer, _ := NewMailerFromURL("smtp://"+srv.addr+"?tls=none", "noreply@example.com")
+	svc := approvalFixture(t)
+	svc.Mailer = mailer
+	svc.PublicBaseURL = "https://app.example"
+
+	g := approvalGraph(map[string]any{"approvers": "ops@acme.se", "prompt": "Refund 230 kr?"})
+	svc.NotifyApprovalRequested(context.Background(), g, "run-1", "gate", "")
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		_, _, raw, to := srv.snapshot()
+		if raw != "" {
+			data := mailText(raw)
+			if len(to) != 1 || !strings.Contains(to[0], "ops@acme.se") {
+				t.Errorf("to = %v", to)
+			}
+			for _, want := range []string{"Refunds", "Refund 230 kr?", "run-1"} {
+				if !strings.Contains(data, want) {
+					t.Errorf("email missing %q", want)
+				}
+			}
+			// No signed link, so the CTA points at the in-app run page and the
+			// don't-forward warning — true only of a bearer link — is absent.
+			// Phrase chosen without an apostrophe: the HTML part escapes it
+			// to &#39;, so "don't forward" never matches and the check would
+			// pass no matter what the mail said.
+			if strings.Contains(data, "Anyone with this link") {
+				t.Error("share warning shown for an access-controlled link")
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("no request email sent without a signed link")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// With a signer configured the one-click link is the CTA, and the warning
+// that it is a bearer capability comes back.
+func TestNotifyApprovalRequested_UsesSignedLinkWhenPresent(t *testing.T) {
+	srv := newFakeSMTP(t)
+	mailer, _ := NewMailerFromURL("smtp://"+srv.addr+"?tls=none", "noreply@example.com")
+	svc := approvalFixture(t)
+	svc.Mailer = mailer
+	svc.PublicBaseURL = "https://app.example"
+
+	g := approvalGraph(map[string]any{"approvers": "ops@acme.se"})
+	svc.NotifyApprovalRequested(context.Background(), g, "run-1", "gate",
+		"https://app.example/approve/run-1/gate?token=abc")
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		_, _, raw, _ := srv.snapshot()
+		if raw != "" {
+			data := mailText(raw)
+			if !strings.Contains(data, "approve/run-1/gate") {
+				t.Error("signed link missing from the email")
+			}
+			if !strings.Contains(data, "Anyone with this link") {
+				t.Error("bearer-link warning missing")
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("no request email sent")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// End-to-end count: ONE Approve call must produce ONE decision email per
+// recipient. Reported from a live deployment as two identical emails to the
+// same address for a single click, which neither the recipient dedupe nor the
+// conditional Complete guard explains — so this drives the real path and
+// counts what reaches the wire.
+func TestApprove_SendsExactlyOneDecisionEmail(t *testing.T) {
+	srv := newFakeSMTP(t)
+	mailer, _ := NewMailerFromURL("smtp://"+srv.addr+"?tls=none", "noreply@example.com")
+
+	store := jobstore.NewMemory()
+	graph := core.Graph{
+		ID: "refunds", Name: "Refunds", Tenant: "acme", Workspace: "default",
+		Nodes: []core.Node{{ID: "gate", Module: "await_approval",
+			Params: map[string]any{"approvers": "ops@acme.se"}}},
+	}
+	payload, _ := json.Marshal(graph)
+	_ = store.Enqueue(t.Context(), core.JobRecord{
+		ID: "run-1", Kind: core.JobKindGraph, GraphID: "refunds", NodeID: "*", Tenant: "acme",
+		Status: core.JobStatusRunning, GraphPayload: payload,
+	})
+	_ = store.Enqueue(t.Context(), core.JobRecord{
+		ID: NodeJobID("run-1", "gate"), Kind: core.JobKindNode,
+		GraphRunID: "run-1", NodeID: "gate", Status: core.JobStatusAwaiting,
+	})
+	svc := &Service{
+		Jobs: store, Bus: NewMemoryBus(), Mailer: mailer,
+		PublicBaseURL: "https://app.example",
+		Engine:        &engine.Engine{Resolver: &engine.NodeResolver{Native: engine.Default}},
+	}
+
+	if err := svc.Approve(t.Context(), "run-1", "gate",
+		ApprovalDecision{Decision: "reject", Approver: "ops@acme.se"}); err != nil {
+		t.Fatalf("approve: %v", err)
+	}
+
+	// Give any stray second send a chance to land before counting.
+	time.Sleep(300 * time.Millisecond)
+	_, _, data, to := srv.snapshot()
+	// One Message-ID header per delivered message.
+	if n := strings.Count(data, "Message-ID:"); n != 1 {
+		t.Errorf("delivered %d emails for one Approve, want 1", n)
+	}
+	if len(to) != 1 {
+		t.Errorf("RCPT TO issued %d times: %v", len(to), to)
 	}
 }

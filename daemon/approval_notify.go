@@ -109,7 +109,7 @@ func (s *Service) HandleNodeAwaiting(ctx context.Context, graph core.Graph, runI
 // pending_url port carries. Anyone holding it can decide, which is why the
 // recipient rule above is deliberately conservative.
 func (s *Service) NotifyApprovalRequested(ctx context.Context, graph core.Graph, runID, nodeID, approvalURL string) {
-	if s.Mailer == nil || approvalURL == "" {
+	if s.Mailer == nil {
 		return
 	}
 	to := s.approvalRecipients(ctx, graph, nodeID)
@@ -120,20 +120,44 @@ func (s *Service) NotifyApprovalRequested(ctx context.Context, graph core.Graph,
 	prompt := approvalNodePrompt(graph, nodeID)
 	runURL := buildRunURL(s.PublicBaseURL, graph.Tenant, runID)
 
+	// approvalURL is the signed one-click link, and it only exists when the
+	// deployment sets DAZYFLOW_APPROVAL_HMAC_SECRET — engine.ApprovalSigner is
+	// nil otherwise and the step emits an empty pending_url. Requiring it here
+	// meant every deployment without that secret sent no request mail at all,
+	// silently, while still sending the decision mail. The in-app run page is
+	// the fallback: it needs a sign-in, which is a fine second-best and is
+	// where the Approve/Reject controls already live.
+	link, linkLabel, shareWarning := approvalURL, "Open the approval", true
+	if link == "" {
+		link, linkLabel, shareWarning = runURL, "Open the flow run", false
+	}
+
 	var b strings.Builder
 	fmt.Fprintf(&b, "The flow %q is waiting for a decision.\n\n", name)
 	if prompt != "" {
 		fmt.Fprintf(&b, "%s\n\n", prompt)
 	}
-	fmt.Fprintf(&b, "Approve or reject:  %s\n", approvalURL)
+	if approvalURL != "" {
+		fmt.Fprintf(&b, "Approve or reject:  %s\n", approvalURL)
+	}
 	if runURL != "" {
 		fmt.Fprintf(&b, "Run details:        %s\n", runURL)
+	}
+	if approvalURL == "" && runURL == "" {
+		b.WriteString("Open Approvals in Dazyflow to approve or reject.\n")
 	}
 
 	facts := []emailtheme.Fact{{Label: "Flow", Value: name}, {Label: "Step", Value: nodeID}}
 	intro := []string{fmt.Sprintf("The flow “%s” has paused and needs someone to decide before it can carry on.", name)}
 	if prompt != "" {
 		intro = append(intro, prompt)
+	}
+	// The don't-forward warning is only true of the signed link, which is a
+	// bearer capability. The run page is access-controlled, so saying it there
+	// would be false and would train people to ignore the real warning.
+	outro := []string{"Whoever decides first resolves it — we'll email everyone the outcome."}
+	if shareWarning {
+		outro = append([]string{"Anyone with this link can approve or reject, so please don't forward it."}, outro...)
 	}
 	content := emailtheme.Content{
 		Subject:   fmt.Sprintf("Approval needed: %s", name),
@@ -142,12 +166,11 @@ func (s *Service) NotifyApprovalRequested(ctx context.Context, graph core.Graph,
 		Heading:   "A flow is waiting on you",
 		Intro:     intro,
 		Facts:     facts,
-		Button:    &emailtheme.Button{Label: "Open the approval", URL: approvalURL},
-		Outro: []string{
-			"Anyone with this link can approve or reject, so please don't forward it.",
-			"Whoever decides first resolves it — we'll email everyone the outcome.",
-		},
-		LogoURL: emailLogoURL(s.PublicBaseURL),
+		Outro:     outro,
+		LogoURL:   emailLogoURL(s.PublicBaseURL),
+	}
+	if link != "" {
+		content.Button = &emailtheme.Button{Label: linkLabel, URL: link}
 	}
 	s.sendApprovalMail(ctx, "requested", graph, to, b.String(), content)
 }
@@ -236,6 +259,13 @@ func (s *Service) sendApprovalMail(
 	text string,
 	content emailtheme.Content,
 ) {
+	// One line per notification, before the sends. Duplicate approval mail was
+	// reported from a live deployment and could not be reproduced — the
+	// recipient list dedupes, Approve is guarded against a second decision,
+	// and SendTrusted does not retry — which left no way to tell an
+	// application double-send from a duplicate delivery downstream. This makes
+	// that answerable from the log: one line means Dazyflow sent once.
+	log.Printf("approval-notify(%s) %s/%s: sending to %d recipient(s)", kind, graph.Tenant, graph.ID, len(to))
 	for _, addr := range to {
 		if err := s.Mailer.SendThemed(ctx, addr, text, content); err != nil {
 			// Best-effort, and per-recipient: one bad address must not stop
