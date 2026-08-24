@@ -16,6 +16,8 @@ import { ActionsCard, ActionRow } from "../../../components/org/PlatformActions"
 import { formatDate } from "../../../lib/datetime";
 import { ErrorNotice } from "../../../components/ui/ErrorNotice";
 import { ICON } from "../../../icons";
+import { Loading } from "../../../components/ui/Loading";
+import { Notice } from "../../../components/ui/Notice";
 
 // AdminPlatformUserDetail is one account's platform-admin moderation
 // page: suspend (reversible lockout), ban (suspend + block re-signup),
@@ -107,9 +109,7 @@ export function AdminPlatformUserDetail() {
       )}
 
       {loading || !user ? (
-        <div className="card" style={{ color: "var(--muted)" }}>
-          {t("common.loading")}
-        </div>
+        <Loading />
       ) : (
         <>
           <div className="card" style={{ marginBottom: "var(--space-3)" }}>
@@ -171,7 +171,7 @@ export function AdminPlatformUserDetail() {
                       <Link
                         key={m}
                         to={`/admin/platform/orgs/${encodeURIComponent(m)}`}
-                        style={{ marginRight: 8 }}
+                        style={{ marginRight: "var(--space-2)" }}
                       >
                         <code>{m}</code>
                       </Link>
@@ -189,9 +189,9 @@ export function AdminPlatformUserDetail() {
           </div>
 
           {isAdmin ? (
-            <div className="card" style={{ color: "var(--muted)" }}>
+            <Notice>
               {t("admin.platformUserDetail.adminProtected")}
-            </div>
+            </Notice>
           ) : (
             <ActionsCard title={t("common.colActions")}>
               {suspended ? (
@@ -395,7 +395,7 @@ function BanModal({
             style={{ width: "100%", marginTop: "var(--space-2)" }}
             autoFocus
           />
-          <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: "var(--space-2)" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginTop: "var(--space-2)" }}>
             <input type="checkbox" checked={domain} onChange={(e) => setDomain(e.target.checked)} />
             {t("admin.platformUserDetail.banDomain")}
           </label>

@@ -11,6 +11,9 @@ import { ConfirmModal } from "../components/ui/ConfirmModal";
 import { explainApiError } from "../lib/explainApiError";
 import { ErrorNotice } from "../components/ui/ErrorNotice";
 import { ICON } from "../icons";
+import { Loading } from "../components/ui/Loading";
+import { EmptyState } from "../components/ui/EmptyState";
+import { Notice } from "../components/ui/Notice";
 
 // Results — the in-app view of Collections. Left: the workspace's
 // boards (tables) with row counts. Right: the selected board as a friendly
@@ -168,7 +171,6 @@ export function Results() {
           onClick={reloadBoards}
           disabled={loading}
           title={t("results.refresh")}
-          style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
         >
           <RefreshCw size={ICON.sm} />
           {t("results.refresh")}
@@ -182,20 +184,14 @@ export function Results() {
       )}
 
       {!error && loading && boards.length === 0 && (
-        <div className="card" style={{ color: "var(--muted)" }}>
-          {t("common.loading")}
-        </div>
+        <Loading />
       )}
 
       {/* Empty state: no boards yet. Point the user at the writer drop. */}
       {!error && !loading && boards.length === 0 && (
-        <div className="card" style={{ color: "var(--muted)", lineHeight: 1.6 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-            <Table2 size={ICON.lg} />
-            <strong style={{ color: "var(--ink)" }}>{t("results.emptyTitle")}</strong>
-          </div>
+        <EmptyState icon={Table2} title={t("results.emptyTitle")}>
           {t("results.emptyBody")}
-        </div>
+        </EmptyState>
       )}
 
       {boards.length > 0 && (
@@ -219,7 +215,7 @@ export function Results() {
                   width: "100%",
                   alignItems: "center",
                   justifyContent: "space-between",
-                  gap: 8,
+                  gap: "var(--space-2)",
                   padding: "var(--space-2) var(--space-3)",
                   border: "none",
                   borderRadius: "var(--r-2)",
@@ -234,7 +230,7 @@ export function Results() {
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
-                    gap: 6,
+                    gap: "var(--space-1h)",
                     overflow: "hidden",
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",
@@ -262,35 +258,22 @@ export function Results() {
               }}
             >
               <div
-                style={{
-                  position: "relative",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  flex: "1 1 220px",
-                }}
+                className="search-box"
+                style={{ flex: "1 1 220px" }}
               >
-                <Search
-                  size={ICON.sm}
-                  style={{
-                    position: "absolute",
-                    left: 10,
-                    color: "var(--faint)",
-                    pointerEvents: "none",
-                  }}
-                />
+                <Search size={ICON.sm} aria-hidden />
                 <input
                   type="search"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder={t("results.searchPlaceholder")}
-                  style={{ width: "100%", paddingLeft: 30 }}
+                  aria-label={t("results.searchPlaceholder")}
                 />
               </div>
               <Button
                 variant="ghost"
                 onClick={downloadCSV}
                 disabled={!page || page.rows.length === 0}
-                style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
               >
                 <Download size={ICON.sm} />
                 {t("results.downloadCsv")}
@@ -299,12 +282,7 @@ export function Results() {
                 variant="ghost"
                 onClick={() => setConfirmClear(true)}
                 disabled={clearing || !selected}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 6,
-                  color: "var(--danger)",
-                }}
+                style={{ color: "var(--danger)" }}
               >
                 <Trash2 size={ICON.sm} />
                 {clearing ? t("results.clearing") : t("results.clear")}
@@ -312,9 +290,7 @@ export function Results() {
             </div>
 
             {tableLoading && !page && (
-              <div className="card" style={{ color: "var(--muted)" }}>
-                {t("common.loading")}
-              </div>
+              <Loading />
             )}
 
             {page && (
@@ -356,15 +332,9 @@ export function Results() {
                     </tbody>
                   </table>
                   {filteredRows.length === 0 && (
-                    <div
-                      style={{
-                        padding: "var(--space-4)",
-                        color: "var(--muted)",
-                        textAlign: "center",
-                      }}
-                    >
+                    <Notice inline>
                       {query ? t("results.noMatches") : t("results.boardEmpty")}
-                    </div>
+                    </Notice>
                   )}
                 </div>
                 <div

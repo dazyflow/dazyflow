@@ -1,12 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Joachim Klahr
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { AlertCircle, ChevronRight, X } from "lucide-react";
 import { Button } from "../ui/Button";
 import { iconFor, isBrandedIcon, dropColor, ICON } from "../../icons";
+import { useEscapeToClose } from "../ui/useEscapeToClose";
 
 // ConfigChecklistModal replaces the old "N to configure" popover with a
 // proper centered dialog: a click-to-jump checklist of every step still
@@ -72,24 +72,18 @@ export function ConfigChecklistModal({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  useEscapeToClose(onClose);
 
   return createPortal(
-    <div className="settings-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={onClose}>
       <div
-        className="settings-dialog config-modal"
+        className="modal config-modal"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-labelledby="config-modal-title"
       >
-        <div className="settings-head config-modal-head">
+        <div className="modal-head config-modal-head">
           <div className="config-modal-heading">
             <span className="config-modal-badge" aria-hidden="true">
               <AlertCircle size={ICON.lg} />
@@ -110,7 +104,7 @@ export function ConfigChecklistModal({
             <X size={ICON.lg} />
           </Button>
         </div>
-        <div className="settings-body config-modal-body">
+        <div className="modal-body config-modal-body">
           <ul className="config-checklist">
             {entries.map((entry) => (
               <li key={entry.nodeID}>
@@ -147,7 +141,7 @@ export function ConfigChecklistModal({
             ))}
           </ul>
         </div>
-        <div className="settings-foot">
+        <div className="modal-foot">
           {/* Secondary, not primary: the affirmative actions in this dialog are
               the jump-to-drop rows above. A purple Close would draw the eye to
               leaving rather than to the thing the user opened it to fix. */}

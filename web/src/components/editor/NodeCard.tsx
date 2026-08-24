@@ -356,9 +356,9 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
               style={{
                 display: "inline-flex",
                 alignItems: "center",
-                gap: 3,
-                marginTop: 3,
-                fontSize: 10,
+                gap: "var(--space-1)",
+                marginTop: "var(--space-1)",
+                fontSize: "var(--text-2xs)",
                 opacity: 0.6,
               }}
             >
@@ -555,7 +555,7 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
                     </Handle>
                     {!isPass && portLabel(p.label ?? p.port, i18n.language)}
                     {!isPass && p.list && (
-                      <span className="dz-port-many" title="many items" style={{ opacity: 0.5, marginLeft: 3 }}>
+                      <span className="dz-port-many" title="many items" style={{ opacity: 0.5, marginLeft: "var(--space-1)" }}>
                         ▦
                       </span>
                     )}
@@ -612,7 +612,7 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
                 </Handle>
                 {!isPass && portLabel(p.label ?? p.port, i18n.language)}
                 {!isPass && p.list && (
-                  <span className="dz-port-many" title="many items" style={{ opacity: 0.5, marginLeft: 3 }}>
+                  <span className="dz-port-many" title="many items" style={{ opacity: 0.5, marginLeft: "var(--space-1)" }}>
                     ▦
                   </span>
                 )}
@@ -813,12 +813,12 @@ function ParamInput({
     const text = String(value ?? "");
     const info = telFieldFlag(text);
     return (
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+      <span style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-1)" }}>
         {info && (
           <span
             aria-hidden
             title={info.region ? regionDisplayName(info.region) : "International"}
-            style={{ fontSize: "1.15em", lineHeight: 1 }}
+                style={{ fontSize: "1.15em", lineHeight: 1 }}
           >
             {info.flag}
           </span>

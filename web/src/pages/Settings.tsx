@@ -211,7 +211,7 @@ function NotificationsCard() {
       <div className="sf-field">
         <div className="label-row">
           <label>
-            <Bell size={ICON.md} style={{ verticalAlign: "-3px" }} />{" "}
+            <Bell className="icon-inline" size={ICON.md} />{" "}
             {t("notifications.title")}
           </label>
         </div>
@@ -379,7 +379,7 @@ function TwoFactorCard() {
       <div className="sf-field">
         <div className="label-row">
           <label>
-            <ShieldCheck size={ICON.md} style={{ verticalAlign: "-3px" }} />{" "}
+            <ShieldCheck className="icon-inline" size={ICON.md} />{" "}
             {t("twoFactor.title")}
           </label>
         </div>

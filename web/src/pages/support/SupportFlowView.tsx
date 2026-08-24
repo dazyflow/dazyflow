@@ -36,6 +36,7 @@ import { Button } from "../../components/ui/Button";
 import { iconFor, ICON } from "../../icons";
 import type { JobStatus, Manifest, SupportBundle } from "../../types";
 import { ErrorNotice } from "../../components/ui/ErrorNotice";
+import { Notice } from "../../components/ui/Notice";
 
 // Reuse the editor's exact node/edge renderers so the read-only canvas looks
 // identical to what the customer sees — just inert.
@@ -104,7 +105,7 @@ export function SupportFlowView() {
   if (gate === "disabled") {
     return (
       <CenterCard tone="muted">
-        <Info size={ICON.md} style={{ marginRight: 6, verticalAlign: -3 }} />
+        <Info className="icon-lede" size={ICON.md} />
         {t("supportView.notEnabled")}
       </CenterCard>
     );
@@ -112,7 +113,7 @@ export function SupportFlowView() {
   if (gate === "forbidden") {
     return (
       <CenterCard tone="danger">
-        <Lock size={ICON.md} style={{ marginRight: 6, verticalAlign: -3 }} />
+        <Lock className="icon-lede" size={ICON.md} />
         {t("supportView.forbidden")}
       </CenterCard>
     );
@@ -130,7 +131,7 @@ export function SupportFlowView() {
   if (error) {
     return (
       <CenterCard tone="danger">
-        <AlertCircle size={ICON.md} style={{ marginRight: 6, verticalAlign: -3 }} />
+        <AlertCircle className="icon-lede" size={ICON.md} />
         {error}
       </CenterCard>
     );
@@ -200,7 +201,7 @@ function RequestAccessCard({
     <div className="support-view-shell">
       <div className="support-view-center">
         <div className="card" style={{ maxWidth: 460 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: "var(--space-2)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginBottom: "var(--space-2)" }}>
             <ShieldCheck size={ICON.lg} />
             <strong>{t("supportView.requestHead")}</strong>
           </div>
@@ -212,10 +213,10 @@ function RequestAccessCard({
             />
           </div>
           {requested ? (
-            <div className="card" style={{ color: "var(--muted)", marginBottom: "var(--space-3)" }}>
-              <Info size={ICON.sm} style={{ marginRight: 6, verticalAlign: -2 }} />
+            <Notice style={{ marginBottom: "var(--space-3)" }}>
+              <Info className="icon-lede" size={ICON.sm} />
               {t("supportView.requestPending")}
-            </div>
+            </Notice>
           ) : (
             <input
               type="text"
@@ -379,7 +380,7 @@ function SupportCanvas({
           <div className="support-view-name">
             {bundle.flow.name || bundle.flow.id}
             <span className="support-view-ro">
-              <Lock size={ICON.xs} style={{ marginRight: 3, verticalAlign: -1 }} />
+              <Lock className="icon-lede" size={ICON.xs} />
               {t("supportView.readOnly")}
             </span>
           </div>

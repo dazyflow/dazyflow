@@ -89,7 +89,7 @@ export function SignUp() {
   if (signupAllowed === null) {
     return (
       <div className="signin-wrap">
-        <div className="signin" style={{ textAlign: "center", color: "var(--muted)" }}>
+        <div className="signin muted" style={{ textAlign: "center" }}>
           {t("common.loading")}
         </div>
       </div>

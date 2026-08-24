@@ -13,6 +13,7 @@ import { explainApiError } from "../../lib/explainApiError";
 import { ErrorNotice } from "../../components/ui/ErrorNotice";
 import { ICON } from "../../icons";
 import { FEEDBACK } from "../../lib/timing";
+import { Loading } from "../../components/ui/Loading";
 
 // ssoUpcoming lists identity providers we show as placeholders so the
 // surface reads as "SSO providers" rather than "Google" — the monogram
@@ -48,9 +49,9 @@ function RedirectURIDisplay({ uri }: { uri: string }) {
       <code className="sso-readonly">{uri}</code>
       <Button onClick={copy} className="sso-copy-btn">
         {copied ? (
-          <Check size={ICON.xs} style={{ marginRight: 6 }} />
+          <Check size={ICON.xs} />
         ) : (
-          <Copy size={ICON.xs} style={{ marginRight: 6 }} />
+          <Copy size={ICON.xs} />
         )}
         {copied ? t("common.copied") : t("common.copy")}
       </Button>
@@ -242,7 +243,7 @@ export function AdminOrgSSO() {
       <div className="page-title">
         <div>
           <h1>
-            <ShieldCheck size={ICON.xl} style={{ marginRight: 8, verticalAlign: -3 }} />
+            <ShieldCheck size={ICON.xl} />
             {t("admin.sso.title")}
           </h1>
           <div className="sub">{t("admin.sso.subtitle")}</div>
@@ -271,29 +272,27 @@ export function AdminOrgSSO() {
           aria-live="assertive"
           style={{ color: "var(--danger)", marginBottom: "var(--space-4)" }}
         >
-          <AlertCircle size={ICON.sm} style={{ marginRight: 6, verticalAlign: -2 }} />
+          <AlertCircle className="icon-lede" size={ICON.sm} />
           {error}
         </div>
       )}
       {testOK && (
         <div className="card sso-test-ok">
-          <Check size={ICON.sm} style={{ marginRight: 6, verticalAlign: -2 }} />
+          <Check className="icon-lede" size={ICON.sm} />
           <strong>{t("admin.sso.testSuccessHead")}</strong>
           <div className="desc">{t("admin.sso.testSuccessBody")}</div>
         </div>
       )}
       {testErrorCode && (
         <div className="card sso-test-error">
-          <AlertCircle size={ICON.sm} style={{ marginRight: 6, verticalAlign: -2 }} />
+          <AlertCircle className="icon-lede" size={ICON.sm} />
           <strong>{t("admin.sso.testErrorHead")}</strong>
           <div className="desc">{t(testErrorBodyKey)}</div>
           <div className="desc sso-test-error-retry">{t("admin.sso.testErrorRetry")}</div>
         </div>
       )}
       {loading ? (
-        <div className="card" style={{ color: "var(--muted)" }}>
-          {t("common.loading")}
-        </div>
+        <Loading />
       ) : (
         <>
         <details className="sso-walkthrough card" open={!enabled}>
@@ -354,7 +353,7 @@ export function AdminOrgSSO() {
               <p className="desc">{t("admin.sso.googleIntro")}</p>
             </div>
             <span className={`sso-status-pill${enabled ? " is-active" : ""}`}>
-              {enabled && <Check size={ICON.xs} style={{ verticalAlign: -1 }} />}
+              {enabled && <Check className="icon-inline" size={ICON.xs} />}
               {enabled ? t("admin.sso.enabledBadge") : t("admin.sso.statusInactive")}
             </span>
           </div>
@@ -407,7 +406,7 @@ export function AdminOrgSSO() {
             <div className="sso-foot-msg" role="status" aria-live="polite">
               {savedAt && (
                 <span className="sso-saved-chip">
-                  <Check size={ICON.xs} style={{ verticalAlign: -1 }} />
+                  <Check className="icon-inline" size={ICON.xs} />
                   {t("common.saved")}
                 </span>
               )}
@@ -452,7 +451,7 @@ export function AdminOrgSSO() {
                 <div className="desc">{t("admin.sso.testButtonDesc")}</div>
                 {popupBlocked && (
                   <div className="sso-popup-blocked">
-                    <AlertCircle size={ICON.xs} style={{ marginRight: 6, verticalAlign: -1 }} />
+                    <AlertCircle className="icon-lede" size={ICON.xs} />
                     <strong>{t("admin.sso.popupBlockedHead")}</strong>
                     <div className="desc">
                       {t("admin.sso.popupBlockedBody")}{" "}

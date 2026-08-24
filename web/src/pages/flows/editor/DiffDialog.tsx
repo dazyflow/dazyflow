@@ -6,6 +6,9 @@ import { GitCompare, Rocket, X } from "lucide-react";
 import { Button } from "../../../components/ui/Button";
 import { ICON } from "../../../icons";
 import { diffIsEmpty, type GraphDiff } from "../../../lib/diffGraphs";
+import { useEscapeToClose } from "../../../components/ui/useEscapeToClose";
+import { Loading } from "../../../components/ui/Loading";
+import { Notice } from "../../../components/ui/Notice";
 
 // What the draft changes relative to the published revision. Execution-focused
 // (nodes, edges, params, meta) — diffGraphs filters cosmetic moves out, so an
@@ -28,17 +31,20 @@ export function DiffDialog({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
+  useEscapeToClose(onClose);
+
   return (
         <div className="modal-backdrop" onClick={() => onClose()}>
           <div
             className="modal diff-modal"
             onClick={(e) => e.stopPropagation()}
+            aria-modal="true"
             role="dialog"
             aria-label={t("editor.diffTitle")}
           >
             <div className="modal-head">
               <strong>
-                <GitCompare size={ICON.sm} style={{ verticalAlign: -2, marginRight: 6 }} />
+                <GitCompare className="icon-lede" size={ICON.sm} />
                 {t("editor.diffHeading")}
               </strong>
               <Button
@@ -51,9 +57,9 @@ export function DiffDialog({
             </div>
             <div className="modal-body">
               {loading ? (
-                <div className="history-empty">{t("common.loading")}</div>
+                <Loading inline />
               ) : !diff || diffIsEmpty(diff) ? (
-                <div className="history-empty">{t("editor.diffNone")}</div>
+                <Notice inline>{t("editor.diffNone")}</Notice>
               ) : (
                 <ul className="diff-list">
                   {diff.addedNodes.map((id) => (
@@ -101,7 +107,7 @@ export function DiffDialog({
                 }}
                 disabled={publishing || !canPublish}
               >
-                <Rocket size={ICON.sm} style={{ marginRight: 5 }} />
+                <Rocket size={ICON.sm} />
                 {t("editor.publish")}
               </Button>
             </div>

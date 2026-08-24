@@ -1,10 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Joachim Klahr
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useEffect, type ReactNode } from "react";
+import {type ReactNode} from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "./Button";
+import { useEscapeToClose } from "./useEscapeToClose";
 
 // ConfirmModal is the app's reusable "are you sure?" dialog — a themed
 // replacement for window.confirm(). Use it for any destructive action
@@ -37,33 +38,27 @@ export function ConfirmModal({
   onCancel: () => void;
 }) {
   const { t } = useTranslation();
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCancel();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onCancel]);
+  useEscapeToClose(onCancel);
   // Portal to <body>: the backdrop is position:fixed, but a caller deep
   // in the tree (e.g. the inspector panel) may sit under a transformed /
   // container-query ancestor that would trap the fixed element inside
   // that subtree instead of the viewport. Rendering at the body level
   // makes the modal correct no matter where it's used.
   return createPortal(
-    <div className="settings-backdrop" onClick={onCancel}>
+    <div className="modal-backdrop" onClick={onCancel}>
       <div
-        className="settings-dialog confirm-dialog"
+        className="modal confirm-dialog"
         onClick={(e) => e.stopPropagation()}
         role="alertdialog"
         aria-modal="true"
       >
-        <div className="settings-head">
+        <div className="modal-head">
           <h2>{title}</h2>
         </div>
-        <div className="settings-body">
+        <div className="modal-body">
           <p className="confirm-message">{message}</p>
         </div>
-        <div className="settings-foot">
+        <div className="modal-foot">
           {/* Cancel is the safe default — autofocused so a reflexive
               Enter/Space dismisses rather than confirms a destructive act. */}
           <Button onClick={onCancel} autoFocus>

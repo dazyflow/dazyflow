@@ -12,6 +12,7 @@ import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import type { EmailTemplateSummary } from "../../types";
 import { ErrorNotice } from "../../components/ui/ErrorNotice";
 import { ICON } from "../../icons";
+import { Loading } from "../../components/ui/Loading";
 
 // EmailTemplates is the "Email templates" tab of Admin → Secrets: the org's
 // library of reusable HTML layout shells the email drops wrap a body in.
@@ -83,7 +84,7 @@ export function EmailTemplates() {
             </Button>
           )}
           {templates === null ? (
-            <p className="muted">{t("common.loading", "Loading…")}</p>
+            <Loading inline />
           ) : (
             <ul>
               {templates.map((tpl) => (

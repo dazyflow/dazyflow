@@ -138,7 +138,7 @@ export function UserAvatar({
   return (
     <span
       className="pa-avatar pa-avatar-user pa-avatar-mono"
-      style={{ width: size, height: size, background: tintFor(email), fontSize: size * 0.42 }}
+          style={{ width: size, height: size, background: tintFor(email), fontSize: size * 0.42 }}
       aria-hidden="true"
     >
       {monogram(email)}

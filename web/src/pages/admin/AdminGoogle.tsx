@@ -11,6 +11,8 @@ import type { GoogleAccountsResponse } from "../../types";
 import { explainApiError } from "../../lib/explainApiError";
 import { ErrorNotice } from "../../components/ui/ErrorNotice";
 import { ICON } from "../../icons";
+import { useEscapeToClose } from "../../components/ui/useEscapeToClose";
+import { Loading } from "../../components/ui/Loading";
 
 // AdminGoogle is the org-admin page for managing the organization's shared
 // Google connections. Google accounts are org-level credentials (not
@@ -138,7 +140,7 @@ export function AdminGoogle() {
               alt=""
               width={20}
               height={20}
-              style={{ marginRight: 8, verticalAlign: -3 }}
+             
             />
             {t("admin.google.title")}
           </h1>
@@ -159,7 +161,7 @@ export function AdminGoogle() {
       </div>
 
       {error && (
-        <ErrorNotice style={{ marginBottom: 12 }}>
+        <ErrorNotice style={{ marginBottom: "var(--space-3)" }}>
           {error}
         </ErrorNotice>
       )}
@@ -171,7 +173,7 @@ export function AdminGoogle() {
           </p>
         </div>
       ) : loading ? (
-        <p className="desc">{t("common.loading")}</p>
+        <Loading inline />
       ) : !data || data.accounts.length === 0 ? (
         <div className="card">
           <p className="desc">{t("admin.google.empty")}</p>
@@ -281,18 +283,22 @@ function ConnectAccountDialog({
     onConnect(trimmed);
   };
 
+
+  useEscapeToClose(onCancel);
   return (
-    <div className="settings-backdrop" onClick={onCancel}>
+    <div className="modal-backdrop" onClick={onCancel}>
       <form
-        className="settings-dialog"
+        className="modal"
         style={{ maxWidth: 460 }}
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
         onSubmit={submit}
       >
-        <div className="settings-head">
+        <div className="modal-head">
           <h2>{t("admin.google.connectTitle")}</h2>
         </div>
-        <div className="settings-body">
+        <div className="modal-body">
           <div className="sf-field">
             <div className="label-row">
               <label htmlFor="google-account-name">{t("admin.google.nameLabel")}</label>
@@ -315,7 +321,7 @@ function ConnectAccountDialog({
             )}
           </div>
         </div>
-        <div className="settings-foot">
+        <div className="modal-foot">
           <Button onClick={onCancel}>
             {t("common.cancel")}
           </Button>
@@ -343,20 +349,24 @@ function ConfirmDisconnectDialog({
   onConfirm: () => void;
 }) {
   const { t } = useTranslation();
+
+  useEscapeToClose(onCancel);
   return (
-    <div className="settings-backdrop" onClick={onCancel}>
+    <div className="modal-backdrop" onClick={onCancel}>
       <div
-        className="settings-dialog"
+        className="modal"
         style={{ maxWidth: 460 }}
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
       >
-        <div className="settings-head">
+        <div className="modal-head">
           <h2>{t("admin.google.disconnectTitle")}</h2>
         </div>
-        <div className="settings-body">
+        <div className="modal-body">
           <p className="desc">{t("admin.google.disconnectConfirm", { account })}</p>
         </div>
-        <div className="settings-foot">
+        <div className="modal-foot">
           <Button onClick={onCancel}>
             {t("common.cancel")}
           </Button>

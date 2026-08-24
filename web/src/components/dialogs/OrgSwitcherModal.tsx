@@ -9,9 +9,10 @@ import { ConfirmModal } from "../ui/ConfirmModal";
 import { Button } from "../ui/Button";
 import { explainApiError } from "../../lib/explainApiError";
 import { ICON } from "../../icons";
+import { useEscapeToClose } from "../ui/useEscapeToClose";
 
 // OrgSwitcherModal is the centered org switcher + create flow, mirroring the
-// ConfigChecklistModal shell (portal to <body>, settings-backdrop/dialog,
+// ConfigChecklistModal shell (portal to <body>, modal-backdrop/dialog,
 // ESC + backdrop dismiss). It lists the orgs you can act in — click one to
 // switch — and offers an inline "Create organization" form. The raw tenant id
 // is shown muted under the name only when showId is set (admins/multi-tenant),
@@ -70,13 +71,7 @@ export function OrgSwitcherModal({
     "idle",
   );
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !busy) onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, busy]);
+  useEscapeToClose(() => !busy && onClose());
 
   const submit = async () => {
     const trimmed = name.trim();
@@ -110,15 +105,15 @@ export function OrgSwitcherModal({
   };
 
   return createPortal(
-    <div className="settings-backdrop" onClick={() => !busy && onClose()}>
+    <div className="modal-backdrop" onClick={() => !busy && onClose()}>
       <div
-        className="settings-dialog org-switcher-modal"
+        className="modal org-switcher-modal"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-labelledby="org-switcher-title"
       >
-        <div className="settings-head">
+        <div className="modal-head">
           <h2 id="org-switcher-title">{t("nav.orgsTitle")}</h2>
           <Button
             variant="ghost"
@@ -130,7 +125,7 @@ export function OrgSwitcherModal({
             <X size={ICON.lg} />
           </Button>
         </div>
-        <div className="settings-body org-switcher-body">
+        <div className="modal-body org-switcher-body">
           <ul className="org-switcher-list">
             {orgs.map((org) => {
               const active = org.tenant === activeTenant;

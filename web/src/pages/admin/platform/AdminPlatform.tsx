@@ -30,7 +30,7 @@ export function AdminPlatform() {
       <div className="page-title">
         <div>
           <h1>
-            <Mail size={ICON.xl} style={{ marginRight: 8, verticalAlign: -3 }} />
+            <Mail size={ICON.xl} />
             {t("admin.platform.title")}
           </h1>
           <div className="sub">{t("admin.platform.subtitle")}</div>
@@ -92,7 +92,7 @@ function SmtpTestSection() {
           style={{ flex: 1 }}
         />
         <Button type="submit" variant="primary" disabled={!canSend}>
-          <Send size={ICON.sm} style={{ marginRight: 6 }} />
+          <Send size={ICON.sm} />
           {sending ? t("common.sending") : t("admin.smtpTest.send")}
         </Button>
       </form>
@@ -110,9 +110,9 @@ function SmtpTestSection() {
           }}
         >
           {result.ok ? (
-            <Check size={ICON.sm} style={{ marginRight: 6, verticalAlign: -2 }} />
+            <Check className="icon-lede" size={ICON.sm} />
           ) : (
-            <AlertCircle size={ICON.sm} style={{ marginRight: 6, verticalAlign: -2 }} />
+            <AlertCircle className="icon-lede" size={ICON.sm} />
           )}
           {result.msg}
         </div>

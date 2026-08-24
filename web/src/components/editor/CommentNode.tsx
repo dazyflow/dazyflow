@@ -67,7 +67,7 @@ export function CommentNode({ data, selected }: NodeProps) {
           setTitle(e.target.value);
           d.onTitleChange?.(e.target.value);
         }}
-        style={{ color }}
+          style={{ color }}
       />
     </div>
   );

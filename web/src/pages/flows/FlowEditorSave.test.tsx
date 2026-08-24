@@ -125,9 +125,14 @@ function graphWithUnzonedSchedule() {
   };
 }
 
-// Let the debounce elapse. The autosave timer is 1500ms; 3s of fake time plus a
-// flush covers it with room to spare.
+// Let the debounce elapse.
+//
+// The wait for the toolbar is load-bearing, not cosmetic: the graph load is
+// async, and the timer is only armed once it resolves and flags the graph dirty.
+// Advancing fake time straight after mount spends it before the timer exists, so
+// nothing fires — which read as "the heal is broken" when it was the test.
 async function letAutosaveFire() {
+  await screen.findByText("editor.run");
   await act(async () => {
     await vi.advanceTimersByTimeAsync(3000);
   });
@@ -160,21 +165,45 @@ describe("editor autosave guards", () => {
     expect(cron?.params?.tz).toBeTruthy();
   });
 
-  // NOTE: this pins current behaviour, and that behaviour is arguably
-  // inconsistent. The autosave effect refuses to write while `lockedRunID` is
-  // set, because "a run executes the SAVED graph". The timezone heal writes for
-  // the SAME stated reason ("persisted because Run executes the SAVED graph")
-  // but calls api.saveGraph directly from the load handler, gated only on
-  // `changed && hasPerm("graph:edit")` — so the lock does not apply to it.
-  // Harm is low: the write is HEAD plus a tz, and it is idempotent. But two
-  // paths draw opposite conclusions from one premise. Pinned as-is so a
-  // deliberate change shows up as a failing test, not a silent swap.
-  it("heals the timezone even while a run holds the lock (unguarded path)", async () => {
+  // Previously this heal was the one write that ignored the edit lock: it PUT
+  // straight from the load handler, while autosave refuses to write during a run
+  // for the very reason the heal exists — "Run executes the SAVED graph". The
+  // heal now marks the graph dirty instead, so it inherits every autosave guard.
+  it("does not heal while a run holds the edit lock", async () => {
     listRuns.mockResolvedValue({ runs: [{ id: "run-9", status: "running" }] });
     loadGraph.mockResolvedValue(graphWithUnzonedSchedule());
     mount();
     await letAutosaveFire();
-    expect(saveGraph).toHaveBeenCalledTimes(1);
+    expect(saveGraph).not.toHaveBeenCalled();
+  });
+
+  it("heals once the run releases the lock", async () => {
+    // The waiting write is not dropped, just deferred: when the lock clears, the
+    // pending autosave writes the stamped graph.
+    listRuns.mockResolvedValue({ runs: [{ id: "run-9", status: "running" }] });
+    loadGraph.mockResolvedValue(graphWithUnzonedSchedule());
+    mount();
+    await letAutosaveFire();
+    expect(saveGraph).not.toHaveBeenCalled();
+
+    listRuns.mockResolvedValue({ runs: [{ id: "run-9", status: "succeeded" }] });
+    // Two advances, deliberately. The first lets the lock poll observe the
+    // finished run and clear the lock; only then does the autosave effect re-run
+    // and arm its 1500ms timer. Doing it in one advance arms the timer during the
+    // final flush, with no fake time left for it to fire.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4000);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4000);
+    });
+    await waitFor(() => expect(saveGraph).toHaveBeenCalled());
+    const saved = saveGraph.mock.calls[0].find(
+      (a) => a && typeof a === "object" && "nodes" in a,
+    ) as { nodes: { module: string; params?: { tz?: string } }[] } | undefined;
+    expect(
+      saved?.nodes.find((n) => n.module === "cron_trigger")?.params?.tz,
+    ).toBeTruthy();
   });
 
   it("does not autosave when the initial load failed", async () => {

@@ -1,12 +1,13 @@
 // SPDX-FileCopyrightText: 2026 Joachim Klahr
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { explainApiError } from "../../lib/explainApiError";
 import { Button } from "../ui/Button";
 import { ErrorNotice } from "../ui/ErrorNotice";
+import { useEscapeToClose } from "../ui/useEscapeToClose";
 
 // DuplicateFlowModal prompts for the new flow's name before copying. The
 // field is pre-filled with "Copy of <source>" so the common case is a single
@@ -31,13 +32,7 @@ export function DuplicateFlowModal({
 
   // Escape cancels — but not mid-flight, so a stray keypress can't abandon the
   // dialog while the request is running.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !busy) onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, busy]);
+  useEscapeToClose(() => !busy && onClose());
 
   const submit = async () => {
     const trimmed = name.trim();
@@ -54,17 +49,17 @@ export function DuplicateFlowModal({
   };
 
   return createPortal(
-    <div className="settings-backdrop" onClick={() => !busy && onClose()}>
+    <div className="modal-backdrop" onClick={() => !busy && onClose()}>
       <div
-        className="settings-dialog confirm-dialog"
+        className="modal confirm-dialog"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
       >
-        <div className="settings-head">
+        <div className="modal-head">
           <h2>{t("duplicateFlow.title")}</h2>
         </div>
-        <div className="settings-body">
+        <div className="modal-body">
           <p className="confirm-message">
             {t("duplicateFlow.body", { name: sourceName })}
           </p>
@@ -90,7 +85,7 @@ export function DuplicateFlowModal({
           </div>
           {err && <ErrorNotice>{err}</ErrorNotice>}
         </div>
-        <div className="settings-foot">
+        <div className="modal-foot">
           <Button onClick={onClose} disabled={busy}>
             {t("common.cancel")}
           </Button>

@@ -30,6 +30,7 @@ import { telFieldFlag, regionDisplayName } from "../../lib/phoneFlag";
 import { useAuth } from "../../auth";
 import { Button } from "../ui/Button";
 import { ICON } from "../../icons";
+import { useEscapeToClose } from "../ui/useEscapeToClose";
 
 // SchemaForm renders manifest.params_schema as a typed form. The
 // happy path: a top-level object whose properties resolve to one of
@@ -1328,21 +1329,17 @@ function EmailTemplatePicker({
 // touching the app.
 function EmailPreviewModal({ html, onClose }: { html: string; onClose: () => void }) {
   const { t } = useTranslation();
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  useEscapeToClose(onClose);
 
   return createPortal(
-    <div className="settings-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={onClose}>
       <div
-        className="settings-dialog email-preview-dialog"
+        className="modal email-preview-dialog"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
       >
-        <div className="settings-head">
+        <div className="modal-head">
           <h2>{t("emailTemplate.previewTitle", "Email preview")}</h2>
           <Button
             variant="ghost"
@@ -1353,7 +1350,7 @@ function EmailPreviewModal({ html, onClose }: { html: string; onClose: () => voi
             <X size={ICON.md} />
           </Button>
         </div>
-        <div className="settings-body">
+        <div className="modal-body">
           <iframe
             className="email-preview-frame"
             title={t("emailTemplate.previewTitle", "Email preview")}
@@ -1887,7 +1884,7 @@ function PlainStringField({
     ) : telInfo ? (
       <div
         className="sf-tel-hint"
-        style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, fontSize: "0.85em", opacity: 0.85 }}
+        style={{ display: "flex", alignItems: "center", gap: "var(--space-1h)", marginTop: "var(--space-1)", fontSize: "0.85em", opacity: 0.85 }}
       >
         <span style={{ fontSize: "1.25em", lineHeight: 1 }} aria-hidden>
           {telInfo.flag}
@@ -2022,6 +2019,13 @@ function ReferenceMenu({
     </Button>
   );
 
+  // The reference picker renders its own backdrop, so Escape has to dismiss it
+  // too. Guarded on `open` so the call is a no-op when the menu is closed. If
+  // this menu sits inside another dialog, Escape closes both — which is what
+  // happened before as well, since the outer dialog took the key and unmounted
+  // the menu with it.
+  useEscapeToClose(() => open && setOpen(false));
+
   return (
     <div className="ref-menu">
       <Button
@@ -2045,15 +2049,15 @@ function ReferenceMenu({
         createPortal(
           // Portal to <body> so the fixed backdrop escapes the inspector's
           // transformed/clipped ancestors — same reasoning as ConfirmModal.
-          <div className="settings-backdrop" onClick={() => setOpen(false)}>
+          <div className="modal-backdrop" onClick={() => setOpen(false)}>
             <div
-              className="settings-dialog ref-dialog"
+              className="modal ref-dialog"
               onClick={(e) => e.stopPropagation()}
               role="dialog"
               aria-modal="true"
               aria-label={t("schemaForm.refPicker.title")}
             >
-              <div className="settings-head">
+              <div className="modal-head">
                 <h2>{t("schemaForm.refPicker.title")}</h2>
                 <Button
                   variant="ghost"
@@ -2082,7 +2086,7 @@ function ReferenceMenu({
                   }}
                 />
               </div>
-              <div className="settings-body ref-dialog-body">
+              <div className="modal-body ref-dialog-body">
                 {error && (
                   <div className="ref-pop-msg ref-pop-error">
                     <span>{error}</span>{" "}
@@ -2477,7 +2481,7 @@ function DictField({
         </div>
       ))}
       <Button size="sm" className="sf-add" onClick={addEmpty}>
-        <Plus size={ICON.xs} style={{ marginRight: 4 }} />
+        <Plus size={ICON.xs} />
         {t("schemaForm.add")}
       </Button>
     </div>
@@ -2526,7 +2530,7 @@ function ArrayField({
         </div>
       ))}
       <Button size="sm" className="sf-add" onClick={addEmpty}>
-        <Plus size={ICON.xs} style={{ marginRight: 4 }} />
+        <Plus size={ICON.xs} />
         {t("schemaForm.add")}
       </Button>
     </div>
@@ -2609,7 +2613,7 @@ function MultiSelectField({
           }}
         />
         <Button size="sm" className="sf-add" onClick={addCustom}>
-          <Plus size={ICON.xs} style={{ marginRight: 4 }} />
+          <Plus size={ICON.xs} />
           {t("schemaForm.add")}
         </Button>
       </div>
@@ -2806,7 +2810,7 @@ function MappingField({
           className="sf-add"
           onClick={() => commit([...rows, { column: "", source: "" }])}
         >
-          <Plus size={ICON.xs} style={{ marginRight: 4 }} />
+          <Plus size={ICON.xs} />
           {t("schemaForm.mapping.add")}
         </Button>
         {autoPairs.length > 0 && (
@@ -3192,7 +3196,7 @@ function RowConditionField({
           <div
             key={i}
             className="sf-rowcond-row"
-            style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}
+            style={{ display: "flex", flexDirection: "column", gap: "var(--space-1h)", marginBottom: "var(--space-3)" }}
           >
             {i > 0 && <span className="desc">{t("schemaForm.rowCond.and")}</span>}
             {/* Column gets its own full-width row so it stays readable in the
@@ -3225,7 +3229,7 @@ function RowConditionField({
                 style={{ width: "100%" }}
               />
             )}
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <div style={{ display: "flex", gap: "var(--space-1h)", alignItems: "center" }}>
               <select
                 value={c.op}
                 onChange={(e) => setCond(i, { op: e.target.value })}
@@ -3257,7 +3261,7 @@ function RowConditionField({
           </div>
         );
       })}
-      <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+      <div style={{ display: "flex", gap: "var(--space-2)", marginTop: "var(--space-1)" }}>
         <Button className="sf-rowcond-add" onClick={addCond}>
           <Plus size={ICON.sm} /> {t("schemaForm.rowCond.addCondition")}
         </Button>
@@ -3521,7 +3525,7 @@ function WorkspacePathField({
           }
         }}
       >
-        <Upload size={ICON.sm} style={{ marginRight: 6, verticalAlign: -2 }} />
+        <Upload className="icon-lede" size={ICON.sm} />
         {uploading ? t("schemaForm.uploading") : t("schemaForm.dropOrBrowse")}
       </div>
       <input
@@ -3540,10 +3544,10 @@ function WorkspacePathField({
         value={value}
         placeholder={t("schemaForm.workspacePathPlaceholder")}
         onChange={(e) => onChange(e.target.value)}
-        style={{ marginTop: 6, fontFamily: "var(--font-mono)", fontSize: "var(--text-sm)" }}
+        style={{ marginTop: "var(--space-1h)", fontFamily: "var(--font-mono)", fontSize: "var(--text-sm)" }}
       />
       {error && (
-        <div style={{ color: "var(--danger)", fontSize: "var(--text-sm)", marginTop: 4 }}>
+        <div style={{ color: "var(--danger)", fontSize: "var(--text-sm)", marginTop: "var(--space-1)" }}>
           {error}
         </div>
       )}
@@ -3674,7 +3678,7 @@ function GitCredAccountField({
   );
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
       <select value={current} onChange={(e) => onChange(e.target.value)}>
         {opts.map((a) => (
           <option key={a} value={a}>

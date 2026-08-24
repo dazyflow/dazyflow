@@ -10,6 +10,8 @@ import type { AuditEvent } from "../../types";
 import { formatDateTime } from "../../lib/datetime";
 import { ErrorNotice } from "../../components/ui/ErrorNotice";
 import { ICON } from "../../icons";
+import { Loading } from "../../components/ui/Loading";
+import { Notice } from "../../components/ui/Notice";
 
 // AdminAudit shows the tenant's administrative trail — graph saves, runs,
 // secret/key changes, approvals, cancels — newest first. Read-only;
@@ -57,7 +59,7 @@ export function AdminAudit() {
       <div className="page-title">
         <div>
           <h1>
-            <ShieldAlert size={ICON.xl} style={{ marginRight: 8, verticalAlign: -3 }} />
+            <ShieldAlert size={ICON.xl} />
             {t("admin.audit.title")}
           </h1>
           <div className="sub">{t("admin.audit.subtitle")}</div>
@@ -71,18 +73,18 @@ export function AdminAudit() {
       )}
 
       {loading && events.length === 0 && (
-        <div className="card" style={{ color: "var(--muted)" }}>{t("common.loading")}</div>
+        <Loading />
       )}
 
       {!loading && events.length === 0 && !error && (
-        <div className="card" style={{ color: "var(--muted)" }}>{t("admin.audit.empty")}</div>
+        <Notice>{t("admin.audit.empty")}</Notice>
       )}
 
       {events.length > 0 && (
         <div className="card" style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "var(--text-md)" }}>
             <thead>
-              <tr style={{ textAlign: "left", color: "var(--muted)" }}>
+              <tr className="muted" style={{ textAlign: "left" }}>
                 <th style={auditCellHead}>{t("admin.audit.colTime")}</th>
                 <th style={auditCellHead}>{t("admin.audit.colActor")}</th>
                 <th style={auditCellHead}>{t("admin.audit.colAction")}</th>
@@ -99,7 +101,7 @@ export function AdminAudit() {
                     <span className="perm-chip">{e.action}</span>
                   </td>
                   <td style={{ ...auditCell, fontFamily: "var(--font-mono)" }}>{e.target}</td>
-                  <td style={{ ...auditCell, color: "var(--muted)" }}>{e.detail}</td>
+                  <td className="muted" style={auditCell}>{e.detail}</td>
                 </tr>
               ))}
             </tbody>
@@ -110,5 +112,5 @@ export function AdminAudit() {
   );
 }
 
-const auditCellHead: React.CSSProperties = { padding: "6px 10px", fontWeight: 600 };
-const auditCell: React.CSSProperties = { padding: "6px 10px", verticalAlign: "top" };
+const auditCellHead: React.CSSProperties = { padding: "var(--space-1h) var(--space-3)", fontWeight: 600 };
+const auditCell: React.CSSProperties = { padding: "var(--space-1h) var(--space-3)", verticalAlign: "top" };

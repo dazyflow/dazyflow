@@ -36,6 +36,8 @@ import { explainApiError } from "../../lib/explainApiError";
 import type { FlowRunStatus } from "../../flowStatus";
 import type { FlowSummary, RunSummary, ScheduleEntry } from "../../types";
 import { ErrorNotice } from "../../components/ui/ErrorNotice";
+import { EmptyState } from "../../components/ui/EmptyState";
+import { Loading } from "../../components/ui/Loading";
 
 type SortKey = "recent" | "name" | "status";
 
@@ -293,53 +295,56 @@ export function FlowList() {
         <div>
           <h1>{t("flowList.title")}</h1>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: "var(--space-2)" }}>
           <Button
             variant="primary"
             onClick={() => navigate("/flows/new")}
             disabled={!canEdit}
             title={!canEdit ? t("flowList.needEdit") : undefined}
           >
-            <Plus size={ICON.md} style={{ marginRight: 6 }} />
+            <Plus size={ICON.md} />
             {t("flowList.newFlow")}
           </Button>
         </div>
       </div>
-      {loading && <div className="card">{t("common.loading")}</div>}
+      {loading && <Loading />}
       {error && <ErrorNotice>{error}</ErrorNotice>}
       {!loading && !error && flows.length === 0 && (
-        <div className="card flow-empty">
-          <Workflow size={28} className="flow-empty-icon" />
-          <h2>{t("flowList.emptyTitle")}</h2>
-          <p>{t("flowList.emptyBody")}</p>
-          {/* Two buttons, because the copy above offers two paths — a single
-              generic "Create a flow" landed on the AI tab, which is neither of
-              them. Template leads: it's the one that produces a working flow
-              without the user designing anything. */}
-          <div className="flow-empty-actions">
-            <Button
-              variant="primary"
-              onClick={() => navigate("/flows/new?tab=template")}
-              disabled={!canEdit}
-              title={!canEdit ? t("flowList.needEdit") : undefined}
-            >
-              {t("flowList.emptyTemplateCta")}
-            </Button>
-            <Button
-              onClick={() => navigate("/flows/new?tab=blank")}
-              disabled={!canEdit}
-              title={!canEdit ? t("flowList.needEdit") : undefined}
-            >
-              {t("flowList.emptyBlankCta")}
-            </Button>
-          </div>
-        </div>
+        <EmptyState
+          icon={Workflow}
+          title={t("flowList.emptyTitle")}
+          /* Two buttons, because the copy above offers two paths — a single
+             generic "Create a flow" landed on the AI tab, which is neither of
+             them. Template leads: it's the one that produces a working flow
+             without the user designing anything. */
+          action={
+            <>
+              <Button
+                variant="primary"
+                onClick={() => navigate("/flows/new?tab=template")}
+                disabled={!canEdit}
+                title={!canEdit ? t("flowList.needEdit") : undefined}
+              >
+                {t("flowList.emptyTemplateCta")}
+              </Button>
+              <Button
+                onClick={() => navigate("/flows/new?tab=blank")}
+                disabled={!canEdit}
+                title={!canEdit ? t("flowList.needEdit") : undefined}
+              >
+                {t("flowList.emptyBlankCta")}
+              </Button>
+            </>
+          }
+        >
+          {t("flowList.emptyBody")}
+        </EmptyState>
       )}
       {/* Search / sort / filter toolbar — only once there are enough flows
           to need it. A two-flow workspace doesn't want a filter bar. */}
       {!loading && !error && flows.length > 1 && (
         <div className="flow-toolbar">
-          <div className="flow-search">
+          <div className="search-box flow-search">
             <Search size={ICON.sm} aria-hidden />
             <input
               type="search"
@@ -380,10 +385,7 @@ export function FlowList() {
         </div>
       )}
       {!loading && !error && flows.length > 0 && visibleFlows.length === 0 && (
-        <div className="card flow-empty">
-          <Search size={24} className="flow-empty-icon" />
-          <p>{t("flowList.noMatches")}</p>
-        </div>
+        <EmptyState icon={Search}>{t("flowList.noMatches")}</EmptyState>
       )}
       <div className="graph-list">
         {visibleFlows.map((f) => {
@@ -482,7 +484,7 @@ export function FlowList() {
                   <div className="graph-card-desc">{f.description}</div>
                 )}
                 {f.owner && !ownedByMe && (
-                  <div className="meta" style={{ color: "var(--muted)" }}>
+                  <div className="meta muted">
                     {t("flowList.createdBy", { owner: f.owner })}
                   </div>
                 )}

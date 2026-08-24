@@ -16,6 +16,8 @@ import { ErrorNotice } from "../../components/ui/ErrorNotice";
 import { ICON } from "../../icons";
 import { POLL } from "../../lib/timing";
 import { formatDuration } from "../../lib/format";
+import { Loading } from "../../components/ui/Loading";
+import { Notice } from "../../components/ui/Notice";
 
 const PAGE_SIZE = 50;
 
@@ -389,7 +391,6 @@ export function RunList() {
             variant="primary"
             onClick={() => setConfirmBulk(true)}
             disabled={retrying}
-            style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
           >
             <RotateCcw size={ICON.sm} />
             {retrying ? t("runAction.retrying") : t("runAction.retrySelected")}
@@ -406,14 +407,12 @@ export function RunList() {
         </ErrorNotice>
       )}
       {!error && loading && runs.length === 0 && (
-        <div className="card" style={{ color: "var(--muted)" }}>
-          {t("common.loading")}
-        </div>
+        <Loading />
       )}
       {!error && !loading && runs.length === 0 && (
-        <div className="card" style={{ color: "var(--muted)" }}>
+        <Notice>
           {t("runList.empty")}
-        </div>
+        </Notice>
       )}
 
       {visibleRuns.length > 0 && (
@@ -517,10 +516,10 @@ export function RunList() {
                       {flowNames[r.graph_id] ?? t("common.unknownParen")}
                     </Link>
                   </td>
-                  <td style={{ color: "var(--muted)", fontSize: "var(--text-sm)" }}>
+                  <td className="muted" style={{ fontSize: "var(--text-sm)" }}>
                     {formatDateTime(r.enqueued_at)}
                   </td>
-                  <td style={{ color: "var(--muted)", fontSize: "var(--text-sm)" }}>
+                  <td className="muted" style={{ fontSize: "var(--text-sm)" }}>
                     {/* Older records (pre started_at-stamping) fall back
                         to enqueued_at so finished runs still show a
                         duration instead of "—". */}
@@ -538,7 +537,7 @@ export function RunList() {
                         gives a plain-English explanation. So don't surface the
                         code here. */}
                   </td>
-                  <td style={{ textAlign: "right", paddingRight: 12 }}>
+                  <td style={{ textAlign: "right", paddingRight: "var(--space-3)" }}>
                     {showInbox && (
                       <Button
                         variant="ghost"
@@ -546,15 +545,15 @@ export function RunList() {
                         onClick={() => void retryOne(r.id)}
                         disabled={retrying}
                         title={t("runAction.retryTitle")}
-                        style={{ marginRight: 8 }}
+
                       >
-                        <RotateCcw size={ICON.sm} style={{ marginRight: 4 }} />
+                        <RotateCcw size={ICON.sm} />
                         {retrying ? t("runAction.retrying") : t("runAction.retry")}
                       </Button>
                     )}
                     <Link
+                      className="muted"
                       to={`/flows/${encodeURIComponent(r.graph_id)}?run=${encodeURIComponent(r.id)}`}
-                      style={{ color: "var(--muted)" }}
                       title={t("common.openInEditor")}
                       aria-label={t("common.openInEditor")}
                     >
@@ -570,9 +569,9 @@ export function RunList() {
       )}
 
       {runs.length > 0 && visibleRuns.length === 0 && (
-        <div className="card" style={{ color: "var(--muted)" }}>
+        <Notice>
           {t("runList.noMatches")}
-        </div>
+        </Notice>
       )}
 
       {hasMore && (

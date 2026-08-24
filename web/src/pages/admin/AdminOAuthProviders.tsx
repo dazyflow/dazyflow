@@ -12,6 +12,7 @@ import type { AdminOAuthProvider } from "../../types";
 import { explainApiError } from "../../lib/explainApiError";
 import { ErrorNotice } from "../../components/ui/ErrorNotice";
 import { ICON } from "../../icons";
+import { Loading } from "../../components/ui/Loading";
 
 // AdminOAuthProviders is the paste-client-credentials surface that
 // replaces "edit env vars + restart the daemon" for an operator setting
@@ -73,7 +74,7 @@ export function AdminOAuthProviders() {
       )}
 
       {loading && !providers.length ? (
-        <div className="card">{t("common.loading")}</div>
+        <Loading />
       ) : (
         <div className="svc-list">
           {providers.map((p) => (
@@ -190,12 +191,12 @@ function ProviderRow({
 
       <div className="svc-actions">
         <Button variant="primary" onClick={save} disabled={saving || !clientID.trim() || !clientSecret.trim()}>
-          <Save size={ICON.sm} style={{ marginRight: 4 }} />
+          <Save size={ICON.sm} />
           {saving ? t("common.saving") : t("common.save")}
         </Button>
         {provider.has_persisted && !confirmClear && (
           <Button variant="ghost" onClick={() => setConfirmClear(true)}>
-            <Trash2 size={ICON.sm} style={{ marginRight: 4 }} />
+            <Trash2 size={ICON.sm} />
             {t("admin.oauth.clear")}
           </Button>
         )}

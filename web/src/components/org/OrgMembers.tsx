@@ -13,6 +13,7 @@ import { ConfirmModal } from "../ui/ConfirmModal";
 import { UserAvatar } from "../brand/PlatformAvatar";
 import { ErrorNotice } from "../ui/ErrorNotice";
 import { ICON } from "../../icons";
+import { Notice } from "../ui/Notice";
 
 const ROLE_NAMES = ["viewer", "editor", "admin"] as const;
 
@@ -112,7 +113,7 @@ export function MembersSection({ tenant }: { tenant: string }) {
                 <div className="subject">
                   {m.email}
                   {m.home && (
-                    <span className="count-pill active" style={{ marginLeft: 8 }}>
+                    <span className="count-pill active" style={{ marginLeft: "var(--space-2)" }}>
                       {t("admin.platformMembers.owner")}
                     </span>
                   )}
@@ -146,9 +147,9 @@ export function MembersSection({ tenant }: { tenant: string }) {
           </div>
         ))}
         {members.length === 0 && (
-          <div className="card" style={{ color: "var(--muted)" }}>
+          <Notice>
             {t("admin.platformMembers.none")}
-          </div>
+          </Notice>
         )}
       </div>
 
@@ -171,7 +172,7 @@ export function MembersSection({ tenant }: { tenant: string }) {
           ))}
         </select>
         <Button variant="primary" disabled={busy === "__invite__" || !inviteEmail.trim()} onClick={() => void invite()}>
-          <UserPlus size={ICON.sm} style={{ marginRight: 6 }} />
+          <UserPlus size={ICON.sm} />
           {t("admin.platformMembers.invite")}
         </Button>
       </div>

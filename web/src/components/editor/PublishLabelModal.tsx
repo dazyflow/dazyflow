@@ -8,6 +8,7 @@ import { Rocket } from "lucide-react";
 import { Button } from "../ui/Button";
 import { Callout } from "../ui/Callout";
 import { ICON } from "../../icons";
+import { useEscapeToClose } from "../ui/useEscapeToClose";
 
 // PublishLabelModal confirms a publish / go-live and nudges the user to give
 // the release an optional name. The name field is always offered but never
@@ -53,31 +54,25 @@ export function PublishLabelModal({
     inputRef.current?.focus();
   }, []);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCancel();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onCancel]);
+  useEscapeToClose(onCancel);
 
   // Portal to <body> for the same reason as ConfirmModal: a transformed or
   // container-query ancestor in the editor tree would otherwise trap the
   // position:fixed backdrop inside that subtree.
   return createPortal(
-    <div className="settings-backdrop" onClick={onCancel}>
+    <div className="modal-backdrop" onClick={onCancel}>
       <div
         className={
-          "settings-dialog confirm-dialog" + (connect ? " publish-gate" : "")
+          "modal confirm-dialog" + (connect ? " publish-gate" : "")
         }
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
       >
-        <div className="settings-head">
+        <div className="modal-head">
           <h2>{title}</h2>
         </div>
-        <div className="settings-body">
+        <div className="modal-body">
           {warning && <Callout variant="warning">{warning}</Callout>}
           <label className="publish-label-field">
             <span>{t("editor.publishLabelField")}</span>
@@ -94,7 +89,7 @@ export function PublishLabelModal({
           </label>
           <p className="confirm-message">{message}</p>
         </div>
-        <div className="settings-foot">
+        <div className="modal-foot">
           <Button onClick={() => onPublish("")}>
             {t("editor.publishWithoutName")}
           </Button>
@@ -102,7 +97,7 @@ export function PublishLabelModal({
             variant={connect ? undefined : "primary"}
             onClick={() => onPublish(value.trim())}
           >
-            <Rocket size={ICON.sm} style={{ marginRight: 5 }} />
+            <Rocket size={ICON.sm} />
             {confirmLabel}
           </Button>
           {connect && (

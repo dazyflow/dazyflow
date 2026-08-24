@@ -14,6 +14,8 @@ import type { AccessGrant, GrantStatus } from "../../types";
 import { ErrorNotice } from "../../components/ui/ErrorNotice";
 import { ICON } from "../../icons";
 import { isGrantActive } from "../../lib/grants";
+import { Loading } from "../../components/ui/Loading";
+import { Notice } from "../../components/ui/Notice";
 
 // SupportAgentHome is the support agent's home: the list of flows they've been
 // granted access to (one-click Open), plus a form to request access to a new
@@ -56,7 +58,7 @@ export function SupportAgentHome() {
       <div className="page-title">
         <div>
           <h1>
-            <LifeBuoy size={ICON.xl} style={{ marginRight: 8, verticalAlign: -3 }} />
+            <LifeBuoy size={ICON.xl} />
             {t("supportHome.title")}
           </h1>
           <div className="sub">{t("supportHome.subtitle")}</div>
@@ -66,10 +68,10 @@ export function SupportAgentHome() {
       </div>
 
       {gate === "disabled" && (
-        <div className="card" style={{ color: "var(--muted)" }}>
-          <Info size={ICON.sm} style={{ marginRight: 6, verticalAlign: -2 }} />
+        <Notice>
+          <Info className="icon-lede" size={ICON.sm} />
           {t("supportView.notEnabled")}
-        </div>
+        </Notice>
       )}
       {gate === "forbidden" && (
         <ErrorNotice>{t("supportView.forbidden")}</ErrorNotice>
@@ -84,9 +86,9 @@ export function SupportAgentHome() {
         <>
           <h2 className="admin-section-head">{t("supportHome.grantsHead")}</h2>
           {loading ? (
-            <div className="card" style={{ color: "var(--muted)" }}>{t("common.loading")}</div>
+            <Loading />
           ) : grants.length === 0 ? (
-            <div className="card" style={{ color: "var(--muted)" }}>{t("supportHome.noGrants")}</div>
+            <Notice>{t("supportHome.noGrants")}</Notice>
           ) : (
             <div className="user-list">
               {grants.map((g) => (
@@ -133,7 +135,7 @@ function GrantRow({ grant, onOpen }: { grant: AccessGrant; onOpen: () => void })
           {grant.flow_id}
           <span
             className="count-pill"
-            style={{ marginLeft: 8, color: statusColor(grant.status, expired) }}
+            style={{ marginLeft: "var(--space-2)", color: statusColor(grant.status, expired) }}
           >
             {t(`supportHome.status.${statusKey}`)}
           </span>
@@ -150,7 +152,7 @@ function GrantRow({ grant, onOpen }: { grant: AccessGrant; onOpen: () => void })
         {active ? (
           <Button variant="primary" onClick={onOpen}>
             {t("supportHome.openFlow")}
-            <ArrowRight size={ICON.sm} style={{ marginLeft: 6 }} />
+            <ArrowRight size={ICON.sm} style={{ marginLeft: "var(--space-1h)" }} />
           </Button>
         ) : grant.status === "requested" ? (
           <span className="sub">{t("supportHome.awaitingApproval")}</span>
@@ -198,7 +200,7 @@ function RequestNewFlow({ onRequested }: { onRequested: () => void }) {
     return (
       <div style={{ marginTop: "var(--space-4)" }}>
         <Button onClick={() => setOpen(true)}>
-          <Plus size={ICON.sm} style={{ marginRight: 6 }} />
+          <Plus size={ICON.sm} />
           {t("supportHome.requestNew")}
         </Button>
       </div>

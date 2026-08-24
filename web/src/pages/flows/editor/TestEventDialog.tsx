@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { Send, X } from "lucide-react";
 import { Button } from "../../../components/ui/Button";
 import { ICON } from "../../../icons";
+import { useEscapeToClose } from "../../../components/ui/useEscapeToClose";
 
 // The "Send test event" dialog: an editable JSON sample the editor POSTs to
 // /test-trigger, so a webhook flow can be fired from the canvas without an
@@ -27,17 +28,20 @@ export function TestEventDialog({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
+  useEscapeToClose(onClose);
+
   return (
         <div className="modal-backdrop" onClick={() => onClose()}>
           <div
             className="modal"
             onClick={(e) => e.stopPropagation()}
+            aria-modal="true"
             role="dialog"
             aria-label={t("editor.testRunHeading")}
           >
             <div className="modal-head">
               <strong>
-                <Send size={ICON.sm} style={{ verticalAlign: -2, marginRight: 6 }} />
+                <Send className="icon-lede" size={ICON.sm} />
                 {t("editor.testRunHeading")}
               </strong>
               <Button
@@ -60,7 +64,7 @@ export function TestEventDialog({
                 rows={12}
               />
               {error && (
-                <div style={{ color: "var(--danger)", fontSize: "var(--text-sm)", marginTop: 6 }}>
+                <div style={{ color: "var(--danger)", fontSize: "var(--text-sm)", marginTop: "var(--space-1h)" }}>
                   {t("editor.testRunBadJSON", { error: error })}
                 </div>
               )}
@@ -74,7 +78,7 @@ export function TestEventDialog({
                 onClick={() => onSubmit()}
                 disabled={!canRun}
               >
-                <Send size={ICON.sm} style={{ marginRight: 5 }} />
+                <Send size={ICON.sm} />
                 {t("editor.testRunFire")}
               </Button>
             </div>

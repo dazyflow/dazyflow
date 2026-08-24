@@ -61,10 +61,10 @@ export function ApprovalPanel({
       <h4>{t("inspector.awaitingApproval")}</h4>
       {prompt && (
         <div
+          className="muted"
           style={{
             fontSize: "var(--text-md)",
-            color: "var(--muted)",
-            marginBottom: 8,
+            marginBottom: "var(--space-2)",
             whiteSpace: "pre-wrap",
           }}
         >
@@ -83,7 +83,7 @@ export function ApprovalPanel({
           style={{ resize: "vertical" }}
         />
       </div>
-      <div style={{ display: "flex", gap: 8 }}>
+      <div style={{ display: "flex", gap: "var(--space-2)" }}>
         <Button variant="primary" disabled={!!busy || !token} onClick={resolve("approve")}>
           {busy === "approve" ? t("inspector.approving") : t("inspector.approve")}
         </Button>
@@ -92,7 +92,7 @@ export function ApprovalPanel({
         </Button>
       </div>
       {error && (
-        <div style={{ color: "var(--danger)", fontSize: "var(--text-sm)", marginTop: 6 }}>
+        <div style={{ color: "var(--danger)", fontSize: "var(--text-sm)", marginTop: "var(--space-1h)" }}>
           {error}
         </div>
       )}

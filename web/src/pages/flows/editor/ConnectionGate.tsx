@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "../../../components/ui/Button";
 import { oauthProviderDisplay } from "../../../integrationMeta";
 import type { MissingConnection, SetupNeed } from "../../../lib/requiredConnections";
+import { useEscapeToClose } from "../../../components/ui/useEscapeToClose";
 
 // ConnectionGate warns, before a run, that the flow references OAuth
 // accounts and/or credentials the tenant hasn't set up. Offers the
@@ -48,17 +49,21 @@ export function ConnectionGate({
     missing.length > 0 || missingSecrets.length > 0 || missingSetups.length > 0;
   const hasAdminBlocked =
     adminBlockedProviders.length > 0 || adminBlockedSecretRefs.length > 0;
+  useEscapeToClose(onCancel);
+
   return (
-    <div className="settings-backdrop" onClick={onCancel}>
+    <div className="modal-backdrop" onClick={onCancel}>
       <div
-        className="settings-dialog"
+        className="modal"
         style={{ maxWidth: 460 }}
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
       >
-        <div className="settings-head">
+        <div className="modal-head">
           <h2>{t("connGate.title")}</h2>
         </div>
-        <div className="settings-body">
+        <div className="modal-body">
           {hasUserFixable && (
             <p className="conn-gate-lede">{t("connGate.lede")}</p>
           )}
@@ -127,7 +132,7 @@ export function ConnectionGate({
         {!canConnect && hasUserFixable && (
           <p className="desc conn-gate-noperm">{t("connGate.noPermNote")}</p>
         )}
-        <div className="settings-foot">
+        <div className="modal-foot">
           <Button onClick={onRunAnyway}>
             {t("connGate.runAnyway")}
           </Button>

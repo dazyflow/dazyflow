@@ -13,6 +13,8 @@ import { ConfirmModal } from "../../../components/ui/ConfirmModal";
 import { DropGlyph } from "../../../components/brand/PlatformAvatar";
 import { ErrorNotice } from "../../../components/ui/ErrorNotice";
 import { ICON } from "../../../icons";
+import { Loading } from "../../../components/ui/Loading";
+import { Notice } from "../../../components/ui/Notice";
 
 // AdminPlatformDrops is the platform-operator killswitch for individual
 // drops. A drop switched off here is refused by the engine on every run
@@ -94,7 +96,7 @@ export function AdminPlatformDrops() {
       <div className="page-title">
         <div>
           <h1>
-            <ShieldCheck size={ICON.xl} style={{ marginRight: 8, verticalAlign: -3 }} />
+            <ShieldCheck size={ICON.xl} />
             {t("admin.platformDrops.title")}
           </h1>
           <div className="sub">{t("admin.platformDrops.subtitle")}</div>
@@ -111,25 +113,19 @@ export function AdminPlatformDrops() {
         {t("admin.platformDrops.disabledCount", { count: disabledCount })}
       </div>
 
-      <div style={{ position: "relative", marginBottom: "var(--space-3)" }}>
-        <Search
-          size={ICON.sm}
-          style={{ position: "absolute", left: 10, top: 11, color: "var(--muted)" }}
-        />
+      <div className="search-box" style={{ marginBottom: "var(--space-3)" }}>
+        <Search size={ICON.sm} aria-hidden />
         <input
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={t("admin.platformDrops.searchPlaceholder")}
           aria-label={t("admin.platformDrops.searchPlaceholder")}
-          style={{ width: "100%", paddingLeft: 32 }}
         />
       </div>
 
       {loading ? (
-        <div className="card" style={{ color: "var(--muted)" }}>
-          {t("common.loading")}
-        </div>
+        <Loading />
       ) : (
         <div className="user-list">
           {filtered.map((d) => (
@@ -147,13 +143,13 @@ export function AdminPlatformDrops() {
                     {d.globally_disabled && (
                       <span
                         className="count-pill"
-                        style={{ marginLeft: 8, color: "var(--danger)" }}
+                        style={{ marginLeft: "var(--space-2)", color: "var(--danger)" }}
                       >
                         {t("admin.platformDrops.off")}
                       </span>
                     )}
                     {(d.disabled_tenants?.length ?? 0) > 0 && (
-                      <span className="count-pill" style={{ marginLeft: 8 }}>
+                      <span className="count-pill" style={{ marginLeft: "var(--space-2)" }}>
                         {t("admin.platformDrops.perOrgCount", {
                           count: d.disabled_tenants?.length ?? 0,
                         })}
@@ -174,7 +170,7 @@ export function AdminPlatformDrops() {
                     disabled={busy === d.id}
                     onClick={() => void toggle(d, "")}
                   >
-                    <Power size={ICON.sm} style={{ marginRight: 4 }} />
+                    <Power size={ICON.sm} />
                     {t("admin.platformDrops.enable")}
                   </Button>
                 ) : (
@@ -183,7 +179,7 @@ export function AdminPlatformDrops() {
                     disabled={busy === d.id}
                     onClick={() => setConfirm(d)}
                   >
-                    <PowerOff size={ICON.sm} style={{ marginRight: 4 }} />
+                    <PowerOff size={ICON.sm} />
                     {t("admin.platformDrops.disable")}
                   </Button>
                 )}
@@ -191,9 +187,9 @@ export function AdminPlatformDrops() {
             </div>
           ))}
           {filtered.length === 0 && (
-            <div className="card" style={{ color: "var(--muted)" }}>
+            <Notice>
               {t("admin.platformDrops.none")}
-            </div>
+            </Notice>
           )}
         </div>
       )}

@@ -11,6 +11,8 @@ import { useAuth } from "../../auth";
 import { Button } from "../ui/Button";
 import type { ShareLink } from "../../types";
 import { ICON } from "../../icons";
+import { useEscapeToClose } from "../ui/useEscapeToClose";
+import { Loading } from "../ui/Loading";
 
 // ShareOverviewModal manages the workspace's single public overview link —
 // the cryptic, login-free TV-dashboard URL. It loads the existing link on
@@ -103,21 +105,25 @@ export function ShareOverviewModal({ onClose }: { onClose: () => void }) {
     }
   }, [link]);
 
+  useEscapeToClose(onClose);
+
   return createPortal(
-    <div className="settings-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={onClose}>
       <div
-        className="settings-dialog"
+        className="modal"
         style={{ maxWidth: 560 }}
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
       >
-        <div className="settings-head">
+        <div className="modal-head">
           <h2>{t("share.title")}</h2>
         </div>
-        <div className="settings-body">
+        <div className="modal-body">
           <p className="settings-help">{t("share.description")}</p>
 
           {loading ? (
-            <p className="desc">{t("common.loading")}</p>
+            <Loading inline />
           ) : link ? (
             <>
               <div className="secret-reveal">{publicURL(link)}</div>
@@ -130,7 +136,7 @@ export function ShareOverviewModal({ onClose }: { onClose: () => void }) {
                 }}
               >
                 <Button onClick={copy}>
-                  <Copy size={ICON.xs} style={{ marginRight: 6 }} />
+                  <Copy size={ICON.xs} />
                   {copied ? t("share.copied") : t("common.copyLink")}
                 </Button>
                 <Button
@@ -138,7 +144,7 @@ export function ShareOverviewModal({ onClose }: { onClose: () => void }) {
                     window.open(publicURL(link), "_blank", "noreferrer")
                   }
                 >
-                  <Tv size={ICON.xs} style={{ marginRight: 6 }} />
+                  <Tv size={ICON.xs} />
                   {t("share.open")}
                 </Button>
               </div>
@@ -156,21 +162,21 @@ export function ShareOverviewModal({ onClose }: { onClose: () => void }) {
             </p>
           )}
         </div>
-        <div className="settings-foot">
+        <div className="modal-foot">
           {link ? (
             <>
               <Button onClick={disable} disabled={busy} variant="danger">
                 {t("share.disable")}
               </Button>
               <Button onClick={create} disabled={busy}>
-                <RefreshCw size={ICON.xs} style={{ marginRight: 6 }} />
+                <RefreshCw size={ICON.xs} />
                 {t("share.regenerate")}
               </Button>
             </>
           ) : (
             !loading && (
               <Button onClick={create} disabled={busy} variant="primary">
-                <ExternalLink size={ICON.xs} style={{ marginRight: 6 }} />
+                <ExternalLink size={ICON.xs} />
                 {t("share.create")}
               </Button>
             )

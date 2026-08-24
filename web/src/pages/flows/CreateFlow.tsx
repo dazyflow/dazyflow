@@ -337,7 +337,7 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
                   onChange={(e) => setRefineText(e.target.value)}
                 />
                 <Button type="submit" disabled={refineText.trim() === ""}>
-                  <Sparkles size={ICON.sm} style={{ marginRight: 6 }} />
+                  <Sparkles size={ICON.sm} />
                   {t("createFlow.refineCta")}
                 </Button>
               </div>
@@ -511,7 +511,7 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
                 disabled={busy || aiDesc.trim() === "" || !canEdit}
                 title={!canEdit ? t("flowList.needEdit") : undefined}
               >
-                <Sparkles size={ICON.sm} style={{ marginRight: 6 }} />
+                <Sparkles size={ICON.sm} />
                 {busy ? t("createAI.generating") : t("createAI.generate")}
               </Button>
             )}

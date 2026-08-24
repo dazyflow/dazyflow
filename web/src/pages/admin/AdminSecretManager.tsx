@@ -21,6 +21,7 @@ import { explainApiError } from "../../lib/explainApiError";
 import { ErrorNotice } from "../../components/ui/ErrorNotice";
 import { ICON } from "../../icons";
 import { featureUnavailable } from "../../lib/explainApiError";
+import { Notice } from "../../components/ui/Notice";
 
 // AdminSecretManager is the tenant-level "point the platform at your own
 // secret manager" config — set-once infrastructure that lives as the
@@ -81,9 +82,9 @@ export function AdminSecretManager() {
 
   if (off) {
     return (
-      <div className="card" style={{ color: "var(--muted)" }}>
+      <Notice>
         {t("connections.secretManager.unavailable")}
-      </div>
+      </Notice>
     );
   }
 
@@ -429,7 +430,7 @@ function ProviderShell({
   return (
     <div>
       <h2 className="admin-section-head" style={{ marginTop: "var(--space-4)" }}>
-        <Cloud size={ICON.sm} style={{ marginRight: 6, verticalAlign: -2 }} />
+        <Cloud className="icon-lede" size={ICON.sm} />
         {t(headKey)}
       </h2>
       <div className="sub" style={{ marginBottom: "var(--space-2)" }}>

@@ -25,6 +25,7 @@ import { Button } from "../ui/Button";
 import { webhookKeys } from "../../flowStatus";
 import { formatDateTime } from "../../lib/datetime";
 import { ICON } from "../../icons";
+import { EmptyState } from "../ui/EmptyState";
 
 // TriggerEmpty is the per-tab "nothing set up yet" state with a single
 // call-to-action that creates the trigger of that type.
@@ -42,15 +43,18 @@ function TriggerEmpty({
   onAdd: () => void;
 }) {
   return (
-    <div className="trigger-empty">
-      <Icon size={28} className="trigger-empty-icon" />
-      <div className="trigger-empty-title">{title}</div>
-      <div className="desc">{desc}</div>
-      <Button variant="primary" onClick={onAdd} style={{ marginTop: 12 }}>
-        <Plus size={ICON.sm} style={{ marginRight: 6 }} />
-        {cta}
-      </Button>
-    </div>
+    <EmptyState
+      icon={Icon}
+      title={title}
+      action={
+        <Button variant="primary" onClick={onAdd}>
+          <Plus size={ICON.sm} />
+          {cta}
+        </Button>
+      }
+    >
+      {desc}
+    </EmptyState>
   );
 }
 
@@ -506,7 +510,7 @@ function WebhookKeys({
     setPendingRevoke(null);
   };
   return (
-    <div className="sf-field" style={{ marginTop: 10 }}>
+    <div className="sf-field" style={{ marginTop: "var(--space-3)" }}>
       <div className="label-row">
         <label>{t("settings.triggers.bearerSecret")}</label>
       </div>
@@ -535,7 +539,7 @@ function WebhookKeys({
         onClick={addKey}
         title={t("settings.triggers.generateTitle")}
       >
-        <Sparkles size={ICON.xs} style={{ marginRight: 5 }} />
+        <Sparkles size={ICON.xs} />
         {keys.length === 0
           ? t("settings.triggers.generate")
           : t("settings.triggers.generateAnother")}
@@ -823,14 +827,14 @@ export function TriggerScheduleField({
       {validation.kind === "invalid" && (
         <div
           className="desc"
-          style={{ color: "var(--danger)", display: "flex", gap: 6, alignItems: "flex-start" }}
+          style={{ color: "var(--danger)", display: "flex", gap: "var(--space-1h)", alignItems: "flex-start" }}
         >
-          <AlertCircle size={ICON.sm} style={{ flexShrink: 0, marginTop: 2 }} />
+          <AlertCircle size={ICON.sm} style={{ flexShrink: 0, marginTop: "var(--space-0)" }} />
           <span>{validation.error}</span>
         </div>
       )}
       {validation.kind === "valid" && validation.nextFires.length > 0 && (
-        <div className="desc" style={{ color: "var(--muted)" }}>
+        <div className="desc muted">
           <div className="cron-next-head">{t("settings.triggers.cronNextLocal", { tz })}</div>
           <ul className="cron-next-list">
             {validation.nextFires.map((iso, i) => (

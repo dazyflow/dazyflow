@@ -17,6 +17,7 @@ import { PlanLimitsSection } from "../../../components/org/OrgPlanLimits";
 import { MembersSection } from "../../../components/org/OrgMembers";
 import { ErrorNotice } from "../../../components/ui/ErrorNotice";
 import { ICON } from "../../../icons";
+import { Loading } from "../../../components/ui/Loading";
 
 // AdminPlatformOrgDetail is one org's platform-admin moderation page:
 // suspend (halt all its flows + lock out members), ban (suspend +
@@ -103,9 +104,7 @@ export function AdminPlatformOrgDetail() {
       )}
 
       {loading || !org ? (
-        <div className="card" style={{ color: "var(--muted)" }}>
-          {t("common.loading")}
-        </div>
+        <Loading />
       ) : (
         <>
           <div className="card" style={{ marginBottom: "var(--space-3)" }}>

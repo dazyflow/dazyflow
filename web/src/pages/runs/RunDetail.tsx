@@ -26,6 +26,7 @@ import { ErrorNotice } from "../../components/ui/ErrorNotice";
 import { ICON } from "../../icons";
 import { POLL, TICK, FEEDBACK } from "../../lib/timing";
 import { formatDuration } from "../../lib/format";
+import { Notice } from "../../components/ui/Notice";
 
 // RunDetail is the post-failure "what happened" page — and the
 // post-success "yes, here are the values" page. T2 of the PMF
@@ -333,7 +334,7 @@ export function RunDetail() {
       <div className="page-title">
         <div>
           <BackLink to="/runs" label={t("nav.runs")} />
-          <h1 style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <h1 style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
             <span className={"status-dot " + run.Status} />
             {graph?.name || run.GraphID}
           </h1>
@@ -350,7 +351,7 @@ export function RunDetail() {
             </div>
           )}
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: "var(--space-2)" }}>
           <Link
             to={`/flows/${encodeURIComponent(run.GraphID)}?run=${encodeURIComponent(run.ID)}`}
             className="secondary-link"
@@ -367,7 +368,7 @@ export function RunDetail() {
               disabled={cancelling}
               title={t("runAction.stopTitle")}
             >
-              <Square size={ICON.sm} style={{ marginRight: 6 }} />
+              <Square size={ICON.sm} />
               {cancelling ? t("runAction.stopping") : t("runAction.stop")}
             </Button>
           )}
@@ -378,7 +379,7 @@ export function RunDetail() {
               disabled={retrying}
               title={t("runAction.retryTitle")}
             >
-              <RotateCcw size={ICON.sm} style={{ marginRight: 6 }} />
+              <RotateCcw size={ICON.sm} />
               {retrying ? t("runAction.retrying") : t("runAction.retry")}
             </Button>
           )}
@@ -391,7 +392,7 @@ export function RunDetail() {
             disabled={replaying}
             title={t("runAction.replayTitle")}
           >
-            <RotateCw size={ICON.sm} style={{ marginRight: 6 }} />
+            <RotateCw size={ICON.sm} />
             {replaying ? t("runAction.replaying") : t("runAction.replay")}
           </Button>
         </div>
@@ -473,7 +474,7 @@ export function RunDetail() {
             <span>
               {t("runDetail.nodesTotal", { count: orderedNodes.length })}
               {orderedNodes.filter((n) => n.Status === "succeeded").length > 0 && (
-                <span style={{ color: "var(--muted)" }}>
+                <span className="muted">
                   {" · "}
                   {t("runDetail.nodesSucceeded", {
                     count: orderedNodes.filter((n) => n.Status === "succeeded").length,
@@ -498,7 +499,7 @@ export function RunDetail() {
         <SummaryRow
           label={t("runDetail.summaryRunId")}
           value={
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-1h)" }}>
               <code style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-sm)" }}>
                 {run.ID}
               </code>
@@ -539,9 +540,9 @@ export function RunDetail() {
 
       <h2 style={{ marginTop: "var(--space-4)" }}>{t("runDetail.timeline")}</h2>
       {orderedNodes.length === 0 && (
-        <div className="card" style={{ color: "var(--muted)" }}>
+        <Notice>
           {t("runDetail.noNodes")}
-        </div>
+        </Notice>
       )}
       <div className="node-timeline">
         {orderedNodes.map((n) => {
@@ -909,7 +910,7 @@ function RunFailureBanner({
       : t("runDetail.failed");
   return (
     <div className="run-error-banner">
-      <AlertCircle size={ICON.lg} style={{ flexShrink: 0, marginTop: 2 }} />
+      <AlertCircle size={ICON.lg} style={{ flexShrink: 0, marginTop: "var(--space-0)" }} />
       <div className="run-error-body">
         {explanation && (
           <div className="run-error-headline">
@@ -958,7 +959,7 @@ function RunFailureBanner({
           </details>
         )}
         <div className="run-error-needsyou">{t("runDetail.needsYou")}</div>
-        <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 8, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-4)", marginTop: "var(--space-2)", flexWrap: "wrap" }}>
           {/* Native ticket path (Tier 1): files a ticket with a redacted
               diagnostic bundle auto-attached. Shown when the deployment wired
               the ticket surface. */}
@@ -970,7 +971,7 @@ function RunFailureBanner({
               style={{
                 display: "inline-flex",
                 alignItems: "center",
-                gap: 6,
+                gap: "var(--space-1h)",
                 fontSize: "var(--text-sm)",
                 fontWeight: 600,
                 background: "none",
@@ -996,7 +997,7 @@ function RunFailureBanner({
               style={{
                 display: "inline-flex",
                 alignItems: "center",
-                gap: 6,
+                gap: "var(--space-1h)",
                 fontSize: "var(--text-sm)",
                 fontWeight: 600,
               }}

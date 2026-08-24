@@ -30,6 +30,10 @@ import { explainApiError } from "../../lib/explainApiError";
 import { ErrorNotice } from "../../components/ui/ErrorNotice";
 import { ICON } from "../../icons";
 import { FEEDBACK } from "../../lib/timing";
+import { useEscapeToClose } from "../../components/ui/useEscapeToClose";
+import { Loading } from "../../components/ui/Loading";
+import { Notice } from "../../components/ui/Notice";
+import { EmptyState } from "../../components/ui/EmptyState";
 
 // isAdminMember reports whether a member's role set grants org admin —
 // either a catalog role named "admin" or any role carrying the
@@ -95,13 +99,13 @@ export function AdminUsers() {
       <div className="page-title">
         <div>
           <h1>
-            <Users size={ICON.xl} style={{ marginRight: 8, verticalAlign: -3 }} />
+            <Users size={ICON.xl} />
             {t("admin.users.title")}
           </h1>
           <div className="sub">{t("admin.users.subtitle")}</div>
         </div>
         <Button variant="primary" onClick={() => setInviting(true)}>
-          <Plus size={ICON.sm} style={{ marginRight: 6 }} />
+          <Plus size={ICON.sm} />
           {t("admin.users.inviteButton")}
         </Button>
       </div>
@@ -121,20 +125,21 @@ export function AdminUsers() {
 
       <h2 className="admin-section-head">{t("admin.users.peopleHead")}</h2>
       {loading && members.length === 0 && (
-        <div className="card" style={{ color: "var(--muted)" }}>
-          {t("common.loading")}
-        </div>
+        <Loading />
       )}
       {!loading && members.length === 0 && !error && (
-        <div className="admin-empty">
-          <Users size={28} />
-          <h2>{t("admin.users.emptyTitle")}</h2>
-          <p>{t("admin.users.emptyBody")}</p>
-          <Button variant="primary" onClick={() => setInviting(true)}>
-            <Plus size={ICON.sm} style={{ marginRight: 6 }} />
-            {t("admin.users.inviteFirst")}
-          </Button>
-        </div>
+        <EmptyState
+          icon={Users}
+          title={t("admin.users.emptyTitle")}
+          action={
+            <Button variant="primary" onClick={() => setInviting(true)}>
+              <Plus size={ICON.sm} />
+              {t("admin.users.inviteFirst")}
+            </Button>
+          }
+        >
+          {t("admin.users.emptyBody")}
+        </EmptyState>
       )}
       <div className="user-list">
         {members.map((m) => (
@@ -152,9 +157,9 @@ export function AdminUsers() {
         {t("admin.users.pendingHead")}
       </h2>
       {invites.length === 0 ? (
-        <div className="card" style={{ color: "var(--muted)" }}>
+        <Notice>
           {t("admin.users.noPending")}
-        </div>
+        </Notice>
       ) : (
         <div className="user-list">
           {invites.map((inv) => (
@@ -286,7 +291,7 @@ function MemberCard({
           <UserCircle2 size={ICON.lg} />
           {member.email}
           {member.home && (
-            <span className="count-pill active" style={{ marginLeft: 8 }}>
+            <span className="count-pill active" style={{ marginLeft: "var(--space-2)" }}>
               {t("admin.users.ownerBadge")}
             </span>
           )}
@@ -334,7 +339,7 @@ function MemberCard({
         )}
         {!member.home && (
           <Button onClick={remove} disabled={removing} title={t("admin.users.removeTitle")}>
-            <Trash2 size={ICON.xs} style={{ marginRight: 4 }} />
+            <Trash2 size={ICON.xs} />
             {removing ? t("admin.users.removing") : t("admin.users.remove")}
           </Button>
         )}
@@ -426,7 +431,7 @@ function InvitationCard({
         <div className="subject">
           <Mail size={ICON.lg} />
           {inv.email}
-          <span className="count-pill" style={{ marginLeft: 8 }}>
+          <span className="count-pill" style={{ marginLeft: "var(--space-2)" }}>
             {statusLabel}
           </span>
         </div>
@@ -459,7 +464,7 @@ function InvitationCard({
       <div className="user-card-actions">
         {inv.pending && (
           <Button onClick={() => setConfirmRevoke(true)} disabled={revoking}>
-            <X size={ICON.xs} style={{ marginRight: 4 }} />
+            <X size={ICON.xs} />
             {revoking ? t("admin.users.revoking") : t("common.revoke")}
           </Button>
         )}
@@ -552,13 +557,7 @@ function InviteModal({
 
   // Esc closes the modal — small thing, big quality-of-life. Attached
   // to the document so a focus inside the input still picks it up.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCancel();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onCancel]);
+  useEscapeToClose(onCancel);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -581,17 +580,19 @@ function InviteModal({
   };
 
   return (
-    <div className="settings-backdrop" onClick={onCancel}>
+    <div className="modal-backdrop" onClick={onCancel}>
       <form
-        className="settings-dialog"
+        className="modal"
         style={{ maxWidth: 520 }}
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
         onSubmit={submit}
       >
-        <div className="settings-head">
+        <div className="modal-head">
           <h2>{t("admin.users.inviteModalTitle")}</h2>
         </div>
-        <div className="settings-body">
+        <div className="modal-body">
           <div className="sf-field">
             <div className="label-row">
               <label>{t("admin.users.inviteEmailLabel")}</label>
@@ -650,7 +651,7 @@ function InviteModal({
             </div>
           </div>
         </div>
-        <div className="settings-foot">
+        <div className="modal-foot">
           <Button type="button" onClick={onCancel}>
             {t("common.cancel")}
           </Button>

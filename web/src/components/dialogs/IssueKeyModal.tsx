@@ -10,6 +10,7 @@ import { Button } from "../ui/Button";
 import { Switch } from "../ui/Switch";
 import type { IssuedAPIKey, Permission, Role } from "../../types";
 import { formatDate } from "../../lib/datetime";
+import { useEscapeToClose } from "../ui/useEscapeToClose";
 
 // Role templates — common shapes admins reach for. "Custom" disables
 // the template effect so the checkbox grid is the source of truth.
@@ -181,18 +182,22 @@ export function IssueKeyModal({
     }
   };
 
+  useEscapeToClose(onCancel);
+
   return (
-    <div className="settings-backdrop" onClick={onCancel}>
+    <div className="modal-backdrop" onClick={onCancel}>
       <form
-        className="settings-dialog"
+        className="modal"
         style={{ maxWidth: 560 }}
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
         onSubmit={submit}
       >
-        <div className="settings-head">
+        <div className="modal-head">
           <h2>{t("issueKey.title")}</h2>
         </div>
-        <div className="settings-body">
+        <div className="modal-body">
           <div className="sf-field">
             <div className="label-row">
               <label>{t("issueKey.subjectLabel")}</label>
@@ -301,7 +306,7 @@ export function IssueKeyModal({
             </div>
           </div>
         </div>
-        <div className="settings-foot">
+        <div className="modal-foot">
           <Button onClick={onCancel}>
             {t("common.cancel")}
           </Button>

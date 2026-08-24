@@ -14,6 +14,9 @@ import { formatDate } from "../../lib/datetime";
 import { explainApiError } from "../../lib/explainApiError";
 import { ErrorNotice } from "../../components/ui/ErrorNotice";
 import { ICON } from "../../icons";
+import { Loading } from "../../components/ui/Loading";
+import { Notice } from "../../components/ui/Notice";
+import { EmptyState } from "../../components/ui/EmptyState";
 
 export function AdminAPIKeys() {
   const { t } = useTranslation();
@@ -91,14 +94,14 @@ export function AdminAPIKeys() {
       <div className="page-title">
         <div>
           <h1>
-            <KeyRound size={ICON.xl} style={{ marginRight: 8, verticalAlign: -3 }} />
+            <KeyRound size={ICON.xl} />
             {t("admin.apiKeys.title")}
           </h1>
           <div className="sub">{t("admin.apiKeys.subtitle")}</div>
         </div>
         {keys.length > 0 && (
           <Button variant="primary" onClick={() => setCreating(true)}>
-            <Plus size={ICON.sm} style={{ marginRight: 6 }} />
+            <Plus size={ICON.sm} />
             {t("admin.apiKeys.issueKey")}
           </Button>
         )}
@@ -111,21 +114,22 @@ export function AdminAPIKeys() {
       )}
 
       {!loading && !error && keys.length === 0 && (
-        <div className="admin-empty">
-          <KeyRound size={28} />
-          <h2>{t("admin.apiKeys.emptyTitle")}</h2>
-          <p>{t("admin.apiKeys.emptyBody")}</p>
-          <Button variant="primary" onClick={() => setCreating(true)}>
-            <Plus size={ICON.sm} style={{ marginRight: 6 }} />
-            {t("admin.apiKeys.issueFirst")}
-          </Button>
-        </div>
+        <EmptyState
+          icon={KeyRound}
+          title={t("admin.apiKeys.emptyTitle")}
+          action={
+            <Button variant="primary" onClick={() => setCreating(true)}>
+              <Plus size={ICON.sm} />
+              {t("admin.apiKeys.issueFirst")}
+            </Button>
+          }
+        >
+          {t("admin.apiKeys.emptyBody")}
+        </EmptyState>
       )}
 
       {loading && keys.length === 0 && (
-        <div className="card" style={{ color: "var(--muted)" }}>
-          {t("common.loading")}
-        </div>
+        <Loading />
       )}
 
       {keys.length > 0 && (
@@ -152,9 +156,9 @@ export function AdminAPIKeys() {
           </div>
 
           {filtered.length === 0 ? (
-            <div className="card" style={{ color: "var(--muted)" }}>
+            <Notice>
               {t("admin.apiKeys.filterNoMatch", { query: filter })}
-            </div>
+            </Notice>
           ) : (
             <div className="card" style={{ padding: 0, overflow: "hidden" }}>
               <table className="run-table">
@@ -258,8 +262,8 @@ function APIKeyRow({
             </Button>
           ))}
         {k.status === "revoked" && (
-          <span style={{ color: "var(--muted)", fontSize: "var(--text-sm)" }}>
-            <ShieldOff size={ICON.xs} style={{ verticalAlign: -1, marginRight: 4 }} />
+          <span className="muted" style={{ fontSize: "var(--text-sm)" }}>
+            <ShieldOff className="icon-lede" size={ICON.xs} />
             {t("admin.apiKeys.revokedAlready")}
           </span>
         )}

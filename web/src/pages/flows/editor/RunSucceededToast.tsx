@@ -24,7 +24,7 @@ export function RunSucceededToast({
           style={{
             background: "var(--surface)",
             border: "1px solid var(--success)",
-            padding: "10px 14px",
+            padding: "var(--space-3) var(--space-4)",
             borderRadius: "var(--r-2)",
             fontSize: "var(--text-md)",
             color: "var(--ink)",
@@ -32,7 +32,7 @@ export function RunSucceededToast({
             pointerEvents: "auto",
             display: "flex",
             flexDirection: "column",
-            gap: 6,
+            gap: "var(--space-1h)",
           }}
         >
           <div
@@ -40,7 +40,7 @@ export function RunSucceededToast({
               display: "flex",
               alignItems: "flex-start",
               justifyContent: "space-between",
-              gap: 8,
+              gap: "var(--space-2)",
             }}
           >
             <strong style={{ color: "var(--success)" }}>
@@ -51,7 +51,7 @@ export function RunSucceededToast({
             <Button
               variant="ghost"
               onClick={() => onDismiss()}
-              style={{ fontSize: "var(--text-xs)", padding: "2px 8px" }}
+              style={{ fontSize: "var(--text-xs)", padding: "var(--space-0) var(--space-2)" }}
               aria-label={t("common.dismiss")}
             >
               {t("common.dismiss")}
@@ -59,6 +59,7 @@ export function RunSucceededToast({
           </div>
           {run.preview && (
             <pre
+              className="muted"
               style={{
                 margin: 0,
                 maxHeight: 160,
@@ -66,7 +67,6 @@ export function RunSucceededToast({
                 whiteSpace: "pre-wrap",
                 wordBreak: "break-word",
                 fontSize: "var(--text-sm)",
-                color: "var(--muted)",
               }}
             >
               {run.preview}

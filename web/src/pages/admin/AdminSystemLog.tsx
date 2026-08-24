@@ -71,6 +71,8 @@ export function AdminSystemLog() {
     if (!containerRef.current) return;
     const term = new Terminal({
       fontFamily: "var(--font-mono), Menlo, monospace",
+      // A real number, not a token: xterm draws on a canvas and cannot
+      // resolve CSS variables. Keep in sync with --text-xs (12px).
       fontSize: 12,
       lineHeight: 1.2,
       convertEol: true,
@@ -212,7 +214,7 @@ export function AdminSystemLog() {
       <div className="page-title">
         <div>
           <h1>
-            <ScrollText size={ICON.xl} style={{ marginRight: 8, verticalAlign: -3 }} />
+            <ScrollText size={ICON.xl} />
             {t("admin.systemLog.title")}
           </h1>
           <div className="sub">{t("admin.systemLog.subtitle")}</div>
@@ -264,13 +266,13 @@ export function AdminSystemLog() {
 
       {filterError && (
         <div className="system-log-hint is-error">
-          <AlertCircle size={ICON.sm} style={{ marginRight: 6, verticalAlign: -2 }} />
+          <AlertCircle className="icon-lede" size={ICON.sm} />
           {t("admin.systemLog.badRegex", { error: filterError })}
         </div>
       )}
       {streamError && !filterError && (
         <div className="system-log-hint is-error">
-          <AlertCircle size={ICON.sm} style={{ marginRight: 6, verticalAlign: -2 }} />
+          <AlertCircle className="icon-lede" size={ICON.sm} />
           {streamError}
         </div>
       )}

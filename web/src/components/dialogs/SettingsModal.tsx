@@ -15,6 +15,7 @@ import { Button } from "../ui/Button";
 import { DeleteFlowModal } from "./DeleteFlowModal";
 import { FlowIcon, ICON } from "../../icons";
 import { ErrorNotice } from "../ui/ErrorNotice";
+import { useEscapeToClose } from "../ui/useEscapeToClose";
 
 // SettingsModal hosts graph-level configuration that doesn't fit in
 // the per-node Inspector. Triggers ("how this flow starts") have their
@@ -57,18 +58,17 @@ export function SettingsModal({ graph, onClose, onSave, onDelete }: Props) {
 
   // ESC closes; click on the backdrop closes; clicks inside the dialog
   // don't bubble.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  useEscapeToClose(onClose);
 
   return (
-    <div className="settings-backdrop" onClick={onClose}>
-      <div className="settings-dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="settings-head">
+    <div className="modal-backdrop" onClick={onClose}>
+      <div
+        className="modal"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+      >
+        <div className="modal-head">
           <h2>{t("settings.title")}</h2>
           <Button variant="ghost" size="icon" onClick={onClose} aria-label={t("settings.close")}>
             <X size={ICON.lg} />
@@ -97,7 +97,7 @@ export function SettingsModal({ graph, onClose, onSave, onDelete }: Props) {
             {t("settings.tabSecrets")}
           </Button>
         </div>
-        <div className="settings-body">
+        <div className="modal-body">
           {tab === "notifications" && (
             <div>
               <p className="settings-help">
@@ -263,7 +263,7 @@ export function SettingsModal({ graph, onClose, onSave, onDelete }: Props) {
                         navigate("/admin/git-credentials");
                       }}
                     >
-                      <GitBranch size={ICON.xs} style={{ marginRight: 3, verticalAlign: "-1px" }} />
+                      <GitBranch className="icon-inline" size={ICON.xs} />
                       {t("settings.general.mirrorLink")}
                     </button>
                   </div>
@@ -338,7 +338,7 @@ export function SettingsModal({ graph, onClose, onSave, onDelete }: Props) {
           )}
           {tab === "secrets" && <FlowSecretsTab graph={graph} />}
         </div>
-        <div className="settings-foot">
+        <div className="modal-foot">
           <Button onClick={onClose}>{t("common.cancel")}</Button>
           <Button
             variant="primary"

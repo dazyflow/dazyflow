@@ -13,6 +13,7 @@ import { explainApiError } from "../../lib/explainApiError";
 import { ErrorNotice } from "../../components/ui/ErrorNotice";
 import { ICON } from "../../icons";
 import { formatBytes } from "../../lib/format";
+import { Loading } from "../../components/ui/Loading";
 
 // AdminWorkspace is a read-only view of the effective limits for the
 // caller's tenant: the per-tenant disk quota plus the daemon-wide graph
@@ -55,7 +56,7 @@ export function AdminWorkspace() {
       <div className="page-title">
         <div>
           <h1>
-            <Settings2 size={ICON.xl} style={{ marginRight: 8, verticalAlign: -3 }} />
+            <Settings2 size={ICON.xl} />
             {t("admin.workspace.title")}
           </h1>
           <div className="sub">{t("admin.workspace.subtitle")}</div>
@@ -68,7 +69,7 @@ export function AdminWorkspace() {
         </ErrorNotice>
       )}
       {loading && !limits && (
-        <div className="card" style={{ color: "var(--muted)" }}>{t("common.loading")}</div>
+        <Loading />
       )}
 
       <OrgProfileEditor />
@@ -89,13 +90,13 @@ export function AdminWorkspace() {
                 }
               />
             ) : (
-              <div style={{ color: "var(--muted)" }}>{t("admin.workspace.noQuota")}</div>
+              <div className="muted">{t("admin.workspace.noQuota")}</div>
             )}
           </div>
 
           <div className="card">
             <h3 style={{ marginTop: 0 }}>{t("admin.workspace.graphLimits")}</h3>
-            <div style={{ fontSize: "var(--text-sm)", color: "var(--muted)", marginBottom: "var(--space-2)" }}>
+            <div className="muted" style={{ fontSize: "var(--text-sm)", marginBottom: "var(--space-2)" }}>
               {t("admin.workspace.daemonWideNote")}
             </div>
             <Row
@@ -115,8 +116,8 @@ export function AdminWorkspace() {
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderTop: "1px solid var(--border)" }}>
-      <span style={{ color: "var(--muted)" }}>{label}</span>
+    <div style={{ display: "flex", justifyContent: "space-between", padding: "var(--space-1h) 0", borderTop: "1px solid var(--border)" }}>
+      <span className="muted">{label}</span>
       <span style={{ fontFamily: "var(--font-mono)" }}>{value}</span>
     </div>
   );
@@ -280,7 +281,7 @@ function OrgProfileEditor() {
     return (
       <div className="card" style={{ marginBottom: "var(--space-4)" }}>
         <h3 style={{ marginTop: 0 }}>{t("admin.workspace.orgNameHead")}</h3>
-        <div className="desc" style={{ color: "var(--muted)" }}>{error}</div>
+        <div className="desc muted">{error}</div>
       </div>
     );
   }
@@ -319,7 +320,7 @@ function OrgProfileEditor() {
       {wildcardDomain && (
         <div className="sf-field" style={{ marginTop: "var(--space-4)" }}>
           <label>
-            <Globe size={ICON.sm} style={{ verticalAlign: -2 }} />{" "}
+            <Globe className="icon-inline" size={ICON.sm} />{" "}
             {t("admin.workspace.subdomainLabel")}
           </label>
           <p className="desc">{t("admin.workspace.subdomainDesc")}</p>
@@ -346,7 +347,7 @@ function OrgProfileEditor() {
             )}
             {avail === "ok" && (
               <span className="desc" style={{ color: "var(--success)" }}>
-                <Check size={ICON.xs} style={{ verticalAlign: -1 }} />{" "}
+                <Check className="icon-inline" size={ICON.xs} />{" "}
                 {t("admin.workspace.subdomainAvailable")}
               </span>
             )}
@@ -390,30 +391,30 @@ function OrgProfileEditor() {
             </Button>
             {subSavedAt && !subError && (
               <span className="desc" style={{ color: "var(--success)" }}>
-                <Check size={ICON.xs} style={{ verticalAlign: -1 }} /> {t("common.saved")}
+                <Check className="icon-inline" size={ICON.xs} /> {t("common.saved")}
               </span>
             )}
           </div>
           {subError && (
-            <div className="error" style={{ marginTop: 8 }}>
-              <AlertCircle size={ICON.sm} style={{ verticalAlign: -2 }} /> {subError}
+            <div className="error" style={{ marginTop: "var(--space-2)" }}>
+              <AlertCircle className="icon-inline" size={ICON.sm} /> {subError}
             </div>
           )}
         </div>
       )}
 
-      <div className="settings-foot" style={{ borderTop: "none", padding: 0, minHeight: 18 }}>
+      <div className="modal-foot" style={{ borderTop: "none", padding: 0, minHeight: 18 }}>
         {saving ? (
           <span className="desc">{t("common.saving")}</span>
         ) : savedAt ? (
           <span className="desc" style={{ color: "var(--success)" }}>
-            <Check size={ICON.xs} style={{ verticalAlign: -1 }} /> {t("common.saved")}
+            <Check className="icon-inline" size={ICON.xs} /> {t("common.saved")}
           </span>
         ) : null}
       </div>
       {error && (
-        <div className="error" style={{ marginTop: 12 }}>
-          <AlertCircle size={ICON.sm} style={{ verticalAlign: -2 }} /> {error}
+        <div className="error" style={{ marginTop: "var(--space-3)" }}>
+          <AlertCircle className="icon-inline" size={ICON.sm} /> {error}
         </div>
       )}
     </div>

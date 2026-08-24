@@ -11,7 +11,7 @@
     "build:docs": "tsc -b && vite build --mode docs",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
-    "test": "node scripts/check-css-tokens.mjs && node scripts/check-css-classes.mjs && node scripts/check-css-breakpoints.mjs && node scripts/check-icon-sizes.mjs && vitest run",
+    "test": "node scripts/check-css-tokens.mjs && node scripts/check-css-classes.mjs && node scripts/check-css-breakpoints.mjs && node scripts/check-icon-sizes.mjs && node scripts/check-modal-a11y.mjs && node scripts/check-ui-primitives.mjs && node scripts/check-style-scales.mjs && vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {

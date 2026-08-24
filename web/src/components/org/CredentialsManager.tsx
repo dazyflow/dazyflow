@@ -11,6 +11,8 @@ import { ConfirmModal } from "../ui/ConfirmModal";
 import { Button } from "../ui/Button";
 import { ErrorNotice } from "../ui/ErrorNotice";
 import { ICON } from "../../icons";
+import { Loading } from "../ui/Loading";
+import { Notice } from "../ui/Notice";
 
 // CredentialsManager lists hand-entered secrets (DB URLs, API tokens) by name
 // — never value, the daemon has no read-back — with delete buttons and an add
@@ -102,9 +104,9 @@ export function CredentialsManager({
     <div className="credentials">
       {err && <ErrorNotice>{err}</ErrorNotice>}
       {loading ? (
-        <div className="card">{t("common.loading")}</div>
+        <Loading />
       ) : secrets.length === 0 ? (
-        <p className="credentials-empty">{t("connections.noSecrets")}</p>
+        <Notice inline>{t("connections.noSecrets")}</Notice>
       ) : (
         <ul className="credentials-list">
           {secrets.map((n) => (

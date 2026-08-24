@@ -13,6 +13,8 @@ import { ConfirmModal } from "../../../components/ui/ConfirmModal";
 import { ErrorNotice } from "../../../components/ui/ErrorNotice";
 import { ICON } from "../../../icons";
 import { slugify } from "../../../lib/format";
+import { useEscapeToClose } from "../../../components/ui/useEscapeToClose";
+import { Loading } from "../../../components/ui/Loading";
 
 // AdminPlatformTiers manages the reusable limit bundles a platform admin
 // assigns to orgs. Built-in Free/Pro can be edited (their limits) but not
@@ -81,6 +83,7 @@ export function AdminPlatformTiers() {
     }
   };
 
+
   return (
     <div>
       <div className="page-title">
@@ -92,7 +95,7 @@ export function AdminPlatformTiers() {
           </div>
         </div>
         <Button variant="primary" onClick={() => setEditing(blankTier())}>
-          <Plus size={ICON.sm} style={{ marginRight: 6 }} />
+          <Plus size={ICON.sm} />
           {t("admin.platformTiers.new")}
         </Button>
       </div>
@@ -104,9 +107,7 @@ export function AdminPlatformTiers() {
       )}
 
       {loading ? (
-        <div className="card" style={{ color: "var(--muted)" }}>
-          {t("common.loading")}
-        </div>
+        <Loading />
       ) : (
         <div className="user-list">
           {tiers.map((tier) => (
@@ -116,12 +117,12 @@ export function AdminPlatformTiers() {
                   {tier.name}
                   <span
                     className={"count-pill" + (tier.plan === "pro" ? " active" : "")}
-                    style={{ marginLeft: 8 }}
+                    style={{ marginLeft: "var(--space-2)" }}
                   >
                     {tier.plan}
                   </span>
                   {tier.built_in && (
-                    <span className="count-pill" style={{ marginLeft: 8 }}>
+                    <span className="count-pill" style={{ marginLeft: "var(--space-2)" }}>
                       {t("admin.platformTiers.builtIn")}
                     </span>
                   )}
@@ -242,16 +243,18 @@ function TierEditor({
     />
   );
 
+
+  useEscapeToClose(() => !busy && onClose());
   return createPortal(
-    <div className="settings-backdrop" onClick={() => !busy && onClose()}>
-      <div className="settings-dialog" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-        <div className="settings-head">
+    <div className="modal-backdrop" onClick={() => !busy && onClose()}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <div className="modal-head">
           <h2>{isNew ? t("admin.platformTiers.new") : t("admin.platformTiers.edit", { name: tier.name })}</h2>
           <Button variant="ghost" size="icon" onClick={onClose} disabled={busy}>
             <X size={ICON.lg} />
           </Button>
         </div>
-        <div className="settings-body pa-tier-form">
+        <div className="modal-body pa-tier-form">
           <label>
             {t("admin.platformTiers.name")}
             <input
@@ -330,7 +333,7 @@ function TierEditor({
             </select>
           </label>
         </div>
-        <div className="settings-foot">
+        <div className="modal-foot">
           <Button onClick={onClose} disabled={busy}>
             {t("common.cancel")}
           </Button>

@@ -14,6 +14,8 @@ import { formatDate } from "../../../lib/datetime";
 import { explainApiError } from "../../../lib/explainApiError";
 import { ErrorNotice } from "../../../components/ui/ErrorNotice";
 import { ICON } from "../../../icons";
+import { Loading } from "../../../components/ui/Loading";
+import { Notice } from "../../../components/ui/Notice";
 
 // AdminPlatformSupportAgents is the platform-admin surface for provisioning
 // support agents (cross-tenant vendor/operator staff who get the support:agent
@@ -86,7 +88,7 @@ export function AdminPlatformSupportAgents() {
       <Link
         to="/admin/platform"
         className="back-link"
-        style={{ display: "inline-flex", alignItems: "center", gap: 4, marginBottom: "var(--space-2)" }}
+        style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-1)", marginBottom: "var(--space-2)" }}
       >
         <ChevronLeft size={ICON.sm} />
         {t("admin.supportAgents.back", { defaultValue: "Platform admin" })}
@@ -94,7 +96,7 @@ export function AdminPlatformSupportAgents() {
       <div className="page-title">
         <div>
           <h1>
-            <LifeBuoy size={ICON.xl} style={{ marginRight: 8, verticalAlign: -3 }} />
+            <LifeBuoy size={ICON.xl} />
             {t("admin.supportAgents.title", { defaultValue: "Support agents" })}
           </h1>
           <div className="sub">
@@ -113,13 +115,13 @@ export function AdminPlatformSupportAgents() {
       )}
 
       {disabled ? (
-        <div className="card" style={{ color: "var(--muted)" }}>
+        <Notice>
           <Trans
             i18nKey="admin.supportAgents.notEnabled"
             components={[<code />]}
             defaults="Support is not enabled on this deployment. Set <0>DAZYFLOW_SUPPORT_ENABLED=1</0> and restart."
           />
-        </div>
+        </Notice>
       ) : (
         <>
           <form className="invite-link-row" style={{ marginBottom: "var(--space-4)" }} onSubmit={add}>
@@ -131,7 +133,7 @@ export function AdminPlatformSupportAgents() {
               style={{ flex: 1 }}
             />
             <Button type="submit" variant="primary" disabled={adding || !email.trim()}>
-              <Plus size={ICON.sm} style={{ marginRight: 6 }} />
+              <Plus size={ICON.sm} />
               {adding
                 ? t("admin.supportAgents.adding", { defaultValue: "Adding…" })
                 : t("admin.supportAgents.add", { defaultValue: "Add agent" })}
@@ -139,14 +141,12 @@ export function AdminPlatformSupportAgents() {
           </form>
 
           {loading && agents.length === 0 && (
-            <div className="card" style={{ color: "var(--muted)" }}>
-              {t("common.loading")}
-            </div>
+            <Loading />
           )}
           {!loading && agents.length === 0 && (
-            <div className="card" style={{ color: "var(--muted)" }}>
+            <Notice>
               {t("admin.supportAgents.empty", { defaultValue: "No support agents yet." })}
-            </div>
+            </Notice>
           )}
           <div className="user-list">
             {agents.map((a) => (
@@ -206,7 +206,7 @@ function AgentCard({
       </div>
       <div className="user-card-actions">
         <Button onClick={() => setConfirm(true)} disabled={busy}>
-          <Trash2 size={ICON.xs} style={{ marginRight: 4 }} />
+          <Trash2 size={ICON.xs} />
           {t("admin.supportAgents.remove", { defaultValue: "Remove" })}
         </Button>
       </div>

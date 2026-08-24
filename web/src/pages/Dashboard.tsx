@@ -154,11 +154,11 @@ export function Dashboard() {
             onClick={() => setShareOpen(true)}
             title={t("share.title")}
           >
-            <Share2 size={ICON.md} style={{ marginRight: 6 }} />
+            <Share2 size={ICON.md} />
             {t("share.action")}
           </Button>
           <Link to="/flows/new" className="btn primary dash-new">
-            <Plus size={ICON.md} style={{ marginRight: 6 }} />
+            <Plus className="icon-lede" size={ICON.md} />
             {t("flowList.newFlow")}
           </Link>
         </div>

@@ -27,6 +27,8 @@ import type { FileEntry } from "../types";
 import { ErrorNotice } from "../components/ui/ErrorNotice";
 import { ICON } from "../icons";
 import { formatBytes } from "../lib/format";
+import { Loading } from "../components/ui/Loading";
+import { Notice } from "../components/ui/Notice";
 
 // Files is the workspace file manager: a browsable view of the persistent
 // sandbox that flows read from and write to (git_checkout clones, file_write
@@ -445,11 +447,11 @@ export function Files() {
       // win when hovered; the surrounding area resolves to the current dir.
       <div className="card files-list" {...dropProps(cwd)}>
         {visible === null ? (
-          <div className="files-empty">{t("common.loading")}</div>
+          <Loading inline />
         ) : visible.length === 0 ? (
-          <div className="files-empty">
+          <Notice inline>
             {hiddenCount > 0 ? t("files.emptyHiddenOnly") : t("files.empty")}
-          </div>
+          </Notice>
         ) : (
           <table className="files-table">
             <thead>

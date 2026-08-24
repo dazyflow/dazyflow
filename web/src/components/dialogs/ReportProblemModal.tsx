@@ -11,6 +11,7 @@ import { Button } from "../ui/Button";
 import { explainApiError } from "../../lib/explainApiError";
 import { ErrorNotice } from "../ui/ErrorNotice";
 import { ICON } from "../../icons";
+import { useEscapeToClose } from "../ui/useEscapeToClose";
 
 // ReportProblemModal files a support ticket about a specific flow/run — the
 // zero-friction "the ask" path (Tier 1): the server auto-attaches a redacted
@@ -58,11 +59,14 @@ export function ReportProblemModal({
     }
   };
 
+  useEscapeToClose(onClose);
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
         className="modal"
         onClick={(e) => e.stopPropagation()}
+        aria-modal="true"
         role="dialog"
         aria-label={t("report.title")}
         style={{ maxWidth: 520 }}
@@ -74,7 +78,7 @@ export function ReportProblemModal({
           </Button>
         </div>
         <div className="modal-body">
-          <p style={{ color: "var(--muted)", fontSize: "var(--text-sm)", margin: "0 0 var(--space-3)" }}>
+          <p className="muted" style={{ fontSize: "var(--text-sm)", margin: "0 0 var(--space-3)" }}>
             {t("report.lede")}
           </p>
           <label className="field-label">{t("support.subjectLabel")}</label>

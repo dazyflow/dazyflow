@@ -34,6 +34,7 @@ import type {
   OAuthProviderStatus,
 } from "../types";
 import { featureUnavailable } from "../lib/explainApiError";
+import { Loading } from "../components/ui/Loading";
 
 // Apps is the index page — one card per integration ("app") the daemon
 // knows about, derived from the live manifest registry plus curated
@@ -154,7 +155,7 @@ export function Apps() {
     return (
       <div className="page">
         <h1>{t("integrations.title")}</h1>
-        <div className="card">{t("common.loading")}</div>
+        <Loading />
       </div>
     );
   }
@@ -402,7 +403,7 @@ export function AppDetail() {
   if (!drops) {
     return (
       <div className="page">
-        <div className="card">{t("common.loading")}</div>
+        <Loading />
       </div>
     );
   }
@@ -413,7 +414,7 @@ export function AppDetail() {
         <Link to="/apps" className="back-link">
           {t("integrations.backAll")}
         </Link>
-        <div className="card" style={{ marginTop: 12 }}>
+        <div className="card" style={{ marginTop: "var(--space-3)" }}>
           {t("integrations.noDrops")}
         </div>
       </div>

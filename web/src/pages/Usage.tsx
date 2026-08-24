@@ -152,7 +152,7 @@ export function Usage() {
       <div className="page-title">
         <div>
           <h1>
-            <CreditCard size={ICON.xl} style={{ marginRight: 8, verticalAlign: -3 }} />
+            <CreditCard size={ICON.xl} />
             {billingEnabled ? t("usage.title") : t("usage.titlePlain")}
           </h1>
           <div className="sub">{billingEnabled ? t("usage.subtitle") : t("usage.subtitlePlain")}</div>
@@ -161,7 +161,7 @@ export function Usage() {
           <div className="dash-title-actions">
             {billing.can_upgrade && (
               <Button variant="primary" disabled={redirecting} onClick={() => void goToStripe("checkout")}>
-                <Sparkles size={ICON.md} style={{ marginRight: 6 }} />
+                <Sparkles size={ICON.md} />
                 {t("usage.upgrade")}
               </Button>
             )}

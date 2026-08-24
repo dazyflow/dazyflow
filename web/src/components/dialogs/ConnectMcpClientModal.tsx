@@ -12,6 +12,7 @@ import type { IssuedAPIKey } from "../../types";
 import { ErrorNotice } from "../ui/ErrorNotice";
 import { ICON } from "../../icons";
 import { FEEDBACK } from "../../lib/timing";
+import { useEscapeToClose } from "../ui/useEscapeToClose";
 
 // ConnectMcpClientModal mints an API key scoped to the current
 // principal, then hands the user the right config snippet for their
@@ -144,13 +145,17 @@ export function ConnectMcpClientModal({ onClose }: { onClose: () => void }) {
     }
   };
 
+  useEscapeToClose(onClose);
+
   return (
-    <div className="settings-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={onClose}>
       <div
-        className="settings-dialog mcp-connect-dialog"
+        className="modal mcp-connect-dialog"
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
       >
-        <div className="settings-head">
+        <div className="modal-head">
           <h2>{t("connectMcp.title")}</h2>
         </div>
         {stage === "confirm" ? (
@@ -191,7 +196,7 @@ function ConfirmStage({
   const { t } = useTranslation();
   return (
     <>
-      <div className="settings-body">
+      <div className="modal-body">
         <p className="settings-help">
           {t(canEdit ? "connectMcp.introRunEdit" : "connectMcp.introRun")}
         </p>
@@ -218,7 +223,7 @@ function ConfirmStage({
           </ErrorNotice>
         )}
       </div>
-      <div className="settings-foot">
+      <div className="modal-foot">
         <Button type="button" onClick={onCancel} disabled={submitting}>
           {t("common.cancel")}
         </Button>
@@ -243,7 +248,7 @@ function RevealStage({ issued, onDone }: { issued: IssuedAPIKey; onDone: () => v
   const cli = active.buildCLI?.(env);
   return (
     <>
-      <div className="settings-body">
+      <div className="modal-body">
         <p className="settings-help">{t("connectMcp.revealHelp")}</p>
         <div className="mcp-client-grid">
           {CLIENTS.map((c) => (
@@ -311,7 +316,7 @@ function RevealStage({ issued, onDone }: { issued: IssuedAPIKey; onDone: () => v
             <div className="sf-field">
               <div className="label-row">
                 <label>
-                  <Terminal size={ICON.xs} style={{ marginRight: 6, verticalAlign: -1 }} />
+                  <Terminal className="icon-lede" size={ICON.xs} />
                   {t("connectMcp.cliLabel")}
                 </label>
               </div>
@@ -323,7 +328,7 @@ function RevealStage({ issued, onDone }: { issued: IssuedAPIKey; onDone: () => v
           )}
         </div>
         <details style={{ marginTop: "var(--space-3)" }}>
-          <summary style={{ cursor: "pointer", color: "var(--muted)" }}>
+          <summary className="muted" style={{ cursor: "pointer" }}>
             {t("connectMcp.advancedSummary")}
           </summary>
           <div className="sf-field" style={{ marginTop: "var(--space-2)" }}>
@@ -340,7 +345,7 @@ function RevealStage({ issued, onDone }: { issued: IssuedAPIKey; onDone: () => v
           </div>
         </details>
       </div>
-      <div className="settings-foot">
+      <div className="modal-foot">
         <Button type="button" variant="primary" onClick={onDone}>
           {t("connectMcp.done")}
         </Button>
@@ -364,9 +369,9 @@ function CopyButton({ text, labelKey }: { text: string; labelKey: string }) {
   return (
     <Button type="button" onClick={copy} style={{ marginTop: "var(--space-2)" }}>
       {copied ? (
-        <Check size={ICON.xs} style={{ marginRight: 6 }} />
+        <Check size={ICON.xs} />
       ) : (
-        <Copy size={ICON.xs} style={{ marginRight: 6 }} />
+        <Copy size={ICON.xs} />
       )}
       {copied ? t("common.copied") : t(labelKey)}
     </Button>

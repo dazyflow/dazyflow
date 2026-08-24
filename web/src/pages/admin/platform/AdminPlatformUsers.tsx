@@ -25,6 +25,8 @@ import { formatDate } from "../../../lib/datetime";
 import { ErrorNotice } from "../../../components/ui/ErrorNotice";
 import { ICON } from "../../../icons";
 import { FEEDBACK } from "../../../lib/timing";
+import { Loading } from "../../../components/ui/Loading";
+import { Notice } from "../../../components/ui/Notice";
 
 // AdminPlatformUsers is the cross-tenant account roster plus the tools for
 // growing it. The roster lists every existing account, each row linking to
@@ -86,7 +88,7 @@ export function AdminPlatformUsers() {
       <div className="page-title">
         <div>
           <h1>
-            <UsersIcon size={ICON.xl} style={{ marginRight: 8, verticalAlign: -3 }} />
+            <UsersIcon size={ICON.xl} />
             {t("admin.platformUsers.title")}
           </h1>
           <div className="sub">{t("admin.platformUsers.subtitle")}</div>
@@ -106,25 +108,19 @@ export function AdminPlatformUsers() {
         })}
       </div>
 
-      <div style={{ position: "relative", marginBottom: "var(--space-3)" }}>
-        <Search
-          size={ICON.sm}
-          style={{ position: "absolute", left: 10, top: 11, color: "var(--muted)" }}
-        />
+      <div className="search-box" style={{ marginBottom: "var(--space-3)" }}>
+        <Search size={ICON.sm} aria-hidden />
         <input
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={t("admin.platformUsers.searchPlaceholder")}
           aria-label={t("admin.platformUsers.searchPlaceholder")}
-          style={{ width: "100%", paddingLeft: 32 }}
         />
       </div>
 
       {loading ? (
-        <div className="card" style={{ color: "var(--muted)" }}>
-          {t("common.loading")}
-        </div>
+        <Loading />
       ) : (
         <div className="user-list">
           {filtered.map((u) => (
@@ -142,13 +138,13 @@ export function AdminPlatformUsers() {
                     {u.status === "suspended" && (
                       <span
                         className="count-pill"
-                        style={{ marginLeft: 8, color: "var(--danger)" }}
+                        style={{ marginLeft: "var(--space-2)", color: "var(--danger)" }}
                       >
                         {t("admin.platformUsers.suspended")}
                       </span>
                     )}
                     {u.platform_admin && (
-                      <span className="count-pill" style={{ marginLeft: 8 }}>
+                      <span className="count-pill" style={{ marginLeft: "var(--space-2)" }}>
                         {t("admin.platformUsers.platformAdmin")}
                       </span>
                     )}
@@ -162,9 +158,9 @@ export function AdminPlatformUsers() {
             </Link>
           ))}
           {filtered.length === 0 && (
-            <div className="card" style={{ color: "var(--muted)" }}>
+            <Notice>
               {t("admin.platformUsers.none")}
-            </div>
+            </Notice>
           )}
         </div>
       )}
@@ -256,7 +252,7 @@ function SignupInviteSection() {
           style={{ flex: 1 }}
         />
         <Button type="submit" variant="primary" disabled={!canSubmit}>
-          <UserPlus size={ICON.sm} style={{ marginRight: 6 }} />
+          <UserPlus size={ICON.sm} />
           {submitting
             ? t("common.sending")
             : t("admin.signupInvites.invite")}
@@ -280,9 +276,9 @@ function SignupInviteSection() {
         {t("admin.signupInvites.pendingHead")}
       </h2>
       {invites.length === 0 ? (
-        <div className="card" style={{ color: "var(--muted)" }}>
+        <Notice>
           {t("admin.signupInvites.none")}
-        </div>
+        </Notice>
       ) : (
         <div className="user-list">
           {invites.map((inv) => (
@@ -389,7 +385,7 @@ function SignupInviteCard({
         <div className="subject">
           <Mail size={ICON.lg} />
           {inv.email}
-          <span className="count-pill" style={{ marginLeft: 8 }}>
+          <span className="count-pill" style={{ marginLeft: "var(--space-2)" }}>
             {statusLabel}
           </span>
         </div>
@@ -411,7 +407,7 @@ function SignupInviteCard({
       <div className="user-card-actions">
         {inv.pending && (
           <Button onClick={() => setConfirmRevoke(true)} disabled={revoking}>
-            <X size={ICON.xs} style={{ marginRight: 4 }} />
+            <X size={ICON.xs} />
             {revoking
               ? t("admin.signupInvites.revoking")
               : t("common.revoke")}

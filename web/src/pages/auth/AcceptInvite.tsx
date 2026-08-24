@@ -13,6 +13,8 @@ import type { InvitationDetails } from "../../types";
 import { formatDateTime } from "../../lib/datetime";
 import { ErrorNotice } from "../../components/ui/ErrorNotice";
 import { ICON } from "../../icons";
+import { Notice } from "../../components/ui/Notice";
+import { Loading } from "../../components/ui/Loading";
 
 // AcceptInvite is the landing page for an invite link. It's reachable
 // without auth so a recipient can read who invited them and to which
@@ -76,7 +78,7 @@ export function AcceptInvite() {
         <div className="signin">
           <h1>{t("acceptInvite.title")}</h1>
           <div className="error">
-            <AlertCircle size={ICON.sm} style={{ verticalAlign: -2 }} /> {error}
+            <AlertCircle className="icon-inline" size={ICON.sm} /> {error}
           </div>
         </div>
       </div>
@@ -87,7 +89,7 @@ export function AcceptInvite() {
       <div className="signin-wrap">
         <div className="signin">
           <h1>{t("acceptInvite.title")}</h1>
-          <div>{t("common.loading")}</div>
+          <Loading inline />
         </div>
       </div>
     );
@@ -138,13 +140,13 @@ export function AcceptInvite() {
         </ul>
 
         {statusLine && (
-          <div className="card" style={{ color: "var(--muted)" }}>
+          <Notice>
             {statusLine}
-          </div>
+          </Notice>
         )}
         {error && (
           <div className="error">
-            <AlertCircle size={ICON.sm} style={{ verticalAlign: -2 }} /> {error}
+            <AlertCircle className="icon-inline" size={ICON.sm} /> {error}
           </div>
         )}
 

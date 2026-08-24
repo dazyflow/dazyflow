@@ -5,9 +5,10 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "./Button";
+import { useEscapeToClose } from "./useEscapeToClose";
 
 // PromptModal is the app's themed replacement for window.prompt() — a
-// single-line text input in the standard settings-dialog chrome. Used for
+// single-line text input in the standard modal chrome. Used for
 // "new folder" and "rename / move". Mount it conditionally; it resolves
 // through onSubmit (with the trimmed value) or onCancel. Escape and a
 // backdrop click both cancel.
@@ -44,13 +45,7 @@ export function PromptModal({
     el.setSelectionRange(slash + 1, el.value.length);
   }, []);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCancel();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onCancel]);
+  useEscapeToClose(onCancel);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,18 +54,18 @@ export function PromptModal({
   };
 
   return createPortal(
-    <div className="settings-backdrop" onClick={onCancel}>
+    <div className="modal-backdrop" onClick={onCancel}>
       <form
-        className="settings-dialog"
+        className="modal"
         onClick={(e) => e.stopPropagation()}
         onSubmit={submit}
         role="dialog"
         aria-modal="true"
       >
-        <div className="settings-head">
+        <div className="modal-head">
           <h2>{title}</h2>
         </div>
-        <div className="settings-body">
+        <div className="modal-body">
           <div className="sf-field">
             <div className="label-row">
               <label>{label}</label>
@@ -85,7 +80,7 @@ export function PromptModal({
             {hint && <p className="desc">{hint}</p>}
           </div>
         </div>
-        <div className="settings-foot">
+        <div className="modal-foot">
           <Button onClick={onCancel}>
             {t("common.cancel")}
           </Button>

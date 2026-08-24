@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Joachim Klahr
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -10,6 +9,7 @@ import { Button } from "../ui/Button";
 import { useAuth } from "../../auth";
 import { supportContactHref } from "../../lib/supportContact";
 import { ICON } from "../../icons";
+import { useEscapeToClose } from "../ui/useEscapeToClose";
 
 // HelpModal is what the header's "?" button and the "?" key open.
 //
@@ -63,24 +63,18 @@ export function HelpModal({ onClose }: { onClose: () => void }) {
   const supportOn = !!me?.support_tickets_enabled;
   const contactHref = supportContactHref(me?.support_contact);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  useEscapeToClose(onClose);
 
   return createPortal(
-    <div className="settings-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={onClose}>
       <div
-        className="settings-dialog"
+        className="modal"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label={t("help.title")}
       >
-        <div className="settings-head">
+        <div className="modal-head">
           <h2>{t("help.title")}</h2>
           <Button
             variant="ghost"
@@ -91,7 +85,7 @@ export function HelpModal({ onClose }: { onClose: () => void }) {
             <X size={ICON.md} />
           </Button>
         </div>
-        <div className="settings-body">
+        <div className="modal-body">
           <div className="help-links">
             <a
               className="help-link"

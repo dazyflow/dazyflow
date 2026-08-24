@@ -11,6 +11,9 @@ import { Button } from "../ui/Button";
 import type { FileEntry } from "../../types";
 import { ErrorNotice } from "../ui/ErrorNotice";
 import { ICON } from "../../icons";
+import { useEscapeToClose } from "../ui/useEscapeToClose";
+import { Loading } from "../ui/Loading";
+import { Notice } from "../ui/Notice";
 
 // MoveModal is the interactive "Move to…" folder picker: browse the
 // workspace folder tree, then drop the entry into the folder you land on.
@@ -58,13 +61,7 @@ export function MoveModal({
   }, [token, tenant, workspace, dir, t]);
   useEffect(load, [load]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCancel();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onCancel]);
+  useEscapeToClose(onCancel);
 
   const doMove = () => {
     setMoving(true);
@@ -82,17 +79,17 @@ export function MoveModal({
   const segments = dir ? dir.split("/") : [];
 
   return createPortal(
-    <div className="settings-backdrop" onClick={onCancel}>
+    <div className="modal-backdrop" onClick={onCancel}>
       <div
-        className="settings-dialog move-dialog"
+        className="modal move-dialog"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
       >
-        <div className="settings-head">
+        <div className="modal-head">
           <h2>{t("files.moveTitle", { name: entry.name })}</h2>
         </div>
-        <div className="settings-body">
+        <div className="modal-body">
           <nav className="files-breadcrumb move-breadcrumb">
             <Button variant="link" onClick={() => setDir("")} disabled={dir === ""}>
               {t("files.root")}
@@ -127,9 +124,9 @@ export function MoveModal({
               </Button>
             )}
             {folders === null ? (
-              <div className="files-empty">{t("common.loading")}</div>
+              <Loading inline />
             ) : folders.length === 0 ? (
-              <div className="files-empty">{t("files.moveNoSubfolders")}</div>
+              <Notice inline>{t("files.moveNoSubfolders")}</Notice>
             ) : (
               folders.map((f) => {
                 const disabled =
@@ -151,7 +148,7 @@ export function MoveModal({
             )}
           </div>
         </div>
-        <div className="settings-foot">
+        <div className="modal-foot">
           <Button type="button" onClick={onCancel}>
             {t("common.cancel")}
           </Button>

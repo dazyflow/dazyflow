@@ -35,6 +35,9 @@ import type {
 } from "../../types";
 import { ICON } from "../../icons";
 import { POLL } from "../../lib/timing";
+import { useEscapeToClose } from "../../components/ui/useEscapeToClose";
+import { Loading } from "../../components/ui/Loading";
+import { Notice } from "../../components/ui/Notice";
 
 // An open ticket re-fetches itself so a reply from the other party shows up
 // without a manual reload. It polls on the `watched` tier (see lib/timing) —
@@ -52,7 +55,6 @@ import { POLL } from "../../lib/timing";
 // Everything a user types is secret-scrubbed server-side before it is stored, and
 // the user-facing responses omit which support agent owns or answered a ticket.
 
-const NOTICE_STYLE = { color: "var(--muted)" } as const;
 
 // statusLabel resolves a ticket status to friendly copy (support.status.*).
 function useStatusLabel() {
@@ -98,7 +100,7 @@ export function SupportTickets() {
       <div className="page-title">
         <div>
           <h1>
-            <LifeBuoy size={ICON.xl} style={{ marginRight: 8, verticalAlign: -3 }} />
+            <LifeBuoy size={ICON.xl} />
             {t("support.title")}
           </h1>
           <div className="sub">
@@ -115,15 +117,15 @@ export function SupportTickets() {
       {error && <ErrorNotice style={{ marginBottom: "var(--space-4)" }}>{error}</ErrorNotice>}
 
       {disabled ? (
-        <div className="card" style={NOTICE_STYLE}>
+        <Notice>
           {t("support.notEnabled")}
-        </div>
+        </Notice>
       ) : loading && tickets.length === 0 ? (
-        <div className="card" style={NOTICE_STYLE}>{t("common.loading")}</div>
+        <Loading />
       ) : tickets.length === 0 ? (
-        <div className="card" style={NOTICE_STYLE}>
+        <Notice>
           {t("support.empty")}
-        </div>
+        </Notice>
       ) : (
         <div className="user-list">
           {tickets.map((tk) => (
@@ -131,7 +133,7 @@ export function SupportTickets() {
               <div style={{ minWidth: 0 }}>
                 <div className="subject">{tk.subject}</div>
                 <div className="meta">
-                  <span className="count-pill" style={{ marginRight: 8 }}>{statusLabel(tk.status)}</span>
+                  <span className="count-pill" style={{ marginRight: "var(--space-2)" }}>{statusLabel(tk.status)}</span>
                   {t("support.updated", { date: formatDateTime(tk.updated_at) })}
                 </div>
               </div>
@@ -235,11 +237,14 @@ function NewTicketModal({ onClose, onCreated }: { onClose: () => void; onCreated
     }
   };
 
+
+  useEscapeToClose(onClose);
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
         className="modal"
         onClick={(e) => e.stopPropagation()}
+        aria-modal="true"
         role="dialog"
         aria-label={t("support.new")}
         style={{ maxWidth: 520 }}
@@ -407,7 +412,7 @@ export function SupportQueue() {
       <div className="page-title">
         <div>
           <h1>
-            <LifeBuoy size={ICON.xl} style={{ marginRight: 8, verticalAlign: -3 }} />
+            <LifeBuoy size={ICON.xl} />
             {t("support.queueTitle")}
           </h1>
           <div className="sub">{t("support.queueSub")}</div>
@@ -494,9 +499,9 @@ export function SupportQueue() {
         <ErrorNotice style={{ marginBottom: "var(--space-4)" }}>{error}</ErrorNotice>
       )}
       {loading && tickets.length === 0 ? (
-        <div className="card" style={NOTICE_STYLE}>{t("common.loading")}</div>
+        <Loading />
       ) : visible.length === 0 ? (
-        <div className="card" style={NOTICE_STYLE}>
+        <Notice>
           {/* "The queue is empty" is only true of the unfiltered view — a narrowed
               one that comes back empty means this view, not the whole queue. */}
           {tickets.length === 0
@@ -504,7 +509,7 @@ export function SupportQueue() {
               ? t("support.queueEmpty")
               : t("support.noneInView")
             : t("support.noMatches")}
-        </div>
+        </Notice>
       ) : (
         <div className="user-list">
           {visible.map((tk) => (
@@ -587,7 +592,7 @@ function QueueRow({
           </Link>
         </div>
         <div className="meta">
-          <span className="count-pill" style={{ marginRight: 8 }}>{statusLabel(ticket.status)}</span>
+          <span className="count-pill" style={{ marginRight: "var(--space-2)" }}>{statusLabel(ticket.status)}</span>
           {ticket.tenant}
           {" · "}
           {owner === ""
@@ -602,7 +607,7 @@ function QueueRow({
       <div className="user-card-actions">
         {owner === "" && (
           <Button onClick={onClaim} disabled={claiming}>
-            <UserCheck size={ICON.xs} style={{ marginRight: 4 }} />
+            <UserCheck size={ICON.xs} />
             {t("support.claim")}
           </Button>
         )}
@@ -718,7 +723,7 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
   // where this thread was opened from.
   const backLabel = mode === "agent" ? t("support.queueTitle") : t("nav.support");
 
-  if (loading) return <div className="card" style={NOTICE_STYLE}>{t("common.loading")}</div>;
+  if (loading) return <Loading />;
   if (error && !view) {
     return (
       <div>
@@ -742,7 +747,7 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
         <div>
           <h1 style={{ fontSize: "var(--text-xl)" }}>{tk.subject}</h1>
           <div className="sub">
-            <span className="count-pill" style={{ marginRight: 8 }}>{statusLabel(tk.status)}</span>
+            <span className="count-pill" style={{ marginRight: "var(--space-2)" }}>{statusLabel(tk.status)}</span>
             {mode === "agent" && (
               <>
                 {tk.tenant}
@@ -786,7 +791,7 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
                 {/* The agent block above already ends in a separator, so only
                     add one when the flow link sits between them. */}
                 {tk.flow_id && " · "}
-                <span style={NOTICE_STYLE}>{t("support.noBundle")}</span>
+                <span className="muted">{t("support.noBundle")}</span>
               </>
             )}
           </div>
@@ -794,19 +799,19 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
         <div className="user-card-actions">
           {mode === "agent" && owner === "" && (
             <Button onClick={() => void assign("me")} disabled={busy}>
-              <UserCheck size={ICON.xs} style={{ marginRight: 4 }} />
+              <UserCheck size={ICON.xs} />
               {t("support.claim")}
             </Button>
           )}
           {mode === "agent" && mine && (
             <Button onClick={() => void assign("")} disabled={busy}>
-              <UserMinus size={ICON.xs} style={{ marginRight: 4 }} />
+              <UserMinus size={ICON.xs} />
               {t("support.release")}
             </Button>
           )}
           {mode === "agent" && !closed && (
             <Button onClick={() => void setStatus("resolved")} disabled={busy}>
-              <Check size={ICON.xs} style={{ marginRight: 4 }} />
+              <Check size={ICON.xs} />
               {t("support.resolve")}
             </Button>
           )}
@@ -814,7 +819,7 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
               reopens it, so there's no separate Reopen button. */}
           {mode === "user" && !closed && (
             <Button onClick={() => void setMyStatus("closed")} disabled={busy}>
-              <X size={ICON.xs} style={{ marginRight: 4 }} />
+              <X size={ICON.xs} />
               {t("support.close")}
             </Button>
           )}
@@ -846,7 +851,7 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
           }
         />
         <Button variant="primary" onClick={() => void send()} disabled={busy || !draft.trim()}>
-          <Send size={ICON.sm} style={{ marginRight: 4 }} />
+          <Send size={ICON.sm} />
           {t("support.send")}
         </Button>
       </div>
@@ -873,11 +878,14 @@ function BundleModal({ ticketId, mode, onClose }: { ticketId: string; mode: "use
       .catch((e) => setError(explainApiError(e, t)));
   }, [token, ticketId, mode, t]);
 
+
+  useEscapeToClose(onClose);
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
         className="modal"
         onClick={(e) => e.stopPropagation()}
+        aria-modal="true"
         role="dialog"
         aria-label={t("bundle.title")}
         style={{ maxWidth: 680 }}
@@ -890,7 +898,7 @@ function BundleModal({ ticketId, mode, onClose }: { ticketId: string; mode: "use
         </div>
         <div className="modal-body">
           {error && <ErrorNotice>{error}</ErrorNotice>}
-          {!bundle && !error && <div style={NOTICE_STYLE}>{t("common.loading")}</div>}
+          {!bundle && !error && <Loading inline />}
           {bundle && <BundleView bundle={bundle} />}
         </div>
         <div className="modal-foot">

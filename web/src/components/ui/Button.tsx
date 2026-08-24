@@ -56,7 +56,7 @@ import {
 // and deliberately live outside this component.
 //
 // The emitted class names mirror the variant/size names so existing contextual
-// CSS (`.signin button.primary`, `.confirm-dialog .settings-foot button.danger`,
+// CSS (`.signin button.primary`, `.confirm-dialog .modal-foot button.danger`,
 // …) keeps matching unchanged. A `btn` base class is always present so anchors
 // rendered through <ButtonLink> pick up the same chrome as native buttons.
 

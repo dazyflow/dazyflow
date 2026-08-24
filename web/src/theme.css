@@ -417,12 +417,16 @@ button,
   font-size: inherit;
   cursor: pointer;
   /* Center label + any leading icon on the cross axis so icons sit on the
-     optical midline without per-call-site verticalAlign nudges. Spacing
-     between icon and text stays the icon's own marginRight (no gap here, so
-     buttons that already set one don't double up). */
+     optical midline without per-call-site verticalAlign nudges, and space
+     them with `gap`.
+     The gap used to be left to each icon's own marginRight, to avoid
+     double-spacing buttons that set one. The cost of that was 67 call sites
+     hand-spacing their own icon at five different values — 3, 4, 5, 6 and 8px
+     for the identical relationship. One gap here, and every button agrees. */
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: var(--space-1h);
   background: var(--surface-2);
   color: var(--ink);
   border: 1px solid var(--border);

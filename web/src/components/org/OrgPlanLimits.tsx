@@ -17,6 +17,7 @@ import { formatDate } from "../../lib/datetime";
 import { Button } from "../ui/Button";
 import { ErrorNotice } from "../ui/ErrorNotice";
 import { ICON } from "../../icons";
+import { useEscapeToClose } from "../ui/useEscapeToClose";
 
 // PlanLimitsSection shows an org's effective plan + limits and lets a
 // platform admin assign a tier, grant/force a plan (trial, comp, force
@@ -54,6 +55,7 @@ export function PlanLimitsSection({ tenant }: { tenant: string }) {
       ? `${Math.round(eff.disk_quota_bytes / (1024 * 1024))} MB`
       : t("admin.platformPlan.unlimited");
 
+
   return (
     <div style={{ marginTop: "var(--space-4)" }}>
       <div className="pa-section-head">
@@ -61,7 +63,7 @@ export function PlanLimitsSection({ tenant }: { tenant: string }) {
           {t("admin.platformPlan.head")}
         </h2>
         <Button onClick={() => setEditing(true)} disabled={!ent}>
-          <Pencil size={ICON.sm} style={{ marginRight: 4 }} />
+          <Pencil size={ICON.sm} />
           {t("common.edit")}
         </Button>
       </div>
@@ -206,16 +208,18 @@ function EntitlementEditor({
     </label>
   );
 
+
+  useEscapeToClose(() => !busy && onClose());
   return createPortal(
-    <div className="settings-backdrop" onClick={() => !busy && onClose()}>
-      <div className="settings-dialog" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-        <div className="settings-head">
+    <div className="modal-backdrop" onClick={() => !busy && onClose()}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <div className="modal-head">
           <h2>{t("admin.platformPlan.editTitle")}</h2>
           <Button variant="ghost" size="icon" onClick={onClose} disabled={busy}>
             <X size={ICON.lg} />
           </Button>
         </div>
-        <div className="settings-body pa-tier-form">
+        <div className="modal-body pa-tier-form">
           <label>
             {t("admin.platformPlan.tier")}
             <select value={tierID} onChange={(e) => setTierID(e.target.value)}>
@@ -263,7 +267,7 @@ function EntitlementEditor({
             <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} />
           </label>
         </div>
-        <div className="settings-foot">
+        <div className="modal-foot">
           <Button onClick={onClose} disabled={busy}>
             {t("common.cancel")}
           </Button>

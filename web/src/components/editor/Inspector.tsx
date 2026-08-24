@@ -671,10 +671,10 @@ export function Inspector({
                   setJsonError((e as Error).message);
                 }
               }}
-              style={{ fontFamily: "var(--font-mono)", resize: "vertical" }}
+                style={{ fontFamily: "var(--font-mono)", resize: "vertical" }}
             />
             {jsonError && (
-              <div style={{ color: "var(--danger)", fontSize: "var(--text-sm)", marginTop: 4 }}>
+              <div style={{ color: "var(--danger)", fontSize: "var(--text-sm)", marginTop: "var(--space-1)" }}>
                 {jsonError}
               </div>
             )}
@@ -689,7 +689,7 @@ export function Inspector({
           // the public ntfy.sh default; the hint covers the custom-server case.)
           <div className="inspector-section">
             <h4>
-              <BellRing size={ICON.sm} style={{ verticalAlign: "-2px", marginRight: 6 }} />
+              <BellRing className="icon-lede" size={ICON.sm} />
               {t("ntfy.subscribeTitle")}
             </h4>
             {typeof currentParams.topic === "string" && currentParams.topic.trim() ? (

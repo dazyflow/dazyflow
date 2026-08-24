@@ -14,6 +14,8 @@ import { explainApiError } from "../../lib/explainApiError";
 import { ErrorNotice } from "../../components/ui/ErrorNotice";
 import { ICON } from "../../icons";
 import { isGrantActive } from "../../lib/grants";
+import { Loading } from "../../components/ui/Loading";
+import { Notice } from "../../components/ui/Notice";
 
 // AdminSupport is the org-admin consent surface for the Support feature (see
 // docs/support-tickets-design.md). Support staff request a scoped, time-boxed,
@@ -69,7 +71,7 @@ export function AdminSupport() {
       <div className="page-title">
         <div>
           <h1>
-            <LifeBuoy size={ICON.xl} style={{ marginRight: 8, verticalAlign: -3 }} />
+            <LifeBuoy size={ICON.xl} />
             {t("admin.support.title", { defaultValue: "Support access" })}
           </h1>
           <div className="sub">
@@ -88,25 +90,23 @@ export function AdminSupport() {
       )}
 
       {disabled ? (
-        <div className="card" style={{ color: "var(--muted)" }}>
+        <Notice>
           {t("admin.support.notEnabled", {
             defaultValue: "Support access is not enabled on this deployment.",
           })}
-        </div>
+        </Notice>
       ) : (
         <>
           <h2 className="admin-section-head">
             {t("admin.support.pendingHead", { defaultValue: "Pending requests" })}
           </h2>
           {loading && grants.length === 0 && (
-            <div className="card" style={{ color: "var(--muted)" }}>
-              {t("common.loading")}
-            </div>
+            <Loading />
           )}
           {!loading && pending.length === 0 && (
-            <div className="card" style={{ color: "var(--muted)" }}>
+            <Notice>
               {t("admin.support.noPending", { defaultValue: "No pending access requests." })}
-            </div>
+            </Notice>
           )}
           <div className="user-list">
             {pending.map((g) => (
@@ -187,7 +187,7 @@ function GrantCard({ grant, onChanged }: { grant: AccessGrant; onChanged: () => 
           })}
           <span
             className={"count-pill" + (active ? " active" : "")}
-            style={{ marginLeft: 8 }}
+            style={{ marginLeft: "var(--space-2)" }}
           >
             {statusLabel}
           </span>
@@ -205,7 +205,7 @@ function GrantCard({ grant, onChanged }: { grant: AccessGrant; onChanged: () => 
             <> · {t("admin.support.decidedBy", { defaultValue: "by {{who}}", who: grant.decided_by })}</>
           )}
         </div>
-        <div className="desc" style={{ marginTop: "var(--space-1)", color: "var(--muted)" }}>
+        <div className="desc muted" style={{ marginTop: "var(--space-1)" }}>
           {t("admin.support.reassure", {
             defaultValue: "Secrets stay hidden and run data is redacted. You can revoke access at any time.",
           })}
@@ -215,18 +215,18 @@ function GrantCard({ grant, onChanged }: { grant: AccessGrant; onChanged: () => 
         {grant.status === "requested" && (
           <>
             <Button variant="primary" onClick={() => void decide("approve")} disabled={busy}>
-              <Check size={ICON.xs} style={{ marginRight: 4 }} />
+              <Check size={ICON.xs} />
               {t("admin.support.approve", { defaultValue: "Approve" })}
             </Button>
             <Button onClick={() => void decide("deny")} disabled={busy}>
-              <X size={ICON.xs} style={{ marginRight: 4 }} />
+              <X size={ICON.xs} />
               {t("admin.support.deny", { defaultValue: "Deny" })}
             </Button>
           </>
         )}
         {active && (
           <Button onClick={() => setConfirmRevoke(true)} disabled={busy}>
-            <X size={ICON.xs} style={{ marginRight: 4 }} />
+            <X size={ICON.xs} />
             {t("common.revoke", { defaultValue: "Revoke" })}
           </Button>
         )}

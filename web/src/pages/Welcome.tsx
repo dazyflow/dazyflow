@@ -116,7 +116,7 @@ export function Welcome() {
           <div className="welcome-mcp">
             <div className="welcome-mcp-body">
               <div className="welcome-mcp-title">
-                <Sparkles size={ICON.md} style={{ marginRight: 8, verticalAlign: -2 }} />
+                <Sparkles className="icon-lede" size={ICON.md} />
                 {t("welcome.aiBuildTitle")}
               </div>
               <div className="welcome-mcp-desc">

@@ -12,6 +12,8 @@ import { explainApiError } from "../../lib/explainApiError";
 import { ErrorNotice } from "../../components/ui/ErrorNotice";
 import { GitMirrorPanel } from "../../components/GitMirrorPanel";
 import { ICON } from "../../icons";
+import { Loading } from "../../components/ui/Loading";
+import { Notice } from "../../components/ui/Notice";
 
 // AdminGitCredentials manages the org's named Git credentials — what a
 // git_checkout node picks by `account` to clone private repos. Each
@@ -110,9 +112,9 @@ export function AdminGitCredentials() {
       )}
 
       {loading ? (
-        <div className="card" style={{ color: "var(--muted)" }}>{t("common.loading")}</div>
+        <Loading />
       ) : creds.length === 0 ? (
-        <div className="card" style={{ color: "var(--muted)" }}>{t("gitCreds.empty")}</div>
+        <Notice>{t("gitCreds.empty")}</Notice>
       ) : (
         <div className="card" style={{ padding: 0, overflow: "hidden" }}>
           <table className="run-table">
@@ -126,10 +128,10 @@ export function AdminGitCredentials() {
             <tbody>
               {creds.map((c) => (
                 <tr key={c.account}>
-                  <td style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <td style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-1h)" }}>
                     <KeyRound size={ICON.sm} /> {c.account}
                   </td>
-                  <td style={{ color: "var(--muted)", fontSize: "var(--text-sm)" }}>
+                  <td className="muted" style={{ fontSize: "var(--text-sm)" }}>
                     {[
                       c.has_ssh_key && t("gitCreds.partSSH"),
                       c.has_token &&
@@ -139,12 +141,11 @@ export function AdminGitCredentials() {
                       .filter(Boolean)
                       .join(" · ")}
                   </td>
-                  <td style={{ textAlign: "right", paddingRight: 12 }}>
+                  <td style={{ textAlign: "right", paddingRight: "var(--space-3)" }}>
                     <Button
                       className="btn-ghost"
                       onClick={() => void remove(c.account)}
                       title={t("gitCreds.delete")}
-                      style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
                     >
                       <Trash2 size={ICON.sm} />
                     </Button>
@@ -169,7 +170,7 @@ export function AdminGitCredentials() {
           <div className="desc">{t("gitCreds.accountDesc")}</div>
         </div>
 
-        <h3 style={{ marginBottom: 4 }}>{t("gitCreds.tokenSection")}</h3>
+        <h3 style={{ marginBottom: "var(--space-1)" }}>{t("gitCreds.tokenSection")}</h3>
         <div className="sf-field">
           <label>{t("gitCreds.tokenLabel")}</label>
           <input
@@ -192,7 +193,7 @@ export function AdminGitCredentials() {
           <div className="desc">{t("gitCreds.usernameDesc")}</div>
         </div>
 
-        <h3 style={{ marginBottom: 4 }}>{t("gitCreds.sshSection")}</h3>
+        <h3 style={{ marginBottom: "var(--space-1)" }}>{t("gitCreds.sshSection")}</h3>
         <div className="sf-field">
           <label>{t("gitCreds.privateKeyLabel")}</label>
           <textarea
@@ -228,10 +229,10 @@ export function AdminGitCredentials() {
         </div>
 
         <Button variant="primary" disabled={!canSave} onClick={() => void save()}>
-          <Plus size={ICON.sm} style={{ marginRight: 4 }} />
+          <Plus size={ICON.sm} />
           {saving ? t("common.saving") : t("gitCreds.saveBtn")}
         </Button>
-        <div className="desc" style={{ marginTop: 6 }}>{t("gitCreds.atLeastOne")}</div>
+        <div className="desc" style={{ marginTop: "var(--space-1h)" }}>{t("gitCreds.atLeastOne")}</div>
       </div>
 
       {/* Mirroring uses one of the credentials above, so it belongs on this

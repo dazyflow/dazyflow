@@ -114,7 +114,7 @@ export function PlanComparison({
     <section className="card dash-panel" style={{ marginTop: "var(--space-4)" }}>
       <div className="dash-panel-head">
         <h2>
-          <CreditCard size={ICON.lg} style={{ marginRight: 8, verticalAlign: -3 }} />
+          <CreditCard size={ICON.lg} />
           {t("plans.compareTitle")}
         </h2>
       </div>
@@ -207,7 +207,7 @@ function PlanCard({
   ) : isUpgradeTarget ? (
     info.can_upgrade ? (
       <Button variant="primary" block disabled={redirecting} onClick={onUpgrade}>
-        <Sparkles size={ICON.sm} style={{ marginRight: 6 }} />
+        <Sparkles size={ICON.sm} />
         {t("plans.upgradeTo", { plan: plan.name })}
       </Button>
     ) : (

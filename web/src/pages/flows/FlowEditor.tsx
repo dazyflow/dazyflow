@@ -141,6 +141,8 @@ import { PublishLabelModal } from "../../components/editor/PublishLabelModal";
 import { Button } from "../../components/ui/Button";
 import { ContactSupportLink } from "../../components/ContactSupportLink";
 import { useResourceResolver } from "../useResourceResolver";
+import { Loading } from "../../components/ui/Loading";
+import { Notice } from "../../components/ui/Notice";
 
 // Custom node-types registry. React Flow caches by reference, so this
 // is declared at module scope rather than inline in the component to
@@ -833,13 +835,21 @@ function EditorInner() {
           hydrateGraph(migrated);
         }
         loadedIDRef.current = requestedID;
+        // The zone stamp is an edit the editor made on the user's behalf, so it
+        // goes out through the same write path as any other edit: mark the graph
+        // dirty and let useAutosave decide when.
+        //
+        // It used to PUT straight from here, which meant it was the one write
+        // that ignored the edit lock — while useAutosave refuses to write during
+        // a run for the very reason this heal exists ("Run executes the SAVED
+        // graph"). Checking lockedRunID here would not have fixed it either:
+        // this load runs in parallel with the first refreshLock(), so the check
+        // would usually read an unresolved null and write anyway. Handing it to
+        // autosave gets every guard for free — it waits out an active run and
+        // writes once the lock releases, and equally respects a history preview,
+        // a failed load, and a mid-flight flow switch.
         if (changed && hasPermRef.current("graph:edit")) {
-          api
-            .saveGraph(token, migrated, true)
-            .then((res) => {
-              if (res.commit) ownCommitsRef.current.add(res.commit);
-            })
-            .catch(() => {});
+          setDirty(true);
         }
       })
       .catch((e) => {
@@ -3880,7 +3890,7 @@ function EditorInner() {
         {previewRef && (
           <div className={`history-preview-banner${showHistory ? " with-panel" : ""}`}>
             <span className="history-preview-msg">
-              <History size={ICON.sm} style={{ verticalAlign: -2, marginRight: 6 }} />
+              <History className="icon-lede" size={ICON.sm} />
               {t("editor.viewingOld", {
                 when: formatDateTime(
                   revisions.find((r) => r.commit === previewRef)?.when ?? "",
@@ -3898,7 +3908,7 @@ function EditorInner() {
                   previewRef === revisions[0]?.commit
                 }
               >
-                <RotateCcw size={ICON.sm} style={{ marginRight: 5 }} />
+                <RotateCcw size={ICON.sm} />
                 {restoring ? t("editor.restoring") : t("editor.restore")}
               </Button>
               <Button variant="ghost" onClick={() => void exitPreview()} disabled={restoring}>
@@ -3920,9 +3930,9 @@ function EditorInner() {
               </Button>
             </div>
             {historyLoading ? (
-              <div className="history-empty">{t("common.loading")}</div>
+              <Loading inline />
             ) : revisions.length === 0 ? (
-              <div className="history-empty">{t("editor.noHistory")}</div>
+              <Notice inline>{t("editor.noHistory")}</Notice>
             ) : (
               <ul className="history-list">
                 {revisions.map((rev, i) => (
@@ -3939,13 +3949,13 @@ function EditorInner() {
                         <span className="history-row-author">{rev.author}</span>
                         {rev.label && (
                           <span className="history-badge label" title={t("editor.labelBadgeTitle")}>
-                            <Tag size={ICON.xs} style={{ verticalAlign: -1, marginRight: 3 }} />
+                            <Tag className="icon-lede" size={ICON.xs} />
                             {rev.label}
                           </span>
                         )}
                         {publishedCommit === rev.commit && (
                           <span className="history-badge live" title={t("editor.publishedTitle")}>
-                            <Rocket size={ICON.xs} style={{ verticalAlign: -1, marginRight: 3 }} />
+                            <Rocket className="icon-lede" size={ICON.xs} />
                             {t("editor.currentRelease")}
                           </span>
                         )}
@@ -3964,7 +3974,7 @@ function EditorInner() {
                         onClick={() => setLabelEditing(rev)}
                         title={t("editor.labelTitle")}
                       >
-                        <Tag size={ICON.xs} style={{ marginRight: 4 }} />
+                        <Tag size={ICON.xs} />
                         {rev.label ? t("editor.relabel") : t("editor.label")}
                       </Button>
                     )}
@@ -3979,7 +3989,7 @@ function EditorInner() {
                         disabled={publishing}
                         title={t("editor.makeLiveTitle")}
                       >
-                        <Rocket size={ICON.xs} style={{ marginRight: 4 }} />
+                        <Rocket size={ICON.xs} />
                         {t("editor.makeLive")}
                       </Button>
                     )}
@@ -4164,7 +4174,7 @@ function EditorInner() {
               flexDirection: "column",
               alignItems: "center",
               justifyContent: "center",
-              gap: 10,
+              gap: "var(--space-3)",
               pointerEvents: "none",
               textAlign: "center",
               color: "var(--faint)",
@@ -4179,7 +4189,7 @@ function EditorInner() {
             </div>
             <Button
               variant="primary"
-              style={{ pointerEvents: "auto", marginTop: 4 }}
+                style={{ pointerEvents: "auto", marginTop: "var(--space-1)" }}
               onClick={() => setPaletteOpen(true)}
             >
               <Plus size={ICON.sm} />
@@ -4259,14 +4269,14 @@ function EditorInner() {
               background: "var(--surface)",
               border: "1px solid var(--danger)",
               color: "var(--danger)",
-              padding: "10px 14px",
+              padding: "var(--space-3) var(--space-4)",
               borderRadius: "var(--r-2)",
               fontSize: "var(--text-md)",
               boxShadow: "0 2px 8px color-mix(in srgb, var(--danger) 25%, transparent)",
               display: "flex",
               alignItems: "flex-start",
               justifyContent: "space-between",
-              gap: 8,
+              gap: "var(--space-2)",
               pointerEvents: "auto",
             }}
           >
@@ -4276,7 +4286,11 @@ function EditorInner() {
                   real link when the operator configured one. Renders nothing
                   otherwise, so no dead affordance appears. */}
               <ContactSupportLink
-                style={{ color: "var(--danger)", textDecoration: "underline", whiteSpace: "nowrap" }}
+                style={{
+                  color: "var(--danger)",
+                  textDecoration: "underline",
+                  whiteSpace: "nowrap",
+                }}
               />
             </span>
             {/* Offer the same recovery the runs list and run-detail page do,
@@ -4295,14 +4309,14 @@ function EditorInner() {
                 title={t("runAction.retryTitle")}
                 style={{ flexShrink: 0 }}
               >
-                <RotateCcw size={ICON.sm} style={{ marginRight: 4 }} />
+                <RotateCcw size={ICON.sm} />
                 {t("runAction.retry")}
               </Button>
             )}
             <Button
               variant="ghost"
               onClick={run.dismissFailure}
-              style={{ fontSize: "var(--text-xs)", padding: "2px 8px", color: "var(--danger)" }}
+              style={{ fontSize: "var(--text-xs)", padding: "var(--space-0) var(--space-2)", color: "var(--danger)" }}
               aria-label={t("common.dismiss")}
             >
               {t("common.dismiss")}
@@ -4317,7 +4331,7 @@ function EditorInner() {
             style={{
               background: "var(--surface)",
               border: "1px solid var(--warning)",
-              padding: "10px 14px",
+              padding: "var(--space-3) var(--space-4)",
               borderRadius: "var(--r-2)",
               fontSize: "var(--text-md)",
               color: "var(--ink)",
@@ -4326,20 +4340,20 @@ function EditorInner() {
             }}
             role="alert"
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "var(--space-2)", marginBottom: "var(--space-1h)" }}>
               <strong style={{ color: "var(--warning)" }}>
                 {t("editor.lintWarning", { count: lintIssues.length })}
               </strong>
               <Button
                 variant="ghost"
                 onClick={() => setLintIssues([])}
-                style={{ fontSize: "var(--text-xs)", padding: "2px 8px" }}
+                style={{ fontSize: "var(--text-xs)", padding: "var(--space-0) var(--space-2)" }}
                 aria-label={t("editor.dismissLint")}
               >
                 {t("common.dismiss")}
               </Button>
             </div>
-            <ul style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 6 }}>
+            <ul style={{ margin: 0, paddingLeft: "var(--space-4)", display: "flex", flexDirection: "column", gap: "var(--space-1h)" }}>
               {/* Just the sentence — the machine code (issue.code) stays
                   out of the visible text and rides along as a hover
                   tooltip for bug reports and grepping. The sentence names the

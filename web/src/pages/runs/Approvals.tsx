@@ -14,6 +14,8 @@ import type { PendingApproval } from "../../types";
 import { ErrorNotice } from "../../components/ui/ErrorNotice";
 import { ICON } from "../../icons";
 import { POLL } from "../../lib/timing";
+import { Loading } from "../../components/ui/Loading";
+import { EmptyState } from "../../components/ui/EmptyState";
 
 // Approvals is the inbox for await_approval nodes parked across the
 // workspace. Polls on the `watched` tier so a freshly-pending node shows up
@@ -145,16 +147,11 @@ export function Approvals() {
       )}
 
       {!error && loading && items.length === 0 && (
-        <div className="card" style={{ color: "var(--muted)" }}>
-          {t("common.loading")}
-        </div>
+        <Loading />
       )}
 
       {!error && !loading && items.length === 0 && (
-        <div className="card approvals-empty">
-          <Inbox size={28} style={{ opacity: 0.5, marginBottom: 8 }} />
-          <div>{t("approvals.inboxZero")}</div>
-        </div>
+        <EmptyState icon={Inbox}>{t("approvals.inboxZero")}</EmptyState>
       )}
 
       <div className="approval-list">
@@ -181,19 +178,19 @@ export function Approvals() {
                         has that panel, plus the timeline of steps that already
                         ran, which is the evidence for the decision. */}
                     <Link to={`/runs/${encodeURIComponent(item.run_id)}`}>
-                      <Activity size={ICON.xs} style={{ verticalAlign: -1 }} />{" "}
+                      <Activity className="icon-inline" size={ICON.xs} />{" "}
                       {flowNames[item.graph_id] || item.graph_id}
                     </Link>
                     {/* Editing is still one click away, the way it is at the
                         end of a runs-list row — it just isn't why anyone
                         opens this page. */}
                     <Link
+                      className="muted"
                       to={`/flows/${encodeURIComponent(item.graph_id)}?run=${encodeURIComponent(item.run_id)}`}
-                      style={{ color: "var(--muted)" }}
                       title={t("common.openInEditor")}
                       aria-label={t("common.openInEditor")}
                     >
-                      <Pencil size={ICON.xs} style={{ verticalAlign: -1 }} />
+                      <Pencil className="icon-inline" size={ICON.xs} />
                     </Link>
                     <span>·</span>
                     <span title={absoluteTime(item.since)}>{formatDateTime(item.since)}</span>
@@ -208,7 +205,7 @@ export function Approvals() {
                     onClick={() => decide(item, "reject")}
                     disabled={!!inflight}
                   >
-                    <XCircle size={ICON.sm} style={{ marginRight: 6 }} />
+                    <XCircle size={ICON.sm} />
                     {inflight === "reject" ? t("approvals.rejecting") : t("approvals.reject")}
                   </Button>
                   <Button
@@ -216,7 +213,7 @@ export function Approvals() {
                     onClick={() => decide(item, "approve")}
                     disabled={!!inflight}
                   >
-                    <CheckCircle2 size={ICON.sm} style={{ marginRight: 6 }} />
+                    <CheckCircle2 size={ICON.sm} />
                     {inflight === "approve" ? t("approvals.approving") : t("approvals.approve")}
                   </Button>
                 </div>

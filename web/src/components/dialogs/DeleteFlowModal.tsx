@@ -1,13 +1,14 @@
 // SPDX-FileCopyrightText: 2026 Joachim Klahr
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { APIError } from "../../api";
 import { explainApiError } from "../../lib/explainApiError";
 import { Button } from "../ui/Button";
 import { ErrorNotice } from "../ui/ErrorNotice";
+import { useEscapeToClose } from "../ui/useEscapeToClose";
 
 // DeleteFlowModal is the password-gated confirm dialog for deleting a flow.
 // Deletion is irreversible (it drops the flow's whole history), so — like
@@ -36,13 +37,7 @@ export function DeleteFlowModal({
 
   // Escape cancels — but not mid-delete, so a stray keypress can't abandon
   // the dialog while the request is in flight.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !busy) onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, busy]);
+  useEscapeToClose(() => !busy && onClose());
 
   const submit = async () => {
     if (!password || busy) return;
@@ -66,17 +61,17 @@ export function DeleteFlowModal({
   };
 
   return createPortal(
-    <div className="settings-backdrop" onClick={() => !busy && onClose()}>
+    <div className="modal-backdrop" onClick={() => !busy && onClose()}>
       <div
-        className="settings-dialog confirm-dialog"
+        className="modal confirm-dialog"
         onClick={(e) => e.stopPropagation()}
         role="alertdialog"
         aria-modal="true"
       >
-        <div className="settings-head">
+        <div className="modal-head">
           <h2>{t("deleteFlow.title")}</h2>
         </div>
-        <div className="settings-body">
+        <div className="modal-body">
           <p className="confirm-message">
             {t("deleteFlow.body", { name: flowName })}
           </p>
@@ -102,7 +97,7 @@ export function DeleteFlowModal({
           </div>
           {err && <ErrorNotice>{err}</ErrorNotice>}
         </div>
-        <div className="settings-foot">
+        <div className="modal-foot">
           <Button onClick={onClose} disabled={busy}>
             {t("common.cancel")}
           </Button>

@@ -15,6 +15,7 @@ import { explainApiError } from "../lib/explainApiError";
 import { formatRelative, formatDateTime } from "../lib/datetime";
 import type { GitCredential, GitMirror } from "../types";
 import { ICON } from "../icons";
+import { Loading } from "./ui/Loading";
 
 // GitMirrorPanel configures the workspace git mirror: push this org's flow
 // repository — full history, every flow, the published-revision tags — to a
@@ -188,15 +189,13 @@ export function GitMirrorPanel({
 
   if (loading) {
     return (
-      <div className="card" style={{ marginTop: "var(--space-4)", color: "var(--muted)" }}>
-        {t("common.loading")}
-      </div>
+      <Loading style={{ marginTop: "var(--space-4)" }} />
     );
   }
 
   return (
     <div className="card" style={{ marginTop: "var(--space-4)" }}>
-      <h2 style={{ marginTop: 0, display: "flex", alignItems: "center", gap: 8 }}>
+      <h2 style={{ marginTop: 0, display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
         <GitBranch size={ICON.lg} />
         {t("gitMirror.title")}
       </h2>
@@ -273,7 +272,7 @@ export function GitMirrorPanel({
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 10,
+              gap: "var(--space-3)",
               marginTop: "var(--space-3)",
             }}
           >
@@ -294,7 +293,7 @@ export function GitMirrorPanel({
           <div
             style={{
               display: "flex",
-              gap: 8,
+              gap: "var(--space-2)",
               marginTop: "var(--space-4)",
               flexWrap: "wrap",
             }}
@@ -303,7 +302,7 @@ export function GitMirrorPanel({
               {busy ? t("common.saving") : t("gitMirror.saveBtn")}
             </Button>
             <Button disabled={!canPush} onClick={() => void pushNow()} title={t("gitMirror.pushNowTitle")}>
-              <Upload size={ICON.sm} style={{ marginRight: 4 }} />
+              <Upload size={ICON.sm} />
               {t("gitMirror.pushNow")}
             </Button>
             {configured && (
@@ -313,7 +312,7 @@ export function GitMirrorPanel({
                 onClick={() => setConfirmRemove(true)}
                 title={t("gitMirror.removeTitle")}
               >
-                <Trash2 size={ICON.sm} style={{ marginRight: 4 }} />
+                <Trash2 size={ICON.sm} />
                 {t("gitMirror.remove")}
               </Button>
             )}
@@ -395,7 +394,7 @@ function MirrorStatus({ mirror }: { mirror: GitMirror | null }) {
         style={{
           display: "flex",
           alignItems: "center",
-          gap: 6,
+          gap: "var(--space-1h)",
           color: failing ? "var(--danger)" : "var(--success)",
         }}
       >
@@ -410,7 +409,7 @@ function MirrorStatus({ mirror }: { mirror: GitMirror | null }) {
       {failing && (
         <pre
           className="run-result-value"
-          style={{ marginTop: "var(--space-2)", whiteSpace: "pre-wrap" }}
+                style={{ marginTop: "var(--space-2)", whiteSpace: "pre-wrap" }}
         >
           {last_error}
         </pre>

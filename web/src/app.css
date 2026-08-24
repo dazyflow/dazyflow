@@ -477,6 +477,13 @@
   margin: 0 0 var(--space-5) 0;
 }
 .page-title h1 {
+  /* Flex, so a leading glyph is spaced by gap and centred on the text's
+     optical midline. Sixteen page headers used to do this with
+     `marginRight: 8, verticalAlign: -3` inline — and the verticalAlign was
+     only ever needed because this was not a flex container. */
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   margin: 0;
   font-size: var(--text-2xl);
   font-weight: 600;
@@ -664,37 +671,6 @@
   gap: var(--space-4);
 }
 
-/* Empty-state card for a workspace with no flows — guides toward the
-   template gallery (primary) over a blank canvas. */
-.flow-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: var(--space-2);
-  padding: var(--space-6) var(--space-4);
-}
-.flow-empty-icon {
-  color: var(--accent);
-  margin-bottom: var(--space-1);
-}
-.flow-empty h2 {
-  margin: 0;
-  font-size: var(--text-xl);
-}
-.flow-empty p {
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--text-md);
-  max-width: 420px;
-}
-.flow-empty-actions {
-  display: flex;
-  gap: var(--space-2);
-  margin-top: var(--space-3);
-  flex-wrap: wrap;
-  justify-content: center;
-}
 .graph-card {
   display: flex;
   flex-direction: column;
@@ -808,23 +784,27 @@
   margin: 0 0 var(--space-4);
   flex-wrap: wrap;
 }
-.flow-search {
+/* A search field. The box owns the border and the focus ring; the glyph and
+   the input are flex children of it.
+   Four pages used to build this a second way — an absolutely positioned glyph
+   at `left: 10, top: 11` with a matching `paddingLeft` on the input. Three
+   magic numbers that had to agree with each other, and didn't: the padding was
+   30 on the results page and 32 on the three platform pages, so the glyph sat
+   2px closer to the text on one of them. */
+.search-box {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  flex: 1;
-  min-width: 200px;
-  max-width: 380px;
   padding: 0 var(--space-3);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-2);
   color: var(--faint);
 }
-.flow-search:focus-within {
+.search-box:focus-within {
   border-color: var(--accent);
 }
-.flow-search input {
+.search-box input {
   flex: 1;
   min-width: 0;
   border: none;
@@ -833,6 +813,13 @@
   color: var(--ink);
   font-size: var(--text-sm);
   padding: var(--space-2) 0;
+}
+/* In the flow toolbar it shares the row with the filter and sort controls, so
+   it flexes rather than filling the width. */
+.flow-search {
+  flex: 1;
+  min-width: 200px;
+  max-width: 380px;
 }
 .flow-filter {
   display: inline-flex;
@@ -2069,10 +2056,6 @@
   margin: var(--space-4) 0 var(--space-6);
 }
 
-.credentials-empty {
-  color: var(--muted);
-  font-size: var(--text-md);
-}
 .connections-setup-incomplete {
   display: flex;
   flex-direction: column;
@@ -2476,13 +2459,10 @@
   font-size: var(--text-sm);
   padding: var(--space-0) var(--space-2);
 }
-/* Icon + label buttons that collapse to icon-only on mobile: gap (not an
-   icon margin) spaces them, so hiding .btn-label leaves a centered icon. */
-.icon-text-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-}
+/* Icon + label buttons that collapse to icon-only on mobile. The layout it
+   used to declare — inline-flex, centred, gapped — is now what every button
+   does, so this class survives only as the hook the media query below hides
+   .btn-label with. */
 @media (max-width: 768px) {
   /* Google admin page: drop button labels, keep the icons. */
   .admin-google .btn-label {
@@ -3427,49 +3407,6 @@ button.warning:hover:not(:disabled) {
   outline: none;
   border-color: var(--accent);
 }
-/* Generic centered modal (diff-vs-published). Mirrors .settings-backdrop. */
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(8, 2, 30, 0.55);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
-  display: grid;
-  place-items: center;
-  z-index: var(--z-modal);
-  padding: var(--space-4);
-}
-.modal {
-  width: 100%;
-  max-width: 560px;
-  max-height: calc(100vh - 60px);
-  display: flex;
-  flex-direction: column;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-3);
-  box-shadow: var(--shadow-pop);
-  overflow: hidden;
-}
-.modal-head,
-.modal-foot {
-  display: flex;
-  align-items: center;
-  padding: var(--space-3) var(--space-4);
-}
-.modal-head {
-  justify-content: space-between;
-  border-bottom: 1px solid var(--border);
-}
-.modal-foot {
-  justify-content: flex-end;
-  gap: var(--space-2);
-  border-top: 1px solid var(--border);
-}
-.modal-body {
-  padding: var(--space-3) var(--space-4);
-  overflow: auto;
-}
 .diff-list {
   list-style: none;
   margin: 0;
@@ -3854,10 +3791,10 @@ button.warning:hover:not(:disabled) {
   animation: dz-slide-down 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 /* Modal backdrop fades in; the dialog pops in. */
-.settings-backdrop {
+.modal-backdrop {
   animation: dz-fade-in 140ms ease-out;
 }
-.settings-dialog {
+.modal {
   animation: dz-pop-in 160ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 /* Quick-drop palette: backdrop fades, panel pops in. */
@@ -3943,8 +3880,8 @@ button.warning:hover:not(:disabled) {
 
 @media (prefers-reduced-motion: reduce) {
   .editor-conn-banner,
-  .settings-backdrop,
-  .settings-dialog,
+  .modal-backdrop,
+  .modal,
   .quick-palette-backdrop,
   .quick-palette {
     animation: none;
@@ -4798,7 +4735,7 @@ button.warning:hover:not(:disabled) {
   background: color-mix(in srgb, var(--danger) 20%, transparent);
 }
 /* Org switcher dialog (OrgSwitcherModal): a centered list of the orgs you can
-   act in + an inline create form. Shares the .settings-dialog modal shell and
+   act in + an inline create form. Shares the .modal modal shell and
    mirrors the config checklist's row styling. */
 .org-switcher-modal {
   max-width: 460px;
@@ -4980,7 +4917,7 @@ button.warning:hover:not(:disabled) {
 
 /* "N to configure" dialog (ConfigChecklistModal): a click-to-jump checklist of
    every node still missing required values, so the count is actionable rather
-   than a dead heads-up. Builds on the shared .settings-dialog modal shell. */
+   than a dead heads-up. Builds on the shared .modal modal shell. */
 .config-modal {
   max-width: 480px;
 }
@@ -6459,7 +6396,7 @@ img[src$="/brands/smhi.svg"] {
   padding: var(--space-2);
 }
 @media (max-width: 768px) {
-  .settings-backdrop:has(.ref-dialog) {
+  .modal-backdrop:has(.ref-dialog) {
     padding: 0;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
@@ -6928,10 +6865,10 @@ img[src$="/brands/smhi.svg"] {
 
 /* Invalid-state for the InviteModal email input so the user sees the
    form pushing back before they click Create. */
-.settings-dialog input.invalid {
+.modal input.invalid {
   border-color: var(--warning);
 }
-.settings-dialog input.invalid:focus {
+.modal input.invalid:focus {
   outline-color: var(--warning);
 }
 
@@ -7333,39 +7270,6 @@ a.pa-card:hover {
   background: color-mix(in srgb, var(--danger) 6%, transparent);
 }
 
-/* Empty-state card used across admin pages when the resource list is
-   genuinely empty (first-time use). Tries to look inviting rather than
-   like an error. */
-.admin-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  background: var(--surface);
-  border: 1px dashed var(--border);
-  border-radius: var(--r-3);
-  padding: var(--space-6) var(--space-4);
-  color: var(--muted);
-}
-/* Only the decorative icon sitting directly in the empty state gets the
-   accent color + drop margin. Scoped to a direct child so it doesn't leak
-   into icons nested in the call-to-action button below (e.g. the Plus),
-   which would otherwise be tinted accent and nudged off-center. */
-.admin-empty > svg {
-  color: var(--accent);
-  margin-bottom: var(--space-3);
-}
-.admin-empty h2 {
-  margin: 0 0 var(--space-1h) 0;
-  font-size: var(--text-lg);
-  color: var(--ink);
-}
-.admin-empty p {
-  margin: 0 0 var(--space-4) 0;
-  max-width: 480px;
-  line-height: 1.5;
-}
-
 /* Approvals inbox */
 .approval-list {
   display: flex;
@@ -7437,14 +7341,26 @@ a.pa-card:hover {
     flex: 1;
   }
 }
-.approvals-empty {
-  text-align: center;
-  color: var(--muted);
-  padding: var(--space-7) var(--space-5);
-}
 
 /* Settings modal */
-.settings-backdrop {
+/* ── The dialog shell ────────────────────────────────────────────────────
+   One backdrop + panel + head/body/foot, used by all 27 dialogs.
+
+   There used to be two of these. `.settings-*` dressed twenty dialogs and
+   `.modal-*` five, and the second was introduced with the comment "Mirrors
+   .settings-backdrop" — which it did, apart from three things nobody chose:
+   it was 560px instead of 640px wide, its head and foot were 4–8px tighter,
+   and it had no entrance animation. So five dialogs were quietly narrower and
+   appeared instantly while every other one popped in.
+
+   They are merged onto the `.settings-*` values under the `.modal-*` names,
+   because most of the twenty were not settings dialogs and the prefix said
+   they were.
+
+   NOT part of this shell: `.settings-tabs`. That one is genuinely shared with
+   the admin secrets PAGE, so it is a tab strip that happens to appear in a
+   dialog, not a piece of dialog chrome. */
+.modal-backdrop {
   position: fixed;
   inset: 0;
   background: rgba(8, 2, 30, 0.55);
@@ -7455,7 +7371,7 @@ a.pa-card:hover {
   z-index: var(--z-modal);
   padding: var(--space-4);
 }
-.settings-dialog {
+.modal {
   width: 100%;
   max-width: 640px;
   max-height: calc(100vh - 60px);
@@ -7467,14 +7383,14 @@ a.pa-card:hover {
   box-shadow: var(--shadow-pop);
   overflow: hidden;
 }
-.settings-head {
+.modal-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: var(--space-4) var(--space-5);
   border-bottom: 1px solid var(--border);
 }
-.settings-head h2 {
+.modal-head h2 {
   margin: 0;
   font-size: var(--text-lg);
   font-weight: 600;
@@ -7526,7 +7442,7 @@ a.pa-card:hover {
   border-radius: 6px;
   padding: var(--space-0) var(--space-1h);
 }
-.settings-body {
+.modal-body {
   padding: var(--space-5);
   overflow-y: auto;
   flex: 1;
@@ -7561,7 +7477,7 @@ a.pa-card:hover {
 }
 /* The filled-red confirm button is defined once in theme.css, alongside the
    `filled` danger modifier it shares its look with. */
-.settings-foot {
+.modal-foot {
   display: flex;
   justify-content: flex-end;
   gap: var(--space-2);
@@ -7573,7 +7489,7 @@ a.pa-card:hover {
    form/webhook/schedule content needs the full viewport rather than a
    cramped centred card. */
 @media (max-width: 600px) {
-  .settings-backdrop:has(.triggers-dialog) {
+  .modal-backdrop:has(.triggers-dialog) {
     padding: 0;
   }
   .triggers-dialog {
@@ -7595,7 +7511,7 @@ a.pa-card:hover {
   max-width: 680px;
 }
 @media (max-width: 768px) {
-  .settings-backdrop:has(.mcp-connect-dialog) {
+  .modal-backdrop:has(.mcp-connect-dialog) {
     padding: 0;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
@@ -7869,28 +7785,6 @@ a.pa-card:hover {
   flex-direction: column;
   gap: var(--space-2);
 }
-/* Triggers modal: per-tab empty state with a single create CTA. */
-.trigger-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: var(--space-1h);
-  padding: var(--space-5) var(--space-3);
-  color: var(--muted);
-}
-.trigger-empty-icon {
-  color: var(--muted);
-  opacity: 0.6;
-}
-.trigger-empty-title {
-  font-weight: 600;
-  font-size: var(--text-base);
-  color: var(--ink);
-}
-.trigger-empty .desc {
-  max-width: 36ch;
-}
 /* Head row of a populated trigger tab: help text on the left, remove
    button pushed to the right. */
 .trigger-tab-head {
@@ -8054,11 +7948,6 @@ a.pa-card:hover {
   justify-content: space-between;
   padding: var(--space-3);
   border-bottom: 1px solid var(--border);
-}
-.history-empty {
-  padding: var(--space-4);
-  color: var(--muted);
-  font-size: var(--text-md);
 }
 .history-list {
   list-style: none;
@@ -9278,11 +9167,6 @@ a.pa-card:hover {
 .files-list {
   padding: 0;
   overflow: hidden;
-}
-.files-empty {
-  padding: var(--space-5, 24px);
-  text-align: center;
-  color: var(--muted);
 }
 .files-table {
   width: 100%;
@@ -10993,6 +10877,99 @@ button:active,
 .card.error > .card-error-body {
   flex: 1 1 auto;
   min-width: 0;
+}
+
+/* ---- Glyphs sitting in text ---------------------------------------------- */
+/* A glyph inside a line of prose — a status line, a card heading, a label.
+   Unlike a button, these containers can't simply be flexed: `.sso-test-ok` and
+   friends hold a heading AND a description under the glyph, so flex would lay
+   them out side by side. Here the glyph really is an inline box, and the two
+   properties it needs are the optical nudge and (when it leads the line) a gap.
+   Both were being hand-written: 41 `verticalAlign` nudges at -1, -2 and -3 —
+   some as numbers, some as "-1px" strings — and 24 margins at 3, 4, 6 and 8px.
+
+   -0.15em rather than a pixel count, because `em` on vertical-align resolves
+   against the element's own font size, which an svg inherits from the text
+   around it. So the nudge tracks the type size instead of needing three
+   hand-picked values for three icon sizes. */
+.icon-inline {
+  vertical-align: -0.15em;
+}
+/* The same glyph when it leads the line and needs a gap after it. */
+.icon-lede {
+  vertical-align: -0.15em;
+  margin-right: var(--space-1h);
+}
+
+/* ---- Quiet notices, loading and empty states ----------------------------- */
+/* Between them these three shapes are the whole vocabulary for "there is
+   nothing to show you yet". They exist because that message had been written by
+   hand roughly a hundred times: `common.loading` alone appeared inside ten
+   different wrappers, and 42 places built a quiet notice as
+   `<div className="card" style={{ color: "var(--muted)" }}>` inline.
+   See components/ui/{Notice,Loading,EmptyState}.tsx — nothing else should set a
+   muted colour from an inline style, and scripts/check-ui-primitives.mjs fails
+   the build if it does. */
+
+/* A card carrying a short, low-urgency message: a load in progress, a
+   nothing-here line, a "you don't have permission" note. Sibling of
+   .card.error — same box, quieter voice. */
+.card.notice {
+  color: var(--muted);
+}
+
+/* The same message where a card would be redundant chrome: inside a dialog
+   body, a panel, a list that already has a border. Centred, because here it
+   stands in for the content rather than sitting beside it. */
+.notice-line {
+  padding: var(--space-4);
+  text-align: center;
+  color: var(--muted);
+}
+
+/* The placeholder box: glyph, heading, one sentence, and the action that fills
+   it. Dashed, so it reads as an outline waiting to be filled rather than as
+   content. That one look replaced four: a dashed box on two admin pages, a
+   solid card on the flow list and the approvals inbox, and a borderless block
+   in the triggers dialog — all for the same state. */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-1h);
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: var(--r-3);
+  padding: var(--space-6) var(--space-4);
+  color: var(--muted);
+}
+/* Targeted by class, not as `> svg`. The rule this replaced tinted the direct
+   child, which also caught the Plus icon inside the call-to-action button and
+   needed a comment warning future editors not to nest it there. A class cannot
+   reach into the action at all. */
+.empty-state-icon {
+  color: var(--accent);
+  margin-bottom: var(--space-2);
+}
+.empty-state-title {
+  margin: 0;
+  font-size: var(--text-lg);
+  color: var(--ink);
+}
+.empty-state-body {
+  margin: 0;
+  max-width: 44ch;
+  line-height: 1.5;
+}
+/* A row, so a state offering two paths (start from a template, or from blank)
+   lays them side by side without needing a class of its own. */
+.empty-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: center;
+  margin-top: var(--space-3);
 }
 
 /* ---- Support bundle view (BundleView.tsx) --------------------------------- */
