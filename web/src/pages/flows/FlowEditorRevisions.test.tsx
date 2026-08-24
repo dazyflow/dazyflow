@@ -181,6 +181,31 @@ describe("editor version history", () => {
     );
   });
 
+  // The undo stack must not reach past a document the user did not author.
+  // hydrateGraph fences it on every outside replacement — a preview, a restore,
+  // a flow switch, an external edit arriving over the MCP flow-watch. The last
+  // is the one that matters: undoing past someone else's edit would silently
+  // discard it.
+  //
+  // A fresh mount cannot test this, because `record` already treats its first
+  // observation as a baseline rather than an edit — deleting the fence does not
+  // change what a newly opened flow offers. It takes a stack that exists first,
+  // and then a replacement.
+  it("fences the undo stack when a revision replaces the document", async () => {
+    // makeDirty clears breakpoints, so the flow has to load with one.
+    loadGraph.mockResolvedValue(graphWithBreakpoint());
+    mount();
+    await screen.findByText("editor.run");
+    await makeDirty();
+    await waitFor(() => expect(screen.getByLabelText("editor.undo")).toBeEnabled());
+
+    await openHistoryAndPick("carol@acme.se");
+    await screen.findByText("editor.backToLatest");
+    await userEvent.click(screen.getByText("editor.backToLatest"));
+
+    await waitFor(() => expect(screen.getByLabelText("editor.undo")).toBeDisabled());
+  });
+
   it("leaving the preview reloads HEAD", async () => {
     mount();
     await openHistoryAndPick("carol@acme.se");

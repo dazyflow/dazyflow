@@ -406,12 +406,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           {/* Mark: the open flow's icon in the editor, else the org logo
               when set, else the Dazyflow favicon. */}
           {showFlow && activeFlowIcon ? (
-            <FlowIcon icon={activeFlowIcon} size={22} className="brand-flow-icon" />
+            <FlowIcon icon={activeFlowIcon} size={22} />
           ) : !showFlow && isImageIcon(orgIcon) ? (
             <img
               src={orgIcon}
               alt=""
-              className="flow-icon-img brand-flow-icon"
+              className="flow-icon-img"
               width={24}
               height={24}
               draggable={false}
@@ -442,7 +442,6 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Button
               variant="ghost"
               size="icon"
-              className="shortcuts-help"
               onClick={() => setHelpOpen(true)}
               aria-label={t("help.title")}
               title={t("help.title")}
@@ -564,10 +563,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           </NavLink>
           <NavLink
             to="/flows"
-            title={t("nav.flows")}
+            title={t("common.flows")}
           >
             <Workflow size={ICON.lg} />
-            <span className="nav-label">{t("nav.flows")}</span>
+            <span className="nav-label">{t("common.flows")}</span>
           </NavLink>
           {/* All flows in the workspace, nested under the Flows entry.
               Hidden in the collapsed icon-rail (no room for labels). */}
@@ -850,7 +849,7 @@ function AccountMenu({
       >
         <SettingsIcon size={ICON.lg} />
         <span className="nav-label account-email">{email}</span>
-        <ChevronDown size={ICON.sm} className="nav-label account-chevron" />
+        <ChevronDown size={ICON.sm} className="nav-label" />
       </Button>
       {open && pos &&
         createPortal(
@@ -924,7 +923,7 @@ function AccountMenu({
               }}
             >
               <CreditCard size={ICON.sm} />
-              {billingEnabled ? t("nav.plans") : t("nav.usage")}
+              {billingEnabled ? t("nav.plans") : t("common.usage")}
             </Button>
             {showAdmin && (
               <Button
@@ -992,7 +991,7 @@ function FlowMenu({ onOpenSettings }: { onOpenSettings: () => void }) {
     };
   }, [open]);
   return (
-    <div className="flow-menu" style={{ position: "relative" }}>
+    <div className="flow-menu">
       <Button
         variant="ghost"
         size="icon"
@@ -1069,7 +1068,6 @@ function VerifyEmailBanner() {
       <Button
         variant="ghost"
         size="icon"
-        className="verify-banner-dismiss"
         onClick={() => setHidden(true)}
         aria-label={t("verifyEmail.bannerDismiss")}
         title={t("verifyEmail.bannerDismiss")}

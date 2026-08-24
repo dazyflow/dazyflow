@@ -168,7 +168,7 @@ export function AdminAPIKeys() {
                     <th>{t("admin.apiKeys.colSubject")}</th>
                     <th>{t("admin.apiKeys.colRoles")}</th>
                     <th>{t("admin.apiKeys.colExpires")}</th>
-                    <th>{t("admin.apiKeys.colStatus")}</th>
+                    <th>{t("common.status")}</th>
                     <th></th>
                   </tr>
                 </thead>

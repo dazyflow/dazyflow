@@ -101,7 +101,7 @@ export function MembersSection({ tenant }: { tenant: string }) {
 
   return (
     <div style={{ marginTop: "var(--space-4)" }}>
-      <h2 className="admin-section-head">{t("admin.platformMembers.head")}</h2>
+      <h2 className="admin-section-head">{t("common.members")}</h2>
       {error && <ErrorNotice style={{ marginBottom: "var(--space-2)" }}>{error}</ErrorNotice>}
 
       <div className="user-list">
@@ -138,7 +138,7 @@ export function MembersSection({ tenant }: { tenant: string }) {
                   variant="danger"
                   disabled={busy === m.email}
                   onClick={() => setConfirmRemove(m)}
-                  title={t("admin.platformMembers.remove")}
+                  title={t("common.remove")}
                 >
                   <Trash2 size={ICON.sm} />
                 </Button>
@@ -186,7 +186,7 @@ export function MembersSection({ tenant }: { tenant: string }) {
         <ConfirmModal
           title={t("admin.platformMembers.removeTitle", { email: confirmRemove.email })}
           message={t("admin.platformMembers.removeWarning")}
-          confirmLabel={t("admin.platformMembers.remove")}
+          confirmLabel={t("common.remove")}
           danger
           onConfirm={() => void remove(confirmRemove)}
           onCancel={() => setConfirmRemove(null)}

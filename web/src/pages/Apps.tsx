@@ -166,7 +166,7 @@ export function Apps() {
     filteredNeedsSetup.length === 0;
 
   return (
-    <div className="page integrations-page">
+    <div className="page">
       <h1>{t("integrations.title")}</h1>
       <p className="page-sub">{t("integrations.intro")}</p>
       {categoryFilter && (
@@ -848,7 +848,7 @@ function SecretCard({
               >
                 {removing
                   ? t("integrations.connection.disconnecting")
-                  : t("integrations.connection.disconnect")}
+                  : t("common.disconnect")}
               </Button>
             </div>
           )}
@@ -873,7 +873,7 @@ function SecretCard({
           {err && <ErrorNotice>{err}</ErrorNotice>}
           <div className="connection-card-footer">
             <Button type="submit" variant="primary" disabled={busy || !value}>
-              {busy ? t("common.saving") : t("connections.connect")}
+              {busy ? t("common.saving") : t("common.connect")}
             </Button>
             {configured && (
               <Button
@@ -893,9 +893,9 @@ function SecretCard({
       )}
       {confirming && (
         <ConfirmModal
-          title={t("integrations.connection.disconnect")}
+          title={t("common.disconnect")}
           message={t("integrations.connection.removeConfirm", { name })}
-          confirmLabel={t("integrations.connection.disconnect")}
+          confirmLabel={t("common.disconnect")}
           danger
           onConfirm={() => {
             setConfirming(false);
@@ -1025,7 +1025,7 @@ function OAuthCard({
       ) : canWrite ? (
         <div className="connection-card-footer">
           <Button variant={connected ? "ghost" : "primary"} onClick={() => connect()}>
-            {connected ? t("connections.connectAnother") : t("connections.connect")}
+            {connected ? t("connections.connectAnother") : t("common.connect")}
           </Button>
         </div>
       ) : !connected ? (
@@ -1222,7 +1222,7 @@ function ConnectionFieldsCard({
               >
                 {removing
                   ? t("integrations.connection.disconnecting")
-                  : t("integrations.connection.disconnect")}
+                  : t("common.disconnect")}
               </Button>
             </div>
           )}
@@ -1282,7 +1282,7 @@ function ConnectionFieldsCard({
                 ? verifiable
                   ? t("integrations.connection.verifying")
                   : t("common.saving")
-                : t("connections.connect")}
+                : t("common.connect")}
             </Button>
             {connected && (
               <Button
@@ -1302,9 +1302,9 @@ function ConnectionFieldsCard({
       )}
       {confirming && (
         <ConfirmModal
-          title={t("integrations.connection.disconnect")}
+          title={t("common.disconnect")}
           message={t("integrations.connection.disconnectFieldsConfirm", { name })}
-          confirmLabel={t("integrations.connection.disconnect")}
+          confirmLabel={t("common.disconnect")}
           danger
           onConfirm={() => {
             setConfirming(false);

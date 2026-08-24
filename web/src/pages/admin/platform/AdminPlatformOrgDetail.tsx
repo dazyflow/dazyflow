@@ -86,7 +86,7 @@ export function AdminPlatformOrgDetail() {
 
   return (
     <div>
-      <BackLink to="/admin/platform/orgs" label={t("admin.platformOrgs.title")} />
+      <BackLink to="/admin/platform/orgs" label={t("common.organizations")} />
       <div className="page-title">
         <div className="pa-detail-head">
           <OrgAvatar name={org?.display_name || tenant} icon={org?.icon} seed={tenant} size={48} />
@@ -109,7 +109,7 @@ export function AdminPlatformOrgDetail() {
         <>
           <div className="card" style={{ marginBottom: "var(--space-3)" }}>
             <dl className="kv-grid">
-              <dt>{t("admin.platformOrgDetail.status")}</dt>
+              <dt>{t("common.status")}</dt>
               <dd>
                 <span
                   className="count-pill"
@@ -128,7 +128,7 @@ export function AdminPlatformOrgDetail() {
                   <dd>{org.subdomain}</dd>
                 </>
               )}
-              <dt>{t("admin.platformOrgDetail.memberCount")}</dt>
+              <dt>{t("common.members")}</dt>
               <dd>{org.member_count}</dd>
               {suspended && org.suspend_reason && (
                 <>
@@ -242,8 +242,8 @@ function OrgReasonModal({
             type="text"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            placeholder={t("admin.platformOrgDetail.reasonPlaceholder")}
-            aria-label={t("admin.platformOrgDetail.reasonPlaceholder")}
+            placeholder={t("common.auditReason")}
+            aria-label={t("common.auditReason")}
             style={{ width: "100%", marginTop: "var(--space-2)" }}
             autoFocus
           />

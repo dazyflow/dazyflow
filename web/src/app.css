@@ -10879,6 +10879,112 @@ button:active,
   min-width: 0;
 }
 
+/* ---- Names the markup was already asking for ------------------------------ */
+/* Each rule below backs a class that components render but no stylesheet
+   defined. Most of the 47 in that state turned out to be dead names — the
+   parent or a sibling class was already doing the work — and those classNames
+   were deleted instead. These nine are the ones that were really carrying
+   something: one that lost information outright, and eight whose look had been
+   written inline at the call site, so the name promised a style that lived
+   somewhere else. */
+
+/* A validation message under a field. With no rule at all it rendered as
+   ordinary body copy — same size, weight and colour as the help text two lines
+   above it, so an error did not read as an error. */
+.field-error {
+  margin: var(--space-1) 0 0;
+  color: var(--danger);
+  font-size: var(--text-sm);
+}
+
+/* The board picker in the results sidebar. All of this was inline on the
+   Button, including the selected state — which was a ternary on `background`
+   rather than the `active` class sitting right beside it in the same
+   className. */
+.board-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  border-radius: var(--r-2);
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+.board-item.active {
+  background: var(--surface-2);
+}
+
+/* "Report a problem" under a failed run: a button that reads as a link. */
+.run-error-help {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1h);
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* One condition in the row-filter builder: the field/operator/value controls
+   stack, and each row is separated from the next. */
+.sf-rowcond-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1h);
+  margin-bottom: var(--space-3);
+}
+
+/* The detected-country hint under a telephone field. */
+.sf-tel-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1h);
+  margin-top: var(--space-1);
+  font-size: 0.85em;
+  opacity: 0.85;
+}
+
+/* Marks a port that carries a list rather than a single value. */
+.dz-port-many {
+  margin-left: var(--space-1);
+  opacity: 0.5;
+}
+
+/* Anchors the flow menu's dropdown. */
+.flow-menu {
+  position: relative;
+}
+
+/* The standalone auth screens (verify, reset) centre a single card. */
+.auth-page {
+  display: grid;
+  place-items: center;
+  min-height: 60vh;
+}
+
+/* The toast that confirms a run finished, floating over the canvas. */
+.editor-run-done {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1h);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--success);
+  border-radius: var(--r-2);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--success) 25%, transparent);
+  color: var(--ink);
+  font-size: var(--text-md);
+  /* The canvas overlay it sits in is pointer-events: none. */
+  pointer-events: auto;
+}
+
 /* ---- Glyphs sitting in text ---------------------------------------------- */
 /* A glyph inside a line of prose — a status line, a card heading, a label.
    Unlike a button, these containers can't simply be flexed: `.sso-test-ok` and

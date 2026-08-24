@@ -293,7 +293,7 @@ export function FlowList() {
     <div>
       <div className="page-title">
         <div>
-          <h1>{t("flowList.title")}</h1>
+          <h1>{t("common.flows")}</h1>
         </div>
         <div style={{ display: "flex", gap: "var(--space-2)" }}>
           <Button
@@ -355,7 +355,7 @@ export function FlowList() {
             />
           </div>
           <label className="flow-filter">
-            <span className="flow-filter-label">{t("flowList.filterStatus")}</span>
+            <span>{t("common.status")}</span>
             <select
               value={statusFilter}
               onChange={(e) =>
@@ -372,14 +372,14 @@ export function FlowList() {
             </select>
           </label>
           <label className="flow-filter">
-            <span className="flow-filter-label">{t("flowList.sortBy")}</span>
+            <span>{t("flowList.sortBy")}</span>
             <select
               value={sort}
               onChange={(e) => setSort(e.target.value as SortKey)}
             >
               <option value="recent">{t("flowList.sortRecent")}</option>
-              <option value="name">{t("flowList.sortName")}</option>
-              <option value="status">{t("flowList.sortStatus")}</option>
+              <option value="name">{t("common.name")}</option>
+              <option value="status">{t("common.status")}</option>
             </select>
           </label>
         </div>
@@ -443,7 +443,6 @@ export function FlowList() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="graph-card-duplicate"
                       title={t("flowList.duplicateFlow")}
                       aria-label={t("flowList.duplicateFlow")}
                       onClick={(e) => {
@@ -460,8 +459,8 @@ export function FlowList() {
                       variant="ghost"
                       size="icon"
                       className="graph-card-delete"
-                      title={t("flowList.deleteFlow")}
-                      aria-label={t("flowList.deleteFlow")}
+                      title={t("common.deleteFlow")}
+                      aria-label={t("common.deleteFlow")}
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();

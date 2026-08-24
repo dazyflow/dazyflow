@@ -320,7 +320,7 @@ export function RunList() {
           />
         </div>
         <label className="flow-filter">
-          <span className="flow-filter-label">{t("runList.filterFlow")}</span>
+          <span>{t("common.flow")}</span>
           <select
             value={flowFilter}
             onChange={(e) => setFlowFilter(e.target.value)}
@@ -334,7 +334,7 @@ export function RunList() {
           </select>
         </label>
         <label className="flow-filter">
-          <span className="flow-filter-label">{t("runList.filterFrom")}</span>
+          <span>{t("runList.filterFrom")}</span>
           <input
             type="date"
             value={since}
@@ -344,7 +344,7 @@ export function RunList() {
           />
         </label>
         <label className="flow-filter">
-          <span className="flow-filter-label">{t("runList.filterTo")}</span>
+          <span>{t("runList.filterTo")}</span>
           <input
             type="date"
             value={until}
@@ -445,7 +445,7 @@ export function RunList() {
                   </th>
                 )}
                 <th style={{ width: 28 }}></th>
-                <th>{t("runList.colFlow")}</th>
+                <th>{t("common.flow")}</th>
                 <th>{t("runList.colStarted")}</th>
                 <th>{t("runList.colDuration")}</th>
                 <th></th>

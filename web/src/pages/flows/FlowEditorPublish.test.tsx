@@ -110,7 +110,7 @@ function mount(id = "coffee-reorder") {
 // The toggle opens a confirm before doing anything, so every go-live/pause is
 // two clicks: the toolbar switch, then the modal's action.
 // The switch is found by ROLE because the go-live confirm button carries the
-// same label as the toggle ("editor.goLive"), so matching on text alone finds
+// same label as the toggle ("editor.publish"), so matching on text alone finds
 // two nodes once the dialog is open.
 async function flipSwitch() {
   await userEvent.click(await screen.findByRole("switch"));
@@ -133,7 +133,7 @@ beforeEach(() => {
 describe("editor publish status", () => {
   it("offers Go live when nothing is published yet", async () => {
     mount();
-    expect(await screen.findByText("editor.goLive")).toBeInTheDocument();
+    expect(await screen.findByText("editor.publish")).toBeInTheDocument();
   });
 
   it("reads as Live once published and enabled", async () => {
@@ -162,7 +162,7 @@ describe("editor go live", () => {
     getPublishedInfo.mockResolvedValue({ published: false });
     mount();
     await flipSwitch();
-    await confirmIn("dialog", "editor.goLive");
+    await confirmIn("dialog", "editor.publish");
     await waitFor(() => expect(publishFlow).toHaveBeenCalled());
   });
 
@@ -179,7 +179,7 @@ describe("editor go live", () => {
     loadGraph.mockResolvedValue({ ...twoStepGraph(), disabled: true });
     mount();
     await flipSwitch();
-    await confirmIn("dialog", "editor.goLive");
+    await confirmIn("dialog", "editor.publish");
     await waitFor(() =>
       expect(setFlowEnabled).toHaveBeenCalledWith(
         "tok",
@@ -201,7 +201,7 @@ describe("editor go live", () => {
     mount();
     await screen.findByText("editor.run");
     expect(screen.queryByRole("switch")).not.toBeInTheDocument();
-    expect(screen.queryByText("editor.goLive")).not.toBeInTheDocument();
+    expect(screen.queryByText("editor.publish")).not.toBeInTheDocument();
   });
 
   it("pausing disables the flow and never touches the published version", async () => {

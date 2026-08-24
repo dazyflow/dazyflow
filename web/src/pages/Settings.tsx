@@ -498,7 +498,7 @@ function TwoFactorCard() {
                       disabled={busy}
                       onClick={() => setDisabling(true)}
                     >
-                      {t("twoFactor.disable")}
+                      {t("common.disable")}
                     </Button>
                   </div>
                 ) : (

@@ -98,7 +98,7 @@ function SmtpTestSection() {
       </form>
       {!looksValid && (
         <div className="sub" style={{ color: "var(--danger)", marginTop: "var(--space-1)" }}>
-          {t("admin.smtpTest.invalid")}
+          {t("common.emailInvalid")}
         </div>
       )}
       {result && (

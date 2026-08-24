@@ -180,7 +180,7 @@ export function AdminPlatformDrops() {
                     onClick={() => setConfirm(d)}
                   >
                     <PowerOff size={ICON.sm} />
-                    {t("admin.platformDrops.disable")}
+                    {t("common.disable")}
                   </Button>
                 )}
               </div>
@@ -234,14 +234,14 @@ function DisableDropModal({
             type="text"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            placeholder={t("admin.platformDrops.reasonPlaceholder")}
-            aria-label={t("admin.platformDrops.reasonPlaceholder")}
+            placeholder={t("common.auditReason")}
+            aria-label={t("common.auditReason")}
             style={{ width: "100%", marginTop: "var(--space-2)" }}
             autoFocus
           />
         </div>
       }
-      confirmLabel={t("admin.platformDrops.disable")}
+      confirmLabel={t("common.disable")}
       danger
       onConfirm={() => onConfirm(reason.trim())}
       onCancel={onCancel}

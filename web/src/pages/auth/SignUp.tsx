@@ -140,7 +140,7 @@ export function SignUp() {
         }}
       >
         <h1>{t("signUp.title")}</h1>
-        <label htmlFor="email">{t("signUp.email")}</label>
+        <label htmlFor="email">{t("common.email")}</label>
         <input
           id="email"
           type="email"
@@ -191,7 +191,7 @@ export function SignUp() {
         </Button>
         {(localErr || error) && <div className="error">{localErr ?? error}</div>}
         <div className="signin-alt">
-          {t("signUp.haveAccount")} <Link to="/signin">{t("signUp.signInLink")}</Link>
+          {t("signUp.haveAccount")} <Link to="/signin">{t("common.signIn")}</Link>
         </div>
       </form>
     </div>

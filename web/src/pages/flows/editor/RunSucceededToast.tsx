@@ -21,19 +21,6 @@ export function RunSucceededToast({
         <div
           role="status"
           className="editor-run-done"
-          style={{
-            background: "var(--surface)",
-            border: "1px solid var(--success)",
-            padding: "var(--space-3) var(--space-4)",
-            borderRadius: "var(--r-2)",
-            fontSize: "var(--text-md)",
-            color: "var(--ink)",
-            boxShadow: "0 2px 8px color-mix(in srgb, var(--success) 25%, transparent)",
-            pointerEvents: "auto",
-            display: "flex",
-            flexDirection: "column",
-            gap: "var(--space-1h)",
-          }}
         >
           <div
             style={{

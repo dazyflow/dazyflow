@@ -121,7 +121,7 @@ export function ConnectionGate({
             </>
           )}
           {slackChannels.length > 0 && (
-            <div className="conn-gate-slack">
+            <div>
               <div className="conn-gate-section-head">{t("connGate.slackHead")}</div>
               <p className="desc">
                 {t("connGate.slackBody", { channels: slackChannels.join(", ") })}
@@ -130,7 +130,7 @@ export function ConnectionGate({
           )}
         </div>
         {!canConnect && hasUserFixable && (
-          <p className="desc conn-gate-noperm">{t("connGate.noPermNote")}</p>
+          <p className="desc">{t("connGate.noPermNote")}</p>
         )}
         <div className="modal-foot">
           <Button onClick={onRunAnyway}>

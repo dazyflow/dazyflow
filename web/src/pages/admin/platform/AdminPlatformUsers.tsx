@@ -260,7 +260,7 @@ function SignupInviteSection() {
       </form>
       {!looksValid && (
         <div className="sub" style={{ color: "var(--danger)", marginTop: "var(--space-1)" }}>
-          {t("admin.signupInvites.emailInvalid")}
+          {t("common.emailInvalid")}
         </div>
       )}
       {err && (
@@ -391,7 +391,7 @@ function SignupInviteCard({
         </div>
         {inv.expires_at && inv.pending && (
           <div className="meta">
-            {t("admin.signupInvites.expiresAt", { date: formatDate(inv.expires_at) })}
+            {t("common.expiresAt", { date: formatDate(inv.expires_at) })}
           </div>
         )}
         {inv.pending && (

@@ -189,8 +189,8 @@ export function AdminSecretManager() {
                 className="danger"
                 onClick={() => setConfirmRemove(true)}
                 disabled={removing}
-                aria-label={t("connections.secretManager.remove")}
-                title={t("connections.secretManager.remove")}
+                aria-label={t("common.disconnect")}
+                title={t("common.disconnect")}
               >
                 <Trash2 size={ICON.sm} />
               </Button>
@@ -203,7 +203,7 @@ export function AdminSecretManager() {
         <ConfirmModal
           title={t("connections.secretManager.removeTitle")}
           message={t("connections.secretManager.removeConfirm")}
-          confirmLabel={t("connections.secretManager.remove")}
+          confirmLabel={t("common.disconnect")}
           danger
           onConfirm={() => {
             setConfirmRemove(false);
@@ -458,8 +458,8 @@ function ProviderShell({
                 className="danger"
                 onClick={() => slot.requestRemove()}
                 disabled={slot.removing}
-                aria-label={t("connections.secretManager.remove")}
-                title={t("connections.secretManager.remove")}
+                aria-label={t("common.disconnect")}
+                title={t("common.disconnect")}
               >
                 <Trash2 size={ICON.sm} />
               </Button>
@@ -472,7 +472,7 @@ function ProviderShell({
         <ConfirmModal
           title={t("connections.secretManager.removeTitle")}
           message={slot.removeConfirmMessage}
-          confirmLabel={t("connections.secretManager.remove")}
+          confirmLabel={t("common.disconnect")}
           danger
           onConfirm={() => {
             slot.cancelRemove();

@@ -456,7 +456,7 @@ export function Files() {
           <table className="files-table">
             <thead>
               <tr>
-                <th>{t("files.colName")}</th>
+                <th>{t("common.name")}</th>
                 <th className="files-col-size">{t("files.colSize")}</th>
                 <th className="files-col-actions" aria-label={t("common.colActions")} />
               </tr>

@@ -146,7 +146,7 @@ function ProviderRow({
   };
 
   return (
-    <div className="card svc-card">
+    <div className="card">
       <div className="svc-head">
         <ServiceIcon name={provider.name} size={32} />
         <div className="svc-head-text">

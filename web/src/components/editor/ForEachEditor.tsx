@@ -66,7 +66,7 @@ export function ForEachEditor({ params, onChange, references, missingKeys }: Pro
   const setFailFast = (v: boolean) => onChange({ ...params, fail_fast: v });
 
   return (
-    <div className="for-each-editor">
+    <div>
       <div className={bodyMissing ? "dz-loop-banner error" : "dz-loop-banner"}>
         {t("forEach.bodyHint")}
       </div>

@@ -85,7 +85,7 @@ export function ApprovalPanel({
       </div>
       <div style={{ display: "flex", gap: "var(--space-2)" }}>
         <Button variant="primary" disabled={!!busy || !token} onClick={resolve("approve")}>
-          {busy === "approve" ? t("inspector.approving") : t("inspector.approve")}
+          {busy === "approve" ? t("inspector.approving") : t("common.approve")}
         </Button>
         <Button variant="ghost" disabled={!!busy || !token} onClick={resolve("reject")}>
           {busy === "reject" ? t("inspector.rejecting") : t("inspector.reject")}

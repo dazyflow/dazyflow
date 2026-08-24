@@ -94,7 +94,7 @@ export function SettingsModal({ graph, onClose, onSave, onDelete }: Props) {
             className={tab === "secrets" ? "active" : ""}
             onClick={() => setTab("secrets")}
           >
-            {t("settings.tabSecrets")}
+            {t("common.secrets")}
           </Button>
         </div>
         <div className="modal-body">
@@ -164,7 +164,7 @@ export function SettingsModal({ graph, onClose, onSave, onDelete }: Props) {
             <div>
               <div className="sf-field">
                 <div className="label-row">
-                  <label>{t("settings.general.displayName")}</label>
+                  <label>{t("common.displayName")}</label>
                 </div>
                 <input
                   value={draft.name ?? ""}
@@ -327,7 +327,7 @@ export function SettingsModal({ graph, onClose, onSave, onDelete }: Props) {
                     <label>{t("settings.general.dangerZone")}</label>
                   </div>
                   <Button variant="danger" onClick={() => setConfirmDelete(true)}>
-                    {t("settings.general.deleteFlow")}
+                    {t("common.deleteFlow")}
                   </Button>
                   <div className="desc">
                     {t("settings.general.deleteFlowDesc")}

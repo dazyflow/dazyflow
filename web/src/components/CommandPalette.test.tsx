@@ -62,7 +62,7 @@ describe("CommandPalette", () => {
   it("lists workspace destinations and flows", () => {
     open();
     const names = rowNames();
-    expect(names).toContain("nav.flows");
+    expect(names).toContain("common.flows");
     expect(names).toContain("nav.runs");
     expect(names).toContain("Invoice sync");
   });
@@ -155,7 +155,7 @@ describe("CommandPalette", () => {
     expect(headings).toEqual([
       "commandPalette.goTo",
       "commandPalette.settingsGroup",
-      "nav.flows",
+      "common.flows",
     ]);
   });
 
@@ -169,7 +169,7 @@ describe("CommandPalette", () => {
         { selector: ".quick-palette-group" },
       )
       .map((el) => el.textContent);
-    expect(headings).toEqual(["nav.flows"]);
+    expect(headings).toEqual(["common.flows"]);
   });
 
   it("reports no results for a query that matches nothing", async () => {

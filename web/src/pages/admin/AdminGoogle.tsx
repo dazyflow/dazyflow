@@ -181,7 +181,7 @@ export function AdminGoogle() {
       ) : (
         <div className="google-accounts">
           {data.accounts.map((acc) => (
-            <div key={acc.account} className="connection-card google-account-card">
+            <div key={acc.account} className="connection-card">
               <div className="google-account-head">
                 <span className="google-account-name">{acc.account}</span>
                 <span className="google-account-actions">
@@ -200,10 +200,10 @@ export function AdminGoogle() {
                     className="danger icon-text-btn"
                     onClick={() => setPendingDisconnect(acc.account)}
                     disabled={busy}
-                    title={t("admin.google.disconnect")}
+                    title={t("common.disconnect")}
                   >
                     <Trash2 size={ICON.sm} />
-                    <span className="btn-label">{t("admin.google.disconnect")}</span>
+                    <span className="btn-label">{t("common.disconnect")}</span>
                   </Button>
                 </span>
               </div>
@@ -326,7 +326,7 @@ function ConnectAccountDialog({
             {t("common.cancel")}
           </Button>
           <Button type="submit" variant="primary" disabled={busy}>
-            {t("admin.google.connect")}
+            {t("common.connect")}
           </Button>
         </div>
       </form>
@@ -371,7 +371,7 @@ function ConfirmDisconnectDialog({
             {t("common.cancel")}
           </Button>
           <Button variant="danger" disabled={busy} onClick={onConfirm}>
-            {t("admin.google.disconnect")}
+            {t("common.disconnect")}
           </Button>
         </div>
       </div>

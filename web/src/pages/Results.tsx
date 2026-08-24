@@ -210,21 +210,6 @@ export function Results() {
                 key={b.name}
                 onClick={() => setSelected(b.name)}
                 className={"board-item" + (b.name === selected ? " active" : "")}
-                style={{
-                  display: "flex",
-                  width: "100%",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: "var(--space-2)",
-                  padding: "var(--space-2) var(--space-3)",
-                  border: "none",
-                  borderRadius: "var(--r-2)",
-                  background:
-                    b.name === selected ? "var(--surface-2)" : "transparent",
-                  color: "var(--ink)",
-                  cursor: "pointer",
-                  textAlign: "left",
-                }}
               >
                 <span
                   style={{

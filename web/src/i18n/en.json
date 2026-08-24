@@ -96,7 +96,28 @@
     "sending": "Sending…",
     "saved": "Saved",
     "emailPlaceholder": "person@example.com",
-    "colActions": "Actions"
+    "colActions": "Actions",
+    "status": "Status",
+    "name": "Name",
+    "email": "Email",
+    "displayName": "Display name",
+    "signIn": "Sign in",
+    "remove": "Remove",
+    "connect": "Connect",
+    "disconnect": "Disconnect",
+    "disable": "Disable",
+    "approve": "Approve",
+    "deleteFlow": "Delete flow",
+    "flow": "Flow",
+    "flows": "Flows",
+    "secrets": "Secrets",
+    "usage": "Usage",
+    "members": "Members",
+    "organization": "Organization",
+    "organizations": "Organizations",
+    "expiresAt": "expires {{date}}",
+    "emailInvalid": "That doesn't look like a valid email yet.",
+    "auditReason": "Reason (recorded in the audit log)"
   },
   "commentNode": {
     "delete": "Delete comment",
@@ -107,11 +128,9 @@
   },
   "nav": {
     "workspaceGroup": "Workspace",
-    "flows": "Flows",
     "draft": "Draft — not published",
     "runs": "Runs",
     "results": "Collections",
-    "usage": "Usage",
     "plans": "Plan & usage",
     "upgrade": "Upgrade to Pro",
     "files": "Files",
@@ -125,7 +144,6 @@
     "expandSidebar": "Expand sidebar",
     "switchTenant": "Switch organization",
     "personalWorkspace": "Personal",
-    "orgsTitle": "Organizations",
     "orgCreate": "Create organization",
     "orgCreating": "Creating…",
     "orgNameLabel": "Organization name",
@@ -149,7 +167,6 @@
     "okTitle": "Email confirmed",
     "okBody": "Your address is verified — you're all set.",
     "toApp": "Back to your flows",
-    "toSignin": "Sign in",
     "failedTitle": "Could not confirm",
     "failedHint": "The link may have expired. Sign in and use the banner's resend button to get a fresh one.",
     "badLink": "This link is missing its email or token.",
@@ -161,7 +178,6 @@
   "forgotPassword": {
     "title": "Reset your password",
     "subtitle": "Enter your account email and we'll send you a link to choose a new password.",
-    "email": "Email",
     "submit": "Send reset link",
     "sentTitle": "Check your inbox",
     "sentBody": "If an account exists for {{email}}, we've sent a link to reset its password. The link expires in an hour.",
@@ -170,7 +186,6 @@
   "resetPassword": {
     "title": "Choose a new password",
     "subtitle": "Set a new password for {{email}}.",
-    "email": "Email",
     "newPassword": "New password",
     "hint": "At least 8 characters.",
     "confirm": "Confirm new password",
@@ -182,7 +197,6 @@
     "requestNew": "Request a new reset link",
     "doneTitle": "Password updated",
     "doneBody": "Your password has been changed and you've been signed out everywhere. Sign in with your new password.",
-    "toSignin": "Sign in",
     "backToSignin": "Back to sign in"
   },
   "files": {
@@ -209,7 +223,6 @@
     "moveHere": "Move here",
     "moveAlreadyHere": "Already here",
     "deleteConfirm": "Delete \"{{name}}\"? This can't be undone.",
-    "colName": "Name",
     "colSize": "Size",
     "showHidden": "Show hidden files",
     "empty": "This folder is empty.",
@@ -231,7 +244,6 @@
   "usage": {
     "title": "Plan & usage",
     "subtitle": "Your plan, billing, and this organization's monthly usage.",
-    "titlePlain": "Usage",
     "subtitlePlain": "This organization's monthly usage.",
     "currentMonth": "This month — {{month}}",
     "runs": "Flow runs",
@@ -283,7 +295,6 @@
       "members": "Team members",
       "concurrency": "Concurrent runs",
       "retention": "Log retention",
-      "flows": "Flows",
       "nodes": "Steps per flow",
       "disk": "File storage",
       "timeout": "Max run time"
@@ -338,16 +349,12 @@
     "downloadCodes": "Download .txt",
     "savedCodes": "I've saved them",
     "regenerate": "Regenerate recovery codes",
-    "disable": "Disable",
     "disablePasswordLabel": "Confirm your password to disable",
     "confirmDisable": "Disable two-factor"
   },
   "signIn": {
-    "title": "Sign in",
     "titleOrg": "Sign in to {{org}}",
-    "email": "Email",
     "password": "Password",
-    "submit": "Sign in",
     "submitting": "Signing in…",
     "newHere": "New here?",
     "createAccount": "Create an account",
@@ -369,7 +376,6 @@
   },
   "signUp": {
     "title": "Create your account",
-    "email": "Email",
     "password": "Password",
     "passwordPlaceholder": "At least 8 characters",
     "passwordHint": "8 characters or more.",
@@ -378,8 +384,7 @@
     "submitting": "Creating account…",
     "tooShort": "Password must be at least 8 characters.",
     "mismatch": "Passwords don't match.",
-    "haveAccount": "Already have an account?",
-    "signInLink": "Sign in"
+    "haveAccount": "Already have an account?"
   },
   "welcome": {
     "title": "Welcome to Dazyflow",
@@ -444,13 +449,11 @@
     }
   },
   "flowList": {
-    "title": "Flows",
     "newFlow": "New flow",
     "emptyTitle": "No flows yet",
     "emptyBody": "Start from a ready-made template, or create a blank flow and build it yourself.",
     "emptyTemplateCta": "Start from a template",
     "emptyBlankCta": "Create a blank flow",
-    "nameLabel": "Name",
     "namePlaceholder": "e.g. Daily sales report",
     "descLabel": "Description (optional)",
     "descPlaceholder": "What does this flow do?",
@@ -462,17 +465,13 @@
     "needEdit": "You need edit access to create flows.",
     "nextRun": "Next run {{when}}",
     "searchPlaceholder": "Search flows…",
-    "filterStatus": "Status",
     "statusAll": "All",
     "sortBy": "Sort",
     "sortRecent": "Recently run",
-    "sortName": "Name",
-    "sortStatus": "Status",
     "noMatches": "No flows match your filters.",
     "lastRun": "Last run {{when}}",
     "neverRun": "Never run",
     "sparkSummary": "{{ok}} of last {{total}} runs succeeded",
-    "deleteFlow": "Delete flow",
     "duplicateFlow": "Duplicate flow"
   },
   "settings": {
@@ -480,7 +479,6 @@
     "close": "close",
     "tabNotifications": "Notifications",
     "tabGeneral": "General",
-    "tabSecrets": "Secrets",
     "secrets": {
       "help": "Secrets only this flow can use. They override workspace and organization secrets of the same name, and no other flow can read them. Reference any secret as ${secret.NAME} — it resolves to the nearest value (flow, then workspace, then organization).",
       "referencedTitle": "This flow references",
@@ -548,7 +546,6 @@
       "emailDesc": "Get a plain-text summary by email when a run fails. Requires the server's email delivery to be set up (ask your administrator if nothing arrives)."
     },
     "general": {
-      "displayName": "Display name",
       "displayNameDesc": "Friendly name shown in the flow list. Defaults to the ID.",
       "icon": "Icon",
       "iconDesc": "Upload an SVG or PNG. Leave empty for the default icon.",
@@ -568,7 +565,6 @@
       "ownerPlaceholder": "(set on first save)",
       "ownerDesc": "Set automatically when the flow is first saved. Only organization admins can transfer ownership.",
       "dangerZone": "Danger zone",
-      "deleteFlow": "Delete flow",
       "deleteFlowDesc": "Permanently deletes this flow and its entire history. This cannot be undone.",
       "storedInGit": "Every save is kept as a version you can go back to — stored as a git repository behind the scenes.",
       "mirrorLink": "Mirror to your own git"
@@ -622,7 +618,6 @@
       "connectPrompt": "Connect {{name}}",
       "loadFailed": "Couldn't load the connection status.",
       "notConfigured": "Not set up — ask an admin.",
-      "disconnect": "Disconnect",
       "disconnecting": "Disconnecting…",
       "connectSuccess": "Connected {{name}}.",
       "removeConfirm": "Disconnect and remove the stored value for {{name}}?",
@@ -649,7 +644,6 @@
     "setupIncompleteBody": "Your administrator hasn't enabled the apps you can connect (Slack, Gmail, Notion, …) or the place where secrets get stored. Until that's done, there's nothing for you to do here — your flows that need those won't be able to run.",
     "setupIncompleteContact": "Contact your administrator",
     "setupIncompleteContactGeneric": "Contact whoever set up this Dazyflow workspace for you and ask them to finish the apps + secrets setup.",
-    "connect": "Connect",
     "connectAnother": "Connect another account",
     "defaultOption": "Default",
     "unknownError": "unknown error",
@@ -680,7 +674,6 @@
       "gcpKeyLabel": "Service-account key (JSON)",
       "gcpRemoveConfirm": "Disconnect GCP Secret Manager? Flows that use ${gcp.…} will stop resolving.",
       "summary": "{{method}} auth · mount {{mount}}",
-      "remove": "Disconnect",
       "removeTitle": "Disconnect the secret manager?",
       "removeConfirm": "Disconnect the secret manager? Flows that use ${vault.…} will stop resolving.",
       "addressLabel": "Address",
@@ -721,7 +714,6 @@
     "noPrompt": "(no prompt — step ID: {{nodeId}})",
     "reject": "Reject",
     "rejecting": "Rejecting…",
-    "approve": "Approve",
     "approving": "Approving…"
   },
   "acceptInvite": {
@@ -745,7 +737,6 @@
     "title": "Admin",
     "needAdmin": "You need <0>organization:admin</0> or <0>graph:admin</0> to view this page.",
     "subtitle": "Organization <0>{{tenant}}</0>",
-    "groupOrg": "Organization",
     "groupPlatform": "Platform",
     "groupSystem": "System",
     "system": {
@@ -781,10 +772,8 @@
     },
     "cardApiKeysTitle": "API keys",
     "cardApiKeysDesc": "Issue and revoke access tokens.",
-    "cardSecretsTitle": "Secrets",
     "cardSecretsDesc": "Organization-wide credentials and your external secret manager.",
     "secrets": {
-      "title": "Secrets",
       "intro": "Credentials available to every flow in this organization.",
       "tabValues": "Values",
       "tabManager": "Secret manager"
@@ -803,7 +792,6 @@
       "empty": "No Google accounts connected yet. Connect one to use Gmail, Sheets, or Forms steps.",
       "connectAnother": "Connect account",
       "connectTitle": "Connect a Google account",
-      "connect": "Connect",
       "nameLabel": "Account name",
       "namePlaceholder": "e.g. marketing or you@company.com",
       "nameHelp": "A label for this shared account (often the email). Letters, numbers, dot, dash and underscore only.",
@@ -812,7 +800,6 @@
       "disconnectConfirm": "Disconnect Google account \"{{account}}\"? Flows using it will stop working until reconnected.",
       "reconnect": "Reconnect",
       "reconnectHint": "Re-run consent for this account (refreshes and tops up its permissions).",
-      "disconnect": "Disconnect",
       "addPermission": "Add permission"
     },
     "cardGitTitle": "Git credentials & mirroring",
@@ -829,7 +816,6 @@
       "subtitle": "Send a test message through the instance mailer to confirm it delivers.",
       "needPlatformAdmin": "You need <0>platform:admin</0> to manage platform settings."
     },
-    "cardWorkspaceTitle": "Organization",
     "cardWorkspaceDesc": "Name, logo, and limits.",
     "cardAuditTitle": "Audit log",
     "cardAuditDesc": "Saves, runs, secrets, approvals.",
@@ -844,7 +830,6 @@
       "pendingHead": "Pending invitations",
       "noPending": "No pending invitations.",
       "ownerBadge": "Owner",
-      "remove": "Remove",
       "removing": "Removing…",
       "removeTitle": "Remove this member from the organization",
       "removeConfirm": "Remove {{email}} from this organization? They lose access immediately.",
@@ -863,7 +848,6 @@
       "inviteModalTitle": "Invite a teammate",
       "inviteEmailLabel": "Their email",
       "inviteEmailDesc": "They'll get an invite link they can open in any browser. SMTP delivery is optional, you can also copy and send the link yourself.",
-      "inviteEmailInvalid": "That doesn't look like a valid email yet.",
       "inviteRoleLabel": "Role",
       "roleViewer": "Viewer",
       "roleViewerDesc": "Can open and run flows. Cannot edit anything or see secrets.",
@@ -882,7 +866,6 @@
       "emptyBody": "Invite a teammate to share this organization. They open the link, sign in (or sign up), and land in your workspaces.",
       "inviteFirst": "Invite your first teammate",
       "joinedAt": "joined {{date}}",
-      "expiresAt": "expires {{date}}",
       "acceptedAt": "accepted {{date}}",
       "rolePermsLabel": "Permissions:"
     },
@@ -890,7 +873,6 @@
       "head": "Invite people to sign up",
       "subtitle": "Self-serve signup is disabled on this deployment. Invite specific people by email — they get a link to set a password and create their own account.",
       "emailLabel": "Email to invite",
-      "emailInvalid": "That doesn't look like a valid email yet.",
       "invite": "Send invite",
       "pendingHead": "Pending signup invites",
       "none": "No signup invites yet.",
@@ -901,16 +883,14 @@
       "statusPending": "Pending",
       "statusAccepted": "Signed up",
       "statusRevoked": "Revoked",
-      "statusExpired": "Expired",
-      "expiresAt": "expires {{date}}"
+      "statusExpired": "Expired"
     },
     "smtpTest": {
       "head": "Test platform email",
       "subtitle": "Send one test message through the configured mailer (DAZYFLOW_SMTP_URL) to confirm it actually delivers. Startup only checks that the URL is valid, not that the server accepts mail. Leave the field blank to send to yourself.",
       "recipientLabel": "Recipient",
       "send": "Send test email",
-      "sent": "Test email sent to {{to}}. Check the inbox to confirm delivery.",
-      "invalid": "That doesn't look like a valid email yet."
+      "sent": "Test email sent to {{to}}. Check the inbox to confirm delivery."
     },
     "sso": {
       "needAdmin": "You need <0>organization:admin</0> to configure sign-in.",
@@ -988,7 +968,6 @@
       "colSubject": "Subject",
       "colRoles": "Roles",
       "colExpires": "Expires",
-      "colStatus": "Status",
       "revokeTitle": "Revoke this key",
       "revokeReally": "Revoke?",
       "revokedAlready": "revoked",
@@ -1029,11 +1008,9 @@
       "colDetail": "Detail"
     },
     "workspace": {
-      "title": "Organization",
       "subtitle": "Your organization's name, logo, and resource limits.",
       "needAdmin": "You need <0>organization:admin</0> to view workspace limits.",
       "diskQuota": "Disk quota",
-      "usage": "Usage",
       "unlimited": "unlimited",
       "noQuota": "No quota configured.",
       "graphLimits": "Flow limits",
@@ -1043,7 +1020,6 @@
       "none": "none",
       "orgNameHead": "Organization name",
       "orgNameDesc": "The name shown in the org switcher, admin pages, and on invitation links. Anyone you invite sees this name.",
-      "orgNameLabel": "Display name",
       "orgNamePlaceholder": "Acme Kitchen Supplies",
       "orgIdHint": "Internal ID: <0>{{tenant}}</0> (used in webhook URLs and audit logs; never changes).",
       "profileNotConfigured": "Organization profiles aren't enabled on this dzd instance.",
@@ -1067,11 +1043,9 @@
       "off": "Off",
       "perOrgCount": "{{count}} org(s)",
       "enable": "Enable",
-      "disable": "Disable",
       "none": "No steps match.",
       "disableTitle": "Disable {{drop}}?",
-      "disableWarning": "This stops the step from running in every org's flows, effective immediately. Existing flows that use it will fail until re-enabled.",
-      "reasonPlaceholder": "Reason (recorded in the audit log)"
+      "disableWarning": "This stops the step from running in every org's flows, effective immediately. Existing flows that use it will fail until re-enabled."
     },
     "platformUsers": {
       "title": "Users",
@@ -1084,7 +1058,6 @@
     },
     "platformUserDetail": {
       "subtitle": "Platform moderation",
-      "status": "Status",
       "active": "Active",
       "homeOrg": "Home org",
       "created": "Created",
@@ -1116,14 +1089,12 @@
       "banDomain": "Block the entire email domain, not just this address",
       "deleteTitle": "Delete {{email}}?",
       "deleteWarning": "Permanently erases the account and, if it's a personal org with no other members, all of its data. This can't be undone.",
-      "reasonPlaceholder": "Reason (recorded in the audit log)",
       "suspendDesc": "Sign the user out and block sign-in and API keys until reversed. Data is kept.",
       "unsuspendDesc": "Restore the account's access.",
       "banDesc": "Suspend and block this email from registering again.",
       "deleteDesc": "Permanently erase the account. This can't be undone."
     },
     "platformOrgs": {
-      "title": "Organizations",
       "subtitle": "Every org on this deployment. Open one to suspend, ban, or delete it.",
       "counts": "{{total}} orgs · {{suspended}} suspended",
       "searchPlaceholder": "Search by name, id, or subdomain…",
@@ -1133,11 +1104,9 @@
     },
     "platformOrgDetail": {
       "subtitle": "Platform moderation",
-      "status": "Status",
       "active": "Active",
       "tenantId": "Organization ID",
       "subdomain": "Subdomain",
-      "memberCount": "Members",
       "reason": "Reason",
       "unsuspend": "Unsuspend",
       "suspend": "Suspend",
@@ -1151,7 +1120,6 @@
       "deleteWarning": "Permanently erases the org and all its data (flows, runs, secrets). Member accounts survive — they may belong to other orgs. This can't be undone.",
       "deleteConfirmPlaceholder": "Type {{tenant}} to confirm",
       "passwordPlaceholder": "Your password",
-      "reasonPlaceholder": "Reason (recorded in the audit log)",
       "suspendDesc": "Halt all of the org's flows and lock out its members. Data is kept.",
       "unsuspendDesc": "Restore the org's access and let its flows run again.",
       "banDesc": "Suspend and block every current member's email from registering again.",
@@ -1159,7 +1127,6 @@
     },
     "cardPlatformUsersTitle": "Users",
     "cardPlatformUsersDesc": "Suspend, ban, or delete any account — or invite new people to sign up.",
-    "cardPlatformOrgsTitle": "Organizations",
     "cardPlatformOrgsDesc": "Suspend, ban, or delete any organization.",
     "cardPlatformDropsTitle": "Step killswitch",
     "cardPlatformDropsDesc": "Turn individual apps on or off platform-wide.",
@@ -1171,18 +1138,15 @@
       "new": "New tier",
       "builtIn": "Built-in",
       "runs": "Runs/mo",
-      "members": "Members",
       "concurrency": "Concurrent runs",
       "retention": "Retention (days)",
       "nodes": "Steps",
-      "flows": "Flows",
       "disk": "Disk",
       "timeout": "Timeout (s)",
       "polling": "Polling",
       "deleteTitle": "Delete tier {{name}}?",
       "deleteWarning": "Orgs assigned to this tier fall back to the Free tier. This can't be undone.",
       "edit": "Edit {{name}}",
-      "name": "Name",
       "plan": "Plan level",
       "zeroInherit": "0 = inherit default",
       "diskMB": "Disk quota (MB)",
@@ -1212,10 +1176,8 @@
       "notes": "Notes"
     },
     "platformMembers": {
-      "head": "Members",
       "owner": "Owner",
       "role": "Role",
-      "remove": "Remove",
       "none": "No members.",
       "inviteHead": "Invite a member",
       "invite": "Invite",
@@ -1238,10 +1200,8 @@
       "requestLine": "{{agent}} wants to view '{{flow}}' — read-only",
       "requestedAt": "requested {{date}}",
       "ticket": "ticket {{id}}",
-      "expiresAt": "expires {{date}}",
       "decidedBy": "by {{who}}",
       "reassure": "Secrets stay hidden and run data is redacted. You can revoke access at any time.",
-      "approve": "Approve",
       "deny": "Deny",
       "revokeConfirm": "Revoke {{agent}}'s access to '{{flow}}' now?",
       "status": {
@@ -1266,7 +1226,6 @@
       "empty": "No support agents yet.",
       "grantedBy": "added by {{who}}",
       "addedAt": "added {{date}}",
-      "remove": "Remove",
       "removeConfirm": "Remove support-agent access for {{email}}?"
     }
   },
@@ -1304,7 +1263,6 @@
     "statusFailed": "Failed",
     "statusCancelled": "Stopped",
     "empty": "No runs match this filter.",
-    "colFlow": "Flow",
     "colStarted": "Started",
     "colDuration": "Duration",
     "inProgress": "in progress",
@@ -1317,7 +1275,6 @@
     "confirmBulkRetryTitle": "Retry selected runs?",
     "confirmBulkRetryBody": "Retry {{count}} run(s)? Each resumes from its failed step and re-runs the steps after it — including side effects like sending emails or messages.",
     "searchPlaceholder": "Search by flow name…",
-    "filterFlow": "Flow",
     "allFlows": "All flows",
     "filterFrom": "From",
     "filterTo": "To",
@@ -1448,7 +1405,6 @@
     "statusAwaiting": "waiting for approval",
     "statusCancelled": "stopped",
     "cancelledNote": "This run was stopped before it finished — it didn't fail on its own. Use Retry to run it again.",
-    "summaryStatus": "Status",
     "summaryStarted": "Started",
     "summaryFinished": "Finished",
     "summaryDuration": "Duration",
@@ -1678,7 +1634,6 @@
       "upstream": "From earlier steps",
       "trigger": "From the trigger",
       "resources": "Resources",
-      "secrets": "Secrets",
       "itemFields": "From each row"
     },
     "duration": {
@@ -1790,8 +1745,7 @@
     "form": "Form",
     "resource": "Resource",
     "secret": "Secret",
-    "first": "first",
-    "clear": "Remove"
+    "first": "first"
   },
   "inspector": {
     "title": "Inspector",
@@ -1812,7 +1766,6 @@
     "stopTitle": "Stop this run",
     "awaitingApproval": "Awaiting approval",
     "commentOptional": "Comment (optional)",
-    "approve": "Approve",
     "approving": "Approving…",
     "reject": "Reject",
     "rejecting": "Rejecting…",
@@ -1887,7 +1840,6 @@
     "publish": "Publish",
     "publishing": "Publishing…",
     "publishChanges": "Publish changes",
-    "goLive": "Publish",
     "pause": "Turn off",
     "liveStateCurrent": "Published — the live version matches your draft.",
     "liveStateDirty": "Published, but your draft has changes that aren't live yet.",
@@ -1898,7 +1850,6 @@
     "publishChangesTitle": "Publish your draft — automatic triggers will run these changes.",
     "publishFirstTitle": "Publish this flow so its triggers start running.",
     "publishNudge": "This flow has a trigger but hasn't been published — nothing runs it until you publish. (Run still works for testing.)",
-    "publishNudgeCta": "Publish",
     "publishPreviewBlocked": "Exit version preview before publishing.",
     "confirmPublishTitle": "Publish this flow?",
     "confirmPublishBody": "Its triggers will start running this version. Your draft stays editable — only publishing again pushes new edits live.",
@@ -1957,7 +1908,6 @@
     "lintDangling": "The “{{field}}” field points to a step that's no longer in this flow — re-point it with the {} picker, or the run will fail when it tries to read it.",
     "lintSecretPersist": "This step uses a secret and feeds its data into a later step that saves output, where the secret could end up stored in plain text. Check the connections, or add a step that removes the secret before it's saved.",
     "connNeededLead": "Connect to run this flow:",
-    "connNeededCta": "Connect",
     "connNeededAskAdmin": "Ask an org admin to connect these.",
     "adminBlockedOnly": "Setup isn't finished on this server: your administrator needs to enable {{items}} before this flow can run.",
     "adminBlockedAppend": "Your administrator also needs to enable: {{items}}.",
@@ -1971,7 +1921,6 @@
     "minimap": "Flow minimap",
     "ctxDuplicate": "Duplicate",
     "ctxEnable": "Enable",
-    "ctxDisable": "Disable",
     "ctxAddBreakpoint": "Add pause point",
     "ctxRemoveBreakpoint": "Remove pause point",
     "ctxResetState": "Reset state…",
@@ -1984,14 +1933,12 @@
     "runSucceededDetails": "See the full run"
   },
   "iconUpload": {
-    "upload": "Upload image",
-    "remove": "Remove"
+    "upload": "Upload image"
   },
   "commandPalette": {
     "title": "Command bar",
     "placeholder": "Jump to a page or flow…",
     "goTo": "Go to",
-    "flowSublabel": "Flow",
     "noResults": "Nothing matches “{{query}}”.",
     "hintOpen": "open",
     "settingsGroup": "Settings & administration",
@@ -2071,7 +2018,6 @@
     "body": "“{{name}}” and its full version history will be permanently deleted. This cannot be undone. Enter your password to confirm.",
     "passwordLabel": "Your password",
     "passwordPlaceholder": "Current account password",
-    "confirm": "Delete flow",
     "deleting": "Deleting…",
     "wrongPassword": "That password is incorrect.",
     "locked": "This flow has a run in progress. Stop the run, then try deleting again."
@@ -2104,8 +2050,6 @@
     "pick": "Select a template, or create a new one.",
     "deleteTitle": "Delete template?",
     "deleteBody": "Flows referencing “{{name}}” will fail until pointed at another template.",
-    "name": "Name",
-    "displayName": "Display name",
     "displayNamePlaceholder": "Welcome email",
     "html": "Template HTML",
     "bodyHint": "Use {{.Body}} where the email body goes. {{.Subject}} and {{.Logo}} are also available.",
@@ -2146,7 +2090,6 @@
     "grantsHead": "Your access",
     "noGrants": "You don't have access to any flows yet. Request access to a flow below.",
     "ticket": "ticket {{id}}",
-    "expires": "expires {{date}}",
     "openFlow": "Open",
     "awaitingApproval": "Waiting for approval",
     "requestNew": "Request access to a flow",
@@ -2221,7 +2164,6 @@
     "ownerAll": "Anyone",
     "ownerUnassigned": "Unassigned",
     "ownerMine": "Assigned to me",
-    "filterStatus": "Status",
     "statusAny": "Any status",
     "noMatches": "No tickets match your search.",
     "unassigned": "unassigned",

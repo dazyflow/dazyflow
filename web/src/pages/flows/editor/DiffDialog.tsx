@@ -36,7 +36,7 @@ export function DiffDialog({
   return (
         <div className="modal-backdrop" onClick={() => onClose()}>
           <div
-            className="modal diff-modal"
+            className="modal"
             onClick={(e) => e.stopPropagation()}
             aria-modal="true"
             role="dialog"

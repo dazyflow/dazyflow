@@ -52,7 +52,7 @@ describe("RunDetail approvals", () => {
     });
     renderRun();
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "inspector.approve" })).toBeInTheDocument(),
+      expect(screen.getByRole("button", { name: "common.approve" })).toBeInTheDocument(),
     );
     expect(screen.getByRole("button", { name: "inspector.reject" })).toBeInTheDocument();
     expect(screen.getByText("Refund 230 kr?")).toBeInTheDocument();
@@ -65,6 +65,6 @@ describe("RunDetail approvals", () => {
     });
     renderRun();
     await waitFor(() => expect(getJob).toHaveBeenCalled());
-    expect(screen.queryByRole("button", { name: "inspector.approve" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "common.approve" })).toBeNull();
   });
 });

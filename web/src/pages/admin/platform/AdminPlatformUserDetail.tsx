@@ -114,7 +114,7 @@ export function AdminPlatformUserDetail() {
         <>
           <div className="card" style={{ marginBottom: "var(--space-3)" }}>
             <dl className="kv-grid">
-              <dt>{t("admin.platformUserDetail.status")}</dt>
+              <dt>{t("common.status")}</dt>
               <dd>
                 <span
                   className="count-pill"
@@ -352,8 +352,8 @@ function ReasonModal({
             type="text"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            placeholder={t("admin.platformUserDetail.reasonPlaceholder")}
-            aria-label={t("admin.platformUserDetail.reasonPlaceholder")}
+            placeholder={t("common.auditReason")}
+            aria-label={t("common.auditReason")}
             style={{ width: "100%", marginTop: "var(--space-2)" }}
             autoFocus
           />
@@ -390,8 +390,8 @@ function BanModal({
             type="text"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            placeholder={t("admin.platformUserDetail.reasonPlaceholder")}
-            aria-label={t("admin.platformUserDetail.reasonPlaceholder")}
+            placeholder={t("common.auditReason")}
+            aria-label={t("common.auditReason")}
             style={{ width: "100%", marginTop: "var(--space-2)" }}
             autoFocus
           />

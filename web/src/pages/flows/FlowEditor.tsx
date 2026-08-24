@@ -3672,7 +3672,7 @@ function EditorInner() {
                           ? t("editor.publishing")
                           : isLive
                           ? t("editor.live")
-                          : t("editor.goLive")}
+                          : t("editor.publish")}
                       </span>
                     </Button>
                   );
@@ -4455,7 +4455,7 @@ function EditorInner() {
                   onClick={() => navigate(setupTarget)}
                 >
                   {userFixableSetup
-                    ? t("editor.connNeededCta")
+                    ? t("common.connect")
                     : t("editor.adminBlockedCta")}
                 </Button>
               ) : (
@@ -4494,7 +4494,7 @@ function EditorInner() {
                 onClick={() => setPublishConfirm("live")}
                 disabled={publishing || !!previewRef}
               >
-                {t("editor.publishNudgeCta")}
+                {t("editor.publish")}
               </Button>
             </span>
           </div>
@@ -4683,7 +4683,7 @@ function EditorInner() {
               ? [
                   { label: t("editor.ctxDuplicate"), disabled: !canEdit, onClick: () => duplicateNode(menu.id) },
                   {
-                    label: disabledNodes.has(menu.id) ? t("editor.ctxEnable") : t("editor.ctxDisable"),
+                    label: disabledNodes.has(menu.id) ? t("editor.ctxEnable") : t("common.disable"),
                     disabled: !canEdit,
                     onClick: () => toggleNodeDisabled(menu.id),
                   },
@@ -4814,7 +4814,7 @@ function EditorInner() {
               : t("editor.confirmPublishBody")
           }
           confirmLabel={
-            publishConfirm === "update" ? t("editor.publishChanges") : t("editor.goLive")
+            publishConfirm === "update" ? t("editor.publishChanges") : t("editor.publish")
           }
           // Going live arms the automatic triggers, so an unconnected app
           // means every scheduled run fails silently — and nobody watches the

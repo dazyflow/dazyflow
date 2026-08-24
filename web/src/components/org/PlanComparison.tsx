@@ -43,7 +43,7 @@ const FEATURES: Feature[] = [
   { key: "max_members", labelKey: "plans.feat.members", kind: "capacity" },
   { key: "max_concurrency", labelKey: "plans.feat.concurrency", kind: "capacity" },
   { key: "retention_days", labelKey: "plans.feat.retention", kind: "days" },
-  { key: "max_flows", labelKey: "plans.feat.flows", kind: "capacity" },
+  { key: "max_flows", labelKey: "common.flows", kind: "capacity" },
   { key: "max_graph_nodes", labelKey: "plans.feat.nodes", kind: "capacity" },
   { key: "disk_quota_bytes", labelKey: "plans.feat.disk", kind: "bytes" },
   { key: "max_timeout_seconds", labelKey: "plans.feat.timeout", kind: "duration" },

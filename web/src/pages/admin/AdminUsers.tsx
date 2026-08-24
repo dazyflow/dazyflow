@@ -340,7 +340,7 @@ function MemberCard({
         {!member.home && (
           <Button onClick={remove} disabled={removing} title={t("admin.users.removeTitle")}>
             <Trash2 size={ICON.xs} />
-            {removing ? t("admin.users.removing") : t("admin.users.remove")}
+            {removing ? t("admin.users.removing") : t("common.remove")}
           </Button>
         )}
       </div>
@@ -351,9 +351,9 @@ function MemberCard({
       )}
       {confirmRemove && (
         <ConfirmModal
-          title={t("admin.users.remove")}
+          title={t("common.remove")}
           message={t("admin.users.removeConfirm", { email: member.email })}
-          confirmLabel={t("admin.users.remove")}
+          confirmLabel={t("common.remove")}
           danger
           onConfirm={() => {
             setConfirmRemove(false);
@@ -441,7 +441,7 @@ function InvitationCard({
           {inv.pending && inv.expires_at && (
             <>
               {" · "}
-              {t("admin.users.expiresAt", { date: shortDate(inv.expires_at) })}
+              {t("common.expiresAt", { date: shortDate(inv.expires_at) })}
             </>
           )}
           {inv.accepted_at && (
@@ -607,7 +607,7 @@ function InviteModal({
             />
             <div className="desc">
               {!looksValid
-                ? t("admin.users.inviteEmailInvalid")
+                ? t("common.emailInvalid")
                 : t("admin.users.inviteEmailDesc")}
             </div>
           </div>

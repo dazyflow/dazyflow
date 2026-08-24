@@ -27,9 +27,9 @@ export function BundleView({ bundle }: { bundle: SupportBundle }) {
 
       {/* Run outcome first: it's what a failed ticket is usually about. */}
       {run && (
-        <div className="bundle-section">
+        <div>
           <div className="bundle-section-head">{t("bundle.runHead")}</div>
-          <div className="bundle-kv">
+          <div>
             <span className={"status-chip " + run.status}>
               <span className={"status-dot " + run.status} /> {run.status}
             </span>
@@ -44,7 +44,7 @@ export function BundleView({ bundle }: { bundle: SupportBundle }) {
       )}
 
       {/* Steps, with per-node run status when a run is attached. */}
-      <div className="bundle-section">
+      <div>
         <div className="bundle-section-head">
           {t("bundle.stepsHead")} ({nodes.length})
         </div>
@@ -72,7 +72,7 @@ export function BundleView({ bundle }: { bundle: SupportBundle }) {
 
       {/* Lint / validation issues — safe by design (ids + field names only). */}
       {bundle.issues && bundle.issues.length > 0 && (
-        <div className="bundle-section">
+        <div>
           <div className="bundle-section-head">
             {t("bundle.issuesHead")} ({bundle.issues.length})
           </div>

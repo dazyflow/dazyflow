@@ -467,7 +467,7 @@ export function SupportQueue() {
           />
         </div>
         <label className="flow-filter">
-          <span className="flow-filter-label">{t("support.filterOwner")}</span>
+          <span>{t("support.filterOwner")}</span>
           <select
             value={view.own}
             onChange={(e) => setView({ ...view, own: e.target.value as TicketQueueFilter })}
@@ -478,7 +478,7 @@ export function SupportQueue() {
           </select>
         </label>
         <label className="flow-filter">
-          <span className="flow-filter-label">{t("support.filterStatus")}</span>
+          <span>{t("common.status")}</span>
           <select
             value={view.status}
             onChange={(e) =>

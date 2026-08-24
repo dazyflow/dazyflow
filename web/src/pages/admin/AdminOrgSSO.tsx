@@ -345,7 +345,7 @@ export function AdminOrgSSO() {
           </ol>
           <p className="desc sso-walkthrough-tip">{t("admin.sso.walkthroughTip")}</p>
         </details>
-        <form className="card sso-card" onSubmit={save}>
+        <form className="card" onSubmit={save}>
           <div className="sso-card-head">
             <ServiceIcon name="google" size={36} className="sso-card-logo" />
             <div className="sso-card-headings">

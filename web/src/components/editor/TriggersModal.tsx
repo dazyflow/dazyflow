@@ -452,7 +452,7 @@ export function CodeField({
 }) {
   const copyButton = useCopyButton(value);
   return (
-    <div className="dz-codefield">
+    <div>
       {label && (
         <span className="dz-code-label">
           {icon}
@@ -470,7 +470,7 @@ export function CodeField({
             href={action.href}
             target="_blank"
             rel="noreferrer noopener"
-            className="dz-code-btn dz-code-link"
+            className="dz-code-btn"
           >
             <ExternalLink size={ICON.sm} />
             <span>{action.label}</span>
@@ -819,7 +819,7 @@ export function TriggerScheduleField({
           (no hour-of-day to anchor) and "custom" (whose own help line
           covers it). */}
       {schedule.kind !== "hourly" && schedule.kind !== "custom" && (
-        <div className="desc cron-tz-note">
+        <div className="desc">
           {t("settings.triggers.scheduleTzNote", { tz })}
         </div>
       )}

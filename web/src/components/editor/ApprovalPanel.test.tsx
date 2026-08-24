@@ -24,14 +24,14 @@ describe("ApprovalPanel", () => {
   it("renders the prompt and the approve/reject controls", () => {
     render(<ApprovalPanel runID="run-1" nodeID="n1" prompt="Ship it?" />);
     expect(screen.getByText("Ship it?")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "inspector.approve" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "common.approve" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "inspector.reject" })).toBeInTheDocument();
   });
 
   it("calls approveNode with the decision + comment on approve", async () => {
     render(<ApprovalPanel runID="run-1" nodeID="n1" />);
     await userEvent.type(screen.getByRole("textbox"), "looks good");
-    await userEvent.click(screen.getByRole("button", { name: "inspector.approve" }));
+    await userEvent.click(screen.getByRole("button", { name: "common.approve" }));
     expect(approveNode).toHaveBeenCalledWith("tok-123", "run-1", "n1", "approve", "looks good");
   });
 

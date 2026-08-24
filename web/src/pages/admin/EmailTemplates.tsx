@@ -63,7 +63,7 @@ export function EmailTemplates() {
   const creating = selected === NEW_DRAFT;
 
   return (
-    <div className="page email-templates">
+    <div className="page">
       <h1>{t("emailTemplates.title", "Email templates")}</h1>
       <p className="page-sub">
         {t(
@@ -114,7 +114,7 @@ export function EmailTemplates() {
           )}
         </div>
 
-        <div className="email-templates-editor">
+        <div>
           {creating ? (
             <TemplateEditor
               key={NEW_DRAFT}
@@ -252,7 +252,7 @@ function TemplateEditor({
   return (
     <div className="template-editor">
       <label>
-        {t("emailTemplates.name", "Name")}
+        {t("common.name", "Name")}
         <input
           type="text"
           value={isNew ? name : existing.id}
@@ -265,7 +265,7 @@ function TemplateEditor({
         />
       </label>
       <label>
-        {t("emailTemplates.displayName", "Display name")}
+        {t("common.displayName", "Display name")}
         <input
           type="text"
           value={displayName}

@@ -144,7 +144,7 @@ function GrantRow({ grant, onOpen }: { grant: AccessGrant; onOpen: () => void })
           {grant.tenant}
           {grant.ticket_id ? ` · ${t("supportHome.ticket", { id: grant.ticket_id })}` : ""}
           {active && grant.expires_at
-            ? ` · ${t("supportHome.expires", { date: formatDate(grant.expires_at) })}`
+            ? ` · ${t("common.expiresAt", { date: formatDate(grant.expires_at) })}`
             : ""}
         </div>
       </div>

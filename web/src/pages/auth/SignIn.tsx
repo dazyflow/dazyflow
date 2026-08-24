@@ -307,7 +307,7 @@ export function SignIn() {
             <h1>{t("signIn.titleOrg", { org: orgBrand.name })}</h1>
           </div>
         ) : (
-          <h1>{t("signIn.title")}</h1>
+          <h1>{t("common.signIn")}</h1>
         )}
 
         {googleEnabled && (
@@ -322,7 +322,7 @@ export function SignIn() {
           </>
         )}
 
-        <label htmlFor="email">{t("signIn.email")}</label>
+        <label htmlFor="email">{t("common.email")}</label>
         <input
           id="email"
           type="email"
@@ -345,7 +345,7 @@ export function SignIn() {
           variant="primary"
           disabled={busy || loading || !email.trim() || !password}
         >
-          {busy ? t("signIn.submitting") : t("signIn.submit")}
+          {busy ? t("signIn.submitting") : t("common.signIn")}
         </Button>
         {error && <div className="error">{error}</div>}
         <div className="signin-alt">

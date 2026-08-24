@@ -153,7 +153,7 @@ export function Usage() {
         <div>
           <h1>
             <CreditCard size={ICON.xl} />
-            {billingEnabled ? t("usage.title") : t("usage.titlePlain")}
+            {billingEnabled ? t("usage.title") : t("common.usage")}
           </h1>
           <div className="sub">{billingEnabled ? t("usage.subtitle") : t("usage.subtitlePlain")}</div>
         </div>

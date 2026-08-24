@@ -83,7 +83,7 @@ export function PlanLimitsSection({ tenant }: { tenant: string }) {
             <dd>{eff.tier_id || "—"}</dd>
             <dt>{t("admin.platformTiers.runs")}</dt>
             <dd>{fmt(eff.runs_per_month)}</dd>
-            <dt>{t("admin.platformTiers.members")}</dt>
+            <dt>{t("common.members")}</dt>
             <dd>{fmt(eff.max_members)}</dd>
             <dt>{t("admin.platformTiers.concurrency")}</dt>
             <dd>{fmt(eff.max_concurrency)}</dd>
@@ -91,7 +91,7 @@ export function PlanLimitsSection({ tenant }: { tenant: string }) {
             <dd>{eff.retention_days > 0 ? `${eff.retention_days}d` : t("admin.platformPlan.unlimited")}</dd>
             <dt>{t("admin.platformTiers.nodes")}</dt>
             <dd>{fmt(eff.max_graph_nodes)}</dd>
-            <dt>{t("admin.platformTiers.flows")}</dt>
+            <dt>{t("common.flows")}</dt>
             <dd>{fmt(eff.max_flows)}</dd>
             <dt>{t("admin.platformTiers.timeout")}</dt>
             <dd>{eff.max_timeout_seconds > 0 ? `${eff.max_timeout_seconds}s` : t("admin.platformPlan.unlimited")}</dd>
@@ -247,11 +247,11 @@ function EntitlementEditor({
             <input type="date" value={trial} onChange={(e) => setTrial(e.target.value)} />
           </label>
           {overrideInput(t("admin.platformTiers.runs"), runs, setRuns)}
-          {overrideInput(t("admin.platformTiers.members"), members, setMembers)}
+          {overrideInput(t("common.members"), members, setMembers)}
           {overrideInput(t("admin.platformTiers.concurrency"), concurrency, setConcurrency)}
           {overrideInput(t("admin.platformTiers.retention"), retention, setRetention)}
           {overrideInput(t("admin.platformTiers.nodes"), nodes, setNodes)}
-          {overrideInput(t("admin.platformTiers.flows"), flows, setFlows)}
+          {overrideInput(t("common.flows"), flows, setFlows)}
           {overrideInput(t("admin.platformTiers.timeout"), timeout, setTimeoutS)}
           {overrideInput(t("admin.platformTiers.diskMB"), diskMB, setDiskMB)}
           <label>

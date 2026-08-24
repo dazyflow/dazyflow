@@ -425,7 +425,7 @@ export function Inspector({
       </div>
       <div className="inspector-body">
         {setupNeeded && (
-          <div className="sf-field inspector-connect">
+          <div className="sf-field">
             {hasPerm("secret:write") ? (
               <>
                 <Button

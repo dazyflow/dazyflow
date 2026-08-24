@@ -33,7 +33,7 @@ export function FlowStatusChip({
       role="status"
     >
       <Icon size={size === "sm" ? 12 : 14} aria-hidden />
-      <span className="flow-status-chip-label">
+      <span>
         {t(`flowStatus.${status}.label`)}
       </span>
     </span>

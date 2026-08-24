@@ -71,7 +71,7 @@ export function CreateFlow() {
   ];
 
   return (
-    <div className="page create-flow">
+    <div className="page">
       <h1>{t("createFlow.title")}</h1>
       <div className="create-flow-tabs" role="tablist">
         {tabs.map(({ key, Icon, label }) => (
@@ -369,7 +369,7 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
         <form className="create-flow-card card" onSubmit={submitBlank}>
           <div className="sf-field">
             <div className="label-row">
-              <label htmlFor="new-flow-name">{t("flowList.nameLabel")}</label>
+              <label htmlFor="new-flow-name">{t("common.name")}</label>
             </div>
             <input
               id="new-flow-name"
@@ -405,7 +405,7 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
           </div>
         </form>
       ) : (
-        <form className="create-flow-card card ai-create" onSubmit={submitAI}>
+        <form className="create-flow-card card" onSubmit={submitAI}>
           <textarea
             id="ai-flow-desc"
             className="ai-create-input"

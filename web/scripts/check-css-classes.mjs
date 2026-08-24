@@ -63,72 +63,23 @@ const PARTNER_APPLIED_AT_RUNTIME = new Set([
   "live",
 ]);
 
-// KNOWN_MISSING is the drift that existed when this guard was introduced. It is
-// a DEBT LEDGER, not an approval list: every entry is a class some component
-// asks for and no stylesheet defines, so it renders unstyled today. They are
-// listed here only so the guard can start failing on NEW drift immediately
-// instead of waiting for the backlog to be written.
+// KNOWN_MISSING is a DEBT LEDGER, not an approval list: an entry is a class
+// some component asks for that no stylesheet defines, so it renders unstyled.
 //
-// The right way to remove an entry is to write the rule (or delete the
-// className), never to add a new one. The self-check at the end fails the
-// build if an entry stops being referenced, so this list shrinks and cannot
-// go stale.
-const KNOWN_MISSING = new Set([
-  // Validation text rendering as plain body copy.
-  "field-error",
-  // The SchemaForm row-condition builder — whole feature block unstyled.
-  "sf-rowcond",
-  "sf-rowcond-add",
-  "sf-rowcond-remove",
-  "sf-rowcond-row",
-  "sf-rowcond-toggle",
-  "sf-rowcond-warn",
-  "sf-tel-hint",
-  "mapping-automap",
-  // Filter labels: the `.flow-filter` container is styled, the label is not.
-  "flow-filter-label",
-  // Siblings exist in CSS; these specific ones were never added.
-  "run-summary-value",
-  "run-error-help",
-  "verify-banner-dismiss",
-  "flow-status-chip-label",
-  "graph-card-duplicate",
-  "dz-node-state",
-  "dz-port-in",
-  "dz-port-many",
-  "conn-gate-noperm",
-  "conn-gate-slack",
-  "bundle-kv",
-  "bundle-section",
-  "email-templates",
-  "email-templates-editor",
-  "google-account-card",
-  "sso-card",
-  "svc-card",
-  // Two link-emphasis tiers that currently render identically.
-  "primary-link",
-  "secondary-link",
-  // AppShell chrome.
-  "account-chevron",
-  "brand-flow-icon",
-  "flow-menu",
-  "shortcuts-help",
-  // Misc single sites.
-  "board-item",
-  "cron-tz-note",
-  "dz-code-link",
-  "dz-codefield",
-  "diff-modal",
-  "editor-run-done",
-  "inspector-connect",
-  "for-each-editor",
-  "ai-create",
-  "create-flow",
-  "integrations-page",
-  "run-detail",
-  "template-gallery",
-  "auth-page",
-]);
+// IT IS NOW EMPTY, and the right way to keep it that way is to leave it empty.
+// It held 47 entries when this guard was written. Clearing them turned out to
+// be mostly deletion rather than design: 38 were dead names — the element was
+// already styled by a partner class on the same tag, or by its parent, or
+// needed no style at all — and dead names in the markup are worse than no name,
+// because they read as styling that exists somewhere. Nine were real, and of
+// those, eight had their look written inline at the call site, so the class
+// named something that lived elsewhere; those moved into app.css. Exactly one,
+// `.field-error`, was a genuine gap: validation messages had been rendering as
+// ordinary body copy.
+//
+// If you add an entry here, you are recording that a component lies about its
+// own styling. Prefer writing the rule, or deleting the className.
+const KNOWN_MISSING = new Set([]);
 
 function walk(dir, test, out = []) {
   for (const e of readdirSync(dir, { withFileTypes: true })) {

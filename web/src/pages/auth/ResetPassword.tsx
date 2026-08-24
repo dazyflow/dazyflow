@@ -51,7 +51,7 @@ export function ResetPassword() {
           <p className="sub">{t("resetPassword.doneBody")}</p>
           <div className="signin-alt">
             <Link to={`/signin?email=${encodeURIComponent(email)}`}>
-              {t("resetPassword.toSignin")}
+              {t("common.signIn")}
             </Link>
           </div>
         </div>
@@ -89,7 +89,7 @@ export function ResetPassword() {
         <p className="sub">{t("resetPassword.subtitle", { email })}</p>
         {/* Email is fixed by the link; surface it read-only so the user
             sees which account they're resetting but can't retarget it. */}
-        <label htmlFor="email">{t("resetPassword.email")}</label>
+        <label htmlFor="email">{t("common.email")}</label>
         <input id="email" type="email" value={email} readOnly autoComplete="username" />
         <label htmlFor="password">{t("resetPassword.newPassword")}</label>
         <PasswordField

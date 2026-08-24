@@ -102,7 +102,7 @@ export function DeleteFlowModal({
             {t("common.cancel")}
           </Button>
           <Button variant="danger" onClick={submit} disabled={busy || !password}>
-            {busy ? t("deleteFlow.deleting") : t("deleteFlow.confirm")}
+            {busy ? t("deleteFlow.deleting") : t("common.deleteFlow")}
           </Button>
         </div>
       </div>

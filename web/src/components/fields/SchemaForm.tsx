@@ -1884,7 +1884,6 @@ function PlainStringField({
     ) : telInfo ? (
       <div
         className="sf-tel-hint"
-        style={{ display: "flex", alignItems: "center", gap: "var(--space-1h)", marginTop: "var(--space-1)", fontSize: "0.85em", opacity: 0.85 }}
       >
         <span style={{ fontSize: "1.25em", lineHeight: 1 }} aria-hidden>
           {telInfo.flag}
@@ -1967,7 +1966,7 @@ function ReferenceMenu({
     { kind: "upstream", label: t("schemaForm.refPicker.upstream") },
     { kind: "trigger", label: t("schemaForm.refPicker.trigger") },
     { kind: "resources", label: t("schemaForm.refPicker.resources") },
-    { kind: "secrets", label: t("schemaForm.refPicker.secrets") },
+    { kind: "secrets", label: t("common.secrets") },
   ];
   const describe = (kind: keyof ReferenceGroups, it: ReferenceItem): string => {
     if (kind === "upstream") {
@@ -2816,7 +2815,7 @@ function MappingField({
         {autoPairs.length > 0 && (
           <Button
             size="sm"
-            className="sf-add mapping-automap"
+            className="sf-add"
             onClick={() => commit([...rows, ...autoPairs])}
           >
             {t("schemaForm.mapping.autoMap", { count: autoPairs.length })}
@@ -3151,7 +3150,7 @@ function RowConditionField({
 
   if (advanced) {
     return (
-      <div className="sf-rowcond">
+      <div>
         <textarea
           rows={2}
           value={value}
@@ -3160,7 +3159,6 @@ function RowConditionField({
           style={{ resize: "vertical", width: "100%", fontFamily: "monospace" }}
         />
         <Button
-          className="sf-rowcond-toggle"
           onClick={() => {
             const p = parseRowCEL(value);
             if (p === null) {
@@ -3177,7 +3175,7 @@ function RowConditionField({
           {t("schemaForm.rowCond.useSimple")}
         </Button>
         {tooAdvanced && (
-          <div className="desc sf-rowcond-warn" role="status">
+          <div className="desc" role="status">
             {t("schemaForm.rowCond.tooAdvanced")}
           </div>
         )}
@@ -3186,7 +3184,7 @@ function RowConditionField({
   }
 
   return (
-    <div className="sf-rowcond">
+    <div>
       {conds.length === 0 && (
         <div className="desc">{t("schemaForm.rowCond.empty")}</div>
       )}
@@ -3196,7 +3194,6 @@ function RowConditionField({
           <div
             key={i}
             className="sf-rowcond-row"
-            style={{ display: "flex", flexDirection: "column", gap: "var(--space-1h)", marginBottom: "var(--space-3)" }}
           >
             {i > 0 && <span className="desc">{t("schemaForm.rowCond.and")}</span>}
             {/* Column gets its own full-width row so it stays readable in the
@@ -3253,7 +3250,6 @@ function RowConditionField({
               <Button
                 aria-label={t("schemaForm.rowCond.removeCondition")}
                 onClick={() => removeCond(i)}
-                className="sf-rowcond-remove"
               >
                 <X size={ICON.sm} />
               </Button>
@@ -3262,11 +3258,10 @@ function RowConditionField({
         );
       })}
       <div style={{ display: "flex", gap: "var(--space-2)", marginTop: "var(--space-1)" }}>
-        <Button className="sf-rowcond-add" onClick={addCond}>
+        <Button onClick={addCond}>
           <Plus size={ICON.sm} /> {t("schemaForm.rowCond.addCondition")}
         </Button>
         <Button
-          className="sf-rowcond-toggle"
           onClick={() => setAdvanced(true)}
         >
           {t("schemaForm.rowCond.advanced")}

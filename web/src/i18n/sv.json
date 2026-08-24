@@ -96,7 +96,28 @@
     "sending": "Skickar…",
     "saved": "Sparat",
     "emailPlaceholder": "person@exempel.se",
-    "colActions": "Åtgärder"
+    "colActions": "Åtgärder",
+    "status": "Status",
+    "name": "Namn",
+    "email": "E-post",
+    "displayName": "Visningsnamn",
+    "signIn": "Logga in",
+    "remove": "Ta bort",
+    "connect": "Anslut",
+    "disconnect": "Koppla från",
+    "disable": "Inaktivera",
+    "approve": "Godkänn",
+    "deleteFlow": "Ta bort flöde",
+    "flow": "Flöde",
+    "flows": "Flöden",
+    "secrets": "Hemligheter",
+    "usage": "Användning",
+    "members": "Medlemmar",
+    "organization": "Organisation",
+    "organizations": "Organisationer",
+    "expiresAt": "går ut {{date}}",
+    "emailInvalid": "Det där ser inte ut som en giltig e-postadress än.",
+    "auditReason": "Orsak (loggas i granskningsloggen)"
   },
   "commentNode": {
     "delete": "Ta bort kommentar",
@@ -107,11 +128,9 @@
   },
   "nav": {
     "workspaceGroup": "Arbetsyta",
-    "flows": "Flöden",
     "draft": "Utkast — inte publicerat",
     "runs": "Körningar",
     "results": "Samlingar",
-    "usage": "Användning",
     "plans": "Plan och användning",
     "upgrade": "Uppgradera till Pro",
     "files": "Filer",
@@ -125,7 +144,6 @@
     "expandSidebar": "Fäll ut sidofältet",
     "switchTenant": "Byt organisation",
     "personalWorkspace": "Personligt",
-    "orgsTitle": "Organisationer",
     "orgCreate": "Skapa organisation",
     "orgCreating": "Skapar…",
     "orgNameLabel": "Organisationsnamn",
@@ -149,7 +167,6 @@
     "okTitle": "E-postadressen bekräftad",
     "okBody": "Din adress är verifierad — allt klart.",
     "toApp": "Tillbaka till dina flöden",
-    "toSignin": "Logga in",
     "failedTitle": "Kunde inte bekräfta",
     "failedHint": "Länken kan ha gått ut. Logga in och använd knappen i bannern för att få en ny.",
     "badLink": "Länken saknar e-postadress eller token.",
@@ -161,7 +178,6 @@
   "forgotPassword": {
     "title": "Återställ ditt lösenord",
     "subtitle": "Ange e-postadressen till ditt konto, så skickar vi en länk där du kan välja ett nytt lösenord.",
-    "email": "E-post",
     "submit": "Skicka återställningslänk",
     "sentTitle": "Kolla din inkorg",
     "sentBody": "Om det finns ett konto för {{email}} har vi skickat en länk för att återställa lösenordet. Länken går ut om en timme.",
@@ -170,7 +186,6 @@
   "resetPassword": {
     "title": "Välj ett nytt lösenord",
     "subtitle": "Ange ett nytt lösenord för {{email}}.",
-    "email": "E-post",
     "newPassword": "Nytt lösenord",
     "hint": "Minst 8 tecken.",
     "confirm": "Bekräfta nytt lösenord",
@@ -182,7 +197,6 @@
     "requestNew": "Begär en ny återställningslänk",
     "doneTitle": "Lösenordet uppdaterat",
     "doneBody": "Ditt lösenord har ändrats och du har loggats ut överallt. Logga in med ditt nya lösenord.",
-    "toSignin": "Logga in",
     "backToSignin": "Tillbaka till inloggning"
   },
   "files": {
@@ -209,7 +223,6 @@
     "moveHere": "Flytta hit",
     "moveAlreadyHere": "Redan här",
     "deleteConfirm": "Ta bort \"{{name}}\"? Detta kan inte ångras.",
-    "colName": "Namn",
     "colSize": "Storlek",
     "showHidden": "Visa dolda filer",
     "empty": "Mappen är tom.",
@@ -231,7 +244,6 @@
   "usage": {
     "title": "Plan och användning",
     "subtitle": "Din plan, fakturering och organisationens användning per månad.",
-    "titlePlain": "Användning",
     "subtitlePlain": "Organisationens användning per månad.",
     "currentMonth": "Den här månaden — {{month}}",
     "runs": "Flödeskörningar",
@@ -283,7 +295,6 @@
       "members": "Teammedlemmar",
       "concurrency": "Samtidiga körningar",
       "retention": "Logghistorik",
-      "flows": "Flöden",
       "nodes": "Steg per flöde",
       "disk": "Fillagring",
       "timeout": "Max körtid"
@@ -338,16 +349,12 @@
     "downloadCodes": "Ladda ner .txt",
     "savedCodes": "Jag har sparat dem",
     "regenerate": "Skapa nya återställningskoder",
-    "disable": "Inaktivera",
     "disablePasswordLabel": "Bekräfta ditt lösenord för att inaktivera",
     "confirmDisable": "Inaktivera tvåfaktor"
   },
   "signIn": {
-    "title": "Logga in",
     "titleOrg": "Logga in på {{org}}",
-    "email": "E-post",
     "password": "Lösenord",
-    "submit": "Logga in",
     "submitting": "Loggar in…",
     "newHere": "Ny här?",
     "createAccount": "Skapa ett konto",
@@ -369,7 +376,6 @@
   },
   "signUp": {
     "title": "Skapa ditt konto",
-    "email": "E-post",
     "password": "Lösenord",
     "passwordPlaceholder": "Minst 8 tecken",
     "passwordHint": "8 tecken eller fler.",
@@ -378,8 +384,7 @@
     "submitting": "Skapar konto…",
     "tooShort": "Lösenordet måste vara minst 8 tecken.",
     "mismatch": "Lösenorden stämmer inte överens.",
-    "haveAccount": "Har du redan ett konto?",
-    "signInLink": "Logga in"
+    "haveAccount": "Har du redan ett konto?"
   },
   "welcome": {
     "title": "Välkommen till Dazyflow",
@@ -444,13 +449,11 @@
     }
   },
   "flowList": {
-    "title": "Flöden",
     "newFlow": "Nytt flöde",
     "emptyTitle": "Inga flöden än",
     "emptyBody": "Börja från en färdig mall, eller skapa ett tomt flöde och bygg det själv.",
     "emptyTemplateCta": "Börja från en mall",
     "emptyBlankCta": "Skapa ett tomt flöde",
-    "nameLabel": "Namn",
     "namePlaceholder": "t.ex. Daglig försäljningsrapport",
     "descLabel": "Beskrivning (valfritt)",
     "descPlaceholder": "Vad gör det här flödet?",
@@ -462,17 +465,13 @@
     "needEdit": "Du behöver redigeringsbehörighet för att skapa flöden.",
     "nextRun": "Nästa körning {{when}}",
     "searchPlaceholder": "Sök flöden…",
-    "filterStatus": "Status",
     "statusAll": "Alla",
     "sortBy": "Sortera",
     "sortRecent": "Senast körda",
-    "sortName": "Namn",
-    "sortStatus": "Status",
     "noMatches": "Inga flöden matchar dina filter.",
     "lastRun": "Senast kört {{when}}",
     "neverRun": "Aldrig kört",
     "sparkSummary": "{{ok}} av senaste {{total}} körningarna lyckades",
-    "deleteFlow": "Ta bort flöde",
     "duplicateFlow": "Duplicera flöde"
   },
   "settings": {
@@ -480,7 +479,6 @@
     "close": "stäng",
     "tabNotifications": "Aviseringar",
     "tabGeneral": "Allmänt",
-    "tabSecrets": "Hemligheter",
     "secrets": {
       "help": "Hemligheter som bara det här flödet kan använda. De åsidosätter hemligheter med samma namn på arbetsyte- och organisationsnivå, och inget annat flöde kan läsa dem. Referera till en hemlighet som ${secret.NAME} — värdet hämtas från närmaste nivå (flödet, sedan arbetsytan, sedan organisationen).",
       "referencedTitle": "Det här flödet refererar till",
@@ -548,7 +546,6 @@
       "emailDesc": "Få en sammanfattning via e-post när en körning misslyckas. Kräver att serverns e-postleverans är konfigurerad (fråga din administratör om inget kommer fram)."
     },
     "general": {
-      "displayName": "Visningsnamn",
       "displayNameDesc": "Vänligt namn som visas i flödeslistan. Standardvärde är ID:t.",
       "icon": "Ikon",
       "iconDesc": "Ladda upp en SVG eller PNG. Lämna tomt för standardikonen.",
@@ -568,7 +565,6 @@
       "ownerPlaceholder": "(anges när flödet sparas första gången)",
       "ownerDesc": "Sätts automatiskt när flödet sparas första gången. Bara organisationens administratörer kan överföra ägarskapet.",
       "dangerZone": "Riskzon",
-      "deleteFlow": "Ta bort flöde",
       "deleteFlowDesc": "Tar bort flödet och hela dess historik permanent. Detta kan inte ångras.",
       "storedInGit": "Varje sparning behålls som en version du kan gå tillbaka till — tekniskt sett lagras de i ett git-repo.",
       "mirrorLink": "Spegla till din egen git"
@@ -618,7 +614,6 @@
       "connectPrompt": "Anslut {{name}}",
       "loadFailed": "Kunde inte ladda anslutningsstatusen.",
       "notConfigured": "Inte konfigurerad — be en administratör.",
-      "disconnect": "Koppla från",
       "disconnecting": "Kopplar från…",
       "connectSuccess": "Anslöt {{name}}.",
       "removeConfirm": "Koppla från och ta bort det lagrade värdet för {{name}}?",
@@ -649,7 +644,6 @@
     "setupIncompleteBody": "Administratören har inte aktiverat apparna du kan ansluta (Slack, Gmail, Notion, …) eller platsen där hemligheter sparas. Tills det är klart finns det inget du kan göra här — flöden som behöver det går inte att köra.",
     "setupIncompleteContact": "Kontakta administratören",
     "setupIncompleteContactGeneric": "Kontakta personen som satte upp den här Dazyflow-arbetsytan åt dig och be dem slutföra konfigurationen av appar och hemligheter.",
-    "connect": "Anslut",
     "connectAnother": "Anslut ytterligare ett konto",
     "defaultOption": "Standard",
     "unknownError": "okänt fel",
@@ -680,7 +674,6 @@
       "gcpKeyLabel": "Service-account-nyckel (JSON)",
       "gcpRemoveConfirm": "Koppla från GCP Secret Manager? Flöden som använder ${gcp.…} kan inte längre slå upp sina värden.",
       "summary": "{{method}}-autentisering · mount {{mount}}",
-      "remove": "Koppla från",
       "removeTitle": "Koppla från hemlighetshanteraren?",
       "removeConfirm": "Koppla från hemlighetshanteraren? Flöden som använder ${vault.…} kan inte längre slå upp sina värden.",
       "addressLabel": "Adress",
@@ -721,7 +714,6 @@
     "noPrompt": "(ingen prompt — steg-ID: {{nodeId}})",
     "reject": "Avslå",
     "rejecting": "Avslår…",
-    "approve": "Godkänn",
     "approving": "Godkänner…"
   },
   "acceptInvite": {
@@ -745,7 +737,6 @@
     "title": "Admin",
     "needAdmin": "Du behöver <0>organization:admin</0> eller <0>graph:admin</0> för att se den här sidan.",
     "subtitle": "Organisation <0>{{tenant}}</0>",
-    "groupOrg": "Organisation",
     "groupPlatform": "Plattform",
     "groupSystem": "System",
     "system": {
@@ -761,10 +752,8 @@
     },
     "cardApiKeysTitle": "API-nycklar",
     "cardApiKeysDesc": "Skapa och återkalla åtkomstnycklar.",
-    "cardSecretsTitle": "Hemligheter",
     "cardSecretsDesc": "Organisationsövergripande inloggningsuppgifter och er externa hemlighetshanterare.",
     "secrets": {
-      "title": "Hemligheter",
       "intro": "Inloggningsuppgifter som är tillgängliga för alla flöden i den här organisationen.",
       "tabValues": "Värden",
       "tabManager": "Hemlighetshanterare"
@@ -783,7 +772,6 @@
       "empty": "Inga Google-konton anslutna än. Anslut ett för att använda steg för Gmail, Kalkylark eller Formulär.",
       "connectAnother": "Anslut konto",
       "connectTitle": "Anslut ett Google-konto",
-      "connect": "Anslut",
       "nameLabel": "Kontonamn",
       "namePlaceholder": "t.ex. marknad eller du@företag.se",
       "nameHelp": "En etikett för det delade kontot (ofta e-posten). Endast bokstäver, siffror, punkt, bindestreck och understreck.",
@@ -792,7 +780,6 @@
       "disconnectConfirm": "Koppla från Google-kontot \"{{account}}\"? Flöden som använder det slutar fungera tills det återansluts.",
       "reconnect": "Återanslut",
       "reconnectHint": "Begär medgivande på nytt för kontot (uppdaterar och fyller på behörigheterna).",
-      "disconnect": "Koppla från",
       "addPermission": "Lägg till behörighet"
     },
     "cardGitTitle": "Git-inloggningsuppgifter och spegling",
@@ -809,7 +796,6 @@
       "subtitle": "Skicka ett testmeddelande via installationens e-postserver för att bekräfta att det levereras.",
       "needPlatformAdmin": "Du behöver <0>platform:admin</0> för att hantera plattformsinställningar."
     },
-    "cardWorkspaceTitle": "Organisation",
     "cardWorkspaceDesc": "Namn, logotyp och gränser.",
     "cardAuditTitle": "Granskningslogg",
     "cardAuditDesc": "Sparade ändringar, körningar, hemligheter, godkännanden.",
@@ -824,7 +810,6 @@
       "pendingHead": "Väntande inbjudningar",
       "noPending": "Inga väntande inbjudningar.",
       "ownerBadge": "Ägare",
-      "remove": "Ta bort",
       "removing": "Tar bort…",
       "removeTitle": "Ta bort den här medlemmen från organisationen",
       "removeConfirm": "Ta bort {{email}} från organisationen? De förlorar åtkomst omedelbart.",
@@ -843,7 +828,6 @@
       "inviteModalTitle": "Bjud in en teammedlem",
       "inviteEmailLabel": "Deras e-post",
       "inviteEmailDesc": "De får en inbjudningslänk de kan öppna i valfri webbläsare. SMTP-leverans är valfri — du kan också kopiera och skicka länken själv.",
-      "inviteEmailInvalid": "Det där ser inte ut som en giltig e-postadress än.",
       "inviteRoleLabel": "Roll",
       "roleViewer": "Läsare",
       "roleViewerDesc": "Kan öppna och köra flöden. Kan inte redigera något eller se hemligheter.",
@@ -862,7 +846,6 @@
       "emptyBody": "Bjud in en teammedlem för att dela organisationen. De öppnar länken, loggar in (eller skapar konto) och landar i dina arbetsytor.",
       "inviteFirst": "Bjud in din första teammedlem",
       "joinedAt": "gick med {{date}}",
-      "expiresAt": "går ut {{date}}",
       "acceptedAt": "accepterad {{date}}",
       "rolePermsLabel": "Behörigheter:"
     },
@@ -870,7 +853,6 @@
       "head": "Bjud in personer att registrera sig",
       "subtitle": "Självregistrering är avstängd på den här installationen. Bjud in specifika personer via e-post — de får en länk för att välja ett lösenord och skapa sitt eget konto.",
       "emailLabel": "E-post att bjuda in",
-      "emailInvalid": "Det där ser inte ut som en giltig e-postadress än.",
       "invite": "Skicka inbjudan",
       "pendingHead": "Väntande registreringsinbjudningar",
       "none": "Inga registreringsinbjudningar än.",
@@ -881,16 +863,14 @@
       "statusPending": "Väntar",
       "statusAccepted": "Registrerad",
       "statusRevoked": "Återkallad",
-      "statusExpired": "Utgången",
-      "expiresAt": "går ut {{date}}"
+      "statusExpired": "Utgången"
     },
     "smtpTest": {
       "head": "Testa plattformens e-post",
       "subtitle": "Skicka ett testmeddelande via den konfigurerade e-postservern (DAZYFLOW_SMTP_URL) för att bekräfta att leverans fungerar. Vid start kontrolleras bara att URL:en är giltig, inte att servern accepterar e-post. Lämna fältet tomt för att skicka till dig själv.",
       "recipientLabel": "Mottagare",
       "send": "Skicka testmejl",
-      "sent": "Testmejl skickat till {{to}}. Kontrollera inkorgen för att bekräfta leverans.",
-      "invalid": "Det där ser inte ut som en giltig e-postadress än."
+      "sent": "Testmejl skickat till {{to}}. Kontrollera inkorgen för att bekräfta leverans."
     },
     "sso": {
       "needAdmin": "Du behöver <0>organization:admin</0> för att konfigurera inloggning.",
@@ -968,7 +948,6 @@
       "colSubject": "Innehavare",
       "colRoles": "Roller",
       "colExpires": "Går ut",
-      "colStatus": "Status",
       "revokeTitle": "Återkalla den här nyckeln",
       "revokeReally": "Återkalla?",
       "revokedAlready": "återkallad",
@@ -1009,11 +988,9 @@
       "colDetail": "Detalj"
     },
     "workspace": {
-      "title": "Organisation",
       "subtitle": "Organisationens namn, logotyp och resursgränser.",
       "needAdmin": "Du behöver <0>organization:admin</0> för att se arbetsytans gränser.",
       "diskQuota": "Diskkvot",
-      "usage": "Användning",
       "unlimited": "obegränsat",
       "noQuota": "Ingen kvot konfigurerad.",
       "graphLimits": "Flödesgränser",
@@ -1023,7 +1000,6 @@
       "none": "ingen",
       "orgNameHead": "Organisationsnamn",
       "orgNameDesc": "Namnet som visas i organisationsväxlaren, adminsidor och på inbjudningslänkar. Alla du bjuder in ser detta namn.",
-      "orgNameLabel": "Visningsnamn",
       "orgNamePlaceholder": "Acme Kitchen Supplies",
       "orgIdHint": "Internt ID: <0>{{tenant}}</0> (används i webhook-URL:er och granskningsloggar; ändras aldrig).",
       "profileNotConfigured": "Organisationsprofiler är inte aktiverade på den här dzd-instansen.",
@@ -1047,11 +1023,9 @@
       "off": "Av",
       "perOrgCount": "{{count}} organisationer",
       "enable": "Aktivera",
-      "disable": "Inaktivera",
       "none": "Inga steg matchar.",
       "disableTitle": "Stäng av {{drop}}?",
-      "disableWarning": "Detta stoppar steget från att köras i alla organisationers flöden, med omedelbar verkan. Befintliga flöden som använder det misslyckas tills det aktiveras igen.",
-      "reasonPlaceholder": "Orsak (loggas i granskningsloggen)"
+      "disableWarning": "Detta stoppar steget från att köras i alla organisationers flöden, med omedelbar verkan. Befintliga flöden som använder det misslyckas tills det aktiveras igen."
     },
     "platformUsers": {
       "title": "Användare",
@@ -1064,7 +1038,6 @@
     },
     "platformUserDetail": {
       "subtitle": "Plattformsmoderering",
-      "status": "Status",
       "active": "Aktiv",
       "homeOrg": "Hemorganisation",
       "created": "Skapad",
@@ -1096,14 +1069,12 @@
       "banDomain": "Blockera hela e-postdomänen, inte bara den här adressen",
       "deleteTitle": "Ta bort {{email}}?",
       "deleteWarning": "Raderar kontot permanent och, om det är en personlig organisation utan andra medlemmar, all dess data. Det går inte att ångra.",
-      "reasonPlaceholder": "Orsak (loggas i granskningsloggen)",
       "suspendDesc": "Logga ut användaren och blockera inloggning och API-nycklar tills det återställs. Datan behålls.",
       "unsuspendDesc": "Återställ kontots åtkomst.",
       "banDesc": "Stäng av kontot och hindra den här e-postadressen från att registrera sig igen.",
       "deleteDesc": "Radera kontot permanent. Det går inte att ångra."
     },
     "platformOrgs": {
-      "title": "Organisationer",
       "subtitle": "Alla organisationer på den här installationen. Öppna en för att stänga av, blockera eller ta bort den.",
       "counts": "{{total}} organisationer · {{suspended}} avstängda",
       "searchPlaceholder": "Sök på namn, id eller subdomän…",
@@ -1113,11 +1084,9 @@
     },
     "platformOrgDetail": {
       "subtitle": "Plattformsmoderering",
-      "status": "Status",
       "active": "Aktiv",
       "tenantId": "Organisations-ID",
       "subdomain": "Subdomän",
-      "memberCount": "Medlemmar",
       "reason": "Orsak",
       "unsuspend": "Återaktivera",
       "suspend": "Stäng av",
@@ -1131,7 +1100,6 @@
       "deleteWarning": "Raderar organisationen och all dess data permanent (flöden, körningar, hemligheter). Medlemskontona finns kvar — de kan tillhöra andra organisationer. Det går inte att ångra.",
       "deleteConfirmPlaceholder": "Skriv {{tenant}} för att bekräfta",
       "passwordPlaceholder": "Ditt lösenord",
-      "reasonPlaceholder": "Orsak (loggas i granskningsloggen)",
       "suspendDesc": "Stoppa alla organisationens flöden och lås ute dess medlemmar. Datan behålls.",
       "unsuspendDesc": "Återställ organisationens åtkomst och låt dess flöden köra igen.",
       "banDesc": "Stäng av organisationen och hindra alla nuvarande medlemmars e-postadresser från att registrera sig igen.",
@@ -1139,7 +1107,6 @@
     },
     "cardPlatformUsersTitle": "Användare",
     "cardPlatformUsersDesc": "Stäng av, blockera eller ta bort valfritt konto — eller bjud in nya personer att registrera sig.",
-    "cardPlatformOrgsTitle": "Organisationer",
     "cardPlatformOrgsDesc": "Stäng av, blockera eller ta bort valfri organisation.",
     "cardPlatformDropsTitle": "Nödstopp för steg",
     "cardPlatformDropsDesc": "Slå på eller av enskilda appar för hela plattformen.",
@@ -1151,18 +1118,15 @@
       "new": "Ny nivå",
       "builtIn": "Inbyggd",
       "runs": "Körningar/mån",
-      "members": "Medlemmar",
       "concurrency": "Samtidiga körningar",
       "retention": "Lagringstid (dagar)",
       "nodes": "Steg",
-      "flows": "Flöden",
       "disk": "Disk",
       "timeout": "Tidsgräns (s)",
       "polling": "Pollning",
       "deleteTitle": "Ta bort nivån {{name}}?",
       "deleteWarning": "Organisationer med den här nivån faller tillbaka till Gratis-nivån. Det går inte att ångra.",
       "edit": "Redigera {{name}}",
-      "name": "Namn",
       "plan": "Plannivå",
       "zeroInherit": "0 = ärv standard",
       "diskMB": "Diskkvot (MB)",
@@ -1192,10 +1156,8 @@
       "notes": "Anteckningar"
     },
     "platformMembers": {
-      "head": "Medlemmar",
       "owner": "Ägare",
       "role": "Roll",
-      "remove": "Ta bort",
       "none": "Inga medlemmar.",
       "inviteHead": "Bjud in en medlem",
       "invite": "Bjud in",
@@ -1240,10 +1202,8 @@
       "requestLine": "{{agent}} vill visa '{{flow}}' — skrivskyddat",
       "requestedAt": "begärd {{date}}",
       "ticket": "ärende {{id}}",
-      "expiresAt": "går ut {{date}}",
       "decidedBy": "av {{who}}",
       "reassure": "Hemligheter förblir dolda och körningsdata maskeras. Du kan återkalla åtkomsten när som helst.",
-      "approve": "Godkänn",
       "deny": "Neka",
       "revokeConfirm": "Återkalla {{agent}}s åtkomst till '{{flow}}' nu?",
       "status": {
@@ -1266,7 +1226,6 @@
       "empty": "Inga supportagenter än.",
       "grantedBy": "tillagd av {{who}}",
       "addedAt": "tillagd {{date}}",
-      "remove": "Ta bort",
       "removeConfirm": "Ta bort supportagentåtkomst för {{email}}?"
     }
   },
@@ -1304,7 +1263,6 @@
     "statusFailed": "Misslyckad",
     "statusCancelled": "Stoppad",
     "empty": "Inga körningar matchar det här filtret.",
-    "colFlow": "Flöde",
     "colStarted": "Startad",
     "colDuration": "Varaktighet",
     "inProgress": "pågår",
@@ -1317,7 +1275,6 @@
     "confirmBulkRetryTitle": "Återuppta valda körningar?",
     "confirmBulkRetryBody": "Kör om {{count}} körningar? Var och en återupptas från sitt misslyckade steg och kör om stegen efter det — inklusive sidoeffekter som att skicka e-post eller meddelanden.",
     "searchPlaceholder": "Sök på flödesnamn…",
-    "filterFlow": "Flöde",
     "allFlows": "Alla flöden",
     "filterFrom": "Från",
     "filterTo": "Till",
@@ -1448,7 +1405,6 @@
     "statusAwaiting": "väntar på godkännande",
     "statusCancelled": "stoppad",
     "cancelledNote": "Den här körningen stoppades innan den blev klar — den misslyckades inte av sig själv. Använd Kör om för att köra den på nytt.",
-    "summaryStatus": "Status",
     "summaryStarted": "Startad",
     "summaryFinished": "Avslutad",
     "summaryDuration": "Varaktighet",
@@ -1678,7 +1634,6 @@
       "upstream": "Från tidigare steg",
       "trigger": "Från triggern",
       "resources": "Resurser",
-      "secrets": "Hemligheter",
       "itemFields": "Från varje rad"
     },
     "duration": {
@@ -1790,8 +1745,7 @@
     "form": "Formulär",
     "resource": "Resurs",
     "secret": "Hemlighet",
-    "first": "första",
-    "clear": "Ta bort"
+    "first": "första"
   },
   "inspector": {
     "title": "Inspektor",
@@ -1812,7 +1766,6 @@
     "stopTitle": "Stoppa körningen",
     "awaitingApproval": "Väntar på godkännande",
     "commentOptional": "Kommentar (valfri)",
-    "approve": "Godkänn",
     "approving": "Godkänner…",
     "reject": "Avslå",
     "rejecting": "Avslår…",
@@ -1879,7 +1832,6 @@
     "publish": "Publicera",
     "publishing": "Publicerar…",
     "publishChanges": "Publicera ändringar",
-    "goLive": "Publicera",
     "pause": "Stäng av",
     "liveStateCurrent": "Publicerat — live-versionen matchar ditt utkast.",
     "liveStateDirty": "Publicerat, men ditt utkast har ändringar som inte är live än.",
@@ -1890,7 +1842,6 @@
     "publishChangesTitle": "Publicera ditt utkast — automatiska triggers kör dessa ändringar.",
     "publishFirstTitle": "Publicera flödet så att dess triggers börjar köra.",
     "publishNudge": "Flödet har en trigger men är inte publicerat — ingenting kör det förrän du publicerar. (Kör fungerar fortfarande för test.)",
-    "publishNudgeCta": "Publicera",
     "publishPreviewBlocked": "Avsluta versionsförhandsgranskningen innan du publicerar.",
     "confirmPublishTitle": "Publicera flödet?",
     "confirmPublishBody": "Dess triggers börjar köra den här versionen. Ditt utkast förblir redigerbart — bara en ny publicering gör nya ändringar live.",
@@ -1955,7 +1906,6 @@
     "lintDangling": "Fältet ”{{field}}” pekar på ett steg som inte längre finns i flödet — peka om det med {}-väljaren, annars misslyckas körningen när den försöker läsa det.",
     "lintSecretPersist": "Det här steget använder en hemlighet och skickar sina data vidare till ett senare steg som sparar utdata, där hemligheten kan hamna i klartext. Kontrollera kopplingarna, eller lägg till ett steg som tar bort hemligheten innan den sparas.",
     "connNeededLead": "Anslut för att köra det här flödet:",
-    "connNeededCta": "Anslut",
     "connNeededAskAdmin": "Be en organisationsadministratör att ansluta dem.",
     "adminBlockedOnly": "Servern är inte färdigkonfigurerad: administratören behöver aktivera {{items}} innan flödet kan köras.",
     "adminBlockedAppend": "Administratören behöver också aktivera: {{items}}.",
@@ -1971,7 +1921,6 @@
     "addDropTitle": "Sök och infoga ett steg (Ctrl/Cmd+K)",
     "ctxDuplicate": "Duplicera",
     "ctxEnable": "Aktivera",
-    "ctxDisable": "Inaktivera",
     "ctxAddBreakpoint": "Lägg till pauspunkt",
     "ctxRemoveBreakpoint": "Ta bort pauspunkt",
     "ctxResetState": "Återställ tillstånd…",
@@ -1984,14 +1933,12 @@
     "runSucceededDetails": "Visa hela körningen"
   },
   "iconUpload": {
-    "upload": "Ladda upp bild",
-    "remove": "Ta bort"
+    "upload": "Ladda upp bild"
   },
   "commandPalette": {
     "title": "Kommandofält",
     "placeholder": "Hoppa till en sida eller ett flöde…",
     "goTo": "Gå till",
-    "flowSublabel": "Flöde",
     "noResults": "Inget matchar ”{{query}}”.",
     "hintOpen": "öppna",
     "settingsGroup": "Inställningar och administration",
@@ -2071,7 +2018,6 @@
     "body": "”{{name}}” och hela dess versionshistorik tas bort permanent. Detta kan inte ångras. Ange ditt lösenord för att bekräfta.",
     "passwordLabel": "Ditt lösenord",
     "passwordPlaceholder": "Nuvarande kontolösenord",
-    "confirm": "Ta bort flöde",
     "deleting": "Tar bort…",
     "wrongPassword": "Lösenordet är felaktigt.",
     "locked": "Flödet har en pågående körning. Stoppa körningen och försök ta bort igen."
@@ -2104,8 +2050,6 @@
     "pick": "Välj en mall, eller skapa en ny.",
     "deleteTitle": "Ta bort mall?",
     "deleteBody": "Flöden som refererar till ”{{name}}” misslyckas tills de pekas om till en annan mall.",
-    "name": "Namn",
-    "displayName": "Visningsnamn",
     "displayNamePlaceholder": "Välkomstmejl",
     "html": "Mall-HTML",
     "bodyHint": "Använd {{.Body}} där e-postinnehållet ska in. {{.Subject}} och {{.Logo}} är också tillgängliga.",
@@ -2146,7 +2090,6 @@
     "grantsHead": "Din åtkomst",
     "noGrants": "Du har inte åtkomst till några flöden än. Begär åtkomst till ett flöde nedan.",
     "ticket": "ärende {{id}}",
-    "expires": "går ut {{date}}",
     "openFlow": "Öppna",
     "awaitingApproval": "Väntar på godkännande",
     "requestNew": "Begär åtkomst till ett flöde",
@@ -2221,7 +2164,6 @@
     "ownerAll": "Alla",
     "ownerUnassigned": "Otilldelade",
     "ownerMine": "Tilldelade mig",
-    "filterStatus": "Status",
     "statusAny": "Alla statusar",
     "noMatches": "Inga ärenden matchar din sökning.",
     "unassigned": "otilldelat",

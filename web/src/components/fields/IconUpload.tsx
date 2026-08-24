@@ -69,8 +69,8 @@ export function IconUpload({
             size="icon"
             className="danger"
             onClick={() => onChange(undefined)}
-            aria-label={t("iconUpload.remove")}
-            title={t("iconUpload.remove")}
+            aria-label={t("common.remove")}
+            title={t("common.remove")}
           >
             <Trash2 size={ICON.sm} />
           </Button>

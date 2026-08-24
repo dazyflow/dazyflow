@@ -330,7 +330,7 @@ export function RunDetail() {
   const startedAgo = formatRelative(run.StartedAt ?? run.EnqueuedAt, t, now);
 
   return (
-    <div className="page run-detail">
+    <div className="page">
       <div className="page-title">
         <div>
           <BackLink to="/runs" label={t("nav.runs")} />
@@ -354,7 +354,6 @@ export function RunDetail() {
         <div style={{ display: "flex", gap: "var(--space-2)" }}>
           <Link
             to={`/flows/${encodeURIComponent(run.GraphID)}?run=${encodeURIComponent(run.ID)}`}
-            className="secondary-link"
           >
             <Button>{t("common.openInEditor")}</Button>
           </Link>
@@ -446,7 +445,7 @@ export function RunDetail() {
 
       {/* Run-level summary card. */}
       <div className="run-summary card">
-        <SummaryRow label={t("runDetail.summaryStatus")} value={<StatusChip status={run.Status} />} />
+        <SummaryRow label={t("common.status")} value={<StatusChip status={run.Status} />} />
         {/* Older records (pre started_at-stamping on enqueue) fall back
             to enqueued_at so finished runs still show a start/duration. */}
         <SummaryRow
@@ -833,7 +832,7 @@ function SummaryRow({ label, value }: { label: string; value: React.ReactNode })
   return (
     <div className="run-summary-row">
       <span className="run-summary-label">{label}</span>
-      <span className="run-summary-value">{value}</span>
+      <span>{value}</span>
     </div>
   );
 }
@@ -968,18 +967,6 @@ function RunFailureBanner({
               type="button"
               className="run-error-help"
               onClick={() => setReporting(true)}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "var(--space-1h)",
-                fontSize: "var(--text-sm)",
-                fontWeight: 600,
-                background: "none",
-                border: "none",
-                padding: 0,
-                cursor: "pointer",
-                color: "inherit",
-              }}
             >
               <LifeBuoy size={ICON.sm} style={{ flexShrink: 0 }} />
               {t("runDetail.reportProblem")}

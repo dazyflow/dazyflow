@@ -348,7 +348,6 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
               and it signals the right-click "Reset state" action exists. */}
           {d.manifest?.node_state && (
             <div
-              className="dz-node-state"
               title={nodeStateText(
                 d.manifest.node_state.reset_hint || d.manifest.node_state.label,
                 i18n.language,
@@ -530,7 +529,7 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
               const field = inlineByPort[p.port];
               return (
                 <div key={"il-" + p.port} className="dz-port-in-row">
-                  <div className={"dz-port-label dz-port-in" + (isPass ? " dz-pass-row" : "")}>
+                  <div className={"dz-port-label" + (isPass ? " dz-pass-row" : "")}>
                     <Handle
                       type="target"
                       position={Position.Left}
@@ -555,7 +554,7 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
                     </Handle>
                     {!isPass && portLabel(p.label ?? p.port, i18n.language)}
                     {!isPass && p.list && (
-                      <span className="dz-port-many" title="many items" style={{ opacity: 0.5, marginLeft: "var(--space-1)" }}>
+                      <span className="dz-port-many" title="many items">
                         ▦
                       </span>
                     )}
@@ -612,7 +611,7 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
                 </Handle>
                 {!isPass && portLabel(p.label ?? p.port, i18n.language)}
                 {!isPass && p.list && (
-                  <span className="dz-port-many" title="many items" style={{ opacity: 0.5, marginLeft: "var(--space-1)" }}>
+                  <span className="dz-port-many" title="many items">
                     ▦
                   </span>
                 )}
@@ -736,8 +735,8 @@ function ParamInput({
         <span className="dz-token-chip-text">{friendly}</span>
         <Button
           className="dz-token-chip-x"
-          aria-label={i18n.t("tokenChip.clear")}
-          title={i18n.t("tokenChip.clear")}
+          aria-label={i18n.t("common.remove")}
+          title={i18n.t("common.remove")}
           onClick={() => onChange("")}
         >
           ×
@@ -1117,7 +1116,7 @@ function NodeApproveBar({
         disabled={busy !== null}
       >
         <Check size={ICON.sm} />
-        {i18n.t(busy === "approve" ? "approvals.approving" : "approvals.approve")}
+        {i18n.t(busy === "approve" ? "approvals.approving" : "common.approve")}
       </button>
       <button
         type="button"

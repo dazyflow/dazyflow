@@ -54,7 +54,7 @@ export function ForgotPassword() {
       >
         <h1>{t("forgotPassword.title")}</h1>
         <p className="sub">{t("forgotPassword.subtitle")}</p>
-        <label htmlFor="email">{t("forgotPassword.email")}</label>
+        <label htmlFor="email">{t("common.email")}</label>
         <input
           id="email"
           type="email"

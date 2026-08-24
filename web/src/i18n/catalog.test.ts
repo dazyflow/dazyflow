@@ -140,6 +140,76 @@ describe("locale catalogues", () => {
     expect(drifted).toEqual([]);
   });
 
+  // One English label, one key.
+  //
+  // 46 English values were reachable through three or more keys, 170 keys in
+  // all — the same word written out again for every surface that needed it. The
+  // cost is not the bytes: a translator sees the same string N times with no
+  // sign they are one thing, and a rewording lands on one surface and not the
+  // others. 79 of those keys now point at a single shared one.
+  //
+  // The rest are legitimate, and the reasons fall into four kinds. They are
+  // listed one by one rather than pattern-matched, because "these keys happen
+  // to read alike" is a claim that needs checking, not inferring.
+  const ALLOWED_DUPLICATION: Record<string, string> = {
+    // 1. A status family read as t(`…status.${value}`). The family has to stay
+    //    complete, so a value shared with a fixed label cannot be merged away.
+    Pending: "invite status vs the support-grant status map (t(`…status.${s}`))",
+    Revoked: "invite status vs the support-grant status map",
+    Expired: "invite status vs the support-grant status map",
+    Active: "org/user state vs the support-grant status map",
+    Running: "run filter and badge vs the wallboard status map",
+    "Waiting for approval": "run filter and badge vs the support home summary",
+    // 2. A filter chip and a status badge, deliberately separate so the chip can
+    //    be reworded (or pluralised) without touching the badge.
+    Failed: "filter chip, run badge, run-detail headline, wallboard status",
+    Succeeded: "filter chip, run badge, wallboard status",
+    // 3. The same English word covering different things, which Swedish already
+    //    splits — see ALLOWED_DIVERGENCE above for the translations.
+    "Built-in": "an integration group, a plan tier, a palette entry, an email template",
+    Live: "a flow's published state vs a feed being live",
+    Open: "the verb (a button) vs a ticket's state",
+    Owner: "an organisation's owner vs a ticket's assignee",
+    Retry: "retry a fetch vs resume a failed run",
+    Custom: "a trigger preset, a role, an issue-key template",
+    required: "a connection field, a node port, a schema field — three genders in Swedish",
+    Clear: "clear a log or selection vs empty a table",
+    // 4. Different domains that happen to coincide in English. Merging these
+    //    would tie a rename in one to a rename in the other.
+    Files: "the nav item and page vs the editor's `files` port type",
+    Admin: "the nav item and page vs the `admin` role name",
+    Workspace: "the nav group vs the file browser's root crumb",
+    Off: "a flow's paused state vs a per-step toggle",
+    Support: "the nav item and page vs a back link and a provenance note",
+    "Creating…": "creating an org, a client, a flow vs forking a template vs sending an invite",
+    Steps: "an integrations heading, a plan limit, a run summary, a bundle section",
+    "Platform admin": "a badge, an env-granted badge, and a back link",
+  };
+
+  it("reach one English label through one key", () => {
+    const byEnglish = new Map<string, string[]>();
+    for (const [k, v] of Object.entries(EN)) {
+      if (!byEnglish.has(v)) byEnglish.set(v, []);
+      byEnglish.get(v)!.push(k);
+    }
+    const duplicated: string[] = [];
+    for (const [english, keys] of byEnglish) {
+      if (keys.length < 3) continue;
+      if (english in ALLOWED_DUPLICATION) continue;
+      duplicated.push(`"${english}" has ${keys.length} keys (${keys.join(", ")})`);
+    }
+    expect(duplicated).toEqual([]);
+  });
+
+  // The same honesty check as for divergence: an entry that no longer has three
+  // keys was merged, and must leave the list.
+  it("carry no stale duplication allowances", () => {
+    const counts = new Map<string, number>();
+    for (const v of Object.values(EN)) counts.set(v, (counts.get(v) ?? 0) + 1);
+    const stale = Object.keys(ALLOWED_DUPLICATION).filter((en) => (counts.get(en) ?? 0) < 3);
+    expect(stale).toEqual([]);
+  });
+
   // Keep the allowlist honest: an entry that no longer diverges has been
   // aligned, and must be deleted so the list stays a record of real decisions.
   it("carry no stale divergence allowances", () => {

@@ -52,7 +52,7 @@ export function VerifyEmail() {
   }, []);
 
   return (
-    <div className="auth-page" style={{ display: "grid", placeItems: "center", minHeight: "60vh" }}>
+    <div className="auth-page">
       <div className="card" style={{ maxWidth: 440, textAlign: "center", padding: "var(--space-6)" }}>
         {state === "working" && <p>{t("verifyEmail.working")}</p>}
         {state === "ok" && (
@@ -61,8 +61,8 @@ export function VerifyEmail() {
             <h1 style={{ marginTop: "var(--space-3)" }}>{t("verifyEmail.okTitle")}</h1>
             <p className="sub">{t("verifyEmail.okBody")}</p>
             <p>
-              <Link to={sessionToken ? "/welcome" : "/signin"} className="primary-link">
-                {sessionToken ? t("verifyEmail.toApp") : t("verifyEmail.toSignin")}
+              <Link to={sessionToken ? "/welcome" : "/signin"}>
+                {sessionToken ? t("verifyEmail.toApp") : t("common.signIn")}
               </Link>
             </p>
           </>
@@ -80,9 +80,8 @@ export function VerifyEmail() {
             <p>
               <Link
                 to={sessionToken ? "/welcome" : "/signin"}
-                className="primary-link"
               >
-                {sessionToken ? t("verifyEmail.toApp") : t("verifyEmail.toSignin")}
+                {sessionToken ? t("verifyEmail.toApp") : t("common.signIn")}
               </Link>
             </p>
           </>

@@ -228,7 +228,7 @@ export function TemplateGallery() {
   }
 
   return (
-    <div className="template-gallery">
+    <div>
       {(categoryFilter || templateFilter) && (
         <div className="template-filter-chip">
           <span>

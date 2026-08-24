@@ -70,7 +70,7 @@ export function AdminPlatformOrgs() {
         <div>
           <h1>
             <Building2 size={ICON.xl} />
-            {t("admin.platformOrgs.title")}
+            {t("common.organizations")}
           </h1>
           <div className="sub">{t("admin.platformOrgs.subtitle")}</div>
         </div>

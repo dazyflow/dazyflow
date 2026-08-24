@@ -214,7 +214,7 @@ export function Approvals() {
                     disabled={!!inflight}
                   >
                     <CheckCircle2 size={ICON.sm} />
-                    {inflight === "approve" ? t("approvals.approving") : t("approvals.approve")}
+                    {inflight === "approve" ? t("approvals.approving") : t("common.approve")}
                   </Button>
                 </div>
               </div>

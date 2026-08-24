@@ -57,7 +57,7 @@ export function AdminWorkspace() {
         <div>
           <h1>
             <Settings2 size={ICON.xl} />
-            {t("admin.workspace.title")}
+            {t("common.organization")}
           </h1>
           <div className="sub">{t("admin.workspace.subtitle")}</div>
         </div>
@@ -80,7 +80,7 @@ export function AdminWorkspace() {
             <h3 style={{ marginTop: 0 }}>{t("admin.workspace.diskQuota")}</h3>
             {limits.quota ? (
               <Row
-                label={t("admin.workspace.usage")}
+                label={t("common.usage")}
                 value={
                   formatBytes(limits.quota.used_bytes ?? 0) +
                   " / " +
@@ -299,7 +299,7 @@ function OrgProfileEditor() {
         />
       </div>
       <div className="sf-field">
-        <label>{t("admin.workspace.orgNameLabel")}</label>
+        <label>{t("common.displayName")}</label>
         <input
           type="text"
           value={displayName}

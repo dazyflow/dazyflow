@@ -207,17 +207,17 @@ function AgentCard({
       <div className="user-card-actions">
         <Button onClick={() => setConfirm(true)} disabled={busy}>
           <Trash2 size={ICON.xs} />
-          {t("admin.supportAgents.remove", { defaultValue: "Remove" })}
+          {t("common.remove", { defaultValue: "Remove" })}
         </Button>
       </div>
       {confirm && (
         <ConfirmModal
-          title={t("admin.supportAgents.remove", { defaultValue: "Remove" })}
+          title={t("common.remove", { defaultValue: "Remove" })}
           message={t("admin.supportAgents.removeConfirm", {
             defaultValue: "Remove support-agent access for {{email}}?",
             email: agent.email,
           })}
-          confirmLabel={t("admin.supportAgents.remove", { defaultValue: "Remove" })}
+          confirmLabel={t("common.remove", { defaultValue: "Remove" })}
           danger
           onConfirm={() => {
             setConfirm(false);

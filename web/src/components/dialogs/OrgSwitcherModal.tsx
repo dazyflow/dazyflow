@@ -114,7 +114,7 @@ export function OrgSwitcherModal({
         aria-labelledby="org-switcher-title"
       >
         <div className="modal-head">
-          <h2 id="org-switcher-title">{t("nav.orgsTitle")}</h2>
+          <h2 id="org-switcher-title">{t("common.organizations")}</h2>
           <Button
             variant="ghost"
             size="icon"

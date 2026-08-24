@@ -34,7 +34,7 @@ export function AdminSecrets() {
 
   return (
     <div className="page">
-      <h1>{t("admin.secrets.title")}</h1>
+      <h1>{t("common.secrets")}</h1>
       <p className="page-sub">{t("admin.secrets.intro")}</p>
 
       <div className="settings-tabs admin-secrets-tabs" role="tablist">

@@ -199,7 +199,7 @@ function GrantCard({ grant, onChanged }: { grant: AccessGrant; onChanged: () => 
           })}
           {grant.ticket_id && <> · {t("admin.support.ticket", { defaultValue: "ticket {{id}}", id: grant.ticket_id })}</>}
           {grant.status === "approved" && grant.expires_at && (
-            <> · {t("admin.support.expiresAt", { defaultValue: "expires {{date}}", date: formatDate(grant.expires_at) })}</>
+            <> · {t("common.expiresAt", { defaultValue: "expires {{date}}", date: formatDate(grant.expires_at) })}</>
           )}
           {grant.decided_by && (
             <> · {t("admin.support.decidedBy", { defaultValue: "by {{who}}", who: grant.decided_by })}</>
@@ -216,7 +216,7 @@ function GrantCard({ grant, onChanged }: { grant: AccessGrant; onChanged: () => 
           <>
             <Button variant="primary" onClick={() => void decide("approve")} disabled={busy}>
               <Check size={ICON.xs} />
-              {t("admin.support.approve", { defaultValue: "Approve" })}
+              {t("common.approve", { defaultValue: "Approve" })}
             </Button>
             <Button onClick={() => void decide("deny")} disabled={busy}>
               <X size={ICON.xs} />

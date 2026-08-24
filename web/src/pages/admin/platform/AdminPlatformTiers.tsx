@@ -176,11 +176,11 @@ function limitSummary(tier: PlatformTier, t: (k: string) => string): string {
   const mb = tier.disk_quota_bytes > 0 ? `${Math.round(tier.disk_quota_bytes / (1024 * 1024))} MB` : "—";
   return [
     `${t("admin.platformTiers.runs")}: ${n(tier.runs_per_month)}`,
-    `${t("admin.platformTiers.members")}: ${n(tier.max_members)}`,
+    `${t("common.members")}: ${n(tier.max_members)}`,
     `${t("admin.platformTiers.concurrency")}: ${n(tier.max_concurrency)}`,
     `${t("admin.platformTiers.retention")}: ${tier.retention_days > 0 ? `${tier.retention_days}d` : "—"}`,
     `${t("admin.platformTiers.nodes")}: ${n(tier.max_graph_nodes)}`,
-    `${t("admin.platformTiers.flows")}: ${n(tier.max_flows)}`,
+    `${t("common.flows")}: ${n(tier.max_flows)}`,
     `${t("admin.platformTiers.disk")}: ${mb}`,
     `${t("admin.platformTiers.polling")}: ${
       tier.polling_allowed == null
@@ -256,7 +256,7 @@ function TierEditor({
         </div>
         <div className="modal-body pa-tier-form">
           <label>
-            {t("admin.platformTiers.name")}
+            {t("common.name")}
             <input
               type="text"
               value={draft.name}
@@ -276,7 +276,7 @@ function TierEditor({
             {num("runs_per_month")}
           </label>
           <label>
-            {t("admin.platformTiers.members")} <span className="pa-subtext">({t("admin.platformTiers.zeroInherit")})</span>
+            {t("common.members")} <span className="pa-subtext">({t("admin.platformTiers.zeroInherit")})</span>
             {num("max_members")}
           </label>
           <label>
@@ -292,7 +292,7 @@ function TierEditor({
             {num("max_graph_nodes")}
           </label>
           <label>
-            {t("admin.platformTiers.flows")} <span className="pa-subtext">({t("admin.platformTiers.zeroInherit")})</span>
+            {t("common.flows")} <span className="pa-subtext">({t("admin.platformTiers.zeroInherit")})</span>
             {num("max_flows")}
           </label>
           <label>

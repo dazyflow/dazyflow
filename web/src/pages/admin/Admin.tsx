@@ -66,12 +66,12 @@ export function Admin() {
 
       {/* Organization administration — the full set of org-admin settings,
           shown flat so everything is one click away. */}
-      <h2 className="admin-group-label">{t("admin.groupOrg")}</h2>
+      <h2 className="admin-group-label">{t("common.organization")}</h2>
       <div className="admin-grid">
         <AdminCard to="/admin/users" icon={<Users size={ICON.lg} />} title={t("admin.cardUsersTitle")} desc={t("admin.cardUsersDesc")} />
-        <AdminCard to="/admin/workspace" icon={<Building2 size={ICON.lg} />} title={t("admin.cardWorkspaceTitle")} desc={t("admin.cardWorkspaceDesc")} />
+        <AdminCard to="/admin/workspace" icon={<Building2 size={ICON.lg} />} title={t("common.organization")} desc={t("admin.cardWorkspaceDesc")} />
         <AdminCard to="/admin/api-keys" icon={<KeyRound size={ICON.lg} />} title={t("admin.cardApiKeysTitle")} desc={t("admin.cardApiKeysDesc")} />
-        <AdminCard to="/admin/secrets" icon={<Lock size={ICON.lg} />} title={t("admin.cardSecretsTitle")} desc={t("admin.cardSecretsDesc")} />
+        <AdminCard to="/admin/secrets" icon={<Lock size={ICON.lg} />} title={t("common.secrets")} desc={t("admin.cardSecretsDesc")} />
         <AdminCard to="/admin/email-templates" icon={<Mail size={ICON.lg} />} title={t("admin.cardEmailTemplatesTitle", "Email templates")} desc={t("admin.cardEmailTemplatesDesc", "Reusable HTML layouts the email steps wrap messages in.")} />
         <AdminCard to="/admin/google" icon={<img src="/brands/google-g.svg" alt="" width={18} height={18} />} title={t("admin.cardGoogleTitle")} desc={t("admin.cardGoogleDesc")} />
         <AdminCard to="/admin/git-credentials" icon={<KeyRound size={ICON.lg} />} title={t("admin.cardGitTitle")} desc={t("admin.cardGitDesc")} />
@@ -90,7 +90,7 @@ export function Admin() {
             <AdminCard to="/admin/oauth" icon={<Plug size={ICON.lg} />} title={t("admin.cardOAuthTitle")} desc={t("admin.cardOAuthDesc")} />
             <AdminCard to="/admin/platform" icon={<Send size={ICON.lg} />} title={t("admin.cardPlatformTitle")} desc={t("admin.cardPlatformDesc")} />
             <AdminCard to="/admin/platform/users" icon={<Users size={ICON.lg} />} title={t("admin.cardPlatformUsersTitle")} desc={t("admin.cardPlatformUsersDesc")} />
-            <AdminCard to="/admin/platform/orgs" icon={<Building2 size={ICON.lg} />} title={t("admin.cardPlatformOrgsTitle")} desc={t("admin.cardPlatformOrgsDesc")} />
+            <AdminCard to="/admin/platform/orgs" icon={<Building2 size={ICON.lg} />} title={t("common.organizations")} desc={t("admin.cardPlatformOrgsDesc")} />
             <AdminCard to="/admin/platform/drops" icon={<PowerOff size={ICON.lg} />} title={t("admin.cardPlatformDropsTitle")} desc={t("admin.cardPlatformDropsDesc")} />
             <AdminCard to="/admin/platform/tiers" icon={<Layers size={ICON.lg} />} title={t("admin.cardPlatformTiersTitle")} desc={t("admin.cardPlatformTiersDesc")} />
             <AdminCard to="/admin/platform/support-agents" icon={<LifeBuoy size={ICON.lg} />} title={t("admin.cardPlatformSupportAgentsTitle", "Support agents")} desc={t("admin.cardPlatformSupportAgentsDesc", "Provision vendor staff who can request read-only access to customer flows.")} />
