@@ -52,6 +52,14 @@
 
   /* React Flow canvas dot-grid colour (faint light dots on the
      near-black canvas). Themed so light mode can flip it to dark. */
+  /* Per-node accents. NodeCard overrides these inline on the element — a
+     trigger node sets --node-accent to its integration's colour, and an
+     operator node sets --op-color — so what is defined here is the DEFAULT for
+     every node that sets neither. They lived as `var(--node-accent)`
+     repeated at eleven call sites, which is a default with no home. */
+  --node-accent: #aa66dd;
+  --op-color: #46c46e;
+
   --canvas-dot: rgba(255, 255, 255, 0.05);
   /* Canvas line-grid, two tiers (dim→bright): a fine 20px grid plus a
      stronger major line every 5th cell (graph-paper feel). Themed for

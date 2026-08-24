@@ -57,7 +57,7 @@ export function VerifyEmail() {
         {state === "working" && <p>{t("verifyEmail.working")}</p>}
         {state === "ok" && (
           <>
-            <CheckCircle2 size={36} style={{ color: "var(--success, #22c55e)" }} />
+            <CheckCircle2 size={36} style={{ color: "var(--success)" }} />
             <h1 style={{ marginTop: "var(--space-3)" }}>{t("verifyEmail.okTitle")}</h1>
             <p className="sub">{t("verifyEmail.okBody")}</p>
             <p>

@@ -226,13 +226,13 @@ export function Usage() {
         (skippedThisMonth > 0 || !billing.polling_allowed || billing.can_upgrade) && (
           <div className="card dash-panel" style={{ marginBottom: "var(--space-4)" }}>
             {skippedThisMonth > 0 && (
-              <p className="dash-empty" style={{ color: "var(--warning, #d97706)" }}>
+              <p className="dash-empty" style={{ color: "var(--warning)" }}>
                 <AlertCircle size={ICON.md} />
                 {t("usage.skippedRuns", { count: skippedThisMonth })}
               </p>
             )}
             {!billing.polling_allowed && (
-              <p className="dash-empty" style={{ color: "var(--warning, #d97706)" }}>
+              <p className="dash-empty" style={{ color: "var(--warning)" }}>
                 <AlertCircle size={ICON.md} />
                 {t("usage.pollingGated")}
               </p>

@@ -106,7 +106,7 @@ function SmtpTestSection() {
           className={result.ok ? "card" : "card error"}
           style={{
             marginTop: "var(--space-2)",
-            ...(result.ok ? { color: "var(--success, var(--accent))" } : {}),
+            ...(result.ok ? { color: "var(--success)" } : {}),
           }}
         >
           {result.ok ? (
