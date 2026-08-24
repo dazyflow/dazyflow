@@ -1,15 +1,15 @@
 // SPDX-FileCopyrightText: 2026 Joachim Klahr
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { SV_DESCRIPTIONS } from "./dropDescriptions.sv";
-import { SV_INTEGRATION_PROSE } from "./integrationProse.sv";
+import { SV_DESCRIPTIONS } from "../i18n/drops/descriptions.sv";
+import { SV_INTEGRATION_PROSE } from "../i18n/drops/integrationProse.sv";
 import {
   SV_CONNECTION_TEXT,
   SV_ENUM_LABELS,
   SV_FIELD_HELP,
   SV_FIELD_TITLES,
   SV_NODE_STATE,
-} from "./dropFields.sv";
+} from "../i18n/drops/fields.sv";
 import type { Manifest } from "../types";
 
 // The resolvers take the smallest shape that carries the text, so the

@@ -13,8 +13,8 @@ import {
 import { useTranslation } from "react-i18next";
 import { AlertCircle, Check, Upload as UploadIcon, X } from "lucide-react";
 import { api } from "./api";
-import { Button } from "./components/Button";
-import i18n from "./i18n";
+import { Button } from "./components/ui/Button";
+import i18n from "./i18n/index";
 import { explainApiError } from "./lib/explainApiError";
 import { ICON } from "./icons";
 

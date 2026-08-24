@@ -41,10 +41,10 @@ import {
   CloudSun,
   type LucideIcon,
 } from "lucide-react";
-import { GitIcon } from "./components/GitIcon";
-import { NtfyIcon } from "./components/NtfyIcon";
-import { ClaudeIcon } from "./components/ClaudeIcon";
-import { OpenAIIcon } from "./components/OpenAIIcon";
+import { GitIcon } from "./components/brand/GitIcon";
+import { NtfyIcon } from "./components/brand/NtfyIcon";
+import { ClaudeIcon } from "./components/brand/ClaudeIcon";
+import { OpenAIIcon } from "./components/brand/OpenAIIcon";
 import { isImageIcon } from "./lib/iconImage";
 
 // iconRegistry maps the kebab-case logical names manifests carry

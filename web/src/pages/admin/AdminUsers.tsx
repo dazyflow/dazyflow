@@ -1,0 +1,735 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { useCallback, useEffect, useState } from "react";
+// useEffect already imported above; no separate hooks needed.
+import { Link } from "react-router-dom";
+import {
+  Check,
+  Copy,
+  Mail,
+  Plus,
+  ShieldCheck,
+  Trash2,
+  UserCircle2,
+  Users,
+  X,
+} from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
+import { useAuth } from "../../auth";
+import { api, APIError } from "../../api";
+import { ConfirmModal } from "../../components/ui/ConfirmModal";
+import { Button } from "../../components/ui/Button";
+import type {
+  InvitationSummary,
+  MemberSummary,
+  Role,
+} from "../../types";
+import { formatDate } from "../../lib/datetime";
+import { explainApiError } from "../../lib/explainApiError";
+import { ErrorNotice } from "../../components/ui/ErrorNotice";
+import { ICON } from "../../icons";
+import { FEEDBACK } from "../../lib/timing";
+
+// isAdminMember reports whether a member's role set grants org admin —
+// either a catalog role named "admin" or any role carrying the
+// organization:admin permission. Drives the last-admin guard so the org
+// can never be left with no one who can manage it.
+function isAdminMember(m: MemberSummary): boolean {
+  return m.roles.some(
+    (r) => r.name === "admin" || (r.permissions ?? []).includes("organization:admin"),
+  );
+}
+
+// AdminUsers is the People page for an organization: the home owner
+// plus everyone who's accepted an invite, plus the pending invites
+// section below. API keys live on /admin/api-keys — they're a
+// programmatic-access concept, not "users", and conflating the two was
+// the original confusion this page is rewritten to fix.
+export function AdminUsers() {
+  const { t } = useTranslation();
+  const { token, hasPerm, me } = useAuth();
+  const [members, setMembers] = useState<MemberSummary[]>([]);
+  const [invites, setInvites] = useState<InvitationSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [inviting, setInviting] = useState(false);
+  const [lastIssued, setLastIssued] = useState<InvitationSummary | null>(null);
+
+  const refresh = useCallback(async () => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      const [m, i] = await Promise.all([
+        api.listMembers(token),
+        api.listInvitations(token).catch(() => ({ invitations: [] })),
+      ]);
+      setMembers(m.members ?? []);
+      setInvites(i.invitations ?? []);
+      setError(null);
+    } catch (e) {
+      if (e instanceof APIError && e.status === 501) {
+        setError(t("admin.users.notConfigured"));
+      } else {
+        setError(explainApiError(e, t));
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [token, t]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  if (!hasPerm("organization:admin")) {
+    return (
+      <ErrorNotice>
+        <Trans i18nKey="admin.users.needAdmin" components={[<code />]} />
+      </ErrorNotice>
+    );
+  }
+
+  return (
+    <div>
+      <div className="page-title">
+        <div>
+          <h1>
+            <Users size={ICON.xl} style={{ marginRight: 8, verticalAlign: -3 }} />
+            {t("admin.users.title")}
+          </h1>
+          <div className="sub">{t("admin.users.subtitle")}</div>
+        </div>
+        <Button variant="primary" onClick={() => setInviting(true)}>
+          <Plus size={ICON.sm} style={{ marginRight: 6 }} />
+          {t("admin.users.inviteButton")}
+        </Button>
+      </div>
+
+      {error && (
+        <ErrorNotice style={{ marginBottom: "var(--space-4)" }}>
+{error}
+        </ErrorNotice>
+      )}
+
+      {lastIssued && (
+        <InviteIssuedCard
+          inv={lastIssued}
+          onDismiss={() => setLastIssued(null)}
+        />
+      )}
+
+      <h2 className="admin-section-head">{t("admin.users.peopleHead")}</h2>
+      {loading && members.length === 0 && (
+        <div className="card" style={{ color: "var(--muted)" }}>
+          {t("common.loading")}
+        </div>
+      )}
+      {!loading && members.length === 0 && !error && (
+        <div className="admin-empty">
+          <Users size={28} />
+          <h2>{t("admin.users.emptyTitle")}</h2>
+          <p>{t("admin.users.emptyBody")}</p>
+          <Button variant="primary" onClick={() => setInviting(true)}>
+            <Plus size={ICON.sm} style={{ marginRight: 6 }} />
+            {t("admin.users.inviteFirst")}
+          </Button>
+        </div>
+      )}
+      <div className="user-list">
+        {members.map((m) => (
+          <MemberCard
+            key={m.email}
+            member={m}
+            adminCount={members.filter(isAdminMember).length}
+            isSelf={!!me?.subject && me.subject === m.email}
+            onChanged={refresh}
+          />
+        ))}
+      </div>
+
+      <h2 className="admin-section-head" style={{ marginTop: "var(--space-4)" }}>
+        {t("admin.users.pendingHead")}
+      </h2>
+      {invites.length === 0 ? (
+        <div className="card" style={{ color: "var(--muted)" }}>
+          {t("admin.users.noPending")}
+        </div>
+      ) : (
+        <div className="user-list">
+          {invites.map((inv) => (
+            <InvitationCard
+              key={inv.token}
+              inv={inv}
+              onChanged={refresh}
+            />
+          ))}
+        </div>
+      )}
+
+      <p className="admin-section-foot">
+        <Trans i18nKey="admin.users.apiKeysHint" components={[<Link to="/admin/api-keys" />]} />
+      </p>
+
+      {inviting && (
+        <InviteModal
+          onCancel={() => setInviting(false)}
+          onIssued={(inv) => {
+            setInviting(false);
+            setLastIssued(inv);
+            void refresh();
+          }}
+          onError={(msg) => setError(msg)}
+        />
+      )}
+    </div>
+  );
+}
+
+function MemberCard({
+  member,
+  adminCount,
+  isSelf,
+  onChanged,
+}: {
+  member: MemberSummary;
+  // adminCount is the number of admins across the whole org, used for the
+  // last-admin guard so the org can never be left with no one who can
+  // manage it.
+  adminCount: number;
+  // isSelf marks the card for the signed-in admin — privilege-reducing
+  // changes to your own account get an extra confirm (it's easy to lock
+  // yourself out of the admin surfaces in one careless click).
+  isSelf: boolean;
+  onChanged: () => void;
+}) {
+  const { t } = useTranslation();
+  const { token } = useAuth();
+  const [removing, setRemoving] = useState(false);
+  const [savingRole, setSavingRole] = useState(false);
+  // pendingRole defers a confirmed role change: set when a privilege-
+  // reducing self-change needs a confirm, applied on ConfirmModal accept.
+  const [pendingRole, setPendingRole] = useState<TeamRoleName | null>(null);
+  // confirmRemove gates member removal behind the themed ConfirmModal
+  // (replacing window.confirm).
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  // err shows action failures / guard messages inline in the card (themed),
+  // replacing the old native window.alert().
+  const [err, setErr] = useState<string | null>(null);
+
+  const wasAdmin = isAdminMember(member);
+
+  const doRemove = async () => {
+    if (!token) return;
+    setRemoving(true);
+    setErr(null);
+    try {
+      await api.removeMember(token, member.email);
+      onChanged();
+    } catch (e) {
+      setErr(explainApiError(e, t));
+    } finally {
+      setRemoving(false);
+    }
+  };
+
+  const remove = () => {
+    // Last-admin guard: never let the org be left without an admin.
+    if (wasAdmin && adminCount <= 1) {
+      setErr(t("admin.users.lastAdminBlocked"));
+      return;
+    }
+    setErr(null);
+    setConfirmRemove(true);
+  };
+
+  const currentRole = teamRoleOf(member.roles);
+  const applyRole = async (next: TeamRoleName) => {
+    if (!token) return;
+    setSavingRole(true);
+    setErr(null);
+    try {
+      // Name-only: the server fills in the catalog role's permissions.
+      await api.updateMemberRoles(token, member.email, [{ name: next, permissions: [] }]);
+      onChanged();
+    } catch (e) {
+      setErr(explainApiError(e, t));
+    } finally {
+      setSavingRole(false);
+    }
+  };
+
+  const changeRole = (next: string) => {
+    if (!token || next === currentRole) return;
+    if (next !== "viewer" && next !== "editor" && next !== "admin") return;
+    // A privilege-reducing change = leaving the admin role. Block it
+    // outright if this is the last admin; otherwise, when it's the admin
+    // demoting THEMSELVES, require an explicit confirm before they drop
+    // their own access.
+    const losingAdmin = wasAdmin && next !== "admin";
+    if (losingAdmin && adminCount <= 1) {
+      setErr(t("admin.users.lastAdminBlocked"));
+      return;
+    }
+    if (losingAdmin && isSelf) {
+      setPendingRole(next);
+      return;
+    }
+    void applyRole(next);
+  };
+
+  const roleNames = member.roles.map((r) => r.name).join(", ");
+  return (
+    <div className="user-card">
+      <div style={{ minWidth: 0 }}>
+        <div className="subject">
+          <UserCircle2 size={ICON.lg} />
+          {member.email}
+          {member.home && (
+            <span className="count-pill active" style={{ marginLeft: 8 }}>
+              {t("admin.users.ownerBadge")}
+            </span>
+          )}
+        </div>
+        <div className="meta">
+          {roleNames || t("admin.users.noRoles")}
+          {member.created_at && (
+            <>
+              {" · "}
+              {t("admin.users.joinedAt", { date: shortDate(member.created_at) })}
+            </>
+          )}
+        </div>
+      </div>
+      <div className="user-card-actions">
+        {/* Role picker — members only; the owner's roles aren't
+            membership-backed (the server answers 409 anyway). A custom
+            multi-role set shows as "custom"; picking a catalog role
+            replaces it. */}
+        {!member.home && (
+          <select
+            value={currentRole ?? "custom"}
+            disabled={savingRole}
+            onChange={(e) => void changeRole(e.target.value)}
+            title={t("admin.users.changeRoleTitle")}
+            aria-label={t("admin.users.changeRoleTitle")}
+          >
+            {currentRole === null && (
+              <option value="custom" disabled>
+                {t("admin.users.roleCustom")}
+              </option>
+            )}
+            {TEAM_ROLE_NAMES.map((n) => (
+              <option key={n} value={n}>
+                {t(
+                  n === "viewer"
+                    ? "admin.users.roleViewer"
+                    : n === "editor"
+                    ? "admin.users.roleEditor"
+                    : "admin.users.roleAdmin",
+                )}
+              </option>
+            ))}
+          </select>
+        )}
+        {!member.home && (
+          <Button onClick={remove} disabled={removing} title={t("admin.users.removeTitle")}>
+            <Trash2 size={ICON.xs} style={{ marginRight: 4 }} />
+            {removing ? t("admin.users.removing") : t("admin.users.remove")}
+          </Button>
+        )}
+      </div>
+      {err && (
+        <ErrorNotice style={{ width: "100%", marginTop: "var(--space-2)" }}>
+          {err}
+        </ErrorNotice>
+      )}
+      {confirmRemove && (
+        <ConfirmModal
+          title={t("admin.users.remove")}
+          message={t("admin.users.removeConfirm", { email: member.email })}
+          confirmLabel={t("admin.users.remove")}
+          danger
+          onConfirm={() => {
+            setConfirmRemove(false);
+            void doRemove();
+          }}
+          onCancel={() => setConfirmRemove(false)}
+        />
+      )}
+      {pendingRole && (
+        <ConfirmModal
+          title={t("admin.users.selfDemoteTitle")}
+          message={t("admin.users.selfDemoteBody")}
+          confirmLabel={t("admin.users.selfDemoteConfirm")}
+          danger
+          onConfirm={() => {
+            const next = pendingRole;
+            setPendingRole(null);
+            void applyRole(next);
+          }}
+          onCancel={() => setPendingRole(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function InvitationCard({
+  inv,
+  onChanged,
+}: {
+  inv: InvitationSummary;
+  onChanged: () => void;
+}) {
+  const { t } = useTranslation();
+  const { token } = useAuth();
+  const [copied, setCopied] = useState(false);
+  const [revoking, setRevoking] = useState(false);
+  const [confirmRevoke, setConfirmRevoke] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const copy = async () => {
+    const link = absoluteInviteURL(inv.accept_url);
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), FEEDBACK.copied);
+    } catch {
+      // Clipboard API can fail in non-secure contexts — fall back to
+      // selecting the link text would require a portal; just leave
+      // the visible URL for manual copy.
+    }
+  };
+  const revoke = async () => {
+    if (!token) return;
+    setRevoking(true);
+    setErr(null);
+    try {
+      await api.revokeInvitation(token, inv.token);
+      onChanged();
+    } catch (e) {
+      setErr(explainApiError(e, t));
+    } finally {
+      setRevoking(false);
+    }
+  };
+
+  let statusLabel: string;
+  if (inv.accepted_at) statusLabel = t("admin.users.inviteAccepted");
+  else if (inv.revoked_at) statusLabel = t("admin.users.inviteRevoked");
+  else if (!inv.pending) statusLabel = t("admin.users.inviteExpired");
+  else statusLabel = t("admin.users.invitePending");
+  return (
+    <div className="user-card">
+      <div style={{ minWidth: 0 }}>
+        <div className="subject">
+          <Mail size={ICON.lg} />
+          {inv.email}
+          <span className="count-pill" style={{ marginLeft: 8 }}>
+            {statusLabel}
+          </span>
+        </div>
+        <div className="meta">
+          {inv.roles.map((r) => r.name).join(", ") || t("admin.users.noRoles")} ·{" "}
+          {t("admin.users.invitedBy", { who: inv.invited_by })}
+          {inv.pending && inv.expires_at && (
+            <>
+              {" · "}
+              {t("admin.users.expiresAt", { date: shortDate(inv.expires_at) })}
+            </>
+          )}
+          {inv.accepted_at && (
+            <>
+              {" · "}
+              {t("admin.users.acceptedAt", { date: shortDate(inv.accepted_at) })}
+            </>
+          )}
+        </div>
+        {inv.pending && (
+          <div className="invite-link-row">
+            <code className="invite-link">{absoluteInviteURL(inv.accept_url)}</code>
+            <Button onClick={copy} title={t("admin.users.copyLink")}>
+              {copied ? <Check size={ICON.xs} /> : <Copy size={ICON.xs} />}
+              {copied ? t("common.copied") : t("common.copyLink")}
+            </Button>
+          </div>
+        )}
+      </div>
+      <div className="user-card-actions">
+        {inv.pending && (
+          <Button onClick={() => setConfirmRevoke(true)} disabled={revoking}>
+            <X size={ICON.xs} style={{ marginRight: 4 }} />
+            {revoking ? t("admin.users.revoking") : t("common.revoke")}
+          </Button>
+        )}
+      </div>
+      {confirmRevoke && (
+        <ConfirmModal
+          title={t("common.revoke")}
+          message={t("admin.users.revokeInviteConfirm", { email: inv.email })}
+          confirmLabel={t("common.revoke")}
+          danger
+          onConfirm={() => {
+            setConfirmRevoke(false);
+            void revoke();
+          }}
+          onCancel={() => setConfirmRevoke(false)}
+        />
+      )}
+      {err && (
+        <ErrorNotice style={{ width: "100%", marginTop: "var(--space-2)" }}>
+          {err}
+        </ErrorNotice>
+      )}
+    </div>
+  );
+}
+
+function InviteIssuedCard({
+  inv,
+  onDismiss,
+}: {
+  inv: InvitationSummary;
+  onDismiss: () => void;
+}) {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+  const link = absoluteInviteURL(inv.accept_url);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), FEEDBACK.copied);
+    } catch {
+      /* manual copy fallback */
+    }
+  };
+  return (
+    <div className="card invite-issued-card">
+      <div className="invite-issued-head">
+        <ShieldCheck size={ICON.lg} />
+        <div>
+          <strong>{t("admin.users.inviteCreatedTitle")}</strong>
+          <div className="desc">
+            {t("admin.users.inviteCreatedBody", { email: inv.email })}
+          </div>
+        </div>
+        <Button onClick={onDismiss} variant="ghost" title={t("common.dismiss")}>
+          <X size={ICON.sm} />
+        </Button>
+      </div>
+      <div className="invite-link-row">
+        <code className="invite-link">{link}</code>
+        <Button onClick={copy} variant="primary">
+          {copied ? <Check size={ICON.xs} /> : <Copy size={ICON.xs} />}
+          {copied ? t("common.copied") : t("admin.users.copyLink")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function InviteModal({
+  onCancel,
+  onIssued,
+  onError,
+}: {
+  onCancel: () => void;
+  onIssued: (inv: InvitationSummary) => void;
+  onError: (msg: string) => void;
+}) {
+  const { t } = useTranslation();
+  const { token } = useAuth();
+  const [email, setEmail] = useState("");
+  const [roleName, setRoleName] = useState<TeamRoleName>("editor");
+  const [submitting, setSubmitting] = useState(false);
+
+  const trimmed = email.trim();
+  const looksValid = trimmed === "" || EMAIL_RE.test(trimmed);
+  const canSubmit = !submitting && trimmed !== "" && looksValid;
+  const selectedRole = rolePresetFor(roleName);
+
+  // Esc closes the modal — small thing, big quality-of-life. Attached
+  // to the document so a focus inside the input still picks it up.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCancel();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token || !canSubmit) return;
+    setSubmitting(true);
+    try {
+      // Send the role by NAME only — the server resolves the catalog
+      // role to its current permission set, so the lists in
+      // rolePresetFor below are display-only and can't drift the grant.
+      const inv = await api.createInvitation(token, {
+        email: trimmed,
+        roles: [{ name: roleName, permissions: [] }],
+      });
+      onIssued(inv);
+    } catch (e) {
+      onError(explainApiError(e, t));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="settings-backdrop" onClick={onCancel}>
+      <form
+        className="settings-dialog"
+        style={{ maxWidth: 520 }}
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={submit}
+      >
+        <div className="settings-head">
+          <h2>{t("admin.users.inviteModalTitle")}</h2>
+        </div>
+        <div className="settings-body">
+          <div className="sf-field">
+            <div className="label-row">
+              <label>{t("admin.users.inviteEmailLabel")}</label>
+            </div>
+            <input
+              autoFocus
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="teammate@example.com"
+              className={!looksValid ? "invalid" : undefined}
+            />
+            <div className="desc">
+              {!looksValid
+                ? t("admin.users.inviteEmailInvalid")
+                : t("admin.users.inviteEmailDesc")}
+            </div>
+          </div>
+          <div className="sf-field">
+            <div className="label-row">
+              <label>{t("admin.users.inviteRoleLabel")}</label>
+            </div>
+            <div className="role-template-grid">
+              <button
+                type="button"
+                className={"role-template" + (roleName === "viewer" ? " active" : "")}
+                onClick={() => setRoleName("viewer")}
+              >
+                <div className="role-template-name">{t("admin.users.roleViewer")}</div>
+                <div className="role-template-desc">{t("admin.users.roleViewerDesc")}</div>
+              </button>
+              <button
+                type="button"
+                className={"role-template" + (roleName === "editor" ? " active" : "")}
+                onClick={() => setRoleName("editor")}
+              >
+                <div className="role-template-name">{t("admin.users.roleEditor")}</div>
+                <div className="role-template-desc">{t("admin.users.roleEditorDesc")}</div>
+              </button>
+              <button
+                type="button"
+                className={"role-template" + (roleName === "admin" ? " active" : "")}
+                onClick={() => setRoleName("admin")}
+              >
+                <div className="role-template-name">{t("admin.users.roleAdmin")}</div>
+                <div className="role-template-desc">{t("admin.users.roleAdminDesc")}</div>
+              </button>
+            </div>
+            <div className="role-perms-preview">
+              <span className="role-perms-label">
+                {t("admin.users.rolePermsLabel")}
+              </span>
+              {selectedRole.permissions.map((p) => (
+                <code key={p}>{p}</code>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="settings-foot">
+          <Button type="button" onClick={onCancel}>
+            {t("common.cancel")}
+          </Button>
+          <Button type="submit" variant="primary" disabled={!canSubmit}>
+            {submitting ? t("admin.users.sending") : t("admin.users.sendInvite")}
+          </Button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// The team role catalog — DISPLAY ONLY. Grants are sent by name and the
+// server resolves them via core.TeamRoleByName, so these permission
+// lists exist purely for the invite modal's preview chips.
+type TeamRoleName = "viewer" | "editor" | "admin";
+
+const TEAM_ROLE_NAMES: TeamRoleName[] = ["viewer", "editor", "admin"];
+
+function rolePresetFor(name: TeamRoleName): Role {
+  if (name === "admin") {
+    return {
+      name: "admin",
+      permissions: [
+        "graph:run",
+        "graph:edit",
+        "graph:admin",
+        "secret:read",
+        "secret:write",
+        "organization:admin",
+      ],
+    };
+  }
+  if (name === "viewer") {
+    return { name: "viewer", permissions: ["graph:run"] };
+  }
+  return {
+    name: "editor",
+    permissions: [
+      "graph:run",
+      "graph:edit",
+      "graph:admin",
+      "secret:read",
+      "secret:write",
+    ],
+  };
+}
+
+// teamRoleOf reduces a member's stored role set to a catalog name when
+// it matches one (single role named viewer/editor/admin), or null for
+// custom/multi-role sets — those show as "custom" and stay editable
+// only via the API.
+function teamRoleOf(roles: Role[]): TeamRoleName | null {
+  if (roles.length !== 1) return null;
+  const n = roles[0].name;
+  return n === "viewer" || n === "editor" || n === "admin" ? n : null;
+}
+
+// absoluteInviteURL turns a path-only accept_url (returned when the
+// daemon has no --public-base-url) into a clickable absolute URL by
+// rewriting against the current window origin. Already-absolute URLs
+// pass through unchanged.
+function absoluteInviteURL(acceptURL: string): string {
+  if (/^https?:\/\//i.test(acceptURL)) return acceptURL;
+  if (typeof window !== "undefined") {
+    return window.location.origin + acceptURL;
+  }
+  return acceptURL;
+}
+
+// shortDate renders an ISO timestamp as the locale's short date form.
+// Used in the meta line on member + invitation cards, so the admin can
+// tell at a glance how stale an account or invitation is.
+function shortDate(iso: string): string {
+  return formatDate(iso);
+}
+
+// EMAIL_RE is intentionally permissive — full RFC validation belongs
+// on the server. We just want to catch the obvious typos
+// ("teammate@example" without a TLD, missing @, etc.) before the user
+// clicks Send and waits for a round-trip.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

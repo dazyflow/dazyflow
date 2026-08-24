@@ -12,10 +12,10 @@ import {
   displayNameForIntegrationSlug,
   oauthProviderForIntegration,
 } from "../integrationMeta";
-import { browserTimeZone } from "./TriggersModal";
-import { Button } from "./Button";
+import { browserTimeZone } from "./editor/TriggersModal";
+import { Button } from "./ui/Button";
 import type { Graph, OAuthProviderStatus, TemplateSummary } from "../types";
-import { ErrorNotice } from "./ErrorNotice";
+import { ErrorNotice } from "./ui/ErrorNotice";
 
 // TemplateGallery is the reusable card grid of pre-built workflows. It
 // lives inside the "From a template" tab of the Create-flow page (and is

@@ -18,15 +18,15 @@ import {
   dropSubtitle,
   portLabel,
 } from "../lib/dropText";
-import { Button } from "../components/Button";
-import { ConfirmModal } from "../components/ConfirmModal";
+import { Button } from "../components/ui/Button";
+import { ConfirmModal } from "../components/ui/ConfirmModal";
 import {
   integrationMeta,
   integrationNameFromSlug,
   integrationSlug,
   oauthProviderDisplay,
 } from "../integrationMeta";
-import { ErrorNotice } from "../components/ErrorNotice";
+import { ErrorNotice } from "../components/ui/ErrorNotice";
 import type {
   ConnectionField,
   ConnectionRequirement,
@@ -1340,7 +1340,7 @@ function dedupeRequirements(drops: Manifest[]): ConnectionRequirement[] {
 // It used to end with the drop's params_schema, pretty-printed as a raw JSON
 // dump. That is gone. The schema's human-readable half — every field title,
 // help line and dropdown option — is what the Inspector's form renders, and
-// dropFields.sv.ts translates 870 of those strings for it; the dump showed the
+// i18n/drops/fields.sv.ts translates 870 of those strings for it; the dump showed the
 // untranslated original, so a Swedish user opening this disclosure met English
 // JSON describing fields the editor shows them in Swedish. The machine-readable
 // half is already served to the consumers that want it, by

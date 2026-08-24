@@ -7,7 +7,7 @@ import { api, APIError, setUnauthorizedHandler, COOKIE_SESSION } from "./api";
 import { pickActive } from "./lib/pickActive";
 import { ORG_PARAM, resolveOrgDeepLink } from "./lib/orgDeepLink";
 import { explainApiError } from "./lib/explainApiError";
-import i18n from "./i18n";
+import i18n from "./i18n/index";
 import { applyTheme } from "./theme";
 import type { Permission, WhoAmI } from "./types";
 

@@ -8,14 +8,14 @@
 // reads the result, so adding a drop — or rewording one — fails that test
 // until the Swedish is written or refreshed.
 //
-// Why the description text and not just the ids: dropDescriptions.sv.ts records
+// Why the description text and not just the ids: i18n/drops/descriptions.sv.ts records
 // the FINGERPRINT of the English each translation was made from, and falls back
 // to English when it stops matching. That fail-safe is deliberate, but it is
 // also silent — a reworded paragraph quietly reverts a Swedish reader to
 // English with nothing anywhere saying so. Shipping the English here lets the
 // guard recompute the fingerprint and name the drops that have gone stale.
 //
-//	go run ./scripts/droptext.go > web/src/lib/dropText.catalog.json
+//	go run ./scripts/droptext.go > web/src/i18n/drops/catalog.json
 package main
 
 import (

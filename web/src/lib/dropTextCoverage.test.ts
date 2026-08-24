@@ -25,10 +25,10 @@
 // test that noisy gets silenced rather than fixed. Those surfaces degrade one
 // label at a time; a description is a whole paragraph.
 import { describe, expect, it } from "vitest";
-import catalog from "./dropText.catalog.json";
+import catalog from "../i18n/drops/catalog.json";
 import { descriptionFingerprint } from "./dropText";
-import { SV_DESCRIPTIONS } from "./dropDescriptions.sv";
-import { SV_INTEGRATION_PROSE } from "./integrationProse.sv";
+import { SV_DESCRIPTIONS } from "../i18n/drops/descriptions.sv";
+import { SV_INTEGRATION_PROSE } from "../i18n/drops/integrationProse.sv";
 import { integrationMeta } from "../integrationMeta";
 
 // Generated from the live drop registry by `make drop-catalog`.

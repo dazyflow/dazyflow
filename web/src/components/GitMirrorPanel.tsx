@@ -4,11 +4,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertCircle, CheckCircle2, GitBranch, RefreshCw, Trash2, Upload } from "lucide-react";
-import { Button } from "./Button";
-import { Callout } from "./Callout";
-import { Switch } from "./Switch";
-import { ConfirmModal } from "./ConfirmModal";
-import { ErrorNotice } from "./ErrorNotice";
+import { Button } from "./ui/Button";
+import { Callout } from "./ui/Callout";
+import { Switch } from "./ui/Switch";
+import { ConfirmModal } from "./ui/ConfirmModal";
+import { ErrorNotice } from "./ui/ErrorNotice";
 import { api, APIError } from "../api";
 import { useAuth } from "../auth";
 import { explainApiError } from "../lib/explainApiError";

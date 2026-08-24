@@ -142,8 +142,8 @@ integration-catalog: ## Refresh the list of apps the description guard checks (r
 	@echo "wrote web/src/integrationMeta.catalog.json"
 
 drop-catalog: ## Refresh the drop text the Swedish coverage guard checks (run after adding or rewording a drop)
-	go run ./scripts/droptext.go > web/src/lib/dropText.catalog.json
-	@echo "wrote web/src/lib/dropText.catalog.json"
+	go run ./scripts/droptext.go > web/src/i18n/drops/catalog.json
+	@echo "wrote web/src/i18n/drops/catalog.json"
 
 catalogs: integration-catalog drop-catalog ## Refresh both generated catalogues the web guards read
 
@@ -164,7 +164,7 @@ catalogs-check: ## Fail if a generated catalogue is out of date (CI)
 	go run ./scripts/integrations.go > $$tmp/integrations.json; \
 	go run ./scripts/droptext.go    > $$tmp/droptext.json; \
 	diff -u web/src/integrationMeta.catalog.json $$tmp/integrations.json || rc=1; \
-	diff -u web/src/lib/dropText.catalog.json    $$tmp/droptext.json    || rc=1; \
+	diff -u web/src/i18n/drops/catalog.json    $$tmp/droptext.json    || rc=1; \
 	rm -rf $$tmp; \
 	if [ $$rc -ne 0 ]; then \
 	  echo; \

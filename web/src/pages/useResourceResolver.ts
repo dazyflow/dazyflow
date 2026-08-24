@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Node as FlowNode, Edge as FlowEdge } from "@xyflow/react";
 import { api } from "../api";
 import type { Manifest } from "../types";
-import { type DazyNodeData } from "../components/nodeCardShared";
+import { type DazyNodeData } from "../components/editor/nodeCardShared";
 
 // RESOURCE_PICKER_KINDS maps a string param's `format` to the (provider, kind)
 // whose account-resource list resolves its opaque id to a friendly name.

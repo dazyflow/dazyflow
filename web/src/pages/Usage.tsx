@@ -4,17 +4,17 @@
 import { useCallback, useEffect, useState } from "react";
 import { Activity, AlertCircle, CreditCard, Layers, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { Button } from "../components/Button";
-import { PlanComparison } from "../components/PlanComparison";
+import { Button } from "../components/ui/Button";
+import { PlanComparison } from "../components/org/PlanComparison";
 import { useAuth } from "../auth";
 import { api, APIError } from "../api";
 import type { PlansInfo } from "../api";
 import { explainApiError } from "../lib/explainApiError";
 import { formatDate } from "../lib/datetime";
 import type { BillingInfo, UsageCounters } from "../types";
-import { ErrorNotice } from "../components/ErrorNotice";
+import { ErrorNotice } from "../components/ui/ErrorNotice";
 import { ICON } from "../icons";
-import { StatCard, type StatTone } from "../components/StatCard";
+import { StatCard, type StatTone } from "../components/ui/StatCard";
 
 // Plan & usage (T3): the single account-billing surface, styled after the
 // Overview dashboard — a row of at-a-glance stat cards (plan, runs, step

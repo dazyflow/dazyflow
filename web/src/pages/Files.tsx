@@ -17,14 +17,14 @@ import {
 import { api } from "../api";
 import { explainApiError } from "../lib/explainApiError";
 import { useAuth } from "../auth";
-import { ConfirmModal } from "../components/ConfirmModal";
-import { Button } from "../components/Button";
-import { Switch } from "../components/Switch";
-import { PromptModal } from "../components/PromptModal";
-import { MoveModal } from "../components/MoveModal";
+import { ConfirmModal } from "../components/ui/ConfirmModal";
+import { Button } from "../components/ui/Button";
+import { Switch } from "../components/ui/Switch";
+import { PromptModal } from "../components/ui/PromptModal";
+import { MoveModal } from "../components/dialogs/MoveModal";
 import { useUploads } from "../uploads";
 import type { FileEntry } from "../types";
-import { ErrorNotice } from "../components/ErrorNotice";
+import { ErrorNotice } from "../components/ui/ErrorNotice";
 import { ICON } from "../icons";
 import { formatBytes } from "../lib/format";
 

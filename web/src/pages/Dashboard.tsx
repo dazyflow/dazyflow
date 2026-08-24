@@ -17,11 +17,11 @@ import {
 import { useAuth } from "../auth";
 import { api } from "../api";
 import { formatRelative, formatDateTime } from "../lib/datetime";
-import { ShareOverviewModal } from "../components/ShareOverviewModal";
-import { Button } from "../components/Button";
+import { ShareOverviewModal } from "../components/dialogs/ShareOverviewModal";
+import { Button } from "../components/ui/Button";
 import type { FlowSummary, PendingApproval, RunSummary } from "../types";
 import { ICON } from "../icons";
-import { StatCard } from "../components/StatCard";
+import { StatCard } from "../components/ui/StatCard";
 
 // Dashboard is the workspace overview — the "is everything healthy?" landing
 // pro automation tools open to. It answers four questions at a glance (runs

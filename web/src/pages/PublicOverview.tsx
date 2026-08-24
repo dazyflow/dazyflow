@@ -6,7 +6,7 @@ import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Maximize, Minimize } from "lucide-react";
 import { api, isErrorCode } from "../api";
-import { Button } from "../components/Button";
+import { Button } from "../components/ui/Button";
 import { FlowIcon, ICON } from "../icons";
 import { formatRelative } from "../lib/datetime";
 import { formatNextRun } from "../lib/schedule";

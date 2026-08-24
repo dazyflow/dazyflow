@@ -6,10 +6,10 @@ import { Table2, Download, Search, Trash2, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, type BoardSummary, type BoardPage } from "../api";
-import { Button } from "../components/Button";
-import { ConfirmModal } from "../components/ConfirmModal";
+import { Button } from "../components/ui/Button";
+import { ConfirmModal } from "../components/ui/ConfirmModal";
 import { explainApiError } from "../lib/explainApiError";
-import { ErrorNotice } from "../components/ErrorNotice";
+import { ErrorNotice } from "../components/ui/ErrorNotice";
 import { ICON } from "../icons";
 
 // Results — the in-app view of Collections. Left: the workspace's

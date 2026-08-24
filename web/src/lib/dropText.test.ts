@@ -17,14 +17,14 @@ import {
   nodeStateText,
   portLabel,
 } from "./dropText";
-import { SV_DESCRIPTIONS } from "./dropDescriptions.sv";
-import { SV_INTEGRATION_PROSE } from "./integrationProse.sv";
+import { SV_DESCRIPTIONS } from "../i18n/drops/descriptions.sv";
+import { SV_INTEGRATION_PROSE } from "../i18n/drops/integrationProse.sv";
 import {
   SV_CONNECTION_TEXT,
   SV_ENUM_LABELS,
   SV_FIELD_HELP,
   SV_FIELD_TITLES,
-} from "./dropFields.sv";
+} from "../i18n/drops/fields.sv";
 import { integrationMeta } from "../integrationMeta";
 import type { Manifest } from "../types";
 
@@ -93,7 +93,7 @@ describe("dropSubtitle", () => {
 
 describe("dropDescription", () => {
   // The English paragraph shipped by the Go catalog for poll_trigger, verbatim.
-  // Its fingerprint is what dropDescriptions.sv.ts recorded, so this pair is
+  // Its fingerprint is what i18n/drops/descriptions.sv.ts recorded, so this pair is
   // also the cross-check that the Python used to generate those fingerprints
   // and the TS that verifies them agree — if they ever diverged, every
   // description would silently fall back to English and this fails first.
@@ -339,7 +339,7 @@ describe("integration prose", () => {
   // This is the drift guard with teeth: integrationMeta.ts lives in this repo,
   // so editing its English here fails this test rather than silently leaving a
   // stale Swedish paragraph on the Apps page. If it fails: retranslate the
-  // entry in integrationProse.sv.ts and recompute its `en` fingerprint (the
+  // entry in i18n/drops/integrationProse.sv.ts and recompute its `en` fingerprint (the
   // recipe is in that file's header). Until then the reader sees the new
   // English, which is correct but untranslated.
   it("has a current fingerprint for every entry in integrationMeta.ts", () => {

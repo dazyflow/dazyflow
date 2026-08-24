@@ -8,9 +8,9 @@ import { applyTheme, getThemeMode, type ThemeMode } from "../theme";
 import { useAuth } from "../auth";
 import { api, APIError, type TOTPSetup, type TOTPStatus } from "../api";
 import { explainApiError } from "../lib/explainApiError";
-import { OtpInput } from "../components/OtpInput";
-import { Switch } from "../components/Switch";
-import { Button } from "../components/Button";
+import { OtpInput } from "../components/ui/OtpInput";
+import { Switch } from "../components/ui/Switch";
+import { Button } from "../components/ui/Button";
 import { ICON } from "../icons";
 import { FEEDBACK } from "../lib/timing";
 
