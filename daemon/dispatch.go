@@ -68,12 +68,23 @@ const reapBatchLimit = 500
 // only one finalize wins and a healthy in-flight run is never disturbed.
 // Returns the number of runs finalized this sweep.
 func (d *Dispatcher) ReapStuckGraphRuns(ctx context.Context) (int, error) {
-	runs, err := d.store.ListGraphRuns(ctx, core.ListGraphRunsOpts{
-		Status: core.JobStatusRunning,
-		Limit:  reapBatchLimit,
-	})
-	if err != nil {
-		return 0, err
+	// Both non-terminal run statuses are swept. `awaiting` is included
+	// because a run parked on an approval carries that status now, and it can
+	// reach the same stranded state as a running one: the decision commits,
+	// the finalize doesn't, and no node transition is left to re-fire it.
+	// Sweeping it is safe — maybeCompleteGraph returns early while any node
+	// record is non-terminal, so a genuinely parked run is looked at and left
+	// exactly as it was.
+	var runs []core.JobRecord
+	for _, st := range []core.JobStatus{core.JobStatusRunning, core.JobStatusAwaiting} {
+		batch, err := d.store.ListGraphRuns(ctx, core.ListGraphRunsOpts{
+			Status: st,
+			Limit:  reapBatchLimit,
+		})
+		if err != nil {
+			return 0, err
+		}
+		runs = append(runs, batch...)
 	}
 	reaped := 0
 	for _, run := range runs {

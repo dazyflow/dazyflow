@@ -23,6 +23,29 @@ into the image.)
 
 ## [Unreleased]
 
+### Added
+
+- **"Waiting for approval" is a run status.** A run parked on a person
+  reported *Running* — on the runs list and the run page alike —
+  indistinguishable from one actually doing work, for however many days it sat
+  there. The web UI had been built for this all along: the amber dot, both
+  labels, the run page's Stop-while-awaiting gating, and a "Waiting" filter
+  chip on the runs list that could never match a single row. What was missing
+  was the daemon ever setting it: `awaiting` lived on the parked NODE record
+  and never reached the run. It does now, so the dot goes amber, the run stops
+  claiming to be busy, and the filter chip works.
+
+  Only an approval pause counts. A subgraph step also parks as `awaiting`
+  while its child graph runs, and that run isn't waiting on anybody — calling
+  it "Waiting for approval" would send someone hunting for a decision that
+  doesn't exist. The line is the same one the Approvals inbox and the approval
+  mail already draw: the pause emitted a `pending_url`.
+
+  A run holding two approvals open at once stays waiting until the last one is
+  decided, rather than reporting whatever the most recent pause did. The
+  stuck-run reaper now sweeps awaiting runs too, so parking can't hide a run
+  from recovery; it leaves genuinely parked runs untouched.
+
 ### Changed
 
 - **The step inspector no longer approves.** A step parked on an approval

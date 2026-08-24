@@ -338,6 +338,12 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 		// Park is a real status transition — the UI wants to show
 		// "awaiting" on this node while it sits.
 		w.dispatcher.PublishNodeStatus(rec.GraphRunID, rec.NodeID, core.JobStatusAwaiting, nil)
+		// Carry it up to the RUN too, so the runs list stops calling a flow
+		// that is waiting on a person "Running". Approval pauses only — a
+		// subgraph pause still has work in flight. Best-effort by design.
+		if isApprovalPause(&result) {
+			setRunParked(jobCtx, w.store, w.cfg.Logger, rec.GraphRunID, true)
+		}
 		// Let the pause-time outputs reach whoever is wired to them — the
 		// notification carrying the approval link, above all. Graph
 		// completion can't fire off the back of this: the parked node is

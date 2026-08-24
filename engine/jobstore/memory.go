@@ -258,6 +258,28 @@ func (m *Memory) complete(jobID, worker string, status core.JobStatus, result *c
 	return nil
 }
 
+// SetGraphRunParked implements core.GraphRunParker. Mirrors the Postgres
+// conditional update: only the transition out of the expected status counts,
+// so repeat parks and non-final resumes are no-ops, and a terminal record is
+// never revived.
+func (m *Memory) SetGraphRunParked(_ context.Context, graphRunID string, parked bool) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	r, ok := m.records[graphRunID]
+	if !ok {
+		return false, core.ErrNotFound
+	}
+	from, to := core.JobStatusRunning, core.JobStatusAwaiting
+	if !parked {
+		from, to = core.JobStatusAwaiting, core.JobStatusRunning
+	}
+	if r.Kind != core.JobKindGraph || r.Status != from {
+		return false, nil
+	}
+	r.Status = to
+	return true, nil
+}
+
 // MarkGraphRunning implements core.GraphRunStarter: flip a pending (queued)
 // graph record to running. Returns true only when this call performed the
 // transition (mirrors the Postgres conditional UPDATE).

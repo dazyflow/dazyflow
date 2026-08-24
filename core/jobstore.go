@@ -176,6 +176,28 @@ type GraphRunStarter interface {
 	MarkGraphRunning(ctx context.Context, jobID string) (bool, error)
 }
 
+// GraphRunParker is an optional JobStore extension: flip a graph-kind record
+// between running and awaiting as the run parks on, and resumes from, a human
+// approval. Returns true only when THIS call performed the transition; false
+// means the record was already in the target state, is terminal, or doesn't
+// exist. Both directions are conditional updates, which is what makes them
+// safe to call from every park and every resume without counting: a run with
+// two steps parked at once takes the first park's transition and no-ops the
+// second, and the last resume takes it back.
+//
+// This is what makes "waiting for approval" a real run status rather than a
+// property you have to open the run to discover — the runs list filters on it,
+// and a parked run stops claiming to be Running while it sits there for a day.
+// It is deliberately NOT set for the other kind of pause (a subgraph node
+// waiting on its child): that run has work in flight and nothing to decide.
+//
+// Implemented by the Memory and Postgres stores.
+type GraphRunParker interface {
+	// SetGraphRunParked moves a graph record running → awaiting when parked
+	// is true, and awaiting → running when it is false.
+	SetGraphRunParked(ctx context.Context, graphRunID string, parked bool) (bool, error)
+}
+
 // ListNodeRecordsOpts scopes a ListNodeRecords call. Same shape as
 // ListGraphRunsOpts but for the node-kind half of the table.
 //

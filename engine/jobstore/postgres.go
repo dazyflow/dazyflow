@@ -460,6 +460,26 @@ func (s *Postgres) MarkGraphRunning(ctx context.Context, jobID string) (bool, er
 	return tag.RowsAffected() == 1, nil
 }
 
+// SetGraphRunParked implements core.GraphRunParker. Both directions are
+// conditional on the current status, so a second park (a run with two steps
+// awaiting at once) and a resume that isn't the last one are no-ops rather
+// than errors — the caller doesn't have to track how many are outstanding.
+// Terminal records are never touched: a cancelled run must not be dragged
+// back to awaiting by a park that lost the race.
+func (s *Postgres) SetGraphRunParked(ctx context.Context, graphRunID string, parked bool) (bool, error) {
+	from, to := core.JobStatusRunning, core.JobStatusAwaiting
+	if !parked {
+		from, to = core.JobStatusAwaiting, core.JobStatusRunning
+	}
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE jobs SET status = $2 WHERE id = $1 AND kind = 'graph' AND status = $3`,
+		graphRunID, string(to), string(from))
+	if err != nil {
+		return false, wrapPgErr(err)
+	}
+	return tag.RowsAffected() == 1, nil
+}
+
 func (s *Postgres) ListByGraph(ctx context.Context, graphID string) ([]core.JobRecord, error) {
 	const q = `
 		SELECT id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result,

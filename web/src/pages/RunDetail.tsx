@@ -433,6 +433,10 @@ export function RunDetail() {
               ? formatDuration((run.StartedAt ?? run.EnqueuedAt)!, run.FinishedAt)
               : run.Status === "running"
               ? t("runDetail.inProgress")
+              : run.Status === "awaiting"
+              ? /* parked on a person, not finished — "—" would read as
+                   "done with no duration". Mirrors RunList's cell. */
+                t("runDetail.statusAwaiting")
               : "—"
           }
         />

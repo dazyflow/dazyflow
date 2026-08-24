@@ -214,6 +214,15 @@ func (s *Service) Approve(
 	}
 	disp := NewDispatcher(s.Jobs, s.bus(), s.Engine, log.New(log.Writer(), "approve: ", log.LstdFlags))
 	disp.AdvanceAfterCompletion(ctx, g, graphRunID, nodeID, core.JobStatusSucceeded, nil)
+	// The run was showing "Waiting for approval"; put it back to Running now
+	// that it has somewhere to go — unless another step in the same run is
+	// still parked on its own approver, in which case the run genuinely is
+	// still waiting. Checked AFTER the dispatch above so a run that the
+	// decision just finished has already been written terminal, and this
+	// conditional update can't drag it back.
+	if !runHasParkedApproval(ctx, s.Jobs, graphRunID, nodeID) {
+		setRunParked(ctx, s.Jobs, s.Logger, graphRunID, false)
+	}
 	// Close the loop with the same people who were asked. After the resume is
 	// committed and dispatched, so the mail can't describe a decision that
 	// then failed to apply — and best-effort, so a dead mailer never turns a

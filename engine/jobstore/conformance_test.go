@@ -580,6 +580,72 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 		}
 	})
 
+	t.Run("SetGraphRunParked", func(t *testing.T) {
+		s := mk(t)
+		ctx := t.Context()
+		parker, ok := s.(core.GraphRunParker)
+		if !ok {
+			t.Skip("store does not implement GraphRunParker")
+		}
+		mustEnqueue(t, s, ctx, core.JobRecord{ID: "gr", Kind: core.JobKindGraph, Status: core.JobStatusRunning, Tenant: "t"})
+
+		// running → awaiting, once.
+		did, err := parker.SetGraphRunParked(ctx, "gr", true)
+		if err != nil || !did {
+			t.Fatalf("park = %v, %v; want true, nil", did, err)
+		}
+		if got, _ := s.Get(ctx, "gr"); got.Status != core.JobStatusAwaiting {
+			t.Errorf("status = %q, want awaiting", got.Status)
+		}
+		// A second park is a no-op — this is the two-steps-parked-at-once
+		// case, and the caller must not have to count outstanding pauses.
+		if did, err := parker.SetGraphRunParked(ctx, "gr", true); err != nil || did {
+			t.Errorf("second park = %v, %v; want false, nil", did, err)
+		}
+
+		// awaiting → running, once.
+		did, err = parker.SetGraphRunParked(ctx, "gr", false)
+		if err != nil || !did {
+			t.Fatalf("unpark = %v, %v; want true, nil", did, err)
+		}
+		if got, _ := s.Get(ctx, "gr"); got.Status != core.JobStatusRunning {
+			t.Errorf("status = %q, want running", got.Status)
+		}
+		if did, err := parker.SetGraphRunParked(ctx, "gr", false); err != nil || did {
+			t.Errorf("second unpark = %v, %v; want false, nil", did, err)
+		}
+
+		// A terminal run is never dragged back: a park racing a cancel must
+		// lose, or the run would report "waiting for approval" forever with
+		// nothing left to decide it.
+		mustEnqueue(t, s, ctx, core.JobRecord{ID: "done", Kind: core.JobKindGraph, Status: core.JobStatusRunning, Tenant: "t"})
+		if err := s.Complete(ctx, "done", core.JobStatusCancelled, nil); err != nil {
+			t.Fatalf("cancel: %v", err)
+		}
+		if did, err := parker.SetGraphRunParked(ctx, "done", true); err != nil || did {
+			t.Errorf("park(terminal) = %v, %v; want false, nil", did, err)
+		}
+		if got, _ := s.Get(ctx, "done"); got.Status != core.JobStatusCancelled {
+			t.Errorf("terminal status changed to %q", got.Status)
+		}
+
+		// Node-kind rows are never touched — awaiting means something else
+		// there (a parked step), and this is the run-level status.
+		mustEnqueue(t, s, ctx, core.JobRecord{ID: "nd", Kind: core.JobKindNode, Status: core.JobStatusRunning, Tenant: "t"})
+		if did, err := parker.SetGraphRunParked(ctx, "nd", true); err != nil || did {
+			t.Errorf("park(node) = %v, %v; want false, nil", did, err)
+		}
+
+		// Missing rows: same tolerated divergence as MarkGraphRunning.
+		did, err = parker.SetGraphRunParked(ctx, "ghost", true)
+		if did {
+			t.Error("park(missing) reported a transition")
+		}
+		if err != nil && !errors.Is(err, core.ErrNotFound) {
+			t.Errorf("park(missing) = %v, want nil or ErrNotFound", err)
+		}
+	})
+
 	t.Run("MarkGraphRunning", func(t *testing.T) {
 		s := mk(t)
 		ctx := t.Context()
