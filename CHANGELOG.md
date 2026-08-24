@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.10.3] - 2026-08-24
+
 ### Changed
 
 - **A row on the Runs page opens the run.** It opened the flow EDITOR — a
