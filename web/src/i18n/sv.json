@@ -86,7 +86,8 @@
     "no": "Nej",
     "edit": "Redigera",
     "save": "Spara",
-    "contactSupport": "Kontakta support"
+    "contactSupport": "Kontakta support",
+    "openInEditor": "Öppna i redigeraren"
   },
   "commentNode": {
     "delete": "Ta bort kommentar",
@@ -623,7 +624,6 @@
     "wiringDetails": "Indata, utdata och inställningar",
     "inputs": "Indata",
     "outputs": "Utdata",
-    "paramsSchema": "Parameterschema",
     "required": "obligatorisk",
     "connection": {
       "connectedTo": "Ansluten till {{name}}",
@@ -1356,7 +1356,6 @@
     "colStarted": "Startad",
     "colDuration": "Varaktighet",
     "inProgress": "pågår",
-    "openInEditor": "Öppna i redigeraren",
     "loadMore": "Ladda fler",
     "selectedCount": "{{count}} valda",
     "clearSelection": "Rensa",
@@ -1476,7 +1475,6 @@
     "summaryRunId": "Körnings-ID",
     "copyId": "Kopiera körnings-ID",
     "copiedId": "Kopierat",
-    "openInEditor": "Öppna i redigeraren",
     "replayFailed": "Omkörningen misslyckades: {{error}}",
     "retryFailed": "Kunde inte återuppta körningen: {{error}}",
     "cancelFailed": "Kunde inte stoppa körningen: {{error}}",

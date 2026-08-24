@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle2, XCircle, Workflow, Inbox } from "lucide-react";
+import { Activity, CheckCircle2, XCircle, Pencil, Inbox } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { Button } from "../components/Button";
 import { useAuth } from "../auth";
@@ -166,12 +166,31 @@ export function Approvals() {
                     {item.prompt || t("approvals.noPrompt", { nodeId: item.node_id })}
                   </div>
                   <div className="approval-meta">
+                    {/* Links to the RUN, not the editor — same rule the runs
+                        list follows: the target is the thing the card is
+                        about, and this card is about one parked run. It also
+                        used to be the only link here, which sent an approver
+                        to the one surface that can't help them: the editor is
+                        read-only while a run is parked (canEdit is gated on
+                        lockedRunID), and its deliberate approve/reject control
+                        was removed precisely because the editor is
+                        graph-scoped — see ApprovalPanel's header. The run page
+                        has that panel, plus the timeline of steps that already
+                        ran, which is the evidence for the decision. */}
+                    <Link to={`/runs/${encodeURIComponent(item.run_id)}`}>
+                      <Activity size={11} style={{ verticalAlign: -1 }} />{" "}
+                      {flowNames[item.graph_id] || item.graph_id}
+                    </Link>
+                    {/* Editing is still one click away, the way it is at the
+                        end of a runs-list row — it just isn't why anyone
+                        opens this page. */}
                     <Link
                       to={`/flows/${encodeURIComponent(item.graph_id)}?run=${encodeURIComponent(item.run_id)}`}
-                      title={item.graph_id}
+                      style={{ color: "var(--muted)" }}
+                      title={t("common.openInEditor")}
+                      aria-label={t("common.openInEditor")}
                     >
-                      <Workflow size={11} style={{ verticalAlign: -1 }} />{" "}
-                      {flowNames[item.graph_id] || item.graph_id}
+                      <Pencil size={12} style={{ verticalAlign: -1 }} />
                     </Link>
                     <span>·</span>
                     <span title={absoluteTime(item.since)}>{formatTime(item.since)}</span>

@@ -87,7 +87,7 @@ describe("RunList row links", () => {
   it("keeps the editor reachable as the row's secondary action", async () => {
     render(<MemoryRouter><RunList /></MemoryRouter>);
     await waitFor(() => expect(listAllRuns).toHaveBeenCalled());
-    const edit = await screen.findByRole("link", { name: "runList.openInEditor" });
+    const edit = await screen.findByRole("link", { name: "common.openInEditor" });
     expect(edit).toHaveAttribute("href", `/flows/${FLOW_ID}?run=${RUN_ID}`);
   });
 });

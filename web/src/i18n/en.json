@@ -86,7 +86,8 @@
     "no": "No",
     "edit": "Edit",
     "save": "Save",
-    "contactSupport": "Contact support"
+    "contactSupport": "Contact support",
+    "openInEditor": "Open in editor"
   },
   "commentNode": {
     "delete": "Delete comment",
@@ -627,7 +628,6 @@
     "wiringDetails": "Inputs, outputs and settings",
     "inputs": "Inputs",
     "outputs": "Outputs",
-    "paramsSchema": "Params schema",
     "required": "required",
     "connection": {
       "connectedTo": "Connected to {{name}}",
@@ -1356,7 +1356,6 @@
     "colStarted": "Started",
     "colDuration": "Duration",
     "inProgress": "in progress",
-    "openInEditor": "Open in editor",
     "loadMore": "Load more",
     "selectedCount": "{{count}} selected",
     "clearSelection": "Clear",
@@ -1476,7 +1475,6 @@
     "summaryRunId": "Run ID",
     "copyId": "Copy run ID",
     "copiedId": "Copied",
-    "openInEditor": "Open in editor",
     "replayFailed": "Replay failed: {{error}}",
     "retryFailed": "Retry failed: {{error}}",
     "cancelFailed": "Couldn't stop the run: {{error}}",

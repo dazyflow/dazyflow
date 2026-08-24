@@ -540,8 +540,8 @@ export function RunList() {
                     <Link
                       to={`/flows/${encodeURIComponent(r.graph_id)}?run=${encodeURIComponent(r.id)}`}
                       style={{ color: "var(--muted)" }}
-                      title={t("runList.openInEditor")}
-                      aria-label={t("runList.openInEditor")}
+                      title={t("common.openInEditor")}
+                      aria-label={t("common.openInEditor")}
                     >
                       <Pencil size={14} />
                     </Link>

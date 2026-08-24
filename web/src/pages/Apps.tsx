@@ -1340,9 +1340,19 @@ function dedupeRequirements(drops: Manifest[]): ConnectionRequirement[] {
   );
 }
 
-// DropCard renders one drop's "help" entry: icon + label + module
-// ID, full description, input + output ports, and a collapsed view
-// of the params schema (rendered as a JSON dump under a <details>).
+// DropCard renders one drop's "help" entry: icon + label + module ID, full
+// description, and its input + output ports behind a disclosure.
+//
+// It used to end with the drop's params_schema, pretty-printed as a raw JSON
+// dump. That is gone. The schema's human-readable half — every field title,
+// help line and dropdown option — is what the Inspector's form renders, and
+// dropFields.sv.ts translates 870 of those strings for it; the dump showed the
+// untranslated original, so a Swedish user opening this disclosure met English
+// JSON describing fields the editor shows them in Swedish. The machine-readable
+// half is already served to the consumers that want it, by
+// GET /api/v1/catalog/drops/{id} (which the MCP describe_drop tool proxies) and
+// over gRPC. That left a surface with no audience: 122 schemas, ~4,200 lines of
+// JSON, for a page whose job is "what does this app do".
 function DropCard({ drop }: { drop: Manifest }) {
   const { t, i18n } = useTranslation();
   const Icon = iconFor(drop.icon, drop.category);
@@ -1384,11 +1394,10 @@ function DropCard({ drop }: { drop: Manifest }) {
       {drop.description && (
         <p className="drop-card-desc">{dropDescription(drop, i18n.language)}</p>
       )}
-      {/* Wiring + params live behind one disclosure so the
-          visible-by-default surface is "what this drop is for";
-          one click expands to "how do I connect it." Keeps non-
-          technical scanners focused without hiding anything from
-          a developer who clicks through. */}
+      {/* Wiring lives behind one disclosure so the visible-by-default
+          surface is "what this step is for"; one click expands to "what
+          connects to it." Keeps non-technical scanners focused without
+          hiding the port names from someone planning a flow. */}
       {hasWiringDetails(drop) && (
         <details className="drop-card-wiring">
           <summary>{t("integrations.wiringDetails")}</summary>
@@ -1431,28 +1440,24 @@ function DropCard({ drop }: { drop: Manifest }) {
               </div>
             )}
           </div>
-          {drop.params_schema && (
-            <div className="drop-card-params-block">
-              <div className="drop-card-port-head">{t("integrations.paramsSchema")}</div>
-              <pre>{JSON.stringify(drop.params_schema, null, 2)}</pre>
-            </div>
-          )}
         </details>
       )}
     </div>
   );
 }
 
-// hasWiringDetails reports whether a drop has any of the
-// technical-flavored fields the disclosure would reveal. Drops
-// with no inputs, no outputs, and no params schema would render an
-// empty disclosure — skip the summary entirely in that case so
-// the card stays clean.
+// hasWiringDetails reports whether a drop has ports worth revealing. A drop
+// with neither inputs nor outputs would render an empty disclosure — skip the
+// summary entirely in that case so the card stays clean.
+//
+// This used to count `params_schema` as a reason to open the disclosure too.
+// Dropping it costs no drop its details section: every drop in the catalogue
+// that declares a params schema also declares ports, so the condition is
+// unchanged in practice.
 function hasWiringDetails(d: Manifest): boolean {
   return (
     (d.inputs && d.inputs.length > 0) ||
-    (d.outputs && d.outputs.length > 0) ||
-    !!d.params_schema
+    (d.outputs && d.outputs.length > 0)
   ) as boolean;
 }
 

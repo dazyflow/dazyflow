@@ -352,7 +352,7 @@ export function RunDetail() {
             to={`/flows/${encodeURIComponent(run.GraphID)}?run=${encodeURIComponent(run.ID)}`}
             className="secondary-link"
           >
-            <Button>{t("runDetail.openInEditor")}</Button>
+            <Button>{t("common.openInEditor")}</Button>
           </Link>
           {/* Stop an in-flight run. Only shown while the run can still be
               stopped (running, or parked awaiting an approval). */}
