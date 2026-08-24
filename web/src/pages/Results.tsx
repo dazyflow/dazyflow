@@ -191,7 +191,7 @@ export function Results() {
         <div className="card" style={{ color: "var(--muted)", lineHeight: 1.6 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
             <Table2 size={18} />
-            <strong style={{ color: "var(--text)" }}>{t("results.emptyTitle")}</strong>
+            <strong style={{ color: "var(--ink)" }}>{t("results.emptyTitle")}</strong>
           </div>
           {t("results.emptyBody")}
         </div>
@@ -221,10 +221,10 @@ export function Results() {
                   gap: 8,
                   padding: "var(--space-2) var(--space-3)",
                   border: "none",
-                  borderRadius: "var(--radius-sm)",
+                  borderRadius: "var(--r-2)",
                   background:
                     b.name === selected ? "var(--surface-2)" : "transparent",
-                  color: "var(--text)",
+                  color: "var(--ink)",
                   cursor: "pointer",
                   textAlign: "left",
                 }}

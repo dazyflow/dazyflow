@@ -97,7 +97,7 @@ export function AdminAudit() {
                   <td style={auditCell}>
                     <span className="perm-chip">{e.action}</span>
                   </td>
-                  <td style={{ ...auditCell, fontFamily: "var(--mono, monospace)" }}>{e.target}</td>
+                  <td style={{ ...auditCell, fontFamily: "var(--font-mono)" }}>{e.target}</td>
                   <td style={{ ...auditCell, color: "var(--muted)" }}>{e.detail}</td>
                 </tr>
               ))}

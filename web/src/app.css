@@ -638,6 +638,16 @@
   margin: 0 0 var(--space-4);
 }
 
+/* Secondary text, one tier down from body ink. Use for hints, placeholders
+   and "nothing here yet" lines that sit beside primary content.
+   Five call sites were already asking for `.muted` while only `.badge.muted`
+   existed, so they rendered at full body ink — this defines what they meant.
+   Colour only: the caller keeps its own element and spacing. `.badge.muted`
+   is more specific and still wins for badges. */
+.muted {
+  color: var(--muted);
+}
+
 /* Card */
 .card {
   background: var(--surface);
@@ -4681,6 +4691,18 @@ button.warning:hover:not(:disabled) {
 .debug-menu button.icon:not(:disabled):hover {
   background: var(--btn-hover);
   box-shadow: var(--glow-accent-hover);
+}
+/* Step mode latched. The block comment above promised "the Step icon
+   highlights in step mode" and FlowEditor duly sets className="on", but no
+   rule ever implemented it — so the one control that tells you whether you
+   are mid-step looked identical either way. The enabled state is already
+   purple, so "on" reads as the brighter fill plus a ring rather than a
+   colour change, and stays visible without hovering. */
+.debug-menu button.icon.on:not(:disabled) {
+  background: var(--btn-hover);
+  box-shadow:
+    var(--glow-accent-hover),
+    0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
 /* Config verification (#13): a red border + red badge for a drop that's

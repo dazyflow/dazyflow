@@ -322,7 +322,7 @@ export function Files() {
     return (
       <div className="page files-page">
         <h1>{t("files.title")}</h1>
-        <p className="desc">{t("files.noAccess")}</p>
+        <p className="page-sub">{t("files.noAccess")}</p>
       </div>
     );
   }
@@ -374,7 +374,9 @@ export function Files() {
           <span>{t("files.dropToUpload", { folder: cwd || t("files.root") })}</span>
         </div>
       )}
-      <h1>{t("files.title")}</h1>
+      <div className="page-title">
+        <h1>{t("files.title")}</h1>
+      </div>
 
       <div className="files-toolbar">
         <nav className="files-breadcrumb" aria-label={t("files.breadcrumbLabel")}>

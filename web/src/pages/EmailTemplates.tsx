@@ -96,14 +96,15 @@ export function EmailTemplates() {
                     {tpl.builtin && <span className="badge">{t("emailTemplates.builtin", "Built-in")}</span>}
                   </button>
                   {canWrite && !tpl.readOnly && (
-                    <button
-                      type="button"
-                      className="icon-button"
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="danger"
                       aria-label={t("common.delete", "Delete")}
                       onClick={() => setPendingDelete(tpl.id)}
                     >
                       <Trash2 size={14} />
-                    </button>
+                    </Button>
                   )}
                 </li>
               ))}

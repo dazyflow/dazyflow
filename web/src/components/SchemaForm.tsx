@@ -1343,9 +1343,14 @@ function EmailPreviewModal({ html, onClose }: { html: string; onClose: () => voi
       >
         <div className="settings-head">
           <h2>{t("emailTemplate.previewTitle", "Email preview")}</h2>
-          <button type="button" className="icon-button" aria-label={t("common.close", "Close")} onClick={onClose}>
-            <X size={18} />
-          </button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            aria-label={t("common.close", "Close")}
+          >
+            <X size={16} />
+          </Button>
         </div>
         <div className="settings-body">
           <iframe

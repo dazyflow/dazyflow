@@ -4912,7 +4912,7 @@ function EditorInner() {
             }}
           >
             <Plus size={28} aria-hidden="true" />
-            <div style={{ fontWeight: 600, color: "var(--text)" }}>
+            <div style={{ fontWeight: 600, color: "var(--ink)" }}>
               {t("editor.emptyEntryTitle")}
             </div>
             <div style={{ maxWidth: 320, fontSize: "var(--text-md)" }}>
@@ -5097,18 +5097,18 @@ function EditorInner() {
           <div
             style={{
               background: "var(--surface)",
-              border: "1px solid var(--warn, #d4a017)",
+              border: "1px solid var(--warning)",
               padding: "10px 14px",
               borderRadius: "var(--r-2)",
               fontSize: "var(--text-md)",
               color: "var(--ink)",
-              boxShadow: "0 2px 8px color-mix(in srgb, var(--warn, #d4a017) 25%, transparent)",
+              boxShadow: "0 2px 8px color-mix(in srgb, var(--warning) 25%, transparent)",
               pointerEvents: "auto",
             }}
             role="alert"
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>
-              <strong style={{ color: "var(--warn, #d4a017)" }}>
+              <strong style={{ color: "var(--warning)" }}>
                 {t("editor.lintWarning", { count: lintIssues.length })}
               </strong>
               <Button

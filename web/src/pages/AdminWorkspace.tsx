@@ -115,7 +115,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderTop: "1px solid var(--border)" }}>
       <span style={{ color: "var(--muted)" }}>{label}</span>
-      <span style={{ fontFamily: "var(--mono, monospace)" }}>{value}</span>
+      <span style={{ fontFamily: "var(--font-mono)" }}>{value}</span>
     </div>
   );
 }

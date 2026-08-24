@@ -13,6 +13,7 @@ import {
   type TenantEntitlement,
 } from "../api";
 import { explainApiError } from "../lib/explainApiError";
+import { formatDate } from "../lib/datetime";
 import { Button } from "./Button";
 import { ErrorNotice } from "./ErrorNotice";
 
@@ -72,7 +73,7 @@ export function PlanLimitsSection({ tenant }: { tenant: string }) {
               <span className={"count-pill" + (eff.plan === "pro" ? " active" : "")}>{eff.plan}</span>
               {eff.comped && <span className="pa-subtext"> · {t("admin.platformPlan.comped")}</span>}
               {eff.trial_ends_at && (
-                <span className="pa-subtext"> · {t("admin.platformPlan.trialUntil", { date: shortDate(eff.trial_ends_at) })}</span>
+                <span className="pa-subtext"> · {t("admin.platformPlan.trialUntil", { date: formatDate(eff.trial_ends_at) })}</span>
               )}
             </dd>
             <dt>{t("admin.platformPlan.tier")}</dt>
@@ -113,14 +114,6 @@ export function PlanLimitsSection({ tenant }: { tenant: string }) {
       )}
     </div>
   );
-}
-
-function shortDate(iso: string): string {
-  try {
-    return new Date(iso).toISOString().slice(0, 10);
-  } catch {
-    return iso;
-  }
 }
 
 // numOrNull maps the override inputs: "" → null (inherit), else a number.
