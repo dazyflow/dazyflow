@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-08-24
+
 ### Changed
 
 - **The run page introduces itself with when it ran, not 24 characters of hex.**
