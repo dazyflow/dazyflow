@@ -23,6 +23,26 @@ into the image.)
 
 ## [Unreleased]
 
+### Fixed
+
+- **Swedish relative times now read as Swedish.** "Ago" is a circumfix there —
+  `för … sedan` — and the strings only had the tail: 0.10.1 rendered "Startad 1
+  dag sedan", which is English word order wearing Swedish words. It now reads
+  "Startad för 1 dag sedan", in every place a relative time appears (the run
+  page, the dashboard's recent runs, the flow cards, the wall display, the git
+  mirror panel). `justNow` was "nu" — *now*, present tense, for a thing that
+  already happened — and is now "nyss". The run page's label is the participle
+  "Startad" rather than the past-tense "Startade": it labels a record, it
+  doesn't narrate one.
+
+  The flow cards' footer said "Senaste körning för 5 minuter sedan" — a noun
+  phrase with a time bolted on. It now says "Senast kört", and the participles
+  around it agree with the flow they describe: a *flöde* is neuter, so "Aldrig
+  kört", "Skapat av", "Pausat", matching the "Inte publicerat" and "Flödet
+  pausat" that were already right. The sort option orders many flows, so it
+  takes the plural: "Senast körda". Run surfaces are untouched — a *körning* is
+  common gender, so "Startad", "Köad" and "Avbruten" were correct already.
+
 ## [0.10.1] - 2026-08-24
 
 ### Changed
