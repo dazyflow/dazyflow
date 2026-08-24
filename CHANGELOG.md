@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.10.2] - 2026-08-24
+
 ### Fixed
 
 - **Swedish relative times now read as Swedish.** "Ago" is a circumfix there —
