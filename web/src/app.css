@@ -6711,6 +6711,25 @@ img[src$="/brands/smhi.svg"] {
 .run-table tbody tr:hover {
   background: var(--surface-2);
 }
+
+/* The Runs table's name cell is the row's primary target — it opens the run.
+   A <tr> can't be wrapped in an anchor (HTML forbids it both ways), so the
+   next best hit area is the whole CELL: the padding moves off the td and onto
+   the link, which then fills it. Without that move the link stops short of the
+   cell edges and the surrounding gap looks clickable but isn't. Scoped to this
+   one cell on purpose — .run-table is shared with four non-navigable tables,
+   and the row hover they all share stays a reading aid rather than promising a
+   click those tables don't deliver. */
+.run-table td.run-name-cell {
+  padding: 0;
+}
+.run-table td.run-name-cell > a {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  padding: var(--space-3) var(--space-4);
+}
 /* Per-row delete button in the Collections table — a muted trash icon that
    stays out of the way until you hover the row, then reads as destructive. */
 .board-row-del {

@@ -23,6 +23,33 @@ into the image.)
 
 ## [Unreleased]
 
+### Changed
+
+- **A row on the Runs page opens the run.** It opened the flow EDITOR — a
+  different object, on the page you go to when you want to change a flow, not
+  when you want to know what one of its runs did — while the run itself sat
+  behind a muted 14px glyph at the end of the row. So the page's whole purpose
+  was its least discoverable action, and its obvious one led somewhere you
+  can't even save (a live run locks the flow) and which shows no timing, no
+  error explanation, no step timeline and no run log.
+
+  The dashboard's recent-runs lists had always linked straight to the run, and
+  the flow list leads to flows; the Runs page was the one that disagreed with
+  both. The two targets are now swapped — the name opens the run, a pencil at
+  the end of the row opens the flow in the editor. That trailing icon had also
+  been an "external link" glyph, which conventionally means "leaves the app",
+  on an internal route.
+
+  The name link fills its cell rather than hugging its text, so the whole cell
+  is the target. Not the whole row: an anchor can't wrap a `<tr>`, so a
+  row-wide target would have meant a hand-rolled `role="link"` with its own
+  keyboard handling — diverging from every other navigable surface in the app,
+  all of which are real anchors (the dashboard's run rows, the flow cards), and
+  losing middle-click and open-in-new-tab with them. The widened cell is scoped
+  to this one table: `.run-table` is shared with four tables that navigate
+  nowhere, and their shared row hover has to keep reading as a reading aid
+  rather than promising a click they don't deliver.
+
 ## [0.10.2] - 2026-08-24
 
 ### Fixed

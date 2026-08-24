@@ -1356,7 +1356,7 @@
     "colStarted": "Started",
     "colDuration": "Duration",
     "inProgress": "in progress",
-    "openDetails": "Open run details",
+    "openInEditor": "Open in editor",
     "loadMore": "Load more",
     "retry": "Retry",
     "retryRun": "Retry this run from where it failed",

@@ -1356,7 +1356,7 @@
     "colStarted": "Startad",
     "colDuration": "Varaktighet",
     "inProgress": "pågår",
-    "openDetails": "Öppna körningsdetaljer",
+    "openInEditor": "Öppna i redigeraren",
     "loadMore": "Ladda fler",
     "retry": "Kör om",
     "retryRun": "Kör om den här körningen från där den misslyckades",

@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Activity, ExternalLink, RotateCcw, Search } from "lucide-react";
+import { Activity, Pencil, RotateCcw, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api } from "../api";
@@ -476,26 +476,28 @@ export function RunList() {
                       title={runStatusLabel(r.status, t)}
                     />
                   </td>
-                  <td>
+                  <td className="run-name-cell">
                     {/* Flow name is the only identifier we show — it's how a
                         user thinks about a run ("the order-alert flow"). The
                         raw ids (flow and run alike) are plumbing: opaque hex
                         that means nothing to a non-technical user, so they
-                        stay off the list. The name links to the editor ("make
-                        changes"); the run-detail "what happened" surface stays
-                        reachable via the open-details link at the end of the
-                        row. A flow whose name we couldn't resolve (deleted, or
-                        a failed fetch) shows "(unknown)" rather than leaking
-                        its id. */}
-                    <Link
-                      to={`/flows/${encodeURIComponent(r.graph_id)}?run=${encodeURIComponent(r.id)}`}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 4,
-                        fontWeight: 600,
-                      }}
-                    >
+                        stay off the list. A flow whose name we couldn't resolve
+                        (deleted, or a failed fetch) shows "(unknown)" rather
+                        than leaking its id.
+
+                        It links to the RUN, not the flow: this is a list of
+                        runs, so the row's obvious target has to be the thing
+                        the row is about — the same way the dashboard's recent
+                        runs behave, and the way the flow list leads to flows.
+                        Editing is still one click away at the end of the row,
+                        but it isn't why anyone opens this page.
+
+                        The link carries the cell's padding instead of the td
+                        (see .run-name-cell) so the whole cell is the target,
+                        not just the glyph and the text — a row-wide click
+                        target isn't available to a <tr>, and this is the part
+                        of the row people aim at anyway. */}
+                    <Link to={`/runs/${encodeURIComponent(r.id)}`}>
                       <Activity size={12} />
                       {flowNames[r.graph_id] ?? t("common.unknownParen")}
                     </Link>
@@ -535,11 +537,12 @@ export function RunList() {
                       </Button>
                     )}
                     <Link
-                      to={`/runs/${encodeURIComponent(r.id)}`}
+                      to={`/flows/${encodeURIComponent(r.graph_id)}?run=${encodeURIComponent(r.id)}`}
                       style={{ color: "var(--muted)" }}
-                      title={t("runList.openDetails")}
+                      title={t("runList.openInEditor")}
+                      aria-label={t("runList.openInEditor")}
                     >
-                      <ExternalLink size={14} />
+                      <Pencil size={14} />
                     </Link>
                   </td>
                 </tr>
