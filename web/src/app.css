@@ -7568,14 +7568,8 @@ a.pa-card:hover {
   line-height: 1.5;
   color: var(--ink-soft);
 }
-.confirm-dialog .settings-foot button.danger {
-  background: var(--danger);
-  color: #fff;
-  border-color: var(--danger);
-}
-.confirm-dialog .settings-foot button.danger:hover {
-  filter: brightness(1.08);
-}
+/* The filled-red confirm button is defined once in theme.css, alongside the
+   `filled` danger modifier it shares its look with. */
 .settings-foot {
   display: flex;
   justify-content: flex-end;
@@ -8500,14 +8494,16 @@ a.pa-card:hover {
   padding: 0 14px;
   font-weight: 600;
 }
-/* While a run is active the primary button becomes Stop — danger-red so
-   it clearly reads as "halt", not "go". Overrides the purple .primary bg. */
+/* While a run is active the Run button becomes Stop. It used to be
+   variant="primary" with the red fill forced on right here, so the button
+   system said "affirmative" while the pixels said "destructive", and the same
+   action on the run-detail page rendered as a red OUTLINE. Both are
+   `variant="danger" filled` now, which puts the red fill in the button system
+   (theme.css) where both surfaces read it from one definition. All that's left
+   here is holding the Stop button to the Run button's width so the toolbar
+   doesn't reflow the moment a run starts. */
 .editor-toolbar button.run-stop {
-  background: var(--danger);
-  box-shadow: none;
-}
-.editor-toolbar button.run-stop:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--danger) 85%, #000);
+  min-width: 5.5rem;
 }
 /* Save while there are unsaved changes: a calm accent outline so it's
    clearly the next thing to do, without shouting for attention. */

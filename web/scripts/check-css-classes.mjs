@@ -223,6 +223,7 @@ function buttonEmittedClasses(source, tagStart) {
   if (s && s !== "md") out.push(s);
   if (/\bcollapseLabel\b/.test(span)) out.push("icon-text-btn");
   if (/\bblock\b/.test(span)) out.push("btn-block");
+  if (/\bfilled\b/.test(span)) out.push("filled");
   // A ternary variant can yield either branch; include both so neither
   // branch is reported as unpartnered.
   for (const alt of span.matchAll(/variant=\{[^}]*\}/g)) {

@@ -389,7 +389,7 @@ export function RunList() {
             style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
           >
             <RotateCcw size={14} />
-            {retrying ? t("runList.retrying") : t("runList.retrySelected")}
+            {retrying ? t("runAction.retrying") : t("runAction.retrySelected")}
           </Button>
           <Button variant="ghost" onClick={() => setSelected(new Set())} disabled={retrying}>
             {t("runList.clearSelection")}
@@ -526,14 +526,15 @@ export function RunList() {
                   <td style={{ textAlign: "right", paddingRight: 12 }}>
                     {showInbox && (
                       <Button
-                        className="btn-ghost"
+                        variant="ghost"
+                        size="sm"
                         onClick={() => void retryOne(r.id)}
                         disabled={retrying}
-                        title={t("runList.retryRun")}
-                        style={{ display: "inline-flex", alignItems: "center", gap: 4, marginRight: 8 }}
+                        title={t("runAction.retryTitle")}
+                        style={{ marginRight: 8 }}
                       >
-                        <RotateCcw size={13} />
-                        {t("runList.retry")}
+                        <RotateCcw size={13} style={{ marginRight: 4 }} />
+                        {retrying ? t("runAction.retrying") : t("runAction.retry")}
                       </Button>
                     )}
                     <Link
@@ -571,7 +572,7 @@ export function RunList() {
         <ConfirmModal
           title={t("runList.confirmBulkRetryTitle")}
           message={t("runList.confirmBulkRetryBody", { count: selected.size })}
-          confirmLabel={t("runList.retrySelected")}
+          confirmLabel={t("runAction.retrySelected")}
           danger
           onConfirm={() => {
             setConfirmBulk(false);

@@ -367,6 +367,14 @@ function EditorInner() {
     label: string;
     preview: string;
   } | null>(null);
+  // failedRun is the run behind the error banner, when that error came from a
+  // run failing (rather than a save, a permission or a config problem). It's
+  // what makes Retry offerable here: the runs list and the run-detail page both
+  // let you resume a failed run from its failed step, and the editor — where
+  // you are standing when you watch it fail — was the one surface that made you
+  // navigate away to do it. Cleared by subscribeToRun, so starting any new run
+  // drops a stale offer.
+  const [failedRun, setFailedRun] = useState<string | null>(null);
   // Breakpoints (#12): node IDs flagged to pause the run after they finish.
   // Saved with the graph (node.breakpoint). pausedAt is the node the live
   // run is currently holding after; stepping mirrors the run's step mode.
@@ -3495,6 +3503,7 @@ function EditorInner() {
     setLiveLogs({});
     setRunOutputs({});
     setRunDone(null);
+    setFailedRun(null);
     setPausedAt(null);
     setStepping(false);
     const abort = new AbortController();
@@ -3545,6 +3554,7 @@ function EditorInner() {
                       r.Result?.error?.code ||
                       t("editor.runFailedNoDetail");
                     setError(t("editor.runFailed", { label, detail }));
+                    setFailedRun(runID);
                   }
                 })
                 .catch(() => {
@@ -3558,6 +3568,7 @@ function EditorInner() {
                         detail: t("editor.runFailedNoDetail"),
                       }),
                     );
+                    setFailedRun(runID);
                   }
                 });
             }
@@ -3615,6 +3626,7 @@ function EditorInner() {
                 term.error?.code ||
                 t("editor.runFailedGeneric");
               setError(t("editor.runFailedGraph", { detail }));
+              setFailedRun(runID);
             }
             // Say so when it worked. Without this the only success signal is
             // a border tint on each node, which reads as "nothing happened"
@@ -3753,6 +3765,32 @@ function EditorInner() {
       setCurrentRunID(job_id);
       setLockedRunID(job_id);
       if (id) localStorage.setItem(`dazyflow.lastRun.${id}`, job_id);
+      subscribeToRun(job_id);
+    } catch (e) {
+      setError(explainApiError(e, t));
+      setRunning(false);
+    }
+  };
+
+  // retryFailedRun resumes the run behind the error banner from the step that
+  // failed, reusing the outputs of everything that already succeeded — the same
+  // api.retryRun the runs list and the run-detail page call.
+  //
+  // It deliberately does NOT navigate to the new run the way those two do: the
+  // point of retrying from here is to watch the resumed run light up the canvas
+  // you are already looking at, so it hands the new job to subscribeToRun and
+  // stays put. Otherwise this is doRun's shape exactly.
+  const retryFailedRun = async () => {
+    if (!token || !id || !failedRun) return;
+    setRunning(true);
+    setError(null);
+    try {
+      const { job_id } = await api.retryRun(token, failedRun);
+      setCurrentRunID(job_id);
+      setLockedRunID(job_id);
+      localStorage.setItem(`dazyflow.lastRun.${id}`, job_id);
+      // Clears failedRun, so the banner's offer can't outlive the run it
+      // referred to.
       subscribeToRun(job_id);
     } catch (e) {
       setError(explainApiError(e, t));
@@ -4383,7 +4421,8 @@ function EditorInner() {
           <div className="toolbar-group">
             {running || lockedRunID ? (
               <Button
-                variant="primary"
+                variant="danger"
+                filled
                 className="run-stop"
                 onClick={() => void stopRun()}
                 disabled={cancelling || !hasPerm("graph:run")}
@@ -4395,9 +4434,9 @@ function EditorInner() {
                     : t("editor.missingRunPerm")
                 }
               >
-                <Square size={15} />
+                <Square size={14} />
                 <span className="toolbar-label">
-                  {cancelling ? t("editor.stopping") : t("editor.stop")}
+                  {cancelling ? t("runAction.stopping") : t("runAction.stop")}
                 </span>
               </Button>
             ) : hasWebhookTrigger ? (
@@ -5020,9 +5059,32 @@ function EditorInner() {
                 style={{ color: "var(--danger)", textDecoration: "underline", whiteSpace: "nowrap" }}
               />
             </span>
+            {/* Offer the same recovery the runs list and run-detail page do,
+                but only when this banner is about a failed RUN — the same
+                banner also carries save, permission and config errors, and
+                none of those has a run to resume. Hidden while a run is in
+                flight so it can't fire twice, and gated on graph:run like Run
+                and Stop are: opening someone else's failed run here via
+                ?run=… replays its terminal frames, so a viewer who cannot
+                start a run can still reach this banner. */}
+            {failedRun && !running && hasPerm("graph:run") && (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => void retryFailedRun()}
+                title={t("runAction.retryTitle")}
+                style={{ flexShrink: 0 }}
+              >
+                <RotateCcw size={13} style={{ marginRight: 4 }} />
+                {t("runAction.retry")}
+              </Button>
+            )}
             <Button
               variant="ghost"
-              onClick={() => setError(null)}
+              onClick={() => {
+                setError(null);
+                setFailedRun(null);
+              }}
               style={{ fontSize: "var(--text-xs)", padding: "2px 8px", color: "var(--danger)" }}
               aria-label={t("editor.dismiss")}
             >

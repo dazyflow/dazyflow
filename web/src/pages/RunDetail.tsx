@@ -359,12 +359,13 @@ export function RunDetail() {
           {(run.Status === "running" || run.Status === "awaiting" || run.Status === "queued") && (
             <Button
               variant="danger"
+              filled
               onClick={() => setConfirmCancel(true)}
               disabled={cancelling}
-              title={t("runDetail.cancelTitle")}
+              title={t("runAction.stopTitle")}
             >
-              <Square size={13} style={{ marginRight: 6 }} />
-              {cancelling ? t("runDetail.cancelling") : t("runDetail.cancel")}
+              <Square size={14} style={{ marginRight: 6 }} />
+              {cancelling ? t("runAction.stopping") : t("runAction.stop")}
             </Button>
           )}
           {(run.Status === "failed" || run.Status === "cancelled") && (
@@ -372,10 +373,10 @@ export function RunDetail() {
               variant="primary"
               onClick={retry}
               disabled={retrying}
-              title={t("runDetail.retryTitle")}
+              title={t("runAction.retryTitle")}
             >
               <RotateCcw size={14} style={{ marginRight: 6 }} />
-              {retrying ? t("runDetail.retrying") : t("runDetail.retry")}
+              {retrying ? t("runAction.retrying") : t("runAction.retry")}
             </Button>
           )}
           {/* Replay re-runs every step from scratch — including side effects
@@ -385,10 +386,10 @@ export function RunDetail() {
           <Button
             onClick={() => setConfirmReplay(true)}
             disabled={replaying}
-            title={t("runDetail.replayTitle")}
+            title={t("runAction.replayTitle")}
           >
             <RotateCw size={14} style={{ marginRight: 6 }} />
-            {replaying ? t("runDetail.replaying") : t("runDetail.replay")}
+            {replaying ? t("runAction.replaying") : t("runAction.replay")}
           </Button>
         </div>
       </div>
@@ -640,7 +641,7 @@ export function RunDetail() {
         <ConfirmModal
           title={t("runDetail.confirmReplayTitle")}
           message={t("runDetail.confirmReplayBody")}
-          confirmLabel={t("runDetail.replay")}
+          confirmLabel={t("runAction.replay")}
           danger
           onConfirm={() => {
             setConfirmReplay(false);
@@ -653,7 +654,7 @@ export function RunDetail() {
         <ConfirmModal
           title={t("runDetail.confirmCancelTitle")}
           message={t("runDetail.confirmCancelBody")}
-          confirmLabel={t("runDetail.cancel")}
+          confirmLabel={t("runAction.stop")}
           danger
           onConfirm={() => {
             setConfirmCancel(false);

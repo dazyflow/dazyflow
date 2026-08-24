@@ -28,7 +28,18 @@ import {
 //
 // Modifiers are props, never variants: `icon` (leading glyph), `collapseLabel`
 // (icon + label that drops to icon-only on narrow screens), `block`
-// (full-width), `loading` (shows busy + disables).
+// (full-width), `loading` (shows busy + disables), `filled` (see below).
+//
+// `filled` only means anything with variant="danger", where it swaps the
+// outlined default for solid red on white. Use it for the moment a
+// destructive action IS the affirmative action — the final confirm in a
+// dialog, and the Stop button that replaces Run while a run is in flight.
+// Those need to hold the same visual weight as the button they stand in for,
+// which an outline cannot. Everything else destructive stays outlined.
+// It exists as a prop because the editor's Stop and the run-detail page's
+// Stop had each grown their own page-scoped CSS override of `.primary` /
+// `.danger` instead, so the same action rendered as a red block on one
+// surface and a red outline on the other.
 //
 // ONE deliberate exception, because the variant list can't express it: a quiet
 // inline destructive action is `variant="ghost" className="danger"`, which the
@@ -71,12 +82,21 @@ interface ButtonBaseProps {
   block?: boolean;
   // Busy state: visually disabled and non-interactive while an action runs.
   loading?: boolean;
+  // Solid red instead of the outlined default. Only meaningful with
+  // variant="danger" — see the note at the top of this file.
+  filled?: boolean;
 }
 
 // Compose the class list from the semantic props. `secondary`/`md` emit no
 // class — they are the bare base look — so the common case stays clean.
 function buttonClasses(
-  { variant = "secondary", size = "md", collapseLabel, block }: ButtonBaseProps,
+  {
+    variant = "secondary",
+    size = "md",
+    collapseLabel,
+    block,
+    filled,
+  }: ButtonBaseProps,
   extra?: string,
   withBase = false,
 ): string {
@@ -86,6 +106,7 @@ function buttonClasses(
   if (size !== "md") parts.push(size);
   if (collapseLabel) parts.push("icon-text-btn");
   if (block) parts.push("btn-block");
+  if (filled) parts.push("filled");
   if (extra) parts.push(extra);
   return parts.join(" ");
 }
@@ -125,6 +146,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       collapseLabel,
       block,
       loading,
+      filled,
       className,
       children,
       disabled,
@@ -150,7 +172,10 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         // it by accident; callers opt into "submit" explicitly.
         type={type ?? "button"}
         className={
-          buttonClasses({ variant, size, collapseLabel, block }, className) ||
+          buttonClasses(
+            { variant, size, collapseLabel, block, filled },
+            className,
+          ) ||
           undefined
         }
         disabled={disabled || loading}
@@ -176,7 +201,17 @@ type ButtonLinkProps = ButtonBaseProps &
 // classes to <Link>, or wrap as needed.
 export const ButtonLink = forwardRef<HTMLAnchorElement, ButtonLinkProps>(
   function ButtonLink(
-    { variant, size, icon, collapseLabel, block, className, children, ...rest },
+    {
+      variant,
+      size,
+      icon,
+      collapseLabel,
+      block,
+      filled,
+      className,
+      children,
+      ...rest
+    },
     ref,
   ) {
     return (
@@ -185,7 +220,7 @@ export const ButtonLink = forwardRef<HTMLAnchorElement, ButtonLinkProps>(
         // withBase: anchors aren't <button> elements, so they need the `.btn`
         // base skin the element selector gives native buttons for free.
         className={buttonClasses(
-          { variant, size, collapseLabel, block },
+          { variant, size, collapseLabel, block, filled },
           className,
           true,
         )}

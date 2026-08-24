@@ -424,9 +424,9 @@ button.ghost:hover:not(:disabled),
 }
 /* Destructive default: red text + red border on a transparent fill. The
    global rule that was missing — bare .danger buttons used to fall through
-   to the plain gray look. Filled-red is reserved for final confirms in
-   dialogs (.confirm-dialog .settings-foot button.danger, scoped in app.css);
-   .ghost.danger drops the border for quiet inline destructive actions. */
+   to the plain gray look. Filled-red is the `filled` modifier just below
+   (dialog confirms, and Run→Stop in the editor toolbar); .ghost.danger drops
+   the border for quiet inline destructive actions. */
 button.danger,
 .btn.danger {
   background: transparent;
@@ -437,6 +437,27 @@ button.danger:hover:not(:disabled),
 .btn.danger:hover {
   background: color-mix(in srgb, var(--danger) 12%, transparent);
   border-color: var(--danger);
+}
+/* Filled destructive — the `filled` prop on <Button variant="danger">. For the
+   moment a destructive action IS the affirmative one and has to carry the same
+   weight as the button it stands in for: the final confirm in a dialog, and the
+   Stop button that replaces Run while a run is in flight. The dialog selector
+   is listed here rather than keeping its own copy in app.css so there is
+   exactly ONE definition of the filled-red look; previously the editor's Stop
+   and the run-detail Stop each had their own page-scoped override and had
+   drifted to a red block on one surface and a red outline on the other. */
+button.danger.filled,
+.btn.danger.filled,
+.confirm-dialog .settings-foot button.danger {
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger);
+}
+button.danger.filled:hover:not(:disabled),
+.btn.danger.filled:hover,
+.confirm-dialog .settings-foot button.danger:hover {
+  background: var(--danger);
+  filter: brightness(1.08);
 }
 /* Link variant: chromeless, reads as inline text. */
 button.link,
