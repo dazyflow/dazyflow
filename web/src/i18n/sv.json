@@ -1464,15 +1464,22 @@
   },
   "relative": {
     "justNow": "nu",
-    "minutesAgo": "{{count}} min sedan",
-    "hoursAgo": "{{count}} h sedan",
-    "daysAgo": "{{count}} dagar sedan"
+    "minutesAgo_one": "{{count}} minut sedan",
+    "minutesAgo_other": "{{count}} minuter sedan",
+    "hoursAgo_one": "{{count}} timme sedan",
+    "hoursAgo_other": "{{count}} timmar sedan",
+    "daysAgo_one": "{{count}} dag sedan",
+    "daysAgo_other": "{{count}} dagar sedan"
   },
   "runDetail": {
     "loading": "Laddar körning…",
     "notFoundTitle": "Körningen hittades inte",
     "notFoundBody": "Ingen körning med det ID:t.",
-    "runIdLabel": "Körning",
+    "startedRelative": "Startade {{when}}",
+    "queuedRelative": "Köad {{when}}",
+    "summaryRunId": "Körnings-ID",
+    "copyId": "Kopiera körnings-ID",
+    "copiedId": "Kopierat",
     "openInEditor": "Öppna i redigeraren",
     "replayTitle": "Kör om det här flödet från början",
     "replay": "Kör om allt",

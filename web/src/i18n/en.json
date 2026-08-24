@@ -1464,15 +1464,22 @@
   },
   "relative": {
     "justNow": "just now",
-    "minutesAgo": "{{count}}m ago",
-    "hoursAgo": "{{count}}h ago",
-    "daysAgo": "{{count}}d ago"
+    "minutesAgo_one": "{{count}} minute ago",
+    "minutesAgo_other": "{{count}} minutes ago",
+    "hoursAgo_one": "{{count}} hour ago",
+    "hoursAgo_other": "{{count}} hours ago",
+    "daysAgo_one": "{{count}} day ago",
+    "daysAgo_other": "{{count}} days ago"
   },
   "runDetail": {
     "loading": "Loading run…",
     "notFoundTitle": "Run not found",
     "notFoundBody": "No run with that ID.",
-    "runIdLabel": "Run",
+    "startedRelative": "Started {{when}}",
+    "queuedRelative": "Queued {{when}}",
+    "summaryRunId": "Run ID",
+    "copyId": "Copy run ID",
+    "copiedId": "Copied",
     "openInEditor": "Open in editor",
     "replayTitle": "Re-run this flow from the start",
     "replay": "Replay",

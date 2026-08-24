@@ -23,6 +23,37 @@ into the image.)
 
 ## [Unreleased]
 
+### Changed
+
+- **The run page introduces itself with when it ran, not 24 characters of hex.**
+  Under the flow's name sat "Run 69a6f59b21aa3a4e7530df27" — the first thing
+  anyone read on the page, and the one thing on it a non-technical user could
+  do nothing with. Every other detail page uses that subtitle slot for a
+  sentence about the page; the run page was alone in putting an identifier
+  there, and the runs LIST had already decided the same ids were plumbing and
+  kept them off the table.
+
+  The slot now answers the question a person actually asks of a run — which one
+  is this? — with "Started 5 minutes ago", localized through the same
+  `formatRelative` the dashboard and flow cards use. It carries its own 30-second clock, because
+  a finished run stops the live poll and a relative label with nothing driving
+  it will still say "just now" an hour later. The exact instant is a hover away
+  and remains spelled out in the details card, so the coarse label is
+  orientation rather than the record.
+
+  The id hasn't gone anywhere — support tickets, `dzctl` and bug reports need
+  it — it moved into the details card with the other technical facts, and
+  gained a copy button, since pasting it somewhere is the only thing anyone
+  does with it.
+
+- **Relative times are spelled out: "5 minutes ago", not "5m ago".** The
+  abbreviated form was compact but read as machine shorthand on the surfaces
+  non-technical users see most — the dashboard's recent runs, the flow cards'
+  last-run line, the wall-display overview, and now the run page's subtitle.
+  Spelling them out required proper plurals, so the strings gained `_one` /
+  `_other` forms; that also fixes Swedish rendering "1 dagar sedan" (and now
+  "1 minut" / "1 timme" / "1 dag" decline correctly).
+
 ### Added
 
 - **"Waiting for approval" is a run status.** A run parked on a person

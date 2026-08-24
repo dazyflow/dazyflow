@@ -3,7 +3,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { AlertCircle, ChevronDown, ChevronRight, RotateCw, RotateCcw, Square, LifeBuoy } from "lucide-react";
+import { AlertCircle, Check, ChevronDown, ChevronRight, Copy, RotateCw, RotateCcw, Square, LifeBuoy } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import { api, APIError } from "../api";
@@ -21,7 +21,7 @@ import { supportContactWithContext } from "../lib/supportContact";
 import { isResultNode, previewOutput } from "../lib/runResult";
 import { ReportProblemModal } from "../components/ReportProblemModal";
 import type { Graph, JobRecord, JobStatus, Manifest, Ref, RunLogEntry } from "../types";
-import { formatDateTime } from "../lib/datetime";
+import { formatDateTime, formatRelative } from "../lib/datetime";
 import { ErrorNotice } from "../components/ErrorNotice";
 
 // RunDetail is the post-failure "what happened" page — and the
@@ -72,6 +72,17 @@ export function RunDetail() {
   // deliberate yes/no.
   const [confirmReplay, setConfirmReplay] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  // Transient "Copied" tick on the run-id row.
+  const [copiedID, setCopiedID] = useState(false);
+  // The subtitle's "started 5m ago" is only true at render time, and a
+  // FINISHED run stops the live poll — so without a clock of its own the page
+  // would sit there claiming "just now" an hour later. Coarse label, so a
+  // 30s tick is plenty. (Same trick as the TV overview's ticking clock.)
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
   // Friendly naming: the flow's display name for the heading, and module
   // labels for timeline rows ("ntfy" instead of "ntfy_1"). Best-effort —
   // a deleted flow or fetch error falls back to the raw IDs.
@@ -310,6 +321,10 @@ export function RunDetail() {
           )
       : undefined;
 
+  // Empty when the run carries no usable timestamp at all — the subtitle is
+  // then dropped rather than rendered as "Started " with a hole in it.
+  const startedAgo = formatRelative(run.StartedAt ?? run.EnqueuedAt, t, now);
+
   return (
     <div className="page run-detail">
       <div className="page-title">
@@ -319,10 +334,18 @@ export function RunDetail() {
             <span className={"status-dot " + run.Status} />
             {graph?.name || run.GraphID}
           </h1>
-          <div className="sub">
-            {t("runDetail.runIdLabel")}{" "}
-            <code style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-sm)" }}>{run.ID}</code>
-          </div>
+          {/* Which run is this? For a person the answer is "the one from a few
+              minutes ago", not a hex id — so the subtitle carries recency, the
+              way the dashboard and flow cards do. The exact instant is two
+              lines below in the details card, and on hover here, because a
+              coarse "2d ago" is orientation rather than a record. */}
+          {startedAgo && (
+            <div className="sub" title={formatAbs(run.StartedAt ?? run.EnqueuedAt ?? null)}>
+              {t(run.StartedAt ? "runDetail.startedRelative" : "runDetail.queuedRelative", {
+                when: startedAgo,
+              })}
+            </div>
+          )}
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <Link
@@ -461,6 +484,33 @@ export function RunDetail() {
                   })}
                 </span>
               )}
+            </span>
+          }
+        />
+        {/* The run id is plumbing — support tickets, dzctl, bug reports — so it
+            sits with the other technical facts rather than under the page
+            title, where it was the first thing anyone read. Copy button
+            because the one thing people do with it is paste it somewhere. */}
+        <SummaryRow
+          label={t("runDetail.summaryRunId")}
+          value={
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <code style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-sm)" }}>
+                {run.ID}
+              </code>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  void navigator.clipboard?.writeText(run.ID);
+                  setCopiedID(true);
+                  window.setTimeout(() => setCopiedID(false), 1500);
+                }}
+                aria-label={t("runDetail.copyId")}
+                title={copiedID ? t("runDetail.copiedId") : t("runDetail.copyId")}
+              >
+                {copiedID ? <Check size={13} /> : <Copy size={13} />}
+              </Button>
             </span>
           }
         />
