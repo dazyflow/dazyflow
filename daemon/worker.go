@@ -323,7 +323,11 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 	if runErr == nil && result.Status == core.StatusAwaiting {
 		cerr := w.completeNode(jobCtx, rec.ID, core.JobStatusAwaiting, &result)
 		if errors.Is(cerr, core.ErrConflict) {
-			w.cfg.Logger.Printf("[%s] %s: park fenced (lease lost or already terminal); abandoning", w.cfg.ID, rec.ID)
+			// Fenced: the lease was lost, the record is already terminal, or
+			// it is already parked (this is a re-execution of a node another
+			// worker parked first). Abandoning here — before the notify hook
+			// — is what keeps one pause from mailing the approvers twice.
+			w.cfg.Logger.Printf("[%s] %s: park fenced (lease lost, already parked, or already terminal); abandoning", w.cfg.ID, rec.ID)
 			return
 		}
 		if cerr != nil {

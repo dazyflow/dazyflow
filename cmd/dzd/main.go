@@ -590,7 +590,7 @@ func main() {
 		Jobs:       jobs,
 		Engine:     eng,
 		Bus:        bus,
-		WorkerID:   "dzd-dev",
+		WorkerID:   instanceID,
 		// AdminKeys uses the same MemKeyStore the Authenticator reads
 		// from, so admin-issued keys are immediately recognized.
 		AdminKeys:              ks,
@@ -1092,7 +1092,10 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 	// claims; the JobStore makes that contention safe.
 	for i := 0; i < d.workerCount; i++ {
 		w := daemon.NewWorker(daemon.WorkerConfig{
-			ID:      fmt.Sprintf("dzd-dev-w%d", i),
+			// Unique per process AND per worker goroutine: the job store's
+			// ownership fence compares this string, so two workers sharing it
+			// can each write over the other's claimed record.
+			ID:      fmt.Sprintf("%s-w%d", instanceID, i),
 			Metrics: d.metrics,
 			Usage:   d.usage,
 			// Email the approvers the moment a run parks on an approval.
@@ -1836,6 +1839,35 @@ func dsnSSLMode(dsn string) string {
 func warnBadEnv(key, raw, using string) {
 	log.Printf("WARNING: %s=%q could not be parsed — using %s instead", key, raw, using)
 }
+
+// instanceID identifies THIS dzd process in the job store. It must be unique
+// across every process that shares the database, because the JobStore's
+// ownership fence is a string compare on it: CompleteOwned and Renew both
+// write `WHERE worker_id = <id>`, which is what stops a worker whose lease
+// expired mid-execution from writing over the record another worker has since
+// reclaimed.
+//
+// It used to be the constant "dzd-dev-w<i>", identical in every process, so
+// across two instances the fence compared equal and passed for the wrong
+// owner — a reclaimed node could be completed twice, which for an
+// await_approval node meant parking twice and mailing the approvers twice.
+// Hostname plus PID is unique among LIVE processes (one host can't run two
+// PIDs the same; two containers don't share a hostname), which is exactly the
+// set the fence has to separate — a dead instance's records are reclaimed by
+// lease expiry and it is not around to write over them.
+//
+// DAZYFLOW_WORKER_ID overrides it for deployments that would rather name
+// their instances; it must still be distinct per process.
+var instanceID = func() string {
+	if id := envStr("DAZYFLOW_WORKER_ID", ""); id != "" {
+		return id
+	}
+	host, err := os.Hostname()
+	if err != nil || host == "" {
+		host = "dzd"
+	}
+	return fmt.Sprintf("%s-%d", host, os.Getpid())
+}()
 
 func envStr(key, def string) string {
 	if v := os.Getenv(key); v != "" {

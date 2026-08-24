@@ -23,6 +23,34 @@ into the image.)
 
 ## [Unreleased]
 
+### Fixed
+
+- **Duplicate approval emails — found and fixed.** 0.10.0 added a log line to
+  tell an application double-send from a duplicate delivery downstream,
+  because the send path looked airtight. It wasn't: the second copy came from
+  the *park*, not the send. A node that pauses is announced once per committed
+  park, and `awaiting → awaiting` was an accepted transition in both job
+  stores — so when an expired lease let a second worker reclaim and re-execute
+  a node the first was still running, both executions committed a park and
+  both mailed the approvers the same request. The later park also overwrote
+  the earlier one's result, so the link in the mail that already went out
+  stopped matching the record. Parking is now refused on a record that is
+  already parked (both stores, pinned by a conformance test); the worker
+  already abandons a fenced park without notifying.
+
+  The ownership fence should have caught the late writer, which is why this
+  survived review — but `dzd` named every worker `dzd-dev-w<i>`, identical in
+  every process, and the fence is a string compare on that name. Across two
+  instances it compared equal and passed for the wrong owner, so a reclaimed
+  node could be completed twice by design. Worker IDs are now unique per
+  process (hostname + PID, or `DAZYFLOW_WORKER_ID`). That fence guarded more
+  than email: usage metering, downstream dispatch and child-graph submission
+  all hang off the same write.
+
+  Reproduced by a test that parks a record out-of-band while a worker is mid
+  execution — with the ownership fence deliberately left matching, as it was
+  in production.
+
 ## [0.10.0] - 2026-08-23
 
 ### Added

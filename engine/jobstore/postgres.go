@@ -394,9 +394,23 @@ func (s *Postgres) complete(ctx context.Context, jobID, worker string, status co
 	// Refuse to overwrite an already-terminal record. Awaiting and skipped
 	// are NOT included in the guard so the resume path (awaiting → succeeded)
 	// works. When worker is set, also fence on lease ownership.
+	//
+	// Parking is additionally fenced against a record that is ALREADY parked:
+	// awaiting → awaiting is a re-park, and the only way to reach one is a
+	// second execution of a node that already parked (an expired lease
+	// reclaimed by another worker while the first was still running). That
+	// write used to succeed, so both executions announced a pause that only
+	// happened once — and the daemon's park hook mailed the approvers on
+	// each. Rejecting it here gives the park path the at-most-once guarantee
+	// its notification hook assumes; the worker already treats a fenced park
+	// as "someone else owns this now" and abandons without notifying.
+	terminalGuard := "'succeeded','failed','cancelled'"
+	if status == core.JobStatusAwaiting {
+		terminalGuard += ",'awaiting'"
+	}
 	q := `
 		UPDATE jobs SET status = $2, result = $3::jsonb, ` + finishedClause + `, lease_until = NULL
-		 WHERE id = $1 AND status NOT IN ('succeeded','failed','cancelled')
+		 WHERE id = $1 AND status NOT IN (` + terminalGuard + `)
 	`
 	args := []any{jobID, string(status), resJSON}
 	if worker != "" {

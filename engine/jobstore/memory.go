@@ -240,6 +240,14 @@ func (m *Memory) complete(jobID, worker string, status core.JobStatus, result *c
 	if core.IsTerminalStatus(r.Status) {
 		return core.ErrConflict
 	}
+	// Same for a re-park: awaiting → awaiting means a node that already
+	// parked executed a second time (expired lease reclaimed mid-run), and
+	// letting the write through announced one pause twice — which the
+	// daemon's park hook turned into a duplicate approval email. Mirrors the
+	// Postgres guard; the two stores must agree on ErrConflict here.
+	if status == core.JobStatusAwaiting && r.Status == core.JobStatusAwaiting {
+		return core.ErrConflict
+	}
 	r.Status = status
 	r.Result = result
 	r.LeaseUntil = nil

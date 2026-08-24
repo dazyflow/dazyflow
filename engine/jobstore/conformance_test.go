@@ -421,6 +421,33 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 		}
 	})
 
+	// A node that already parked must not be able to park again: the only
+	// way to reach a second park is a second execution of the same record
+	// (expired lease reclaimed mid-run), and the daemon mails the approvers
+	// off the back of every park that commits. Both stores must report the
+	// re-park as ErrConflict so the worker abandons instead of notifying.
+	t.Run("Complete_awaiting_twice_rejected", func(t *testing.T) {
+		s := mk(t)
+		ctx := t.Context()
+		mustEnqueue(t, s, ctx, core.JobRecord{ID: "j", Kind: core.JobKindNode, Tenant: "t"})
+		if err := s.Complete(ctx, "j", core.JobStatusAwaiting, &core.Result{Status: core.StatusAwaiting}); err != nil {
+			t.Fatalf("first park: %v", err)
+		}
+		err := s.Complete(ctx, "j", core.JobStatusAwaiting, &core.Result{Status: core.StatusAwaiting})
+		if !errors.Is(err, core.ErrConflict) {
+			t.Errorf("re-park = %v, want ErrConflict", err)
+		}
+		// The first park's record must survive the rejected write, and the
+		// resume path must still work afterwards.
+		rec, _ := s.Get(ctx, "j")
+		if rec.Status != core.JobStatusAwaiting {
+			t.Errorf("status after rejected re-park = %q, want awaiting", rec.Status)
+		}
+		if err := s.Complete(ctx, "j", core.JobStatusSucceeded, &core.Result{Status: core.StatusOK}); err != nil {
+			t.Errorf("resume after rejected re-park: %v", err)
+		}
+	})
+
 	t.Run("Complete_nonterminal_rejected", func(t *testing.T) {
 		s := mk(t)
 		ctx := t.Context()
