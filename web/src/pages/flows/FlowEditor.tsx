@@ -10,7 +10,7 @@ import {
   type DragEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
-import { Link, useParams, useSearchParams, useNavigate, useLocation } from "react-router-dom";
+import { useParams, useSearchParams, useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useActiveFlow, FLOWS_CHANGED_EVENT } from "../../activeFlow";
 import { saveRecentFlow, userScope } from "../../recentFlow";
@@ -72,7 +72,7 @@ import {
 import { useAuth } from "../../auth";
 import { useThemeMode } from "../../theme";
 import i18n from "../../i18n/index";
-import { api, APIError, isErrorCode, isHTTPStatus } from "../../api";
+import { api, isErrorCode, isHTTPStatus } from "../../api";
 import { oauthProviderDisplay } from "../../integrationMeta";
 import { iconFor, ICON } from "../../icons";
 import {
@@ -83,7 +83,6 @@ import {
   slackChannels,
   nodeSetupNeeded,
   missingConnectionApps,
-  type MissingConnection,
   type SetupNeed,
 } from "../../lib/requiredConnections";
 import { mimeCompatible, pickPort, portsConnectable, connectionHint, PASS_PORT } from "../../lib/ports";
@@ -100,7 +99,17 @@ import {
 import { reconcileByID, samePosition, sameData } from "../../lib/graphReconcile";
 import { suggestNextDrops, topDropsByUsage } from "../../lib/suggest";
 import { explainApiError } from "../../lib/explainApiError";
-import { previewOutput } from "../../lib/runResult";
+import { lintMessage } from "./editor/lintMessage";
+import { buildTestEventSample } from "./editor/testEventSample";
+import { stampScheduleTimezones } from "./editor/scheduleTimezone";
+import { ConnectionGate } from "./editor/ConnectionGate";
+import { TestEventDialog } from "./editor/TestEventDialog";
+import { DiffDialog } from "./editor/DiffDialog";
+import { RunSucceededToast } from "./editor/RunSucceededToast";
+import { useRunStream } from "./editor/useRunStream";
+import { useAutosave } from "./editor/useAutosave";
+import { useRevisions } from "./editor/useRevisions";
+import { usePublish } from "./editor/usePublish";
 import type {
   DropAdjacency,
   Graph,
@@ -108,14 +117,9 @@ import type {
   LintIssue,
   Manifest,
   Port,
-  Ref,
-  JobStatus,
   OAuthProviderStatus,
-  PublishInfo,
-  Revision,
   Visibility,
 } from "../../types";
-import { diffGraphs, diffIsEmpty, type GraphDiff } from "../../lib/diffGraphs";
 import { formatDateTime } from "../../lib/datetime";
 import { EDITOR_NARROW, isNarrower } from "../../lib/breakpoints";
 import { Inspector } from "../../components/editor/Inspector";
@@ -123,14 +127,12 @@ import { FlowStatusChip } from "../../components/ui/FlowStatusChip";
 import { flowRunStatusPublished } from "../../flowStatus";
 import { DazyNode } from "../../components/editor/NodeCard";
 import { portColor, type DazyNodeData } from "../../components/editor/nodeCardShared";
-import { humanize } from "../../components/fields/SchemaForm";
 import { CommentNode } from "../../components/editor/CommentNode";
 import { RerouteEdge } from "../../components/editor/RerouteEdge";
 import { SettingsModal } from "../../components/dialogs/SettingsModal";
 import { ConfigChecklistModal } from "../../components/editor/ConfigChecklistModal";
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import { PublishCelebration } from "../../components/editor/PublishCelebration";
-import { browserTimeZone } from "../../components/editor/TriggersModal";
 import { QuickDropPalette } from "../../components/editor/QuickDropPalette";
 import { dropLabel, dropLabelIsDefault } from "../../lib/dropText";
 import { CanvasContextMenu, type ContextMenuItem } from "../../components/editor/CanvasContextMenu";
@@ -139,7 +141,6 @@ import { PublishLabelModal } from "../../components/editor/PublishLabelModal";
 import { Button } from "../../components/ui/Button";
 import { ContactSupportLink } from "../../components/ContactSupportLink";
 import { useResourceResolver } from "../useResourceResolver";
-import { POLL } from "../../lib/timing";
 
 // Custom node-types registry. React Flow caches by reference, so this
 // is declared at module scope rather than inline in the component to
@@ -147,107 +148,11 @@ import { POLL } from "../../lib/timing";
 const nodeTypes = { dazy: DazyNode, comment: CommentNode };
 const edgeTypes = { reroute: RerouteEdge };
 
-// How long the editor waits after the last edit before autosaving. Short
-// enough to feel "always saved", long enough that a burst of edits (typing,
-// dragging) debounces into a single save the daemon then coalesces.
-const AUTOSAVE_DEBOUNCE_MS = 1500;
 
-// timeAgo renders a locale-aware relative time ("3 minutes ago") for the
-// history panel. Falls back to the raw string if the timestamp is unparseable.
-// Standard local "YYYY-MM-DD HH:MM" everywhere — no relative "ago" strings.
-function timeAgo(iso: string): string {
-  return formatDateTime(iso);
-}
 
-// lintFieldLabel names a flagged param the way the Inspector form does: by its
-// schema `title`, falling back to the humanized key — never the raw slug. Env
-// vars have no schema entry and are shown by their bare name in the Inspector,
-// so we keep that.
-function lintFieldLabel(path: string, manifest: Manifest | undefined): string {
-  if (path.startsWith("env.")) return path.slice(4);
-  const top = path.split(/[.[]/)[0];
-  const title = manifest?.params_schema?.properties?.[top]?.title;
-  return title && title.length > 0 ? title : humanize(top);
-}
 
-// lintMessage builds the user-facing sentence for a lint finding using
-// Inspector-style field labels and no node/module/field slugs. The node itself
-// is already highlighted on the canvas, so it goes unnamed. Codes we don't have
-// a label-based string for (or findings missing field data) fall back to the
-// backend `message`, which keeps the slug-bearing phrasing for CLI/API readers.
-function lintMessage(
-  issue: LintIssue,
-  manifest: Manifest | undefined,
-  t: (key: string, opts?: Record<string, unknown>) => string,
-): string {
-  const fields = (issue.fields ?? []).map((f) => lintFieldLabel(f, manifest));
-  const field = fields.join(", ");
-  switch (issue.code) {
-    case "template_placeholder":
-      if (field) return t("editor.lintPlaceholder", { field });
-      break;
-    case "hardcoded_secret":
-      if (field) return t("editor.lintHardcoded", { field });
-      break;
-    case "dangling_reference":
-      if (field) return t("editor.lintDangling", { field });
-      break;
-    case "secret_to_persistence":
-      return t("editor.lintSecretPersist");
-  }
-  return issue.message;
-}
 
-// buildTestEventSample produces the JSON object the "Send test event"
-// button POSTs to /test-trigger. When the webhook trigger has
-// public_form opted in, formFields names the exact form inputs the
-// hosted form will collect — we mirror that shape so the test fires
-// with the same payload the real form would. Per-field defaults pick
-// realistic-looking values for common names (email, phone, message)
-// so a non-techie watching the canvas light up sees believable data
-// instead of "string" everywhere. Unknown fields fall back to "Sample
-// <field>". A nil or empty formFields list reproduces the legacy
-// {name, email, message, submitted_at} sample — used when a webhook
-// trigger isn't form-backed.
-function buildTestEventSample(formFields?: string[]): Record<string, string> {
-  if (!formFields || formFields.length === 0) {
-    return {
-      message: "Test event from Dazyflow",
-      name: "Jane Example",
-      email: "jane@example.com",
-      submitted_at: new Date().toISOString(),
-    };
-  }
-  const sample: Record<string, string> = {};
-  for (const raw of formFields) {
-    const field = raw.trim();
-    if (!field) continue;
-    sample[field] = sampleValueFor(field);
-  }
-  return sample;
-}
 
-// sampleValueFor picks a plausible-looking value for a form field
-// based on its name. Matching is on the lowercased name so "Email"
-// and "email" both resolve to the same default. The catch-all
-// produces a label like "Sample phone" rather than an empty string
-// so the value is visibly distinguishable in a downstream Slack post
-// or store row during testing.
-function sampleValueFor(field: string): string {
-  const f = field.toLowerCase();
-  if (f === "email" || f.endsWith("_email")) return "jane@example.com";
-  if (f === "name" || f.endsWith("_name")) return "Jane Example";
-  if (f === "message" || f === "body" || f === "notes" || f === "comment" || f === "comments") {
-    return "Test event from Dazyflow";
-  }
-  if (f === "phone" || f === "telephone" || f === "mobile") return "+1 555 0123";
-  if (f === "company" || f === "organisation" || f === "organization") return "Acme AB";
-  if (f === "subject") return "Test event";
-  if (f === "submitted_at" || f === "created_at" || f === "timestamp") {
-    return new Date().toISOString();
-  }
-  return `Sample ${field}`;
-}
 
 // Resource-picker id→name resolution lives in useResourceResolver (extracted
 // from this file); RESOURCE_PICKER_KINDS / pickerFormat moved there with it.
@@ -257,26 +162,6 @@ function sampleValueFor(field: string): string {
 // be equal and would defeat the cache).
 const EMPTY_PORTS: string[] = [];
 
-// stampScheduleTimezones fills a missing/blank tz on Schedule (cron_trigger)
-// nodes with the viewer's browser zone, returning the node list and whether
-// anything changed. Templates and older flows ship only `cron`; without a zone
-// both the schedule and its fired_at run in UTC. The editor stamps the zone on
-// add/edit, but a forked or pre-existing flow never went through that — so we
-// heal it once on load (and persist, since a Run executes the SAVED graph).
-function stampScheduleTimezones(
-  nodes: Graph["nodes"],
-): { nodes: Graph["nodes"]; changed: boolean } {
-  let changed = false;
-  const out = (nodes ?? []).map((n) => {
-    const tz = (n.params as { tz?: unknown } | undefined)?.tz;
-    if (n.module === "cron_trigger" && !(typeof tz === "string" && tz.trim())) {
-      changed = true;
-      return { ...n, params: { ...(n.params ?? {}), tz: browserTimeZone() } };
-    }
-    return n;
-  });
-  return { nodes: out, changed };
-}
 
 function EditorInner() {
   const { t } = useTranslation();
@@ -357,18 +242,12 @@ function EditorInner() {
   const [frameNodes, setFrameNodes] = useState<FlowNode[]>([]);
   // Per-node output values from the current run (#10) — nodeId → port → Ref.
   // Populated as nodes finish; surfaced as a hover-peek on output ports.
-  const [runOutputs, setRunOutputs] = useState<Record<string, Record<string, Ref>>>({});
   // runDone reports a SUCCESSFUL run on the canvas. A failure already raises
   // the error banner, but success used to change nothing except each node's
   // border tint — so pressing Run and getting a working flow looked identical
   // to pressing Run and nothing happening, and the result itself was only
   // reachable by leaving for the run list. This carries the last step's output
   // so "what did it produce?" is answered where the user is standing.
-  const [runDone, setRunDone] = useState<{
-    runID: string;
-    label: string;
-    preview: string;
-  } | null>(null);
   // failedRun is the run behind the error banner, when that error came from a
   // run failing (rather than a save, a permission or a config problem). It's
   // what makes Retry offerable here: the runs list and the run-detail page both
@@ -376,13 +255,10 @@ function EditorInner() {
   // you are standing when you watch it fail — was the one surface that made you
   // navigate away to do it. Cleared by subscribeToRun, so starting any new run
   // drops a stale offer.
-  const [failedRun, setFailedRun] = useState<string | null>(null);
   // Breakpoints (#12): node IDs flagged to pause the run after they finish.
   // Saved with the graph (node.breakpoint). pausedAt is the node the live
   // run is currently holding after; stepping mirrors the run's step mode.
   const [breakpoints, setBreakpoints] = useState<Set<string>>(() => new Set());
-  const [pausedAt, setPausedAt] = useState<string | null>(null);
-  const [stepping, setStepping] = useState(false);
   // Disabled steps: node IDs switched off. Saved with the graph
   // (node.disabled); at run time the engine skips them and everything
   // downstream (the skip cascade) — a setup-time aid.
@@ -428,7 +304,6 @@ function EditorInner() {
   // node still missing required values (ConfigChecklistModal handles its own
   // ESC/backdrop dismissal).
   const [showConfigList, setShowConfigList] = useState(false);
-  const [dirty, setDirty] = useState(false);
   // Undo/redo. Whole-document snapshots rather than a command stack — see
   // lib/graphHistory.ts for why, and for why the server's version snapshots
   // can't back this. Kept in state (not a ref) because the toolbar buttons
@@ -447,8 +322,6 @@ function EditorInner() {
   // and no-ops anyway. This just stops a near-miss apply from being recorded
   // as if the user had made it.
   const pendingHistoryApplyRef = useRef<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // connHint is a transient explanation shown when the editor refuses an
   // incompatible wire ("Items can't plug into a Text input — add a …"). Set in
@@ -459,13 +332,6 @@ function EditorInner() {
     const t = setTimeout(() => setConnHint(null), 6000);
     return () => clearTimeout(t);
   }, [connHint]);
-  // loadFailed is set when the INITIAL graph load fails with a non-404
-  // (500/network). In that state `nodes` is [] but that empty canvas does
-  // NOT reflect the server graph — so editing + autosave is blocked to
-  // stop an empty graph overwriting the real one. Cleared on a successful
-  // (re)load. A 404 is the normal "never saved yet" state and does NOT set
-  // this flag.
-  const [loadFailed, setLoadFailed] = useState(false);
   // graphLoading gates the empty-state CTA so a populated flow doesn't flash
   // "Add your first step" during the initial graph fetch. true from mount
   // (and on every flow switch) until the load settles (success / 404 /
@@ -516,28 +382,6 @@ function EditorInner() {
   // dismisses the warning visually until the next save confirms) or
   // when the user explicitly dismisses.
   const [lintIssues, setLintIssues] = useState<LintIssue[]>([]);
-  // Version-history panel state. previewRef holds the commit currently
-  // being previewed on the canvas (null = live HEAD). While previewing,
-  // autosave/save/run are suppressed so a peek at an old version can't be
-  // written back as the new HEAD by accident.
-  const [showHistory, setShowHistory] = useState(false);
-  const [revisions, setRevisions] = useState<Revision[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [previewRef, setPreviewRef] = useState<string | null>(null);
-  const [restoring, setRestoring] = useState(false);
-  // labelEditing holds the revision whose label is being edited in the
-  // prompt modal (null = closed). Set/clear a human name for a commit.
-  const [labelEditing, setLabelEditing] = useState<Revision | null>(null);
-  // makeLivePrompt holds the unlabeled revision a "Make live" (rollback)
-  // is about to publish — it opens the publish modal that nudges for a
-  // release name. Already-labeled revisions publish without the prompt.
-  const [makeLivePrompt, setMakeLivePrompt] = useState<Revision | null>(null);
-  // Publish state. publishInfo is the draft-vs-live status; null until
-  // loaded. publishedCommit (mirrored from the history fetch) marks which
-  // revision is currently live in the history panel. diffOpen toggles the
-  // "what changed since publish" modal.
-  const [publishInfo, setPublishInfo] = useState<PublishInfo | null>(null);
-  const [publishing, setPublishing] = useState(false);
   // publishConfirm gates the Live switch behind a confirm dialog (going live
   // is "a thing" — automatic triggers run it; pausing stops them all).
   // justPublished drives the one-shot launch animation on going live.
@@ -546,30 +390,17 @@ function EditorInner() {
   //   "update" — push the current draft to the live version
   const [publishConfirm, setPublishConfirm] =
     useState<"live" | "pause" | "update" | null>(null);
-  const [justPublished, setJustPublished] = useState(false);
-  const [publishedCommit, setPublishedCommit] = useState<string | null>(null);
-  const [diffOpen, setDiffOpen] = useState(false);
-  const [diff, setDiff] = useState<GraphDiff | null>(null);
-  const [diffLoading, setDiffLoading] = useState(false);
   // lockedRunID is set when ANY run of this flow (this tab or another)
   // is still in-flight. Save is gated on it so two editors can't race
   // a save against a live run.
-  const [lockedRunID, setLockedRunID] = useState<string | null>(null);
-  const [cancelling, setCancelling] = useState(false);
   // The most-recent run for this graph in this session. Used by the
   // Inspector's Output panel to fetch per-node results. Persisted via
   // localStorage so a page refresh keeps the panel populated.
   // Initial run resolves in priority order: URL ?run=... (deep link from
   // the Runs page) → localStorage cached last-run for this graph → null.
-  const [currentRunID, setCurrentRunID] = useState<string | null>(() => {
-    const fromURL = searchParams.get("run");
-    if (fromURL) return fromURL;
-    return id ? localStorage.getItem(`dazyflow.lastRun.${id}`) : null;
-  });
   // liveLogs holds per-node stdout/stderr lines streamed via SSE
   // progress events. Cleared on every new run. The Inspector renders
   // the buffer for the currently-selected node.
-  const [liveLogs, setLiveLogs] = useState<Record<string, string[]>>({});
   // On narrow viewports the inspector is a bottom sheet. Selecting a node
   // rests it in a collapsed peek (just the head); the user taps the head
   // or chevron to expand, and X's it out (or taps the canvas) to dismiss.
@@ -632,6 +463,47 @@ function EditorInner() {
   }, [selectedID]);
 
   const rfRef = useRef<ReactFlowInstance<FlowNode<DazyNodeData>, FlowEdge> | null>(null);
+
+  // The run to attach to on open, resolved once: a ?run= deep link from the runs
+  // page wins, else the sticky last-run for this flow.
+  const initialRunIDRef = useRef<string | null>(null);
+  if (initialRunIDRef.current === null) {
+    const fromURL = searchParams.get("run");
+    initialRunIDRef.current =
+      fromURL || (id ? localStorage.getItem(`dazyflow.lastRun.${id}`) : null);
+  }
+
+  // Everything about "a run is happening" lives in useRunStream: the SSE
+  // subscription, the per-node statuses it paints onto this component's graph,
+  // the live logs, the success and failure banners, the edit lock, and the four
+  // ways a run starts. This component keeps the graph and the gating.
+  const run = useRunStream({
+    token,
+    graphID: id,
+    tenant: activeTenant,
+    workspace: activeWorkspace,
+    t,
+    setNodes,
+    flow: rfRef,
+    onError: setError,
+    initialRunID: initialRunIDRef.current,
+  });
+  const {
+    running,
+    cancelling,
+    currentRunID,
+    lockedRunID,
+    pausedAt,
+    stepping,
+    runOutputs,
+    runDone,
+    failedRun,
+    liveLogs,
+    setRunDone,
+    stopRun,
+    resumeRun,
+    refreshLock,
+  } = run;
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   // streamAbortRef holds the AbortController for the one SSE run-stream
   // that's currently active. subscribeToRun aborts the previous stream
@@ -639,7 +511,6 @@ function EditorInner() {
   // unmount — so starting a run, sending a test event, or picking a
   // historical run can never leave concurrent readers writing state (and
   // nothing keeps streaming after the editor is gone).
-  const streamAbortRef = useRef<AbortController | null>(null);
   // lastPointer tracks the most recent mouse position over the canvas so
   // Ctrl+K can spawn the chosen drop where the user is looking. Falls
   // back to viewport centre when nothing has moved yet.
@@ -717,6 +588,72 @@ function EditorInner() {
     // someone else's edit would silently discard it.
     fenceHistoryRef.current = true;
   }, []);
+
+  // Version history. useRevisions owns the commit list and the read-only preview
+  // of an older revision; `previewRef` is read back out because three other
+  // clusters gate on it (autosave refuses to write, the publish switch goes
+  // away, and the canvas becomes uneditable while a preview is up).
+  const versionHistory = useRevisions({
+    token,
+    graphID: id,
+    tenant: activeTenant,
+    workspace: activeWorkspace,
+    t,
+    hydrateGraph,
+    onError: setError,
+    onConflict: refreshLock,
+  });
+  const {
+    showHistory,
+    revisions,
+    historyLoading,
+    previewRef,
+    restoring,
+    publishedCommit,
+    setPublishedCommit,
+    labelEditing,
+    setLabelEditing,
+    makeLivePrompt,
+    setMakeLivePrompt,
+    openHistory,
+    previewRevision,
+    exitPreview,
+    restoreRevision,
+    saveLabel,
+  } = versionHistory;
+
+  // Going live, pausing, and the draft-vs-live status. Publishing changes which
+  // revision is live, so it tells the history panel to re-read rather than
+  // reaching into that cluster itself.
+  const publish = usePublish({
+    token,
+    ready: !!me,
+    graphID: id,
+    tenant: activeTenant,
+    workspace: activeWorkspace,
+    t,
+    hasPerm,
+    disabled,
+    setDisabled,
+    onError: setError,
+    onPublished: versionHistory.refreshHistoryIfOpen,
+    onPublishedCommit: setPublishedCommit,
+  });
+  const {
+    publishInfo,
+    setPublishInfo,
+    publishing,
+    justPublished,
+    diffOpen,
+    setDiffOpen,
+    diff,
+    diffLoading,
+    publishRef,
+    setLive,
+    openDiff,
+  } = publish;
+
+
 
   // applyGraphAnimated hydrates a graph the way hydrateGraph does, but plays
   // a build animation as it lands: drops that are NEW scale/fade in left→
@@ -2358,34 +2295,11 @@ function EditorInner() {
   const canEdit = hasPerm("graph:edit") && !lockedRunID && !previewRef;
 
   // Continue / Step a paused run (#12).
-  const resumeRun = useCallback(
-    (step: boolean) => {
-      if (!token || !currentRunID) return;
-      setPausedAt(null);
-      api.resumeRun(token, currentRunID, step).catch((e) => setError(explainApiError(e, t)));
-    },
-    [token, currentRunID, t],
-  );
   // Stop the active (possibly paused) run. Cancels lockedRunID if known,
   // else the run this editor started (currentRunID) — covers the brief
   // window before refreshLock detects the lock. The cancel publishes a
   // Terminal event over SSE, which subscribeToRun handles (clears pause
   // state + refreshes the lock), so we don't refreshLock here.
-  const stopRun = useCallback(async () => {
-    const runID = lockedRunID || currentRunID;
-    if (!token || !runID) return;
-    setCancelling(true);
-    setError(null);
-    try {
-      await api.cancelRun(token, runID, "stopped from editor");
-      setRunning(false);
-      setPausedAt(null);
-    } catch (e) {
-      setError(explainApiError(e, t));
-    } finally {
-      setCancelling(false);
-    }
-  }, [token, lockedRunID, currentRunID, t]);
   // Clear every breakpoint in the graph.
   const clearBreakpoints = useCallback(() => {
     setBreakpoints((prev) => (prev.size === 0 ? prev : new Set()));
@@ -2754,6 +2668,68 @@ function EditorInner() {
     ...overrides,
   });
 
+  // When and whether the editor writes. useAutosave owns the dirty/saving flags,
+  // the debounced timer, the unload flush, and the five guards that stop a save
+  // clobbering something — see its header. The graph itself stays here, so
+  // buildGraph is handed in rather than reconstructed there.
+  const autosave = useAutosave({
+    token,
+    ready: !!me,
+    graphID: id,
+    t,
+    buildGraph,
+    canEdit: hasPerm("graph:edit"),
+    lockedRunID,
+    previewing: !!previewRef,
+    loadedID: loadedIDRef,
+    onError: setError,
+    onConflict: refreshLock,
+    onSaved: (res, isAutosave) => {
+      // Remember our own commit so the flow-watch can ignore its echo.
+      if (res.commit) ownCommitsRef.current.add(res.commit);
+      // Lint findings are advisory — the save already succeeded. Show them; the
+      // user can fix-and-resave or dismiss.
+      setLintIssues(res.lint ?? []);
+      // The draft moved, so the "unpublished changes" pill must flip on. A
+      // manual save does a real status probe; autosave bursts skip the network
+      // call (it would hammer the endpoint) and flip the pill optimistically,
+      // since a successful save means HEAD now differs from the published
+      // revision.
+      if (!isAutosave) {
+        void publish.loadPublishInfo();
+      } else {
+        setPublishInfo((prev) =>
+          prev && prev.published && !prev.dirty ? { ...prev, dirty: true } : prev,
+        );
+      }
+    },
+    // Any content change restarts the idle timer.
+    reArmOn: [
+      nodes,
+      edges,
+      paramsByID,
+      triggers,
+      visibility,
+      owner,
+      name,
+      icon,
+      description,
+      timeoutSeconds,
+    ],
+  });
+  const {
+    dirty,
+    setDirty,
+    saving,
+    setSaving,
+    loadFailed,
+    setLoadFailed,
+    save,
+    dirtyRef,
+    loadFailedRef,
+  } = autosave;
+
+
   // --- Undo / redo -----------------------------------------------------
   //
   // The document is snapshotted from buildGraph, with two adjustments:
@@ -2969,79 +2945,7 @@ function EditorInner() {
     return () => window.removeEventListener("keydown", onKey);
   }, [doUndo, doRedo]);
 
-  const save = async (autosave = false): Promise<boolean> => {
-    if (!token || !me || !id) return false;
-    // Never PUT over a graph we failed to load — the in-memory state is the
-    // empty fallback, not the server's. (Defends manual Save too, not just
-    // the autosave effect.)
-    if (loadFailed) {
-      setError(t("editor.loadFailedBlocked"));
-      return false;
-    }
-    setSaving(true);
-    setError(null);
-    try {
-      const res = await api.saveGraph(token, buildGraph(), autosave);
-      // Remember our own commit so the flow-watch can ignore its echo.
-      if (res.commit) ownCommitsRef.current.add(res.commit);
-      setDirty(false);
-      // Lint findings are advisory — the save already succeeded.
-      // Show them; the user can fix-and-resave or dismiss.
-      setLintIssues(res.lint ?? []);
-      // The draft moved — the publish pill ("unpublished changes") must
-      // flip on. A manual save does a real status probe; autosave bursts
-      // skip the network call (it would hammer the endpoint) and instead
-      // flip the pill optimistically, since a successful save means HEAD
-      // now differs from the published revision. Without this the pill
-      // stayed hidden until the next explicit interaction or a reload.
-      if (!autosave) {
-        void loadPublishInfo();
-      } else {
-        setPublishInfo((prev) =>
-          prev && prev.published && !prev.dirty ? { ...prev, dirty: true } : prev,
-        );
-      }
-      return true;
-    } catch (e) {
-      const msg = (e as Error).message;
-      setError(explainApiError(e, t));
-      // A 409 from the gateway means another run started between the
-      // last lock check and this save. Re-pull so the UI catches up.
-      if (
-        isHTTPStatus(e, 409) ||
-        isErrorCode(e, "conflict") ||
-        msg.toLowerCase().includes("active run")
-      ) {
-        void refreshLock();
-      }
-      return false;
-    } finally {
-      setSaving(false);
-    }
-  };
 
-  // Autosave: the editor saves on its own a short beat after the last
-  // edit, so there's nothing to remember to press. saveRef always points
-  // at the latest save closure (which reads current state), so the
-  // debounced timer never fires a stale snapshot. The daemon coalesces
-  // these autosaves into one commit per editing burst (autosave=true), so
-  // the workspace git history stays readable; the manual Save button still
-  // writes its own explicit checkpoint commit.
-  const saveRef = useRef(save);
-  saveRef.current = save;
-  // Mirrors for the unload-flush effect below: it registers its listener
-  // once, but must read the latest dirty state and graph when the page is
-  // actually being torn down. The mount-load effect's resolve guard reads
-  // dirtyRef too (skip hydrating over local edits made mid-fetch).
-  const dirtyRef = useRef(dirty);
-  dirtyRef.current = dirty;
-  // Mirror of loadFailed for the unmount/unload flush (reads latest value
-  // without re-registering the listener) — never flush the empty fallback
-  // over a graph we couldn't load.
-  const loadFailedRef = useRef(loadFailed);
-  loadFailedRef.current = loadFailed;
-  const buildGraphRef = useRef(buildGraph);
-  buildGraphRef.current = buildGraph;
   // Mirror of previewRef for the flow-watch (below): a history preview shows
   // an old revision, intentionally diverged from HEAD, so an external HEAD
   // edit must not animate over it.
@@ -3104,339 +3008,22 @@ function EditorInner() {
       });
     return () => ctrl.abort();
   }, [token, meReady, id, activeTenant, activeWorkspace]);
-  useEffect(() => {
-    if (!dirty || saving || !token || !me || !id) return;
-    if (!hasPerm("graph:edit") || lockedRunID) return;
-    if (previewRef) return; // never autosave a history preview as the HEAD
-    // The initial load failed (non-404): the in-memory empty graph is NOT
-    // the server's, so autosaving would clobber the real graph. Block until
-    // a successful reload clears loadFailed.
-    if (loadFailed) return;
-    // The in-memory state must belong to the flow in the URL. After a
-    // flow switch there's a beat where `id` is the new flow but the
-    // nodes are still the old one's — autosaving then writes flow A's
-    // graph under flow B's id (real data loss, observed in the wild).
-    if (loadedIDRef.current !== null && loadedIDRef.current !== id) return;
-    const handle = window.setTimeout(() => {
-      void saveRef.current(true);
-    }, AUTOSAVE_DEBOUNCE_MS);
-    return () => window.clearTimeout(handle);
-    // Re-arm on any content change so the debounce measures idle time, not
-    // time-since-first-edit. Each change cancels the prior timer. `saving`
-    // is a dep so a save in flight defers the next autosave instead of
-    // racing a second PUT.
-  }, [
-    dirty,
-    saving,
-    nodes,
-    edges,
-    paramsByID,
-    triggers,
-    visibility,
-    owner,
-    name,
-    icon,
-    description,
-    timeoutSeconds,
-    lockedRunID,
-    previewRef,
-    loadFailed,
-    token,
-    me,
-    id,
-    hasPerm,
-  ]);
 
-  // Flush a pending edit when the page unloads (refresh, close, navigate).
-  // The debounced autosave clears its timer on unmount, so a refresh within
-  // the ~1.5s window — or before an in-flight save returns — would otherwise
-  // silently drop the change: you pick a form/sheet, refresh, and see the
-  // previously-saved value reappear. A keepalive PUT survives unload AND can
-  // send the Authorization header (sendBeacon can't), so the latest graph
-  // lands even on a fast refresh. Best-effort: a 409 from an active run is
-  // the only realistic loss, and the in-app autosave already covers the rest.
-  useEffect(() => {
-    // flush PUTs the current (dirty) graph immediately, bypassing the
-    // debounce. Used both on page unload (pagehide) AND on component
-    // unmount / in-app route change (the effect cleanup) — the debounced
-    // autosave clears its pending timer on unmount, so without this an edit
-    // made within the ~1.5s window just before navigating away is silently
-    // dropped. It reads `g` (and so the flow id) from buildGraphRef at call
-    // time; because `id` is an effect dep, a route change tears this effect
-    // down with the PREVIOUS flow's closure, so the flush targets the flow
-    // the edits actually belong to. Blocked when the initial load failed —
-    // never overwrite the real graph with the empty fallback.
-    const flush = () => {
-      if (
-        !dirtyRef.current ||
-        loadFailedRef.current ||
-        !token ||
-        !id ||
-        !hasPerm("graph:edit")
-      )
-        return;
-      const g = buildGraphRef.current();
-      const path = `/me/flows/${encodeURIComponent(`${g.tenant}/${g.workspace}/${g.id}`)}?autosave=1`;
-      try {
-        void fetch((import.meta.env.VITE_API_BASE ?? "") + "/api/v1" + path, {
-          method: "PUT",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          credentials: "include",
-          body: JSON.stringify(g),
-          keepalive: true,
-        });
-      } catch {
-        /* best-effort on unload */
-      }
-    };
-    window.addEventListener("pagehide", flush);
-    return () => {
-      window.removeEventListener("pagehide", flush);
-      // Unmount / route change: flush any edit still inside the debounce
-      // window before this editor instance (and its pending timer) is gone.
-      flush();
-    };
-  }, [token, id, hasPerm]);
 
-  // --- Version history ------------------------------------------------
-  // openHistory loads the flow's commit log into the side panel.
-  const openHistory = useCallback(async () => {
-    if (!token || !id) return;
-    setShowHistory(true);
-    setHistoryLoading(true);
-    try {
-      const res = await api.flowHistory(token, activeTenant, activeWorkspace, id);
-      setRevisions(res.revisions ?? []);
-      setPublishedCommit(res.published_commit ?? null);
-    } catch (e) {
-      setError(explainApiError(e, t));
-    } finally {
-      setHistoryLoading(false);
-    }
-  }, [token, id, activeTenant, activeWorkspace, t]);
 
-  // loadPublishInfo refreshes the draft-vs-live status that drives the
-  // toolbar publish control. Called on load and after every save/publish.
-  const loadPublishInfo = useCallback(async () => {
-    if (!token || !id) return;
-    try {
-      const info = await api.getPublishedInfo(token, activeTenant, activeWorkspace, id);
-      setPublishInfo(info);
-      setPublishedCommit(info.published_commit ?? null);
-    } catch {
-      // Non-fatal: the publish pill just won't render. Don't surface an
-      // error banner for a status probe.
-    }
-  }, [token, id, activeTenant, activeWorkspace]);
 
-  // publishDraft promotes the current draft (HEAD) to live, then refreshes
-  // status + history. rollbackTo publishes an older commit instead — same
-  // endpoint, different ref. Both go live for automatic triggers; the
-  // editor keeps showing the draft.
-  const publishRef = useCallback(
-    async (ref?: string, label?: string) => {
-      if (!token || !id) return;
-      setPublishing(true);
-      setError(null);
-      try {
-        await api.publishFlow(token, activeTenant, activeWorkspace, id, ref, label);
-        await loadPublishInfo();
-        if (showHistory) {
-          const res = await api.flowHistory(token, activeTenant, activeWorkspace, id);
-          setRevisions(res.revisions ?? []);
-          setPublishedCommit(res.published_commit ?? null);
-        }
-        // Celebrate — publishing took the flow live, make it land. The
-        // animation self-dismisses after its ~1.6s run.
-        setJustPublished(true);
-        window.setTimeout(() => setJustPublished(false), 1600);
-      } catch (e) {
-        setError(explainApiError(e, t));
-      } finally {
-        setPublishing(false);
-      }
-    },
-    [token, id, activeTenant, activeWorkspace, loadPublishInfo, showHistory, t],
-  );
 
-  // setLive is the single Live/Paused switch. "Live" means enabled AND
-  // published — the only state where automatic triggers actually run, for
-  // every trigger type. Going live publishes the draft when nothing is live
-  // yet (first go-live) and enables the flow; a resume of an already-published
-  // flow only re-enables, so edits made while paused stay a draft (draft
-  // safety). Going off disables — the universal kill switch that stops cron,
-  // poll, webhook, and form triggers alike. Animates on going live.
-  const setLive = useCallback(
-    async (on: boolean, label?: string) => {
-      if (!token || !id) return;
-      setPublishing(true);
-      setError(null);
-      try {
-        if (on) {
-          // Publish only when there's no live version to preserve — first
-          // go-live, or after an explicit unpublish. A paused-but-published
-          // flow resumes its existing live version untouched. Publishing needs
-          // graph:admin; a graph:edit-only user can still resume (re-enable).
-          if (!publishInfo?.published && hasPerm("graph:admin")) {
-            await api.publishFlow(token, activeTenant, activeWorkspace, id, undefined, label);
-          }
-          if (disabled) {
-            await api.setFlowEnabled(token, activeTenant, activeWorkspace, id, true);
-            setDisabled(false);
-          }
-          setJustPublished(true);
-          window.setTimeout(() => setJustPublished(false), 1600);
-        } else {
-          await api.setFlowEnabled(token, activeTenant, activeWorkspace, id, false);
-          setDisabled(true);
-        }
-        await loadPublishInfo();
-        if (showHistory) {
-          const res = await api.flowHistory(token, activeTenant, activeWorkspace, id);
-          setRevisions(res.revisions ?? []);
-          setPublishedCommit(res.published_commit ?? null);
-        }
-      } catch (e) {
-        setError(e instanceof APIError && e.status === 404 ? t("editor.pauseSaveFirst") : explainApiError(e, t));
-      } finally {
-        setPublishing(false);
-      }
-    },
-    [token, id, activeTenant, activeWorkspace, publishInfo, disabled, loadPublishInfo, showHistory, hasPerm, t],
-  );
 
-  // openDiff fetches the published revision and diffs it against the
-  // current draft (HEAD), then opens the change summary modal.
-  const openDiff = useCallback(async () => {
-    if (!token || !id || !publishInfo?.published || !publishInfo.published_commit) return;
-    setDiffOpen(true);
-    setDiffLoading(true);
-    try {
-      const [published, draft] = await Promise.all([
-        api.loadGraph(token, activeTenant, activeWorkspace, id, publishInfo.published_commit),
-        api.loadGraph(token, activeTenant, activeWorkspace, id),
-      ]);
-      setDiff(diffGraphs(published, draft));
-    } catch (e) {
-      setError(explainApiError(e, t));
-      setDiffOpen(false);
-    } finally {
-      setDiffLoading(false);
-    }
-  }, [token, id, activeTenant, activeWorkspace, publishInfo, t]);
 
-  // Load the publish status once the flow + scope are ready, so the
-  // toolbar pill reflects draft-vs-live from first paint.
-  useEffect(() => {
-    void loadPublishInfo();
-  }, [loadPublishInfo]);
 
-  // previewRevision loads a past revision onto the canvas read-only. It
-  // does NOT touch HEAD — autosave/save/run are gated on previewRef.
-  const previewRevision = useCallback(
-    async (commit: string) => {
-      if (!token || !id) return;
-      try {
-        const g = await api.loadGraph(token, activeTenant, activeWorkspace, id, commit);
-        hydrateGraph(g);
-        setPreviewRef(commit);
-      } catch (e) {
-        setError(explainApiError(e, t));
-      }
-    },
-    [token, id, activeTenant, activeWorkspace, hydrateGraph, t],
-  );
 
-  // exitPreview drops the preview and reloads the live HEAD.
-  const exitPreview = useCallback(async () => {
-    if (!token || !id) {
-      setPreviewRef(null);
-      return;
-    }
-    try {
-      const g = await api.loadGraph(token, activeTenant, activeWorkspace, id);
-      hydrateGraph(g);
-    } catch (e) {
-      setError(explainApiError(e, t));
-    } finally {
-      setPreviewRef(null);
-    }
-  }, [token, id, activeTenant, activeWorkspace, hydrateGraph, t]);
 
-  // restoreRevision makes a revision the new HEAD (a fresh commit on top),
-  // then reloads HEAD and refreshes the history list. History is preserved.
-  const restoreRevision = useCallback(
-    async (commit: string) => {
-      if (!token || !id) return;
-      setRestoring(true);
-      setError(null);
-      try {
-        await api.restoreFlow(token, activeTenant, activeWorkspace, id, commit);
-        const g = await api.loadGraph(token, activeTenant, activeWorkspace, id);
-        hydrateGraph(g);
-        setPreviewRef(null);
-        const res = await api.flowHistory(token, activeTenant, activeWorkspace, id);
-        setRevisions(res.revisions ?? []);
-      } catch (e) {
-        const msg = (e as Error).message;
-        setError(explainApiError(e, t));
-        if (
-          isHTTPStatus(e, 409) ||
-          isErrorCode(e, "conflict") ||
-          msg.toLowerCase().includes("locked")
-        ) {
-          void refreshLock();
-        }
-      } finally {
-        setRestoring(false);
-      }
-    },
-    [token, id, activeTenant, activeWorkspace, hydrateGraph, t],
-  );
 
-  // saveLabel names a revision (or clears its name when label is empty)
-  // without publishing it, then refreshes the history list so the new name
-  // shows immediately. The label is keyed to the commit server-side, so it
-  // survives later publishes and rollbacks. Admin-gated by the daemon.
-  const saveLabel = useCallback(
-    async (commit: string, label: string) => {
-      if (!token || !id) return;
-      setLabelEditing(null);
-      setError(null);
-      try {
-        await api.labelRevision(token, activeTenant, activeWorkspace, id, commit, label);
-        const res = await api.flowHistory(token, activeTenant, activeWorkspace, id);
-        setRevisions(res.revisions ?? []);
-        setPublishedCommit(res.published_commit ?? null);
-      } catch (e) {
-        setError(explainApiError(e, t));
-      }
-    },
-    [token, id, activeTenant, activeWorkspace, t],
-  );
 
   // refreshLock asks the daemon whether any run of this flow is still
   // active. The server is the source of truth — another tab or a
   // scheduled trigger can have started a run this editor doesn't know
   // about. Called on mount, after Run, and after every SSE terminal.
-  const refreshLock = useCallback(async () => {
-    // activeTenant/activeWorkspace resolve on a separate async path; until
-    // they do, the runs URL would be ".//<id>" which the API rejects (400).
-    // Wait for them — the effect re-runs once they land.
-    if (!token || !id || !activeTenant || !activeWorkspace) return;
-    try {
-      const { runs } = await api.listRuns(token, activeTenant, activeWorkspace, id, { limit: 20 });
-      const active = runs.find(
-        (r) => r.status === "queued" || r.status === "running" || r.status === "awaiting",
-      );
-      setLockedRunID(active?.id ?? null);
-    } catch {
-      // Best-effort; a transient failure shouldn't break the editor.
-    }
-  }, [token, id, activeTenant, activeWorkspace]);
 
   // Self-heal the edit lock. lockedRunID is set when a run is active, but
   // scheduler-driven runs (a poll/cron trigger firing) never reach this
@@ -3446,11 +3033,6 @@ function EditorInner() {
   // While locked, re-poll so the lock releases once the run finishes and the
   // pending autosave (re-armed on the lockedRunID change) can write. Only
   // runs while locked, so there's no idle polling cost.
-  useEffect(() => {
-    if (!lockedRunID) return;
-    const h = window.setInterval(() => void refreshLock(), POLL.live);
-    return () => window.clearInterval(h);
-  }, [lockedRunID, refreshLock]);
 
   // summarizeSuccess builds the "it worked, here's what came out" banner for
   // a run that finished cleanly. "What came out" means the leaf steps — the
@@ -3460,201 +3042,11 @@ function EditorInner() {
   // is stale by the time a terminal frame lands. Any lookup failure just
   // yields the plain "run finished" form: never let a preview fetch turn a
   // successful run back into silence.
-  const summarizeSuccess = async (runID: string) => {
-    const inst = rfRef.current;
-    if (!token || !inst) {
-      setRunDone({ runID, label: "", preview: "" });
-      return;
-    }
-    const sources = new Set(inst.getEdges().map((e) => e.source));
-    const leaves = inst
-      .getNodes()
-      .filter((n) => n.type !== "comment" && !sources.has(n.id));
-    for (const leaf of leaves) {
-      try {
-        const rec = await api.getNodeRecord(token, runID, leaf.id);
-        const preview = previewOutput(rec.Result?.output);
-        if (preview) {
-          setRunDone({
-            runID,
-            label: String(leaf.data?.label || leaf.id),
-            preview,
-          });
-          return;
-        }
-      } catch {
-        /* node never materialised (off / skipped) — try the next leaf */
-      }
-    }
-    setRunDone({ runID, label: "", preview: "" });
-  };
 
   // subscribeToRun opens the SSE stream for runID and applies per-node
   // status frames to the canvas. Shared by Run (new run just started)
   // and by the history picker (load an old run). Returns a cancel
   // function that aborts the stream.
-  const subscribeToRun = (runID: string) => {
-    if (!token) return () => {};
-    // Abort any stream still open from a prior run/test/history pick so we
-    // never run two readers writing the canvas at once (the returned cancel
-    // used to be discarded at most call sites, leaking the old stream).
-    streamAbortRef.current?.abort();
-    // Clear status dots so we don't carry stale state across runs.
-    setNodes((nds) =>
-      nds.map((n) => ({ ...n, data: { ...n.data, status: undefined } })),
-    );
-    setLiveLogs({});
-    setRunOutputs({});
-    setRunDone(null);
-    setFailedRun(null);
-    setPausedAt(null);
-    setStepping(false);
-    const abort = new AbortController();
-    streamAbortRef.current = abort;
-    // Tracks whether a per-node failure already raised the banner, so the
-    // terminal handler doesn't double-report. Set synchronously the moment a
-    // node reports "failed" (not after the async getNodeRecord), because the
-    // terminal frame can arrive before that fetch resolves.
-    let nodeFailureSeen = false;
-    api
-      .streamJob(
-        token,
-        runID,
-        (kind, data) => {
-          if (kind === "node") {
-            const ev = data as { node_id?: string; status?: JobStatus };
-            if (!ev.node_id || !ev.status) return;
-            if (ev.status === "failed") nodeFailureSeen = true;
-            setNodes((nds) =>
-              nds.map((n) =>
-                n.id === ev.node_id
-                  ? { ...n, data: { ...n.data, status: ev.status } }
-                  : n,
-              ),
-            );
-            // Once a node reaches a terminal state, pull its output values
-            // so the canvas can show a hover-peek on its ports (#10).
-            if (ev.status === "succeeded" || ev.status === "failed") {
-              const nodeID = ev.node_id;
-              const failed = ev.status === "failed";
-              api
-                .getNodeRecord(token, runID, nodeID)
-                .then((r) => {
-                  const out = r.Result?.output;
-                  if (out && Object.keys(out).length > 0) {
-                    setRunOutputs((m) => ({ ...m, [nodeID]: out }));
-                  }
-                  // A failed step otherwise only shows as a subtle red border
-                  // with the reason buried below the fold in the Inspector.
-                  // Raise it to a dismissible banner naming the step + the
-                  // user-facing message (not the developer `details`), so a
-                  // non-technical user knows the run didn't work and why.
-                  if (failed) {
-                    const label =
-                      rfRef.current?.getNode(nodeID)?.data?.label || nodeID;
-                    const detail =
-                      r.Result?.error?.message ||
-                      r.Result?.error?.code ||
-                      t("editor.runFailedNoDetail");
-                    setError(t("editor.runFailed", { label, detail }));
-                    setFailedRun(runID);
-                  }
-                })
-                .catch(() => {
-                  /* 404 = node hasn't materialised yet; ignore */
-                  if (failed) {
-                    const label =
-                      rfRef.current?.getNode(nodeID)?.data?.label || nodeID;
-                    setError(
-                      t("editor.runFailed", {
-                        label,
-                        detail: t("editor.runFailedNoDetail"),
-                      }),
-                    );
-                    setFailedRun(runID);
-                  }
-                });
-            }
-          }
-          if (kind === "progress") {
-            // GraphProgress shape from the daemon:
-            //   { job_id, node_id, progress: { message, data: {stream, line} } }
-            const ev = data as {
-              node_id?: string;
-              progress?: {
-                message?: string;
-                data?: { stream?: string; line?: string };
-              };
-            };
-            if (!ev.node_id) return;
-            const line = ev.progress?.data?.line ?? ev.progress?.message;
-            if (typeof line !== "string" || line === "") return;
-            const stream = ev.progress?.data?.stream;
-            const localPrefix = stream === "stderr" ? "[stderr] " : "";
-            const localLine = localPrefix + line;
-            setLiveLogs((prev) => {
-              const cur = prev[ev.node_id!] ?? [];
-              // Cap per-node buffer at 1000 lines to keep React state
-              // bounded for chatty builds.
-              const next =
-                cur.length >= 1000
-                  ? [...cur.slice(-999), localLine]
-                  : [...cur, localLine];
-              return { ...prev, [ev.node_id!]: next };
-            });
-          }
-          if (kind === "paused") {
-            // Breakpoint hit (#12): the run is holding after this node.
-            const ev = data as { node_id?: string; stepping?: boolean };
-            setPausedAt(ev.node_id ?? null);
-            setStepping(!!ev.stepping);
-          }
-          if (kind === "terminal") {
-            setPausedAt(null);
-            setStepping(false);
-            // A run can fail at the graph level (build/validation error,
-            // global timeout, a skip-cascade or leaf-only failure) without
-            // ever emitting a per-node `failed` frame. The terminal frame
-            // carries the final status + structured error, so surface it as
-            // a banner when no node-level banner already covered it —
-            // otherwise the canvas just goes quiet and the user assumes the
-            // run worked.
-            const term = data as {
-              status?: JobStatus;
-              error?: { code?: string; message?: string };
-            };
-            if (term.status === "failed" && !nodeFailureSeen) {
-              const detail =
-                term.error?.message ||
-                term.error?.code ||
-                t("editor.runFailedGeneric");
-              setError(t("editor.runFailedGraph", { detail }));
-              setFailedRun(runID);
-            }
-            // Say so when it worked. Without this the only success signal is
-            // a border tint on each node, which reads as "nothing happened"
-            // to anyone who isn't looking for it.
-            if (term.status === "succeeded") void summarizeSuccess(runID);
-            abort.abort();
-            // The run that just held the lock might be the only active
-            // one; ask the server before clearing the editor lock so
-            // a parallel run from another tab keeps the gate up.
-            void refreshLock();
-          }
-        },
-        abort.signal,
-      )
-      .catch(() => {
-        /* aborted on terminal — expected */
-      })
-      .finally(() => {
-        // Only clear the running flag if this is still the active stream;
-        // a superseded stream settling (because a newer run aborted it)
-        // must not flip the state the newer run just set.
-        if (streamAbortRef.current === abort) setRunning(false);
-      });
-    return () => abort.abort();
-  };
 
   // enabledNodes: nodes that will actually run — everything except the ones
   // switched off AND the ones the engine skips downstream of an off step
@@ -3757,22 +3149,11 @@ function EditorInner() {
     if (!token || !me || !id) return;
     // Acknowledge the Slack-channel reminder so subsequent runs of this
     // flow don't re-open the gate just for it.
-    if (id && slackTargets.length > 0) {
+    if (slackTargets.length > 0) {
       localStorage.setItem(`dazyflow.slackAck.${id}`, "1");
     }
     setGateOpen(false);
-    setRunning(true);
-    setError(null);
-    try {
-      const { job_id } = await api.runGraph(token, activeTenant, activeWorkspace, id);
-      setCurrentRunID(job_id);
-      setLockedRunID(job_id);
-      if (id) localStorage.setItem(`dazyflow.lastRun.${id}`, job_id);
-      subscribeToRun(job_id);
-    } catch (e) {
-      setError(explainApiError(e, t));
-      setRunning(false);
-    }
+    await run.startRun();
   };
 
   // retryFailedRun resumes the run behind the error banner from the step that
@@ -3783,23 +3164,6 @@ function EditorInner() {
   // point of retrying from here is to watch the resumed run light up the canvas
   // you are already looking at, so it hands the new job to subscribeToRun and
   // stays put. Otherwise this is doRun's shape exactly.
-  const retryFailedRun = async () => {
-    if (!token || !id || !failedRun) return;
-    setRunning(true);
-    setError(null);
-    try {
-      const { job_id } = await api.retryRun(token, failedRun);
-      setCurrentRunID(job_id);
-      setLockedRunID(job_id);
-      localStorage.setItem(`dazyflow.lastRun.${id}`, job_id);
-      // Clears failedRun, so the banner's offer can't outlive the run it
-      // referred to.
-      subscribeToRun(job_id);
-    } catch (e) {
-      setError(explainApiError(e, t));
-      setRunning(false);
-    }
-  };
 
   // A webhook flow waits for an external POST — clicking "Run" gives its
   // webhook_input node no body, which confuses non-technical users. When
@@ -3835,34 +3199,13 @@ function EditorInner() {
       return;
     }
     setTestEventOpen(false);
-    await fireTestEvent(parsed);
+    await run.fireTestEvent(parsed);
   };
 
   // fireTestEvent runs the (draft / HEAD) flow with the given sample
   // payload via the test-trigger path — webhook_input nodes light up
   // exactly as a real /trigger hit would, but it runs under the caller's
   // token and shows in the run list like any other run.
-  const fireTestEvent = async (sample: unknown) => {
-    if (!token || !me || !id) return;
-    setRunning(true);
-    setError(null);
-    try {
-      const { job_id } = await api.testTrigger(
-        token,
-        activeTenant,
-        activeWorkspace,
-        id,
-        sample,
-      );
-      setCurrentRunID(job_id);
-      setLockedRunID(job_id);
-      localStorage.setItem(`dazyflow.lastRun.${id}`, job_id);
-      subscribeToRun(job_id);
-    } catch (e) {
-      setError(explainApiError(e, t));
-      setRunning(false);
-    }
-  };
 
   // confirmDelete gates React Flow's delete (Backspace/Delete on a selection,
   // or the inspector's remove). It opens the ConfirmModal and resolves the
@@ -3936,24 +3279,12 @@ function EditorInner() {
   // hit Run again.
   // Pull the lock state on first paint so the Save button reflects an
   // already-active run from another tab without waiting for SSE.
-  useEffect(() => {
-    void refreshLock();
-  }, [refreshLock]);
 
-  useEffect(() => {
-    if (!currentRunID) return;
-    const cancel = subscribeToRun(currentRunID);
-    return cancel;
-    // Intentionally only re-run when the graph (id) changes, not every
-    // render — subscribeToRun captures fresh setters via closure.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
 
   // Abort the live run-stream when the editor unmounts. subscribeToRun
   // keeps streamAbortRef pointed at the current stream, whereas the [id]
   // effect's own cleanup only captures the controller from when it ran —
   // which a later run() / test-event / history pick may have superseded.
-  useEffect(() => () => streamAbortRef.current?.abort(), []);
 
   // settingsGraph + persistSettings are shared by the Settings and
   // Triggers modals — both edit graph-level fields and persist
@@ -4551,7 +3882,7 @@ function EditorInner() {
             <span className="history-preview-msg">
               <History size={ICON.sm} style={{ verticalAlign: -2, marginRight: 6 }} />
               {t("editor.viewingOld", {
-                when: timeAgo(
+                when: formatDateTime(
                   revisions.find((r) => r.commit === previewRef)?.when ?? "",
                 ),
               })}
@@ -4582,7 +3913,7 @@ function EditorInner() {
               <strong>{t("editor.historyTitle")}</strong>
               <Button
                 size="icon"
-                onClick={() => setShowHistory(false)}
+                onClick={versionHistory.closeHistory}
                 aria-label={t("common.dismiss")}
               >
                 <X size={ICON.md} />
@@ -4602,7 +3933,7 @@ function EditorInner() {
                       title={formatDateTime(rev.when)}
                     >
                       <span className="history-row-when">
-                        {i === 0 ? t("editor.historyLatest") : timeAgo(rev.when)}
+                        {i === 0 ? t("editor.historyLatest") : formatDateTime(rev.when)}
                       </span>
                       <span className="history-row-meta">
                         <span className="history-row-author">{rev.author}</span>
@@ -4675,141 +4006,27 @@ function EditorInner() {
             webhook flow, so edge cases can be exercised (not just the one
             auto-generated shape). Runs the draft via the test-trigger path. */}
         {testEventOpen && (
-          <div className="modal-backdrop" onClick={() => setTestEventOpen(false)}>
-            <div
-              className="modal"
-              onClick={(e) => e.stopPropagation()}
-              role="dialog"
-              aria-label={t("editor.testRunHeading")}
-            >
-              <div className="modal-head">
-                <strong>
-                  <Send size={ICON.sm} style={{ verticalAlign: -2, marginRight: 6 }} />
-                  {t("editor.testRunHeading")}
-                </strong>
-                <Button
-                  size="icon"
-                  onClick={() => setTestEventOpen(false)}
-                  aria-label={t("common.dismiss")}
-                >
-                  <X size={ICON.md} />
-                </Button>
-              </div>
-              <div className="modal-body">
-                <p className="sub" style={{ marginTop: 0 }}>
-                  {t("editor.testRunHelp")}
-                </p>
-                <textarea
-                  className="test-sample-input"
-                  value={testEventJSON}
-                  spellCheck={false}
-                  onChange={(e) => setTestEventJSON(e.target.value)}
-                  rows={12}
-                />
-                {testEventErr && (
-                  <div style={{ color: "var(--danger)", fontSize: "var(--text-sm)", marginTop: 6 }}>
-                    {t("editor.testRunBadJSON", { error: testEventErr })}
-                  </div>
-                )}
-              </div>
-              <div className="modal-foot">
-                <Button variant="ghost" onClick={() => setTestEventOpen(false)}>
-                  {t("common.dismiss")}
-                </Button>
-                <Button
-                  variant="primary"
-                  onClick={() => void submitTestEvent()}
-                  disabled={!hasPerm("graph:run")}
-                >
-                  <Send size={ICON.sm} style={{ marginRight: 5 }} />
-                  {t("editor.testRunFire")}
-                </Button>
-              </div>
-            </div>
-          </div>
+          <TestEventDialog
+            json={testEventJSON}
+            error={testEventErr}
+            canRun={hasPerm("graph:run")}
+            onChange={setTestEventJSON}
+            onSubmit={() => void submitTestEvent()}
+            onClose={() => setTestEventOpen(false)}
+          />
         )}
         {/* Diff-vs-published modal: what the draft changes relative to the
             live revision. Execution-focused (nodes/edges/params/meta) —
             cosmetic moves are filtered out by diffGraphs. */}
         {diffOpen && (
-          <div className="modal-backdrop" onClick={() => setDiffOpen(false)}>
-            <div
-              className="modal diff-modal"
-              onClick={(e) => e.stopPropagation()}
-              role="dialog"
-              aria-label={t("editor.diffTitle")}
-            >
-              <div className="modal-head">
-                <strong>
-                  <GitCompare size={ICON.sm} style={{ verticalAlign: -2, marginRight: 6 }} />
-                  {t("editor.diffHeading")}
-                </strong>
-                <Button
-                  size="icon"
-                  onClick={() => setDiffOpen(false)}
-                  aria-label={t("common.dismiss")}
-                >
-                  <X size={ICON.md} />
-                </Button>
-              </div>
-              <div className="modal-body">
-                {diffLoading ? (
-                  <div className="history-empty">{t("common.loading")}</div>
-                ) : !diff || diffIsEmpty(diff) ? (
-                  <div className="history-empty">{t("editor.diffNone")}</div>
-                ) : (
-                  <ul className="diff-list">
-                    {diff.addedNodes.map((id) => (
-                      <li key={`an-${id}`} className="diff-row added">
-                        + {t("editor.diffNodeAdded", { id })}
-                      </li>
-                    ))}
-                    {diff.removedNodes.map((id) => (
-                      <li key={`rn-${id}`} className="diff-row removed">
-                        − {t("editor.diffNodeRemoved", { id })}
-                      </li>
-                    ))}
-                    {diff.changedNodes.map((c) => (
-                      <li key={`cn-${c.id}`} className="diff-row changed">
-                        ~ {t("editor.diffNodeChanged", { id: c.id, fields: c.fields.join(", ") })}
-                      </li>
-                    ))}
-                    {diff.addedEdges.map((k) => (
-                      <li key={`ae-${k}`} className="diff-row added">
-                        + {t("editor.diffEdgeAdded")}: <code>{k}</code>
-                      </li>
-                    ))}
-                    {diff.removedEdges.map((k) => (
-                      <li key={`re-${k}`} className="diff-row removed">
-                        − {t("editor.diffEdgeRemoved")}: <code>{k}</code>
-                      </li>
-                    ))}
-                    {diff.metaChanged.length > 0 && (
-                      <li className="diff-row changed">
-                        ~ {t("editor.diffMeta", { fields: diff.metaChanged.join(", ") })}
-                      </li>
-                    )}
-                  </ul>
-                )}
-              </div>
-              <div className="modal-foot">
-                <Button variant="ghost" onClick={() => setDiffOpen(false)}>
-                  {t("common.dismiss")}
-                </Button>
-                <Button
-                  className="editor-publish"
-                  onClick={() => {
-                    setDiffOpen(false);
-                    void publishRef();
-                  }}
-                  disabled={publishing || !!previewRef}
-                >
-                  <Rocket size={ICON.sm} style={{ marginRight: 5 }} />
-                  {t("editor.publish")}
-                </Button>
-              </div>
-            </div>
-          </div>
+          <DiffDialog
+            diff={diff}
+            loading={diffLoading}
+            publishing={publishing}
+            canPublish={!previewRef}
+            onPublish={() => void publishRef()}
+            onClose={() => setDiffOpen(false)}
+          />
         )}
         <ReactFlow
           // Frames first so they paint behind the real nodes. Cast: comment
@@ -5074,7 +4291,7 @@ function EditorInner() {
               <Button
                 variant="primary"
                 size="sm"
-                onClick={() => void retryFailedRun()}
+                onClick={() => void run.retryFailedRun()}
                 title={t("runAction.retryTitle")}
                 style={{ flexShrink: 0 }}
               >
@@ -5084,10 +4301,7 @@ function EditorInner() {
             )}
             <Button
               variant="ghost"
-              onClick={() => {
-                setError(null);
-                setFailedRun(null);
-              }}
+              onClick={run.dismissFailure}
               style={{ fontSize: "var(--text-xs)", padding: "2px 8px", color: "var(--danger)" }}
               aria-label={t("common.dismiss")}
             >
@@ -5096,67 +4310,7 @@ function EditorInner() {
           </div>
         )}
         {runDone && (
-          <div
-            role="status"
-            className="editor-run-done"
-            style={{
-              background: "var(--surface)",
-              border: "1px solid var(--success)",
-              padding: "10px 14px",
-              borderRadius: "var(--r-2)",
-              fontSize: "var(--text-md)",
-              color: "var(--ink)",
-              boxShadow: "0 2px 8px color-mix(in srgb, var(--success) 25%, transparent)",
-              pointerEvents: "auto",
-              display: "flex",
-              flexDirection: "column",
-              gap: 6,
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "flex-start",
-                justifyContent: "space-between",
-                gap: 8,
-              }}
-            >
-              <strong style={{ color: "var(--success)" }}>
-                {runDone.label
-                  ? t("editor.runSucceededWith", { label: runDone.label })
-                  : t("editor.runSucceeded")}
-              </strong>
-              <Button
-                variant="ghost"
-                onClick={() => setRunDone(null)}
-                style={{ fontSize: "var(--text-xs)", padding: "2px 8px" }}
-                aria-label={t("common.dismiss")}
-              >
-                {t("common.dismiss")}
-              </Button>
-            </div>
-            {runDone.preview && (
-              <pre
-                style={{
-                  margin: 0,
-                  maxHeight: 160,
-                  overflow: "auto",
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-word",
-                  fontSize: "var(--text-sm)",
-                  color: "var(--muted)",
-                }}
-              >
-                {runDone.preview}
-              </pre>
-            )}
-            <Link
-              to={`/runs/${runDone.runID}`}
-              style={{ fontSize: "var(--text-sm)", alignSelf: "flex-start" }}
-            >
-              {t("editor.runSucceededDetails")}
-            </Link>
-          </div>
+          <RunSucceededToast run={runDone} onDismiss={() => setRunDone(null)} />
         )}
         {lintIssues.length > 0 && (
           <div
@@ -5449,24 +4603,15 @@ function EditorInner() {
                   // surfaced the error.
                   const ok = await save();
                   if (!ok) return undefined;
-                  const { job_id } = await api.sampleNode(
-                    token,
-                    activeTenant,
-                    activeWorkspace,
-                    id,
-                    nodeID,
+                  const job_id = await run.begin(() =>
+                    api.sampleNode(token, activeTenant, activeWorkspace, id, nodeID),
                   );
-                  // Reuse the same SSE plumbing the regular Run uses, so
-                  // the sample drives node statuses + live logs from the
-                  // same currentRunID the regular Run does.
-                  setCurrentRunID(job_id);
-                  setLockedRunID(job_id);
-                  localStorage.setItem(`dazyflow.lastRun.${id}`, job_id);
-                  // Mark the editor as running so the "Run this step" button
-                  // flips to a Stop affordance for the life of the partial run
-                  // — subscribeToRun's terminal handler clears it on completion.
-                  setRunning(true);
-                  subscribeToRun(job_id);
+                  if (!job_id) return undefined;
+                  // Reuse the same SSE plumbing the regular Run uses: begin()
+                  // adopts the job as current + locking, remembers it, and
+                  // subscribes — so a partial run drives node statuses and live
+                  // logs exactly like a full one, and the "Run this step" button
+                  // flips to Stop for its lifetime.
                   return job_id;
                 }
               : undefined
@@ -5719,141 +4864,6 @@ function EditorInner() {
   );
 }
 
-// ConnectionGate warns, before a run, that the flow references OAuth
-// accounts and/or credentials the tenant hasn't set up. Offers the
-// high-leverage next action (go to Connections) plus an escape hatch
-// ("Run anyway") because the detection is a heuristic — a node could
-// resolve its token/secret another way the editor can't see.
-function ConnectionGate({
-  missing,
-  missingSecrets,
-  missingSetups,
-  adminBlockedProviders,
-  adminBlockedSecretRefs,
-  slackChannels,
-  canConnect,
-  onConnect,
-  onRunAnyway,
-  onCancel,
-}: {
-  missing: MissingConnection[];
-  missingSecrets: string[];
-  // canConnect = hasPerm("secret:write"); when false the user can't connect
-  // apps, so the Connect button is replaced with an "ask an admin" note.
-  canConnect: boolean;
-  // missingSetups names apps with a service connection (API key / endpoint)
-  // that isn't configured — the ConnectionFields shape (Claude, ntfy, SMTP).
-  missingSetups: SetupNeed[];
-  // adminBlockedProviders / adminBlockedSecretRefs name the OAuth
-  // providers and ${secret.NAME} refs the graph would need but the
-  // operator hasn't enabled on this install. Rendered as a separate,
-  // explicitly admin-side section so the user doesn't try to "Connect"
-  // something they can't reach. Empty arrays = nothing admin-blocked.
-  adminBlockedProviders: string[];
-  adminBlockedSecretRefs: string[];
-  slackChannels: string[];
-  onConnect: () => void;
-  onRunAnyway: () => void;
-  onCancel: () => void;
-}) {
-  const { t } = useTranslation();
-  const hasUserFixable =
-    missing.length > 0 || missingSecrets.length > 0 || missingSetups.length > 0;
-  const hasAdminBlocked =
-    adminBlockedProviders.length > 0 || adminBlockedSecretRefs.length > 0;
-  return (
-    <div className="settings-backdrop" onClick={onCancel}>
-      <div
-        className="settings-dialog"
-        style={{ maxWidth: 460 }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="settings-head">
-          <h2>{t("connGate.title")}</h2>
-        </div>
-        <div className="settings-body">
-          {hasUserFixable && (
-            <p className="conn-gate-lede">{t("connGate.lede")}</p>
-          )}
-          {!hasUserFixable && hasAdminBlocked && (
-            <p className="conn-gate-lede">{t("connGate.adminLede")}</p>
-          )}
-          {(missing.length > 0 || missingSetups.length > 0) && (
-            <>
-              <div className="conn-gate-section-head">{t("connGate.appsHead")}</div>
-              <ul className="conn-gate-list">
-                {missing.map((m) => (
-                  <li key={`${m.provider}::${m.account}`}>
-                    <strong>{oauthProviderDisplay(m.provider).name}</strong>
-                    <span className="conn-gate-account">{m.account}</span>
-                  </li>
-                ))}
-                {missingSetups.map((s) => (
-                  <li key={s.slug}>
-                    <strong>{s.integration}</strong>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-          {missingSecrets.length > 0 && (
-            <>
-              <div className="conn-gate-section-head">{t("connGate.secretsHead")}</div>
-              <ul className="conn-gate-list">
-                {missingSecrets.map((name) => (
-                  <li key={name}>
-                    <code>{name}</code>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-          {hasAdminBlocked && (
-            <>
-              <div className="conn-gate-section-head conn-gate-admin-head">
-                {t("connGate.adminBlockedHead")}
-              </div>
-              <p className="desc">{t("connGate.adminBlockedBody")}</p>
-              <ul className="conn-gate-list conn-gate-admin-list">
-                {adminBlockedProviders.map((p) => (
-                  <li key={`prov::${p}`}>
-                    <strong>{oauthProviderDisplay(p).name}</strong>
-                  </li>
-                ))}
-                {adminBlockedSecretRefs.map((n) => (
-                  <li key={`sec::${n}`}>
-                    <code>{n}</code>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-          {slackChannels.length > 0 && (
-            <div className="conn-gate-slack">
-              <div className="conn-gate-section-head">{t("connGate.slackHead")}</div>
-              <p className="desc">
-                {t("connGate.slackBody", { channels: slackChannels.join(", ") })}
-              </p>
-            </div>
-          )}
-        </div>
-        {!canConnect && hasUserFixable && (
-          <p className="desc conn-gate-noperm">{t("connGate.noPermNote")}</p>
-        )}
-        <div className="settings-foot">
-          <Button onClick={onRunAnyway}>
-            {t("connGate.runAnyway")}
-          </Button>
-          {canConnect && (
-            <Button variant="primary" onClick={onConnect}>
-              {t("connGate.connect")}
-            </Button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // nextID generates a unique node ID for a freshly-dropped module by
 // counting existing nodes with the same module prefix.

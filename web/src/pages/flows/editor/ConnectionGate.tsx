@@ -1,0 +1,143 @@
+// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { useTranslation } from "react-i18next";
+import { Button } from "../../../components/ui/Button";
+import { oauthProviderDisplay } from "../../../integrationMeta";
+import type { MissingConnection, SetupNeed } from "../../../lib/requiredConnections";
+
+// ConnectionGate warns, before a run, that the flow references OAuth
+// accounts and/or credentials the tenant hasn't set up. Offers the
+// high-leverage next action (go to Connections) plus an escape hatch
+// ("Run anyway") because the detection is a heuristic — a node could
+// resolve its token/secret another way the editor can't see.
+export function ConnectionGate({
+  missing,
+  missingSecrets,
+  missingSetups,
+  adminBlockedProviders,
+  adminBlockedSecretRefs,
+  slackChannels,
+  canConnect,
+  onConnect,
+  onRunAnyway,
+  onCancel,
+}: {
+  missing: MissingConnection[];
+  missingSecrets: string[];
+  // canConnect = hasPerm("secret:write"); when false the user can't connect
+  // apps, so the Connect button is replaced with an "ask an admin" note.
+  canConnect: boolean;
+  // missingSetups names apps with a service connection (API key / endpoint)
+  // that isn't configured — the ConnectionFields shape (Claude, ntfy, SMTP).
+  missingSetups: SetupNeed[];
+  // adminBlockedProviders / adminBlockedSecretRefs name the OAuth
+  // providers and ${secret.NAME} refs the graph would need but the
+  // operator hasn't enabled on this install. Rendered as a separate,
+  // explicitly admin-side section so the user doesn't try to "Connect"
+  // something they can't reach. Empty arrays = nothing admin-blocked.
+  adminBlockedProviders: string[];
+  adminBlockedSecretRefs: string[];
+  slackChannels: string[];
+  onConnect: () => void;
+  onRunAnyway: () => void;
+  onCancel: () => void;
+}) {
+  const { t } = useTranslation();
+  const hasUserFixable =
+    missing.length > 0 || missingSecrets.length > 0 || missingSetups.length > 0;
+  const hasAdminBlocked =
+    adminBlockedProviders.length > 0 || adminBlockedSecretRefs.length > 0;
+  return (
+    <div className="settings-backdrop" onClick={onCancel}>
+      <div
+        className="settings-dialog"
+        style={{ maxWidth: 460 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="settings-head">
+          <h2>{t("connGate.title")}</h2>
+        </div>
+        <div className="settings-body">
+          {hasUserFixable && (
+            <p className="conn-gate-lede">{t("connGate.lede")}</p>
+          )}
+          {!hasUserFixable && hasAdminBlocked && (
+            <p className="conn-gate-lede">{t("connGate.adminLede")}</p>
+          )}
+          {(missing.length > 0 || missingSetups.length > 0) && (
+            <>
+              <div className="conn-gate-section-head">{t("connGate.appsHead")}</div>
+              <ul className="conn-gate-list">
+                {missing.map((m) => (
+                  <li key={`${m.provider}::${m.account}`}>
+                    <strong>{oauthProviderDisplay(m.provider).name}</strong>
+                    <span className="conn-gate-account">{m.account}</span>
+                  </li>
+                ))}
+                {missingSetups.map((s) => (
+                  <li key={s.slug}>
+                    <strong>{s.integration}</strong>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {missingSecrets.length > 0 && (
+            <>
+              <div className="conn-gate-section-head">{t("connGate.secretsHead")}</div>
+              <ul className="conn-gate-list">
+                {missingSecrets.map((name) => (
+                  <li key={name}>
+                    <code>{name}</code>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {hasAdminBlocked && (
+            <>
+              <div className="conn-gate-section-head conn-gate-admin-head">
+                {t("connGate.adminBlockedHead")}
+              </div>
+              <p className="desc">{t("connGate.adminBlockedBody")}</p>
+              <ul className="conn-gate-list conn-gate-admin-list">
+                {adminBlockedProviders.map((p) => (
+                  <li key={`prov::${p}`}>
+                    <strong>{oauthProviderDisplay(p).name}</strong>
+                  </li>
+                ))}
+                {adminBlockedSecretRefs.map((n) => (
+                  <li key={`sec::${n}`}>
+                    <code>{n}</code>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {slackChannels.length > 0 && (
+            <div className="conn-gate-slack">
+              <div className="conn-gate-section-head">{t("connGate.slackHead")}</div>
+              <p className="desc">
+                {t("connGate.slackBody", { channels: slackChannels.join(", ") })}
+              </p>
+            </div>
+          )}
+        </div>
+        {!canConnect && hasUserFixable && (
+          <p className="desc conn-gate-noperm">{t("connGate.noPermNote")}</p>
+        )}
+        <div className="settings-foot">
+          <Button onClick={onRunAnyway}>
+            {t("connGate.runAnyway")}
+          </Button>
+          {canConnect && (
+            <Button variant="primary" onClick={onConnect}>
+              {t("connGate.connect")}
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
