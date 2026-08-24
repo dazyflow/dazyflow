@@ -9,6 +9,7 @@ import { BookOpen, LifeBuoy, X } from "lucide-react";
 import { Button } from "./Button";
 import { useAuth } from "../auth";
 import { supportContactHref } from "../lib/supportContact";
+import { ICON } from "../icons";
 
 // HelpModal is what the header's "?" button and the "?" key open.
 //
@@ -87,7 +88,7 @@ export function HelpModal({ onClose }: { onClose: () => void }) {
             onClick={onClose}
             aria-label={t("common.close")}
           >
-            <X size={16} />
+            <X size={ICON.md} />
           </Button>
         </div>
         <div className="settings-body">
@@ -98,7 +99,7 @@ export function HelpModal({ onClose }: { onClose: () => void }) {
               target="_blank"
               rel="noreferrer noopener"
             >
-              <BookOpen size={16} className="help-link-icon" />
+              <BookOpen size={ICON.md} className="help-link-icon" />
               <span className="help-link-text">
                 <span className="help-link-title">{t("help.docs")}</span>
                 <span className="help-link-desc">{t("help.docsDesc")}</span>
@@ -113,7 +114,7 @@ export function HelpModal({ onClose }: { onClose: () => void }) {
                   navigate("/support");
                 }}
               >
-                <LifeBuoy size={16} className="help-link-icon" />
+                <LifeBuoy size={ICON.md} className="help-link-icon" />
                 <span className="help-link-text">
                   <span className="help-link-title">{t("help.support")}</span>
                   <span className="help-link-desc">{t("help.supportDesc")}</span>
@@ -128,7 +129,7 @@ export function HelpModal({ onClose }: { onClose: () => void }) {
                     ? {}
                     : { target: "_blank", rel: "noreferrer noopener" })}
                 >
-                  <LifeBuoy size={16} className="help-link-icon" />
+                  <LifeBuoy size={ICON.md} className="help-link-icon" />
                   <span className="help-link-text">
                     <span className="help-link-title">{t("help.support")}</span>
                     <span className="help-link-desc">{t("help.supportDesc")}</span>

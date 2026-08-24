@@ -20,7 +20,11 @@ let perms: string[] = [];
 vi.mock("../auth", () => ({
   useAuth: () => ({ hasPerm: (p: string) => perms.includes(p) }),
 }));
-vi.mock("../icons", () => ({
+// FlowIcon is stubbed to keep the assertions about rows, not glyphs. ICON is
+// the real scale — it's plain data, and the component reads it while building
+// the row list, so a stub would just be a second copy to keep in sync.
+vi.mock("../icons", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../icons")>()),
   FlowIcon: () => <span data-testid="flow-icon" />,
 }));
 

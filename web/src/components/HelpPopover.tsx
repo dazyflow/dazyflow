@@ -3,6 +3,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { Info } from "lucide-react";
+import { ICON } from "../icons";
 
 // The (i) affordance on a step header or a form field.
 //
@@ -65,7 +66,7 @@ export function HelpPopover({ label, body }: { label: string; body: string }) {
           setOpen((v) => !v);
         }}
       >
-        <Info size={13} aria-hidden="true" />
+        <Info size={ICON.sm} aria-hidden="true" />
       </button>
       {open && (
         <span className="help-pop" id={id} role="note">

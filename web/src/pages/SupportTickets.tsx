@@ -33,11 +33,14 @@ import type {
   TicketStatus,
   TicketView,
 } from "../types";
+import { ICON } from "../icons";
+import { POLL } from "../lib/timing";
 
-// THREAD_POLL_MS re-fetches an open ticket so a reply from the other party shows
-// up without a manual reload. 8s is responsive enough for a chat without
-// hammering the API; the nav badge (AppShell) polls more slowly for the count.
-const THREAD_POLL_MS = 8000;
+// An open ticket re-fetches itself so a reply from the other party shows up
+// without a manual reload. It polls on the `watched` tier (see lib/timing) —
+// responsive enough for a chat without hammering the API. The nav badge in
+// AppShell counts the same tickets on the slower `background` tier, since that
+// one only drives a number.
 
 // SupportTickets.tsx is the native ticket + chat surface (Phase 2 of the Support
 // feature). Three views share one file because they share most of the chat UI:
@@ -95,7 +98,7 @@ export function SupportTickets() {
       <div className="page-title">
         <div>
           <h1>
-            <LifeBuoy size={20} style={{ marginRight: 8, verticalAlign: -3 }} />
+            <LifeBuoy size={ICON.xl} style={{ marginRight: 8, verticalAlign: -3 }} />
             {t("support.title")}
           </h1>
           <div className="sub">
@@ -244,7 +247,7 @@ function NewTicketModal({ onClose, onCreated }: { onClose: () => void; onCreated
         <div className="modal-head">
           <strong>{t("support.new")}</strong>
           <Button size="icon" onClick={onClose} aria-label={t("common.close")}>
-            <X size={16} />
+            <X size={ICON.md} />
           </Button>
         </div>
         <div className="modal-body">
@@ -404,7 +407,7 @@ export function SupportQueue() {
       <div className="page-title">
         <div>
           <h1>
-            <LifeBuoy size={20} style={{ marginRight: 8, verticalAlign: -3 }} />
+            <LifeBuoy size={ICON.xl} style={{ marginRight: 8, verticalAlign: -3 }} />
             {t("support.queueTitle")}
           </h1>
           <div className="sub">{t("support.queueSub")}</div>
@@ -416,7 +419,7 @@ export function SupportQueue() {
 
       <div className="dash-stats">
         <QueueTile
-          icon={<Inbox size={18} />}
+          icon={<Inbox size={ICON.lg} />}
           label={t("support.stats.unassigned")}
           value={summary?.summary.unassigned}
           tone={summary && summary.summary.unassigned > 0 ? "warn" : "good"}
@@ -424,21 +427,21 @@ export function SupportQueue() {
           onSelect={() => setView(VIEW_UNASSIGNED)}
         />
         <QueueTile
-          icon={<UserCheck size={18} />}
+          icon={<UserCheck size={ICON.lg} />}
           label={t("support.stats.mine")}
           value={summary?.mine}
           active={sameView(view, VIEW_MINE)}
           onSelect={() => setView(VIEW_MINE)}
         />
         <QueueTile
-          icon={<MessageSquare size={18} />}
+          icon={<MessageSquare size={ICON.lg} />}
           label={t("support.stats.waiting")}
           value={summary?.summary.by_status?.awaiting_support}
           active={sameView(view, VIEW_WAITING)}
           onSelect={() => setView(VIEW_WAITING)}
         />
         <QueueTile
-          icon={<LifeBuoy size={18} />}
+          icon={<LifeBuoy size={ICON.lg} />}
           label={t("support.stats.open")}
           value={summary?.summary.open}
           sub={summary ? t("support.stats.ofTotal", { count: summary.summary.total }) : undefined}
@@ -449,7 +452,7 @@ export function SupportQueue() {
 
       <div className="flow-toolbar">
         <div className="flow-search">
-          <Search size={15} aria-hidden />
+          <Search size={ICON.sm} aria-hidden />
           <input
             type="search"
             value={query}
@@ -599,7 +602,7 @@ function QueueRow({
       <div className="user-card-actions">
         {owner === "" && (
           <Button onClick={onClaim} disabled={claiming}>
-            <UserCheck size={12} style={{ marginRight: 4 }} />
+            <UserCheck size={ICON.xs} style={{ marginRight: 4 }} />
             {t("support.claim")}
           </Button>
         )}
@@ -645,7 +648,7 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
   // hard failure. Draft state is separate, so a poll never clobbers what the
   // user is typing.
   useEffect(() => {
-    const iv = window.setInterval(() => void load(), THREAD_POLL_MS);
+    const iv = window.setInterval(() => void load(), POLL.watched);
     return () => window.clearInterval(iv);
   }, [load]);
 
@@ -791,19 +794,19 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
         <div className="user-card-actions">
           {mode === "agent" && owner === "" && (
             <Button onClick={() => void assign("me")} disabled={busy}>
-              <UserCheck size={12} style={{ marginRight: 4 }} />
+              <UserCheck size={ICON.xs} style={{ marginRight: 4 }} />
               {t("support.claim")}
             </Button>
           )}
           {mode === "agent" && mine && (
             <Button onClick={() => void assign("")} disabled={busy}>
-              <UserMinus size={12} style={{ marginRight: 4 }} />
+              <UserMinus size={ICON.xs} style={{ marginRight: 4 }} />
               {t("support.release")}
             </Button>
           )}
           {mode === "agent" && !closed && (
             <Button onClick={() => void setStatus("resolved")} disabled={busy}>
-              <Check size={12} style={{ marginRight: 4 }} />
+              <Check size={ICON.xs} style={{ marginRight: 4 }} />
               {t("support.resolve")}
             </Button>
           )}
@@ -811,7 +814,7 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
               reopens it, so there's no separate Reopen button. */}
           {mode === "user" && !closed && (
             <Button onClick={() => void setMyStatus("closed")} disabled={busy}>
-              <X size={12} style={{ marginRight: 4 }} />
+              <X size={ICON.xs} style={{ marginRight: 4 }} />
               {t("support.close")}
             </Button>
           )}
@@ -843,7 +846,7 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
           }
         />
         <Button variant="primary" onClick={() => void send()} disabled={busy || !draft.trim()}>
-          <Send size={14} style={{ marginRight: 4 }} />
+          <Send size={ICON.sm} style={{ marginRight: 4 }} />
           {t("support.send")}
         </Button>
       </div>
@@ -882,7 +885,7 @@ function BundleModal({ ticketId, mode, onClose }: { ticketId: string; mode: "use
         <div className="modal-head">
           <strong>{t("bundle.title")}</strong>
           <Button size="icon" onClick={onClose} aria-label={t("common.close")}>
-            <X size={16} />
+            <X size={ICON.md} />
           </Button>
         </div>
         <div className="modal-body">

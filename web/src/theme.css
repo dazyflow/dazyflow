@@ -154,6 +154,48 @@
   --sidebar-rail-w: 56px;
   --catalog-w: 280px;
   --inspector-w: 320px;
+
+  /* Stacking order — every app-level z-index comes from here, so "what does
+     this sit above?" is answered by reading the list rather than by guessing a
+     number bigger than whatever was in the way. Ordered bottom to top:
+
+       topbar / sidebar        the fixed app chrome
+       inspector-sheet         the editor inspector when it's a bottom sheet
+                               (below 1100px); above 1100px it's a side panel
+                               sitting in the canvas band instead
+       popover / help-popover  transient panels anchored to a control; help
+                               opens over the workspace switcher, hence two
+       modal                   both dialog backdrops (.modal / .settings-*)
+       context-menu            the canvas right-click menu
+       palette                 the Cmd+K command palette, deliberately over
+                               modals — it's the "get me out of here" surface
+       toast                   the background-uploads panel, pinned corner
+       overlay                 full-screen celebration, over everything
+
+     Two notes for whoever adds the next layer.
+
+     The canvas interior (0–11: node badges, the toolbar, the debug menu, port
+     peeks) is NOT here on purpose. React Flow transforms .react-flow__viewport,
+     which creates a stacking context, so those values only compete with each
+     other and are meaningless outside it. A port peek at z-index 20 cannot
+     reach the topbar even though the raw numbers look like a tie — which also
+     means raising one of them to "fix" an overlap does nothing.
+
+     toast and overlay used to be 1000 and 9999, picked to win rather than to
+     mean anything. They are 400 and 500 now; nothing sat between 300 and 9999,
+     so the order is unchanged. If you need a new band, leave a gap — don't
+     reach for a bigger number. */
+  --z-topbar: 20;
+  --z-inspector-sheet: 30;
+  --z-sidebar-scrim: 40;
+  --z-sidebar: 50;
+  --z-popover: 110;
+  --z-help-popover: 120;
+  --z-modal: 200;
+  --z-context-menu: 210;
+  --z-palette: 300;
+  --z-toast: 400;
+  --z-overlay: 500;
 }
 
 /* ============================================================

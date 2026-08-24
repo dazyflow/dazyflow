@@ -20,6 +20,8 @@ import { formatRelative, formatDateTime } from "../lib/datetime";
 import { ShareOverviewModal } from "../components/ShareOverviewModal";
 import { Button } from "../components/Button";
 import type { FlowSummary, PendingApproval, RunSummary } from "../types";
+import { ICON } from "../icons";
+import { StatCard } from "../components/StatCard";
 
 // Dashboard is the workspace overview — the "is everything healthy?" landing
 // pro automation tools open to. It answers four questions at a glance (runs
@@ -152,11 +154,11 @@ export function Dashboard() {
             onClick={() => setShareOpen(true)}
             title={t("share.title")}
           >
-            <Share2 size={16} style={{ marginRight: 6 }} />
+            <Share2 size={ICON.md} style={{ marginRight: 6 }} />
             {t("share.action")}
           </Button>
           <Link to="/flows/new" className="btn primary dash-new">
-            <Plus size={16} style={{ marginRight: 6 }} />
+            <Plus size={ICON.md} style={{ marginRight: 6 }} />
             {t("flowList.newFlow")}
           </Link>
         </div>
@@ -166,13 +168,13 @@ export function Dashboard() {
 
       <div className="dash-stats">
         <StatCard
-          icon={<Activity size={18} />}
+          icon={<Activity size={ICON.lg} />}
           label={t("dashboard.runsToday")}
           value={loading ? "—" : String(stats.runsToday)}
           to="/runs"
         />
         <StatCard
-          icon={<CheckCircle2 size={18} />}
+          icon={<CheckCircle2 size={ICON.lg} />}
           label={t("dashboard.successRate")}
           value={
             loading || stats.successRate === null
@@ -192,14 +194,14 @@ export function Dashboard() {
           to="/runs"
         />
         <StatCard
-          icon={<AlertTriangle size={18} />}
+          icon={<AlertTriangle size={ICON.lg} />}
           label={t("dashboard.needsAttention")}
           value={loading ? "—" : String(attentionRuns.length)}
           tone={attentionRuns.length > 0 ? "bad" : "good"}
           to="/runs?status=failed"
         />
         <StatCard
-          icon={<Inbox size={18} />}
+          icon={<Inbox size={ICON.lg} />}
           label={t("dashboard.approvalsWaiting")}
           value={loading ? "—" : String(approvals.length)}
           tone={approvals.length > 0 ? "warn" : "good"}
@@ -215,7 +217,7 @@ export function Dashboard() {
             <h2>{t("dashboard.needsAttention")}</h2>
             {attentionRuns.length > 0 && (
               <Link to="/runs?status=failed" className="dash-panel-link">
-                {t("dashboard.viewAll")} <ArrowRight size={13} />
+                {t("dashboard.viewAll")} <ArrowRight size={ICON.sm} />
               </Link>
             )}
           </div>
@@ -223,7 +225,7 @@ export function Dashboard() {
             <p className="dash-empty">{t("common.loading")}</p>
           ) : attentionRuns.length === 0 ? (
             <p className="dash-empty dash-empty-good">
-              <CheckCircle2 size={16} />
+              <CheckCircle2 size={ICON.md} />
               {t("dashboard.noFailures")}
             </p>
           ) : (
@@ -254,7 +256,7 @@ export function Dashboard() {
           <div className="dash-panel-head">
             <h2>{t("dashboard.recentActivity")}</h2>
             <Link to="/runs" className="dash-panel-link">
-              {t("dashboard.viewAll")} <ArrowRight size={13} />
+              {t("dashboard.viewAll")} <ArrowRight size={ICON.sm} />
             </Link>
           </div>
           {loading ? (
@@ -284,40 +286,16 @@ export function Dashboard() {
 
       {/* Footer line: flow inventory, with a quick jump to the full list. */}
       <div className="dash-foot">
-        <Workflow size={15} />
+        <Workflow size={ICON.sm} />
         {t("dashboard.flowSummary", {
           total: countedFlows.length,
           live: stats.liveFlows,
         })}
         <Link to="/flows" className="dash-panel-link">
-          {t("dashboard.manageFlows")} <ArrowRight size={13} />
+          {t("dashboard.manageFlows")} <ArrowRight size={ICON.sm} />
         </Link>
       </div>
     </div>
   );
 }
 
-function StatCard({
-  icon,
-  label,
-  value,
-  sub,
-  tone = "neutral",
-  to,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  sub?: string;
-  tone?: "neutral" | "good" | "warn" | "bad";
-  to: string;
-}) {
-  return (
-    <Link to={to} className={"card dash-stat dash-stat-" + tone}>
-      <span className="dash-stat-icon">{icon}</span>
-      <span className="dash-stat-value">{value}</span>
-      <span className="dash-stat-label">{label}</span>
-      {sub && <span className="dash-stat-sub">{sub}</span>}
-    </Link>
-  );
-}

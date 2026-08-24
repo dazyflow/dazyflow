@@ -11,6 +11,8 @@ import { explainApiError } from "../lib/explainApiError";
 import { Button } from "../components/Button";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { ICON } from "../icons";
+import { slugify } from "../lib/format";
 
 // AdminPlatformTiers manages the reusable limit bundles a platform admin
 // assigns to orgs. Built-in Free/Pro can be edited (their limits) but not
@@ -83,14 +85,14 @@ export function AdminPlatformTiers() {
     <div>
       <div className="page-title">
         <div className="pa-detail-head">
-          <Layers size={20} />
+          <Layers size={ICON.xl} />
           <div>
             <h1>{t("admin.platformTiers.title")}</h1>
             <div className="sub">{t("admin.platformTiers.subtitle")}</div>
           </div>
         </div>
         <Button variant="primary" onClick={() => setEditing(blankTier())}>
-          <Plus size={14} style={{ marginRight: 6 }} />
+          <Plus size={ICON.sm} style={{ marginRight: 6 }} />
           {t("admin.platformTiers.new")}
         </Button>
       </div>
@@ -128,11 +130,11 @@ export function AdminPlatformTiers() {
               </div>
               <div className="user-card-actions" style={{ flexDirection: "row" }}>
                 <Button onClick={() => setEditing(tier)} title={t("common.edit", "Edit")}>
-                  <Pencil size={13} />
+                  <Pencil size={ICON.sm} />
                 </Button>
                 {!tier.built_in && (
                   <Button variant="danger" onClick={() => setConfirmDelete(tier)}>
-                    <Trash2 size={13} />
+                    <Trash2 size={ICON.sm} />
                   </Button>
                 )}
               </div>
@@ -156,7 +158,7 @@ export function AdminPlatformTiers() {
         <ConfirmModal
           title={t("admin.platformTiers.deleteTitle", { name: confirmDelete.name })}
           message={t("admin.platformTiers.deleteWarning")}
-          confirmLabel={t("admin.platformTiers.delete")}
+          confirmLabel={t("common.delete")}
           danger
           onConfirm={() => void del(confirmDelete)}
           onCancel={() => setConfirmDelete(null)}
@@ -246,7 +248,7 @@ function TierEditor({
         <div className="settings-head">
           <h2>{isNew ? t("admin.platformTiers.new") : t("admin.platformTiers.edit", { name: tier.name })}</h2>
           <Button variant="ghost" size="icon" onClick={onClose} disabled={busy}>
-            <X size={18} />
+            <X size={ICON.lg} />
           </Button>
         </div>
         <div className="settings-body pa-tier-form">
@@ -333,7 +335,7 @@ function TierEditor({
             {t("common.cancel")}
           </Button>
           <Button variant="primary" onClick={() => void save()} disabled={busy || !draft.name.trim()}>
-            {busy ? t("admin.platformTiers.saving") : t("admin.platformTiers.save")}
+            {busy ? t("common.saving") : t("admin.platformTiers.save")}
           </Button>
         </div>
       </div>
@@ -342,10 +344,3 @@ function TierEditor({
   );
 }
 
-function slugify(name: string): string {
-  return name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}

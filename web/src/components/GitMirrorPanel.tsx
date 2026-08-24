@@ -14,6 +14,7 @@ import { useAuth } from "../auth";
 import { explainApiError } from "../lib/explainApiError";
 import { formatRelative, formatDateTime } from "../lib/datetime";
 import type { GitCredential, GitMirror } from "../types";
+import { ICON } from "../icons";
 
 // GitMirrorPanel configures the workspace git mirror: push this org's flow
 // repository — full history, every flow, the published-revision tags — to a
@@ -196,7 +197,7 @@ export function GitMirrorPanel({
   return (
     <div className="card" style={{ marginTop: "var(--space-4)" }}>
       <h2 style={{ marginTop: 0, display: "flex", alignItems: "center", gap: 8 }}>
-        <GitBranch size={17} />
+        <GitBranch size={ICON.lg} />
         {t("gitMirror.title")}
       </h2>
       <p className="desc" style={{ marginTop: 0 }}>{t("gitMirror.subtitle")}</p>
@@ -299,10 +300,10 @@ export function GitMirrorPanel({
             }}
           >
             <Button variant="primary" disabled={!canSave} onClick={() => void save()}>
-              {busy ? t("gitMirror.saving") : t("gitMirror.saveBtn")}
+              {busy ? t("common.saving") : t("gitMirror.saveBtn")}
             </Button>
             <Button disabled={!canPush} onClick={() => void pushNow()} title={t("gitMirror.pushNowTitle")}>
-              <Upload size={15} style={{ marginRight: 4 }} />
+              <Upload size={ICON.sm} style={{ marginRight: 4 }} />
               {t("gitMirror.pushNow")}
             </Button>
             {configured && (
@@ -312,12 +313,12 @@ export function GitMirrorPanel({
                 onClick={() => setConfirmRemove(true)}
                 title={t("gitMirror.removeTitle")}
               >
-                <Trash2 size={15} style={{ marginRight: 4 }} />
+                <Trash2 size={ICON.sm} style={{ marginRight: 4 }} />
                 {t("gitMirror.remove")}
               </Button>
             )}
             <Button variant="ghost" disabled={busy} onClick={load} title={t("gitMirror.refresh")}>
-              <RefreshCw size={15} />
+              <RefreshCw size={ICON.sm} />
             </Button>
           </div>
 
@@ -398,7 +399,7 @@ function MirrorStatus({ mirror }: { mirror: GitMirror | null }) {
           color: failing ? "var(--danger)" : "var(--success)",
         }}
       >
-        {failing ? <AlertCircle size={15} /> : <CheckCircle2 size={15} />}
+        {failing ? <AlertCircle size={ICON.sm} /> : <CheckCircle2 size={ICON.sm} />}
         <strong>
           {failing ? t("gitMirror.statusFailing") : t("gitMirror.statusOk")}
         </strong>

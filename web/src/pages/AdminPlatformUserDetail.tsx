@@ -15,6 +15,7 @@ import { UserAvatar } from "../components/PlatformAvatar";
 import { ActionsCard, ActionRow } from "../components/PlatformActions";
 import { formatDate } from "../lib/datetime";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { ICON } from "../icons";
 
 // AdminPlatformUserDetail is one account's platform-admin moderation
 // page: suspend (reversible lockout), ban (suspend + block re-signup),
@@ -151,7 +152,7 @@ export function AdminPlatformUserDetail() {
                     <Button
                       variant="secondary"
                       size="sm"
-                      icon={<MailCheck size={14} />}
+                      icon={<MailCheck size={ICON.sm} />}
                       disabled={busy}
                       onClick={() =>
                         void run(() => api.platformVerifyUser(token!, email))
@@ -192,10 +193,10 @@ export function AdminPlatformUserDetail() {
               {t("admin.platformUserDetail.adminProtected")}
             </div>
           ) : (
-            <ActionsCard title={t("admin.platformUserDetail.actionsHead")}>
+            <ActionsCard title={t("common.colActions")}>
               {suspended ? (
                 <ActionRow
-                  icon={<UserCheck size={17} />}
+                  icon={<UserCheck size={ICON.lg} />}
                   title={t("admin.platformUserDetail.unsuspend")}
                   description={t("admin.platformUserDetail.unsuspendDesc")}
                 >
@@ -205,7 +206,7 @@ export function AdminPlatformUserDetail() {
                 </ActionRow>
               ) : (
                 <ActionRow
-                  icon={<ShieldOff size={17} />}
+                  icon={<ShieldOff size={ICON.lg} />}
                   title={t("admin.platformUserDetail.suspend")}
                   description={t("admin.platformUserDetail.suspendDesc")}
                 >
@@ -216,7 +217,7 @@ export function AdminPlatformUserDetail() {
               )}
               <ActionRow
                 danger
-                icon={<Ban size={17} />}
+                icon={<Ban size={ICON.lg} />}
                 title={t("admin.platformUserDetail.ban")}
                 description={t("admin.platformUserDetail.banDesc")}
               >
@@ -226,7 +227,7 @@ export function AdminPlatformUserDetail() {
               </ActionRow>
               <ActionRow
                 danger
-                icon={<Trash2 size={17} />}
+                icon={<Trash2 size={ICON.lg} />}
                 title={t("admin.platformUserDetail.delete")}
                 description={t("admin.platformUserDetail.deleteDesc")}
               >
@@ -243,7 +244,7 @@ export function AdminPlatformUserDetail() {
           <ActionsCard title={t("admin.platformUserDetail.platformRoleHead")}>
             {isEnvAdmin ? (
               <ActionRow
-                icon={<ShieldCheck size={17} />}
+                icon={<ShieldCheck size={ICON.lg} />}
                 title={t("admin.platformUserDetail.platformAdminEnv")}
                 description={t("admin.platformUserDetail.platformAdminEnvDesc")}
               >
@@ -253,7 +254,7 @@ export function AdminPlatformUserDetail() {
               </ActionRow>
             ) : isGrantedAdmin ? (
               <ActionRow
-                icon={<ShieldCheck size={17} />}
+                icon={<ShieldCheck size={ICON.lg} />}
                 title={t("admin.platformUserDetail.revokeAdmin")}
                 description={t("admin.platformUserDetail.revokeAdminDesc")}
               >
@@ -263,7 +264,7 @@ export function AdminPlatformUserDetail() {
               </ActionRow>
             ) : (
               <ActionRow
-                icon={<ShieldPlus size={17} />}
+                icon={<ShieldPlus size={ICON.lg} />}
                 title={t("admin.platformUserDetail.grantAdmin")}
                 description={t("admin.platformUserDetail.grantAdminDesc")}
               >

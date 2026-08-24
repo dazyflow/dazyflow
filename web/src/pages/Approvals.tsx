@@ -12,9 +12,11 @@ import { explainApiError } from "../lib/explainApiError";
 import { absoluteTime, formatDateTime } from "../lib/datetime";
 import type { PendingApproval } from "../types";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { ICON } from "../icons";
+import { POLL } from "../lib/timing";
 
 // Approvals is the inbox for await_approval nodes parked across the
-// workspace. Polls every 5s so a freshly-pending node shows up without
+// workspace. Polls on the `watched` tier so a freshly-pending node shows up
 // manual refresh. Approve / Reject buttons call POST /approvals/...
 // which Service.Approve services (same code path as the HMAC endpoint).
 export function Approvals() {
@@ -78,12 +80,13 @@ export function Approvals() {
     void refresh();
   }, [refresh]);
 
-  // Live polling — 5 seconds is light enough to feel responsive but
-  // doesn't hammer the daemon. Stops only when the page unmounts.
+  // An inbox can't gate on "is anything live" — a new approval arriving IS
+  // the event — so this runs the whole time the page is open, which is why it
+  // sits on the slower `watched` tier rather than `live`.
   useEffect(() => {
     const t = window.setInterval(() => {
       void refresh();
-    }, 5000);
+    }, POLL.watched);
     return () => window.clearInterval(t);
   }, [refresh]);
 
@@ -178,7 +181,7 @@ export function Approvals() {
                         has that panel, plus the timeline of steps that already
                         ran, which is the evidence for the decision. */}
                     <Link to={`/runs/${encodeURIComponent(item.run_id)}`}>
-                      <Activity size={11} style={{ verticalAlign: -1 }} />{" "}
+                      <Activity size={ICON.xs} style={{ verticalAlign: -1 }} />{" "}
                       {flowNames[item.graph_id] || item.graph_id}
                     </Link>
                     {/* Editing is still one click away, the way it is at the
@@ -190,10 +193,10 @@ export function Approvals() {
                       title={t("common.openInEditor")}
                       aria-label={t("common.openInEditor")}
                     >
-                      <Pencil size={12} style={{ verticalAlign: -1 }} />
+                      <Pencil size={ICON.xs} style={{ verticalAlign: -1 }} />
                     </Link>
                     <span>·</span>
-                    <span title={absoluteTime(item.since)}>{formatTime(item.since)}</span>
+                    <span title={absoluteTime(item.since)}>{formatDateTime(item.since)}</span>
                     {/* The raw node_id was shown here in monospace — internal
                         plumbing that means nothing to an approver. Dropped; the
                         prompt (or its node-id fallback) already identifies the
@@ -205,7 +208,7 @@ export function Approvals() {
                     onClick={() => decide(item, "reject")}
                     disabled={!!inflight}
                   >
-                    <XCircle size={14} style={{ marginRight: 6 }} />
+                    <XCircle size={ICON.sm} style={{ marginRight: 6 }} />
                     {inflight === "reject" ? t("approvals.rejecting") : t("approvals.reject")}
                   </Button>
                   <Button
@@ -213,7 +216,7 @@ export function Approvals() {
                     onClick={() => decide(item, "approve")}
                     disabled={!!inflight}
                   >
-                    <CheckCircle2 size={14} style={{ marginRight: 6 }} />
+                    <CheckCircle2 size={ICON.sm} style={{ marginRight: 6 }} />
                     {inflight === "approve" ? t("approvals.approving") : t("approvals.approve")}
                   </Button>
                 </div>
@@ -236,7 +239,3 @@ export function Approvals() {
   );
 }
 
-// Standard local "YYYY-MM-DD HH:MM" everywhere — no relative "ago" strings.
-function formatTime(iso: string): string {
-  return formatDateTime(iso);
-}

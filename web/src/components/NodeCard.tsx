@@ -8,7 +8,7 @@ import i18n from "../i18n";
 import { portTypeLabel } from "../lib/ports";
 import { telFieldFlag, regionDisplayName } from "../lib/phoneFlag";
 import { Switch } from "./Switch";
-import { iconFor, isBrandedIcon, dropColor } from "../icons";
+import { iconFor, isBrandedIcon, dropColor, ICON } from "../icons";
 import { dropSubtitle, nodeStateText, portLabel } from "../lib/dropText";
 import type { Manifest, Port, JSONSchema, Ref } from "../types";
 import {
@@ -333,7 +333,7 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
               background: `linear-gradient(135deg, ${color}, color-mix(in srgb, ${color} 70%, #fff))`,
             }}
           >
-            <Icon size={16} color="#140d30" strokeWidth={2.2} />
+            <Icon size={ICON.md} color="#140d30" strokeWidth={2.2} />
           </div>
         )}
         <div className="dz-node-body">
@@ -362,7 +362,7 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
                 opacity: 0.6,
               }}
             >
-              <Repeat size={10} strokeWidth={2.2} />
+              <Repeat size={ICON.xs} strokeWidth={2.2} />
               {nodeStateText(d.manifest.node_state.label, i18n.language)}
             </div>
           )}
@@ -629,12 +629,12 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
 
       {d.lintMessage && (
         <div className="dz-node-lint" title={d.lintMessage} aria-label={i18n.t("nodeCard.lintWarning")}>
-          <AlertTriangle size={13} />
+          <AlertTriangle size={ICON.sm} />
         </div>
       )}
       {d.loopHint && (
         <div className="dz-node-loop" title={d.loopHint} aria-label={i18n.t("nodeCard.loopWarnAria")}>
-          <Repeat size={13} />
+          <Repeat size={ICON.sm} />
         </div>
       )}
       {/* Config errors read as an inline footer on the card (#13) — the same
@@ -649,7 +649,7 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
           title={d.configErrors.map((e) => e.message).join("\n")}
           aria-label={i18n.t("nodeCard.configErrorAria", { count: d.configErrors.length })}
         >
-          <AlertTriangle size={14} className="dz-node-setup-logo" />
+          <AlertTriangle size={ICON.sm} className="dz-node-setup-logo" />
           <span className="dz-node-setup-label">
             {d.configErrors.length > 1
               ? i18n.t("nodeCard.configErrorMore", {
@@ -675,7 +675,7 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
           const icon = d.manifest?.brand_logo ? (
             <img src={d.manifest.brand_logo} alt="" className="dz-node-setup-logo" draggable={false} />
           ) : (
-            <Icon size={14} className="dz-node-setup-logo" />
+            <Icon size={ICON.sm} className="dz-node-setup-logo" />
           );
           if (locked) {
             const label = i18n.t("nodeCard.askAdmin", { name });
@@ -696,7 +696,7 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
             >
               {icon}
               <span className="dz-node-setup-label">{i18n.t("nodeCard.connect", { name })}</span>
-              <ChevronRight size={14} className="dz-node-setup-arrow" />
+              <ChevronRight size={ICON.sm} className="dz-node-setup-arrow" />
             </a>
           );
         })()}
@@ -953,12 +953,12 @@ function OperatorChip({
       />
       {d.lintMessage && (
         <div className="dz-node-lint" title={d.lintMessage} aria-label={i18n.t("nodeCard.lintWarning")}>
-          <AlertTriangle size={13} />
+          <AlertTriangle size={ICON.sm} />
         </div>
       )}
       {d.loopHint && (
         <div className="dz-node-loop" title={d.loopHint} aria-label={i18n.t("nodeCard.loopWarnAria")}>
-          <Repeat size={13} />
+          <Repeat size={ICON.sm} />
         </div>
       )}
     </div>
@@ -1116,7 +1116,7 @@ function NodeApproveBar({
         onClick={decide("approve")}
         disabled={busy !== null}
       >
-        <Check size={13} />
+        <Check size={ICON.sm} />
         {i18n.t(busy === "approve" ? "approvals.approving" : "approvals.approve")}
       </button>
       <button
@@ -1125,7 +1125,7 @@ function NodeApproveBar({
         onClick={decide("reject")}
         disabled={busy !== null}
       >
-        <X size={13} />
+        <X size={ICON.sm} />
         {i18n.t(busy === "reject" ? "approvals.rejecting" : "approvals.reject")}
       </button>
     </div>

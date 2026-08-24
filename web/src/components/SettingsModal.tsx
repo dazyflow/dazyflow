@@ -13,7 +13,7 @@ import { IconUpload } from "./IconUpload";
 import { CredentialsManager } from "./CredentialsManager";
 import { Button } from "./Button";
 import { DeleteFlowModal } from "./DeleteFlowModal";
-import { FlowIcon } from "../icons";
+import { FlowIcon, ICON } from "../icons";
 import { ErrorNotice } from "./ErrorNotice";
 
 // SettingsModal hosts graph-level configuration that doesn't fit in
@@ -71,7 +71,7 @@ export function SettingsModal({ graph, onClose, onSave, onDelete }: Props) {
         <div className="settings-head">
           <h2>{t("settings.title")}</h2>
           <Button variant="ghost" size="icon" onClick={onClose} aria-label={t("settings.close")}>
-            <X size={18} />
+            <X size={ICON.lg} />
           </Button>
         </div>
         <div className="settings-tabs">
@@ -263,7 +263,7 @@ export function SettingsModal({ graph, onClose, onSave, onDelete }: Props) {
                         navigate("/admin/git-credentials");
                       }}
                     >
-                      <GitBranch size={12} style={{ marginRight: 3, verticalAlign: "-1px" }} />
+                      <GitBranch size={ICON.xs} style={{ marginRight: 3, verticalAlign: "-1px" }} />
                       {t("settings.general.mirrorLink")}
                     </button>
                   </div>
@@ -339,7 +339,7 @@ export function SettingsModal({ graph, onClose, onSave, onDelete }: Props) {
           {tab === "secrets" && <FlowSecretsTab graph={graph} />}
         </div>
         <div className="settings-foot">
-          <Button onClick={onClose}>{t("settings.cancel")}</Button>
+          <Button onClick={onClose}>{t("common.cancel")}</Button>
           <Button
             variant="primary"
             onClick={() => {
@@ -347,7 +347,7 @@ export function SettingsModal({ graph, onClose, onSave, onDelete }: Props) {
               onClose();
             }}
           >
-            {t("settings.save")}
+            {t("common.save")}
           </Button>
         </div>
       </div>

@@ -7,12 +7,8 @@ import { useAuth } from "../auth";
 import { api } from "../api";
 import { explainApiError } from "../lib/explainApiError";
 import type { Ref } from "../types";
-import type { ReferenceCtx } from "./SchemaForm";
+import { humanize, type ReferenceCtx } from "./SchemaForm";
 
-// humanize turns a column key ("model_name") into a header ("Model Name").
-function humanize(key: string): string {
-  return key.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
 
 // uniq concatenates lists, keeping first-seen order and dropping repeats.
 function uniq(...lists: string[][]): string[] {

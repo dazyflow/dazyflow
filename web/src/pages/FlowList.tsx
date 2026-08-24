@@ -21,7 +21,7 @@ import { FLOWS_CHANGED_EVENT } from "../activeFlow";
 import { Button } from "../components/Button";
 import { DeleteFlowModal } from "../components/DeleteFlowModal";
 import { DuplicateFlowModal } from "../components/DuplicateFlowModal";
-import { FlowIcon, isBrandedIcon } from "../icons";
+import { FlowIcon, isBrandedIcon, ICON } from "../icons";
 import { FlowStatusChip } from "../components/FlowStatusChip";
 import { RunSparkline } from "../components/RunSparkline";
 import { isImageIcon } from "../lib/iconImage";
@@ -300,7 +300,7 @@ export function FlowList() {
             disabled={!canEdit}
             title={!canEdit ? t("flowList.needEdit") : undefined}
           >
-            <Plus size={16} style={{ marginRight: 6 }} />
+            <Plus size={ICON.md} style={{ marginRight: 6 }} />
             {t("flowList.newFlow")}
           </Button>
         </div>
@@ -340,7 +340,7 @@ export function FlowList() {
       {!loading && !error && flows.length > 1 && (
         <div className="flow-toolbar">
           <div className="flow-search">
-            <Search size={15} aria-hidden />
+            <Search size={ICON.sm} aria-hidden />
             <input
               type="search"
               value={query}
@@ -429,7 +429,7 @@ export function FlowList() {
                             })
                       }
                     >
-                      <Lock size={11} />
+                      <Lock size={ICON.xs} />
                       {t("common.private")}
                     </span>
                   )}
@@ -450,7 +450,7 @@ export function FlowList() {
                         setDupTarget(f);
                       }}
                     >
-                      <Copy size={14} />
+                      <Copy size={ICON.sm} />
                     </Button>
                   )}
                   {canEdit && (
@@ -466,7 +466,7 @@ export function FlowList() {
                         setDeleteTarget(f);
                       }}
                     >
-                      <Trash2 size={14} />
+                      <Trash2 size={ICON.sm} />
                     </Button>
                   )}
                 </div>
@@ -575,7 +575,7 @@ function FlowScheduleChip({
   }
   return (
     <div className={"flow-schedule" + (sum.active ? "" : " is-paused")}>
-      <Clock size={12} className="flow-schedule-icon" />
+      <Clock size={ICON.xs} className="flow-schedule-icon" />
       <span className="flow-schedule-status">{statusText}</span>
       {showToggle && (
         <Button
@@ -588,7 +588,7 @@ function FlowScheduleChip({
             onToggle();
           }}
         >
-          {resume ? <Play size={12} /> : <Pause size={12} />}
+          {resume ? <Play size={ICON.xs} /> : <Pause size={ICON.xs} />}
           {resume ? t("schedules.resume") : t("schedules.pause")}
         </Button>
       )}

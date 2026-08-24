@@ -7,6 +7,7 @@ import { CheckCircle2, AlertCircle } from "lucide-react";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import { highlightCEL } from "../lib/celHighlight";
+import { ICON } from "../icons";
 
 // CelInput is the formula editor for the Expression drop: a textarea with a
 // live CEL syntax-highlight overlay behind it, plus a debounced server-side
@@ -86,7 +87,7 @@ export function CelInput({
       </div>
       {issue ? (
         <div className="cel-issue" role="alert">
-          <AlertCircle size={13} />
+          <AlertCircle size={ICON.sm} />
           <span>
             {issue.line > 0
               ? t("celInput.errorAt", { line: issue.line, col: issue.column, message: issue.message })
@@ -95,7 +96,7 @@ export function CelInput({
         </div>
       ) : valid ? (
         <div className="cel-ok">
-          <CheckCircle2 size={13} />
+          <CheckCircle2 size={ICON.sm} />
           <span>{t("celInput.valid")}</span>
         </div>
       ) : null}

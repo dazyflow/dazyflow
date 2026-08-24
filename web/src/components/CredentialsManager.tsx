@@ -10,6 +10,7 @@ import { useAuth } from "../auth";
 import { ConfirmModal } from "./ConfirmModal";
 import { Button } from "./Button";
 import { ErrorNotice } from "./ErrorNotice";
+import { ICON } from "../icons";
 
 // CredentialsManager lists hand-entered secrets (DB URLs, API tokens) by name
 // — never value, the daemon has no read-back — with delete buttons and an add
@@ -128,7 +129,7 @@ export function CredentialsManager({
                   title={t("connections.deleteSecret", { name: n })}
                   onClick={() => setPendingDelete(n)}
                 >
-                  <Trash2 size={15} />
+                  <Trash2 size={ICON.sm} />
                 </Button>
               )}
             </li>
@@ -165,7 +166,7 @@ export function CredentialsManager({
             variant="primary"
             disabled={busy || !name.trim() || !value}
           >
-            <Plus size={15} /> {busy ? t("connections.saving") : t("connections.addSecret")}
+            <Plus size={ICON.sm} /> {busy ? t("common.saving") : t("connections.addSecret")}
           </Button>
         </form>
       )}

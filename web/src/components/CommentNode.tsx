@@ -6,6 +6,7 @@ import { Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import i18n from "../i18n";
 import { Button } from "./Button";
+import { ICON } from "../icons";
 
 // CommentNode is an editor-only "frame": a resizable, titled, colored box
 // that sits behind the real nodes to group them visually (#3). It has no
@@ -54,7 +55,7 @@ export function CommentNode({ data, selected }: NodeProps) {
             d.onRequestDelete?.();
           }}
         >
-          <Trash2 size={14} />
+          <Trash2 size={ICON.sm} />
         </Button>
       )}
       <input

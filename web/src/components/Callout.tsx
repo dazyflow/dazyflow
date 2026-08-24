@@ -9,6 +9,7 @@ import {
   XCircle,
   LucideIcon,
 } from "lucide-react";
+import { ICON } from "../icons";
 
 // Callout is the shared "this stands out" notice block — a bordered, tinted
 // box with a leading icon. Use it instead of a bare muted <p> whenever a
@@ -39,7 +40,7 @@ export function Callout({
       className={`callout callout-${variant}${className ? ` ${className}` : ""}`}
       role="note"
     >
-      <Icon size={16} className="callout-icon" aria-hidden="true" />
+      <Icon size={ICON.md} className="callout-icon" aria-hidden="true" />
       <div className="callout-body">{children}</div>
     </div>
   );

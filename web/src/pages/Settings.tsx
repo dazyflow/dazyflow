@@ -11,6 +11,8 @@ import { explainApiError } from "../lib/explainApiError";
 import { OtpInput } from "../components/OtpInput";
 import { Switch } from "../components/Switch";
 import { Button } from "../components/Button";
+import { ICON } from "../icons";
+import { FEEDBACK } from "../lib/timing";
 
 // Settings is the per-user, per-browser preferences page — reached
 // from the account menu in the sidebar. Holds appearance + language,
@@ -72,7 +74,7 @@ export function Settings() {
               onClick={() => pickTheme("system")}
             >
               <span className="theme-swatch theme-swatch-system" aria-hidden="true">
-                <Monitor size={16} />
+                <Monitor size={ICON.md} />
               </span>
               <span className="theme-option-label">{t("appSettings.themeSystem")}</span>
             </button>
@@ -83,7 +85,7 @@ export function Settings() {
               onClick={() => pickTheme("dark")}
             >
               <span className="theme-swatch theme-swatch-dark" aria-hidden="true">
-                <Moon size={16} />
+                <Moon size={ICON.md} />
               </span>
               <span className="theme-option-label">{t("appSettings.themeDark")}</span>
             </button>
@@ -94,7 +96,7 @@ export function Settings() {
               onClick={() => pickTheme("light")}
             >
               <span className="theme-swatch theme-swatch-light" aria-hidden="true">
-                <Sun size={16} />
+                <Sun size={ICON.md} />
               </span>
               <span className="theme-option-label">{t("appSettings.themeLight")}</span>
             </button>
@@ -209,7 +211,7 @@ function NotificationsCard() {
       <div className="sf-field">
         <div className="label-row">
           <label>
-            <Bell size={16} style={{ verticalAlign: "-3px" }} />{" "}
+            <Bell size={ICON.md} style={{ verticalAlign: "-3px" }} />{" "}
             {t("notifications.title")}
           </label>
         </div>
@@ -266,7 +268,7 @@ function TwoFactorCard() {
   const copy = (text: string, which: "secret" | "codes") => {
     void navigator.clipboard?.writeText(text);
     setCopied(which);
-    window.setTimeout(() => setCopied((c) => (c === which ? null : c)), 1500);
+    window.setTimeout(() => setCopied((c) => (c === which ? null : c)), FEEDBACK.copied);
   };
 
   // Recovery codes are shown once — let the user keep an offline copy as a
@@ -377,7 +379,7 @@ function TwoFactorCard() {
       <div className="sf-field">
         <div className="label-row">
           <label>
-            <ShieldCheck size={16} style={{ verticalAlign: "-3px" }} />{" "}
+            <ShieldCheck size={ICON.md} style={{ verticalAlign: "-3px" }} />{" "}
             {t("twoFactor.title")}
           </label>
         </div>
@@ -399,7 +401,7 @@ function TwoFactorCard() {
               <Button
                 onClick={() => copy(recoveryCodes.join("\n"), "codes")}
               >
-                {copied === "codes" ? t("twoFactor.copied") : t("twoFactor.copyCodes")}
+                {copied === "codes" ? t("common.copied") : t("twoFactor.copyCodes")}
               </Button>
               <Button
                 onClick={() => downloadCodes(recoveryCodes)}
@@ -437,7 +439,7 @@ function TwoFactorCard() {
                     className="linklike"
                     onClick={() => copy(setup.secret_base32, "secret")}
                   >
-                    {copied === "secret" ? t("twoFactor.copied") : t("twoFactor.copySecret")}
+                    {copied === "secret" ? t("common.copied") : t("common.copy")}
                   </Button>
                 </div>
               </div>
@@ -467,7 +469,7 @@ function TwoFactorCard() {
                   setErr(null);
                 }}
               >
-                {t("twoFactor.cancel")}
+                {t("common.cancel")}
               </Button>
             </div>
           </div>
@@ -527,7 +529,7 @@ function TwoFactorCard() {
                           setErr(null);
                         }}
                       >
-                        {t("twoFactor.cancel")}
+                        {t("common.cancel")}
                       </Button>
                     </div>
                   </div>

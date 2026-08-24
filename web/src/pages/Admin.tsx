@@ -28,6 +28,7 @@ import { api } from "../api";
 import type { VersionStatus } from "../types";
 import { orgDisplayName } from "../lib/orgDisplayName";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { ICON } from "../icons";
 
 // Admin is the gating point for tenant-level configuration. Cards are
 // split into what an org admin manages and what only the platform
@@ -67,16 +68,16 @@ export function Admin() {
           shown flat so everything is one click away. */}
       <h2 className="admin-group-label">{t("admin.groupOrg")}</h2>
       <div className="admin-grid">
-        <AdminCard to="/admin/users" icon={<Users size={18} />} title={t("admin.cardUsersTitle")} desc={t("admin.cardUsersDesc")} />
-        <AdminCard to="/admin/workspace" icon={<Building2 size={18} />} title={t("admin.cardWorkspaceTitle")} desc={t("admin.cardWorkspaceDesc")} />
-        <AdminCard to="/admin/api-keys" icon={<KeyRound size={18} />} title={t("admin.cardApiKeysTitle")} desc={t("admin.cardApiKeysDesc")} />
-        <AdminCard to="/admin/secrets" icon={<Lock size={18} />} title={t("admin.cardSecretsTitle")} desc={t("admin.cardSecretsDesc")} />
-        <AdminCard to="/admin/email-templates" icon={<Mail size={18} />} title={t("admin.cardEmailTemplatesTitle", "Email templates")} desc={t("admin.cardEmailTemplatesDesc", "Reusable HTML layouts the email steps wrap messages in.")} />
+        <AdminCard to="/admin/users" icon={<Users size={ICON.lg} />} title={t("admin.cardUsersTitle")} desc={t("admin.cardUsersDesc")} />
+        <AdminCard to="/admin/workspace" icon={<Building2 size={ICON.lg} />} title={t("admin.cardWorkspaceTitle")} desc={t("admin.cardWorkspaceDesc")} />
+        <AdminCard to="/admin/api-keys" icon={<KeyRound size={ICON.lg} />} title={t("admin.cardApiKeysTitle")} desc={t("admin.cardApiKeysDesc")} />
+        <AdminCard to="/admin/secrets" icon={<Lock size={ICON.lg} />} title={t("admin.cardSecretsTitle")} desc={t("admin.cardSecretsDesc")} />
+        <AdminCard to="/admin/email-templates" icon={<Mail size={ICON.lg} />} title={t("admin.cardEmailTemplatesTitle", "Email templates")} desc={t("admin.cardEmailTemplatesDesc", "Reusable HTML layouts the email steps wrap messages in.")} />
         <AdminCard to="/admin/google" icon={<img src="/brands/google-g.svg" alt="" width={18} height={18} />} title={t("admin.cardGoogleTitle")} desc={t("admin.cardGoogleDesc")} />
-        <AdminCard to="/admin/git-credentials" icon={<KeyRound size={18} />} title={t("admin.cardGitTitle")} desc={t("admin.cardGitDesc")} />
-        <AdminCard to="/admin/sso" icon={<ShieldCheck size={18} />} title={t("admin.cardSSOTitle")} desc={t("admin.cardSSODesc")} />
-        <AdminCard to="/admin/audit" icon={<ScrollText size={18} />} title={t("admin.cardAuditTitle")} desc={t("admin.cardAuditDesc")} />
-        <AdminCard to="/admin/support" icon={<LifeBuoy size={18} />} title={t("admin.cardSupportTitle", "Support access")} desc={t("admin.cardSupportDesc", "Approve or deny read-only access support requests for a flow.")} />
+        <AdminCard to="/admin/git-credentials" icon={<KeyRound size={ICON.lg} />} title={t("admin.cardGitTitle")} desc={t("admin.cardGitDesc")} />
+        <AdminCard to="/admin/sso" icon={<ShieldCheck size={ICON.lg} />} title={t("admin.cardSSOTitle")} desc={t("admin.cardSSODesc")} />
+        <AdminCard to="/admin/audit" icon={<ScrollText size={ICON.lg} />} title={t("admin.cardAuditTitle")} desc={t("admin.cardAuditDesc")} />
+        <AdminCard to="/admin/support" icon={<LifeBuoy size={ICON.lg} />} title={t("admin.cardSupportTitle", "Support access")} desc={t("admin.cardSupportDesc", "Approve or deny read-only access support requests for a flow.")} />
       </div>
 
       {/* OAuth provider apps are instance-wide (shared across every org), so
@@ -86,18 +87,18 @@ export function Admin() {
         <>
           <h2 className="admin-group-label">{t("admin.groupPlatform")}</h2>
           <div className="admin-grid">
-            <AdminCard to="/admin/oauth" icon={<Plug size={18} />} title={t("admin.cardOAuthTitle")} desc={t("admin.cardOAuthDesc")} />
-            <AdminCard to="/admin/platform" icon={<Send size={18} />} title={t("admin.cardPlatformTitle")} desc={t("admin.cardPlatformDesc")} />
-            <AdminCard to="/admin/platform/users" icon={<Users size={18} />} title={t("admin.cardPlatformUsersTitle")} desc={t("admin.cardPlatformUsersDesc")} />
-            <AdminCard to="/admin/platform/orgs" icon={<Building2 size={18} />} title={t("admin.cardPlatformOrgsTitle")} desc={t("admin.cardPlatformOrgsDesc")} />
-            <AdminCard to="/admin/platform/drops" icon={<PowerOff size={18} />} title={t("admin.cardPlatformDropsTitle")} desc={t("admin.cardPlatformDropsDesc")} />
-            <AdminCard to="/admin/platform/tiers" icon={<Layers size={18} />} title={t("admin.cardPlatformTiersTitle")} desc={t("admin.cardPlatformTiersDesc")} />
-            <AdminCard to="/admin/platform/support-agents" icon={<LifeBuoy size={18} />} title={t("admin.cardPlatformSupportAgentsTitle", "Support agents")} desc={t("admin.cardPlatformSupportAgentsDesc", "Provision vendor staff who can request read-only access to customer flows.")} />
+            <AdminCard to="/admin/oauth" icon={<Plug size={ICON.lg} />} title={t("admin.cardOAuthTitle")} desc={t("admin.cardOAuthDesc")} />
+            <AdminCard to="/admin/platform" icon={<Send size={ICON.lg} />} title={t("admin.cardPlatformTitle")} desc={t("admin.cardPlatformDesc")} />
+            <AdminCard to="/admin/platform/users" icon={<Users size={ICON.lg} />} title={t("admin.cardPlatformUsersTitle")} desc={t("admin.cardPlatformUsersDesc")} />
+            <AdminCard to="/admin/platform/orgs" icon={<Building2 size={ICON.lg} />} title={t("admin.cardPlatformOrgsTitle")} desc={t("admin.cardPlatformOrgsDesc")} />
+            <AdminCard to="/admin/platform/drops" icon={<PowerOff size={ICON.lg} />} title={t("admin.cardPlatformDropsTitle")} desc={t("admin.cardPlatformDropsDesc")} />
+            <AdminCard to="/admin/platform/tiers" icon={<Layers size={ICON.lg} />} title={t("admin.cardPlatformTiersTitle")} desc={t("admin.cardPlatformTiersDesc")} />
+            <AdminCard to="/admin/platform/support-agents" icon={<LifeBuoy size={ICON.lg} />} title={t("admin.cardPlatformSupportAgentsTitle", "Support agents")} desc={t("admin.cardPlatformSupportAgentsDesc", "Provision vendor staff who can request read-only access to customer flows.")} />
           </div>
 
           <h2 className="admin-group-label">{t("admin.groupSystem")}</h2>
           <div className="admin-grid">
-            <AdminCard to="/admin/system/log" icon={<Terminal size={18} />} title={t("admin.cardSystemLogTitle")} desc={t("admin.cardSystemLogDesc")} />
+            <AdminCard to="/admin/system/log" icon={<Terminal size={ICON.lg} />} title={t("admin.cardSystemLogTitle")} desc={t("admin.cardSystemLogDesc")} />
           </div>
           <SystemSection />
         </>
@@ -145,7 +146,7 @@ function SystemSection() {
   } else if (!status || status.check_error) {
     body = (
       <span className="admin-system-status is-muted">
-        <AlertTriangle size={15} />
+        <AlertTriangle size={ICON.sm} />
         {t("admin.system.checkFailed")}
       </span>
     );
@@ -153,7 +154,7 @@ function SystemSection() {
     body = (
       <div className="admin-system-update">
         <span className="admin-system-status is-update">
-          <CircleArrowUp size={15} />
+          <CircleArrowUp size={ICON.sm} />
           <Trans
             i18nKey="admin.system.updateAvailable"
             values={{ latest: fmtVer(status.latest || "") }}
@@ -183,7 +184,7 @@ function SystemSection() {
   } else {
     body = (
       <span className="admin-system-status is-ok">
-        <CheckCircle2 size={15} />
+        <CheckCircle2 size={ICON.sm} />
         {t("admin.system.upToDate")}
       </span>
     );
@@ -193,7 +194,7 @@ function SystemSection() {
     <div className="admin-system">
       <div className="admin-system-head">
         <span className="admin-card-icon">
-          <ServerCog size={18} />
+          <ServerCog size={ICON.lg} />
         </span>
         <div className="admin-system-head-text">
           <span className="admin-card-title">{t("admin.system.title")}</span>

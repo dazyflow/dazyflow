@@ -8,7 +8,7 @@ import { useTranslation } from "react-i18next";
 import { api, APIError } from "../api";
 import { explainApiError } from "../lib/explainApiError";
 import { useAuth } from "../auth";
-import { iconFor, isBrandedIcon, dropColor } from "../icons";
+import { iconFor, isBrandedIcon, dropColor, ICON } from "../icons";
 import {
   connectionText,
   integrationProse,
@@ -33,6 +33,7 @@ import type {
   Manifest,
   OAuthProviderStatus,
 } from "../types";
+import { featureUnavailable } from "../lib/explainApiError";
 
 // Apps is the index page — one card per integration ("app") the daemon
 // knows about, derived from the live manifest registry plus curated
@@ -492,13 +493,6 @@ export function AppDetail() {
   );
 }
 
-// featureUnavailable: a 501 (not configured), 401/403 (not permitted)
-// from a connections endpoint means "this feature isn't usable for
-// this caller" — render an inert "ask your admin" note rather than an
-// error banner. Mirrors the same helper on the Connections page.
-function featureUnavailable(status: number): boolean {
-  return status === 501 || status === 401 || status === 403;
-}
 
 // IntegrationConnections is the configure widget: it turns each drop's
 // requires_connections into an actionable row, so a user sets up an
@@ -844,7 +838,7 @@ function SecretCard({
           {canWrite && (
             <div className="connection-card-footer">
               <Button variant="ghost" onClick={() => setEditing(true)}>
-                {t("integrations.connection.edit")}
+                {t("common.edit")}
               </Button>
               <Button
                 variant="danger"
@@ -878,7 +872,7 @@ function SecretCard({
           {err && <ErrorNotice>{err}</ErrorNotice>}
           <div className="connection-card-footer">
             <Button type="submit" variant="primary" disabled={busy || !value}>
-              {busy ? t("connections.saving") : t("connections.connect")}
+              {busy ? t("common.saving") : t("connections.connect")}
             </Button>
             {configured && (
               <Button
@@ -1218,7 +1212,7 @@ function ConnectionFieldsCard({
                 </Button>
               )}
               <Button variant="ghost" onClick={() => setEditing(true)}>
-                {t("integrations.connection.edit")}
+                {t("common.edit")}
               </Button>
               <Button
                 variant="danger"
@@ -1286,7 +1280,7 @@ function ConnectionFieldsCard({
               {busy
                 ? verifiable
                   ? t("integrations.connection.verifying")
-                  : t("connections.saving")
+                  : t("common.saving")
                 : t("connections.connect")}
             </Button>
             {connected && (
@@ -1376,7 +1370,7 @@ function DropCard({ drop }: { drop: Manifest }) {
               background: `linear-gradient(135deg, ${color}, color-mix(in srgb, ${color} 70%, #fff))`,
             }}
           >
-            <Icon size={16} color="#140d30" strokeWidth={2.2} />
+            <Icon size={ICON.md} color="#140d30" strokeWidth={2.2} />
           </div>
         )}
         <div className="drop-card-title">

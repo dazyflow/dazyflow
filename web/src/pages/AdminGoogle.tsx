@@ -10,6 +10,7 @@ import { Button } from "../components/Button";
 import type { GoogleAccountsResponse } from "../types";
 import { explainApiError } from "../lib/explainApiError";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { ICON } from "../icons";
 
 // AdminGoogle is the org-admin page for managing the organization's shared
 // Google connections. Google accounts are org-level credentials (not
@@ -151,7 +152,7 @@ export function AdminGoogle() {
             disabled={busy}
             title={t("admin.google.connectAnother")}
           >
-            <Plus size={15} />
+            <Plus size={ICON.sm} />
             <span className="btn-label">{t("admin.google.connectAnother")}</span>
           </Button>
         )}
@@ -189,7 +190,7 @@ export function AdminGoogle() {
                     disabled={busy}
                     title={t("admin.google.reconnectHint")}
                   >
-                    <RefreshCw size={14} />
+                    <RefreshCw size={ICON.sm} />
                     <span className="btn-label">{t("admin.google.reconnect")}</span>
                   </Button>
                   <Button
@@ -199,7 +200,7 @@ export function AdminGoogle() {
                     disabled={busy}
                     title={t("admin.google.disconnect")}
                   >
-                    <Trash2 size={14} />
+                    <Trash2 size={ICON.sm} />
                     <span className="btn-label">{t("admin.google.disconnect")}</span>
                   </Button>
                 </span>
@@ -213,7 +214,7 @@ export function AdminGoogle() {
                       className={`google-coverage-row${granted ? " granted" : ""}`}
                     >
                       <span className="google-coverage-icon">
-                        {granted ? <Check size={15} /> : <X size={15} />}
+                        {granted ? <Check size={ICON.sm} /> : <X size={ICON.sm} />}
                       </span>
                       <span className="google-coverage-svc">{svc}</span>
                       {!granted && (
@@ -316,7 +317,7 @@ function ConnectAccountDialog({
         </div>
         <div className="settings-foot">
           <Button onClick={onCancel}>
-            {t("admin.google.cancel")}
+            {t("common.cancel")}
           </Button>
           <Button type="submit" variant="primary" disabled={busy}>
             {t("admin.google.connect")}
@@ -357,7 +358,7 @@ function ConfirmDisconnectDialog({
         </div>
         <div className="settings-foot">
           <Button onClick={onCancel}>
-            {t("admin.google.cancel")}
+            {t("common.cancel")}
           </Button>
           <Button variant="danger" disabled={busy} onClick={onConfirm}>
             {t("admin.google.disconnect")}

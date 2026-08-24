@@ -7,17 +7,17 @@ import { useTranslation } from "react-i18next";
 import { Maximize, Minimize } from "lucide-react";
 import { api, isErrorCode } from "../api";
 import { Button } from "../components/Button";
-import { FlowIcon } from "../icons";
+import { FlowIcon, ICON } from "../icons";
 import { formatRelative } from "../lib/datetime";
 import { formatNextRun } from "../lib/schedule";
 import type { PublicOverview as PublicOverviewData } from "../types";
+import { POLL, TICK } from "../lib/timing";
 
 // PublicOverview is the login-free, full-screen workspace status board behind
 // a share link — designed to live on a wall-mounted TV. It polls the public
 // snapshot endpoint (the share token in the URL is the only credential) and
 // re-renders the counters + per-flow grid as runs come and go. No AppShell,
 // no navigation: it's a single self-contained surface.
-const POLL_MS = 5000; // live enough for a wall, gentle on the daemon
 
 export function PublicOverview() {
   const { token = "" } = useParams();
@@ -52,13 +52,13 @@ export function PublicOverview() {
 
   useEffect(() => {
     poll();
-    const id = window.setInterval(poll, POLL_MS);
+    const id = window.setInterval(poll, POLL.watched);
     return () => window.clearInterval(id);
   }, [poll]);
 
   // A ticking clock + "updated Ns ago" need a steady re-render even between polls.
   useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    const id = window.setInterval(() => setNow(Date.now()), TICK.second);
     return () => window.clearInterval(id);
   }, []);
 
@@ -137,7 +137,7 @@ export function PublicOverview() {
             onClick={toggleFullscreen}
             title={t("tv.fullscreen")}
           >
-            {fullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
+            {fullscreen ? <Minimize size={ICON.xl} /> : <Maximize size={ICON.xl} />}
           </Button>
         </div>
       </header>

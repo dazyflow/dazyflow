@@ -7,6 +7,7 @@ import { Upload, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { fileToIconDataURL, isImageIcon } from "../lib/iconImage";
 import { Button } from "./Button";
+import { ICON } from "../icons";
 
 // IconUpload is the shared "set a real icon" control used by flow
 // settings and org settings. Shows a preview tile (the uploaded image,
@@ -60,7 +61,7 @@ export function IconUpload({
           }}
         />
         <Button variant="ghost" onClick={pick}>
-          <Upload size={14} /> {t("iconUpload.upload")}
+          <Upload size={ICON.sm} /> {t("iconUpload.upload")}
         </Button>
         {hasImage && (
           <Button
@@ -71,7 +72,7 @@ export function IconUpload({
             aria-label={t("iconUpload.remove")}
             title={t("iconUpload.remove")}
           >
-            <Trash2 size={14} />
+            <Trash2 size={ICON.sm} />
           </Button>
         )}
       </div>

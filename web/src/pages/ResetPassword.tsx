@@ -116,7 +116,7 @@ export function ResetPassword() {
           variant="primary"
           disabled={busy || !password || !confirm || mismatch}
         >
-          {busy ? t("resetPassword.submitting") : t("resetPassword.submit")}
+          {busy ? t("common.saving") : t("resetPassword.submit")}
         </Button>
         {err && <div className="error">{err}</div>}
         <div className="signin-alt">

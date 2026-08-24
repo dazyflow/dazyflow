@@ -10,6 +10,7 @@ import { explainApiError } from "../lib/explainApiError";
 import { Button } from "./Button";
 import type { FileEntry } from "../types";
 import { ErrorNotice } from "./ErrorNotice";
+import { ICON } from "../icons";
 
 // MoveModal is the interactive "Move to…" folder picker: browse the
 // workspace folder tree, then drop the entry into the folder you land on.
@@ -100,7 +101,7 @@ export function MoveModal({
               const target = segments.slice(0, i + 1).join("/");
               return (
                 <span key={target} className="files-crumb">
-                  <ChevronRight size={14} className="files-crumb-sep" />
+                  <ChevronRight size={ICON.sm} className="files-crumb-sep" />
                   <Button
                     variant="link"
                     onClick={() => setDir(target)}
@@ -121,12 +122,12 @@ export function MoveModal({
                 className="move-folder-row"
                 onClick={() => setDir(currentParentOf(dir))}
               >
-                <CornerLeftUp size={16} className="files-icon" />
+                <CornerLeftUp size={ICON.md} className="files-icon" />
                 <span className="move-folder-name">{t("files.moveUp")}</span>
               </Button>
             )}
             {folders === null ? (
-              <div className="files-empty">{t("files.loading")}</div>
+              <div className="files-empty">{t("common.loading")}</div>
             ) : folders.length === 0 ? (
               <div className="files-empty">{t("files.moveNoSubfolders")}</div>
             ) : (
@@ -141,9 +142,9 @@ export function MoveModal({
                     disabled={disabled}
                     onClick={() => setDir(f.path)}
                   >
-                    <Folder size={16} className="files-icon files-icon-dir" />
+                    <Folder size={ICON.md} className="files-icon files-icon-dir" />
                     <span className="move-folder-name">{f.name}</span>
-                    <ChevronRight size={16} className="move-folder-chev" />
+                    <ChevronRight size={ICON.md} className="move-folder-chev" />
                   </Button>
                 );
               })

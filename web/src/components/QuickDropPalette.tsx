@@ -11,7 +11,7 @@ import {
 } from "react";
 import { Search, Box } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { iconFor, isBrandedIcon, dropColor } from "../icons";
+import { iconFor, isBrandedIcon, dropColor, ICON } from "../icons";
 import { Button } from "./Button";
 import { scoreDrop } from "../lib/dropSearch";
 import { dropCategoryLabel, dropLabel, dropSubtitle } from "../lib/dropText";
@@ -267,7 +267,7 @@ export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAl
         aria-label={t("quickPalette.title")}
       >
         <div className="quick-palette-search">
-          <Search size={16} aria-hidden="true" />
+          <Search size={ICON.md} aria-hidden="true" />
           <input
             ref={inputRef}
             type="text"
@@ -390,7 +390,7 @@ function QuickRow({
             background: `linear-gradient(135deg, ${color}, color-mix(in srgb, ${color} 70%, #fff))`,
           }}
         >
-          <Icon size={16} color="#140d30" strokeWidth={2.2} />
+          <Icon size={ICON.md} color="#140d30" strokeWidth={2.2} />
         </div>
       )}
       <div className="quick-palette-row-text">
@@ -410,7 +410,7 @@ function QuickRow({
             </span>
           ) : (
             <span className="quick-palette-row-integration faint">
-              <Box size={10} aria-hidden="true" /> {t("quickPalette.builtIn")}
+              <Box size={ICON.xs} aria-hidden="true" /> {t("quickPalette.builtIn")}
             </span>
           )}
         </div>

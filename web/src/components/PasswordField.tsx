@@ -4,6 +4,7 @@
 import { forwardRef, useState, type InputHTMLAttributes } from "react";
 import { useTranslation } from "react-i18next";
 import { Eye, EyeOff } from "lucide-react";
+import { ICON } from "../icons";
 
 // PasswordField is a password input with a reveal toggle.
 //
@@ -39,7 +40,7 @@ export const PasswordField = forwardRef<
         aria-label={shown ? t("common.hidePassword") : t("common.showPassword")}
         title={shown ? t("common.hidePassword") : t("common.showPassword")}
       >
-        {shown ? <EyeOff size={16} /> : <Eye size={16} />}
+        {shown ? <EyeOff size={ICON.md} /> : <Eye size={ICON.md} />}
       </button>
     </div>
   );

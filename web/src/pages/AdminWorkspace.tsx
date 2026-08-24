@@ -11,6 +11,8 @@ import { Button } from "../components/Button";
 import type { WorkspaceLimits } from "../types";
 import { explainApiError } from "../lib/explainApiError";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { ICON } from "../icons";
+import { formatBytes } from "../lib/format";
 
 // AdminWorkspace is a read-only view of the effective limits for the
 // caller's tenant: the per-tenant disk quota plus the daemon-wide graph
@@ -53,7 +55,7 @@ export function AdminWorkspace() {
       <div className="page-title">
         <div>
           <h1>
-            <Settings2 size={20} style={{ marginRight: 8, verticalAlign: -3 }} />
+            <Settings2 size={ICON.xl} style={{ marginRight: 8, verticalAlign: -3 }} />
             {t("admin.workspace.title")}
           </h1>
           <div className="sub">{t("admin.workspace.subtitle")}</div>
@@ -317,7 +319,7 @@ function OrgProfileEditor() {
       {wildcardDomain && (
         <div className="sf-field" style={{ marginTop: "var(--space-4)" }}>
           <label>
-            <Globe size={13} style={{ verticalAlign: -2 }} />{" "}
+            <Globe size={ICON.sm} style={{ verticalAlign: -2 }} />{" "}
             {t("admin.workspace.subdomainLabel")}
           </label>
           <p className="desc">{t("admin.workspace.subdomainDesc")}</p>
@@ -344,7 +346,7 @@ function OrgProfileEditor() {
             )}
             {avail === "ok" && (
               <span className="desc" style={{ color: "var(--success)" }}>
-                <Check size={12} style={{ verticalAlign: -1 }} />{" "}
+                <Check size={ICON.xs} style={{ verticalAlign: -1 }} />{" "}
                 {t("admin.workspace.subdomainAvailable")}
               </span>
             )}
@@ -381,20 +383,20 @@ function OrgProfileEditor() {
               }
             >
               {savingSub
-                ? t("admin.workspace.saving")
+                ? t("common.saving")
                 : sub.trim() === "" && savedSub
                 ? t("admin.workspace.subdomainRelease")
                 : t("admin.workspace.subdomainSave")}
             </Button>
             {subSavedAt && !subError && (
               <span className="desc" style={{ color: "var(--success)" }}>
-                <Check size={12} style={{ verticalAlign: -1 }} /> {t("admin.workspace.saved")}
+                <Check size={ICON.xs} style={{ verticalAlign: -1 }} /> {t("common.saved")}
               </span>
             )}
           </div>
           {subError && (
             <div className="error" style={{ marginTop: 8 }}>
-              <AlertCircle size={14} style={{ verticalAlign: -2 }} /> {subError}
+              <AlertCircle size={ICON.sm} style={{ verticalAlign: -2 }} /> {subError}
             </div>
           )}
         </div>
@@ -402,30 +404,19 @@ function OrgProfileEditor() {
 
       <div className="settings-foot" style={{ borderTop: "none", padding: 0, minHeight: 18 }}>
         {saving ? (
-          <span className="desc">{t("admin.workspace.saving")}</span>
+          <span className="desc">{t("common.saving")}</span>
         ) : savedAt ? (
           <span className="desc" style={{ color: "var(--success)" }}>
-            <Check size={12} style={{ verticalAlign: -1 }} /> {t("admin.workspace.saved")}
+            <Check size={ICON.xs} style={{ verticalAlign: -1 }} /> {t("common.saved")}
           </span>
         ) : null}
       </div>
       {error && (
         <div className="error" style={{ marginTop: 12 }}>
-          <AlertCircle size={14} style={{ verticalAlign: -2 }} /> {error}
+          <AlertCircle size={ICON.sm} style={{ verticalAlign: -2 }} /> {error}
         </div>
       )}
     </div>
   );
 }
 
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  const units = ["KiB", "MiB", "GiB", "TiB"];
-  let v = n / 1024;
-  let i = 0;
-  while (v >= 1024 && i < units.length - 1) {
-    v /= 1024;
-    i++;
-  }
-  return `${v.toFixed(1)} ${units[i]}`;
-}

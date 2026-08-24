@@ -13,6 +13,7 @@ import type { SupportAgentGrant } from "../types";
 import { formatDate } from "../lib/datetime";
 import { explainApiError } from "../lib/explainApiError";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { ICON } from "../icons";
 
 // AdminPlatformSupportAgents is the platform-admin surface for provisioning
 // support agents (cross-tenant vendor/operator staff who get the support:agent
@@ -87,13 +88,13 @@ export function AdminPlatformSupportAgents() {
         className="back-link"
         style={{ display: "inline-flex", alignItems: "center", gap: 4, marginBottom: "var(--space-2)" }}
       >
-        <ChevronLeft size={14} />
+        <ChevronLeft size={ICON.sm} />
         {t("admin.supportAgents.back", { defaultValue: "Platform admin" })}
       </Link>
       <div className="page-title">
         <div>
           <h1>
-            <LifeBuoy size={20} style={{ marginRight: 8, verticalAlign: -3 }} />
+            <LifeBuoy size={ICON.xl} style={{ marginRight: 8, verticalAlign: -3 }} />
             {t("admin.supportAgents.title", { defaultValue: "Support agents" })}
           </h1>
           <div className="sub">
@@ -130,7 +131,7 @@ export function AdminPlatformSupportAgents() {
               style={{ flex: 1 }}
             />
             <Button type="submit" variant="primary" disabled={adding || !email.trim()}>
-              <Plus size={14} style={{ marginRight: 6 }} />
+              <Plus size={ICON.sm} style={{ marginRight: 6 }} />
               {adding
                 ? t("admin.supportAgents.adding", { defaultValue: "Adding…" })
                 : t("admin.supportAgents.add", { defaultValue: "Add agent" })}
@@ -189,7 +190,7 @@ function AgentCard({
     <div className="user-card">
       <div style={{ minWidth: 0 }}>
         <div className="subject">
-          <UserCircle2 size={18} />
+          <UserCircle2 size={ICON.lg} />
           {agent.email}
         </div>
         <div className="meta">
@@ -205,7 +206,7 @@ function AgentCard({
       </div>
       <div className="user-card-actions">
         <Button onClick={() => setConfirm(true)} disabled={busy}>
-          <Trash2 size={12} style={{ marginRight: 4 }} />
+          <Trash2 size={ICON.xs} style={{ marginRight: 4 }} />
           {t("admin.supportAgents.remove", { defaultValue: "Remove" })}
         </Button>
       </div>

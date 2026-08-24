@@ -10,6 +10,7 @@ import { api } from "../api";
 import { Button } from "./Button";
 import { explainApiError } from "../lib/explainApiError";
 import { ErrorNotice } from "./ErrorNotice";
+import { ICON } from "../icons";
 
 // ReportProblemModal files a support ticket about a specific flow/run — the
 // zero-friction "the ask" path (Tier 1): the server auto-attaches a redacted
@@ -69,7 +70,7 @@ export function ReportProblemModal({
         <div className="modal-head">
           <strong>{t("report.title")}</strong>
           <Button size="icon" onClick={onClose} aria-label={t("common.close")}>
-            <X size={16} />
+            <X size={ICON.md} />
           </Button>
         </div>
         <div className="modal-body">

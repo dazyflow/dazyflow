@@ -303,7 +303,7 @@ export function IssueKeyModal({
         </div>
         <div className="settings-foot">
           <Button onClick={onCancel}>
-            {t("issueKey.cancel")}
+            {t("common.cancel")}
           </Button>
           <Button type="submit" variant="primary" disabled={submitting}>
             {submitting ? t("issueKey.issuing") : t("issueKey.issue")}

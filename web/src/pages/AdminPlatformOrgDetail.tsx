@@ -16,6 +16,7 @@ import { ActionsCard, ActionRow } from "../components/PlatformActions";
 import { PlanLimitsSection } from "../components/OrgPlanLimits";
 import { MembersSection } from "../components/OrgMembers";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { ICON } from "../icons";
 
 // AdminPlatformOrgDetail is one org's platform-admin moderation page:
 // suspend (halt all its flows + lock out members), ban (suspend +
@@ -139,10 +140,10 @@ export function AdminPlatformOrgDetail() {
             </dl>
           </div>
 
-          <ActionsCard title={t("admin.platformOrgDetail.actionsHead")}>
+          <ActionsCard title={t("common.colActions")}>
             {suspended ? (
               <ActionRow
-                icon={<CheckCircle2 size={17} />}
+                icon={<CheckCircle2 size={ICON.lg} />}
                 title={t("admin.platformOrgDetail.unsuspend")}
                 description={t("admin.platformOrgDetail.unsuspendDesc")}
               >
@@ -152,7 +153,7 @@ export function AdminPlatformOrgDetail() {
               </ActionRow>
             ) : (
               <ActionRow
-                icon={<ShieldOff size={17} />}
+                icon={<ShieldOff size={ICON.lg} />}
                 title={t("admin.platformOrgDetail.suspend")}
                 description={t("admin.platformOrgDetail.suspendDesc")}
               >
@@ -163,7 +164,7 @@ export function AdminPlatformOrgDetail() {
             )}
             <ActionRow
               danger
-              icon={<Ban size={17} />}
+              icon={<Ban size={ICON.lg} />}
               title={t("admin.platformOrgDetail.ban")}
               description={t("admin.platformOrgDetail.banDesc")}
             >
@@ -173,7 +174,7 @@ export function AdminPlatformOrgDetail() {
             </ActionRow>
             <ActionRow
               danger
-              icon={<Trash2 size={17} />}
+              icon={<Trash2 size={ICON.lg} />}
               title={t("admin.platformOrgDetail.delete")}
               description={t("admin.platformOrgDetail.deleteDesc")}
             >

@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { Activity, AlertCircle, CreditCard, Layers, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../components/Button";
@@ -14,6 +13,8 @@ import { explainApiError } from "../lib/explainApiError";
 import { formatDate } from "../lib/datetime";
 import type { BillingInfo, UsageCounters } from "../types";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { ICON } from "../icons";
+import { StatCard, type StatTone } from "../components/StatCard";
 
 // Plan & usage (T3): the single account-billing surface, styled after the
 // Overview dashboard — a row of at-a-glance stat cards (plan, runs, step
@@ -151,7 +152,7 @@ export function Usage() {
       <div className="page-title">
         <div>
           <h1>
-            <CreditCard size={20} style={{ marginRight: 8, verticalAlign: -3 }} />
+            <CreditCard size={ICON.xl} style={{ marginRight: 8, verticalAlign: -3 }} />
             {billingEnabled ? t("usage.title") : t("usage.titlePlain")}
           </h1>
           <div className="sub">{billingEnabled ? t("usage.subtitle") : t("usage.subtitlePlain")}</div>
@@ -160,7 +161,7 @@ export function Usage() {
           <div className="dash-title-actions">
             {billing.can_upgrade && (
               <Button variant="primary" disabled={redirecting} onClick={() => void goToStripe("checkout")}>
-                <Sparkles size={16} style={{ marginRight: 6 }} />
+                <Sparkles size={ICON.md} style={{ marginRight: 6 }} />
                 {t("usage.upgrade")}
               </Button>
             )}
@@ -183,7 +184,7 @@ export function Usage() {
         <div className="dash-stats">
           {billing && billingEnabled && (
             <StatCard
-              icon={<CreditCard size={18} />}
+              icon={<CreditCard size={ICON.lg} />}
               label={t("usage.planLabel")}
               value={billing.plan === "pro" ? t("usage.planValuePro") : t("usage.planValueFree")}
               sub={planSub}
@@ -191,7 +192,7 @@ export function Usage() {
             />
           )}
           <StatCard
-            icon={<Activity size={18} />}
+            icon={<Activity size={ICON.lg} />}
             label={t("usage.runs")}
             value={loading ? "—" : fmt.format(current?.graph_runs ?? 0)}
             sub={
@@ -208,7 +209,7 @@ export function Usage() {
             to="/runs"
           />
           <StatCard
-            icon={<Layers size={18} />}
+            icon={<Layers size={ICON.lg} />}
             label={t("usage.nodeExecutions")}
             value={loading ? "—" : fmt.format(current?.node_executions ?? 0)}
             to="/runs"
@@ -226,19 +227,19 @@ export function Usage() {
           <div className="card dash-panel" style={{ marginBottom: "var(--space-4)" }}>
             {skippedThisMonth > 0 && (
               <p className="dash-empty" style={{ color: "var(--warning, #d97706)" }}>
-                <AlertCircle size={16} />
+                <AlertCircle size={ICON.md} />
                 {t("usage.skippedRuns", { count: skippedThisMonth })}
               </p>
             )}
             {!billing.polling_allowed && (
               <p className="dash-empty" style={{ color: "var(--warning, #d97706)" }}>
-                <AlertCircle size={16} />
+                <AlertCircle size={ICON.md} />
                 {t("usage.pollingGated")}
               </p>
             )}
             {billing.can_upgrade && (
               <p className="dash-empty">
-                <Sparkles size={16} />
+                <Sparkles size={ICON.md} />
                 {t("usage.proPitch")}
               </p>
             )}
@@ -286,37 +287,4 @@ export function Usage() {
   );
 }
 
-type StatTone = "neutral" | "good" | "warn" | "bad";
 
-function StatCard({
-  icon,
-  label,
-  value,
-  sub,
-  tone = "neutral",
-  to,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  sub?: React.ReactNode;
-  tone?: StatTone;
-  to?: string;
-}) {
-  const className = "card dash-stat dash-stat-" + tone;
-  const body = (
-    <>
-      <span className="dash-stat-icon">{icon}</span>
-      <span className="dash-stat-value">{value}</span>
-      <span className="dash-stat-label">{label}</span>
-      {sub && <span className="dash-stat-sub">{sub}</span>}
-    </>
-  );
-  return to ? (
-    <Link to={to} className={className}>
-      {body}
-    </Link>
-  ) : (
-    <div className={className}>{body}</div>
-  );
-}

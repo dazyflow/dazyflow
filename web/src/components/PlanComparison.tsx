@@ -6,6 +6,8 @@ import { ArrowUp, Check, CreditCard, Minus, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button, ButtonLink } from "./Button";
 import type { PlanLimits, PlanOption, PlansInfo } from "../api";
+import { ICON } from "../icons";
+import { formatBytes } from "../lib/format";
 
 // Unlimited renders the ∞ glyph for a no-limit value, keeping the localized
 // "Unlimited" as the accessible label (tooltip + screen reader) so the symbol
@@ -47,17 +49,6 @@ const FEATURES: Feature[] = [
   { key: "max_timeout_seconds", labelKey: "plans.feat.timeout", kind: "duration" },
 ];
 
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  const units = ["KiB", "MiB", "GiB", "TiB"];
-  let v = n / 1024;
-  let i = 0;
-  while (v >= 1024 && i < units.length - 1) {
-    v /= 1024;
-    i++;
-  }
-  return `${v.toFixed(1)} ${units[i]}`;
-}
 
 // score maps a numeric limit to a comparable magnitude where 0 = unlimited is
 // the largest. Used to decide whether a plan's value is an upgrade over the
@@ -123,7 +114,7 @@ export function PlanComparison({
     <section className="card dash-panel" style={{ marginTop: "var(--space-4)" }}>
       <div className="dash-panel-head">
         <h2>
-          <CreditCard size={18} style={{ marginRight: 8, verticalAlign: -3 }} />
+          <CreditCard size={ICON.lg} style={{ marginRight: 8, verticalAlign: -3 }} />
           {t("plans.compareTitle")}
         </h2>
       </div>
@@ -216,7 +207,7 @@ function PlanCard({
   ) : isUpgradeTarget ? (
     info.can_upgrade ? (
       <Button variant="primary" block disabled={redirecting} onClick={onUpgrade}>
-        <Sparkles size={14} style={{ marginRight: 6 }} />
+        <Sparkles size={ICON.sm} style={{ marginRight: 6 }} />
         {t("plans.upgradeTo", { plan: plan.name })}
       </Button>
     ) : (
@@ -248,14 +239,14 @@ function PlanCard({
               <span className="plan-feat-ico">
                 {f.kind === "bool" ? (
                   v ? (
-                    <Check size={15} />
+                    <Check size={ICON.sm} />
                   ) : (
-                    <Minus size={15} />
+                    <Minus size={ICON.sm} />
                   )
                 ) : up ? (
-                  <ArrowUp size={15} />
+                  <ArrowUp size={ICON.sm} />
                 ) : (
-                  <Check size={15} />
+                  <Check size={ICON.sm} />
                 )}
               </span>
               <span className="plan-feat-label">{t(f.labelKey)}</span>

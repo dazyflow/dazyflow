@@ -42,9 +42,12 @@ import { OrgSwitcherModal } from "./OrgSwitcherModal";
 import { ConnectMcpClientModal } from "./ConnectMcpClientModal";
 import { CommandPalette } from "./CommandPalette";
 import { HelpModal } from "./HelpModal";
-import { FlowIcon } from "../icons";
+import { FlowIcon, ICON } from "../icons";
 import { isImageIcon } from "../lib/iconImage";
+import { MOBILE, isNarrower, mediaQuery } from "../lib/breakpoints";
 import type { FlowSummary } from "../types";
+import { POLL } from "../lib/timing";
+import { savedCollapsePref, initialNavCollapsed } from "../lib/navCollapse";
 
 // orgGlyph renders an org's icon: an uploaded image (data: URL) as an
 // <img>, otherwise the generic Building2 mark. Shared by the tenant
@@ -89,34 +92,8 @@ const COLLAPSE_KEY = "dazyflow.sidebar.collapsed";
 // uses to stay visible after the user has used the approval inbox
 // at least once. See the everHadApproval state below.
 const APPROVAL_SEEN_KEY = "dazyflow.approvalsEverSeen";
-// MOBILE_BREAK mirrors the @media (max-width: 768px) rule in app.css —
-// AppShell uses it to default new visitors on small viewports to the
-// rail layout on first paint.
-const MOBILE_BREAK = 768;
 
-// savedCollapsePref reads the user's explicit desktop collapse choice.
-// Only the desktop toggle writes this (see toggleNav) — on small screens
-// the rail is a per-session default, not a persisted preference, so a
-// phone toggle never overwrites the desktop layout.
-function savedCollapsePref(): boolean {
-  try {
-    return localStorage.getItem(COLLAPSE_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
 
-// initialNavCollapsed picks the first-paint rail state: small viewports
-// always start collapsed (the full sidebar would eat too much of a
-// phone/tablet screen, regardless of any saved desktop preference);
-// desktops honour the saved choice. Runs synchronously so the first
-// paint matches the viewport — no flicker between the two widths.
-function initialNavCollapsed(): boolean {
-  if (typeof window !== "undefined" && window.innerWidth <= MOBILE_BREAK) {
-    return true;
-  }
-  return savedCollapsePref();
-}
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
@@ -160,7 +137,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   // would eat too much of a phone/tablet screen) and expanded on
   // desktops. The initial read runs synchronously so the first paint
   // matches — no flicker between the two widths.
-  const [navCollapsed, setNavCollapsed] = useState<boolean>(initialNavCollapsed);
+  const [navCollapsed, setNavCollapsed] = useState<boolean>(() => initialNavCollapsed(COLLAPSE_KEY));
   // Keep the rail in sync with the viewport: collapse when we cross into
   // a small screen, and restore the saved desktop preference when we
   // cross back out. matchMedia's change event fires only on crossing the
@@ -169,8 +146,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   // deliberately NOT persisted — the stored value is the desktop choice.
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return;
-    const mq = window.matchMedia(`(max-width: ${MOBILE_BREAK}px)`);
-    const apply = () => setNavCollapsed(mq.matches ? true : savedCollapsePref());
+    const mq = window.matchMedia(mediaQuery(MOBILE));
+    const apply = () => setNavCollapsed(mq.matches ? true : savedCollapsePref(COLLAPSE_KEY));
     mq.addEventListener("change", apply);
     return () => mq.removeEventListener("change", apply);
   }, []);
@@ -180,13 +157,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   // shouldn't keep covering the page. No-op on desktop (inline sidebar)
   // and on first mount (the drawer already starts closed there).
   useEffect(() => {
-    if (typeof window !== "undefined" && window.innerWidth <= MOBILE_BREAK) {
+    if (isNarrower(MOBILE)) {
       setNavCollapsed(true);
     }
   }, [location.pathname]);
   // Pending approvals count — surfaces a badge on the sidebar nav so
   // operators see "you have N decisions waiting" without visiting the
-  // page. Polled every 30s; updates immediately on visibility change.
+  // page. Polled on the `background` tier; updates immediately on visibility
+  // change.
   const [pendingCount, setPendingCount] = useState(0);
   // supportUnread badges the Support nav entry: for a user, tickets now waiting
   // on them (support replied); for an agent, tickets waiting on support. Closes
@@ -240,15 +218,17 @@ export function AppShell({ children }: { children: ReactNode }) {
           /* ignore — non-essential */
         });
     void fetch();
-    const t = window.setInterval(fetch, 30000);
+    const t = window.setInterval(fetch, POLL.background);
     return () => {
       cancelled = true;
       window.clearInterval(t);
     };
   }, [token, location.pathname, activeTenant, activeWorkspace, everHadApproval]);
   // Support unread count: agents count queue tickets awaiting support; users
-  // count their own tickets awaiting them. Polled slowly (60s) — it only drives
-  // a badge. Skipped entirely when the ticket surface is off.
+  // count their own tickets awaiting them. Same `background` tier as the
+  // approvals badge above — it used to poll at 60s against that one's 30s, a
+  // distinction nothing justified when both drive only a sidebar number.
+  // Skipped entirely when the ticket surface is off.
   const isAgent = hasPerm("support:agent");
   const supportOn = !!me?.support_tickets_enabled || isAgent;
   useEffect(() => {
@@ -268,7 +248,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       });
     };
     fetch();
-    const iv = window.setInterval(fetch, 60000);
+    const iv = window.setInterval(fetch, POLL.background);
     return () => {
       cancelled = true;
       window.clearInterval(iv);
@@ -366,7 +346,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const toggleNav = () =>
     setNavCollapsed((x) => {
       const next = !x;
-      if (typeof window === "undefined" || window.innerWidth > MOBILE_BREAK) {
+      if (!isNarrower(MOBILE)) {
         try {
           localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0");
         } catch {
@@ -467,7 +447,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               aria-label={t("help.title")}
               title={t("help.title")}
             >
-              <HelpCircle size={18} />
+              <HelpCircle size={ICON.lg} />
             </Button>
             {/* Org switcher: opens a modal listing the orgs you can act in,
                 with an inline "Create organization" form. Always available so
@@ -490,7 +470,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   t("nav.personalWorkspace"),
                 )}
               </strong>
-              <ChevronDown size={12} />
+              <ChevronDown size={ICON.xs} />
             </Button>
             {inEditor && openSettings && (
               <FlowMenu onOpenSettings={openSettings} />
@@ -575,18 +555,18 @@ export function AppShell({ children }: { children: ReactNode }) {
             className="sidebar-new-flow"
             title={t("flowList.newFlow")}
           >
-            <Plus size={18} />
+            <Plus size={ICON.lg} />
             <span className="nav-label">{t("flowList.newFlow")}</span>
           </NavLink>
           <NavLink to="/overview" title={t("nav.overview")}>
-            <Gauge size={18} />
+            <Gauge size={ICON.lg} />
             <span className="nav-label">{t("nav.overview")}</span>
           </NavLink>
           <NavLink
             to="/flows"
             title={t("nav.flows")}
           >
-            <Workflow size={18} />
+            <Workflow size={ICON.lg} />
             <span className="nav-label">{t("nav.flows")}</span>
           </NavLink>
           {/* All flows in the workspace, nested under the Flows entry.
@@ -600,11 +580,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                   className="nav-flow-item"
                   title={f.name || f.id}
                 >
-                  <FlowIcon icon={f.icon} size={15} className="nav-flow-icon" />
+                  <FlowIcon icon={f.icon} size={ICON.sm} className="nav-flow-icon" />
                   <span className="nav-label nav-flow-name">{f.name || f.id}</span>
                   {f.published === false && (
                     <PencilLine
-                      size={13}
+                      size={ICON.sm}
                       className="nav-flow-draft"
                       aria-label={t("nav.draft")}
                     />
@@ -617,7 +597,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             to="/runs"
             title={t("nav.runs")}
           >
-            <Activity size={18} />
+            <Activity size={ICON.lg} />
             <span className="nav-label">{t("nav.runs")}</span>
           </NavLink>
           {/* Results — the in-app view of data flows saved to the Built-in
@@ -626,7 +606,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             to="/collections"
             title={t("nav.results")}
           >
-            <Table2 size={18} />
+            <Table2 size={ICON.lg} />
             <span className="nav-label">{t("nav.results")}</span>
           </NavLink>
           {/* Files is an authoring surface (workspace inputs/outputs), gated to
@@ -637,7 +617,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               to="/files"
               title={t("nav.files")}
             >
-              <FolderTree size={18} />
+              <FolderTree size={ICON.lg} />
               <span className="nav-label">{t("nav.files")}</span>
             </NavLink>
           )}
@@ -652,7 +632,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               to="/approvals"
               title={t("nav.approvals")}
             >
-              <Inbox size={18} />
+              <Inbox size={ICON.lg} />
               <span className="nav-label" style={{ flex: 1 }}>
                 {t("nav.approvals")}
               </span>
@@ -668,7 +648,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             to="/apps"
             title={t("nav.apps")}
           >
-            <Boxes size={18} />
+            <Boxes size={ICON.lg} />
             <span className="nav-label">{t("nav.apps")}</span>
           </NavLink>
           {/* Support tickets: only when the deployment wired the native
@@ -679,7 +659,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               to={isAgent ? "/support/queue" : "/support"}
               title={t("nav.support")}
             >
-              <LifeBuoy size={18} />
+              <LifeBuoy size={ICON.lg} />
               <span className="nav-label" style={{ flex: 1 }}>{t("nav.support")}</span>
               {supportUnread > 0 && <span className="nav-badge">{supportUnread}</span>}
             </NavLink>
@@ -704,9 +684,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             }
           >
             {navCollapsed ? (
-              <ChevronRight size={16} />
+              <ChevronRight size={ICON.md} />
             ) : (
-              <ChevronLeft size={16} />
+              <ChevronLeft size={ICON.md} />
             )}
             <span className="nav-label">
               {navCollapsed
@@ -868,9 +848,9 @@ function AccountMenu({
         aria-label={t("account.menu")}
         title={collapsed ? email : undefined}
       >
-        <SettingsIcon size={18} />
+        <SettingsIcon size={ICON.lg} />
         <span className="nav-label account-email">{email}</span>
-        <ChevronDown size={14} className="nav-label account-chevron" />
+        <ChevronDown size={ICON.sm} className="nav-label account-chevron" />
       </Button>
       {open && pos &&
         createPortal(
@@ -897,7 +877,7 @@ function AccountMenu({
                     navigate("/usage");
                   }}
                 >
-                  <Sparkles size={14} />
+                  <Sparkles size={ICON.sm} />
                   {t("nav.upgrade")}
                 </Button>
                 <div className="workspace-pop-sep" role="separator" />
@@ -911,7 +891,7 @@ function AccountMenu({
                 navigate("/settings");
               }}
             >
-              <SettingsIcon size={14} />
+              <SettingsIcon size={ICON.sm} />
               {t("account.settings")}
             </Button>
             {/* Connect an assistant — the guided MCP-client flow: mints a
@@ -927,7 +907,7 @@ function AccountMenu({
                 onConnectMcp();
               }}
             >
-              <Plug size={14} />
+              <Plug size={ICON.sm} />
               {t("account.connectMcp")}
             </Button>
             {/* Plan & usage (plan, billing, consumption) — one account-menu
@@ -943,7 +923,7 @@ function AccountMenu({
                 navigate("/usage");
               }}
             >
-              <CreditCard size={14} />
+              <CreditCard size={ICON.sm} />
               {billingEnabled ? t("nav.plans") : t("nav.usage")}
             </Button>
             {showAdmin && (
@@ -955,7 +935,7 @@ function AccountMenu({
                   navigate("/admin");
                 }}
               >
-                <ShieldCheck size={14} />
+                <ShieldCheck size={ICON.sm} />
                 {t("nav.admin")}
               </Button>
             )}
@@ -969,7 +949,7 @@ function AccountMenu({
                 onSignOut();
               }}
             >
-              <LogOut size={14} />
+              <LogOut size={ICON.sm} />
               {t("account.signOut")}
             </Button>
             {/* Version footer — informational, not a menu item. Hidden
@@ -1022,7 +1002,7 @@ function FlowMenu({ onOpenSettings }: { onOpenSettings: () => void }) {
         aria-label={t("flowMenu.label")}
         title={t("flowMenu.label")}
       >
-        <MoreVertical size={18} />
+        <MoreVertical size={ICON.lg} />
       </Button>
       {open && (
         <div className="workspace-pop account-pop" role="menu">
@@ -1034,7 +1014,7 @@ function FlowMenu({ onOpenSettings }: { onOpenSettings: () => void }) {
               onOpenSettings();
             }}
           >
-            <SettingsIcon size={14} />
+            <SettingsIcon size={ICON.sm} />
             {t("flowMenu.settings")}
           </Button>
         </div>
@@ -1072,7 +1052,7 @@ function VerifyEmailBanner() {
   };
   return (
     <div className="card verify-banner">
-      <MailWarning size={18} className="verify-banner-icon" />
+      <MailWarning size={ICON.lg} className="verify-banner-icon" />
       <div className="verify-banner-body">
         {sent ? t("verifyEmail.bannerSent") : t("verifyEmail.banner")}
       </div>
@@ -1082,8 +1062,8 @@ function VerifyEmailBanner() {
           disabled={busy}
           onClick={() => void resend()}
         >
-          <Send size={14} />
-          {busy ? t("verifyEmail.bannerSending") : t("verifyEmail.bannerResend")}
+          <Send size={ICON.sm} />
+          {busy ? t("common.sending") : t("verifyEmail.bannerResend")}
         </Button>
       )}
       <Button
@@ -1094,7 +1074,7 @@ function VerifyEmailBanner() {
         aria-label={t("verifyEmail.bannerDismiss")}
         title={t("verifyEmail.bannerDismiss")}
       >
-        <X size={14} />
+        <X size={ICON.sm} />
       </Button>
     </div>
   );

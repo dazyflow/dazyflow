@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ArrowRight, Sparkles } from "lucide-react";
-import { FlowIcon } from "../icons";
+import { FlowIcon, ICON } from "../icons";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { loadRecentFlow, userScope } from "../recentFlow";
@@ -84,7 +84,7 @@ export function Welcome() {
             className="welcome-resume"
           >
             <span className="welcome-resume-icon">
-              <FlowIcon icon={live?.icon ?? recent.icon} size={18} />
+              <FlowIcon icon={live?.icon ?? recent.icon} size={ICON.lg} />
             </span>
             <span className="welcome-resume-body">
               <span className="welcome-resume-lede">
@@ -92,7 +92,7 @@ export function Welcome() {
               </span>
               <span className="welcome-resume-name">{live?.name ?? recent.name}</span>
             </span>
-            <ArrowRight size={16} className="welcome-resume-arrow" />
+            <ArrowRight size={ICON.md} className="welcome-resume-arrow" />
           </Link>
         )}
         <p className="welcome-intro">
@@ -104,7 +104,7 @@ export function Welcome() {
           to="/flows/new?tab=template&start=try-it-now"
           className="primary welcome-cta welcome-create"
         >
-          <Sparkles size={16} /> {t("welcome.featuredCta")}
+          <Sparkles size={ICON.md} /> {t("welcome.featuredCta")}
         </Link>
         <p className="welcome-featured-desc">{t("welcome.featuredDesc")}</p>
         <p className="welcome-alt">
@@ -116,7 +116,7 @@ export function Welcome() {
           <div className="welcome-mcp">
             <div className="welcome-mcp-body">
               <div className="welcome-mcp-title">
-                <Sparkles size={16} style={{ marginRight: 8, verticalAlign: -2 }} />
+                <Sparkles size={ICON.md} style={{ marginRight: 8, verticalAlign: -2 }} />
                 {t("welcome.aiBuildTitle")}
               </div>
               <div className="welcome-mcp-desc">
@@ -126,7 +126,7 @@ export function Welcome() {
             {/* Explicit ?tab=ai — the create page defaults to templates now,
                 so this has to name the tab it wants. */}
             <Link to="/flows/new?tab=ai" className="welcome-cta">
-              <Sparkles size={14} /> {t("welcome.aiBuildCta")}
+              <Sparkles size={ICON.sm} /> {t("welcome.aiBuildCta")}
             </Link>
           </div>
         )}

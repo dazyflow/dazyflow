@@ -23,6 +23,8 @@ import { Button } from "../components/Button";
 import type { SignupInviteSummary } from "../types";
 import { formatDate } from "../lib/datetime";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { ICON } from "../icons";
+import { FEEDBACK } from "../lib/timing";
 
 // AdminPlatformUsers is the cross-tenant account roster plus the tools for
 // growing it. The roster lists every existing account, each row linking to
@@ -84,7 +86,7 @@ export function AdminPlatformUsers() {
       <div className="page-title">
         <div>
           <h1>
-            <UsersIcon size={20} style={{ marginRight: 8, verticalAlign: -3 }} />
+            <UsersIcon size={ICON.xl} style={{ marginRight: 8, verticalAlign: -3 }} />
             {t("admin.platformUsers.title")}
           </h1>
           <div className="sub">{t("admin.platformUsers.subtitle")}</div>
@@ -106,7 +108,7 @@ export function AdminPlatformUsers() {
 
       <div style={{ position: "relative", marginBottom: "var(--space-3)" }}>
         <Search
-          size={15}
+          size={ICON.sm}
           style={{ position: "absolute", left: 10, top: 11, color: "var(--muted)" }}
         />
         <input
@@ -249,14 +251,14 @@ function SignupInviteSection() {
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder={t("admin.signupInvites.emailPlaceholder")}
+          placeholder={t("common.emailPlaceholder")}
           aria-label={t("admin.signupInvites.emailLabel")}
           style={{ flex: 1 }}
         />
         <Button type="submit" variant="primary" disabled={!canSubmit}>
-          <UserPlus size={14} style={{ marginRight: 6 }} />
+          <UserPlus size={ICON.sm} style={{ marginRight: 6 }} />
           {submitting
-            ? t("admin.signupInvites.inviting")
+            ? t("common.sending")
             : t("admin.signupInvites.invite")}
         </Button>
       </form>
@@ -306,7 +308,7 @@ function SignupInviteIssuedCard({
     try {
       await navigator.clipboard.writeText(link);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      setTimeout(() => setCopied(false), FEEDBACK.copied);
     } catch {
       /* manual copy fallback */
     }
@@ -314,7 +316,7 @@ function SignupInviteIssuedCard({
   return (
     <div className="card invite-issued-card" style={{ marginTop: "var(--space-3)" }}>
       <div className="invite-issued-head">
-        <ShieldCheck size={18} />
+        <ShieldCheck size={ICON.lg} />
         <div>
           <strong>{inv.email}</strong>
           <div className="desc">
@@ -323,15 +325,15 @@ function SignupInviteIssuedCard({
               : t("admin.signupInvites.createdCopy", { email: inv.email })}
           </div>
         </div>
-        <Button onClick={onDismiss} variant="ghost" title={t("admin.signupInvites.dismiss")}>
-          <X size={14} />
+        <Button onClick={onDismiss} variant="ghost" title={t("common.dismiss")}>
+          <X size={ICON.sm} />
         </Button>
       </div>
       <div className="invite-link-row">
         <code className="invite-link">{link}</code>
         <Button onClick={copy} variant="primary">
-          {copied ? <Check size={12} /> : <Copy size={12} />}
-          {copied ? t("admin.signupInvites.copied") : t("admin.signupInvites.copy")}
+          {copied ? <Check size={ICON.xs} /> : <Copy size={ICON.xs} />}
+          {copied ? t("common.copied") : t("common.copyLink")}
         </Button>
       </div>
     </div>
@@ -356,7 +358,7 @@ function SignupInviteCard({
     try {
       await navigator.clipboard.writeText(absoluteSignupURL(inv.signup_url));
       setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      setTimeout(() => setCopied(false), FEEDBACK.copied);
     } catch {
       /* manual copy fallback */
     }
@@ -385,7 +387,7 @@ function SignupInviteCard({
     <div className="user-card">
       <div style={{ minWidth: 0 }}>
         <div className="subject">
-          <Mail size={18} />
+          <Mail size={ICON.lg} />
           {inv.email}
           <span className="count-pill" style={{ marginLeft: 8 }}>
             {statusLabel}
@@ -399,9 +401,9 @@ function SignupInviteCard({
         {inv.pending && (
           <div className="invite-link-row">
             <code className="invite-link">{absoluteSignupURL(inv.signup_url)}</code>
-            <Button onClick={copy} title={t("admin.signupInvites.copy")}>
-              {copied ? <Check size={12} /> : <Copy size={12} />}
-              {copied ? t("admin.signupInvites.copied") : t("admin.signupInvites.copy")}
+            <Button onClick={copy} title={t("common.copyLink")}>
+              {copied ? <Check size={ICON.xs} /> : <Copy size={ICON.xs} />}
+              {copied ? t("common.copied") : t("common.copyLink")}
             </Button>
           </div>
         )}
@@ -409,18 +411,18 @@ function SignupInviteCard({
       <div className="user-card-actions">
         {inv.pending && (
           <Button onClick={() => setConfirmRevoke(true)} disabled={revoking}>
-            <X size={12} style={{ marginRight: 4 }} />
+            <X size={ICON.xs} style={{ marginRight: 4 }} />
             {revoking
               ? t("admin.signupInvites.revoking")
-              : t("admin.signupInvites.revoke")}
+              : t("common.revoke")}
           </Button>
         )}
       </div>
       {confirmRevoke && (
         <ConfirmModal
-          title={t("admin.signupInvites.revoke")}
+          title={t("common.revoke")}
           message={t("admin.signupInvites.revokeConfirm", { email: inv.email })}
-          confirmLabel={t("admin.signupInvites.revoke")}
+          confirmLabel={t("common.revoke")}
           danger
           onConfirm={() => {
             setConfirmRevoke(false);

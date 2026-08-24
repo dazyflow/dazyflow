@@ -29,6 +29,7 @@ import { detectTrackingParams, stripTrackingParams } from "../lib/trackingParams
 import { telFieldFlag, regionDisplayName } from "../lib/phoneFlag";
 import { useAuth } from "../auth";
 import { Button } from "./Button";
+import { ICON } from "../icons";
 
 // SchemaForm renders manifest.params_schema as a typed form. The
 // happy path: a top-level object whose properties resolve to one of
@@ -723,8 +724,8 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
             value={cur ? "yes" : "no"}
             onChange={(e) => onChange(e.target.value === "yes")}
           >
-            <option value="yes">{t("schemaForm.yes")}</option>
-            <option value="no">{t("schemaForm.no")}</option>
+            <option value="yes">{t("common.yes")}</option>
+            <option value="no">{t("common.no")}</option>
           </select>
         </FieldWrap>
       );
@@ -1349,7 +1350,7 @@ function EmailPreviewModal({ html, onClose }: { html: string; onClose: () => voi
             onClick={onClose}
             aria-label={t("common.close", "Close")}
           >
-            <X size={16} />
+            <X size={ICON.md} />
           </Button>
         </div>
         <div className="settings-body">
@@ -1634,7 +1635,7 @@ function ResourcePickerField({
       >
         <option value="">
           {opts === null
-            ? t("schemaForm.resourcePicker.loading")
+            ? t("common.loading")
             : required === false
               ? t("schemaForm.resourcePicker.any", { noun })
               : t("schemaForm.resourcePicker.choose", { noun })}
@@ -2061,7 +2062,7 @@ function ReferenceMenu({
                   aria-label={t("common.close")}
                   title={t("common.close")}
                 >
-                  <X size={16} />
+                  <X size={ICON.md} />
                 </Button>
               </div>
               <div className="ref-dialog-search">
@@ -2094,7 +2095,7 @@ function ReferenceMenu({
                   </div>
                 )}
                 {!groups && !error && !hasExtra && (
-                  <div className="ref-pop-msg">{t("schemaForm.refPicker.loading")}</div>
+                  <div className="ref-pop-msg">{t("common.loading")}</div>
                 )}
                 {groups && !hasAny && (
                   <div className="ref-pop-msg">{t("schemaForm.refPicker.empty")}</div>
@@ -2471,12 +2472,12 @@ function DictField({
             onClick={() => removeAt(idx)}
             aria-label={t("schemaForm.remove")}
           >
-            <X size={14} />
+            <X size={ICON.sm} />
           </Button>
         </div>
       ))}
       <Button size="sm" className="sf-add" onClick={addEmpty}>
-        <Plus size={12} style={{ marginRight: 4 }} />
+        <Plus size={ICON.xs} style={{ marginRight: 4 }} />
         {t("schemaForm.add")}
       </Button>
     </div>
@@ -2520,12 +2521,12 @@ function ArrayField({
             onClick={() => removeAt(idx)}
             aria-label={t("schemaForm.remove")}
           >
-            <X size={14} />
+            <X size={ICON.sm} />
           </Button>
         </div>
       ))}
       <Button size="sm" className="sf-add" onClick={addEmpty}>
-        <Plus size={12} style={{ marginRight: 4 }} />
+        <Plus size={ICON.xs} style={{ marginRight: 4 }} />
         {t("schemaForm.add")}
       </Button>
     </div>
@@ -2588,7 +2589,7 @@ function MultiSelectField({
                 onClick={() => toggle(c)}
                 aria-label={t("schemaForm.remove")}
               >
-                <X size={12} />
+                <X size={ICON.xs} />
               </Button>
             </span>
           ))}
@@ -2608,7 +2609,7 @@ function MultiSelectField({
           }}
         />
         <Button size="sm" className="sf-add" onClick={addCustom}>
-          <Plus size={12} style={{ marginRight: 4 }} />
+          <Plus size={ICON.xs} style={{ marginRight: 4 }} />
           {t("schemaForm.add")}
         </Button>
       </div>
@@ -2795,7 +2796,7 @@ function MappingField({
             onClick={() => remove(i)}
             aria-label={t("schemaForm.remove")}
           >
-            <X size={14} />
+            <X size={ICON.sm} />
           </Button>
         </div>
       ))}
@@ -2805,7 +2806,7 @@ function MappingField({
           className="sf-add"
           onClick={() => commit([...rows, { column: "", source: "" }])}
         >
-          <Plus size={12} style={{ marginRight: 4 }} />
+          <Plus size={ICON.xs} style={{ marginRight: 4 }} />
           {t("schemaForm.mapping.add")}
         </Button>
         {autoPairs.length > 0 && (
@@ -2888,8 +2889,8 @@ function ScalarValue({
           value={value ? "yes" : "no"}
           onChange={(e) => onChange(e.target.value === "yes")}
         >
-          <option value="yes">{t("schemaForm.yes")}</option>
-          <option value="no">{t("schemaForm.no")}</option>
+          <option value="yes">{t("common.yes")}</option>
+          <option value="no">{t("common.no")}</option>
         </select>
       );
     case "object":
@@ -3250,7 +3251,7 @@ function RowConditionField({
                 onClick={() => removeCond(i)}
                 className="sf-rowcond-remove"
               >
-                <X size={14} />
+                <X size={ICON.sm} />
               </Button>
             </div>
           </div>
@@ -3258,7 +3259,7 @@ function RowConditionField({
       })}
       <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
         <Button className="sf-rowcond-add" onClick={addCond}>
-          <Plus size={14} /> {t("schemaForm.rowCond.addCondition")}
+          <Plus size={ICON.sm} /> {t("schemaForm.rowCond.addCondition")}
         </Button>
         <Button
           className="sf-rowcond-toggle"
@@ -3520,7 +3521,7 @@ function WorkspacePathField({
           }
         }}
       >
-        <Upload size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+        <Upload size={ICON.sm} style={{ marginRight: 6, verticalAlign: -2 }} />
         {uploading ? t("schemaForm.uploading") : t("schemaForm.dropOrBrowse")}
       </div>
       <input

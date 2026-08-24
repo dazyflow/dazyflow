@@ -12,6 +12,8 @@ import { Button } from "../components/Button";
 import { formatDate } from "../lib/datetime";
 import type { AccessGrant, GrantStatus } from "../types";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { ICON } from "../icons";
+import { isGrantActive } from "../lib/grants";
 
 // SupportAgentHome is the support agent's home: the list of flows they've been
 // granted access to (one-click Open), plus a form to request access to a new
@@ -54,7 +56,7 @@ export function SupportAgentHome() {
       <div className="page-title">
         <div>
           <h1>
-            <LifeBuoy size={20} style={{ marginRight: 8, verticalAlign: -3 }} />
+            <LifeBuoy size={ICON.xl} style={{ marginRight: 8, verticalAlign: -3 }} />
             {t("supportHome.title")}
           </h1>
           <div className="sub">{t("supportHome.subtitle")}</div>
@@ -65,7 +67,7 @@ export function SupportAgentHome() {
 
       {gate === "disabled" && (
         <div className="card" style={{ color: "var(--muted)" }}>
-          <Info size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+          <Info size={ICON.sm} style={{ marginRight: 6, verticalAlign: -2 }} />
           {t("supportView.notEnabled")}
         </div>
       )}
@@ -102,12 +104,6 @@ export function SupportAgentHome() {
   );
 }
 
-// isActive reports whether an approved grant is still within its time box (not
-// revoked, not expired) — only then is Open live.
-function isActive(g: AccessGrant): boolean {
-  if (g.status !== "approved" || g.revoked_at) return false;
-  return !g.expires_at || new Date(g.expires_at).getTime() > Date.now();
-}
 
 function statusColor(status: GrantStatus, expired: boolean): string {
   if (expired) return "var(--muted)";
@@ -126,7 +122,7 @@ function statusColor(status: GrantStatus, expired: boolean): string {
 
 function GrantRow({ grant, onOpen }: { grant: AccessGrant; onOpen: () => void }) {
   const { t } = useTranslation();
-  const active = isActive(grant);
+  const active = isGrantActive(grant);
   const expired =
     grant.status === "approved" && !active && !grant.revoked_at;
   const statusKey = expired ? "expired" : grant.status;
@@ -154,7 +150,7 @@ function GrantRow({ grant, onOpen }: { grant: AccessGrant; onOpen: () => void })
         {active ? (
           <Button variant="primary" onClick={onOpen}>
             {t("supportHome.openFlow")}
-            <ArrowRight size={14} style={{ marginLeft: 6 }} />
+            <ArrowRight size={ICON.sm} style={{ marginLeft: 6 }} />
           </Button>
         ) : grant.status === "requested" ? (
           <span className="sub">{t("supportHome.awaitingApproval")}</span>
@@ -202,7 +198,7 @@ function RequestNewFlow({ onRequested }: { onRequested: () => void }) {
     return (
       <div style={{ marginTop: "var(--space-4)" }}>
         <Button onClick={() => setOpen(true)}>
-          <Plus size={14} style={{ marginRight: 6 }} />
+          <Plus size={ICON.sm} style={{ marginRight: 6 }} />
           {t("supportHome.requestNew")}
         </Button>
       </div>

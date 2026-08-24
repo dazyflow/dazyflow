@@ -33,7 +33,7 @@ import {
   ShieldCheck,
   Users,
 } from "lucide-react";
-import { FlowIcon } from "../icons";
+import { FlowIcon, ICON } from "../icons";
 import { useAuth } from "../auth";
 import type { FlowSummary } from "../types";
 
@@ -109,42 +109,42 @@ export function CommandPalette({
   // then one entry per flow.
   const commands = useMemo<Command[]>(() => {
     const nav: Command[] = [
-      { id: "nav:new", label: t("flowList.newFlow"), icon: <Plus size={16} />, group: "nav", keywords: "create add nytt skapa", run: () => go("/flows/new") },
-      { id: "nav:overview", label: t("nav.overview"), icon: <Gauge size={16} />, group: "nav", keywords: "dashboard home health översikt hem", run: () => go("/overview") },
-      { id: "nav:flows", label: t("nav.flows"), icon: <Workflow size={16} />, group: "nav", keywords: "workflows automations flöden", run: () => go("/flows") },
-      { id: "nav:runs", label: t("nav.runs"), icon: <Activity size={16} />, group: "nav", keywords: "history logs failures körningar historik loggar", run: () => go("/runs") },
-      { id: "nav:results", label: t("nav.results"), icon: <Table2 size={16} />, group: "nav", keywords: "collections tables data resultat tabeller", run: () => go("/collections") },
-      { id: "nav:files", label: t("nav.files"), icon: <FolderTree size={16} />, group: "nav", keywords: "uploads storage filer lagring", run: () => go("/files") },
-      { id: "nav:approvals", label: t("nav.approvals"), icon: <Inbox size={16} />, group: "nav", keywords: "approve pending inbox godkännanden", run: () => go("/approvals") },
-      { id: "nav:apps", label: t("nav.apps"), icon: <Boxes size={16} />, group: "nav", keywords: "integrations connections connectors appar integrationer anslutningar", run: () => go("/apps") },
-      { id: "nav:usage", label: t("nav.usage"), icon: <Gauge size={16} />, group: "nav", keywords: "billing quota metering användning fakturering", run: () => go("/usage") },
+      { id: "nav:new", label: t("flowList.newFlow"), icon: <Plus size={ICON.md} />, group: "nav", keywords: "create add nytt skapa", run: () => go("/flows/new") },
+      { id: "nav:overview", label: t("nav.overview"), icon: <Gauge size={ICON.md} />, group: "nav", keywords: "dashboard home health översikt hem", run: () => go("/overview") },
+      { id: "nav:flows", label: t("nav.flows"), icon: <Workflow size={ICON.md} />, group: "nav", keywords: "workflows automations flöden", run: () => go("/flows") },
+      { id: "nav:runs", label: t("nav.runs"), icon: <Activity size={ICON.md} />, group: "nav", keywords: "history logs failures körningar historik loggar", run: () => go("/runs") },
+      { id: "nav:results", label: t("nav.results"), icon: <Table2 size={ICON.md} />, group: "nav", keywords: "collections tables data resultat tabeller", run: () => go("/collections") },
+      { id: "nav:files", label: t("nav.files"), icon: <FolderTree size={ICON.md} />, group: "nav", keywords: "uploads storage filer lagring", run: () => go("/files") },
+      { id: "nav:approvals", label: t("nav.approvals"), icon: <Inbox size={ICON.md} />, group: "nav", keywords: "approve pending inbox godkännanden", run: () => go("/approvals") },
+      { id: "nav:apps", label: t("nav.apps"), icon: <Boxes size={ICON.md} />, group: "nav", keywords: "integrations connections connectors appar integrationer anslutningar", run: () => go("/apps") },
+      { id: "nav:usage", label: t("nav.usage"), icon: <Gauge size={ICON.md} />, group: "nav", keywords: "billing quota metering användning fakturering", run: () => go("/usage") },
     ];
     // Settings + admin destinations. These were absent entirely, so anything
     // configured rather than browsed — credentials, secrets, the git mirror —
     // was unreachable from the launcher and effectively undiscoverable.
     const admin: Command[] = [
-      { id: "admin:settings", label: t("commandPalette.account"), icon: <SettingsIcon size={16} />, group: "admin", keywords: "profile password 2fa theme language konto lösenord språk tema", run: () => go("/settings") },
+      { id: "admin:settings", label: t("commandPalette.account"), icon: <SettingsIcon size={ICON.md} />, group: "admin", keywords: "profile password 2fa theme language konto lösenord språk tema", run: () => go("/settings") },
     ];
     if (canAdmin) {
       admin.push(
         // The git page hosts both credentials and the workspace mirror, and
         // "back up my flows" is what people actually search for.
-        { id: "admin:git", label: t("admin.cardGitTitle"), icon: <GitBranch size={16} />, group: "admin", keywords: "mirror backup sync export deploy key ssh github gitlab spegling spegla säkerhetskopia synk nyckel", run: () => go("/admin/git-credentials") },
-        { id: "admin:index", label: t("nav.admin"), icon: <ShieldCheck size={16} />, group: "admin", keywords: "administration organization org inställningar organisation", run: () => go("/admin") },
-        { id: "admin:users", label: t("admin.cardUsersTitle"), icon: <Users size={16} />, group: "admin", keywords: "members invite team roles personer bjud in medlemmar roller", run: () => go("/admin/users") },
-        { id: "admin:secrets", label: t("admin.cardSecretsTitle"), icon: <Lock size={16} />, group: "admin", keywords: "api keys tokens credentials hemligheter nycklar", run: () => go("/admin/secrets") },
-        { id: "admin:apikeys", label: t("admin.cardApiKeysTitle"), icon: <KeyRound size={16} />, group: "admin", keywords: "tokens mcp access api-nycklar", run: () => go("/admin/api-keys") },
-        { id: "admin:workspace", label: t("admin.cardWorkspaceTitle"), icon: <Building2 size={16} />, group: "admin", keywords: "organization limits quota name logo organisation gränser namn", run: () => go("/admin/workspace") },
-        { id: "admin:audit", label: t("admin.cardAuditTitle"), icon: <ScrollText size={16} />, group: "admin", keywords: "log trail who did what granskningslogg spår", run: () => go("/admin/audit") },
-        { id: "admin:sso", label: t("admin.cardSSOTitle"), icon: <ShieldCheck size={16} />, group: "admin", keywords: "saml oidc google login sign-in inloggning", run: () => go("/admin/sso") },
-        { id: "admin:emailTemplates", label: t("admin.cardEmailTemplatesTitle"), icon: <Mail size={16} />, group: "admin", keywords: "layout html branding e-postmallar mallar", run: () => go("/admin/email-templates") },
+        { id: "admin:git", label: t("admin.cardGitTitle"), icon: <GitBranch size={ICON.md} />, group: "admin", keywords: "mirror backup sync export deploy key ssh github gitlab spegling spegla säkerhetskopia synk nyckel", run: () => go("/admin/git-credentials") },
+        { id: "admin:index", label: t("nav.admin"), icon: <ShieldCheck size={ICON.md} />, group: "admin", keywords: "administration organization org inställningar organisation", run: () => go("/admin") },
+        { id: "admin:users", label: t("admin.cardUsersTitle"), icon: <Users size={ICON.md} />, group: "admin", keywords: "members invite team roles personer bjud in medlemmar roller", run: () => go("/admin/users") },
+        { id: "admin:secrets", label: t("admin.cardSecretsTitle"), icon: <Lock size={ICON.md} />, group: "admin", keywords: "api keys tokens credentials hemligheter nycklar", run: () => go("/admin/secrets") },
+        { id: "admin:apikeys", label: t("admin.cardApiKeysTitle"), icon: <KeyRound size={ICON.md} />, group: "admin", keywords: "tokens mcp access api-nycklar", run: () => go("/admin/api-keys") },
+        { id: "admin:workspace", label: t("admin.cardWorkspaceTitle"), icon: <Building2 size={ICON.md} />, group: "admin", keywords: "organization limits quota name logo organisation gränser namn", run: () => go("/admin/workspace") },
+        { id: "admin:audit", label: t("admin.cardAuditTitle"), icon: <ScrollText size={ICON.md} />, group: "admin", keywords: "log trail who did what granskningslogg spår", run: () => go("/admin/audit") },
+        { id: "admin:sso", label: t("admin.cardSSOTitle"), icon: <ShieldCheck size={ICON.md} />, group: "admin", keywords: "saml oidc google login sign-in inloggning", run: () => go("/admin/sso") },
+        { id: "admin:emailTemplates", label: t("admin.cardEmailTemplatesTitle"), icon: <Mail size={ICON.md} />, group: "admin", keywords: "layout html branding e-postmallar mallar", run: () => go("/admin/email-templates") },
       );
     }
     const flowCmds: Command[] = flows.map((f) => ({
       id: `flow:${f.id}`,
       label: f.name || f.id,
       sublabel: t("commandPalette.flowSublabel"),
-      icon: <FlowIcon icon={f.icon} size={16} />,
+      icon: <FlowIcon icon={f.icon} size={ICON.md} />,
       group: "flow",
       run: () => go(`/flows/${encodeURIComponent(f.id)}`),
     }));
@@ -236,7 +236,7 @@ export function CommandPalette({
         aria-label={t("commandPalette.title")}
       >
         <div className="quick-palette-search">
-          <Search size={16} aria-hidden="true" />
+          <Search size={ICON.md} aria-hidden="true" />
           <input
             ref={inputRef}
             type="text"

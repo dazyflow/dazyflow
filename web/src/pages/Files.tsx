@@ -25,6 +25,8 @@ import { MoveModal } from "../components/MoveModal";
 import { useUploads } from "../uploads";
 import type { FileEntry } from "../types";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { ICON } from "../icons";
+import { formatBytes } from "../lib/format";
 
 // Files is the workspace file manager: a browsable view of the persistent
 // sandbox that flows read from and write to (git_checkout clones, file_write
@@ -32,17 +34,6 @@ import { ErrorNotice } from "../components/ErrorNotice";
 // require graph:edit, so it's gated to editors/admins (viewers, who can only
 // run flows, don't see it). Mutations are additionally enforced server-side.
 
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  const units = ["KiB", "MiB", "GiB", "TiB"];
-  let v = n / 1024;
-  let i = 0;
-  while (v >= 1024 && i < units.length - 1) {
-    v /= 1024;
-    i++;
-  }
-  return `${v.toFixed(1)} ${units[i]}`;
-}
 
 function joinPath(dir: string, name: string): string {
   return dir ? `${dir}/${name}` : name;
@@ -392,7 +383,7 @@ export function Files() {
             const target = segments.slice(0, i + 1).join("/");
             return (
               <span key={target} className="files-crumb">
-                <ChevronRight size={14} className="files-crumb-sep" />
+                <ChevronRight size={ICON.sm} className="files-crumb-sep" />
                 <Button
                   variant="link"
                   onClick={() => setCwd(target)}
@@ -419,14 +410,14 @@ export function Files() {
               onClick={() => setCreatingFolder(true)}
               disabled={busy}
             >
-              <FolderPlus size={16} /> {t("files.newFolder")}
+              <FolderPlus size={ICON.md} /> {t("files.newFolder")}
             </Button>
             <Button
               variant="ghost"
               onClick={() => fileInput.current?.click()}
               disabled={busy}
             >
-              <Upload size={16} /> {t("files.upload")}
+              <Upload size={ICON.md} /> {t("files.upload")}
             </Button>
             <input
               ref={fileInput}
@@ -454,7 +445,7 @@ export function Files() {
       // win when hovered; the surrounding area resolves to the current dir.
       <div className="card files-list" {...dropProps(cwd)}>
         {visible === null ? (
-          <div className="files-empty">{t("files.loading")}</div>
+          <div className="files-empty">{t("common.loading")}</div>
         ) : visible.length === 0 ? (
           <div className="files-empty">
             {hiddenCount > 0 ? t("files.emptyHiddenOnly") : t("files.empty")}
@@ -465,7 +456,7 @@ export function Files() {
               <tr>
                 <th>{t("files.colName")}</th>
                 <th className="files-col-size">{t("files.colSize")}</th>
-                <th className="files-col-actions" aria-label={t("files.colActions")} />
+                <th className="files-col-actions" aria-label={t("common.colActions")} />
               </tr>
             </thead>
             <tbody>
@@ -489,12 +480,12 @@ export function Files() {
                   <td className="files-name-cell">
                     {entry.is_dir ? (
                       <Button variant="link" className="files-name" onClick={() => setCwd(entry.path)}>
-                        <Folder size={16} className="files-icon files-icon-dir" />
+                        <Folder size={ICON.md} className="files-icon files-icon-dir" />
                         {entry.name}
                       </Button>
                     ) : (
                       <span className="files-name">
-                        <FileIcon size={16} className="files-icon" />
+                        <FileIcon size={ICON.md} className="files-icon" />
                         {entry.name}
                       </span>
                     )}
@@ -510,7 +501,7 @@ export function Files() {
                         title={t("files.download")}
                         onClick={() => onDownload(entry)}
                       >
-                        <Download size={16} />
+                        <Download size={ICON.md} />
                       </Button>
                     )}
                     {canWrite && (
@@ -522,7 +513,7 @@ export function Files() {
                           onClick={() => setMovingPick(entry)}
                           disabled={busy}
                         >
-                          <FolderInput size={16} />
+                          <FolderInput size={ICON.md} />
                         </Button>
                         <Button
                           variant="ghost"
@@ -531,17 +522,17 @@ export function Files() {
                           onClick={() => setRenaming(entry)}
                           disabled={busy}
                         >
-                          <Pencil size={16} />
+                          <Pencil size={ICON.md} />
                         </Button>
                         <Button
                           variant="ghost"
                           size="icon"
                           className="danger"
-                          title={t("files.delete")}
+                          title={t("common.delete")}
                           onClick={() => setDeleting(entry)}
                           disabled={busy}
                         >
-                          <Trash2 size={16} />
+                          <Trash2 size={ICON.md} />
                         </Button>
                       </>
                     )}
@@ -598,7 +589,7 @@ export function Files() {
           label={t("files.renameLabel")}
           hint={t("files.renameHint")}
           initialValue={renaming.path}
-          confirmLabel={t("files.save")}
+          confirmLabel={t("common.save")}
           onSubmit={(next) => submitRename(renaming, next)}
           onCancel={() => setRenaming(null)}
         />
@@ -606,9 +597,9 @@ export function Files() {
 
       {deleting && (
         <ConfirmModal
-          title={t("files.deleteTitle")}
+          title={t("common.delete")}
           message={t("files.deleteConfirm", { name: deleting.name })}
-          confirmLabel={t("files.delete")}
+          confirmLabel={t("common.delete")}
           danger
           onConfirm={() => confirmDelete(deleting)}
           onCancel={() => setDeleting(null)}

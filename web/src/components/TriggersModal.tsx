@@ -24,6 +24,7 @@ import { ConfirmModal } from "./ConfirmModal";
 import { Button } from "./Button";
 import { webhookKeys } from "../flowStatus";
 import { formatDateTime } from "../lib/datetime";
+import { ICON } from "../icons";
 
 // TriggerEmpty is the per-tab "nothing set up yet" state with a single
 // call-to-action that creates the trigger of that type.
@@ -46,7 +47,7 @@ function TriggerEmpty({
       <div className="trigger-empty-title">{title}</div>
       <div className="desc">{desc}</div>
       <Button variant="primary" onClick={onAdd} style={{ marginTop: 12 }}>
-        <Plus size={14} style={{ marginRight: 6 }} />
+        <Plus size={ICON.sm} style={{ marginRight: 6 }} />
         {cta}
       </Button>
     </div>
@@ -112,7 +113,7 @@ export function FormTab({
               for most flows, so the open state stays four lines. */}
           <CodeField
             label={t("settings.triggers.form.urlLabel")}
-            icon={<LinkIcon size={12} aria-hidden="true" />}
+            icon={<LinkIcon size={ICON.xs} aria-hidden="true" />}
             value={formURL}
             action={{ href: formURL, label: t("settings.triggers.form.preview") }}
           />
@@ -218,7 +219,7 @@ export function WebhookTab({
             aria-label={t("settings.triggers.removeAria")}
             title={t("triggers.webhook.removeTitle")}
           >
-            <Trash2 size={14} />
+            <Trash2 size={ICON.sm} />
           </Button>
         )}
       </div>
@@ -259,7 +260,7 @@ export function WebhookStatusLine({ webhook }: { webhook?: GraphTrigger }) {
   const ok = hasForm || hasSecret;
   return (
     <div className={"webhook-status" + (ok ? " ok" : "")}>
-      {ok ? <Check size={13} aria-hidden="true" /> : <Info size={13} aria-hidden="true" />}
+      {ok ? <Check size={ICON.sm} aria-hidden="true" /> : <Info size={ICON.sm} aria-hidden="true" />}
       <span>{t(`inspector.webhookStatus.${key}`)}</span>
     </div>
   );
@@ -411,10 +412,10 @@ function useCopyButton(value: string) {
     <Button
       className={"dz-code-btn" + (extraClass ? " " + extraClass : "")}
       onClick={copy}
-      title={t("settings.triggers.copyTitle")}
+      title={t("common.copy")}
     >
-      {copied ? <Check size={13} /> : <Copy size={13} />}
-      <span>{copied ? t("settings.triggers.copied") : t("settings.triggers.copy")}</span>
+      {copied ? <Check size={ICON.sm} /> : <Copy size={ICON.sm} />}
+      <span>{copied ? t("common.copied") : t("common.copy")}</span>
     </Button>
   );
 }
@@ -467,7 +468,7 @@ export function CodeField({
             rel="noreferrer noopener"
             className="dz-code-btn dz-code-link"
           >
-            <ExternalLink size={13} />
+            <ExternalLink size={ICON.sm} />
             <span>{action.label}</span>
           </a>
         )}
@@ -521,8 +522,8 @@ function WebhookKeys({
                 onClick={() => setPendingRevoke(i)}
                 title={t("settings.triggers.revokeTitle")}
               >
-                <Trash2 size={13} />
-                <span>{t("settings.triggers.revoke")}</span>
+                <Trash2 size={ICON.sm} />
+                <span>{t("common.revoke")}</span>
               </Button>
             }
           />
@@ -534,7 +535,7 @@ function WebhookKeys({
         onClick={addKey}
         title={t("settings.triggers.generateTitle")}
       >
-        <Sparkles size={12} style={{ marginRight: 5 }} />
+        <Sparkles size={ICON.xs} style={{ marginRight: 5 }} />
         {keys.length === 0
           ? t("settings.triggers.generate")
           : t("settings.triggers.generateAnother")}
@@ -550,7 +551,7 @@ function WebhookKeys({
               ? "settings.triggers.revokeLastConfirm"
               : "settings.triggers.revokeConfirm",
           )}
-          confirmLabel={t("settings.triggers.revoke")}
+          confirmLabel={t("common.revoke")}
           danger
           onConfirm={confirmRevoke}
           onCancel={() => setPendingRevoke(null)}
@@ -824,7 +825,7 @@ export function TriggerScheduleField({
           className="desc"
           style={{ color: "var(--danger)", display: "flex", gap: 6, alignItems: "flex-start" }}
         >
-          <AlertCircle size={13} style={{ flexShrink: 0, marginTop: 2 }} />
+          <AlertCircle size={ICON.sm} style={{ flexShrink: 0, marginTop: 2 }} />
           <span>{validation.error}</span>
         </div>
       )}

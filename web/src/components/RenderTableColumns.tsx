@@ -8,6 +8,7 @@ import { useAuth } from "../auth";
 import { api } from "../api";
 import type { Ref } from "../types";
 import type { ReferenceCtx } from "./SchemaForm";
+import { ICON } from "../icons";
 
 // GripIcon is the 6-dot drag gripper (mirrors hazydo's task-row handle): two
 // columns of three dots, the conventional "pick me up here" affordance.
@@ -372,8 +373,8 @@ export function RenderTableColumns({
                   style={{ justifyContent: dx < 0 ? "flex-end" : "flex-start" }}
                   aria-hidden="true"
                 >
-                  <Trash2 size={14} />
-                  <span>{t("renderTableColumns.delete")}</span>
+                  <Trash2 size={ICON.sm} />
+                  <span>{t("common.delete")}</span>
                 </div>
               )}
               <div
@@ -407,7 +408,7 @@ export function RenderTableColumns({
         <li className="rtc-item rtc-add-row">
           <div className="rtc-fg">
             <span className="rtc-restore" aria-hidden="true">
-              <Plus size={14} />
+              <Plus size={ICON.sm} />
             </span>
             <input
               className="rtc-edit-input"
@@ -439,7 +440,7 @@ export function RenderTableColumns({
               onClick={() => restore(col)}
             >
               <span className="rtc-restore" aria-hidden="true">
-                <Plus size={14} />
+                <Plus size={ICON.sm} />
               </span>
               <span className="rtc-col">{col}</span>
             </button>

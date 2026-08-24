@@ -18,6 +18,7 @@ import { useAuth } from "../auth";
 import { api, APIError } from "../api";
 import { Button } from "../components/Button";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { ICON } from "../icons";
 
 // Keep at most this many lines in memory. The terminal's own scrollback is
 // separate; this bounds the buffer we re-render from when the filter changes.
@@ -211,7 +212,7 @@ export function AdminSystemLog() {
       <div className="page-title">
         <div>
           <h1>
-            <ScrollText size={20} style={{ marginRight: 8, verticalAlign: -3 }} />
+            <ScrollText size={ICON.xl} style={{ marginRight: 8, verticalAlign: -3 }} />
             {t("admin.systemLog.title")}
           </h1>
           <div className="sub">{t("admin.systemLog.subtitle")}</div>
@@ -220,7 +221,7 @@ export function AdminSystemLog() {
 
       <div className="system-log-toolbar">
         <div className="system-log-search">
-          <Search size={14} className="system-log-search-icon" />
+          <Search size={ICON.sm} className="system-log-search-icon" />
           <input
             type="text"
             value={filter}
@@ -236,7 +237,7 @@ export function AdminSystemLog() {
         <Button
           variant="ghost"
           size="sm"
-          icon={following ? <Pause size={14} /> : <Play size={14} />}
+          icon={following ? <Pause size={ICON.sm} /> : <Play size={ICON.sm} />}
           onClick={toggleFollow}
           aria-pressed={following}
           title={t("admin.systemLog.followHint")}
@@ -246,7 +247,7 @@ export function AdminSystemLog() {
         <Button
           variant="ghost"
           size="sm"
-          icon={<Trash2 size={14} />}
+          icon={<Trash2 size={ICON.sm} />}
           onClick={clear}
           title={t("admin.systemLog.clearHint")}
         >
@@ -263,13 +264,13 @@ export function AdminSystemLog() {
 
       {filterError && (
         <div className="system-log-hint is-error">
-          <AlertCircle size={13} style={{ marginRight: 6, verticalAlign: -2 }} />
+          <AlertCircle size={ICON.sm} style={{ marginRight: 6, verticalAlign: -2 }} />
           {t("admin.systemLog.badRegex", { error: filterError })}
         </div>
       )}
       {streamError && !filterError && (
         <div className="system-log-hint is-error">
-          <AlertCircle size={13} style={{ marginRight: 6, verticalAlign: -2 }} />
+          <AlertCircle size={ICON.sm} style={{ marginRight: 6, verticalAlign: -2 }} />
           {streamError}
         </div>
       )}

@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { Rocket } from "lucide-react";
 import { Button } from "./Button";
 import { Callout } from "./Callout";
+import { ICON } from "../icons";
 
 // PublishLabelModal confirms a publish / go-live and nudges the user to give
 // the release an optional name. The name field is always offered but never
@@ -101,7 +102,7 @@ export function PublishLabelModal({
             variant={connect ? undefined : "primary"}
             onClick={() => onPublish(value.trim())}
           >
-            <Rocket size={14} style={{ marginRight: 5 }} />
+            <Rocket size={ICON.sm} style={{ marginRight: 5 }} />
             {confirmLabel}
           </Button>
           {connect && (

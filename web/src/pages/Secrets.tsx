@@ -11,6 +11,7 @@ import { ButtonLink } from "../components/Button";
 import { CredentialsManager } from "../components/CredentialsManager";
 import { supportContactHref } from "../lib/supportContact";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { featureUnavailable } from "../lib/explainApiError";
 
 // Secrets is the tenant's credential store: hand-entered values your
 // flows reference as ${secret.NAME} (API keys, database URLs), plus an
@@ -22,12 +23,6 @@ import { ErrorNotice } from "../components/ErrorNotice";
 // configured (501) or the caller can't use it (401/403), so a minimal
 // install or a low-privilege user doesn't see dead controls.
 
-// featureUnavailable: statuses that mean "this feature isn't usable for
-// this caller" — not configured (501) or not permitted (401/403). All
-// map to "hide the section" rather than an error banner.
-function featureUnavailable(status: number): boolean {
-  return status === 501 || status === 401 || status === 403;
-}
 
 // Secrets is the "Values" tab of the Admin → Secrets page (AdminSecrets):
 // the tenant ${secret.NAME} vault. It renders bare (no page header) because

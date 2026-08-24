@@ -19,6 +19,8 @@ import type {
 } from "../types";
 import { explainApiError } from "../lib/explainApiError";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { ICON } from "../icons";
+import { featureUnavailable } from "../lib/explainApiError";
 
 // AdminSecretManager is the tenant-level "point the platform at your own
 // secret manager" config — set-once infrastructure that lives as the
@@ -29,10 +31,6 @@ import { ErrorNotice } from "../components/ErrorNotice";
 // back) and the page shows an unavailable note when the encrypted store
 // that holds the connection configs isn't configured for this deployment.
 
-// featureUnavailable: not configured (501) or not permitted (401/403).
-function featureUnavailable(status: number): boolean {
-  return status === 501 || status === 401 || status === 403;
-}
 
 // AdminSecretManager is the "Secret manager" tab of the Admin → Secrets
 // page (AdminSecrets): the tenant-level "point the platform at your own
@@ -182,7 +180,7 @@ export function AdminSecretManager() {
           {canWrite && (
             <div className="secret-manager-actions">
               <Button variant="ghost" onClick={startEdit}>
-                {t("connections.secretManager.edit")}
+                {t("common.edit")}
               </Button>
               <Button
                 variant="ghost"
@@ -193,7 +191,7 @@ export function AdminSecretManager() {
                 aria-label={t("connections.secretManager.remove")}
                 title={t("connections.secretManager.remove")}
               >
-                <Trash2 size={15} />
+                <Trash2 size={ICON.sm} />
               </Button>
             </div>
           )}
@@ -431,7 +429,7 @@ function ProviderShell({
   return (
     <div>
       <h2 className="admin-section-head" style={{ marginTop: "var(--space-4)" }}>
-        <Cloud size={15} style={{ marginRight: 6, verticalAlign: -2 }} />
+        <Cloud size={ICON.sm} style={{ marginRight: 6, verticalAlign: -2 }} />
         {t(headKey)}
       </h2>
       <div className="sub" style={{ marginBottom: "var(--space-2)" }}>
@@ -451,7 +449,7 @@ function ProviderShell({
                   slot.startEdit();
                 }}
               >
-                {t("connections.secretManager.edit")}
+                {t("common.edit")}
               </Button>
               <Button
                 variant="ghost"
@@ -462,7 +460,7 @@ function ProviderShell({
                 aria-label={t("connections.secretManager.remove")}
                 title={t("connections.secretManager.remove")}
               >
-                <Trash2 size={15} />
+                <Trash2 size={ICON.sm} />
               </Button>
             </div>
           )}

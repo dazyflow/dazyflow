@@ -109,6 +109,41 @@ const categoryFallback: Record<string, LucideIcon> = {
   system: Box,
 };
 
+// ICON is the icon-size scale. Every `size=` on an icon comes from here, the
+// same way every font-size comes from the type scale and every gap from the
+// spacing scale in theme.css.
+//
+// It exists because icons were the last unscaled dimension in the UI: 17
+// distinct pixel values across 491 call sites, picked per file rather than per
+// role. An icon inside a <Button> — one role — used SEVEN sizes (12, 13, 14,
+// 15, 16, 18, 20) across 207 call sites, so the same button in two files got
+// different glyphs, and 29 of the 64 uses of `size={ICON.sm}` were simply "whatever
+// FlowEditor happened to start with". That is what produced a Stop button whose
+// icon was 15px in the editor and 13px on the run page.
+//
+// The steps are the four the codebase already leaned on, and the values are the
+// plurality choice for each role rather than an invention:
+//
+//   xs  12  dense — compact (sm) buttons, chips, meta lines, table cells
+//   sm  14  default — the icon in a standard button, inline row actions
+//   md  16  standalone — icon-only buttons, palette rows, nav items
+//   lg  18  prominent — section and card headers, nav landmarks
+//   xl  20  feature — the largest size that still sits in a line of text
+//
+// Anything bigger is decorative, not scaled: empty-state and hero glyphs
+// (22–48) stay literals, because each is tuned to the box it sits in rather
+// than to a step, and there are only a handful.
+//
+// scripts/check-icon-sizes.mjs rejects an off-scale numeric size, so the
+// collapsed values (10, 11, 13, 15, 17) cannot creep back.
+export const ICON = {
+  xs: 12,
+  sm: 14,
+  md: 16,
+  lg: 18,
+  xl: 20,
+} as const;
+
 export function iconFor(name?: string, category?: string): LucideIcon {
   if (name && iconRegistry[name]) return iconRegistry[name];
   if (category && categoryFallback[category]) return categoryFallback[category];

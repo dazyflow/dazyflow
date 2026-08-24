@@ -16,6 +16,7 @@ import { api } from "./api";
 import { Button } from "./components/Button";
 import i18n from "./i18n";
 import { explainApiError } from "./lib/explainApiError";
+import { ICON } from "./icons";
 
 // Uploads lifts file-upload state above the router so an upload keeps
 // running — and keeps showing progress — while the user navigates between
@@ -211,7 +212,7 @@ function UploadsIndicator() {
   return (
     <div className="uploads-panel" role="status" aria-live="polite">
       <div className="uploads-head" data-failed={active === 0 && anyFailed ? "true" : undefined}>
-        <UploadIcon size={15} />
+        <UploadIcon size={ICON.sm} />
         <span>{headerText}</span>
       </div>
       <div className="uploads-list">
@@ -220,11 +221,11 @@ function UploadsIndicator() {
             <div className="upload-row-top">
               <span className="upload-status-icon">
                 {task.status === "done" ? (
-                  <Check size={14} />
+                  <Check size={ICON.sm} />
                 ) : task.status === "error" ? (
-                  <AlertCircle size={14} />
+                  <AlertCircle size={ICON.sm} />
                 ) : (
-                  <UploadIcon size={14} />
+                  <UploadIcon size={ICON.sm} />
                 )}
               </span>
               <span className="upload-name" title={task.dest}>
@@ -238,7 +239,7 @@ function UploadsIndicator() {
                   title={t("uploads.cancel")}
                   onClick={() => cancel(task.id)}
                 >
-                  <X size={14} />
+                  <X size={ICON.sm} />
                 </Button>
               )}
               {(task.status === "done" || task.status === "error" || task.status === "canceled") && (
@@ -246,10 +247,10 @@ function UploadsIndicator() {
                   variant="ghost"
                   size="icon"
                   className="upload-x"
-                  title={t("uploads.dismiss")}
+                  title={t("common.dismiss")}
                   onClick={() => dismiss(task.id)}
                 >
-                  <X size={14} />
+                  <X size={ICON.sm} />
                 </Button>
               )}
             </div>

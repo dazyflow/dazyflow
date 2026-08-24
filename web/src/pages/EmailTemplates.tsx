@@ -11,6 +11,7 @@ import { Button } from "../components/Button";
 import { ConfirmModal } from "../components/ConfirmModal";
 import type { EmailTemplateSummary } from "../types";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { ICON } from "../icons";
 
 // EmailTemplates is the "Email templates" tab of Admin → Secrets: the org's
 // library of reusable HTML layout shells the email drops wrap a body in.
@@ -78,7 +79,7 @@ export function EmailTemplates() {
         <div className="email-templates-list">
           {canWrite && (
             <Button variant="primary" onClick={() => setSelected(NEW_DRAFT)}>
-              <Plus size={14} /> {t("emailTemplates.new", "New template")}
+              <Plus size={ICON.sm} /> {t("emailTemplates.new", "New template")}
             </Button>
           )}
           {templates === null ? (
@@ -103,7 +104,7 @@ export function EmailTemplates() {
                       aria-label={t("common.delete", "Delete")}
                       onClick={() => setPendingDelete(tpl.id)}
                     >
-                      <Trash2 size={14} />
+                      <Trash2 size={ICON.sm} />
                     </Button>
                   )}
                 </li>
@@ -314,7 +315,7 @@ function TemplateEditor({
                 onClick={sendTest}
                 disabled={testBusy || testTo.trim() === ""}
               >
-                <Send size={14} /> {t("emailTemplates.sendTest", "Send test")}
+                <Send size={ICON.sm} /> {t("emailTemplates.sendTest", "Send test")}
               </Button>
             </div>
           </label>

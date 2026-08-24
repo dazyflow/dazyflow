@@ -65,7 +65,7 @@ export function ForgotPassword() {
           placeholder="you@example.com"
         />
         <Button type="submit" variant="primary" disabled={busy || !email.trim()}>
-          {busy ? t("forgotPassword.submitting") : t("forgotPassword.submit")}
+          {busy ? t("common.sending") : t("forgotPassword.submit")}
         </Button>
         <div className="signin-alt">
           <Link to="/signin">{t("forgotPassword.backToSignin")}</Link>

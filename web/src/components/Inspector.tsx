@@ -7,7 +7,7 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { X, Trash2, Play, Square, BellRing, Repeat } from "lucide-react";
 import { HelpPopover } from "./HelpPopover";
-import { iconFor, dropColor as resolveDropColor } from "../icons";
+import { iconFor, dropColor as resolveDropColor, ICON } from "../icons";
 import type { DazyNodeData } from "./nodeCardShared";
 import {
   SchemaForm,
@@ -262,7 +262,7 @@ export function Inspector({
               aria-label={t("inspector.close")}
               title={t("inspector.close")}
             >
-              <X size={16} />
+              <X size={ICON.md} />
             </Button>
           )}
         </div>
@@ -361,7 +361,7 @@ export function Inspector({
             {brandLogo ? (
               <img src={brandLogo} alt="" draggable={false} />
             ) : (
-              <DropIcon size={18} strokeWidth={2.2} />
+              <DropIcon size={ICON.lg} strokeWidth={2.2} />
             )}
           </span>
           <span className="inspector-identity-text">
@@ -418,7 +418,7 @@ export function Inspector({
               aria-label={t("inspector.close")}
               title={t("inspector.close")}
             >
-              <X size={16} />
+              <X size={ICON.md} />
             </Button>
           )}
         </span>
@@ -437,7 +437,7 @@ export function Inspector({
                   {brandLogo ? (
                     <img src={brandLogo} alt="" draggable={false} />
                   ) : (
-                    <DropIcon size={15} strokeWidth={2.2} />
+                    <DropIcon size={ICON.sm} strokeWidth={2.2} />
                   )}
                   {t("nodeCard.connect", { name: setupNeeded.integration })}
                 </Button>
@@ -462,7 +462,7 @@ export function Inspector({
                 onClick={() => onStopRun?.()}
                 title={t("inspector.stopTitle")}
               >
-                <Square size={14} />
+                <Square size={ICON.sm} />
                 {cancelling ? t("inspector.stopping") : t("inspector.stop")}
               </Button>
             ) : (
@@ -485,7 +485,7 @@ export function Inspector({
                 }}
                 title={t("inspector.sampleTitle")}
               >
-                <Play size={15} />
+                <Play size={ICON.sm} />
                 {sampling ? t("inspector.sampling") : t("inspector.sample")}
               </Button>
             )}
@@ -689,7 +689,7 @@ export function Inspector({
           // the public ntfy.sh default; the hint covers the custom-server case.)
           <div className="inspector-section">
             <h4>
-              <BellRing size={14} style={{ verticalAlign: "-2px", marginRight: 6 }} />
+              <BellRing size={ICON.sm} style={{ verticalAlign: "-2px", marginRight: 6 }} />
               {t("ntfy.subscribeTitle")}
             </h4>
             {typeof currentParams.topic === "string" && currentParams.topic.trim() ? (
@@ -725,7 +725,7 @@ export function Inspector({
                 className="inspector-reset"
                 onClick={() => onResetState(selected.id)}
               >
-                <Repeat size={14} />
+                <Repeat size={ICON.sm} />
                 {t("inspector.resetState", {
                   label: nodeStateText(d.manifest.node_state.label, i18n.language),
                 })}
@@ -737,7 +737,7 @@ export function Inspector({
                 className="inspector-delete"
                 onClick={() => setConfirmDelete(true)}
               >
-                <Trash2 size={14} />
+                <Trash2 size={ICON.sm} />
                 {t("inspector.deleteNode")}
               </Button>
             )}

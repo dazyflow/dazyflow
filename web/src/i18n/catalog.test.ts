@@ -78,4 +78,80 @@ describe("locale catalogues", () => {
     }
     expect(unpaired).toEqual([]);
   });
+
+  // One English label rendered as two different Swedish ones is drift a
+  // reviewer cannot see: the English reads fine, so nothing looks wrong unless
+  // you read the other catalogue. It had already happened thirteen times — the
+  // publish toggle called a live flow "Live" while the status chip beside it
+  // called the same state "Aktiv", and the TV wall reported a run as
+  // "Misslyckades" where the runs list said "Misslyckad".
+  //
+  // Divergence is sometimes CORRECT, which is why this is an allowlist rather
+  // than a ban. Swedish inflects for gender and number, so one English word
+  // legitimately becomes two; and a couple of English labels are simply
+  // imprecise, covering two different things the Swedish distinguishes. Every
+  // entry below says which it is. Adding one is a real decision — if you cannot
+  // write the reason, it is drift.
+  const ALLOWED_DIVERGENCE: Record<string, string> = {
+    // Gender / number agreement — one English word, two Swedish forms.
+    Custom: "neuter 'schema' (Anpassat) vs en-word 'roll'/'mall' (Anpassad)",
+    "Built-in": "plural group heading (Inbyggda) vs singular badge (Inbyggd)",
+    required: "en-word 'port' (obligatorisk) vs neuter 'fält' (obligatoriskt)",
+    optional: "en-word 'port' (valfri) vs neuter value (valfritt)",
+    Done: "en-word 'uppladdningen' (Klar) vs standalone confirmation (Klart)",
+    Disabled:
+      "matched plural pair Tillåtna/Avstängda in one select vs a singular badge (Avstängd)",
+    Succeeded: "plural filter chip (Lyckade) vs singular status (Lyckad)",
+    Failed:
+      "plural filter (Misslyckade), singular status (Misslyckad), verb headline (Misslyckades)",
+    // Different parts of speech.
+    Open: "the verb, a button (Öppna) vs a ticket's state (Öppet)",
+    // The English label covers two genuinely different things.
+    Retry:
+      "retry a failed fetch (Försök igen) vs resume a failed run from its failed step (Återuppta)",
+    Owner:
+      "an organisation's owner (Ägare) vs a ticket's assignee (Ansvarig) — the English is the imprecise one here",
+    Subject:
+      "the principal an API key is issued to (Innehavare) vs a ticket's subject line (Ämne)",
+    Clear: "clear a log or a selection (Rensa) vs empty a collection of rows (Töm)",
+    "Clearing…": "follows Clear",
+    Live: "a flow's published state (Aktiv) vs a data feed being live (Live)",
+  };
+
+  it("render one English label as one Swedish label", () => {
+    const byEnglish = new Map<string, string[]>();
+    for (const [k, v] of Object.entries(EN)) {
+      // Long strings are sentences; two translations of one sentence is not the
+      // vocabulary problem this guards.
+      if (v.length <= 2 || v.length >= 44) continue;
+      if (!byEnglish.has(v)) byEnglish.set(v, []);
+      byEnglish.get(v)!.push(k);
+    }
+    const drifted: string[] = [];
+    for (const [english, keys] of byEnglish) {
+      if (keys.length < 2) continue;
+      const swedish = [...new Set(keys.map((k) => SV[k]))];
+      if (swedish.length < 2) continue;
+      if (english in ALLOWED_DIVERGENCE) continue;
+      drifted.push(
+        `"${english}" renders as ${swedish.map((s) => `"${s}"`).join(" and ")} (${keys.join(", ")})`,
+      );
+    }
+    expect(drifted).toEqual([]);
+  });
+
+  // Keep the allowlist honest: an entry that no longer diverges has been
+  // aligned, and must be deleted so the list stays a record of real decisions.
+  it("carry no stale divergence allowances", () => {
+    const byEnglish = new Map<string, Set<string>>();
+    for (const [k, v] of Object.entries(EN)) {
+      if (v.length <= 2 || v.length >= 44) continue;
+      if (!byEnglish.has(v)) byEnglish.set(v, new Set());
+      byEnglish.get(v)!.add(SV[k]);
+    }
+    const stale = Object.keys(ALLOWED_DIVERGENCE).filter(
+      (en) => (byEnglish.get(en)?.size ?? 0) < 2,
+    );
+    expect(stale).toEqual([]);
+  });
 });

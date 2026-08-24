@@ -13,6 +13,9 @@ import { explainApiError } from "../lib/explainApiError";
 import { formatDateTime } from "../lib/datetime";
 import type { RunSummary, JobStatus } from "../types";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { ICON } from "../icons";
+import { POLL } from "../lib/timing";
+import { formatDuration } from "../lib/format";
 
 const PAGE_SIZE = 50;
 
@@ -170,7 +173,7 @@ export function RunList() {
   //
   // The interval depends on the derived `anyLive` boolean, NOT the whole
   // `runs` array — the tick calls setRuns, so depending on `runs` rebuilt
-  // the interval every 3s (a teardown + new timer per tick). The current
+  // the interval on every tick (a teardown + new timer per tick). The current
   // row count (for the refresh limit) is read from a ref so the callback
   // stays stable.
   const anyLive = runs.some(
@@ -190,7 +193,7 @@ export function RunList() {
           setHasMore(page.length >= PAGE_SIZE);
         })
         .catch(() => {});
-    }, 3000);
+    }, POLL.live);
     return () => window.clearInterval(t);
   }, [token, anyLive, fetchRunsPage]);
 
@@ -305,7 +308,7 @@ export function RunList() {
 
       <div className="run-toolbar">
         <div className="flow-search">
-          <Search size={15} aria-hidden />
+          <Search size={ICON.sm} aria-hidden />
           <input
             type="search"
             value={query}
@@ -388,7 +391,7 @@ export function RunList() {
             disabled={retrying}
             style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
           >
-            <RotateCcw size={14} />
+            <RotateCcw size={ICON.sm} />
             {retrying ? t("runAction.retrying") : t("runAction.retrySelected")}
           </Button>
           <Button variant="ghost" onClick={() => setSelected(new Set())} disabled={retrying}>
@@ -454,9 +457,21 @@ export function RunList() {
                 <tr key={r.id}>
                   {showInbox && (
                     <td>
+                      {/* Named by what the row SHOWS — the flow and when it
+                          started. It used to be the run id, truncated to 8
+                          hex characters, which contradicted this file's own
+                          rule two columns over: ids are "plumbing: opaque hex
+                          that means nothing to a non-technical user, so they
+                          stay off the list". They stayed off the visible list
+                          and went to screen readers instead. The start time is
+                          what disambiguates, since one flow can have several
+                          failed runs here. */}
                       <input
                         type="checkbox"
-                        aria-label={t("runList.selectRun", { id: r.id.slice(0, 8) })}
+                        aria-label={t("runList.selectRun", {
+                          flow: flowNames[r.graph_id] ?? t("common.unknownParen"),
+                          started: formatDateTime(r.enqueued_at),
+                        })}
                         checked={selected.has(r.id)}
                         onChange={() => toggleSelected(r.id)}
                       />
@@ -498,12 +513,12 @@ export function RunList() {
                         target isn't available to a <tr>, and this is the part
                         of the row people aim at anyway. */}
                     <Link to={`/runs/${encodeURIComponent(r.id)}`}>
-                      <Activity size={12} />
+                      <Activity size={ICON.xs} />
                       {flowNames[r.graph_id] ?? t("common.unknownParen")}
                     </Link>
                   </td>
                   <td style={{ color: "var(--muted)", fontSize: "var(--text-sm)" }}>
-                    {formatTime(r.enqueued_at)}
+                    {formatDateTime(r.enqueued_at)}
                   </td>
                   <td style={{ color: "var(--muted)", fontSize: "var(--text-sm)" }}>
                     {/* Older records (pre started_at-stamping) fall back
@@ -533,7 +548,7 @@ export function RunList() {
                         title={t("runAction.retryTitle")}
                         style={{ marginRight: 8 }}
                       >
-                        <RotateCcw size={13} style={{ marginRight: 4 }} />
+                        <RotateCcw size={ICON.sm} style={{ marginRight: 4 }} />
                         {retrying ? t("runAction.retrying") : t("runAction.retry")}
                       </Button>
                     )}
@@ -543,7 +558,7 @@ export function RunList() {
                       title={t("common.openInEditor")}
                       aria-label={t("common.openInEditor")}
                     >
-                      <Pencil size={14} />
+                      <Pencil size={ICON.sm} />
                     </Link>
                   </td>
                 </tr>
@@ -585,13 +600,6 @@ export function RunList() {
   );
 }
 
-// formatTime renders a relative time string ("3m ago", "2h ago", …).
-// Pulls the active locale via the singleton i18n instance — avoids
-// threading `t` through table-row helpers.
-// Standard local "YYYY-MM-DD HH:MM" everywhere — no relative "ago" strings.
-function formatTime(iso: string): string {
-  return formatDateTime(iso);
-}
 
 // dayStartISO turns a "YYYY-MM-DD" date (from <input type="date">) into the
 // RFC3339 instant for that day's LOCAL midnight — the inclusive ?since= bound.
@@ -612,12 +620,3 @@ function dayEndExclusiveISO(d: string): string | undefined {
   return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + 1).toISOString();
 }
 
-function formatDuration(startedISO: string, finishedISO: string): string {
-  const start = Date.parse(startedISO);
-  const end = Date.parse(finishedISO);
-  if (!Number.isFinite(start) || !Number.isFinite(end)) return "";
-  const ms = Math.max(0, end - start);
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${Math.round(ms / 60_000)}m`;
-}

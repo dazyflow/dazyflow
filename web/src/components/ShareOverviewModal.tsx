@@ -10,6 +10,7 @@ import { explainApiError } from "../lib/explainApiError";
 import { useAuth } from "../auth";
 import { Button } from "./Button";
 import type { ShareLink } from "../types";
+import { ICON } from "../icons";
 
 // ShareOverviewModal manages the workspace's single public overview link —
 // the cryptic, login-free TV-dashboard URL. It loads the existing link on
@@ -129,15 +130,15 @@ export function ShareOverviewModal({ onClose }: { onClose: () => void }) {
                 }}
               >
                 <Button onClick={copy}>
-                  <Copy size={12} style={{ marginRight: 6 }} />
-                  {copied ? t("share.copied") : t("share.copy")}
+                  <Copy size={ICON.xs} style={{ marginRight: 6 }} />
+                  {copied ? t("share.copied") : t("common.copyLink")}
                 </Button>
                 <Button
                   onClick={() =>
                     window.open(publicURL(link), "_blank", "noreferrer")
                   }
                 >
-                  <Tv size={12} style={{ marginRight: 6 }} />
+                  <Tv size={ICON.xs} style={{ marginRight: 6 }} />
                   {t("share.open")}
                 </Button>
               </div>
@@ -162,14 +163,14 @@ export function ShareOverviewModal({ onClose }: { onClose: () => void }) {
                 {t("share.disable")}
               </Button>
               <Button onClick={create} disabled={busy}>
-                <RefreshCw size={12} style={{ marginRight: 6 }} />
+                <RefreshCw size={ICON.xs} style={{ marginRight: 6 }} />
                 {t("share.regenerate")}
               </Button>
             </>
           ) : (
             !loading && (
               <Button onClick={create} disabled={busy} variant="primary">
-                <ExternalLink size={12} style={{ marginRight: 6 }} />
+                <ExternalLink size={ICON.xs} style={{ marginRight: 6 }} />
                 {t("share.create")}
               </Button>
             )

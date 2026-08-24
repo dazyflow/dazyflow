@@ -14,6 +14,8 @@ import { Button } from "../components/Button";
 import { explainApiError } from "../lib/explainApiError";
 import type { Graph, Manifest } from "../types";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { ICON } from "../icons";
+import { slugify } from "../lib/format";
 
 // GenIssue mirrors core.LintIssue — the heads-up findings the generator
 // returns alongside the draft (a missing sheet ID, an app to connect, a
@@ -81,7 +83,7 @@ export function CreateFlow() {
             className={"create-flow-tab" + (tab === key ? " active" : "")}
             onClick={() => setTab(key)}
           >
-            <Icon size={16} />
+            <Icon size={ICON.md} />
             {label}
           </button>
         ))}
@@ -166,7 +168,7 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
   // the user never types a slug) and opens it in the editor.
   const createNew = async () => {
     if (!token || !me || !activeWorkspace) return;
-    const id = `${slugify(name)}-${Math.random().toString(36).slice(2, 8)}`;
+    const id = `${flowSlug(name)}-${Math.random().toString(36).slice(2, 8)}`;
     await api.saveGraph(token, {
       id,
       tenant: activeTenant,
@@ -185,7 +187,7 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
   const createFromGraph = async (graph: Graph) => {
     if (!token || !activeWorkspace) return;
     const flowName = (graph.name || "AI-generated flow").trim();
-    const id = `${slugify(flowName)}-${Math.random().toString(36).slice(2, 8)}`;
+    const id = `${flowSlug(flowName)}-${Math.random().toString(36).slice(2, 8)}`;
     await api.saveGraph(token, {
       id,
       tenant: activeTenant,
@@ -335,7 +337,7 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
                   onChange={(e) => setRefineText(e.target.value)}
                 />
                 <Button type="submit" disabled={refineText.trim() === ""}>
-                  <Sparkles size={14} style={{ marginRight: 6 }} />
+                  <Sparkles size={ICON.sm} style={{ marginRight: 6 }} />
                   {t("createFlow.refineCta")}
                 </Button>
               </div>
@@ -426,7 +428,7 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
                     onClick={() => setAiDesc(text)}
                   >
                     <span className="ai-starter-icon">
-                      <Icon size={16} strokeWidth={2} />
+                      <Icon size={ICON.md} strokeWidth={2} />
                     </span>
                     <span className="ai-starter-text">{text}</span>
                   </Button>
@@ -498,7 +500,7 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
                   className="ai-connect-cta"
                   onClick={() => navigate("/apps?category=ai")}
                 >
-                  <Sparkles size={14} />
+                  <Sparkles size={ICON.sm} />
                   {t("createAI.connectCta")}
                 </Button>
               )
@@ -509,7 +511,7 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
                 disabled={busy || aiDesc.trim() === "" || !canEdit}
                 title={!canEdit ? t("flowList.needEdit") : undefined}
               >
-                <Sparkles size={14} style={{ marginRight: 6 }} />
+                <Sparkles size={ICON.sm} style={{ marginRight: 6 }} />
                 {busy ? t("createAI.generating") : t("createAI.generate")}
               </Button>
             )}
@@ -569,15 +571,10 @@ function dedupeSteps(steps: { phase: string; message: string }[]) {
   return out;
 }
 
-// slugify turns a human flow name into the [A-Za-z0-9_.-] machine ID the
-// daemon expects. Lowercases, swaps runs of anything else for a single
-// hyphen, trims edge hyphens, and falls back to "flow" when a name is
-// all punctuation/empty.
-function slugify(name: string): string {
-  const s = name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return s || "flow";
+// flowSlug turns a human flow name into the [A-Za-z0-9_.-] machine ID the
+// daemon expects: the shared slugify, plus this page's own fallback. A name
+// that is all punctuation slugifies to "", which would leave a bare
+// "-a1b2c3" id, so it becomes "flow" instead.
+function flowSlug(name: string): string {
+  return slugify(name) || "flow";
 }

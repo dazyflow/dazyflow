@@ -8,6 +8,7 @@ import { Check, Download, Plus, Trash2, X } from "lucide-react";
 import { ConfirmModal } from "./ConfirmModal";
 import { Button } from "./Button";
 import { explainApiError } from "../lib/explainApiError";
+import { ICON } from "../icons";
 
 // OrgSwitcherModal is the centered org switcher + create flow, mirroring the
 // ConfigChecklistModal shell (portal to <body>, settings-backdrop/dialog,
@@ -126,7 +127,7 @@ export function OrgSwitcherModal({
             disabled={busy}
             aria-label={t("settings.close")}
           >
-            <X size={18} />
+            <X size={ICON.lg} />
           </Button>
         </div>
         <div className="settings-body org-switcher-body">
@@ -152,7 +153,7 @@ export function OrgSwitcherModal({
                     {active && (
                       <Check
                         className="org-switcher-check"
-                        size={16}
+                        size={ICON.md}
                         aria-hidden="true"
                       />
                     )}
@@ -170,10 +171,10 @@ export function OrgSwitcherModal({
                         setConfirmDelete(org);
                       }}
                       disabled={busy}
-                      title={t("nav.orgDelete")}
+                      title={t("common.delete")}
                       aria-label={t("nav.orgDeleteAria", { name: org.name })}
                     >
-                      <Trash2 size={15} />
+                      <Trash2 size={ICON.sm} />
                     </Button>
                   )}
                 </li>
@@ -226,7 +227,7 @@ export function OrgSwitcherModal({
               className="org-switcher-add"
               onClick={() => setCreating(true)}
             >
-              <Plus size={16} />
+              <Plus size={ICON.md} />
               <span>{t("nav.orgCreate")}</span>
             </Button>
           )}
@@ -255,7 +256,7 @@ export function OrgSwitcherModal({
                       });
                   }}
                 >
-                  <Download size={14} />
+                  <Download size={ICON.sm} />
                   {exportState === "exporting"
                     ? t("nav.orgExporting")
                     : exportState === "done"
@@ -264,7 +265,7 @@ export function OrgSwitcherModal({
                 </Button>
                 {exportState === "done" && (
                   <span className="org-switcher-export-done">
-                    <Check size={14} /> {t("nav.orgExported")}
+                    <Check size={ICON.sm} /> {t("nav.orgExported")}
                   </span>
                 )}
               </span>
@@ -293,7 +294,7 @@ export function OrgSwitcherModal({
               )}
             </>
           }
-          confirmLabel={busy ? t("nav.orgDeleting") : t("nav.orgDelete")}
+          confirmLabel={busy ? t("nav.orgDeleting") : t("common.delete")}
           cancelLabel={t("common.cancel")}
           danger
           confirmDisabled={busy || !deletePassword.trim()}

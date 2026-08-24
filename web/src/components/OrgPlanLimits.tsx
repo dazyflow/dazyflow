@@ -16,6 +16,7 @@ import { explainApiError } from "../lib/explainApiError";
 import { formatDate } from "../lib/datetime";
 import { Button } from "./Button";
 import { ErrorNotice } from "./ErrorNotice";
+import { ICON } from "../icons";
 
 // PlanLimitsSection shows an org's effective plan + limits and lets a
 // platform admin assign a tier, grant/force a plan (trial, comp, force
@@ -60,8 +61,8 @@ export function PlanLimitsSection({ tenant }: { tenant: string }) {
           {t("admin.platformPlan.head")}
         </h2>
         <Button onClick={() => setEditing(true)} disabled={!ent}>
-          <Pencil size={13} style={{ marginRight: 4 }} />
-          {t("admin.platformPlan.edit")}
+          <Pencil size={ICON.sm} style={{ marginRight: 4 }} />
+          {t("common.edit")}
         </Button>
       </div>
       {error && <ErrorNotice>{error}</ErrorNotice>}
@@ -211,7 +212,7 @@ function EntitlementEditor({
         <div className="settings-head">
           <h2>{t("admin.platformPlan.editTitle")}</h2>
           <Button variant="ghost" size="icon" onClick={onClose} disabled={busy}>
-            <X size={18} />
+            <X size={ICON.lg} />
           </Button>
         </div>
         <div className="settings-body pa-tier-form">
@@ -267,7 +268,7 @@ function EntitlementEditor({
             {t("common.cancel")}
           </Button>
           <Button variant="primary" onClick={() => void save()} disabled={busy}>
-            {busy ? t("admin.platformTiers.saving") : t("admin.platformTiers.save")}
+            {busy ? t("common.saving") : t("admin.platformTiers.save")}
           </Button>
         </div>
       </div>

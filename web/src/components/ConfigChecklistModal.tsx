@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { AlertCircle, ChevronRight, X } from "lucide-react";
 import { Button } from "./Button";
-import { iconFor, isBrandedIcon, dropColor } from "../icons";
+import { iconFor, isBrandedIcon, dropColor, ICON } from "../icons";
 
 // ConfigChecklistModal replaces the old "N to configure" popover with a
 // proper centered dialog: a click-to-jump checklist of every step still
@@ -45,7 +45,7 @@ function StepIcon({ icon }: { icon?: ConfigChecklistEntry["icon"] }) {
   if (isBrandedIcon(icon?.name)) {
     return (
       <div className="icon branded">
-        <Glyph size={18} strokeWidth={2.2} />
+        <Glyph size={ICON.lg} strokeWidth={2.2} />
       </div>
     );
   }
@@ -57,7 +57,7 @@ function StepIcon({ icon }: { icon?: ConfigChecklistEntry["icon"] }) {
         background: `linear-gradient(135deg, ${color}, color-mix(in srgb, ${color} 70%, #fff))`,
       }}
     >
-      <Glyph size={15} color="#140d30" strokeWidth={2.2} />
+      <Glyph size={ICON.sm} color="#140d30" strokeWidth={2.2} />
     </div>
   );
 }
@@ -92,7 +92,7 @@ export function ConfigChecklistModal({
         <div className="settings-head config-modal-head">
           <div className="config-modal-heading">
             <span className="config-modal-badge" aria-hidden="true">
-              <AlertCircle size={18} />
+              <AlertCircle size={ICON.lg} />
             </span>
             <div>
               <h2 id="config-modal-title">{t("editor.configModalTitle")}</h2>
@@ -107,7 +107,7 @@ export function ConfigChecklistModal({
             onClick={onClose}
             aria-label={t("settings.close")}
           >
-            <X size={18} />
+            <X size={ICON.lg} />
           </Button>
         </div>
         <div className="settings-body config-modal-body">
@@ -139,7 +139,7 @@ export function ConfigChecklistModal({
                   </span>
                   <ChevronRight
                     className="config-checklist-arrow"
-                    size={16}
+                    size={ICON.md}
                     aria-hidden="true"
                   />
                 </Button>

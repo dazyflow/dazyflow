@@ -11,6 +11,7 @@ import type { GitCredential } from "../types";
 import { explainApiError } from "../lib/explainApiError";
 import { ErrorNotice } from "../components/ErrorNotice";
 import { GitMirrorPanel } from "../components/GitMirrorPanel";
+import { ICON } from "../icons";
 
 // AdminGitCredentials manages the org's named Git credentials — what a
 // git_checkout node picks by `account` to clone private repos. Each
@@ -126,7 +127,7 @@ export function AdminGitCredentials() {
               {creds.map((c) => (
                 <tr key={c.account}>
                   <td style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                    <KeyRound size={13} /> {c.account}
+                    <KeyRound size={ICON.sm} /> {c.account}
                   </td>
                   <td style={{ color: "var(--muted)", fontSize: "var(--text-sm)" }}>
                     {[
@@ -145,7 +146,7 @@ export function AdminGitCredentials() {
                       title={t("gitCreds.delete")}
                       style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
                     >
-                      <Trash2 size={14} />
+                      <Trash2 size={ICON.sm} />
                     </Button>
                   </td>
                 </tr>
@@ -227,8 +228,8 @@ export function AdminGitCredentials() {
         </div>
 
         <Button variant="primary" disabled={!canSave} onClick={() => void save()}>
-          <Plus size={15} style={{ marginRight: 4 }} />
-          {saving ? t("gitCreds.saving") : t("gitCreds.saveBtn")}
+          <Plus size={ICON.sm} style={{ marginRight: 4 }} />
+          {saving ? t("common.saving") : t("gitCreds.saveBtn")}
         </Button>
         <div className="desc" style={{ marginTop: 6 }}>{t("gitCreds.atLeastOne")}</div>
       </div>

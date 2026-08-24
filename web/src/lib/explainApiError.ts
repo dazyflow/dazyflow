@@ -27,6 +27,17 @@ type TFunc = (k: string, o?: Record<string, unknown>) => string;
 // different meaning. Omit it for the generic mapping.
 export type ApiErrorContext = "signin" | "signup" | "totp" | "approval";
 
+// featureUnavailable reports whether a status means "this surface isn't
+// available to you" rather than "something went wrong": 501 the daemon has the
+// feature switched off, 401/403 the caller isn't permitted. Callers use it to
+// fall back to an empty state instead of showing an error — a secrets page that
+// the operator disabled is not a failure the user should be alarmed by.
+//
+// Was defined identically in Secrets, AdminSecretManager and Apps.
+export function featureUnavailable(status: number): boolean {
+  return status === 501 || status === 401 || status === 403;
+}
+
 export function explainApiError(
   err: unknown,
   t: TFunc,

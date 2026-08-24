@@ -7,7 +7,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api";
 import { explainApiError } from "../lib/explainApiError";
 import { useAuth } from "../auth";
-import { iconFor } from "../icons";
+import { iconFor, ICON } from "../icons";
 import {
   displayNameForIntegrationSlug,
   oauthProviderForIntegration,
@@ -287,7 +287,7 @@ export function TemplateGallery() {
                 >
                   <div className="template-card-head">
                     <span className="template-icon">
-                      <Icon size={18} strokeWidth={2.2} />
+                      <Icon size={ICON.lg} strokeWidth={2.2} />
                     </span>
                     <h3>{tpl.title}</h3>
                   </div>

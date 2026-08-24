@@ -11,6 +11,8 @@ import { ServiceIcon, serviceLabel } from "../components/ServiceIcon";
 import type { OrgAuthConfig } from "../types";
 import { explainApiError } from "../lib/explainApiError";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { ICON } from "../icons";
+import { FEEDBACK } from "../lib/timing";
 
 // ssoUpcoming lists identity providers we show as placeholders so the
 // surface reads as "SSO providers" rather than "Google" — the monogram
@@ -31,7 +33,7 @@ function RedirectURIDisplay({ uri }: { uri: string }) {
     try {
       await navigator.clipboard.writeText(uri);
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
+      window.setTimeout(() => setCopied(false), FEEDBACK.copied);
     } catch {
       /* clipboard may be blocked; user can select + copy manually */
     }
@@ -46,11 +48,11 @@ function RedirectURIDisplay({ uri }: { uri: string }) {
       <code className="sso-readonly">{uri}</code>
       <Button onClick={copy} className="sso-copy-btn">
         {copied ? (
-          <Check size={12} style={{ marginRight: 6 }} />
+          <Check size={ICON.xs} style={{ marginRight: 6 }} />
         ) : (
-          <Copy size={12} style={{ marginRight: 6 }} />
+          <Copy size={ICON.xs} style={{ marginRight: 6 }} />
         )}
-        {copied ? t("admin.sso.copyRedirectDone") : t("admin.sso.copyRedirect")}
+        {copied ? t("common.copied") : t("common.copy")}
       </Button>
     </div>
   );
@@ -240,7 +242,7 @@ export function AdminOrgSSO() {
       <div className="page-title">
         <div>
           <h1>
-            <ShieldCheck size={20} style={{ marginRight: 8, verticalAlign: -3 }} />
+            <ShieldCheck size={ICON.xl} style={{ marginRight: 8, verticalAlign: -3 }} />
             {t("admin.sso.title")}
           </h1>
           <div className="sub">{t("admin.sso.subtitle")}</div>
@@ -269,20 +271,20 @@ export function AdminOrgSSO() {
           aria-live="assertive"
           style={{ color: "var(--danger)", marginBottom: "var(--space-4)" }}
         >
-          <AlertCircle size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+          <AlertCircle size={ICON.sm} style={{ marginRight: 6, verticalAlign: -2 }} />
           {error}
         </div>
       )}
       {testOK && (
         <div className="card sso-test-ok">
-          <Check size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+          <Check size={ICON.sm} style={{ marginRight: 6, verticalAlign: -2 }} />
           <strong>{t("admin.sso.testSuccessHead")}</strong>
           <div className="desc">{t("admin.sso.testSuccessBody")}</div>
         </div>
       )}
       {testErrorCode && (
         <div className="card sso-test-error">
-          <AlertCircle size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+          <AlertCircle size={ICON.sm} style={{ marginRight: 6, verticalAlign: -2 }} />
           <strong>{t("admin.sso.testErrorHead")}</strong>
           <div className="desc">{t(testErrorBodyKey)}</div>
           <div className="desc sso-test-error-retry">{t("admin.sso.testErrorRetry")}</div>
@@ -352,7 +354,7 @@ export function AdminOrgSSO() {
               <p className="desc">{t("admin.sso.googleIntro")}</p>
             </div>
             <span className={`sso-status-pill${enabled ? " is-active" : ""}`}>
-              {enabled && <Check size={12} style={{ verticalAlign: -1 }} />}
+              {enabled && <Check size={ICON.xs} style={{ verticalAlign: -1 }} />}
               {enabled ? t("admin.sso.enabledBadge") : t("admin.sso.statusInactive")}
             </span>
           </div>
@@ -405,8 +407,8 @@ export function AdminOrgSSO() {
             <div className="sso-foot-msg" role="status" aria-live="polite">
               {savedAt && (
                 <span className="sso-saved-chip">
-                  <Check size={12} style={{ verticalAlign: -1 }} />
-                  {t("admin.sso.savedAt")}
+                  <Check size={ICON.xs} style={{ verticalAlign: -1 }} />
+                  {t("common.saved")}
                 </span>
               )}
             </div>
@@ -417,7 +419,7 @@ export function AdminOrgSSO() {
                 </Button>
               )}
               <Button type="submit" variant="primary" disabled={saving}>
-                {saving ? t("admin.sso.saving") : t("admin.sso.save")}
+                {saving ? t("common.saving") : t("common.save")}
               </Button>
             </div>
           </div>
@@ -450,7 +452,7 @@ export function AdminOrgSSO() {
                 <div className="desc">{t("admin.sso.testButtonDesc")}</div>
                 {popupBlocked && (
                   <div className="sso-popup-blocked">
-                    <AlertCircle size={12} style={{ marginRight: 6, verticalAlign: -1 }} />
+                    <AlertCircle size={ICON.xs} style={{ marginRight: 6, verticalAlign: -1 }} />
                     <strong>{t("admin.sso.popupBlockedHead")}</strong>
                     <div className="desc">
                       {t("admin.sso.popupBlockedBody")}{" "}

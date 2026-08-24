@@ -13,6 +13,7 @@ import { RevealSecretModal } from "../components/RevealSecretModal";
 import { formatDate } from "../lib/datetime";
 import { explainApiError } from "../lib/explainApiError";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { ICON } from "../icons";
 
 export function AdminAPIKeys() {
   const { t } = useTranslation();
@@ -90,14 +91,14 @@ export function AdminAPIKeys() {
       <div className="page-title">
         <div>
           <h1>
-            <KeyRound size={20} style={{ marginRight: 8, verticalAlign: -3 }} />
+            <KeyRound size={ICON.xl} style={{ marginRight: 8, verticalAlign: -3 }} />
             {t("admin.apiKeys.title")}
           </h1>
           <div className="sub">{t("admin.apiKeys.subtitle")}</div>
         </div>
         {keys.length > 0 && (
           <Button variant="primary" onClick={() => setCreating(true)}>
-            <Plus size={14} style={{ marginRight: 6 }} />
+            <Plus size={ICON.sm} style={{ marginRight: 6 }} />
             {t("admin.apiKeys.issueKey")}
           </Button>
         )}
@@ -115,7 +116,7 @@ export function AdminAPIKeys() {
           <h2>{t("admin.apiKeys.emptyTitle")}</h2>
           <p>{t("admin.apiKeys.emptyBody")}</p>
           <Button variant="primary" onClick={() => setCreating(true)}>
-            <Plus size={14} style={{ marginRight: 6 }} />
+            <Plus size={ICON.sm} style={{ marginRight: 6 }} />
             {t("admin.apiKeys.issueFirst")}
           </Button>
         </div>
@@ -131,7 +132,7 @@ export function AdminAPIKeys() {
         <>
           <div className="api-key-toolbar">
             <div className="api-key-search">
-              <Search size={14} aria-hidden="true" />
+              <Search size={ICON.sm} aria-hidden="true" />
               <input
                 type="search"
                 value={filter}
@@ -241,10 +242,10 @@ function APIKeyRow({
             <span className="inline-confirm">
               {t("admin.apiKeys.revokeReally")}{" "}
               <Button variant="danger" onClick={onRevoke}>
-                {t("admin.apiKeys.revokeConfirmBtn")}
+                {t("common.revoke")}
               </Button>
               <Button variant="ghost" onClick={onCancelConfirm}>
-                {t("admin.apiKeys.cancel")}
+                {t("common.cancel")}
               </Button>
             </span>
           ) : (
@@ -253,12 +254,12 @@ function APIKeyRow({
               onClick={onConfirm}
               title={t("admin.apiKeys.revokeTitle")}
             >
-              <Trash2 size={14} />
+              <Trash2 size={ICON.sm} />
             </Button>
           ))}
         {k.status === "revoked" && (
           <span style={{ color: "var(--muted)", fontSize: "var(--text-sm)" }}>
-            <ShieldOff size={12} style={{ verticalAlign: -1, marginRight: 4 }} />
+            <ShieldOff size={ICON.xs} style={{ verticalAlign: -1, marginRight: 4 }} />
             {t("admin.apiKeys.revokedAlready")}
           </span>
         )}

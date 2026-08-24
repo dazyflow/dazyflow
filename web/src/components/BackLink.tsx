@@ -3,6 +3,7 @@
 
 import { Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
+import { ICON } from "../icons";
 
 /**
  * BackLink is the one way a detail page offers a route back to its parent.
@@ -35,7 +36,7 @@ import { ArrowLeft } from "lucide-react";
 export function BackLink({ to, label }: { to: string; label: string }) {
   return (
     <Link to={to} className="back-link">
-      <ArrowLeft size={14} aria-hidden="true" /> {label}
+      <ArrowLeft size={ICON.sm} aria-hidden="true" /> {label}
     </Link>
   );
 }

@@ -10,6 +10,7 @@ import { api, type PlatformOrg } from "../api";
 import { explainApiError } from "../lib/explainApiError";
 import { OrgAvatar } from "../components/PlatformAvatar";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { ICON } from "../icons";
 
 // AdminPlatformOrgs is the cross-tenant org roster. Each row links to
 // that org's moderation page (suspend / ban / delete). Read-only list;
@@ -66,7 +67,7 @@ export function AdminPlatformOrgs() {
       <div className="page-title">
         <div>
           <h1>
-            <Building2 size={20} style={{ marginRight: 8, verticalAlign: -3 }} />
+            <Building2 size={ICON.xl} style={{ marginRight: 8, verticalAlign: -3 }} />
             {t("admin.platformOrgs.title")}
           </h1>
           <div className="sub">{t("admin.platformOrgs.subtitle")}</div>
@@ -88,7 +89,7 @@ export function AdminPlatformOrgs() {
 
       <div style={{ position: "relative", marginBottom: "var(--space-3)" }}>
         <Search
-          size={15}
+          size={ICON.sm}
           style={{ position: "absolute", left: 10, top: 11, color: "var(--muted)" }}
         />
         <input

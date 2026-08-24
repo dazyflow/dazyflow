@@ -12,6 +12,7 @@ import { Button } from "../components/Button";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { DropGlyph } from "../components/PlatformAvatar";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { ICON } from "../icons";
 
 // AdminPlatformDrops is the platform-operator killswitch for individual
 // drops. A drop switched off here is refused by the engine on every run
@@ -93,7 +94,7 @@ export function AdminPlatformDrops() {
       <div className="page-title">
         <div>
           <h1>
-            <ShieldCheck size={20} style={{ marginRight: 8, verticalAlign: -3 }} />
+            <ShieldCheck size={ICON.xl} style={{ marginRight: 8, verticalAlign: -3 }} />
             {t("admin.platformDrops.title")}
           </h1>
           <div className="sub">{t("admin.platformDrops.subtitle")}</div>
@@ -112,7 +113,7 @@ export function AdminPlatformDrops() {
 
       <div style={{ position: "relative", marginBottom: "var(--space-3)" }}>
         <Search
-          size={15}
+          size={ICON.sm}
           style={{ position: "absolute", left: 10, top: 11, color: "var(--muted)" }}
         />
         <input
@@ -173,7 +174,7 @@ export function AdminPlatformDrops() {
                     disabled={busy === d.id}
                     onClick={() => void toggle(d, "")}
                   >
-                    <Power size={13} style={{ marginRight: 4 }} />
+                    <Power size={ICON.sm} style={{ marginRight: 4 }} />
                     {t("admin.platformDrops.enable")}
                   </Button>
                 ) : (
@@ -182,7 +183,7 @@ export function AdminPlatformDrops() {
                     disabled={busy === d.id}
                     onClick={() => setConfirm(d)}
                   >
-                    <PowerOff size={13} style={{ marginRight: 4 }} />
+                    <PowerOff size={ICON.sm} style={{ marginRight: 4 }} />
                     {t("admin.platformDrops.disable")}
                   </Button>
                 )}

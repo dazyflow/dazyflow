@@ -9,6 +9,7 @@ import { api } from "../api";
 import { explainApiError } from "../lib/explainApiError";
 import { Button } from "../components/Button";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { ICON } from "../icons";
 
 // AdminPlatform is the platform-operator email surface: a single place to
 // confirm the instance mailer actually delivers. (Signup invites — the
@@ -29,7 +30,7 @@ export function AdminPlatform() {
       <div className="page-title">
         <div>
           <h1>
-            <Mail size={20} style={{ marginRight: 8, verticalAlign: -3 }} />
+            <Mail size={ICON.xl} style={{ marginRight: 8, verticalAlign: -3 }} />
             {t("admin.platform.title")}
           </h1>
           <div className="sub">{t("admin.platform.subtitle")}</div>
@@ -86,13 +87,13 @@ function SmtpTestSection() {
           type="email"
           value={to}
           onChange={(e) => setTo(e.target.value)}
-          placeholder={me?.subject ?? t("admin.smtpTest.recipientPlaceholder")}
+          placeholder={me?.subject ?? t("common.emailPlaceholder")}
           aria-label={t("admin.smtpTest.recipientLabel")}
           style={{ flex: 1 }}
         />
         <Button type="submit" variant="primary" disabled={!canSend}>
-          <Send size={14} style={{ marginRight: 6 }} />
-          {sending ? t("admin.smtpTest.sending") : t("admin.smtpTest.send")}
+          <Send size={ICON.sm} style={{ marginRight: 6 }} />
+          {sending ? t("common.sending") : t("admin.smtpTest.send")}
         </Button>
       </form>
       {!looksValid && (
@@ -109,9 +110,9 @@ function SmtpTestSection() {
           }}
         >
           {result.ok ? (
-            <Check size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+            <Check size={ICON.sm} style={{ marginRight: 6, verticalAlign: -2 }} />
           ) : (
-            <AlertCircle size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+            <AlertCircle size={ICON.sm} style={{ marginRight: 6, verticalAlign: -2 }} />
           )}
           {result.msg}
         </div>

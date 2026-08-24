@@ -10,6 +10,8 @@ import { explainApiError } from "../lib/explainApiError";
 import { Button } from "./Button";
 import type { IssuedAPIKey } from "../types";
 import { ErrorNotice } from "./ErrorNotice";
+import { ICON } from "../icons";
+import { FEEDBACK } from "../lib/timing";
 
 // ConnectMcpClientModal mints an API key scoped to the current
 // principal, then hands the user the right config snippet for their
@@ -218,7 +220,7 @@ function ConfirmStage({
       </div>
       <div className="settings-foot">
         <Button type="button" onClick={onCancel} disabled={submitting}>
-          {t("connectMcp.cancel")}
+          {t("common.cancel")}
         </Button>
         <Button type="button" variant="primary" onClick={onCreate} disabled={submitting}>
           {submitting ? t("connectMcp.creating") : t("connectMcp.create")}
@@ -309,7 +311,7 @@ function RevealStage({ issued, onDone }: { issued: IssuedAPIKey; onDone: () => v
             <div className="sf-field">
               <div className="label-row">
                 <label>
-                  <Terminal size={12} style={{ marginRight: 6, verticalAlign: -1 }} />
+                  <Terminal size={ICON.xs} style={{ marginRight: 6, verticalAlign: -1 }} />
                   {t("connectMcp.cliLabel")}
                 </label>
               </div>
@@ -354,7 +356,7 @@ function CopyButton({ text, labelKey }: { text: string; labelKey: string }) {
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
+      window.setTimeout(() => setCopied(false), FEEDBACK.copied);
     } catch {
       /* clipboard blocked — input/pre is selectable for manual copy */
     }
@@ -362,11 +364,11 @@ function CopyButton({ text, labelKey }: { text: string; labelKey: string }) {
   return (
     <Button type="button" onClick={copy} style={{ marginTop: "var(--space-2)" }}>
       {copied ? (
-        <Check size={12} style={{ marginRight: 6 }} />
+        <Check size={ICON.xs} style={{ marginRight: 6 }} />
       ) : (
-        <Copy size={12} style={{ marginRight: 6 }} />
+        <Copy size={ICON.xs} style={{ marginRight: 6 }} />
       )}
-      {copied ? t("connectMcp.copied") : t(labelKey)}
+      {copied ? t("common.copied") : t(labelKey)}
     </Button>
   );
 }

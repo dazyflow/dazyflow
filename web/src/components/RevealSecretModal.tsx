@@ -6,6 +6,8 @@ import { Copy } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "./Button";
 import type { IssuedAPIKey } from "../types";
+import { ICON } from "../icons";
+import { FEEDBACK } from "../lib/timing";
 
 // RevealSecretModal renders the one-time view of a freshly-minted API
 // key's secret. Once closed, the secret is gone — Dazyflow keeps only
@@ -23,7 +25,7 @@ export function RevealSecretModal({
     try {
       await navigator.clipboard.writeText(issued.secret);
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
+      window.setTimeout(() => setCopied(false), FEEDBACK.copied);
     } catch {
       /* clipboard may be blocked; user can select + copy manually */
     }
@@ -44,8 +46,8 @@ export function RevealSecretModal({
           </p>
           <div className="secret-reveal">{issued.secret}</div>
           <Button onClick={copy} style={{ marginTop: "var(--space-3)" }}>
-            <Copy size={12} style={{ marginRight: 6 }} />
-            {copied ? t("revealSecret.copied") : t("revealSecret.copy")}
+            <Copy size={ICON.xs} style={{ marginRight: 6 }} />
+            {copied ? t("common.copied") : t("revealSecret.copy")}
           </Button>
           <div className="sf-field" style={{ marginTop: "var(--space-4)" }}>
             <div className="label-row">

@@ -23,6 +23,9 @@ import { ReportProblemModal } from "../components/ReportProblemModal";
 import type { Graph, JobRecord, JobStatus, Manifest, Ref, RunLogEntry } from "../types";
 import { formatDateTime, formatRelative } from "../lib/datetime";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { ICON } from "../icons";
+import { POLL, TICK, FEEDBACK } from "../lib/timing";
+import { formatDuration } from "../lib/format";
 
 // RunDetail is the post-failure "what happened" page — and the
 // post-success "yes, here are the values" page. T2 of the PMF
@@ -80,7 +83,7 @@ export function RunDetail() {
   // 30s tick is plenty. (Same trick as the TV overview's ticking clock.)
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
-    const id = window.setInterval(() => setNow(new Date()), 30_000);
+    const id = window.setInterval(() => setNow(new Date()), TICK.relative);
     return () => window.clearInterval(id);
   }, []);
   // Friendly naming: the flow's display name for the heading, and module
@@ -194,7 +197,7 @@ export function RunDetail() {
           setNodes(ns.nodes ?? []);
         })
         .catch(() => {});
-    }, 2000);
+    }, POLL.live);
     return () => {
       cancelled = true;
       window.clearInterval(t);
@@ -364,7 +367,7 @@ export function RunDetail() {
               disabled={cancelling}
               title={t("runAction.stopTitle")}
             >
-              <Square size={14} style={{ marginRight: 6 }} />
+              <Square size={ICON.sm} style={{ marginRight: 6 }} />
               {cancelling ? t("runAction.stopping") : t("runAction.stop")}
             </Button>
           )}
@@ -375,7 +378,7 @@ export function RunDetail() {
               disabled={retrying}
               title={t("runAction.retryTitle")}
             >
-              <RotateCcw size={14} style={{ marginRight: 6 }} />
+              <RotateCcw size={ICON.sm} style={{ marginRight: 6 }} />
               {retrying ? t("runAction.retrying") : t("runAction.retry")}
             </Button>
           )}
@@ -388,7 +391,7 @@ export function RunDetail() {
             disabled={replaying}
             title={t("runAction.replayTitle")}
           >
-            <RotateCw size={14} style={{ marginRight: 6 }} />
+            <RotateCw size={ICON.sm} style={{ marginRight: 6 }} />
             {replaying ? t("runAction.replaying") : t("runAction.replay")}
           </Button>
         </div>
@@ -505,12 +508,12 @@ export function RunDetail() {
                 onClick={() => {
                   void navigator.clipboard?.writeText(run.ID);
                   setCopiedID(true);
-                  window.setTimeout(() => setCopiedID(false), 1500);
+                  window.setTimeout(() => setCopiedID(false), FEEDBACK.copied);
                 }}
                 aria-label={t("runDetail.copyId")}
-                title={copiedID ? t("runDetail.copiedId") : t("runDetail.copyId")}
+                title={copiedID ? t("common.copied") : t("runDetail.copyId")}
               >
-                {copiedID ? <Check size={13} /> : <Copy size={13} />}
+                {copiedID ? <Check size={ICON.sm} /> : <Copy size={ICON.sm} />}
               </Button>
             </span>
           }
@@ -559,7 +562,7 @@ export function RunDetail() {
                 onClick={() => toggle(n.NodeID)}
                 aria-expanded={isOpen}
               >
-                {isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                {isOpen ? <ChevronDown size={ICON.xs} /> : <ChevronRight size={ICON.xs} />}
                 <span className={"status-dot " + n.Status} />
                   <span className="node-id" title={n.NodeID}>{nodeLabel(n.NodeID)}</span>
                 <span className="node-status">{statusLabel(n.Status, t)}</span>
@@ -568,7 +571,7 @@ export function RunDetail() {
                     so it doesn't read as stuck. */}
                 {n.WillRetry && (
                   <span className="node-retry" title={formatAbs(n.RetryAt ?? null)}>
-                    <RotateCw size={11} />
+                    <RotateCw size={ICON.xs} />
                     {retryCountdown(n.RetryAt)
                       ? t("runDetail.willRetry", { when: retryCountdown(n.RetryAt) })
                       : t("runDetail.willRetrySoon")}
@@ -757,7 +760,7 @@ function RunLogs({
     wasLive.current = true;
     const id = window.setInterval(() => {
       fetchMore().catch(() => {});
-    }, 2000);
+    }, POLL.live);
     return () => window.clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live, available, token, runID]);
@@ -906,7 +909,7 @@ function RunFailureBanner({
       : t("runDetail.failed");
   return (
     <div className="run-error-banner">
-      <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 2 }} />
+      <AlertCircle size={ICON.lg} style={{ flexShrink: 0, marginTop: 2 }} />
       <div className="run-error-body">
         {explanation && (
           <div className="run-error-headline">
@@ -977,7 +980,7 @@ function RunFailureBanner({
                 color: "inherit",
               }}
             >
-              <LifeBuoy size={14} style={{ flexShrink: 0 }} />
+              <LifeBuoy size={ICON.sm} style={{ flexShrink: 0 }} />
               {t("runDetail.reportProblem")}
             </button>
           )}
@@ -998,7 +1001,7 @@ function RunFailureBanner({
                 fontWeight: 600,
               }}
             >
-              <LifeBuoy size={14} style={{ flexShrink: 0 }} />
+              <LifeBuoy size={ICON.sm} style={{ flexShrink: 0 }} />
               {t("runDetail.getHelp")}
             </a>
           )}
@@ -1136,15 +1139,6 @@ function retryCountdown(iso: string | null | undefined): string {
   return `${Math.round(secs / 60)}m`;
 }
 
-function formatDuration(startedISO: string, finishedISO: string): string {
-  const start = Date.parse(startedISO);
-  const end = Date.parse(finishedISO);
-  if (!Number.isFinite(start) || !Number.isFinite(end)) return "";
-  const ms = Math.max(0, end - start);
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60_000) return `${(ms / 1000).toFixed(2)}s`;
-  return `${(ms / 60_000).toFixed(1)}m`;
-}
 
 // timestamp tries the Go-shaped capitalized field then the
 // JSON-shaped lowercased one — defends against backend serialization

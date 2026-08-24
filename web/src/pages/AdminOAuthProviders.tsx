@@ -11,6 +11,7 @@ import { ServiceIcon } from "../components/ServiceIcon";
 import type { AdminOAuthProvider } from "../types";
 import { explainApiError } from "../lib/explainApiError";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { ICON } from "../icons";
 
 // AdminOAuthProviders is the paste-client-credentials surface that
 // replaces "edit env vars + restart the daemon" for an operator setting
@@ -189,12 +190,12 @@ function ProviderRow({
 
       <div className="svc-actions">
         <Button variant="primary" onClick={save} disabled={saving || !clientID.trim() || !clientSecret.trim()}>
-          <Save size={14} style={{ marginRight: 4 }} />
-          {saving ? t("admin.oauth.saving") : t("admin.oauth.save")}
+          <Save size={ICON.sm} style={{ marginRight: 4 }} />
+          {saving ? t("common.saving") : t("common.save")}
         </Button>
         {provider.has_persisted && !confirmClear && (
           <Button variant="ghost" onClick={() => setConfirmClear(true)}>
-            <Trash2 size={14} style={{ marginRight: 4 }} />
+            <Trash2 size={ICON.sm} style={{ marginRight: 4 }} />
             {t("admin.oauth.clear")}
           </Button>
         )}
@@ -205,7 +206,7 @@ function ProviderRow({
               {clearing ? t("admin.oauth.clearing") : t("admin.oauth.clearYes")}
             </Button>
             <Button variant="ghost" onClick={() => setConfirmClear(false)}>
-              {t("admin.oauth.clearNo")}
+              {t("common.cancel")}
             </Button>
           </>
         )}

@@ -28,6 +28,8 @@ import type {
 import { formatDate } from "../lib/datetime";
 import { explainApiError } from "../lib/explainApiError";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { ICON } from "../icons";
+import { FEEDBACK } from "../lib/timing";
 
 // isAdminMember reports whether a member's role set grants org admin —
 // either a catalog role named "admin" or any role carrying the
@@ -93,13 +95,13 @@ export function AdminUsers() {
       <div className="page-title">
         <div>
           <h1>
-            <Users size={20} style={{ marginRight: 8, verticalAlign: -3 }} />
+            <Users size={ICON.xl} style={{ marginRight: 8, verticalAlign: -3 }} />
             {t("admin.users.title")}
           </h1>
           <div className="sub">{t("admin.users.subtitle")}</div>
         </div>
         <Button variant="primary" onClick={() => setInviting(true)}>
-          <Plus size={14} style={{ marginRight: 6 }} />
+          <Plus size={ICON.sm} style={{ marginRight: 6 }} />
           {t("admin.users.inviteButton")}
         </Button>
       </div>
@@ -129,7 +131,7 @@ export function AdminUsers() {
           <h2>{t("admin.users.emptyTitle")}</h2>
           <p>{t("admin.users.emptyBody")}</p>
           <Button variant="primary" onClick={() => setInviting(true)}>
-            <Plus size={14} style={{ marginRight: 6 }} />
+            <Plus size={ICON.sm} style={{ marginRight: 6 }} />
             {t("admin.users.inviteFirst")}
           </Button>
         </div>
@@ -281,7 +283,7 @@ function MemberCard({
     <div className="user-card">
       <div style={{ minWidth: 0 }}>
         <div className="subject">
-          <UserCircle2 size={18} />
+          <UserCircle2 size={ICON.lg} />
           {member.email}
           {member.home && (
             <span className="count-pill active" style={{ marginLeft: 8 }}>
@@ -332,7 +334,7 @@ function MemberCard({
         )}
         {!member.home && (
           <Button onClick={remove} disabled={removing} title={t("admin.users.removeTitle")}>
-            <Trash2 size={12} style={{ marginRight: 4 }} />
+            <Trash2 size={ICON.xs} style={{ marginRight: 4 }} />
             {removing ? t("admin.users.removing") : t("admin.users.remove")}
           </Button>
         )}
@@ -392,7 +394,7 @@ function InvitationCard({
     try {
       await navigator.clipboard.writeText(link);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      setTimeout(() => setCopied(false), FEEDBACK.copied);
     } catch {
       // Clipboard API can fail in non-secure contexts — fall back to
       // selecting the link text would require a portal; just leave
@@ -422,7 +424,7 @@ function InvitationCard({
     <div className="user-card">
       <div style={{ minWidth: 0 }}>
         <div className="subject">
-          <Mail size={18} />
+          <Mail size={ICON.lg} />
           {inv.email}
           <span className="count-pill" style={{ marginLeft: 8 }}>
             {statusLabel}
@@ -448,8 +450,8 @@ function InvitationCard({
           <div className="invite-link-row">
             <code className="invite-link">{absoluteInviteURL(inv.accept_url)}</code>
             <Button onClick={copy} title={t("admin.users.copyLink")}>
-              {copied ? <Check size={12} /> : <Copy size={12} />}
-              {copied ? t("admin.users.copied") : t("admin.users.copy")}
+              {copied ? <Check size={ICON.xs} /> : <Copy size={ICON.xs} />}
+              {copied ? t("common.copied") : t("common.copyLink")}
             </Button>
           </div>
         )}
@@ -457,16 +459,16 @@ function InvitationCard({
       <div className="user-card-actions">
         {inv.pending && (
           <Button onClick={() => setConfirmRevoke(true)} disabled={revoking}>
-            <X size={12} style={{ marginRight: 4 }} />
-            {revoking ? t("admin.users.revoking") : t("admin.users.revoke")}
+            <X size={ICON.xs} style={{ marginRight: 4 }} />
+            {revoking ? t("admin.users.revoking") : t("common.revoke")}
           </Button>
         )}
       </div>
       {confirmRevoke && (
         <ConfirmModal
-          title={t("admin.users.revoke")}
+          title={t("common.revoke")}
           message={t("admin.users.revokeInviteConfirm", { email: inv.email })}
-          confirmLabel={t("admin.users.revoke")}
+          confirmLabel={t("common.revoke")}
           danger
           onConfirm={() => {
             setConfirmRevoke(false);
@@ -498,7 +500,7 @@ function InviteIssuedCard({
     try {
       await navigator.clipboard.writeText(link);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      setTimeout(() => setCopied(false), FEEDBACK.copied);
     } catch {
       /* manual copy fallback */
     }
@@ -506,22 +508,22 @@ function InviteIssuedCard({
   return (
     <div className="card invite-issued-card">
       <div className="invite-issued-head">
-        <ShieldCheck size={18} />
+        <ShieldCheck size={ICON.lg} />
         <div>
           <strong>{t("admin.users.inviteCreatedTitle")}</strong>
           <div className="desc">
             {t("admin.users.inviteCreatedBody", { email: inv.email })}
           </div>
         </div>
-        <Button onClick={onDismiss} variant="ghost" title={t("admin.users.dismiss")}>
-          <X size={14} />
+        <Button onClick={onDismiss} variant="ghost" title={t("common.dismiss")}>
+          <X size={ICON.sm} />
         </Button>
       </div>
       <div className="invite-link-row">
         <code className="invite-link">{link}</code>
         <Button onClick={copy} variant="primary">
-          {copied ? <Check size={12} /> : <Copy size={12} />}
-          {copied ? t("admin.users.copied") : t("admin.users.copyLink")}
+          {copied ? <Check size={ICON.xs} /> : <Copy size={ICON.xs} />}
+          {copied ? t("common.copied") : t("admin.users.copyLink")}
         </Button>
       </div>
     </div>
@@ -650,7 +652,7 @@ function InviteModal({
         </div>
         <div className="settings-foot">
           <Button type="button" onClick={onCancel}>
-            {t("admin.users.cancel")}
+            {t("common.cancel")}
           </Button>
           <Button type="submit" variant="primary" disabled={!canSubmit}>
             {submitting ? t("admin.users.sending") : t("admin.users.sendInvite")}

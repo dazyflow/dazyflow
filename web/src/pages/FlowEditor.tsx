@@ -74,7 +74,7 @@ import { useThemeMode } from "../theme";
 import i18n from "../i18n";
 import { api, APIError, isErrorCode, isHTTPStatus } from "../api";
 import { oauthProviderDisplay } from "../integrationMeta";
-import { iconFor } from "../icons";
+import { iconFor, ICON } from "../icons";
 import {
   requiredConnections,
   requiredSecrets,
@@ -117,6 +117,7 @@ import type {
 } from "../types";
 import { diffGraphs, diffIsEmpty, type GraphDiff } from "../lib/diffGraphs";
 import { formatDateTime } from "../lib/datetime";
+import { EDITOR_NARROW, isNarrower } from "../lib/breakpoints";
 import { Inspector } from "../components/Inspector";
 import { FlowStatusChip } from "../components/FlowStatusChip";
 import { flowRunStatusPublished } from "../flowStatus";
@@ -138,6 +139,7 @@ import { PublishLabelModal } from "../components/PublishLabelModal";
 import { Button } from "../components/Button";
 import { ContactSupportLink } from "../components/ContactSupportLink";
 import { useResourceResolver } from "./useResourceResolver";
+import { POLL } from "../lib/timing";
 
 // Custom node-types registry. React Flow caches by reference, so this
 // is declared at module scope rather than inline in the component to
@@ -574,14 +576,15 @@ function EditorInner() {
   // This keeps a single tap on a drop from slamming the full sheet over
   // the canvas — see inspectorExpanded below.
   //
-  // isNarrow tracks the same 1100px breakpoint the CSS uses. It gates both
-  // the expand chevron and the close-X on the inspector head so the desktop
-  // layout (where the panel is always visible) stays clean.
+  // isNarrow tracks EDITOR_NARROW, the same breakpoint the CSS switches the
+  // inspector at. It gates both the expand chevron and the close-X on the
+  // inspector head so the desktop layout (where the panel is always visible)
+  // stays clean.
   const [isNarrow, setIsNarrow] = useState<boolean>(() =>
-    typeof window !== "undefined" ? window.innerWidth <= 1100 : false,
+    isNarrower(EDITOR_NARROW),
   );
   useEffect(() => {
-    const onResize = () => setIsNarrow(window.innerWidth <= 1100);
+    const onResize = () => setIsNarrow(isNarrower(EDITOR_NARROW));
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
@@ -3445,7 +3448,7 @@ function EditorInner() {
   // runs while locked, so there's no idle polling cost.
   useEffect(() => {
     if (!lockedRunID) return;
-    const h = window.setInterval(() => void refreshLock(), 3000);
+    const h = window.setInterval(() => void refreshLock(), POLL.live);
     return () => window.clearInterval(h);
   }, [lockedRunID, refreshLock]);
 
@@ -4105,7 +4108,7 @@ function EditorInner() {
               title={t("editor.undoTitle")}
               aria-label={t("editor.undo")}
             >
-              <Undo2 size={15} />
+              <Undo2 size={ICON.sm} />
             </Button>
             <Button
               variant="ghost"
@@ -4114,7 +4117,7 @@ function EditorInner() {
               title={t("editor.redoTitle")}
               aria-label={t("editor.redo")}
             >
-              <Redo2 size={15} />
+              <Redo2 size={ICON.sm} />
             </Button>
           </div>
           <span className="toolbar-divider" aria-hidden="true" />
@@ -4127,7 +4130,7 @@ function EditorInner() {
               title={t("editor.addDropTitle")}
               aria-label={t("editor.addDrop")}
             >
-              <Plus size={15} />
+              <Plus size={ICON.sm} />
               <span className="toolbar-label">{t("editor.addDrop")}</span>
             </Button>
             {/* Triggers are configured on their nodes now (Schedule / Poll /
@@ -4138,7 +4141,7 @@ function EditorInner() {
               title={t("editor.addFrameTitle")}
               aria-label={t("editor.addFrame")}
             >
-              <StickyNote size={15} />
+              <StickyNote size={ICON.sm} />
               <span className="toolbar-label">{t("editor.addFrame")}</span>
             </Button>
             {/* One-click "Tidy" — re-columns the whole graph by dependency
@@ -4150,7 +4153,7 @@ function EditorInner() {
                 title={t("editor.tidyTitle")}
               aria-label={t("editor.tidy")}
               >
-                <LayoutGrid size={15} />
+                <LayoutGrid size={ICON.sm} />
                 <span className="toolbar-label">{t("editor.tidy")}</span>
               </Button>
             )}
@@ -4165,27 +4168,27 @@ function EditorInner() {
               <div className="toolbar-group toolbar-align">
                 <Button variant="ghost" title={t("editor.alignLeft")}
               aria-label={t("editor.alignLeft")} onClick={() => alignNodes("left")}>
-                  <AlignStartVertical size={15} />
+                  <AlignStartVertical size={ICON.sm} />
                 </Button>
                 <Button variant="ghost" title={t("editor.alignHCenter")}
               aria-label={t("editor.alignHCenter")} onClick={() => alignNodes("hcenter")}>
-                  <AlignCenterVertical size={15} />
+                  <AlignCenterVertical size={ICON.sm} />
                 </Button>
                 <Button variant="ghost" title={t("editor.alignRight")}
               aria-label={t("editor.alignRight")} onClick={() => alignNodes("right")}>
-                  <AlignEndVertical size={15} />
+                  <AlignEndVertical size={ICON.sm} />
                 </Button>
                 <Button variant="ghost" title={t("editor.alignTop")}
               aria-label={t("editor.alignTop")} onClick={() => alignNodes("top")}>
-                  <AlignStartHorizontal size={15} />
+                  <AlignStartHorizontal size={ICON.sm} />
                 </Button>
                 <Button variant="ghost" title={t("editor.alignVCenter")}
               aria-label={t("editor.alignVCenter")} onClick={() => alignNodes("vcenter")}>
-                  <AlignCenterHorizontal size={15} />
+                  <AlignCenterHorizontal size={ICON.sm} />
                 </Button>
                 <Button variant="ghost" title={t("editor.alignBottom")}
               aria-label={t("editor.alignBottom")} onClick={() => alignNodes("bottom")}>
-                  <AlignEndHorizontal size={15} />
+                  <AlignEndHorizontal size={ICON.sm} />
                 </Button>
                 <Button
                   variant="ghost"
@@ -4194,7 +4197,7 @@ function EditorInner() {
                   disabled={selectedCount < 3}
                   onClick={() => distributeNodes("h")}
                 >
-                  <AlignHorizontalDistributeCenter size={15} />
+                  <AlignHorizontalDistributeCenter size={ICON.sm} />
                 </Button>
                 <Button
                   variant="ghost"
@@ -4203,7 +4206,7 @@ function EditorInner() {
                   disabled={selectedCount < 3}
                   onClick={() => distributeNodes("v")}
                 >
-                  <AlignVerticalDistributeCenter size={15} />
+                  <AlignVerticalDistributeCenter size={ICON.sm} />
                 </Button>
               </div>
               <Button
@@ -4213,7 +4216,7 @@ function EditorInner() {
                 title={t("editor.groupSubgraphTitle")}
               aria-label={t("editor.groupSubgraph")}
               >
-                <Group size={15} />
+                <Group size={ICON.sm} />
                 <span className="toolbar-label">{t("editor.groupSubgraph")}</span>
               </Button>
             </>
@@ -4232,7 +4235,7 @@ function EditorInner() {
                 onClick={toggleBreakpoint}
                 title={`${t("editor.breakpointTitle")} — b`}
               >
-                <CircleDot size={15} />
+                <CircleDot size={ICON.sm} />
                 <span className="toolbar-label">{t("editor.breakpoint")}</span>
               </Button>
             </>
@@ -4254,28 +4257,28 @@ function EditorInner() {
                     ? t("editor.readOnly")
                     : lockedRunID
                     ? t("editor.lockedRun", { runID: lockedRunID.slice(0, 8) })
-                    : t("editor.save")
+                    : t("common.save")
                 }
               >
-                <Save size={15} />
+                <Save size={ICON.sm} />
                 <span className="toolbar-label">
-                  {lockedRunID ? t("editor.locked") : t("editor.save")}
+                  {lockedRunID ? t("editor.locked") : t("common.save")}
                 </span>
               </Button>
             ) : dirty || saving ? (
               // Edits are pending or a save is in flight — autosave
               // (AUTOSAVE_DEBOUNCE_MS) persists them on its own, so show a
               // non-clickable spinner rather than a clickable floppy.
-              <span className="editor-saving" title={t("editor.saving")}>
-                <Loader2 size={15} className="spin" />
-                <span className="toolbar-label">{t("editor.saving")}</span>
+              <span className="editor-saving" title={t("common.saving")}>
+                <Loader2 size={ICON.sm} className="spin" />
+                <span className="toolbar-label">{t("common.saving")}</span>
               </span>
             ) : (
               // Everything's saved and we're on the live graph — a calm
               // confirmation.
-              <span className="editor-saved" title={t("editor.saved")}>
-                <Check size={15} />
-                <span className="toolbar-label">{t("editor.saved")}</span>
+              <span className="editor-saved" title={t("common.saved")}>
+                <Check size={ICON.sm} />
+                <span className="toolbar-label">{t("common.saved")}</span>
               </span>
             )}
             {me && id && (
@@ -4285,7 +4288,7 @@ function EditorInner() {
                 title={t("editor.historyTitle")}
               aria-label={t("editor.history")}
               >
-                <History size={15} />
+                <History size={ICON.sm} />
                 <span className="toolbar-label">{t("editor.history")}</span>
               </Button>
             )}
@@ -4320,7 +4323,7 @@ function EditorInner() {
                     >
                       <span className="editor-publish-track" aria-hidden="true">
                         <span className="editor-publish-knob">
-                          <Rocket size={11} strokeWidth={2.4} />
+                          <Rocket size={ICON.xs} strokeWidth={2.4} />
                         </span>
                       </span>
                       <span className="toolbar-label">
@@ -4347,7 +4350,7 @@ function EditorInner() {
                           : t("editor.publishChangesTitle")
                       }
                     >
-                      <UploadCloud size={15} />
+                      <UploadCloud size={ICON.sm} />
                       <span className="toolbar-label">
                         {publishing ? t("editor.publishing") : t("editor.publishChanges")}
                       </span>
@@ -4358,7 +4361,7 @@ function EditorInner() {
                       title={t("editor.diffTitle")}
               aria-label={t("editor.diff")}
                     >
-                      <GitCompare size={15} />
+                      <GitCompare size={ICON.sm} />
                       <span className="toolbar-label">{t("editor.diff")}</span>
                     </Button>
                   </>
@@ -4382,7 +4385,7 @@ function EditorInner() {
               aria-haspopup="dialog"
               aria-expanded={showConfigList}
             >
-              <AlertCircle size={14} />
+              <AlertCircle size={ICON.sm} />
               <span className="toolbar-label">
                 {t("editor.configWarn", { count: configErrorsByNode.size })}
               </span>
@@ -4434,7 +4437,7 @@ function EditorInner() {
                     : t("editor.missingRunPerm")
                 }
               >
-                <Square size={14} />
+                <Square size={ICON.sm} />
                 <span className="toolbar-label">
                   {cancelling ? t("runAction.stopping") : t("runAction.stop")}
                 </span>
@@ -4452,7 +4455,7 @@ function EditorInner() {
                     : t("editor.missingRunPerm")
                 }
               >
-                <Send size={15} />
+                <Send size={ICON.sm} />
                 <span className="toolbar-label">{t("editor.testEvent")}</span>
               </Button>
             ) : (
@@ -4470,7 +4473,7 @@ function EditorInner() {
                     : t("editor.run")
                 }
               >
-                <Play size={15} />
+                <Play size={ICON.sm} />
                 <span className="toolbar-label">{t("editor.run")}</span>
               </Button>
             )}
@@ -4487,7 +4490,7 @@ function EditorInner() {
                 disabled={publishing}
                 title={disabled ? t("editor.resumeTitle") : t("editor.pauseTitle")}
               >
-                {disabled ? <Play size={15} /> : <Pause size={15} />}
+                {disabled ? <Play size={ICON.sm} /> : <Pause size={ICON.sm} />}
                 <span className="toolbar-label">
                   {disabled ? t("editor.paused") : t("editor.enabledState")}
                 </span>
@@ -4507,7 +4510,7 @@ function EditorInner() {
               disabled={!pausedAt}
               onClick={() => resumeRun(false)}
             >
-              <Play size={16} />
+              <Play size={ICON.md} />
             </Button>
             <Button
               size="icon"
@@ -4516,7 +4519,7 @@ function EditorInner() {
               disabled={!pausedAt}
               onClick={() => resumeRun(true)}
             >
-              <StepForward size={16} />
+              <StepForward size={ICON.md} />
             </Button>
             <Button
               size="icon"
@@ -4524,7 +4527,7 @@ function EditorInner() {
               disabled={breakpoints.size === 0}
               onClick={clearBreakpoints}
             >
-              <CircleOff size={16} />
+              <CircleOff size={ICON.md} />
             </Button>
           </div>
         )}
@@ -4540,13 +4543,13 @@ function EditorInner() {
               aria-label={t("editor.inspect")}
             onClick={() => setInspectorExpanded(true)}
           >
-            <PanelRight size={18} />
+            <PanelRight size={ICON.lg} />
           </Button>
         )}
         {previewRef && (
           <div className={`history-preview-banner${showHistory ? " with-panel" : ""}`}>
             <span className="history-preview-msg">
-              <History size={14} style={{ verticalAlign: -2, marginRight: 6 }} />
+              <History size={ICON.sm} style={{ verticalAlign: -2, marginRight: 6 }} />
               {t("editor.viewingOld", {
                 when: timeAgo(
                   revisions.find((r) => r.commit === previewRef)?.when ?? "",
@@ -4564,7 +4567,7 @@ function EditorInner() {
                   previewRef === revisions[0]?.commit
                 }
               >
-                <RotateCcw size={13} style={{ marginRight: 5 }} />
+                <RotateCcw size={ICON.sm} style={{ marginRight: 5 }} />
                 {restoring ? t("editor.restoring") : t("editor.restore")}
               </Button>
               <Button variant="ghost" onClick={() => void exitPreview()} disabled={restoring}>
@@ -4582,7 +4585,7 @@ function EditorInner() {
                 onClick={() => setShowHistory(false)}
                 aria-label={t("common.dismiss")}
               >
-                <X size={16} />
+                <X size={ICON.md} />
               </Button>
             </div>
             {historyLoading ? (
@@ -4605,13 +4608,13 @@ function EditorInner() {
                         <span className="history-row-author">{rev.author}</span>
                         {rev.label && (
                           <span className="history-badge label" title={t("editor.labelBadgeTitle")}>
-                            <Tag size={11} style={{ verticalAlign: -1, marginRight: 3 }} />
+                            <Tag size={ICON.xs} style={{ verticalAlign: -1, marginRight: 3 }} />
                             {rev.label}
                           </span>
                         )}
                         {publishedCommit === rev.commit && (
                           <span className="history-badge live" title={t("editor.publishedTitle")}>
-                            <Rocket size={11} style={{ verticalAlign: -1, marginRight: 3 }} />
+                            <Rocket size={ICON.xs} style={{ verticalAlign: -1, marginRight: 3 }} />
                             {t("editor.currentRelease")}
                           </span>
                         )}
@@ -4630,7 +4633,7 @@ function EditorInner() {
                         onClick={() => setLabelEditing(rev)}
                         title={t("editor.labelTitle")}
                       >
-                        <Tag size={12} style={{ marginRight: 4 }} />
+                        <Tag size={ICON.xs} style={{ marginRight: 4 }} />
                         {rev.label ? t("editor.relabel") : t("editor.label")}
                       </Button>
                     )}
@@ -4645,7 +4648,7 @@ function EditorInner() {
                         disabled={publishing}
                         title={t("editor.makeLiveTitle")}
                       >
-                        <Rocket size={12} style={{ marginRight: 4 }} />
+                        <Rocket size={ICON.xs} style={{ marginRight: 4 }} />
                         {t("editor.makeLive")}
                       </Button>
                     )}
@@ -4681,7 +4684,7 @@ function EditorInner() {
             >
               <div className="modal-head">
                 <strong>
-                  <Send size={15} style={{ verticalAlign: -2, marginRight: 6 }} />
+                  <Send size={ICON.sm} style={{ verticalAlign: -2, marginRight: 6 }} />
                   {t("editor.testRunHeading")}
                 </strong>
                 <Button
@@ -4689,7 +4692,7 @@ function EditorInner() {
                   onClick={() => setTestEventOpen(false)}
                   aria-label={t("common.dismiss")}
                 >
-                  <X size={16} />
+                  <X size={ICON.md} />
                 </Button>
               </div>
               <div className="modal-body">
@@ -4718,7 +4721,7 @@ function EditorInner() {
                   onClick={() => void submitTestEvent()}
                   disabled={!hasPerm("graph:run")}
                 >
-                  <Send size={14} style={{ marginRight: 5 }} />
+                  <Send size={ICON.sm} style={{ marginRight: 5 }} />
                   {t("editor.testRunFire")}
                 </Button>
               </div>
@@ -4738,7 +4741,7 @@ function EditorInner() {
             >
               <div className="modal-head">
                 <strong>
-                  <GitCompare size={15} style={{ verticalAlign: -2, marginRight: 6 }} />
+                  <GitCompare size={ICON.sm} style={{ verticalAlign: -2, marginRight: 6 }} />
                   {t("editor.diffHeading")}
                 </strong>
                 <Button
@@ -4746,7 +4749,7 @@ function EditorInner() {
                   onClick={() => setDiffOpen(false)}
                   aria-label={t("common.dismiss")}
                 >
-                  <X size={16} />
+                  <X size={ICON.md} />
                 </Button>
               </div>
               <div className="modal-body">
@@ -4801,7 +4804,7 @@ function EditorInner() {
                   }}
                   disabled={publishing || !!previewRef}
                 >
-                  <Rocket size={14} style={{ marginRight: 5 }} />
+                  <Rocket size={ICON.sm} style={{ marginRight: 5 }} />
                   {t("editor.publish")}
                 </Button>
               </div>
@@ -4962,7 +4965,7 @@ function EditorInner() {
               style={{ pointerEvents: "auto", marginTop: 4 }}
               onClick={() => setPaletteOpen(true)}
             >
-              <Plus size={15} />
+              <Plus size={ICON.sm} />
               <span>{t("editor.addEntryPoint")}</span>
             </Button>
           </div>
@@ -4998,7 +5001,7 @@ function EditorInner() {
           !lockedRunID &&
           !error && (
             <div className="editor-trigger-hint" role="status">
-              <Zap size={15} className="editor-trigger-hint-icon" />
+              <Zap size={ICON.sm} className="editor-trigger-hint-icon" />
               <span className="editor-trigger-hint-text">
                 {t("editor.triggerHint")}
               </span>
@@ -5006,10 +5009,10 @@ function EditorInner() {
                 variant="ghost"
                 className="editor-trigger-hint-x"
                 onClick={dismissTriggerHint}
-                title={t("editor.dismiss")}
-                aria-label={t("editor.dismiss")}
+                title={t("common.dismiss")}
+                aria-label={t("common.dismiss")}
               >
-                <X size={14} />
+                <X size={ICON.sm} />
               </Button>
             </div>
           )}
@@ -5019,16 +5022,16 @@ function EditorInner() {
         <div className="editor-banner-stack">
         {connHint && (
           <div className="editor-conn-hint" role="status">
-            <AlertCircle size={15} className="editor-conn-hint-icon" />
+            <AlertCircle size={ICON.sm} className="editor-conn-hint-icon" />
             <span className="editor-conn-hint-text">{connHint}</span>
             <Button
               variant="ghost"
               className="editor-conn-hint-x"
               onClick={() => setConnHint(null)}
-              title={t("editor.dismiss")}
-              aria-label={t("editor.dismiss")}
+              title={t("common.dismiss")}
+              aria-label={t("common.dismiss")}
             >
-              <X size={14} />
+              <X size={ICON.sm} />
             </Button>
           </div>
         )}
@@ -5075,7 +5078,7 @@ function EditorInner() {
                 title={t("runAction.retryTitle")}
                 style={{ flexShrink: 0 }}
               >
-                <RotateCcw size={13} style={{ marginRight: 4 }} />
+                <RotateCcw size={ICON.sm} style={{ marginRight: 4 }} />
                 {t("runAction.retry")}
               </Button>
             )}
@@ -5086,9 +5089,9 @@ function EditorInner() {
                 setFailedRun(null);
               }}
               style={{ fontSize: "var(--text-xs)", padding: "2px 8px", color: "var(--danger)" }}
-              aria-label={t("editor.dismiss")}
+              aria-label={t("common.dismiss")}
             >
-              {t("editor.dismiss")}
+              {t("common.dismiss")}
             </Button>
           </div>
         )}
@@ -5127,9 +5130,9 @@ function EditorInner() {
                 variant="ghost"
                 onClick={() => setRunDone(null)}
                 style={{ fontSize: "var(--text-xs)", padding: "2px 8px" }}
-                aria-label={t("editor.dismiss")}
+                aria-label={t("common.dismiss")}
               >
-                {t("editor.dismiss")}
+                {t("common.dismiss")}
               </Button>
             </div>
             {runDone.preview && (
@@ -5179,7 +5182,7 @@ function EditorInner() {
                 style={{ fontSize: "var(--text-xs)", padding: "2px 8px" }}
                 aria-label={t("editor.dismissLint")}
               >
-                {t("editor.dismiss")}
+                {t("common.dismiss")}
               </Button>
             </div>
             <ul style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 6 }}>
@@ -5239,7 +5242,7 @@ function EditorInner() {
                             draggable={false}
                           />
                         ) : (
-                          <SetupIcon size={14} className="editor-conn-chip-logo" />
+                          <SetupIcon size={ICON.sm} className="editor-conn-chip-logo" />
                         )}
                         {s.integration}
                       </span>
@@ -5293,9 +5296,9 @@ function EditorInner() {
               <Button
                 variant="ghost"
                 onClick={() => setConnBannerDismissed(true)}
-                aria-label={t("editor.dismiss")}
+                aria-label={t("common.dismiss")}
               >
-                {t("editor.dismiss")}
+                {t("common.dismiss")}
               </Button>
             </span>
           </div>
@@ -5546,7 +5549,7 @@ function EditorInner() {
                       ]
                     : []),
                   { separator: true },
-                  { label: t("editor.ctxDelete"), shortcut: "Del", danger: true, disabled: !canEdit, onClick: () => del({ nodes: [{ id: menu.id }] }) },
+                  { label: t("common.delete"), shortcut: "Del", danger: true, disabled: !canEdit, onClick: () => del({ nodes: [{ id: menu.id }] }) },
                 ]
               : [
                   {
@@ -5577,7 +5580,7 @@ function EditorInner() {
           message={t("editor.confirmDeleteBody", {
             count: deletePending.nodes + deletePending.edges,
           })}
-          confirmLabel={t("editor.delete")}
+          confirmLabel={t("common.delete")}
           danger
           onConfirm={() => {
             deletePending.resolve(true);

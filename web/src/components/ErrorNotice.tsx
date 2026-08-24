@@ -3,6 +3,7 @@
 
 import type { CSSProperties, ReactNode } from "react";
 import { AlertCircle } from "lucide-react";
+import { ICON } from "../icons";
 
 // ErrorNotice is THE way to show a failed action or load in the app UI. It
 // exists because error rendering had drifted into three shapes: a bare
@@ -31,7 +32,7 @@ export function ErrorNotice({
     // role="alert" so a screen reader announces the failure when it appears —
     // these are almost always rendered in response to a user action.
     <div className={className ? `card error ${className}` : "card error"} style={style} role="alert">
-      <AlertCircle size={14} aria-hidden="true" />
+      <AlertCircle size={ICON.sm} aria-hidden="true" />
       {/* A div, not a span: some messages carry block content (a paragraph
           plus a button), which is invalid nested inside a span. */}
       <div className="card-error-body">{children}</div>

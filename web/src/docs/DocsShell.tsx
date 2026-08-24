@@ -10,42 +10,33 @@ import { ReactNode, useCallback, useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { NAV } from "./content";
+import { MOBILE, isNarrower, mediaQuery } from "../lib/breakpoints";
+import { ICON } from "../icons";
+import { savedCollapsePref, initialNavCollapsed } from "../lib/navCollapse";
 
 // Mirrors AppShell's rail behaviour: a persisted desktop collapse choice; small
 // viewports default to the icons-only rail / slide-over drawer.
 const COLLAPSE_KEY = "dazyflow.docs.sidebar.collapsed";
-const MOBILE_BREAK = 768;
 const INVITE = "mailto:hi@dazyflow.app?subject=Dazyflow%20early%20access";
 
-function savedCollapsePref(): boolean {
-  try {
-    return localStorage.getItem(COLLAPSE_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-function initialNavCollapsed(): boolean {
-  if (typeof window !== "undefined" && window.innerWidth <= MOBILE_BREAK) return true;
-  return savedCollapsePref();
-}
 
 export function DocsShell({ children }: { children: ReactNode }) {
-  const [navCollapsed, setNavCollapsed] = useState<boolean>(initialNavCollapsed);
+  const [navCollapsed, setNavCollapsed] = useState<boolean>(() => initialNavCollapsed(COLLAPSE_KEY));
   const location = useLocation();
 
   // Track the viewport: collapse into the rail below the breakpoint, restore
   // the saved desktop choice above it (matches AppShell).
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return;
-    const mq = window.matchMedia(`(max-width: ${MOBILE_BREAK}px)`);
-    const apply = () => setNavCollapsed(mq.matches ? true : savedCollapsePref());
+    const mq = window.matchMedia(mediaQuery(MOBILE));
+    const apply = () => setNavCollapsed(mq.matches ? true : savedCollapsePref(COLLAPSE_KEY));
     mq.addEventListener("change", apply);
     return () => mq.removeEventListener("change", apply);
   }, []);
 
   // Close the mobile drawer after navigating.
   useEffect(() => {
-    if (typeof window !== "undefined" && window.innerWidth <= MOBILE_BREAK) {
+    if (isNarrower(MOBILE)) {
       setNavCollapsed(true);
     }
   }, [location.pathname]);
@@ -54,7 +45,7 @@ export function DocsShell({ children }: { children: ReactNode }) {
     setNavCollapsed((c) => {
       const next = !c;
       try {
-        if (window.innerWidth > MOBILE_BREAK) {
+        if (!isNarrower(MOBILE)) {
           localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0");
         }
       } catch {
@@ -121,7 +112,7 @@ export function DocsShell({ children }: { children: ReactNode }) {
                         draggable={false}
                       />
                     ) : (
-                      <Icon size={18} />
+                      <Icon size={ICON.lg} />
                     )}
                     <span className="nav-label">{item.text}</span>
                   </NavLink>
@@ -135,7 +126,7 @@ export function DocsShell({ children }: { children: ReactNode }) {
             onClick={toggleNav}
             title={navCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
-            {navCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+            {navCollapsed ? <ChevronRight size={ICON.lg} /> : <ChevronLeft size={ICON.lg} />}
             <span className="nav-label">Collapse</span>
           </button>
         </aside>

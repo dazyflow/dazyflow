@@ -12,6 +12,8 @@ import type { AccessGrant } from "../types";
 import { formatDate } from "../lib/datetime";
 import { explainApiError } from "../lib/explainApiError";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { ICON } from "../icons";
+import { isGrantActive } from "../lib/grants";
 
 // AdminSupport is the org-admin consent surface for the Support feature (see
 // docs/support-tickets-design.md). Support staff request a scoped, time-boxed,
@@ -67,7 +69,7 @@ export function AdminSupport() {
       <div className="page-title">
         <div>
           <h1>
-            <LifeBuoy size={20} style={{ marginRight: 8, verticalAlign: -3 }} />
+            <LifeBuoy size={ICON.xl} style={{ marginRight: 8, verticalAlign: -3 }} />
             {t("admin.support.title", { defaultValue: "Support access" })}
           </h1>
           <div className="sub">
@@ -130,11 +132,6 @@ export function AdminSupport() {
   );
 }
 
-// isActive mirrors core.AccessGrant.IsActive for display: approved, not revoked,
-// not past expiry. Purely for the "active" pill / revoke affordance.
-function isActive(g: AccessGrant): boolean {
-  return g.status === "approved" && !g.revoked_at && new Date(g.expires_at).getTime() > Date.now();
-}
 
 function GrantCard({ grant, onChanged }: { grant: AccessGrant; onChanged: () => void }) {
   const { t } = useTranslation();
@@ -171,7 +168,7 @@ function GrantCard({ grant, onChanged }: { grant: AccessGrant; onChanged: () => 
     }
   };
 
-  const active = isActive(grant);
+  const active = isGrantActive(grant);
   const statusLabel = t(`admin.support.status.${grant.status}`, {
     defaultValue: grant.status,
   });
@@ -180,7 +177,7 @@ function GrantCard({ grant, onChanged }: { grant: AccessGrant; onChanged: () => 
     <div className="user-card">
       <div style={{ minWidth: 0 }}>
         <div className="subject">
-          <ShieldCheck size={18} />
+          <ShieldCheck size={ICON.lg} />
           {/* Plain-language consent line, e.g. "support@vendor wants to view
               'daily-invoice' (read-only)". */}
           {t("admin.support.requestLine", {
@@ -218,19 +215,19 @@ function GrantCard({ grant, onChanged }: { grant: AccessGrant; onChanged: () => 
         {grant.status === "requested" && (
           <>
             <Button variant="primary" onClick={() => void decide("approve")} disabled={busy}>
-              <Check size={12} style={{ marginRight: 4 }} />
+              <Check size={ICON.xs} style={{ marginRight: 4 }} />
               {t("admin.support.approve", { defaultValue: "Approve" })}
             </Button>
             <Button onClick={() => void decide("deny")} disabled={busy}>
-              <X size={12} style={{ marginRight: 4 }} />
+              <X size={ICON.xs} style={{ marginRight: 4 }} />
               {t("admin.support.deny", { defaultValue: "Deny" })}
             </Button>
           </>
         )}
         {active && (
           <Button onClick={() => setConfirmRevoke(true)} disabled={busy}>
-            <X size={12} style={{ marginRight: 4 }} />
-            {t("admin.support.revoke", { defaultValue: "Revoke" })}
+            <X size={ICON.xs} style={{ marginRight: 4 }} />
+            {t("common.revoke", { defaultValue: "Revoke" })}
           </Button>
         )}
       </div>
@@ -241,13 +238,13 @@ function GrantCard({ grant, onChanged }: { grant: AccessGrant; onChanged: () => 
       )}
       {confirmRevoke && (
         <ConfirmModal
-          title={t("admin.support.revoke", { defaultValue: "Revoke" })}
+          title={t("common.revoke", { defaultValue: "Revoke" })}
           message={t("admin.support.revokeConfirm", {
             defaultValue: "Revoke {{agent}}'s access to '{{flow}}' now?",
             agent: grant.agent_subject,
             flow: grant.flow_id,
           })}
-          confirmLabel={t("admin.support.revoke", { defaultValue: "Revoke" })}
+          confirmLabel={t("common.revoke", { defaultValue: "Revoke" })}
           danger
           onConfirm={() => {
             setConfirmRevoke(false);

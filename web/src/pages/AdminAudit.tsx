@@ -9,6 +9,7 @@ import { api, APIError } from "../api";
 import type { AuditEvent } from "../types";
 import { formatDateTime } from "../lib/datetime";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { ICON } from "../icons";
 
 // AdminAudit shows the tenant's administrative trail — graph saves, runs,
 // secret/key changes, approvals, cancels — newest first. Read-only;
@@ -56,7 +57,7 @@ export function AdminAudit() {
       <div className="page-title">
         <div>
           <h1>
-            <ShieldAlert size={20} style={{ marginRight: 8, verticalAlign: -3 }} />
+            <ShieldAlert size={ICON.xl} style={{ marginRight: 8, verticalAlign: -3 }} />
             {t("admin.audit.title")}
           </h1>
           <div className="sub">{t("admin.audit.subtitle")}</div>

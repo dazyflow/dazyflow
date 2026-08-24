@@ -12,6 +12,7 @@ import { explainApiError } from "../lib/explainApiError";
 import type { InvitationDetails } from "../types";
 import { formatDateTime } from "../lib/datetime";
 import { ErrorNotice } from "../components/ErrorNotice";
+import { ICON } from "../icons";
 
 // AcceptInvite is the landing page for an invite link. It's reachable
 // without auth so a recipient can read who invited them and to which
@@ -75,7 +76,7 @@ export function AcceptInvite() {
         <div className="signin">
           <h1>{t("acceptInvite.title")}</h1>
           <div className="error">
-            <AlertCircle size={14} style={{ verticalAlign: -2 }} /> {error}
+            <AlertCircle size={ICON.sm} style={{ verticalAlign: -2 }} /> {error}
           </div>
         </div>
       </div>
@@ -121,7 +122,7 @@ export function AcceptInvite() {
         </p>
         <ul className="invite-meta-list">
           <li>
-            <ShieldCheck size={14} />
+            <ShieldCheck size={ICON.sm} />
             {t("acceptInvite.rolesLine", {
               roles: details.roles.map((r) => r.name).join(", "),
             })}
@@ -143,7 +144,7 @@ export function AcceptInvite() {
         )}
         {error && (
           <div className="error">
-            <AlertCircle size={14} style={{ verticalAlign: -2 }} /> {error}
+            <AlertCircle size={ICON.sm} style={{ verticalAlign: -2 }} /> {error}
           </div>
         )}
 

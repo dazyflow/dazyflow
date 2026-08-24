@@ -12,6 +12,7 @@ import { Button } from "./Button";
 import { ConfirmModal } from "./ConfirmModal";
 import { UserAvatar } from "./PlatformAvatar";
 import { ErrorNotice } from "./ErrorNotice";
+import { ICON } from "../icons";
 
 const ROLE_NAMES = ["viewer", "editor", "admin"] as const;
 
@@ -138,7 +139,7 @@ export function MembersSection({ tenant }: { tenant: string }) {
                   onClick={() => setConfirmRemove(m)}
                   title={t("admin.platformMembers.remove")}
                 >
-                  <Trash2 size={13} />
+                  <Trash2 size={ICON.sm} />
                 </Button>
               )}
             </div>
@@ -158,7 +159,7 @@ export function MembersSection({ tenant }: { tenant: string }) {
         <input
           type="email"
           value={inviteEmail}
-          placeholder={t("admin.platformMembers.emailPlaceholder")}
+          placeholder={t("common.emailPlaceholder")}
           onChange={(e) => setInviteEmail(e.target.value)}
           style={{ flex: 1, minWidth: 200 }}
         />
@@ -170,7 +171,7 @@ export function MembersSection({ tenant }: { tenant: string }) {
           ))}
         </select>
         <Button variant="primary" disabled={busy === "__invite__" || !inviteEmail.trim()} onClick={() => void invite()}>
-          <UserPlus size={14} style={{ marginRight: 6 }} />
+          <UserPlus size={ICON.sm} style={{ marginRight: 6 }} />
           {t("admin.platformMembers.invite")}
         </Button>
       </div>

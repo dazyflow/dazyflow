@@ -33,7 +33,7 @@ import { CommentNode } from "../components/CommentNode";
 import { RerouteEdge } from "../components/RerouteEdge";
 import { portColor, type DazyNodeData } from "../components/nodeCardShared";
 import { Button } from "../components/Button";
-import { iconFor } from "../icons";
+import { iconFor, ICON } from "../icons";
 import type { JobStatus, Manifest, SupportBundle } from "../types";
 import { ErrorNotice } from "../components/ErrorNotice";
 
@@ -104,7 +104,7 @@ export function SupportFlowView() {
   if (gate === "disabled") {
     return (
       <CenterCard tone="muted">
-        <Info size={16} style={{ marginRight: 6, verticalAlign: -3 }} />
+        <Info size={ICON.md} style={{ marginRight: 6, verticalAlign: -3 }} />
         {t("supportView.notEnabled")}
       </CenterCard>
     );
@@ -112,7 +112,7 @@ export function SupportFlowView() {
   if (gate === "forbidden") {
     return (
       <CenterCard tone="danger">
-        <Lock size={16} style={{ marginRight: 6, verticalAlign: -3 }} />
+        <Lock size={ICON.md} style={{ marginRight: 6, verticalAlign: -3 }} />
         {t("supportView.forbidden")}
       </CenterCard>
     );
@@ -130,7 +130,7 @@ export function SupportFlowView() {
   if (error) {
     return (
       <CenterCard tone="danger">
-        <AlertCircle size={16} style={{ marginRight: 6, verticalAlign: -3 }} />
+        <AlertCircle size={ICON.md} style={{ marginRight: 6, verticalAlign: -3 }} />
         {error}
       </CenterCard>
     );
@@ -201,7 +201,7 @@ function RequestAccessCard({
       <div className="support-view-center">
         <div className="card" style={{ maxWidth: 460 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: "var(--space-2)" }}>
-            <ShieldCheck size={18} />
+            <ShieldCheck size={ICON.lg} />
             <strong>{t("supportView.requestHead")}</strong>
           </div>
           <div className="sub" style={{ marginBottom: "var(--space-3)" }}>
@@ -213,7 +213,7 @@ function RequestAccessCard({
           </div>
           {requested ? (
             <div className="card" style={{ color: "var(--muted)", marginBottom: "var(--space-3)" }}>
-              <Info size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+              <Info size={ICON.sm} style={{ marginRight: 6, verticalAlign: -2 }} />
               {t("supportView.requestPending")}
             </div>
           ) : (
@@ -370,16 +370,16 @@ function SupportCanvas({
     <div className="support-view-shell">
       <header className="support-view-head">
         <Link to="/support" className="back-link" title={t("supportView.back")}>
-          <ChevronLeft size={16} />
+          <ChevronLeft size={ICON.md} />
         </Link>
         <span className="support-view-flowicon">
-          <FlowGlyph size={18} />
+          <FlowGlyph size={ICON.lg} />
         </span>
         <div className="support-view-title">
           <div className="support-view-name">
             {bundle.flow.name || bundle.flow.id}
             <span className="support-view-ro">
-              <Lock size={11} style={{ marginRight: 3, verticalAlign: -1 }} />
+              <Lock size={ICON.xs} style={{ marginRight: 3, verticalAlign: -1 }} />
               {t("supportView.readOnly")}
             </span>
           </div>
@@ -460,12 +460,12 @@ function SupportCanvas({
 
         <aside className="support-view-issues">
           <div className="support-view-issues-head">
-            <LifeBuoy size={14} />
+            <LifeBuoy size={ICON.sm} />
             {t("supportView.issuesHead", { count: issues.length })}
           </div>
           {run?.error && (
             <div className="support-view-issue is-error">
-              <AlertCircle size={13} />
+              <AlertCircle size={ICON.sm} />
               <div>
                 <div className="support-view-issue-msg">{run.error.message}</div>
                 {run.error.details && (
@@ -484,7 +484,7 @@ function SupportCanvas({
                 key={`${iss.code}-${i}`}
                 className={"support-view-issue " + (iss.severity === "error" ? "is-error" : "is-warn")}
               >
-                {iss.severity === "error" ? <AlertCircle size={13} /> : <AlertTriangle size={13} />}
+                {iss.severity === "error" ? <AlertCircle size={ICON.sm} /> : <AlertTriangle size={ICON.sm} />}
                 <div>
                   <div className="support-view-issue-msg">{iss.message}</div>
                   {iss.node_ids && iss.node_ids.length > 0 && (
