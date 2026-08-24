@@ -131,7 +131,7 @@ export function AdminGoogle() {
   }
 
   return (
-    <div className="admin-google">
+    <div>
       <div className="page-title">
         <div>
           <h1>
@@ -149,13 +149,13 @@ export function AdminGoogle() {
         {!notConfigured && (
           <Button
             variant="primary"
-            className="icon-text-btn"
+            collapseLabel
             onClick={() => setConnectOpen(true)}
             disabled={busy}
             title={t("admin.google.connectAnother")}
           >
             <Plus size={ICON.sm} />
-            <span className="btn-label">{t("admin.google.connectAnother")}</span>
+            {t("admin.google.connectAnother")}
           </Button>
         )}
       </div>
@@ -187,23 +187,24 @@ export function AdminGoogle() {
                 <span className="google-account-actions">
                   <Button
                     variant="ghost"
-                    className="icon-text-btn"
+                    collapseLabel
                     onClick={() => void authorize(acc.account)}
                     disabled={busy}
                     title={t("admin.google.reconnectHint")}
                   >
                     <RefreshCw size={ICON.sm} />
-                    <span className="btn-label">{t("admin.google.reconnect")}</span>
+                    {t("admin.google.reconnect")}
                   </Button>
                   <Button
                     variant="ghost"
-                    className="danger icon-text-btn"
+                    collapseLabel
+                    className="danger"
                     onClick={() => setPendingDisconnect(acc.account)}
                     disabled={busy}
                     title={t("common.disconnect")}
                   >
                     <Trash2 size={ICON.sm} />
-                    <span className="btn-label">{t("common.disconnect")}</span>
+                    {t("common.disconnect")}
                   </Button>
                 </span>
               </div>

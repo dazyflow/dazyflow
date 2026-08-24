@@ -61,6 +61,9 @@ const PARTNER_APPLIED_AT_RUNTIME = new Set([
   // overrides it, so `live` is a deliberate no-op marker for the default
   // state rather than a missing rule. Checked before "fixing" it.
   "live",
+  // React Flow toggles this on its own handle while a connection drag is in
+  // flight; `.react-flow__handle.connectingto` is the compound it lands in.
+  "connectingto",
 ]);
 
 // KNOWN_MISSING is a DEBT LEDGER, not an approval list: an entry is a class
@@ -96,7 +99,15 @@ const srcFiles = walk(
   (n) => /\.tsx?$/.test(n) && !/\.test\./.test(n) && !/\.d\.ts$/.test(n),
 );
 
-const css = cssFiles.map((f) => readFileSync(f, "utf8")).join("\n");
+// Comments are stripped before anything is parsed. They are prose, and prose
+// about CSS is full of class names — the note explaining the modal rename
+// mentions `.settings-backdrop`, which is precisely a class that should NOT
+// exist any more. Reading them as selectors made three retired names look
+// defined to the forward check and look orphaned to the reverse one.
+const css = cssFiles
+  .map((f) => readFileSync(f, "utf8"))
+  .join("\n")
+  .replace(/\/\*[\s\S]*?\*\//g, "");
 
 const NAME = "-?[_a-zA-Z][_a-zA-Z0-9-]*";
 
@@ -337,6 +348,50 @@ for (const cls of KNOWN_MISSING) {
       `.${cls} is in KNOWN_MISSING but now resolves — delete the entry`,
     );
   }
+}
+
+// The other direction: a rule nothing can ever match.
+//
+// The check above asks whether every class a component renders has a rule. This
+// asks the reverse, and it exists because the gap between them let a real bug
+// through: renaming `.settings-foot` to `.modal-foot` updated app.css and every
+// component, and missed two rules in theme.css. Nothing failed — the classes
+// components asked for all still resolved. But `.confirm-dialog .settings-foot
+// button.danger` was the only thing making the delete-confirm's button solid
+// red, and it had quietly stopped matching anything. The same scan found a
+// `@media` block styling a triggers dialog that no longer exists.
+//
+// Reachability here is deliberately cruder than the check above: does the name
+// appear ANYWHERE in the source text? A class can reach an element through a
+// template literal, a concatenation, a lookup table or a prop, and a parser that
+// tried to model all of those would produce false alarms — which, in a guard, is
+// worse than a miss. A bare substring search cannot produce one.
+const allSource = srcFiles.map((f) => readFileSync(f, "utf8")).join("\n");
+
+// A class can also be assembled at runtime: `callout-${variant}`,
+// `"run-dot-" + status`. Those prefixes are discovered rather than listed, so
+// adding a variant never means editing this guard.
+const dynamicPrefixes = new Set();
+// Not anchored to the opening quote: the prefix is usually mid-literal, as in
+// `callout callout-${variant}`.
+for (const m of allSource.matchAll(/([A-Za-z][\w-]*-)\$\{/g)) dynamicPrefixes.add(m[1]);
+for (const m of allSource.matchAll(/([A-Za-z][\w-]*-)["'`]\s*\+/g)) dynamicPrefixes.add(m[1]);
+
+// Markup this app does not author, so no component names these classes.
+const THIRD_PARTY = ["react-flow__", "leaflet-", "xterm-", "cm-", "tippy-"];
+
+const orphaned = [...new Set([...standalone, ...compounds.flat()])]
+  .filter((cls) => !allSource.includes(cls))
+  .filter((cls) => !THIRD_PARTY.some((p) => cls.startsWith(p)))
+  .filter((cls) => !PARTNER_APPLIED_AT_RUNTIME.has(cls))
+  .filter((cls) => ![...dynamicPrefixes].some((p) => cls.startsWith(p)))
+  .sort();
+
+for (const cls of orphaned) {
+  fail.push(
+    `.${cls} has a rule but no component ever renders it` +
+      ` — delete the rule, or fix the name if it was renamed on one side only`,
+  );
 }
 
 if (fail.length) {

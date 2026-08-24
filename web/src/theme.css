@@ -502,14 +502,14 @@ button.danger:hover:not(:disabled),
    drifted to a red block on one surface and a red outline on the other. */
 button.danger.filled,
 .btn.danger.filled,
-.confirm-dialog .settings-foot button.danger {
+.confirm-dialog .modal-foot button.danger {
   background: var(--danger);
   color: #fff;
   border-color: var(--danger);
 }
 button.danger.filled:hover:not(:disabled),
 .btn.danger.filled:hover,
-.confirm-dialog .settings-foot button.danger:hover {
+.confirm-dialog .modal-foot button.danger:hover {
   background: var(--danger);
   filter: brightness(1.08);
 }

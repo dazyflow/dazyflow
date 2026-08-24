@@ -2459,13 +2459,14 @@
   font-size: var(--text-sm);
   padding: var(--space-0) var(--space-2);
 }
-/* Icon + label buttons that collapse to icon-only on mobile. The layout it
-   used to declare — inline-flex, centred, gapped — is now what every button
-   does, so this class survives only as the hook the media query below hides
-   .btn-label with. */
+/* Icon + label buttons that collapse to icon-only on mobile.
+   The layout this class used to declare — inline-flex, centred, gapped — is now
+   what every button does, so all it carries is the collapse. It is emitted by
+   <Button collapseLabel>, which also wraps the label in .btn-label; three call
+   sites used to write both by hand, which worked but scoped the rule below to
+   one page. Keyed off the class, it now works wherever the prop is used. */
 @media (max-width: 768px) {
-  /* Google admin page: drop button labels, keep the icons. */
-  .admin-google .btn-label {
+  .icon-text-btn .btn-label {
     display: none;
   }
 }
@@ -7484,22 +7485,6 @@ a.pa-card:hover {
   padding: var(--space-3) var(--space-5);
   border-top: 1px solid var(--border);
   background: var(--surface-2);
-}
-/* On small screens the triggers editor goes fullscreen: its tabbed
-   form/webhook/schedule content needs the full viewport rather than a
-   cramped centred card. */
-@media (max-width: 600px) {
-  .modal-backdrop:has(.triggers-dialog) {
-    padding: 0;
-  }
-  .triggers-dialog {
-    max-width: none;
-    width: 100%;
-    height: 100%;
-    max-height: 100%;
-    border: none;
-    border-radius: 0;
-  }
 }
 /* MCP connect modal: a touch wider than the default dialog, and goes
    edge-to-edge on small screens so its client cards, OS tabs, and config
