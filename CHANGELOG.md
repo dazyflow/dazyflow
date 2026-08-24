@@ -23,6 +23,24 @@ into the image.)
 
 ## [Unreleased]
 
+### Changed
+
+- **The step inspector no longer approves.** A step parked on an approval
+  offered approve/reject in two places at once — the canvas card's bar and a
+  panel in the inspector — and they weren't the same control: only the
+  inspector's carried the comment box, so the fuller version of the action was
+  the one hidden behind selecting the step. The inspector's panel is gone. The
+  canvas keeps its decide-in-place bar for the run you're already watching, and
+  the run page and Approvals inbox keep the full control, comment included.
+
+  The inspector was also the one surface that couldn't say *which* run it was
+  deciding: it is graph-scoped and binds to "whichever run is latest", and
+  nothing stops a schedule from starting a second run while the first sits
+  parked on the same step (`SubmitGraph` has no active-run gate). The other two
+  surfaces are run-scoped by construction. A parked run additionally blocks
+  saving the flow, so the inspector's real job — editing config — was disabled
+  for exactly as long as the panel was on screen.
+
 ### Fixed
 
 - **Duplicate approval emails — found and fixed.** 0.10.0 added a log line to

@@ -17,7 +17,6 @@ import {
 } from "./SchemaForm";
 import { LiveConsole } from "./LiveConsole";
 import { ConfirmModal } from "./ConfirmModal";
-import { ApprovalPanel } from "./ApprovalPanel";
 import { RenderTemplatePreview } from "./RenderTemplatePreview";
 import { RenderTextPreview } from "./RenderTextPreview";
 import { RenderTableColumns } from "./RenderTableColumns";
@@ -80,9 +79,11 @@ type Props = {
   // tokenLabels: "nodeId.port" → friendly step·port names so fields holding
   // one ${upstream.…} token render as a readable chip.
   tokenLabels?: Record<string, string>;
-  // currentRunID is the most-recent run for this graph (set when the
-  // user clicks Run). Used by the inline approval panel for
-  // await_approval nodes.
+  // currentRunID is the most-recent run for this graph (set when the user
+  // clicks Run). Used by the render_text / render_table editors to read real
+  // values off that run. Note it is graph-scoped, not run-scoped: it names
+  // whichever run is latest, which is why no decision control (approvals)
+  // hangs off it — see ApprovalPanel.
   currentRunID: string | null;
   // upstreamRows: for a render_text step, the rows its `rows` producer emitted
   // on the last run — the parent resolves it from the run outputs so the
@@ -190,9 +191,6 @@ export function Inspector({
   const [mode, setMode] = useState<Mode>("form");
   const [jsonText, setJsonText] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
-  // Approve/reject UI lives in ApprovalPanel (mounted below for an awaiting
-  // await_approval node); it owns its own comment/in-flight state, discarded
-  // when the user clicks away and it unmounts.
   const { hasPerm } = useAuth();
 
   // Loop-body reference tokens: when the selected node runs inside a for_each
@@ -497,14 +495,6 @@ export function Inspector({
               </div>
             )}
           </div>
-        )}
-
-        {d.moduleID === "await_approval" && d.status === "awaiting" && currentRunID && (
-          <ApprovalPanel
-            runID={currentRunID}
-            nodeID={selected.id}
-            prompt={typeof currentParams.prompt === "string" ? currentParams.prompt : undefined}
-          />
         )}
 
         {mode === "form" && canForm && schema && isCronTrigger && (

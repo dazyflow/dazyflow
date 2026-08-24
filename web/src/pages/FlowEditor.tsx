@@ -1609,8 +1609,9 @@ function EditorInner() {
   );
 
   // approveFromCard resolves an await_approval step straight from its canvas
-  // card. Same endpoint the Inspector's ApprovalPanel and the Approvals inbox
-  // call; the decision flips the node status over SSE and dispatches
+  // card — the editor's only decision control. Same endpoint ApprovalPanel
+  // (run page) and the Approvals inbox call; the decision flips the node
+  // status over SSE and dispatches
   // downstream, so there is nothing to refresh here. Errors surface on the
   // editor's existing error bar rather than on the card, which is about to be
   // replaced by the resumed state anyway.
