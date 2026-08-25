@@ -69,6 +69,21 @@ func (h *HTTPGateway) runnersConfigured(rw http.ResponseWriter) bool {
 	return true
 }
 
+// runnerTasksConfigured is the agent endpoints' gate: the registry AND the
+// queue. One function rather than `!h.runnersConfigured(rw) || h.RunnerTasks
+// == nil` followed by a write, which sent the 501 body TWICE when the registry
+// was the missing half — two concatenated JSON envelopes in one response.
+func (h *HTTPGateway) runnerTasksConfigured(rw http.ResponseWriter) bool {
+	if !h.runnersConfigured(rw) {
+		return false
+	}
+	if h.RunnerTasks == nil {
+		writeJSONError(rw, http.StatusNotImplemented, "runners are not configured on this deployment")
+		return false
+	}
+	return true
+}
+
 func (h *HTTPGateway) listRunners(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !requireRunnerAdmin(rw, p) || !h.runnersConfigured(rw) {
 		return
@@ -209,8 +224,7 @@ type claimResponse struct {
 // is why an idle agent must keep polling rather than sleeping quietly. That is
 // also what makes "online" mean something without a connection to watch.
 func (h *HTTPGateway) claimRunnerTask(rw http.ResponseWriter, r *http.Request) {
-	if !h.runnersConfigured(rw) || h.RunnerTasks == nil {
-		writeJSONError(rw, http.StatusNotImplemented, "runners are not configured on this deployment")
+	if !h.runnerTasksConfigured(rw) {
 		return
 	}
 	runner, ok := h.authRunner(rw, r)
@@ -246,8 +260,7 @@ type progressRequest struct {
 // nothing for the whole lease is indistinguishable from an agent that died, and
 // the honest response to that is to let the task go.
 func (h *HTTPGateway) runnerTaskProgress(rw http.ResponseWriter, r *http.Request) {
-	if !h.runnersConfigured(rw) || h.RunnerTasks == nil {
-		writeJSONError(rw, http.StatusNotImplemented, "runners are not configured on this deployment")
+	if !h.runnerTasksConfigured(rw) {
 		return
 	}
 	runner, ok := h.authRunner(rw, r)
@@ -257,10 +270,8 @@ func (h *HTTPGateway) runnerTaskProgress(rw http.ResponseWriter, r *http.Request
 	var req progressRequest
 	_ = decodeRunnerBody(r, &req) // a progress ping with no body is fine
 	id := r.PathValue("id")
-	if err := h.RunnerTasks.Extend(r.Context(), id, runner.Name, time.Now().Add(TaskLease)); err != nil {
-		// 409: the agent is reporting on work it no longer holds, which is a
-		// state conflict rather than a bad request. It should stop and poll.
-		writeJSONError(rw, http.StatusConflict, "this task is no longer yours")
+	if err := h.RunnerTasks.Extend(r.Context(), runner, id, time.Now().Add(TaskLease), req.Message); err != nil {
+		writeRunnerTaskError(rw, err)
 		return
 	}
 	rw.WriteHeader(http.StatusNoContent)
@@ -268,8 +279,7 @@ func (h *HTTPGateway) runnerTaskProgress(rw http.ResponseWriter, r *http.Request
 
 // runnerTaskResult records the outcome and releases the task.
 func (h *HTTPGateway) runnerTaskResult(rw http.ResponseWriter, r *http.Request) {
-	if !h.runnersConfigured(rw) || h.RunnerTasks == nil {
-		writeJSONError(rw, http.StatusNotImplemented, "runners are not configured on this deployment")
+	if !h.runnerTasksConfigured(rw) {
 		return
 	}
 	runner, ok := h.authRunner(rw, r)
@@ -278,15 +288,45 @@ func (h *HTTPGateway) runnerTaskResult(rw http.ResponseWriter, r *http.Request) 
 	}
 	var res RunnerTaskResult
 	if err := decodeRunnerBody(r, &res); err != nil {
+		var tooBig *http.MaxBytesError
+		if errors.As(err, &tooBig) {
+			// 413, and a message that says what to do. The old 400 read as
+			// "your agent is broken" for a script that simply printed a lot,
+			// and the agent treated it as terminal — so the task stranded and
+			// the step blamed a machine that was online and healthy.
+			writeJSONError(rw, http.StatusRequestEntityTooLarge,
+				"this step's output is larger than the server accepts; "+
+					"have the script write it to a file or print less")
+			return
+		}
 		writeJSONError(rw, http.StatusBadRequest, "malformed request body")
 		return
 	}
 	id := r.PathValue("id")
-	if err := h.RunnerTasks.Complete(r.Context(), id, runner.Name, res, time.Now()); err != nil {
-		writeJSONError(rw, http.StatusConflict, "this task is no longer yours")
+	if err := h.RunnerTasks.Complete(r.Context(), runner, id, res, time.Now()); err != nil {
+		writeRunnerTaskError(rw, err)
 		return
 	}
 	rw.WriteHeader(http.StatusNoContent)
+}
+
+// writeRunnerTaskError separates "this task is not yours" from "the database
+// was briefly unhappy".
+//
+// The distinction is the agent's, not ours: it treats a 409 as terminal and
+// moves on, so collapsing a transient pool error into one throws away a result
+// that could have been retried, and the step then fails with "the runner
+// stopped responding" for a machine that is online and holding the answer.
+func writeRunnerTaskError(rw http.ResponseWriter, err error) {
+	if errors.Is(err, ErrTaskNotClaimable) {
+		// 409: the agent is reporting on work it no longer holds, which is a
+		// state conflict rather than a bad request. It should stop and poll.
+		writeJSONError(rw, http.StatusConflict, "this task is no longer yours")
+		return
+	}
+	// 503 rather than 500: it is worth retrying, and the agent branches on it.
+	writeJSONError(rw, http.StatusServiceUnavailable,
+		"could not record this just now — try again")
 }
 
 // decodeRunnerBody reads a bounded JSON body.
@@ -295,5 +335,11 @@ func (h *HTTPGateway) runnerTaskResult(rw http.ResponseWriter, r *http.Request) 
 // entire output, and a runaway script producing gigabytes must not become the
 // daemon's problem.
 func decodeRunnerBody(r *http.Request, into any) error {
-	return json.NewDecoder(http.MaxBytesReader(nil, r.Body, 4<<20)).Decode(into)
+	return json.NewDecoder(http.MaxBytesReader(nil, r.Body, MaxRunnerBodyBytes)).Decode(into)
 }
+
+// MaxRunnerBodyBytes caps an agent's request body. Exported because the agent
+// is the one that has to stay under it: it trims its own output first, so the
+// step gets a clear "the script printed too much" rather than a rejected POST
+// and a task nobody ever closes.
+const MaxRunnerBodyBytes = 4 << 20

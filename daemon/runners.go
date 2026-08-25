@@ -171,6 +171,10 @@ CREATE TABLE IF NOT EXISTS runner_tokens (
     used_at     TIMESTAMPTZ,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- MintToken sweeps expired tokens on the request path, so that DELETE runs
+-- while an admin waits for their install command. Without this it is a
+-- sequential scan of every token ever minted.
+CREATE INDEX IF NOT EXISTS runner_tokens_expiry_idx ON runner_tokens (expires_at);
 `
 
 // EnsurePgRunnerSchema creates the runner tables.

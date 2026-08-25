@@ -35,6 +35,15 @@ export function AdminRunners() {
   // and cannot be fetched again, so navigating away loses it on purpose.
   const [minted, setMinted] = useState<RunnerToken | null>(null);
   const [minting, setMinting] = useState(false);
+  // confirmRemove holds the runner name being asked about; null = no prompt.
+  // Inline rather than a modal, matching AdminAPIKeys, so focus stays on the
+  // row being acted on.
+  //
+  // There is a prompt at all because removing a runner is not undoable: it
+  // revokes that machine's credential, and re-adding it means a fresh token
+  // and a second visit to the machine. Every sibling admin page confirms a
+  // destructive action; this one used to delete on a single click.
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
 
   const load = useCallback(() => {
     if (!token) return;
@@ -82,6 +91,7 @@ export function AdminRunners() {
   const remove = async (name: string) => {
     if (!token) return;
     setError(null);
+    setConfirmRemove(null);
     try {
       await api.deleteRunner(token, name);
       load();
@@ -129,7 +139,7 @@ export function AdminRunners() {
             </thead>
             <tbody>
               {runners.map((r) => (
-                <tr key={r.name}>
+                <tr key={r.name} className={confirmRemove === r.name ? "row-confirming" : undefined}>
                   <td>{r.name}</td>
                   <td className="muted runner-labels">
                     {r.labels?.length ? r.labels.join(" · ") : "—"}
@@ -139,15 +149,27 @@ export function AdminRunners() {
                   </td>
                   <td className="muted runner-agent">{r.version || "—"}</td>
                   <td className="runner-actions">
-                    <Button
-                      variant="ghost"
-                      className="danger"
-                      onClick={() => void remove(r.name)}
-                      title={t("runners.remove")}
-                      aria-label={t("runners.remove")}
-                    >
-                      <Trash2 size={ICON.sm} />
-                    </Button>
+                    {confirmRemove === r.name ? (
+                      <span className="inline-confirm">
+                        {t("runners.removeReally")}{" "}
+                        <Button variant="danger" onClick={() => void remove(r.name)}>
+                          {t("common.remove")}
+                        </Button>
+                        <Button variant="ghost" onClick={() => setConfirmRemove(null)}>
+                          {t("common.cancel")}
+                        </Button>
+                      </span>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        className="danger"
+                        onClick={() => setConfirmRemove(r.name)}
+                        title={t("runners.remove")}
+                        aria-label={t("runners.remove")}
+                      >
+                        <Trash2 size={ICON.sm} />
+                      </Button>
+                    )}
                   </td>
                 </tr>
               ))}

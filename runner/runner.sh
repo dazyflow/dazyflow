@@ -30,11 +30,20 @@ set -eu
 # DAZYFLOW_URL is substituted by the server. The fallback keeps the script
 # usable straight from the repository, where nothing has substituted anything.
 URL="${DAZYFLOW_URL:-@@DAZYFLOW_URL@@}"
+# The server substitutes the checksum of the agent it is serving. Left as the
+# placeholder when this file comes straight from the repository, where there is
+# no server to vouch for anything and the check is skipped with a word about it.
+AGENT_SHA256="@@DAZYFLOW_AGENT_SHA256@@"
 TOKEN=""
 NAME=""
 LABELS=""
 ALLOW=""
 SERVICE=""
+
+# How long systemd waits for the agent to finish its current task on stop.
+# Covers the agent's own default script timeout (600s) with room to report the
+# result, so a drain is never cut short by a SIGKILL.
+STOP_TIMEOUT="660s"
 
 UNIT_NAME="dazyflow-runner"
 UNIT_DIR="$HOME/.config/systemd/user"
@@ -164,6 +173,17 @@ write_unit() {
 		[ -n "$url" ] && printf ' --url "%s"' "$url"
 		[ -n "$allow" ] && printf ' --allow "%s"' "$allow"
 		echo
+		# The agent's SIGTERM handler stops it BETWEEN tasks, so a stop or a
+		# restart drains rather than killing a command halfway through — but
+		# only if systemd lets it. The default KillMode=control-group SIGTERMs
+		# every process in the cgroup, which is the running script and its
+		# children, so the promise in the agent's handler and in `restart`
+		# below was not kept. KillMode=mixed sends the signal to the agent
+		# alone and leaves the script to finish.
+		echo "KillMode=mixed"
+		# Long enough to cover the step's own ceiling (the agent's default
+		# timeout is 600s), or systemd SIGKILLs the script it just spared.
+		echo "TimeoutStopSec=$STOP_TIMEOUT"
 		echo "Restart=always"
 		echo "RestartSec=10"
 		echo
@@ -211,8 +231,15 @@ Register it first — get a token from Admin -> Runners and run:
 		die "systemd would not reload its unit files. Finish with:
   systemctl --user daemon-reload
   systemctl --user enable --now $UNIT_NAME"
-	if systemctl --user enable --now "$UNIT_NAME"; then
+	# enable --now STARTS a unit; on one that is already active it does
+	# nothing, so the running process keeps its original ExecStart argv. That
+	# matters because re-running install is the documented way to TIGHTEN the
+	# allow-list: without the restart the operator gets "Started." while the
+	# old, looser list is still in force until the next reboot.
+	if systemctl --user enable "$UNIT_NAME" && systemctl --user restart "$UNIT_NAME"; then
 		echo "Started. It will come back on its own if it stops."
+		echo "(Restarted, so any change to runner.env is in force now. The"
+		echo " agent finishes its current task first.)"
 	else
 		die "the service was written but would not start.
 This machine is registered, so there is no need for a new token. See why with:
@@ -252,6 +279,50 @@ fetch() {
 	else
 		die "need curl or wget to download the agent."
 	fi
+}
+
+# sha256_of prints a file's checksum, or nothing if this machine has no tool
+# for it. Three spellings because the one that exists depends on the OS:
+# GNU/BusyBox coreutils, the BSDs, and machines with only openssl.
+sha256_of() {
+	if command -v sha256sum >/dev/null 2>&1; then
+		sha256sum "$1" | cut -d" " -f1
+	elif command -v shasum >/dev/null 2>&1; then
+		shasum -a 256 "$1" | cut -d" " -f1
+	elif command -v openssl >/dev/null 2>&1; then
+		openssl dgst -sha256 "$1" | sed "s/.*= *//"
+	fi
+}
+
+# verify_agent checks the downloaded agent against the checksum the server
+# published, and refuses to continue if they disagree.
+#
+# This file is about to chmod +x something and run it as a service, so what
+# vouches for those bytes matters. Without the check the answer is "the
+# transport did" — which behind a proxy that terminates TLS and does not say so
+# can mean a plain-HTTP download.
+#
+# Not a signature: the checksum comes down the same channel as the script, so it
+# does not help against someone who controls the whole channel. It does catch
+# the split channel, a tampered mirror, a truncated download, and an agent that
+# has drifted from the server it will talk to.
+verify_agent() {
+	case "$AGENT_SHA256" in
+	"" | *@@*)
+		echo "Note: no checksum published for the agent (running from a repository copy)."
+		return 0
+		;;
+	esac
+	got=$(sha256_of "$1")
+	if [ -z "$got" ]; then
+		echo "Note: no sha256 tool on this machine, so the agent was not verified."
+		return 0
+	fi
+	[ "$got" = "$AGENT_SHA256" ] || die "the downloaded agent does not match the checksum $URL published.
+  expected $AGENT_SHA256
+  got      $got
+Nothing was installed and your token has not been used. This means the file
+changed between the server and this machine — check the URL and try again."
 }
 
 cmd_setup() {
@@ -328,13 +399,27 @@ It ships with most systems; install it and run this again."
 
 	mkdir -p "$DIR"
 	echo "Downloading the agent to $AGENT"
-	fetch "$URL/dzrunner.py" "$AGENT"
-	chmod +x "$AGENT"
+	# Verified BEFORE it lands on its final path, so a failed check leaves no
+	# half-trusted file behind and nothing has been made executable.
+	fetch "$URL/dzrunner.py" "$AGENT.new"
+	verify_agent "$AGENT.new"
+	chmod +x "$AGENT.new"
+	mv -f "$AGENT.new" "$AGENT"
 
 	# And a copy of ourselves, because this one came down a pipe and is not on
 	# disk anywhere. That copy is what manages the runner from now on.
-	fetch "$URL/runner.sh" "$DIR/runner.sh"
-	chmod +x "$DIR/runner.sh"
+	#
+	# Downloaded beside the target and moved into place, never written over it.
+	# After the first install the only copy the operator has is
+	# $DIR/runner.sh, and the script itself invites a re-run ("consider
+	# re-running with --allow"). Writing over it would truncate and rewrite the
+	# file /bin/sh is reading by byte offset, so the rest of this run would
+	# execute whatever now sits at that position — after the single-use token
+	# had already been spent. rename(2) is atomic and leaves the open file
+	# intact.
+	fetch "$URL/runner.sh" "$DIR/runner.sh.new"
+	chmod +x "$DIR/runner.sh.new"
+	mv -f "$DIR/runner.sh.new" "$DIR/runner.sh"
 
 	# Show what is about to be trusted. One line, but it points at a file the
 	# operator can actually read — which is the reason it is a script.
@@ -411,7 +496,9 @@ start | stop | restart)
 	need_systemd
 	require_installed
 	# The agent stops between tasks, so stopping does not kill a command
-	# halfway through.
+	# halfway through — the unit sets KillMode=mixed and a TimeoutStopSec that
+	# covers a full-length task, which is what makes that true rather than
+	# merely intended.
 	systemctl --user "$1" "$UNIT_NAME"
 	echo "Done ($1)."
 	;;

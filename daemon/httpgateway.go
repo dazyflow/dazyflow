@@ -275,6 +275,13 @@ type HTTPGateway struct {
 	// floods. Lazily defaulted in mountRoutes when left nil.
 	WebhookRateLimit *ipRateLimiter
 
+	// RunnerRateLimit throttles the agent's own endpoints (register, claim,
+	// progress, result) per client IP. They sit outside requireAuth and each
+	// touches the database before it can reject a stranger, so without a
+	// throttle one host can saturate the connection pool and starve both
+	// legitimate runner polling and the web app. Defaulted in the constructor.
+	RunnerRateLimit *ipRateLimiter
+
 	// TrustProxyHeaders makes the gateway honor X-Forwarded-Proto when
 	// deciding whether a request arrived over HTTPS (for the Secure
 	// cookie flag + HSTS). Enable ONLY when dzd sits behind a trusted
@@ -341,6 +348,7 @@ func NewHTTPGateway(svc *Service) *HTTPGateway {
 		// gateway is never usable without them.
 		SupportRateLimit: newIPRateLimiter(defaultSupportRatePerMin, defaultSupportRateBurst),
 		WebhookRateLimit: newIPRateLimiter(defaultWebhookRatePerMin, defaultWebhookRateBurst),
+		RunnerRateLimit:  newIPRateLimiter(defaultRunnerRatePerMin, defaultRunnerRateBurst),
 	}
 }
 

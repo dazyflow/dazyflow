@@ -1747,7 +1747,19 @@ func (s *Service) ListDrops(ctx context.Context, p core.Principal) (map[string]c
 // the support-view path to run core.ValidateGraphFull for the bundle's issues
 // (safe by design: validation references node IDs / field names, never values).
 // Returns nil when the resolver exposes no manifests.
-func (s *Service) manifestsSnapshot() map[string]core.Manifest {
+//
+// TENANT-SCOPED, and it has to be. A tenant's runner drops live in the remote
+// catalog keyed by (tenant, id), so the unscoped map does not contain them by
+// construction. Validating a flow against that map accuses a working flow of
+// `references unknown module "csv-transform"` and then SKIPS every dependent
+// structural check on that node — so the diagnostic that exists to explain a
+// failure leads with a fabricated one, and hides the real issue behind it.
+func (s *Service) manifestsSnapshot(tenant string) map[string]core.Manifest {
+	if mp, ok := s.Engine.Resolver.(interface {
+		ManifestsForTenant(string) map[string]core.Manifest
+	}); ok {
+		return mp.ManifestsForTenant(tenant)
+	}
 	mp, ok := s.Engine.Resolver.(interface {
 		Manifests() map[string]core.Manifest
 	})

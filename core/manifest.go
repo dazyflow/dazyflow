@@ -127,7 +127,8 @@ type Port struct {
 	// reference. Set on every input of a tenant runner's drop: a Ref's path is
 	// on the daemon's own disk, which means nothing to a process on another
 	// machine. The editor uses it to say so on the port rather than leaving the
-	// failure to a run; engine/remote.go refuses such a job before dialling.
+	// failure to a run; the engine refuses such a job before the step runs
+	// (engine.refuseInlineOnlyFileRefs), whether the drop is native or remote.
 	InlineOnly bool `json:"inline_only,omitempty" xml:"inline_only,omitempty"`
 }
 

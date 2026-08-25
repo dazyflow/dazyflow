@@ -4,7 +4,6 @@
 package engine
 
 import (
-	"context"
 	"strings"
 	"testing"
 
@@ -120,30 +119,48 @@ func TestManifests_UnscopedCarriesNoRunners(t *testing.T) {
 
 // ---- the inline-only bound --------------------------------------------
 
-// Ref.Ref is a path on the DAEMON's disk. Sending it to a runner on another
-// machine would fail inside the org's own code, reporting a missing file the
-// org would reasonably read as their bug. Refuse here, naming the real cause.
-func TestExecute_RefusesAFileRefBeforeDialling(t *testing.T) {
-	// No connection at all: if the refusal did not happen first, this would
-	// fail on a nil client instead, so the test also proves the ordering.
-	tr := &RemoteTransport{
-		Descriptor: RemoteDescriptor{ID: "box", Tenant: "acme", Endpoint: "127.0.0.1:1"},
-		manifest:   core.Manifest{ID: "fetch"},
-		dropID:     "fetch",
+// Ref.Ref is a path on the DAEMON's disk. Sending it to a step that cannot read
+// it would fail inside the org's own code, reporting a missing file the org
+// would reasonably read as their bug. Refuse before the step runs, naming the
+// real cause.
+//
+// Driven by the MANIFEST, not by the transport, which is what makes it cover
+// `run_on_runner` — a NATIVE drop that declares InlineOnly and used to receive
+// a file ref, silently run its script with empty stdin, and report SUCCESS.
+func TestRefuseInlineOnlyFileRefs(t *testing.T) {
+	m := core.Manifest{
+		ID: "fetch",
+		Inputs: []core.Port{
+			{Port: "in", InlineOnly: true},
+			{Port: "notes"},
+		},
 	}
-	_, err := tr.Execute(context.Background(), core.Job{
-		ID:    "j1",
-		Input: map[string]core.Ref{"in": {Ref: "invoices/march.csv", MIME: "text/csv"}},
-	}, nil)
+	err := refuseInlineOnlyFileRefs(m, map[string]core.Ref{
+		"in": {Ref: "invoices/march.csv", MIME: "text/csv"},
+	})
 	if err == nil {
-		t.Fatal("a job carrying a file path was sent to a runner")
+		t.Fatal("a file path reached a port that cannot read one")
 	}
 	// The message has to name the cause, the port, and the fix — this is the
 	// error a flow author reads when their file-wired step stops working.
-	for _, want := range []string{"in", "invoices/march.csv", "runner", "value"} {
+	for _, want := range []string{"in", "invoices/march.csv", "value"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("err = %q, missing %q", err.Error(), want)
 		}
+	}
+	// An inline value on the same port is the supported shape.
+	if err := refuseInlineOnlyFileRefs(m, map[string]core.Ref{
+		"in": {Inline: "march", MIME: "text/plain"},
+	}); err != nil {
+		t.Errorf("an inline value was refused: %v", err)
+	}
+	// A port that never declared the bound keeps taking files. Refusing every
+	// file ref on every remote transport regressed co-located gRPC modules,
+	// which read the daemon's disk perfectly well.
+	if err := refuseInlineOnlyFileRefs(m, map[string]core.Ref{
+		"notes": {Ref: "notes.txt"},
+	}); err != nil {
+		t.Errorf("a file was refused on a port that never declared InlineOnly: %v", err)
 	}
 }
 
@@ -251,5 +268,59 @@ func TestManifestFromPB_DropsAnUnknownCategory(t *testing.T) {
 		if got := manifestFromPB(&nodepb.Manifest{Id: "x", Category: c}).Category; got != c {
 			t.Errorf("category %q was dropped", c)
 		}
+	}
+}
+
+// A remote may not take a built-in's id.
+//
+// lookup() prefers Native, but the manifest map used to add Remote after it —
+// so the palette and validation showed the REMOTE's manifest while every run
+// executed the built-in. Nothing errored; the flow author was reading a
+// description of something that never ran.
+func TestRegister_RefusesADropIdABuiltInAlreadyOwns(t *testing.T) {
+	c := NewRemoteCatalog()
+	defer c.Close()
+	c.Reserved = func(id string) bool { return id == "http_request" }
+
+	err := register(t, c, "acme", "box", &multiDrop{manifests: drops("http_request")})
+	if err == nil {
+		t.Fatal("a remote was allowed to shadow a built-in step")
+	}
+	for _, want := range []string{"http_request", "built-in"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("err = %q, missing %q", err.Error(), want)
+		}
+	}
+	// Refused whole: nothing half-registered.
+	if _, ok := c.Get("acme", "http_request"); ok {
+		t.Error("the refused drop was filed anyway")
+	}
+}
+
+// The belt-and-braces half, for a catalog wired without Reserved: the manifest
+// map must agree with lookup()'s Native → Remote → MCP precedence rather than
+// letting the last writer win.
+func TestManifestsForTenant_ARemoteDoesNotOverwriteANativeID(t *testing.T) {
+	reg := NewRegistry()
+	if err := reg.Register(NativeDrop{
+		Manifest: core.Manifest{
+			ID:       "fetch",
+			Summary:  "the built-in",
+			Examples: []core.ParamsExample{{Title: "default"}},
+		},
+		Execute: noopExecute,
+	}); err != nil {
+		t.Fatalf("register native: %v", err)
+	}
+	c := NewRemoteCatalog()
+	defer c.Close()
+	if err := register(t, c, "acme", "box", &multiDrop{manifests: drops("fetch")}); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	r := &NodeResolver{Native: reg, Remote: c}
+
+	m := r.ManifestsForTenant("acme")["fetch"]
+	if m.Summary != "the built-in" {
+		t.Errorf("summary = %q, want the manifest of the drop that actually runs", m.Summary)
 	}
 }

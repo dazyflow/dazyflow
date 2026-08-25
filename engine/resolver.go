@@ -145,12 +145,30 @@ func (r *NodeResolver) ManifestsForTenant(tenant string) map[string]core.Manifes
 		// An empty tenant yields nothing, matching Get: the tenant-less callers
 		// (docs generation, the support view) want built-ins, not one org's
 		// private steps.
-		add(r.Remote.ManifestsFor(tenant))
+		//
+		// keepExisting, because lookup() prefers Native. Letting a remote
+		// overwrite a native id here would show its manifest in the palette
+		// and in validation while every run executed the built-in — the
+		// catalog and the executor disagreeing, silently. RemoteCatalog.
+		// Reserved refuses such a registration outright; this is the
+		// belt-and-braces half, for a catalog wired without it.
+		addKeeping(out, r.Remote.ManifestsFor(tenant))
 	}
 	if r.MCP != nil {
-		add(r.MCP.Manifests())
+		addKeeping(out, r.MCP.Manifests())
 	}
 	return out
+}
+
+// addKeeping merges src into dst without overwriting an id dst already holds,
+// so the map agrees with lookup()'s Native → Remote → MCP precedence.
+func addKeeping(dst, src map[string]core.Manifest) {
+	for id, m := range src {
+		if _, taken := dst[id]; taken {
+			continue
+		}
+		dst[id] = core.MarkListPorts(core.WithPassthrough(m))
+	}
 }
 
 // Manifests gathers the instance-wide manifests — native and MCP, with no
@@ -159,4 +177,25 @@ func (r *NodeResolver) ManifestsForTenant(tenant string) map[string]core.Manifes
 // ManifestsForTenant so a runner reaches exactly the org that registered it.
 func (r *NodeResolver) Manifests() map[string]core.Manifest {
 	return r.ManifestsForTenant("")
+}
+
+// AllManifests gathers every drop on the instance INCLUDING every tenant's
+// runner drops, with the tenants each remote id belongs to.
+//
+// The one legitimate caller is the platform killswitch page, which is
+// instance-wide by definition: a platform admin has to be able to switch off a
+// misbehaving tenant-runner drop, and ManifestsForTenant cannot show it to them
+// without asking which org to look in. Nothing that ROUTES may use this — an id
+// can belong to several tenants and this flattens them, which is exactly the
+// confusion remoteKey exists to prevent.
+func (r *NodeResolver) AllManifests() (map[string]core.Manifest, map[string][]string) {
+	out := r.ManifestsForTenant("")
+	if r.Remote == nil {
+		return out, nil
+	}
+	remotes, tenants := r.Remote.AllManifests()
+	for id, m := range remotes {
+		out[id] = core.MarkListPorts(core.WithPassthrough(m))
+	}
+	return out, tenants
 }

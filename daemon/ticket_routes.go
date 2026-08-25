@@ -667,7 +667,7 @@ func (h *HTTPGateway) buildAndStoreBundle(ctx context.Context, p core.Principal,
 			runPtr = &rs
 		}
 	}
-	manifests := h.svc.manifestsSnapshot()
+	manifests := h.svc.manifestsSnapshot(p.Tenant)
 	// ValidateGraphFull already includes LintGraph's findings (see
 	// core/validate.go), so it's the complete set — appending LintGraph again
 	// double-counts every lint issue.

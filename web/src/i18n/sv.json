@@ -2234,6 +2234,7 @@
     "offlineSince": "Senast sedd {{at}}",
     "neverSeen": "Har aldrig anslutit",
     "remove": "Ta bort körnod",
+    "removeReally": "Ta bort? Dess inloggning slutar fungera.",
     "installHead": "Kör det här på maskinen",
     "installIntro": "Ett kommando. Det hämtar en enda läsbar Python-fil, registrerar maskinen och installerar en tjänst så att den fortsätter köra efter en omstart. Ingenting behöver nå maskinen, så det fungerar bakom en brandvägg.",
     "installExpiry": "Kommandot slutar fungera {{at}} och går bara att använda en gång. Lägg till en ny körnod för att få ett nytt.",

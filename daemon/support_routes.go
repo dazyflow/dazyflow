@@ -272,7 +272,7 @@ func (h *HTTPGateway) supportView(rw http.ResponseWriter, r *http.Request, p cor
 	}
 
 	mode := core.RedactMode(r.URL.Query().Get("mode")) // "" → structure-only default
-	manifests := h.svc.manifestsSnapshot()
+	manifests := h.svc.manifestsSnapshot(tenant)
 	// ValidateGraphFull already includes LintGraph's findings (see
 	// core/validate.go), so it's the complete set — appending LintGraph again
 	// double-counts every lint issue.

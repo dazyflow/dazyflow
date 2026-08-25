@@ -364,7 +364,7 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 		if got.Env["A"] != "1" || got.Env["B"] != "two" {
 			t.Errorf("env = %v", got.Env)
 		}
-		if err := q.Complete(ctx, "whole", "box", RunnerTaskResult{Stdout: "out"}, time.Now()); err != nil {
+		if err := q.Complete(ctx, box, "whole", RunnerTaskResult{Stdout: "out"}, time.Now()); err != nil {
 			t.Fatalf("Complete: %v", err)
 		}
 		done, err := q.Get(ctx, "acme", "whole")
@@ -445,7 +445,7 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 		if _, err := q.Claim(ctx, box, now, TaskLease); err != nil {
 			t.Fatalf("Claim: %v", err)
 		}
-		if err := q.Extend(ctx, "ext", "box", now.Add(10*TaskLease)); err != nil {
+		if err := q.Extend(ctx, box, "ext", now.Add(10*TaskLease), "halfway through"); err != nil {
 			t.Fatalf("Extend: %v", err)
 		}
 		got, err := q.Get(ctx, "acme", "ext")
@@ -455,7 +455,19 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 		if !got.LeaseUntil.After(now.Add(TaskLease)) {
 			t.Errorf("lease_until = %v, want it pushed out", got.LeaseUntil)
 		}
-		if err := q.Extend(ctx, "ext", "someone-else", now.Add(time.Hour)); !errors.Is(err, ErrTaskNotClaimable) {
+		// The line the script printed has to reach the row: the step waiting
+		// for it may be on a different daemon, so there is no other channel.
+		if got.Progress != "halfway through" {
+			t.Errorf("progress = %q, want the reported line", got.Progress)
+		}
+		// A bare heartbeat must not blank out what the script last said.
+		if err := q.Extend(ctx, box, "ext", now.Add(11*TaskLease), ""); err != nil {
+			t.Fatalf("Extend: %v", err)
+		}
+		if again, _ := q.Get(ctx, "acme", "ext"); again.Progress != "halfway through" {
+			t.Errorf("progress = %q after an empty ping, want it kept", again.Progress)
+		}
+		if err := q.Extend(ctx, Runner{Tenant: "acme", Name: "someone-else"}, "ext", now.Add(time.Hour), ""); !errors.Is(err, ErrTaskNotClaimable) {
 			t.Errorf("a foreign extend was allowed (err = %v)", err)
 		}
 	})
@@ -465,7 +477,7 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 		if _, err := q.Claim(ctx, box, time.Now(), TaskLease); err != nil {
 			t.Fatalf("Claim: %v", err)
 		}
-		if err := q.Complete(ctx, "nonzero", "box",
+		if err := q.Complete(ctx, box, "nonzero",
 			RunnerTaskResult{ExitCode: 2, Stderr: "boom"}, time.Now()); err != nil {
 			t.Fatalf("Complete: %v", err)
 		}
@@ -488,9 +500,100 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 		if _, err := q.Claim(ctx, box, time.Now(), TaskLease); err != nil {
 			t.Fatalf("Claim: %v", err)
 		}
-		err := q.Complete(ctx, "foreign", "impostor", RunnerTaskResult{Stdout: "hi"}, time.Now())
+		err := q.Complete(ctx, Runner{Tenant: "acme", Name: "impostor"}, "foreign", RunnerTaskResult{Stdout: "hi"}, time.Now())
 		if !errors.Is(err, ErrTaskNotClaimable) {
 			t.Errorf("err = %v, want ErrTaskNotClaimable", err)
+		}
+	})
+
+	// Names are only unique per organisation — tenant_runners is keyed on
+	// (tenant, name) — so a same-named runner in another org is a DIFFERENT
+	// machine, and the ownership check has to say so. Without the tenant
+	// predicate only the task id's randomness stands between them.
+	t.Run("a same-named runner in another organisation is refused", func(t *testing.T) {
+		enqueue(t, RunnerTask{ID: "crosstenant", Tenant: "acme", Runner: "box", Script: "x"})
+		now := time.Now()
+		if _, err := q.Claim(ctx, box, now, TaskLease); err != nil {
+			t.Fatalf("Claim: %v", err)
+		}
+		twin := Runner{Tenant: "other", Name: "box", Labels: []string{"linux", "build"}}
+		if err := q.Complete(ctx, twin, "crosstenant",
+			RunnerTaskResult{Stdout: "not mine to write"}, now); !errors.Is(err, ErrTaskNotClaimable) {
+			t.Errorf("another org's runner wrote the result (err = %v)", err)
+		}
+		if err := q.Extend(ctx, twin, "crosstenant", now.Add(time.Hour), ""); !errors.Is(err, ErrTaskNotClaimable) {
+			t.Errorf("another org's runner held the lease open (err = %v)", err)
+		}
+		got, err := q.Get(ctx, "acme", "crosstenant")
+		if err != nil {
+			t.Fatalf("Get: %v", err)
+		}
+		if got.State != TaskRunning || got.Result != nil {
+			t.Errorf("task = %+v, want it untouched and still running", got)
+		}
+		// The real holder is unaffected.
+		if err := q.Complete(ctx, box, "crosstenant", RunnerTaskResult{Stdout: "mine"}, now); err != nil {
+			t.Fatalf("the holder was refused its own task: %v", err)
+		}
+	})
+
+	// Both shapes the sweeper closes, listed by the same query on both stores.
+	// Without this listing nothing outside the live Dispatch goroutine owns a
+	// task, so a redeploy leaves a queued row claimable forever.
+	//
+	// Targeted at a runner of its own rather than `box`, so the rows this
+	// subtest leaves behind cannot be claimed by a later one — the store is
+	// shared across the whole contract.
+	t.Run("orphaned tasks are listed, live ones are not", func(t *testing.T) {
+		now := time.Now()
+		grace := 30 * time.Second
+		ceiling := time.Hour
+		enqueue(t, RunnerTask{
+			ID: "orph-queued", Tenant: "acme", Runner: "orphbox", Script: "x",
+			Timeout: 30 * time.Second, CreatedAt: now.Add(-10 * time.Minute),
+		})
+		enqueue(t, RunnerTask{
+			ID: "orph-live", Tenant: "acme", Runner: "orphbox", Script: "x",
+			Timeout: time.Hour, CreatedAt: now,
+		})
+		enqueue(t, RunnerTask{
+			ID: "orph-untimed", Tenant: "acme", Runner: "orphbox", Script: "x",
+			CreatedAt: now.Add(-2 * time.Minute),
+		})
+		// Claimed with a clock three minutes ago, so its lease has lapsed by
+		// the time the sweep looks.
+		enqueue(t, RunnerTask{
+			ID: "orph-held", Tenant: "acme", Runner: "orphheld", Script: "x",
+			CreatedAt: now.Add(-3 * time.Minute),
+		})
+		if got, err := q.Claim(ctx, Runner{Tenant: "acme", Name: "orphheld"}, now.Add(-3*time.Minute), TaskLease); err != nil || got.ID != "orph-held" {
+			t.Fatalf("Claim: %+v err=%v", got, err)
+		}
+		rows, err := q.OrphanedTasks(ctx, now, grace, ceiling, 100)
+		if err != nil {
+			t.Fatalf("OrphanedTasks: %v", err)
+		}
+		seen := map[string]RunnerTaskState{}
+		for _, r := range rows {
+			seen[r.ID] = r.State
+		}
+		if seen["orph-queued"] != TaskQueued {
+			t.Errorf("a queued task past its own timeout was not listed (rows = %v)", seen)
+		}
+		if seen["orph-held"] != TaskRunning {
+			t.Errorf("a running task whose lease lapsed was not listed (rows = %v)", seen)
+		}
+		if _, ok := seen["orph-live"]; ok {
+			t.Error("a task still inside its own deadline was listed as orphaned")
+		}
+		if _, ok := seen["orph-untimed"]; ok {
+			t.Error("an untimed task was listed before the ceiling elapsed")
+		}
+		// The tenant has to come back, or the sweeper cannot close the row.
+		for _, r := range rows {
+			if r.Tenant == "" {
+				t.Errorf("listed task %q carries no tenant", r.ID)
+			}
 		}
 	})
 
@@ -519,7 +622,7 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 			t.Errorf("result = %+v, want an error naming the runner", got.Result)
 		}
 		// A late result is refused: the step has already failed.
-		if err := q.Complete(ctx, "gone", "box", RunnerTaskResult{Stdout: "late"}, time.Now()); !errors.Is(err, ErrTaskNotClaimable) {
+		if err := q.Complete(ctx, box, "gone", RunnerTaskResult{Stdout: "late"}, time.Now()); !errors.Is(err, ErrTaskNotClaimable) {
 			t.Errorf("a late result was accepted (err = %v)", err)
 		}
 	})
@@ -530,7 +633,7 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 		if _, err := q.Claim(ctx, box, now, TaskLease); err != nil {
 			t.Fatalf("Claim: %v", err)
 		}
-		if err := q.Complete(ctx, "raced", "box", RunnerTaskResult{Stdout: "made it"}, now); err != nil {
+		if err := q.Complete(ctx, box, "raced", RunnerTaskResult{Stdout: "made it"}, now); err != nil {
 			t.Fatalf("Complete: %v", err)
 		}
 		if failed, err := q.FailAbandoned(ctx, "acme", "raced", now.Add(TaskLease+time.Second)); err != nil || failed {
@@ -582,7 +685,7 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 			t.Fatal("cancelled a task a runner was already holding")
 		}
 		// And the agent can still report on it.
-		if err := q.Complete(ctx, "taken", "box", RunnerTaskResult{Stdout: "fine"}, now); err != nil {
+		if err := q.Complete(ctx, box, "taken", RunnerTaskResult{Stdout: "fine"}, now); err != nil {
 			t.Errorf("the holder could no longer finish its task: %v", err)
 		}
 	})
@@ -731,7 +834,7 @@ func TestPgRunnerTaskStore_PruneKeepsLiveWork(t *testing.T) {
 	if _, err := q.Claim(ctx, box, old, TaskLease); err != nil {
 		t.Fatalf("Claim: %v", err)
 	}
-	if err := q.Complete(ctx, "finished", "box", RunnerTaskResult{Stdout: "ok"}, old); err != nil {
+	if err := q.Complete(ctx, box, "finished", RunnerTaskResult{Stdout: "ok"}, old); err != nil {
 		t.Fatalf("Complete: %v", err)
 	}
 	// "queued" is next oldest; skip it and claim "running" by name.
@@ -771,5 +874,108 @@ func TestPgRunnerTaskStore_PruneKeepsLiveWork(t *testing.T) {
 	// A disabled retention is a no-op, not a full sweep.
 	if n, err := q.Prune(ctx, 0, 500); err != nil || n != 0 {
 		t.Errorf("Prune(0) = %d, %v; want a no-op", n, err)
+	}
+}
+
+// The queue is a transport that happens to be durable, and what it carries is
+// the script with every ${secret.…} already expanded. engine/secrets.go's
+// contract is that a resolved secret "exists only in the transport.Execute
+// call"; an unsealed row would hold the tenant's live credential in cleartext
+// until DAZYFLOW_RUNNER_TASK_RETENTION elapsed, readable from any dump,
+// replica or backup by someone with no Dazyflow permission at all.
+//
+// Against real Postgres because the assertion is about what is IN THE COLUMN,
+// which is exactly what a store test cannot fake.
+func TestPgRunnerTaskStore_SealsTheScriptAtRest(t *testing.T) {
+	pool := pgRunnerPool(t)
+	ctx := context.Background()
+	q, err := NewPgRunnerTaskStore(ctx, pool)
+	if err != nil {
+		t.Fatalf("NewPgRunnerTaskStore: %v", err)
+	}
+	es, err := NewEncryptedSecrets(randomKey(t), NewMemSecretsStore())
+	if err != nil {
+		t.Fatalf("NewEncryptedSecrets: %v", err)
+	}
+	q.Cipher = es
+	if _, err := pool.Exec(ctx, "TRUNCATE runner_tasks"); err != nil {
+		t.Fatalf("truncate: %v", err)
+	}
+
+	const cred = "sk_live_thisisthecredential"
+	task := RunnerTask{
+		ID: "sealed", Tenant: "acme", Runner: "box",
+		Script: "./sync.sh --key " + cred,
+		Stdin:  "invoice " + cred,
+		Env:    map[string]string{"TOKEN": cred},
+		State:  TaskQueued, CreatedAt: time.Now(),
+	}
+	if err := q.Enqueue(ctx, task); err != nil {
+		t.Fatalf("Enqueue: %v", err)
+	}
+
+	var script, stdin string
+	var env []byte
+	if err := pool.QueryRow(ctx,
+		`SELECT script, stdin, env FROM runner_tasks WHERE id = $1`, "sealed").
+		Scan(&script, &stdin, &env); err != nil {
+		t.Fatalf("read the raw row: %v", err)
+	}
+	for name, col := range map[string]string{"script": script, "stdin": stdin, "env": string(env)} {
+		if strings.Contains(col, cred) {
+			t.Errorf("the %s column holds the secret in cleartext: %s", name, col)
+		}
+		if !strings.Contains(col, sealedPrefix) {
+			t.Errorf("the %s column is not marked as sealed: %s", name, col)
+		}
+	}
+
+	// And the agent still gets the real thing.
+	got, err := q.Claim(ctx, Runner{Tenant: "acme", Name: "box"}, time.Now(), TaskLease)
+	if err != nil {
+		t.Fatalf("Claim: %v", err)
+	}
+	if got.Script != task.Script || got.Stdin != task.Stdin || got.Env["TOKEN"] != cred {
+		t.Errorf("claimed task = %+v, want the plaintext back", got)
+	}
+}
+
+// Rows written before sealing existed — and rows from a deployment with no
+// master key — must still read back, or an upgrade would strand every queued
+// task. The marker is what makes the two tellable apart.
+func TestPgRunnerTaskStore_ReadsBackAnUnsealedRow(t *testing.T) {
+	pool := pgRunnerPool(t)
+	ctx := context.Background()
+	plainStore, err := NewPgRunnerTaskStore(ctx, pool)
+	if err != nil {
+		t.Fatalf("NewPgRunnerTaskStore: %v", err)
+	}
+	if _, err := pool.Exec(ctx, "TRUNCATE runner_tasks"); err != nil {
+		t.Fatalf("truncate: %v", err)
+	}
+	// Written by a daemon with no cipher configured.
+	if err := plainStore.Enqueue(ctx, RunnerTask{
+		ID: "legacy", Tenant: "acme", Runner: "box", Script: "./old.sh",
+		State: TaskQueued, CreatedAt: time.Now(),
+	}); err != nil {
+		t.Fatalf("Enqueue: %v", err)
+	}
+
+	// Read by one that now has one.
+	es, err := NewEncryptedSecrets(randomKey(t), NewMemSecretsStore())
+	if err != nil {
+		t.Fatalf("NewEncryptedSecrets: %v", err)
+	}
+	sealing, err := NewPgRunnerTaskStore(ctx, pool)
+	if err != nil {
+		t.Fatalf("NewPgRunnerTaskStore: %v", err)
+	}
+	sealing.Cipher = es
+	got, err := sealing.Get(ctx, "acme", "legacy")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.Script != "./old.sh" {
+		t.Errorf("script = %q, want the unsealed row read straight back", got.Script)
 	}
 }

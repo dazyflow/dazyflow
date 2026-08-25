@@ -76,7 +76,11 @@ type platformDropDTO struct {
 	// DisabledTenants lists the tenants this drop is switched off for
 	// (excludes the global switch). Empty when only globally toggled.
 	DisabledTenants []string `json:"disabled_tenants,omitempty"`
-	Reason          string   `json:"reason,omitempty"`
+	// OwnedByTenants is set only for a tenant runner's drop, naming the orgs
+	// that registered it. Empty for a built-in, which every org shares — so
+	// the page can say whose machine a step belongs to before switching it off.
+	OwnedByTenants []string `json:"owned_by_tenants,omitempty"`
+	Reason         string   `json:"reason,omitempty"`
 }
 
 // moderationBody is the shared JSON body for suspend/ban/disable actions.
@@ -691,8 +695,13 @@ func (h *HTTPGateway) platformListDrops(rw http.ResponseWriter, r *http.Request,
 		writeJSONError(rw, http.StatusNotImplemented, "step killswitch not configured")
 		return
 	}
+	// AllManifests, not Manifests: this page is instance-wide and is the only
+	// surface that can switch a drop off. A tenant's runner drops are keyed by
+	// (tenant, id) and so are absent from the unscoped map by construction —
+	// which left a platform admin with no way to disable a misbehaving one,
+	// even though DropGate would have enforced a switch on that id.
 	mp, ok := h.svc.Engine.Resolver.(interface {
-		Manifests() map[string]core.Manifest
+		AllManifests() (map[string]core.Manifest, map[string][]string)
 	})
 	if !ok {
 		writeJSONError(rw, http.StatusInternalServerError, "resolver has no catalog")
@@ -713,7 +722,7 @@ func (h *HTTPGateway) platformListDrops(rw http.ResponseWriter, r *http.Request,
 			perTenant[sw.DropID] = append(perTenant[sw.DropID], sw.Tenant)
 		}
 	}
-	manifests := mp.Manifests()
+	manifests, remoteTenants := mp.AllManifests()
 	out := make([]platformDropDTO, 0, len(manifests))
 	for id, m := range manifests {
 		reason, isGlobal := global[id]
@@ -727,6 +736,7 @@ func (h *HTTPGateway) platformListDrops(rw http.ResponseWriter, r *http.Request,
 			BrandLogo:        m.BrandLogo,
 			GloballyDisabled: isGlobal,
 			DisabledTenants:  perTenant[id],
+			OwnedByTenants:   remoteTenants[id],
 			Reason:           reason,
 		})
 	}

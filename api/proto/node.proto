@@ -9,11 +9,13 @@ option go_package = "git.sr.ht/~klahr/dazyflow/api/gen/node;nodepb";
 // engine.RemoteTransport.
 service NodeService {
     // ListManifests returns every drop this runner serves.
-    //
     // Plural from the outset, even though a runner that serves one drop just
-    // returns a single entry. Changing the shape later would mean every runner
-    // already written has to be updated in lockstep with the daemon — and the
-    // point of a runner is that its binary is not the daemon's to update.
+    // returns a single entry. It REPLACED a singular GetManifest, and the
+    // daemon still falls back to that method (by name — it is deliberately not
+    // declared here) when a server answers Unimplemented, so runners built
+    // against the older contract keep working. Nothing new should implement
+    // it; the fallback exists so an upgraded daemon does not break a binary it
+    // does not own.
     rpc ListManifests (ListManifestsRequest) returns (ListManifestsResponse);
     rpc Execute       (Job)                  returns (stream Event);
 }

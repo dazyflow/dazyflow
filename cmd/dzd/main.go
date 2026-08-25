@@ -356,6 +356,13 @@ func main() {
 	// per-job snapshot can't (mirrors the SetTokenLookup wiring below).
 	io.SetQuotaReserver(quota.Reserve)
 	remoteCatalog := engine.NewRemoteCatalog()
+	// A remote may not take a built-in's id: lookup prefers the native drop, so
+	// the palette would describe the remote while every run executed the
+	// built-in. Refused at registration, where someone is reading the output.
+	remoteCatalog.Reserved = func(id string) bool {
+		_, ok := engine.Default.Get(id)
+		return ok
+	}
 	if err := registerRemotes(remoteCatalog, remotes, devMode); err != nil {
 		log.Fatalf("DAZYFLOW_REMOTE_MODULES: %v", err)
 	}
@@ -366,7 +373,7 @@ func main() {
 	// Tenant runners. They need the encrypted store for the client key, so
 	// this has to follow setupEncryptedSecrets; without one the feature stays
 	// off and its endpoints answer 501 rather than half-working.
-	runners, runnerTasks := setupRunners(ctx, pgPool)
+	runners, runnerTasks := setupRunners(ctx, pgPool, encryptedSecrets)
 	// Resolve a git_checkout node's selected git credential (by account) to
 	// its material (SSH key and/or HTTPS PAT) from the per-tenant encrypted
 	// store at clone time. Mirrors the OAuth connectors' SetTokenLookup
@@ -699,6 +706,7 @@ func main() {
 		usage:       bufferedUsage,
 		runLogs:     stores.runLogs,
 		workerCount: workerCount,
+		runnerTasks: runnerTasks,
 	}, &bgWg)
 
 	// Git mirror: push each workspace's flow repository to a remote the
@@ -1088,7 +1096,16 @@ type backgroundDeps struct {
 	usage       daemon.UsageStore
 	runLogs     daemon.RunLogStore
 	workerCount int
+	// runnerTasks drives the orphaned-task sweep. Nil when runners are not
+	// configured, which leaves the sweep unstarted rather than half-running.
+	runnerTasks daemon.RunnerTaskStore
 }
+
+// runnerSweepInterval is how often the orphaned-runner-task sweep runs. A
+// minute rather than the retention sweep's hour: the row it closes is
+// claimable until it does, and an hour of that is an hour in which a machine
+// coming online runs a script for a dead run.
+const runnerSweepInterval = time.Minute
 
 // startBackgroundJobs launches the worker pool, the cron scheduler (with
 // Postgres leader election when a pool is present), the orphaned-run reaper,
@@ -1119,6 +1136,41 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 			defer bgWg.Done()
 			if err := w.Run(ctx); err != nil && err != context.Canceled {
 				log.Printf("worker stopped: %v", err)
+			}
+		}()
+	}
+
+	// The runner queue's own reaper. Separate from the hourly retention sweep
+	// because the harm it prevents is time-sensitive: a queued task nobody is
+	// waiting for stays CLAIMABLE, so until it is closed a machine switched on
+	// in the meantime will run a script for a run that is already dead.
+	//
+	// Safe on every daemon at once — see RunnerTaskSweeper — so it needs no
+	// leader election.
+	if d.runnerTasks != nil {
+		sweeper := &daemon.RunnerTaskSweeper{Tasks: d.runnerTasks}
+		bgWg.Add(1)
+		go func() {
+			defer bgWg.Done()
+			pass := func() {
+				n, err := sweeper.Sweep(ctx, time.Now())
+				if err != nil && ctx.Err() == nil {
+					log.Printf("runner tasks: sweep orphans: %v", err)
+				}
+				if n > 0 {
+					log.Printf("runner tasks: closed %d task(s) nobody was waiting for", n)
+				}
+			}
+			pass() // startup pass: this boot is itself the restart that stranded them
+			t := time.NewTicker(runnerSweepInterval)
+			defer t.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.C:
+					pass()
+				}
 			}
 		}()
 	}
@@ -2274,7 +2326,7 @@ func wireConnectorTokenHooks(reg *daemon.OAuthRegistry) {
 // "Run on your machine" step reports that runners are not set up. A
 // half-configured runner feature would be worse than none, because a registered
 // machine that cannot be handed work looks like a bug on the org's side.
-func setupRunners(ctx context.Context, pool *pgxpool.Pool) (*daemon.Runners, daemon.RunnerTaskStore) {
+func setupRunners(ctx context.Context, pool *pgxpool.Pool, secrets *daemon.EncryptedSecrets) (*daemon.Runners, daemon.RunnerTaskStore) {
 	if pool == nil {
 		return nil, nil
 	}
@@ -2292,6 +2344,16 @@ func setupRunners(ctx context.Context, pool *pgxpool.Pool) (*daemon.Runners, dae
 	if err != nil {
 		log.Printf("runners disabled: %v", err)
 		return nil, nil
+	}
+	// A queued task carries the script and stdin with every ${secret.…} already
+	// expanded, so the rows are sealed under the tenant's DEK. Guarded on the
+	// pointer rather than assigned straight through: a typed nil would satisfy
+	// the interface and then panic on the first Enqueue.
+	if secrets != nil {
+		tasks.Cipher = secrets
+	} else {
+		log.Printf("runners: DAZYFLOW_MASTER_KEY is not set, so queued scripts are stored in cleartext — " +
+			"any secret a script references will sit in the database until retention removes it")
 	}
 	runners := &daemon.Runners{Store: store}
 	dispatcher := &daemon.RunnerDispatcher{Tasks: tasks, Runners: runners}

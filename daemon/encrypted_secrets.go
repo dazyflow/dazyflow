@@ -372,6 +372,67 @@ func (e *EncryptedSecrets) Put(ctx context.Context, tenant, name, value string) 
 	return e.store.putSecret(ctx, tenant, name, ct, nonce)
 }
 
+// SealPayload encrypts an arbitrary blob under the tenant's DEK, for data that
+// is not a named secret but must not sit in the database in cleartext — the
+// runner task queue's script and stdin being the case this exists for.
+//
+// The queue is a transport that happens to be durable. engine/secrets.go's
+// contract is that a resolved secret "exists only in the transport.Execute
+// call"; a script the author wrote as `./sync.sh --key ${secret.STRIPE_KEY}`
+// arrives here already expanded, so the row would otherwise carry the tenant's
+// live credential until retention elapsed, readable from any dump, replica or
+// backup with no Dazyflow permission at all.
+//
+// domain and id bind the ciphertext to the row it belongs in, exactly as
+// secretAAD binds a secret to its name: without it, GCM only proves the blob
+// was sealed under this tenant's DEK, so someone with write access could
+// relocate a sealed script into a row they are allowed to read back.
+//
+// The returned blob is nonce||ciphertext; OpenPayload is its inverse.
+func (e *EncryptedSecrets) SealPayload(ctx context.Context, tenant, domain, id string, plaintext []byte) ([]byte, error) {
+	if tenant == "" {
+		return nil, fmt.Errorf("seal payload: tenant required")
+	}
+	dek, err := e.dekFor(ctx, tenant)
+	if err != nil {
+		return nil, err
+	}
+	nonce := make([]byte, dek.NonceSize())
+	if _, err := io.ReadFull(e.rng(), nonce); err != nil {
+		return nil, fmt.Errorf("nonce: %w", err)
+	}
+	return append(nonce, dek.Seal(nil, nonce, plaintext, payloadAAD(tenant, domain, id))...), nil
+}
+
+// OpenPayload reverses SealPayload. It does NOT fall back to an unbound open
+// the way openBound does: payload sealing is new, so there is no legacy
+// ciphertext to accept, and accepting one would reopen the relocation hole.
+func (e *EncryptedSecrets) OpenPayload(ctx context.Context, tenant, domain, id string, blob []byte) ([]byte, error) {
+	if tenant == "" {
+		return nil, fmt.Errorf("open payload: tenant required")
+	}
+	dek, err := e.dekFor(ctx, tenant)
+	if err != nil {
+		return nil, err
+	}
+	if len(blob) < dek.NonceSize() {
+		return nil, fmt.Errorf("open payload: ciphertext is too short to carry a nonce")
+	}
+	nonce, ct := blob[:dek.NonceSize()], blob[dek.NonceSize():]
+	pt, err := dek.Open(nil, nonce, ct, payloadAAD(tenant, domain, id))
+	if err != nil {
+		return nil, fmt.Errorf("open payload (wrong DAZYFLOW_MASTER_KEY?): %w", err)
+	}
+	return pt, nil
+}
+
+// payloadAAD binds a sealed payload to (tenant, domain, row id). Same encoding
+// discipline as secretAAD: a versioned prefix and NUL separators, so no triple
+// can be spelled two ways.
+func payloadAAD(tenant, domain, id string) []byte {
+	return []byte("dazyflow/payload/v1\x00" + tenant + "\x00" + domain + "\x00" + id)
+}
+
 // RewrapDEKs rotates the KEK: it unwraps every tenant DEK with this
 // store's current KEK and re-wraps it under newMasterKey, persisting the
 // new wrapped form. The DEK plaintexts — and therefore every stored

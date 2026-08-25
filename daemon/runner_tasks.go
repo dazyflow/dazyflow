@@ -66,8 +66,16 @@ type RunnerTask struct {
 	// on the daemon's disk means nothing there.
 	Stdin string
 
-	State      RunnerTaskState
-	ClaimedBy  string
+	// sealedEnv carries the env column when it was stored sealed, between the
+	// row scan and the decrypt pass. Never set on a task the caller sees.
+	sealedEnv string
+
+	State     RunnerTaskState
+	ClaimedBy string
+	// Progress is the last line the agent reported while the script ran. The
+	// waiting step polls the row, so this is the only way a message from
+	// another daemon's agent reaches it.
+	Progress   string
 	LeaseUntil time.Time
 	Result     *RunnerTaskResult
 	CreatedAt  time.Time
@@ -109,6 +117,21 @@ const RunnerPickupGrace = 30 * time.Second
 // agent never answers at all, and wants to fire after the agent would have.
 const RunnerDispatchGrace = 30 * time.Second
 
+const (
+	// runnerPollTightFor is how long the waiting step polls at its base rate
+	// before loosening. Long enough that anything a person would call quick
+	// still feels immediate.
+	runnerPollTightFor = 30 * time.Second
+	// runnerPollSlow is the rate after that. A script running for minutes does
+	// not become more urgent at minute nine.
+	runnerPollSlow = 2 * time.Second
+	// runnerOnlineCheckEvery bounds how often the "is any runner online?"
+	// listing runs while a task sits queued. The answer changes on the scale of
+	// the heartbeat, not the poll, so re-asking every tick was a second query
+	// per waiting step per half-second for no new information.
+	runnerOnlineCheckEvery = 5 * time.Second
+)
+
 const pgRunnerTaskSchema = `
 CREATE TABLE IF NOT EXISTS runner_tasks (
     id           TEXT PRIMARY KEY,
@@ -121,15 +144,23 @@ CREATE TABLE IF NOT EXISTS runner_tasks (
     timeout_ms   BIGINT NOT NULL DEFAULT 0,
     state        TEXT NOT NULL,
     claimed_by   TEXT NOT NULL DEFAULT '',
+    progress     TEXT NOT NULL DEFAULT '',
     lease_until  TIMESTAMPTZ,
     result       JSONB,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     finished_at  TIMESTAMPTZ
 );
+ALTER TABLE runner_tasks ADD COLUMN IF NOT EXISTS progress TEXT NOT NULL DEFAULT '';
 -- The claim query's working set: a tenant's unfinished tasks, oldest first.
 CREATE INDEX IF NOT EXISTS runner_tasks_claim_idx
     ON runner_tasks (tenant, created_at)
     WHERE state IN ('queued', 'running');
+-- Prune's predicate. Terminal rows are the overwhelming majority of the table
+-- on a busy deployment, so without this the retention sweep scans all of them
+-- every hour to find the few old enough to delete.
+CREATE INDEX IF NOT EXISTS runner_tasks_prune_idx
+    ON runner_tasks (finished_at)
+    WHERE state IN ('done', 'failed');
 `
 
 // EnsurePgRunnerTaskSchema creates the task table.
@@ -144,9 +175,18 @@ type RunnerTaskStore interface {
 	// or returns ErrNoTask when there is nothing to do.
 	Claim(ctx context.Context, r Runner, now time.Time, lease time.Duration) (RunnerTask, error)
 	// Extend pushes a held task's lease out, so a long script does not lapse.
-	Extend(ctx context.Context, id, runnerName string, until time.Time) error
-	// Complete records a result. Refuses a task the runner does not hold.
-	Complete(ctx context.Context, id, runnerName string, res RunnerTaskResult, now time.Time) error
+	//
+	// Takes the whole Runner rather than its name because the name alone is not
+	// an identity: tenant_runners is keyed on (tenant, name), so "build" in one
+	// org and "build" in another are different machines. Matching on the name
+	// by itself would let either one write to the other's task.
+	// message, when non-empty, is recorded as the task's latest progress line
+	// so the waiting step can show it — the step may be on another daemon, so
+	// the row is the only channel between them.
+	Extend(ctx context.Context, r Runner, id string, until time.Time, message string) error
+	// Complete records a result. Refuses a task the runner does not hold — see
+	// the note on Extend for why that check needs the tenant too.
+	Complete(ctx context.Context, r Runner, id string, res RunnerTaskResult, now time.Time) error
 	// FailAbandoned marks a task whose lease has lapsed as failed, reporting
 	// whether this call is the one that did it.
 	//
@@ -168,6 +208,24 @@ type RunnerTaskStore interface {
 	// exactly the ambiguity the lease rules exist to avoid.
 	CancelQueued(ctx context.Context, tenant, id string, res RunnerTaskResult, now time.Time) (bool, error)
 	Get(ctx context.Context, tenant, id string) (RunnerTask, error)
+	// OrphanedTasks lists non-terminal tasks nobody is waiting for any more,
+	// oldest first and bounded by limit.
+	//
+	// It exists because Dispatch's goroutine was the only thing that ever
+	// closed a task, and that goroutine does not survive a redeploy or an
+	// OOM kill. What it leaves behind is worse than a stale row: a QUEUED task
+	// stays claimable forever, so a machine switched on an hour later runs a
+	// script for a run that is already dead — the same harm CancelQueued exists
+	// to prevent. And because Prune only collects 'done' and 'failed', neither
+	// shape is ever removed, so they accumulate inside runner_tasks_claim_idx
+	// and slow the hot claim path.
+	//
+	// Two shapes qualify. A RUNNING task whose lease has lapsed: the agent is
+	// presumed gone. A QUEUED task older than its own timeout plus the dispatch
+	// grace: whoever was waiting has given up by definition, so nothing will
+	// ever read the result. Rows carrying no timeout fall back to
+	// queuedCeiling.
+	OrphanedTasks(ctx context.Context, now time.Time, grace, queuedCeiling time.Duration, limit int) ([]RunnerTask, error)
 }
 
 // ErrNoTask means the queue had nothing for this runner. Not a failure — it is
@@ -199,6 +257,17 @@ func eligible(t RunnerTask, r Runner) bool {
 	return false
 }
 
+// heldBy reports that this runner currently holds this task.
+//
+// All three parts are load-bearing. The tenant is the boundary: names are only
+// unique per organisation, so without it an agent could report on a same-named
+// runner's task in another org. The claimant is the ownership check within an
+// organisation. And 'running' is what refuses a result for a task already
+// closed — accepting one would resurrect a step that has already failed.
+func heldBy(t RunnerTask, r Runner) bool {
+	return t.Tenant == r.Tenant && t.ClaimedBy == r.Name && t.State == TaskRunning
+}
+
 // abandoned reports that a claim has lapsed: the agent took the task and then
 // stopped saying anything, so the machine is presumed gone.
 //
@@ -207,6 +276,23 @@ func eligible(t RunnerTask, r Runner) bool {
 // condemn a task the moment it appeared.
 func abandoned(t RunnerTask, now time.Time) bool {
 	return t.State == TaskRunning && !t.LeaseUntil.IsZero() && now.After(t.LeaseUntil)
+}
+
+// orphaned reports that nothing is waiting for this task any more. The two
+// shapes are documented on RunnerTaskStore.OrphanedTasks.
+func orphaned(t RunnerTask, now time.Time, grace, queuedCeiling time.Duration) bool {
+	switch t.State {
+	case TaskRunning:
+		return abandoned(t, now)
+	case TaskQueued:
+		ceiling := queuedCeiling
+		if t.Timeout > 0 {
+			ceiling = t.Timeout + grace
+		}
+		return !t.CreatedAt.IsZero() && now.Sub(t.CreatedAt) > ceiling
+	default:
+		return false
+	}
 }
 
 // abandonedResult is the result recorded for a task whose runner vanished. It
@@ -273,22 +359,25 @@ func (m *MemRunnerTaskStore) Claim(_ context.Context, r Runner, now time.Time, l
 	return RunnerTask{}, ErrNoTask
 }
 
-func (m *MemRunnerTaskStore) Extend(_ context.Context, id, runnerName string, until time.Time) error {
+func (m *MemRunnerTaskStore) Extend(_ context.Context, r Runner, id string, until time.Time, message string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	t, ok := m.tasks[id]
-	if !ok || t.ClaimedBy != runnerName || t.State != TaskRunning {
+	if !ok || !heldBy(*t, r) {
 		return ErrTaskNotClaimable
 	}
 	t.LeaseUntil = until
+	if message != "" {
+		t.Progress = message
+	}
 	return nil
 }
 
-func (m *MemRunnerTaskStore) Complete(_ context.Context, id, runnerName string, res RunnerTaskResult, now time.Time) error {
+func (m *MemRunnerTaskStore) Complete(_ context.Context, r Runner, id string, res RunnerTaskResult, now time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	t, ok := m.tasks[id]
-	if !ok || t.ClaimedBy != runnerName || t.State != TaskRunning {
+	if !ok || !heldBy(*t, r) {
 		return ErrTaskNotClaimable
 	}
 	stored := res
@@ -338,6 +427,22 @@ func (m *MemRunnerTaskStore) CancelQueued(_ context.Context, tenant, id string, 
 	t.State = TaskFailed
 	t.FinishedAt = now
 	return true, nil
+}
+
+func (m *MemRunnerTaskStore) OrphanedTasks(_ context.Context, now time.Time, grace, queuedCeiling time.Duration, limit int) ([]RunnerTask, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []RunnerTask
+	for _, t := range m.tasks {
+		if orphaned(*t, now, grace, queuedCeiling) {
+			out = append(out, *t)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
 }
 
 func (m *MemRunnerTaskStore) Get(_ context.Context, tenant, id string) (RunnerTask, error) {
@@ -447,9 +552,23 @@ func (d *RunnerDispatcher) Dispatch(ctx context.Context, req DispatchRequest, on
 		deadline = time.Now().Add(req.Timeout + d.dispatchGrace())
 	}
 	queuedSince := time.Now()
+	// The last line already shown, so a repeated poll of an unchanged row does
+	// not repeat it. Seeded with the waiting message for the same reason.
+	lastProgress := ""
+	// When the "is any runner online?" check last ran. It lists the org's
+	// runners, so running it on every tick cost a second query per waiting step
+	// per half-second — for minutes, whenever the target is online but busy
+	// with another task, which is the normal way a queue drains.
+	var lastOnlineCheck time.Time
 
 	ticker := time.NewTicker(poll)
 	defer ticker.Stop()
+	// The poll starts tight and loosens. Half a second is what makes a quick
+	// script feel immediate; holding that rate for a script that runs for ten
+	// minutes is 1200 pointless round trips, and the result is not more urgent
+	// at minute nine than it was at minute one.
+	slowPollAfter := time.Now().Add(runnerPollTightFor)
+	slowed := false
 	for {
 		select {
 		case <-ctx.Done():
@@ -462,9 +581,20 @@ func (d *RunnerDispatcher) Dispatch(ctx context.Context, req DispatchRequest, on
 		case <-ticker.C:
 		}
 		now := time.Now()
+		if !slowed && now.After(slowPollAfter) {
+			slowed = true
+			ticker.Reset(max(poll, runnerPollSlow))
+		}
 		cur, err := d.Tasks.Get(ctx, req.Tenant, task.ID)
 		if err != nil {
 			return RunnerTaskResult{}, fmt.Errorf("read the task back: %w", err)
+		}
+		// Anything the script said since the last tick. The agent posts it to
+		// whichever daemon answers, which may not be this one, so the row is
+		// the only channel between them.
+		if onProgress != nil && cur.Progress != "" && cur.Progress != lastProgress {
+			lastProgress = cur.Progress
+			onProgress(cur.Progress)
 		}
 		switch cur.State {
 		case TaskDone, TaskFailed:
@@ -497,7 +627,12 @@ func (d *RunnerDispatcher) Dispatch(ctx context.Context, req DispatchRequest, on
 			// normal for a while if the runner is busy with another task —
 			// its heartbeat keeps it online meanwhile. It is only a problem
 			// once no runner that COULD take this work is there at all.
-			if now.Sub(queuedSince) > d.pickupGrace() {
+			// Bounded by the pickup grace as well, so a test that shrinks the
+			// grace to exercise the give-up path is not left waiting on a
+			// production-sized interval.
+			if now.Sub(queuedSince) > d.pickupGrace() &&
+				now.Sub(lastOnlineCheck) >= min(runnerOnlineCheckEvery, d.pickupGrace()) {
+				lastOnlineCheck = now
 				if err := d.checkTargetOnline(ctx, req, now); err != nil {
 					cancelled, cerr := d.Tasks.CancelQueued(ctx, req.Tenant, task.ID,
 						cancelledResult(err.Error()), now)

@@ -360,7 +360,7 @@ func TestFailAbandoned_LosesToAResultThatArrives(t *testing.T) {
 		t.Fatalf("Claim: %v", err)
 	}
 	// The agent reports just before we condemn it.
-	if err := q.Complete(t.Context(), "t1", "box", RunnerTaskResult{Stdout: "done"}, now); err != nil {
+	if err := q.Complete(t.Context(), Runner{Tenant: "acme", Name: "box"}, "t1", RunnerTaskResult{Stdout: "done"}, now); err != nil {
 		t.Fatalf("Complete: %v", err)
 	}
 	lapsed := now.Add(TaskLease + time.Second)
@@ -385,7 +385,7 @@ func TestComplete_RefusesAResultAfterWeGaveUp(t *testing.T) {
 	if _, err := q.FailAbandoned(t.Context(), "acme", "t1", now.Add(TaskLease+time.Second)); err != nil {
 		t.Fatalf("FailAbandoned: %v", err)
 	}
-	err := q.Complete(t.Context(), "t1", "box", RunnerTaskResult{Stdout: "late"}, now)
+	err := q.Complete(t.Context(), Runner{Tenant: "acme", Name: "box"}, "t1", RunnerTaskResult{Stdout: "late"}, now)
 	if !errors.Is(err, ErrTaskNotClaimable) {
 		t.Errorf("err = %v, want a late result refused", err)
 	}
@@ -420,7 +420,7 @@ func TestExtend_KeepsALongTaskHeld(t *testing.T) {
 	if _, err := q.Claim(t.Context(), r, now, TaskLease); err != nil {
 		t.Fatalf("Claim: %v", err)
 	}
-	if err := q.Extend(t.Context(), "t1", "box", now.Add(10*TaskLease)); err != nil {
+	if err := q.Extend(t.Context(), r, "t1", now.Add(10*TaskLease), ""); err != nil {
 		t.Fatalf("Extend: %v", err)
 	}
 	other := Runner{Tenant: "acme", Name: "other"}
@@ -428,7 +428,7 @@ func TestExtend_KeepsALongTaskHeld(t *testing.T) {
 		t.Error("an extended lease still lapsed on the original schedule")
 	}
 	// Extending something you do not hold is refused.
-	if err := q.Extend(t.Context(), "t1", "someone-else", now.Add(time.Hour)); !errors.Is(err, ErrTaskNotClaimable) {
+	if err := q.Extend(t.Context(), Runner{Tenant: "acme", Name: "someone-else"}, "t1", now.Add(time.Hour), ""); !errors.Is(err, ErrTaskNotClaimable) {
 		t.Errorf("err = %v, want a foreign extend refused", err)
 	}
 }
@@ -442,7 +442,7 @@ func TestComplete_NonZeroExitFailsTheTask(t *testing.T) {
 	if _, err := q.Claim(t.Context(), r, time.Now(), TaskLease); err != nil {
 		t.Fatalf("Claim: %v", err)
 	}
-	if err := q.Complete(t.Context(), "t1", "box", RunnerTaskResult{ExitCode: 2, Stderr: "boom"}, time.Now()); err != nil {
+	if err := q.Complete(t.Context(), r, "t1", RunnerTaskResult{ExitCode: 2, Stderr: "boom"}, time.Now()); err != nil {
 		t.Fatalf("Complete: %v", err)
 	}
 	got, err := q.Get(t.Context(), "acme", "t1")
@@ -461,7 +461,7 @@ func TestComplete_RefusesATaskYouDoNotHold(t *testing.T) {
 	if _, err := q.Claim(t.Context(), r, time.Now(), TaskLease); err != nil {
 		t.Fatalf("Claim: %v", err)
 	}
-	err := q.Complete(t.Context(), "t1", "impostor", RunnerTaskResult{}, time.Now())
+	err := q.Complete(t.Context(), Runner{Tenant: "acme", Name: "impostor"}, "t1", RunnerTaskResult{}, time.Now())
 	if !errors.Is(err, ErrTaskNotClaimable) {
 		t.Fatalf("err = %v, want a foreign completion refused", err)
 	}
@@ -500,7 +500,7 @@ func fakeAgent(t *testing.T, q RunnerTaskStore, r Runner, run func(RunnerTask) R
 				time.Sleep(5 * time.Millisecond)
 				continue
 			}
-			_ = q.Complete(context.Background(), task.ID, r.Name, run(task), time.Now())
+			_ = q.Complete(context.Background(), r, task.ID, run(task), time.Now())
 		}
 	}()
 	return func() { close(stop); wg.Wait() }
@@ -746,7 +746,7 @@ func TestDispatch_KeepsWaitingIfTheTaskIsClaimedAsItGivesUp(t *testing.T) {
 		for {
 			task, err := q.Claim(context.Background(), r, time.Now(), TaskLease)
 			if err == nil {
-				_ = q.Complete(context.Background(), task.ID, r.Name,
+				_ = q.Complete(context.Background(), r, task.ID,
 					RunnerTaskResult{Stdout: "ran anyway"}, time.Now())
 				return
 			}

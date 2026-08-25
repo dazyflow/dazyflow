@@ -17,6 +17,144 @@ without them the same suggestions arrive again every review.
 
 ## Open
 
+### Runners — the 2026-08-25 review, worked through
+
+`ccb6f6f..98ac656` landed tenant-owned runners; a review the same day found 15
+gaps plus a tail of smaller ones. **All of them are fixed** — the entry stays
+because several were resolved in a way a future reader should not have to
+re-derive, and three were deliberately left alone with a reason.
+
+The gaps clustered in three seams, and the fixes follow them.
+
+**Seam 1 — resolved secrets and the tenant boundary.**
+
+- **A queued task's script, stdin and env are now sealed at rest** under the
+  tenant's DEK (`EncryptedSecrets.SealPayload`, AAD-bound to the row AND the
+  field so a ciphertext cannot be relocated). They arrive at `Enqueue` with
+  every `${secret.…}` already expanded, which contradicted
+  `engine/secrets.go`'s stated contract. A deployment with no
+  `DAZYFLOW_MASTER_KEY` still stores cleartext and logs that it is doing so —
+  the same posture as every other stored secret there. Rows written before
+  sealing read back unchanged, told apart by a `sealed:v1:` marker.
+  **Deliberately NOT added to `core/lint.go`'s `persistenceModules`:** that
+  rule's message says a value "could land in plaintext on disk or in a
+  database", which sealing makes untrue, so the warning would be noise.
+- **`Complete` and `Extend` take the whole `Runner`, not its name.**
+  `tenant_runners` is keyed `(tenant, name)`, so the name alone was never an
+  identity. Both stores now match on tenant as well, via one `heldBy` predicate,
+  and the shared contract suite has a same-named-runner-in-another-org case —
+  the old test only tried a differently-named impostor.
+- **The four `/api/v1/runner/*` endpoints are throttled per IP.** `/register`
+  takes the tighter webhook allowance; the polled endpoints take a new runner
+  allowance sized so a whole office of agents behind one NAT fits (they poll
+  every 5s, and that poll is also the heartbeat).
+
+**Seam 2 — nothing outside the live `Dispatch` goroutine owned a task.**
+
+- **`RunnerTaskSweeper` now does**, on its own minute-long ticker with a
+  startup pass, closing what nobody is waiting for: a running task whose lease
+  lapsed, and a queued task past its own timeout plus the dispatch grace (or
+  `DefaultRunnerQueuedCeiling` when it carries no timeout). It closes each row
+  through the existing `FailAbandoned`/`CancelQueued`, so the wording and the
+  atomic re-check stay in one place, and it is safe on every daemon at once.
+  This is what stops a redeploy leaving a queued row *claimable* — a machine
+  switched on an hour later running a script for a run that died.
+- **An oversized result no longer strands the task.** The agent trims to 1 MiB
+  per stream and FAILS the step naming the limit, rather than handing on half a
+  document; the server answers 413 with a message that says what to do; and
+  `Complete` failures are no longer all collapsed into a terminal 409 — a
+  transient error is a 503 and the agent retries with backoff.
+- **A dropped packet no longer kills the agent.** `post()` catches `OSError`
+  (which covers the read-phase `TimeoutError` that is not a `URLError`) and
+  `ValueError` (a proxy's HTML error page), `execute()` is total, and
+  `subprocess.run` uses `errors="replace"` so binary output cannot escape.
+  `--once` also exits on an empty queue now, which is what it always claimed.
+
+**Seam 3 — the runner host's own guarantees.**
+
+Each was promised in a comment or in `docs/guide/runners.md` and not delivered.
+
+- **`--allow` turns the shell off.** Checking `parts[0]` and then running the
+  string with `shell=True` enforced nothing. With an allow-list the command is
+  `shlex.split` and executed directly, so metacharacters are argument text.
+  This is a **behaviour change** for anyone whose allowed command used a pipe:
+  the docs, the changelog and the refusal message all say to put it in a script
+  and allow that.
+- **The credential is created 0600** via `os.open`, not written and chmod'ed,
+  and its directory is 0700.
+- **`install` restarts**, so re-running it — the documented way to tighten the
+  allow-list — actually applies the new list instead of printing "Started."
+  over the old one.
+- **The unit sets `KillMode=mixed` and `TimeoutStopSec=660s`**, which is what
+  makes the "stops between tasks" promise in `runner.sh` and `dzrunner.py`
+  true; systemd's default SIGTERMs the whole cgroup.
+- **Setup moves files into place instead of writing over them**, so re-running
+  the installed copy no longer truncates the script `sh` is reading — which
+  used to happen *after* the single-use token was spent.
+- **The installer carries the agent's SHA-256** and refuses a mismatch before
+  anything is made executable, and `runnerBaseURL` now goes through
+  `effectiveBaseURL` so `X-Forwarded-Proto`/`-Host` are gated on
+  `TrustProxyHeaders` like everywhere else. The checksum is not a signature —
+  it comes down the same channel — but it closes the split channel, a tampered
+  mirror and a truncated download.
+
+**Standalone.**
+
+- **`InlineOnly` is enforced by the ENGINE, from the manifest**
+  (`refuseInlineOnlyFileRefs`), for every drop rather than inside
+  `RemoteTransport.Execute`. That fixed two things at once: `run_on_runner` — a
+  native drop — silently ran with empty stdin on a file input and reported
+  SUCCESS, and every remote transport refused file refs even for a co-located
+  gRPC module that never declared the flag.
+- **The step normalizes its `runner`/`label` params** the way registration
+  normalizes them, so `Linux` matches the `linux` the admin page shows.
+- **`manifestsSnapshot` is tenant-scoped**, so a support bundle stops accusing a
+  working flow of referencing an unknown module (and skipping every dependent
+  check on that node). The platform killswitch page uses a new
+  `NodeResolver.AllManifests`, which is the one legitimate instance-wide view —
+  a tenant runner's drops were invisible on the only surface that can switch
+  them off.
+- **A remote may not take a built-in's id.** `lookup` prefers Native but the
+  manifest map added Remote after it, so the palette described the remote while
+  every run executed the built-in. Refused at registration via
+  `RemoteCatalog.Reserved`, with `addKeeping` as the belt-and-braces half.
+- **`ListManifests` falls back to `GetManifest`** (invoked by name; deliberately
+  not re-declared in the `.proto`) when a server answers `Unimplemented`, so
+  runners built against the older contract keep registering — which is what the
+  proto's own comment about a runner's binary "not being the daemon's to
+  update" asks for.
+- **Progress is forwarded.** The handler decoded `Message` and dropped it; there
+  is now a `progress` column, and `Dispatch` emits each new line as it polls.
+- **Delete asks first** in `AdminRunners`, like every sibling admin page, and
+  the test that pinned its absence now pins the confirmation.
+- Cleanup done: `Env` is populated from `job.Env` rather than being decoration;
+  `RemoteTransport.Close` is a documented no-op and the per-drop `conn` field is
+  gone (the connection is the catalog's, shared per runner);
+  `RunnerCategories` includes `"external"`; `runner_tokens (expires_at)` and
+  `runner_tasks (finished_at)` are indexed for the sweeps that scan them; the
+  501 is no longer written twice; the dispatch poll loosens to 2s after 30s and
+  the "is anything online?" listing is throttled to 5s.
+
+**Left alone, on purpose.**
+
+- [ ] **The lease is still written with the claiming daemon's wall clock**
+      and compared against another's. Fixing it properly means computing
+      `lease_until` from the database's `now()`, which the injected-clock
+      contract suite is built against — so it is a store-API change, not a
+      one-liner. Low harm meanwhile: `TaskLease` is two minutes and NTP skew is
+      seconds. Do it with the clock injection, not around it.
+- [ ] **The registration token is still passed in argv**, so it is readable via
+      `/proc/*/cmdline` during install. Moving it to an environment variable or
+      a file would help a little (`/proc/*/environ` is owner-only) but the
+      token is single-use and 30-minute-lived, and `runner.sh` spends it in the
+      foreground within seconds. Worth doing when the installer next changes,
+      not on its own.
+- [ ] **Two assertions the review called vacuous were not located.** The report
+      named `engine/coverage_test.go` and `daemon/runners_test.go` without
+      lines, and nothing in either is obviously unable to fail. The nearest
+      candidate — `remote_multidrop_test.go` asserting no namespaced alias is
+      filed — is a deliberate regression guard and stays.
+
 ### Vocabulary — renamed, with one convention to hold
 
 The product says **step** (sv: *steg*) everywhere a person can read it, as of

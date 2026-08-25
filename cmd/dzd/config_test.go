@@ -181,7 +181,6 @@ func TestApplyNetworkPolicy_DevModeNoFatal(t *testing.T) {
 	applyNetworkPolicy("", true)
 }
 
-
 // The dev remote spec has to name a tenant, because the catalog is keyed by
 // one and a remote registered under no tenant resolves for nobody. An entry
 // that omits it gets devRemoteTenant — the tenant the seeded development user

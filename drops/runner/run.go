@@ -181,8 +181,15 @@ func execute(ctx context.Context, job core.Job, progress chan<- core.Progress) (
 		return failed(job, "no_tenant", "this step has no organisation to run against"), nil
 	}
 
-	runnerName := params.StringDefault(job.Params, "runner", "")
-	label := params.StringDefault(job.Params, "label", "")
+	// Normalized the same way registration normalizes them: lower-cased and
+	// trimmed. A runner installed with `--labels Linux,Build` is stored (and
+	// listed in the admin page) as linux and build, so a step targeting "Linux"
+	// — or "build " with a trailing space from a paste — matched nothing and
+	// failed with 'no runner is labelled "Linux"' while the page plainly showed
+	// one. Same for the name, which validRunnerName only ever allows in
+	// lower-case.
+	runnerName := normalizeTarget(params.StringDefault(job.Params, "runner", ""))
+	label := normalizeTarget(params.StringDefault(job.Params, "label", ""))
 	script := strings.TrimSpace(params.StringDefault(job.Params, "script", ""))
 	if script == "" {
 		return failed(job, "no_script", "this step has no command to run"), nil
@@ -204,10 +211,15 @@ func execute(ctx context.Context, job core.Job, progress chan<- core.Progress) (
 	}
 
 	res, err := d.Dispatch(ctx, Request{
-		Tenant:  tenant,
-		Runner:  runnerName,
-		Label:   label,
-		Script:  script,
+		Tenant: tenant,
+		Runner: runnerName,
+		Label:  label,
+		Script: script,
+		// The node's own environment, with ${secret.…} already resolved by the
+		// engine. Plumbed all the way to the agent — which merges it over its
+		// own environment — but never populated here until now, so a script
+		// that read $MONTH got nothing and the whole path was decoration.
+		Env:     job.Env,
 		Stdin:   stdinFrom(job),
 		Timeout: timeout,
 	}, func(msg string) {
@@ -238,7 +250,20 @@ func execute(ctx context.Context, job core.Job, progress chan<- core.Progress) (
 	}, nil
 }
 
+// normalizeTarget matches daemon.normalizeLabels' rule for one value. Kept
+// here rather than imported because a drop must not depend on the daemon; the
+// rule is two operations and the tests on both sides pin it.
+func normalizeTarget(s string) string {
+	return strings.ToLower(strings.TrimSpace(s))
+}
+
 // stdinFrom renders the wired input as the text the script reads.
+//
+// A file reference cannot reach here: the port is InlineOnly and the engine
+// refuses such a job before the step runs (engine.refuseInlineOnlyFileRefs).
+// The nil case below is therefore "nothing wired in", not "a file was wired
+// in" — which is what it used to be, and why a file-producing step upstream
+// made the script run with empty stdin and report SUCCESS.
 func stdinFrom(job core.Job) string {
 	ref, ok := job.Input["in"]
 	if !ok {

@@ -4,9 +4,12 @@
 package daemon
 
 import (
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"net/http"
 	"strings"
+	"sync"
 )
 
 // The daemon serves its own runner agent.
@@ -39,6 +42,35 @@ var runnerFiles embed.FS
 // explicit --url.
 const urlPlaceholder = "@@DAZYFLOW_URL@@"
 
+// agentSHAPlaceholder is where the installer carries the checksum of the agent
+// it is about to download and execute.
+//
+// runner.sh fetches dzrunner.py and runs it as a service, so without this the
+// only thing vouching for that file is the transport. Substituting the hash of
+// the very bytes this build embeds means the two files cannot disagree: an
+// agent altered between here and the runner's disk fails the check instead of
+// being chmod +x'ed. Left as the placeholder when running from the repository,
+// where runner.sh skips the check and says so.
+const agentSHAPlaceholder = "@@DAZYFLOW_AGENT_SHA256@@"
+
+var (
+	agentSHAOnce sync.Once
+	agentSHAHex  string
+)
+
+// agentChecksum is the SHA-256 of the embedded agent, computed once.
+func agentChecksum() string {
+	agentSHAOnce.Do(func() {
+		b, err := runnerFiles.ReadFile("embed/dzrunner.py")
+		if err != nil {
+			return
+		}
+		sum := sha256.Sum256(b)
+		agentSHAHex = hex.EncodeToString(sum[:])
+	})
+	return agentSHAHex
+}
+
 // serveRunnerAgent hands over the agent script.
 func (h *HTTPGateway) serveRunnerAgent(rw http.ResponseWriter, _ *http.Request) {
 	b, err := runnerFiles.ReadFile("embed/dzrunner.py")
@@ -62,6 +94,9 @@ func (h *HTTPGateway) serveRunnerScript(rw http.ResponseWriter, r *http.Request)
 		return
 	}
 	script := strings.ReplaceAll(string(b), urlPlaceholder, h.runnerBaseURL(r))
+	if sum := agentChecksum(); sum != "" {
+		script = strings.ReplaceAll(script, agentSHAPlaceholder, sum)
+	}
 	rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	rw.WriteHeader(http.StatusOK)
 	_, _ = rw.Write([]byte(script))
@@ -73,12 +108,22 @@ func (h *HTTPGateway) serveRunnerScript(rw http.ResponseWriter, r *http.Request)
 // deliberately set and the only one that is right behind a proxy. Falls back to
 // reconstructing it from the request, which is what a local development server
 // needs — there the request host IS the address.
+//
+// The fallback goes through effectiveBaseURL rather than reading the forwarded
+// headers itself. GET /runner.sh is unauthenticated and the address it bakes in
+// is where the agent then downloads code from and posts its registration token,
+// so an ungated X-Forwarded-Proto let any caller decide the served script said
+// "http://" — and an ungated X-Forwarded-Host let a primed cache point real
+// operators at somebody else's server. effectiveBaseURL gates both on
+// TrustProxyHeaders, which is the rule the rest of the gateway already follows.
 func (h *HTTPGateway) runnerBaseURL(r *http.Request) string {
-	if h.svc != nil && h.svc.PublicBaseURL != "" {
-		return strings.TrimRight(h.svc.PublicBaseURL, "/")
+	if h.svc != nil {
+		if b := h.effectiveBaseURL(r); b != "" {
+			return b
+		}
 	}
 	scheme := "http"
-	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+	if h.requestIsHTTPS(r) {
 		scheme = "https"
 	}
 	return scheme + "://" + r.Host

@@ -2234,6 +2234,7 @@
     "offlineSince": "Last seen {{at}}",
     "neverSeen": "Never connected",
     "remove": "Remove runner",
+    "removeReally": "Remove? Its credential stops working.",
     "installHead": "Run this on the machine",
     "installIntro": "One command. It downloads one readable Python file, registers the machine, and installs a service so it keeps running after a reboot. Nothing needs to reach the machine, so this works behind a firewall.",
     "installExpiry": "This command stops working at {{at}}, and only works once. Add another runner to get a fresh one.",

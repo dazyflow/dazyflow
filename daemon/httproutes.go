@@ -360,10 +360,16 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /dzrunner.py", h.serveRunnerAgent)
 	mux.HandleFunc("GET /runner.sh", h.serveRunnerScript)
 
-	mux.HandleFunc("POST /api/v1/runner/register", h.registerRunner)
-	mux.HandleFunc("POST /api/v1/runner/claim", h.claimRunnerTask)
-	mux.HandleFunc("POST /api/v1/runner/tasks/{id}/progress", h.runnerTaskProgress)
-	mux.HandleFunc("POST /api/v1/runner/tasks/{id}/result", h.runnerTaskResult)
+	// Throttled per IP like every other unauthenticated DB-touching route
+	// here: each of these runs a token or credential lookup — /claim a locking
+	// UPDATE as well — before it can decide the caller is a stranger. Register
+	// takes the tighter webhook allowance because it is rare and opens a
+	// transaction; the polled endpoints take the runner allowance, which has
+	// to fit a whole office of agents behind one NAT.
+	mux.HandleFunc("POST /api/v1/runner/register", h.rateLimitWebhook(h.registerRunner))
+	mux.HandleFunc("POST /api/v1/runner/claim", h.rateLimitRunner(h.claimRunnerTask))
+	mux.HandleFunc("POST /api/v1/runner/tasks/{id}/progress", h.rateLimitRunner(h.runnerTaskProgress))
+	mux.HandleFunc("POST /api/v1/runner/tasks/{id}/result", h.rateLimitRunner(h.runnerTaskResult))
 
 	mux.HandleFunc("GET /api/v1/admin/oauth-providers", h.requireAuth(h.listAdminOAuthProviders))
 	mux.HandleFunc("PUT /api/v1/admin/oauth-providers/{name}", h.requireAuth(h.upsertAdminOAuthProvider))

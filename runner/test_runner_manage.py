@@ -30,14 +30,15 @@ HERE = Path(__file__).resolve().parent
 SCRIPT = HERE / "runner.sh"
 SH = shutil.which("sh") or "/bin/sh"
 
-REAL_TOOLS = ["mkdir", "chmod", "id", "cat", "rm", "sed", "tail", "dirname",
-              "python3", "sh"]
+REAL_TOOLS = ["mkdir", "chmod", "id", "cat", "rm", "mv", "sed", "tail", "dirname",
+              "python3", "sh", "cut", "sha256sum"]
 
 STUB_SYSTEMCTL = """#!/bin/sh
 echo "$*" >> "$SYSTEMCTL_CALLS"
 case "$*" in
 *show-environment*) exit ${SYSTEMCTL_BUS_EXIT:-0} ;;
 *daemon-reload*)    exit ${SYSTEMCTL_RELOAD_EXIT:-0} ;;
+*restart*)          exit ${SYSTEMCTL_RESTART_EXIT:-0} ;;
 *enable*)           exit ${SYSTEMCTL_ENABLE_EXIT:-0} ;;
 *status*)           exit ${SYSTEMCTL_STATUS_EXIT:-0} ;;
 esac
@@ -139,7 +140,12 @@ class TestInstall(ManageHarness):
         self.assertTrue(self.unit.exists())
         sc = self.calls(self.systemctl_calls)
         self.assertIn("daemon-reload", sc)
-        self.assertIn("enable --now dazyflow-runner", sc)
+        # enable, and then RESTART. `enable --now` starts nothing on a unit
+        # that is already active, so re-running install — the documented way to
+        # tighten the allow-list — left the old, looser list running while the
+        # script printed "Started."
+        self.assertIn("enable dazyflow-runner", sc)
+        self.assertIn("restart dazyflow-runner", sc)
 
     def test_refuses_a_machine_that_is_not_registered(self):
         # A service for an unregistered machine crash-loops against a server
@@ -375,3 +381,31 @@ class TestLinger(ManageHarness):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestInstallRestarts(ManageHarness):
+    """Re-running install is the documented way to TIGHTEN the allow-list.
+
+    docs/guide/runners.md: "edit ~/.dazyflow/runner.env and run ./runner.sh
+    install again". `enable --now` starts nothing on a unit that is already
+    active — systemd re-reads the file, but the running process keeps its
+    original ExecStart argv — so the operator got "Started." while the old,
+    looser list was still in force until the next reboot.
+    """
+
+    def test_a_second_install_restarts_rather_than_only_enabling(self):
+        self.registered()
+        self.assertEqual(self.run_svc("install").returncode, 0)
+        self.systemctl_calls.write_text("")  # only look at the second run
+
+        r = self.run_svc("install")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        sc = self.calls(self.systemctl_calls)
+        self.assertIn("restart dazyflow-runner", sc)
+        self.assertIn("in force now", r.stdout)
+
+    def test_a_restart_that_fails_does_not_claim_to_have_started(self):
+        self.registered()
+        r = self.run_svc("install", SYSTEMCTL_RESTART_EXIT="1")
+        self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertNotIn("Started.", r.stdout)

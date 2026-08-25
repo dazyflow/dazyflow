@@ -45,6 +45,18 @@ const (
 
 	defaultWebhookRatePerMin = 120
 	defaultWebhookRateBurst  = 40
+
+	// The runner endpoints are polled, not called: an idle agent asks for work
+	// every POLL_SECONDS and that same call is its heartbeat, so the steady
+	// rate has to comfortably fit a whole office of agents behind one NAT
+	// rather than one caller. It is still bounded, because /claim runs a
+	// credential lookup and a locking UPDATE before it can reject a stranger,
+	// and an unthrottled loop of those is a cheap way to exhaust the pool.
+	// Registration is deliberately NOT on this allowance — it is rare, it
+	// opens a transaction against runner_tokens, and it keeps the tighter
+	// webhook limiter.
+	defaultRunnerRatePerMin = 600
+	defaultRunnerRateBurst  = 120
 	// maxRateLimiterBuckets bounds the per-IP bucket map. Without a cap a
 	// flood of distinct source IPs (or IP rotation) grows the map without
 	// bound between GC sweeps. When full we evict the oldest-seen bucket.
@@ -293,6 +305,21 @@ func (h *HTTPGateway) rateLimitAuth(next http.HandlerFunc) http.HandlerFunc {
 func (h *HTTPGateway) rateLimitWebhook(next http.HandlerFunc) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
 		if h.WebhookRateLimit != nil && !h.WebhookRateLimit.Allow(clientIP(r)) {
+			rw.Header().Set("Retry-After", "60")
+			writeJSONError(rw, http.StatusTooManyRequests, "rate limit exceeded — slow down")
+			return
+		}
+		next(rw, r)
+	}
+}
+
+// rateLimitRunner wraps the agent's own endpoints with the per-IP runner
+// limiter. They sit outside requireAuth — an agent holds a runner credential,
+// not a session — and every one of them touches the database before it can
+// decide the caller is a stranger, so the throttle runs first.
+func (h *HTTPGateway) rateLimitRunner(next http.HandlerFunc) http.HandlerFunc {
+	return func(rw http.ResponseWriter, r *http.Request) {
+		if h.RunnerRateLimit != nil && !h.RunnerRateLimit.Allow(clientIP(r)) {
 			rw.Header().Set("Retry-After", "60")
 			writeJSONError(rw, http.StatusTooManyRequests, "rate limit exceeded — slow down")
 			return

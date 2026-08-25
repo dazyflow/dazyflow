@@ -115,7 +115,9 @@ cd ~/.dazyflow
 
 There is no second script to find and no systemd incantation to remember. To
 change what the runner is allowed to run, edit `~/.dazyflow/runner.env` and run
-`./runner.sh install` again.
+`./runner.sh install` again — that rewrites the unit and restarts the agent, so
+the new list is in force straight away. The agent finishes whatever it is
+running first; stopping or restarting never kills a command halfway through.
 
 > **Coming from a self-hosted CI runner?** Same shape, two differences. There is
 > no `sudo ./runner.sh install` — this is a systemd **user** service, so it
@@ -203,10 +205,22 @@ python3 dzrunner.py --allow ./fetch-invoices.sh,./reconcile.sh
 
 It will then refuse anything else, and the flow gets a clear failure saying so.
 
-Be clear-eyed about what this buys. It restricts which **program** is invoked,
-not what that program may then do. Allowing a shell — or a script that shells
-out, or an interpreter that takes arbitrary code — allows everything. It is a
-guard against a flow running the wrong thing, not a sandbox.
+**An allow-list also turns the shell off.** Without one, whatever the flow sends
+goes to a shell, because that is what the step promises. With one, the command
+is parsed by the agent and the program is executed directly — so `;`, `|`, `&&`,
+backticks and `$(...)` are ordinary characters in an argument rather than
+operators. That is what makes the list mean anything: checking only the first
+word and then handing the whole string to a shell would let
+`./fetch-invoices.sh ; anything-else` through.
+
+The practical consequence: if a command needs a pipe or a redirect, put it in a
+script and allow the script.
+
+Be clear-eyed about what this still does not buy. It restricts which **program**
+is invoked, not what that program may then do. Allowing a shell — or a script
+that shells out, or an interpreter that takes arbitrary code — allows
+everything. It is a guard against a flow running the wrong thing, not a
+sandbox.
 
 If you need a real boundary, run the agent as an unprivileged user, in a
 container, or on a machine you are willing to lose.
@@ -228,7 +242,13 @@ credential no longer identifies anything. Add a runner again and re-run the
 command.
 
 **A step fails with "not allowed to run".** The agent has an `--allow` list and
-the command isn't on it.
+the command isn't on it. If the command looks allowed, check for a pipe, a
+redirect or a `;`: an allow-list runs commands without a shell, so those are
+arguments rather than operators. Put them in a script and allow that.
+
+**A step fails saying the command printed too much.** The agent sends back at
+most 1 MiB per stream. Have the script write large output to a file and print
+the path, or print less.
 
 **A step fails saying the runner "has not checked in recently".** The machine is
 registered but the agent isn't running on it. Start it with

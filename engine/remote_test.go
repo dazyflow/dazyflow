@@ -82,7 +82,6 @@ func TestRemoteTransport_RoundTrip(t *testing.T) {
 		Descriptor: RemoteDescriptor{ID: "remote-echo", Endpoint: "bufnet"},
 		manifest:   manifestFromPB(manifest),
 		dropID:     "remote-echo",
-		conn:       conn,
 		client:     client,
 	}
 

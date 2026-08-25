@@ -358,6 +358,20 @@ func (e *Engine) buildAndExecute(
 	// the many→one auto-fan would wrongly iterate a node that takes a whole list.
 	manifest := core.MarkListPorts(transport.Manifest())
 	input := assembleInput(graph, node.ID, manifest, prior)
+	// A port declared InlineOnly cannot take a file on the daemon's disk. The
+	// flag was advisory until now — only a tooltip read it — so `run_on_runner`
+	// silently ran its script with EMPTY stdin when a file-producing step was
+	// wired in, exited 0, and reported SUCCESS with whatever the script printed
+	// for no input. Enforced here rather than in a transport because the drop
+	// that declares it may be native, and core/manifest.go promises the job is
+	// refused before it is dispatched.
+	if err := refuseInlineOnlyFileRefs(manifest, input); err != nil {
+		recordErr(err)
+		return core.Result{
+			Status: core.StatusError,
+			Error:  &core.JobError{Code: "file_input_unsupported", Message: err.Error()},
+		}, err
+	}
 
 	params, env := cloneNodeIO(node.Params, node.Env)
 	job := core.Job{

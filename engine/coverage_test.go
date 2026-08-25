@@ -487,7 +487,6 @@ func TestRemoteCatalog_Lifecycle(t *testing.T) {
 	c.nodes[remoteKey{tenant: "acme", id: "remote-echo"}] = &RemoteTransport{
 		Descriptor: RemoteDescriptor{ID: "remote-echo", Tenant: "acme"},
 		manifest:   core.Manifest{ID: "remote-echo"},
-		conn:       conn,
 		client:     nodepb.NewNodeServiceClient(conn),
 	}
 

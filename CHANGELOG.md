@@ -94,7 +94,21 @@ into the image.)
   results — it holds no session, can read no flows and can enumerate nothing),
   or the server's secrets (it receives what the step's parameters carry and
   nothing else). Removing a runner revokes its credential immediately, whether
-  or not anyone remembers to stop the agent on the machine.
+  or not anyone remembers to stop the agent on the machine, and the page asks
+  before it does.
+
+  A queued command carries whatever `${secret.…}` references it used, already
+  resolved — so the queue encrypts the script, its input and its environment at
+  rest under the organization's own key, the same envelope the secret store
+  uses. A deployment with no `DAZYFLOW_MASTER_KEY` stores them in cleartext and
+  says so at boot, which is the same posture as every other stored secret
+  there. The installer that machines are set up with also carries the checksum
+  of the agent it is about to download, and refuses to install one that does
+  not match.
+
+  A step's output comes back capped at 1 MiB per stream; a script that prints
+  more fails with a message naming the limit rather than silently handing on
+  half a document.
 
   What a runner *does* get is the part worth deciding deliberately rather than
   discovering: it runs whatever command a flow sends it, so anyone who can edit
@@ -102,10 +116,15 @@ into the image.)
   the agent runs as. That is the same bargain a self-hosted CI runner makes,
   and it is what makes a runner useful — but it means a runner is as trusted as
   the people who can edit your flows. Starting the agent with `--allow` limits
-  which programs it will invoke; be clear-eyed that this restricts the program,
-  not what that program may then do, so allowing a shell allows everything.
-  The page says all of this next to the install command rather than in a
-  footnote. Adding or removing a runner needs `organization:admin` or an API
+  which programs it will invoke, and an allow-list also turns the shell off —
+  the command is parsed by the agent and the program executed directly, so `;`,
+  `|` and `&&` are characters in an argument rather than operators. (Without
+  that, checking the first word and then handing the whole string to a shell
+  would let `./allowed.sh ; anything-else` straight through.) If a command needs
+  a pipe, put it in a script and allow the script. Be clear-eyed about what is
+  left: this restricts the program, not what that program may then do, so
+  allowing a shell allows everything. The page says all of this next to the
+  install command rather than in a footnote. Adding or removing a runner needs `organization:admin` or an API
   key carrying `module:register`; using one in a flow needs `graph:edit`, the
   same as any other step.
 

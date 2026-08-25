@@ -14,8 +14,10 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 
 	nodepb "git.sr.ht/~klahr/dazyflow/api/gen/node"
 	"git.sr.ht/~klahr/dazyflow/core"
@@ -72,21 +74,23 @@ type RemoteTLS struct {
 type RemoteTransport struct {
 	Descriptor RemoteDescriptor
 	manifest   core.Manifest
-	// dropID is what the RUNNER calls this drop, which is not what the
-	// catalog calls it: the catalog namespaces ids as runner/<runner>/<drop>
-	// so a reader of a graph can tell which steps leave the daemon. The runner
-	// knows nothing about that namespace and must not have to.
+	// dropID is what the RUNNER calls this drop. Today it is also what the
+	// catalog files it under — the runner/<runner>/<drop> namespace was
+	// removed, since nothing resolved through it and it made every id in
+	// DAZYFLOW_REMOTE_MODULES unaddressable from a graph. Kept as its own
+	// field because the two are separate concepts and only one is the
+	// runner's.
 	dropID string
-	conn   *grpc.ClientConn
+	// No connection here on purpose: it belongs to the CATALOG, which owns one
+	// per runner and shares it across every drop that runner serves. A
+	// per-drop conn would be closed twelve times for a runner serving twelve
+	// drops — see Close.
 	client nodepb.NodeServiceClient
 }
 
 func (t *RemoteTransport) Manifest() core.Manifest { return t.manifest }
 
 func (t *RemoteTransport) Execute(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
-	if err := refuseFileRefs(job); err != nil {
-		return core.Result{}, err
-	}
 	pbJob, err := jobToPB(job)
 	if err != nil {
 		return core.Result{}, fmt.Errorf("marshal job: %w", err)
@@ -156,18 +160,34 @@ func (t *RemoteTransport) Execute(ctx context.Context, job core.Job, progress ch
 	}
 }
 
-func (t *RemoteTransport) Close() error {
-	if t.conn != nil {
-		return t.conn.Close()
-	}
-	return nil
-}
+// Close is deliberately a no-op on the connection.
+//
+// A transport is per-DROP and the connection is per-RUNNER, shared by every
+// drop that runner serves — so closing it here would take twelve working drops
+// down with the one being discarded. RemoteCatalog.Close owns the connections
+// and iterates them, which is the only place that can do it once each.
+//
+// Kept rather than deleted because core.Transport's optional closer shape is
+// what callers type-assert for; answering nil is how this transport says "not
+// mine to close".
+func (t *RemoteTransport) Close() error { return nil }
 
 // RemoteCatalog discovers remote modules from descriptor files in the same
 // directory keyed by module ID. Connection + manifest fetch happen at Register
 // time so the engine can validate graphs without a per-node RPC.
 type RemoteCatalog struct {
 	DialTimeout time.Duration
+	// Reserved reports that a drop id is already owned by the instance-wide
+	// catalog (a native or MCP drop). Registration is refused for such an id.
+	//
+	// This is a resolution bug made loud. NodeResolver.lookup prefers Native,
+	// but ManifestsForTenant adds Remote AFTER Native — so a remote declaring
+	// `http_request` would put its own manifest in the palette and in
+	// validation while every run executed the built-in. Nothing errors, and
+	// the flow author is looking at a step description that does not describe
+	// what runs. Nil disables the check, which is what a unit harness with no
+	// native registry wants.
+	Reserved func(id string) bool
 
 	mu    sync.RWMutex
 	nodes map[remoteKey]*RemoteTransport
@@ -176,6 +196,41 @@ type RemoteCatalog struct {
 	// would otherwise each close the same conn.
 	conns map[runnerKey]*grpc.ClientConn
 }
+
+// listManifests asks a runner what it serves, falling back to the single-drop
+// GetManifest for a server built before ListManifests existed.
+//
+// The fallback is the point. ListManifests replaced GetManifest in one change,
+// and the comment justifying the plural shape says a runner's binary "is not
+// the daemon's to update" — which is exactly the argument for not breaking the
+// servers already written against the old method. An upgraded daemon would
+// otherwise refuse every one of them with Unimplemented.
+//
+// Invoked by name rather than through a generated stub because GetManifest is
+// gone from the .proto and should stay gone from what we ASK new servers to
+// implement. The messages are wire-compatible: GetManifestRequest was empty,
+// as ListManifestsRequest is, and both methods return the same Manifest.
+func listManifests(ctx context.Context, conn *grpc.ClientConn, client nodepb.NodeServiceClient) ([]*nodepb.Manifest, error) {
+	res, err := client.ListManifests(ctx, &nodepb.ListManifestsRequest{})
+	if err == nil {
+		return res.Manifests, nil
+	}
+	if status.Code(err) != codes.Unimplemented {
+		return nil, err
+	}
+	var one nodepb.Manifest
+	if ferr := conn.Invoke(ctx, legacyGetManifestMethod, &nodepb.ListManifestsRequest{}, &one); ferr != nil {
+		// Report the ORIGINAL error: the server not implementing either method
+		// is the honest diagnosis, and the fallback's own error would send the
+		// reader after a method we no longer publish.
+		return nil, err
+	}
+	return []*nodepb.Manifest{&one}, nil
+}
+
+// legacyGetManifestMethod is the pre-ListManifests RPC, kept only as a client
+// fallback. Not in the .proto: nothing new should implement it.
+const legacyGetManifestMethod = "/dazyflow.node.v1.NodeService/GetManifest"
 
 // runnerKey identifies one registered runner endpoint.
 type runnerKey struct {
@@ -226,21 +281,21 @@ func (c *RemoteCatalog) Register(desc RemoteDescriptor) error {
 		return fmt.Errorf("dial %q: %w", desc.Endpoint, err)
 	}
 	client := nodepb.NewNodeServiceClient(conn)
-	res, err := client.ListManifests(ctx, &nodepb.ListManifestsRequest{})
+	manifests, err := listManifests(ctx, conn, client)
 	if err != nil {
 		_ = conn.Close()
 		return fmt.Errorf("ListManifests %q: %w", desc.ID, err)
 	}
-	if len(res.Manifests) == 0 {
+	if len(manifests) == 0 {
 		_ = conn.Close()
 		return fmt.Errorf("remote %q serves no drops", desc.ID)
 	}
 
 	// Validate the whole set before filing any of it, so a runner declaring
 	// one bad drop doesn't half-register.
-	transports := make(map[remoteKey]*RemoteTransport, len(res.Manifests))
-	seen := make(map[string]struct{}, len(res.Manifests))
-	for _, pb := range res.Manifests {
+	transports := make(map[remoteKey]*RemoteTransport, len(manifests))
+	seen := make(map[string]struct{}, len(manifests))
+	for _, pb := range manifests {
 		manifest := manifestFromPB(pb)
 		if manifest.ID == "" {
 			_ = conn.Close()
@@ -251,6 +306,12 @@ func (c *RemoteCatalog) Register(desc RemoteDescriptor) error {
 			return fmt.Errorf("remote %q declared drop %q twice", desc.ID, manifest.ID)
 		}
 		seen[manifest.ID] = struct{}{}
+		if c.Reserved != nil && c.Reserved(manifest.ID) {
+			_ = conn.Close()
+			return fmt.Errorf("remote %q declares drop %q, which is a built-in step on this "+
+				"deployment — pick another id, or the palette would describe your drop while "+
+				"every run executed the built-in", desc.ID, manifest.ID)
+		}
 		// Filed under the id the remote declares, which is the id a graph
 		// references. These were briefly namespaced as runner/<remote>/<drop>,
 		// for a runner model that no longer exists — and since nothing else
@@ -260,7 +321,6 @@ func (c *RemoteCatalog) Register(desc RemoteDescriptor) error {
 			Descriptor: desc,
 			manifest:   inlineOnlyInputs(manifest),
 			dropID:     manifest.ID,
-			conn:       conn,
 			client:     client,
 		}
 	}
@@ -361,6 +421,30 @@ func (c *RemoteCatalog) ManifestsFor(tenant string) map[string]core.Manifest {
 		}
 	}
 	return out
+}
+
+// AllManifests returns every tenant's remote drops, keyed by drop id, with the
+// tenants that can resolve each one.
+//
+// Deliberately NOT a catalog anyone routes on — an id can belong to several
+// tenants and this flattens them. It exists for the platform killswitch page,
+// which is instance-wide and must be able to switch off a misbehaving
+// tenant-runner drop. Without it those drops are absent from the only surface
+// that can disable them, while NodeResolver.DropGate would happily enforce a
+// switch on that id if one existed.
+func (c *RemoteCatalog) AllManifests() (map[string]core.Manifest, map[string][]string) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	manifests := map[string]core.Manifest{}
+	tenants := map[string][]string{}
+	for k, t := range c.nodes {
+		manifests[k.id] = t.manifest
+		tenants[k.id] = append(tenants[k.id], k.tenant)
+	}
+	for id := range tenants {
+		sort.Strings(tenants[id])
+	}
+	return manifests, tenants
 }
 
 // Close terminates every runner connection.
@@ -533,8 +617,9 @@ const RunnerNamespace = "runner/"
 // A runner is on another machine, and Ref.Ref is a path on the DAEMON's disk
 // (or a scratch:// path in its per-run tree). Neither means anything to a
 // process elsewhere, so a job carrying one is refused rather than sent — see
-// refuseFileRefs. The flag is on the manifest so the editor can say so on the
-// port instead of leaving the failure to a run.
+// refuseInlineOnlyFileRefs, which the engine calls for every drop. The flag is
+// on the manifest so the editor can say so on the port instead of leaving the
+// failure to a run.
 func inlineOnlyInputs(m core.Manifest) core.Manifest {
 	if len(m.Inputs) == 0 {
 		return m
@@ -548,20 +633,31 @@ func inlineOnlyInputs(m core.Manifest) core.Manifest {
 	return m
 }
 
-// refuseFileRefs rejects a job whose input is a path rather than a value.
+// refuseInlineOnlyFileRefs rejects a job whose input is a path rather than a
+// value, on a port that declared it cannot take one.
 //
-// Refused BEFORE dialling, and with the real reason: the alternative is the
-// runner receiving a path into a filesystem it cannot see, failing somewhere
-// inside the org's own code, and reporting an error about a missing file that
-// the org will reasonably read as their bug.
-func refuseFileRefs(job core.Job) error {
-	for port, ref := range job.Input {
-		if ref.Ref == "" {
+// Driven by the MANIFEST rather than by the transport, which is the whole
+// point. Applied per-transport it did two things wrong at once: a native drop
+// declaring InlineOnly — `run_on_runner` — was never checked at all and ran its
+// script with empty stdin, and a co-located gRPC module that never declared the
+// flag had every file input refused anyway.
+//
+// Refused BEFORE the step runs, and with the real reason: the alternative is
+// the runner receiving a path into a filesystem it cannot see, failing
+// somewhere inside the org's own code, and reporting an error about a missing
+// file that the org will reasonably read as their bug.
+func refuseInlineOnlyFileRefs(m core.Manifest, input map[string]core.Ref) error {
+	for _, port := range m.Inputs {
+		if !port.InlineOnly {
+			continue
+		}
+		ref, ok := input[port.Port]
+		if !ok || ref.Ref == "" {
 			continue
 		}
 		return fmt.Errorf(
-			"input %q is a file on the daemon (%s), and this step runs on your runner, "+
-				"which cannot read it — connect a value instead", port, ref.Ref)
+			"input %q is a file on the daemon (%s), and this step cannot read it — "+
+				"connect a value instead", port.Port, ref.Ref)
 	}
 	return nil
 }
@@ -575,7 +671,12 @@ func refuseFileRefs(job core.Job) error {
 // looks startable in the editor and never fires — the worst kind of wrong,
 // because nothing errors.
 var RunnerCategories = map[string]bool{
-	"ai":             true,
+	"ai": true,
+	// "external" is what core/manifest.go names for exactly this — "MCP tools
+	// and remote gRPC modules" — and it was the one bucket a runner could not
+	// declare. A runner that picked the category documented for it landed
+	// ungrouped.
+	"external":       true,
 	"flow_control":   true,
 	"io":             true,
 	"logic":          true,

@@ -162,14 +162,33 @@ describe("AdminRunners", () => {
     expect(await screen.findByText("runners.neverSeen")).toBeInTheDocument();
   });
 
-  it("removes a machine", async () => {
+  it("removes a machine, once it has been confirmed", async () => {
+    const user = userEvent.setup();
+    listRunners.mockResolvedValue({ runners: [online] });
+    render(<AdminRunners />);
+    await screen.findByText("invoices-box");
+
+    // Removing a runner revokes its credential and cannot be undone — getting
+    // the machine back means a fresh token and a second visit to it. So the
+    // first click asks rather than acting, like every other admin page.
+    await user.click(screen.getByRole("button", { name: "runners.remove" }));
+    expect(deleteRunner).not.toHaveBeenCalled();
+    expect(screen.getByText("runners.removeReally")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "common.remove" }));
+    await waitFor(() => expect(deleteRunner).toHaveBeenCalledWith("tok", "invoices-box"));
+  });
+
+  it("lets the operator back out of removing a machine", async () => {
     const user = userEvent.setup();
     listRunners.mockResolvedValue({ runners: [online] });
     render(<AdminRunners />);
     await screen.findByText("invoices-box");
 
     await user.click(screen.getByRole("button", { name: "runners.remove" }));
-    await waitFor(() => expect(deleteRunner).toHaveBeenCalledWith("tok", "invoices-box"));
+    await user.click(screen.getByRole("button", { name: "common.cancel" }));
+    expect(deleteRunner).not.toHaveBeenCalled();
+    expect(screen.queryByText("runners.removeReally")).not.toBeInTheDocument();
   });
 
   // The page warns on every visit, not only when a runner exists. Whoever can

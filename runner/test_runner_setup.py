@@ -37,7 +37,12 @@ SH = shutil.which("sh") or "/bin/sh"
 # `sh` is on the list because runner.sh is re-run as a child during setup, the
 # same way it invokes the agent through python3 rather than relying on a
 # shebang.
-REAL_TOOLS = ["mkdir", "chmod", "id", "cat", "python3", "env", "rm", "sh", "sed", "tail", "dirname"]
+# mv: setup moves the downloaded agent and the copy of this script into place
+# rather than writing over them, so the file /bin/sh is reading is never
+# truncated underneath it and a failed checksum leaves nothing half-trusted.
+# cut/sha256sum: the checksum check the served installer carries.
+REAL_TOOLS = ["mkdir", "chmod", "id", "cat", "python3", "env", "rm", "mv", "sh",
+              "sed", "tail", "dirname", "cut", "sha256sum"]
 
 # A stand-in for the agent, delivered by the stub downloader. It records how it
 # was invoked and exits however the test asks.
@@ -83,6 +88,7 @@ echo "$*" >> "$SYSTEMCTL_CALLS"
 case "$*" in
 *show-environment*) exit ${SYSTEMCTL_BUS_EXIT:-0} ;;
 *daemon-reload*)    exit ${SYSTEMCTL_RELOAD_EXIT:-0} ;;
+*restart*)          exit ${SYSTEMCTL_RESTART_EXIT:-0} ;;
 *enable*)           exit ${SYSTEMCTL_ENABLE_EXIT:-0} ;;
 esac
 exit 0
@@ -172,10 +178,11 @@ class TestServiceInstall(SetupHarness):
         # It registered while the operator was watching.
         self.assertIn("--register-only", self.calls(self.agent_calls))
 
-        # And it did the two steps that used to be homework.
+        # And it did the steps that used to be homework.
         sc = self.calls(self.systemctl_calls)
         self.assertIn("daemon-reload", sc)
-        self.assertIn("enable --now dazyflow-runner", sc)
+        self.assertIn("enable dazyflow-runner", sc)
+        self.assertIn("restart dazyflow-runner", sc)
 
     def test_the_unit_carries_no_token(self):
         r = self.run_install("--token", "dzrt_secret", "--service")
@@ -200,7 +207,15 @@ class TestServiceInstall(SetupHarness):
         self.assertIn("WantedBy=default.target", unit)
         # And Restart, which covers the agent dying rather than the machine.
         self.assertIn("Restart=always", unit)
-        self.assertIn("enable --now dazyflow-runner", self.calls(self.systemctl_calls))
+        # KillMode=mixed is what makes the drain real: systemd's default
+        # SIGTERMs the whole cgroup, so a stop killed the running script — the
+        # opposite of what the agent's signal handler and ./runner.sh restart
+        # both promise.
+        self.assertIn("KillMode=mixed", unit)
+        self.assertIn("TimeoutStopSec=", unit)
+        sc = self.calls(self.systemctl_calls)
+        self.assertIn("enable dazyflow-runner", sc)
+        self.assertIn("restart dazyflow-runner", sc)
 
     def test_an_allow_list_reaches_the_service(self):
         # --allow is the one setting the saved credential does not carry, so
@@ -359,3 +374,69 @@ class TestArgumentHandling(SetupHarness):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestSelfUpdateAndIntegrity(SetupHarness):
+    """Setup downloads two files and then executes one of them.
+
+    Both properties here are about that: the copy of this script must not be
+    written over the file /bin/sh is currently reading, and the agent — which is
+    about to be chmod +x'ed and run as a service — must match what the server
+    said it was serving.
+    """
+
+    def test_re_running_the_installed_copy_does_not_corrupt_itself(self):
+        # The script itself invites the re-run ("consider re-running with
+        # --allow"), and after the first install the installed copy is the only
+        # one the operator has. Writing over it truncates and rewrites the file
+        # sh is reading by byte offset, so the rest of the run executes whatever
+        # now sits at that position — AFTER the single-use token is spent.
+        first = self.run_install("--token", "dzrt_good")
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        installed = self.home / ".dazyflow" / "runner.sh"
+        self.assertTrue(installed.exists(), "setup left no copy of itself")
+
+        env = dict(self.env)
+        r = subprocess.run(
+            [SH, str(installed), "--token", "dzrt_good", "--allow", "./x.sh"],
+            env=env, capture_output=True, text=True, timeout=60,
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        # No syntax error, no half-line: sh read the whole script.
+        for noise in ("Syntax error", "unexpected", "not found"):
+            self.assertNotIn(noise, r.stderr, r.stderr)
+        # And the allow-list from the second run was recorded, which only
+        # happens if execution reached the end of cmd_setup.
+        self.assertIn("DAZYFLOW_ALLOW=./x.sh",
+                      (self.home / ".dazyflow" / "runner.env").read_text())
+
+    def test_an_agent_that_does_not_match_the_published_checksum_is_refused(self):
+        # runner.sh chmod +x's the agent and runs it as a service, so what
+        # vouches for those bytes matters. The server substitutes the checksum
+        # of the file it is serving; here the download is deliberately something
+        # else.
+        served = Path(self.tmp) / "served-runner.sh"
+        src = (HERE / "runner.sh").read_text()
+        self.assertIn("@@DAZYFLOW_AGENT_SHA256@@", src,
+                      "the repository copy no longer carries the placeholder")
+        served.write_text(src.replace("@@DAZYFLOW_AGENT_SHA256@@", "0" * 64))
+        served.chmod(0o755)
+
+        r = subprocess.run(
+            [SH, str(served), "--token", "dzrt_good"],
+            env=dict(self.env), capture_output=True, text=True, timeout=60,
+        )
+        self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("does not match the checksum", r.stderr)
+        # Nothing half-trusted left behind, and the token was never spent.
+        self.assertFalse((self.home / ".dazyflow" / "dzrunner.py").exists(),
+                         "a mismatched agent was installed anyway")
+        self.assertEqual(self.calls(self.agent_calls), "",
+                         "the token was spent on an agent that failed its check")
+
+    def test_the_repository_copy_says_it_cannot_verify(self):
+        # Run straight from a checkout there is no server to vouch for anything.
+        # Skipping silently would look identical to a check that passed.
+        r = self.run_install("--token", "dzrt_good")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("no checksum published", r.stdout)

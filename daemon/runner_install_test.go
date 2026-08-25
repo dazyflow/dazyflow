@@ -4,6 +4,8 @@
 package daemon
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -118,7 +120,10 @@ func TestServeRunnerScript_FallsBackToTheRequestHost(t *testing.T) {
 // Behind a proxy the scheme has to come from the forwarded header, or the agent
 // is told to call back over plaintext to an HTTPS deployment.
 func TestServeRunnerScript_HonoursForwardedProto(t *testing.T) {
-	gw := &HTTPGateway{svc: &Service{}}
+	// TrustProxyHeaders on, which is what an operator behind a TLS-terminating
+	// proxy sets. The rest of the gateway gates the header on it and so does
+	// this — see the next test for why.
+	gw := &HTTPGateway{svc: &Service{}, TrustProxyHeaders: true}
 	req := httptest.NewRequest(http.MethodGet, "/runner.sh", nil)
 	req.Host = "flows.acme.test"
 	req.Header.Set("X-Forwarded-Proto", "https")
@@ -127,6 +132,51 @@ func TestServeRunnerScript_HonoursForwardedProto(t *testing.T) {
 
 	if !strings.Contains(rw.Body.String(), "https://flows.acme.test") {
 		t.Error("the installer would tell the agent to use plaintext")
+	}
+}
+
+// GET /runner.sh is unauthenticated, and the address it bakes in is where the
+// agent then downloads code from and posts its registration token. So the
+// forwarded headers have to be gated the way requestIsHTTPS and
+// effectiveBaseURL gate them: without TrustProxyHeaders, anyone can set them.
+func TestServeRunnerScript_IgnoresForwardedHeadersWhenNotTrusted(t *testing.T) {
+	gw := &HTTPGateway{svc: &Service{}}
+	req := httptest.NewRequest(http.MethodGet, "/runner.sh", nil)
+	req.Host = "flows.acme.test"
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set("X-Forwarded-Host", "evil.example")
+	rw := httptest.NewRecorder()
+	gw.serveRunnerScript(rw, req)
+
+	body := rw.Body.String()
+	if strings.Contains(body, "evil.example") {
+		t.Error("a stranger's X-Forwarded-Host reached the installer's URL")
+	}
+	if !strings.Contains(body, "http://flows.acme.test") {
+		t.Errorf("the installer did not fall back to the request host")
+	}
+}
+
+// The installer downloads the agent and runs it as a service, so it carries the
+// checksum of the very bytes this build embeds. Without it the only thing
+// vouching for that file is the transport.
+func TestServeRunnerScript_CarriesTheAgentChecksum(t *testing.T) {
+	gw := &HTTPGateway{svc: &Service{PublicBaseURL: "https://example.com"}}
+	rw := httptest.NewRecorder()
+	gw.serveRunnerScript(rw, httptest.NewRequest(http.MethodGet, "/runner.sh", nil))
+
+	body := rw.Body.String()
+	if strings.Contains(body, agentSHAPlaceholder) {
+		t.Fatal("the installer went out with the checksum placeholder still in it")
+	}
+	agent, err := runnerFiles.ReadFile("embed/dzrunner.py")
+	if err != nil {
+		t.Fatalf("read the embedded agent: %v", err)
+	}
+	sum := sha256.Sum256(agent)
+	want := hex.EncodeToString(sum[:])
+	if !strings.Contains(body, want) {
+		t.Errorf("the installer does not carry the checksum of the agent it serves (%s)", want)
 	}
 }
 
@@ -152,7 +202,9 @@ func TestServeRunnerScript_CarriesTheVerbs(t *testing.T) {
 	}
 	// Identical to the repository file apart from the address, which
 	// TestServeRunnerScript_FillsInTheServerAddress covers on its own.
-	if body != strings.ReplaceAll(string(src), urlPlaceholder, "http://example.com") {
+	want := strings.ReplaceAll(string(src), urlPlaceholder, "http://example.com")
+	want = strings.ReplaceAll(want, agentSHAPlaceholder, agentChecksum())
+	if body != want {
 		t.Error("what is served is not the file in the repository")
 	}
 	// The verbs are the interface; losing one silently is the failure worth

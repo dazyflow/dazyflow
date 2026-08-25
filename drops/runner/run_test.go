@@ -221,3 +221,32 @@ func manifestsUnderTest(t *testing.T) []core.Manifest {
 	}
 	return out
 }
+
+// Registration normalizes labels — lower-cased, trimmed, de-duplicated — and
+// the admin page shows them that way. A step targeting the label as the
+// operator TYPED it therefore has to be normalized too, or a flow author sees
+// 'no runner is labelled "Linux"' next to a page plainly showing linux.
+func TestExecute_NormalizesTheTarget(t *testing.T) {
+	f := install(t, &fakeDispatcher{})
+
+	run(t, map[string]any{"label": "  Linux ", "script": "x"}, nil)
+	if f.got.Label != "linux" {
+		t.Errorf("label = %q, want it normalized the way registration stores it", f.got.Label)
+	}
+	if f.got.Runner != "" {
+		t.Errorf("runner = %q, want it left empty", f.got.Runner)
+	}
+
+	// The same for the name: validRunnerName only ever allows lower-case, so a
+	// capital or a pasted space could never match anything.
+	run(t, map[string]any{"runner": "Build-Box ", "script": "x"}, nil)
+	if f.got.Runner != "build-box" {
+		t.Errorf("runner = %q, want it normalized", f.got.Runner)
+	}
+
+	// Whitespace alone is still no target, not a target of "".
+	res := run(t, map[string]any{"runner": "   ", "script": "x"}, nil)
+	if res.Status != core.StatusError || res.Error.Code != "no_target" {
+		t.Errorf("result = %+v, want a no_target failure", res)
+	}
+}

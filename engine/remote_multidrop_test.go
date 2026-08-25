@@ -105,10 +105,16 @@ func TestRegister_SharesOneConnectionAcrossDrops(t *testing.T) {
 	if len(c.conns) != 1 {
 		t.Errorf("conns = %d, want 1 shared connection", len(c.conns))
 	}
+	// The connection lives on the CATALOG, one per runner. Closing a single
+	// drop's transport must therefore close nothing, or discarding one drop
+	// would take the other eleven down with it.
 	a, _ := c.Get("acme", "a")
+	if err := a.(*RemoteTransport).Close(); err != nil {
+		t.Errorf("closing one drop's transport: %v", err)
+	}
 	b, _ := c.Get("acme", "b")
-	if a.(*RemoteTransport).conn != b.(*RemoteTransport).conn {
-		t.Error("drops from one runner hold different connections")
+	if _, err := b.Execute(t.Context(), core.Job{ID: "j1"}, nil); err != nil {
+		t.Errorf("a sibling drop stopped working when one was closed: %v", err)
 	}
 }
 
