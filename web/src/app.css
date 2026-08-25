@@ -3867,6 +3867,30 @@ button.warning:hover:not(:disabled) {
   margin: 4px 6px;
   background: var(--border);
 }
+/* Caption over a group of items — the connection menu's "when does the next
+   step run?". Not focusable and not a menuitem; it only names the group. */
+.canvas-context-menu .context-menu-head {
+  padding: 6px 10px 2px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+/* Tick gutter for a radio group. Fixed width whether or not this row is the
+   checked one, so every label in the group starts at the same x. */
+.canvas-context-menu .context-menu-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 14px;
+  color: var(--accent);
+}
+/* The label takes the slack, so the tick stays left and the shortcut right. */
+.canvas-context-menu button .context-menu-label {
+  flex: 1 1 auto;
+}
 @media (prefers-reduced-motion: reduce) {
   .canvas-context-menu {
     animation: none;
@@ -4233,6 +4257,15 @@ button.warning:hover:not(:disabled) {
 .dz-node-runner {
   opacity: 1;
   color: var(--accent-2);
+}
+/* A step whose failure does not fail the run (node.continue_on_error). Full
+   opacity for the same reason as the runner chip: it answers "could this step
+   have turned the run red?", which is the question someone reading a green run
+   is asking. Amber, matching the tolerated-failure connection — the two are one
+   idea, on a wire and on a step at the end of a branch. */
+.dz-node-keepgoing {
+  opacity: 1;
+  color: var(--status-warning);
 }
 .dz-node-subtitle {
   font-size: var(--text-xs);

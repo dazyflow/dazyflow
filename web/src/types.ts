@@ -17,6 +17,11 @@ export type Node = {
   // Step switched off: skipped at run time, and everything downstream
   // of it is skipped too (setup-time aid).
   disabled?: boolean;
+  // Non-critical step: if it fails, the run carries on and finishes its other
+  // branches instead of being marked failed. For the "announce it everywhere"
+  // shape — Discord being down is no reason for the Slack post not to go out.
+  // The step's own dependents are still skipped; there is no output for them.
+  continue_on_error?: boolean;
 };
 
 export type Edge = {
@@ -237,6 +242,10 @@ export type Manifest = {
   outputs?: Port[];
   params_schema?: JSONSchema;
   idempotent?: boolean;
+  // retry_policy is "never" or "exponential_backoff". The worker refuses to
+  // retry a module that declares no policy, so the editor reads it to decide
+  // whether an on_error=retry connection would do anything at all.
+  retry_policy?: string;
   // node_state, when present, means a node of this drop keeps per-node state
   // across runs (a dedupe cursor, a poll watermark). Drives the "Reset state"
   // context-menu action and the "keeps state" indicator on the node card.

@@ -1474,7 +1474,9 @@
     },
     "geoWired": "Set by the connected input",
     "geoUnset": "No location set",
-    "portValueOnly": "takes a value, not a file"
+    "portValueOnly": "takes a value, not a file",
+    "continueOnError": "Can't fail the run",
+    "continueOnErrorHint": "If this step fails the run carries on and finishes its other branches. Anything after it is still skipped."
   },
   "issueKey": {
     "title": "Issue API key",
@@ -1939,7 +1941,17 @@
     "publishNeedsSetup": "This flow can't run yet — {{apps}} still needs setting up. Publish now and its automatic runs will fail.",
     "runSucceeded": "Done — the flow ran.",
     "runSucceededWith": "Done — the flow ran. “{{label}}” produced:",
-    "runSucceededDetails": "See the full run"
+    "runSucceededDetails": "See the full run",
+    "edgeError": {
+      "head": "When does the next step run?",
+      "abort": "Only if this step succeeds",
+      "skip": "Whether it succeeds or fails",
+      "fallback": "Only if this step fails",
+      "retry": "Retry this step on failure",
+      "noRetry": "This step can't be retried automatically — nobody can know how far it got, so retrying is your call from the run."
+    },
+    "ctxContinueOnError": "Failing here doesn't fail the run",
+    "ctxContinueOnErrorHint": "The run carries on and finishes its other branches. Steps after this one are still skipped — there's no output to feed them."
   },
   "iconUpload": {
     "upload": "Upload image"

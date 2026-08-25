@@ -269,6 +269,34 @@ upstream step happened to be connected.
 A non-zero exit fails the step, and the script's own error output is attached,
 so a failing flow tells you what your script said rather than just a number.
 
+### Letting the flow handle the exit code
+
+Sometimes a non-zero exit is not a breakage. `2` might mean "nothing to invoice
+today", and you want the flow to take a quiet path rather than fail.
+
+Set **If the script exits non-zero** to *Carry on — the flow checks the exit
+code*. The step then succeeds whatever the script returned, and hands you three
+outputs to route on:
+
+| Output | Carries |
+| --- | --- |
+| **Output** | standard output, as always |
+| **Exit code** | the number the script returned, as text — `"0"` is success |
+| **Error output** | standard error |
+
+All three are emitted either way, on a success as well as a handled failure, so
+switching the setting cannot change what your wires carry — and a script that
+succeeded with warnings on stderr still hands them over.
+
+**What this deliberately does not cover.** It applies only to a script that RAN
+and returned a code. A machine that is switched off, an agent that refused the
+script, a script the runner had to stop at the timeout — those still fail the
+step, because there is no exit code to give you, and inventing one would send
+the flow down the "the script ran and said no" path when nothing ran at all. To
+react to *those*, put an error handler on the wire out of the step: right-click
+the connection and pick **Only if this step fails**. That branch stays idle on
+every run that goes well, and runs when the step could not.
+
 **A script is never run twice.** If the machine goes down while your script is
 running, the step fails and says which machine went quiet — it is not handed to
 another runner, and it is not retried when the machine comes back. Dazyflow

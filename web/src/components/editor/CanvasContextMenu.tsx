@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useEffect, useRef } from "react";
+import { Check } from "lucide-react";
+import { ICON } from "../../icons";
 
 // CanvasContextMenu is the small right-click actions menu the flow editor pops
 // over a node or edge (Blueprint-style). It's a dumb, positioned list: the
@@ -10,11 +12,23 @@ import { useEffect, useRef } from "react";
 // the usual "click away and it's gone" contract.
 export type ContextMenuItem =
   | { separator: true }
+  // A non-interactive caption over a group of items. Added for the connection
+  // menu, where three items are answers to one question ("when does the next
+  // step run?") and read as three unrelated commands without it.
+  | { header: string }
   | {
       label: string;
       onClick: () => void;
       danger?: boolean;
       disabled?: boolean;
+      // checked marks the item as the state the thing is already in — a set of
+      // items sharing one `checked` behaves as a radio group. Rendered as a
+      // tick in a fixed gutter, so labels stay aligned whether or not any item
+      // in the menu is checked.
+      checked?: boolean;
+      // Explains a disabled item. Nothing is more annoying than a greyed-out
+      // command with no reason attached.
+      title?: string;
       // Keyboard shortcut hint, right-adjusted next to the label (hidden on
       // narrow screens — see .context-menu-shortcut in app.css).
       shortcut?: string;
@@ -79,18 +93,31 @@ export function CanvasContextMenu({
       {items.map((it, i) =>
         "separator" in it ? (
           <div key={i} className="context-menu-sep" role="separator" />
+        ) : "header" in it ? (
+          <div key={i} className="context-menu-head" role="presentation">
+            {it.header}
+          </div>
         ) : (
           <button
             key={i}
             type="button"
-            role="menuitem"
+            role={it.checked === undefined ? "menuitem" : "menuitemradio"}
+            aria-checked={it.checked === undefined ? undefined : it.checked}
             className={it.danger ? "danger" : ""}
             disabled={it.disabled}
+            title={it.title}
             onClick={() => {
               it.onClick();
               onClose();
             }}
           >
+            {/* The gutter is always rendered for a checkable item so the
+                labels of a radio group line up with each other. */}
+            {it.checked !== undefined && (
+              <span className="context-menu-check" aria-hidden="true">
+                {it.checked ? <Check size={ICON.xs} /> : null}
+              </span>
+            )}
             <span className="context-menu-label">{it.label}</span>
             {it.shortcut && <span className="context-menu-shortcut">{it.shortcut}</span>}
           </button>

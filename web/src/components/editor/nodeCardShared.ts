@@ -121,6 +121,10 @@ export type DazyNodeData = {
   // Step switched off (node.disabled): dimmed card with an "Off" chip; at
   // run time the engine skips it and everything downstream.
   disabled?: boolean;
+  // Non-critical step (node.continue_on_error): its failure does not fail the
+  // run. Shown as a chip, because a step that cannot fail a flow is a fact
+  // about the flow's shape and invisible otherwise.
+  continueOnError?: boolean;
   // Downstream of a switched-off step: will be skipped by the cascade at
   // run time. Greyed (softer than the off node itself, no chip).
   offByCascade?: boolean;

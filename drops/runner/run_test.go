@@ -6,6 +6,7 @@ package runner
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -19,6 +20,10 @@ import (
 // read. Most of these tests are about the failure shapes, because a script on
 // someone else's machine can fail in more ways than a built-in step and each
 // one needs to arrive as a sentence, not a number.
+
+// errNoMachine stands in for the dispatcher giving up — no machine carries the
+// tags, or none is switched on.
+var errNoMachine = errors.New("no machine tagged box has checked in recently")
 
 type fakeDispatcher struct {
 	got Request
@@ -516,6 +521,138 @@ func TestManifest_DeclaresTheEnvField(t *testing.T) {
 		// help has to say it.
 		if !strings.Contains(schema.Properties.Env.Description, "${secret.") {
 			t.Error("the env help does not mention ${secret.…}, which is how a credential gets in safely")
+		}
+	}
+}
+
+// ---- letting the flow handle the exit code -----------------------------
+
+// The default is unchanged and has to stay that way: a non-zero exit is a
+// failure, and every flow written before this param relies on it.
+func TestExecute_NonZeroExitStillFailsByDefault(t *testing.T) {
+	install(t, &fakeDispatcher{res: Result{ExitCode: 3, Stderr: "no such invoice"}})
+	res := run(t, map[string]any{"tags": []any{"box"}, "script": "x"}, nil)
+	if res.Status != core.StatusError || res.Error.Code != "nonzero_exit" {
+		t.Fatalf("result = %+v, want a nonzero_exit failure", res)
+	}
+	// The script's own message is the useful part; a bare number leaves the
+	// author guessing.
+	if !strings.Contains(res.Error.Message, "no such invoice") {
+		t.Errorf("message = %q, want the script's stderr attached", res.Error.Message)
+	}
+}
+
+// The point of the param: a script's exit codes become a flow signal, so 2 can
+// mean "nothing to do today" rather than "broken".
+func TestExecute_CarriesOnAndHandsTheExitCodeToTheFlow(t *testing.T) {
+	install(t, &fakeDispatcher{res: Result{ExitCode: 2, Stdout: "partial", Stderr: "warned"}})
+	res := run(t, map[string]any{
+		"tags": []any{"box"}, "script": "x", "on_nonzero_exit": "continue",
+	}, nil)
+	if res.Status != core.StatusOK {
+		t.Fatalf("status = %q (%+v), want the step to carry on", res.Status, res.Error)
+	}
+	if got := res.Output["exit_code"].Inline; got != "2" {
+		t.Errorf("exit_code = %v, want the script's own code as text", got)
+	}
+	if got := res.Output["stderr"].Inline; got != "warned" {
+		t.Errorf("stderr = %v, want the script's error output on its own wire", got)
+	}
+	if got := res.Output["out"].Inline; got != "partial" {
+		t.Errorf("out = %v, want whatever the script managed to print", got)
+	}
+}
+
+// A step switched between the two modes must not change what its wires carry,
+// or turning the setting on would silently break the branch downstream.
+func TestExecute_EmitsTheExitCodeOnSuccessToo(t *testing.T) {
+	install(t, &fakeDispatcher{res: Result{Stdout: "done", Stderr: "a warning"}})
+	res := run(t, map[string]any{"tags": []any{"box"}, "script": "x"}, nil)
+	if got := res.Output["exit_code"].Inline; got != "0" {
+		t.Errorf("exit_code = %v, want \"0\" on a success", got)
+	}
+	// A script that succeeded can still have written warnings, and a flow may
+	// want them.
+	if got := res.Output["stderr"].Inline; got != "a warning" {
+		t.Errorf("stderr = %v, want it emitted on success as well", got)
+	}
+}
+
+// The line the param draws, and the one that matters most: 'carry on' covers a
+// script that RAN and returned a code. A machine that is switched off, an agent
+// that refused the script, or a script the runner had to stop have no exit code
+// to hand over — succeeding with a made-up one would send the flow down the
+// "the script ran and said no" path when nothing ran at all.
+func TestExecute_CarryOnDoesNotSwallowAFailureToRunAtAll(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		res  Result
+		err  error
+		code string
+	}{
+		{"the agent refused it", Result{Error: "not on this runner's allow-list"}, nil, "runner_error"},
+		{"the script was stopped", Result{Error: "still running after 30s and was stopped"}, nil, "runner_error"},
+		{"no machine took it", Result{}, errNoMachine, "dispatch_failed"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			install(t, &fakeDispatcher{res: tc.res, err: tc.err})
+			res := run(t, map[string]any{
+				"tags": []any{"box"}, "script": "x", "on_nonzero_exit": "continue",
+			}, nil)
+			if res.Status != core.StatusError || res.Error.Code != tc.code {
+				t.Fatalf("result = %+v, want a %s failure even with 'carry on'", res, tc.code)
+			}
+		})
+	}
+}
+
+// Someone who wrote "ignore" meant not to fail; failing anyway would look like
+// the setting does nothing.
+func TestExecute_RefusesAnUnknownExitMode(t *testing.T) {
+	install(t, &fakeDispatcher{})
+	res := run(t, map[string]any{
+		"tags": []any{"box"}, "script": "x", "on_nonzero_exit": "ignore",
+	}, nil)
+	if res.Status != core.StatusError || res.Error.Code != "bad_param" {
+		t.Fatalf("result = %+v, want a bad_param failure", res)
+	}
+	if !strings.Contains(res.Error.Message, ExitContinue) {
+		t.Errorf("message = %q, want it to name the value that works", res.Error.Message)
+	}
+}
+
+// The outputs have to exist in the manifest, or there is nothing to wire the
+// branch from.
+func TestManifest_DeclaresTheExitCodeOutputs(t *testing.T) {
+	for _, m := range manifestsUnderTest(t) {
+		have := map[string]bool{}
+		for _, p := range m.Outputs {
+			have[p.Port] = true
+		}
+		for _, want := range []string{"out", "exit_code", "stderr"} {
+			if !have[want] {
+				t.Errorf("%s has no %q output", m.ID, want)
+			}
+		}
+		var schema struct {
+			Properties struct {
+				OnNonzeroExit struct {
+					Enum    []string `json:"enum"`
+					Default string   `json:"default"`
+				} `json:"on_nonzero_exit"`
+			} `json:"properties"`
+		}
+		if err := json.Unmarshal(m.ParamsSchema, &schema); err != nil {
+			t.Fatalf("params schema: %v", err)
+		}
+		if !slices.Equal(schema.Properties.OnNonzeroExit.Enum, []string{ExitFail, ExitContinue}) {
+			t.Errorf("enum = %v, want exactly the two the step accepts",
+				schema.Properties.OnNonzeroExit.Enum)
+		}
+		// The default has to be the old behaviour, or every existing flow
+		// changes meaning on upgrade.
+		if schema.Properties.OnNonzeroExit.Default != ExitFail {
+			t.Errorf("default = %q, want %q", schema.Properties.OnNonzeroExit.Default, ExitFail)
 		}
 	}
 }

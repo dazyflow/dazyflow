@@ -150,6 +150,57 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+// A step's failure policy — a connection's on_error and a node's
+// continue_on_error — has to survive a load and a save untouched. The engine has
+// honoured both since the beginning; the editor only just learned to READ them,
+// and until now saving from the editor silently dropped whatever an API-built
+// flow had set. Which is a data-loss bug that looks like nothing in a diff.
+describe("editor failure-policy round trip", () => {
+  // Built on the unzoned-schedule graph because that is what makes the editor
+  // dirty and so makes autosave fire at all: a plain load writes nothing, which
+  // is the point of every guard in the suite below.
+  const graphWithPolicy = (onError?: string, continueOnError?: boolean) => {
+    const g = graphWithUnzonedSchedule();
+    return {
+      ...g,
+      nodes: g.nodes.map((n) =>
+        n.id === "ntfy_1" && continueOnError ? { ...n, continue_on_error: true } : n,
+      ),
+      edges: [{ ...g.edges[0], ...(onError ? { on_error: onError } : {}) }],
+    };
+  };
+
+  const savedGraph = () =>
+    saveGraph.mock.calls[0].find((a) => a && typeof a === "object" && "nodes" in a) as
+      | {
+          nodes: { id: string; continue_on_error?: boolean }[];
+          edges: { on_error?: string }[];
+        }
+      | undefined;
+
+  it("keeps an on_error connection and a continue-on-error step through a save", async () => {
+    loadGraph.mockResolvedValue(graphWithPolicy("fallback", true));
+    mount();
+    await letAutosaveFire();
+    await waitFor(() => expect(saveGraph).toHaveBeenCalled());
+    const saved = savedGraph();
+    expect(saved?.edges[0].on_error).toBe("fallback");
+    expect(saved?.nodes.find((n) => n.id === "ntfy_1")?.continue_on_error).toBe(true);
+  });
+
+  it("writes nothing for the default, so a flow does not grow empty fields", async () => {
+    // Turning the setting on and off again has to leave the flow as it was
+    // rather than accumulating `"on_error": ""` on every wire.
+    loadGraph.mockResolvedValue(graphWithPolicy());
+    mount();
+    await letAutosaveFire();
+    await waitFor(() => expect(saveGraph).toHaveBeenCalled());
+    const saved = savedGraph();
+    expect(saved?.edges[0]).not.toHaveProperty("on_error");
+    expect(saved?.nodes[0]).not.toHaveProperty("continue_on_error");
+  });
+});
+
 describe("editor autosave guards", () => {
   it("heals a Schedule step with no timezone and persists it", async () => {
     loadGraph.mockResolvedValue(graphWithUnzonedSchedule());

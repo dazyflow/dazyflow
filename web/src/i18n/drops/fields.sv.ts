@@ -207,6 +207,8 @@ export const SV_FIELD_TITLES: Record<string, string> = {
   "Row-number column": "Kolumn med radnummer",
   "Rows": "Rader",
   "Environment variables": "Miljövariabler",
+  "Error output": "Felutskrift",
+  "If the script exits non-zero": "Om skriptet avslutas med en kod som inte är noll",
   "Run it with": "Kör det med",
   "Where to run it": "Var det ska köras",
   "Runner": "Körnod",
@@ -564,6 +566,8 @@ export const SV_FIELD_HELP: Record<string, string> = {
   "The .xlsx file in the workspace. Ignored when a 'File' input is wired.": "xlsx-filen i arbetsytan. Ignoreras när en Fil-ingång är inkopplad.",
   "The Drive file to download — pick from your account's files. The File ID input overrides this when connected.": "Drive-filen som ska laddas ner — välj bland kontots filer. Ingången Fil-ID vinner över detta när den är inkopplad.",
   "The Google Form to watch for new responses.": "Google-formuläret som ska bevakas för nya svar.",
+  "A script that exits non-zero has failed, and by default so does this step. Choose 'Carry on' and the step succeeds instead, with the script's exit code on the 'Exit code' output for the flow to branch on — the way a script author expects exit codes to work (2 might mean 'nothing to do today' rather than 'broken'). This covers ONLY a script that ran and returned a code: a machine that is switched off, an agent that refused the script, or a script the runner had to stop still fail the step, because there is no exit code to hand you and pretending otherwise would send the flow down the wrong path.":
+    "Ett skript som avslutas med en kod som inte är noll har misslyckats, och som standard gör det här steget det också. Välj 'Fortsätt' och steget lyckas i stället, med skriptets avslutningskod på utgången Avslutningskod som flödet kan förgrena på — så som den som skriver skript förväntar sig att avslutningskoder fungerar (2 kan betyda 'inget att göra i dag' snarare än 'trasigt'). Det här gäller BARA ett skript som kördes och returnerade en kod: en maskin som är avstängd, en agent som vägrade skriptet eller ett skript som körnoden fick avbryta gör fortfarande att steget misslyckas, eftersom det inte finns någon avslutningskod att ge dig och att låtsas annat skulle skicka flödet fel väg.",
   "Values the script reads from its environment — $NAME in a shell, os.environ in Python. Use ${secret.NAME} for anything sensitive: the value reaches the machine but is never written into the flow, and is blanked out of the run's output and logs. A value set here wins over one the agent's own environment already has.":
     "Värden som skriptet läser från sin miljö — $NAMN i ett skal, os.environ i Python. Använd ${secret.NAMN} för allt känsligt: värdet når maskinen men skrivs aldrig in i flödet, och maskeras bort ur körningens utdata och loggar. Ett värde som sätts här vinner över ett som agentens egen miljö redan har.",
   "Tags the machine must carry — ALL of them. One tag sends the work to whichever machine carrying it is free; adding a second narrows that to machines carrying both. Every machine's own name is also a tag, so picking a name pins this step to that one machine.":
@@ -677,6 +681,8 @@ export const SV_FIELD_HELP: Record<string, string> = {
 
 // Dropdown option labels (schema.enumNames), including the currency list.
 export const SV_ENUM_LABELS: Record<string, string> = {
+  "Fail this step": "Låt steget misslyckas",
+  "Carry on — the flow checks the exit code": "Fortsätt — flödet kontrollerar avslutningskoden",
   "(none)": "(ingen)",
   "The machine's own shell": "Maskinens eget skal",
   "sh (POSIX shell)": "sh (POSIX-skal)",

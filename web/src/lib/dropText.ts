@@ -274,6 +274,8 @@ const SV_PORTS: Record<string, string> = {
   "Ended at": "Slutade",
   "Ends at": "Slutar",
   Entity: "Enhet",
+  "Error output": "Felutskrift",
+  "Exit code": "Avslutningskod",
   Event: "Händelse",
   "Event ID": "Händelse-ID",
   Events: "Händelser",

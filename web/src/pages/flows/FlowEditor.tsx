@@ -97,6 +97,14 @@ import {
   type HistoryState,
 } from "../../lib/graphHistory";
 import { reconcileByID, samePosition, sameData } from "../../lib/graphReconcile";
+import {
+  asEdgeErrorMode,
+  edgeErrorLabelKey,
+  edgeErrorStyle,
+  retryAvailable,
+  ROUTING_MODES,
+  type EdgeErrorMode,
+} from "../../lib/edgeError";
 import { suggestNextDrops, topDropsByUsage } from "../../lib/suggest";
 import { explainApiError } from "../../lib/explainApiError";
 import { lintMessage } from "./editor/lintMessage";
@@ -265,6 +273,11 @@ function EditorInner() {
   // (node.disabled); at run time the engine skips them and everything
   // downstream (the skip cascade) — a setup-time aid.
   const [disabledNodes, setDisabledNodes] = useState<Set<string>>(() => new Set());
+  // Steps whose failure must not fail the run. The companion to a connection's
+  // on_error: those live on EDGES, so a step at the end of a branch has nowhere
+  // to hang one — which is exactly the "announce it everywhere" shape this is
+  // for.
+  const [continueOnError, setContinueOnError] = useState<Set<string>>(() => new Set());
   // Triggers live at graph-level (not per-node). Carried through so a
   // save doesn't accidentally drop the webhook secret / cron expression
   // a user configured in the settings modal.
@@ -553,8 +566,10 @@ function EditorInner() {
         target: e.to,
         sourceHandle: e.from_port,
         targetHandle: e.to_port,
-        data: { waypoints: e.waypoints ?? [] },
-        style: { stroke: "var(--accent)", strokeWidth: 1.5 },
+        data: { waypoints: e.waypoints ?? [], onError: asEdgeErrorMode(e.on_error) },
+        // Drawn from the mode, so a flow's error handling is visible on the
+        // canvas rather than hidden in its JSON. The default is unchanged.
+        style: edgeErrorStyle(asEdgeErrorMode(e.on_error)),
       })),
     );
     setFrameNodes(
@@ -571,6 +586,7 @@ function EditorInner() {
     );
     setBreakpoints(new Set((g.nodes ?? []).filter((n) => n.breakpoint).map((n) => n.id)));
     setDisabledNodes(new Set((g.nodes ?? []).filter((n) => n.disabled).map((n) => n.id)));
+    setContinueOnError(new Set((g.nodes ?? []).filter((n) => n.continue_on_error).map((n) => n.id)));
     setParamsByID(Object.fromEntries((g.nodes ?? []).map((n) => [n.id, n.params ?? {}])));
     setTriggers(g.triggers ?? []);
     setVisibility(g.visibility);
@@ -2109,6 +2125,7 @@ function EditorInner() {
       const disabled = disabledNodes.has(n.id);
       const off = offByCascade.has(n.id);
       const breakpoint = breakpoints.has(n.id);
+      const keepGoing = continueOnError.has(n.id);
       const paused = pausedAt === n.id;
       // Entrance delay while a build animation plays (see applyGraphAnimated);
       // undefined otherwise, so a node only rebuilds for it when it's actually
@@ -2169,6 +2186,7 @@ function EditorInner() {
           resourceLabels,
           loopOwned,
           disabled,
+          continueOnError: keepGoing,
           offByCascade: off,
           tokenLabels,
           breakpoint,
@@ -2206,6 +2224,30 @@ function EditorInner() {
 
   // Switch a step on/off (saved with the graph as node.disabled). Off = the
   // engine skips it and everything downstream at run time.
+  // setEdgeErrorMode is the editor's half of core.Edge.OnError: what this
+  // connection does when the step it comes from fails. Restyles the wire in the
+  // same breath, because the drawing IS the feedback that it took.
+  const setEdgeErrorMode = useCallback((edgeID: string, mode: EdgeErrorMode) => {
+    setEdges((prev) =>
+      prev.map((e) =>
+        e.id === edgeID
+          ? { ...e, data: { ...(e.data ?? {}), onError: mode }, style: edgeErrorStyle(mode) }
+          : e,
+      ),
+    );
+    setDirty(true);
+  }, [setEdges]);
+
+  const toggleContinueOnError = useCallback((nodeID: string) => {
+    setContinueOnError((prev) => {
+      const next = new Set(prev);
+      if (next.has(nodeID)) next.delete(nodeID);
+      else next.add(nodeID);
+      return next;
+    });
+    setDirty(true);
+  }, []);
+
   const toggleNodeDisabled = useCallback((nodeID: string) => {
     setDisabledNodes((prev) => {
       const next = new Set(prev);
@@ -2514,6 +2556,9 @@ function EditorInner() {
       from_port: e.sourceHandle ?? "out",
       to: e.target,
       to_port: e.targetHandle ?? "in",
+      // An extracted sub-flow keeps its internal error handling; dropping it
+      // here would quietly turn every handler branch into an ordinary one.
+      ...(asEdgeErrorMode(e.data?.onError) ? { on_error: asEdgeErrorMode(e.data?.onError) } : {}),
     }));
 
     // One seed-carrier per incoming boundary edge → input_map.
@@ -2643,12 +2688,16 @@ function EditorInner() {
       position: n.position,
       ...(breakpoints.has(n.id) ? { breakpoint: true } : {}),
       ...(disabledNodes.has(n.id) ? { disabled: true } : {}),
+      ...(continueOnError.has(n.id) ? { continue_on_error: true } : {}),
     })),
     edges: edges.map((e) => ({
       from: e.source,
       from_port: e.sourceHandle ?? "out",
       to: e.target,
       to_port: e.targetHandle ?? "in",
+      // Omitted when it is the default, so turning the setting on and off again
+      // leaves the flow byte-identical rather than growing an `"on_error": ""`.
+      ...(asEdgeErrorMode(e.data?.onError) ? { on_error: asEdgeErrorMode(e.data?.onError) } : {}),
       ...((e.data?.waypoints as { x: number; y: number }[] | undefined)?.length
         ? { waypoints: e.data!.waypoints as { x: number; y: number }[] }
         : {}),
@@ -4688,6 +4737,13 @@ function EditorInner() {
                     onClick: () => toggleNodeDisabled(menu.id),
                   },
                   {
+                    label: t("editor.ctxContinueOnError"),
+                    checked: continueOnError.has(menu.id),
+                    disabled: !canEdit,
+                    title: t("editor.ctxContinueOnErrorHint"),
+                    onClick: () => toggleContinueOnError(menu.id),
+                  },
+                  {
                     label: breakpoints.has(menu.id)
                       ? t("editor.ctxRemoveBreakpoint")
                       : t("editor.ctxAddBreakpoint"),
@@ -4710,15 +4766,44 @@ function EditorInner() {
                   { separator: true },
                   { label: t("common.delete"), shortcut: "Del", danger: true, disabled: !canEdit, onClick: () => del({ nodes: [{ id: menu.id }] }) },
                 ]
-              : [
-                  {
-                    label: t("editor.ctxDeleteEdge"),
-                    shortcut: "Del",
-                    danger: true,
-                    disabled: !canEdit,
-                    onClick: () => del({ edges: [{ id: menu.id }] }),
-                  },
-                ];
+              : (() => {
+                  const edge = edges.find((e) => e.id === menu.id);
+                  const mode = asEdgeErrorMode(edge?.data?.onError);
+                  const sourceManifest = nodes.find((n) => n.id === edge?.source)?.data.manifest;
+                  const canRetry = retryAvailable(sourceManifest?.retry_policy);
+                  return [
+                    { header: t("editor.edgeError.head") },
+                    // A radio group: three answers to one question. The wire is
+                    // redrawn per mode so the choice is visible after the menu
+                    // closes.
+                    ...ROUTING_MODES.map((m) => ({
+                      label: t(edgeErrorLabelKey(m)),
+                      checked: mode === m,
+                      disabled: !canEdit,
+                      onClick: () => setEdgeErrorMode(menu.id, m),
+                    })),
+                    { separator: true },
+                    {
+                      label: t(edgeErrorLabelKey("retry")),
+                      checked: mode === "retry",
+                      // Offered only where it would do something: the worker
+                      // refuses to retry a step whose drop declares no retry
+                      // policy, and a setting that silently does nothing is
+                      // worse than one that is visibly unavailable.
+                      disabled: !canEdit || !canRetry,
+                      title: canRetry ? undefined : t("editor.edgeError.noRetry"),
+                      onClick: () => setEdgeErrorMode(menu.id, "retry"),
+                    },
+                    { separator: true },
+                    {
+                      label: t("editor.ctxDeleteEdge"),
+                      shortcut: "Del",
+                      danger: true,
+                      disabled: !canEdit,
+                      onClick: () => del({ edges: [{ id: menu.id }] }),
+                    },
+                  ] as ContextMenuItem[];
+                })();
           return (
             <CanvasContextMenu x={menu.x} y={menu.y} items={items} onClose={() => setCtxMenu(null)} />
           );

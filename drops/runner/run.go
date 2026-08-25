@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -101,6 +102,20 @@ const DefaultShell = "default"
 // file extension the script is written to; see runner/dzrunner.py.
 var Shells = []string{DefaultShell, "sh", "bash", "python", "powershell", "node"}
 
+// What a non-zero exit means for the step. Two words rather than a boolean
+// because they say what happens, and a `"on_nonzero_exit": "continue"` in a
+// saved flow reads without a lookup — where `"ignore_exit_code": true` would
+// claim the code is ignored when it is in fact handed to the flow.
+const (
+	// ExitFail is the default and the long-standing behaviour: a script that
+	// exits non-zero has failed, and so has the step.
+	ExitFail = "fail"
+	// ExitContinue succeeds the step and puts the code on an output for the
+	// flow to branch on. Covers ONLY a script that ran and returned a code —
+	// see the param's description for the cases it deliberately does not.
+	ExitContinue = "continue"
+)
+
 // knownShell reports whether s is one of Shells. The empty string is the same
 // as DefaultShell: a task queued before this param existed carries no shell,
 // and so does a step nobody has touched.
@@ -141,7 +156,9 @@ func init() {
 				"values in as environment variables — ${secret.NAME} for a credential, which reaches the " +
 				"machine without ever being written into the flow. The " +
 				"value wired into 'in' arrives on the script's standard input; whatever the script prints " +
-				"comes back on 'out'. A non-zero exit fails the step, with the script's error output attached.",
+				"comes back on 'out'. A non-zero exit fails the step, with the script's error output " +
+				"attached — or set 'If the script exits non-zero' to carry on, and branch on the " +
+				"'Exit code' output instead so the flow handles its own failures.",
 			Summary: "Run a script on a machine you host, and use what it prints.",
 			Examples: []core.ParamsExample{
 				{
@@ -163,6 +180,11 @@ func init() {
 					Title:  "Give the script a credential and a parameter",
 					Params: json.RawMessage(`{"tags":["invoices-box"],"env":{"API_TOKEN":"${secret.BILLING_TOKEN}","MONTH":"03"},"script":"./fetch-invoices.sh"}`),
 					Notes:  "The secret is resolved on the way out and never stored in the flow; the script reads $API_TOKEN.",
+				},
+				{
+					Title:  "Let the flow decide what a failure means",
+					Params: json.RawMessage(`{"tags":["build"],"script":"./sync.sh","on_nonzero_exit":"continue"}`),
+					Notes:  "The step succeeds whatever the script returns; branch on 'Exit code' (\"0\" is success) to take a different path per code.",
 				},
 				{
 					Title:  "A Python script instead of a shell one",
@@ -199,6 +221,12 @@ func init() {
 			},
 			Outputs: []core.Port{
 				{Port: "out", Label: "Output", MIME: []string{"text/plain"}},
+				// The script's own report on how it went. Emitted on every run
+				// that actually reached the machine, success or not — a script
+				// that succeeds can still have written warnings to stderr, and
+				// a flow handling its own failures needs the number.
+				{Port: "exit_code", Label: "Exit code", MIME: []string{"text/plain"}},
+				{Port: "stderr", Label: "Error output", MIME: []string{"text/plain"}},
 			},
 			ParamsSchema: json.RawMessage(`{
   "type": "object",
@@ -223,6 +251,14 @@ func init() {
       "title": "Script",
       "format": "script",
       "description": "The script to run on that machine. It runs as the user the runner agent runs as, in the agent's working directory. Connect the 'script' input instead to have an earlier step supply it."
+    },
+    "on_nonzero_exit": {
+      "type": "string",
+      "title": "If the script exits non-zero",
+      "default": "fail",
+      "enum": ["fail", "continue"],
+      "enumNames": ["Fail this step", "Carry on — the flow checks the exit code"],
+      "description": "A script that exits non-zero has failed, and by default so does this step. Choose 'Carry on' and the step succeeds instead, with the script's exit code on the 'Exit code' output for the flow to branch on — the way a script author expects exit codes to work (2 might mean 'nothing to do today' rather than 'broken'). This covers ONLY a script that ran and returned a code: a machine that is switched off, an agent that refused the script, or a script the runner had to stop still fail the step, because there is no exit code to hand you and pretending otherwise would send the flow down the wrong path."
     },
     "env": {
       "type": "object",
@@ -284,6 +320,19 @@ func execute(ctx context.Context, job core.Job, progress chan<- core.Progress) (
 			"the environment variable name "+bad+" cannot be used — a name must not be "+
 				"empty, contain '=', or contain control characters"), nil
 	}
+	onNonzero := strings.ToLower(strings.TrimSpace(
+		params.StringDefault(job.Params, "on_nonzero_exit", ExitFail)))
+	if onNonzero == "" {
+		onNonzero = ExitFail
+	}
+	if onNonzero != ExitFail && onNonzero != ExitContinue {
+		// Refused rather than read as the default: someone who wrote "ignore"
+		// meant not to fail, and silently failing anyway would look like the
+		// setting does nothing.
+		return failed(job, "bad_param",
+			"'if the script exits non-zero' is "+onNonzero+", which is neither "+
+				ExitFail+" nor "+ExitContinue), nil
+	}
 	shell := strings.ToLower(strings.TrimSpace(params.StringDefault(job.Params, "shell", "")))
 	if !knownShell(shell) {
 		// Refused here rather than on the machine: the daemon knows the list,
@@ -329,7 +378,7 @@ func execute(ctx context.Context, job core.Job, progress chan<- core.Progress) (
 	if res.Error != "" {
 		return failed(job, "runner_error", res.Error), nil
 	}
-	if res.ExitCode != 0 {
+	if res.ExitCode != 0 && onNonzero != ExitContinue {
 		// The script's own stderr is the useful part — it is the author's
 		// message about what went wrong, and burying it would leave them with
 		// only a number.
@@ -339,11 +388,18 @@ func execute(ctx context.Context, job core.Job, progress chan<- core.Progress) (
 		}
 		return failed(job, "nonzero_exit", msg), nil
 	}
+	// Reached either because the script succeeded, or because the flow asked to
+	// handle the exit code itself. Both emit the same three outputs, so a step
+	// switched from one mode to the other does not change what its wires carry.
 	return core.Result{
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
 			"out": {MIME: "text/plain", Inline: res.Stdout},
+			// Text, not a number, matching the shell drop's 'Exit code' — it is
+			// compared against "0" and routed on, not arithmetic.
+			"exit_code": {MIME: "text/plain", Inline: strconv.Itoa(res.ExitCode)},
+			"stderr":    {MIME: "text/plain", Inline: res.Stderr},
 		},
 	}, nil
 }

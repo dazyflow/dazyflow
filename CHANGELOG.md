@@ -25,6 +25,57 @@ into the image.)
 
 ### Added
 
+- **A connection can say what happens when the step before it fails.** The
+  engine has honoured this since the beginning and nothing in the editor could
+  set it, so a flow author had to reach for the API, the MCP tools or the flow's
+  JSON. Right-click a connection:
+
+  - **Only if this step succeeds** — the default, unchanged.
+  - **Whether it succeeds or fails** — the next step runs either way.
+  - **Only if this step fails** — the error handler. Idle on every run that goes
+    well.
+  - **Retry this step on failure** — offered only where it would do something.
+    A step whose drop declares no retry policy shows it greyed with the reason,
+    because a setting that silently does nothing is worse than one that is
+    visibly unavailable. (The runner step is exactly that case, on purpose:
+    nobody can know whether a script already sent the invoices.)
+
+  Each mode is **drawn** — its own colour and its own dash — so a flow's error
+  handling is visible on the canvas instead of hidden in its JSON. The default
+  is drawn exactly as before, so an existing flow looks identical and colour
+  reads as "something was chosen here".
+
+- **A step can be marked as one whose failure doesn't fail the run.** Right-click
+  it: *Failing here doesn't fail the run*. For the "announce it everywhere"
+  shape — Discord being down is no reason for the Slack post and the email not
+  to go out. It carries a chip on the card, because a step that cannot turn a
+  run red is a fact about the flow and invisible otherwise.
+
+  It exists as a step setting because the mode above lives on CONNECTIONS, so a
+  step at the end of a branch has nowhere to hang one.
+
+  Both settings now survive a save from the editor. Until this release, opening
+  an API-built flow and letting autosave run silently dropped them.
+
+- **A script's exit code can be a flow signal instead of a failure.** A non-zero
+  exit is not always a breakage — `2` might mean "nothing to invoice today", and
+  the flow should take a quiet path rather than fail. Set **If the script exits
+  non-zero** to *Carry on* and the step succeeds whatever the script returned,
+  handing the flow three outputs to route on: **Output** (stdout as before),
+  **Exit code** (as text, `"0"` is success) and **Error output** (stderr).
+
+  All three are emitted either way — on a plain success as well as a handled
+  failure — so turning the setting on cannot change what the existing wires
+  carry, and a script that succeeded with warnings on stderr still hands them
+  over. The default is unchanged: a non-zero exit fails the step, with the
+  script's own error output attached.
+
+  What *Carry on* deliberately does not cover: a machine that is switched off, an
+  agent that refused the script, or a script the runner had to stop at the
+  timeout. Those still fail the step, because there is no exit code to hand over
+  and inventing one would send the flow down the "the script ran and said no"
+  path when nothing ran at all.
+
 - **Run on your machine can pass environment variables to the script**, and a
   credential can be one of them without ending up anywhere it should not.
 

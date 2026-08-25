@@ -1474,7 +1474,9 @@
     },
     "geoWired": "Anges av den kopplade indatan",
     "geoUnset": "Ingen plats angiven",
-    "portValueOnly": "tar ett värde, inte en fil"
+    "portValueOnly": "tar ett värde, inte en fil",
+    "continueOnError": "Kan inte stoppa körningen",
+    "continueOnErrorHint": "Om det här steget misslyckas fortsätter körningen och slutför sina andra grenar. Allt efter det hoppas ändå över."
   },
   "issueKey": {
     "title": "Skapa API-nyckel",
@@ -1939,7 +1941,17 @@
     "publishNeedsSetup": "Flödet kan inte köras än — {{apps}} måste konfigureras först. Publicerar du nu kommer de automatiska körningarna att misslyckas.",
     "runSucceeded": "Klart — flödet kördes.",
     "runSucceededWith": "Klart — flödet kördes. ”{{label}}” gav:",
-    "runSucceededDetails": "Visa hela körningen"
+    "runSucceededDetails": "Visa hela körningen",
+    "edgeError": {
+      "head": "När körs nästa steg?",
+      "abort": "Bara om det här steget lyckas",
+      "skip": "Vare sig det lyckas eller misslyckas",
+      "fallback": "Bara om det här steget misslyckas",
+      "retry": "Försök om det här steget vid fel",
+      "noRetry": "Det här steget kan inte göras om automatiskt — ingen kan veta hur långt det kom, så att köra om är ditt beslut utifrån körningen."
+    },
+    "ctxContinueOnError": "Fel här stoppar inte körningen",
+    "ctxContinueOnErrorHint": "Körningen fortsätter och slutför sina andra grenar. Steg efter det här hoppas ändå över — det finns ingen utdata att mata dem med."
   },
   "iconUpload": {
     "upload": "Ladda upp bild"

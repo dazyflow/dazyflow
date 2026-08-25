@@ -3,7 +3,7 @@
 
 import { memo, useState } from "react";
 import { Handle, Position, useStore, type NodeProps } from "@xyflow/react";
-import { AlertTriangle, Check, ChevronRight, Plug, Repeat, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronRight, Plug, Repeat, ShieldOff, X } from "lucide-react";
 import i18n from "../../i18n";
 import { portTypeLabel } from "../../lib/ports";
 import { telFieldFlag, regionDisplayName } from "../../lib/phoneFlag";
@@ -377,6 +377,16 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
             >
               <Repeat size={ICON.xs} strokeWidth={2.2} />
               {nodeStateText(d.manifest.node_state.label, i18n.language)}
+            </div>
+          )}
+          {/* A step whose failure does not fail the run. Worth a chip for the
+              same reason the runner one is: someone reading the flow to work
+              out why a run went green needs to see which steps could not have
+              turned it red. */}
+          {d.continueOnError && (
+            <div className="dz-node-chip dz-node-keepgoing" title={i18n.t("nodeCard.continueOnErrorHint")}>
+              <ShieldOff size={ICON.xs} strokeWidth={2.2} />
+              {i18n.t("nodeCard.continueOnError")}
             </div>
           )}
         </div>
