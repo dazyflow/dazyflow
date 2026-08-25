@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-08-25
+
 ### Added
 
 - **The Run on your machine step now asks which machine, and what should run
