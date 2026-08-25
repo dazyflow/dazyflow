@@ -350,6 +350,11 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/admin/runners", h.requireAuth(h.listRunners))
 	mux.HandleFunc("POST /api/v1/admin/runners/token", h.requireAuth(h.mintRunnerToken))
 	mux.HandleFunc("DELETE /api/v1/admin/runners/{name}", h.requireAuth(h.deleteRunner))
+	// The same fleet, seen by someone building a flow rather than administering
+	// one: names, labels and whether each machine is there, for the step's
+	// "Machine" dropdown. graph:edit, because that is already all it takes to
+	// target a runner — see listRunnerTargets.
+	mux.HandleFunc("GET /api/v1/runners", h.requireAuth(h.listRunnerTargets))
 
 	// The agent's own endpoints. Outside requireAuth on purpose: an agent holds
 	// a runner credential, not a session or an API key, and it authorises

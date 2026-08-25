@@ -36,10 +36,14 @@ type Dispatcher interface {
 
 // Request is one script to run.
 type Request struct {
-	Tenant  string
-	Runner  string
-	Label   string
-	Script  string
+	Tenant string
+	Runner string
+	Label  string
+	Script string
+	// Shell names the interpreter the agent starts the script with — one of
+	// Shells. Empty (and DefaultShell) mean the machine's own shell, which is
+	// what a runner did before this was a choice.
+	Shell   string
 	Env     map[string]string
 	Stdin   string
 	Timeout time.Duration
@@ -78,6 +82,39 @@ func current() Dispatcher {
 // open for the rest of the day.
 const DefaultTimeout = 10 * time.Minute
 
+// DefaultShell means "whatever this machine runs scripts with" — /bin/sh on a
+// unix box, cmd on Windows. It is the value a step carries when nobody chose,
+// and it is what a runner did before choosing was possible, so an existing flow
+// keeps behaving exactly as it did.
+const DefaultShell = "default"
+
+// Shells are the interpreters a step may ask for.
+//
+// A short, closed list rather than a free-text command, because the daemon has
+// to be able to say "that is not a shell" while the author is still editing —
+// and because the value crosses to another machine, where an arbitrary string
+// would be an arbitrary program to start. Anything not on it belongs inside the
+// script, behind a shebang or an explicit interpreter call.
+//
+// The agent maps each of these to the program it actually starts and picks the
+// file extension the script is written to; see runner/dzrunner.py.
+var Shells = []string{DefaultShell, "sh", "bash", "python", "powershell", "node"}
+
+// knownShell reports whether s is one of Shells. The empty string is the same
+// as DefaultShell: a task queued before this param existed carries no shell,
+// and so does a step nobody has touched.
+func knownShell(s string) bool {
+	if s == "" {
+		return true
+	}
+	for _, k := range Shells {
+		if k == s {
+			return true
+		}
+	}
+	return false
+}
+
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
@@ -94,10 +131,12 @@ func init() {
 			},
 			Description: "Runs a script on one of your organisation's own machines — a server, a laptop, " +
 				"anything running the Dazyflow runner agent. Use it when the work needs a library, a tool, " +
-				"or a network the built-in steps cannot reach. Point it at a runner by name, or at a label " +
-				"shared by several machines so any free one can take the job. The value wired into 'in' " +
-				"arrives on the script's standard input; whatever the script prints comes back on 'out'. " +
-				"A non-zero exit fails the step, with the script's error output attached.",
+				"or a network the built-in steps cannot reach. Pick a machine from the list, or a label " +
+				"shared by several machines so any free one can take the job. Choose what runs the script " +
+				"— the machine's own shell, sh, bash, Python, PowerShell or Node — and write it in the " +
+				"box; or wire the script in on the 'script' input to build it in an earlier step. The " +
+				"value wired into 'in' arrives on the script's standard input; whatever the script prints " +
+				"comes back on 'out'. A non-zero exit fails the step, with the script's error output attached.",
 			Summary: "Run a script on a machine you host, and use what it prints.",
 			Examples: []core.ParamsExample{
 				{
@@ -115,6 +154,11 @@ func init() {
 					Params: json.RawMessage(`{"runner":"tools","script":"jq -r .total","timeout_seconds":30}`),
 					Notes:  "Whatever is wired into 'in' arrives on standard input.",
 				},
+				{
+					Title:  "A Python script instead of a shell one",
+					Params: json.RawMessage(`{"runner":"invoices-box","shell":"python","script":"import sys, json\nprint(json.load(sys.stdin)[\"total\"])"}`),
+					Notes:  "The agent starts python3 with the script; standard input still carries the 'in' value.",
+				},
 			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
@@ -127,6 +171,21 @@ func init() {
 					// daemon's disk means nothing there. Values only.
 					InlineOnly: true,
 				},
+				{
+					// The script itself, when an earlier step builds it —
+					// picked from a table, filled into a template, written by
+					// the AI step. Wired, it wins over the typed one; unwired,
+					// the box on the step is the script, which is how nearly
+					// every flow uses this.
+					//
+					// Separate from 'in' on purpose. One port carrying either
+					// the program or its data would make "what did this run?"
+					// depend on which upstream step happened to be connected.
+					Port:       "script",
+					Label:      "Script",
+					MIME:       []string{"text/plain"},
+					InlineOnly: true,
+				},
 			},
 			Outputs: []core.Port{
 				{Port: "out", Label: "Output", MIME: []string{"text/plain"}},
@@ -136,19 +195,29 @@ func init() {
   "properties": {
     "runner": {
       "type": "string",
-      "title": "Runner",
-      "description": "The machine to run this on, by name. Leave empty and set a label instead to use any machine in a pool."
+      "title": "Machine",
+      "format": "runner",
+      "description": "The machine to run this on, chosen from the ones your organisation has registered. Leave it empty and set a label instead to use any machine in a pool."
     },
     "label": {
       "type": "string",
-      "title": "Or any runner labelled",
+      "title": "Or any machine labelled",
+      "format": "runner-label",
       "description": "Send the work to whichever machine carrying this label is free."
+    },
+    "shell": {
+      "type": "string",
+      "title": "Run it with",
+      "default": "default",
+      "enum": ["default", "sh", "bash", "python", "powershell", "node"],
+      "enumNames": ["The machine's own shell", "sh (POSIX shell)", "bash", "Python 3", "PowerShell", "Node.js"],
+      "description": "What starts the script on that machine. 'The machine's own shell' is /bin/sh on a unix box and cmd on Windows — the behaviour a runner has always had. Anything else writes the script to a temporary file and starts that interpreter with it, so choose Python and write Python. An agent older than this Dazyflow release does not know how to do that and will use the machine's shell regardless — re-run the install command on the machine to upgrade it."
     },
     "script": {
       "type": "string",
-      "title": "Command",
-      "format": "textarea",
-      "description": "The command to run on that machine. It runs as the user the runner agent runs as, in the agent's working directory."
+      "title": "Script",
+      "format": "script",
+      "description": "The script to run on that machine. It runs as the user the runner agent runs as, in the agent's working directory. Connect the 'script' input instead to have an earlier step supply it."
     },
     "timeout_seconds": {
       "type": "integer",
@@ -190,9 +259,28 @@ func execute(ctx context.Context, job core.Job, progress chan<- core.Progress) (
 	// lower-case.
 	runnerName := normalizeTarget(params.StringDefault(job.Params, "runner", ""))
 	label := normalizeTarget(params.StringDefault(job.Params, "label", ""))
-	script := strings.TrimSpace(params.StringDefault(job.Params, "script", ""))
+	// The 'script' input wins over the typed box, so an earlier step can build
+	// the script — from a template, a table cell, the AI step. Only the
+	// surrounding blank space goes: the inside of a script is significant, and
+	// a Python one stops working if its indentation is rearranged.
+	script, ok := params.TextInputOr(job, "script", params.StringDefault(job.Params, "script", ""))
+	if !ok {
+		return failed(job, "bad_input",
+			"the 'script' input must carry text — wire a step that produces text, "+
+				"or type the script on this step"), nil
+	}
+	script = strings.TrimSpace(script)
 	if script == "" {
-		return failed(job, "no_script", "this step has no command to run"), nil
+		return failed(job, "no_script", "this step has no script to run"), nil
+	}
+	shell := strings.ToLower(strings.TrimSpace(params.StringDefault(job.Params, "shell", "")))
+	if !knownShell(shell) {
+		// Refused here rather than on the machine: the daemon knows the list,
+		// and a typo caught before the task is queued is a message about a
+		// field instead of a script that never started.
+		return failed(job, "bad_shell",
+			"this step asks to run the script with "+shell+
+				", which is not one of "+strings.Join(Shells, ", ")), nil
 	}
 	if runnerName == "" && label == "" {
 		return failed(job, "no_target",
@@ -215,6 +303,7 @@ func execute(ctx context.Context, job core.Job, progress chan<- core.Progress) (
 		Runner: runnerName,
 		Label:  label,
 		Script: script,
+		Shell:  shell,
 		// The node's own environment, with ${secret.…} already resolved by the
 		// engine. Plumbed all the way to the agent — which merges it over its
 		// own environment — but never populated here until now, so a script

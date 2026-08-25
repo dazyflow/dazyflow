@@ -5,6 +5,8 @@ package runner
 
 import (
 	"context"
+	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -248,5 +250,128 @@ func TestExecute_NormalizesTheTarget(t *testing.T) {
 	res := run(t, map[string]any{"runner": "   ", "script": "x"}, nil)
 	if res.Status != core.StatusError || res.Error.Code != "no_target" {
 		t.Errorf("result = %+v, want a no_target failure", res)
+	}
+}
+
+// ---- the script, and what starts it -----------------------------------
+
+// The 'script' input exists so an earlier step can build the script — a
+// template, a table cell, the AI step. Wired, it decides; the box on the step
+// is the fallback, which is how nearly every flow uses this.
+func TestExecute_TheScriptInputOverridesTheTypedOne(t *testing.T) {
+	f := install(t, &fakeDispatcher{})
+
+	run(t, map[string]any{"runner": "box", "script": "./typed.sh"}, map[string]core.Ref{
+		"script": {MIME: "text/plain", Inline: "./wired.sh"},
+	})
+	if f.got.Script != "./wired.sh" {
+		t.Errorf("script = %q, want the wired one", f.got.Script)
+	}
+
+	// An unwired port must not blank the typed script out.
+	run(t, map[string]any{"runner": "box", "script": "./typed.sh"}, nil)
+	if f.got.Script != "./typed.sh" {
+		t.Errorf("script = %q, want the typed one", f.got.Script)
+	}
+}
+
+// A script's insides are significant — a Python one stops working if its
+// indentation is rearranged — so only the surrounding blank space goes.
+func TestExecute_KeepsTheShapeOfTheScript(t *testing.T) {
+	f := install(t, &fakeDispatcher{})
+	run(t, map[string]any{
+		"runner": "box",
+		"shell":  "python",
+		"script": "\nif True:\n    print(1)\n\n",
+	}, nil)
+	if f.got.Script != "if True:\n    print(1)" {
+		t.Errorf("script = %q, want the indentation intact", f.got.Script)
+	}
+}
+
+func TestExecute_RejectsAScriptInputThatIsNotText(t *testing.T) {
+	install(t, &fakeDispatcher{})
+	res := run(t, map[string]any{"runner": "box", "script": "./typed.sh"}, map[string]core.Ref{
+		"script": {MIME: "application/json", Inline: map[string]any{"not": "text"}},
+	})
+	if res.Status != core.StatusError || res.Error.Code != "bad_input" {
+		t.Errorf("result = %+v, want a bad_input failure naming the port", res)
+	}
+}
+
+func TestExecute_PassesTheChosenShellThrough(t *testing.T) {
+	f := install(t, &fakeDispatcher{})
+	run(t, map[string]any{"runner": "box", "script": "print(1)", "shell": " Python "}, nil)
+	if f.got.Shell != "python" {
+		t.Errorf("shell = %q, want it normalized and passed on", f.got.Shell)
+	}
+
+	// Nothing chosen stays nothing, so the agent does what it always did.
+	run(t, map[string]any{"runner": "box", "script": "x"}, nil)
+	if f.got.Shell != "" {
+		t.Errorf("shell = %q, want it left empty", f.got.Shell)
+	}
+}
+
+// Caught here rather than on the machine: the daemon knows the list, and a
+// message about a field beats a script that never started.
+func TestExecute_RefusesAShellItDoesNotKnow(t *testing.T) {
+	install(t, &fakeDispatcher{})
+	res := run(t, map[string]any{"runner": "box", "script": "x", "shell": "erlang"}, nil)
+	if res.Status != core.StatusError || res.Error.Code != "bad_shell" {
+		t.Fatalf("result = %+v, want a bad_shell failure", res)
+	}
+	if !strings.Contains(res.Error.Message, "bash") {
+		t.Errorf("message = %q, want it to name the shells that do work", res.Error.Message)
+	}
+}
+
+// The step's enum and the Shells list are the same list seen from two sides: a
+// value the form offers and the drop then refuses is a dead field.
+func TestManifest_OffersExactlyTheShellsTheStepAccepts(t *testing.T) {
+	for _, m := range manifestsUnderTest(t) {
+		var schema struct {
+			Properties struct {
+				Shell struct {
+					Enum      []string `json:"enum"`
+					EnumNames []string `json:"enumNames"`
+					Default   string   `json:"default"`
+				} `json:"shell"`
+			} `json:"properties"`
+		}
+		if err := json.Unmarshal(m.ParamsSchema, &schema); err != nil {
+			t.Fatalf("params schema: %v", err)
+		}
+		got := schema.Properties.Shell
+		if !slices.Equal(got.Enum, Shells) {
+			t.Errorf("shell enum = %v, want %v", got.Enum, Shells)
+		}
+		if len(got.EnumNames) != len(got.Enum) {
+			t.Errorf("%d shells but %d names — one would render as its raw value",
+				len(got.Enum), len(got.EnumNames))
+		}
+		if got.Default != DefaultShell {
+			t.Errorf("shell default = %q, want %q", got.Default, DefaultShell)
+		}
+		for _, s := range got.Enum {
+			if !knownShell(s) {
+				t.Errorf("the form offers %q and the step refuses it", s)
+			}
+		}
+	}
+}
+
+// The script can arrive on a port now, so the port has to exist.
+func TestManifest_HasAScriptInput(t *testing.T) {
+	for _, m := range manifestsUnderTest(t) {
+		var found bool
+		for _, p := range m.Inputs {
+			if p.Port == "script" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("%s has no 'script' input", m.ID)
+		}
 	}
 }

@@ -19,9 +19,17 @@ import { HelpPopover } from "../ui/HelpPopover";
 import { Trans, useTranslation } from "react-i18next";
 import i18n from "../../i18n";
 import { enumLabel, fieldHelp, fieldTitle } from "../../lib/dropText";
-import type { EmailTemplateSummary, JSONSchema, ReferenceGroups, ReferenceItem } from "../../types";
+import type {
+  EmailTemplateSummary,
+  JSONSchema,
+  ReferenceGroups,
+  ReferenceItem,
+  RunnerTarget,
+} from "../../types";
 import { type TokenLabels, friendlyTokenText } from "../editor/nodeCardShared";
 import { JsonEditor, isInvalidJSON } from "../ui/JsonEditor";
+import { ScriptEditor } from "../ui/ScriptEditor";
+import { scriptLangFor } from "../../lib/scriptHighlight";
 import { GeoPointField } from "./GeoPointField";
 import { api } from "../../api";
 import { explainApiError } from "../../lib/explainApiError";
@@ -538,6 +546,43 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
             onChange={onChange}
             references={references}
           />
+        );
+      }
+      // format:"runner" and format:"runner-label" are the Run on your machine
+      // step's two ways of saying where: a dropdown of the org's registered
+      // machines, or one of the labels those machines carry. Both keep an
+      // escape to free text, because a ${…} reference (a machine chosen per row
+      // in a For-each) is a real use and a closed select forbids it.
+      if (schema.format === "runner" || schema.format === "runner-label") {
+        return (
+          <RunnerField
+            name={name}
+            schema={schema}
+            required={required}
+            value={value}
+            onChange={onChange}
+            mode={schema.format === "runner" ? "name" : "label"}
+            references={references}
+            extraReferenceItems={extraReferenceItems}
+            tokenLabels={tokenLabels}
+          />
+        );
+      }
+      // format:"script" gets the code box: a real textarea, monospace, with
+      // syntax highlighting for the language the step says it will run the
+      // script with (the sibling `shell` param). A one-line input hid
+      // everything past the right edge of a thing that is many lines by nature.
+      if (schema.format === "script") {
+        const text = (value as string) ?? (schema.default as string | undefined) ?? "";
+        return (
+          <FieldWrap name={name} schema={schema} required={required} value={value}>
+            <ScriptEditor
+              value={text}
+              lang={scriptLangFor(typeof siblings?.shell === "string" ? siblings.shell : undefined)}
+              onChange={(v) => onChange(v === "" && !required ? undefined : v)}
+              rows={10}
+            />
+          </FieldWrap>
         );
       }
       // format:"geo-point" gets the OpenStreetMap map picker — search/click to
@@ -1732,6 +1777,179 @@ function SuggestField({
         className="sf-picker-mode"
         onClick={() => setManual((m) => !m)}
       >
+        {manual
+          ? t("schemaForm.resourcePicker.chooseFromList")
+          : t("schemaForm.resourcePicker.useExpression")}
+      </Button>
+    </FieldWrap>
+  );
+}
+
+// useRunnerTargets fetches the org's machines once per form and hands the same
+// answer to every field that asks.
+//
+// Cached at module level because the Run on your machine step has TWO fields
+// backed by this list (the machine and the label), and an inspector that opened
+// with two identical requests in flight — then two more on every re-render —
+// would be paying for the same list repeatedly to fill in one step. The cache is
+// keyed by token so switching account or organisation cannot show one org's
+// machines to another.
+const runnerTargetCache = new Map<string, Promise<RunnerTarget[]>>();
+
+function useRunnerTargets(token: string | undefined) {
+  const [state, setState] = useState<{ rows: RunnerTarget[] | null; failed: boolean }>({
+    rows: null,
+    failed: !token,
+  });
+
+  useEffect(() => {
+    if (!token) {
+      setState({ rows: null, failed: true });
+      return;
+    }
+    let live = true;
+    let pending = runnerTargetCache.get(token);
+    if (!pending) {
+      pending = api.listRunnerTargets(token).then((r) => r.runners ?? []);
+      // A failure is not cached: runners answer 501 on a deployment without
+      // Postgres, but they also fail on a dropped connection, and remembering
+      // that forever would leave the field a text box until a reload.
+      pending.catch(() => runnerTargetCache.delete(token));
+      runnerTargetCache.set(token, pending);
+    }
+    pending
+      .then((rows) => live && setState({ rows, failed: false }))
+      .catch(() => live && setState({ rows: null, failed: true }));
+    return () => {
+      live = false;
+    };
+  }, [token]);
+
+  return state;
+}
+
+// RunnerField is the "where does this run" picker on the Run on your machine
+// step: a dropdown of the org's registered machines (mode "name") or of the
+// labels they carry (mode "label").
+//
+// It replaced a plain text box, which had the flow author retyping a name that
+// exists in exactly one place they cannot see from the editor — and a typo did
+// not surface until a run failed with 'no runner named "buld-box"'.
+//
+// Three things it deliberately does NOT do. It does not hide an offline
+// machine: a step pointed at one still saves, waits and then fails, and seeing
+// that while choosing is the whole value. It does not drop a value that is no
+// longer in the list — a decommissioned machine, or a name typed before the
+// list loaded — because silently clearing a step's target is worse than showing
+// one that needs attention. And it does not close the field: the toggle to free
+// text is what keeps a ${…} reference possible.
+function RunnerField({
+  name,
+  schema,
+  required,
+  value,
+  onChange,
+  mode,
+  references,
+  extraReferenceItems,
+  tokenLabels,
+}: {
+  name: string;
+  schema: JSONSchema;
+  required: boolean;
+  value: unknown;
+  onChange: (v: unknown) => void;
+  mode: "name" | "label";
+  references?: ReferenceCtx;
+  extraReferenceItems?: { label: string; token: string }[];
+  tokenLabels?: TokenLabels;
+}) {
+  const { t } = useTranslation();
+  const { rows, failed } = useRunnerTargets(references?.token);
+  const cur = typeof value === "string" ? value : "";
+  const [manual, setManual] = useState(cur.includes("${"));
+
+  // Labels are collected across machines and de-duplicated: they exist to name
+  // a pool, so the same label on three machines is one choice, and the count is
+  // what tells the author it is a pool at all.
+  const options = useMemo(() => {
+    if (!rows) return [];
+    if (mode === "name") {
+      return rows.map((r) => ({
+        value: r.name,
+        label: r.online ? r.name : t("schemaForm.runner.offline", { name: r.name }),
+      }));
+    }
+    const byLabel = new Map<string, number>();
+    for (const r of rows) {
+      for (const l of r.labels ?? []) byLabel.set(l, (byLabel.get(l) ?? 0) + 1);
+    }
+    return [...byLabel.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([label, n]) => ({
+        value: label,
+        label: t("schemaForm.runner.labelOption", { label, count: n }),
+      }));
+  }, [rows, mode, t]);
+
+  const textBox = (
+    <TokenInput
+      value={value}
+      onChange={onChange}
+      references={references}
+      extraReferenceItems={extraReferenceItems}
+      tokenLabels={tokenLabels}
+      required={required}
+      placeholder={t("schemaForm.resourcePicker.exprPlaceholder")}
+      ariaLabel={schema.title ? fieldTitle(schema.title, i18n.language) : humanize(name)}
+    />
+  );
+
+  // Nothing to choose from — no auth context, a deployment without runners
+  // (the endpoint answers 501), or an organisation that has registered none.
+  // The text box alone, with no toggle to a dropdown that would be empty.
+  if (failed || (rows !== null && options.length === 0)) {
+    return (
+      <FieldWrap name={name} schema={schema} required={required} value={value}>
+        {textBox}
+        <div className="sf-docs-hint">
+          {t(mode === "name" ? "schemaForm.runner.none" : "schemaForm.runner.noLabels")}
+        </div>
+      </FieldWrap>
+    );
+  }
+
+  const known = options.some((o) => o.value === cur);
+  return (
+    <FieldWrap name={name} schema={schema} required={required} value={value}>
+      {manual ? (
+        textBox
+      ) : (
+        <select
+          value={cur}
+          disabled={rows === null}
+          onChange={(e) => onChange(e.target.value === "" && !required ? undefined : e.target.value)}
+        >
+          {!known && (
+            <option value={cur}>
+              {/* While the list is still loading, a value that is perfectly
+                  valid must not be labelled "not registered any more" — it is
+                  simply not known yet. Show it as it is. */}
+              {rows === null
+                ? cur || t("schemaForm.runner.loading")
+                : cur
+                  ? t("schemaForm.runner.unknown", { name: cur })
+                  : t(mode === "name" ? "schemaForm.runner.choose" : "schemaForm.runner.chooseLabel")}
+            </option>
+          )}
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      )}
+      <Button variant="link" className="sf-picker-mode" onClick={() => setManual((m) => !m)}>
         {manual
           ? t("schemaForm.resourcePicker.chooseFromList")
           : t("schemaForm.resourcePicker.useExpression")}

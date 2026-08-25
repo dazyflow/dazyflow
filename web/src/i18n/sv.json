@@ -1644,7 +1644,17 @@
       "hours": "timmar",
       "days": "dagar"
     },
-    "aboutField": "Om det här fältet"
+    "aboutField": "Om det här fältet",
+    "runner": {
+      "loading": "Hämtar maskiner…",
+      "choose": "Välj en maskin…",
+      "chooseLabel": "Välj en etikett…",
+      "offline": "{{name}} — inte igång",
+      "labelOption": "{{label}} — {{count}} maskin(er)",
+      "unknown": "{{name}} — inte registrerad längre",
+      "none": "Inga maskiner är registrerade för den här organisationen. Lägg till en under Admin → Körnoder och välj den sedan här.",
+      "noLabels": "Ingen av dina maskiner har någon etikett. Registrera en med --labels för att peka ut en pool i stället för ett namn."
+    }
   },
   "forEach": {
     "bodyHint": "Koppla utgången Loopens innehåll till det första steget du vill köra för varje rad. Alla steg efter det körs också en gång per rad.",

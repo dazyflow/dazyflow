@@ -181,6 +181,11 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
       // blobs that don't read as a card preview — they're edited in the
       // Inspector (with its live preview), so the card shows just the pin.
       if (s?.format === "multiline") continue;
+      // A script (Run on your machine) is the same case, and more so: the whole
+      // point of the box is that it is many lines with the syntax coloured, and
+      // a one-line preview of it on the card would be the input the field used
+      // to be. The card shows the pin; the Inspector shows the script.
+      if (s?.format === "script") continue;
       if (inlineEligible(s)) inlineByPort[p.port] = s;
     }
   }

@@ -9074,7 +9074,8 @@ a.pa-card:hover {
    Both layers MUST share identical metrics (font, size, line-height,
    padding, wrapping) so the caret sits exactly over its highlighted glyph;
    the component syncs scrollTop/Left between them. See JsonEditor.tsx. */
-.dz-json-editor {
+.dz-json-editor,
+.dz-code-editor {
   position: relative;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -9090,7 +9091,9 @@ a.pa-card:hover {
   border-color: var(--accent);
 }
 .dz-json-pre,
-.dz-json-ta {
+.dz-json-ta,
+.dz-code-pre,
+.dz-code-ta {
   margin: 0;
   border: 0;
   padding: 8px;
@@ -9102,7 +9105,8 @@ a.pa-card:hover {
   word-break: break-word;
   overflow-wrap: break-word;
 }
-.dz-json-pre {
+.dz-json-pre,
+.dz-code-pre {
   position: absolute;
   inset: 0;
   overflow: hidden;
@@ -9110,10 +9114,12 @@ a.pa-card:hover {
   color: var(--code-fg);
   background: transparent;
 }
-.dz-json-pre code {
+.dz-json-pre code,
+.dz-code-pre code {
   font: inherit;
 }
-.dz-json-ta {
+.dz-json-ta,
+.dz-code-ta {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -9131,6 +9137,24 @@ a.pa-card:hover {
 .dz-j-number { color: var(--json-number); }
 .dz-j-bool { color: var(--json-bool); }
 .dz-j-punct { color: var(--json-punct); }
+
+/* ── Script editor (dz-code-editor) ─────────────────────────────────────
+   The runner step's script box. Shares every metric with the JSON editor
+   above — same two-layer overlay, same reason they must not diverge — and
+   differs only in which tokens it colours. See ScriptEditor.tsx. */
+.dz-code-editor {
+  resize: vertical;
+}
+.dz-s-comment {
+  color: var(--script-comment);
+  font-style: italic;
+}
+.dz-s-string { color: var(--script-string); }
+.dz-s-keyword { color: var(--script-keyword); }
+.dz-s-number { color: var(--script-number); }
+/* Shell/PowerShell variables and, in every language, a ${…} reference the
+   server substitutes before the machine sees the script. */
+.dz-s-var { color: var(--script-var); }
 
 /* ── Files (workspace file manager) ─────────────────────────────────── */
 .files-toolbar {

@@ -138,7 +138,10 @@ func NewPgRunnerTaskStore(ctx context.Context, pool *pgxpool.Pool) (*PgRunnerTas
 	return &PgRunnerTaskStore{pool: pool}, nil
 }
 
-const runnerTaskColumns = `id, tenant, runner, label, script, env, stdin, timeout_ms,
+// shell sits with script rather than among the sealed columns because it is not
+// secret-bearing: it is one of a fixed handful of words, and sealing it would
+// cost a decrypt on the hot claim path to learn "bash".
+const runnerTaskColumns = `id, tenant, runner, label, script, shell, env, stdin, timeout_ms,
 		state, claimed_by, progress, lease_until, result, created_at, finished_at`
 
 func scanRunnerTask(row pgx.Row) (RunnerTask, error) {
@@ -146,7 +149,7 @@ func scanRunnerTask(row pgx.Row) (RunnerTask, error) {
 	var env, result []byte
 	var timeoutMS int64
 	var leaseUntil, finishedAt *time.Time
-	if err := row.Scan(&t.ID, &t.Tenant, &t.Runner, &t.Label, &t.Script, &env,
+	if err := row.Scan(&t.ID, &t.Tenant, &t.Runner, &t.Label, &t.Script, &t.Shell, &env,
 		&t.Stdin, &timeoutMS, &t.State, &t.ClaimedBy, &t.Progress, &leaseUntil, &result,
 		&t.CreatedAt, &finishedAt); err != nil {
 		return RunnerTask{}, err
@@ -195,9 +198,9 @@ func (s *PgRunnerTaskStore) Enqueue(ctx context.Context, t RunnerTask) error {
 	}
 	_, err = s.pool.Exec(ctx, `
 		INSERT INTO runner_tasks
-		    (id, tenant, runner, label, script, env, stdin, timeout_ms, state, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-		t.ID, t.Tenant, t.Runner, t.Label, script, env, stdin,
+		    (id, tenant, runner, label, script, shell, env, stdin, timeout_ms, state, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		t.ID, t.Tenant, t.Runner, t.Label, script, t.Shell, env, stdin,
 		t.Timeout.Milliseconds(), string(t.State), t.CreatedAt)
 	return err
 }

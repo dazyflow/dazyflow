@@ -109,6 +109,55 @@ func (h *HTTPGateway) listRunners(rw http.ResponseWriter, r *http.Request, p cor
 	writeJSON(rw, http.StatusOK, map[string]any{"runners": out})
 }
 
+// runnerTargetRow is the flow editor's shape: what a step needs to choose where
+// to run, and nothing else.
+//
+// Deliberately narrower than runnerRow. Who registered a machine, when, and
+// which agent version it reported are facts about administering the fleet; a
+// picker in the inspector needs the name, the labels it can be targeted by, and
+// whether it is there right now.
+type runnerTargetRow struct {
+	Name   string   `json:"name"`
+	Labels []string `json:"labels,omitempty"`
+	Online bool     `json:"online"`
+}
+
+// listRunnerTargets answers the "Machine" and "Or any machine labelled"
+// dropdowns on the Run on your machine step.
+//
+// Gated on graph:edit rather than requireRunnerAdmin, and that difference is the
+// whole reason this route exists next to the admin one. Using a runner in a flow
+// already needs graph:edit and nothing more (see docs/guide/runners.md), so an
+// editor who may target a machine may obviously be told which machines there
+// are — while the admin endpoint stays admin-only, because it also mints
+// credentials and deletes runners. Sending an editor to the admin route instead
+// would have meant either a 403 on a field they are entitled to fill in, or
+// widening the endpoint that hands out registration tokens.
+func (h *HTTPGateway) listRunnerTargets(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	if !core.CanAdminOrg(p) && !p.Has(core.PermGraphEdit) {
+		writeAPIError(rw, http.StatusForbidden, "forbidden", "graph:edit required")
+		return
+	}
+	if !h.runnersConfigured(rw) {
+		return
+	}
+	rows, err := h.Runners.List(r.Context(), p.Tenant)
+	if err != nil {
+		writeJSONError(rw, http.StatusInternalServerError, err.Error())
+		return
+	}
+	now := time.Now()
+	out := make([]runnerTargetRow, 0, len(rows))
+	for _, x := range rows {
+		out = append(out, runnerTargetRow{
+			Name:   x.Name,
+			Labels: x.Labels,
+			Online: x.Online(now),
+		})
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{"runners": out})
+}
+
 // mintRunnerToken returns a registration token, shown once.
 //
 // POST rather than GET because it creates something, and because a token in a
@@ -208,8 +257,13 @@ func (h *HTTPGateway) authRunner(rw http.ResponseWriter, r *http.Request) (Runne
 }
 
 type claimResponse struct {
-	ID      string            `json:"id"`
-	Script  string            `json:"script"`
+	ID     string `json:"id"`
+	Script string `json:"script"`
+	// Shell is the interpreter to start the script with, omitted when the step
+	// asked for the machine's own shell. An agent that predates the field
+	// ignores it and uses the machine's shell — which is why the step's help
+	// names the agent version the choice needs.
+	Shell   string            `json:"shell,omitempty"`
 	Stdin   string            `json:"stdin,omitempty"`
 	Env     map[string]string `json:"env,omitempty"`
 	Timeout int64             `json:"timeout_seconds,omitempty"`
@@ -243,6 +297,7 @@ func (h *HTTPGateway) claimRunnerTask(rw http.ResponseWriter, r *http.Request) {
 	writeJSON(rw, http.StatusOK, claimResponse{
 		ID:      task.ID,
 		Script:  task.Script,
+		Shell:   task.Shell,
 		Stdin:   task.Stdin,
 		Env:     task.Env,
 		Timeout: int64(task.Timeout / time.Second),

@@ -2380,6 +2380,7 @@ func (b runnerBridge) Dispatch(
 		Runner:  req.Runner,
 		Label:   req.Label,
 		Script:  req.Script,
+		Shell:   req.Shell,
 		Env:     req.Env,
 		Stdin:   req.Stdin,
 		Timeout: req.Timeout,

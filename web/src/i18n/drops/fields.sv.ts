@@ -170,7 +170,6 @@ export const SV_FIELD_TITLES: Record<string, string> = {
   "Only new items": "Bara nya poster",
   "Only new since last run": "Bara nya sedan förra körningen",
   "Only these types": "Bara dessa typer",
-  "Or any runner labelled": "Eller vilken körnod som helst med etiketten",
   "Order ID": "Order-ID",
   "Order by": "Sortera efter",
   "Org number": "Organisationsnummer",
@@ -207,6 +206,9 @@ export const SV_FIELD_TITLES: Record<string, string> = {
   "Row limit": "Radgräns",
   "Row-number column": "Kolumn med radnummer",
   "Rows": "Rader",
+  "Machine": "Maskin",
+  "Or any machine labelled": "Eller vilken maskin som helst med etiketten",
+  "Run it with": "Kör det med",
   "Runner": "Körnod",
   "Runs": "Körs",
   "Save into": "Spara i",
@@ -327,6 +329,8 @@ export const SV_FIELD_HELP: Record<string, string> = {
   "Customer name. Overridden by the 'Name' input.": "Kundens namn. Ingången Namn vinner över detta.",
   "Database file kept in your workspace. Created automatically on first save.": "Databasfil som ligger i din arbetsyta. Skapas automatiskt vid första sparningen.",
   "Default values for missing or null cells, keyed by INPUT column name.": "Standardvärden för celler som saknas eller är null, med INDATATS kolumnnamn som nyckel.",
+  "What starts the script on that machine. 'The machine's own shell' is /bin/sh on a unix box and cmd on Windows — the behaviour a runner has always had. Anything else writes the script to a temporary file and starts that interpreter with it, so choose Python and write Python. An agent older than this Dazyflow release does not know how to do that and will use the machine's shell regardless — re-run the install command on the machine to upgrade it.":
+    "Vad som startar skriptet på maskinen. 'Maskinens eget skal' är /bin/sh på en unix-maskin och cmd på Windows — det en körnod alltid har gjort. Allt annat skriver skriptet till en tillfällig fil och startar den tolken med den, så väljer du Python skriver du Python. En agent som är äldre än den här Dazyflow-versionen känner inte till det och använder maskinens skal ändå — kör om installationskommandot på maskinen för att uppgradera den.",
   "Defaults to 600. The runner kills the script when this elapses.":
     "Standard är 600. Körnoden avbryter skriptet när tiden gått ut.",
   "Defaults to PUT for a direct upload, POST for a form upload.": "Standard är PUT för en direkt uppladdning, POST för en formuläruppladdning.",
@@ -560,14 +564,14 @@ export const SV_FIELD_HELP: Record<string, string> = {
   "The .xlsx file in the workspace. Ignored when a 'File' input is wired.": "xlsx-filen i arbetsytan. Ignoreras när en Fil-ingång är inkopplad.",
   "The Drive file to download — pick from your account's files. The File ID input overrides this when connected.": "Drive-filen som ska laddas ner — välj bland kontots filer. Ingången Fil-ID vinner över detta när den är inkopplad.",
   "The Google Form to watch for new responses.": "Google-formuläret som ska bevakas för nya svar.",
-  "The command to run on that machine. It runs as the user the runner agent runs as, in the agent's working directory.":
-    "Kommandot som ska köras på maskinen. Det körs som den användare körnodsagenten körs som, i agentens arbetskatalog.",
+  "The script to run on that machine. It runs as the user the runner agent runs as, in the agent's working directory. Connect the 'script' input instead to have an earlier step supply it.":
+    "Skriptet som ska köras på maskinen. Det körs som den användare körnodsagenten körs som, i agentens arbetskatalog. Koppla in ingången 'script' i stället för att låta ett tidigare steg leverera det.",
   "The ID of the flow to run as a step.": "ID:t på flödet som ska köras som ett steg.",
   "The Klarna order id to look up. Overridden by the 'Order ID' input.": "Klarna-order-id:t som ska hämtas. Ingången Order-ID vinner över detta.",
   "The Klarna order to capture. Overridden by the 'Order ID' input.": "Klarna-ordern som ska debiteras. Ingången Order-ID vinner över detta.",
   "The Klarna order to refund. Overridden by the 'Order ID' input.": "Klarna-ordern som ska återbetalas. Ingången Order-ID vinner över detta.",
-  "The machine to run this on, by name. Leave empty and set a label instead to use any machine in a pool.":
-    "Maskinen som det här ska köras på, med namn. Lämna tomt och sätt en etikett i stället för att använda vilken maskin som helst i en pool.",
+  "The machine to run this on, chosen from the ones your organisation has registered. Leave it empty and set a label instead to use any machine in a pool.":
+    "Maskinen som det här ska köras på, vald bland dem organisationen har registrerat. Lämna tomt och sätt en etikett i stället för att använda vilken maskin som helst i en pool.",
   "The Postgres schema the table lives in.": "Postgres-schemat som tabellen ligger i.",
   "The RSS or Atom feed URL. Can also be wired into the 'url' input.": "URL till RSS- eller Atom-flödet. Kan också kopplas in i ingången 'url'.",
   "The SELECT query to run. Use $1, $2 … placeholders for values and supply them under 'Query values'.": "SELECT-frågan som ska köras. Använd platshållarna $1, $2 … för värden och ange dem under Frågevärden.",
@@ -672,6 +676,8 @@ export const SV_FIELD_HELP: Record<string, string> = {
 // Dropdown option labels (schema.enumNames), including the currency list.
 export const SV_ENUM_LABELS: Record<string, string> = {
   "(none)": "(ingen)",
+  "The machine's own shell": "Maskinens eget skal",
+  "sh (POSIX shell)": "sh (POSIX-skal)",
   "1 — Min": "1 — Lägst",
   "2 — Low": "2 — Låg",
   "3 — Default": "3 — Standard",

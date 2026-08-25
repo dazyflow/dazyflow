@@ -135,14 +135,64 @@ running first; stopping or restarting never kills a command halfway through.
 
 Add the **Run on your machine** step and fill in:
 
-- **Runner** — which machine, by name. Or leave it empty and set a **label**
-instead, and whichever labelled machine is free takes the job.
-- **Command** — what to run. It runs as the user the agent runs as, in the
-agent's working directory.
+- **Machine** — which one, picked from a list of the machines this organisation
+has registered. The list says which are switched on, so a step aimed at a
+sleeping laptop is something you see now rather than after a run. Or leave it
+empty and choose a **label** instead, and whichever labelled machine is free
+takes the job.
+- **Run it with** — what starts the script: the machine's own shell, `sh`,
+`bash`, Python, PowerShell or Node.
+- **Script** — what to run, in a proper box with the syntax coloured for the
+language you chose. It runs as the user the agent runs as, in the agent's
+working directory.
 
 Whatever you wire into the step's input arrives on the script's **standard
 input**. Whatever the script prints comes back out, ready for the next step — an
 email, a spreadsheet, a database.
+
+### Choosing what runs the script
+
+The default, **the machine's own shell**, is `/bin/sh` on a unix box and `cmd`
+on Windows — what a runner has always done, and what an existing step keeps
+doing.
+
+Choose anything else and the agent writes the script to a temporary file and
+starts that interpreter with it. So a Python step is Python all the way down:
+
+```python
+import json, sys
+
+order = json.load(sys.stdin)
+print(order["total"] * 1.25)
+```
+
+Two things follow from the script being a file rather than something piped in.
+**Standard input stays yours** — the value wired into the step reaches the
+script, exactly as it does for a shell one. And the interpreter has a real
+filename to talk about, so a mistake comes back as `line 4 of
+dzrunner-x8f2.py` instead of `<string>`.
+
+The interpreter has to be on the machine, and the agent says so plainly if it
+is not: *"this runner was asked to run the script with node, which is not
+installed on this machine"*. `python` means `python3` from the agent's `PATH`,
+and PowerShell means `pwsh` if it is there and `powershell` otherwise.
+
+**Upgrade the agent before using this.** An agent installed before this release
+does not know about the choice and will use the machine's shell whatever the
+step says — which for a Python script means a pile of shell syntax errors. Re-run
+the install command on the machine to upgrade it; **Admin → Runners** shows which
+version each one is running.
+
+### Building the script in an earlier step
+
+The script does not have to be typed on the step. Connect the **script** input
+and an earlier step supplies it — filled in from a template, read out of a
+table, written by the AI step. Wired, it wins over the box; unwired, the box is
+what runs.
+
+It is a separate input from the value on **in** on purpose. One port carrying
+either the program or its data would make "what did this run?" depend on which
+upstream step happened to be connected.
 
 A non-zero exit fails the step, and the script's own error output is attached,
 so a failing flow tells you what your script said rather than just a number.
@@ -205,6 +255,14 @@ python3 dzrunner.py --allow ./fetch-invoices.sh,./reconcile.sh
 
 It will then refuse anything else, and the flow gets a clear failure saying so.
 
+**An allow-list has to name an interpreter too.** A step that chooses Python
+starts `python`, not the first word of the script, so an allow-list of
+`./fetch-invoices.sh` refuses it — otherwise a runner permitted one shell script
+would quietly be permitted every Python program ever written. Add `python`
+(or `bash`, `node`, `powershell`) to the list if a flow should be able to run
+that language here, and be clear about what that grants: permission to run
+anything that language can do.
+
 **An allow-list also turns the shell off.** Without one, whatever the flow sends
 goes to a shell, because that is what the step promises. With one, the command
 is parsed by the agent and the program is executed directly — so `;`, `|`, `&&`,
@@ -244,7 +302,14 @@ command.
 **A step fails with "not allowed to run".** The agent has an `--allow` list and
 the command isn't on it. If the command looks allowed, check for a pipe, a
 redirect or a `;`: an allow-list runs commands without a shell, so those are
-arguments rather than operators. Put them in a script and allow that.
+arguments rather than operators. Put them in a script and allow that. If the
+step chose an interpreter under **Run it with**, the list has to name the
+interpreter — `python`, not the script.
+
+**A Python or PowerShell script fails with shell syntax errors.** The agent on
+that machine predates the **Run it with** choice, so it ran the script through
+the machine's shell. Re-run the install command there to upgrade it;
+**Admin → Runners** shows each machine's agent version.
 
 **A step fails saying the command printed too much.** The agent sends back at
 most 1 MiB per stream. Have the script write large output to a file and print

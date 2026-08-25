@@ -43,6 +43,7 @@ import type {
   PublishInfo,
   GitCredential,
   Runner,
+  RunnerTarget,
   RunnerToken,
   GitMirror,
   MirrorPushResult,
@@ -957,6 +958,13 @@ export const api = {
   // checked in recently. Never returns a credential.
   listRunners: (token: string) =>
     request<{ runners: Runner[] }>(token, "GET", "/admin/runners"),
+  // listRunnerTargets is the same fleet seen from the flow editor: the names
+  // and labels a step can be pointed at, and whether each machine is there
+  // right now. A separate endpoint from listRunners because that one is
+  // admin-only (it neighbours minting credentials), while filling in a step
+  // needs only graph:edit.
+  listRunnerTargets: (token: string) =>
+    request<{ runners: RunnerTarget[] }>(token, "GET", "/runners"),
   // mintRunnerToken creates a registration token, shown once. POST rather than
   // GET because it creates something — and because a token in a URL ends up in
   // a proxy log.

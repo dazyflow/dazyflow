@@ -23,6 +23,39 @@ into the image.)
 
 ## [Unreleased]
 
+### Added
+
+- **The Run on your machine step now asks which machine, and what should run
+  the script.** Three fields that used to be typing are now choices:
+
+  - **Machine** is a dropdown of the machines your organisation has registered,
+    with the offline ones marked. The name existed in exactly one place a flow
+    author could not see from the editor, so a typo surfaced only when a run
+    failed with `no runner named "buld-box"`. **Or any machine labelled** is
+    likewise a list of the labels those machines carry.
+  - **Run it with** picks the interpreter: the machine's own shell (the
+    default, and what a runner has always done), `sh`, `bash`, Python,
+    PowerShell or Node. Choose one and the agent writes the script to a
+    temporary file and starts that interpreter with it — so a Python step is
+    Python, with standard input still carrying the value wired into the step
+    and tracebacks that name a real file.
+  - **Script** — renamed from **Command**, because it always was one — is a
+    proper multi-line box, monospace, with the syntax coloured for the language
+    you chose. It was a single-line input, which hid everything past the right
+    edge of a thing that is many lines by nature.
+
+  The script can also come from an earlier step now: connect the new **script**
+  input and it supplies one, built from a template, read out of a table, or
+  written by the AI step.
+
+  **Upgrade your agents.** An agent installed before this release does not know
+  about the interpreter choice and will use the machine's shell whatever the
+  step says. Re-run the install command on each machine; **Admin → Runners**
+  shows which version each one is running. An allow-listed agent (`--allow`)
+  additionally has to name any interpreter a flow may start — `python`, not the
+  script — which is worth reading as what it is: permission to run anything that
+  language can do.
+
 ## [0.11.0] - 2026-08-25
 
 ### Added

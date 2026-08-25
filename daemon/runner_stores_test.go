@@ -348,7 +348,8 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 	t.Run("a task round-trips whole", func(t *testing.T) {
 		enqueue(t, RunnerTask{
 			ID: "whole", Tenant: "acme", Runner: "box", Script: "./x.sh",
-			Env: map[string]string{"A": "1", "B": "two"}, Stdin: "on stdin",
+			Shell: "python",
+			Env:   map[string]string{"A": "1", "B": "two"}, Stdin: "on stdin",
 			Timeout: 90 * time.Second,
 		})
 		got, err := q.Claim(ctx, box, time.Now(), TaskLease)
@@ -357,6 +358,12 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 		}
 		if got.Script != "./x.sh" || got.Stdin != "on stdin" {
 			t.Errorf("task = %+v", got)
+		}
+		// The claim is the only place the chosen interpreter reaches the agent:
+		// dropped here, a Python script runs under sh and fails as if the flow
+		// author had written it wrong.
+		if got.Shell != "python" {
+			t.Errorf("shell = %q, want the one the step chose", got.Shell)
 		}
 		if got.Timeout != 90*time.Second {
 			t.Errorf("timeout = %v, want 90s", got.Timeout)

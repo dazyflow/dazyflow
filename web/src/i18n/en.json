@@ -1644,7 +1644,17 @@
       "hours": "hours",
       "days": "days"
     },
-    "aboutField": "About this field"
+    "aboutField": "About this field",
+    "runner": {
+      "loading": "Loading machines…",
+      "choose": "Choose a machine…",
+      "chooseLabel": "Choose a label…",
+      "offline": "{{name}} — offline",
+      "labelOption": "{{label}} — {{count}} machine(s)",
+      "unknown": "{{name}} — not registered any more",
+      "none": "No machines are registered for this organisation. Add one under Admin → Runners, then pick it here.",
+      "noLabels": "None of your machines carries a label. Register one with --labels to target a pool instead of a name."
+    }
   },
   "forEach": {
     "bodyHint": "Connect the Loop body output to the first step you want to run for each row. Every step after it runs once per row too.",

@@ -58,7 +58,12 @@ type RunnerTask struct {
 	Runner string
 	Label  string
 
-	Script  string
+	Script string
+	// Shell names the interpreter the agent starts the script with — the
+	// step's "Run it with" choice, one of drops/runner.Shells. Empty means the
+	// machine's own shell, which is what every task queued before the choice
+	// existed carries, and what the agent does with a value it does not know.
+	Shell   string
 	Env     map[string]string
 	Timeout time.Duration
 	// Stdin is the value wired into the step, handed to the script on standard
@@ -139,6 +144,7 @@ CREATE TABLE IF NOT EXISTS runner_tasks (
     runner       TEXT NOT NULL DEFAULT '',
     label        TEXT NOT NULL DEFAULT '',
     script       TEXT NOT NULL,
+    shell        TEXT NOT NULL DEFAULT '',
     env          JSONB,
     stdin        TEXT NOT NULL DEFAULT '',
     timeout_ms   BIGINT NOT NULL DEFAULT 0,
@@ -151,6 +157,7 @@ CREATE TABLE IF NOT EXISTS runner_tasks (
     finished_at  TIMESTAMPTZ
 );
 ALTER TABLE runner_tasks ADD COLUMN IF NOT EXISTS progress TEXT NOT NULL DEFAULT '';
+ALTER TABLE runner_tasks ADD COLUMN IF NOT EXISTS shell TEXT NOT NULL DEFAULT '';
 -- The claim query's working set: a tenant's unfinished tasks, oldest first.
 CREATE INDEX IF NOT EXISTS runner_tasks_claim_idx
     ON runner_tasks (tenant, created_at)
@@ -491,10 +498,13 @@ func (d *RunnerDispatcher) dispatchGrace() time.Duration {
 
 // DispatchRequest is what the step asks for.
 type DispatchRequest struct {
-	Tenant  string
-	Runner  string
-	Label   string
-	Script  string
+	Tenant string
+	Runner string
+	Label  string
+	Script string
+	// Shell is the interpreter the agent should start the script with; empty
+	// means the machine's own shell. See RunnerTask.Shell.
+	Shell   string
 	Env     map[string]string
 	Stdin   string
 	Timeout time.Duration
@@ -527,6 +537,7 @@ func (d *RunnerDispatcher) Dispatch(ctx context.Context, req DispatchRequest, on
 		Runner:    req.Runner,
 		Label:     req.Label,
 		Script:    req.Script,
+		Shell:     req.Shell,
 		Env:       req.Env,
 		Stdin:     req.Stdin,
 		Timeout:   req.Timeout,

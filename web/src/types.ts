@@ -845,6 +845,19 @@ export type Runner = {
   created_at: string;
 };
 
+// RunnerTarget is one machine as the flow editor sees it, from GET /runners:
+// what the Run on your machine step needs to be pointed somewhere, and nothing
+// about administering the fleet.
+//
+// Online is here because it is the difference between "this step will run" and
+// "this step will wait and then fail" — worth seeing while choosing, not after
+// a run.
+export type RunnerTarget = {
+  name: string;
+  labels?: string[];
+  online: boolean;
+};
+
 // RunnerToken is a registration token, returned once by
 // POST /admin/runners/token and never retrievable again. It is the whole of the
 // install: paste it into one command on the machine.

@@ -24,17 +24,19 @@ import json
 import os
 import platform
 import shlex
+import shutil
 import signal
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 
 # How long to wait after an empty poll.
 #
@@ -232,8 +234,99 @@ def log(msg):
     print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {msg}", flush=True)
 
 
+# The interpreters a step may ask for, and the extension the script is written
+# with. The server offers exactly these words; anything else it sends — an older
+# agent's idea of the list, a newer server's — falls back to the machine's own
+# shell, which is what a runner did before this was a choice.
+#
+# The extension is not cosmetic. PowerShell will not run a file that is not
+# .ps1, and Python's traceback names the file, so a syntax error in a flow's
+# script reads as "line 4 of dz-abc123.py" instead of "<string>".
+SHELL_SUFFIXES = {
+    "sh": ".sh",
+    "bash": ".sh",
+    "python": ".py",
+    "powershell": ".ps1",
+    "node": ".js",
+}
+
+
+def interpreter_argv(shell):
+    """Return the argv that starts `shell` here, minus the script path.
+
+    None means the program is not installed on this machine — a refusal the
+    caller can name, rather than the bare OSError the exec would raise.
+
+    Which program a word means is decided HERE, on the machine, because this is
+    the only place that can know: the server has no idea whether "python" is
+    /usr/bin/python3, a pyenv shim, or absent.
+    """
+    if shell in ("sh", "bash"):
+        exe = shutil.which(shell)
+        return [exe] if exe else None
+    if shell == "python":
+        # PATH first, so a script runs under the machine's Python rather than
+        # whatever happens to be running the agent. sys.executable is the
+        # fallback because an agent that is running proves one Python exists.
+        exe = shutil.which("python3") or shutil.which("python") or sys.executable
+        return [exe] if exe else None
+    if shell == "node":
+        exe = shutil.which("node") or shutil.which("nodejs")
+        return [exe] if exe else None
+    if shell == "powershell":
+        # pwsh first: it is PowerShell 7, the one that exists on every platform.
+        exe = shutil.which("pwsh") or shutil.which("powershell")
+        if not exe:
+            return None
+        argv = [exe, "-NoProfile", "-NonInteractive"]
+        if os.name == "nt":
+            # A .ps1 in a temp directory is refused outright under a stock
+            # Windows execution policy, so without this every PowerShell step
+            # would fail on a freshly installed Windows runner. Windows only:
+            # -ExecutionPolicy is not a parameter pwsh has elsewhere.
+            argv += ["-ExecutionPolicy", "Bypass"]
+        return argv + ["-File"]
+    return None
+
+
+def plan_interpreter(shell, allowed):
+    """Decide how to start the step's chosen interpreter.
+
+    Returns (argv-prefix, suffix, refusal). A refusal is the agent's decision
+    and is reported as such, so the flow author learns the script never ran.
+
+    The allow-list check is the interesting half. With an interpreter the
+    program being started is the interpreter, NOT the first word of the script
+    — so the ordinary check ("is the script's first word permitted?") would be
+    answering the wrong question, and answering it favourably: a runner allowed
+    to run ./fetch-invoices.sh would happily run any Python at all. So an
+    allow-list must name the interpreter itself, and be understood for what it
+    then is: permission to run arbitrary code in that language.
+    """
+    if allowed and shell not in allowed:
+        return None, None, (
+            f'this runner is not allowed to run scripts with "{shell}" '
+            f"(permitted: {', '.join(allowed)}). "
+            f'Add "{shell}" to the allow-list if a flow should be able to run '
+            f"{shell} code here — which is permission to run anything that "
+            "language can do — or leave the step on the machine's own shell "
+            "and allow the individual script instead."
+        )
+    argv = interpreter_argv(shell)
+    if argv is None:
+        return None, None, (
+            f'this runner was asked to run the script with "{shell}", '
+            "which is not installed on this machine"
+        )
+    return argv, SHELL_SUFFIXES[shell], None
+
+
 def plan(script, allowed):
-    """Decide how to run a command. Returns (argv-or-string, use_shell, refusal).
+    """Decide how to run a command with the machine's own shell.
+
+    Returns (argv-or-string, use_shell, refusal). This is the path for a step
+    that did not choose an interpreter — see plan_interpreter for the one that
+    did.
 
     With NO allow-list the command goes to a shell, because that is what the
     step promises: whatever the flow sends, run it here.
@@ -314,12 +407,57 @@ class Agent:
             return {"error": f"the runner agent could not finish this step: {e}"}
 
     def _execute(self, task):
-        command, use_shell, refusal = plan(task.get("script", ""), self.allowed)
-        if refusal:
-            # Refused locally, and reported as the agent's decision rather than
-            # a script failure — the flow author needs to know it never ran.
-            return {"error": refusal}
+        script = task.get("script", "")
+        # An unknown word — an older agent's list, a newer server's — means the
+        # machine's own shell, the behaviour a runner had before the step could
+        # choose. Silently picking some other interpreter would be worse than
+        # doing what the default has always done.
+        shell = str(task.get("shell") or "").strip().lower()
+        if shell not in SHELL_SUFFIXES:
+            shell = ""
 
+        script_file = None
+        if shell:
+            prefix, suffix, refusal = plan_interpreter(shell, self.allowed)
+            if refusal:
+                return {"error": refusal}
+            script_file = self.write_script(script, suffix)
+            command, use_shell = prefix + [script_file], False
+        else:
+            command, use_shell, refusal = plan(script, self.allowed)
+            if refusal:
+                # Refused locally, and reported as the agent's decision rather
+                # than a script failure — the flow author needs to know it
+                # never ran.
+                return {"error": refusal}
+
+        try:
+            return self._run(task, command, use_shell)
+        finally:
+            if script_file:
+                # Best effort: a script that will not delete is not a reason to
+                # fail a step that has already run.
+                try:
+                    os.unlink(script_file)
+                except OSError:
+                    pass
+
+    @staticmethod
+    def write_script(script, suffix):
+        """Write the script somewhere the interpreter can be pointed at.
+
+        A file rather than `-c`/`-Command` with the script as an argument, for
+        three reasons that all bite in practice: a long script exceeds the
+        command-line limit on Windows, PowerShell's quoting of an inline script
+        is its own field of study, and an interpreter given a real filename puts
+        that filename in its error messages.
+        """
+        fd, path = tempfile.mkstemp(prefix="dzrunner-", suffix=suffix)
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
+            f.write(script)
+        return path
+
+    def _run(self, task, command, use_shell):
         timeout = int(task.get("timeout_seconds") or 0) or DEFAULT_TIMEOUT_SECONDS
         env = dict(os.environ)
         # Not scrubbed: unlike a plugin inside the daemon, this process is the
@@ -463,7 +601,12 @@ class Agent:
                 self._sleep(POLL_SECONDS)
                 continue
 
-            log(f"task {task['id']}: {task.get('script', '')}")
+            # The interpreter is part of what ran, so the machine's own log says
+            # which one — otherwise a Python script and a shell script look
+            # identical here and "why did that fail?" starts with a guess.
+            with_shell = str(task.get("shell") or "").strip().lower()
+            prefix = f"[{with_shell}] " if with_shell in SHELL_SUFFIXES else ""
+            log(f"task {task['id']}: {prefix}{task.get('script', '')}")
             result = self.execute(task)
             try:
                 self.report(task["id"], result)

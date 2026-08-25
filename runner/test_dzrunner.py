@@ -19,6 +19,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from unittest import mock
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
@@ -351,6 +352,77 @@ class AgentTest(unittest.TestCase):
 
     def test_an_unparseable_command_is_refused_rather_than_guessed(self):
         self.assertIn("could not read", dzrunner.plan('./ok.sh "unclosed', ["./ok.sh"])[2])
+
+    # ---- the step's choice of interpreter ------------------------------
+
+    def test_a_python_script_runs_under_python(self):
+        # The whole point of the choice: what is typed on the step is Python,
+        # not something a shell would make sense of.
+        cfg = self.register()
+        self.state["queue"].append({
+            "id": "t1",
+            "shell": "python",
+            "script": 'print("|".join(str(i * i) for i in range(4)))',
+        })
+        dzrunner.Agent(cfg, []).run(once=True)
+        res = self.state["results"][0]
+        self.assertEqual(res["exit_code"], 0, res)
+        self.assertEqual(res["stdout"].strip(), "0|1|4|9")
+
+    def test_the_chosen_interpreter_still_reads_standard_input(self):
+        # The script travels in a file precisely so stdin stays free for the
+        # value wired into the step. Sending it on stdin instead would silently
+        # take that away.
+        cfg = self.register()
+        self.state["queue"].append({
+            "id": "t1",
+            "shell": "python",
+            "stdin": "hello",
+            "script": "import sys\nprint(sys.stdin.read().strip().upper())",
+        })
+        dzrunner.Agent(cfg, []).run(once=True)
+        self.assertEqual(self.state["results"][0]["stdout"].strip(), "HELLO")
+
+    def test_a_shell_the_agent_does_not_know_falls_back_to_the_machines_shell(self):
+        # A newer server, or a typo that got past the step: do what the default
+        # has always done rather than guess at an interpreter.
+        cfg = self.register()
+        self.state["queue"].append({"id": "t1", "shell": "erlang", "script": "printf hello"})
+        dzrunner.Agent(cfg, []).run(once=True)
+        self.assertEqual(self.state["results"][0]["stdout"], "hello")
+
+    def test_the_script_file_is_removed_afterwards(self):
+        cfg = self.register()
+        self.state["queue"].append({
+            "id": "t1",
+            "shell": "python",
+            "script": "import sys; print(sys.argv[0])",
+        })
+        dzrunner.Agent(cfg, []).run(once=True)
+        path = self.state["results"][0]["stdout"].strip()
+        self.assertTrue(path.endswith(".py"), path)
+        self.assertFalse(Path(path).exists(), "the temporary script outlived the task")
+
+    def test_an_allow_list_must_name_the_interpreter(self):
+        # The ordinary check asks whether the script's first word is permitted,
+        # which is the wrong question here: the program being started is the
+        # interpreter. Answering the wrong question favourably would let a
+        # runner allowed one shell script run any Python at all.
+        _, _, refusal = dzrunner.plan_interpreter("python", ["./fetch.sh"])
+        self.assertIn("not allowed", refusal)
+        self.assertIn("python", refusal)
+
+    def test_an_allow_list_that_names_the_interpreter_permits_it(self):
+        prefix, suffix, refusal = dzrunner.plan_interpreter("python", ["python"])
+        self.assertIsNone(refusal)
+        self.assertEqual(suffix, ".py")
+        self.assertTrue(prefix, "an argv that starts python")
+
+    def test_an_interpreter_this_machine_does_not_have_is_named(self):
+        with mock.patch.object(dzrunner.shutil, "which", return_value=None):
+            _, _, refusal = dzrunner.plan_interpreter("node", [])
+        self.assertIn("not installed", refusal)
+        self.assertIn("node", refusal)
 
     # ---- reporting back -----------------------------------------------
 

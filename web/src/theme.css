@@ -82,6 +82,16 @@
   --json-bool: #e0a93a;
   --json-punct: #9e9abb;
 
+  /* Script syntax-highlight token colours (dz-code-editor). Same well, and
+     deliberately the same hues as the JSON tokens so the two editors read as
+     one family; a comment is the exception, muted because it is the one token
+     meant to recede. */
+  --script-comment: #7b7796;
+  --script-string: #4ec96d;
+  --script-keyword: #9f83fe;
+  --script-number: #6cb6ff;
+  --script-var: #e0a93a;
+
   /* Shadows + synthwave glow */
   --shadow: 0 1px 2px rgba(8, 2, 30, 0.45);
   --shadow-lg: 0 2px 10px rgba(8, 2, 30, 0.55);
@@ -274,6 +284,13 @@
   --json-number: #0969da;
   --json-bool: #9a6700;
   --json-punct: #57606a;
+
+  /* Script token colours for the light theme well (see dark block). */
+  --script-comment: #6a7280;
+  --script-string: #1a7f37;
+  --script-keyword: #6d28d9;
+  --script-number: #0969da;
+  --script-var: #9a6700;
 
   /* Soft, neutral elevation — light themes want diffuse gray shadows,
      not the heavy near-black drops the dark theme uses. */
