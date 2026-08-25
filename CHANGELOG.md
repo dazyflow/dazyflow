@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-08-25
+
 ### Fixed
 
 - **The caret sat off the text in the runner step's script box.** The box draws
