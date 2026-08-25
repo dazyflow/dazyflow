@@ -23,7 +23,7 @@ into the image.)
 
 ## [Unreleased]
 
-## [0.15.0] - 2026-08-25
+## [0.15.1] - 2026-08-26
 
 ### Fixed
 
@@ -41,6 +41,28 @@ into the image.)
   first row quietly is not what runs. This is the shared name/value editor, so
   every map-shaped setting gets the fix.
 
+- **The caret in the script box was still off after 0.15.0.** That release
+  removed two contributors — an italic comment token, and a scrollbar reserved
+  in one layer and not the other — but not the cause, and the caret still drifted
+  from the text.
+
+  The cause is the technique: it asks two different layout engines — CSS text
+  layout in the highlight layer, the browser's text-control code in the textarea
+  — to break a line at the same character. Identical CSS is necessary but not
+  sufficient, and anything that narrows one content box and not the other moves
+  every wrap point below it.
+
+  So **the script box no longer wraps**. Long lines scroll sideways, which
+  leaves nothing to disagree about beyond per-line font metrics — and is what a
+  code box should do anyway: wrapping a shell pipeline mid-token to fit a narrow
+  panel is worse than scrolling it. The overlay guard now covers the wrapping
+  properties too, since a wrap disagreement is what actually broke rather than a
+  font one.
+
+## [0.15.0] - 2026-08-25
+
+### Fixed
+
 - **The caret sat off the text in the runner step's script box.** The box draws
   a transparent textarea over a highlighted copy of the same text, which only
   works while the two advance character-for-character — and the comment token
@@ -57,21 +79,11 @@ into the image.)
   behind it. Both layers now reserve the scrollbar's width whether or not one is
   showing.
 
-  And the deeper cause is gone with them: **the script box no longer wraps.**
-  The technique asks two different layout engines — CSS text layout in the
-  highlight layer, the browser's text-control code in the textarea — to break a
-  line at the same character, and identical CSS is necessary but not sufficient
-  for that. Anything narrowing one content box and not the other moves every
-  wrap point below it. With no wrapping there is nothing left to disagree about,
-  only per-line font metrics. Long lines scroll sideways instead, which is what
-  a code box should do anyway: wrapping a shell pipeline mid-token to fit a
-  narrow panel is worse than scrolling it.
-
-  `npm test` now fails if a token span is given any property that moves text, or
-  if the two layers of one of these editors are given one separately — including
-  the wrapping properties, which is what actually broke. The bug looks right in
-  a screenshot and only shows with a caret at the end of a long line, which is
-  why it wants a guard rather than care.
+  `npm test` now fails if a token span is given any property that changes glyph
+  width, or if the two layers of one of these editors are given a metric
+  separately. The bug looks right in a screenshot and only shows when you put
+  the caret at the end of a long commented line, which is why it wants a guard
+  rather than care.
 
 ### Added
 
