@@ -133,7 +133,7 @@ var fanDedupeManifest = core.Manifest{
 // run recorded nothing (the node never reached StatusOK), so the reclaim
 // re-fired every item, double-sending 0..2.
 func TestWriteDedupe_FannedPartialFailureDoesNotReFire(t *testing.T) {
-	var sent []string             // items whose side effect (send) completed
+	var sent []string                       // items whose side effect (send) completed
 	failFirst := map[string]bool{"d": true} // item "d" (index 3) fails once
 	e := newEngineWith(t, NativeDrop{
 		Manifest: fanDedupeManifest,

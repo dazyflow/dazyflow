@@ -540,7 +540,7 @@ func TestRemoteCatalog_Register_InsecureDialAndHandshake(t *testing.T) {
 	if err := c.Register(desc); err != nil {
 		t.Fatalf("Register: %v", err)
 	}
-	id := RunnerDropID("remote-echo", "remote-echo")
+	id := "remote-echo"
 	tr, ok := c.Get("acme", id)
 	if !ok || tr.Manifest().ID != id {
 		t.Errorf("Get after Register = (%v,%v)", tr, ok)
@@ -554,7 +554,7 @@ func TestRemoteCatalog_Register_InsecureDialAndHandshake(t *testing.T) {
 // the runner declares, so there is no longer an id to "mismatch". Registration
 // under a name unrelated to the drops it serves is now the normal case.
 // remote_multidrop_test.go covers what IS validated instead.
-func TestRemoteCatalog_Register_RunnerNameNeedNotMatchDropID(t *testing.T) {
+func TestRemoteCatalog_Register_RemoteNameNeedNotMatchDropID(t *testing.T) {
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
@@ -569,12 +569,14 @@ func TestRemoteCatalog_Register_RunnerNameNeedNotMatchDropID(t *testing.T) {
 	if err := c.Register(desc); err != nil {
 		t.Fatalf("Register: %v", err)
 	}
-	// Filed under runner/<runner>/<drop>, combining both.
-	if _, ok := c.Get("acme", RunnerDropID("billing-box", "remote-echo")); !ok {
-		t.Error("drop not reachable by its namespaced id")
+	// The remote is called "billing-box" and serves a drop called "remote-echo".
+	// The drop resolves by the id it declared; the remote's own name is routing
+	// metadata and never part of it.
+	if _, ok := c.Get("acme", "remote-echo"); !ok {
+		t.Error("drop not resolvable by the id it declared")
 	}
-	if _, ok := c.Get("acme", "remote-echo"); ok {
-		t.Error("drop reachable by its bare declared id, bypassing the namespace")
+	if _, ok := c.Get("acme", "billing-box"); ok {
+		t.Error("the remote's name resolved as though it were a drop id")
 	}
 	if err := c.Close(); err != nil {
 		t.Errorf("Close: %v", err)

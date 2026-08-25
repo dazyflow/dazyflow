@@ -251,14 +251,15 @@ func (c *RemoteCatalog) Register(desc RemoteDescriptor) error {
 			return fmt.Errorf("remote %q declared drop %q twice", desc.ID, manifest.ID)
 		}
 		seen[manifest.ID] = struct{}{}
-		declared := manifest.ID
-		// The catalog id is namespaced; the manifest the editor sees carries it
-		// so a saved graph references the same string it resolves by.
-		manifest.ID = RunnerDropID(desc.ID, declared)
+		// Filed under the id the remote declares, which is the id a graph
+		// references. These were briefly namespaced as runner/<remote>/<drop>,
+		// for a runner model that no longer exists — and since nothing else
+		// resolved through that prefix, the only thing it did was make every
+		// id in DAZYFLOW_REMOTE_MODULES unaddressable from a graph.
 		transports[remoteKey{tenant: desc.Tenant, id: manifest.ID}] = &RemoteTransport{
 			Descriptor: desc,
 			manifest:   inlineOnlyInputs(manifest),
-			dropID:     declared,
+			dropID:     manifest.ID,
 			conn:       conn,
 			client:     client,
 		}
@@ -266,22 +267,43 @@ func (c *RemoteCatalog) Register(desc RemoteDescriptor) error {
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	// No cross-runner clash check is needed, and that is the namespace earning
-	// its keep rather than an omission: the catalog id is
-	// runner/<runner>/<drop>, so two runners in one tenant declaring the same
-	// drop name land on different keys and both stay reachable. Before the
-	// namespace this needed an explicit refusal, because otherwise which one
-	// executed depended on registration order.
-	// Re-registering the same runner replaces it: drop the old connection and
-	// any drops it used to serve but no longer does.
+
+	// Re-registering the same remote replaces it, so work out which keys this
+	// registration is taking over before deciding what counts as a clash.
 	rk := runnerKey{tenant: desc.Tenant, name: desc.ID}
-	if old, ok := c.conns[rk]; ok {
-		_ = old.Close()
+	_, replacing := c.conns[rk]
+	stale := map[remoteKey]struct{}{}
+	if replacing {
 		for k, t := range c.nodes {
 			if t.Descriptor.ID == desc.ID && k.tenant == desc.Tenant {
-				delete(c.nodes, k)
+				stale[k] = struct{}{}
 			}
 		}
+	}
+
+	// Two remotes in one tenant declaring the same drop id would otherwise
+	// resolve by registration order — not something anyone can reason about, and
+	// silent. Refuse instead. Without the namespace this check is load-bearing
+	// again: it was dropped while ids carried runner/<remote>/ and could not
+	// collide.
+	for k := range transports {
+		if _, taking := stale[k]; taking {
+			continue
+		}
+		if existing, taken := c.nodes[k]; taken {
+			_ = conn.Close()
+			return fmt.Errorf("remote %q declares drop %q, which remote %q already serves for tenant %q",
+				desc.ID, k.id, existing.Descriptor.ID, desc.Tenant)
+		}
+	}
+
+	// Nothing above this line has mutated the catalog, so a refusal leaves the
+	// previous registration exactly as it was rather than half-removed.
+	if old, ok := c.conns[rk]; ok {
+		_ = old.Close()
+	}
+	for k := range stale {
+		delete(c.nodes, k)
 	}
 	c.conns[rk] = conn
 	for k, t := range transports {
@@ -500,23 +522,13 @@ func portFromPB(pb *nodepb.Port) core.Port {
 	return p
 }
 
-// RunnerNamespace prefixes every drop a tenant runner contributes.
+// RunnerNamespace is a reserved id prefix: the native registry refuses a drop
+// whose id starts with it.
 //
-// Reserved: the native registry refuses an id starting with it, so a future
-// built-in can never shadow an org's runner. It also means a reader of a saved
-// graph can tell at a glance which steps leave the daemon, which matters most
-// to whoever is reviewing where a secret goes.
+// Nothing produces such ids any more — remote drops are filed under the id they
+// declare. It stays reserved so the prefix is available if a namespaced remote
+// scheme returns, and so no built-in can quietly claim it in the meantime.
 const RunnerNamespace = "runner/"
-
-// RunnerDropID is the catalog id for one drop of one runner.
-//
-// The tenant is deliberately NOT part of it. Putting it there would bake a
-// tenant name into saved graphs, so forking a flow, exporting it, or moving it
-// between workspaces would dangle every runner reference. Uniqueness comes from
-// the catalog key (tenant, id), not from the string.
-func RunnerDropID(runner, drop string) string {
-	return RunnerNamespace + runner + "/" + drop
-}
 
 // inlineOnlyInputs marks a runner drop's inputs as taking values, not files.
 //

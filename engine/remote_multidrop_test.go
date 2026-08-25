@@ -81,17 +81,16 @@ func TestRegister_FilesEveryDeclaredDrop(t *testing.T) {
 	if err := register(t, c, "acme", "box", &multiDrop{manifests: drops("fetch", "render", "post")}); err != nil {
 		t.Fatalf("Register: %v", err)
 	}
-	// Filed under the namespaced id, not the bare one the runner declared:
-	// runner/<runner>/<drop>, so a saved graph shows which steps leave the
-	// daemon.
+	// Filed under the id the remote declares, which is the id a graph writes.
+	// Anything else and a saved graph cannot name the step it wants.
 	for _, id := range []string{"fetch", "render", "post"} {
-		want := RunnerDropID("box", id)
-		if _, ok := c.Get("acme", want); !ok {
-			t.Errorf("drop %q not registered under %q", id, want)
+		if _, ok := c.Get("acme", id); !ok {
+			t.Errorf("drop %q is not resolvable by the id it declared", id)
 		}
-		if _, ok := c.Get("acme", id); ok {
-			t.Errorf("drop %q is reachable by its bare id, bypassing the namespace", id)
-		}
+	}
+	// And nothing invented a namespaced alias alongside it.
+	if _, ok := c.Get("acme", RunnerNamespace+"box/fetch"); ok {
+		t.Error("a namespaced id is still being filed")
 	}
 }
 
@@ -106,8 +105,8 @@ func TestRegister_SharesOneConnectionAcrossDrops(t *testing.T) {
 	if len(c.conns) != 1 {
 		t.Errorf("conns = %d, want 1 shared connection", len(c.conns))
 	}
-	a, _ := c.Get("acme", RunnerDropID("box", "a"))
-	b, _ := c.Get("acme", RunnerDropID("box", "b"))
+	a, _ := c.Get("acme", "a")
+	b, _ := c.Get("acme", "b")
 	if a.(*RemoteTransport).conn != b.(*RemoteTransport).conn {
 		t.Error("drops from one runner hold different connections")
 	}
@@ -122,7 +121,7 @@ func TestExecute_TellsTheRunnerWhichDrop(t *testing.T) {
 	if err := register(t, c, "acme", "box", impl); err != nil {
 		t.Fatalf("Register: %v", err)
 	}
-	tr, ok := c.Get("acme", RunnerDropID("box", "render"))
+	tr, ok := c.Get("acme", "render")
 	if !ok {
 		t.Fatal("render not registered")
 	}
@@ -161,26 +160,72 @@ func TestRegister_RefusesDuplicateDropWithinOneRunner(t *testing.T) {
 	}
 }
 
-// Two runners in one tenant may both declare a drop called "fetch", and both
-// stay reachable. That is the namespace doing the work: before ids were
-// runner/<runner>/<drop> this had to be refused at registration, because
-// otherwise which one executed depended on registration order.
-func TestRegister_TwoRunnersMayDeclareTheSameDropName(t *testing.T) {
+// Two remotes in one tenant declaring the same drop id is refused.
+//
+// Drops are filed under the id they declare, so the second one would either
+// shadow the first or be shadowed by it depending on registration order —
+// silently, and differently on every restart. An error at registration is the
+// only answer that anyone can act on. (Ids were briefly namespaced as
+// runner/<remote>/<drop>, which made this impossible to hit; that namespace is
+// gone, so the refusal is load-bearing again.)
+func TestRegister_TwoRemotesMayNotDeclareTheSameDropName(t *testing.T) {
 	c := NewRemoteCatalog()
 	defer c.Close()
 	if err := register(t, c, "acme", "box-a", &multiDrop{manifests: drops("fetch")}); err != nil {
 		t.Fatalf("box-a: %v", err)
 	}
-	if err := register(t, c, "acme", "box-b", &multiDrop{manifests: drops("fetch")}); err != nil {
-		t.Fatalf("box-b: %v", err)
+	err := register(t, c, "acme", "box-b", &multiDrop{manifests: drops("fetch")})
+	if err == nil {
+		t.Fatal("a second remote claimed a drop id already served in this tenant")
 	}
-	a, okA := c.Get("acme", RunnerDropID("box-a", "fetch"))
-	b, okB := c.Get("acme", RunnerDropID("box-b", "fetch"))
-	if !okA || !okB {
-		t.Fatalf("reachable: box-a=%v box-b=%v", okA, okB)
+	// The message has to name both remotes and the drop, or the operator has
+	// to guess which two of their remotes are fighting.
+	for _, want := range []string{"box-a", "box-b", "fetch"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("err = %v, want it to name %q", err, want)
+		}
 	}
-	if a == b {
-		t.Fatal("both resolved to the same transport — the ids collided")
+	// And the refusal left the first remote exactly as it was.
+	if _, ok := c.Get("acme", "fetch"); !ok {
+		t.Error("the refused registration disturbed the remote that was already there")
+	}
+	if len(c.conns) != 1 {
+		t.Errorf("conns = %d, want only the first remote", len(c.conns))
+	}
+}
+
+// A refused re-registration must leave the remote it was replacing intact.
+//
+// The dangerous ordering is subtle: re-registering "box" retires the drops it
+// used to serve, and the clash is only visible once the new set is known. Retire
+// first and then refuse, and "box" has silently lost the drop it was still
+// serving — the flow that used it breaks, and the operator sees only an error
+// about a different drop entirely.
+func TestRegister_ARefusedReRegistrationChangesNothing(t *testing.T) {
+	c := NewRemoteCatalog()
+	defer c.Close()
+	if err := register(t, c, "acme", "box", &multiDrop{manifests: drops("fetch")}); err != nil {
+		t.Fatalf("box: %v", err)
+	}
+	if err := register(t, c, "acme", "other", &multiDrop{manifests: drops("legacy")}); err != nil {
+		t.Fatalf("other: %v", err)
+	}
+	// "box" comes back claiming a drop "other" already serves.
+	if err := register(t, c, "acme", "box", &multiDrop{manifests: drops("legacy")}); err == nil {
+		t.Fatal("box claimed a drop another remote serves")
+	}
+	// box keeps what it had...
+	if _, ok := c.Get("acme", "fetch"); !ok {
+		t.Error("the refused re-registration retired the drop box was still serving")
+	}
+	// ...and other keeps what it had.
+	if tr, ok := c.Get("acme", "legacy"); !ok {
+		t.Error("legacy vanished")
+	} else if rt, isRemote := tr.(*RemoteTransport); isRemote && rt.Descriptor.ID != "other" {
+		t.Errorf("legacy now belongs to %q, want other", rt.Descriptor.ID)
+	}
+	if len(c.conns) != 2 {
+		t.Errorf("conns = %d, want both remotes still connected", len(c.conns))
 	}
 }
 
@@ -209,16 +254,16 @@ func TestRegister_ReplacingARunnerRetiresDropsItNoLongerServes(t *testing.T) {
 	if err := register(t, c, "acme", "box", &multiDrop{manifests: drops("fetch", "legacy")}); err != nil {
 		t.Fatalf("first Register: %v", err)
 	}
-	if _, ok := c.Get("acme", RunnerDropID("box", "legacy")); !ok {
+	if _, ok := c.Get("acme", "legacy"); !ok {
 		t.Fatal("legacy not registered by the first pass")
 	}
 	if err := register(t, c, "acme", "box", &multiDrop{manifests: drops("fetch")}); err != nil {
 		t.Fatalf("re-Register: %v", err)
 	}
-	if _, ok := c.Get("acme", RunnerDropID("box", "fetch")); !ok {
+	if _, ok := c.Get("acme", "fetch"); !ok {
 		t.Error("fetch lost across re-registration")
 	}
-	if _, ok := c.Get("acme", RunnerDropID("box", "legacy")); ok {
+	if _, ok := c.Get("acme", "legacy"); ok {
 		t.Error("legacy still resolves after the runner stopped declaring it")
 	}
 	if len(c.conns) != 1 {

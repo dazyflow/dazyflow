@@ -18,14 +18,15 @@ import (
 
 // ---- the reserved namespace -------------------------------------------
 
-// A built-in must never be able to take an id an org's runner already uses.
-// Refusing at registration means the collision is a build-time error in this
-// repo rather than a silent change to what an existing flow runs on upgrade.
+// The runner/ prefix is reserved, and the native registry is what reserves it.
+// Nothing produces such ids today, so this test is the only thing keeping the
+// prefix from being quietly claimed by a built-in before anyone decides whether
+// a namespaced remote scheme should come back.
 func TestRegistry_RefusesTheRunnerNamespace(t *testing.T) {
 	reg := NewRegistry()
 	err := reg.Register(NativeDrop{
 		Manifest: core.Manifest{
-			ID:       RunnerDropID("box", "fetch"),
+			ID:       RunnerNamespace + "box/fetch",
 			Summary:  "a built-in trying to squat a runner id",
 			Examples: []core.ParamsExample{{Title: "default"}},
 		},
@@ -56,34 +57,11 @@ func TestRegistry_AllowsTheWordRunnerElsewhere(t *testing.T) {
 	}
 }
 
-// The tenant is deliberately absent from the id: putting it there would bake a
-// tenant name into saved graphs, so forking a flow or moving it between
-// workspaces would dangle every runner reference.
-func TestRunnerDropID_CarriesNoTenant(t *testing.T) {
-	id := RunnerDropID("box", "fetch")
-	if !strings.HasPrefix(id, RunnerNamespace) {
-		t.Errorf("id = %q, want the reserved prefix", id)
-	}
-	if !strings.Contains(id, "box") || !strings.Contains(id, "fetch") {
-		t.Errorf("id = %q, want it to name the runner and the drop", id)
-	}
-	for _, tenant := range []string{"acme", "globex", "usr_deadbeef"} {
-		if strings.Contains(id, tenant) {
-			t.Errorf("id = %q contains a tenant name", id)
-		}
-	}
-}
-
-// ---- palette scoping --------------------------------------------------
-
-// A tenant's palette must contain its own runner's drops and no one else's.
-// Seeing another org's step would be a broken entry AND a disclosure: it tells
-// you a runner by that name exists somewhere.
 func TestManifestsForTenant_ShowsOnlyThatTenantsRunners(t *testing.T) {
 	c := NewRemoteCatalog()
 	defer c.Close()
-	fakeRemote(c, "acme", RunnerDropID("box", "fetch"))
-	fakeRemote(c, "globex", RunnerDropID("till", "settle"))
+	fakeRemote(c, "acme", "fetch")
+	fakeRemote(c, "globex", "settle")
 
 	reg := NewRegistry()
 	if err := reg.Register(NativeDrop{
@@ -99,10 +77,10 @@ func TestManifestsForTenant_ShowsOnlyThatTenantsRunners(t *testing.T) {
 	r := &NodeResolver{Native: reg, Remote: c}
 
 	acme := r.ManifestsForTenant("acme")
-	if _, ok := acme[RunnerDropID("box", "fetch")]; !ok {
+	if _, ok := acme["fetch"]; !ok {
 		t.Error("acme cannot see its own runner's drop")
 	}
-	if _, ok := acme[RunnerDropID("till", "settle")]; ok {
+	if _, ok := acme["settle"]; ok {
 		t.Error("acme can see globex's runner drop")
 	}
 	// The positive control: without it, a ManifestsForTenant that returned
@@ -117,7 +95,7 @@ func TestManifestsForTenant_ShowsOnlyThatTenantsRunners(t *testing.T) {
 func TestManifests_UnscopedCarriesNoRunners(t *testing.T) {
 	c := NewRemoteCatalog()
 	defer c.Close()
-	fakeRemote(c, "acme", RunnerDropID("box", "fetch"))
+	fakeRemote(c, "acme", "fetch")
 	reg := NewRegistry()
 	if err := reg.Register(NativeDrop{
 		Manifest: core.Manifest{
@@ -135,7 +113,7 @@ func TestManifests_UnscopedCarriesNoRunners(t *testing.T) {
 	if _, ok := all["native_drop"]; !ok {
 		t.Error("the unscoped map lost the built-ins it exists to carry")
 	}
-	if _, ok := all[RunnerDropID("box", "fetch")]; ok {
+	if _, ok := all["fetch"]; ok {
 		t.Error("the unscoped map leaked a tenant's runner drop")
 	}
 }
@@ -150,7 +128,7 @@ func TestExecute_RefusesAFileRefBeforeDialling(t *testing.T) {
 	// fail on a nil client instead, so the test also proves the ordering.
 	tr := &RemoteTransport{
 		Descriptor: RemoteDescriptor{ID: "box", Tenant: "acme", Endpoint: "127.0.0.1:1"},
-		manifest:   core.Manifest{ID: RunnerDropID("box", "fetch")},
+		manifest:   core.Manifest{ID: "fetch"},
 		dropID:     "fetch",
 	}
 	_, err := tr.Execute(context.Background(), core.Job{
@@ -181,7 +159,7 @@ func TestExecute_AllowsInlineValues(t *testing.T) {
 	if err := register(t, c, "acme", "box", impl); err != nil {
 		t.Fatalf("Register: %v", err)
 	}
-	tr, ok := c.Get("acme", RunnerDropID("box", "fetch"))
+	tr, ok := c.Get("acme", "fetch")
 	if !ok {
 		t.Fatal("fetch not registered")
 	}

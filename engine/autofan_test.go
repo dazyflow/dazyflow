@@ -11,9 +11,11 @@ import (
 	"git.sr.ht/~klahr/dazyflow/core"
 )
 
-func itemInput() core.Port  { return core.Port{Port: "item", MIME: []string{"application/json"}} }       // typed, One
-func listInput() core.Port  { return core.Port{Port: "rows", MIME: []string{"application/json"}, List: true} } // Many
-func anyInput() core.Port   { return core.Port{Port: "pass"} }                                            // untyped
+func itemInput() core.Port { return core.Port{Port: "item", MIME: []string{"application/json"}} } // typed, One
+func listInput() core.Port {
+	return core.Port{Port: "rows", MIME: []string{"application/json"}, List: true}
+}                         // Many
+func anyInput() core.Port { return core.Port{Port: "pass"} } // untyped
 
 func TestDetectAutoFan(t *testing.T) {
 	list := core.Ref{Inline: []any{map[string]any{"a": 1}, map[string]any{"a": 2}}}
