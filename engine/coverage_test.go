@@ -504,10 +504,13 @@ func TestRemoteCatalog_Lifecycle(t *testing.T) {
 		t.Errorf("Get miss = (%v,%v), want (nil,false)", tr, ok)
 	}
 
-	// Manifests includes the registered remote.
-	m := c.Manifests()
+	// ManifestsFor includes the registered remote, for its own tenant only.
+	m := c.ManifestsFor("acme")
 	if _, ok := m["remote-echo"]; !ok {
-		t.Errorf("Manifests missing remote-echo: %v", manifestKeys(m))
+		t.Errorf("ManifestsFor missing remote-echo: %v", manifestKeys(m))
+	}
+	if other := c.ManifestsFor("other"); len(other) != 0 {
+		t.Errorf("ManifestsFor leaked to another tenant: %v", manifestKeys(other))
 	}
 
 	// Close shuts the conn and clears the cache.

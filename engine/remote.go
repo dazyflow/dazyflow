@@ -347,20 +347,18 @@ func (c *RemoteCatalog) DropsFor(tenant, runner string) []string {
 	return out
 }
 
-// Manifests returns every registered remote's manifest, across all tenants.
-//
-// Deliberately NOT tenant-scoped yet: this feeds the palette and graph
-// validation, and narrowing it is a separate change with its own UI work.
-// Execution is already scoped by Get, so the worst this can do is show a
-// tenant a drop it cannot run — visible, not reachable. Narrow this (and the
-// listDrops call behind it) before remotes are registrable by anyone but the
-// operator.
-func (c *RemoteCatalog) Manifests() map[string]core.Manifest {
+// ManifestsFor returns the manifests of the drops one tenant can resolve.
+func (c *RemoteCatalog) ManifestsFor(tenant string) map[string]core.Manifest {
+	if tenant == "" {
+		return map[string]core.Manifest{}
+	}
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	out := make(map[string]core.Manifest, len(c.nodes))
+	out := map[string]core.Manifest{}
 	for k, t := range c.nodes {
-		out[k.id] = t.manifest
+		if k.tenant == tenant {
+			out[k.id] = t.manifest
+		}
 	}
 	return out
 }
@@ -566,22 +564,6 @@ func refuseFileRefs(job core.Job) error {
 				"which cannot read it — connect a value instead", port, ref.Ref)
 	}
 	return nil
-}
-
-// ManifestsFor returns the manifests of the drops one tenant can resolve.
-func (c *RemoteCatalog) ManifestsFor(tenant string) map[string]core.Manifest {
-	if tenant == "" {
-		return map[string]core.Manifest{}
-	}
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	out := map[string]core.Manifest{}
-	for k, t := range c.nodes {
-		if k.tenant == tenant {
-			out[k.id] = t.manifest
-		}
-	}
-	return out
 }
 
 // RunnerCategories are the palette groups a runner may declare.

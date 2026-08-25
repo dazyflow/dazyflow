@@ -23,6 +23,276 @@ into the image.)
 
 ## [Unreleased]
 
+### Added
+
+- **Flows can run scripts on machines you own.** A **runner** is a machine
+  with a small agent on it — a server, a laptop, a container on a network
+  this server has never heard of. Add one in **Admin → Runners** and the new
+  **Run on your machine** step sends it a command. Whatever is wired into the
+  step arrives on the script's standard input; whatever the script prints
+  comes back out, ready for the next step. A non-zero exit fails the step with
+  the script's own error output attached, so a failing flow tells you what
+  your script said rather than a number.
+
+  This is the answer to "no built-in step does what I need". The existing
+  answers — an MCP server, or a gRPC remote module — both mean writing and
+  hosting a service that speaks a protocol. A runner is a script.
+
+  Nothing has to reach the machine. The agent connects outward and asks for
+  work, so a runner behind NAT or a firewall needs no open port, no inbound
+  rule and no certificate. There is no form on the page either — no address,
+  no key material — because everything Dazyflow knows about a runner arrives
+  from the machine itself. Setup is the one command the page hands you:
+
+  ```sh
+  curl -fsSL https://your-dazyflow-server/runner.sh | sh -s -- --token dzrt_... --service
+  ```
+
+  It downloads one Python file plus a copy of `runner.sh`, registers the
+  machine, and installs a systemd **user** service that restarts the agent
+  within ten seconds of a crash. It installs no packages, adds no
+  repositories and opens no ports; Python 3 is the only requirement. Neither
+  file is a compiled binary on purpose — you are about to let them run
+  commands on your machine, so both are meant to be read, and both are served
+  as plain text so they also open in a browser. `sudo` appears exactly once in
+  the whole procedure, for `loginctl enable-linger`, which is the difference
+  between starting at boot and starting when you next log in; it is yours to
+  run rather than the script's, and the script checks whether it is already
+  done instead of telling you to do it again. Afterwards the same file manages
+  the agent — `./runner.sh status | start | stop | restart | logs | install |
+  uninstall` — so there is no second script to find and no systemd
+  incantation to remember.
+
+  Two secrets, with different jobs. A registration token (`dzrt_`) lives 30
+  minutes and works once: it is the string pasted into a terminal, which makes
+  it the one most likely to end up in a shell history or a chat message. The
+  agent's own credential (`dzrc_`) is long-lived and never leaves the machine
+  after registration. Both are stored as SHA-256 hashes, so a database dump is
+  not a set of working runners — and the installed service file holds no token
+  at all, because registration happens before it is written.
+
+  **A script is never run twice.** If the machine goes quiet mid-script the
+  step fails and names the machine that went away; the work is not handed to
+  another runner and not retried when the machine comes back. Dazyflow cannot
+  know how far a script got, and re-running one that had already sent the
+  invoices is worse than failing, so retrying is a decision for whoever knows
+  what the script does. For the same reason the step fails rather than waits
+  when no eligible machine has checked in recently — a run hanging on a
+  switched-off laptop looks alive and tells nobody — and work a step has given
+  up on is closed rather than queued, so starting an agent after a weekend
+  away never sets off a backlog of scripts whose runs finished days ago.
+
+  Target a machine by name, or by **label** so a pool shares the work:
+  register three build servers with `--labels linux,build` and a step aimed at
+  `build` runs on whichever is free. The agent labels itself with its
+  operating system and architecture, so `linux` and `arm64` work without
+  anyone setting anything.
+
+  What a runner never gets: another organization's work (it claims tasks for
+  the organization whose token registered it, and the queue is keyed by that,
+  not filtered by it), a way into Dazyflow (the agent asks for work and reports
+  results — it holds no session, can read no flows and can enumerate nothing),
+  or the server's secrets (it receives what the step's parameters carry and
+  nothing else). Removing a runner revokes its credential immediately, whether
+  or not anyone remembers to stop the agent on the machine.
+
+  What a runner *does* get is the part worth deciding deliberately rather than
+  discovering: it runs whatever command a flow sends it, so anyone who can edit
+  a flow in your organization can run commands on these machines, as the user
+  the agent runs as. That is the same bargain a self-hosted CI runner makes,
+  and it is what makes a runner useful — but it means a runner is as trusted as
+  the people who can edit your flows. Starting the agent with `--allow` limits
+  which programs it will invoke; be clear-eyed that this restricts the program,
+  not what that program may then do, so allowing a shell allows everything.
+  The page says all of this next to the install command rather than in a
+  footnote. Adding or removing a runner needs `organization:admin` or an API
+  key carrying `module:register`; using one in a flow needs `graph:edit`, the
+  same as any other step.
+
+  On the canvas the step carries the machine it will run on, under its title,
+  and reads "no machine chosen" until one is picked. Wiring a secret into a
+  step is the moment to know it is leaving the server, and the palette is long
+  gone by then. The step's input takes a value, not a file: a file in Dazyflow
+  is a path on the *server's* disk, so sending one would fail inside your
+  script as a missing-file error you would reasonably read as your own bug. It
+  is marked on the port and refused before the job is dispatched instead.
+
+  Runners need Postgres. A registration outlives the daemon — the agent keeps
+  its credential forever, so a daemon that forgot its runners on restart would
+  tell every one of them it is no longer registered — and the task queue is the
+  handoff between the agent's result and the step waiting for it. Without
+  Postgres the endpoints answer 501 and the step reports that runners are not
+  set up on this deployment, rather than half-working: a registered machine
+  that cannot be handed work looks like a fault on the organization's side.
+  Task rows follow the job retention window, or
+  `DAZYFLOW_RUNNER_TASK_RETENTION` if you want them swept sooner. The full
+  guide is **Runners** in the docs.
+
+### Changed
+
+- **A remote module declares every step it serves, and belongs to one
+  organization.** This is a **breaking change to the gRPC node protocol**:
+  `NodeService.GetManifest` is gone, replaced by `ListManifests`, which returns
+  a list of manifests; `Job` now carries `drop_id` so a server hosting several
+  steps knows which one a job means. An existing remote module renames one
+  method and wraps its manifest in a one-element list —
+  `examples/csv-pipeline` shows the shape.
+
+  Plural from the outset, even though a server offering one step just returns
+  one entry. Changing the shape later would mean every remote module already
+  written updating in lockstep with the daemon, and the whole point of a remote
+  module is that its binary is not the daemon's to release. Manifests also
+  gained the presentation fields the built-ins have had all along — icon,
+  category, subtitle, description, summary, tags — for the same reason: without
+  them a remote step lands in the palette as a generic box with nothing for
+  search to match on but its id, and adding them afterwards would be a second
+  lockstep upgrade.
+
+  The catalog is now keyed by (organization, step id) rather than by step id
+  alone. A remote used to belong to nobody in particular, so resolution had to
+  *choose* not to cross organizations; now it cannot, because there is no key
+  to reach it by. An absent organization matches nothing rather than
+  everything, so a background task or a test that forgot its context fails to
+  resolve the module instead of quietly resolving someone else's. The palette
+  and graph validation are scoped the same way — showing a step an organization
+  cannot resolve is bad, and telling it a runner by that name exists somewhere
+  is worse. `DAZYFLOW_REMOTES` (development only, as before) accordingly
+  accepts `tenant/id=host:port`, and defaults to the seeded dev tenant when an
+  entry names none, so the documented local workflow is unchanged. The
+  `runner/` id prefix is now reserved: a future built-in claiming it would
+  change what an existing flow runs, silently, on upgrade.
+
+- **The Approvals inbox opens the run.** 0.10.3 swapped the Runs page's two
+  targets and left this page disagreeing with it. The flow name in an approval
+  card was its only link, and it went to the editor — the one surface that
+  cannot help an approver, because the editor is read-only while a run is
+  parked and its deliberate approve/reject control was removed precisely
+  because the editor is graph-scoped rather than run-scoped. It now opens the
+  run, which has the approval panel *and* the timeline of steps that already
+  ran, which is the evidence the decision rests on. Editing stays one click
+  away behind the same trailing pencil the runs list uses.
+
+- **Icon sizes, spacing and stacking order come from scales.** Icons were the
+  last unscaled dimension in the UI: 17 distinct pixel values across 491 call
+  sites, and an icon inside a `<Button>` — one role — used seven of them across
+  207 sites, which is how the Stop button's square came to be 15px in the
+  editor and 13px on the run page. Spacing had drifted the same way: 235 raw
+  numbers across 51 files, 26 of them off the scale entirely (3, 5, 10, 14, 18,
+  30), and 115 of them one idiom — the gap between a button's icon and its
+  label, hand-written at 3, 4, 5, 6 *and* 8px for the identical relationship.
+  That gap now lives on the button itself, so a call site has nothing left to
+  get wrong, and the 41 hand-tuned `verticalAlign` nudges under inline glyphs
+  are one em-relative class that tracks the type size instead of approximating
+  it per site. Every app-level `z-index` is a named token in one ordered list,
+  so "what does this sit above?" is answered by reading it rather than by
+  picking a number bigger than whatever was in the way; the two worst offenders
+  (1000 and 9999, chosen to win rather than to mean anything) are 400 and 500
+  now, with nothing that was between them, so the order is unchanged.
+
+- **The Apps page no longer ends each step with a JSON dump of its params
+  schema.** The schema's human-readable half — every field title, help line and
+  dropdown option — is what the Inspector's form renders, and 870 of those
+  strings are translated for it; the dump showed the untranslated original, so a
+  Swedish user opening that disclosure met English JSON describing fields the
+  editor shows them in Swedish. The machine-readable half is already served to
+  the consumers that want it, by `GET /api/v1/catalog/drops/{id}` (which the MCP
+  `describe_drop` tool proxies) and over gRPC. That left 122 schemas and roughly
+  4,200 lines of JSON on a page whose job is "what does this app do". The
+  disclosure keeps the input and output ports, and no step lost its details
+  section: every step declaring a params schema declares ports too.
+
+- **Two English strings had two Swedish translations each.** Collapsing
+  duplicated interface text onto shared keys (see *Developer*) surfaced them:
+  "Disable" was both *Stäng av* and *Inaktivera*, and "expires {{date}}" was
+  both *löper ut* and *går ut* across three keys. One wording each is now used
+  everywhere.
+
+### Fixed
+
+- **Fourteen dialogs now close on Escape, and every dialog announces itself as
+  one.** Backdrop-click dismissal never needed attention, because it falls out
+  of the markup — the backdrop is the element you hang the handler on, so you
+  cannot build one without it. Escape and the ARIA attributes fall out of
+  nothing, which is exactly why they drifted: of 36 dialogs, 22 closed on
+  Escape and 14 did not, so a user who learned it works on the delete-flow
+  confirm found it dead on the MCP connect wizard, the report-a-problem,
+  reveal-secret, share-overview, issue-key and plan-limits dialogs, the
+  editor's diff, test-event and connection-gate dialogs, and the Google, plan-
+  tier and support-ticket dialogs in admin. All of them now close on Escape and
+  carry `role="dialog"`/`aria-modal`, so a screen reader is told it is in a
+  dialog rather than in the middle of the page.
+
+- **Loading placeholders are announced to screen readers.** Ten different
+  hand-built wrappers rendered the one "Loading…" string, and not one of them
+  carried `role="status"` — so every loading state in the app was silent to a
+  screen reader, and a page that was fetching was indistinguishable from a page
+  that was empty. They are now two shared primitives that carry it, along with
+  a shared empty-state and quiet-notice pair whose padding, type size and
+  wrapper element had each drifted apart across the 42 places that had built
+  the same thing by hand.
+
+### Developer
+
+- **The web app is arranged by feature, and the flow editor has been broken
+  up.** `pages/` and `components/` were flat directories of 53 and 77 entries;
+  they are now grouped (`pages/{admin,auth,flows,runs,support}`,
+  `components/{ui,dialogs,editor,fields,org,brand}`), 112 files moved, with no
+  behaviour change in the move itself. `FlowEditor.tsx` then shed 1,208 lines
+  — 5,872 down to 4,896 — into eleven named modules under `flows/editor/`:
+  autosave, publishing, revisions, the run stream, the connection gate, the
+  diff and test-event dialogs, the schedule timezone and lint-message helpers.
+  Each is now directly testable, and five new test files (~1,400 lines) cover
+  saving, editing, publishing, revisions and running.
+
+- **Five new guards on the design system, each one written after the drift it
+  now prevents.** `check-style-scales`, `check-icon-sizes` and
+  `check-css-breakpoints` hold the spacing, type, icon and viewport scales
+  (see *Changed*); the breakpoint one exists because CSS custom properties do
+  not work inside media queries, so a width both a stylesheet and a component
+  need must be written twice — two components had each declared their own
+  `MOBILE_BREAK = 768` and the editor compared against a bare `1100` twice,
+  with the obligation to match `app.css` recorded only in a prose comment.
+  `check-modal-a11y` requires an Escape handler and the dialog ARIA per
+  backdrop a file renders; `check-ui-primitives` forbids the hand-rolled quiet
+  notice and the hand-rolled loading card. Two of the dialogs missing Escape
+  had been extracted from inline JSX earlier in the same cleanup — the gap
+  propagates the moment nothing checks for it.
+
+  The two existing CSS guards grew a direction each. `check-css-tokens` now
+  rejects a `var()` fallback on a token that *is* defined: there were 172 of
+  them, all dead, and what they had drifted into is the argument — `--warning`
+  appeared as six different oranges and `--success` as six different greens,
+  while `--accent-ink` was written as both its light and its dark value in
+  different files. Dead but not harmless, since they read as the token's value,
+  so retuning the palette meant disbelieving 172 stale copies.
+  `check-css-classes` now also asks the reverse of its original question — is
+  there a rule nothing can match? — which immediately found the bug that
+  motivated it: renaming `.settings-foot` to `.modal-foot` updated `app.css`
+  and every component but missed two rules in `theme.css`, and
+  `.confirm-dialog .settings-foot button.danger` was the only thing making the
+  delete-confirm's button solid red. Nothing had failed, because every class a
+  component asked for still resolved.
+
+- **Duplicated interface text is on shared keys, and the locale bundles are
+  checked structurally.** 153 keys whose English was identical to another
+  key's collapsed onto 31 shared `common.*` keys, which is what surfaced the
+  three divergent Swedish translations above. A new test asserts the two
+  bundles carry exactly the same keys, that neither has an empty string, and
+  that no translation drops a `{{interpolation}}` or a `<0>…</0>` `<Trans>`
+  placeholder — a Swedish string that loses its `{{count}}` does not crash, it
+  renders a sentence with a hole in it, in production, in the language the
+  reviewer does not read.
+
+- **The runner agent and its installer are tested, in CI.** They are Python and
+  POSIX shell, so the Go suite can only check that the copies the daemon serves
+  still match the source; everything that makes them trustworthy — a single-use
+  token refused before anything spends it, the registration token never
+  reaching a file, an allow-list surviving a reinstall, `runner.env` read rather
+  than evaluated, a service actually wired to start at boot — is in 67 Python
+  unit tests, run by `make runner-test` and by the build, before the Go race
+  suite, because this is the one script every organization pastes into a
+  terminal. `make runner-embed` refreshes the embedded copies.
+
 ## [0.10.3] - 2026-08-24
 
 ### Changed
