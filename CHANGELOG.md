@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-08-25
+
 ### Added
 
 - **Labels can be assigned from Admin → Runners.** A machine's labels — the pool
