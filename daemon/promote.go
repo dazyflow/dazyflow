@@ -141,7 +141,9 @@ func (s *Service) startPendingRun(ctx context.Context, run core.JobRecord) {
 	}
 
 	s.startGraphTimeoutWatchdog(run.ID, run.Tenant, run.Workspace, s.effectiveGraphTimeout(g))
-	s.startFailureNotifier(g, run.ID)
+	// run.Manual comes off the stored record: this promotion may be minutes
+	// after the person pressed Run, in a goroutine that never saw them.
+	s.startFailureNotifier(g, run.ID, run.Manual)
 }
 
 // seededNodes returns the set of node IDs that already hold a succeeded

@@ -176,7 +176,9 @@ func (h *HTTPGateway) runGraph(rw http.ResponseWriter, r *http.Request, p core.P
 		writeJSONError(rw, http.StatusNotFound, err.Error())
 		return
 	}
-	runID, err := h.svc.SubmitGraph(r.Context(), p, g)
+	// Manual: this is the editor's Run button (and the runs list's "Run again"),
+	// so somebody is watching. No failure email — see core.JobRecord.Manual.
+	runID, err := h.svc.SubmitGraphOpts(r.Context(), p, g, SubmitOpts{Manual: true})
 	if err != nil {
 		// Plan-gate refusals get 402 so the web client can show an
 		// upgrade prompt instead of a generic error toast.
@@ -245,7 +247,9 @@ func (h *HTTPGateway) testTrigger(rw http.ResponseWriter, r *http.Request, p cor
 		writeJSONError(rw, http.StatusBadRequest, "flow has no webhook_input node to send a test event to")
 		return
 	}
-	runID, err := h.svc.SubmitGraphWithSeed(r.Context(), p, g, seeds)
+	// A test fired from the editor with a made-up payload is the definition of
+	// a run someone is watching, so no failure email.
+	runID, err := h.svc.SubmitGraphOpts(r.Context(), p, g, SubmitOpts{Seeds: seeds, Manual: true})
 	if err != nil {
 		writeJSONError(rw, http.StatusBadRequest, err.Error())
 		return

@@ -85,6 +85,33 @@ func (s *Service) SubmitGraphWithSeed(
 	g core.Graph,
 	seeds map[string]core.Result,
 ) (string, error) {
+	return s.SubmitGraphOpts(ctx, p, g, SubmitOpts{Seeds: seeds})
+}
+
+// SubmitOpts carries what a submission needs beyond the graph itself.
+//
+// A struct rather than more parameters because the two things in it are set by
+// different callers for different reasons, and every automatic trigger — the
+// scheduler, webhooks, forms — wants the zero value. Adding them as positional
+// arguments would have made eight call sites say "nil, false" to mean
+// "ordinary run".
+type SubmitOpts struct {
+	// Seeds pre-completes nodes: a webhook body, a form submission, the
+	// already-succeeded steps of a run being retried.
+	Seeds map[string]core.Result
+	// Manual marks a run a person started from the app and is watching. See
+	// core.JobRecord.Manual for what it changes and why it is persisted.
+	Manual bool
+}
+
+// SubmitGraphOpts is the one implementation the other two delegate to.
+func (s *Service) SubmitGraphOpts(
+	ctx context.Context,
+	p core.Principal,
+	g core.Graph,
+	opts SubmitOpts,
+) (string, error) {
+	seeds := opts.Seeds
 	if err := core.AuthorizeGraphRun(p, g); err != nil {
 		return "", err
 	}
@@ -177,6 +204,7 @@ func (s *Service) SubmitGraphWithSeed(
 		Workspace:    g.Workspace,
 		Status:       initialStatus,
 		GraphPayload: payload,
+		Manual:       opts.Manual,
 		Job:          core.Job{ID: graphRunID, GraphID: g.ID},
 	}
 	if err := s.Jobs.Enqueue(ctx, graphRec); err != nil {
@@ -251,7 +279,7 @@ func (s *Service) SubmitGraphWithSeed(
 	// timeout watchdog — subscribes to the bus, exits on the first
 	// terminal event (firing the notification if status=failed).
 	// No-op when the graph has no FailureNotify configured.
-	s.startFailureNotifier(g, graphRunID)
+	s.startFailureNotifier(g, graphRunID, opts.Manual)
 	return graphRunID, nil
 }
 

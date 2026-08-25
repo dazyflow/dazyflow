@@ -24,12 +24,16 @@ CREATE TABLE IF NOT EXISTS jobs (
     attempt       INTEGER NOT NULL DEFAULT 0,
     lease_until   TIMESTAMPTZ,
     worker_id     TEXT NOT NULL DEFAULT '',
-    parent_node_rec_id TEXT NOT NULL DEFAULT ''
+    parent_node_rec_id TEXT NOT NULL DEFAULT '',
+    -- Whether a person started this run from the app (and is therefore watching
+    -- it fail). Suppresses the failure email; see core.JobRecord.Manual.
+    manual BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 -- Backfill for existing deployments (idempotent — schema is re-applied
 -- on every OpenPostgres).
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS parent_node_rec_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS manual BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- Workqueue index: node-kind rows in a claimable state. The predicate
 -- must be IMMUTABLE, so it can't reference now() — the time-window

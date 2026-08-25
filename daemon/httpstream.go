@@ -46,7 +46,9 @@ func (h *HTTPGateway) sampleNode(rw http.ResponseWriter, r *http.Request, p core
 			}
 		}
 	}
-	runID, err := h.svc.SubmitGraph(r.Context(), p, sub)
+	// The inspector's "what does this step emit?" preview. Nobody wants an
+	// email because a preview of one step failed while they were looking at it.
+	runID, err := h.svc.SubmitGraphOpts(r.Context(), p, sub, SubmitOpts{Manual: true})
 	if err != nil {
 		writeJSONError(rw, http.StatusBadRequest, err.Error())
 		return

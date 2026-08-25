@@ -38,6 +38,23 @@ type JobRecord struct {
 	LeaseUntil   *time.Time
 	WorkerID     string
 
+	// Manual marks a run a person started from the app — the editor's Run
+	// button, an inspector node preview, a test trigger, a retry — as opposed
+	// to one the scheduler, a webhook or a form started on its own.
+	//
+	// It exists to answer one question: is anybody looking? A failure email is
+	// for a run that failed while nobody was watching. Someone who pressed Run
+	// and is watching the canvas light up red does not need to be told by
+	// email, and being told anyway trains people to ignore the mail that
+	// matters. So a manual run sends no failure email; the per-flow webhook
+	// still fires, because that is a machine channel the author wired
+	// deliberately.
+	//
+	// Stored rather than passed around because a run can be PARKED at the
+	// concurrency limit and promoted minutes later, in another goroutine with
+	// no memory of who started it (see promote.go).
+	Manual bool
+
 	// ParentNodeRecID links a child graph-record back to the parent
 	// node-record that submitted it (via the subgraph module). Empty
 	// for top-level graph submissions. The dispatcher uses it when the

@@ -23,6 +23,45 @@ into the image.)
 
 ## [Unreleased]
 
+### Changed
+
+- **A run you start yourself no longer emails you when it fails.** Pressing Run
+  in the editor, previewing a step in the inspector, firing a test trigger or
+  retrying a failed run all put the failure on your screen — so a failure email
+  about it is telling you something you are already looking at, and mail like
+  that is how people learn to ignore the mail that matters. Runs that start on
+  their own — a schedule, a webhook, a form — email exactly as before.
+
+  Both email channels are off for those runs: the per-flow address (often a
+  shared or on-call inbox, which really should not be paged because someone was
+  testing) and the account-level owner email. **The per-flow failure webhook
+  still fires**, because that is a machine channel the flow's author wired
+  deliberately rather than a person being interrupted.
+
+  Which kind a run is gets recorded on the run itself rather than inferred
+  later: a run can be parked at the concurrency limit and started minutes
+  afterwards by something that never saw who pressed the button.
+
+- **A flow that keeps failing now emails once an hour, not once per run.** The
+  other way to drown in failure mail: a poll trigger every five minutes against
+  a service that is down is twelve identical emails an hour, and twelve
+  identical emails teach the reader to filter the lot. The first failure in the
+  window mails; the rest are silent, and the suppression is logged so an
+  operator asking "why did I not get mail about that?" can find the answer.
+
+  The rule is one clause — no other failure of that flow in the last hour — and
+  it deliberately catches the flow that FLAPS (fail, succeed, fail, succeed) as
+  well as the one that stays broken; a "first failure of a streak" rule would
+  mail on every one of the former. It is per flow, so a noisy flow cannot
+  silence a quiet one, and it is derived from the run history rather than from a
+  record of what was sent, so it cannot drift out of step with the runs
+  themselves. If the store cannot answer, the mail goes: a throttle that eats an
+  alert is worse than one that sends a duplicate.
+
+  The failure **webhook is not throttled** — it is a stream for machines, not an
+  inbox. `DAZYFLOW_FAILURE_EMAIL_WINDOW` changes the window; `0` restores one
+  mail per failure.
+
 ## [0.14.0] - 2026-08-25
 
 ### Changed

@@ -327,7 +327,7 @@
     "title": "Notifications",
     "intro": "Choose which emails we send you. Account and security emails (verification, password resets) are always sent.",
     "flowFailureLabel": "Email me when one of my flows fails",
-    "flowFailureDesc": "Sends a short summary to your account email whenever a flow you own finishes with an error. On by default.",
+    "flowFailureDesc": "Sends a short summary to your account email when a flow you own fails on its own — on a schedule, a webhook or a form. Runs you start yourself don't mail, since you can see them fail, and a flow that keeps failing mails once an hour rather than once per run. On by default.",
     "supportReplyLabel": "Email me when support replies",
     "supportReplyDesc": "Get an email when support answers or resolves one of your tickets. Turn this off and you'll only see replies when you open the Support page."
   },
@@ -543,7 +543,7 @@
       "webhookLabel": "Failure webhook URL",
       "webhookDesc": "POSTed payload includes <0>graph_id</0>, <0>run_id</0>, <0>error_code</0>, <0>error_message</0>, <0>failed_node</0>, <0>run_url</0>. Leave blank to disable.",
       "emailLabel": "Email on failure",
-      "emailDesc": "Get a plain-text summary by email when a run fails. Requires the server's email delivery to be set up (ask your administrator if nothing arrives)."
+      "emailDesc": "Get a plain-text summary by email when a run fails. Only for runs that start on their own — a schedule, a webhook, a form — since a run you start yourself is one you're watching. A flow that keeps failing mails once an hour, not once per run. Requires the server's email delivery to be set up (ask your administrator if nothing arrives)."
     },
     "general": {
       "displayNameDesc": "Friendly name shown in the flow list. Defaults to the ID.",

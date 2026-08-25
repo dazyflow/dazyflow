@@ -139,8 +139,8 @@ func (s *Postgres) Enqueue(ctx context.Context, rec core.JobRecord) error {
 		started = time.Now().UTC()
 	}
 	const q = `
-		INSERT INTO jobs (id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result, enqueued_at, started_at, finished_at, parent_node_rec_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, COALESCE($12, now()), $13, $14, $15)
+		INSERT INTO jobs (id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result, enqueued_at, started_at, finished_at, parent_node_rec_id, manual)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, COALESCE($12, now()), $13, $14, $15, $16)
 	`
 	var enqueued any
 	if !rec.EnqueuedAt.IsZero() {
@@ -148,7 +148,7 @@ func (s *Postgres) Enqueue(ctx context.Context, rec core.JobRecord) error {
 	}
 	_, err = s.pool.Exec(ctx, q,
 		rec.ID, string(kind), rec.GraphRunID, rec.GraphID, rec.NodeID,
-		rec.Tenant, rec.Workspace, string(status), jobJSON, graphPayload, resJSON, enqueued, started, finished, rec.ParentNodeRecID)
+		rec.Tenant, rec.Workspace, string(status), jobJSON, graphPayload, resJSON, enqueued, started, finished, rec.ParentNodeRecID, rec.Manual)
 	if err != nil {
 		return wrapPgErr(err)
 	}
@@ -170,7 +170,7 @@ func (s *Postgres) Claim(ctx context.Context, worker string, lease time.Duration
 }
 
 const claimReturning = `id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result,
-		           enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id, parent_node_rec_id`
+		           enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id, parent_node_rec_id, manual`
 
 // claimQuery picks the oldest claimable node job (queued, or running with
 // an expired lease) and marks it running under the caller's worker.
@@ -436,7 +436,7 @@ func (s *Postgres) complete(ctx context.Context, jobID, worker string, status co
 func (s *Postgres) Get(ctx context.Context, jobID string) (core.JobRecord, error) {
 	const q = `
 		SELECT id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result,
-		       enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id, parent_node_rec_id
+		       enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id, parent_node_rec_id, manual
 		  FROM jobs WHERE id = $1
 	`
 	rec, err := scanRecord(s.pool.QueryRow(ctx, q, jobID))
@@ -483,7 +483,7 @@ func (s *Postgres) SetGraphRunParked(ctx context.Context, graphRunID string, par
 func (s *Postgres) ListByGraph(ctx context.Context, graphID string) ([]core.JobRecord, error) {
 	const q = `
 		SELECT id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result,
-		       enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id, parent_node_rec_id
+		       enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id, parent_node_rec_id, manual
 		  FROM jobs WHERE graph_id = $1 ORDER BY enqueued_at DESC
 	`
 	rows, err := s.pool.Query(ctx, q, graphID)
@@ -511,7 +511,7 @@ func (s *Postgres) ListGraphRuns(ctx context.Context, opts core.ListGraphRunsOpt
 		limit = 50
 	}
 	q := `SELECT id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result,
-	             enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id, parent_node_rec_id
+	             enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id, parent_node_rec_id, manual
 	        FROM jobs WHERE kind = 'graph'`
 	args := []any{}
 	if opts.Tenant != "" {
@@ -571,7 +571,7 @@ func (s *Postgres) ListNodeRecords(ctx context.Context, opts core.ListNodeRecord
 		limit = 100
 	}
 	q := `SELECT id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result,
-	             enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id, parent_node_rec_id
+	             enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id, parent_node_rec_id, manual
 	        FROM jobs WHERE kind = 'node'`
 	args := []any{}
 	if opts.Tenant != "" {
@@ -640,6 +640,7 @@ func scanRecord(r row) (core.JobRecord, error) {
 		&rec.Status, &jobJSON, &graphJSON, &resultJSON,
 		&rec.EnqueuedAt, &available, &started, &finished, &rec.Attempt, &lease, &rec.WorkerID,
 		&rec.ParentNodeRecID,
+		&rec.Manual,
 	); err != nil {
 		return core.JobRecord{}, err
 	}

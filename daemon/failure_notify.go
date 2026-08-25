@@ -84,15 +84,21 @@ type FailurePayload struct {
 // could send an account-level failure email to. Avoids spawning a
 // goroutine that would just exit on the first event; important because
 // some hot deployment loops trigger many graphs.
-func (s *Service) startFailureNotifier(graph core.Graph, runID string) {
-	hasPerFlow := graph.FailureNotify != nil &&
-		(graph.FailureNotify.Webhook != "" || graph.FailureNotify.Email != "")
+func (s *Service) startFailureNotifier(graph core.Graph, runID string, manual bool) {
+	hasWebhook := graph.FailureNotify != nil && graph.FailureNotify.Webhook != ""
+	hasPerFlowEmail := graph.FailureNotify != nil && graph.FailureNotify.Email != ""
 	// Account-level owner email is only worth watching for when we can
 	// both resolve the owner's account (Users) and actually deliver mail
 	// (Mailer). The owner's opt-out is checked lazily at failure time —
 	// here we only avoid spawning when it could never fire.
 	hasOwnerEmail := graph.Owner != "" && s.Users != nil && s.Mailer != nil
-	if !hasPerFlow && !hasOwnerEmail {
+	if manual {
+		// Somebody is watching this run fail on their screen. Both email
+		// channels are off (see JobRecord.Manual); the webhook is not.
+		hasPerFlowEmail = false
+		hasOwnerEmail = false
+	}
+	if !hasWebhook && !hasPerFlowEmail && !hasOwnerEmail {
 		return
 	}
 	// Subscribe SYNCHRONOUSLY before spawning the goroutine so a
@@ -109,11 +115,17 @@ func (s *Service) startFailureNotifier(graph core.Graph, runID string) {
 	go func() {
 		defer cancel()
 		defer cancelSub()
-		s.watchForFailure(ctx, graph, runID, events)
+		s.watchForFailure(ctx, graph, runID, events, manual)
 	}()
 }
 
-func (s *Service) watchForFailure(ctx context.Context, graph core.Graph, runID string, events <-chan BusEvent) {
+func (s *Service) watchForFailure(
+	ctx context.Context,
+	graph core.Graph,
+	runID string,
+	events <-chan BusEvent,
+	manual bool,
+) {
 
 	// Defensive recheck: the worker might have completed between
 	// SubmitGraph and our subscribe — same race WaitGraph defends
@@ -121,7 +133,7 @@ func (s *Service) watchForFailure(ctx context.Context, graph core.Graph, runID s
 	// terminal.
 	if rec, err := s.Jobs.Get(ctx, runID); err == nil && isTerminal(rec.Status) {
 		if rec.Status == core.JobStatusFailed {
-			s.fireFailureNotification(ctx, graph, recToPayload(graph, rec, s.PublicBaseURL))
+			s.fireFailureNotification(ctx, graph, recToPayload(graph, rec, s.PublicBaseURL), manual)
 		}
 		return
 	}
@@ -138,7 +150,7 @@ func (s *Service) watchForFailure(ctx context.Context, graph core.Graph, runID s
 				if rec, err := s.Jobs.Get(context.Background(), runID); err == nil &&
 					rec.Status == core.JobStatusFailed {
 					s.fireFailureNotification(context.Background(), graph,
-						recToPayload(graph, rec, s.PublicBaseURL))
+						recToPayload(graph, rec, s.PublicBaseURL), manual)
 				}
 				return
 			}
@@ -163,33 +175,121 @@ func (s *Service) watchForFailure(ctx context.Context, graph core.Graph, runID s
 						payload.FailedNode = nodes[0].NodeID
 					}
 				}
-				s.fireFailureNotification(ctx, graph, payload)
+				s.fireFailureNotification(ctx, graph, payload, manual)
 			}
 			return
 		}
 	}
 }
 
+// FailureEmailWindow is how long one failure email speaks for.
+//
+// A flow that breaks usually breaks repeatedly: a poll trigger every five
+// minutes against a service that is down produces twelve identical failures an
+// hour, and twelve identical emails teach the reader to filter the lot. So the
+// first failure mails and the rest of the window is silent.
+//
+// An hour rather than a few minutes because the mail is not the incident
+// channel — the runs list is, and the webhook is for anyone who wants a stream.
+// The mail's job is "you did not know this was broken", which is answered once.
+//
+// Overridable with DAZYFLOW_FAILURE_EMAIL_WINDOW; zero or negative turns the
+// throttle off and mails every failure, which is the pre-throttle behaviour.
+var FailureEmailWindow = time.Hour
+
+// failureEmailThrottled reports whether an email about this failure would be a
+// repeat, and how many other failures of this flow it is standing in for.
+//
+// Derived from the run history rather than from a record of what was sent,
+// which is the whole reason there is no new table here: "has this flow failed
+// recently?" is already a question the job store can answer, and an answer
+// derived from the runs themselves cannot drift out of step with them.
+//
+// The rule is one clause — no OTHER failed run of this flow inside the window —
+// and it covers both shapes of flood on purpose. A flow that stays broken has a
+// prior failure every time, so exactly one email goes out. A flow that FLAPS
+// (fail, succeed, fail, succeed) would defeat a "first failure of a streak"
+// rule, and does not defeat this one.
+//
+// Fails OPEN: if the store cannot answer, the mail goes. A throttle that eats
+// an alert when the database hiccups is worse than one that sends a duplicate.
+func (s *Service) failureEmailThrottled(ctx context.Context, graph core.Graph, runID string) (bool, int) {
+	if FailureEmailWindow <= 0 || s.Jobs == nil {
+		return false, 0
+	}
+	// Bounded: the count is for a log line, and a flow failing more than this
+	// in an hour is already comprehensively described by "a lot".
+	const scan = 100
+	runs, err := s.Jobs.ListGraphRuns(ctx, core.ListGraphRunsOpts{
+		Tenant:    graph.Tenant,
+		Workspace: graph.Workspace,
+		GraphID:   graph.ID,
+		Status:    core.JobStatusFailed,
+		// Since bounds EnqueuedAt, which is the only time the store filters on.
+		// For the flows this protects against — a trigger firing on a schedule —
+		// enqueue and finish are seconds apart, so the difference does not
+		// matter; a run that started three hours ago and fails now is treated as
+		// outside the window, which errs towards sending.
+		Since: time.Now().Add(-FailureEmailWindow),
+		Limit: scan,
+	})
+	if err != nil {
+		return false, 0
+	}
+	others := 0
+	for _, r := range runs {
+		// The failure being reported is already terminal in the store, so it is
+		// in this list and must not throttle itself.
+		if r.ID != runID {
+			others++
+		}
+	}
+	return others > 0, others
+}
+
 // fireFailureNotification POSTs the payload to the graph's
 // webhook URL. Errors land in the daemon log; we don't surface
 // them back to the user because the dispatcher runs after the run
 // has already terminated — there's no in-progress request to fail.
-func (s *Service) fireFailureNotification(ctx context.Context, graph core.Graph, payload FailurePayload) {
-	// Per-flow email channel: an explicit address configured on the
-	// graph (notify some external inbox / on-call address).
-	perFlowEmail := ""
-	if graph.FailureNotify != nil {
-		perFlowEmail = graph.FailureNotify.Email
+func (s *Service) fireFailureNotification(
+	ctx context.Context,
+	graph core.Graph,
+	payload FailurePayload,
+	manual bool,
+) {
+	// Both email channels are off for a run someone started in the app: they
+	// are watching it fail. Checked here as well as at arming time, because
+	// arming still happens for the webhook and the two must not drift.
+	//
+	// The throttle is the same idea one step out: the first failure in the
+	// window has already said what an email can say.
+	throttled, others := false, 0
+	if !manual {
+		throttled, others = s.failureEmailThrottled(ctx, graph, payload.RunID)
 	}
-	if perFlowEmail != "" {
-		s.fireFailureEmail(ctx, graph, payload, perFlowEmail)
+	if throttled && s.Logger != nil {
+		// Logged rather than silent: an operator asking "why did I not get mail
+		// about that?" should find the answer here.
+		s.Logger.Printf("failure email for %s/%s/%s throttled: %d other failure(s) in the last %s",
+			graph.Tenant, graph.Workspace, graph.ID, others, FailureEmailWindow)
 	}
-	// Account-level channel: email the flow owner if their preference
-	// opts in (the default). Deduped against the per-flow address so an
-	// owner who also set FailureNotify.Email to themselves gets a single
-	// mail, not two.
-	if to := s.ownerFailureEmail(ctx, graph); to != "" && !strings.EqualFold(to, perFlowEmail) {
-		s.fireFailureEmail(ctx, graph, payload, to)
+	if !manual && !throttled {
+		// Per-flow email channel: an explicit address configured on the
+		// graph (notify some external inbox / on-call address).
+		perFlowEmail := ""
+		if graph.FailureNotify != nil {
+			perFlowEmail = graph.FailureNotify.Email
+		}
+		if perFlowEmail != "" {
+			s.fireFailureEmail(ctx, graph, payload, perFlowEmail)
+		}
+		// Account-level channel: email the flow owner if their preference
+		// opts in (the default). Deduped against the per-flow address so an
+		// owner who also set FailureNotify.Email to themselves gets a single
+		// mail, not two.
+		if to := s.ownerFailureEmail(ctx, graph); to != "" && !strings.EqualFold(to, perFlowEmail) {
+			s.fireFailureEmail(ctx, graph, payload, to)
+		}
 	}
 	if graph.FailureNotify == nil || graph.FailureNotify.Webhook == "" {
 		return

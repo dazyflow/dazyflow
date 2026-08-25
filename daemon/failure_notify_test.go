@@ -100,7 +100,7 @@ func TestFailureNotify_BlocksPrivateWebhook(t *testing.T) {
 		Status: core.JobStatusRunning,
 	})
 
-	svc.startFailureNotifier(graph, runID)
+	svc.startFailureNotifier(graph, runID, false)
 	svc.bus().Publish(runID, BusEvent{Terminal: &TerminalEvent{
 		JobID:  runID,
 		Status: core.JobStatusFailed,
@@ -133,7 +133,7 @@ func TestFailureNotify_FiresOnFailedTerminal(t *testing.T) {
 		Status: core.JobStatusRunning,
 	})
 
-	svc.startFailureNotifier(graph, runID)
+	svc.startFailureNotifier(graph, runID, false)
 
 	// Publish the terminal failure event.
 	svc.bus().Publish(runID, BusEvent{Terminal: &TerminalEvent{
@@ -182,7 +182,7 @@ func TestFailureNotify_DoesNotFireOnSuccess(t *testing.T) {
 		ID: runID, Kind: core.JobKindGraph, Tenant: "t", Workspace: "ws",
 		Status: core.JobStatusRunning,
 	})
-	svc.startFailureNotifier(graph, runID)
+	svc.startFailureNotifier(graph, runID, false)
 	svc.bus().Publish(runID, BusEvent{Terminal: &TerminalEvent{
 		JobID:  runID,
 		Status: core.JobStatusSucceeded,
@@ -207,7 +207,7 @@ func TestFailureNotify_NoConfigSkipsGoroutine(t *testing.T) {
 		ID: "g", Tenant: "t", Workspace: "ws",
 		// FailureNotify: intentionally nil
 	}
-	svc.startFailureNotifier(graph, "any-run")
+	svc.startFailureNotifier(graph, "any-run", false)
 	// Publish — nothing should consume it.
 	svc.bus().Publish("any-run", BusEvent{Terminal: &TerminalEvent{
 		JobID: "any-run", Status: core.JobStatusFailed,
@@ -227,7 +227,7 @@ func TestFailureNotify_EmptyWebhookSkipsGoroutine(t *testing.T) {
 		ID: "g", Tenant: "t", Workspace: "ws",
 		FailureNotify: &core.FailureNotify{Webhook: ""}, // explicit empty
 	}
-	svc.startFailureNotifier(graph, "any-run")
+	svc.startFailureNotifier(graph, "any-run", false)
 	svc.bus().Publish("any-run", BusEvent{Terminal: &TerminalEvent{
 		JobID: "any-run", Status: core.JobStatusFailed,
 	}})
@@ -262,7 +262,7 @@ func TestFailureNotify_FailedNodePopulatedFromStore(t *testing.T) {
 		Status: core.JobStatusFailed,
 	})
 
-	svc.startFailureNotifier(graph, runID)
+	svc.startFailureNotifier(graph, runID, false)
 	svc.bus().Publish(runID, BusEvent{Terminal: &TerminalEvent{
 		JobID: runID, Status: core.JobStatusFailed,
 		Error: &core.JobError{Code: "timeout", Message: "x"},
@@ -301,7 +301,7 @@ func TestFailureNotify_RaceRecheckFiresIfAlreadyTerminal(t *testing.T) {
 		},
 	})
 
-	svc.startFailureNotifier(graph, runID)
+	svc.startFailureNotifier(graph, runID, false)
 
 	fw.wait(t, 1, 2*time.Second)
 	fw.mu.Lock()
@@ -328,7 +328,7 @@ func TestFailureNotify_NonSuccessWebhookDoesNotPanic(t *testing.T) {
 		ID: "run-500", Kind: core.JobKindGraph, Tenant: "t", Workspace: "ws",
 		Status: core.JobStatusRunning,
 	})
-	svc.startFailureNotifier(graph, "run-500")
+	svc.startFailureNotifier(graph, "run-500", false)
 	svc.bus().Publish("run-500", BusEvent{Terminal: &TerminalEvent{
 		JobID: "run-500", Status: core.JobStatusFailed,
 		Error: &core.JobError{Code: "x", Message: "y"},
@@ -420,6 +420,7 @@ func TestFailureNotify_DefaultClientPostsRealJSON(t *testing.T) {
 			FailureNotify: &core.FailureNotify{Webhook: srv.URL},
 		},
 		FailurePayload{GraphID: "g", RunID: "r"},
+		false,
 	)
 	if !bytes.Contains(got.Bytes(), []byte(`"graph_id":"g"`)) {
 		t.Errorf("missing graph_id: %s", got.String())

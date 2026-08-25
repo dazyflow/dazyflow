@@ -1280,6 +1280,9 @@ func startRetentionSweeps(ctx context.Context, svc *daemon.Service, jobs core.Jo
 	// A runner task row is an operational record of one dispatch, so it keeps
 	// the same window as the job it belonged to.
 	runnerTaskRetention := envDuration("DAZYFLOW_RUNNER_TASK_RETENTION", jobRetention)
+	// How long one failure email speaks for. Zero or negative mails every
+	// failure — see daemon.FailureEmailWindow for why the default is an hour.
+	daemon.FailureEmailWindow = envDuration("DAZYFLOW_FAILURE_EMAIL_WINDOW", daemon.FailureEmailWindow)
 	// A free-tier per-tenant retention window keeps the sweep alive even when
 	// every global window is disabled (the per-tenant pass below still runs).
 	perTenantRetention := svc != nil && svc.FreeRetentionDays > 0

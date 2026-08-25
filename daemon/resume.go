@@ -132,7 +132,13 @@ func (s *Service) ResumeFailedRun(ctx context.Context, p core.Principal, runID s
 
 	// The stored graph carries the original tenant/workspace/id; the seed
 	// path validates seed targets against it and runs under p's authz.
-	return s.SubmitGraphWithSeed(ctx, p, g, seeds)
+	//
+	// Manual, because every way to reach a retry is a person pressing a button
+	// in front of the failure they are retrying — the editor's error banner, the
+	// runs list, the run-detail page. The original run already emailed about
+	// this failure if it was going to; a retry that fails should not send a
+	// second mail about the thing they are actively working on.
+	return s.SubmitGraphOpts(ctx, p, g, SubmitOpts{Seeds: seeds, Manual: true})
 }
 
 // outputsReusable reports whether a succeeded node's outputs can be reused

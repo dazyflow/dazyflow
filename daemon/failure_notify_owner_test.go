@@ -73,7 +73,7 @@ func TestFailureNotify_OwnerEmailDefaultOn(t *testing.T) {
 	}
 	svc.fireFailureNotification(context.Background(), graph, FailurePayload{
 		GraphID: graph.ID, RunID: "run-1", ErrorMessage: "boom",
-	})
+	}, false)
 
 	data, to := waitForEmail(t, srv, 2*time.Second)
 	if data == "" {
@@ -98,7 +98,7 @@ func TestFailureNotify_OwnerEmailOptedOut(t *testing.T) {
 	}
 	svc.fireFailureNotification(context.Background(), graph, FailurePayload{
 		GraphID: graph.ID, RunID: "run-1",
-	})
+	}, false)
 
 	if data, to := waitForEmail(t, srv, 300*time.Millisecond); data != "" {
 		t.Errorf("opted-out owner still got mail: to=%v\n%s", to, data)
@@ -118,7 +118,7 @@ func TestFailureNotify_OwnerEmailDedupedAgainstPerFlow(t *testing.T) {
 	}
 	svc.fireFailureNotification(context.Background(), graph, FailurePayload{
 		GraphID: graph.ID, RunID: "run-1", ErrorMessage: "boom",
-	})
+	}, false)
 
 	// Give a possible second send time to (wrongly) arrive.
 	data, to := waitForEmail(t, srv, 1*time.Second)
@@ -147,7 +147,7 @@ func TestFailureNotify_OwnerOnlySpawnsWatcher(t *testing.T) {
 		Status: core.JobStatusRunning,
 	})
 
-	svc.startFailureNotifier(graph, runID)
+	svc.startFailureNotifier(graph, runID, false)
 	svc.bus().Publish(runID, BusEvent{Terminal: &TerminalEvent{
 		JobID: runID, Status: core.JobStatusFailed,
 		Error: &core.JobError{Code: "x", Message: "y"},

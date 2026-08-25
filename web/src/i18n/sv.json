@@ -327,7 +327,7 @@
     "title": "Aviseringar",
     "intro": "Välj vilka e-postmeddelanden vi skickar till dig. Konto- och säkerhetsmeddelanden (verifiering, lösenordsåterställning) skickas alltid.",
     "flowFailureLabel": "Mejla mig när ett av mina flöden misslyckas",
-    "flowFailureDesc": "Skickar en kort sammanfattning till din konto-e-post när ett flöde du äger avslutas med ett fel. På som standard.",
+    "flowFailureDesc": "Skickar en kort sammanfattning till din kontoadress när ett flöde du äger misslyckas av sig själv — på ett schema, en webhook eller ett formulär. Körningar du startar själv mejlar inte, eftersom du ser dem misslyckas, och ett flöde som fortsätter misslyckas mejlar en gång i timmen i stället för en gång per körning. På som standard.",
     "supportReplyLabel": "Mejla mig när supporten svarar",
     "supportReplyDesc": "Få ett mejl när supporten svarar på eller löser ett av dina ärenden. Stänger du av detta ser du bara svaren när du öppnar Support-sidan."
   },
@@ -543,7 +543,7 @@
       "webhookLabel": "Webhook-URL för fel",
       "webhookDesc": "POSTad payload innehåller <0>graph_id</0>, <0>run_id</0>, <0>error_code</0>, <0>error_message</0>, <0>failed_node</0>, <0>run_url</0>. Lämna tomt för att stänga av.",
       "emailLabel": "E-post vid fel",
-      "emailDesc": "Få en sammanfattning via e-post när en körning misslyckas. Kräver att serverns e-postleverans är konfigurerad (fråga din administratör om inget kommer fram)."
+      "emailDesc": "Få en kort sammanfattning per e-post när en körning misslyckas. Bara för körningar som startar av sig själva — ett schema, en webhook, ett formulär — eftersom en körning du startar själv är en du tittar på. Ett flöde som fortsätter misslyckas mejlar en gång i timmen, inte en gång per körning. Kräver att serverns e-postutskick är uppsatt (fråga din administratör om inget kommer fram)."
     },
     "general": {
       "displayNameDesc": "Vänligt namn som visas i flödeslistan. Standardvärde är ID:t.",
