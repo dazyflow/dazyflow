@@ -206,6 +206,7 @@ export const SV_FIELD_TITLES: Record<string, string> = {
   "Row limit": "Radgräns",
   "Row-number column": "Kolumn med radnummer",
   "Rows": "Rader",
+  "Environment variables": "Miljövariabler",
   "Run it with": "Kör det med",
   "Where to run it": "Var det ska köras",
   "Runner": "Körnod",
@@ -563,6 +564,8 @@ export const SV_FIELD_HELP: Record<string, string> = {
   "The .xlsx file in the workspace. Ignored when a 'File' input is wired.": "xlsx-filen i arbetsytan. Ignoreras när en Fil-ingång är inkopplad.",
   "The Drive file to download — pick from your account's files. The File ID input overrides this when connected.": "Drive-filen som ska laddas ner — välj bland kontots filer. Ingången Fil-ID vinner över detta när den är inkopplad.",
   "The Google Form to watch for new responses.": "Google-formuläret som ska bevakas för nya svar.",
+  "Values the script reads from its environment — $NAME in a shell, os.environ in Python. Use ${secret.NAME} for anything sensitive: the value reaches the machine but is never written into the flow, and is blanked out of the run's output and logs. A value set here wins over one the agent's own environment already has.":
+    "Värden som skriptet läser från sin miljö — $NAMN i ett skal, os.environ i Python. Använd ${secret.NAMN} för allt känsligt: värdet når maskinen men skrivs aldrig in i flödet, och maskeras bort ur körningens utdata och loggar. Ett värde som sätts här vinner över ett som agentens egen miljö redan har.",
   "Tags the machine must carry — ALL of them. One tag sends the work to whichever machine carrying it is free; adding a second narrows that to machines carrying both. Every machine's own name is also a tag, so picking a name pins this step to that one machine.":
     "Etiketter som maskinen måste ha — ALLA av dem. En etikett skickar arbetet till vilken ledig maskin som helst med den; en till smalnar av till maskiner som har båda. Varje maskins eget namn är också en etikett, så att välja ett namn låser steget till just den maskinen.",
   "The script to run on that machine. It runs as the user the runner agent runs as, in the agent's working directory. Connect the 'script' input instead to have an earlier step supply it.":

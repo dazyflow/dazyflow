@@ -401,3 +401,121 @@ func TestManifest_HasAScriptInput(t *testing.T) {
 		}
 	}
 }
+
+// ---- the environment the script runs with ------------------------------
+
+// The point of the field: a credential reaches the machine without being
+// written into the flow. The engine has already expanded ${secret.…} by the
+// time the step runs, so what this checks is that the expanded value is
+// actually handed on — the plumbing that was decoration once before.
+func TestExecute_PassesTheStepsEnvToTheMachine(t *testing.T) {
+	f := install(t, &fakeDispatcher{})
+	run(t, map[string]any{
+		"tags":   []any{"box"},
+		"script": "./fetch.sh",
+		"env":    map[string]any{"API_TOKEN": "resolved-secret", "MONTH": "03"},
+	}, nil)
+
+	if f.got.Env["API_TOKEN"] != "resolved-secret" || f.got.Env["MONTH"] != "03" {
+		t.Errorf("env = %v, want the step's own values", f.got.Env)
+	}
+}
+
+// Two sources existed before this field: core.Node.Env, which every step has,
+// and now the step's own box. Both have to arrive, and the order has to be one
+// somebody can predict.
+func TestExecute_TheStepsEnvLayersOverTheNodes(t *testing.T) {
+	f := install(t, &fakeDispatcher{})
+	ctx := core.WithTenant(t.Context(), "acme")
+	_, err := execute(ctx, core.Job{
+		ID:     "j1",
+		Params: map[string]any{"tags": []any{"box"}, "script": "x", "env": map[string]any{"SHARED": "from-step"}},
+		Env:    map[string]string{"SHARED": "from-node", "NODE_ONLY": "kept"},
+	}, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	// The field is the one a person can see while editing the step, so it must
+	// not be the half that is silently overridden.
+	if f.got.Env["SHARED"] != "from-step" {
+		t.Errorf("SHARED = %q, want the step's field to win", f.got.Env["SHARED"])
+	}
+	if f.got.Env["NODE_ONLY"] != "kept" {
+		t.Errorf("env = %v, want the node's own entries kept", f.got.Env)
+	}
+}
+
+// Nothing set means nothing sent, so the queued task's env column stays NULL
+// and there is nothing to seal.
+func TestExecute_NoEnvSendsNone(t *testing.T) {
+	f := install(t, &fakeDispatcher{})
+	run(t, map[string]any{"tags": []any{"box"}, "script": "x"}, nil)
+	if f.got.Env != nil {
+		t.Errorf("env = %v, want nil when nothing is set", f.got.Env)
+	}
+}
+
+// A name an environment block cannot carry is refused before the task is
+// queued. Not a privilege boundary — this step already runs arbitrary scripts —
+// but a '=' splits the assignment and a newline corrupts everything after it,
+// and both surface on the machine as something unrelated going wrong.
+func TestExecute_RefusesAnUnusableEnvName(t *testing.T) {
+	for _, name := range []string{"", "A=B", "WITH\nNEWLINE"} {
+		t.Run(name, func(t *testing.T) {
+			install(t, &fakeDispatcher{})
+			res := run(t, map[string]any{
+				"tags": []any{"box"}, "script": "x",
+				"env": map[string]any{name: "v"},
+			}, nil)
+			if res.Status != core.StatusError || res.Error.Code != "bad_env" {
+				t.Fatalf("result = %+v, want a bad_env failure", res)
+			}
+			if !strings.Contains(res.Error.Message, "must not be") {
+				t.Errorf("message = %q, want it to say what a name may not contain", res.Error.Message)
+			}
+		})
+	}
+}
+
+// A flow built by the API or an older editor can carry a non-string; a script
+// asking for $RETRIES would rather have "3" than nothing.
+func TestExecute_StringifiesANonStringEnvValue(t *testing.T) {
+	f := install(t, &fakeDispatcher{})
+	run(t, map[string]any{
+		"tags": []any{"box"}, "script": "x",
+		"env": map[string]any{"RETRIES": 3, "EMPTY": nil},
+	}, nil)
+	if f.got.Env["RETRIES"] != "3" {
+		t.Errorf("RETRIES = %q, want it stringified", f.got.Env["RETRIES"])
+	}
+	if v, ok := f.got.Env["EMPTY"]; !ok || v != "" {
+		t.Errorf("EMPTY = %q (present=%v), want an empty value, not a missing one", v, ok)
+	}
+}
+
+// The field has to be in the schema for the editor to render its dict box.
+func TestManifest_DeclaresTheEnvField(t *testing.T) {
+	for _, m := range manifestsUnderTest(t) {
+		var schema struct {
+			Properties struct {
+				Env struct {
+					Type                 string          `json:"type"`
+					AdditionalProperties json.RawMessage `json:"additionalProperties"`
+					Description          string          `json:"description"`
+				} `json:"env"`
+			} `json:"properties"`
+		}
+		if err := json.Unmarshal(m.ParamsSchema, &schema); err != nil {
+			t.Fatalf("params schema: %v", err)
+		}
+		if schema.Properties.Env.Type != "object" || len(schema.Properties.Env.AdditionalProperties) == 0 {
+			t.Errorf("env is not a string-keyed map, so the editor renders no dict box: %+v",
+				schema.Properties.Env)
+		}
+		// The whole reason the field is safe to use for a credential, so the
+		// help has to say it.
+		if !strings.Contains(schema.Properties.Env.Description, "${secret.") {
+			t.Error("the env help does not mention ${secret.…}, which is how a credential gets in safely")
+		}
+	}
+}

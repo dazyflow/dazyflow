@@ -23,6 +23,27 @@ into the image.)
 
 ## [Unreleased]
 
+### Added
+
+- **Run on your machine can pass environment variables to the script**, and a
+  credential can be one of them without ending up anywhere it should not.
+
+  Set names and values on the step; they are merged over the machine's own
+  environment, so `PATH` still works and a name you set wins. Use
+  `${secret.NAME}` for anything sensitive and the reference is what gets saved —
+  the value is substituted one step before the script starts, and is kept out of
+  the flow definition (so not in the workspace's git history), encrypted at rest
+  in the queued task, scrubbed from the run's output and live log if the script
+  prints it, and reduced to a bare name in a support bundle.
+
+  Which leaves exactly one place the value does exist, on purpose: the machine
+  you sent it to. A runner is as trusted as the people who can edit your flows,
+  and a secret you send one is as trusted as that machine.
+
+  Names that an environment block cannot carry — empty, containing `=`, or
+  containing control characters — are refused before the task is queued, rather
+  than failing on the machine as something that looks unrelated.
+
 ### Changed
 
 - **A run you start yourself no longer emails you when it fails.** Pressing Run

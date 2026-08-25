@@ -137,7 +137,9 @@ func init() {
 				"'linux + gpu' means one that is both. Every machine's own name is also a tag, so listing " +
 				"a name pins the step to that one machine. Choose what runs the script " +
 				"— the machine's own shell, sh, bash, Python, PowerShell or Node — and write it in the " +
-				"box; or wire the script in on the 'script' input to build it in an earlier step. The " +
+				"box; or wire the script in on the 'script' input to build it in an earlier step. Pass " +
+				"values in as environment variables — ${secret.NAME} for a credential, which reaches the " +
+				"machine without ever being written into the flow. The " +
 				"value wired into 'in' arrives on the script's standard input; whatever the script prints " +
 				"comes back on 'out'. A non-zero exit fails the step, with the script's error output attached.",
 			Summary: "Run a script on a machine you host, and use what it prints.",
@@ -156,6 +158,11 @@ func init() {
 					Title:  "Narrow the pool with a second tag",
 					Params: json.RawMessage(`{"tags":["linux","gpu"],"script":"./render.sh"}`),
 					Notes:  "Every tag must match, so this runs on a machine that is both — not on either.",
+				},
+				{
+					Title:  "Give the script a credential and a parameter",
+					Params: json.RawMessage(`{"tags":["invoices-box"],"env":{"API_TOKEN":"${secret.BILLING_TOKEN}","MONTH":"03"},"script":"./fetch-invoices.sh"}`),
+					Notes:  "The secret is resolved on the way out and never stored in the flow; the script reads $API_TOKEN.",
 				},
 				{
 					Title:  "A Python script instead of a shell one",
@@ -217,6 +224,12 @@ func init() {
       "format": "script",
       "description": "The script to run on that machine. It runs as the user the runner agent runs as, in the agent's working directory. Connect the 'script' input instead to have an earlier step supply it."
     },
+    "env": {
+      "type": "object",
+      "title": "Environment variables",
+      "additionalProperties": { "type": "string" },
+      "description": "Values the script reads from its environment — $NAME in a shell, os.environ in Python. Use ${secret.NAME} for anything sensitive: the value reaches the machine but is never written into the flow, and is blanked out of the run's output and logs. A value set here wins over one the agent's own environment already has."
+    },
     "timeout_seconds": {
       "type": "integer",
       "title": "Give up after (seconds)",
@@ -263,6 +276,14 @@ func execute(ctx context.Context, job core.Job, progress chan<- core.Progress) (
 	if script == "" {
 		return failed(job, "no_script", "this step has no script to run"), nil
 	}
+	if bad := badEnvName(job); bad != "" {
+		// Refused here rather than on the machine: an environment block cannot
+		// carry these, and a script that starts with a mangled environment fails
+		// somewhere far from the field that caused it.
+		return failed(job, "bad_env",
+			"the environment variable name "+bad+" cannot be used — a name must not be "+
+				"empty, contain '=', or contain control characters"), nil
+	}
 	shell := strings.ToLower(strings.TrimSpace(params.StringDefault(job.Params, "shell", "")))
 	if !knownShell(shell) {
 		// Refused here rather than on the machine: the daemon knows the list,
@@ -288,11 +309,15 @@ func execute(ctx context.Context, job core.Job, progress chan<- core.Progress) (
 		Tags:   tags,
 		Script: script,
 		Shell:  shell,
-		// The node's own environment, with ${secret.…} already resolved by the
-		// engine. Plumbed all the way to the agent — which merges it over its
-		// own environment — but never populated here until now, so a script
-		// that read $MONTH got nothing and the whole path was decoration.
-		Env:     job.Env,
+		// What the script reads from its environment, with ${secret.…} already
+		// resolved by the engine — for both the node's own env and the step's
+		// own field, since the engine resolves params and env in one pass.
+		//
+		// The step's field wins over the node's env, which wins over whatever
+		// the machine already has (the agent merges over its own environment).
+		// Deliberately that order: the field is the one a person can see while
+		// editing the step, so it must not be the one silently overridden.
+		Env:     mergeEnv(job),
 		Stdin:   stdinFrom(job),
 		Timeout: timeout,
 	}, func(msg string) {
@@ -390,6 +415,83 @@ func stdinFrom(job core.Job) string {
 		}
 		return string(b)
 	}
+}
+
+// mergeEnv builds the environment the script runs with.
+//
+// Two sources, because there were already two: core.Node.Env, which every step
+// has and almost none uses, and this step's own `env` param, which is the one
+// with a box in the editor. Merging rather than choosing means a flow already
+// setting node env keeps working, and the layering has an order somebody can
+// predict — see the note at the call site.
+//
+// Both arrive with ${secret.…} already expanded: the engine resolves params and
+// node env in the same pass before the step runs, and the resolved values exist
+// only for the length of this call plus the sealed queue row. Nothing here
+// writes them anywhere.
+func mergeEnv(job core.Job) map[string]string {
+	out := map[string]string{}
+	for k, v := range job.Env {
+		out[k] = v
+	}
+	for k, v := range envParam(job) {
+		out[k] = v
+	}
+	if len(out) == 0 {
+		// nil rather than an empty map, so the task row's env column stays NULL
+		// and there is nothing to seal.
+		return nil
+	}
+	return out
+}
+
+// envParam reads the step's `env` field as strings.
+//
+// Non-string values are stringified rather than dropped: the schema says string,
+// but a flow built by the API or an older editor can carry a number, and a
+// script asking for $RETRIES would rather have "3" than nothing.
+func envParam(job core.Job) map[string]string {
+	raw, ok := job.Params["env"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	out := make(map[string]string, len(raw))
+	for k, v := range raw {
+		switch tv := v.(type) {
+		case nil:
+			out[k] = ""
+		case string:
+			out[k] = tv
+		default:
+			out[k] = fmt.Sprint(tv)
+		}
+	}
+	return out
+}
+
+// badEnvName returns the first environment variable name that cannot be put in
+// an environment block, quoted, or "" when they are all usable.
+//
+// Not a security boundary — the author of this step can already run any script
+// on that machine, so there is no privilege here to protect. It is about the
+// failure being legible: a name containing '=' splits the assignment, and a
+// name with a newline in it corrupts everything after it, both of which surface
+// on the machine as something unrelated going wrong.
+func badEnvName(job core.Job) string {
+	for name := range mergeEnv(job) {
+		if name == "" {
+			return `""`
+		}
+		if strings.ContainsRune(name, '=') {
+			return `"` + name + `"`
+		}
+		for _, r := range name {
+			if r < 0x20 || r == 0x7f {
+				return `"` + name + `"`
+			}
+		}
+	}
+	return ""
 }
 
 func emit(job core.Job, progress chan<- core.Progress, msg string) {

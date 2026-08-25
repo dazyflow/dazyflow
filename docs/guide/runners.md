@@ -216,6 +216,45 @@ step says — which for a Python script means a pile of shell syntax errors. Re-
 the install command on the machine to upgrade it; **Admin → Runners** shows which
 version each one is running.
 
+### Passing values in — and credentials
+
+**Environment variables** on the step become environment variables for the
+script: `$API_TOKEN` in a shell, `os.environ["API_TOKEN"]` in Python. They are
+merged over the machine's own environment, so `PATH` and everything else the
+agent has still works, and a name you set here wins.
+
+For anything sensitive, reference a stored secret rather than typing the value:
+
+| Name | Value |
+| --- | --- |
+| `API_TOKEN` | `${secret.BILLING_TOKEN}` |
+| `MONTH` | `03` |
+
+The reference is what gets saved in the flow. The **value** is substituted on the
+way out, one step before the script starts, and it is kept out of every place
+you would not want to find it:
+
+- **The flow definition** stores `${secret.BILLING_TOKEN}`, not the token — so
+it is not in the workspace's git history and not visible to anyone reading the
+flow. (Type a literal credential instead and the save-time lint says so.)
+- **The queued task** is encrypted at rest under your organisation's key, because
+that row is the one place the substituted value has to sit for a moment.
+- **The run's output** is scrubbed: a script that prints `$API_TOKEN`, on purpose
+or in a stack trace, shows `[redacted:secret]` in the run record and in the live
+log.
+- **A support bundle** keeps the names and drops the values.
+
+What no amount of this can do is protect the value once it is on the machine —
+that is the point of sending it. The script has it, anything the script runs has
+it, and a script that writes it to a file has written it to a file. A runner is
+as trusted as the people who can edit your flows; a secret you send one is as
+trusted as the machine.
+
+A name cannot be empty, contain `=`, or contain control characters — an
+environment block cannot carry those, and the step refuses before anything is
+queued rather than letting the script fail on the machine for a reason that
+looks unrelated.
+
 ### Building the script in an earlier step
 
 The script does not have to be typed on the step. Connect the **script** input
