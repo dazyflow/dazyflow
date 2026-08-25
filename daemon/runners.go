@@ -82,6 +82,43 @@ func (r Runner) Online(now time.Time) bool {
 	return !r.LastSeen.IsZero() && now.Sub(r.LastSeen) <= RunnerOnlineWindow
 }
 
+// Tags is everything a step may target this machine by: its labels, plus its
+// own name.
+//
+// The name being a tag is what lets a step name ONE machine without the step
+// needing a separate "which machine" field. There used to be two: a name and a
+// label, mutually exclusive, each with its own not-found error and its own
+// half of the matching rule — for what is one question ("where should this
+// run?") with one answer shape. A name is simply the tag that exactly one
+// machine carries.
+//
+// Sorted and de-duplicated so a machine labelled with its own name reads as
+// one tag rather than two.
+func (r Runner) Tags() []string {
+	return normalizeLabels(append(append([]string(nil), r.Labels...), r.Name))
+}
+
+// HasTags reports whether this machine carries EVERY one of these tags.
+//
+// All of them, not any: a step asking for linux + gpu means a machine that is
+// both, and "any" would send the work to a machine with no GPU and fail there.
+// An empty list matches nothing — see eligible().
+func (r Runner) HasTags(want []string) bool {
+	if len(want) == 0 {
+		return false
+	}
+	have := map[string]struct{}{}
+	for _, t := range r.Tags() {
+		have[t] = struct{}{}
+	}
+	for _, w := range want {
+		if _, ok := have[w]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
 // ---- secrets: tokens and credentials ----------------------------------
 
 // Two kinds of secret, with different lifetimes and different jobs:
@@ -374,7 +411,51 @@ func (rs *Runners) SetLabels(ctx context.Context, tenant, name string, labels []
 			return Runner{}, err
 		}
 	}
+	if err := rs.refuseNameCollisions(ctx, tenant, name, norm); err != nil {
+		return Runner{}, err
+	}
 	return rs.Store.SetLabels(ctx, tenant, name, norm)
+}
+
+// refuseNameCollisions rejects a label that is already a machine's NAME.
+//
+// Every machine carries its own name as a tag — that is what lets a step target
+// one machine without a separate field for it. So labelling machine B with
+// machine A's name would make one tag mean two different things: a step written
+// to pin work to A would silently start landing on B as well. Which is precisely
+// the ambiguity the single-field design removes, so it must not be creatable
+// through the back door.
+//
+// A machine's own name is refused too, with a different message: it is already
+// its own tag, and a chip that vanished on save would read as a bug.
+func (rs *Runners) refuseNameCollisions(ctx context.Context, tenant, name string, labels []string) error {
+	if len(labels) == 0 {
+		return nil
+	}
+	rows, err := rs.Store.List(ctx, tenant)
+	if err != nil {
+		// The label rules that protect against a typo are worth failing closed
+		// for; this one guards against an ambiguity, and refusing the whole edit
+		// because a list query blipped would be worse than allowing it.
+		return nil
+	}
+	taken := map[string]struct{}{}
+	for _, r := range rows {
+		if r.Name != name {
+			taken[r.Name] = struct{}{}
+		}
+	}
+	for _, l := range labels {
+		if l == name {
+			return fmt.Errorf("%q is already this machine's own tag — every machine "+
+				"carries its name, so there is nothing to add", l)
+		}
+		if _, clash := taken[l]; clash {
+			return fmt.Errorf("%q is another machine's name, and a machine's name is "+
+				"always its own tag — using it here would make one tag mean two machines", l)
+		}
+	}
+	return nil
 }
 
 func (rs *Runners) Delete(ctx context.Context, tenant, name string) error {

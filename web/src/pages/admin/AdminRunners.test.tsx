@@ -3,6 +3,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { POLL } from "../../lib/timing";
 import userEvent from "@testing-library/user-event";
 
@@ -25,18 +26,25 @@ vi.mock("../../auth", () => {
 const listRunners = vi.fn();
 const mintRunnerToken = vi.fn();
 const deleteRunner = vi.fn();
-const setRunnerLabels = vi.fn();
 vi.mock("../../api", () => ({
   APIError: class extends Error {},
   api: {
     listRunners: (...a: unknown[]) => listRunners(...a),
     mintRunnerToken: (...a: unknown[]) => mintRunnerToken(...a),
     deleteRunner: (...a: unknown[]) => deleteRunner(...a),
-    setRunnerLabels: (...a: unknown[]) => setRunnerLabels(...a),
   },
 }));
 
 import { AdminRunners } from "./AdminRunners";
+
+// The machine name is a link to that machine's settings page, so the page needs
+// a router. Wrapped in one helper rather than at every render site.
+const mount = () =>
+  render(
+    <MemoryRouter>
+      <AdminRunners />
+    </MemoryRouter>,
+  );
 
 // Setting up a runner is: press a button, copy one line, paste it elsewhere.
 // The page's whole job is to make that line available exactly once and then be
@@ -67,11 +75,6 @@ beforeEach(() => {
     expires_at: "2026-08-25T10:00:00Z",
   });
   deleteRunner.mockResolvedValue({});
-  setRunnerLabels.mockImplementation((_tok: string, name: string, labels: string[]) =>
-    // The server normalizes and returns the saved row; the page shows what came
-    // back rather than what was typed.
-    Promise.resolve({ ...online, name, labels: [...labels].map((l) => l.trim().toLowerCase()).sort() }),
-  );
 });
 
 afterEach(() => {
@@ -80,7 +83,7 @@ afterEach(() => {
 
 describe("AdminRunners", () => {
   it("offers a way in when nothing is registered", async () => {
-    render(<AdminRunners />);
+    mount();
     expect(await screen.findByText("runners.emptyTitle")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "runners.add" })).toBeEnabled();
   });
@@ -89,7 +92,7 @@ describe("AdminRunners", () => {
   // server's own address — the operator should not have to supply either.
   it("shows a copyable one-line install command", async () => {
     const user = userEvent.setup();
-    render(<AdminRunners />);
+    mount();
     await screen.findByText("runners.emptyTitle");
 
     await user.click(screen.getByRole("button", { name: "runners.add" }));
@@ -121,7 +124,7 @@ describe("AdminRunners", () => {
   // say when it stops working rather than leaving someone to discover it.
   it("says when the command expires", async () => {
     const user = userEvent.setup();
-    render(<AdminRunners />);
+    mount();
     await screen.findByText("runners.emptyTitle");
     await user.click(screen.getByRole("button", { name: "runners.add" }));
     expect(await screen.findByText(/runners.installExpiry/)).toBeInTheDocument();
@@ -129,7 +132,7 @@ describe("AdminRunners", () => {
 
   it("keeps the command until it is dismissed", async () => {
     const user = userEvent.setup();
-    render(<AdminRunners />);
+    mount();
     await screen.findByText("runners.emptyTitle");
     await user.click(screen.getByRole("button", { name: "runners.add" }));
     await screen.findByText(/runner\.sh/);
@@ -138,9 +141,18 @@ describe("AdminRunners", () => {
     expect(screen.queryByText(/runner\.sh/)).not.toBeInTheDocument();
   });
 
+  // Tags are assigned on the machine's own settings page, so the list's job is
+  // to get you there — clicking the machine is how anyone expects to.
+  it("opens a machine's settings from its name", async () => {
+    listRunners.mockResolvedValue({ runners: [online] });
+    mount();
+    const link = await screen.findByRole("link", { name: "invoices-box" });
+    expect(link).toHaveAttribute("href", "/admin/runners/invoices-box");
+  });
+
   it("lists a machine that has checked in", async () => {
     listRunners.mockResolvedValue({ runners: [online] });
-    render(<AdminRunners />);
+    mount();
     expect(await screen.findByText("invoices-box")).toBeInTheDocument();
     expect(screen.getByText("runners.online")).toBeInTheDocument();
     expect(screen.getByText(/linux · x64/)).toBeInTheDocument();
@@ -154,7 +166,7 @@ describe("AdminRunners", () => {
   // need to.
   it("says how long a machine has been gone", async () => {
     listRunners.mockResolvedValue({ runners: [offline] });
-    render(<AdminRunners />);
+    mount();
     expect(await screen.findByText(/runners.offlineSince/)).toBeInTheDocument();
     expect(screen.queryByText("runners.online")).not.toBeInTheDocument();
   });
@@ -163,7 +175,7 @@ describe("AdminRunners", () => {
     listRunners.mockResolvedValue({
       runners: [{ ...offline, last_seen: undefined }],
     });
-    render(<AdminRunners />);
+    mount();
     // A machine that never arrived is a different problem from one that went
     // away: the token was probably never pasted.
     expect(await screen.findByText("runners.neverSeen")).toBeInTheDocument();
@@ -172,7 +184,7 @@ describe("AdminRunners", () => {
   it("removes a machine, once it has been confirmed", async () => {
     const user = userEvent.setup();
     listRunners.mockResolvedValue({ runners: [online] });
-    render(<AdminRunners />);
+    mount();
     await screen.findByText("invoices-box");
 
     // Removing a runner revokes its credential and cannot be undone — getting
@@ -189,7 +201,7 @@ describe("AdminRunners", () => {
   it("lets the operator back out of removing a machine", async () => {
     const user = userEvent.setup();
     listRunners.mockResolvedValue({ runners: [online] });
-    render(<AdminRunners />);
+    mount();
     await screen.findByText("invoices-box");
 
     await user.click(screen.getByRole("button", { name: "runners.remove" }));
@@ -202,106 +214,15 @@ describe("AdminRunners", () => {
   // edit a flow can run commands on these machines, and that is worth knowing
   // before the first one is added.
   it("always states what a runner can be told to do", async () => {
-    render(<AdminRunners />);
+    mount();
     await screen.findByText("runners.emptyTitle");
     expect(screen.getByText(/runners.securityNote/)).toBeInTheDocument();
   });
 
   it("surfaces a failure to load", async () => {
     listRunners.mockRejectedValue(new Error("nope"));
-    render(<AdminRunners />);
+    mount();
     expect(await screen.findByRole("alert")).toBeInTheDocument();
-  });
-
-  // ---- assigning labels ---------------------------------------------
-
-  // A label used to be decided on the machine at install time and fixed there
-  // forever: putting an existing server into another pool meant a visit to it,
-  // or deleting the runner and re-installing with a fresh token.
-  it("assigns a label to a registered machine", async () => {
-    const user = userEvent.setup();
-    listRunners.mockResolvedValue({ runners: [online] });
-    render(<AdminRunners />);
-    await screen.findByText("invoices-box");
-
-    await user.click(screen.getByRole("button", { name: "runners.editLabels" }));
-    await user.type(screen.getByLabelText("runners.labelPlaceholder"), "Build ");
-    await user.click(screen.getByRole("button", { name: /runners.labelAdd/ }));
-
-    // The whole set goes up, not a diff: the set is what routes work, so two
-    // admins editing one machine each end with a set they meant.
-    await waitFor(() =>
-      expect(setRunnerLabels).toHaveBeenCalledWith("tok", "invoices-box", ["linux", "x64", "Build"]),
-    );
-    // And the row shows the server's normalized answer, so it is visible that a
-    // step has to spell it "build".
-    expect(await screen.findByText(/build · linux · x64/)).toBeInTheDocument();
-  });
-
-  it("removes a label", async () => {
-    const user = userEvent.setup();
-    listRunners.mockResolvedValue({ runners: [online] });
-    render(<AdminRunners />);
-    await screen.findByText("invoices-box");
-
-    await user.click(screen.getByRole("button", { name: "runners.editLabels" }));
-    await user.click(screen.getByRole("button", { name: /runners.labelRemove.*x64/ }));
-    await waitFor(() =>
-      expect(setRunnerLabels).toHaveBeenCalledWith("tok", "invoices-box", ["linux"]),
-    );
-  });
-
-  it("does not spend a request on a label the machine already carries", async () => {
-    const user = userEvent.setup();
-    listRunners.mockResolvedValue({ runners: [online] });
-    render(<AdminRunners />);
-    await screen.findByText("invoices-box");
-
-    await user.click(screen.getByRole("button", { name: "runners.editLabels" }));
-    await user.type(screen.getByLabelText("runners.labelPlaceholder"), "LINUX{Enter}");
-    expect(setRunnerLabels).not.toHaveBeenCalled();
-  });
-
-  // A rejected label (a comma, a seventeenth pool) must not look as though it
-  // stuck: the failure surfaces and the row keeps what the server still holds.
-  it("says when a label was refused, and keeps the old set", async () => {
-    const user = userEvent.setup();
-    listRunners.mockResolvedValue({ runners: [online] });
-    setRunnerLabels.mockRejectedValue(new Error("comma"));
-    render(<AdminRunners />);
-    await screen.findByText("invoices-box");
-
-    await user.click(screen.getByRole("button", { name: "runners.editLabels" }));
-    await user.type(screen.getByLabelText("runners.labelPlaceholder"), "a,b{Enter}");
-    expect(await screen.findByRole("alert")).toBeInTheDocument();
-    expect(screen.getByText(/linux · x64/)).toBeInTheDocument();
-  });
-
-  // The editor is a row of its own under the machine, not a box inside the
-  // labels cell — on a phone that column is narrower than the input needs.
-  it("opens the editor in its own full-width row", async () => {
-    const user = userEvent.setup();
-    listRunners.mockResolvedValue({ runners: [online] });
-    const { container } = render(<AdminRunners />);
-    await screen.findByText("invoices-box");
-
-    await user.click(screen.getByRole("button", { name: "runners.editLabels" }));
-    const cell = container.querySelector(".runner-label-row td");
-    expect(cell).toHaveAttribute("colspan", "5");
-
-    await user.click(screen.getByRole("button", { name: "common.close" }));
-    expect(container.querySelector(".runner-label-row")).toBeNull();
-  });
-
-  // The table keeps a readable minimum width on a narrow screen, so the columns
-  // that stick out have to SCROLL. Without this wrapper the card's
-  // overflow:hidden clipped them and the last columns were unreachable on a
-  // phone — which is exactly what was reported.
-  it("lets the table scroll sideways instead of clipping it", async () => {
-    listRunners.mockResolvedValue({ runners: [online] });
-    const { container } = render(<AdminRunners />);
-    await screen.findByText("invoices-box");
-    expect(container.querySelector(".run-table-scroll .run-table")).not.toBeNull();
   });
 
   // A machine appears seconds after the command is pasted, and that wait is
@@ -309,7 +230,7 @@ describe("AdminRunners", () => {
   // itself rather than needing a reload.
   it("picks up a machine that arrives while the page is open", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    render(<AdminRunners />);
+    mount();
     await screen.findByText("runners.emptyTitle");
 
     listRunners.mockResolvedValue({ runners: [online] });

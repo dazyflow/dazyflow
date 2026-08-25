@@ -71,69 +71,150 @@ const refs = (token: string) => ({
 const runnerSchema: JSONSchema = {
   type: "object",
   properties: {
-    runner: { type: "string", title: "Machine", format: "runner" },
-    label: { type: "string", title: "Or any machine labelled", format: "runner-label" },
+    tags: {
+      type: "array",
+      title: "Where to run it",
+      format: "runner-tags",
+      items: { type: "string" },
+    },
     shell: { type: "string", title: "Run it with", default: "default", enum: ["default", "python"] },
     script: { type: "string", title: "Script", format: "script" },
   },
 } as JSONSchema;
 
 describe("SchemaForm — the runner step's fields", () => {
-  it("offers the org's machines as a dropdown instead of a name to retype", async () => {
+  // One field replaced two (a machine name and a label, mutually exclusive),
+  // which is possible because every machine now carries its own name as a tag.
+  it("offers every tag the org's machines carry, names included", async () => {
     const token = "list";
-    // The name exists in exactly one place the flow author cannot see from the
-    // editor, and a typo used to surface only when a run failed.
     vi.spyOn(api, "listRunnerTargets").mockResolvedValue({
       runners: [
-        { name: "invoices-box", labels: ["linux", "build"], online: true },
-        { name: "old-laptop", labels: ["linux"], online: false },
+        { name: "invoices-box", tags: ["build", "invoices-box", "linux"], online: true },
+        { name: "old-laptop", tags: ["linux", "old-laptop"], online: false },
       ],
     });
     render(
       <SchemaForm schema={runnerSchema} value={{}} onChange={() => {}} references={refs(token)} />,
     );
 
-    const machine = await screen.findByRole("option", { name: "invoices-box" });
-    expect(machine).toBeInTheDocument();
-    // An offline machine is still offered — a step pointed at one saves, waits
-    // and then fails, so it has to be visible while choosing, not after a run.
-    expect(await screen.findByRole("option", { name: /old-laptop/ })).toBeInTheDocument();
-
-    // Labels are de-duplicated across machines: they name a pool, so "linux" on
-    // two machines is one choice.
-    const labels = await screen.findAllByRole("option", { name: /^schemaForm.runner.labelOption/ });
-    expect(labels).toHaveLength(2);
+    // The count is what says whether a tag is a pool or one machine.
+    expect(await screen.findByText(/schemaForm.runner.tagOption.*linux.*2/)).toBeInTheDocument();
+    expect(await screen.findByText(/schemaForm.runner.tagOption.*invoices-box.*1/)).toBeInTheDocument();
   });
 
-  it("keeps a target that is no longer registered rather than clearing it", async () => {
-    const token = "gone";
-    // Silently blanking a step's target would be a worse failure than showing
-    // one that needs attention.
+  // Work goes to whichever tagged machine is polling when the step fires, so
+  // the tags backed by a machine that is actually on are the ones worth
+  // reaching for — they lead.
+  it("puts tags with a machine switched on first", async () => {
+    const token = "order";
     vi.spyOn(api, "listRunnerTargets").mockResolvedValue({
-      runners: [{ name: "invoices-box", online: true }],
+      runners: [
+        { name: "off-box", tags: ["alpha-pool", "off-box"], online: false },
+        { name: "on-box", tags: ["zeta-pool", "on-box"], online: true },
+      ],
     });
     render(
+      <SchemaForm schema={runnerSchema} value={{}} onChange={() => {}} references={refs(token)} />,
+    );
+    await screen.findByText(/zeta-pool/);
+    const labels = [...document.querySelectorAll(".sf-multiselect-opt")].map((e) => e.textContent ?? "");
+    const at = (tag: string) => labels.findIndex((l) => l.includes(tag));
+    // zeta-pool has a machine that is on; alpha-pool does not. So it leads,
+    // even though alphabetically it would come last — which is the whole point.
+    expect(at("zeta-pool")).toBeLessThan(at("alpha-pool"));
+    // Within each group the order stays alphabetical, so the list does not
+    // reshuffle as machines come and go.
+    expect(at("on-box")).toBeLessThan(at("zeta-pool"));
+    expect(at("alpha-pool")).toBeLessThan(at("off-box"));
+  });
+
+  // Machines carry the tags but not one is on: the step will wait and then
+  // fail. A different problem from a set that matches nothing, and one the
+  // "— 0 online" count let people read straight past.
+  it("warns when the matching machines are all switched off", async () => {
+    const token = "asleep";
+    vi.spyOn(api, "listRunnerTargets").mockResolvedValue({
+      runners: [
+        { name: "render-01", tags: ["gpu", "render-01"], online: false },
+        { name: "render-02", tags: ["gpu", "render-02"], online: false },
+      ],
+    });
+    const { container } = render(
       <SchemaForm
         schema={runnerSchema}
-        value={{ runner: "decommissioned" }}
+        value={{ tags: ["gpu"] }}
         onChange={() => {}}
         references={refs(token)}
       />,
     );
-    expect(await screen.findByRole("option", { name: /decommissioned/ }))
-      .toHaveValue("decommissioned");
+    // Names them, because which machine to go and switch on is the answer.
+    const warn = await screen.findByText(/schemaForm.runner.matchesNoneOnline.*render-01, render-02/);
+    expect(warn).toBeInTheDocument();
+    expect(container.querySelector(".sf-warn")).not.toBeNull();
   });
 
-  it("falls back to a text box when there are no machines to list", async () => {
-    const token = "empty";
+  it("ticks tags into the params as a list", async () => {
+    const token = "tick";
+    const onChange = vi.fn();
+    vi.spyOn(api, "listRunnerTargets").mockResolvedValue({
+      runners: [{ name: "box", tags: ["box", "linux"], online: true }],
+    });
+    render(
+      <SchemaForm schema={runnerSchema} value={{}} onChange={onChange} references={refs(token)} />,
+    );
+    const linux = await screen.findByText(/schemaForm.runner.tagOption.*linux/);
+    await userEvent.click(linux);
+    expect(onChange.mock.calls.at(-1)?.[0]).toMatchObject({ tags: ["linux"] });
+  });
+
+  // Every tag must match, so a set can narrow to nothing — and that failure is
+  // otherwise invisible until a run. The field says how many machines qualify.
+  it("says how many machines carry all the chosen tags", async () => {
+    const token = "count";
+    vi.spyOn(api, "listRunnerTargets").mockResolvedValue({
+      runners: [
+        { name: "a", tags: ["a", "linux"], online: true },
+        { name: "b", tags: ["b", "linux", "gpu"], online: false },
+      ],
+    });
+    render(
+      <SchemaForm
+        schema={runnerSchema}
+        value={{ tags: ["linux"] }}
+        onChange={() => {}}
+        references={refs(token)}
+      />,
+    );
+    // Two carry linux, one of them online.
+    expect(await screen.findByText(/schemaForm.runner.matches.*2.*1/)).toBeInTheDocument();
+  });
+
+  it("warns when no machine carries the whole set", async () => {
+    const token = "none";
+    vi.spyOn(api, "listRunnerTargets").mockResolvedValue({
+      runners: [{ name: "a", tags: ["a", "linux"], online: true }],
+    });
+    render(
+      <SchemaForm
+        schema={runnerSchema}
+        value={{ tags: ["linux", "gpu"] }}
+        onChange={() => {}}
+        references={refs(token)}
+      />,
+    );
+    expect(await screen.findByText("schemaForm.runner.matchesNone")).toBeInTheDocument();
+  });
+
+  it("stays usable when the machine list cannot be fetched", async () => {
     // A deployment without runners answers 501, and an org may have registered
-    // none yet. Either way the field must stay usable — a name typed now, or a
-    // ${…} reference — rather than becoming an empty dropdown.
+    // none yet. The tags still have to be typeable by hand.
+    const token = "failed";
     vi.spyOn(api, "listRunnerTargets").mockRejectedValue(new Error("501"));
     render(
       <SchemaForm schema={runnerSchema} value={{}} onChange={() => {}} references={refs(token)} />,
     );
-    expect(await screen.findByText(/schemaForm.runner.none/)).toBeInTheDocument();
+    expect(await screen.findByText("schemaForm.runner.noneKnown")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("schemaForm.multiSelectCustom")).toBeInTheDocument();
   });
 
   it("gives the script a highlighted code box, coloured for the chosen language", async () => {

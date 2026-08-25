@@ -23,6 +23,64 @@ into the image.)
 
 ## [Unreleased]
 
+### Changed
+
+- **Online machines lead when several match.** Work already only ever reaches a
+  machine that is running — the step queues the job and machines ask for work,
+  so an offline one never receives anything and none of it needs re-routing when
+  a machine goes away. What was missing was saying so at the two points where
+  something is actually chosen:
+
+  - The tag field now lists tags with a machine switched on first, and each tag
+    says how many machines carry it and how many of those are on.
+  - Choosing tags that only offline machines carry is now a warning naming those
+    machines, instead of a `0 online` count inside a sentence that was easy to
+    read past. It is a different problem from tags nothing carries, and it fails
+    a run either way.
+  - The step's progress line, while it waits, says how many of the matching
+    machines are on — and when none is, that it is going to fail shortly unless
+    one starts. It used to read "waiting for a machine tagged build" for the
+    thirty seconds before giving up, which looks like progress.
+
+- **Run on your machine says where with tags, and only tags.** The step had two
+  fields for one question — a machine name and a label, mutually exclusive, each
+  with its own matching rule and its own not-found error. There is now one:
+  **Where to run it**, a list of tags the machine must carry.
+
+  Three things make that a simplification rather than a loss:
+
+  - **Every machine carries its own name as a tag.** So one tag does either job:
+    `invoices-box` runs on that machine and nowhere else, `build` runs on
+    whichever machine tagged `build` is free.
+  - **All the tags must match.** `linux` `gpu` runs on a machine that is both,
+    not on either. Tags narrow; they never widen. The field says how many
+    machines carry the whole set and how many of those are switched on, because
+    a set that narrows to nothing otherwise fails invisibly until a run.
+  - **A tag no machine carries is told apart from a combination no machine has**
+    — one is usually a typo, the other usually a second tag too many, and they
+    need different fixes.
+
+  Flows saved before this keep running: the old `runner` and `label` params are
+  still honoured, each read as a single tag. Nothing needs re-saving, and a task
+  already queued survives the deploy that brings this in.
+
+- **Tags are assigned on a machine's own settings page.** Click a machine in
+  **Admin → Runners** and you land on it: what it is, whether it is there, and
+  the tags it carries. Add and remove them there. 0.13.0 put that editor in a row
+  on the list, which was the wrong home for it twice over — on a phone a row is a
+  sideways-scrolling strip, and a tag is the thing people come to this section to
+  change.
+
+  The page shows the machine's name as a tag it always carries and cannot lose,
+  because that rule is invisible otherwise. Tagging one machine with another's
+  name is refused: names are tags, so it would make one tag mean two machines and
+  quietly send pinned work to the wrong one.
+
+- **`--tags` is the flag; `--labels` still works.** The UI, the docs and the
+  installer all say tags now. `--labels` is accepted unchanged, because it is in
+  every install command written down so far, and the stored field keeps the name
+  `labels` in the API — renaming a synonym is not worth a migration.
+
 ## [0.13.0] - 2026-08-25
 
 ### Added

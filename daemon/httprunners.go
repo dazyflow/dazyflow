@@ -117,13 +117,16 @@ func (h *HTTPGateway) listRunners(rw http.ResponseWriter, r *http.Request, p cor
 // picker in the inspector needs the name, the labels it can be targeted by, and
 // whether it is there right now.
 type runnerTargetRow struct {
-	Name   string   `json:"name"`
-	Labels []string `json:"labels,omitempty"`
+	Name string `json:"name"`
+	// Tags is everything this machine can be targeted by, its own name
+	// included — the exact set the step's field offers, so the editor does not
+	// have to know that the name is also a tag.
+	Tags   []string `json:"tags,omitempty"`
 	Online bool     `json:"online"`
 }
 
-// listRunnerTargets answers the "Machine" and "Or any machine labelled"
-// dropdowns on the Run on your machine step.
+// listRunnerTargets answers the "Where to run it" tag picker on the Run on your
+// machine step.
 //
 // Gated on graph:edit rather than requireRunnerAdmin, and that difference is the
 // whole reason this route exists next to the admin one. Using a runner in a flow
@@ -151,7 +154,7 @@ func (h *HTTPGateway) listRunnerTargets(rw http.ResponseWriter, r *http.Request,
 	for _, x := range rows {
 		out = append(out, runnerTargetRow{
 			Name:   x.Name,
-			Labels: x.Labels,
+			Tags:   x.Tags(),
 			Online: x.Online(now),
 		})
 	}

@@ -16,18 +16,26 @@ describe("runnerStep", () => {
     expect(isRunnerStep("runner/invoices/fetch")).toBe(false);
   });
 
-  it("names the machine a step targets", () => {
+  it("names the tags a step targets", () => {
+    expect(runnerTargetOf({ tags: ["invoices-box"] })).toBe("invoices-box");
+  });
+
+  it("joins several tags with + because every one must match", () => {
+    // "linux, gpu" would read as a choice between them, which is the opposite
+    // of what the step does — and this chip is the only place on the canvas
+    // where the rule is visible at a glance.
+    expect(runnerTargetOf({ tags: ["linux", "gpu"] })).toBe("linux + gpu");
+  });
+
+  it("still reads a step saved before this field took tags", () => {
+    // Those flows are in production. Both old params were a single target and
+    // both are one tag now, so an old step reads correctly instead of going
+    // blank and looking unconfigured.
     expect(runnerTargetOf({ runner: "invoices-box" })).toBe("invoices-box");
-  });
-
-  it("falls back to the label when no machine is named", () => {
     expect(runnerTargetOf({ label: "linux" })).toBe("linux");
-  });
-
-  it("prefers a named machine over a label", () => {
-    // The step refuses both at run time, but the editor still has to render
-    // something sensible while someone is mid-edit.
-    expect(runnerTargetOf({ runner: "box", label: "linux" })).toBe("box");
+    // Once tags are set they are the answer; the leftovers are ignored, exactly
+    // as the drop ignores them at run time.
+    expect(runnerTargetOf({ tags: ["gpu"], runner: "old-box" })).toBe("gpu");
   });
 
   it("returns nothing for a step nobody has configured yet", () => {
@@ -35,6 +43,10 @@ describe("runnerStep", () => {
     // so callers must handle it rather than assume a target exists.
     expect(runnerTargetOf({})).toBe("");
     expect(runnerTargetOf(undefined)).toBe("");
+    expect(runnerTargetOf({ tags: [] })).toBe("");
+    expect(runnerTargetOf({ tags: ["  ", ""] })).toBe("");
+    expect(runnerTargetOf({ tags: "linux" })).toBe("");
+    expect(runnerTargetOf({ tags: [42] })).toBe("");
     expect(runnerTargetOf({ runner: "   " })).toBe("");
     expect(runnerTargetOf({ runner: 42 })).toBe("");
   });

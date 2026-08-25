@@ -305,6 +305,64 @@ func runnerStoreContract(t *testing.T, store RunnerStore) {
 		}
 	})
 
+	t.Run("a label that is another machine's name is refused", func(t *testing.T) {
+		// Every machine carries its own name as a tag, so this would make one
+		// tag mean two machines: a step pinned to "collide-a" would silently
+		// start landing on "collide-b" too.
+		if _, _, err := rs.Register(ctx, mint("acme"), "collide-a", nil, "0.2.0"); err != nil {
+			t.Fatalf("Register: %v", err)
+		}
+		if _, _, err := rs.Register(ctx, mint("acme"), "collide-b", nil, "0.2.0"); err != nil {
+			t.Fatalf("Register: %v", err)
+		}
+		_, err := rs.SetLabels(ctx, "acme", "collide-b", []string{"collide-a"})
+		if err == nil {
+			t.Fatal("one machine was labelled with another's name")
+		}
+		if !strings.Contains(err.Error(), "another machine's name") {
+			t.Errorf("message = %q, want it to say why", err)
+		}
+
+		// Its own name is refused too, with a different reason: it is already a
+		// tag, and a chip that vanished on save would read as a bug.
+		if _, err := rs.SetLabels(ctx, "acme", "collide-b", []string{"collide-b"}); err == nil {
+			t.Error("a machine was labelled with its own name")
+		}
+
+		// Another organisation's machine names are not in the way: names are
+		// unique per organisation, and so is the tag namespace.
+		if _, _, err := rs.Register(ctx, mint("globex"), "collide-c", nil, "0.2.0"); err != nil {
+			t.Fatalf("Register: %v", err)
+		}
+		if _, err := rs.SetLabels(ctx, "acme", "collide-b", []string{"collide-c"}); err != nil {
+			t.Errorf("another org's machine name blocked a label: %v", err)
+		}
+	})
+
+	t.Run("a machine's tags are its labels plus its name", func(t *testing.T) {
+		// The name being a tag is what lets a step pin work to one machine
+		// without a separate field for it.
+		r, _, err := rs.Register(ctx, mint("acme"), "tagged-box", []string{"Linux", "tagged-box"}, "0.2.0")
+		if err != nil {
+			t.Fatalf("Register: %v", err)
+		}
+		if strings.Join(r.Tags(), ",") != "linux,tagged-box" {
+			t.Errorf("tags = %v, want the labels and the name, de-duplicated", r.Tags())
+		}
+		// Every tag must be carried, not any: a step asking for linux + gpu means
+		// a machine that is both, and "any" would send the work somewhere it
+		// cannot run.
+		if !r.HasTags([]string{"linux", "tagged-box"}) {
+			t.Error("a machine carrying both tags was not matched")
+		}
+		if r.HasTags([]string{"linux", "gpu"}) {
+			t.Error("a machine matched a tag set it only half carries")
+		}
+		if r.HasTags(nil) {
+			t.Error("a machine matched an empty tag set — that would run a script anywhere")
+		}
+	})
+
 	t.Run("an unknown runner is not found", func(t *testing.T) {
 		if _, err := store.Get(ctx, "acme", "ghost"); !errors.Is(err, ErrRunnerNotFound) {
 			t.Errorf("err = %v, want ErrRunnerNotFound", err)
@@ -415,7 +473,7 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 
 	t.Run("a task round-trips whole", func(t *testing.T) {
 		enqueue(t, RunnerTask{
-			ID: "whole", Tenant: "acme", Runner: "box", Script: "./x.sh",
+			ID: "whole", Tenant: "acme", Tags: []string{"box"}, Script: "./x.sh",
 			Shell: "python",
 			Env:   map[string]string{"A": "1", "B": "two"}, Stdin: "on stdin",
 			Timeout: 90 * time.Second,
@@ -451,8 +509,47 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 		}
 	})
 
+	t.Run("every tag must match, not any", func(t *testing.T) {
+		// A step asking for linux + gpu means a machine that is both. "Any"
+		// would send the work to a machine with no GPU, where it fails — and
+		// the flow author would be looking at the wrong machine's logs.
+		enqueue(t, RunnerTask{ID: "both", Tenant: "acme", Tags: []string{"linux", "gpu"}, Script: "x"})
+		half := Runner{Tenant: "acme", Name: "plain", Labels: []string{"linux"}}
+		if _, err := q.Claim(ctx, half, time.Now(), TaskLease); !errors.Is(err, ErrNoTask) {
+			t.Errorf("a machine carrying one of two tags claimed it (err = %v)", err)
+		}
+		whole := Runner{Tenant: "acme", Name: "workstation", Labels: []string{"linux", "gpu"}}
+		got, err := q.Claim(ctx, whole, time.Now(), TaskLease)
+		if err != nil || got.ID != "both" {
+			t.Fatalf("the machine carrying both was refused: %+v err=%v", got, err)
+		}
+	})
+
+	t.Run("a machine's own name is one of its tags", func(t *testing.T) {
+		// This is what replaced the separate "which machine" field: pinning a
+		// step to one machine is a task whose single tag is that name.
+		enqueue(t, RunnerTask{ID: "pinned", Tenant: "acme", Tags: []string{"box"}, Script: "x"})
+		bare := Runner{Tenant: "acme", Name: "box"} // no labels at all
+		got, err := q.Claim(ctx, bare, time.Now(), TaskLease)
+		if err != nil || got.ID != "pinned" {
+			t.Fatalf("a machine could not be targeted by its own name: %+v err=%v", got, err)
+		}
+	})
+
+	t.Run("a task with no tags is claimed by nobody", func(t *testing.T) {
+		// Fail closed. A task with no target is a bug upstream, and the wrong
+		// answer to it is to run someone's script on an arbitrary machine. Worth
+		// pinning in the contract because the two stores get it wrong in
+		// different ways: in SQL, `'{}' <@ anything` is TRUE, so the natural
+		// containment query matches EVERY machine.
+		enqueue(t, RunnerTask{ID: "untargeted", Tenant: "acme", Script: "x"})
+		if _, err := q.Claim(ctx, box, time.Now(), TaskLease); !errors.Is(err, ErrNoTask) {
+			t.Errorf("a task with no tags was claimed (err = %v)", err)
+		}
+	})
+
 	t.Run("a label matches any runner carrying it", func(t *testing.T) {
-		enqueue(t, RunnerTask{ID: "bylabel", Tenant: "acme", Label: "build", Script: "x"})
+		enqueue(t, RunnerTask{ID: "bylabel", Tenant: "acme", Tags: []string{"build"}, Script: "x"})
 		other := Runner{Tenant: "acme", Name: "other", Labels: []string{"windows"}}
 		if _, err := q.Claim(ctx, other, time.Now(), TaskLease); !errors.Is(err, ErrNoTask) {
 			t.Errorf("a runner without the label claimed it (err = %v)", err)
@@ -464,7 +561,7 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 	})
 
 	t.Run("a name is exact", func(t *testing.T) {
-		enqueue(t, RunnerTask{ID: "byname", Tenant: "acme", Runner: "box", Script: "x"})
+		enqueue(t, RunnerTask{ID: "byname", Tenant: "acme", Tags: []string{"box"}, Script: "x"})
 		nearly := Runner{Tenant: "acme", Name: "box2", Labels: []string{"linux"}}
 		if _, err := q.Claim(ctx, nearly, time.Now(), TaskLease); !errors.Is(err, ErrNoTask) {
 			t.Errorf("another machine claimed a task addressed by name (err = %v)", err)
@@ -475,7 +572,7 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 	})
 
 	t.Run("nothing crosses organisations", func(t *testing.T) {
-		enqueue(t, RunnerTask{ID: "ours", Tenant: "acme", Runner: "box", Script: "x"})
+		enqueue(t, RunnerTask{ID: "ours", Tenant: "acme", Tags: []string{"box"}, Script: "x"})
 		intruder := Runner{Tenant: "globex", Name: "box", Labels: []string{"linux", "build"}}
 		if _, err := q.Claim(ctx, intruder, time.Now(), TaskLease); !errors.Is(err, ErrNoTask) {
 			t.Fatal("another organisation's runner claimed the task")
@@ -497,7 +594,7 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 	})
 
 	t.Run("a claim is exclusive, and stays exclusive after it lapses", func(t *testing.T) {
-		enqueue(t, RunnerTask{ID: "excl", Tenant: "acme", Label: "build", Script: "x"})
+		enqueue(t, RunnerTask{ID: "excl", Tenant: "acme", Tags: []string{"build"}, Script: "x"})
 		now := time.Now()
 		if _, err := q.Claim(ctx, box, now, TaskLease); err != nil {
 			t.Fatalf("first claim: %v", err)
@@ -515,7 +612,7 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 	})
 
 	t.Run("a held task can be extended, by its holder only", func(t *testing.T) {
-		enqueue(t, RunnerTask{ID: "ext", Tenant: "acme", Runner: "box", Script: "x"})
+		enqueue(t, RunnerTask{ID: "ext", Tenant: "acme", Tags: []string{"box"}, Script: "x"})
 		now := time.Now()
 		if _, err := q.Claim(ctx, box, now, TaskLease); err != nil {
 			t.Fatalf("Claim: %v", err)
@@ -548,7 +645,7 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 	})
 
 	t.Run("a non-zero exit fails the task", func(t *testing.T) {
-		enqueue(t, RunnerTask{ID: "nonzero", Tenant: "acme", Runner: "box", Script: "x"})
+		enqueue(t, RunnerTask{ID: "nonzero", Tenant: "acme", Tags: []string{"box"}, Script: "x"})
 		if _, err := q.Claim(ctx, box, time.Now(), TaskLease); err != nil {
 			t.Fatalf("Claim: %v", err)
 		}
@@ -571,7 +668,7 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 	})
 
 	t.Run("a result from a runner that does not hold the task is refused", func(t *testing.T) {
-		enqueue(t, RunnerTask{ID: "foreign", Tenant: "acme", Runner: "box", Script: "x"})
+		enqueue(t, RunnerTask{ID: "foreign", Tenant: "acme", Tags: []string{"box"}, Script: "x"})
 		if _, err := q.Claim(ctx, box, time.Now(), TaskLease); err != nil {
 			t.Fatalf("Claim: %v", err)
 		}
@@ -586,7 +683,7 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 	// machine, and the ownership check has to say so. Without the tenant
 	// predicate only the task id's randomness stands between them.
 	t.Run("a same-named runner in another organisation is refused", func(t *testing.T) {
-		enqueue(t, RunnerTask{ID: "crosstenant", Tenant: "acme", Runner: "box", Script: "x"})
+		enqueue(t, RunnerTask{ID: "crosstenant", Tenant: "acme", Tags: []string{"box"}, Script: "x"})
 		now := time.Now()
 		if _, err := q.Claim(ctx, box, now, TaskLease); err != nil {
 			t.Fatalf("Claim: %v", err)
@@ -624,21 +721,21 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 		grace := 30 * time.Second
 		ceiling := time.Hour
 		enqueue(t, RunnerTask{
-			ID: "orph-queued", Tenant: "acme", Runner: "orphbox", Script: "x",
+			ID: "orph-queued", Tenant: "acme", Tags: []string{"orphbox"}, Script: "x",
 			Timeout: 30 * time.Second, CreatedAt: now.Add(-10 * time.Minute),
 		})
 		enqueue(t, RunnerTask{
-			ID: "orph-live", Tenant: "acme", Runner: "orphbox", Script: "x",
+			ID: "orph-live", Tenant: "acme", Tags: []string{"orphbox"}, Script: "x",
 			Timeout: time.Hour, CreatedAt: now,
 		})
 		enqueue(t, RunnerTask{
-			ID: "orph-untimed", Tenant: "acme", Runner: "orphbox", Script: "x",
+			ID: "orph-untimed", Tenant: "acme", Tags: []string{"orphbox"}, Script: "x",
 			CreatedAt: now.Add(-2 * time.Minute),
 		})
 		// Claimed with a clock three minutes ago, so its lease has lapsed by
 		// the time the sweep looks.
 		enqueue(t, RunnerTask{
-			ID: "orph-held", Tenant: "acme", Runner: "orphheld", Script: "x",
+			ID: "orph-held", Tenant: "acme", Tags: []string{"orphheld"}, Script: "x",
 			CreatedAt: now.Add(-3 * time.Minute),
 		})
 		if got, err := q.Claim(ctx, Runner{Tenant: "acme", Name: "orphheld"}, now.Add(-3*time.Minute), TaskLease); err != nil || got.ID != "orph-held" {
@@ -673,7 +770,7 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 	})
 
 	t.Run("an abandoned claim is condemned, not retried", func(t *testing.T) {
-		enqueue(t, RunnerTask{ID: "gone", Tenant: "acme", Runner: "box", Script: "x"})
+		enqueue(t, RunnerTask{ID: "gone", Tenant: "acme", Tags: []string{"box"}, Script: "x"})
 		now := time.Now()
 		if _, err := q.Claim(ctx, box, now, TaskLease); err != nil {
 			t.Fatalf("Claim: %v", err)
@@ -703,7 +800,7 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 	})
 
 	t.Run("a real result beats a guess that the runner was gone", func(t *testing.T) {
-		enqueue(t, RunnerTask{ID: "raced", Tenant: "acme", Runner: "box", Script: "x"})
+		enqueue(t, RunnerTask{ID: "raced", Tenant: "acme", Tags: []string{"box"}, Script: "x"})
 		now := time.Now()
 		if _, err := q.Claim(ctx, box, now, TaskLease); err != nil {
 			t.Fatalf("Claim: %v", err)
@@ -724,7 +821,7 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 	// machine is switched on an hour later. Without this the agent would claim
 	// the still-queued task and run a script whose step failed long ago.
 	t.Run("a cancelled task cannot be claimed later", func(t *testing.T) {
-		enqueue(t, RunnerTask{ID: "gaveup", Tenant: "acme", Runner: "box", Script: "./invoices.sh"})
+		enqueue(t, RunnerTask{ID: "gaveup", Tenant: "acme", Tags: []string{"box"}, Script: "./invoices.sh"})
 		now := time.Now()
 		cancelled, err := q.CancelQueued(ctx, "acme", "gaveup", cancelledResult("nobody was there"), now)
 		if err != nil || !cancelled {
@@ -747,7 +844,7 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 	// A claimed task belongs to the agent holding it. Cancelling it would
 	// create exactly the ambiguity the lease rules exist to avoid.
 	t.Run("cancelling refuses a task already claimed", func(t *testing.T) {
-		enqueue(t, RunnerTask{ID: "taken", Tenant: "acme", Runner: "box", Script: "x"})
+		enqueue(t, RunnerTask{ID: "taken", Tenant: "acme", Tags: []string{"box"}, Script: "x"})
 		now := time.Now()
 		if _, err := q.Claim(ctx, box, now, TaskLease); err != nil {
 			t.Fatalf("Claim: %v", err)
@@ -770,7 +867,7 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 			t.Error("CancelQueued invented a task")
 		}
 		// And one organisation cannot close another's task.
-		enqueue(t, RunnerTask{ID: "theirs", Tenant: "acme", Runner: "box", Script: "x"})
+		enqueue(t, RunnerTask{ID: "theirs", Tenant: "acme", Tags: []string{"box"}, Script: "x"})
 		if _, err := q.CancelQueued(ctx, "globex", "theirs", cancelledResult("x"), time.Now()); err == nil {
 			t.Error("another organisation closed our task")
 		}
@@ -778,8 +875,8 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 
 	t.Run("the queue drains oldest first", func(t *testing.T) {
 		base := time.Now().Add(-time.Hour)
-		enqueue(t, RunnerTask{ID: "second", Tenant: "acme", Runner: "box", Script: "x", CreatedAt: base.Add(time.Minute)})
-		enqueue(t, RunnerTask{ID: "first", Tenant: "acme", Runner: "box", Script: "x", CreatedAt: base})
+		enqueue(t, RunnerTask{ID: "second", Tenant: "acme", Tags: []string{"box"}, Script: "x", CreatedAt: base.Add(time.Minute)})
+		enqueue(t, RunnerTask{ID: "first", Tenant: "acme", Tags: []string{"box"}, Script: "x", CreatedAt: base})
 		got, err := q.Claim(ctx, box, time.Now(), TaskLease)
 		if err != nil {
 			t.Fatalf("Claim: %v", err)
@@ -833,7 +930,7 @@ func TestPgRunnerTaskStore_ConcurrentClaimsDoNotOverlap(t *testing.T) {
 	const tasks = 12
 	for i := range tasks {
 		if err := q.Enqueue(ctx, RunnerTask{
-			ID: "c" + string(rune('a'+i)), Tenant: "acme", Label: "pool",
+			ID: "c" + string(rune('a'+i)), Tenant: "acme", Tags: []string{"pool"},
 			Script: "x", State: TaskQueued, CreatedAt: time.Now(),
 		}); err != nil {
 			t.Fatalf("Enqueue: %v", err)
@@ -899,7 +996,7 @@ func TestPgRunnerTaskStore_PruneKeepsLiveWork(t *testing.T) {
 	// One finished long ago, one still queued, one claimed and running.
 	for _, id := range []string{"finished", "queued", "running"} {
 		if err := q.Enqueue(ctx, RunnerTask{
-			ID: id, Tenant: "acme", Runner: "box", Script: "x",
+			ID: id, Tenant: "acme", Tags: []string{"box"}, Script: "x",
 			State: TaskQueued, CreatedAt: old,
 		}); err != nil {
 			t.Fatalf("Enqueue: %v", err)
@@ -979,7 +1076,7 @@ func TestPgRunnerTaskStore_SealsTheScriptAtRest(t *testing.T) {
 
 	const cred = "sk_live_thisisthecredential"
 	task := RunnerTask{
-		ID: "sealed", Tenant: "acme", Runner: "box",
+		ID: "sealed", Tenant: "acme", Tags: []string{"box"},
 		Script: "./sync.sh --key " + cred,
 		Stdin:  "invoice " + cred,
 		Env:    map[string]string{"TOKEN": cred},
@@ -1015,6 +1112,45 @@ func TestPgRunnerTaskStore_SealsTheScriptAtRest(t *testing.T) {
 	}
 }
 
+// A task queued by the pre-tags version, claimed by this one moments later:
+// exactly what a rolling deploy produces. Stranding it would fail a live run
+// with "the runner stopped responding" about a machine that is perfectly fine.
+func TestPgRunnerTaskStore_ClaimsARowQueuedBeforeTags(t *testing.T) {
+	pool := pgRunnerPool(t)
+	ctx := context.Background()
+	q, err := NewPgRunnerTaskStore(ctx, pool)
+	if err != nil {
+		t.Fatalf("NewPgRunnerTaskStore: %v", err)
+	}
+	if _, err := pool.Exec(ctx, "TRUNCATE runner_tasks"); err != nil {
+		t.Fatalf("truncate: %v", err)
+	}
+	// Written the way the previous version wrote them: one of the two target
+	// columns, no tags.
+	for _, row := range []struct{ id, runner, label string }{
+		{"old-byname", "box", ""},
+		{"old-bylabel", "", "build"},
+	} {
+		if _, err := pool.Exec(ctx, `
+			INSERT INTO runner_tasks (id, tenant, runner, label, script, state, created_at)
+			VALUES ($1, 'acme', $2, $3, './old.sh', 'queued', now())`,
+			row.id, row.runner, row.label); err != nil {
+			t.Fatalf("insert %s: %v", row.id, err)
+		}
+	}
+	box := Runner{Tenant: "acme", Name: "box", Labels: []string{"linux", "build"}}
+	for _, want := range []string{"old-byname", "old-bylabel"} {
+		got, err := q.Claim(ctx, box, time.Now(), TaskLease)
+		if err != nil {
+			t.Fatalf("claiming %s: %v", want, err)
+		}
+		// Read back as tags, so the rest of the daemon never sees the old shape.
+		if len(got.Tags) != 1 {
+			t.Errorf("%s came back with tags %v, want the old column read as one tag", got.ID, got.Tags)
+		}
+	}
+}
+
 // Rows written before sealing existed — and rows from a deployment with no
 // master key — must still read back, or an upgrade would strand every queued
 // task. The marker is what makes the two tellable apart.
@@ -1030,7 +1166,7 @@ func TestPgRunnerTaskStore_ReadsBackAnUnsealedRow(t *testing.T) {
 	}
 	// Written by a daemon with no cipher configured.
 	if err := plainStore.Enqueue(ctx, RunnerTask{
-		ID: "legacy", Tenant: "acme", Runner: "box", Script: "./old.sh",
+		ID: "legacy", Tenant: "acme", Tags: []string{"box"}, Script: "./old.sh",
 		State: TaskQueued, CreatedAt: time.Now(),
 	}); err != nil {
 		t.Fatalf("Enqueue: %v", err)

@@ -2377,8 +2377,7 @@ func (b runnerBridge) Dispatch(
 ) (runnerdrop.Result, error) {
 	res, err := b.inner.Dispatch(ctx, daemon.DispatchRequest{
 		Tenant:  req.Tenant,
-		Runner:  req.Runner,
-		Label:   req.Label,
+		Tags:    req.Tags,
 		Script:  req.Script,
 		Shell:   req.Shell,
 		Env:     req.Env,

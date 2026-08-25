@@ -18,16 +18,30 @@ export function isRunnerStep(moduleID: string | undefined): boolean {
   return moduleID === RUNNER_STEP;
 }
 
-// runnerTargetOf names where a configured step will run — a machine, or a
-// label standing for whichever machine is free.
+// runnerTargetOf names where a configured step will run: the tags a machine has
+// to carry, joined the way the rule reads.
+//
+// Joined with "+" rather than ", " because every tag must match. A comma reads
+// as a choice between them, which is the opposite of what the step does — and on
+// the canvas this chip is the only place the rule is visible at a glance.
 //
 // Returns "" when nothing is chosen yet, which is the state a step is in for as
 // long as it takes someone to fill the field in, so callers must handle it
 // rather than assume a target exists.
 export function runnerTargetOf(params: Record<string, unknown> | undefined): string {
   if (!params) return "";
-  const named = typeof params.runner === "string" ? params.runner.trim() : "";
-  if (named) return named;
-  const label = typeof params.label === "string" ? params.label.trim() : "";
-  return label;
+  const tags = Array.isArray(params.tags)
+    ? params.tags.filter((t): t is string => typeof t === "string").map((t) => t.trim())
+    : [];
+  const named = tags.filter((t) => t !== "");
+  if (named.length > 0) return named.join(" + ");
+  // The pre-tags params, for a flow saved before this step took tags. Both were
+  // a single target and both are one tag now — a machine's name is itself a tag
+  // — so an old step still reads correctly on the canvas instead of going blank
+  // and looking unconfigured. The drop honours them at run time the same way.
+  for (const legacy of ["runner", "label"]) {
+    const v = typeof params[legacy] === "string" ? (params[legacy] as string).trim() : "";
+    if (v) return v;
+  }
+  return "";
 }

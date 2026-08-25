@@ -126,6 +126,12 @@ class AgentTest(unittest.TestCase):
         cfg = self.register()
         self.assertEqual(cfg["credential"], "dzrc_secret")
         self.assertEqual(self.state["registered"]["labels"], ["linux"])
+        # --tags is the flag the docs and the web UI use; --labels is the older
+        # spelling of the same thing, and both have to land in the same place or
+        # one of them silently registers a machine with no tags.
+        for flag in ("--tags", "--labels"):
+            args = dzrunner.build_parser().parse_args([flag, "a,b"])
+            self.assertEqual(args.labels, "a,b", flag)
         # The agent reports its version so the admin list can say which one a
         # machine is running.
         self.assertEqual(self.state["registered"]["version"], dzrunner.VERSION)

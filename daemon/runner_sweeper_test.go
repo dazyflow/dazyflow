@@ -17,7 +17,7 @@ func TestSweep_ClosesAQueuedTaskNobodyIsWaitingFor(t *testing.T) {
 	q := NewMemRunnerTaskStore()
 	created := time.Now().Add(-10 * time.Minute)
 	mustEnqueue(t, q, RunnerTask{
-		ID: "orphan", Tenant: "acme", Runner: "box", Script: "./send-invoices.sh",
+		ID: "orphan", Tenant: "acme", Tags: []string{"box"}, Script: "./send-invoices.sh",
 		Timeout: 30 * time.Second, State: TaskQueued, CreatedAt: created,
 	})
 	s := &RunnerTaskSweeper{Tasks: q}
@@ -52,7 +52,7 @@ func TestSweep_ClosesAQueuedTaskNobodyIsWaitingFor(t *testing.T) {
 func TestSweep_LeavesATaskSomeoneIsStillWaitingFor(t *testing.T) {
 	q := NewMemRunnerTaskStore()
 	mustEnqueue(t, q, RunnerTask{
-		ID: "live", Tenant: "acme", Runner: "box", Script: "x",
+		ID: "live", Tenant: "acme", Tags: []string{"box"}, Script: "x",
 		Timeout: 10 * time.Minute, State: TaskQueued, CreatedAt: time.Now(),
 	})
 	s := &RunnerTaskSweeper{Tasks: q}
@@ -70,7 +70,7 @@ func TestSweep_LeavesATaskSomeoneIsStillWaitingFor(t *testing.T) {
 func TestSweep_CondemnsARunningTaskWhoseAgentVanished(t *testing.T) {
 	q := NewMemRunnerTaskStore()
 	now := time.Now()
-	mustEnqueue(t, q, RunnerTask{ID: "held", Tenant: "acme", Runner: "box", Script: "x", State: TaskQueued})
+	mustEnqueue(t, q, RunnerTask{ID: "held", Tenant: "acme", Tags: []string{"box"}, Script: "x", State: TaskQueued})
 	if _, err := q.Claim(t.Context(), Runner{Tenant: "acme", Name: "box"}, now, TaskLease); err != nil {
 		t.Fatalf("Claim: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestSweep_UntimedTaskUsesTheCeiling(t *testing.T) {
 	q := NewMemRunnerTaskStore()
 	created := time.Now().Add(-30 * time.Minute)
 	mustEnqueue(t, q, RunnerTask{
-		ID: "untimed", Tenant: "acme", Runner: "box", Script: "x",
+		ID: "untimed", Tenant: "acme", Tags: []string{"box"}, Script: "x",
 		State: TaskQueued, CreatedAt: created,
 	})
 	s := &RunnerTaskSweeper{Tasks: q}
@@ -117,7 +117,7 @@ func TestSweep_IgnoresFinishedTasks(t *testing.T) {
 	q := NewMemRunnerTaskStore()
 	old := time.Now().Add(-24 * time.Hour)
 	mustEnqueue(t, q, RunnerTask{
-		ID: "done", Tenant: "acme", Runner: "box", Script: "x",
+		ID: "done", Tenant: "acme", Tags: []string{"box"}, Script: "x",
 		State: TaskDone, CreatedAt: old,
 		Result: &RunnerTaskResult{Stdout: "the real answer"},
 	})

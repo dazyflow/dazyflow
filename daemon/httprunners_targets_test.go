@@ -63,10 +63,12 @@ func TestListRunnerTargets_AnEditorCanSeeTheMachinesItMayTarget(t *testing.T) {
 	if len(got.Runners) != 1 || got.Runners[0].Name != "invoices-box" {
 		t.Fatalf("runners = %+v", got.Runners)
 	}
-	// Normalized, because that is how a step has to spell a label to match one
-	// — the picker offering "Linux" would offer a value that never matches.
-	if strings.Join(got.Runners[0].Labels, ",") != "build,linux" {
-		t.Errorf("labels = %v, want them as registration stores them", got.Runners[0].Labels)
+	// The machine's own name is one of its tags, which is what lets a step pin
+	// itself to one machine without a separate "which machine" field. Normalized
+	// with the labels, because that is how a step has to spell a tag to match it
+	// — a picker offering "Linux" would offer a value that never matches.
+	if strings.Join(got.Runners[0].Tags, ",") != "build,invoices-box,linux" {
+		t.Errorf("tags = %v, want the labels and the name, normalized", got.Runners[0].Tags)
 	}
 	// Just registered, so it has checked in: the picker says so while choosing,
 	// which is the difference between a step that runs and one that waits and
@@ -241,5 +243,59 @@ func TestSetRunnerLabels_ClearingThemIsAllowed(t *testing.T) {
 	// A machine with no labels is the ordinary state of one targeted by name.
 	if len(got.Labels) != 0 {
 		t.Errorf("labels = %v, want none", got.Labels)
+	}
+}
+
+// ---- what the step says while it waits ---------------------------------
+
+// Work goes to whichever eligible machine polls first, so an offline machine is
+// never sent anything — there is no claim-time preference to make. What CAN go
+// wrong is a step whose machines are all switched off: it waits out the pickup
+// grace and then fails, and for those thirty seconds a bare "waiting for a
+// machine tagged build" reads like progress. These pin the difference.
+func TestWaitingMessage_SaysHowManyOfTheMatchingMachinesAreOn(t *testing.T) {
+	now := time.Now()
+	req := DispatchRequest{Tenant: "acme", Tags: []string{"build"}}
+	matches := []Runner{
+		{Name: "a", LastSeen: now},
+		{Name: "b", LastSeen: now.Add(-2 * RunnerOnlineWindow)},
+		{Name: "c", LastSeen: now},
+	}
+	got := waitingMessage(req, matches, now)
+	if !strings.Contains(got, "2 of 3 switched on") {
+		t.Errorf("message = %q, want it to count the machines that could take it", got)
+	}
+}
+
+func TestWaitingMessage_SaysWhenNothingIsThereToTakeIt(t *testing.T) {
+	now := time.Now()
+	req := DispatchRequest{Tenant: "acme", Tags: []string{"build", "gpu"}}
+	stale := now.Add(-2 * RunnerOnlineWindow)
+
+	// Several machines carry the tags and none is on: the step is going to fail,
+	// and saying so while the run is open beats saying it thirty seconds later.
+	got := waitingMessage(req, []Runner{{Name: "a", LastSeen: stale}, {Name: "b", LastSeen: stale}}, now)
+	if !strings.Contains(got, "none of the 2 machines") || !strings.Contains(got, "will fail") {
+		t.Errorf("message = %q, want it to say nothing is there", got)
+	}
+	// The tags read the way the rule works: all of them, not any.
+	if !strings.Contains(got, "build + gpu") {
+		t.Errorf("message = %q, want the tags joined with +", got)
+	}
+
+	// One machine gets named — with a single candidate, which machine to go and
+	// switch on is the whole answer.
+	one := waitingMessage(req, []Runner{{Name: "render-01", LastSeen: stale}}, now)
+	if !strings.Contains(one, "render-01") {
+		t.Errorf("message = %q, want the one machine named", one)
+	}
+}
+
+// A deployment with no runner registry reaches this too, and must not promise
+// anything about who is there.
+func TestWaitingMessage_PromisesNothingWhenTheFleetIsUnknown(t *testing.T) {
+	got := waitingMessage(DispatchRequest{Tags: []string{"build"}}, nil, time.Now())
+	if got != "waiting for a machine tagged build" {
+		t.Errorf("message = %q, want the plain form", got)
 	}
 }

@@ -1646,14 +1646,11 @@
     },
     "aboutField": "Om det här fältet",
     "runner": {
-      "loading": "Hämtar maskiner…",
-      "choose": "Välj en maskin…",
-      "chooseLabel": "Välj en etikett…",
-      "offline": "{{name}} — inte igång",
-      "labelOption": "{{label}} — {{count}} maskin(er)",
-      "unknown": "{{name}} — inte registrerad längre",
-      "none": "Inga maskiner är registrerade för den här organisationen. Lägg till en under Admin → Körnoder och välj den sedan här.",
-      "noLabels": "Ingen av dina maskiner har någon etikett. Registrera en med --labels för att peka ut en pool i stället för ett namn."
+      "tagOption": "{{tag}} — {{count}} maskin(er), {{online}} igång",
+      "matches": "{{count}} maskin(er) har alla dessa — {{online}} är igång just nu.",
+      "matchesNone": "Ingen maskin har alla dessa etiketter, så steget kommer att misslyckas. Varje etikett måste stämma, inte bara en.",
+      "noneKnown": "Kunde inte hämta dina maskiner, så skriv etiketterna för hand. De måste stämma exakt.",
+      "matchesNoneOnline": "{{count}} maskin(er) har alla dessa ({{names}}), men ingen är igång — steget väntar och misslyckas sedan. Arbetet går till den maskin med etiketterna som är igång när steget körs."
     }
   },
   "forEach": {
@@ -2250,14 +2247,18 @@
     "installExpiry": "Kommandot slutar fungera {{at}} och går bara att använda en gång. Lägg till en ny körnod för att få ett nytt.",
     "securityNote": "En körnod kör vilket kommando ett flöde än skickar. Alla som kan redigera ett flöde i den här organisationen kan därför köra kommandon på dessa maskiner. Starta agenten med --allow för att begränsa vilka program den får köra.",
     "onYourHardware": "Din körnod",
-    "onYourHardwareHint": "Det här steget kör ett skript på {{name}}, en av dina egna maskiner – inte på Dazyflow-servern.",
-    "noTargetYet": "ingen maskin vald",
-    "editLabels": "Ändra etiketter",
-    "labelsHead": "Etiketter på {{name}}",
-    "labelsHint": "En etikett namnger en pool: ett steg kan skicka arbete till vilken ledig maskin som helst med den etiketten, i stället för att peka ut en maskin. Att lägga till eller ta bort en dirigerar om varje steg som pekar på den — maskinen själv är inte inblandad.",
-    "labelsNone": "Inga etiketter — den här maskinen kan bara pekas ut med namn.",
-    "labelPlaceholder": "Ny etikett",
-    "labelAdd": "Lägg till",
-    "labelRemove": "Ta bort etiketten {{label}}"
+    "onYourHardwareHint": "Det här steget kör ett skript på en av dina egna maskiner med etiketten {{name}} — inte på Dazyflow-servern.",
+    "noTargetYet": "inga etiketter valda",
+    "detailSubtitle": "En av dina maskiner, och etiketterna som avgör vad som körs på den.",
+    "notFound": "Ingen maskin som heter {{name}} är registrerad. Den kan ha tagits bort.",
+    "addedHead": "Tillagd",
+    "addedByOn": "av {{who}} den {{at}}",
+    "tagsHead": "Etiketter",
+    "tagsIntro": "Ett steg anger var det ska köras genom att lista etiketter, och arbetet går till en maskin som har ALLA av dem — så det här är krav den här maskinen uppfyller, inte mappar den ligger i. En etikett på flera maskiner är en pool: den som är ledig tar jobbet.",
+    "nameTag": "alltid",
+    "nameTagHint": "Varje maskin har sitt eget namn som etikett, så att ett steg kan peka ut just den här maskinen. Den går inte att ta bort.",
+    "tagPlaceholder": "Ny etikett",
+    "tagAdd": "Lägg till",
+    "tagRemove": "Ta bort etiketten {{tag}}"
   }
 }

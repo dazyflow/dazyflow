@@ -37,8 +37,9 @@ type Dispatcher interface {
 // Request is one script to run.
 type Request struct {
 	Tenant string
-	Runner string
-	Label  string
+	// Tags is where to run: a machine carrying ALL of them. A machine's own name
+	// is one of its tags, so pinning a step to one machine is a single-tag list.
+	Tags   []string
 	Script string
 	// Shell names the interpreter the agent starts the script with — one of
 	// Shells. Empty (and DefaultShell) mean the machine's own shell, which is
@@ -131,8 +132,10 @@ func init() {
 			},
 			Description: "Runs a script on one of your organisation's own machines — a server, a laptop, " +
 				"anything running the Dazyflow runner agent. Use it when the work needs a library, a tool, " +
-				"or a network the built-in steps cannot reach. Pick a machine from the list, or a label " +
-				"shared by several machines so any free one can take the job. Choose what runs the script " +
+				"or a network the built-in steps cannot reach. Say WHERE with tags: the job goes to a " +
+				"machine carrying every tag you list, so 'linux' means any of your linux machines and " +
+				"'linux + gpu' means one that is both. Every machine's own name is also a tag, so listing " +
+				"a name pins the step to that one machine. Choose what runs the script " +
 				"— the machine's own shell, sh, bash, Python, PowerShell or Node — and write it in the " +
 				"box; or wire the script in on the 'script' input to build it in an earlier step. The " +
 				"value wired into 'in' arrives on the script's standard input; whatever the script prints " +
@@ -140,23 +143,23 @@ func init() {
 			Summary: "Run a script on a machine you host, and use what it prints.",
 			Examples: []core.ParamsExample{
 				{
-					Title:  "Run a script on one machine",
-					Params: json.RawMessage(`{"runner":"invoices-box","script":"./fetch-invoices.sh"}`),
-					Notes:  "The simplest form: a named runner and a command it is allowed to run.",
+					Title:  "Run a script on one particular machine",
+					Params: json.RawMessage(`{"tags":["invoices-box"],"script":"./fetch-invoices.sh"}`),
+					Notes:  "A machine's name is one of its tags, so a single name pins the step to it.",
 				},
 				{
 					Title:  "Any machine in a pool",
-					Params: json.RawMessage(`{"label":"linux","script":"./report.sh --month 03"}`),
-					Notes:  "Targets a label instead of a name, so whichever labelled runner is free takes it.",
+					Params: json.RawMessage(`{"tags":["build"],"script":"./report.sh --month 03"}`),
+					Notes:  "Whichever machine tagged 'build' is free takes the job.",
 				},
 				{
-					Title:  "Pipe a value in, read the output back",
-					Params: json.RawMessage(`{"runner":"tools","script":"jq -r .total","timeout_seconds":30}`),
-					Notes:  "Whatever is wired into 'in' arrives on standard input.",
+					Title:  "Narrow the pool with a second tag",
+					Params: json.RawMessage(`{"tags":["linux","gpu"],"script":"./render.sh"}`),
+					Notes:  "Every tag must match, so this runs on a machine that is both — not on either.",
 				},
 				{
 					Title:  "A Python script instead of a shell one",
-					Params: json.RawMessage(`{"runner":"invoices-box","shell":"python","script":"import sys, json\nprint(json.load(sys.stdin)[\"total\"])"}`),
+					Params: json.RawMessage(`{"tags":["invoices-box"],"shell":"python","script":"import sys, json\nprint(json.load(sys.stdin)[\"total\"])"}`),
 					Notes:  "The agent starts python3 with the script; standard input still carries the 'in' value.",
 				},
 			},
@@ -193,17 +196,12 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
   "type": "object",
   "properties": {
-    "runner": {
-      "type": "string",
-      "title": "Machine",
-      "format": "runner",
-      "description": "The machine to run this on, chosen from the ones your organisation has registered. Leave it empty and set a label instead to use any machine in a pool."
-    },
-    "label": {
-      "type": "string",
-      "title": "Or any machine labelled",
-      "format": "runner-label",
-      "description": "Send the work to whichever machine carrying this label is free."
+    "tags": {
+      "type": "array",
+      "title": "Where to run it",
+      "format": "runner-tags",
+      "items": { "type": "string" },
+      "description": "Tags the machine must carry — ALL of them. One tag sends the work to whichever machine carrying it is free; adding a second narrows that to machines carrying both. Every machine's own name is also a tag, so picking a name pins this step to that one machine."
     },
     "shell": {
       "type": "string",
@@ -226,7 +224,7 @@ func init() {
       "description": "Defaults to 600. The runner kills the script when this elapses."
     }
   },
-  "required": ["script"]
+  "required": ["tags", "script"]
 }`),
 			// Not idempotent, and this is the one manifest flag worth being
 			// careful about: the daemon has no idea what the script does, so it
@@ -250,15 +248,7 @@ func execute(ctx context.Context, job core.Job, progress chan<- core.Progress) (
 		return failed(job, "no_tenant", "this step has no organisation to run against"), nil
 	}
 
-	// Normalized the same way registration normalizes them: lower-cased and
-	// trimmed. A runner installed with `--labels Linux,Build` is stored (and
-	// listed in the admin page) as linux and build, so a step targeting "Linux"
-	// — or "build " with a trailing space from a paste — matched nothing and
-	// failed with 'no runner is labelled "Linux"' while the page plainly showed
-	// one. Same for the name, which validRunnerName only ever allows in
-	// lower-case.
-	runnerName := normalizeTarget(params.StringDefault(job.Params, "runner", ""))
-	label := normalizeTarget(params.StringDefault(job.Params, "label", ""))
+	tags := targetTags(job)
 	// The 'script' input wins over the typed box, so an earlier step can build
 	// the script — from a template, a table cell, the AI step. Only the
 	// surrounding blank space goes: the inside of a script is significant, and
@@ -282,15 +272,10 @@ func execute(ctx context.Context, job core.Job, progress chan<- core.Progress) (
 			"this step asks to run the script with "+shell+
 				", which is not one of "+strings.Join(Shells, ", ")), nil
 	}
-	if runnerName == "" && label == "" {
+	if len(tags) == 0 {
 		return failed(job, "no_target",
-			"choose a runner, or a label shared by the machines that may take this"), nil
-	}
-	if runnerName != "" && label != "" {
-		// Both would be ambiguous, and silently preferring one would make the
-		// other look honoured.
-		return failed(job, "two_targets",
-			"set either a runner or a label, not both"), nil
+			"this step has no tags saying where to run — pick a machine's name, "+
+				"or the tags the machines that may take this all carry"), nil
 	}
 
 	timeout := DefaultTimeout
@@ -300,8 +285,7 @@ func execute(ctx context.Context, job core.Job, progress chan<- core.Progress) (
 
 	res, err := d.Dispatch(ctx, Request{
 		Tenant: tenant,
-		Runner: runnerName,
-		Label:  label,
+		Tags:   tags,
 		Script: script,
 		Shell:  shell,
 		// The node's own environment, with ${secret.…} already resolved by the
@@ -339,11 +323,45 @@ func execute(ctx context.Context, job core.Job, progress chan<- core.Progress) (
 	}, nil
 }
 
-// normalizeTarget matches daemon.normalizeLabels' rule for one value. Kept
-// here rather than imported because a drop must not depend on the daemon; the
-// rule is two operations and the tests on both sides pin it.
-func normalizeTarget(s string) string {
-	return strings.ToLower(strings.TrimSpace(s))
+// targetTags reads where this step should run.
+//
+// Two older shapes are still honoured, and have to be: a flow saved before this
+// step took tags carries `runner` (one machine, by name) or `label` (any machine
+// carrying it), and those flows keep running. Both collapse to a single tag,
+// because a machine's own name is now one of its tags — which is exactly why the
+// two fields could be replaced by one in the first place.
+//
+// Normalized the same way registration normalizes labels: lower-cased and
+// trimmed. A runner installed with `--labels Linux,Build` is stored (and listed
+// in the admin page) as linux and build, so a step targeting "Linux" — or
+// "build " with a trailing space from a paste — matched nothing and failed while
+// the page plainly showed one. Names get the same treatment, since
+// validRunnerName only ever allows lower-case.
+func targetTags(job core.Job) []string {
+	raw := params.StringSlice(job.Params, "tags")
+	if len(raw) == 0 {
+		// The pre-tags params. Read in a fixed order rather than merged: they
+		// were mutually exclusive, so at most one is ever set.
+		for _, key := range []string{"runner", "label"} {
+			if v := params.StringDefault(job.Params, key, ""); v != "" {
+				raw = append(raw, v)
+			}
+		}
+	}
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(raw))
+	for _, t := range raw {
+		t = strings.ToLower(strings.TrimSpace(t))
+		if t == "" {
+			continue
+		}
+		if _, dup := seen[t]; dup {
+			continue
+		}
+		seen[t] = struct{}{}
+		out = append(out, t)
+	}
+	return out
 }
 
 // stdinFrom renders the wired input as the text the script reads.

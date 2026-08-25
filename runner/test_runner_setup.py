@@ -358,13 +358,22 @@ class TestArgumentHandling(SetupHarness):
         self.assertIn("--token is required", r.stderr)
         self.assertIn("30 minutes", r.stderr)
 
-    def test_name_and_labels_reach_registration(self):
+    def test_name_and_tags_reach_registration(self):
         r = self.run_install("--token", "t", "--service",
-                             "--name", "invoices-box", "--labels", "linux,build")
+                             "--name", "invoices-box", "--tags", "linux,build")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         calls = self.calls(self.agent_calls)
         self.assertIn("--name invoices-box", calls)
-        self.assertIn("--labels linux,build", calls)
+        self.assertIn("--tags linux,build", calls)
+
+    def test_the_old_labels_flag_still_works(self):
+        # It is in every install command anyone has written down, and breaking
+        # those to rename a synonym would be a poor trade. Accepted here and
+        # forwarded under the current name.
+        r = self.run_install("--token", "t", "--service",
+                             "--name", "invoices-box", "--labels", "linux,build")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("--tags linux,build", self.calls(self.agent_calls))
 
     def test_help_needs_no_token(self):
         r = self.run_install("--help")

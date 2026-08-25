@@ -632,7 +632,13 @@ def _text(v):
 # ---------------------------------------------------------------------------
 
 
-def main(argv=None):
+def build_parser():
+    """The command line, in one place so a test can read it.
+
+    Separate from main() because main() registers with a server and then polls
+    forever: checking that a flag lands where it should had no way in short of
+    running the whole agent.
+    """
     p = argparse.ArgumentParser(
         prog="dzrunner",
         description="Run Dazyflow steps on this machine.",
@@ -640,7 +646,13 @@ def main(argv=None):
     p.add_argument("--url", default="", help="Dazyflow server URL, e.g. https://dazyflow.example.com")
     p.add_argument("--token", default="", help="registration token from Admin → Runners (first run only)")
     p.add_argument("--name", default=default_name(), help="name for this machine, as it appears in Dazyflow")
-    p.add_argument("--labels", default=default_labels(), help="comma-separated labels a flow can target instead of the name")
+    # --tags is the name the web UI and the docs use; --labels is what the flag
+    # was called first and what every existing install script passes, so both
+    # write to the same place rather than one of them becoming a lie. Same dest,
+    # so passing both is last-one-wins instead of a conflict nobody can see.
+    p.add_argument("--tags", dest="labels", default=default_labels(),
+                   help="comma-separated tags a flow can target this machine by (its name is always one)")
+    p.add_argument("--labels", dest="labels", help=argparse.SUPPRESS)
     p.add_argument(
         "--allow",
         default="",
@@ -653,7 +665,11 @@ def main(argv=None):
         action="store_true",
         help="register this machine and exit, without claiming any work",
     )
-    args = p.parse_args(argv)
+    return p
+
+
+def main(argv=None):
+    args = build_parser().parse_args(argv)
 
     labels = [x.strip() for x in args.labels.split(",") if x.strip()]
     allowed = [x.strip() for x in args.allow.split(",") if x.strip()]

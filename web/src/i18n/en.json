@@ -1646,14 +1646,11 @@
     },
     "aboutField": "About this field",
     "runner": {
-      "loading": "Loading machines…",
-      "choose": "Choose a machine…",
-      "chooseLabel": "Choose a label…",
-      "offline": "{{name}} — offline",
-      "labelOption": "{{label}} — {{count}} machine(s)",
-      "unknown": "{{name}} — not registered any more",
-      "none": "No machines are registered for this organisation. Add one under Admin → Runners, then pick it here.",
-      "noLabels": "None of your machines carries a label. Register one with --labels to target a pool instead of a name."
+      "tagOption": "{{tag}} — {{count}} machine(s), {{online}} on",
+      "matches": "{{count}} machine(s) carry all of these — {{online}} online right now.",
+      "matchesNone": "No machine carries all of these tags, so this step will fail. Every tag has to match, not just one.",
+      "noneKnown": "Couldn't list your machines, so type the tags by hand. They must match exactly.",
+      "matchesNoneOnline": "{{count}} machine(s) carry all of these ({{names}}), but none is switched on — this step will wait, then fail. Work goes to whichever tagged machine is running when the step fires."
     }
   },
   "forEach": {
@@ -2238,7 +2235,7 @@
     "adding": "Preparing…",
     "emptyTitle": "No runners yet",
     "emptyBody": "A runner is a machine of yours — a server, a laptop, anything with Python 3. Add one and your flows can run scripts on it with the “Run on your machine” step.",
-    "colLabels": "Labels",
+    "colLabels": "Tags",
     "colAgent": "Agent",
     "online": "Online",
     "offlineSince": "Last seen {{at}}",
@@ -2250,14 +2247,18 @@
     "installExpiry": "This command stops working at {{at}}, and only works once. Add another runner to get a fresh one.",
     "securityNote": "A runner runs whatever command a flow sends it. Anyone who can edit a flow in this organisation can therefore run commands on these machines. Start the agent with --allow to limit which programs it will run.",
     "onYourHardware": "Your runner",
-    "onYourHardwareHint": "This step runs a script on {{name}}, one of your own machines — not on the Dazyflow server.",
-    "noTargetYet": "no machine chosen",
-    "editLabels": "Edit labels",
-    "labelsHead": "Labels on {{name}}",
-    "labelsHint": "A label names a pool: a step can send work to whichever machine carrying that label is free, instead of naming one machine. Adding or removing one reroutes every step that targets it — the machine itself is not involved.",
-    "labelsNone": "No labels — this machine can only be targeted by name.",
-    "labelPlaceholder": "New label",
-    "labelAdd": "Add",
-    "labelRemove": "Remove the label {{label}}"
+    "onYourHardwareHint": "This step runs a script on a machine of yours tagged {{name}} — not on the Dazyflow server.",
+    "noTargetYet": "no tags chosen",
+    "detailSubtitle": "One of your machines, and the tags that decide what runs on it.",
+    "notFound": "No machine called {{name}} is registered. It may have been removed.",
+    "addedHead": "Added",
+    "addedByOn": "by {{who}} on {{at}}",
+    "tagsHead": "Tags",
+    "tagsIntro": "A step says where to run by listing tags, and the work goes to a machine carrying ALL of them — so these are requirements this machine meets, not folders it sits in. A tag on several machines is a pool: whichever one is free takes the job.",
+    "nameTag": "always",
+    "nameTagHint": "Every machine carries its own name as a tag, so a step can name this one machine. It cannot be removed.",
+    "tagPlaceholder": "New tag",
+    "tagAdd": "Add",
+    "tagRemove": "Remove the tag {{tag}}"
   }
 }

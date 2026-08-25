@@ -548,26 +548,6 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
           />
         );
       }
-      // format:"runner" and format:"runner-label" are the Run on your machine
-      // step's two ways of saying where: a dropdown of the org's registered
-      // machines, or one of the labels those machines carry. Both keep an
-      // escape to free text, because a ${…} reference (a machine chosen per row
-      // in a For-each) is a real use and a closed select forbids it.
-      if (schema.format === "runner" || schema.format === "runner-label") {
-        return (
-          <RunnerField
-            name={name}
-            schema={schema}
-            required={required}
-            value={value}
-            onChange={onChange}
-            mode={schema.format === "runner" ? "name" : "label"}
-            references={references}
-            extraReferenceItems={extraReferenceItems}
-            tokenLabels={tokenLabels}
-          />
-        );
-      }
       // format:"script" gets the code box: a real textarea, monospace, with
       // syntax highlighting for the language the step says it will run the
       // script with (the sibling `shell` param). A one-line input hid
@@ -848,6 +828,23 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
               token={references?.token}
             />
           </FieldWrap>
+        );
+      }
+      // format:"runner-tags" is the Run on your machine step's "where": a
+      // checklist of every tag the org's machines carry, plus a box for one they
+      // do not yet. Same control as string-multiselect below, with the options
+      // fetched rather than declared — the set changes as machines are
+      // registered and retagged, so a schema could not carry it.
+      if (schema.format === "runner-tags") {
+        return (
+          <RunnerTagsField
+            name={name}
+            schema={schema}
+            required={required}
+            value={(value as string[]) ?? []}
+            onChange={onChange}
+            references={references}
+          />
         );
       }
       // format:"string-multiselect" turns an array-of-string into a
@@ -1828,132 +1825,114 @@ function useRunnerTargets(token: string | undefined) {
   return state;
 }
 
-// RunnerField is the "where does this run" picker on the Run on your machine
-// step: a dropdown of the org's registered machines (mode "name") or of the
-// labels they carry (mode "label").
+// RunnerTagsField is the "where does this run" picker on the Run on your machine
+// step: which tags a machine must carry for the step to land on it.
 //
-// It replaced a plain text box, which had the flow author retyping a name that
-// exists in exactly one place they cannot see from the editor — and a typo did
-// not surface until a run failed with 'no runner named "buld-box"'.
+// It replaced two fields — a machine name and a label, mutually exclusive — with
+// one, which is possible because every machine now carries its own name as a
+// tag. So "run this on invoices-box" and "run this on any build machine" are the
+// same question with different answers, and the field asks it once.
 //
-// Three things it deliberately does NOT do. It does not hide an offline
-// machine: a step pointed at one still saves, waits and then fails, and seeing
-// that while choosing is the whole value. It does not drop a value that is no
-// longer in the list — a decommissioned machine, or a name typed before the
-// list loaded — because silently clearing a step's target is worse than showing
-// one that needs attention. And it does not close the field: the toggle to free
-// text is what keeps a ${…} reference possible.
-function RunnerField({
+// The options are every tag any of the org's machines carries. Ticking two means
+// BOTH must match, which is stated under the field rather than left to be
+// discovered: a set of tags that no single machine carries fails the step, and
+// "narrower than you meant" is the mistake this control invites.
+//
+// Free text stays available for a tag nothing carries yet — a machine about to
+// be registered, or a ${…} reference resolved per row in a For-each — because a
+// closed checklist would forbid both.
+function RunnerTagsField({
   name,
   schema,
   required,
   value,
   onChange,
-  mode,
   references,
-  extraReferenceItems,
-  tokenLabels,
 }: {
   name: string;
   schema: JSONSchema;
   required: boolean;
-  value: unknown;
+  value: string[];
   onChange: (v: unknown) => void;
-  mode: "name" | "label";
   references?: ReferenceCtx;
-  extraReferenceItems?: { label: string; token: string }[];
-  tokenLabels?: TokenLabels;
 }) {
   const { t } = useTranslation();
   const { rows, failed } = useRunnerTargets(references?.token);
-  const cur = typeof value === "string" ? value : "";
-  const [manual, setManual] = useState(cur.includes("${"));
+  const chosen = Array.isArray(value)
+    ? value.filter((v): v is string => typeof v === "string")
+    : [];
 
-  // Labels are collected across machines and de-duplicated: they exist to name
-  // a pool, so the same label on three machines is one choice, and the count is
-  // what tells the author it is a pool at all.
+  // Every tag in the fleet, each labelled with how many machines carry it and
+  // how many of those are switched on. The first number says whether a tag is a
+  // pool or one machine; the second is the one that decides whether a step
+  // written now will actually run, and it is the reason both are here rather
+  // than just the total.
   const options = useMemo(() => {
-    if (!rows) return [];
-    if (mode === "name") {
-      return rows.map((r) => ({
-        value: r.name,
-        label: r.online ? r.name : t("schemaForm.runner.offline", { name: r.name }),
-      }));
+    const total = new Map<string, number>();
+    const live = new Map<string, number>();
+    for (const r of rows ?? []) {
+      for (const tag of r.tags ?? []) {
+        total.set(tag, (total.get(tag) ?? 0) + 1);
+        if (r.online) live.set(tag, (live.get(tag) ?? 0) + 1);
+      }
     }
-    const byLabel = new Map<string, number>();
-    for (const r of rows) {
-      for (const l of r.labels ?? []) byLabel.set(l, (byLabel.get(l) ?? 0) + 1);
-    }
-    return [...byLabel.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([label, n]) => ({
-        value: label,
-        label: t("schemaForm.runner.labelOption", { label, count: n }),
-      }));
-  }, [rows, mode, t]);
-
-  const textBox = (
-    <TokenInput
-      value={value}
-      onChange={onChange}
-      references={references}
-      extraReferenceItems={extraReferenceItems}
-      tokenLabels={tokenLabels}
-      required={required}
-      placeholder={t("schemaForm.resourcePicker.exprPlaceholder")}
-      ariaLabel={schema.title ? fieldTitle(schema.title, i18n.language) : humanize(name)}
-    />
-  );
-
-  // Nothing to choose from — no auth context, a deployment without runners
-  // (the endpoint answers 501), or an organisation that has registered none.
-  // The text box alone, with no toggle to a dropdown that would be empty.
-  if (failed || (rows !== null && options.length === 0)) {
     return (
-      <FieldWrap name={name} schema={schema} required={required} value={value}>
-        {textBox}
-        <div className="sf-docs-hint">
-          {t(mode === "name" ? "schemaForm.runner.none" : "schemaForm.runner.noLabels")}
-        </div>
-      </FieldWrap>
+      [...total.entries()]
+        // Tags with a machine switched on first, so the ones that can take work
+        // now are what the eye lands on; alphabetical within each group, so the
+        // list does not reshuffle as machines come and go.
+        .sort(([a, an], [b, bn]) => {
+          const liveA = (live.get(a) ?? 0) > 0 ? 0 : 1;
+          const liveB = (live.get(b) ?? 0) > 0 ? 0 : 1;
+          return liveA - liveB || a.localeCompare(b) || an - bn;
+        })
+        .map(([tag, n]) => ({
+          value: tag,
+          label: t("schemaForm.runner.tagOption", { tag, count: n, online: live.get(tag) ?? 0 }),
+        }))
     );
-  }
+  }, [rows, t]);
 
-  const known = options.some((o) => o.value === cur);
+  // How many machines carry EVERY chosen tag — the number that decides whether
+  // this step can run at all. Shown always, because zero is the failure this
+  // control invites and it is invisible until a run.
+  const matching = useMemo(() => {
+    if (chosen.length === 0 || !rows) return null;
+    return rows.filter((r) => chosen.every((tag) => (r.tags ?? []).includes(tag)));
+  }, [rows, chosen]);
+
+  const footer =
+    matching === null ? (
+      failed ? (
+        // No list to check against — no auth context, or a deployment with no
+        // runners (the endpoint answers 501). The field still works by hand.
+        <div className="sf-docs-hint">{t("schemaForm.runner.noneKnown")}</div>
+      ) : undefined
+    ) : matching.length === 0 ? (
+      <div className="sf-docs-hint">{t("schemaForm.runner.matchesNone")}</div>
+    ) : matching.every((r) => !r.online) ? (
+      // Machines carry the tags, but not one of them is switched on. Work goes
+      // to whichever eligible machine polls first, so this step will wait and
+      // then fail — a different problem from a set that matches nothing, and
+      // one a count tucked into a sentence let people read straight past.
+      <div className="sf-docs-hint sf-warn">
+        {t("schemaForm.runner.matchesNoneOnline", {
+          count: matching.length,
+          names: matching.map((r) => r.name).join(", "),
+        })}
+      </div>
+    ) : (
+      <div className="sf-docs-hint">
+        {t("schemaForm.runner.matches", {
+          count: matching.length,
+          online: matching.filter((r) => r.online).length,
+        })}
+      </div>
+    );
+
   return (
-    <FieldWrap name={name} schema={schema} required={required} value={value}>
-      {manual ? (
-        textBox
-      ) : (
-        <select
-          value={cur}
-          disabled={rows === null}
-          onChange={(e) => onChange(e.target.value === "" && !required ? undefined : e.target.value)}
-        >
-          {!known && (
-            <option value={cur}>
-              {/* While the list is still loading, a value that is perfectly
-                  valid must not be labelled "not registered any more" — it is
-                  simply not known yet. Show it as it is. */}
-              {rows === null
-                ? cur || t("schemaForm.runner.loading")
-                : cur
-                  ? t("schemaForm.runner.unknown", { name: cur })
-                  : t(mode === "name" ? "schemaForm.runner.choose" : "schemaForm.runner.chooseLabel")}
-            </option>
-          )}
-          {options.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      )}
-      <Button variant="link" className="sf-picker-mode" onClick={() => setManual((m) => !m)}>
-        {manual
-          ? t("schemaForm.resourcePicker.chooseFromList")
-          : t("schemaForm.resourcePicker.useExpression")}
-      </Button>
+    <FieldWrap name={name} schema={schema} required={required} value={value} footer={footer}>
+      <MultiSelectField value={chosen} onChange={onChange} options={options} />
     </FieldWrap>
   );
 }

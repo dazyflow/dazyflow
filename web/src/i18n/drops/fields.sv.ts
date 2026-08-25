@@ -206,9 +206,8 @@ export const SV_FIELD_TITLES: Record<string, string> = {
   "Row limit": "Radgräns",
   "Row-number column": "Kolumn med radnummer",
   "Rows": "Rader",
-  "Machine": "Maskin",
-  "Or any machine labelled": "Eller vilken maskin som helst med etiketten",
   "Run it with": "Kör det med",
+  "Where to run it": "Var det ska köras",
   "Runner": "Körnod",
   "Runs": "Körs",
   "Save into": "Spara i",
@@ -564,14 +563,14 @@ export const SV_FIELD_HELP: Record<string, string> = {
   "The .xlsx file in the workspace. Ignored when a 'File' input is wired.": "xlsx-filen i arbetsytan. Ignoreras när en Fil-ingång är inkopplad.",
   "The Drive file to download — pick from your account's files. The File ID input overrides this when connected.": "Drive-filen som ska laddas ner — välj bland kontots filer. Ingången Fil-ID vinner över detta när den är inkopplad.",
   "The Google Form to watch for new responses.": "Google-formuläret som ska bevakas för nya svar.",
+  "Tags the machine must carry — ALL of them. One tag sends the work to whichever machine carrying it is free; adding a second narrows that to machines carrying both. Every machine's own name is also a tag, so picking a name pins this step to that one machine.":
+    "Etiketter som maskinen måste ha — ALLA av dem. En etikett skickar arbetet till vilken ledig maskin som helst med den; en till smalnar av till maskiner som har båda. Varje maskins eget namn är också en etikett, så att välja ett namn låser steget till just den maskinen.",
   "The script to run on that machine. It runs as the user the runner agent runs as, in the agent's working directory. Connect the 'script' input instead to have an earlier step supply it.":
     "Skriptet som ska köras på maskinen. Det körs som den användare körnodsagenten körs som, i agentens arbetskatalog. Koppla in ingången 'script' i stället för att låta ett tidigare steg leverera det.",
   "The ID of the flow to run as a step.": "ID:t på flödet som ska köras som ett steg.",
   "The Klarna order id to look up. Overridden by the 'Order ID' input.": "Klarna-order-id:t som ska hämtas. Ingången Order-ID vinner över detta.",
   "The Klarna order to capture. Overridden by the 'Order ID' input.": "Klarna-ordern som ska debiteras. Ingången Order-ID vinner över detta.",
   "The Klarna order to refund. Overridden by the 'Order ID' input.": "Klarna-ordern som ska återbetalas. Ingången Order-ID vinner över detta.",
-  "The machine to run this on, chosen from the ones your organisation has registered. Leave it empty and set a label instead to use any machine in a pool.":
-    "Maskinen som det här ska köras på, vald bland dem organisationen har registrerat. Lämna tomt och sätt en etikett i stället för att använda vilken maskin som helst i en pool.",
   "The Postgres schema the table lives in.": "Postgres-schemat som tabellen ligger i.",
   "The RSS or Atom feed URL. Can also be wired into the 'url' input.": "URL till RSS- eller Atom-flödet. Kan också kopplas in i ingången 'url'.",
   "The SELECT query to run. Use $1, $2 … placeholders for values and supply them under 'Query values'.": "SELECT-frågan som ska köras. Använd platshållarna $1, $2 … för värden och ange dem under Frågevärden.",

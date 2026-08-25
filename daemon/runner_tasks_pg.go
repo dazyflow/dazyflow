@@ -141,7 +141,7 @@ func NewPgRunnerTaskStore(ctx context.Context, pool *pgxpool.Pool) (*PgRunnerTas
 // shell sits with script rather than among the sealed columns because it is not
 // secret-bearing: it is one of a fixed handful of words, and sealing it would
 // cost a decrypt on the hot claim path to learn "bash".
-const runnerTaskColumns = `id, tenant, runner, label, script, shell, env, stdin, timeout_ms,
+const runnerTaskColumns = `id, tenant, runner, label, tags, script, shell, env, stdin, timeout_ms,
 		state, claimed_by, progress, lease_until, result, created_at, finished_at`
 
 func scanRunnerTask(row pgx.Row) (RunnerTask, error) {
@@ -149,10 +149,22 @@ func scanRunnerTask(row pgx.Row) (RunnerTask, error) {
 	var env, result []byte
 	var timeoutMS int64
 	var leaseUntil, finishedAt *time.Time
-	if err := row.Scan(&t.ID, &t.Tenant, &t.Runner, &t.Label, &t.Script, &t.Shell, &env,
-		&t.Stdin, &timeoutMS, &t.State, &t.ClaimedBy, &t.Progress, &leaseUntil, &result,
-		&t.CreatedAt, &finishedAt); err != nil {
+	// runner and label are the pre-tags columns; nothing writes them any more.
+	var legacyRunner, legacyLabel string
+	if err := row.Scan(&t.ID, &t.Tenant, &legacyRunner, &legacyLabel, &t.Tags, &t.Script,
+		&t.Shell, &env, &t.Stdin, &timeoutMS, &t.State, &t.ClaimedBy, &t.Progress,
+		&leaseUntil, &result, &t.CreatedAt, &finishedAt); err != nil {
 		return RunnerTask{}, err
+	}
+	// A task queued by the previous version, claimed by this one moments later
+	// across a rolling deploy. Both old shapes are one tag now — a machine's
+	// name is a tag, so the name column needs no special case.
+	if len(t.Tags) == 0 {
+		for _, legacy := range []string{legacyRunner, legacyLabel} {
+			if legacy != "" {
+				t.Tags = append(t.Tags, legacy)
+			}
+		}
 	}
 	t.Timeout = time.Duration(timeoutMS) * time.Millisecond
 	if leaseUntil != nil {
@@ -198,9 +210,9 @@ func (s *PgRunnerTaskStore) Enqueue(ctx context.Context, t RunnerTask) error {
 	}
 	_, err = s.pool.Exec(ctx, `
 		INSERT INTO runner_tasks
-		    (id, tenant, runner, label, script, shell, env, stdin, timeout_ms, state, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-		t.ID, t.Tenant, t.Runner, t.Label, script, t.Shell, env, stdin,
+		    (id, tenant, tags, script, shell, env, stdin, timeout_ms, state, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+		t.ID, t.Tenant, tagsOrEmpty(t.Tags), script, t.Shell, env, stdin,
 		t.Timeout.Milliseconds(), string(t.State), t.CreatedAt)
 	return err
 }
@@ -229,11 +241,22 @@ func (s *PgRunnerTaskStore) sealEnv(ctx context.Context, t RunnerTask) ([]byte, 
 // Only 'queued' is claimable. A lapsed claim is never handed out again — see
 // the note at the top of runner_tasks.go.
 //
-// The eligibility clause is the tenant boundary, and it is written to fail
-// closed: a task carrying neither a runner name nor a label matches nothing,
-// because `label <> ”` excludes it. A task with no target is a bug upstream,
-// and the wrong answer to it is to run someone's script on an arbitrary
+// The eligibility clause is the tenant boundary, and it must agree exactly with
+// eligible() in runner_tasks.go — the memory store applies that function and
+// this store applies this SQL, and the two are meant to be indistinguishable.
+//
+// `tags <@ $3` is the AND rule: every tag the task asks for is in the set this
+// machine carries ($3 is Runner.Tags(), so the machine's own name is in there).
+// The cardinality guard is what makes it fail closed, and it is load-bearing
+// rather than tidy: in Postgres `'{}' <@ anything` is TRUE, so without it a task
+// with no tags would match EVERY machine — and a task with no target is a bug
+// upstream whose wrong answer is to run someone's script on an arbitrary
 // machine.
+//
+// The ELSE branch is the pre-tags shape, for a task queued by the previous
+// version and claimed by this one across a rolling deploy. Both old columns
+// resolve against the same tag array, because a machine's name is now one of its
+// tags.
 const claimRunnerTaskQuery = `
 		UPDATE runner_tasks
 		   SET state = 'running', claimed_by = $2, lease_until = $4
@@ -241,8 +264,11 @@ const claimRunnerTaskQuery = `
 		     SELECT id FROM runner_tasks
 		      WHERE tenant = $1
 		        AND state = 'queued'
-		        AND ( (runner <> '' AND runner = $2)
-		           OR (runner = '' AND label <> '' AND label = ANY($3::text[])) )
+		        AND CASE WHEN cardinality(tags) > 0
+		                 THEN tags <@ $3::text[]
+		                 ELSE (runner <> '' AND runner = ANY($3::text[]))
+		                   OR (runner = '' AND label <> '' AND label = ANY($3::text[]))
+		            END
 		      ORDER BY created_at
 		      FOR UPDATE SKIP LOCKED
 		      LIMIT 1
@@ -250,14 +276,16 @@ const claimRunnerTaskQuery = `
 		 RETURNING ` + runnerTaskColumns
 
 func (s *PgRunnerTaskStore) Claim(ctx context.Context, r Runner, now time.Time, lease time.Duration) (RunnerTask, error) {
-	labels := r.Labels
-	if labels == nil {
-		labels = []string{}
+	// Everything this machine can be targeted by, its name included — the same
+	// set Runner.HasTags checks against.
+	tags := r.Tags()
+	if tags == nil {
+		tags = []string{}
 	}
 	// The lease is computed from the caller's clock rather than the database's
 	// now(), so the store honours an injected time the way the memory one does.
 	t, err := scanRunnerTask(s.pool.QueryRow(ctx, claimRunnerTaskQuery,
-		r.Tenant, r.Name, labels, now.Add(lease)))
+		r.Tenant, r.Name, tags, now.Add(lease)))
 	if err != nil {
 		if isPgNoRows(err) {
 			return RunnerTask{}, ErrNoTask

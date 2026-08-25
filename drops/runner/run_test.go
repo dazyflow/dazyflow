@@ -59,12 +59,12 @@ func run(t *testing.T, params map[string]any, input map[string]core.Ref) core.Re
 
 func TestExecute_PassesTheScriptAndTargetThrough(t *testing.T) {
 	f := install(t, &fakeDispatcher{res: Result{Stdout: "hello\n"}})
-	res := run(t, map[string]any{"runner": "box", "script": "./go.sh"}, nil)
+	res := run(t, map[string]any{"tags": []any{"box"}, "script": "./go.sh"}, nil)
 
 	if res.Status != core.StatusOK {
 		t.Fatalf("status = %q (%+v)", res.Status, res.Error)
 	}
-	if f.got.Runner != "box" || f.got.Script != "./go.sh" {
+	if strings.Join(f.got.Tags, ",") != "box" || f.got.Script != "./go.sh" {
 		t.Errorf("dispatched %+v", f.got)
 	}
 	if f.got.Tenant != "acme" {
@@ -77,11 +77,11 @@ func TestExecute_PassesTheScriptAndTargetThrough(t *testing.T) {
 
 func TestExecute_DefaultsTheTimeout(t *testing.T) {
 	f := install(t, &fakeDispatcher{})
-	run(t, map[string]any{"runner": "box", "script": "x"}, nil)
+	run(t, map[string]any{"tags": []any{"box"}, "script": "x"}, nil)
 	if f.got.Timeout != DefaultTimeout {
 		t.Errorf("timeout = %v, want the default", f.got.Timeout)
 	}
-	run(t, map[string]any{"runner": "box", "script": "x", "timeout_seconds": 30}, nil)
+	run(t, map[string]any{"tags": []any{"box"}, "script": "x", "timeout_seconds": 30}, nil)
 	if f.got.Timeout != 30*time.Second {
 		t.Errorf("timeout = %v, want the configured 30s", f.got.Timeout)
 	}
@@ -91,7 +91,7 @@ func TestExecute_DefaultsTheTimeout(t *testing.T) {
 // every language and every shell tool already agrees on.
 func TestExecute_WiresTheInputToStdin(t *testing.T) {
 	f := install(t, &fakeDispatcher{})
-	run(t, map[string]any{"runner": "box", "script": "x"},
+	run(t, map[string]any{"tags": []any{"box"}, "script": "x"},
 		map[string]core.Ref{"in": {Inline: "plain text"}})
 	if f.got.Stdin != "plain text" {
 		t.Errorf("stdin = %q", f.got.Stdin)
@@ -102,7 +102,7 @@ func TestExecute_WiresTheInputToStdin(t *testing.T) {
 // unparseable by jq, python, or anything else a script would reach for.
 func TestExecute_StructuredInputBecomesJSON(t *testing.T) {
 	f := install(t, &fakeDispatcher{})
-	run(t, map[string]any{"runner": "box", "script": "x"},
+	run(t, map[string]any{"tags": []any{"box"}, "script": "x"},
 		map[string]core.Ref{"in": {Inline: map[string]any{"total": 42}}})
 	if !strings.Contains(f.got.Stdin, `"total"`) || !strings.Contains(f.got.Stdin, "42") {
 		t.Errorf("stdin = %q, want JSON", f.got.Stdin)
@@ -114,7 +114,7 @@ func TestExecute_StructuredInputBecomesJSON(t *testing.T) {
 // leave them with only a number.
 func TestExecute_NonZeroExitFailsWithTheScriptsMessage(t *testing.T) {
 	install(t, &fakeDispatcher{res: Result{ExitCode: 3, Stderr: "no such ledger"}})
-	res := run(t, map[string]any{"runner": "box", "script": "x"}, nil)
+	res := run(t, map[string]any{"tags": []any{"box"}, "script": "x"}, nil)
 
 	if res.Status != core.StatusError {
 		t.Fatalf("status = %q, want an error", res.Status)
@@ -131,7 +131,7 @@ func TestExecute_NonZeroExitFailsWithTheScriptsMessage(t *testing.T) {
 // timed out) is a different failure from a script that ran and exited badly.
 func TestExecute_AgentRefusalIsItsOwnFailure(t *testing.T) {
 	install(t, &fakeDispatcher{res: Result{Error: "command not permitted by this runner"}})
-	res := run(t, map[string]any{"runner": "box", "script": "rm -rf /"}, nil)
+	res := run(t, map[string]any{"tags": []any{"box"}, "script": "rm -rf /"}, nil)
 	if res.Status != core.StatusError {
 		t.Fatal("an agent refusal did not fail the step")
 	}
@@ -148,11 +148,10 @@ func TestExecute_ConfigurationMistakes(t *testing.T) {
 		name, wantCode string
 		params         map[string]any
 	}{
-		{"no command", "no_script", map[string]any{"runner": "box"}},
+		{"no script", "no_script", map[string]any{"tags": []any{"box"}}},
 		{"no target", "no_target", map[string]any{"script": "x"}},
 		// Both would be ambiguous, and silently preferring one would make the
 		// other look honoured.
-		{"both target kinds", "two_targets", map[string]any{"runner": "box", "label": "linux", "script": "x"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			install(t, &fakeDispatcher{})
@@ -171,7 +170,7 @@ func TestExecute_ConfigurationMistakes(t *testing.T) {
 func TestExecute_WithoutADispatcher(t *testing.T) {
 	install(t, nil)
 	SetDispatcher(nil)
-	res := run(t, map[string]any{"runner": "box", "script": "x"}, nil)
+	res := run(t, map[string]any{"tags": []any{"box"}, "script": "x"}, nil)
 	if res.Status != core.StatusError || res.Error.Code != "not_configured" {
 		t.Fatalf("result = %+v, want a clear not-configured failure", res)
 	}
@@ -183,7 +182,7 @@ func TestExecute_RefusesWithoutATenant(t *testing.T) {
 	install(t, &fakeDispatcher{})
 	res, err := execute(context.Background(), core.Job{
 		ID:     "j1",
-		Params: map[string]any{"runner": "box", "script": "x"},
+		Params: map[string]any{"tags": []any{"box"}, "script": "x"},
 	}, nil)
 	if err != nil {
 		t.Fatalf("execute: %v", err)
@@ -231,25 +230,52 @@ func manifestsUnderTest(t *testing.T) []core.Manifest {
 func TestExecute_NormalizesTheTarget(t *testing.T) {
 	f := install(t, &fakeDispatcher{})
 
-	run(t, map[string]any{"label": "  Linux ", "script": "x"}, nil)
-	if f.got.Label != "linux" {
-		t.Errorf("label = %q, want it normalized the way registration stores it", f.got.Label)
-	}
-	if f.got.Runner != "" {
-		t.Errorf("runner = %q, want it left empty", f.got.Runner)
-	}
-
-	// The same for the name: validRunnerName only ever allows lower-case, so a
-	// capital or a pasted space could never match anything.
-	run(t, map[string]any{"runner": "Build-Box ", "script": "x"}, nil)
-	if f.got.Runner != "build-box" {
-		t.Errorf("runner = %q, want it normalized", f.got.Runner)
+	// Registration normalizes labels — lower-cased, trimmed, de-duplicated — and
+	// the admin page shows them that way. A tag has to get the same treatment, or
+	// a step reads 'no machine carries the tag "Linux"' next to a page plainly
+	// showing linux. Names too: validRunnerName only ever allows lower-case.
+	run(t, map[string]any{"tags": []any{"  Linux ", "Build-Box "}, "script": "x"}, nil)
+	if strings.Join(f.got.Tags, ",") != "linux,build-box" {
+		t.Errorf("tags = %v, want them normalized the way registration stores them", f.got.Tags)
 	}
 
-	// Whitespace alone is still no target, not a target of "".
-	res := run(t, map[string]any{"runner": "   ", "script": "x"}, nil)
+	// Duplicates and blanks collapse: one tag listed twice is one requirement,
+	// and an empty row left in the editor is not a tag no machine can carry.
+	run(t, map[string]any{"tags": []any{"linux", "LINUX", "  ", ""}, "script": "x"}, nil)
+	if strings.Join(f.got.Tags, ",") != "linux" {
+		t.Errorf("tags = %v, want duplicates and blanks dropped", f.got.Tags)
+	}
+
+	// Whitespace alone is no target, not a target of "".
+	res := run(t, map[string]any{"tags": []any{"   "}, "script": "x"}, nil)
 	if res.Status != core.StatusError || res.Error.Code != "no_target" {
 		t.Errorf("result = %+v, want a no_target failure", res)
+	}
+}
+
+// A flow saved before this step took tags carries `runner` (one machine) or
+// `label` (any machine with it), and has to keep running: those flows are in
+// production, and the whole reason one field could replace two is that a
+// machine's name is now itself a tag.
+func TestExecute_HonoursThePreTagsParams(t *testing.T) {
+	f := install(t, &fakeDispatcher{})
+
+	run(t, map[string]any{"runner": "Invoices-Box", "script": "x"}, nil)
+	if strings.Join(f.got.Tags, ",") != "invoices-box" {
+		t.Errorf("tags = %v, want the old `runner` read as one tag", f.got.Tags)
+	}
+
+	run(t, map[string]any{"label": "build", "script": "x"}, nil)
+	if strings.Join(f.got.Tags, ",") != "build" {
+		t.Errorf("tags = %v, want the old `label` read as one tag", f.got.Tags)
+	}
+
+	// A step re-saved with tags ignores the leftovers rather than quietly adding
+	// them as extra requirements — which, since every tag must match, would
+	// narrow the step to nothing.
+	run(t, map[string]any{"tags": []any{"gpu"}, "runner": "old-box", "label": "stale", "script": "x"}, nil)
+	if strings.Join(f.got.Tags, ",") != "gpu" {
+		t.Errorf("tags = %v, want only the new field once it is set", f.got.Tags)
 	}
 }
 
@@ -261,7 +287,7 @@ func TestExecute_NormalizesTheTarget(t *testing.T) {
 func TestExecute_TheScriptInputOverridesTheTypedOne(t *testing.T) {
 	f := install(t, &fakeDispatcher{})
 
-	run(t, map[string]any{"runner": "box", "script": "./typed.sh"}, map[string]core.Ref{
+	run(t, map[string]any{"tags": []any{"box"}, "script": "./typed.sh"}, map[string]core.Ref{
 		"script": {MIME: "text/plain", Inline: "./wired.sh"},
 	})
 	if f.got.Script != "./wired.sh" {
@@ -269,7 +295,7 @@ func TestExecute_TheScriptInputOverridesTheTypedOne(t *testing.T) {
 	}
 
 	// An unwired port must not blank the typed script out.
-	run(t, map[string]any{"runner": "box", "script": "./typed.sh"}, nil)
+	run(t, map[string]any{"tags": []any{"box"}, "script": "./typed.sh"}, nil)
 	if f.got.Script != "./typed.sh" {
 		t.Errorf("script = %q, want the typed one", f.got.Script)
 	}
@@ -280,7 +306,7 @@ func TestExecute_TheScriptInputOverridesTheTypedOne(t *testing.T) {
 func TestExecute_KeepsTheShapeOfTheScript(t *testing.T) {
 	f := install(t, &fakeDispatcher{})
 	run(t, map[string]any{
-		"runner": "box",
+		"tags":   []any{"box"},
 		"shell":  "python",
 		"script": "\nif True:\n    print(1)\n\n",
 	}, nil)
@@ -291,7 +317,7 @@ func TestExecute_KeepsTheShapeOfTheScript(t *testing.T) {
 
 func TestExecute_RejectsAScriptInputThatIsNotText(t *testing.T) {
 	install(t, &fakeDispatcher{})
-	res := run(t, map[string]any{"runner": "box", "script": "./typed.sh"}, map[string]core.Ref{
+	res := run(t, map[string]any{"tags": []any{"box"}, "script": "./typed.sh"}, map[string]core.Ref{
 		"script": {MIME: "application/json", Inline: map[string]any{"not": "text"}},
 	})
 	if res.Status != core.StatusError || res.Error.Code != "bad_input" {
@@ -301,13 +327,13 @@ func TestExecute_RejectsAScriptInputThatIsNotText(t *testing.T) {
 
 func TestExecute_PassesTheChosenShellThrough(t *testing.T) {
 	f := install(t, &fakeDispatcher{})
-	run(t, map[string]any{"runner": "box", "script": "print(1)", "shell": " Python "}, nil)
+	run(t, map[string]any{"tags": []any{"box"}, "script": "print(1)", "shell": " Python "}, nil)
 	if f.got.Shell != "python" {
 		t.Errorf("shell = %q, want it normalized and passed on", f.got.Shell)
 	}
 
 	// Nothing chosen stays nothing, so the agent does what it always did.
-	run(t, map[string]any{"runner": "box", "script": "x"}, nil)
+	run(t, map[string]any{"tags": []any{"box"}, "script": "x"}, nil)
 	if f.got.Shell != "" {
 		t.Errorf("shell = %q, want it left empty", f.got.Shell)
 	}
@@ -317,7 +343,7 @@ func TestExecute_PassesTheChosenShellThrough(t *testing.T) {
 // message about a field beats a script that never started.
 func TestExecute_RefusesAShellItDoesNotKnow(t *testing.T) {
 	install(t, &fakeDispatcher{})
-	res := run(t, map[string]any{"runner": "box", "script": "x", "shell": "erlang"}, nil)
+	res := run(t, map[string]any{"tags": []any{"box"}, "script": "x", "shell": "erlang"}, nil)
 	if res.Status != core.StatusError || res.Error.Code != "bad_shell" {
 		t.Fatalf("result = %+v, want a bad_shell failure", res)
 	}

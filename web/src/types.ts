@@ -854,7 +854,11 @@ export type Runner = {
 // a run.
 export type RunnerTarget = {
   name: string;
-  labels?: string[];
+  // tags is everything a step may target this machine by — its labels AND its
+  // own name. The name is in there because that is how a step pins itself to
+  // one machine; the editor does not have to know the rule, it just offers the
+  // set.
+  tags?: string[];
   online: boolean;
 };
 

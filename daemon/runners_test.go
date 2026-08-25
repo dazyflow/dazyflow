@@ -242,7 +242,7 @@ func TestRunner_OnlineFollowsTheLastCheckIn(t *testing.T) {
 func TestClaim_ByName(t *testing.T) {
 	q := NewMemRunnerTaskStore()
 	r := Runner{Tenant: "acme", Name: "box"}
-	mustEnqueue(t, q, RunnerTask{ID: "t1", Tenant: "acme", Runner: "box", Script: "x", State: TaskQueued})
+	mustEnqueue(t, q, RunnerTask{ID: "t1", Tenant: "acme", Tags: []string{"box"}, Script: "x", State: TaskQueued})
 
 	got, err := q.Claim(t.Context(), r, time.Now(), TaskLease)
 	if err != nil {
@@ -256,7 +256,7 @@ func TestClaim_ByName(t *testing.T) {
 // A label lets a pool of interchangeable machines share a queue.
 func TestClaim_ByLabel(t *testing.T) {
 	q := NewMemRunnerTaskStore()
-	mustEnqueue(t, q, RunnerTask{ID: "t1", Tenant: "acme", Label: "linux", Script: "x", State: TaskQueued})
+	mustEnqueue(t, q, RunnerTask{ID: "t1", Tenant: "acme", Tags: []string{"linux"}, Script: "x", State: TaskQueued})
 
 	unlabelled := Runner{Tenant: "acme", Name: "a"}
 	if _, err := q.Claim(t.Context(), unlabelled, time.Now(), TaskLease); !errors.Is(err, ErrNoTask) {
@@ -272,7 +272,7 @@ func TestClaim_ByLabel(t *testing.T) {
 // a task must never be claimable by another organisation's runner.
 func TestClaim_NeverCrossesTenants(t *testing.T) {
 	q := NewMemRunnerTaskStore()
-	mustEnqueue(t, q, RunnerTask{ID: "t1", Tenant: "acme", Runner: "box", Script: "x", State: TaskQueued})
+	mustEnqueue(t, q, RunnerTask{ID: "t1", Tenant: "acme", Tags: []string{"box"}, Script: "x", State: TaskQueued})
 
 	intruder := Runner{Tenant: "globex", Name: "box"} // same name, other org
 	if _, err := q.Claim(t.Context(), intruder, time.Now(), TaskLease); !errors.Is(err, ErrNoTask) {
@@ -295,7 +295,7 @@ func TestClaim_RefusesAnUntargetedTask(t *testing.T) {
 // not both run the same script.
 func TestClaim_IsExclusiveWhileLeased(t *testing.T) {
 	q := NewMemRunnerTaskStore()
-	mustEnqueue(t, q, RunnerTask{ID: "t1", Tenant: "acme", Label: "linux", Script: "x", State: TaskQueued})
+	mustEnqueue(t, q, RunnerTask{ID: "t1", Tenant: "acme", Tags: []string{"linux"}, Script: "x", State: TaskQueued})
 	a := Runner{Tenant: "acme", Name: "a", Labels: []string{"linux"}}
 	b := Runner{Tenant: "acme", Name: "b", Labels: []string{"linux"}}
 	now := time.Now()
@@ -320,7 +320,7 @@ func TestClaim_IsExclusiveWhileLeased(t *testing.T) {
 // forever for a machine that is gone.
 func TestFailAbandoned_CondemnsALapsedClaim(t *testing.T) {
 	q := NewMemRunnerTaskStore()
-	mustEnqueue(t, q, RunnerTask{ID: "t1", Tenant: "acme", Runner: "box", Script: "x", State: TaskQueued})
+	mustEnqueue(t, q, RunnerTask{ID: "t1", Tenant: "acme", Tags: []string{"box"}, Script: "x", State: TaskQueued})
 	now := time.Now()
 	if _, err := q.Claim(t.Context(), Runner{Tenant: "acme", Name: "box"}, now, TaskLease); err != nil {
 		t.Fatalf("Claim: %v", err)
@@ -354,7 +354,7 @@ func TestFailAbandoned_CondemnsALapsedClaim(t *testing.T) {
 // that did not happen would be worse than the hang.
 func TestFailAbandoned_LosesToAResultThatArrives(t *testing.T) {
 	q := NewMemRunnerTaskStore()
-	mustEnqueue(t, q, RunnerTask{ID: "t1", Tenant: "acme", Runner: "box", Script: "x", State: TaskQueued})
+	mustEnqueue(t, q, RunnerTask{ID: "t1", Tenant: "acme", Tags: []string{"box"}, Script: "x", State: TaskQueued})
 	now := time.Now()
 	if _, err := q.Claim(t.Context(), Runner{Tenant: "acme", Name: "box"}, now, TaskLease); err != nil {
 		t.Fatalf("Claim: %v", err)
@@ -377,7 +377,7 @@ func TestFailAbandoned_LosesToAResultThatArrives(t *testing.T) {
 // resurrecting it would report success for a run that already errored.
 func TestComplete_RefusesAResultAfterWeGaveUp(t *testing.T) {
 	q := NewMemRunnerTaskStore()
-	mustEnqueue(t, q, RunnerTask{ID: "t1", Tenant: "acme", Runner: "box", Script: "x", State: TaskQueued})
+	mustEnqueue(t, q, RunnerTask{ID: "t1", Tenant: "acme", Tags: []string{"box"}, Script: "x", State: TaskQueued})
 	now := time.Now()
 	if _, err := q.Claim(t.Context(), Runner{Tenant: "acme", Name: "box"}, now, TaskLease); err != nil {
 		t.Fatalf("Claim: %v", err)
@@ -414,7 +414,7 @@ func TestAbandoned_NeedsAnActualLapsedLease(t *testing.T) {
 
 func TestExtend_KeepsALongTaskHeld(t *testing.T) {
 	q := NewMemRunnerTaskStore()
-	mustEnqueue(t, q, RunnerTask{ID: "t1", Tenant: "acme", Runner: "box", Script: "x", State: TaskQueued})
+	mustEnqueue(t, q, RunnerTask{ID: "t1", Tenant: "acme", Tags: []string{"box"}, Script: "x", State: TaskQueued})
 	r := Runner{Tenant: "acme", Name: "box"}
 	now := time.Now()
 	if _, err := q.Claim(t.Context(), r, now, TaskLease); err != nil {
@@ -437,7 +437,7 @@ func TestExtend_KeepsALongTaskHeld(t *testing.T) {
 // step fails, not succeed with an error buried in its output.
 func TestComplete_NonZeroExitFailsTheTask(t *testing.T) {
 	q := NewMemRunnerTaskStore()
-	mustEnqueue(t, q, RunnerTask{ID: "t1", Tenant: "acme", Runner: "box", Script: "x", State: TaskQueued})
+	mustEnqueue(t, q, RunnerTask{ID: "t1", Tenant: "acme", Tags: []string{"box"}, Script: "x", State: TaskQueued})
 	r := Runner{Tenant: "acme", Name: "box"}
 	if _, err := q.Claim(t.Context(), r, time.Now(), TaskLease); err != nil {
 		t.Fatalf("Claim: %v", err)
@@ -456,7 +456,7 @@ func TestComplete_NonZeroExitFailsTheTask(t *testing.T) {
 
 func TestComplete_RefusesATaskYouDoNotHold(t *testing.T) {
 	q := NewMemRunnerTaskStore()
-	mustEnqueue(t, q, RunnerTask{ID: "t1", Tenant: "acme", Runner: "box", Script: "x", State: TaskQueued})
+	mustEnqueue(t, q, RunnerTask{ID: "t1", Tenant: "acme", Tags: []string{"box"}, Script: "x", State: TaskQueued})
 	r := Runner{Tenant: "acme", Name: "box"}
 	if _, err := q.Claim(t.Context(), r, time.Now(), TaskLease); err != nil {
 		t.Fatalf("Claim: %v", err)
@@ -521,7 +521,7 @@ func TestDispatch_RoundTrip(t *testing.T) {
 
 	var progress []string
 	res, err := d.Dispatch(t.Context(), DispatchRequest{
-		Tenant: "acme", Runner: "box", Script: "./count.sh", Stdin: "input",
+		Tenant: "acme", Tags: []string{"box"}, Script: "./count.sh", Stdin: "input",
 	}, func(m string) { progress = append(progress, m) })
 	if err != nil {
 		t.Fatalf("Dispatch: %v", err)
@@ -590,7 +590,7 @@ func TestDispatch_FailsWhenTheRunnerIsOffline(t *testing.T) {
 	}
 
 	err := dispatchWithin(t, d, DispatchRequest{
-		Tenant: "acme", Runner: "box", Script: "./x.sh",
+		Tenant: "acme", Tags: []string{"box"}, Script: "./x.sh",
 	}, 2*time.Second)
 	if err == nil {
 		t.Fatal("Dispatch waited forever for a machine that is switched off")
@@ -613,7 +613,7 @@ func TestDispatch_FailsWhenNoLabelledRunnerIsOnline(t *testing.T) {
 		PickupGrace:  5 * time.Millisecond,
 	}
 	err := dispatchWithin(t, d, DispatchRequest{
-		Tenant: "acme", Label: "build", Script: "./x.sh",
+		Tenant: "acme", Tags: []string{"build"}, Script: "./x.sh",
 	}, 2*time.Second)
 	if err == nil || !strings.Contains(err.Error(), "build") {
 		t.Fatalf("err = %v, want a failure naming the label", err)
@@ -641,7 +641,7 @@ func TestDispatch_WaitsForABusyRunnerThatIsStillOnline(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 150*time.Millisecond)
 	defer cancel()
 	_, err := d.Dispatch(ctx, DispatchRequest{
-		Tenant: "acme", Runner: "box", Script: "./x.sh",
+		Tenant: "acme", Tags: []string{"box"}, Script: "./x.sh",
 	}, nil)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("err = %v, want the step to still be waiting on a busy online runner", err)
@@ -669,7 +669,7 @@ func TestDispatch_FailsWhenTheRunnerVanishesMidTask(t *testing.T) {
 	}()
 
 	err := dispatchWithin(t, d, DispatchRequest{
-		Tenant: "acme", Runner: "box", Script: "./x.sh",
+		Tenant: "acme", Tags: []string{"box"}, Script: "./x.sh",
 	}, 2*time.Second)
 	if err == nil {
 		t.Fatal("Dispatch hung on a runner that vanished mid-task")
@@ -695,7 +695,7 @@ func TestDispatch_GivingUpClosesTheTaskForGood(t *testing.T) {
 		PickupGrace:  5 * time.Millisecond,
 	}
 	if err := dispatchWithin(t, d, DispatchRequest{
-		Tenant: "acme", Runner: "box", Script: "./invoices.sh",
+		Tenant: "acme", Tags: []string{"box"}, Script: "./invoices.sh",
 	}, 2*time.Second); err == nil {
 		t.Fatal("Dispatch did not give up on an offline runner")
 	}
@@ -759,7 +759,7 @@ func TestDispatch_KeepsWaitingIfTheTaskIsClaimedAsItGivesUp(t *testing.T) {
 	errs := make(chan error, 1)
 	go func() {
 		res, err := d.Dispatch(context.Background(), DispatchRequest{
-			Tenant: "acme", Runner: "box", Script: "./x.sh",
+			Tenant: "acme", Tags: []string{"box"}, Script: "./x.sh",
 		}, nil)
 		if err != nil {
 			errs <- err
@@ -798,7 +798,7 @@ func TestDispatch_StopsAtTheCeiling(t *testing.T) {
 	}
 
 	err := dispatchWithin(t, d, DispatchRequest{
-		Tenant: "acme", Runner: "box", Script: "./x.sh", Timeout: 20 * time.Millisecond,
+		Tenant: "acme", Tags: []string{"box"}, Script: "./x.sh", Timeout: 20 * time.Millisecond,
 	}, 2*time.Second)
 	if err == nil {
 		t.Fatal("Dispatch ignored its own ceiling and waited forever")
@@ -818,7 +818,7 @@ func TestDispatch_RefusesAnUnknownRunner(t *testing.T) {
 		PollInterval: 5 * time.Millisecond,
 	}
 	_, err := d.Dispatch(t.Context(), DispatchRequest{
-		Tenant: "acme", Runner: "ghost", Script: "x",
+		Tenant: "acme", Tags: []string{"ghost"}, Script: "x",
 	}, nil)
 	if err == nil {
 		t.Fatal("dispatched to a runner that does not exist")
@@ -833,7 +833,7 @@ func TestDispatch_RefusesAnUnknownLabel(t *testing.T) {
 	register(t, rs, "acme", "box", "linux")
 	d := &RunnerDispatcher{Tasks: NewMemRunnerTaskStore(), Runners: rs, PollInterval: 5 * time.Millisecond}
 	_, err := d.Dispatch(t.Context(), DispatchRequest{
-		Tenant: "acme", Label: "windows", Script: "x",
+		Tenant: "acme", Tags: []string{"windows"}, Script: "x",
 	}, nil)
 	if err == nil || !strings.Contains(err.Error(), "windows") {
 		t.Fatalf("err = %v, want it to name the label", err)
@@ -854,7 +854,7 @@ func TestDispatch_StopsWhenTheRunIsCancelled(t *testing.T) {
 	}()
 	// No agent is running, so this only returns because the context ends.
 	if _, err := d.Dispatch(ctx, DispatchRequest{
-		Tenant: "acme", Runner: "box", Script: "x",
+		Tenant: "acme", Tags: []string{"box"}, Script: "x",
 	}, nil); !errors.Is(err, context.Canceled) {
 		t.Fatalf("err = %v, want the cancellation", err)
 	}

@@ -135,16 +135,49 @@ running first; stopping or restarting never kills a command halfway through.
 
 Add the **Run on your machine** step and fill in:
 
-- **Machine** — which one, picked from a list of the machines this organisation
-has registered. The list says which are switched on, so a step aimed at a
-sleeping laptop is something you see now rather than after a run. Or leave it
-empty and choose a **label** instead, and whichever labelled machine is free
-takes the job.
+- **Where to run it** — tags the machine must carry, ticked from the tags your
+machines actually have. **All of them must match**, and the field says how many
+machines qualify and how many of those are switched on.
 - **Run it with** — what starts the script: the machine's own shell, `sh`,
 `bash`, Python, PowerShell or Node.
 - **Script** — what to run, in a proper box with the syntax coloured for the
 language you chose. It runs as the user the agent runs as, in the agent's
 working directory.
+
+There is no separate "which machine" field, because **a machine's name is always
+one of its tags**. So one tag does either job:
+
+| Tags on the step | Where it runs |
+| --- | --- |
+| `invoices-box` | that one machine, and nowhere else |
+| `build` | whichever machine tagged `build` is free |
+| `linux` `gpu` | a machine that is **both** — not either |
+
+The last row is the one to read twice. Tags narrow; they do not widen. Two tags
+mean fewer machines qualify, not more, and a pair no single machine carries
+fails the step rather than picking the nearest thing.
+
+### How one machine gets chosen
+
+Nothing chooses. The step queues the job and every machine asks for work every
+five seconds, so the one that runs it is **whichever tagged machine asks first**.
+
+Which means a machine that is switched off is never sent anything — it simply
+never asks. There is no "assigned to a machine that turned out to be down"
+state, and none of the work needs re-routing when a machine goes away.
+
+Two consequences worth knowing:
+
+- **It is not load balancing.** Each agent runs one job at a time, so a busy
+machine stops asking until it is done — which spreads work as a side effect. But
+nothing prefers the idle machine, the fast one or the nearest one.
+- **A busy pool is a queue.** If every machine with your tags is working, the
+step waits (up to its own timeout), rather than starting somewhere it does not
+belong.
+
+The tag field leads with the tags that have a machine switched on, and says how
+many machines carry the set you have chosen and how many of those are running —
+so a step aimed at a sleeping pool is visible while you are writing it.
 
 Whatever you wire into the step's input arrives on the script's **standard
 input**. Whatever the script prints comes back out, ready for the next step — an
@@ -207,31 +240,42 @@ On the canvas the step carries the name of the machine it will run on, under its
 title. Wiring a secret into a step is the moment to know it is leaving the
 server, and the palette is long gone by then.
 
-### Labels
+### Tags
 
-Labels let a pool of machines share work. Register three build servers with
-`--labels linux,build` and a step targeting `build` runs on whichever is free.
+Tags let a pool of machines share work. Register three build servers with
+`--tags linux,build` and a step targeting `build` runs on whichever is free.
 
-The agent labels itself with its operating system and architecture by default,
-so `linux` and `arm64` work without anyone setting anything.
+The agent tags itself with its operating system and architecture by default, so
+`linux` and `arm64` work without anyone setting anything. And every machine
+carries its own name, which is what lets a step name one machine without a
+separate field for it.
 
-**Retagging a machine takes no visit to it.** In **Admin → Runners**, the label
-button on a row opens the labels for that machine: add one, remove one, done.
-Registration is not involved, the credential does not change, and the agent
-never learns about it — a label is how *this* Dazyflow routes work, not
+**Retagging takes no visit to the machine.** In **Admin → Runners**, click the
+machine: its settings page lists the tags it carries, and you add and remove
+them there. Registration is not involved, the credential does not change, and
+the agent never learns about it — a tag is how *this* Dazyflow routes work, not
 something the machine knows about itself.
 
-Labels are stored lower-cased, trimmed and de-duplicated, however they were
-typed, because that is what a step has to spell to match one. So a label added
-as `Build ` appears as `build` the moment it saves — which is the spelling to put
-on the step. A comma is refused: `--labels a,b` splits on it, so a label
-containing one could never come from a machine, and would read as two labels
-everywhere it is shown.
+Tags are stored lower-cased, trimmed and de-duplicated, however they were typed,
+because that is what a step has to spell to match one. So a tag added as `Build `
+appears as `build` the moment it saves — which is the spelling to put on the
+step. Two things are refused:
 
-Changing a label reroutes every step that targets it, which is why it needs
+- **A comma.** `--tags a,b` splits on it, so a tag containing one could never
+come from a machine, and would read as two tags everywhere it is shown.
+- **Another machine's name.** Names are tags, so tagging machine B with machine
+A's name would make one tag mean two machines — and a step written to pin work
+to A would quietly start landing on B.
+
+Changing a tag reroutes every step that targets it, which is why it needs
 `organization:admin` (or an API key with `module:register`) — the same authority
 as adding the machine in the first place — and why it is recorded in the audit
 log.
+
+> **`--labels` still works.** It is the older name for `--tags` and every install
+> command written down so far uses it, so the agent and the installer accept
+> both. The stored field is still called `labels` in the API for the same reason:
+> renaming a synonym is not worth a migration.
 
 ### One limit worth knowing
 
@@ -333,9 +377,18 @@ the machine's shell. Re-run the install command there to upgrade it;
 most 1 MiB per stream. Have the script write large output to a file and print
 the path, or print less.
 
-**A step fails saying the runner "has not checked in recently".** The machine is
-registered but the agent isn't running on it. Start it with
-`~/.dazyflow/runner.sh start`, or see why with `./runner.sh status`. The step
+**A step fails saying "no machine carries the tag …".** Nothing in this
+organisation has that tag. Check the spelling against the machine's settings page
+(tags are lower-case), or add it there.
+
+**A step fails saying "no single machine carries all of …".** Each tag exists,
+but no one machine has the whole set — the usual cause is a second tag that
+narrowed the step to nothing. Every tag has to match.
+
+**A step fails saying no machine tagged something "has not checked in
+recently".** The machines with those tags are registered but their agents aren't
+running. Start one with `~/.dazyflow/runner.sh start`, or see why with
+`./runner.sh status`. The step
 fails rather than waiting, so a run never hangs on a machine that is switched
 off.
 

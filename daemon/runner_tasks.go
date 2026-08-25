@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -54,9 +55,10 @@ var ErrTaskNotClaimable = errors.New("task is not held by this runner")
 type RunnerTask struct {
 	ID     string
 	Tenant string
-	// Target names a runner, or a label shared by several. Exactly one is set.
-	Runner string
-	Label  string
+	// Tags is what the step asked for: a machine carrying ALL of them. A
+	// machine's own name is one of its tags, so a step pinned to one machine is
+	// simply a task whose tags are that name.
+	Tags []string
 
 	Script string
 	// Shell names the interpreter the agent starts the script with — the
@@ -141,8 +143,15 @@ const pgRunnerTaskSchema = `
 CREATE TABLE IF NOT EXISTS runner_tasks (
     id           TEXT PRIMARY KEY,
     tenant       TEXT NOT NULL,
+    -- runner and label are the pre-tags targeting columns. They stay because a
+    -- task queued by the previous version is claimed by this one moments later,
+    -- across a rolling deploy: dropping them would strand whatever was in the
+    -- queue at that instant, and a stranded task fails a live run with "the
+    -- runner stopped responding" about a machine that is fine. Nothing writes
+    -- them any more; scanRunnerTask reads them as a fallback.
     runner       TEXT NOT NULL DEFAULT '',
     label        TEXT NOT NULL DEFAULT '',
+    tags         TEXT[] NOT NULL DEFAULT '{}',
     script       TEXT NOT NULL,
     shell        TEXT NOT NULL DEFAULT '',
     env          JSONB,
@@ -158,6 +167,7 @@ CREATE TABLE IF NOT EXISTS runner_tasks (
 );
 ALTER TABLE runner_tasks ADD COLUMN IF NOT EXISTS progress TEXT NOT NULL DEFAULT '';
 ALTER TABLE runner_tasks ADD COLUMN IF NOT EXISTS shell TEXT NOT NULL DEFAULT '';
+ALTER TABLE runner_tasks ADD COLUMN IF NOT EXISTS tags TEXT[] NOT NULL DEFAULT '{}';
 -- The claim query's working set: a tenant's unfinished tasks, oldest first.
 CREATE INDEX IF NOT EXISTS runner_tasks_claim_idx
     ON runner_tasks (tenant, created_at)
@@ -241,27 +251,19 @@ var ErrNoTask = errors.New("no task available")
 
 // eligible reports whether a runner may claim a task.
 //
-// A task targets a runner by name OR by label. Name is exact. Label matches any
-// runner carrying it, which is how a pool of interchangeable machines works.
+// A task names tags; a machine may claim it when it carries every one of them.
+// Its own name counts as a tag, so "run this on invoices-box" and "run this on
+// any linux build machine" are the same rule with different tags — one that
+// exactly one machine satisfies, and one that a pool does.
+//
+// No tags means nothing may claim it. A task with no target is a bug upstream,
+// and letting any runner take it would run someone's script on an arbitrary
+// machine.
 func eligible(t RunnerTask, r Runner) bool {
 	if t.Tenant != r.Tenant {
 		return false
 	}
-	if t.Runner != "" {
-		return t.Runner == r.Name
-	}
-	if t.Label != "" {
-		for _, l := range r.Labels {
-			if l == t.Label {
-				return true
-			}
-		}
-		return false
-	}
-	// Neither set: nothing may claim it. A task with no target is a bug
-	// upstream, and letting any runner take it would run someone's script on
-	// an arbitrary machine.
-	return false
+	return r.HasTags(t.Tags)
 }
 
 // heldBy reports that this runner currently holds this task.
@@ -499,8 +501,8 @@ func (d *RunnerDispatcher) dispatchGrace() time.Duration {
 // DispatchRequest is what the step asks for.
 type DispatchRequest struct {
 	Tenant string
-	Runner string
-	Label  string
+	// Tags is the step's target: a machine carrying all of them.
+	Tags   []string
 	Script string
 	// Shell is the interpreter the agent should start the script with; empty
 	// means the machine's own shell. See RunnerTask.Shell.
@@ -522,20 +524,20 @@ func (d *RunnerDispatcher) Dispatch(ctx context.Context, req DispatchRequest, on
 	if d == nil || d.Tasks == nil {
 		return RunnerTaskResult{}, fmt.Errorf("runners are not configured on this deployment")
 	}
-	if req.Runner == "" && req.Label == "" {
-		return RunnerTaskResult{}, fmt.Errorf("this step needs a runner or a label to send the work to")
+	if len(req.Tags) == 0 {
+		return RunnerTaskResult{}, fmt.Errorf("this step needs at least one tag saying where to run")
 	}
 	// Refuse up front when the target cannot possibly answer, rather than
 	// enqueueing into a queue nothing reads.
-	if err := d.checkTargetExists(ctx, req); err != nil {
+	matches, err := d.checkTargetExists(ctx, req)
+	if err != nil {
 		return RunnerTaskResult{}, err
 	}
 
 	task := RunnerTask{
 		ID:        d.newID(),
 		Tenant:    req.Tenant,
-		Runner:    req.Runner,
-		Label:     req.Label,
+		Tags:      req.Tags,
 		Script:    req.Script,
 		Shell:     req.Shell,
 		Env:       req.Env,
@@ -548,7 +550,7 @@ func (d *RunnerDispatcher) Dispatch(ctx context.Context, req DispatchRequest, on
 		return RunnerTaskResult{}, fmt.Errorf("queue the task: %w", err)
 	}
 	if onProgress != nil {
-		onProgress(d.waitingMessage(req))
+		onProgress(waitingMessage(req, matches, time.Now()))
 	}
 
 	poll := d.PollInterval
@@ -665,7 +667,8 @@ func (d *RunnerDispatcher) Dispatch(ctx context.Context, req DispatchRequest, on
 
 		if !deadline.IsZero() && now.After(deadline) {
 			if cur.State == TaskQueued {
-				reason := fmt.Sprintf("no runner picked this step up within %s", req.Timeout)
+				reason := fmt.Sprintf("no machine tagged %s picked this step up within %s",
+					tagList(req.Tags), req.Timeout)
 				// Unlike the path above, the outcome does not change with the
 				// answer: the ceiling stops the step regardless. If it was
 				// claimed in the last instant there is nothing to close and
@@ -701,34 +704,66 @@ func (d *RunnerDispatcher) checkTargetOnline(ctx context.Context, req DispatchRe
 			return nil
 		}
 	}
-	if req.Runner != "" {
-		return fmt.Errorf("runner %q is registered but has not checked in recently — "+
-			"the agent is not running on that machine", req.Runner)
-	}
-	return fmt.Errorf("no runner labelled %q has checked in recently — "+
-		"none of those machines is running the agent", req.Label)
+	// Naming the machines that DO match is the useful half: the tags are right,
+	// so what the author has to act on is a machine that is switched off.
+	return fmt.Errorf("no machine tagged %s has checked in recently (%s) — "+
+		"the agent is not running there", tagList(req.Tags), runnerNames(matches))
 }
 
-// checkTargetExists rejects a target no registered runner could serve.
-func (d *RunnerDispatcher) checkTargetExists(ctx context.Context, req DispatchRequest) error {
+// checkTargetExists rejects a target no registered runner could serve, and
+// returns the machines that DO carry the tags.
+//
+// The caller wants them for the waiting message: whether any of them is switched
+// on is the difference between "this will start in a second" and "this will fail
+// in thirty", and that is worth saying while the step is waiting rather than
+// only once it has given up. A nil slice with a nil error means there was no
+// registry to ask, which is not the same as no machine matching.
+func (d *RunnerDispatcher) checkTargetExists(ctx context.Context, req DispatchRequest) ([]Runner, error) {
 	if d.Runners == nil {
-		return nil
+		return nil, nil
 	}
 	matches, err := d.eligibleRunners(ctx, req)
 	if err != nil {
-		return fmt.Errorf("look up your runners: %w", err)
+		return nil, fmt.Errorf("look up your runners: %w", err)
 	}
 	if len(matches) > 0 {
-		return nil
+		return matches, nil
 	}
-	if req.Runner != "" {
-		return fmt.Errorf("no runner named %q is registered for this organisation", req.Runner)
+	// One tag that matches nothing is usually a typo; several that match
+	// nothing individually are usually a combination no machine has. Saying
+	// which is which saves the author checking each one by hand.
+	if missing, err := d.unmatchedTags(ctx, req); err == nil && len(missing) > 0 {
+		return nil, fmt.Errorf("no machine carries the tag %s", tagList(missing))
 	}
-	return fmt.Errorf("no runner is labelled %q", req.Label)
+	return nil, fmt.Errorf("no single machine carries all of %s — "+
+		"each tag exists, but no machine has the whole set", tagList(req.Tags))
 }
 
-// eligibleRunners lists this organisation's runners that could take the task —
-// the name match, or every runner carrying the label.
+// unmatchedTags returns the requested tags that no machine in this organisation
+// carries at all.
+func (d *RunnerDispatcher) unmatchedTags(ctx context.Context, req DispatchRequest) ([]string, error) {
+	rs, err := d.Runners.List(ctx, req.Tenant)
+	if err != nil {
+		return nil, err
+	}
+	known := map[string]struct{}{}
+	for _, r := range rs {
+		for _, t := range r.Tags() {
+			known[t] = struct{}{}
+		}
+	}
+	var missing []string
+	for _, t := range req.Tags {
+		if _, ok := known[t]; !ok {
+			missing = append(missing, t)
+		}
+	}
+	return missing, nil
+}
+
+// eligibleRunners lists this organisation's runners that carry every requested
+// tag — the same rule the claim uses, asked ahead of time so the step can fail
+// with something to act on instead of waiting out a queue nothing reads.
 func (d *RunnerDispatcher) eligibleRunners(ctx context.Context, req DispatchRequest) ([]Runner, error) {
 	rs, err := d.Runners.List(ctx, req.Tenant)
 	if err != nil {
@@ -736,27 +771,66 @@ func (d *RunnerDispatcher) eligibleRunners(ctx context.Context, req DispatchRequ
 	}
 	var out []Runner
 	for _, r := range rs {
-		if req.Runner != "" {
-			if r.Name == req.Runner {
-				out = append(out, r)
-			}
-			continue
-		}
-		for _, l := range r.Labels {
-			if l == req.Label {
-				out = append(out, r)
-				break
-			}
+		if r.HasTags(req.Tags) {
+			out = append(out, r)
 		}
 	}
 	return out, nil
 }
 
-func (d *RunnerDispatcher) waitingMessage(req DispatchRequest) string {
-	if req.Runner != "" {
-		return "waiting for runner " + req.Runner
+// waitingMessage says what the step is waiting for, and — when it is known —
+// whether anything is there to answer.
+//
+// The distinction is the whole point. Work goes to whichever eligible machine
+// polls first, so an offline machine is never sent anything; but a step whose
+// machines are ALL switched off waits out the pickup grace and then fails, and
+// for those thirty seconds "waiting for a machine tagged build" is a message
+// that reads like progress. Saying how many of them are actually there turns it
+// into something the author can act on while the run is still open.
+func waitingMessage(req DispatchRequest, matches []Runner, now time.Time) string {
+	base := "waiting for a machine tagged " + tagList(req.Tags)
+	if len(matches) == 0 {
+		// No registry to ask (a deployment without runners reaches this), so
+		// promising anything about who is there would be a guess.
+		return base
 	}
-	return "waiting for a runner labelled " + req.Label
+	online := 0
+	for _, r := range matches {
+		if r.Online(now) {
+			online++
+		}
+	}
+	if online == 0 {
+		who := fmt.Sprintf("none of the %d machines carrying them", len(matches))
+		if len(matches) == 1 {
+			who = "the only machine carrying them (" + matches[0].Name + ")"
+		}
+		return fmt.Sprintf("%s — %s has checked in recently, "+
+			"so this will fail shortly unless one starts", base, who)
+	}
+	return fmt.Sprintf("%s (%d of %d switched on)", base, online, len(matches))
+}
+
+// tagList renders tags the way the step's field reads them: joined with "+",
+// because the rule is AND. "linux, gpu" would read as a choice between two.
+func tagList(tags []string) string {
+	if len(tags) == 0 {
+		return "(none)"
+	}
+	return strings.Join(tags, " + ")
+}
+
+// runnerNames names the machines a message is about, so "not checked in
+// recently" says WHICH machine to go and look at.
+func runnerNames(rs []Runner) string {
+	if len(rs) == 0 {
+		return "none"
+	}
+	names := make([]string, 0, len(rs))
+	for _, r := range rs {
+		names = append(names, r.Name)
+	}
+	return strings.Join(names, ", ")
 }
 
 func (d *RunnerDispatcher) newID() string {
@@ -773,6 +847,16 @@ func (d *RunnerDispatcher) newID() string {
 		return fmt.Sprintf("task_%d", time.Now().UnixNano())
 	}
 	return plain
+}
+
+// tagsOrEmpty keeps a nil slice out of a NOT NULL array column. A task with no
+// tags is refused long before this, so this is about the column's shape rather
+// than about a case that should reach the database.
+func tagsOrEmpty(tags []string) []string {
+	if tags == nil {
+		return []string{}
+	}
+	return tags
 }
 
 // jsonOrNil marshals a map for storage, returning nil for an empty one so the

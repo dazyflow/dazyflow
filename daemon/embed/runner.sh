@@ -62,7 +62,7 @@ Set up (from your Dazyflow server):
   --token TOKEN   registration token from Admin -> Runners in Dazyflow
   --url URL       Dazyflow server (already set if you piped this from one)
   --name NAME     name for this machine (default: this host's name)
-  --labels A,B    labels a flow can target instead of the name
+  --tags A,B      tags a flow can target this machine by (its name is always one)
   --allow A,B     only let these programs run. Strongly recommended
   --dir PATH      where to install (default: $HOME/.dazyflow)
   --service       install and start a systemd user service, so it survives a reboot
@@ -331,7 +331,10 @@ cmd_setup() {
 		--token) TOKEN="$2"; shift 2 ;;
 		--url) URL="$2"; shift 2 ;;
 		--name) NAME="$2"; shift 2 ;;
-		--labels) LABELS="$2"; shift 2 ;;
+		# --labels is the old name for --tags. Still accepted: it is in every
+		# install command anyone has written down, and breaking those to rename a
+		# synonym would be a poor trade.
+		--tags|--labels) LABELS="$2"; shift 2 ;;
 		--allow) ALLOW="$2"; shift 2 ;;
 		--dir) DIR="$2"; shift 2 ;;
 		--service) SERVICE=1; shift ;;
@@ -427,7 +430,7 @@ It ships with most systems; install it and run this again."
 
 	set -- --url "$URL" --token "$TOKEN"
 	[ -n "$NAME" ] && set -- "$@" --name "$NAME"
-	[ -n "$LABELS" ] && set -- "$@" --labels "$LABELS"
+	[ -n "$LABELS" ] && set -- "$@" --tags "$LABELS"
 	[ -n "$ALLOW" ] && set -- "$@" --allow "$ALLOW"
 
 	if [ -z "$ALLOW" ]; then
