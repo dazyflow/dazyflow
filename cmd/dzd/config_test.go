@@ -180,3 +180,39 @@ func TestApplyNetworkPolicy_DevModeNoFatal(t *testing.T) {
 	t.Setenv("DAZYFLOW_EGRESS_RATE_PER_MIN", "")
 	applyNetworkPolicy("", true)
 }
+
+
+// The dev remote spec has to name a tenant, because the catalog is keyed by
+// one and a remote registered under no tenant resolves for nobody. An entry
+// that omits it gets devRemoteTenant — the tenant the seeded development user
+// signs in as — so the documented local workflow keeps working unchanged.
+func TestParseRemoteEntry(t *testing.T) {
+	for _, tc := range []struct {
+		name, spec, tenant, id string
+		wantErr                bool
+	}{
+		{name: "bare id defaults to the dev tenant", spec: "mod=127.0.0.1:1", tenant: devRemoteTenant, id: "mod"},
+		{name: "explicit tenant", spec: "acme/mod=127.0.0.1:1", tenant: "acme", id: "mod"},
+		{name: "surrounding space is trimmed", spec: " acme / mod = 127.0.0.1:1", tenant: "acme", id: "mod"},
+		{name: "missing tenant half", spec: "/mod=127.0.0.1:1", wantErr: true},
+		{name: "missing id half", spec: "acme/=127.0.0.1:1", wantErr: true},
+		{name: "no equals sign", spec: "acme/mod", wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			desc, err := parseRemoteEntry(tc.spec)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("parseRemoteEntry(%q) = %+v, want an error", tc.spec, desc)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseRemoteEntry(%q) = %v", tc.spec, err)
+			}
+			if desc.Tenant != tc.tenant || desc.ID != tc.id {
+				t.Errorf("got (tenant=%q id=%q), want (tenant=%q id=%q)",
+					desc.Tenant, desc.ID, tc.tenant, tc.id)
+			}
+		})
+	}
+}

@@ -1227,7 +1227,8 @@
       "grantedBy": "tillagd av {{who}}",
       "addedAt": "tillagd {{date}}",
       "removeConfirm": "Ta bort supportagentåtkomst för {{email}}?"
-    }
+    },
+    "cardRunnersDesc": "Körnoder för din egen kod, registrerade med certifikat på båda sidor."
   },
   "results": {
     "title": "Samlingar",
@@ -1472,7 +1473,8 @@
       "days_other": "Var {{count}}:e dag"
     },
     "geoWired": "Anges av den kopplade indatan",
-    "geoUnset": "Ingen plats angiven"
+    "geoUnset": "Ingen plats angiven",
+    "portValueOnly": "tar ett värde, inte en fil"
   },
   "issueKey": {
     "title": "Skapa API-nyckel",
@@ -2218,5 +2220,39 @@
     "stop": "Stoppa",
     "stopping": "Stoppar…",
     "stopTitle": "Stoppa körningen innan den är klar"
+  },
+  "runners": {
+    "title": "Körnoder",
+    "subtitle": "Din egen kod, på din egen hårdvara, som ett steg i dina flöden.",
+    "emptyTitle": "Inga körnoder än",
+    "emptyBody": "En körnod är en liten tjänst du själv driftar. Registrera en och stegen den erbjuder dyker upp i din palett, tillsammans med de inbyggda.",
+    "colSteps": "Steg",
+    "noSteps": "—",
+    "remove": "Ta bort körnod",
+    "addTitle": "Registrera en körnod",
+    "addIntro": "Båda sidor visar vilka de är med ett certifikat. Du anger din körnods certifikat så att daemonen kan känna igen den, och ett certifikat med nyckel som daemonen visar tillbaka.",
+    "nameDesc": "Små bokstäver, siffror och bindestreck. Namnet blir en del av varje stegs id och kan därför inte ändras senare.",
+    "endpointLabel": "Adress",
+    "endpointDesc": "Värdnamn och port som daemonen kan nå. Namnet här måste stämma med körnodens certifikat.",
+    "serverCertLabel": "Din körnods certifikat",
+    "serverCertDesc": "Inklistrat, inte hämtat: daemonen litar på exakt det här certifikatet och inget annat.",
+    "clientCertLabel": "Certifikat som daemonen visar",
+    "clientCertDesc": "Installera motsvarande certifikat på din körnod så att den känner igen daemonen.",
+    "clientKeyLabel": "Privat nyckel för certifikatet",
+    "clientKeyDesc": "Lagras krypterad och visas aldrig igen. Att ersätta en körnod innebär att klistra in den en gång till.",
+    "test": "Testa anslutning",
+    "testing": "Testar…",
+    "save": "Registrera",
+    "probeAnswered": "Svarade",
+    "probeSteps": "Erbjuder: {{steps}}",
+    "probeNoSteps": "Ansluten, men erbjuder inga steg än.",
+    "expiringSoon": "Certifikatet för {{names}} går snart ut. Registrera körnoden igen med ett nytt innan det sker.",
+    "state": {
+      "connected": "Ansluten",
+      "unreachable": "Kan inte nås",
+      "disabled": "Av"
+    },
+    "onYourHardware": "Din körnod",
+    "onYourHardwareHint": "Det här steget körs på din egen körnod ({{name}}), inte på Dazyflow-servern. Allt du kopplar in skickas dit."
   }
 }

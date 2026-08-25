@@ -1227,7 +1227,8 @@
       "grantedBy": "added by {{who}}",
       "addedAt": "added {{date}}",
       "removeConfirm": "Remove support-agent access for {{email}}?"
-    }
+    },
+    "cardRunnersDesc": "Runners for your own code, registered with certificates on both sides."
   },
   "results": {
     "title": "Collections",
@@ -1472,7 +1473,8 @@
       "days_other": "Every {{count}} days"
     },
     "geoWired": "Set by the connected input",
-    "geoUnset": "No location set"
+    "geoUnset": "No location set",
+    "portValueOnly": "takes a value, not a file"
   },
   "issueKey": {
     "title": "Issue API key",
@@ -2218,5 +2220,39 @@
     "stop": "Stop",
     "stopping": "Stopping…",
     "stopTitle": "Stop this run before it finishes"
+  },
+  "runners": {
+    "title": "Runners",
+    "subtitle": "Your own code, on your own hardware, as a step in your flows.",
+    "emptyTitle": "No runners yet",
+    "emptyBody": "A runner is a small service you host. Register one and the steps it offers appear in your palette, alongside the built-in ones.",
+    "colSteps": "Steps",
+    "noSteps": "—",
+    "remove": "Remove runner",
+    "addTitle": "Register a runner",
+    "addIntro": "Both sides prove who they are with a certificate. You supply your runner's certificate so the daemon can recognise it, and a certificate and key the daemon presents in return.",
+    "nameDesc": "Lower case, digits, dashes. It becomes part of each step's id, so it cannot be changed later.",
+    "endpointLabel": "Address",
+    "endpointDesc": "Host and port, reachable from the daemon. The name here must match your runner's certificate.",
+    "serverCertLabel": "Your runner's certificate",
+    "serverCertDesc": "Pasted, not fetched: the daemon trusts this exact certificate and nothing else.",
+    "clientCertLabel": "Certificate the daemon presents",
+    "clientCertDesc": "Install the matching certificate on your runner so it can recognise the daemon.",
+    "clientKeyLabel": "Private key for that certificate",
+    "clientKeyDesc": "Stored encrypted and never shown again. Replacing a runner means pasting it once more.",
+    "test": "Test connection",
+    "testing": "Testing…",
+    "save": "Register",
+    "probeAnswered": "Answered",
+    "probeSteps": "Offers: {{steps}}",
+    "probeNoSteps": "Connected, but it offers no steps yet.",
+    "expiringSoon": "The certificate for {{names}} expires soon. Register the runner again with a new one before it does.",
+    "state": {
+      "connected": "Connected",
+      "unreachable": "Unreachable",
+      "disabled": "Off"
+    },
+    "onYourHardware": "Your runner",
+    "onYourHardwareHint": "This step runs on your own runner ({{name}}), not on the Dazyflow server. Anything you wire in is sent there."
   }
 }

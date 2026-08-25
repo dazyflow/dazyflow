@@ -149,8 +149,8 @@ type echoNode struct {
 	nodepb.UnimplementedNodeServiceServer
 }
 
-func (echoNode) GetManifest(_ context.Context, _ *nodepb.GetManifestRequest) (*nodepb.Manifest, error) {
-	return &nodepb.Manifest{
+func (echoNode) ListManifests(_ context.Context, _ *nodepb.ListManifestsRequest) (*nodepb.ListManifestsResponse, error) {
+	return &nodepb.ListManifestsResponse{Manifests: []*nodepb.Manifest{{
 		Id:             "echo",
 		Version:        "1.0",
 		Label:          "Echo",
@@ -159,7 +159,7 @@ func (echoNode) GetManifest(_ context.Context, _ *nodepb.GetManifestRequest) (*n
 		Inputs:         []*nodepb.Port{{Id: "in"}},
 		Outputs:        []*nodepb.Port{{Id: "out"}},
 		Idempotent:     true,
-	}, nil
+	}}}, nil
 }
 
 func (echoNode) Execute(job *nodepb.Job, stream nodepb.NodeService_ExecuteServer) error {
@@ -330,12 +330,12 @@ func TestGRPCCov_NodeService(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
-	man, err := client.GetManifest(ctx, &nodepb.GetManifestRequest{})
+	res, err := client.ListManifests(ctx, &nodepb.ListManifestsRequest{})
 	if err != nil {
-		t.Fatalf("GetManifest: %v", err)
+		t.Fatalf("ListManifests: %v", err)
 	}
-	if man.Id != "echo" {
-		t.Errorf("GetManifest id = %q", man.Id)
+	if len(res.Manifests) != 1 || res.Manifests[0].Id != "echo" {
+		t.Errorf("ListManifests = %+v, want one manifest with id \"echo\"", res.Manifests)
 	}
 
 	stream, err := client.Execute(ctx, &nodepb.Job{

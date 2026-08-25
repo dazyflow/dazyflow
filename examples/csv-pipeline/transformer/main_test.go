@@ -34,12 +34,16 @@ func (f *fakeExecStream) result() *nodepb.Result {
 	return nil
 }
 
-func TestGetManifest(t *testing.T) {
+func TestListManifests(t *testing.T) {
 	s := &server{}
-	m, err := s.GetManifest(context.Background(), &nodepb.GetManifestRequest{})
+	res, err := s.ListManifests(context.Background(), &nodepb.ListManifestsRequest{})
 	if err != nil {
-		t.Fatalf("GetManifest: %v", err)
+		t.Fatalf("ListManifests: %v", err)
 	}
+	if len(res.Manifests) != 1 {
+		t.Fatalf("manifests=%d, want 1", len(res.Manifests))
+	}
+	m := res.Manifests[0]
 	if m.Id != "csv_uppercase" {
 		t.Fatalf("id=%q", m.Id)
 	}

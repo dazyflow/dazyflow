@@ -26,8 +26,11 @@ type server struct {
 	nodepb.UnimplementedNodeServiceServer
 }
 
-func (s *server) GetManifest(_ context.Context, _ *nodepb.GetManifestRequest) (*nodepb.Manifest, error) {
-	return &nodepb.Manifest{
+// ListManifests declares what this runner serves. One drop here, returned as a
+// list of one: the RPC is plural so a runner can grow to several without the
+// daemon and every existing runner having to change together.
+func (s *server) ListManifests(_ context.Context, _ *nodepb.ListManifestsRequest) (*nodepb.ListManifestsResponse, error) {
+	return &nodepb.ListManifestsResponse{Manifests: []*nodepb.Manifest{{
 		Id:             "csv_uppercase",
 		Version:        "1.0",
 		Label:          "CSV Uppercase",
@@ -37,7 +40,15 @@ func (s *server) GetManifest(_ context.Context, _ *nodepb.GetManifestRequest) (*
 		Inputs:         []*nodepb.Port{{Id: "in", Required: true}},
 		Outputs:        []*nodepb.Port{{Id: "out"}},
 		Idempotent:     true,
-	}, nil
+		// Presentation. Without these the step shows up in the palette as a
+		// generic box that search cannot find by concept.
+		Icon:        "type",
+		Category:    "transformation",
+		Subtitle:    "Upper-case every cell",
+		Summary:     "Upper-cases every cell of a CSV.",
+		Description: "Reads a CSV value, upper-cases every cell, and returns the result. A worked example of a runner: the transformation itself is trivial so the wiring is what you read.",
+		Tags:        []string{"csv", "uppercase", "example"},
+	}}}, nil
 }
 
 func (s *server) Execute(job *nodepb.Job, stream nodepb.NodeService_ExecuteServer) error {

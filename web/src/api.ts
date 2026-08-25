@@ -42,6 +42,8 @@ import type {
   ScheduleEntry,
   PublishInfo,
   GitCredential,
+  Runner,
+  RunnerProbe,
   GitMirror,
   MirrorPushResult,
   ReferenceGroups,
@@ -951,6 +953,41 @@ export const api = {
         nodeID,
       )}/${enabled ? "enable" : "disable"}`,
     ),
+  // listRunners returns the org's registered runners with their live
+  // connection state. Never returns the client private key.
+  listRunners: (token: string) =>
+    request<{ runners: Runner[] }>(token, "GET", "/admin/runners"),
+  // putRunner registers or replaces a runner. The client key is write-only:
+  // it goes in here and is never read back.
+  putRunner: (
+    token: string,
+    name: string,
+    body: {
+      endpoint: string;
+      server_ca_pem: string;
+      client_cert_pem: string;
+      client_key_pem: string;
+      recv_timeout_ms?: number;
+      enabled?: boolean;
+    },
+  ) => request<Runner>(token, "PUT", `/admin/runners/${encodeURIComponent(name)}`, body),
+  // deleteRunner removes a runner and its stored client key.
+  deleteRunner: (token: string, name: string) =>
+    request<void>(token, "DELETE", `/admin/runners/${encodeURIComponent(name)}`),
+  // testRunner dials a runner with material that has NOT been saved, so an
+  // admin can confirm the certificates are right while the form is still open.
+  // Answers 200 with ok:false for a failed connection — the request succeeded
+  // in telling you what is wrong.
+  testRunner: (
+    token: string,
+    name: string,
+    body: {
+      endpoint: string;
+      server_ca_pem: string;
+      client_cert_pem: string;
+      client_key_pem: string;
+    },
+  ) => request<RunnerProbe>(token, "POST", `/admin/runners/${encodeURIComponent(name)}/test`, body),
   // listGitCredentials returns the org's named git credentials (names +
   // which parts are set — never the secret material). Backs the admin page
   // and the git_checkout account picker.

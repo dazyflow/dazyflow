@@ -41,6 +41,12 @@ type HTTPGateway struct {
 	// cmd/dzd installs it as a tee behind the standard logger at startup.
 	LogTail *LogTail
 
+	// Runners and RunnerSupervisor power the tenant-runner admin API. Both nil
+	// leaves those endpoints answering 501, so a deployment that has not
+	// configured runner storage simply does not offer the feature.
+	Runners          *Runners
+	RunnerSupervisor *RunnerSupervisor
+
 	// WildcardDomain, when set (e.g. "dazyflow.app"), treats every
 	// subdomain "<org>.dazyflow.app" as an allowed browser origin for
 	// the CORS allowlist + the CSRF origin check, on top of the exact

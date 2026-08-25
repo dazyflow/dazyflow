@@ -5,6 +5,7 @@ package engine
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
 	"git.sr.ht/~klahr/dazyflow/core"
@@ -33,6 +34,12 @@ func NewRegistry() *Registry {
 // correctly. Fail-closed here keeps the contract honest — drops can't
 // silently ship without the discovery shape the LLM relies on.
 func (r *Registry) Register(n NativeDrop) error {
+	// The runner/ namespace belongs to tenant runners. Refusing it here means a
+	// future built-in can never shadow an org's own step — which would change
+	// what an existing flow runs, silently, on upgrade.
+	if strings.HasPrefix(n.Manifest.ID, RunnerNamespace) {
+		return fmt.Errorf("drop %q: the %q prefix is reserved for tenant runners", n.Manifest.ID, RunnerNamespace)
+	}
 	if n.Manifest.ID == "" {
 		return fmt.Errorf("manifest ID is empty")
 	}

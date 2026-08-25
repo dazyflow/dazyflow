@@ -123,6 +123,12 @@ type Port struct {
 	// Drives the "you wired a list into a one-at-a-time step — wrap it in a
 	// For each loop" hint: a List output into a non-List input is the tell.
 	List bool `json:"list,omitempty" xml:"list,omitempty"`
+	// InlineOnly marks an input that takes a VALUE and cannot take a file
+	// reference. Set on every input of a tenant runner's drop: a Ref's path is
+	// on the daemon's own disk, which means nothing to a process on another
+	// machine. The editor uses it to say so on the port rather than leaving the
+	// failure to a run; engine/remote.go refuses such a job before dialling.
+	InlineOnly bool `json:"inline_only,omitempty" xml:"inline_only,omitempty"`
 }
 
 // PortKind is the value kind a port carries in the simplified data model — the

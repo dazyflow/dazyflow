@@ -3,13 +3,14 @@
 
 import { memo, useState } from "react";
 import { Handle, Position, useStore, type NodeProps } from "@xyflow/react";
-import { AlertTriangle, Check, ChevronRight, Repeat, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronRight, Plug, Repeat, X } from "lucide-react";
 import i18n from "../../i18n";
 import { portTypeLabel } from "../../lib/ports";
 import { telFieldFlag, regionDisplayName } from "../../lib/phoneFlag";
 import { Switch } from "../ui/Switch";
 import { iconFor, isBrandedIcon, dropColor, ICON } from "../../icons";
 import { dropSubtitle, nodeStateText, portLabel } from "../../lib/dropText";
+import { isRunnerStep, runnerNameOf } from "../../lib/runnerDrop";
 import type { Manifest, Port, JSONSchema, Ref } from "../../types";
 import {
   type DazyNodeData,
@@ -343,6 +344,21 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
               {dropSubtitle(d.manifest, i18n.language)}
             </div>
           )}
+          {/* A step that leaves the daemon says so, on the canvas.
+              This is the one place it has to be visible: wiring a secret into
+              a step is the moment someone should know it is being sent to
+              hardware the org runs, and the palette is long gone by then. */}
+          {isRunnerStep(d.moduleID) && (
+            <div
+              className="dz-node-chip dz-node-runner"
+              title={i18n.t("runners.onYourHardwareHint", {
+                name: runnerNameOf(d.moduleID),
+              })}
+            >
+              <Plug size={ICON.xs} strokeWidth={2.2} />
+              {runnerNameOf(d.moduleID)}
+            </div>
+          )}
           {/* Stateful drops (RSS dedupe, poll watermarks) show a subtle "keeps
               state" chip so an empty output reads as memory, not breakage —
               and it signals the right-click "Reset state" action exists. */}
@@ -352,14 +368,7 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
                 d.manifest.node_state.reset_hint || d.manifest.node_state.label,
                 i18n.language,
               )}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "var(--space-1)",
-                marginTop: "var(--space-1)",
-                fontSize: "var(--text-2xs)",
-                opacity: 0.6,
-              }}
+              className="dz-node-chip"
             >
               <Repeat size={ICON.xs} strokeWidth={2.2} />
               {nodeStateText(d.manifest.node_state.label, i18n.language)}
@@ -1080,6 +1089,12 @@ function portTooltip(port: Port): string {
   // instead of raw MIME — what's flowing, in words a non-techie reads.
   parts.push(portTypeLabel(port, (k, d) => i18n.t(k, d)));
   parts.push(port.required ? i18n.t("nodeCard.portRequired") : i18n.t("nodeCard.portOptional"));
+  // A runner's input takes a value, never a file. Said on the pin's tooltip
+  // because that is the moment someone is deciding what to wire in — the
+  // alternative is finding out from a run that refused the job.
+  if (port.inline_only) {
+    parts.push(i18n.t("nodeCard.portValueOnly"));
+  }
   return parts.join(" — ");
 }
 

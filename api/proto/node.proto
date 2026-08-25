@@ -8,11 +8,21 @@ option go_package = "git.sr.ht/~klahr/dazyflow/api/gen/node;nodepb";
 // implements this server-side; the engine talks to it as a client via
 // engine.RemoteTransport.
 service NodeService {
-    rpc GetManifest (GetManifestRequest) returns (Manifest);
-    rpc Execute     (Job)                returns (stream Event);
+    // ListManifests returns every drop this runner serves.
+    //
+    // Plural from the outset, even though a runner that serves one drop just
+    // returns a single entry. Changing the shape later would mean every runner
+    // already written has to be updated in lockstep with the daemon — and the
+    // point of a runner is that its binary is not the daemon's to update.
+    rpc ListManifests (ListManifestsRequest) returns (ListManifestsResponse);
+    rpc Execute       (Job)                  returns (stream Event);
 }
 
-message GetManifestRequest {}
+message ListManifestsRequest {}
+
+message ListManifestsResponse {
+    repeated Manifest manifests = 1;
+}
 
 message Port {
     string id        = 1;
@@ -37,6 +47,17 @@ message Manifest {
     bool   idempotent        = 10;
     string retry_policy      = 11;
     repeated string compatible_with = 12;
+
+    // Presentation. Without these a runner's step lands in the palette with a
+    // generic box icon, no grouping, and nothing for search to match on but
+    // its id — so they are part of the contract from the start rather than
+    // added once runners exist in the wild.
+    string icon              = 13; // a name from the shared icon set
+    string category          = 14; // groups it in the palette; see the docs
+    string subtitle          = 15; // one line under the label
+    string description       = 16; // what it does, for the inspector
+    string summary           = 17; // one sentence, for lists and search
+    repeated string tags     = 18; // words someone might search for
 }
 
 message Ref {
@@ -55,6 +76,10 @@ message Job {
     bytes  params           = 7; // JSON
     map<string, string> env = 8;
     string cleanup          = 9;
+    // Which of the runner's drops to execute. A runner serving one drop can
+    // ignore it; a runner serving several has no other way to tell, since a
+    // job otherwise names only the graph and node it came from.
+    string drop_id          = 10;
 }
 
 message Progress {

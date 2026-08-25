@@ -1769,8 +1769,11 @@ func (s *Service) manifestsSnapshot() map[string]core.Manifest {
 // Either way the engine resolver still hard-blocks execution if a disabled
 // drop is referenced; this only shapes the build-time UI.
 func (s *Service) listDrops(ctx context.Context, p core.Principal, includeDisabled bool) (map[string]core.Manifest, error) {
+	// Tenant-scoped: native and MCP drops are instance-wide, but a runner's
+	// drops belong to the org that registered it. Asking for the unscoped map
+	// here would put another tenant's private steps in this one's palette.
 	mp, ok := s.Engine.Resolver.(interface {
-		Manifests() map[string]core.Manifest
+		ManifestsForTenant(string) map[string]core.Manifest
 	})
 	if !ok {
 		return map[string]core.Manifest{}, nil
@@ -1779,7 +1782,7 @@ func (s *Service) listDrops(ctx context.Context, p core.Principal, includeDisabl
 	// stamp the computed ConnectionVerifiable flag without mutating the
 	// registry. The flag tells the Apps page which connections it can test
 	// (and verify before saving) vs which just store.
-	out := mp.Manifests()
+	out := mp.ManifestsForTenant(p.Tenant)
 	for id, m := range out {
 		if len(m.ConnectionFields) > 0 && m.Integration != "" {
 			if _, verifiable := engine.ConnectionVerifierFor(core.ConnectionSlug(m.Integration)); verifiable {

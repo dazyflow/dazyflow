@@ -344,6 +344,14 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// OAuth provider configuration: paste client_id + client_secret in
 	// the admin UI instead of DAZYFLOW_OAUTH_*_CLIENT_ID env vars + a
 	// restart. Persisted creds win over env on the next boot.
+	// Tenant runners: an org's own code, reachable as a step in its flows.
+	// Gated on organization:admin or module:register — see requireRunnerAdmin
+	// for why that is deliberately not graph:edit.
+	mux.HandleFunc("GET /api/v1/admin/runners", h.requireAuth(h.listRunners))
+	mux.HandleFunc("PUT /api/v1/admin/runners/{name}", h.requireAuth(h.putRunner))
+	mux.HandleFunc("DELETE /api/v1/admin/runners/{name}", h.requireAuth(h.deleteRunner))
+	mux.HandleFunc("POST /api/v1/admin/runners/{name}/test", h.requireAuth(h.testRunner))
+
 	mux.HandleFunc("GET /api/v1/admin/oauth-providers", h.requireAuth(h.listAdminOAuthProviders))
 	mux.HandleFunc("PUT /api/v1/admin/oauth-providers/{name}", h.requireAuth(h.upsertAdminOAuthProvider))
 	mux.HandleFunc("DELETE /api/v1/admin/oauth-providers/{name}", h.requireAuth(h.deleteAdminOAuthProvider))

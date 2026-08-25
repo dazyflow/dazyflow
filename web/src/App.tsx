@@ -55,6 +55,7 @@ import { AdminGoogle } from "./pages/admin/AdminGoogle";
 import { AdminSecrets } from "./pages/admin/AdminSecrets";
 import { EmailTemplates } from "./pages/admin/EmailTemplates";
 import { AdminGitCredentials } from "./pages/admin/AdminGitCredentials";
+import { AdminRunners } from "./pages/admin/AdminRunners";
 import { AcceptInvite } from "./pages/auth/AcceptInvite";
 import { PublicOverview } from "./pages/PublicOverview";
 import { UploadsProvider } from "./uploads";
@@ -166,6 +167,7 @@ export function App() {
         <Route path="/admin/secrets" element={<AdminSecrets />} />
         <Route path="/admin/email-templates" element={<EmailTemplates />} />
         <Route path="/admin/git-credentials" element={<AdminGitCredentials />} />
+        <Route path="/admin/runners" element={<AdminRunners />} />
         <Route path="/invite/:token" element={<AcceptInvite />} />
         <Route path="*" element={<Navigate to="/flows" replace />} />
       </Routes>

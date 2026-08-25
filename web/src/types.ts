@@ -172,6 +172,12 @@ export type Port = {
   // the "you fed a whole list into a one-at-a-time step" tell — see the loop
   // hint in FlowEditor.
   list?: boolean;
+  // inline_only marks an input that takes a VALUE and cannot take a file.
+  // Set on every input of a tenant runner's drop: the runner is on another
+  // machine, and a file reference is a path on the daemon's own disk. The
+  // engine refuses such a job before dialling, so surfacing this on the port
+  // is what turns a failed run into something visible while editing.
+  inline_only?: boolean;
 };
 
 // ConnectionRequirement is one credential a drop needs to run, surfaced
@@ -811,6 +817,47 @@ export type PublishInfo = {
   published_commit?: string;
   head_commit?: string;
   dirty: boolean;
+};
+
+// Runner is one of the org's registered runners from GET /admin/runners: its
+// own code, on its own hardware, reachable as a step in its flows.
+//
+// The client PRIVATE key is never returned — it is write-only, held encrypted
+// server-side. The certificates ARE returned: they are public identity an admin
+// may need to re-install on the runner side.
+export type Runner = {
+  name: string;
+  endpoint: string;
+  enabled: boolean;
+  client_cert_pem?: string;
+  server_ca_pem?: string;
+  // not_after is the client certificate's expiry; expiring_soon is the server's
+  // own verdict on it, so every caller warns at the same threshold.
+  not_after?: string;
+  expiring_soon?: boolean;
+  created_by?: string;
+  created_at: string;
+  updated_at: string;
+  // Live connection state. Absent until the daemon has tried.
+  state?: "connected" | "unreachable" | "disabled";
+  // drops are the steps this runner currently serves, by their catalog ids
+  // (runner/<runner>/<drop>). Empty while unreachable.
+  drops?: string[];
+  error?: string;
+  last_attempt?: string;
+  last_success?: string;
+};
+
+// RunnerProbe is the result of testing a runner before saving it. `ok` means it
+// answered; `subject` and `hosts` come from the certificate that was pasted, so
+// they are reported even when the connection fails — confirming WHO you are
+// about to trust matters more than confirming that something answered.
+export type RunnerProbe = {
+  ok: boolean;
+  subject?: string;
+  hosts?: string[];
+  drops?: string[];
+  error?: string;
 };
 
 // GitCredential is one named per-org git credential from

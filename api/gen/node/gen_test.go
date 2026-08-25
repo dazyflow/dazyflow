@@ -48,7 +48,7 @@ func nodeRoundTrip[T covMessage](t *testing.T, m T, fresh T) {
 }
 
 func TestNodeGenCoverage(t *testing.T) {
-	getManReq := &GetManifestRequest{}
+	listReq := &ListManifestsRequest{}
 
 	port := &Port{Id: "p", Mime: []string{"text/plain"}, Label: "L", Required: true, Variadic: true, Min: 1, Max: 9}
 	if port.GetId() != "p" || len(port.GetMime()) != 1 || port.GetLabel() != "L" || !port.GetRequired() || !port.GetVariadic() || port.GetMin() != 1 || port.GetMax() != 9 {
@@ -129,7 +129,7 @@ func TestNodeGenCoverage(t *testing.T) {
 		t.Fatal("Event result oneof")
 	}
 
-	nodeRoundTrip(t, getManReq, &GetManifestRequest{})
+	nodeRoundTrip(t, listReq, &ListManifestsRequest{})
 	nodeRoundTrip(t, port, &Port{})
 	nodeRoundTrip(t, man, &Manifest{})
 	nodeRoundTrip(t, ref, &Ref{})

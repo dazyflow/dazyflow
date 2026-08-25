@@ -75,6 +75,7 @@ export function Admin() {
         <AdminCard to="/admin/email-templates" icon={<Mail size={ICON.lg} />} title={t("admin.cardEmailTemplatesTitle", "Email templates")} desc={t("admin.cardEmailTemplatesDesc", "Reusable HTML layouts the email steps wrap messages in.")} />
         <AdminCard to="/admin/google" icon={<img src="/brands/google-g.svg" alt="" width={18} height={18} />} title={t("admin.cardGoogleTitle")} desc={t("admin.cardGoogleDesc")} />
         <AdminCard to="/admin/git-credentials" icon={<KeyRound size={ICON.lg} />} title={t("admin.cardGitTitle")} desc={t("admin.cardGitDesc")} />
+        <AdminCard to="/admin/runners" icon={<Plug size={ICON.lg} />} title={t("runners.title")} desc={t("admin.cardRunnersDesc")} />
         <AdminCard to="/admin/sso" icon={<ShieldCheck size={ICON.lg} />} title={t("admin.cardSSOTitle")} desc={t("admin.cardSSODesc")} />
         <AdminCard to="/admin/audit" icon={<ScrollText size={ICON.lg} />} title={t("admin.cardAuditTitle")} desc={t("admin.cardAuditDesc")} />
         <AdminCard to="/admin/support" icon={<LifeBuoy size={ICON.lg} />} title={t("admin.cardSupportTitle", "Support access")} desc={t("admin.cardSupportDesc", "Approve or deny read-only access support requests for a flow.")} />

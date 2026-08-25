@@ -74,7 +74,7 @@ func (r *NodeResolver) Resolve(ctx context.Context, moduleID string) (core.Trans
 	// Native / local / remote / MCP drops are version-blind: they live in the
 	// bare-id world, so resolve them by id and ignore any pin (a built-in's
 	// behavior doesn't fork per version).
-	t, ok := r.lookup(id)
+	t, ok := r.lookup(ctx, id)
 	if !ok {
 		return nil, fmt.Errorf("no transport registered for module %q", moduleID)
 	}
@@ -92,14 +92,22 @@ func (r *NodeResolver) Resolve(ctx context.Context, moduleID string) (core.Trans
 
 // lookup returns the first transport for id across the catalogs, in
 // priority order (native → remote → MCP).
-func (r *NodeResolver) lookup(id string) (core.Transport, bool) {
+//
+// Takes a ctx solely to read the executing tenant: native and MCP drops are
+// instance-wide, but a remote belongs to exactly one tenant and must not be
+// reachable from another. Resolve already had the tenant for DropGate; passing
+// it one level further down is what makes cross-tenant resolution impossible
+// rather than merely forbidden.
+func (r *NodeResolver) lookup(ctx context.Context, id string) (core.Transport, bool) {
 	if r.Native != nil {
 		if t, ok := r.Native.Get(id); ok {
 			return t, true
 		}
 	}
 	if r.Remote != nil {
-		if t, ok := r.Remote.Get(id); ok {
+		// An absent tenant yields "", which Get treats as matching nothing.
+		tenant, _ := core.TenantFromContext(ctx)
+		if t, ok := r.Remote.Get(tenant, id); ok {
 			return t, true
 		}
 	}
@@ -113,7 +121,12 @@ func (r *NodeResolver) lookup(id string) (core.Transport, bool) {
 
 // ManifestsForTenant gathers every manifest visible to the tenant, for
 // ValidateWithManifests before execution.
-func (r *NodeResolver) ManifestsForTenant(_ string) map[string]core.Manifest {
+//
+// Native and MCP drops are instance-wide. Remotes are not: a tenant runner's
+// drops belong to one tenant, and showing them to another would put a step in
+// the palette that tenant cannot resolve — and, worse, would tell them a runner
+// by that name exists somewhere.
+func (r *NodeResolver) ManifestsForTenant(tenant string) map[string]core.Manifest {
 	out := map[string]core.Manifest{}
 	add := func(src map[string]core.Manifest) {
 		for id, m := range src {
@@ -129,7 +142,10 @@ func (r *NodeResolver) ManifestsForTenant(_ string) map[string]core.Manifest {
 		add(r.Native.Manifests())
 	}
 	if r.Remote != nil {
-		add(r.Remote.Manifests())
+		// An empty tenant yields nothing, matching Get: the tenant-less callers
+		// (docs generation, the support view) want built-ins, not one org's
+		// private steps.
+		add(r.Remote.ManifestsFor(tenant))
 	}
 	if r.MCP != nil {
 		add(r.MCP.Manifests())
@@ -137,8 +153,10 @@ func (r *NodeResolver) ManifestsForTenant(_ string) map[string]core.Manifest {
 	return out
 }
 
-// Manifests gathers the global-default manifests. Back-compat shim for callers
-// that aren't tenant-scoped; the engine prefers ManifestsForTenant.
+// Manifests gathers the instance-wide manifests — native and MCP, with no
+// tenant's runners. For callers that have no tenant to scope by (docs
+// generation, a unit harness); anything serving a request should use
+// ManifestsForTenant so a runner reaches exactly the org that registered it.
 func (r *NodeResolver) Manifests() map[string]core.Manifest {
 	return r.ManifestsForTenant("")
 }

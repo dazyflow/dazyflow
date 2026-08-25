@@ -134,6 +134,7 @@ export const NAV: NavGroup[] = [
     text: "Guide",
     items: [
       { text: "How Dazyflow works", link: "/guide/concepts", icon: Workflow },
+      { text: "Runners", link: "/guide/runners", icon: Plug },
       { text: "Glossary", link: "/guide/glossary", icon: BookText },
     ],
   },

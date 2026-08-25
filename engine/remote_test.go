@@ -22,13 +22,13 @@ type fakeServer struct {
 	nodepb.UnimplementedNodeServiceServer
 }
 
-func (s *fakeServer) GetManifest(_ context.Context, _ *nodepb.GetManifestRequest) (*nodepb.Manifest, error) {
-	return &nodepb.Manifest{
+func (s *fakeServer) ListManifests(_ context.Context, _ *nodepb.ListManifestsRequest) (*nodepb.ListManifestsResponse, error) {
+	return &nodepb.ListManifestsResponse{Manifests: []*nodepb.Manifest{{
 		Id:      "remote-echo",
 		Version: "1.0",
 		Inputs:  []*nodepb.Port{{Id: "in"}},
 		Outputs: []*nodepb.Port{{Id: "out"}},
-	}, nil
+	}}}, nil
 }
 
 func (s *fakeServer) Execute(job *nodepb.Job, stream nodepb.NodeService_ExecuteServer) error {
@@ -40,8 +40,10 @@ func (s *fakeServer) Execute(job *nodepb.Job, stream nodepb.NodeService_ExecuteS
 	}); err != nil {
 		return err
 	}
+	// Echo the inline value back. Not a Ref path: a runner is on another
+	// machine, so RemoteTransport refuses a job carrying one before it dials.
 	out := map[string]*nodepb.Ref{
-		"out": {Mime: "text/plain", Ref: job.Input["in"].Ref + "-echoed"},
+		"out": {Mime: "text/plain", Inline: job.Input["in"].GetInline()},
 	}
 	return stream.Send(&nodepb.Event{
 		Payload: &nodepb.Event_Result{
@@ -70,14 +72,16 @@ func TestRemoteTransport_RoundTrip(t *testing.T) {
 	defer conn.Close()
 
 	client := nodepb.NewNodeServiceClient(conn)
-	manifest, err := client.GetManifest(t.Context(), &nodepb.GetManifestRequest{})
+	res, err := client.ListManifests(t.Context(), &nodepb.ListManifestsRequest{})
 	if err != nil {
-		t.Fatalf("GetManifest: %v", err)
+		t.Fatalf("ListManifests: %v", err)
 	}
+	manifest := res.Manifests[0]
 
 	transport := &RemoteTransport{
 		Descriptor: RemoteDescriptor{ID: "remote-echo", Endpoint: "bufnet"},
 		manifest:   manifestFromPB(manifest),
+		dropID:     "remote-echo",
 		conn:       conn,
 		client:     client,
 	}
@@ -85,7 +89,7 @@ func TestRemoteTransport_RoundTrip(t *testing.T) {
 	progress := make(chan core.Progress, 4)
 	job := core.Job{
 		ID:    "j1",
-		Input: map[string]core.Ref{"in": {Ref: "hello", MIME: "text/plain"}},
+		Input: map[string]core.Ref{"in": {Inline: "hello", MIME: "text/plain"}},
 	}
 	result, err := transport.Execute(t.Context(), job, progress)
 	close(progress)
@@ -95,8 +99,8 @@ func TestRemoteTransport_RoundTrip(t *testing.T) {
 	if result.Status != core.StatusOK {
 		t.Fatalf("status = %q", result.Status)
 	}
-	if result.Output["out"].Ref != "hello-echoed" {
-		t.Errorf("out.ref = %q, want hello-echoed", result.Output["out"].Ref)
+	if got := result.Output["out"].Inline; got != "hello" {
+		t.Errorf("out.inline = %v, want hello", got)
 	}
 
 	var pevents []core.Progress

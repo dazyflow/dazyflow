@@ -362,6 +362,10 @@ func main() {
 	// over the API) is set up below in setupEncryptedSecrets.
 	secrets := map[string]core.SecretProvider{}
 	encryptedSecrets := setupEncryptedSecrets(ctx, masterKeyB64, secrets, pgPool)
+	// Tenant runners. They need the encrypted store for the client key, so
+	// this has to follow setupEncryptedSecrets; without one the feature stays
+	// off and its endpoints answer 501 rather than half-working.
+	runners, runnerSupervisor := setupRunners(ctx, pgPool, encryptedSecrets, remoteCatalog)
 	// Resolve a git_checkout node's selected git credential (by account) to
 	// its material (SSH key and/or HTTPS PAT) from the per-tenant encrypted
 	// store at clone time. Mirrors the OAuth connectors' SetTokenLookup
@@ -807,6 +811,8 @@ func main() {
 			blocklist:        blocklist,
 			dropSwitches:     dropSwitches,
 			encryptedSecrets: encryptedSecrets,
+			runners:          runners,
+			runnerSupervisor: runnerSupervisor,
 			mirrors:          stores.mirrors,
 			mirrorPusher:     mirrorPusher,
 			oauth:            oauthRegistry,
@@ -1375,6 +1381,8 @@ type gatewayDeps struct {
 	blocklist        auth.BlocklistStore
 	dropSwitches     daemon.DropSwitchStore
 	encryptedSecrets *daemon.EncryptedSecrets
+	runners          *daemon.Runners
+	runnerSupervisor *daemon.RunnerSupervisor
 	mirrors          daemon.GitMirrorStore
 	mirrorPusher     *daemon.MirrorPusher
 	oauth            *daemon.OAuthRegistry
@@ -1433,7 +1441,9 @@ func buildGateway(ctx context.Context, bgWg *sync.WaitGroup, d gatewayDeps) {
 	gw.Blocklist = d.blocklist               // nil = nothing banned (bans unavailable)
 	gw.DropSwitches = d.dropSwitches         // nil disables drop-killswitch endpoints
 	gw.EncryptedSecrets = d.encryptedSecrets // nil disables /api/v1/secrets endpoints
-	gw.GitMirrors = d.mirrors                // nil disables /api/v1/git/mirror endpoints
+	gw.Runners = d.runners                   // nil leaves /api/v1/admin/runners at 501
+	gw.RunnerSupervisor = d.runnerSupervisor
+	gw.GitMirrors = d.mirrors // nil disables /api/v1/git/mirror endpoints
 	gw.MirrorPusher = d.mirrorPusher
 	gw.OAuth = d.oauth                 // nil disables /api/v1/oauth/* endpoints
 	gw.Approval = d.approval           // nil leaves POST /approve/ unregistered
@@ -1668,8 +1678,23 @@ func registerMCPServers(cat *mcp.Catalog, spec string) error {
 	return nil
 }
 
-// registerRemotes parses "id1=host:port,id2=host:port" and registers
-// each remote module against the catalog over an insecure (cleartext) dial.
+// devRemoteTenant is the tenant dev remotes register under when the spec does
+// not name one. It matches the tenant of the seeded development user, so the
+// documented local workflow (DAZYFLOW_DEV=1, sign in as the seed user, wire a
+// remote into a flow) keeps working now that the catalog is tenant-keyed.
+//
+// It is not a fallback for production: registerRemotes refuses to run at all
+// outside dev mode.
+const devRemoteTenant = "dev"
+
+// registerRemotes parses "id=host:port" or "tenant/id=host:port" entries,
+// comma-separated, and registers each remote module against the catalog over
+// an insecure (cleartext) dial.
+//
+// The catalog is keyed by (tenant, id), so an entry has to name a tenant to be
+// reachable by anything. Entries that omit one get devRemoteTenant, which is
+// what a developer following the local setup is signed in as. The explicit
+// "tenant/id" form exists so multi-tenant behaviour can be exercised locally.
 // The flag string carries no TLS material, so it can only describe a
 // PLAINTEXT connection — fine for local development, but in a multi-tenant
 // host it would put resolved secrets (Authorization headers, API keys, DB
@@ -1691,23 +1716,42 @@ func registerRemotes(cat *engine.RemoteCatalog, spec string, devMode bool) error
 		if pair == "" {
 			continue
 		}
-		id, endpoint, ok := strings.Cut(pair, "=")
-		if !ok {
-			return fmt.Errorf("entry %q: expected id=host:port", pair)
-		}
-		id = strings.TrimSpace(id)
-		endpoint = strings.TrimSpace(endpoint)
-		desc := engine.RemoteDescriptor{
-			ID:       id,
-			Endpoint: endpoint,
-			Insecure: true, // safe: dev-only, guarded above
+		desc, err := parseRemoteEntry(pair)
+		if err != nil {
+			return err
 		}
 		if err := cat.Register(desc); err != nil {
-			return fmt.Errorf("register %q at %q: %w", id, endpoint, err)
+			return fmt.Errorf("register %q at %q: %w", desc.ID, desc.Endpoint, err)
 		}
-		log.Printf("registered remote module %q at %s", id, endpoint)
+		log.Printf("registered remote module %q at %s for tenant %q", desc.ID, desc.Endpoint, desc.Tenant)
 	}
 	return nil
+}
+
+// parseRemoteEntry turns one "id=host:port" or "tenant/id=host:port" entry
+// into a descriptor. Split out from registerRemotes so the parsing can be
+// tested without standing up a gRPC server for every case.
+func parseRemoteEntry(pair string) (engine.RemoteDescriptor, error) {
+	id, endpoint, ok := strings.Cut(pair, "=")
+	if !ok {
+		return engine.RemoteDescriptor{}, fmt.Errorf("entry %q: expected id=host:port", pair)
+	}
+	id = strings.TrimSpace(id)
+	endpoint = strings.TrimSpace(endpoint)
+	tenant := devRemoteTenant
+	if scoped, rest, found := strings.Cut(id, "/"); found {
+		tenant = strings.TrimSpace(scoped)
+		id = strings.TrimSpace(rest)
+		if tenant == "" || id == "" {
+			return engine.RemoteDescriptor{}, fmt.Errorf("entry %q: expected tenant/id=host:port", pair)
+		}
+	}
+	return engine.RemoteDescriptor{
+		ID:       id,
+		Tenant:   tenant,
+		Endpoint: endpoint,
+		Insecure: true, // safe: dev-only, guarded by the caller
+	}, nil
 }
 
 // defaultInsecurePassword is the DB password shipped in the bundled .env /
@@ -2196,3 +2240,44 @@ func wireConnectorTokenHooks(reg *daemon.OAuthRegistry) {
 		return sheets.ListSheetColumns(ctx, core.Job{Params: p})
 	})
 }
+
+// setupRunners wires tenant runners: the store, the encrypted client keys, and
+// the supervisor that reconciles them into the engine's remote catalog.
+//
+// Returns (nil, nil) when the feature cannot be configured — no Postgres, or
+// no master key for the encrypted store. That is a supported deployment, not a
+// failure: the admin endpoints then answer 501 and nothing else changes. A
+// half-configured runner feature would be worse than none, because a
+// registration that cannot store its key is a runner that can never connect.
+func setupRunners(
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	secrets *daemon.EncryptedSecrets,
+	catalog *engine.RemoteCatalog,
+) (*daemon.Runners, *daemon.RunnerSupervisor) {
+	if pool == nil || secrets == nil {
+		return nil, nil
+	}
+	store, err := daemon.NewPgRunnerStore(ctx, pool)
+	if err != nil {
+		log.Printf("tenant runners disabled: %v", err)
+		return nil, nil
+	}
+	runners := &daemon.Runners{Store: store, Secrets: secrets}
+	sup := daemon.NewRunnerSupervisor(runners, catalog)
+	// One synchronous pass at boot so runners that ARE up are in the catalog
+	// before the first request arrives — otherwise the palette would briefly
+	// be missing steps on every restart.
+	if n, err := sup.Sync(ctx); err != nil {
+		log.Printf("tenant runners: initial sync: %v", err)
+	} else if n > 0 {
+		log.Printf("connected %d tenant runner(s)", n)
+	}
+	go sup.Run(ctx, runnerSyncInterval)
+	return runners, sup
+}
+
+// runnerSyncInterval is how often the supervisor reconciles. Frequent, because
+// a pass is nearly free for runners that are already connected — the per-runner
+// backoff, not this interval, is what paces retries against one that is down.
+const runnerSyncInterval = 10 * time.Second

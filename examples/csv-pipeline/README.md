@@ -81,11 +81,13 @@ type server struct {
     nodepb.UnimplementedNodeServiceServer
 }
 
-func (s *server) GetManifest(ctx context.Context, _ *nodepb.GetManifestRequest) (*nodepb.Manifest, error) {
-    // declare id, inputs, outputs, idempotency
+func (s *server) ListManifests(ctx context.Context, _ *nodepb.ListManifestsRequest) (*nodepb.ListManifestsResponse, error) {
+    // declare every drop this runner serves: id, inputs, outputs, idempotency.
+    // Serving one drop means returning a list of one.
 }
 
 func (s *server) Execute(job *nodepb.Job, stream nodepb.NodeService_ExecuteServer) error {
+    // job.DropId says WHICH drop to run — ignorable if you serve only one
     // read job.Input["<port>"].Inline (or job.Input["<port>"].Ref + side-channel)
     // do work, optionally stream progress events
     // send a final Result event

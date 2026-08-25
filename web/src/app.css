@@ -4217,6 +4217,23 @@ button.warning:hover:not(:disabled) {
 }
 /* Optional action line under the node title (e.g. "Google Sheets" /
    "Append rows"). Muted + smaller so the product name reads first. */
+/* A small chip under a node's label — "keeps state", "runs on your hardware".
+   One rule rather than two inline copies, so the chips stay a family. */
+.dz-node-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+  font-size: var(--text-2xs);
+  opacity: 0.6;
+}
+/* The runner chip is the exception that earns full opacity: it answers "does
+   this step leave the daemon?", which is the question someone wiring a secret
+   is asking, and a 60%-opacity answer is one they will not read. */
+.dz-node-runner {
+  opacity: 1;
+  color: var(--accent-2);
+}
 .dz-node-subtitle {
   font-size: var(--text-xs);
   color: var(--muted);
@@ -10968,6 +10985,58 @@ button:active,
   font-size: var(--text-md);
   /* The canvas overlay it sits in is pointer-events: none. */
   pointer-events: auto;
+}
+
+/* ---- Tenant runners (AdminRunners.tsx) ----------------------------------- */
+/* A runner's own code, on its own hardware, listed with whether it is actually
+   reachable — a runner can be registered and down, and this page is where the
+   reason lives. */
+.runner-list {
+  padding: 0;
+  overflow: hidden;
+}
+/* Endpoints and step ids are machine strings: monospace so a typo in a host or
+   a port is findable by eye. */
+.runner-endpoint,
+.runner-steps {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+/* The connection error, under its chip. Wraps rather than truncates: a TLS
+   failure is long and the useful part is often at the end. */
+.runner-error {
+  margin-top: var(--space-1);
+  max-width: 42ch;
+  white-space: normal;
+}
+.runner-actions {
+  text-align: right;
+  padding-right: var(--space-3);
+}
+.runner-expiry {
+  margin-top: var(--space-4);
+}
+.runner-form {
+  margin-top: var(--space-4);
+}
+.runner-form-head {
+  margin-top: 0;
+}
+/* PEM blocks are pasted, long, and never read closely — monospace and
+   nowrap-free so a line break in the middle of base64 is visible. */
+.runner-pem {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  resize: vertical;
+  width: 100%;
+}
+.runner-form-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+.runner-probe strong {
+  color: var(--ink);
 }
 
 /* ---- Glyphs sitting in text ---------------------------------------------- */

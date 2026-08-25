@@ -338,9 +338,9 @@ func TestEngine_RunNode_ApprovalURLAttached(t *testing.T) {
 func TestNodeResolver_ChainHitsRemote(t *testing.T) {
 	reg := NewRegistry()
 	remote := NewRemoteCatalog()
-	remote.nodes["m"] = &RemoteTransport{manifest: core.Manifest{ID: "m"}}
+	remote.nodes[remoteKey{tenant: "acme", id: "m"}] = &RemoteTransport{manifest: core.Manifest{ID: "m"}}
 	r := &NodeResolver{Native: reg, Remote: remote}
-	tr, err := r.Resolve(context.Background(), "m")
+	tr, err := r.Resolve(core.WithTenant(context.Background(), "acme"), "m")
 	if err != nil || tr.Manifest().ID != "m" {
 		t.Errorf("Resolve = (%v,%v)", tr, err)
 	}
@@ -362,9 +362,11 @@ func TestNodeResolver_Manifests_MergesAllCatalogs(t *testing.T) {
 	reg := NewRegistry()
 	_ = reg.Register(NativeDrop{Manifest: validTestManifest("native-mod"), Execute: noopExecute})
 	remote := NewRemoteCatalog()
-	remote.nodes["remote-mod"] = &RemoteTransport{manifest: core.Manifest{ID: "remote-mod"}}
+	remote.nodes[remoteKey{tenant: "acme", id: "remote-mod"}] = &RemoteTransport{manifest: core.Manifest{ID: "remote-mod"}}
 	r := &NodeResolver{Native: reg, Remote: remote, MCP: mcp.NewCatalog()}
-	m := r.Manifests()
+	// ManifestsForTenant, not Manifests: a runner's drops belong to one tenant,
+	// so the unscoped map deliberately carries only the instance-wide catalogs.
+	m := r.ManifestsForTenant("acme")
 	for _, want := range []string{"native-mod", "remote-mod"} {
 		if _, ok := m[want]; !ok {
 			t.Errorf("missing %q in merged Manifests (%v)", want, manifestKeys(m))
@@ -482,23 +484,23 @@ func TestRemoteCatalog_Lifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
-	c.nodes["remote-echo"] = &RemoteTransport{
-		Descriptor: RemoteDescriptor{ID: "remote-echo"},
+	c.nodes[remoteKey{tenant: "acme", id: "remote-echo"}] = &RemoteTransport{
+		Descriptor: RemoteDescriptor{ID: "remote-echo", Tenant: "acme"},
 		manifest:   core.Manifest{ID: "remote-echo"},
 		conn:       conn,
 		client:     nodepb.NewNodeServiceClient(conn),
 	}
 
 	// Manifest accessor on the transport.
-	if c.nodes["remote-echo"].Manifest().ID != "remote-echo" {
-		t.Errorf("Manifest.ID = %q", c.nodes["remote-echo"].Manifest().ID)
+	if c.nodes[remoteKey{tenant: "acme", id: "remote-echo"}].Manifest().ID != "remote-echo" {
+		t.Errorf("Manifest.ID = %q", c.nodes[remoteKey{tenant: "acme", id: "remote-echo"}].Manifest().ID)
 	}
 
 	// Get hit + miss.
-	if tr, ok := c.Get("remote-echo"); !ok || tr.Manifest().ID != "remote-echo" {
+	if tr, ok := c.Get("acme", "remote-echo"); !ok || tr.Manifest().ID != "remote-echo" {
 		t.Errorf("Get hit = (%v,%v)", tr, ok)
 	}
-	if tr, ok := c.Get("ghost"); ok || tr != nil {
+	if tr, ok := c.Get("acme", "ghost"); ok || tr != nil {
 		t.Errorf("Get miss = (%v,%v), want (nil,false)", tr, ok)
 	}
 
@@ -534,12 +536,13 @@ func TestRemoteCatalog_Register_InsecureDialAndHandshake(t *testing.T) {
 
 	c := NewRemoteCatalog()
 	c.DialTimeout = 5 * time.Second
-	desc := RemoteDescriptor{ID: "remote-echo", Endpoint: lis.Addr().String(), Insecure: true}
+	desc := RemoteDescriptor{ID: "remote-echo", Tenant: "acme", Endpoint: lis.Addr().String(), Insecure: true}
 	if err := c.Register(desc); err != nil {
 		t.Fatalf("Register: %v", err)
 	}
-	tr, ok := c.Get("remote-echo")
-	if !ok || tr.Manifest().ID != "remote-echo" {
+	id := RunnerDropID("remote-echo", "remote-echo")
+	tr, ok := c.Get("acme", id)
+	if !ok || tr.Manifest().ID != id {
 		t.Errorf("Get after Register = (%v,%v)", tr, ok)
 	}
 	if err := c.Close(); err != nil {
@@ -547,34 +550,46 @@ func TestRemoteCatalog_Register_InsecureDialAndHandshake(t *testing.T) {
 	}
 }
 
-// TestRemoteCatalog_Register_ManifestIDMismatch exercises the
-// "remote %q reported manifest id %q" branch: register under a name
-// that doesn't match what the server claims.
-func TestRemoteCatalog_Register_ManifestIDMismatch(t *testing.T) {
+// The descriptor's ID names the RUNNER, and drop ids come from the manifests
+// the runner declares, so there is no longer an id to "mismatch". Registration
+// under a name unrelated to the drops it serves is now the normal case.
+// remote_multidrop_test.go covers what IS validated instead.
+func TestRemoteCatalog_Register_RunnerNameNeedNotMatchDropID(t *testing.T) {
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
 	srv := grpc.NewServer()
-	nodepb.RegisterNodeServiceServer(srv, &fakeServer{}) // reports id "remote-echo"
+	nodepb.RegisterNodeServiceServer(srv, &fakeServer{}) // serves drop "remote-echo"
 	go srv.Serve(lis)
 	defer srv.Stop()
 
 	c := NewRemoteCatalog()
-	desc := RemoteDescriptor{ID: "different-name", Endpoint: lis.Addr().String(), Insecure: true}
-	err = c.Register(desc)
-	if err == nil || !strings.Contains(err.Error(), "manifest id") {
-		t.Errorf("err = %v, want one mentioning 'manifest id'", err)
+	desc := RemoteDescriptor{ID: "billing-box", Tenant: "acme", Endpoint: lis.Addr().String(), Insecure: true}
+	if err := c.Register(desc); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	// Filed under runner/<runner>/<drop>, combining both.
+	if _, ok := c.Get("acme", RunnerDropID("billing-box", "remote-echo")); !ok {
+		t.Error("drop not reachable by its namespaced id")
+	}
+	if _, ok := c.Get("acme", "remote-echo"); ok {
+		t.Error("drop reachable by its bare declared id, bypassing the namespace")
+	}
+	if err := c.Close(); err != nil {
+		t.Errorf("Close: %v", err)
 	}
 }
 
 // TestRemoteCatalog_Register_DefaultTimeoutZeroed exercises the
 // "timeout <= 0 → 5s default" branch.
 func TestRemoteCatalog_Register_DefaultTimeoutZeroed(t *testing.T) {
-	c := &RemoteCatalog{nodes: map[string]*RemoteTransport{}} // DialTimeout=0
+	c := &RemoteCatalog{nodes: map[remoteKey]*RemoteTransport{}} // DialTimeout=0
 	// No TLS, no Insecure → credentialsForDescriptor errors out fast,
-	// but only AFTER the default-timeout assignment runs.
-	if err := c.Register(RemoteDescriptor{ID: "x", Endpoint: "127.0.0.1:1"}); err == nil {
+	// but only AFTER the default-timeout assignment runs. Tenant is set so
+	// the tenant check (which runs first) doesn't short-circuit the branch
+	// this test is actually about.
+	if err := c.Register(RemoteDescriptor{ID: "x", Tenant: "acme", Endpoint: "127.0.0.1:1"}); err == nil {
 		t.Error("Register without TLS/Insecure: want error")
 	}
 }
@@ -584,7 +599,7 @@ func TestRemoteCatalog_Register_RejectsCleartextWithoutOptIn(t *testing.T) {
 	c.DialTimeout = time.Millisecond
 	// No TLS configured, Insecure=false → must refuse with the explicit
 	// "TLS not configured" credential error.
-	err := c.Register(RemoteDescriptor{ID: "x", Endpoint: "127.0.0.1:1"})
+	err := c.Register(RemoteDescriptor{ID: "x", Tenant: "acme", Endpoint: "127.0.0.1:1"})
 	if err == nil || !strings.Contains(err.Error(), "TLS not configured") {
 		t.Errorf("err = %v, want one mentioning 'TLS not configured'", err)
 	}
