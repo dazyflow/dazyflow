@@ -970,6 +970,16 @@ export const api = {
   // a proxy log.
   mintRunnerToken: (token: string) =>
     request<RunnerToken>(token, "POST", "/admin/runners/token", {}),
+  // setRunnerLabels replaces which pools a machine belongs to, so an existing
+  // machine can be retagged from the admin page instead of only at install
+  // time via --labels. Replaces the whole set rather than adding or removing
+  // one, because the set is what routes work: two admins editing the same
+  // machine should each end with a set they meant. Returns the updated runner
+  // with the labels normalized the way registration stores them.
+  setRunnerLabels: (token: string, name: string, labels: string[]) =>
+    request<Runner>(token, "PUT", `/admin/runners/${encodeURIComponent(name)}/labels`, {
+      labels,
+    }),
   // deleteRunner removes a machine and revokes its credential, so a
   // decommissioned host stops being able to claim work.
   deleteRunner: (token: string, name: string) =>

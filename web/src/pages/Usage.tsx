@@ -251,24 +251,29 @@ export function Usage() {
           <div className="dash-panel-head">
             <h2>{t("usage.historyTitle")}</h2>
           </div>
-          <table className="run-table">
-            <thead>
-              <tr>
-                <th>{t("usage.month")}</th>
-                <th style={{ textAlign: "right" }}>{t("usage.runs")}</th>
-                <th style={{ textAlign: "right" }}>{t("usage.nodeExecutions")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {usage.map((u) => (
-                <tr key={u.period}>
-                  <td>{periodLabel(u.period)}</td>
-                  <td style={{ textAlign: "right" }}>{fmt.format(u.graph_runs)}</td>
-                  <td style={{ textAlign: "right" }}>{fmt.format(u.node_executions)}</td>
+          {/* Scrolls sideways inside the panel on a narrow screen, where the
+              table keeps a readable minimum width: without this wrapper what
+              stuck out pushed past the card instead of scrolling. */}
+          <div className="run-table-scroll">
+            <table className="run-table">
+              <thead>
+                <tr>
+                  <th>{t("usage.month")}</th>
+                  <th style={{ textAlign: "right" }}>{t("usage.runs")}</th>
+                  <th style={{ textAlign: "right" }}>{t("usage.nodeExecutions")}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {usage.map((u) => (
+                  <tr key={u.period}>
+                    <td>{periodLabel(u.period)}</td>
+                    <td style={{ textAlign: "right" }}>{fmt.format(u.graph_runs)}</td>
+                    <td style={{ textAlign: "right" }}>{fmt.format(u.node_executions)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       )}
 

@@ -144,6 +144,12 @@ type RunnerStore interface {
 	RunnerByCredential(ctx context.Context, credHash []byte, seenAt time.Time) (Runner, error)
 	List(ctx context.Context, tenant string) ([]Runner, error)
 	Get(ctx context.Context, tenant, name string) (Runner, error)
+	// SetLabels replaces a runner's labels and returns the updated row.
+	//
+	// Replaces rather than adds/removes one at a time, because a label set is
+	// what decides where work goes: two admins editing the same machine should
+	// end with one of their intended sets, not an interleaving of both.
+	SetLabels(ctx context.Context, tenant, name string, labels []string) (Runner, error)
 	Delete(ctx context.Context, tenant, name string) error
 }
 
@@ -200,6 +206,40 @@ func validRunnerName(name string) error {
 		case r == '-' || r == '_':
 		default:
 			return fmt.Errorf("name may only contain [a-z0-9_-]")
+		}
+	}
+	return nil
+}
+
+const (
+	// MaxRunnerLabels caps how many labels one machine may carry. A label names
+	// a pool this machine belongs to; a machine in twenty pools is not being
+	// routed to, it is being decorated.
+	MaxRunnerLabels = 16
+	// MaxRunnerLabelLen matches the name limit — a label is typed into a step
+	// field the same way a name is.
+	MaxRunnerLabelLen = 64
+)
+
+// validRunnerLabel keeps a label usable as a step's target.
+//
+// The comma is the interesting rule. `--labels linux,build` splits on it, so a
+// comma can never appear in a label a machine registered with — accepting one
+// here would let this page create a label the install command cannot express,
+// and which reads as two labels everywhere it is displayed.
+func validRunnerLabel(l string) error {
+	if l == "" {
+		return fmt.Errorf("label is empty")
+	}
+	if len(l) > MaxRunnerLabelLen {
+		return fmt.Errorf("label %q is too long (max %d)", l, MaxRunnerLabelLen)
+	}
+	if strings.ContainsRune(l, ',') {
+		return fmt.Errorf("label %q contains a comma, which separates labels rather than being part of one", l)
+	}
+	for _, r := range l {
+		if r < 0x20 || r == 0x7f {
+			return fmt.Errorf("label %q contains a character that cannot be typed on a step", l)
 		}
 	}
 	return nil
@@ -311,6 +351,32 @@ func (rs *Runners) List(ctx context.Context, tenant string) ([]Runner, error) {
 	return rs.Store.List(ctx, tenant)
 }
 
+// SetLabels replaces which pools a machine belongs to.
+//
+// Normalized here with the SAME rule registration uses, which is the point of
+// going through the registry rather than the store: a label typed as "Build " on
+// the admin page and one installed as `--labels build` have to end up as the
+// same routing key, or a step targeting one silently misses the other.
+//
+// Note what this does NOT touch: the credential. Retagging a machine reroutes
+// work to it without the machine being involved at all — which is why the
+// endpoint is admin-gated and audited.
+func (rs *Runners) SetLabels(ctx context.Context, tenant, name string, labels []string) (Runner, error) {
+	if rs == nil || rs.Store == nil {
+		return Runner{}, fmt.Errorf("runners: not configured")
+	}
+	norm := normalizeLabels(labels)
+	if len(norm) > MaxRunnerLabels {
+		return Runner{}, fmt.Errorf("a machine may carry at most %d labels", MaxRunnerLabels)
+	}
+	for _, l := range norm {
+		if err := validRunnerLabel(l); err != nil {
+			return Runner{}, err
+		}
+	}
+	return rs.Store.SetLabels(ctx, tenant, name, norm)
+}
+
 func (rs *Runners) Delete(ctx context.Context, tenant, name string) error {
 	return rs.Store.Delete(ctx, tenant, name)
 }
@@ -413,6 +479,19 @@ func (m *MemRunnerStore) Get(_ context.Context, tenant, name string) (Runner, er
 	if !ok {
 		return Runner{}, ErrRunnerNotFound
 	}
+	return *r, nil
+}
+
+func (m *MemRunnerStore) SetLabels(_ context.Context, tenant, name string, labels []string) (Runner, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	r, ok := m.runners[tenant][name]
+	if !ok {
+		return Runner{}, ErrRunnerNotFound
+	}
+	// Copied rather than aliased: the caller's slice is theirs to reuse, and a
+	// stored runner sharing its backing array would change under the store.
+	r.Labels = append([]string(nil), labels...)
 	return *r, nil
 }
 

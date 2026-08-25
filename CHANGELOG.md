@@ -23,6 +23,40 @@ into the image.)
 
 ## [Unreleased]
 
+### Added
+
+- **Labels can be assigned from Admin → Runners.** A machine's labels — the pool
+  names a step can target instead of one machine — used to be decided on the
+  machine at install time with `--labels` and fixed there forever: moving an
+  existing server into another pool meant a visit to it, or deleting the runner
+  and re-installing with a fresh token. The label button on a row now opens them
+  for editing. Registration is untouched and the credential does not change; a
+  label is how this Dazyflow routes work, not something the machine knows about
+  itself.
+
+  They are stored lower-cased, trimmed and de-duplicated however they were typed
+  — that is what a step has to spell to match one — so a label added as `Build `
+  shows as `build` as soon as it saves. Needs `organization:admin` (or
+  `module:register`) like adding a machine does, because it reroutes every step
+  aimed at the label, and it is recorded in the audit log.
+
+### Fixed
+
+- **Wide tables could not be scrolled on a phone.** Below 640px a table keeps a
+  readable minimum width instead of crushing its columns together, so it is
+  deliberately wider than the screen — and something has to scroll it. On
+  **Runners**, **API keys** and **Git credentials** the overflowing columns were
+  clipped by the card instead (Status, Agent, expiry and the remove buttons were
+  simply unreachable), and on **Usage** the table pushed past the card and
+  scrolled the whole page sideways. All of them now scroll inside their card, the
+  way the runs table already did. **Collection results** — the widest table here,
+  since its columns are whatever the collection holds — scrolled already, and now
+  does it through the same wrapper as everything else.
+
+  A guard (`npm test`) now fails if a table is added without that wrapper. The
+  failure was invisible in review, invisible on a desktop, and only ever
+  reported by someone holding a phone.
+
 ## [0.12.0] - 2026-08-25
 
 ### Added

@@ -176,6 +176,58 @@ func (h *HTTPGateway) mintRunnerToken(rw http.ResponseWriter, r *http.Request, p
 	writeJSON(rw, http.StatusOK, tok)
 }
 
+// setRunnerLabelsRequest replaces the whole set. There is no add or remove
+// verb: the labels are what routes work to this machine, so two admins editing
+// the same one should each end with a set they meant, not a merge of both.
+type setRunnerLabelsRequest struct {
+	Labels []string `json:"labels"`
+}
+
+// setRunnerLabels retags a machine — which pools it belongs to — from the admin
+// page, rather than only at install time via `--labels`.
+//
+// It exists because a label was previously decided on the machine and fixed
+// there forever: putting an existing server into a new pool meant a visit to it
+// (or deleting the runner, minting a token, and re-installing), for a change
+// that is purely about how this Dazyflow routes work.
+//
+// Admin-gated and audited like registration, and deliberately not graph:edit.
+// Retagging reroutes every step that targets the label — a machine can be
+// pulled into, or out of, work it was never meant for without anyone touching
+// a flow.
+func (h *HTTPGateway) setRunnerLabels(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	if !requireRunnerAdmin(rw, p) || !h.runnersConfigured(rw) {
+		return
+	}
+	var req setRunnerLabelsRequest
+	if err := decodeRunnerBody(r, &req); err != nil {
+		writeJSONError(rw, http.StatusBadRequest, "malformed request body")
+		return
+	}
+	name := r.PathValue("name")
+	runner, err := h.Runners.SetLabels(r.Context(), p.Tenant, name, req.Labels)
+	if err != nil {
+		if errors.Is(err, ErrRunnerNotFound) {
+			writeJSONError(rw, http.StatusNotFound, "no runner named "+name)
+			return
+		}
+		// A rejected label is the caller's mistake and the message names which
+		// one and why, so it goes back as a 400 rather than a 500.
+		writeJSONError(rw, http.StatusBadRequest, err.Error())
+		return
+	}
+	h.audit(r.Context(), p, "runner.labels", name, strings.Join(runner.Labels, ","))
+	writeJSON(rw, http.StatusOK, runnerRow{
+		Name:      runner.Name,
+		Labels:    runner.Labels,
+		Version:   runner.Version,
+		Online:    runner.Online(time.Now()),
+		LastSeen:  runner.LastSeen,
+		CreatedBy: runner.CreatedBy,
+		CreatedAt: runner.CreatedAt,
+	})
+}
+
 func (h *HTTPGateway) deleteRunner(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !requireRunnerAdmin(rw, p) || !h.runnersConfigured(rw) {
 		return

@@ -349,6 +349,9 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// for why that is deliberately not graph:edit.
 	mux.HandleFunc("GET /api/v1/admin/runners", h.requireAuth(h.listRunners))
 	mux.HandleFunc("POST /api/v1/admin/runners/token", h.requireAuth(h.mintRunnerToken))
+	// Retagging a registered machine — which pools it belongs to — without a
+	// visit to it. Admin-gated with the rest: a label decides where work goes.
+	mux.HandleFunc("PUT /api/v1/admin/runners/{name}/labels", h.requireAuth(h.setRunnerLabels))
 	mux.HandleFunc("DELETE /api/v1/admin/runners/{name}", h.requireAuth(h.deleteRunner))
 	// The same fleet, seen by someone building a flow rather than administering
 	// one: names, labels and whether each machine is there, for the step's

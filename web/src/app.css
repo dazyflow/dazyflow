@@ -11015,6 +11015,11 @@ button:active,
 /* Machines the org owns, running scripts a flow sends them. There is no form on
    this page — setup is one command — so the layout is a list plus the command
    to copy. */
+/* overflow:hidden clips the table to the card's rounded corners. The table
+   itself scrolls inside .run-table-scroll — without that wrapper this rule was
+   the bug: on a narrow screen the table keeps a readable minimum width, and
+   what stuck out was CUT OFF rather than scrollable, so the last columns were
+   unreachable on a phone. */
 .runner-list {
   padding: 0;
   overflow: hidden;
@@ -11029,6 +11034,61 @@ button:active,
 .runner-actions {
   text-align: right;
   padding-right: var(--space-3);
+  /* Two icon buttons (labels, remove) — kept on one line so the row height
+     does not change between a machine being acted on and not. */
+  white-space: nowrap;
+}
+
+/* The label editor, in a row of its own under the machine it belongs to.
+   Full-width there rather than inside the labels cell, which on a phone is a
+   column narrower than the input would need. */
+.runner-label-row td {
+  padding: 0;
+  background: var(--surface-2);
+}
+.runner-label-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+}
+.runner-label-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-weight: 600;
+}
+.runner-label-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+/* Same chip as the schema form's multi-select, because it is the same idea: a
+   short set of values, each removable. */
+.runner-label-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-0) var(--space-1) var(--space-0) var(--space-1h);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.runner-label-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.runner-label-add input {
+  flex: 1;
+  /* A phone gets the whole width; a desktop does not need a 900px-wide box for
+     one word. */
+  min-width: 12ch;
+  max-width: 32ch;
+  font-family: var(--font-mono);
 }
 
 /* The install command. Accented border because it is the one thing on the page

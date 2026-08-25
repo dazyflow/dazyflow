@@ -2251,6 +2251,13 @@
     "securityNote": "En körnod kör vilket kommando ett flöde än skickar. Alla som kan redigera ett flöde i den här organisationen kan därför köra kommandon på dessa maskiner. Starta agenten med --allow för att begränsa vilka program den får köra.",
     "onYourHardware": "Din körnod",
     "onYourHardwareHint": "Det här steget kör ett skript på {{name}}, en av dina egna maskiner – inte på Dazyflow-servern.",
-    "noTargetYet": "ingen maskin vald"
+    "noTargetYet": "ingen maskin vald",
+    "editLabels": "Ändra etiketter",
+    "labelsHead": "Etiketter på {{name}}",
+    "labelsHint": "En etikett namnger en pool: ett steg kan skicka arbete till vilken ledig maskin som helst med den etiketten, i stället för att peka ut en maskin. Att lägga till eller ta bort en dirigerar om varje steg som pekar på den — maskinen själv är inte inblandad.",
+    "labelsNone": "Inga etiketter — den här maskinen kan bara pekas ut med namn.",
+    "labelPlaceholder": "Ny etikett",
+    "labelAdd": "Lägg till",
+    "labelRemove": "Ta bort etiketten {{label}}"
   }
 }

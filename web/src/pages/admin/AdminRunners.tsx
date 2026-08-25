@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Joachim Klahr
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, Check, Copy, Plug, Trash2 } from "lucide-react";
+import { Fragment, useCallback, useEffect, useState } from "react";
+import { AlertTriangle, Check, Copy, Plug, Plus, Tag, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/Button";
 import { useAuth } from "../../auth";
@@ -44,6 +44,11 @@ export function AdminRunners() {
   // and a second visit to the machine. Every sibling admin page confirms a
   // destructive action; this one used to delete on a single click.
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
+  // editLabels holds the runner name whose labels are open for editing; null =
+  // none. In a row of its own below the machine rather than inside the labels
+  // cell: the table already scrolls sideways on a phone, and an input in a
+  // column that is 90px wide there is not something anyone can type in.
+  const [editLabels, setEditLabels] = useState<string | null>(null);
 
   const load = useCallback(() => {
     if (!token) return;
@@ -127,54 +132,92 @@ export function AdminRunners() {
         </EmptyState>
       ) : (
         <div className="card runner-list">
-          <table className="run-table">
-            <thead>
-              <tr>
-                <th>{t("common.name")}</th>
-                <th>{t("runners.colLabels")}</th>
-                <th>{t("common.status")}</th>
-                <th>{t("runners.colAgent")}</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {runners.map((r) => (
-                <tr key={r.name} className={confirmRemove === r.name ? "row-confirming" : undefined}>
-                  <td>{r.name}</td>
-                  <td className="muted runner-labels">
-                    {r.labels?.length ? r.labels.join(" · ") : "—"}
-                  </td>
-                  <td>
-                    <RunnerOnlineChip runner={r} />
-                  </td>
-                  <td className="muted runner-agent">{r.version || "—"}</td>
-                  <td className="runner-actions">
-                    {confirmRemove === r.name ? (
-                      <span className="inline-confirm">
-                        {t("runners.removeReally")}{" "}
-                        <Button variant="danger" onClick={() => void remove(r.name)}>
-                          {t("common.remove")}
-                        </Button>
-                        <Button variant="ghost" onClick={() => setConfirmRemove(null)}>
-                          {t("common.cancel")}
-                        </Button>
-                      </span>
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        className="danger"
-                        onClick={() => setConfirmRemove(r.name)}
-                        title={t("runners.remove")}
-                        aria-label={t("runners.remove")}
-                      >
-                        <Trash2 size={ICON.sm} />
-                      </Button>
-                    )}
-                  </td>
+          {/* Horizontal-scroll wrapper, the same one the runs table uses. The
+              card's overflow:hidden still clips the table to the rounded
+              corners; without this wrapper it CLIPPED the overflow instead of
+              scrolling it, so on a phone the status, agent and remove columns
+              simply could not be reached. */}
+          <div className="run-table-scroll">
+            <table className="run-table">
+              <thead>
+                <tr>
+                  <th>{t("common.name")}</th>
+                  <th>{t("runners.colLabels")}</th>
+                  <th>{t("common.status")}</th>
+                  <th>{t("runners.colAgent")}</th>
+                  <th />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {runners.map((r) => (
+                  <Fragment key={r.name}>
+                    <tr className={confirmRemove === r.name ? "row-confirming" : undefined}>
+                      <td>{r.name}</td>
+                      <td className="muted runner-labels">
+                        {r.labels?.length ? r.labels.join(" · ") : "—"}
+                      </td>
+                      <td>
+                        <RunnerOnlineChip runner={r} />
+                      </td>
+                      <td className="muted runner-agent">{r.version || "—"}</td>
+                      <td className="runner-actions">
+                        {confirmRemove === r.name ? (
+                          <span className="inline-confirm">
+                            {t("runners.removeReally")}{" "}
+                            <Button variant="danger" onClick={() => void remove(r.name)}>
+                              {t("common.remove")}
+                            </Button>
+                            <Button variant="ghost" onClick={() => setConfirmRemove(null)}>
+                              {t("common.cancel")}
+                            </Button>
+                          </span>
+                        ) : (
+                          <>
+                            <Button
+                              variant="ghost"
+                              onClick={() =>
+                                setEditLabels(editLabels === r.name ? null : r.name)
+                              }
+                              title={t("runners.editLabels")}
+                              aria-label={t("runners.editLabels")}
+                              aria-expanded={editLabels === r.name}
+                            >
+                              <Tag size={ICON.sm} />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              className="danger"
+                              onClick={() => setConfirmRemove(r.name)}
+                              title={t("runners.remove")}
+                              aria-label={t("runners.remove")}
+                            >
+                              <Trash2 size={ICON.sm} />
+                            </Button>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                    {editLabels === r.name && (
+                      <tr className="runner-label-row">
+                        <td colSpan={5}>
+                          <RunnerLabelEditor
+                            runner={r}
+                            onSaved={(updated) =>
+                              setRunners((rs) =>
+                                rs.map((x) => (x.name === updated.name ? updated : x)),
+                              )
+                            }
+                            onError={setError}
+                            onDone={() => setEditLabels(null)}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -182,6 +225,119 @@ export function AdminRunners() {
         <AlertTriangle size={ICON.sm} className="icon-lede" />
         {t("runners.securityNote")}
       </Notice>
+    </div>
+  );
+}
+
+// RunnerLabelEditor assigns the labels a machine carries — which pools it
+// belongs to, and therefore which steps can send it work.
+//
+// It exists because a label used to be decided on the machine, at install time,
+// and fixed there forever: putting an existing server into a new pool meant a
+// visit to it, or deleting the runner and re-installing with a fresh token — for
+// a change that is purely about how this Dazyflow routes work.
+//
+// Each add and each remove saves on its own rather than collecting a draft
+// behind a Save button. The set is short (a machine is in one or two pools), and
+// one request per act means there is never a half-entered state to lose by
+// navigating away — or to be quietly overwritten by the list poll this page
+// already runs. The saved row comes back from the server and replaces the one
+// on screen, so a label typed as "Build " visibly becomes "build": normalization
+// is the server's rule, and seeing it applied is how someone learns that a step
+// has to spell it that way too.
+function RunnerLabelEditor({
+  runner,
+  onSaved,
+  onError,
+  onDone,
+}: {
+  runner: Runner;
+  onSaved: (r: Runner) => void;
+  onError: (msg: string) => void;
+  onDone: () => void;
+}) {
+  const { t } = useTranslation();
+  const { token } = useAuth();
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const labels = runner.labels ?? [];
+
+  const save = async (next: string[]) => {
+    if (!token) return;
+    setSaving(true);
+    try {
+      onSaved(await api.setRunnerLabels(token, runner.name, next));
+      setDraft("");
+    } catch (e) {
+      // Surfaced at the top of the page with the other failures, and the row is
+      // left showing what the server still holds — a rejected label (a comma, a
+      // 17th pool) must not look as though it stuck.
+      onError(explainApiError(e, t));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const add = () => {
+    const value = draft.trim();
+    // Nothing to do for an empty box or a label already carried — pressing Add
+    // twice on the same word should not spend a request to change nothing.
+    if (!value || labels.includes(value.toLowerCase())) {
+      setDraft("");
+      return;
+    }
+    void save([...labels, value]);
+  };
+
+  return (
+    <div className="runner-label-editor">
+      <div className="runner-label-head">
+        {t("runners.labelsHead", { name: runner.name })}
+        <Button variant="ghost" onClick={onDone}>
+          {t("common.close")}
+        </Button>
+      </div>
+      <p className="desc">{t("runners.labelsHint")}</p>
+      <div className="runner-label-list">
+        {labels.length === 0 ? (
+          <span className="muted">{t("runners.labelsNone")}</span>
+        ) : (
+          labels.map((l) => (
+            <span key={l} className="runner-label-chip">
+              {l}
+              <Button
+                variant="ghost"
+                disabled={saving}
+                onClick={() => void save(labels.filter((x) => x !== l))}
+                title={t("runners.labelRemove", { label: l })}
+                aria-label={t("runners.labelRemove", { label: l })}
+              >
+                <X size={ICON.xs} />
+              </Button>
+            </span>
+          ))
+        )}
+      </div>
+      <div className="runner-label-add">
+        <input
+          type="text"
+          value={draft}
+          disabled={saving}
+          placeholder={t("runners.labelPlaceholder")}
+          aria-label={t("runners.labelPlaceholder")}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            // Enter adds, because that is what typing a tag into a box means.
+            if (e.key !== "Enter") return;
+            e.preventDefault();
+            add();
+          }}
+        />
+        <Button disabled={saving || draft.trim() === ""} onClick={add}>
+          <Plus size={ICON.xs} />
+          {t("runners.labelAdd")}
+        </Button>
+      </div>
     </div>
   );
 }

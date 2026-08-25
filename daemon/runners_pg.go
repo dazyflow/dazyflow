@@ -185,6 +185,30 @@ func (s *PgRunnerStore) Get(ctx context.Context, tenant, name string) (Runner, e
 	return r, nil
 }
 
+// SetLabels replaces the label array on one row.
+//
+// RETURNING rather than a second SELECT: the caller wants the updated runner,
+// and doing it in one statement means the answer cannot be another admin's
+// concurrent edit.
+func (s *PgRunnerStore) SetLabels(ctx context.Context, tenant, name string, labels []string) (Runner, error) {
+	// An empty array, not NULL: the column is NOT NULL DEFAULT '{}', and a
+	// machine with no labels is the ordinary state of one targeted by name.
+	if labels == nil {
+		labels = []string{}
+	}
+	r, err := scanRunner(s.pool.QueryRow(ctx, `
+		UPDATE tenant_runners SET labels = $3
+		 WHERE tenant = $1 AND name = $2
+		RETURNING `+runnerColumns, tenant, name, labels))
+	if err != nil {
+		if isPgNoRows(err) {
+			return Runner{}, ErrRunnerNotFound
+		}
+		return Runner{}, err
+	}
+	return r, nil
+}
+
 // Delete removes the runner, which is also the revocation: the credential is
 // stored on the row, so deleting the row is what stops the agent — whether or
 // not anyone remembers to shut it down.

@@ -117,43 +117,48 @@ export function AdminGitCredentials() {
         <Notice>{t("gitCreds.empty")}</Notice>
       ) : (
         <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-          <table className="run-table">
-            <thead>
-              <tr>
-                <th>{t("gitCreds.colAccount")}</th>
-                <th>{t("gitCreds.colParts")}</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {creds.map((c) => (
-                <tr key={c.account}>
-                  <td style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-1h)" }}>
-                    <KeyRound size={ICON.sm} /> {c.account}
-                  </td>
-                  <td className="muted" style={{ fontSize: "var(--text-sm)" }}>
-                    {[
-                      c.has_ssh_key && t("gitCreds.partSSH"),
-                      c.has_token &&
-                        t("gitCreds.partToken") +
-                          (c.username ? ` (${c.username})` : ""),
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </td>
-                  <td style={{ textAlign: "right", paddingRight: "var(--space-3)" }}>
-                    <Button
-                      className="btn-ghost"
-                      onClick={() => void remove(c.account)}
-                      title={t("gitCreds.delete")}
-                    >
-                      <Trash2 size={ICON.sm} />
-                    </Button>
-                  </td>
+          {/* The card's overflow:hidden clips to its rounded corners, so the
+              table has to scroll in here — clipped, the account's parts and the
+              remove button were unreachable on a phone. */}
+          <div className="run-table-scroll">
+            <table className="run-table">
+              <thead>
+                <tr>
+                  <th>{t("gitCreds.colAccount")}</th>
+                  <th>{t("gitCreds.colParts")}</th>
+                  <th></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {creds.map((c) => (
+                  <tr key={c.account}>
+                    <td style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-1h)" }}>
+                      <KeyRound size={ICON.sm} /> {c.account}
+                    </td>
+                    <td className="muted" style={{ fontSize: "var(--text-sm)" }}>
+                      {[
+                        c.has_ssh_key && t("gitCreds.partSSH"),
+                        c.has_token &&
+                          t("gitCreds.partToken") +
+                            (c.username ? ` (${c.username})` : ""),
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </td>
+                    <td style={{ textAlign: "right", paddingRight: "var(--space-3)" }}>
+                      <Button
+                        className="btn-ghost"
+                        onClick={() => void remove(c.account)}
+                        title={t("gitCreds.delete")}
+                      >
+                        <Trash2 size={ICON.sm} />
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

@@ -2251,6 +2251,13 @@
     "securityNote": "A runner runs whatever command a flow sends it. Anyone who can edit a flow in this organisation can therefore run commands on these machines. Start the agent with --allow to limit which programs it will run.",
     "onYourHardware": "Your runner",
     "onYourHardwareHint": "This step runs a script on {{name}}, one of your own machines — not on the Dazyflow server.",
-    "noTargetYet": "no machine chosen"
+    "noTargetYet": "no machine chosen",
+    "editLabels": "Edit labels",
+    "labelsHead": "Labels on {{name}}",
+    "labelsHint": "A label names a pool: a step can send work to whichever machine carrying that label is free, instead of naming one machine. Adding or removing one reroutes every step that targets it — the machine itself is not involved.",
+    "labelsNone": "No labels — this machine can only be targeted by name.",
+    "labelPlaceholder": "New label",
+    "labelAdd": "Add",
+    "labelRemove": "Remove the label {{label}}"
   }
 }

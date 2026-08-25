@@ -280,42 +280,49 @@ export function Results() {
 
             {page && (
               <>
-                <div className="card" style={{ padding: 0, overflow: "auto" }}>
-                  <table className="run-table">
-                    <thead>
-                      <tr>
-                        {page.columns.map((c) => (
-                          <th key={c}>{c}</th>
-                        ))}
-                        {/* Trailing action column for the per-row delete. */}
-                        <th aria-label={t("results.deleteRow")} style={{ width: 1 }} />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredRows.map((row, i) => {
-                        const rowid = Number(row[ROWID_KEY]);
-                        return (
-                          <tr key={Number.isFinite(rowid) ? rowid : i}>
-                            {page.columns.map((c) => (
-                              <td key={c}>{formatCell(row[c])}</td>
-                            ))}
-                            <td style={{ width: 1, whiteSpace: "nowrap" }}>
-                              <button
-                                type="button"
-                                className="board-row-del"
-                                title={t("results.deleteRow")}
-                                aria-label={t("results.deleteRow")}
-                                disabled={deletingRow || !Number.isFinite(rowid)}
-                                onClick={() => setRowPendingDelete(rowid)}
-                              >
-                                <Trash2 size={ICON.sm} />
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+                  {/* The widest table in the app — its columns are whatever the
+                      collection has. The card used to carry overflow:auto inline, which
+                      scrolled but also made the card itself a scroll container in both
+                      directions; the named wrapper is the one pattern every other table
+                      here uses, and adds momentum scrolling on touch. */}
+                  <div className="run-table-scroll">
+                    <table className="run-table">
+                      <thead>
+                        <tr>
+                          {page.columns.map((c) => (
+                            <th key={c}>{c}</th>
+                          ))}
+                          {/* Trailing action column for the per-row delete. */}
+                          <th aria-label={t("results.deleteRow")} style={{ width: 1 }} />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredRows.map((row, i) => {
+                          const rowid = Number(row[ROWID_KEY]);
+                          return (
+                            <tr key={Number.isFinite(rowid) ? rowid : i}>
+                              {page.columns.map((c) => (
+                                <td key={c}>{formatCell(row[c])}</td>
+                              ))}
+                              <td style={{ width: 1, whiteSpace: "nowrap" }}>
+                                <button
+                                  type="button"
+                                  className="board-row-del"
+                                  title={t("results.deleteRow")}
+                                  aria-label={t("results.deleteRow")}
+                                  disabled={deletingRow || !Number.isFinite(rowid)}
+                                  onClick={() => setRowPendingDelete(rowid)}
+                                >
+                                  <Trash2 size={ICON.sm} />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                   {filteredRows.length === 0 && (
                     <Notice inline>
                       {query ? t("results.noMatches") : t("results.boardEmpty")}

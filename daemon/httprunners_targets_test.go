@@ -146,3 +146,100 @@ func TestListRunnerTargets_AStaleMachineReadsAsOffline(t *testing.T) {
 		t.Errorf("runners = %+v, want the stale one listed and offline", got.Runners)
 	}
 }
+
+// ---- retagging a machine from the admin page --------------------------
+
+func setLabels(t *testing.T, h *HTTPGateway, p core.Principal, name, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	rw := httptest.NewRecorder()
+	req := httptest.NewRequest("PUT", "/api/v1/admin/runners/"+name+"/labels", strings.NewReader(body))
+	req.SetPathValue("name", name)
+	h.setRunnerLabels(rw, req, p)
+	return rw
+}
+
+func TestSetRunnerLabels_RetagsAMachineWithoutVisitingIt(t *testing.T) {
+	h := targetsGateway(t)
+	audit := NewMemAuditLog()
+	h.Audit = audit
+	rw := setLabels(t, h, adminPrincipal("acme"), "invoices-box", `{"labels":[" Build ","linux","BUILD"]}`)
+	if rw.Code != 200 {
+		t.Fatalf("code %d body %s", rw.Code, rw.Body)
+	}
+	var got runnerRow
+	if err := json.Unmarshal(rw.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	// Normalized the way registration stores them, so a step targeting "build"
+	// matches a machine the page shows as carrying it.
+	if strings.Join(got.Labels, ",") != "build,linux" {
+		t.Errorf("labels = %v, want them normalized and de-duplicated", got.Labels)
+	}
+	// The answer is the updated row, so the page can replace it without a
+	// refetch racing the poll it already runs.
+	if got.Name != "invoices-box" || !got.Online {
+		t.Errorf("row = %+v, want the whole updated runner", got)
+	}
+
+	// Audited like registration: this is the moment a machine starts or stops
+	// receiving a pool's work, and nobody touched the machine or a flow to do it.
+	events, err := audit.List(context.Background(), core.AuditQuery{Tenant: "acme"})
+	if err != nil {
+		t.Fatalf("audit list: %v", err)
+	}
+	var found bool
+	for _, e := range events {
+		if e.Action == "runner.labels" && e.Target == "invoices-box" && e.Detail == "build,linux" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("retagging was not audited: %+v", events)
+	}
+}
+
+// Retagging reroutes every step aimed at the label, so it belongs with
+// registration rather than with editing a flow.
+func TestSetRunnerLabels_NeedsRunnerAdminRatherThanGraphEdit(t *testing.T) {
+	h := targetsGateway(t)
+	if rw := setLabels(t, h, editorPrincipal("acme"), "invoices-box", `{"labels":["build"]}`); rw.Code != 403 {
+		t.Errorf("code %d, want 403 for someone who can only edit flows", rw.Code)
+	}
+}
+
+func TestSetRunnerLabels_RefusesALabelTheInstallCommandCouldNotExpress(t *testing.T) {
+	h := targetsGateway(t)
+	rw := setLabels(t, h, adminPrincipal("acme"), "invoices-box", `{"labels":["a,b"]}`)
+	if rw.Code != 400 {
+		t.Fatalf("code %d body %s, want 400", rw.Code, rw.Body)
+	}
+	// The message has to say which label and why — the page shows it verbatim.
+	if !strings.Contains(rw.Body.String(), "comma") {
+		t.Errorf("body = %s, want it to name the problem", rw.Body)
+	}
+}
+
+func TestSetRunnerLabels_CannotReachAnotherOrgsMachine(t *testing.T) {
+	h := targetsGateway(t)
+	// Same name, different organisation: names are unique only per org, so the
+	// tenant is what stops one org retagging another's fleet.
+	if rw := setLabels(t, h, adminPrincipal("globex"), "invoices-box", `{"labels":["theirs"]}`); rw.Code != 404 {
+		t.Errorf("code %d, want 404 across the tenant boundary", rw.Code)
+	}
+}
+
+func TestSetRunnerLabels_ClearingThemIsAllowed(t *testing.T) {
+	h := targetsGateway(t)
+	rw := setLabels(t, h, adminPrincipal("acme"), "invoices-box", `{"labels":[]}`)
+	if rw.Code != 200 {
+		t.Fatalf("code %d body %s", rw.Code, rw.Body)
+	}
+	var got runnerRow
+	if err := json.Unmarshal(rw.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	// A machine with no labels is the ordinary state of one targeted by name.
+	if len(got.Labels) != 0 {
+		t.Errorf("labels = %v, want none", got.Labels)
+	}
+}

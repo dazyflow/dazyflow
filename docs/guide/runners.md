@@ -215,6 +215,24 @@ Labels let a pool of machines share work. Register three build servers with
 The agent labels itself with its operating system and architecture by default,
 so `linux` and `arm64` work without anyone setting anything.
 
+**Retagging a machine takes no visit to it.** In **Admin → Runners**, the label
+button on a row opens the labels for that machine: add one, remove one, done.
+Registration is not involved, the credential does not change, and the agent
+never learns about it — a label is how *this* Dazyflow routes work, not
+something the machine knows about itself.
+
+Labels are stored lower-cased, trimmed and de-duplicated, however they were
+typed, because that is what a step has to spell to match one. So a label added
+as `Build ` appears as `build` the moment it saves — which is the spelling to put
+on the step. A comma is refused: `--labels a,b` splits on it, so a label
+containing one could never come from a machine, and would read as two labels
+everywhere it is shown.
+
+Changing a label reroutes every step that targets it, which is why it needs
+`organization:admin` (or an API key with `module:register`) — the same authority
+as adding the machine in the first place — and why it is recorded in the audit
+log.
+
 ### One limit worth knowing
 
 A runner's input takes a **value, not a file**. Wiring a file in is refused

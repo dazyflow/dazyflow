@@ -25,12 +25,14 @@ vi.mock("../../auth", () => {
 const listRunners = vi.fn();
 const mintRunnerToken = vi.fn();
 const deleteRunner = vi.fn();
+const setRunnerLabels = vi.fn();
 vi.mock("../../api", () => ({
   APIError: class extends Error {},
   api: {
     listRunners: (...a: unknown[]) => listRunners(...a),
     mintRunnerToken: (...a: unknown[]) => mintRunnerToken(...a),
     deleteRunner: (...a: unknown[]) => deleteRunner(...a),
+    setRunnerLabels: (...a: unknown[]) => setRunnerLabels(...a),
   },
 }));
 
@@ -65,6 +67,11 @@ beforeEach(() => {
     expires_at: "2026-08-25T10:00:00Z",
   });
   deleteRunner.mockResolvedValue({});
+  setRunnerLabels.mockImplementation((_tok: string, name: string, labels: string[]) =>
+    // The server normalizes and returns the saved row; the page shows what came
+    // back rather than what was typed.
+    Promise.resolve({ ...online, name, labels: [...labels].map((l) => l.trim().toLowerCase()).sort() }),
+  );
 });
 
 afterEach(() => {
@@ -204,6 +211,97 @@ describe("AdminRunners", () => {
     listRunners.mockRejectedValue(new Error("nope"));
     render(<AdminRunners />);
     expect(await screen.findByRole("alert")).toBeInTheDocument();
+  });
+
+  // ---- assigning labels ---------------------------------------------
+
+  // A label used to be decided on the machine at install time and fixed there
+  // forever: putting an existing server into another pool meant a visit to it,
+  // or deleting the runner and re-installing with a fresh token.
+  it("assigns a label to a registered machine", async () => {
+    const user = userEvent.setup();
+    listRunners.mockResolvedValue({ runners: [online] });
+    render(<AdminRunners />);
+    await screen.findByText("invoices-box");
+
+    await user.click(screen.getByRole("button", { name: "runners.editLabels" }));
+    await user.type(screen.getByLabelText("runners.labelPlaceholder"), "Build ");
+    await user.click(screen.getByRole("button", { name: /runners.labelAdd/ }));
+
+    // The whole set goes up, not a diff: the set is what routes work, so two
+    // admins editing one machine each end with a set they meant.
+    await waitFor(() =>
+      expect(setRunnerLabels).toHaveBeenCalledWith("tok", "invoices-box", ["linux", "x64", "Build"]),
+    );
+    // And the row shows the server's normalized answer, so it is visible that a
+    // step has to spell it "build".
+    expect(await screen.findByText(/build · linux · x64/)).toBeInTheDocument();
+  });
+
+  it("removes a label", async () => {
+    const user = userEvent.setup();
+    listRunners.mockResolvedValue({ runners: [online] });
+    render(<AdminRunners />);
+    await screen.findByText("invoices-box");
+
+    await user.click(screen.getByRole("button", { name: "runners.editLabels" }));
+    await user.click(screen.getByRole("button", { name: /runners.labelRemove.*x64/ }));
+    await waitFor(() =>
+      expect(setRunnerLabels).toHaveBeenCalledWith("tok", "invoices-box", ["linux"]),
+    );
+  });
+
+  it("does not spend a request on a label the machine already carries", async () => {
+    const user = userEvent.setup();
+    listRunners.mockResolvedValue({ runners: [online] });
+    render(<AdminRunners />);
+    await screen.findByText("invoices-box");
+
+    await user.click(screen.getByRole("button", { name: "runners.editLabels" }));
+    await user.type(screen.getByLabelText("runners.labelPlaceholder"), "LINUX{Enter}");
+    expect(setRunnerLabels).not.toHaveBeenCalled();
+  });
+
+  // A rejected label (a comma, a seventeenth pool) must not look as though it
+  // stuck: the failure surfaces and the row keeps what the server still holds.
+  it("says when a label was refused, and keeps the old set", async () => {
+    const user = userEvent.setup();
+    listRunners.mockResolvedValue({ runners: [online] });
+    setRunnerLabels.mockRejectedValue(new Error("comma"));
+    render(<AdminRunners />);
+    await screen.findByText("invoices-box");
+
+    await user.click(screen.getByRole("button", { name: "runners.editLabels" }));
+    await user.type(screen.getByLabelText("runners.labelPlaceholder"), "a,b{Enter}");
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(screen.getByText(/linux · x64/)).toBeInTheDocument();
+  });
+
+  // The editor is a row of its own under the machine, not a box inside the
+  // labels cell — on a phone that column is narrower than the input needs.
+  it("opens the editor in its own full-width row", async () => {
+    const user = userEvent.setup();
+    listRunners.mockResolvedValue({ runners: [online] });
+    const { container } = render(<AdminRunners />);
+    await screen.findByText("invoices-box");
+
+    await user.click(screen.getByRole("button", { name: "runners.editLabels" }));
+    const cell = container.querySelector(".runner-label-row td");
+    expect(cell).toHaveAttribute("colspan", "5");
+
+    await user.click(screen.getByRole("button", { name: "common.close" }));
+    expect(container.querySelector(".runner-label-row")).toBeNull();
+  });
+
+  // The table keeps a readable minimum width on a narrow screen, so the columns
+  // that stick out have to SCROLL. Without this wrapper the card's
+  // overflow:hidden clipped them and the last columns were unreachable on a
+  // phone — which is exactly what was reported.
+  it("lets the table scroll sideways instead of clipping it", async () => {
+    listRunners.mockResolvedValue({ runners: [online] });
+    const { container } = render(<AdminRunners />);
+    await screen.findByText("invoices-box");
+    expect(container.querySelector(".run-table-scroll .run-table")).not.toBeNull();
   });
 
   // A machine appears seconds after the command is pasted, and that wait is

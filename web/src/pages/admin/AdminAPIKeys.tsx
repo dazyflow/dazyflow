@@ -161,30 +161,35 @@ export function AdminAPIKeys() {
             </Notice>
           ) : (
             <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-              <table className="run-table">
-                <thead>
-                  <tr>
-                    <th>{t("admin.apiKeys.colId")}</th>
-                    <th>{t("admin.apiKeys.colSubject")}</th>
-                    <th>{t("admin.apiKeys.colRoles")}</th>
-                    <th>{t("admin.apiKeys.colExpires")}</th>
-                    <th>{t("common.status")}</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((k) => (
-                    <APIKeyRow
-                      key={k.id}
-                      k={k}
-                      confirming={confirmRevoke === k.id}
-                      onConfirm={() => setConfirmRevoke(k.id)}
-                      onCancelConfirm={() => setConfirmRevoke(null)}
-                      onRevoke={() => revoke(k.id)}
-                    />
-                  ))}
-                </tbody>
-              </table>
+              {/* Six columns behind the card's overflow:hidden: on a phone the
+                  expiry, the status and the revoke button were clipped away
+                  entirely, so the table scrolls in here instead. */}
+              <div className="run-table-scroll">
+                <table className="run-table">
+                  <thead>
+                    <tr>
+                      <th>{t("admin.apiKeys.colId")}</th>
+                      <th>{t("admin.apiKeys.colSubject")}</th>
+                      <th>{t("admin.apiKeys.colRoles")}</th>
+                      <th>{t("admin.apiKeys.colExpires")}</th>
+                      <th>{t("common.status")}</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((k) => (
+                      <APIKeyRow
+                        key={k.id}
+                        k={k}
+                        confirming={confirmRevoke === k.id}
+                        onConfirm={() => setConfirmRevoke(k.id)}
+                        onCancelConfirm={() => setConfirmRevoke(null)}
+                        onRevoke={() => revoke(k.id)}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </>

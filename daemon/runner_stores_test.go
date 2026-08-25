@@ -6,6 +6,7 @@ package daemon
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -240,12 +241,79 @@ func runnerStoreContract(t *testing.T, store RunnerStore) {
 		}
 	})
 
+	t.Run("labels can be replaced after registration", func(t *testing.T) {
+		// A label used to be decided on the machine and fixed there forever, so
+		// moving an existing server into a new pool meant a visit to it.
+		if _, _, err := rs.Register(ctx, mint("acme"), "retag", []string{"linux"}, "0.2.0"); err != nil {
+			t.Fatalf("Register: %v", err)
+		}
+		got, err := rs.SetLabels(ctx, "acme", "retag", []string{" Build ", "linux", "BUILD"})
+		if err != nil {
+			t.Fatalf("SetLabels: %v", err)
+		}
+		// Normalized by the same rule registration uses — lower-cased, trimmed,
+		// de-duplicated, sorted — or a step targeting "build" would miss a
+		// machine the page shows as carrying it.
+		if strings.Join(got.Labels, ",") != "build,linux" {
+			t.Errorf("labels = %v, want them normalized", got.Labels)
+		}
+		back, err := store.Get(ctx, "acme", "retag")
+		if err != nil {
+			t.Fatalf("Get: %v", err)
+		}
+		if strings.Join(back.Labels, ",") != "build,linux" {
+			t.Errorf("stored labels = %v", back.Labels)
+		}
+
+		// Clearing them is a real state: a machine targeted only by name.
+		cleared, err := rs.SetLabels(ctx, "acme", "retag", nil)
+		if err != nil {
+			t.Fatalf("SetLabels(nil): %v", err)
+		}
+		if len(cleared.Labels) != 0 {
+			t.Errorf("labels = %v, want none", cleared.Labels)
+		}
+	})
+
+	t.Run("a label the install command could not express is refused", func(t *testing.T) {
+		if _, _, err := rs.Register(ctx, mint("acme"), "picky", nil, "0.2.0"); err != nil {
+			t.Fatalf("Register: %v", err)
+		}
+		// `--labels a,b` splits on the comma, so a label containing one can
+		// never come from a machine — and would read as two labels everywhere
+		// it is shown.
+		if _, err := rs.SetLabels(ctx, "acme", "picky", []string{"a,b"}); err == nil {
+			t.Error("a comma inside a label was accepted")
+		}
+		if _, err := rs.SetLabels(ctx, "acme", "picky", []string{strings.Repeat("x", MaxRunnerLabelLen+1)}); err == nil {
+			t.Error("an over-long label was accepted")
+		}
+		many := make([]string, MaxRunnerLabels+1)
+		for i := range many {
+			many[i] = fmt.Sprintf("pool-%d", i)
+		}
+		if _, err := rs.SetLabels(ctx, "acme", "picky", many); err == nil {
+			t.Error("more labels than the cap were accepted")
+		}
+		// Refused before the write, so the machine keeps the set it had.
+		back, err := store.Get(ctx, "acme", "picky")
+		if err != nil {
+			t.Fatalf("Get: %v", err)
+		}
+		if len(back.Labels) != 0 {
+			t.Errorf("a refused edit still changed the row: %v", back.Labels)
+		}
+	})
+
 	t.Run("an unknown runner is not found", func(t *testing.T) {
 		if _, err := store.Get(ctx, "acme", "ghost"); !errors.Is(err, ErrRunnerNotFound) {
 			t.Errorf("err = %v, want ErrRunnerNotFound", err)
 		}
 		if err := store.Delete(ctx, "acme", "ghost"); !errors.Is(err, ErrRunnerNotFound) {
 			t.Errorf("err = %v, want ErrRunnerNotFound", err)
+		}
+		if _, err := store.SetLabels(ctx, "acme", "ghost", []string{"x"}); !errors.Is(err, ErrRunnerNotFound) {
+			t.Errorf("SetLabels: err = %v, want ErrRunnerNotFound", err)
 		}
 	})
 }
