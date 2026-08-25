@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-08-25
+
 ### Changed
 
 - **Online machines lead when several match.** Work already only ever reaches a
