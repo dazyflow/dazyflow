@@ -36,6 +36,28 @@ if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
 }
 
+// xterm.js parses CSS colours by painting them onto a 1×1 canvas and reading
+// the pixel back, which it does at MODULE LOAD — so merely importing anything
+// that reaches LiveConsole or the system-log viewer makes jsdom log a
+// not-implemented stack trace for getContext. jsdom returns null rather than
+// throwing, so nothing fails; the five flow-editor suites just each printed a
+// ten-frame trace that reads like a real error in CI output.
+//
+// The stub is the smallest surface xterm actually uses: set a fill, fill a
+// rect, read four bytes back. Deliberately NOT a colour implementation —
+// nothing in a jsdom test asserts on a rendered terminal, and pretending to
+// measure one would invite tests that trust the numbers.
+HTMLCanvasElement.prototype.getContext = function getContext() {
+  return {
+    fillStyle: "",
+    fillRect: () => {},
+    clearRect: () => {},
+    getImageData: () => ({ data: new Uint8ClampedArray(4) }),
+    measureText: () => ({ width: 0 }),
+    createLinearGradient: () => ({ addColorStop: () => {} }),
+  } as unknown as CanvasRenderingContext2D;
+} as unknown as typeof HTMLCanvasElement.prototype.getContext;
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();

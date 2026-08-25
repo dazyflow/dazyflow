@@ -14,7 +14,7 @@ import { EmptyState } from "../../components/ui/EmptyState";
 import { Loading } from "../../components/ui/Loading";
 import { Notice } from "../../components/ui/Notice";
 import { ICON } from "../../icons";
-import { FEEDBACK } from "../../lib/timing";
+import { FEEDBACK, POLL } from "../../lib/timing";
 import { formatDateTime } from "../../lib/datetime";
 
 // AdminRunners is where an org adds machines of its own that flows can run
@@ -62,7 +62,7 @@ export function AdminRunners() {
         .catch(() => {
           /* a failed refresh is not worth replacing the list with an error */
         });
-    }, 5000);
+    }, POLL.watched);
     return () => clearInterval(id);
   }, [token]);
 

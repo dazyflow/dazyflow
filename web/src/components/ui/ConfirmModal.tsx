@@ -56,7 +56,12 @@ export function ConfirmModal({
           <h2>{title}</h2>
         </div>
         <div className="modal-body">
-          <p className="confirm-message">{message}</p>
+          {/* A div, not a <p>: `message` is a ReactNode, and callers pass
+              block content — the git-mirror unrelated-history confirm sends a
+              paragraph plus a <pre> of the server's own words. Inside a <p>
+              the browser auto-closes at the first block child, so the markup
+              the caller wrote is not the markup that renders. */}
+          <div className="confirm-message">{message}</div>
         </div>
         <div className="modal-foot">
           {/* Cancel is the safe default — autofocused so a reflexive

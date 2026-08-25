@@ -81,6 +81,9 @@ const SV_LABELS: Record<string, string> = {
   "Remove duplicates": "Ta bort dubbletter",
   "Reusable flow": "Återanvändbart flöde",
   "Route rows": "Dirigera rader",
+  // "Runner" is "körnod" throughout the UI (see the runners.* block in
+  // sv.json); the step names the machine, not the agent process.
+  "Run on your machine": "Kör på din maskin",
   Schedule: "Schema",
   Secrets: "Hemligheter",
   "SMHI Weather": "SMHI Väder",
@@ -99,6 +102,7 @@ const SV_LABELS: Record<string, string> = {
 };
 
 const SV_SUBTITLES: Record<string, string> = {
+  "A script, on a runner you host": "Ett skript, på en körnod du driver",
   "Add comment": "Lägg till kommentar",
   "Alert when a site breaks, and when it's back": "Larma när en sajt går ner, och när den är tillbaka",
   "Append rows": "Lägg till rader",
@@ -331,6 +335,7 @@ const SV_PORTS: Record<string, string> = {
   "Order ID": "Order-ID",
   "Order amount (smallest unit)": "Orderbelopp (minsta enhet)",
   "Org number": "Organisationsnummer",
+  Output: "Utdata",
   Outputs: "Utdata",
   "Page address": "Sidans adress",
   "PR link": "PR-länk",

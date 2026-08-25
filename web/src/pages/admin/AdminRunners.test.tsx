@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
+import { POLL } from "../../lib/timing";
 import userEvent from "@testing-library/user-event";
 
 // Stable `t` and auth: the page's load callback lists `t` in its deps, so a
@@ -195,7 +196,13 @@ describe("AdminRunners", () => {
     await screen.findByText("runners.emptyTitle");
 
     listRunners.mockResolvedValue({ runners: [online] });
-    await vi.advanceTimersByTimeAsync(6000);
+    // Inside act(): advancing the timer fires the poll, whose promise resolves
+    // into setRunners after the await returns. Outside, React warns that the
+    // update happened unobserved — and the warning is the honest one, since the
+    // assertion below would then be racing the render rather than following it.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(POLL.watched + 1000);
+    });
     await waitFor(() => expect(screen.getByText("invoices-box")).toBeInTheDocument());
   });
 });

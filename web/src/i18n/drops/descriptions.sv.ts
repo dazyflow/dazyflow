@@ -469,6 +469,10 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     en: "dbfb8c10",
     sv: "Läs ett RSS 2.0- eller Atom-flöde och skicka ut dess poster som rader. Kombinera det med en Intervall-trigger för att polla enligt schema: med dubblettrensning på (standard) minns det vilka poster som redan skickats ut och utlöser bara för NYA — så att en blogg, ett släppflöde, en podd eller en nyhetskälla driver flödet en gång per post. Den första pollningen sätter en utgångspunkt och skickar ut ingenting (den börjar bevaka från nu, inte hela historiken). Båda dialekterna normaliseras till samma kolumner: id, title, link, published (RFC3339 när flödets datum går att tolka), author, summary, content. Slå av dubblettrensningen för att bara tolka det aktuella flödet till rader vid varje körning.",
   },
+  run_on_runner: {
+    en: "73b15f6d",
+    sv: "Kör ett skript på en av organisationens egna maskiner — en server, en laptop, vad som helst som kör Dazyflows körnodsagent. Använd det när arbetet behöver ett bibliotek, ett verktyg eller ett nät som de inbyggda stegen inte når. Peka ut en körnod med namn, eller en etikett som flera maskiner delar så att vilken ledig maskin som helst kan ta jobbet. Värdet som kopplas in i 'in' kommer in på skriptets standard input; det skriptet skriver ut kommer tillbaka på 'out'. En avslutningskod som inte är noll gör att steget misslyckas, med skriptets felutskrift bifogad.",
+  },
   secret_set: {
     en: "0b7ba489",
     sv: "Spara ett värde i din organisations krypterade hemlighetslager under det angivna namnet. Kombinera det med mallsubstitution (${secret.namn}) för att läsa tillbaka värdet i senare flödeskörningar — det klassiska användningsfallet är att lagra en markör för pollande flöden som behöver minnas 'vad var det sista jag bearbetade' över omstarter.",

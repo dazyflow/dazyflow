@@ -222,6 +222,18 @@ into the image.)
   carry `role="dialog"`/`aria-modal`, so a screen reader is told it is in a
   dialog rather than in the middle of the page.
 
+- **A confirm dialog with more than a sentence in it now renders the markup it
+  was given.** `ConfirmModal` wrapped its message in a `<p>`, but the message
+  is a `ReactNode` and seven callers pass block content — the git-mirror
+  "unrelated history" confirm sends a paragraph plus a `<pre>` of the server's
+  own words, and the platform drop-killswitch and org/user detail confirms each
+  send a `<div>` with a reason field in it. A browser closes a paragraph at the
+  first block child, so all of that content escaped the `<p>` and rendered as
+  the dialog body's own children: it lost the muted colour, the type size and
+  the line height `.confirm-message` was there to give it, and the empty `<p>`
+  left behind kept them. The wrapper is a `<div>` now, which is what a
+  node-valued prop needed all along.
+
 - **Loading placeholders are announced to screen readers.** Ten different
   hand-built wrappers rendered the one "Loading…" string, and not one of them
   carried `role="status"` — so every loading state in the app was silent to a
