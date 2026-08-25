@@ -1228,7 +1228,7 @@
       "addedAt": "added {{date}}",
       "removeConfirm": "Remove support-agent access for {{email}}?"
     },
-    "cardRunnersDesc": "Runners for your own code, registered with certificates on both sides."
+    "cardRunnersDesc": "Machines you own that your flows can run scripts on."
   },
   "results": {
     "title": "Collections",
@@ -2223,36 +2223,23 @@
   },
   "runners": {
     "title": "Runners",
-    "subtitle": "Your own code, on your own hardware, as a step in your flows.",
+    "subtitle": "Machines you own, running scripts your flows send them.",
+    "add": "Add a runner",
+    "adding": "Preparing…",
     "emptyTitle": "No runners yet",
-    "emptyBody": "A runner is a small service you host. Register one and the steps it offers appear in your palette, alongside the built-in ones.",
-    "colSteps": "Steps",
-    "noSteps": "—",
+    "emptyBody": "A runner is a machine of yours — a server, a laptop, anything with Python 3. Add one and your flows can run scripts on it with the “Run on your machine” step.",
+    "colLabels": "Labels",
+    "colAgent": "Agent",
+    "online": "Online",
+    "offlineSince": "Last seen {{at}}",
+    "neverSeen": "Never connected",
     "remove": "Remove runner",
-    "addTitle": "Register a runner",
-    "addIntro": "Both sides prove who they are with a certificate. You supply your runner's certificate so the daemon can recognise it, and a certificate and key the daemon presents in return.",
-    "nameDesc": "Lower case, digits, dashes. It becomes part of each step's id, so it cannot be changed later.",
-    "endpointLabel": "Address",
-    "endpointDesc": "Host and port, reachable from the daemon. The name here must match your runner's certificate.",
-    "serverCertLabel": "Your runner's certificate",
-    "serverCertDesc": "Pasted, not fetched: the daemon trusts this exact certificate and nothing else.",
-    "clientCertLabel": "Certificate the daemon presents",
-    "clientCertDesc": "Install the matching certificate on your runner so it can recognise the daemon.",
-    "clientKeyLabel": "Private key for that certificate",
-    "clientKeyDesc": "Stored encrypted and never shown again. Replacing a runner means pasting it once more.",
-    "test": "Test connection",
-    "testing": "Testing…",
-    "save": "Register",
-    "probeAnswered": "Answered",
-    "probeSteps": "Offers: {{steps}}",
-    "probeNoSteps": "Connected, but it offers no steps yet.",
-    "expiringSoon": "The certificate for {{names}} expires soon. Register the runner again with a new one before it does.",
-    "state": {
-      "connected": "Connected",
-      "unreachable": "Unreachable",
-      "disabled": "Off"
-    },
+    "installHead": "Run this on the machine",
+    "installIntro": "One command. It downloads one readable Python file, registers the machine, and installs a service so it keeps running after a reboot. Nothing needs to reach the machine, so this works behind a firewall.",
+    "installExpiry": "This command stops working at {{at}}, and only works once. Add another runner to get a fresh one.",
+    "securityNote": "A runner runs whatever command a flow sends it. Anyone who can edit a flow in this organisation can therefore run commands on these machines. Start the agent with --allow to limit which programs it will run.",
     "onYourHardware": "Your runner",
-    "onYourHardwareHint": "This step runs on your own runner ({{name}}), not on the Dazyflow server. Anything you wire in is sent there."
+    "onYourHardwareHint": "This step runs a script on {{name}}, one of your own machines — not on the Dazyflow server.",
+    "noTargetYet": "no machine chosen"
   }
 }

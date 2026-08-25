@@ -348,9 +348,22 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// Gated on organization:admin or module:register — see requireRunnerAdmin
 	// for why that is deliberately not graph:edit.
 	mux.HandleFunc("GET /api/v1/admin/runners", h.requireAuth(h.listRunners))
-	mux.HandleFunc("PUT /api/v1/admin/runners/{name}", h.requireAuth(h.putRunner))
+	mux.HandleFunc("POST /api/v1/admin/runners/token", h.requireAuth(h.mintRunnerToken))
 	mux.HandleFunc("DELETE /api/v1/admin/runners/{name}", h.requireAuth(h.deleteRunner))
-	mux.HandleFunc("POST /api/v1/admin/runners/{name}/test", h.requireAuth(h.testRunner))
+
+	// The agent's own endpoints. Outside requireAuth on purpose: an agent holds
+	// a runner credential, not a session or an API key, and it authorises
+	// nothing beyond claiming that runner's work. Each handler authenticates
+	// itself via authRunner.
+	// The agent and runner.sh, unauthenticated: neither is a secret, and requiring
+	// auth would break the one-line install for no gain.
+	mux.HandleFunc("GET /dzrunner.py", h.serveRunnerAgent)
+	mux.HandleFunc("GET /runner.sh", h.serveRunnerScript)
+
+	mux.HandleFunc("POST /api/v1/runner/register", h.registerRunner)
+	mux.HandleFunc("POST /api/v1/runner/claim", h.claimRunnerTask)
+	mux.HandleFunc("POST /api/v1/runner/tasks/{id}/progress", h.runnerTaskProgress)
+	mux.HandleFunc("POST /api/v1/runner/tasks/{id}/result", h.runnerTaskResult)
 
 	mux.HandleFunc("GET /api/v1/admin/oauth-providers", h.requireAuth(h.listAdminOAuthProviders))
 	mux.HandleFunc("PUT /api/v1/admin/oauth-providers/{name}", h.requireAuth(h.upsertAdminOAuthProvider))

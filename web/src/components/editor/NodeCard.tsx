@@ -10,7 +10,7 @@ import { telFieldFlag, regionDisplayName } from "../../lib/phoneFlag";
 import { Switch } from "../ui/Switch";
 import { iconFor, isBrandedIcon, dropColor, ICON } from "../../icons";
 import { dropSubtitle, nodeStateText, portLabel } from "../../lib/dropText";
-import { isRunnerStep, runnerNameOf } from "../../lib/runnerDrop";
+import { isRunnerStep, runnerTargetOf } from "../../lib/runnerStep";
 import type { Manifest, Port, JSONSchema, Ref } from "../../types";
 import {
   type DazyNodeData,
@@ -352,11 +352,11 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
             <div
               className="dz-node-chip dz-node-runner"
               title={i18n.t("runners.onYourHardwareHint", {
-                name: runnerNameOf(d.moduleID),
+                name: runnerTargetOf(d.params) || i18n.t("runners.noTargetYet"),
               })}
             >
               <Plug size={ICON.xs} strokeWidth={2.2} />
-              {runnerNameOf(d.moduleID)}
+              {runnerTargetOf(d.params) || i18n.t("runners.noTargetYet")}
             </div>
           )}
           {/* Stateful drops (RSS dedupe, poll watermarks) show a subtle "keeps

@@ -57,6 +57,7 @@ import (
 	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 	"git.sr.ht/~klahr/dazyflow/drops/notion"
 	rssdrop "git.sr.ht/~klahr/dazyflow/drops/rss"
+	runnerdrop "git.sr.ht/~klahr/dazyflow/drops/runner"
 	secretsdrop "git.sr.ht/~klahr/dazyflow/drops/secrets"
 	"git.sr.ht/~klahr/dazyflow/drops/sheets"
 	"git.sr.ht/~klahr/dazyflow/drops/slack"
@@ -365,7 +366,7 @@ func main() {
 	// Tenant runners. They need the encrypted store for the client key, so
 	// this has to follow setupEncryptedSecrets; without one the feature stays
 	// off and its endpoints answer 501 rather than half-working.
-	runners, runnerSupervisor := setupRunners(ctx, pgPool, encryptedSecrets, remoteCatalog)
+	runners, runnerTasks := setupRunners(ctx, pgPool)
 	// Resolve a git_checkout node's selected git credential (by account) to
 	// its material (SSH key and/or HTTPS PAT) from the per-tenant encrypted
 	// store at clone time. Mirrors the OAuth connectors' SetTokenLookup
@@ -812,7 +813,7 @@ func main() {
 			dropSwitches:     dropSwitches,
 			encryptedSecrets: encryptedSecrets,
 			runners:          runners,
-			runnerSupervisor: runnerSupervisor,
+			runnerTasks:      runnerTasks,
 			mirrors:          stores.mirrors,
 			mirrorPusher:     mirrorPusher,
 			oauth:            oauthRegistry,
@@ -1224,11 +1225,15 @@ func startRetentionSweeps(ctx context.Context, svc *daemon.Service, jobs core.Jo
 	// Run logs default to the JOB retention: a run's log should outlive
 	// neither the run record it narrates nor the operator's expectations.
 	runLogRetention := envDuration("DAZYFLOW_RUN_LOG_RETENTION", jobRetention)
+	// A runner task row is an operational record of one dispatch, so it keeps
+	// the same window as the job it belonged to.
+	runnerTaskRetention := envDuration("DAZYFLOW_RUNNER_TASK_RETENTION", jobRetention)
 	// A free-tier per-tenant retention window keeps the sweep alive even when
 	// every global window is disabled (the per-tenant pass below still runs).
 	perTenantRetention := svc != nil && svc.FreeRetentionDays > 0
 	supportSweep := supportRetention > 0 && envBool("DAZYFLOW_SUPPORT_ENABLED", false)
-	if jobRetention <= 0 && auditRetention <= 0 && runLogRetention <= 0 && !perTenantRetention && !supportSweep {
+	if jobRetention <= 0 && auditRetention <= 0 && runLogRetention <= 0 &&
+		runnerTaskRetention <= 0 && !perTenantRetention && !supportSweep {
 		return
 	}
 	retentionAudit, err := daemon.NewPgAuditLog(ctx, pgPool)
@@ -1247,14 +1252,14 @@ func startRetentionSweeps(ctx context.Context, svc *daemon.Service, jobs core.Jo
 		PruneTenant(context.Context, string, time.Duration, int) (int, error)
 		RunLogTenants(context.Context) ([]string, error)
 	})
-	// Support pruners are built straight from the pool rather than threaded in
-	// from buildGateway: the gateway's stores are created later in the boot
-	// sequence than this sweep starts, and both constructors only ensure an
+	// The pruners below are built straight from the pool rather than threaded
+	// in from buildGateway: the gateway's stores are created later in the boot
+	// sequence than this sweep starts, and every constructor only ensures an
 	// idempotent schema over the same pool. Nil when the feature is off.
-	type supportPruner interface {
+	type pruner interface {
 		Prune(context.Context, time.Duration, int) (int, error)
 	}
-	var ticketPruner, bundlePruner supportPruner
+	var ticketPruner, bundlePruner pruner
 	if supportSweep {
 		if ts, err := daemon.NewPgTicketStore(ctx, pgPool); err != nil {
 			log.Printf("retention: support ticket store: %v", err)
@@ -1265,6 +1270,17 @@ func startRetentionSweeps(ctx context.Context, svc *daemon.Service, jobs core.Jo
 			log.Printf("retention: support bundle store: %v", err)
 		} else {
 			bundlePruner = bs
+		}
+	}
+	// Built straight from the pool for the same reason as the support pruners:
+	// the gateway's own store is created later in the boot sequence, and the
+	// constructor only ensures an idempotent schema over the same pool.
+	var runnerTaskPruner pruner
+	if runnerTaskRetention > 0 && pgPool != nil {
+		if rt, err := daemon.NewPgRunnerTaskStore(ctx, pgPool); err != nil {
+			log.Printf("retention: runner task store: %v", err)
+		} else {
+			runnerTaskPruner = rt
 		}
 	}
 	bgWg.Add(1)
@@ -1296,6 +1312,15 @@ func startRetentionSweeps(ctx context.Context, svc *daemon.Service, jobs core.Jo
 					}
 				} else if n > 0 {
 					log.Printf("retention: pruned %d run-log row(s)", n)
+				}
+			}
+			if runnerTaskPruner != nil {
+				if n, err := runnerTaskPruner.Prune(ctx, runnerTaskRetention, 5000); err != nil {
+					if ctx.Err() == nil {
+						log.Printf("retention: prune runner tasks: %v", err)
+					}
+				} else if n > 0 {
+					log.Printf("retention: pruned %d runner task row(s)", n)
 				}
 			}
 			// Support pass: tickets first, then bundles — a bundle is only
@@ -1382,7 +1407,7 @@ type gatewayDeps struct {
 	dropSwitches     daemon.DropSwitchStore
 	encryptedSecrets *daemon.EncryptedSecrets
 	runners          *daemon.Runners
-	runnerSupervisor *daemon.RunnerSupervisor
+	runnerTasks      daemon.RunnerTaskStore
 	mirrors          daemon.GitMirrorStore
 	mirrorPusher     *daemon.MirrorPusher
 	oauth            *daemon.OAuthRegistry
@@ -1441,8 +1466,8 @@ func buildGateway(ctx context.Context, bgWg *sync.WaitGroup, d gatewayDeps) {
 	gw.Blocklist = d.blocklist               // nil = nothing banned (bans unavailable)
 	gw.DropSwitches = d.dropSwitches         // nil disables drop-killswitch endpoints
 	gw.EncryptedSecrets = d.encryptedSecrets // nil disables /api/v1/secrets endpoints
-	gw.Runners = d.runners                   // nil leaves /api/v1/admin/runners at 501
-	gw.RunnerSupervisor = d.runnerSupervisor
+	gw.Runners = d.runners                   // nil leaves the runner endpoints at 501
+	gw.RunnerTasks = d.runnerTasks
 	gw.GitMirrors = d.mirrors // nil disables /api/v1/git/mirror endpoints
 	gw.MirrorPusher = d.mirrorPusher
 	gw.OAuth = d.oauth                 // nil disables /api/v1/oauth/* endpoints
@@ -2241,43 +2266,69 @@ func wireConnectorTokenHooks(reg *daemon.OAuthRegistry) {
 	})
 }
 
-// setupRunners wires tenant runners: the store, the encrypted client keys, and
-// the supervisor that reconciles them into the engine's remote catalog.
+// setupRunners wires the runner feature: where runners and their credentials
+// live, and the queue their agents claim work from.
 //
-// Returns (nil, nil) when the feature cannot be configured — no Postgres, or
-// no master key for the encrypted store. That is a supported deployment, not a
-// failure: the admin endpoints then answer 501 and nothing else changes. A
-// half-configured runner feature would be worse than none, because a
-// registration that cannot store its key is a runner that can never connect.
-func setupRunners(
-	ctx context.Context,
-	pool *pgxpool.Pool,
-	secrets *daemon.EncryptedSecrets,
-	catalog *engine.RemoteCatalog,
-) (*daemon.Runners, *daemon.RunnerSupervisor) {
-	if pool == nil || secrets == nil {
+// Returns (nil, nil) when it cannot be configured — no Postgres — which is a
+// supported deployment rather than a failure: the endpoints answer 501 and the
+// "Run on your machine" step reports that runners are not set up. A
+// half-configured runner feature would be worse than none, because a registered
+// machine that cannot be handed work looks like a bug on the org's side.
+func setupRunners(ctx context.Context, pool *pgxpool.Pool) (*daemon.Runners, daemon.RunnerTaskStore) {
+	if pool == nil {
 		return nil, nil
 	}
+	// Both stores are durable, and both have to be. A registration outlives
+	// the daemon — the agent keeps its credential on disk forever, so a daemon
+	// that forgot its runners on restart would tell every one of them it is no
+	// longer registered. And the task queue is the handoff between the agent's
+	// result and the step waiting for it, which may be on another daemon.
 	store, err := daemon.NewPgRunnerStore(ctx, pool)
 	if err != nil {
-		log.Printf("tenant runners disabled: %v", err)
+		log.Printf("runners disabled: %v", err)
 		return nil, nil
 	}
-	runners := &daemon.Runners{Store: store, Secrets: secrets}
-	sup := daemon.NewRunnerSupervisor(runners, catalog)
-	// One synchronous pass at boot so runners that ARE up are in the catalog
-	// before the first request arrives — otherwise the palette would briefly
-	// be missing steps on every restart.
-	if n, err := sup.Sync(ctx); err != nil {
-		log.Printf("tenant runners: initial sync: %v", err)
-	} else if n > 0 {
-		log.Printf("connected %d tenant runner(s)", n)
+	tasks, err := daemon.NewPgRunnerTaskStore(ctx, pool)
+	if err != nil {
+		log.Printf("runners disabled: %v", err)
+		return nil, nil
 	}
-	go sup.Run(ctx, runnerSyncInterval)
-	return runners, sup
+	runners := &daemon.Runners{Store: store}
+	dispatcher := &daemon.RunnerDispatcher{Tasks: tasks, Runners: runners}
+	runnerdrop.SetDispatcher(runnerBridge{inner: dispatcher})
+	return runners, tasks
 }
 
-// runnerSyncInterval is how often the supervisor reconciles. Frequent, because
-// a pass is nearly free for runners that are already connected — the per-runner
-// backoff, not this interval, is what paces retries against one that is down.
-const runnerSyncInterval = 10 * time.Second
+// runnerBridge adapts the daemon's dispatcher to the step's interface.
+//
+// It lives here rather than in either package because it is the only place that
+// legitimately knows both: `daemon` must not depend on `drops`, and a drop must
+// not depend on the daemon. Two small structs and a copy is the price of that
+// separation, and it is worth paying — the alternative is a shared types
+// package that exists only to let two layers reach each other.
+type runnerBridge struct{ inner *daemon.RunnerDispatcher }
+
+func (b runnerBridge) Dispatch(
+	ctx context.Context,
+	req runnerdrop.Request,
+	onProgress func(string),
+) (runnerdrop.Result, error) {
+	res, err := b.inner.Dispatch(ctx, daemon.DispatchRequest{
+		Tenant:  req.Tenant,
+		Runner:  req.Runner,
+		Label:   req.Label,
+		Script:  req.Script,
+		Env:     req.Env,
+		Stdin:   req.Stdin,
+		Timeout: req.Timeout,
+	}, onProgress)
+	if err != nil {
+		return runnerdrop.Result{}, err
+	}
+	return runnerdrop.Result{
+		ExitCode: res.ExitCode,
+		Stdout:   res.Stdout,
+		Stderr:   res.Stderr,
+		Error:    res.Error,
+	}, nil
+}

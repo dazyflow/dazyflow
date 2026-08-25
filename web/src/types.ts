@@ -825,39 +825,32 @@ export type PublishInfo = {
 // The client PRIVATE key is never returned — it is write-only, held encrypted
 // server-side. The certificates ARE returned: they are public identity an admin
 // may need to re-install on the runner side.
+// Runner is one machine the org has registered from GET /admin/runners.
+//
+// There is no address and no connection state, because nothing connects TO a
+// runner: an agent on that machine asks the daemon for work. "Online" is
+// therefore derived from when it last asked, which is why last_seen is here and
+// a status field is not.
 export type Runner = {
   name: string;
-  endpoint: string;
-  enabled: boolean;
-  client_cert_pem?: string;
-  server_ca_pem?: string;
-  // not_after is the client certificate's expiry; expiring_soon is the server's
-  // own verdict on it, so every caller warns at the same threshold.
-  not_after?: string;
-  expiring_soon?: boolean;
+  // labels a flow can target instead of the name, so a pool of interchangeable
+  // machines can share work.
+  labels?: string[];
+  // version of the agent, reported at registration — an old agent is a
+  // plausible cause of odd behaviour.
+  version?: string;
+  online: boolean;
+  last_seen?: string;
   created_by?: string;
   created_at: string;
-  updated_at: string;
-  // Live connection state. Absent until the daemon has tried.
-  state?: "connected" | "unreachable" | "disabled";
-  // drops are the steps this runner currently serves, by their catalog ids
-  // (runner/<runner>/<drop>). Empty while unreachable.
-  drops?: string[];
-  error?: string;
-  last_attempt?: string;
-  last_success?: string;
 };
 
-// RunnerProbe is the result of testing a runner before saving it. `ok` means it
-// answered; `subject` and `hosts` come from the certificate that was pasted, so
-// they are reported even when the connection fails — confirming WHO you are
-// about to trust matters more than confirming that something answered.
-export type RunnerProbe = {
-  ok: boolean;
-  subject?: string;
-  hosts?: string[];
-  drops?: string[];
-  error?: string;
+// RunnerToken is a registration token, returned once by
+// POST /admin/runners/token and never retrievable again. It is the whole of the
+// install: paste it into one command on the machine.
+export type RunnerToken = {
+  token: string;
+  expires_at: string;
 };
 
 // GitCredential is one named per-org git credential from

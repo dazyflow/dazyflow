@@ -9,13 +9,12 @@ import {
   useRef,
   useState,
 } from "react";
-import { Search, Box, Plug } from "lucide-react";
+import { Search, Box } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { iconFor, isBrandedIcon, dropColor, ICON } from "../../icons";
 import { Button } from "../ui/Button";
 import { scoreDrop } from "../../lib/dropSearch";
 import { dropCategoryLabel, dropLabel, dropSubtitle } from "../../lib/dropText";
-import { isRunnerStep, runnerNameOf } from "../../lib/runnerDrop";
 import type { Manifest } from "../../types";
 
 type Props = {
@@ -128,10 +127,6 @@ export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAl
       // jargon to anyone who isn't a developer.
       const tier = (d: Manifest) => {
         if (d.disabled) return 9; // platform-disabled — sink to the bottom
-        // The org's own runners lead: someone who went to the trouble of
-        // hosting a step is more likely to want it than any built-in, and it
-        // is the one group nobody else's catalog can offer them.
-        if (isRunnerStep(d.id)) return 0;
         if (!d.integration) return d.category === "logic" ? 3 : 2;
         return 1; // a real connector
       };
@@ -405,15 +400,7 @@ function QuickRow({
               share a product title; it stands in for the integration line
               (which would just repeat the title). Falls back to the
               integration, or a stdlib chip. */}
-          {isRunnerStep(drop.id) ? (
-            // Named before the subtitle: where a step RUNS matters more when
-            // picking it than what it is called, because it decides whether
-            // the org's secrets leave the daemon.
-            <span className="quick-palette-row-integration">
-              <Plug size={ICON.xs} aria-hidden="true" />{" "}
-              {t("runners.onYourHardware")} · {runnerNameOf(drop.id)}
-            </span>
-          ) : drop.subtitle ? (
+          {drop.subtitle ? (
             <span className="quick-palette-row-integration">
               {dropSubtitle(drop, lang)}
             </span>

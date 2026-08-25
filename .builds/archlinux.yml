@@ -3,6 +3,7 @@ packages:
   - go
   - nodejs
   - npm
+  - python
   - postgresql
   - mariadb
   - podman
@@ -55,6 +56,19 @@ tasks:
   - build: |
       cd dazyflow
       go build ./...
+  # The runner agent and runner.sh are Python and POSIX sh, so the Go suite
+  # cannot see what they DO — it only checks that the embedded copies still
+  # match the source (TestEmbeddedRunnerFilesMatchTheSource). Everything that
+  # makes them trustworthy is in these unittest suites: a single-use token
+  # refused before anything spends it, the registration token never reaching a
+  # file, an allow-list surviving a reinstall, runner.env read rather than
+  # evaluated, a service actually wired to start at boot. Unrun here, they would
+  # rot unnoticed — the same trap the web task below documents. Runs before the
+  # race suite because it takes seconds and this is the one script every
+  # organisation pastes into a terminal.
+  - runner: |
+      cd dazyflow
+      make runner-test
   - test: |
       cd dazyflow
       # The race detector pushes the daemon package past Go's default

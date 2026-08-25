@@ -5,8 +5,10 @@ package daemon
 
 import (
 	"context"
-	"crypto/x509"
-	"encoding/pem"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"sort"
@@ -17,308 +19,169 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// A runner is an org's own code, running on the org's own hardware, reachable
-// as a step in that org's flows. This file owns how one is remembered.
+// A runner is a machine the org owns, running a small agent that asks the
+// daemon for work. Registering one is a single command with a token.
 //
-// The material splits in two, and the split is the point:
+// The connection goes OUTWARD, from the runner to the daemon, and that one
+// choice is what makes the setup a single line:
 //
-//	Public — endpoint, the runner's certificate, our client certificate. These
-//	are identities, not secrets; they live in the tenant_runners table where an
-//	admin UI can list them and an operator can read them in psql.
+//	Nothing has to reach the runner. It works behind NAT, on a laptop, inside
+//	a network the daemon has never heard of — no port to open, no address to
+//	register, and no certificate on either side.
 //
-//	Private — the client PRIVATE key, which is what proves the daemon is the
-//	daemon. It never touches that table. It goes through EncryptedSecrets, so
-//	it inherits the envelope encryption, the AAD row-binding, and the master-key
-//	rotation path that already exist for tenant secrets.
+//	Authentication is a token, not a keypair. The org runs one command; there
+//	is no PEM to generate, paste, or rotate.
 //
-// See runnerKeyTenant below for why it is not stored in the tenant's own
-// secret namespace, which would have been the obvious thing to do and is wrong.
+// The cost, stated plainly because it is the real trade: a runner executes a
+// script the FLOW supplies, so whoever can edit a flow can run commands on that
+// machine. That is the same bargain a self-hosted CI runner makes. The
+// mitigation lives on the runner rather than here — the agent can be started
+// with a list of permitted commands, which the daemon neither knows nor needs
+// to.
 
-// ErrRunnerNotFound is returned when no runner is registered under a name.
-var ErrRunnerNotFound = errors.New("runner not found")
+var (
+	// ErrRunnerNotFound is returned when no runner is registered under a name.
+	ErrRunnerNotFound = errors.New("runner not found")
+	// ErrBadRunnerToken covers every reason a registration token was refused:
+	// unknown, expired, or already used. Deliberately one error — saying WHICH
+	// would help someone probing for a live token.
+	ErrBadRunnerToken = errors.New("registration token is not valid")
+	// ErrBadRunnerCredential is returned when a credential identifies no
+	// registered runner.
+	ErrBadRunnerCredential = errors.New("runner credential is not valid")
+)
 
-// Runner is one registered runner endpoint.
-//
-// ClientKeyPEM is write-only: it is supplied on Put and is always empty on
-// read, because reads come from the table and the key is not in the table.
+// Runner is one registered machine.
 type Runner struct {
-	Tenant   string
-	Name     string
-	Endpoint string
-
-	// ServerCAPEM is the certificate the runner must present. Pinned, not
-	// chained to a public CA: for a link between two parties who already know
-	// each other, trusting one known certificate is stricter than trusting
-	// anything a CA has signed.
-	ServerCAPEM []byte
-	// ClientCertPEM is what the daemon presents to the runner.
-	ClientCertPEM []byte
-	// ClientKeyPEM is accepted on write and never returned on read.
-	ClientKeyPEM []byte
-
-	// RecvTimeout bounds the gap between two events on an Execute stream.
-	// Zero means the engine default.
-	RecvTimeout time.Duration
-	Enabled     bool
-
-	// NotAfter is the client certificate's expiry, parsed once at registration
-	// so the admin list can warn before a flow starts failing with a TLS error
-	// nobody reads as "the certificate expired".
-	NotAfter time.Time
-
+	Tenant string
+	Name   string
+	// Labels route work. A step may target a runner by name, or by a label
+	// several runners share — which is how a pool of interchangeable machines
+	// is expressed.
+	Labels []string
+	// Version is whatever the agent reported at registration, for the admin
+	// list: an old agent is a plausible cause of odd behaviour.
+	Version string
+	// LastSeen is the last time the agent asked for work. A runner is "online"
+	// if that was recent. There is no connection to be up or down, which is why
+	// this replaces a connection state.
+	LastSeen  time.Time
 	CreatedBy string
 	CreatedAt time.Time
-	UpdatedAt time.Time
 }
 
-// runnerKeyTenant is the pseudo-tenant a runner's client key is stored under.
-//
-// The obvious placement — the tenant's own secret namespace, under a reserved
-// name — is unsafe. Secret names permit dots, and a flow resolves
-// ${secret.NAME} against its own tenant, so a member who guessed the name
-// could read the key straight out through an ordinary flow. The reserved-name
-// check in httpsecrets.go guards WRITES, not reads.
-//
-// A per-tenant pseudo-tenant closes that: no flow ever executes with this as
-// its tenant, so no ${secret.…} can reach it. Real tenants are `usr_<hex>` or
-// admin-named org slugs, neither of which starts with an underscore — the same
-// reasoning the OAuth provider store relies on.
-//
-// A side effect worth having: the key ends up under its own DEK, separate from
-// the DEK protecting that tenant's ordinary secrets.
-func runnerKeyTenant(tenant string) string { return "_runner:" + tenant }
+// RunnerOnlineWindow is how long after its last check-in a runner still counts
+// as online. Several times the agent's poll interval, so one missed poll — a
+// hiccup, a slow network, a long task during which it is not polling — does
+// not read as a machine that has gone away.
+const RunnerOnlineWindow = 90 * time.Second
 
-// runnerKeyName is the secret name a runner's client key is stored under
-// within its pseudo-tenant. Just the runner name — the tenant is already the
-// namespace, so nothing has to be encoded into the name.
-func runnerKeyName(name string) string { return "client_key/" + name }
+// Online reports whether the agent has checked in recently enough to be
+// considered present.
+func (r Runner) Online(now time.Time) bool {
+	return !r.LastSeen.IsZero() && now.Sub(r.LastSeen) <= RunnerOnlineWindow
+}
+
+// ---- secrets: tokens and credentials ----------------------------------
+
+// Two kinds of secret, with different lifetimes and different jobs:
+//
+//	A REGISTRATION TOKEN is minted by an admin, lives minutes, and is used
+//	once. It is the thing pasted into a terminal, so it is the thing most
+//	likely to end up in a shell history or a chat message — which is exactly
+//	why it expires and why using it burns it.
+//
+//	A CREDENTIAL is what the agent keeps. Long-lived, and never leaves the
+//	machine after registration.
+//
+// Both are stored as SHA-256 hashes, so the daemon can verify one and cannot
+// leak one: a database dump is not a set of working runners.
+
+const (
+	runnerTokenPrefix      = "dzrt_" // registration token
+	runnerCredentialPrefix = "dzrc_" // agent credential
+	// RunnerTokenTTL is how long a registration token stays usable — long
+	// enough to paste into a terminal on another machine, short enough that
+	// one left in a scrollback is not a way in tomorrow.
+	RunnerTokenTTL = 30 * time.Minute
+)
+
+// newRunnerSecret mints a random secret, returning the plaintext (shown once)
+// and the hash (stored).
+func newRunnerSecret(prefix string) (plain string, hash []byte, err error) {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", nil, fmt.Errorf("generate runner secret: %w", err)
+	}
+	plain = prefix + base64.RawURLEncoding.EncodeToString(buf)
+	sum := sha256.Sum256([]byte(plain))
+	return plain, sum[:], nil
+}
+
+func hashRunnerSecret(plain string) []byte {
+	sum := sha256.Sum256([]byte(plain))
+	return sum[:]
+}
+
+// RunnerToken is a minted registration token, returned once.
+type RunnerToken struct {
+	Token     string    `json:"token"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// ---- store ------------------------------------------------------------
+
+// RunnerStore persists runners, their credentials, and registration tokens.
+type RunnerStore interface {
+	MintToken(ctx context.Context, tenant, createdBy string, hash []byte, expires time.Time) error
+	// RedeemToken consumes a token and registers the runner in ONE step, so a
+	// token cannot be spent twice even by two agents racing.
+	//
+	// Returns ErrBadRunnerToken for a token that is unknown, expired, or spent.
+	RedeemToken(ctx context.Context, tokenHash []byte, r Runner, credHash []byte) (Runner, error)
+	// RunnerByCredential identifies the runner presenting a credential and
+	// records the check-in.
+	RunnerByCredential(ctx context.Context, credHash []byte, seenAt time.Time) (Runner, error)
+	List(ctx context.Context, tenant string) ([]Runner, error)
+	Get(ctx context.Context, tenant, name string) (Runner, error)
+	Delete(ctx context.Context, tenant, name string) error
+}
 
 const pgRunnerSchema = `
 CREATE TABLE IF NOT EXISTS tenant_runners (
-    tenant           TEXT NOT NULL,
-    name             TEXT NOT NULL,
-    endpoint         TEXT NOT NULL,
-    server_ca_pem    BYTEA NOT NULL,
-    client_cert_pem  BYTEA NOT NULL,
-    recv_timeout_ms  BIGINT NOT NULL DEFAULT 0,
-    enabled          BOOLEAN NOT NULL DEFAULT TRUE,
-    not_after        TIMESTAMPTZ,
-    created_by       TEXT NOT NULL DEFAULT '',
-    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    tenant      TEXT NOT NULL,
+    name        TEXT NOT NULL,
+    labels      TEXT[] NOT NULL DEFAULT '{}',
+    cred_hash   BYTEA NOT NULL,
+    version     TEXT NOT NULL DEFAULT '',
+    last_seen   TIMESTAMPTZ,
+    created_by  TEXT NOT NULL DEFAULT '',
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant, name)
+);
+-- One credential identifies one runner, and the agent presents it on every
+-- poll, so this lookup is the hot path.
+CREATE UNIQUE INDEX IF NOT EXISTS tenant_runners_cred_idx ON tenant_runners (cred_hash);
+
+CREATE TABLE IF NOT EXISTS runner_tokens (
+    token_hash  BYTEA PRIMARY KEY,
+    tenant      TEXT NOT NULL,
+    created_by  TEXT NOT NULL DEFAULT '',
+    expires_at  TIMESTAMPTZ NOT NULL,
+    used_at     TIMESTAMPTZ,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 `
 
-// EnsurePgRunnerSchema creates the tenant_runners table.
+// EnsurePgRunnerSchema creates the runner tables.
 func EnsurePgRunnerSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	return applyPgSchema(ctx, pool, pgRunnerSchema)
 }
 
-// RunnerStore persists the public half of a runner registration.
-type RunnerStore interface {
-	Put(ctx context.Context, r Runner) error
-	Get(ctx context.Context, tenant, name string) (Runner, error)
-	List(ctx context.Context, tenant string) ([]Runner, error)
-	// ListAll is the boot path: every tenant's runners, so the catalog can be
-	// rebuilt after a restart.
-	ListAll(ctx context.Context) ([]Runner, error)
-	Delete(ctx context.Context, tenant, name string) error
-}
+// ---- validation -------------------------------------------------------
 
-// ---- in-memory backend ------------------------------------------------
-
-// MemRunnerStore implements RunnerStore against a map, for tests and for
-// single-binary dev runs with no Postgres.
-type MemRunnerStore struct {
-	mu   sync.Mutex
-	rows map[string]map[string]Runner // tenant → name → row
-}
-
-func NewMemRunnerStore() *MemRunnerStore {
-	return &MemRunnerStore{rows: map[string]map[string]Runner{}}
-}
-
-func (m *MemRunnerStore) Put(_ context.Context, r Runner) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.rows[r.Tenant] == nil {
-		m.rows[r.Tenant] = map[string]Runner{}
-	}
-	r.ClientKeyPEM = nil // never held here, mirroring the table
-	if prev, ok := m.rows[r.Tenant][r.Name]; ok {
-		r.CreatedAt = prev.CreatedAt
-	}
-	m.rows[r.Tenant][r.Name] = r
-	return nil
-}
-
-func (m *MemRunnerStore) Get(_ context.Context, tenant, name string) (Runner, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	r, ok := m.rows[tenant][name]
-	if !ok {
-		return Runner{}, ErrRunnerNotFound
-	}
-	return r, nil
-}
-
-func (m *MemRunnerStore) List(_ context.Context, tenant string) ([]Runner, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	out := make([]Runner, 0, len(m.rows[tenant]))
-	for _, r := range m.rows[tenant] {
-		out = append(out, r)
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
-	return out, nil
-}
-
-func (m *MemRunnerStore) ListAll(_ context.Context) ([]Runner, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	var out []Runner
-	for _, byName := range m.rows {
-		for _, r := range byName {
-			out = append(out, r)
-		}
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Tenant != out[j].Tenant {
-			return out[i].Tenant < out[j].Tenant
-		}
-		return out[i].Name < out[j].Name
-	})
-	return out, nil
-}
-
-func (m *MemRunnerStore) Delete(_ context.Context, tenant, name string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	delete(m.rows[tenant], name)
-	return nil
-}
-
-// ---- Postgres backend -------------------------------------------------
-
-// PgRunnerStore implements RunnerStore against a Postgres pool.
-type PgRunnerStore struct{ pool *pgxpool.Pool }
-
-func NewPgRunnerStore(ctx context.Context, pool *pgxpool.Pool) (*PgRunnerStore, error) {
-	if pool == nil {
-		return nil, fmt.Errorf("nil pool")
-	}
-	if err := EnsurePgRunnerSchema(ctx, pool); err != nil {
-		return nil, fmt.Errorf("runner schema: %w", err)
-	}
-	return &PgRunnerStore{pool: pool}, nil
-}
-
-func (p *PgRunnerStore) Put(ctx context.Context, r Runner) error {
-	_, err := p.pool.Exec(ctx, `
-INSERT INTO tenant_runners
-    (tenant, name, endpoint, server_ca_pem, client_cert_pem, recv_timeout_ms, enabled, not_after, created_by)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-ON CONFLICT (tenant, name) DO UPDATE SET
-    endpoint        = EXCLUDED.endpoint,
-    server_ca_pem   = EXCLUDED.server_ca_pem,
-    client_cert_pem = EXCLUDED.client_cert_pem,
-    recv_timeout_ms = EXCLUDED.recv_timeout_ms,
-    enabled         = EXCLUDED.enabled,
-    not_after       = EXCLUDED.not_after,
-    updated_at      = now()`,
-		r.Tenant, r.Name, r.Endpoint, r.ServerCAPEM, r.ClientCertPEM,
-		r.RecvTimeout.Milliseconds(), r.Enabled, nullTime(r.NotAfter), r.CreatedBy)
-	return err
-}
-
-func (p *PgRunnerStore) Get(ctx context.Context, tenant, name string) (Runner, error) {
-	row := p.pool.QueryRow(ctx, `
-SELECT tenant, name, endpoint, server_ca_pem, client_cert_pem, recv_timeout_ms,
-       enabled, not_after, created_by, created_at, updated_at
-  FROM tenant_runners WHERE tenant=$1 AND name=$2`, tenant, name)
-	r, err := scanRunner(row)
-	if isPgNoRows(err) {
-		return Runner{}, ErrRunnerNotFound
-	}
-	return r, err
-}
-
-func (p *PgRunnerStore) List(ctx context.Context, tenant string) ([]Runner, error) {
-	return p.query(ctx, `
-SELECT tenant, name, endpoint, server_ca_pem, client_cert_pem, recv_timeout_ms,
-       enabled, not_after, created_by, created_at, updated_at
-  FROM tenant_runners WHERE tenant=$1 ORDER BY name`, tenant)
-}
-
-func (p *PgRunnerStore) ListAll(ctx context.Context) ([]Runner, error) {
-	return p.query(ctx, `
-SELECT tenant, name, endpoint, server_ca_pem, client_cert_pem, recv_timeout_ms,
-       enabled, not_after, created_by, created_at, updated_at
-  FROM tenant_runners ORDER BY tenant, name`)
-}
-
-func (p *PgRunnerStore) query(ctx context.Context, sql string, args ...any) ([]Runner, error) {
-	rows, err := p.pool.Query(ctx, sql, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []Runner
-	for rows.Next() {
-		r, err := scanRunner(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, r)
-	}
-	return out, rows.Err()
-}
-
-func (p *PgRunnerStore) Delete(ctx context.Context, tenant, name string) error {
-	_, err := p.pool.Exec(ctx, `DELETE FROM tenant_runners WHERE tenant=$1 AND name=$2`, tenant, name)
-	return err
-}
-
-// scanner is satisfied by both pgx.Row and pgx.Rows.
-type scanner interface{ Scan(dest ...any) error }
-
-func scanRunner(s scanner) (Runner, error) {
-	var (
-		r        Runner
-		ms       int64
-		notAfter *time.Time
-	)
-	err := s.Scan(&r.Tenant, &r.Name, &r.Endpoint, &r.ServerCAPEM, &r.ClientCertPEM,
-		&ms, &r.Enabled, &notAfter, &r.CreatedBy, &r.CreatedAt, &r.UpdatedAt)
-	if err != nil {
-		return Runner{}, err
-	}
-	r.RecvTimeout = time.Duration(ms) * time.Millisecond
-	if notAfter != nil {
-		r.NotAfter = *notAfter
-	}
-	return r, nil
-}
-
-func nullTime(t time.Time) *time.Time {
-	if t.IsZero() {
-		return nil
-	}
-	return &t
-}
-
-// ---- registry: table + key, as one thing ------------------------------
-
-// Runners couples the table with the encrypted key so a caller registers a
-// runner in one call and cannot half-do it.
-type Runners struct {
-	Store   RunnerStore
-	Secrets *EncryptedSecrets
-}
-
-// validRunnerName keeps names to something that reads well in a palette and
-// cannot be confused with a path segment or a drop id.
+// validRunnerName keeps a name usable as a step's target and readable in a
+// list.
 func validRunnerName(name string) error {
 	if name == "" {
 		return fmt.Errorf("name is empty")
@@ -338,87 +201,232 @@ func validRunnerName(name string) error {
 	return nil
 }
 
-// Put registers or replaces a runner.
+// normalizeLabels lower-cases, trims, de-duplicates and sorts, so routing
+// compares like with like and the admin list reads the same however the agent
+// was invoked.
+func normalizeLabels(in []string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(in))
+	for _, l := range in {
+		l = strings.ToLower(strings.TrimSpace(l))
+		if l == "" {
+			continue
+		}
+		if _, dup := seen[l]; dup {
+			continue
+		}
+		seen[l] = struct{}{}
+		out = append(out, l)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// ---- registry ---------------------------------------------------------
+
+// Runners is the service the API and the dispatcher talk to.
+type Runners struct {
+	Store RunnerStore
+	// Now is overridable for tests; nil means time.Now.
+	Now func() time.Time
+}
+
+func (rs *Runners) now() time.Time {
+	if rs != nil && rs.Now != nil {
+		return rs.Now()
+	}
+	return time.Now()
+}
+
+// MintToken creates a registration token. The plaintext is returned once and
+// never stored.
+func (rs *Runners) MintToken(ctx context.Context, tenant, createdBy string) (RunnerToken, error) {
+	if rs == nil || rs.Store == nil {
+		return RunnerToken{}, fmt.Errorf("runners: not configured")
+	}
+	if tenant == "" {
+		return RunnerToken{}, fmt.Errorf("runner token: tenant required")
+	}
+	plain, hash, err := newRunnerSecret(runnerTokenPrefix)
+	if err != nil {
+		return RunnerToken{}, err
+	}
+	expires := rs.now().Add(RunnerTokenTTL)
+	if err := rs.Store.MintToken(ctx, tenant, createdBy, hash, expires); err != nil {
+		return RunnerToken{}, err
+	}
+	return RunnerToken{Token: plain, ExpiresAt: expires}, nil
+}
+
+// Register redeems a token and returns the credential the agent keeps.
 //
-// The key is written FIRST. If the table write then fails the key is orphaned,
-// which is harmless — nothing reads it without a row. The reverse order would
-// leave a row whose key is missing, which is a runner that exists in the UI and
-// cannot connect.
-func (rs *Runners) Put(ctx context.Context, r Runner) error {
-	if rs == nil || rs.Store == nil || rs.Secrets == nil {
-		return fmt.Errorf("runners: not configured")
+// The tenant comes from the TOKEN, never from the request. An agent says who it
+// is, not which organisation it belongs to — letting the caller name a tenant
+// would make the token the only thing between one org and another's work queue,
+// and a typo a cross-tenant registration.
+func (rs *Runners) Register(ctx context.Context, token, name string, labels []string, version string) (Runner, string, error) {
+	if rs == nil || rs.Store == nil {
+		return Runner{}, "", fmt.Errorf("runners: not configured")
 	}
-	if r.Tenant == "" {
-		return fmt.Errorf("runner: tenant required")
+	if err := validRunnerName(name); err != nil {
+		return Runner{}, "", fmt.Errorf("runner name: %w", err)
 	}
-	if err := validRunnerName(r.Name); err != nil {
-		return fmt.Errorf("runner name: %w", err)
-	}
-	if strings.TrimSpace(r.Endpoint) == "" {
-		return fmt.Errorf("runner %q: endpoint required", r.Name)
-	}
-	if len(r.ServerCAPEM) == 0 {
-		return fmt.Errorf("runner %q: the runner's certificate is required — "+
-			"a runner is trusted by pinning its certificate, not by a public CA", r.Name)
-	}
-	if len(r.ClientCertPEM) == 0 || len(r.ClientKeyPEM) == 0 {
-		return fmt.Errorf("runner %q: a client certificate and key are required — "+
-			"they are how the daemon proves itself to your runner", r.Name)
-	}
-	// Parse now rather than at first connect: a malformed pair should be
-	// rejected while an admin is looking at the form, not hours later inside a
-	// run. This also yields the expiry the admin list warns on.
-	notAfter, err := clientCertNotAfter(r.ClientCertPEM, r.ClientKeyPEM)
+	credPlain, credHash, err := newRunnerSecret(runnerCredentialPrefix)
 	if err != nil {
-		return fmt.Errorf("runner %q: %w", r.Name, err)
+		return Runner{}, "", err
 	}
-	r.NotAfter = notAfter
-
-	if err := rs.Secrets.Put(ctx, runnerKeyTenant(r.Tenant), runnerKeyName(r.Name), string(r.ClientKeyPEM)); err != nil {
-		return fmt.Errorf("runner %q: store client key: %w", r.Name, err)
+	r := Runner{
+		Name:     name,
+		Labels:   normalizeLabels(labels),
+		Version:  strings.TrimSpace(version),
+		LastSeen: rs.now(),
 	}
-	if err := rs.Store.Put(ctx, r); err != nil {
-		return fmt.Errorf("runner %q: %w", r.Name, err)
+	stored, err := rs.Store.RedeemToken(ctx, hashRunnerSecret(token), r, credHash)
+	if err != nil {
+		return Runner{}, "", err
 	}
-	return nil
+	return stored, credPlain, nil
 }
 
-// Delete removes a runner and its key. The key goes last: a row without a key
-// is a broken runner, but a key without a row is inert.
+// Authenticate identifies the runner presenting a credential and records the
+// check-in, which is what "online" is derived from.
+func (rs *Runners) Authenticate(ctx context.Context, credential string) (Runner, error) {
+	if rs == nil || rs.Store == nil {
+		return Runner{}, fmt.Errorf("runners: not configured")
+	}
+	// Cheap reject before touching the database: presenting a registration
+	// token where a credential belongs is a common mistake, and a mistake is
+	// not worth a query.
+	if !strings.HasPrefix(credential, runnerCredentialPrefix) {
+		return Runner{}, ErrBadRunnerCredential
+	}
+	return rs.Store.RunnerByCredential(ctx, hashRunnerSecret(credential), rs.now())
+}
+
+func (rs *Runners) List(ctx context.Context, tenant string) ([]Runner, error) {
+	return rs.Store.List(ctx, tenant)
+}
+
 func (rs *Runners) Delete(ctx context.Context, tenant, name string) error {
-	if err := rs.Store.Delete(ctx, tenant, name); err != nil {
-		return err
+	return rs.Store.Delete(ctx, tenant, name)
+}
+
+// ---- in-memory store --------------------------------------------------
+
+// MemRunnerStore implements RunnerStore in process, for tests and for
+// single-binary runs without Postgres.
+type MemRunnerStore struct {
+	mu      sync.Mutex
+	runners map[string]map[string]*Runner // tenant → name → runner
+	creds   map[string]runnerRef          // hex(credHash) → runner
+	tokens  map[string]*memRunnerToken    // hex(tokenHash) → token
+}
+
+type runnerRef struct{ tenant, name string }
+
+type memRunnerToken struct {
+	tenant    string
+	createdBy string
+	expires   time.Time
+	used      bool
+}
+
+func NewMemRunnerStore() *MemRunnerStore {
+	return &MemRunnerStore{
+		runners: map[string]map[string]*Runner{},
+		creds:   map[string]runnerRef{},
+		tokens:  map[string]*memRunnerToken{},
 	}
-	if err := rs.Secrets.Delete(ctx, runnerKeyTenant(tenant), runnerKeyName(name)); err != nil && !errors.Is(err, ErrSecretNotFound) {
-		return fmt.Errorf("runner %q: delete client key: %w", name, err)
-	}
+}
+
+func (m *MemRunnerStore) MintToken(_ context.Context, tenant, createdBy string, hash []byte, expires time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.tokens[hex.EncodeToString(hash)] = &memRunnerToken{tenant: tenant, createdBy: createdBy, expires: expires}
 	return nil
 }
 
-// clientKey reads back the stored private key.
-func (rs *Runners) clientKey(ctx context.Context, tenant, name string) ([]byte, error) {
-	// GetExact, not Get: Get resolves flow→org precedence for a running flow,
-	// which has no meaning for a key that no flow may reach.
-	pemStr, err := rs.Secrets.GetExact(ctx, runnerKeyTenant(tenant), runnerKeyName(name))
-	if err != nil {
-		return nil, err
+func (m *MemRunnerStore) RedeemToken(_ context.Context, tokenHash []byte, r Runner, credHash []byte) (Runner, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	tok, ok := m.tokens[hex.EncodeToString(tokenHash)]
+	if !ok || tok.used || time.Now().After(tok.expires) {
+		return Runner{}, ErrBadRunnerToken
 	}
-	return []byte(pemStr), nil
+	tok.used = true
+	r.Tenant = tok.tenant
+	r.CreatedBy = tok.createdBy
+	r.CreatedAt = time.Now()
+	if m.runners[r.Tenant] == nil {
+		m.runners[r.Tenant] = map[string]*Runner{}
+	}
+	// Re-registering under an existing name replaces it — that is how a
+	// rebuilt machine comes back — and the old credential stops working.
+	if prev, exists := m.runners[r.Tenant][r.Name]; exists {
+		for h, ref := range m.creds {
+			if ref == (runnerRef{r.Tenant, r.Name}) {
+				delete(m.creds, h)
+			}
+		}
+		r.CreatedAt = prev.CreatedAt
+	}
+	stored := r
+	m.runners[r.Tenant][r.Name] = &stored
+	m.creds[hex.EncodeToString(credHash)] = runnerRef{r.Tenant, r.Name}
+	return stored, nil
 }
 
-// clientCertNotAfter validates that cert and key are a usable pair and returns
-// the certificate's expiry.
-func clientCertNotAfter(certPEM, keyPEM []byte) (time.Time, error) {
-	if _, err := tlsKeyPair(certPEM, keyPEM); err != nil {
-		return time.Time{}, err
+func (m *MemRunnerStore) RunnerByCredential(_ context.Context, credHash []byte, seenAt time.Time) (Runner, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	ref, ok := m.creds[hex.EncodeToString(credHash)]
+	if !ok {
+		return Runner{}, ErrBadRunnerCredential
 	}
-	block, _ := pem.Decode(certPEM)
-	if block == nil {
-		return time.Time{}, fmt.Errorf("client certificate is not PEM")
+	r := m.runners[ref.tenant][ref.name]
+	if r == nil {
+		return Runner{}, ErrBadRunnerCredential
 	}
-	parsed, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("client certificate: %w", err)
+	r.LastSeen = seenAt
+	return *r, nil
+}
+
+func (m *MemRunnerStore) List(_ context.Context, tenant string) ([]Runner, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]Runner, 0, len(m.runners[tenant]))
+	for _, r := range m.runners[tenant] {
+		out = append(out, *r)
 	}
-	return parsed.NotAfter, nil
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out, nil
+}
+
+func (m *MemRunnerStore) Get(_ context.Context, tenant, name string) (Runner, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	r, ok := m.runners[tenant][name]
+	if !ok {
+		return Runner{}, ErrRunnerNotFound
+	}
+	return *r, nil
+}
+
+func (m *MemRunnerStore) Delete(_ context.Context, tenant, name string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.runners[tenant][name]; !ok {
+		return ErrRunnerNotFound
+	}
+	delete(m.runners[tenant], name)
+	// Drop the credential index too. The revocation above is what actually
+	// stops the agent — a credential pointing at a runner that no longer
+	// exists fails to resolve — so this is housekeeping: without it the index
+	// would grow by one entry for every machine ever decommissioned.
+	for h, ref := range m.creds {
+		if ref == (runnerRef{tenant, name}) {
+			delete(m.creds, h)
+		}
+	}
+	return nil
 }

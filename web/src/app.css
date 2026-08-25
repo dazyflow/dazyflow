@@ -10987,56 +10987,60 @@ button:active,
   pointer-events: auto;
 }
 
-/* ---- Tenant runners (AdminRunners.tsx) ----------------------------------- */
-/* A runner's own code, on its own hardware, listed with whether it is actually
-   reachable — a runner can be registered and down, and this page is where the
-   reason lives. */
+/* ---- Runners (AdminRunners.tsx) ------------------------------------------ */
+/* Machines the org owns, running scripts a flow sends them. There is no form on
+   this page — setup is one command — so the layout is a list plus the command
+   to copy. */
 .runner-list {
   padding: 0;
   overflow: hidden;
 }
-/* Endpoints and step ids are machine strings: monospace so a typo in a host or
-   a port is findable by eye. */
-.runner-endpoint,
-.runner-steps {
+/* Labels and agent versions are machine strings: monospace so a typo in a label
+   is findable by eye. */
+.runner-labels,
+.runner-agent {
   font-family: var(--font-mono);
   font-size: var(--text-sm);
-}
-/* The connection error, under its chip. Wraps rather than truncates: a TLS
-   failure is long and the useful part is often at the end. */
-.runner-error {
-  margin-top: var(--space-1);
-  max-width: 42ch;
-  white-space: normal;
 }
 .runner-actions {
   text-align: right;
   padding-right: var(--space-3);
 }
-.runner-expiry {
-  margin-top: var(--space-4);
+
+/* The install command. Accented border because it is the one thing on the page
+   that cannot be recovered once dismissed — the token is shown exactly once. */
+.runner-install {
+  margin: var(--space-4) 0;
+  border-color: var(--accent);
 }
-.runner-form {
-  margin-top: var(--space-4);
-}
-.runner-form-head {
+.runner-install-head {
   margin-top: 0;
 }
-/* PEM blocks are pasted, long, and never read closely — monospace and
-   nowrap-free so a line break in the middle of base64 is visible. */
-.runner-pem {
+/* Wraps rather than scrolls: the command is meant to be read and understood
+   before it is pasted, and a line that runs off the edge invites pasting it
+   unread. */
+.runner-install-cmd {
+  margin: var(--space-3) 0;
+  padding: var(--space-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
   font-family: var(--font-mono);
   font-size: var(--text-sm);
-  resize: vertical;
-  width: 100%;
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: all;
 }
-.runner-form-actions {
+.runner-install-actions {
   display: flex;
   gap: var(--space-2);
-  margin-top: var(--space-4);
 }
-.runner-probe strong {
-  color: var(--ink);
+.runner-install-expiry {
+  margin-top: var(--space-3);
+  margin-bottom: 0;
+}
+.runner-warning {
+  margin-top: var(--space-4);
 }
 
 /* ---- Glyphs sitting in text ---------------------------------------------- */

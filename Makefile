@@ -59,6 +59,7 @@ LDFLAGS := -s -w \
 .DEFAULT_GOAL := help
 
 .PHONY: help up down restart logs ps build rebuild env pg pg-down dev web test vet fmt check ci \
+	runner-embed runner-test \
         integration-catalog drop-catalog catalogs catalogs-check flowgen-eval \
         docs-content docs-site docs-dev bin version latest major minor patch _bump upgrade
 
@@ -136,6 +137,14 @@ GO_TEST_TIMEOUT ?= 30m
 
 test: ## Run the Go test suite with the race detector
 	go test -race -timeout $(GO_TEST_TIMEOUT) ./...
+
+runner-embed: ## Refresh the copies of the runner agent the daemon serves
+	cp runner/dzrunner.py daemon/embed/dzrunner.py
+	cp runner/runner.sh daemon/embed/runner.sh
+	@echo "refreshed daemon/embed from runner/"
+
+runner-test: ## Test the runner agent and its installer (python3, no dependencies)
+	cd runner && python3 -m unittest discover -v
 
 integration-catalog: ## Refresh the list of apps the description guard checks (run after adding a connector)
 	go run ./scripts/integrations.go > web/src/integrationMeta.catalog.json

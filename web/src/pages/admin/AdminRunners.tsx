@@ -2,49 +2,39 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, Plug, Trash2 } from "lucide-react";
+import { AlertTriangle, Check, Copy, Plug, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/Button";
 import { useAuth } from "../../auth";
 import { api } from "../../api";
-import type { Runner, RunnerProbe } from "../../types";
+import type { Runner, RunnerToken } from "../../types";
 import { explainApiError } from "../../lib/explainApiError";
 import { ErrorNotice } from "../../components/ui/ErrorNotice";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { Loading } from "../../components/ui/Loading";
 import { Notice } from "../../components/ui/Notice";
 import { ICON } from "../../icons";
+import { FEEDBACK } from "../../lib/timing";
 import { formatDateTime } from "../../lib/datetime";
 
-// AdminRunners manages the org's runners — its own code, on its own hardware,
-// reachable as a step in its flows.
+// AdminRunners is where an org adds machines of its own that flows can run
+// scripts on.
 //
-// Two things make this page different from the other credential pages:
-//
-//   The private key is write-only. It goes in and is never read back, so
-//   editing a runner means re-pasting it. That is stated on the form rather
-//   than discovered.
-//
-//   A runner can be registered and NOT working. Registration dials, and a
-//   runner that is down would otherwise vanish from the palette with nothing
-//   to explain it, so the daemon keeps it listed as unreachable and this page
-//   is where the reason lives.
+// The page is deliberately small, because the setup is: press a button, copy
+// one line, paste it on the machine. There is no form — no address, no
+// certificates, nothing to fill in — because the agent connects outward and
+// identifies itself with the token. Everything this page knows about a runner
+// arrives from the machine itself.
 export function AdminRunners() {
   const { t } = useTranslation();
   const { token } = useAuth();
   const [runners, setRunners] = useState<Runner[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // The add/replace form.
-  const [name, setName] = useState("");
-  const [endpoint, setEndpoint] = useState("");
-  const [serverCA, setServerCA] = useState("");
-  const [clientCert, setClientCert] = useState("");
-  const [clientKey, setClientKey] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [probe, setProbe] = useState<RunnerProbe | null>(null);
-  const [probing, setProbing] = useState(false);
+  // The freshly minted token, held only in this component: it is returned once
+  // and cannot be fetched again, so navigating away loses it on purpose.
+  const [minted, setMinted] = useState<RunnerToken | null>(null);
+  const [minting, setMinting] = useState(false);
 
   const load = useCallback(() => {
     if (!token) return;
@@ -60,70 +50,45 @@ export function AdminRunners() {
     load();
   }, [load]);
 
-  const body = () => ({
-    endpoint: endpoint.trim(),
-    server_ca_pem: serverCA.trim(),
-    client_cert_pem: clientCert.trim(),
-    client_key_pem: clientKey.trim(),
-  });
-
-  const clearForm = () => {
-    setName("");
-    setEndpoint("");
-    setServerCA("");
-    setClientCert("");
-    setClientKey("");
-    setProbe(null);
-  };
-
-  const save = async () => {
+  // Poll while the page is open, so a machine that has just been set up appears
+  // without anyone reloading. The wait between pasting the command and seeing
+  // the runner arrive is the moment someone is most likely to think it failed.
+  useEffect(() => {
     if (!token) return;
-    setSaving(true);
+    const id = setInterval(() => {
+      api
+        .listRunners(token)
+        .then((r) => setRunners(r.runners ?? []))
+        .catch(() => {
+          /* a failed refresh is not worth replacing the list with an error */
+        });
+    }, 5000);
+    return () => clearInterval(id);
+  }, [token]);
+
+  const mint = async () => {
+    if (!token) return;
+    setMinting(true);
     setError(null);
     try {
-      await api.putRunner(token, name.trim(), body());
-      clearForm();
-      load();
+      setMinted(await api.mintRunnerToken(token));
     } catch (e) {
       setError(explainApiError(e, t));
     } finally {
-      setSaving(false);
+      setMinting(false);
     }
   };
 
-  // Test before saving. The result reports the certificate subject even when
-  // the connection fails, because confirming WHO you are about to trust is the
-  // point — an address answering tells you much less.
-  const test = async () => {
-    if (!token) return;
-    setProbing(true);
-    setProbe(null);
-    try {
-      setProbe(await api.testRunner(token, name.trim() || "unnamed", body()));
-    } catch (e) {
-      setError(explainApiError(e, t));
-    } finally {
-      setProbing(false);
-    }
-  };
-
-  const remove = async (runnerName: string) => {
+  const remove = async (name: string) => {
     if (!token) return;
     setError(null);
     try {
-      await api.deleteRunner(token, runnerName);
+      await api.deleteRunner(token, name);
       load();
     } catch (e) {
       setError(explainApiError(e, t));
     }
   };
-
-  const complete =
-    name.trim() !== "" &&
-    endpoint.trim() !== "" &&
-    serverCA.trim() !== "" &&
-    clientCert.trim() !== "" &&
-    clientKey.trim() !== "";
 
   return (
     <div>
@@ -135,9 +100,14 @@ export function AdminRunners() {
           </h1>
           <div className="sub">{t("runners.subtitle")}</div>
         </div>
+        <Button variant="primary" onClick={() => void mint()} disabled={minting}>
+          {minting ? t("runners.adding") : t("runners.add")}
+        </Button>
       </div>
 
       {error && <ErrorNotice>{error}</ErrorNotice>}
+
+      {minted && <InstallCommand token={minted} onDone={() => setMinted(null)} />}
 
       {loading ? (
         <Loading />
@@ -151,9 +121,9 @@ export function AdminRunners() {
             <thead>
               <tr>
                 <th>{t("common.name")}</th>
-                <th>{t("runners.endpointLabel")}</th>
+                <th>{t("runners.colLabels")}</th>
                 <th>{t("common.status")}</th>
-                <th>{t("runners.colSteps")}</th>
+                <th>{t("runners.colAgent")}</th>
                 <th />
               </tr>
             </thead>
@@ -161,14 +131,13 @@ export function AdminRunners() {
               {runners.map((r) => (
                 <tr key={r.name}>
                   <td>{r.name}</td>
-                  <td className="muted runner-endpoint">{r.endpoint}</td>
+                  <td className="muted runner-labels">
+                    {r.labels?.length ? r.labels.join(" · ") : "—"}
+                  </td>
                   <td>
-                    <RunnerStateChip runner={r} />
-                    {r.error && <div className="desc runner-error">{r.error}</div>}
+                    <RunnerOnlineChip runner={r} />
                   </td>
-                  <td className="muted runner-steps">
-                    {r.drops?.length ? r.drops.join(" · ") : t("runners.noSteps")}
-                  </td>
+                  <td className="muted runner-agent">{r.version || "—"}</td>
                   <td className="runner-actions">
                     <Button
                       variant="ghost"
@@ -187,148 +156,83 @@ export function AdminRunners() {
         </div>
       )}
 
-      {runners.some((r) => r.expiring_soon) && (
-        <Notice className="runner-expiry">
-          <AlertTriangle size={ICON.sm} className="icon-lede" />
-          {t("runners.expiringSoon", {
-            names: runners
-              .filter((r) => r.expiring_soon)
-              .map((r) => r.name)
-              .join(", "),
-          })}
-        </Notice>
-      )}
-
-      <div className="card runner-form">
-        <h2 className="runner-form-head">{t("runners.addTitle")}</h2>
-        <p className="desc">{t("runners.addIntro")}</p>
-
-        <div className="sf-field">
-          <label htmlFor="runner-name">{t("common.name")}</label>
-          <input
-            id="runner-name"
-            type="text"
-            value={name}
-            placeholder="invoices"
-            onChange={(e) => setName(e.target.value)}
-          />
-          <div className="desc">{t("runners.nameDesc")}</div>
-        </div>
-
-        <div className="sf-field">
-          <label htmlFor="runner-endpoint">{t("runners.endpointLabel")}</label>
-          <input
-            id="runner-endpoint"
-            type="text"
-            value={endpoint}
-            placeholder="runner.example.internal:9000"
-            onChange={(e) => setEndpoint(e.target.value)}
-          />
-          <div className="desc">{t("runners.endpointDesc")}</div>
-        </div>
-
-        <div className="sf-field">
-          <label htmlFor="runner-server-ca">{t("runners.serverCertLabel")}</label>
-          <textarea
-            id="runner-server-ca"
-            rows={4}
-            value={serverCA}
-            placeholder="-----BEGIN CERTIFICATE-----"
-            onChange={(e) => setServerCA(e.target.value)}
-            className="runner-pem"
-          />
-          <div className="desc">{t("runners.serverCertDesc")}</div>
-        </div>
-
-        <div className="sf-field">
-          <label htmlFor="runner-client-cert">{t("runners.clientCertLabel")}</label>
-          <textarea
-            id="runner-client-cert"
-            rows={4}
-            value={clientCert}
-            placeholder="-----BEGIN CERTIFICATE-----"
-            onChange={(e) => setClientCert(e.target.value)}
-            className="runner-pem"
-          />
-          <div className="desc">{t("runners.clientCertDesc")}</div>
-        </div>
-
-        <div className="sf-field">
-          <label htmlFor="runner-client-key">{t("runners.clientKeyLabel")}</label>
-          <textarea
-            id="runner-client-key"
-            rows={4}
-            value={clientKey}
-            autoComplete="off"
-            placeholder="-----BEGIN PRIVATE KEY-----"
-            onChange={(e) => setClientKey(e.target.value)}
-            className="runner-pem"
-          />
-          <div className="desc">{t("runners.clientKeyDesc")}</div>
-        </div>
-
-        {probe && <ProbeResult probe={probe} />}
-
-        <div className="runner-form-actions">
-          <Button onClick={() => void test()} disabled={!complete || probing}>
-            {probing ? t("runners.testing") : t("runners.test")}
-          </Button>
-          <Button variant="primary" onClick={() => void save()} disabled={!complete || saving}>
-            {saving ? t("common.saving") : t("runners.save")}
-          </Button>
-        </div>
-      </div>
+      <Notice className="runner-warning">
+        <AlertTriangle size={ICON.sm} className="icon-lede" />
+        {t("runners.securityNote")}
+      </Notice>
     </div>
   );
 }
 
-// RunnerStateChip reuses the status-chip vocabulary the runs surfaces use, so
-// "connected" reads the same way "succeeded" does elsewhere.
-function RunnerStateChip({ runner }: { runner: Runner }) {
+// InstallCommand is the whole setup: one line to copy.
+//
+// Shown inline rather than in a dialog. A dialog would have to be dismissed to
+// get at the terminal behind it, and the token is unrecoverable once gone — so
+// it stays on the page until the operator says they are done with it.
+function InstallCommand({ token, onDone }: { token: RunnerToken; onDone: () => void }) {
   const { t } = useTranslation();
-  const state = runner.state ?? "unreachable";
-  const tone =
-    state === "connected" ? "succeeded" : state === "disabled" ? "queued" : "failed";
+  const [copied, setCopied] = useState(false);
+
+  // The daemon serves runner.sh with its address already substituted, so the
+  // command carries only the token. window.location is the right source for it
+  // here: this page is being served by the very daemon the agent will call back
+  // to.
+  //
+  // --service is included rather than offered. A runner that stops when the
+  // terminal closes is almost never what an organisation wants, and it fails
+  // silently — the machine simply stops appearing, days later, with nothing to
+  // point at. Someone who genuinely wants a foreground agent can drop the flag;
+  // the far more common mistake is not knowing it existed.
+  const command =
+    `curl -fsSL ${window.location.origin}/runner.sh | sh -s -- ` +
+    `--token ${token.token} --service`;
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(command);
+      setCopied(true);
+      setTimeout(() => setCopied(false), FEEDBACK.copied);
+    } catch {
+      /* clipboard unavailable — the command is selectable */
+    }
+  };
+
   return (
-    <span className={"status-chip " + tone}>
-      <span className={"status-dot " + tone} />
-      {t(`runners.state.${state}`)}
-      {state === "connected" && runner.last_success
-        ? ` · ${formatDateTime(runner.last_success)}`
-        : ""}
-    </span>
+    <div className="card runner-install">
+      <h2 className="runner-install-head">{t("runners.installHead")}</h2>
+      <p className="desc">{t("runners.installIntro")}</p>
+      <pre className="runner-install-cmd">{command}</pre>
+      <div className="runner-install-actions">
+        <Button variant="primary" onClick={() => void copy()}>
+          {copied ? <Check size={ICON.sm} /> : <Copy size={ICON.sm} />}
+          {copied ? t("common.copied") : t("common.copy")}
+        </Button>
+        <Button onClick={onDone}>{t("common.close")}</Button>
+      </div>
+      <p className="desc runner-install-expiry">
+        {t("runners.installExpiry", { at: formatDateTime(token.expires_at) })}
+      </p>
+    </div>
   );
 }
 
-// ProbeResult is the Test outcome.
+// RunnerOnlineChip reuses the run-status vocabulary, so "online" reads the way
+// "succeeded" does elsewhere in the app.
 //
-// It leads with the certificate subject rather than a tick: an address
-// answering only says something is listening, while the subject and the list of
-// steps are how an admin confirms the thing on the other end is theirs.
-function ProbeResult({ probe }: { probe: RunnerProbe }) {
+// It shows the last check-in for an offline machine and not for an online one:
+// "online" needs no qualification, while "offline since Tuesday" is the whole
+// story of what went wrong.
+function RunnerOnlineChip({ runner }: { runner: Runner }) {
   const { t } = useTranslation();
-  if (!probe.ok) {
-    return (
-      <ErrorNotice>
-        {probe.subject ? (
-          <>
-            <strong>{probe.subject}</strong>
-            <div className="desc">{probe.error}</div>
-          </>
-        ) : (
-          probe.error
-        )}
-      </ErrorNotice>
-    );
-  }
+  const tone = runner.online ? "succeeded" : "failed";
   return (
-    <Notice className="runner-probe">
-      <strong>{probe.subject || t("runners.probeAnswered")}</strong>
-      <div className="desc">
-        {probe.drops?.length
-          ? t("runners.probeSteps", { steps: probe.drops.join(" · ") })
-          : t("runners.probeNoSteps")}
-      </div>
-    </Notice>
+    <span className={"status-chip " + tone}>
+      <span className={"status-dot " + tone} />
+      {runner.online
+        ? t("runners.online")
+        : runner.last_seen
+          ? t("runners.offlineSince", { at: formatDateTime(runner.last_seen) })
+          : t("runners.neverSeen")}
+    </span>
   );
 }

@@ -1228,7 +1228,7 @@
       "addedAt": "tillagd {{date}}",
       "removeConfirm": "Ta bort supportagentåtkomst för {{email}}?"
     },
-    "cardRunnersDesc": "Körnoder för din egen kod, registrerade med certifikat på båda sidor."
+    "cardRunnersDesc": "Maskiner du äger som dina flöden kan köra skript på."
   },
   "results": {
     "title": "Samlingar",
@@ -2223,36 +2223,23 @@
   },
   "runners": {
     "title": "Körnoder",
-    "subtitle": "Din egen kod, på din egen hårdvara, som ett steg i dina flöden.",
+    "subtitle": "Maskiner du äger, som kör skript dina flöden skickar dem.",
+    "add": "Lägg till körnod",
+    "adding": "Förbereder…",
     "emptyTitle": "Inga körnoder än",
-    "emptyBody": "En körnod är en liten tjänst du själv driftar. Registrera en och stegen den erbjuder dyker upp i din palett, tillsammans med de inbyggda.",
-    "colSteps": "Steg",
-    "noSteps": "—",
+    "emptyBody": "En körnod är en maskin du äger – en server, en laptop, vad som helst med Python 3. Lägg till en och dina flöden kan köra skript på den med steget ”Kör på din maskin”.",
+    "colLabels": "Etiketter",
+    "colAgent": "Agent",
+    "online": "Ansluten",
+    "offlineSince": "Senast sedd {{at}}",
+    "neverSeen": "Har aldrig anslutit",
     "remove": "Ta bort körnod",
-    "addTitle": "Registrera en körnod",
-    "addIntro": "Båda sidor visar vilka de är med ett certifikat. Du anger din körnods certifikat så att daemonen kan känna igen den, och ett certifikat med nyckel som daemonen visar tillbaka.",
-    "nameDesc": "Små bokstäver, siffror och bindestreck. Namnet blir en del av varje stegs id och kan därför inte ändras senare.",
-    "endpointLabel": "Adress",
-    "endpointDesc": "Värdnamn och port som daemonen kan nå. Namnet här måste stämma med körnodens certifikat.",
-    "serverCertLabel": "Din körnods certifikat",
-    "serverCertDesc": "Inklistrat, inte hämtat: daemonen litar på exakt det här certifikatet och inget annat.",
-    "clientCertLabel": "Certifikat som daemonen visar",
-    "clientCertDesc": "Installera motsvarande certifikat på din körnod så att den känner igen daemonen.",
-    "clientKeyLabel": "Privat nyckel för certifikatet",
-    "clientKeyDesc": "Lagras krypterad och visas aldrig igen. Att ersätta en körnod innebär att klistra in den en gång till.",
-    "test": "Testa anslutning",
-    "testing": "Testar…",
-    "save": "Registrera",
-    "probeAnswered": "Svarade",
-    "probeSteps": "Erbjuder: {{steps}}",
-    "probeNoSteps": "Ansluten, men erbjuder inga steg än.",
-    "expiringSoon": "Certifikatet för {{names}} går snart ut. Registrera körnoden igen med ett nytt innan det sker.",
-    "state": {
-      "connected": "Ansluten",
-      "unreachable": "Kan inte nås",
-      "disabled": "Av"
-    },
+    "installHead": "Kör det här på maskinen",
+    "installIntro": "Ett kommando. Det hämtar en enda läsbar Python-fil, registrerar maskinen och installerar en tjänst så att den fortsätter köra efter en omstart. Ingenting behöver nå maskinen, så det fungerar bakom en brandvägg.",
+    "installExpiry": "Kommandot slutar fungera {{at}} och går bara att använda en gång. Lägg till en ny körnod för att få ett nytt.",
+    "securityNote": "En körnod kör vilket kommando ett flöde än skickar. Alla som kan redigera ett flöde i den här organisationen kan därför köra kommandon på dessa maskiner. Starta agenten med --allow för att begränsa vilka program den får köra.",
     "onYourHardware": "Din körnod",
-    "onYourHardwareHint": "Det här steget körs på din egen körnod ({{name}}), inte på Dazyflow-servern. Allt du kopplar in skickas dit."
+    "onYourHardwareHint": "Det här steget kör ett skript på {{name}}, en av dina egna maskiner – inte på Dazyflow-servern.",
+    "noTargetYet": "ingen maskin vald"
   }
 }

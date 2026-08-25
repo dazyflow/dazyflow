@@ -1,12 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Joachim Klahr
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-// Stable `t` and auth objects: the page's load callback lists `t` in its deps,
-// so a fresh function per render would re-fire it forever.
+// Stable `t` and auth: the page's load callback lists `t` in its deps, so a
+// fresh function per render would re-fire it forever.
 vi.mock("react-i18next", () => {
   const t = (k: string, o?: Record<string, unknown>) =>
     o && typeof o === "object" ? `${k}:${JSON.stringify(o)}` : k;
@@ -22,183 +22,180 @@ vi.mock("../../auth", () => {
 });
 
 const listRunners = vi.fn();
-const putRunner = vi.fn();
+const mintRunnerToken = vi.fn();
 const deleteRunner = vi.fn();
-const testRunner = vi.fn();
 vi.mock("../../api", () => ({
   APIError: class extends Error {},
   api: {
     listRunners: (...a: unknown[]) => listRunners(...a),
-    putRunner: (...a: unknown[]) => putRunner(...a),
+    mintRunnerToken: (...a: unknown[]) => mintRunnerToken(...a),
     deleteRunner: (...a: unknown[]) => deleteRunner(...a),
-    testRunner: (...a: unknown[]) => testRunner(...a),
   },
 }));
 
 import { AdminRunners } from "./AdminRunners";
 
-// The page's job is to make a runner's real state legible: whether it is
-// connected, what it offers, and — when it is not — why. A registered runner
-// that will not connect is the case that matters, because the daemon keeps it
-// listed precisely so this page can explain it.
+// Setting up a runner is: press a button, copy one line, paste it elsewhere.
+// The page's whole job is to make that line available exactly once and then be
+// honest about which machines have actually turned up.
 
-const connected = {
-  name: "invoices",
-  endpoint: "runner.acme.internal:9000",
-  enabled: true,
+const online = {
+  name: "invoices-box",
+  labels: ["linux", "x64"],
+  version: "0.1.0",
+  online: true,
+  last_seen: "2026-08-25T09:00:00Z",
   created_at: "2026-08-01T10:00:00Z",
-  updated_at: "2026-08-01T10:00:00Z",
-  state: "connected" as const,
-  drops: ["runner/invoices/fetch", "runner/invoices/render"],
 };
 
-const unreachable = {
-  name: "billing",
-  endpoint: "billing.acme.internal:9000",
-  enabled: true,
+const offline = {
+  name: "old-laptop",
+  labels: ["linux"],
+  version: "0.1.0",
+  online: false,
+  last_seen: "2026-08-20T09:00:00Z",
   created_at: "2026-08-01T10:00:00Z",
-  updated_at: "2026-08-01T10:00:00Z",
-  state: "unreachable" as const,
-  error: "tls: failed to verify certificate: x509: certificate has expired",
 };
-
-// Filling the form is what unlocks Test and Register, so most tests need it.
-async function fillForm(user: ReturnType<typeof userEvent.setup>) {
-  await user.type(screen.getByLabelText("common.name"), "invoices");
-  await user.type(screen.getByLabelText("runners.endpointLabel"), "host:9000");
-  await user.type(screen.getByLabelText("runners.serverCertLabel"), "-----BEGIN CERTIFICATE-----");
-  await user.type(screen.getByLabelText("runners.clientCertLabel"), "-----BEGIN CERTIFICATE-----");
-  await user.type(screen.getByLabelText("runners.clientKeyLabel"), "-----BEGIN PRIVATE KEY-----");
-}
 
 beforeEach(() => {
   listRunners.mockResolvedValue({ runners: [] });
-  putRunner.mockResolvedValue({});
+  mintRunnerToken.mockResolvedValue({
+    token: "dzrt_abc123",
+    expires_at: "2026-08-25T10:00:00Z",
+  });
   deleteRunner.mockResolvedValue({});
-  testRunner.mockReset();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("AdminRunners", () => {
   it("offers a way in when nothing is registered", async () => {
     render(<AdminRunners />);
     expect(await screen.findByText("runners.emptyTitle")).toBeInTheDocument();
-    // The form is always present, so an empty org has somewhere to start.
-    expect(screen.getByText("runners.addTitle")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "runners.add" })).toBeEnabled();
   });
 
-  it("shows what a connected runner offers", async () => {
-    listRunners.mockResolvedValue({ runners: [connected] });
+  // The command is the whole setup, so it has to carry the token and the
+  // server's own address — the operator should not have to supply either.
+  it("shows a copyable one-line install command", async () => {
+    const user = userEvent.setup();
     render(<AdminRunners />);
-    expect(await screen.findByText("invoices")).toBeInTheDocument();
-    expect(screen.getByText("runners.state.connected")).toBeInTheDocument();
-    // The steps, by their namespaced ids — which is what a flow references.
-    expect(screen.getByText(/runner\/invoices\/fetch/)).toBeInTheDocument();
+    await screen.findByText("runners.emptyTitle");
+
+    await user.click(screen.getByRole("button", { name: "runners.add" }));
+    await waitFor(() => expect(mintRunnerToken).toHaveBeenCalledWith("tok"));
+
+    const cmd = await screen.findByText(/runner\.sh/);
+    expect(cmd.textContent).toContain("dzrt_abc123");
+    // Served by this very daemon, so the address is already known.
+    expect(cmd.textContent).toContain(window.location.origin);
+    // --service is part of the command, not an option to discover. A runner
+    // that dies with the terminal fails silently — the machine just stops
+    // appearing days later — so the default has to be the one that survives a
+    // reboot.
+    expect(cmd.textContent).toContain("--service");
+
+    // Read it back through userEvent's own clipboard rather than spying on
+    // writeText: userEvent installs its own stub, so a hand-rolled spy is
+    // replaced and never called. Reading back also tests the thing that
+    // matters — what would land in the operator's paste buffer.
+    await user.click(screen.getByRole("button", { name: /common.copy/ }));
+    await waitFor(async () => {
+      expect(await navigator.clipboard.readText()).toContain("dzrt_abc123");
+    });
+    // And the button says so, which is the only feedback there is.
+    expect(await screen.findByText("common.copied")).toBeInTheDocument();
   });
 
-  // The load-bearing case: a runner that will not connect stays listed WITH
-  // its reason. If it vanished, the flow author would see a step they built
-  // with simply not exist, and nothing would explain it.
-  it("keeps an unreachable runner listed, with the reason", async () => {
-    listRunners.mockResolvedValue({ runners: [unreachable] });
+  // The token is returned once and cannot be fetched again, so the page has to
+  // say when it stops working rather than leaving someone to discover it.
+  it("says when the command expires", async () => {
+    const user = userEvent.setup();
     render(<AdminRunners />);
-    expect(await screen.findByText("billing")).toBeInTheDocument();
-    expect(screen.getByText("runners.state.unreachable")).toBeInTheDocument();
-    expect(screen.getByText(/certificate has expired/)).toBeInTheDocument();
+    await screen.findByText("runners.emptyTitle");
+    await user.click(screen.getByRole("button", { name: "runners.add" }));
+    expect(await screen.findByText(/runners.installExpiry/)).toBeInTheDocument();
   });
 
-  it("warns before a certificate expires", async () => {
+  it("keeps the command until it is dismissed", async () => {
+    const user = userEvent.setup();
+    render(<AdminRunners />);
+    await screen.findByText("runners.emptyTitle");
+    await user.click(screen.getByRole("button", { name: "runners.add" }));
+    await screen.findByText(/runner\.sh/);
+
+    await user.click(screen.getByRole("button", { name: "common.close" }));
+    expect(screen.queryByText(/runner\.sh/)).not.toBeInTheDocument();
+  });
+
+  it("lists a machine that has checked in", async () => {
+    listRunners.mockResolvedValue({ runners: [online] });
+    render(<AdminRunners />);
+    expect(await screen.findByText("invoices-box")).toBeInTheDocument();
+    expect(screen.getByText("runners.online")).toBeInTheDocument();
+    expect(screen.getByText(/linux · x64/)).toBeInTheDocument();
+    // The agent version, because an old agent is a plausible cause of odd
+    // behaviour.
+    expect(screen.getByText("0.1.0")).toBeInTheDocument();
+  });
+
+  // "Offline since Tuesday" is the whole story of what went wrong, so an
+  // offline machine shows when it was last seen and an online one does not
+  // need to.
+  it("says how long a machine has been gone", async () => {
+    listRunners.mockResolvedValue({ runners: [offline] });
+    render(<AdminRunners />);
+    expect(await screen.findByText(/runners.offlineSince/)).toBeInTheDocument();
+    expect(screen.queryByText("runners.online")).not.toBeInTheDocument();
+  });
+
+  it("distinguishes a machine that never connected", async () => {
     listRunners.mockResolvedValue({
-      runners: [{ ...connected, expiring_soon: true }],
+      runners: [{ ...offline, last_seen: undefined }],
     });
     render(<AdminRunners />);
-    expect(await screen.findByText(/runners.expiringSoon/)).toBeInTheDocument();
+    // A machine that never arrived is a different problem from one that went
+    // away: the token was probably never pasted.
+    expect(await screen.findByText("runners.neverSeen")).toBeInTheDocument();
   });
 
-  it("does not warn when no certificate is near expiry", async () => {
-    listRunners.mockResolvedValue({ runners: [connected] });
-    render(<AdminRunners />);
-    await screen.findByText("invoices");
-    expect(screen.queryByText(/runners.expiringSoon/)).not.toBeInTheDocument();
-  });
-
-  // Registering needs every piece: a partly-filled form cannot be submitted,
-  // because a runner missing one certificate can never connect.
-  it("will not register until the form is complete", async () => {
+  it("removes a machine", async () => {
     const user = userEvent.setup();
+    listRunners.mockResolvedValue({ runners: [online] });
     render(<AdminRunners />);
-    await screen.findByText("runners.addTitle");
-
-    expect(screen.getByRole("button", { name: "runners.save" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "runners.test" })).toBeDisabled();
-
-    await fillForm(user);
-    expect(screen.getByRole("button", { name: "runners.save" })).toBeEnabled();
-  });
-
-  // Testing must not save. An admin checking pasted certificates would
-  // otherwise leave a broken registration behind on every failed attempt.
-  it("tests without registering", async () => {
-    const user = userEvent.setup();
-    testRunner.mockResolvedValue({ ok: true, subject: "CN=runner.acme.internal", drops: ["fetch"] });
-    render(<AdminRunners />);
-    await screen.findByText("runners.addTitle");
-    await fillForm(user);
-
-    await user.click(screen.getByRole("button", { name: "runners.test" }));
-    await waitFor(() => expect(testRunner).toHaveBeenCalled());
-    expect(putRunner).not.toHaveBeenCalled();
-    // The subject, not just a tick: it is how an admin confirms whose runner
-    // answered.
-    expect(await screen.findByText("CN=runner.acme.internal")).toBeInTheDocument();
-  });
-
-  // A failed probe still reports who the certificate claims to be, because
-  // that is the half the admin is checking.
-  it("reports the identity even when the connection fails", async () => {
-    const user = userEvent.setup();
-    testRunner.mockResolvedValue({
-      ok: false,
-      subject: "CN=runner.acme.internal",
-      error: "connection refused",
-    });
-    render(<AdminRunners />);
-    await screen.findByText("runners.addTitle");
-    await fillForm(user);
-
-    await user.click(screen.getByRole("button", { name: "runners.test" }));
-    expect(await screen.findByText("CN=runner.acme.internal")).toBeInTheDocument();
-    expect(screen.getByText("connection refused")).toBeInTheDocument();
-  });
-
-  it("registers and reloads the list", async () => {
-    const user = userEvent.setup();
-    render(<AdminRunners />);
-    await screen.findByText("runners.addTitle");
-    await fillForm(user);
-
-    listRunners.mockResolvedValue({ runners: [connected] });
-    await user.click(screen.getByRole("button", { name: "runners.save" }));
-    await waitFor(() => expect(putRunner).toHaveBeenCalled());
-    expect(await screen.findByText("invoices")).toBeInTheDocument();
-
-    // The key field is cleared: it is write-only server-side, so leaving it on
-    // screen would imply it can be read back.
-    expect(screen.getByLabelText("runners.clientKeyLabel")).toHaveValue("");
-  });
-
-  it("removes a runner", async () => {
-    const user = userEvent.setup();
-    listRunners.mockResolvedValue({ runners: [connected] });
-    render(<AdminRunners />);
-    await screen.findByText("invoices");
+    await screen.findByText("invoices-box");
 
     await user.click(screen.getByRole("button", { name: "runners.remove" }));
-    await waitFor(() => expect(deleteRunner).toHaveBeenCalledWith("tok", "invoices"));
+    await waitFor(() => expect(deleteRunner).toHaveBeenCalledWith("tok", "invoices-box"));
+  });
+
+  // The page warns on every visit, not only when a runner exists. Whoever can
+  // edit a flow can run commands on these machines, and that is worth knowing
+  // before the first one is added.
+  it("always states what a runner can be told to do", async () => {
+    render(<AdminRunners />);
+    await screen.findByText("runners.emptyTitle");
+    expect(screen.getByText(/runners.securityNote/)).toBeInTheDocument();
   });
 
   it("surfaces a failure to load", async () => {
     listRunners.mockRejectedValue(new Error("nope"));
     render(<AdminRunners />);
     expect(await screen.findByRole("alert")).toBeInTheDocument();
+  });
+
+  // A machine appears seconds after the command is pasted, and that wait is
+  // when someone is most likely to think it failed — so the list refreshes
+  // itself rather than needing a reload.
+  it("picks up a machine that arrives while the page is open", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    render(<AdminRunners />);
+    await screen.findByText("runners.emptyTitle");
+
+    listRunners.mockResolvedValue({ runners: [online] });
+    await vi.advanceTimersByTimeAsync(6000);
+    await waitFor(() => expect(screen.getByText("invoices-box")).toBeInTheDocument());
   });
 });
