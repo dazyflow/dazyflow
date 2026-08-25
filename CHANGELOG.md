@@ -23,6 +23,30 @@ into the image.)
 
 ## [Unreleased]
 
+### Fixed
+
+- **The caret sat off the text in the runner step's script box.** The box draws
+  a transparent textarea over a highlighted copy of the same text, which only
+  works while the two advance character-for-character — and the comment token
+  was styled italic. An italic face is a different face with different advance
+  widths (and a family with no true italic gets a synthesised oblique, which
+  differs again), so everything after a comment on that line sat out of step
+  with the caret, and because the line then wrapped at a different column than
+  the textarea did, every line below it drifted too. Comments are now coloured
+  and not slanted.
+
+  A second, latent cause of the same drift is fixed with it: the textarea
+  scrolls and the highlight layer does not, so once the content was tall enough
+  for a scrollbar the textarea's text wrapped ~15px earlier than the layer
+  behind it. Both layers now reserve the scrollbar's width whether or not one is
+  showing.
+
+  `npm test` now fails if a token span is given any property that changes glyph
+  width, or if the two layers of one of these editors are given a metric
+  separately. The bug looks right in a screenshot and only shows when you put
+  the caret at the end of a long commented line, which is why it wants a guard
+  rather than care.
+
 ### Added
 
 - **A connection can say what happens when the step before it fails.** The

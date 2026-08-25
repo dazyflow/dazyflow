@@ -9143,6 +9143,14 @@ a.pa-card:hover {
   white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: break-word;
+  /* Reserve the scrollbar's width in BOTH layers, always. The textarea scrolls
+     and the <pre> does not, so once the content was tall enough for a scrollbar
+     the textarea's content box narrowed by ~15px and the <pre>'s did not — and
+     with pre-wrap that means the two layers wrap at different columns, so the
+     text drifts apart line by line and the caret lands on the wrong glyph.
+     Where scrollbar-gutter is unsupported this degrades to that older
+     behaviour rather than breaking anything. */
+  scrollbar-gutter: stable;
 }
 .dz-json-pre,
 .dz-code-pre {
@@ -9184,9 +9192,16 @@ a.pa-card:hover {
 .dz-code-editor {
   resize: vertical;
 }
+/* Colour only. NOT italic, and not bold, and nothing else that changes how wide
+   a glyph is: the highlight layer has to advance character-for-character with
+   the transparent textarea over it, and an italic face is a different face. A
+   family with no true italic gets a synthesised oblique, whose advances differ
+   again — so a line with a comment on it pushed every following glyph out of
+   step with the caret, and pushed the WRAP POINT out of step too, which threw
+   off every line below. See check-overlay-metrics.mjs, which now fails the build
+   for this. */
 .dz-s-comment {
   color: var(--script-comment);
-  font-style: italic;
 }
 .dz-s-string { color: var(--script-string); }
 .dz-s-keyword { color: var(--script-keyword); }
