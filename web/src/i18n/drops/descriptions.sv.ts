@@ -594,8 +594,8 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     sv: "Dirigerar nyttolasten på `in` till en av N fallportar genom att matcha en nyckel mot varje falls värde. Parametern `cases` är en ordnad lista med {slot, equals} — det FÖRSTA fallet vars värde matchar nyckeln vinner, och hela nyttolasten går ut på den utgången; en nyckel som inte matchar något fall går till `default`. Matcha hela indatat, eller ett fält i det med parametern `field`. Ett `equals` som är en lista matchar om nyckeln är lika med något element (som Jämförs one_of). Flervalssyskonet till Förgrening — ta det i stället för att kedja Förgreningar när du ska dela upp en nyttolast på status/enum/kategori.",
   },
   text: {
-    en: "0f934db1",
-    sv: "Skickar ut ett fast textvärde. Parametern 'text' kan vara flera rader; senare steg ser det som text/plain på porten 'out'.",
+    en: "9081444e",
+    sv: "Skickar ut ett fast textvärde. Parametern 'text' kan vara flera rader; senare steg ser det som text/plain på porten 'out'. Sätt 'Skrivet i' till ett språk så blir rutan en kodredigerare — fast bredd, färgad syntax, och den slutar radbryta långa rader — vilket är så du håller en SQL-fråga, ett skalskript eller en bit YAML i ett flöde. Det är fortfarande en vanlig sträng på vägen ut; det är JSON-steget som tolkar.",
   },
   twilio_send_sms: {
     en: "7b1bb480",

@@ -264,6 +264,7 @@ func init() {
       "type": "object",
       "title": "Environment variables",
       "additionalProperties": { "type": "string" },
+      "x_confirm_remove": true,
       "description": "Values the script reads from its environment — $NAME in a shell, os.environ in Python. Use ${secret.NAME} for anything sensitive: the value reaches the machine but is never written into the flow, and is blanked out of the run's output and logs. A value set here wins over one the agent's own environment already has."
     },
     "timeout_seconds": {

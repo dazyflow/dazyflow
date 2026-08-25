@@ -17,19 +17,34 @@
 // content would colour half of either one wrongly.
 
 // ScriptLang is what the highlighter is told to read the text as.
-export type ScriptLang = "shell" | "python" | "powershell" | "js";
+export type ScriptLang = "shell" | "python" | "powershell" | "js" | "sql" | "yaml" | "json";
 
-// scriptLangFor maps the step's `shell` param onto a highlighter. Unknown (and
-// the machine's own shell) reads as POSIX shell, which is what that default
-// actually runs.
-export function scriptLangFor(shell: string | undefined): ScriptLang {
-  switch (shell) {
+// scriptLangFor maps a step's language param onto a highlighter.
+//
+// It takes values from two vocabularies on purpose. The runner step says how it
+// will RUN the script ("node", "the machine's own shell"), and the Text step
+// says what the text IS ("javascript", "yaml") — the same question asked from
+// two sides, and one function answering both beats two that can drift.
+//
+// Anything unrecognised reads as shell, which is what the runner's default
+// actually executes and a harmless guess for a box of unknown text.
+export function scriptLangFor(lang: string | undefined): ScriptLang {
+  switch (lang) {
     case "python":
       return "python";
     case "powershell":
       return "powershell";
     case "node":
+    case "js":
+    case "javascript":
       return "js";
+    case "sql":
+      return "sql";
+    case "yaml":
+    case "yml":
+      return "yaml";
+    case "json":
+      return "json";
     default:
       return "shell";
   }
@@ -52,6 +67,15 @@ type LangSpec = {
   // place getting this wrong is visible: '\' would otherwise swallow the quote.
   quotes: { q: string; escapes: boolean; multiline?: boolean }[];
   keywords: Set<string>;
+  // SQL is written in both cases and means the same thing either way, so its
+  // keywords match however they were typed. Everywhere else case is meaning.
+  caseInsensitiveKeywords?: boolean;
+  // Mark a name that is followed by a colon as a key — `"total":` in JSON,
+  // `retries:` in YAML. Keys are the shape of those two formats, so colouring
+  // them is most of the value of highlighting them at all. They reuse the
+  // keyword colour, which is the same purple the JSON editor already gives a
+  // key.
+  keysBeforeColon?: boolean;
   // A sigil that starts a variable — $ in shell and PowerShell. Python and
   // JavaScript have none, but a ${…} Dazyflow reference still gets marked
   // there, because it is not part of the language and should not read as if it
@@ -107,6 +131,44 @@ const LANGS: Record<ScriptLang, LangSpec> = {
       "trap", "try", "until", "while", "class", "enum", "using",
     ]),
     sigil: "$",
+  },
+  sql: {
+    lineComment: "--",
+    blockComment: ["/*", "*/"],
+    quotes: [
+      // A SQL string escapes a quote by doubling it, not with a backslash — so
+      // a trailing backslash must not swallow the closing quote.
+      { q: "'", escapes: false },
+      { q: '"', escapes: false },
+    ],
+    caseInsensitiveKeywords: true,
+    keywords: new Set([
+      "select", "from", "where", "and", "or", "not", "in", "is", "null", "as",
+      "join", "inner", "left", "right", "full", "outer", "cross", "on", "using",
+      "group", "order", "by", "having", "limit", "offset", "distinct", "union",
+      "all", "insert", "into", "values", "update", "set", "delete", "returning",
+      "create", "alter", "drop", "table", "index", "view", "with", "case",
+      "when", "then", "else", "end", "asc", "desc", "between", "like", "ilike",
+      "exists", "count", "sum", "avg", "min", "max", "coalesce", "true", "false",
+    ]),
+  },
+  yaml: {
+    lineComment: "#",
+    quotes: [
+      { q: '"', escapes: true },
+      { q: "'", escapes: false },
+    ],
+    keysBeforeColon: true,
+    keywords: new Set(["true", "false", "null", "yes", "no", "on", "off", "~"]),
+  },
+  json: {
+    // JSON has no comments. The line-comment prefix is required by the spec
+    // shape, so it is a string that cannot occur — better than pretending "//"
+    // is a comment here, which would grey out half of a URL.
+    lineComment: "\u0000",
+    quotes: [{ q: '"', escapes: true }],
+    keysBeforeColon: true,
+    keywords: new Set(["true", "false", "null"]),
   },
   js: {
     lineComment: "//",
@@ -188,7 +250,11 @@ export function tokenizeScript(src: string, lang: ScriptLang): ScriptToken[] {
     // Longest quote first (Python's """ before "), which LANGS orders.
     const quote = spec.quotes.find((q) => rest.startsWith(q.q));
     if (quote) {
-      push("string", readString(src, i, quote));
+      const literal = readString(src, i, quote);
+      // `"total":` in JSON is a key, not a string. Marked with the keyword
+      // colour, which is the same purple the JSON editor gives a key — so the
+      // two editors do not disagree about what a key looks like.
+      push(spec.keysBeforeColon && followedByColon(src, i + literal.length) ? "keyword" : "string", literal);
       continue;
     }
 
@@ -212,7 +278,14 @@ export function tokenizeScript(src: string, lang: ScriptLang): ScriptToken[] {
 
     const ident = IDENT.exec(rest);
     if (ident) {
-      if (spec.keywords.has(ident[0])) {
+      // SQL means the same thing in either case, so its keywords match however
+      // they were typed. Everywhere else case is meaning, and folding it would
+      // colour a Python variable named `If`.
+      const word = spec.caseInsensitiveKeywords ? ident[0].toLowerCase() : ident[0];
+      // `retries:` in YAML — a bare key, the shape of the format.
+      if (spec.keysBeforeColon && followedByColon(src, i + ident[0].length)) {
+        push("keyword", ident[0]);
+      } else if (spec.keywords.has(word)) {
         push("keyword", ident[0]);
       } else {
         // Consumed as one run so the next iteration cannot re-read the tail of
@@ -228,6 +301,18 @@ export function tokenizeScript(src: string, lang: ScriptLang): ScriptToken[] {
   }
   flush();
   return out;
+}
+
+// followedByColon reports whether the next non-space character at `at` is a
+// colon — how both JSON and YAML mark the thing before it as a key.
+//
+// Spaces only, never a newline: in YAML a name at the end of one line and a
+// colon at the start of the next are not a key, and treating them as one would
+// paint an ordinary word purple.
+function followedByColon(src: string, at: number): boolean {
+  let i = at;
+  while (src[i] === " " || src[i] === "\t") i += 1;
+  return src[i] === ":";
 }
 
 // readString returns the whole literal starting at `from`, including its

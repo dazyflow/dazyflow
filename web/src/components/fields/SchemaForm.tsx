@@ -548,6 +548,19 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
           />
         );
       }
+      // Which language the box is written in, read off a SIBLING param named by
+      // the schema (x_lang_param). Two steps ask this in their own words — the
+      // runner's "Run it with" says how it will be executed, Text's "Written
+      // in" says what it is — so the field is told where to look rather than
+      // knowing either name.
+      //
+      // Defaulted to "shell" for the runner step, whose field predates the
+      // setting and whose own default IS a shell.
+      const chosenLang = (() => {
+        const key = schema.x_lang_param ?? (schema.format === "script" ? "shell" : undefined);
+        const v = key ? siblings?.[key] : undefined;
+        return typeof v === "string" ? v : undefined;
+      })();
       // format:"script" gets the code box: a real textarea, monospace, with
       // syntax highlighting for the language the step says it will run the
       // script with (the sibling `shell` param). A one-line input hid
@@ -558,7 +571,7 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
           <FieldWrap name={name} schema={schema} required={required} value={value}>
             <ScriptEditor
               value={text}
-              lang={scriptLangFor(typeof siblings?.shell === "string" ? siblings.shell : undefined)}
+              lang={scriptLangFor(chosenLang)}
               onChange={(v) => onChange(v === "" && !required ? undefined : v)}
               rows={10}
             />
@@ -655,6 +668,23 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
             />
           </div>
         ) : undefined;
+        // A language chosen on the sibling param turns this box into the code
+        // editor: monospace, highlighted, no wrapping. "plain" (and unset) stays
+        // a plain textarea, because most of what goes in one of these is prose —
+        // an LLM system prompt, an email body — and prose in monospace is worse,
+        // not better.
+        if (chosenLang && chosenLang !== "plain") {
+          return (
+            <FieldWrap name={name} schema={schema} required={required} value={value} footer={celFooter}>
+              <ScriptEditor
+                value={(value as string) ?? (schema.default as string | undefined) ?? ""}
+                lang={scriptLangFor(chosenLang)}
+                onChange={(v) => onChange(v === "" && !required ? undefined : v)}
+                rows={8}
+              />
+            </FieldWrap>
+          );
+        }
         return (
           <FieldWrap name={name} schema={schema} required={required} value={value} footer={celFooter}>
             <textarea
@@ -783,6 +813,7 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
         return (
           <FieldWrap name={name} schema={schema} required={required}>
             <DictField
+              confirmRemove={!!schema.x_confirm_remove}
               valueSchema={schema.additionalProperties}
               value={(value as Record<string, unknown>) ?? {}}
               onChange={onChange}
@@ -2617,12 +2648,25 @@ function DictField({
   valueSchema,
   value,
   onChange,
+  confirmRemove,
 }: {
   valueSchema: JSONSchema;
   value: Record<string, unknown>;
   onChange: (v: Record<string, unknown>) => void;
+  // Ask before removing a row (x_confirm_remove on the field).
+  //
+  // Opt-in rather than always, because a confirm on every row of every map
+  // would be one people click through without reading — and then it is not
+  // protecting the one that matters. It is set where the value costs something
+  // to reconstruct: an environment variable holding a ${secret.…} reference
+  // means a trip back to the secret picker, while a column-rename entry is
+  // retyped in two seconds.
+  confirmRemove?: boolean;
 }) {
   const { t } = useTranslation();
+  // Index of the row being confirmed; null = none. Cleared on every commit,
+  // since the indices move when the list does.
+  const [confirming, setConfirming] = useState<number | null>(null);
   // The rows are LOCAL state, not derived from `value` on every render.
   //
   // Deriving them meant a row existed only while its key did: an object cannot
@@ -2657,6 +2701,7 @@ function DictField({
   }, [incoming]);
 
   const commit = (next: [string, unknown][]) => {
+    setConfirming(null);
     setRows(next);
     onChange(toObject(next));
   };
@@ -2682,7 +2727,7 @@ function DictField({
 
   return (
     <div className="sf-dict">
-      {rows.map(([k, v], idx) => (
+      {rows.flatMap(([k, v], idx) => [
         <div key={idx} className="sf-dict-row">
           <input
             value={k}
@@ -2700,13 +2745,29 @@ function DictField({
           <Button
             variant="ghost"
             className="sf-remove"
-            onClick={() => removeAt(idx)}
+            onClick={() => (confirmRemove ? setConfirming(idx) : removeAt(idx))}
             aria-label={t("schemaForm.remove")}
+            aria-expanded={confirmRemove ? confirming === idx : undefined}
           >
             <X size={ICON.sm} />
           </Button>
-        </div>
-      ))}
+        </div>,
+        // The prompt sits UNDER its row rather than replacing it, so what is
+        // about to go is still on screen while the question is being answered.
+        confirming === idx ? (
+          <div key={`${idx}-confirm`} className="sf-dict-confirm inline-confirm">
+            {k
+              ? t("schemaForm.dictRemoveConfirm", { key: k })
+              : t("schemaForm.dictRemoveConfirmUnnamed")}{" "}
+            <Button variant="danger" onClick={() => removeAt(idx)}>
+              {t("common.remove")}
+            </Button>
+            <Button variant="ghost" onClick={() => setConfirming(null)}>
+              {t("common.cancel")}
+            </Button>
+          </div>
+        ) : null,
+      ])}
       <Button size="sm" className="sf-add" onClick={addEmpty}>
         <Plus size={ICON.xs} />
         {t("schemaForm.add")}

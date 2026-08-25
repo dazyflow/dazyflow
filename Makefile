@@ -60,7 +60,7 @@ LDFLAGS := -s -w \
 
 .PHONY: help up down restart logs ps build rebuild env pg pg-down dev web test vet fmt check ci \
 	runner-embed runner-test \
-        integration-catalog drop-catalog catalogs catalogs-check flowgen-eval \
+        integration-catalog drop-catalog catalogs catalogs-check check-changelog flowgen-eval \
         docs-content docs-site docs-dev bin version latest major minor patch _bump upgrade
 
 help: ## List targets
@@ -254,7 +254,14 @@ minor: ## Cut a minor release tag (x.Y+1.0)
 patch: ## Cut a patch release tag (x.y.Z+1)
 	@$(MAKE) --no-print-directory _bump BUMP=patch
 
-_bump:
+check-changelog: ## Fail if a released CHANGELOG section has been edited
+	@./scripts/check-changelog.sh
+
+# Every bump checks first: the release that is about to promote [Unreleased] is
+# exactly the moment an entry filed under the PREVIOUS version's heading gets
+# silently baked in — and the refusal below ("[Unreleased] is empty") is the
+# symptom people see instead of the cause.
+_bump: check-changelog
 	@CUR=$$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.0); \
 	MAJOR=$$(echo "$$CUR" | cut -d. -f1); \
 	MINOR=$$(echo "$$CUR" | cut -d. -f2); \
@@ -349,6 +356,7 @@ check: ## Fast local gate before pushing: build, vet, tests
 	@echo "==> go build"; go build ./...
 	@echo "==> go vet"; go vet ./...
 	@echo "==> go test"; go test ./...
+	@echo "==> changelog"; ./scripts/check-changelog.sh
 
 ci: ## Full local mirror of CI (.build.yml): build, vet, race tests, web build
 	@echo "==> go build"; go build ./...
@@ -357,3 +365,4 @@ ci: ## Full local mirror of CI (.build.yml): build, vet, race tests, web build
 	@echo "==> catalogues"; $(MAKE) --no-print-directory catalogs-check
 	@echo "==> web test"; cd web && npm ci && npm test
 	@echo "==> web build"; cd web && npm run build
+	@echo "==> changelog"; ./scripts/check-changelog.sh

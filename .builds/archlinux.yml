@@ -147,6 +147,13 @@ tasks:
   - catalogs: |
       cd dazyflow
       make catalogs-check
+  # A released CHANGELOG section describes what is in its tag. Editing one is
+  # invisible in review — correct prose under a plausible heading — and it takes
+  # the next release down with it, since the entry that should have gone under
+  # [Unreleased] left it empty. See scripts/check-changelog.sh.
+  - changelog: |
+      cd dazyflow
+      make check-changelog
   # `npm run build` is `tsc -b && vite build`, so a type error fails here — but
   # it does NOT run the unit tests, which meant the whole vitest suite (error
   # explainers, port typing, the Swedish catalog vocabulary and its drift

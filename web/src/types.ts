@@ -325,6 +325,16 @@ export type JSONSchema = {
   // input linking to the CEL language docs, so the formula language is named
   // in the form rather than buried in a tooltip.
   x_cel?: boolean;
+  // x_confirm_remove asks before deleting a row of a name/value map. Set where
+  // the value costs something to reconstruct — an environment variable holding
+  // a ${secret.…} reference — rather than everywhere, since a confirm on every
+  // row is one people learn to click through. See DictField.
+  x_confirm_remove?: boolean;
+  // x_lang_param names a SIBLING param holding the language this field is
+  // written in — "shell" on the runner step, "language" on Text. The field is
+  // told where to look rather than knowing either name, because the two steps
+  // ask the same question in their own words.
+  x_lang_param?: string;
   // x_columns_source marks a row-condition filter whose column field should be
   // a dropdown populated from a data source rather than typed free-hand.
   // "collection" lists the columns of the collection named by the sibling

@@ -100,7 +100,9 @@ describe("SchemaForm — a name/value map", () => {
     },
   } as JSONSchema;
 
-  const keyBoxes = () => screen.getAllByPlaceholderText("schemaForm.keyPlaceholder");
+  // queryAll, not getAll: the zero case is a real assertion here (the row is
+  // gone after a confirmed removal), and getAll throws rather than returning [].
+  const keyBoxes = () => screen.queryAllByPlaceholderText("schemaForm.keyPlaceholder");
 
   it("keeps the row while its name is being retyped", async () => {
     const onChange = vi.fn();
@@ -143,6 +145,65 @@ describe("SchemaForm — a name/value map", () => {
     expect(onChange.mock.calls.at(-1)?.[0]).toMatchObject({ env: { B: "2" } });
   });
 
+  // Removing an environment variable asks first: the value is often a
+  // ${secret.…} reference, so a mis-click costs a trip back to the secret
+  // picker. Opt-in per field, not everywhere — see DictField.
+  const confirmSchema: JSONSchema = {
+    type: "object",
+    properties: {
+      env: {
+        type: "object",
+        title: "Environment variables",
+        additionalProperties: { type: "string" },
+        x_confirm_remove: true,
+      },
+    },
+  } as JSONSchema;
+
+  it("asks before removing, and keeps the row while asking", async () => {
+    const onChange = vi.fn();
+    render(
+      <SchemaForm schema={confirmSchema} value={{ env: { API_TOKEN: "v" } }} onChange={onChange} />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "schemaForm.remove" }));
+
+    // Nothing gone yet, and the row is still on screen — what is about to go
+    // has to be visible while the question is being answered.
+    expect(onChange).not.toHaveBeenCalled();
+    expect(keyBoxes()).toHaveLength(1);
+    // Named, so it is clear WHICH one.
+    expect(screen.getByText(/schemaForm.dictRemoveConfirm.*API_TOKEN/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "common.remove" }));
+    expect(onChange.mock.calls.at(-1)?.[0]).toMatchObject({ env: {} });
+    expect(keyBoxes()).toHaveLength(0);
+  });
+
+  it("backs out of the removal on cancel", async () => {
+    const onChange = vi.fn();
+    render(
+      <SchemaForm schema={confirmSchema} value={{ env: { API_TOKEN: "v" } }} onChange={onChange} />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "schemaForm.remove" }));
+    await userEvent.click(screen.getByRole("button", { name: "common.cancel" }));
+    expect(onChange).not.toHaveBeenCalled();
+    expect(keyBoxes()).toHaveLength(1);
+    expect(screen.queryByText(/schemaForm.dictRemoveConfirm/)).not.toBeInTheDocument();
+  });
+
+  it("asks about the row that was clicked, not another", async () => {
+    render(
+      <SchemaForm
+        schema={confirmSchema}
+        value={{ env: { FIRST: "1", SECOND: "2" } }}
+        onChange={() => {}}
+      />,
+    );
+    await userEvent.click(screen.getAllByRole("button", { name: "schemaForm.remove" })[1]);
+    expect(screen.getByText(/schemaForm.dictRemoveConfirm.*SECOND/)).toBeInTheDocument();
+    expect(screen.queryByText(/FIRST/)).not.toBeInTheDocument();
+  });
+
   it("says so when one name is used twice", async () => {
     // The second wins when the object is built, so the first row's value
     // quietly is not what runs.
@@ -152,6 +213,59 @@ describe("SchemaForm — a name/value map", () => {
     await userEvent.click(screen.getByRole("button", { name: /schemaForm.add/ }));
     await userEvent.type(keyBoxes()[1], "A");
     expect(keyBoxes()[1]).toHaveAttribute("aria-invalid", "true");
+  });
+});
+
+// A multiline field becomes a code box when a sibling param says which language
+// it is written in — the Text step's "Written in", the runner step's "Run it
+// with". The field is told WHICH sibling to read, so the two steps can each ask
+// the question in their own words.
+describe("SchemaForm — a language-aware text box", () => {
+  const textSchema: JSONSchema = {
+    type: "object",
+    properties: {
+      text: { type: "string", format: "multiline", x_lang_param: "language", title: "Text" },
+      language: { type: "string", title: "Written in", default: "plain", enum: ["plain", "sql"] },
+    },
+  } as JSONSchema;
+
+  it("stays a plain textarea for prose", () => {
+    // Most of what goes in one of these is a system prompt or an email body,
+    // and prose in a monospace box reads worse, not better.
+    const { container } = render(
+      <SchemaForm schema={textSchema} value={{ text: "Dear team," }} onChange={() => {}} />,
+    );
+    expect(container.querySelector(".dz-code-editor")).toBeNull();
+    expect(screen.getByDisplayValue("Dear team,")).toBeInTheDocument();
+  });
+
+  it("becomes a highlighted code box once a language is chosen", () => {
+    const { container } = render(
+      <SchemaForm
+        schema={textSchema}
+        value={{ text: "select id -- all", language: "sql" }}
+        onChange={() => {}}
+      />,
+    );
+    expect(container.querySelector(".dz-code-editor textarea")).toHaveValue("select id -- all");
+    expect(container.querySelector(".dz-s-keyword")).toHaveTextContent("select");
+    expect(container.querySelector(".dz-s-comment")).toHaveTextContent("-- all");
+  });
+
+  it("reads the sibling the schema names, not one it assumes", () => {
+    // The runner step calls it `shell`; a field with no x_lang_param and no
+    // script format must not pick up a stray sibling of either name.
+    const noPointer: JSONSchema = {
+      type: "object",
+      properties: {
+        text: { type: "string", format: "multiline", title: "Text" },
+        language: { type: "string", enum: ["plain", "sql"] },
+      },
+    } as JSONSchema;
+    const { container } = render(
+      <SchemaForm schema={noPointer} value={{ text: "select 1", language: "sql" }} onChange={() => {}} />,
+    );
+    expect(container.querySelector(".dz-code-editor")).toBeNull();
   });
 });
 

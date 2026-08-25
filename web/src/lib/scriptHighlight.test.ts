@@ -96,7 +96,90 @@ describe("tokenizeScript", () => {
   });
 });
 
+describe("the languages the Text step adds", () => {
+  it("reads SQL keywords in either case, because SQL means the same either way", () => {
+    expect(kinds("SELECT id FROM t where x = 1", "sql")).toEqual([
+      ["keyword", "SELECT"],
+      ["keyword", "FROM"],
+      ["keyword", "where"],
+      ["number", "1"],
+    ]);
+  });
+
+  it("does not fold case anywhere else", () => {
+    // A Python variable named `If` is a variable. Folding case for every
+    // language would paint it as a keyword.
+    expect(kinds("If = 1", "python")).toEqual([["number", "1"]]);
+  });
+
+  it("reads a SQL comment as -- to end of line, and a quoted literal whole", () => {
+    expect(kinds("-- note\nselect 'a''b'", "sql")).toEqual([
+      ["comment", "-- note"],
+      ["keyword", "select"],
+      // A SQL string doubles its quote rather than escaping it, so this is two
+      // literals, not one runaway string swallowing the rest of the file.
+      ["string", "'a'"],
+      ["string", "'b'"],
+    ]);
+  });
+
+  it("marks the keys in JSON, which is the shape of it", () => {
+    const got = kinds('{"total": 3, "note": "total"}', "json");
+    expect(got).toEqual([
+      ["keyword", '"total"'],
+      ["number", "3"],
+      ["keyword", '"note"'],
+      // The same word as a VALUE stays a string — it is the colon that makes a
+      // key, not the spelling.
+      ["string", '"total"'],
+    ]);
+  });
+
+  it("marks bare keys in YAML and leaves a comment alone", () => {
+    expect(kinds("retries: 3 # twice\nname: bob", "yaml")).toEqual([
+      ["keyword", "retries"],
+      ["number", "3"],
+      ["comment", "# twice"],
+      ["keyword", "name"],
+    ]);
+  });
+
+  it("does not read a key across a line break", () => {
+    // A name at the end of one line and a colon at the start of the next are
+    // not a key, and painting them as one would purple an ordinary word.
+    expect(kinds("name\n: 1", "yaml")).toEqual([["number", "1"]]);
+  });
+
+  it("has no comments in JSON, so a // inside a URL stays a string", () => {
+    expect(kinds('{"u": "https://x/y"}', "json")).toEqual([
+      ["keyword", '"u"'],
+      ["string", '"https://x/y"'],
+    ]);
+  });
+
+  it("is lossless for the three of them too", () => {
+    for (const [lang, src] of [
+      ["sql", "select *\nfrom t -- all\nwhere a = 'x'"],
+      ["yaml", "# c\na:\n  - 1\n  - b: 'q'\n"],
+      ["json", '{"a":[1,true,null],"b":"\\"q\\""}'],
+    ] as [ScriptLang, string][]) {
+      expect(flat(src, lang), lang).toBe(src);
+    }
+  });
+});
+
 describe("scriptLangFor", () => {
+  it("takes the Text step's language names as well as the runner's", () => {
+    // Two vocabularies for one question: how it will RUN ("node") and what it
+    // IS ("javascript"). One function answers both so they cannot drift.
+    expect(scriptLangFor("javascript")).toBe("js");
+    expect(scriptLangFor("js")).toBe("js");
+    expect(scriptLangFor("sql")).toBe("sql");
+    expect(scriptLangFor("yaml")).toBe("yaml");
+    expect(scriptLangFor("yml")).toBe("yaml");
+    expect(scriptLangFor("json")).toBe("json");
+  });
+
   it("maps the step's shell param onto a highlighter", () => {
     expect(scriptLangFor("python")).toBe("python");
     expect(scriptLangFor("powershell")).toBe("powershell");

@@ -1654,7 +1654,9 @@
       "noneKnown": "Couldn't list your machines, so type the tags by hand. They must match exactly.",
       "matchesNoneOnline": "{{count}} machine(s) carry all of these ({{names}}), but none is switched on — this step will wait, then fail. Work goes to whichever tagged machine is running when the step fires."
     },
-    "dictDuplicate": "Two entries are both called {{key}} — only the last one is used."
+    "dictDuplicate": "Two entries are both called {{key}} — only the last one is used.",
+    "dictRemoveConfirm": "Remove {{key}}?",
+    "dictRemoveConfirmUnnamed": "Remove this entry?"
   },
   "forEach": {
     "bodyHint": "Connect the Loop body output to the first step you want to run for each row. Every step after it runs once per row too.",
