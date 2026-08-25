@@ -23,6 +23,57 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.15.2] - 2026-08-26
+
+### Added
+
+- **The Text step can hold code.** Set **Written in** to a language and the box
+  becomes a code editor: monospace, syntax-coloured, and it stops wrapping long
+  lines. Shell, Python, JavaScript, SQL, YAML, JSON and PowerShell. It is how
+  you keep a query, a script or a chunk of config in a flow — and it feeds the
+  runner step's **script** input, so a script can live in its own node and be
+  shared between steps.
+
+  A setting on the existing step rather than a new "Code" one, deliberately. The
+  value-source family earns a separate node by what it PRODUCES — JSON emits a
+  parsed object, Number a number, URL validates — and a code node would emit the
+  same plain string Text already does. So this changes the editor and nothing
+  else: what comes out is byte-identical either way, and every Text node that
+  already holds a pasted script upgrades in place instead of needing to be
+  swapped for a different node and rewired. Searching the palette for `code`,
+  `script`, `sql` or `yaml` now finds it.
+
+  It stays on **plain text** by default, because most of what goes in one of
+  these is prose — a system prompt, an email body — and prose in a monospace box
+  reads worse, not better.
+
+### Changed
+
+- **A released changelog section can no longer be edited by accident.**
+  `make patch` promotes `[Unreleased]` under a new version heading and leaves a
+  fresh empty one above it — so between releases, the heading that WAS the place
+  to write becomes the one place you must not, and nothing about the file looks
+  different. Writing under the old one breaks two things at once: the next
+  release refuses with "[Unreleased] is empty", and the previous version's notes
+  claim work that is not in its tag.
+
+  `make check-changelog` compares the newest released section against the commit
+  that released it and fails if they differ. It runs as part of `make check`,
+  `make ci`, CI, and — where it matters most — as a prerequisite of every
+  version bump, so a release cannot bake in an entry filed under the wrong
+  heading.
+
+- **Removing an environment variable asks first.** The value is often a
+  `${secret.…}` reference, so a mis-click on the × cost a trip back to the
+  secret picker to rebuild it. The row now stays on screen with a "Remove
+  API_TOKEN?" prompt underneath it, so what is about to go is still visible
+  while the question is being answered.
+
+  Deliberately not on every name/value map in the app: a confirm on every row of
+  every map is one people learn to click through, and then it is not protecting
+  the one that matters. It is a per-field setting, turned on where the value
+  costs something to reconstruct.
+
 ## [0.15.1] - 2026-08-26
 
 ### Fixed
