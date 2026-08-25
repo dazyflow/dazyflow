@@ -2623,42 +2623,73 @@ function DictField({
   onChange: (v: Record<string, unknown>) => void;
 }) {
   const { t } = useTranslation();
-  // entries ordering — preserve insertion via stable keys, but render
-  // in insertion order. Re-keying on rename is unavoidable; we accept a
-  // focus blip when the user finishes editing the key.
-  const entries = Object.entries(value);
-  const updateAt = (idx: number, newKey: string, newVal: unknown) => {
-    const next: Record<string, unknown> = {};
-    entries.forEach(([k, v], i) => {
-      if (i === idx) {
-        if (newKey) next[newKey] = newVal;
-      } else {
-        next[k] = v;
-      }
-    });
-    onChange(next);
+  // The rows are LOCAL state, not derived from `value` on every render.
+  //
+  // Deriving them meant a row existed only while its key did: an object cannot
+  // hold "the entry currently being renamed", so clearing the key to retype it
+  // dropped the entry and the row vanished from under the cursor. Naming a
+  // variable was only possible by editing around the existing text and never
+  // emptying the box — which is not something anyone should have to work out.
+  //
+  // So the editor owns the list, and hands up only the rows that have a name.
+  const [rows, setRows] = useState<[string, unknown][]>(() => Object.entries(value ?? {}));
+
+  // What the rows mean as an object: the nameless one is being typed, not
+  // deleted, so it is simply not part of the value yet.
+  const named = (rs: [string, unknown][]) => rs.filter(([k]) => k !== "");
+  const toObject = (rs: [string, unknown][]) => Object.fromEntries(named(rs));
+
+  // Re-sync when a DIFFERENT value arrives from outside — another node
+  // selected, an undo, a wired value. Keyed on the CONTENT rather than the
+  // object's identity: the call site passes `value ?? {}`, a fresh object on
+  // every render, which as an effect dependency would rebuild the rows
+  // continuously and undo every keystroke.
+  const incoming = JSON.stringify(Object.entries(value ?? {}));
+  useEffect(() => {
+    setRows((prev) =>
+      // Already agreed — keep the rows, and with them the half-typed name that
+      // the object cannot represent.
+      JSON.stringify(named(prev)) === incoming ? prev : Object.entries(value ?? {}),
+    );
+    // `value` is read inside but `incoming` is its content; depending on both
+    // would reintroduce the per-render identity churn described above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [incoming]);
+
+  const commit = (next: [string, unknown][]) => {
+    setRows(next);
+    onChange(toObject(next));
   };
-  const removeAt = (idx: number) => {
-    const next: Record<string, unknown> = {};
-    entries.forEach(([k, v], i) => {
-      if (i !== idx) next[k] = v;
-    });
-    onChange(next);
-  };
+  const updateAt = (idx: number, newKey: string, newVal: unknown) =>
+    commit(rows.map((row, i) => (i === idx ? [newKey, newVal] : row)));
+  const removeAt = (idx: number) => commit(rows.filter((_, i) => i !== idx));
   const addEmpty = () => {
-    let i = 1;
-    let k = "key";
-    while (k in value) k = `key${++i}`;
-    onChange({ ...value, [k]: defaultFor(valueSchema) ?? "" });
+    // A fresh row starts empty and unnamed, which is what an editor should give
+    // you — the old "key", "key2", "key3" placeholders had to be selected and
+    // deleted before a real name could be typed.
+    commit([...rows, ["", defaultFor(valueSchema) ?? ""]]);
   };
+
+  // A name used twice: the second one wins when the object is built, so the
+  // first row's value is quietly not what runs. Flagged rather than prevented —
+  // it is a transient state while renaming, and blocking the keystroke would be
+  // worse than saying so.
+  const duplicated = new Set(
+    named(rows)
+      .map(([k]) => k)
+      .filter((k, i, all) => all.indexOf(k) !== i),
+  );
+
   return (
     <div className="sf-dict">
-      {entries.map(([k, v], idx) => (
+      {rows.map(([k, v], idx) => (
         <div key={idx} className="sf-dict-row">
           <input
             value={k}
             onChange={(e) => updateAt(idx, e.target.value, v)}
             placeholder={t("schemaForm.keyPlaceholder")}
+            aria-invalid={duplicated.has(k) || undefined}
+            title={duplicated.has(k) ? t("schemaForm.dictDuplicate", { key: k }) : undefined}
             style={{ fontFamily: "var(--font-mono)" }}
           />
           <DictValueCell

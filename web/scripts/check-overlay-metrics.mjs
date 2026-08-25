@@ -51,9 +51,13 @@ const NOT_TOKENS = new Set([
   ".cel-docs",
 ]);
 
-// Properties that can change how much horizontal space text takes. `color`,
-// `background`, `text-decoration` and friends are all fine — they paint without
-// moving anything.
+// Properties that can move text: how wide a glyph is, where a line breaks,
+// where the first line starts. `color`, `background`, `text-decoration` and
+// friends are all fine — they paint without moving anything.
+//
+// The wrapping ones are in here because they are what actually broke: the two
+// layers agreeing on the font is not enough if they disagree about where a line
+// ends, and a disagreement about ONE wrap point moves every line below it.
 const METRIC_PROPS = [
   "font",
   "font-family",
@@ -71,6 +75,25 @@ const METRIC_PROPS = [
   "text-transform",
   "text-indent",
   "zoom",
+  // Line breaking: both layers must break in the same places, or not at all.
+  "white-space",
+  "word-break",
+  "overflow-wrap",
+  "word-wrap",
+  "line-break",
+  "hyphens",
+  "text-wrap",
+  "tab-size",
+  // Vertical rhythm and the box the text is laid out in.
+  "line-height",
+  "padding",
+  "padding-top",
+  "padding-right",
+  "padding-bottom",
+  "padding-left",
+  "border-width",
+  "writing-mode",
+  "direction",
 ];
 
 // The overlay's own layers, where the metrics MUST be declared together. Listed

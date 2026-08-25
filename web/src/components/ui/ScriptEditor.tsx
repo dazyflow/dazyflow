@@ -71,6 +71,11 @@ export function ScriptEditor({
       <textarea
         ref={taRef}
         className="dz-code-ta"
+        // Belt and braces with `white-space: pre` in the stylesheet: this is the
+        // HTML-level switch for soft wrapping, and it is unambiguous. A wrapped
+        // line is a line the <pre> behind this has to break at the same
+        // character, and two layout engines cannot be relied on to agree.
+        wrap="off"
         spellCheck={false}
         autoCapitalize="off"
         autoCorrect="off"

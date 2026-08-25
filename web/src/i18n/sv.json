@@ -1653,7 +1653,8 @@
       "matchesNone": "Ingen maskin har alla dessa etiketter, så steget kommer att misslyckas. Varje etikett måste stämma, inte bara en.",
       "noneKnown": "Kunde inte hämta dina maskiner, så skriv etiketterna för hand. De måste stämma exakt.",
       "matchesNoneOnline": "{{count}} maskin(er) har alla dessa ({{names}}), men ingen är igång — steget väntar och misslyckas sedan. Arbetet går till den maskin med etiketterna som är igång när steget körs."
-    }
+    },
+    "dictDuplicate": "Två poster heter båda {{key}} — bara den sista används."
   },
   "forEach": {
     "bodyHint": "Koppla utgången Loopens innehåll till det första steget du vill köra för varje rad. Alla steg efter det körs också en gång per rad.",

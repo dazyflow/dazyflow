@@ -27,6 +27,20 @@ into the image.)
 
 ### Fixed
 
+- **Adding an environment variable was close to impossible.** The row was
+  derived from the object it edits, so it existed only while its name did:
+  clearing the name to retype it dropped the entry and the row vanished from
+  under the cursor. Naming a variable was only possible by editing around the
+  old text without ever emptying the box. The editor now owns the list of rows
+  and hands up only the ones that have a name, so an empty name means "being
+  typed" rather than "deleted". A row goes when its remove button is used.
+
+  Two things came with it: a new row starts empty instead of pre-filled with
+  `key`, `key2`, `key3` for you to select and delete first; and a name used
+  twice is flagged, because the second one wins when the value is built and the
+  first row quietly is not what runs. This is the shared name/value editor, so
+  every map-shaped setting gets the fix.
+
 - **The caret sat off the text in the runner step's script box.** The box draws
   a transparent textarea over a highlighted copy of the same text, which only
   works while the two advance character-for-character — and the comment token
@@ -43,11 +57,21 @@ into the image.)
   behind it. Both layers now reserve the scrollbar's width whether or not one is
   showing.
 
-  `npm test` now fails if a token span is given any property that changes glyph
-  width, or if the two layers of one of these editors are given a metric
-  separately. The bug looks right in a screenshot and only shows when you put
-  the caret at the end of a long commented line, which is why it wants a guard
-  rather than care.
+  And the deeper cause is gone with them: **the script box no longer wraps.**
+  The technique asks two different layout engines — CSS text layout in the
+  highlight layer, the browser's text-control code in the textarea — to break a
+  line at the same character, and identical CSS is necessary but not sufficient
+  for that. Anything narrowing one content box and not the other moves every
+  wrap point below it. With no wrapping there is nothing left to disagree about,
+  only per-line font metrics. Long lines scroll sideways instead, which is what
+  a code box should do anyway: wrapping a shell pipeline mid-token to fit a
+  narrow panel is worse than scrolling it.
+
+  `npm test` now fails if a token span is given any property that moves text, or
+  if the two layers of one of these editors are given one separately — including
+  the wrapping properties, which is what actually broke. The bug looks right in
+  a screenshot and only shows with a caret at the end of a long line, which is
+  why it wants a guard rather than care.
 
 ### Added
 

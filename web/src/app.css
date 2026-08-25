@@ -9192,6 +9192,28 @@ a.pa-card:hover {
 .dz-code-editor {
   resize: vertical;
 }
+/* Long lines SCROLL; they do not wrap. Both layers, in one rule, because the
+   two must never disagree about this.
+ *
+ * The overlay technique asks two different layout engines — CSS text layout in
+ * the <pre>, the browser's text-control code in the <textarea> — to break a
+ * line at exactly the same character. Identical CSS is necessary but not
+ * sufficient: they are separate implementations, and anything that narrows one
+ * content box and not the other (a scrollbar appearing, a gutter reserved on
+ * one side only) shifts every wrap point below it, which is what puts the caret
+ * a few characters off the glyph it is in front of. With no wrapping there is
+ * nothing left to disagree about — only per-line font metrics, which the shared
+ * rule above pins.
+ *
+ * It is also what a code box should do. Wrapping a shell pipeline or a long
+ * URL mid-token to fit a narrow inspector panel is worse than scrolling it,
+ * which is why every code editor scrolls. */
+.dz-code-pre,
+.dz-code-ta {
+  white-space: pre;
+  word-break: normal;
+  overflow-wrap: normal;
+}
 /* Colour only. NOT italic, and not bold, and nothing else that changes how wide
    a glyph is: the highlight layer has to advance character-for-character with
    the transparent textarea over it, and an italic face is a different face. A

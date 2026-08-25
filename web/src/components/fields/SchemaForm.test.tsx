@@ -82,6 +82,79 @@ const runnerSchema: JSONSchema = {
   },
 } as JSONSchema;
 
+// The environment-variable editor, and every other string-keyed map param.
+//
+// The row used to be derived from the object, which meant it existed only while
+// its key did: clearing the name to retype it dropped the entry and the row
+// disappeared from under the cursor. Typing a name was only possible by editing
+// around the old text and never emptying the box.
+describe("SchemaForm — a name/value map", () => {
+  const dictSchema: JSONSchema = {
+    type: "object",
+    properties: {
+      env: {
+        type: "object",
+        title: "Environment variables",
+        additionalProperties: { type: "string" },
+      },
+    },
+  } as JSONSchema;
+
+  const keyBoxes = () => screen.getAllByPlaceholderText("schemaForm.keyPlaceholder");
+
+  it("keeps the row while its name is being retyped", async () => {
+    const onChange = vi.fn();
+    render(
+      <SchemaForm schema={dictSchema} value={{ env: { OLD: "v" } }} onChange={onChange} />,
+    );
+    const key = keyBoxes()[0];
+    await userEvent.clear(key);
+
+    // The row is still there with its value, which is the whole bug: an empty
+    // name means "being typed", not "deleted".
+    expect(keyBoxes()).toHaveLength(1);
+    expect(screen.getByDisplayValue("v")).toBeInTheDocument();
+    // And the params no longer carry a half-named entry.
+    expect(onChange.mock.calls.at(-1)?.[0]).toMatchObject({ env: {} });
+
+    await userEvent.type(key, "NEW");
+    expect(onChange.mock.calls.at(-1)?.[0]).toMatchObject({ env: { NEW: "v" } });
+  });
+
+  it("adds a row with an empty name rather than a placeholder to delete", async () => {
+    const onChange = vi.fn();
+    render(<SchemaForm schema={dictSchema} value={{ env: {} }} onChange={onChange} />);
+    await userEvent.click(screen.getByRole("button", { name: /schemaForm.add/ }));
+    expect(keyBoxes()).toHaveLength(1);
+    expect(keyBoxes()[0]).toHaveValue("");
+  });
+
+  it("removes a row when its remove button is used, not when its name is cleared", async () => {
+    const onChange = vi.fn();
+    render(
+      <SchemaForm
+        schema={dictSchema}
+        value={{ env: { A: "1", B: "2" } }}
+        onChange={onChange}
+      />,
+    );
+    await userEvent.click(screen.getAllByRole("button", { name: "schemaForm.remove" })[0]);
+    expect(keyBoxes()).toHaveLength(1);
+    expect(onChange.mock.calls.at(-1)?.[0]).toMatchObject({ env: { B: "2" } });
+  });
+
+  it("says so when one name is used twice", async () => {
+    // The second wins when the object is built, so the first row's value
+    // quietly is not what runs.
+    render(
+      <SchemaForm schema={dictSchema} value={{ env: { A: "1" } }} onChange={() => {}} />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: /schemaForm.add/ }));
+    await userEvent.type(keyBoxes()[1], "A");
+    expect(keyBoxes()[1]).toHaveAttribute("aria-invalid", "true");
+  });
+});
+
 describe("SchemaForm — the runner step's fields", () => {
   // One field replaced two (a machine name and a label, mutually exclusive),
   // which is possible because every machine now carries its own name as a tag.
