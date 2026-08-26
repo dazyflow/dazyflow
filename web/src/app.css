@@ -9839,6 +9839,18 @@ a.pa-card:hover {
 .rtc-fg:hover .rtc-grip { color: var(--muted); }
 .rtc-grip:active { cursor: grabbing; color: var(--accent); }
 .rtc-col { overflow-wrap: anywhere; }
+/* The data column a renamed header sits over. Quiet and monospace: it is the
+   field name from the data, not prose, and the header text is what the row is
+   about. Shown only when the two differ. */
+.rtc-key {
+  flex: 0 1 auto;
+  margin-left: auto;
+  padding-left: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--faint);
+  overflow-wrap: anywhere;
+}
 /* Hidden columns live in the same list, below the shown ones: dimmed, dashed,
    with a + to bring them back. A faint divider labels the group. */
 .rtc-divider {

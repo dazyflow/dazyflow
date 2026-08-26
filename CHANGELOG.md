@@ -25,6 +25,19 @@ into the image.)
 
 ### Added
 
+- **A table can be named.** Make a table produced a bare grid: sending two of
+  them in one email left the reader to work out which was which. The new Table
+  name field renders as the table's `<caption>` — the element HTML has for
+  exactly this — so the name travels inside the `<table>` and stays attached to
+  its rows when the markup is pasted into an email body or a message, where a
+  separate heading line comes apart. It takes a reference like every other text
+  field, so the name can carry the run's own data
+  ("Orders for ${upstream.today.out}").
+
+  Left blank, the output is byte-identical to before. With zero rows the
+  `empty` fallback still stands alone — a caption over nothing is a heading
+  for a table that isn't there.
+
 - **Sort rows has a direction toggle.** The step could already sort descending
   — by typing a `-` in front of the column name, a convention documented in
   the field's help text and nowhere a user would look. "Newest first" is the
@@ -61,6 +74,28 @@ into the image.)
   entirely on a canvas you can't edit.
 
 ### Fixed
+
+- **Renaming a column in Make a table emptied it.** The column editor has
+  always offered "tap a column to rename it", and with only a name to write it
+  wrote the new name into `columns` — which is the list of *fields the cells
+  come from*. So renaming `customer_email` to "Customer" produced a table with
+  a correct-looking "Customer" header and nothing at all underneath it: no row
+  has a field by that name, so every cell in the column rendered blank. The
+  table looked deliberate, and it went out in whatever email the flow sent.
+
+  A column now carries both facts. `columns` takes
+  `{"column":"customer_email","label":"Customer"}` beside the plain names it
+  always took, the header reads the label and the cells still read the column,
+  and the editor writes an object only for a column that has actually been
+  renamed — so a flow that never renamed anything keeps the exact param it had.
+  A renamed row in the editor names the field it reads underneath the header
+  text, so a rename is visibly a rename rather than a re-point, and clearing
+  the box goes back to the data's own name.
+
+  Flows saved with a column renamed the old way can't be recovered
+  automatically — the original field name was overwritten and isn't anywhere
+  to read it back from. Those columns still render as they do today (blank);
+  re-point them at the right field and the rename will hold.
 
 - **The editor asked you to publish changes it then reported as no changes.**
   Tidying the canvas — moving a step, dropping a note, bending a wire — saves,

@@ -1730,9 +1730,10 @@
   "renderTableColumns": {
     "title": "Column order",
     "drag": "Drag to reorder",
-    "rename": "Column name",
+    "rename": "Header text",
+    "fromField": "The data column this header sits over",
     "addPlaceholder": "Add a column…",
-    "help": "Drag the handle to reorder, tap a column to rename it, or swipe it sideways to remove. The table shows columns left to right in this order.",
+    "help": "Drag the handle to reorder, tap a column to change its header text, or swipe it sideways to remove. Renaming changes the header only — the column still reads the same field, named underneath. The table shows columns left to right in this order.",
     "hiddenTitle": "Hidden columns",
     "restore": "Tap to show this column again",
     "empty": "Columns show up here once this step knows its input. Run it once, or connect a step whose columns are known."

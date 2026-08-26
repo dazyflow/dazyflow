@@ -1730,9 +1730,10 @@
   "renderTableColumns": {
     "title": "Kolumnordning",
     "drag": "Dra för att ändra ordning",
-    "rename": "Kolumnnamn",
+    "rename": "Rubriktext",
+    "fromField": "Datakolumnen som rubriken står över",
     "addPlaceholder": "Lägg till en kolumn…",
-    "help": "Dra i handtaget för att ändra ordning, tryck på en kolumn för att byta namn, eller svep den i sidled för att ta bort. Tabellen visar kolumnerna från vänster till höger i den här ordningen.",
+    "help": "Dra i handtaget för att ändra ordning, tryck på en kolumn för att ändra dess rubriktext, eller svep den i sidled för att ta bort den. Att byta namn ändrar bara rubriken — kolumnen läser fortfarande samma fält, som står angivet under. Tabellen visar kolumnerna från vänster till höger i den här ordningen.",
     "hiddenTitle": "Dolda kolumner",
     "restore": "Tryck för att visa kolumnen igen",
     "empty": "Kolumner visas här när steget känner till sin indata. Kör det en gång, eller koppla ett steg vars kolumner är kända."

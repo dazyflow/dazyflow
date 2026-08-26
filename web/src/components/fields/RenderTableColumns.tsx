@@ -25,8 +25,50 @@ function GripIcon() {
   );
 }
 
-function asStringList(v: unknown): string[] {
-  return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+// TableColumn mirrors one entry of the drop's `columns` param: `key` is the row
+// field the cells come from, `label` is what the header says. They differ only
+// once the user renames a column.
+//
+// Keeping them apart is the whole point of this type. Renaming used to write
+// the new name into `columns` as the key, which is what the drop reads its
+// cells by — so a renamed column rendered a correct-looking header over an
+// entirely empty column. The rename now changes the label and leaves the key
+// alone.
+type TableColumn = { key: string; label: string };
+
+// asColumnList reads the saved param. A bare string is a column headed by its
+// own name; {column,label} is a renamed one. Anything else is ignored rather
+// than guessed at.
+function asColumnList(v: unknown): TableColumn[] {
+  if (!Array.isArray(v)) return [];
+  const out: TableColumn[] = [];
+  for (const item of v) {
+    if (typeof item === "string") {
+      if (item !== "") out.push({ key: item, label: item });
+      continue;
+    }
+    if (item && typeof item === "object" && !Array.isArray(item)) {
+      const rec = item as Record<string, unknown>;
+      const key = typeof rec.column === "string" ? rec.column : "";
+      if (key === "") continue;
+      const label = typeof rec.label === "string" && rec.label.trim() !== "" ? rec.label : key;
+      out.push({ key, label });
+    }
+  }
+  return out;
+}
+
+// toParam writes the leanest shape that carries the meaning: a plain string for
+// a column still headed by its own name, an object only for a renamed one. So a
+// flow that never renames anything keeps the exact param it had before.
+function toParam(cols: TableColumn[]): unknown[] {
+  return cols.map((c) => (c.label === c.key ? c.key : { column: c.key, label: c.label }));
+}
+
+function sameColumns(a: TableColumn[], b: TableColumn[]): boolean {
+  return (
+    a.length === b.length && a.every((c, i) => c.key === b[i].key && c.label === b[i].label)
+  );
 }
 
 // rowsKeys reads the column names off a run record's resolved `rows` input —
@@ -96,7 +138,7 @@ export function RenderTableColumns({
   const { token } = useAuth();
   const [schemaCols, setSchemaCols] = useState<string[]>([]);
   const [runCols, setRunCols] = useState<string[]>([]);
-  const [order, setOrder] = useState<string[]>([]);
+  const [order, setOrder] = useState<TableColumn[]>([]);
   // Active reorder drag (grip) and active swipe (row body). Only one at a time.
   const [drag, setDrag] = useState<{ col: string; from: number; to: number; dy: number } | null>(
     null,
@@ -151,17 +193,21 @@ export function RenderTableColumns({
     };
   }, [token, currentRunID, nodeId]);
 
-  const paramCols = useMemo(() => asStringList(params.columns), [params.columns]);
+  const paramCols = useMemo(() => asColumnList(params.columns), [params.columns]);
   const discovered = useMemo(() => uniq(runCols, schemaCols), [runCols, schemaCols]);
   // Shown columns: the saved set if the user has curated one (authoritative, so
   // hidden/renamed columns stick), else every discovered column in data order.
   const shown = useMemo(
-    () => (paramCols.length > 0 ? paramCols : discovered),
+    () => (paramCols.length > 0 ? paramCols : discovered.map((c) => ({ key: c, label: c }))),
     [paramCols, discovered],
   );
   // Hidden: discovered columns not in the shown set — hidden by the user, or
   // appeared upstream after the set was curated. Shown below, tap to restore.
-  const hidden = useMemo(() => discovered.filter((c) => !shown.includes(c)), [discovered, shown]);
+  // Matched by KEY: a renamed column is still that column.
+  const hidden = useMemo(
+    () => discovered.filter((c) => !shown.some((x) => x.key === c)),
+    [discovered, shown],
+  );
 
   // Mirror the shown list into local state so a drag can reorder live; resync
   // whenever the underlying set changes and no interaction is in flight.
@@ -171,22 +217,21 @@ export function RenderTableColumns({
 
   // Persist the shown order to `columns`, but only when it differs from what's
   // saved, so merely opening the editor never pins the set.
-  const persist = (next: string[]) => {
-    const same = next.length === paramCols.length && next.every((c, i) => c === paramCols[i]);
-    if (!same) onApply({ columns: next });
+  const persist = (next: TableColumn[]) => {
+    if (!sameColumns(next, paramCols)) onApply({ columns: toParam(next) });
   };
 
-  const hide = (col: string) => {
+  const hide = (key: string) => {
     // Keep at least one column: an empty `columns` means "show every column" at
     // the drop, so removing the last one would paradoxically show them all.
     if (order.length <= 1) return;
-    const next = order.filter((c) => c !== col);
+    const next = order.filter((c) => c.key !== key);
     setOrder(next);
     persist(next);
   };
 
-  const restore = (col: string) => {
-    const next = [...order, col];
+  const restore = (key: string) => {
+    const next = [...order, { key, label: key }];
     setOrder(next);
     persist(next);
   };
@@ -194,28 +239,30 @@ export function RenderTableColumns({
   const addColumn = () => {
     const name = addValue.trim();
     setAddValue("");
-    if (!name || order.includes(name)) return; // blank or already shown
-    const next = [...order, name];
+    if (!name || order.some((c) => c.key === name)) return; // blank or already shown
+    const next = [...order, { key: name, label: name }];
     setOrder(next);
     persist(next);
   };
 
-  const startEdit = (col: string) => {
+  const startEdit = (col: TableColumn) => {
     busy.current = true; // don't let a resync reshuffle the list while typing
-    setEditing(col);
-    setEditValue(col);
+    setEditing(col.key);
+    setEditValue(col.label);
   };
   const cancelEdit = () => {
     busy.current = false;
     setEditing(null);
   };
   const commitEdit = () => {
-    const col = editing;
-    const name = editValue.trim();
+    const key = editing;
+    const label = editValue.trim();
     busy.current = false;
     setEditing(null);
-    if (!col || !name || name === col || order.includes(name)) return; // no-op / dup
-    const next = order.map((c) => (c === col ? name : c));
+    if (!key) return;
+    // A blank box means "go back to the data's own name" rather than a column
+    // with no header at all.
+    const next = order.map((c) => (c.key === key ? { key: c.key, label: label || c.key } : c));
     setOrder(next);
     persist(next);
   };
@@ -302,14 +349,14 @@ export function RenderTableColumns({
     setSwipe({ col, dx });
   };
 
-  const onRowUp = (col: string) => {
+  const onRowUp = (col: TableColumn) => {
     const s = swipeRef.current;
     swipeRef.current = null;
     busy.current = false;
     setSwipe(null);
-    if (!s || s.col !== col) return;
-    if (s.axis === "x" && Math.abs(s.dx) > SWIPE_DELETE_PX) hide(col);
-    else if (s.axis === "") startEdit(col); // a tap (no drag) renames the column
+    if (!s || s.col !== col.key) return;
+    if (s.axis === "x" && Math.abs(s.dx) > SWIPE_DELETE_PX) hide(col.key);
+    else if (s.axis === "") startEdit(col); // a tap (no drag) renames the header
   };
 
   const step = stepRef.current || 40;
@@ -321,21 +368,21 @@ export function RenderTableColumns({
       {isEmpty && <div className="rtc-hint">{t("renderTableColumns.empty")}</div>}
       <ul className="rtc-list" ref={listRef}>
         {order.map((col, i) => {
-          const isEditing = editing === col;
+          const isEditing = editing === col.key;
           // Reorder transforms: the lifted row follows the finger; the rows
           // between its start and target shift one step to open the gap.
           let ty = 0;
-          const lifted = drag?.col === col;
+          const lifted = drag?.col === col.key;
           if (drag && !isEditing) {
             if (lifted) ty = drag.dy;
             else if (drag.from < drag.to && i > drag.from && i <= drag.to) ty = -step;
             else if (drag.from > drag.to && i >= drag.to && i < drag.from) ty = step;
           }
-          const dx = swipe?.col === col ? swipe.dx : 0;
+          const dx = swipe?.col === col.key ? swipe.dx : 0;
           const swiping = dx !== 0;
           if (isEditing) {
             return (
-              <li key={col} className="rtc-item">
+              <li key={col.key} className="rtc-item">
                 <div className="rtc-fg rtc-editing">
                   <span className="rtc-grip rtc-grip-off" aria-hidden="true">
                     <GripIcon />
@@ -363,7 +410,7 @@ export function RenderTableColumns({
           }
           return (
             <li
-              key={col}
+              key={col.key}
               className={"rtc-item" + (lifted ? " rtc-lift" : "")}
               style={ty !== 0 ? { transform: `translateY(${ty}px)` } : undefined}
             >
@@ -380,8 +427,8 @@ export function RenderTableColumns({
               <div
                 className={"rtc-fg" + (swiping ? " rtc-swiping" : "")}
                 style={swiping ? { transform: `translateX(${dx}px)` } : undefined}
-                onPointerDown={(e) => onRowDown(e, col)}
-                onPointerMove={(e) => onRowMove(e, col)}
+                onPointerDown={(e) => onRowDown(e, col.key)}
+                onPointerMove={(e) => onRowMove(e, col.key)}
                 onPointerUp={() => onRowUp(col)}
                 onPointerCancel={() => {
                   swipeRef.current = null;
@@ -392,14 +439,22 @@ export function RenderTableColumns({
                 <span
                   className="rtc-grip"
                   title={t("renderTableColumns.drag")}
-                  onPointerDown={(e) => onGripDown(e, col, i)}
+                  onPointerDown={(e) => onGripDown(e, col.key, i)}
                   onPointerMove={onGripMove}
                   onPointerUp={onGripUp}
                   onPointerCancel={onGripUp}
                 >
                   <GripIcon />
                 </span>
-                <span className="rtc-col">{col}</span>
+                <span className="rtc-col">{col.label}</span>
+                {/* A renamed column names the field it still reads, so the
+                    header text can't be mistaken for the data's own name —
+                    and so a rename is visibly a rename, not a re-point. */}
+                {col.label !== col.key && (
+                  <span className="rtc-key" title={t("renderTableColumns.fromField")}>
+                    {col.key}
+                  </span>
+                )}
               </div>
             </li>
           );

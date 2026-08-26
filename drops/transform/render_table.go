@@ -25,7 +25,7 @@ func init() {
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"transform", "table", "html", "render", "format", "email", "message", "report"},
-			Description: "Turn a rows list straight into a ready-to-send HTML table — the column names become the header row and every row becomes a table row. Unlike Make text there is no template to write and no column names to type: the headers come from whatever columns the data actually has, so it can't drift from the source (no \"no such key\" at run time). Connect a rows list into `rows` and the `html` output into a message step — e.g. a Send email step's Body. With zero rows it emits `empty` (default \"\") so an empty result yields a chosen fallback instead of a blank table.",
+			Description: "Turn a rows list straight into a ready-to-send HTML table — the column names become the header row and every row becomes a table row. Unlike Make text there is no template to write and no column names to type: the headers come from whatever columns the data actually has, so it can't drift from the source (no \"no such key\" at run time). Connect a rows list into `rows` and the `html` output into a message step — e.g. a Send email step's Body. Headers are the data's own column names unless `columns` gives one a `label`, which renames just the header and keeps reading the same column — so a table can say \"Customer\" over a `customer_email` column. Set `title` to name the table and it renders as a caption above the header row — a ${upstream.…} reference works there, so the name can carry the run's data (\"Orders for 2026-08-26\"). With zero rows it emits `empty` (default \"\") so an empty result yields a chosen fallback instead of a blank table.",
 			Summary:     "Turn rows into a ready-to-send HTML table — columns become the header row, no template needed.",
 			Examples: []core.ParamsExample{
 				{
@@ -34,8 +34,18 @@ func init() {
 					Notes:  "Zero config: connect a rows list into 'rows' and the 'html' output into a Send email step's Body. Headers are the data's columns, in order.",
 				},
 				{
+					Title:  "A named table",
+					Params: json.RawMessage(`{"title":"Open orders"}`),
+					Notes:  "Renders as a caption above the header row. Use a reference — \"Orders for ${upstream.date.out}\" — to name it from the run's own data.",
+				},
+				{
 					Title:  "Only some columns, in a chosen order",
 					Params: json.RawMessage(`{"columns":["name","email","status"]}`),
+				},
+				{
+					Title:  "Readable headers over technical column names",
+					Params: json.RawMessage(`{"columns":[{"column":"customer_email","label":"Customer"},{"column":"created_at","label":"Ordered"}]}`),
+					Notes:  "`label` renames the header only — the cells still come from the named column. A plain string, as above, heads the column with the data's own name.",
 				},
 				{
 					Title:  "Fallback when there are no rows",
@@ -57,7 +67,8 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"columns": {"type":"array","items":{"type":"string"},"x_advanced":true,"description":"Which columns to include, in order. Leave empty to use every column the data has, in its natural order. The inspector's drag-to-reorder editor writes this for you."},
+					"title":   {"type":"string","title":"Table name","description":"An optional name for the table, shown as a caption above the header row. Leave blank for no caption. Takes a reference, so it can name the run's own data — e.g. \"Orders for ${upstream.today.out}\"."},
+					"columns": {"type":"array","items":{"oneOf":[{"type":"string"},{"type":"object","properties":{"column":{"type":"string"},"label":{"type":"string"}},"required":["column"]}]},"x_advanced":true,"description":"Which columns to include, in order. A plain name uses the data's own column name as the header; {\"column\":\"customer_email\",\"label\":\"Customer\"} keeps reading that column but heads it \"Customer\". Leave empty to use every column the data has, in its natural order. The inspector's column editor writes this for you."},
 					"empty":   {"type":"string","title":"If there are no rows","description":"What to show instead of an empty table when the input has zero rows — plain text or HTML, e.g. \"No results yet\". Leave blank to output nothing at all."}
 				}
 			}`),
@@ -84,44 +95,136 @@ func executeRenderTable(_ context.Context, job core.Job, _ chan<- core.Progress)
 		return errRes, nil
 	}
 
-	// An explicit `columns` list overrides both the set and the order; absent,
-	// we use every column the data carries (loadRowsAndHeaders' header order).
+	// An explicit `columns` list overrides the set, the order AND the header
+	// text; absent, we use every column the data carries (loadRowsAndHeaders'
+	// header order), each headed by its own name.
+	cols := dataColumns(headers)
 	if raw, present := job.Params["columns"]; present {
-		cols, err := normalizeStringSlice(raw, "columns")
+		chosen, err := parseTableColumns(raw)
 		if err != nil {
 			return errResult(job, "bad_param", err.Error()), nil
 		}
-		if len(cols) > 0 {
-			headers = cols
+		if len(chosen) > 0 {
+			cols = chosen
 		}
 	}
 
+	// Zero rows emits the `empty` fallback verbatim — no table, and so no
+	// caption either. A caption with nothing under it would be a heading for a
+	// table that isn't there, and `empty` is the whole message in that case.
 	if len(rowsOut) == 0 {
 		return renderTableResult(job, paramStringOr(job.Params, "empty", "")), nil
 	}
-	return renderTableResult(job, buildHTMLTable(headers, rowsOut)), nil
+	title := strings.TrimSpace(paramStringOr(job.Params, "title", ""))
+	return renderTableResult(job, buildHTMLTable(title, cols, rowsOut)), nil
+}
+
+// tableColumn is one column of the output: `key` is the row field the cells
+// come from, `label` is what the header says. They are the same thing for a
+// plainly-named column, and deliberately separable for a table meant to be
+// read by a person — `customer_email` is the data's name for it, "Customer" is
+// the reader's.
+//
+// The split is what makes renaming a header work at all. The inspector's
+// column editor has always offered "tap a column to rename it", and with only
+// a name to write it wrote the new name into `columns` as the KEY: the header
+// read "Customer" and every cell under it came out blank, because no row has a
+// field called "Customer". The header text and the field name are two
+// different facts and the param now carries both.
+type tableColumn struct {
+	key   string
+	label string
+}
+
+// dataColumns heads each of the data's own columns with its own name — the
+// zero-config default.
+func dataColumns(headers []string) []tableColumn {
+	out := make([]tableColumn, len(headers))
+	for i, h := range headers {
+		out[i] = tableColumn{key: h, label: h}
+	}
+	return out
+}
+
+// parseTableColumns reads the `columns` param. An entry is either a bare name
+// (header = the data's name for it) or {"column":…,"label":…} (header = label,
+// cells still from `column`). A blank or missing label falls back to the key,
+// so {"column":"name"} is exactly the same as "name".
+//
+// Both shapes coexist because most columns want neither renaming nor the
+// clutter of an object, and the editor writes whichever shape a column
+// actually needs.
+func parseTableColumns(v any) ([]tableColumn, error) {
+	switch list := v.(type) {
+	case []string:
+		return dataColumns(list), nil
+	case []tableColumn:
+		// Native callers (tests) may build the columns directly.
+		return list, nil
+	case []any:
+		out := make([]tableColumn, 0, len(list))
+		for i, item := range list {
+			switch it := item.(type) {
+			case string:
+				if it == "" {
+					continue
+				}
+				out = append(out, tableColumn{key: it, label: it})
+			case map[string]any:
+				key, _ := it["column"].(string)
+				if key == "" {
+					return nil, fmt.Errorf("columns[%d]: 'column' missing", i)
+				}
+				label, _ := it["label"].(string)
+				if strings.TrimSpace(label) == "" {
+					label = key
+				}
+				out = append(out, tableColumn{key: key, label: label})
+			default:
+				return nil, fmt.Errorf("columns[%d]: expected a name or {column,label}, got %T", i, item)
+			}
+		}
+		return out, nil
+	}
+	return nil, fmt.Errorf("columns: expected array of names or {column,label} objects, got %T", v)
 }
 
 const (
 	tableStyle = "border-collapse:collapse;font-family:sans-serif;font-size:14px"
-	thStyle    = "border:1px solid #ddd;padding:6px 10px;text-align:left;background:#f3f4f6"
-	tdStyle    = "border:1px solid #ddd;padding:6px 10px"
+	// A caption is a heading, so it reads as one: a size up from the cells,
+	// semibold, and left-aligned (a caption centres by default, which floats
+	// oddly over a left-aligned table).
+	captionStyle = "font-family:sans-serif;font-size:15px;font-weight:600;text-align:left;padding:0 0 6px"
+	thStyle      = "border:1px solid #ddd;padding:6px 10px;text-align:left;background:#f3f4f6"
+	tdStyle      = "border:1px solid #ddd;padding:6px 10px"
 )
 
 // buildHTMLTable writes an inline-styled table (inline CSS so it survives email
 // clients, which strip <style>). Headers are the raw column names — "first row
 // is the column names" — not humanized, so what the user sees matches the data.
-func buildHTMLTable(headers []string, rows []map[string]any) string {
+//
+// A non-empty title becomes a <caption>, which is the element HTML has for
+// naming a table: it travels INSIDE the <table>, so pasting the output into an
+// email body or a message keeps the name attached to the rows it belongs to,
+// where a separate <h3> would come apart the first time something re-wrapped
+// the markup. Escaped like every other author- or tenant-supplied string here.
+func buildHTMLTable(title string, cols []tableColumn, rows []map[string]any) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, `<table style=%q><thead><tr>`, tableStyle)
-	for _, h := range headers {
-		fmt.Fprintf(&b, `<th style=%q>%s</th>`, thStyle, html.EscapeString(h))
+	fmt.Fprintf(&b, `<table style=%q>`, tableStyle)
+	// Must precede <thead>: a caption anywhere else in a table is invalid and
+	// browsers relocate it.
+	if title != "" {
+		fmt.Fprintf(&b, `<caption style=%q>%s</caption>`, captionStyle, html.EscapeString(title))
+	}
+	b.WriteString(`<thead><tr>`)
+	for _, c := range cols {
+		fmt.Fprintf(&b, `<th style=%q>%s</th>`, thStyle, html.EscapeString(c.label))
 	}
 	b.WriteString("</tr></thead><tbody>")
 	for _, row := range rows {
 		b.WriteString("<tr>")
-		for _, h := range headers {
-			fmt.Fprintf(&b, `<td style=%q>%s</td>`, tdStyle, html.EscapeString(cellString(row[h])))
+		for _, c := range cols {
+			fmt.Fprintf(&b, `<td style=%q>%s</td>`, tdStyle, html.EscapeString(cellString(row[c.key])))
 		}
 		b.WriteString("</tr>")
 	}
