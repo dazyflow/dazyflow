@@ -424,3 +424,65 @@ describe("SchemaForm — the runner step's fields", () => {
     expect(container.querySelector(".dz-s-comment")).toHaveTextContent("# go");
   });
 });
+
+describe("SchemaForm — a two-way choice", () => {
+  // Sort rows' direction, the field this rendering was added for.
+  const toggleSchema: JSONSchema = {
+    type: "object",
+    properties: {
+      sort_dir: {
+        type: "string",
+        format: "toggle",
+        enum: ["asc", "desc"],
+        enumNames: ["Ascending", "Descending"],
+        default: "asc",
+        title: "Direction",
+      },
+    },
+  } as JSONSchema;
+
+  it("puts both choices on screen instead of behind a dropdown", () => {
+    render(<SchemaForm schema={toggleSchema} value={{}} onChange={() => {}} />);
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.getByRole("button", { name: "Ascending" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Descending" })).toBeInTheDocument();
+  });
+
+  it("shows the default as chosen while the param is unset", () => {
+    render(<SchemaForm schema={toggleSchema} value={{}} onChange={() => {}} />);
+    expect(screen.getByRole("button", { name: "Ascending" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "Descending" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+  });
+
+  it("follows the saved value, not the default", () => {
+    render(<SchemaForm schema={toggleSchema} value={{ sort_dir: "desc" }} onChange={() => {}} />);
+    expect(screen.getByRole("button", { name: "Descending" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("writes the picked enum value", async () => {
+    const onChange = vi.fn();
+    render(<SchemaForm schema={toggleSchema} value={{}} onChange={onChange} />);
+    await userEvent.click(screen.getByRole("button", { name: "Descending" }));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ sort_dir: "desc" }));
+  });
+
+  it("still renders a plain enum as a dropdown", () => {
+    const selectSchema: JSONSchema = {
+      type: "object",
+      properties: {
+        method: { type: "string", enum: ["GET", "POST"], title: "Method" },
+      },
+    } as JSONSchema;
+    render(<SchemaForm schema={selectSchema} value={{}} onChange={() => {}} />);
+    expect(screen.getByRole("combobox")).toBeInTheDocument();
+  });
+});

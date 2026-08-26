@@ -15,7 +15,6 @@ without them the same suggestions arrive again every review.
 
 ---
 
-[ ] Row sorting step shall have a toggle for Ascend/descend sorting
 [ ] In the create HTML table step one should be able to set a custom table name
 [ ] The collections view shows columns with capital letters - it shall show the real values
 [ ] The collections view shall have support to sort by column. That setting shall be kept when exporting as CSV

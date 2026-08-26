@@ -25,17 +25,22 @@ func init() {
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"transform", "sort", "order", "etl"},
-			Description: "Sort rows by one or more columns. The 'by' param is a comma-separated list of column names in priority order — earlier names win, later ones break ties. Prefix a name with '-' for descending: \"revenue,-created_at\" is revenue ascending, then newest first. (A legacy array of names / {column,desc:true} objects is still accepted for older flows.)",
-			Summary:     "Stably sort rows by one or more columns, ascending or '-descending' per key.",
+			Description: "Sort rows by one or more columns. The 'by' param is a comma-separated list of column names in priority order — earlier names win, later ones break ties. The Direction param ('sort_dir') sets ascending or descending for the whole sort. To mix directions in a multi-column sort, prefix a name with '-' for descending or '+' for ascending: with Direction ascending, \"revenue,-created_at\" is revenue ascending, then newest first. A prefixed name always keeps its own direction, whatever Direction says. (A legacy array of names / {column,desc:true} objects is still accepted for older flows.)",
+			Summary:     "Stably sort rows by one or more columns, ascending or descending, with per-column overrides.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Sort by created_at ascending",
 					Params: json.RawMessage(`{"by":"created_at"}`),
 				},
 				{
+					Title:  "Newest first",
+					Params: json.RawMessage(`{"by":"created_at","sort_dir":"desc"}`),
+					Notes:  "Direction applies to every column in 'by'.",
+				},
+				{
 					Title:  "Highest revenue first, then alphabetical name",
 					Params: json.RawMessage(`{"by":"-revenue,name"}`),
-					Notes:  "Prefix '-' for descending. Multi-key sort is stable: rows with equal revenue keep their name-order tiebreak.",
+					Notes:  "Prefix '-' for descending on one column while the rest follow Direction. Multi-key sort is stable: rows with equal revenue keep their name-order tiebreak.",
 				},
 			},
 			ExecutionModel: core.ExecutionBatch,
@@ -52,7 +57,16 @@ func init() {
 					"by":{
 						"type":"string",
 						"title":"Sort by",
-						"description":"Comma-separated column names in priority order; earlier names win ties. Prefix a name with '-' for descending. E.g. \"revenue,-created_at\"."
+						"description":"Comma-separated column names in priority order; earlier names win ties. E.g. \"revenue,created_at\". To override Direction for one column, prefix it with '-' (descending) or '+' (ascending)."
+					},
+					"sort_dir":{
+						"type":"string",
+						"format":"toggle",
+						"enum":["asc","desc"],
+						"enumNames":["Ascending (A→Z, low→high)","Descending (Z→A, high→low)"],
+						"default":"asc",
+						"title":"Direction",
+						"description":"Which way to sort. Applies to every column in 'Sort by' except ones prefixed with '-' or '+', which keep their own direction."
 					}
 				},
 				"required":["by"]
@@ -66,6 +80,11 @@ func init() {
 type sortKey struct {
 	column string
 	desc   bool
+	// explicit records that this key stated its own direction — a '-'/'+'
+	// prefix, or a legacy {column,desc} object that carried the key. The
+	// Direction param supplies the direction for every key that didn't, so
+	// the two settings compose instead of one silently overruling the other.
+	explicit bool
 }
 
 // executeSortRows orders rows by the listed keys, stably. Headers
@@ -81,6 +100,16 @@ func executeSortRows(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 	keys, err := parseSortKeys(job.Params)
 	if err != nil {
 		return errResult(job, "bad_param", err.Error()), nil
+	}
+
+	descDefault, err := parseSortDir(job.Params)
+	if err != nil {
+		return errResult(job, "bad_param", err.Error()), nil
+	}
+	for i := range keys {
+		if !keys[i].explicit {
+			keys[i].desc = descDefault
+		}
 	}
 
 	// Sort a copy so the input slice (potentially shared with the
@@ -105,8 +134,9 @@ func executeSortRows(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 }
 
 // parseSortKeys reads the `by` param. The documented shape is a single
-// comma-separated string ("id,name,-age" → id asc, name asc, age desc); a
-// leading '-' on a name flips it to descending. The legacy array form (bare
+// comma-separated string ("id,name,-age" → id, name, then age descending); a
+// leading '-' or '+' on a name states that column's direction, and anything
+// unprefixed takes it from the Direction param. The legacy array form (bare
 // strings and {column,desc} objects) is still accepted so older flows keep
 // working. No column-type auto-detect here — that happens lazily in the
 // comparator.
@@ -146,8 +176,11 @@ func parseSortKeys(params map[string]any) ([]sortKey, error) {
 				if col == "" {
 					return nil, fmt.Errorf("by[%d]: 'column' missing", i)
 				}
-				desc, _ := it["desc"].(bool)
-				keys = append(keys, sortKey{column: col, desc: desc})
+				// A `desc` key that is present — even as false — is a stated
+				// direction, so Direction leaves it alone.
+				rawDesc, has := it["desc"]
+				desc, _ := rawDesc.(bool)
+				keys = append(keys, sortKey{column: col, desc: desc, explicit: has})
 			default:
 				return nil, fmt.Errorf("by[%d]: expected string or {column,desc}, got %T", i, item)
 			}
@@ -176,21 +209,60 @@ func parseSortString(s string) ([]sortKey, error) {
 	return keys, nil
 }
 
-// sortTokenKey turns one token into a key: a leading '-' marks descending
-// ("-age"), otherwise ascending. Whitespace is trimmed so "id, -age" splits
-// cleanly. Returns ok=false for an empty token. A column literally named with
-// a leading '-' must use the legacy {column,desc} object form.
+// sortTokenKey turns one token into a key. A leading '-' marks descending
+// ("-age") and a leading '+' marks ascending ("+name"); either one is a stated
+// direction that the Direction param won't touch. An unprefixed name follows
+// Direction. Whitespace is trimmed so "id, -age" splits cleanly. Returns
+// ok=false for an empty token. A column literally named with a leading '-' or
+// '+' must use the legacy {column,desc} object form.
+//
+// '+' exists so Direction stays overridable in both directions. Without it,
+// "descending, but break ties alphabetically" was unsayable: every unprefixed
+// name would follow Direction down, and the only escape hatch ('-') pointed
+// the same way.
 func sortTokenKey(tok string) (sortKey, bool) {
 	tok = strings.TrimSpace(tok)
-	desc := false
-	if strings.HasPrefix(tok, "-") {
-		desc = true
+	desc, explicit := false, false
+	switch {
+	case strings.HasPrefix(tok, "-"):
+		desc, explicit = true, true
+		tok = strings.TrimSpace(tok[1:])
+	case strings.HasPrefix(tok, "+"):
+		desc, explicit = false, true
 		tok = strings.TrimSpace(tok[1:])
 	}
 	if tok == "" {
 		return sortKey{}, false
 	}
-	return sortKey{column: tok, desc: desc}, true
+	return sortKey{column: tok, desc: desc, explicit: explicit}, true
+}
+
+// parseSortDir reads the Direction param: the direction for every key that
+// didn't state one. Unset means ascending, which is what the drop did before
+// the param existed.
+//
+// The long spellings are accepted because they are what a hand-written or
+// model-written flow reaches for, and "descending" silently sorting ascending
+// is the kind of wrong answer nobody goes looking for. Anything else IS
+// reported: a typo'd direction is a flow that quietly returns its rows the
+// wrong way round.
+func parseSortDir(params map[string]any) (bool, error) {
+	raw, ok := params["sort_dir"]
+	if !ok || raw == nil {
+		return false, nil
+	}
+	s, ok := raw.(string)
+	if !ok {
+		return false, fmt.Errorf("sort_dir: expected \"asc\" or \"desc\", got %T", raw)
+	}
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "", "asc", "ascending":
+		return false, nil
+	case "desc", "descending":
+		return true, nil
+	default:
+		return false, fmt.Errorf("sort_dir: expected \"asc\" or \"desc\", got %q", s)
+	}
 }
 
 // compareCells orders two cell values: -1 if a < b, 0 if equal,

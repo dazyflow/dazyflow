@@ -25,6 +25,27 @@ into the image.)
 
 ### Added
 
+- **Sort rows has a direction toggle.** The step could already sort descending
+  — by typing a `-` in front of the column name, a convention documented in
+  the field's help text and nowhere a user would look. "Newest first" is the
+  most ordinary thing to ask a sort for, and it was reachable only by knowing
+  a punctuation trick.
+
+  There is now a Direction control next to Sort by: Ascending or Descending,
+  both visible, one click apart. It sets the direction for the whole sort, and
+  a column that states its own — `-revenue`, or the new `+name` for ascending
+  — keeps it, so a multi-column sort can still mix the two ("highest revenue
+  first, ties alphabetical"). `+` exists because without it that sentence was
+  unsayable once Direction was descending: every unprefixed column followed it
+  down and the only escape hatch pointed the same way. Saved flows are
+  untouched — no Direction means ascending, exactly as before — and a
+  misspelled direction is now an error rather than a silent sort the wrong way
+  round.
+
+  The control is a segmented toggle rather than a dropdown, which two-value
+  enums can now opt into (`"format":"toggle"`) instead of hiding half the
+  answer behind an interaction.
+
 - **A comment can be coloured.** The colour was already stored, round-tripped
   and drawn — the note's tint, its border and its resize handles all read it —
   but nothing could change it, so every note on every canvas was the same

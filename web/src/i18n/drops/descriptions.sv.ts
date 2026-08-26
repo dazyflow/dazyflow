@@ -518,8 +518,8 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     sv: "Se upp till 10 dagar framåt för en punkt i Norden (och området omkring) med SMHI:s kostnadsfria Open Data-prognos — inget konto och ingen API-nyckel. Ge den en koordinat — skriv Latitud och Longitud, eller koppla in ett \"lat,lon\"-värde från ett Plats-/geokodningssteg — och välj antal dagar. Du får en läsbar Sammanfattning dag för dag plus arrayen Per dygn som JSON (min-/maxtemperatur och väderläge per dag), i metriska enheter.",
   },
   sort_rows: {
-    en: "9aecc532",
-    sv: "Sortera rader på en eller flera kolumner. Parametern 'by' är en kommaseparerad lista med kolumnnamn i prioritetsordning — tidigare namn väger tyngst, senare avgör lika fall. Sätt '-' före ett namn för fallande ordning: \"revenue,-created_at\" är intäkt i stigande ordning, därefter nyast först. (En äldre array med namn eller {column,desc:true}-objekt tas fortfarande emot för gamla flöden.)",
+    en: "b29e12a8",
+    sv: "Sortera rader på en eller flera kolumner. Parametern 'by' är en kommaseparerad lista med kolumnnamn i prioritetsordning — tidigare namn väger tyngst, senare avgör lika fall. Parametern Ordning ('sort_dir') styr om hela sorteringen är stigande eller fallande. Vill du blanda ordning i en sortering på flera kolumner sätter du '-' före ett namn för fallande eller '+' för stigande: med Ordning stigande ger \"revenue,-created_at\" intäkt i stigande ordning, därefter nyast först. Ett namn med prefix behåller alltid sin egen ordning, oavsett vad Ordning säger. (En äldre array med namn eller {column,desc:true}-objekt tas fortfarande emot för gamla flöden.)",
   },
   split_rows: {
     en: "8d782402",

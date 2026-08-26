@@ -182,6 +182,134 @@ func TestSortRows_InputNotMutated(t *testing.T) {
 	}
 }
 
+// ----- Direction (sort_dir) -----------------------------------------
+//
+// The param the editor renders as a toggle. Every case here is about how it
+// composes with the per-column prefixes, because that is the part a user can
+// get a wrong answer from without any error to go on.
+
+func TestSortRows_DirectionDescending(t *testing.T) {
+	got := runSort(t,
+		map[string]any{"by": "name", "sort_dir": "desc"},
+		[]map[string]any{{"name": "Alice"}, {"name": "Carol"}, {"name": "Bob"}},
+		nil)
+	if got[0]["name"] != "Carol" || got[2]["name"] != "Alice" {
+		t.Errorf("got %+v, want Carol, Bob, Alice", got)
+	}
+}
+
+func TestSortRows_DirectionDefaultsToAscending(t *testing.T) {
+	// Unset and "asc" must both behave the way the drop did before the param
+	// existed — every saved flow depends on it.
+	for _, params := range []map[string]any{
+		{"by": "name"},
+		{"by": "name", "sort_dir": "asc"},
+		{"by": "name", "sort_dir": ""},
+	} {
+		got := runSort(t, params,
+			[]map[string]any{{"name": "Carol"}, {"name": "Alice"}}, nil)
+		if got[0]["name"] != "Alice" {
+			t.Errorf("params %+v: got %+v, want Alice first", params, got)
+		}
+	}
+}
+
+func TestSortRows_DirectionAppliesToEveryUnprefixedKey(t *testing.T) {
+	got := runSort(t,
+		map[string]any{"by": "dept,name", "sort_dir": "desc"},
+		[]map[string]any{
+			{"dept": "eng", "name": "Alice"},
+			{"dept": "ops", "name": "Bob"},
+			{"dept": "ops", "name": "Carol"},
+		},
+		nil)
+	// ops before eng, and within ops the later name first.
+	if got[0]["name"] != "Carol" || got[1]["name"] != "Bob" || got[2]["name"] != "Alice" {
+		t.Errorf("got %+v", got)
+	}
+}
+
+func TestSortRows_PrefixOverridesDirection(t *testing.T) {
+	// "descending overall, but break ties alphabetically" — the case that
+	// needs '+', since every unprefixed key follows Direction down.
+	got := runSort(t,
+		map[string]any{"by": "revenue,+name", "sort_dir": "desc"},
+		[]map[string]any{
+			{"revenue": 100, "name": "Carol"},
+			{"revenue": 200, "name": "Bob"},
+			{"revenue": 100, "name": "Alice"},
+		},
+		nil)
+	if got[0]["name"] != "Bob" || got[1]["name"] != "Alice" || got[2]["name"] != "Carol" {
+		t.Errorf("got %+v, want Bob, Alice, Carol", got)
+	}
+}
+
+func TestSortRows_MinusPrefixSurvivesAscendingDirection(t *testing.T) {
+	got := runSort(t,
+		map[string]any{"by": "-revenue,name", "sort_dir": "asc"},
+		[]map[string]any{
+			{"revenue": 100, "name": "Carol"},
+			{"revenue": 200, "name": "Bob"},
+			{"revenue": 100, "name": "Alice"},
+		},
+		nil)
+	if got[0]["name"] != "Bob" || got[1]["name"] != "Alice" || got[2]["name"] != "Carol" {
+		t.Errorf("got %+v, want Bob, Alice, Carol", got)
+	}
+}
+
+func TestSortRows_LegacyObjectDescWinsOverDirection(t *testing.T) {
+	// {column,desc:false} states ascending. Direction must not flip it — a
+	// saved flow that spelled its direction out keeps sorting the same way.
+	got := runSort(t,
+		map[string]any{
+			"by":       []any{map[string]any{"column": "name", "desc": false}},
+			"sort_dir": "desc",
+		},
+		[]map[string]any{{"name": "Carol"}, {"name": "Alice"}}, nil)
+	if got[0]["name"] != "Alice" {
+		t.Errorf("got %+v, want Alice first", got)
+	}
+}
+
+func TestSortRows_LegacyObjectWithoutDescFollowsDirection(t *testing.T) {
+	got := runSort(t,
+		map[string]any{
+			"by":       []any{map[string]any{"column": "name"}},
+			"sort_dir": "desc",
+		},
+		[]map[string]any{{"name": "Alice"}, {"name": "Carol"}}, nil)
+	if got[0]["name"] != "Carol" {
+		t.Errorf("got %+v, want Carol first", got)
+	}
+}
+
+func TestSortRows_DirectionLongSpelling(t *testing.T) {
+	got := runSort(t,
+		map[string]any{"by": "name", "sort_dir": "Descending"},
+		[]map[string]any{{"name": "Alice"}, {"name": "Carol"}}, nil)
+	if got[0]["name"] != "Carol" {
+		t.Errorf("got %+v, want Carol first", got)
+	}
+}
+
+func TestSortRows_BadDirectionIsAnError(t *testing.T) {
+	// Reported rather than absorbed: "dsc" quietly sorting ascending is a
+	// wrong answer with nothing pointing at it.
+	for _, dir := range []any{"dsc", "down", true} {
+		res, _ := executeSortRows(t.Context(), core.Job{
+			Params: map[string]any{"by": "name", "sort_dir": dir},
+			Input: map[string]core.Ref{
+				"rows": {Inline: []map[string]any{{"name": "a"}}},
+			},
+		}, nil)
+		if res.Status != core.StatusError || res.Error.Code != "bad_param" {
+			t.Errorf("sort_dir=%v: status=%q code=%q, want bad_param", dir, res.Status, res.Error.Code)
+		}
+	}
+}
+
 func TestSortRows_MissingBy(t *testing.T) {
 	res, _ := executeSortRows(t.Context(), core.Job{
 		Params: map[string]any{},

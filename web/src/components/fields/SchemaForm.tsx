@@ -398,6 +398,45 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
       />
     );
   }
+  // format:"toggle" renders a small enum as a segmented control instead of a
+  // dropdown: both choices are on screen, and picking one is a single click
+  // rather than open-read-pick. For a two-value choice that the user flips
+  // back and forth while building a flow — a sort's direction — a dropdown
+  // hides half the answer behind an interaction. Opt-in per field, and meant
+  // for two or three options; more than that belongs in the select below,
+  // which doesn't run out of room.
+  if (schema.format === "toggle" && schema.enum && schema.enum.length > 0) {
+    const current = (value as string) ?? (schema.default as string) ?? "";
+    return (
+      <FieldWrap name={name} schema={schema} required={required}>
+        {/* A group of pressed-state buttons, not a tablist: these pick a
+            value, they don't switch a panel. Same idiom as the note-colour
+            swatches on the canvas. */}
+        <div
+          className="sf-mode-toggle"
+          role="group"
+          aria-label={schema.title ? fieldTitle(schema.title, i18n.language) : humanize(name)}
+        >
+          {schema.enum.map((v, i) => {
+            const val = String(v);
+            const label = schema.enumNames?.[i]
+              ? enumLabel(schema.enumNames[i], i18n.language)
+              : val;
+            return (
+              <Button
+                key={val}
+                className={val === current ? "active" : undefined}
+                aria-pressed={val === current}
+                onClick={() => onChange(val)}
+              >
+                {label}
+              </Button>
+            );
+          })}
+        </div>
+      </FieldWrap>
+    );
+  }
   // Enums become a select regardless of underlying type — most useful
   // for our string-enum case ("method": GET/POST/...).
   if (schema.enum && schema.enum.length > 0) {
