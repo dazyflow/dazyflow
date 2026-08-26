@@ -844,8 +844,15 @@ function ParamInput({
     );
   }
   if (s.enum) {
+    const current = String(value ?? s.default ?? "");
+    // A stored value the enum no longer offers keeps an option of its own, so
+    // the box shows what the flow actually holds rather than the first option
+    // (see the same guard in SchemaForm).
+    const unlisted =
+      current !== "" && !s.enum.some((o) => String(o) === current) ? current : undefined;
     return (
-      <select value={String(value ?? s.default ?? "")} onChange={(e) => onChange(e.target.value)}>
+      <select value={current} onChange={(e) => onChange(e.target.value)}>
+        {unlisted !== undefined && <option value={unlisted}>{unlisted}</option>}
         {s.enum.map((o, i) => (
           <option key={String(o)} value={String(o)}>
             {s.enumNames?.[i] ?? String(o)}

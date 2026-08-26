@@ -262,3 +262,117 @@ func TestDate_LegacyFormatParamAcceptsTokens(t *testing.T) {
 		t.Errorf("got %q, want 27/08/2026 — the format string must not be echoed", got)
 	}
 }
+
+// The weekday dropdown, and the pairing that motivates it: pick a day, then
+// let the offset carry it forward. Monday + 1d is Tuesday.
+func TestDate_WeekdayThenOffset(t *testing.T) {
+	// 2026-08-27 is a Thursday, so the coming Monday is the 31st.
+	res := runDate(t, "2026-08-27T10:00:00Z", map[string]any{
+		"weekday": "monday", "add": "1d", "format": "custom", "custom_format": "dddd D MMM",
+	})
+	if got := outOf(t, res); got != "Tuesday 1 Sep" {
+		t.Errorf("got %q, want Tuesday 1 Sep", got)
+	}
+}
+
+func TestDate_WeekdayCountsToday(t *testing.T) {
+	// A flow that names "the coming Monday" and runs on a Monday means today.
+	// Skipping to next week the moment it fires on the day it names would make
+	// every weekly schedule a week late.
+	res := runDate(t, "2026-08-31T10:00:00Z", map[string]any{ // a Monday
+		"weekday": "monday", "format": "date",
+	})
+	if got := outOf(t, res); got != "2026-08-31" {
+		t.Errorf("got %q, want 2026-08-31 (today, not next week)", got)
+	}
+}
+
+func TestDate_WeekdayThisWeekViaNegativeOffset(t *testing.T) {
+	// The documented way to get the CURRENT week's Monday — the "week
+	// beginning" label — rather than the next one.
+	res := runDate(t, "2026-08-27T10:00:00Z", map[string]any{ // Thursday
+		"weekday": "monday", "add": "-7d", "format": "date",
+	})
+	if got := outOf(t, res); got != "2026-08-24" {
+		t.Errorf("got %q, want 2026-08-24", got)
+	}
+}
+
+func TestDate_WeekdayKeepsTheClock(t *testing.T) {
+	res := runDate(t, "2026-08-27T13:45:07Z", map[string]any{"weekday": "friday", "format": "datetime"})
+	if got := outOf(t, res); got != "2026-08-28 13:45:07" {
+		t.Errorf("got %q, want 2026-08-28 13:45:07", got)
+	}
+}
+
+func TestDate_WeekdayRejectsNonsense(t *testing.T) {
+	res := runDate(t, "2026-08-27T10:00:00Z", map[string]any{"weekday": "someday"})
+	if res.Status != core.StatusError || res.Error.Code != "bad_param" {
+		t.Fatalf("res = %+v, want error/bad_param", res)
+	}
+}
+
+// The weekday is a CALENDAR question, so it has to be asked in the output
+// timezone. Late Thursday in UTC is already Friday in Sydney, and "the next
+// Friday" differs by a week between those two readings.
+func TestDate_WeekdayUsesTheOutputTimezone(t *testing.T) {
+	res := runDate(t, "2026-08-27T23:00:00Z", map[string]any{ // Thu 23:00Z = Fri 09:00 Sydney
+		"weekday": "friday", "tz": "Australia/Sydney", "format": "date",
+	})
+	if got := outOf(t, res); got != "2026-08-28" {
+		t.Errorf("got %q, want 2026-08-28 (already Friday there, so today)", got)
+	}
+}
+
+func TestDate_TimeFormats(t *testing.T) {
+	// The 12/24-hour pair, and the names they had when they weren't a pair.
+	for _, c := range []struct{ format, want string }{
+		{"time24", "14:05:09"},
+		{"time12", "2:05:09 PM"},
+		{"time", "14:05:09"},  // legacy name for time24
+		{"kitchen", "2:05PM"}, // legacy name for time12
+	} {
+		res := runDate(t, "2026-08-27T14:05:09Z", map[string]any{"format": c.format})
+		if got := outOf(t, res); got != c.want {
+			t.Errorf("format %q = %q, want %q", c.format, got, c.want)
+		}
+	}
+}
+
+func TestDate_TimezoneFromDropdown(t *testing.T) {
+	res := runDate(t, "2026-08-27T14:05:09Z", map[string]any{
+		"tz": "Asia/Tokyo", "format": "datetime",
+	})
+	if got := outOf(t, res); got != "2026-08-27 23:05:09" {
+		t.Errorf("got %q, want 2026-08-27 23:05:09", got)
+	}
+}
+
+// The picker offers every IANA zone the browser knows, and the step accepts
+// any of them — including the far ones no curated list would have carried.
+func TestDate_TimezoneAnyIANAZone(t *testing.T) {
+	res := runDate(t, "2026-08-27T14:05:09Z", map[string]any{
+		"tz": "Pacific/Auckland", "format": "datetime",
+	})
+	if got := outOf(t, res); got != "2026-08-28 02:05:09" {
+		t.Errorf("got %q, want 2026-08-28 02:05:09", got)
+	}
+}
+
+// A name that is not a zone fails the step and says what a zone looks like.
+// The picker can't produce one, but a template or an API call can.
+func TestDate_TimezoneRejectsNonsense(t *testing.T) {
+	res := runDate(t, "2026-08-27T14:05:09Z", map[string]any{"tz": "Mars/Olympus"})
+	if res.Status != core.StatusError || res.Error.Code != "bad_param" {
+		t.Fatalf("res = %+v, want error/bad_param", res)
+	}
+}
+
+func TestDate_LegacyArbitraryTimezone(t *testing.T) {
+	res := runDate(t, "2026-08-27T14:05:09Z", map[string]any{
+		"tz": "Africa/Nairobi", "format": "datetime",
+	})
+	if got := outOf(t, res); got != "2026-08-27 17:05:09" {
+		t.Errorf("got %q, want 2026-08-27 17:05:09", got)
+	}
+}

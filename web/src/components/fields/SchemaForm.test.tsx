@@ -93,6 +93,31 @@ describe("SchemaForm (FormContext)", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  // A stored value the enum no longer lists — a retired option, or a param
+  // that accepts more than the dropdown offers (any IANA timezone). Without
+  // its own option the select displays the FIRST option while the param holds
+  // something else, so the form lies and one idle click rewrites it.
+  it("keeps an option for a stored value the enum no longer lists", () => {
+    const schema: JSONSchema = {
+      type: "object",
+      properties: {
+        tz: {
+          type: "string",
+          title: "Timezone",
+          default: "UTC",
+          enum: ["UTC", "Europe/Stockholm"],
+          enumNames: ["UTC", "Europe/Stockholm"],
+        },
+      },
+    } as JSONSchema;
+    render(
+      <SchemaForm schema={schema} value={{ tz: "Africa/Nairobi" }} onChange={() => {}} />,
+    );
+    const select = screen.getByRole("combobox") as HTMLSelectElement;
+    expect(select.value).toBe("Africa/Nairobi");
+    expect(screen.getByRole("option", { name: "Africa/Nairobi" })).toBeInTheDocument();
+  });
+
   it("renders nothing actionable for a non-object schema (fallback hint)", () => {
     render(
       <SchemaForm

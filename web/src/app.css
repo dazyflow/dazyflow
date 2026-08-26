@@ -10885,6 +10885,66 @@ button:active,
   }
 }
 
+/* ----- Timezone picker (format:"timezone", TimezoneField) ----- */
+/* A combobox, not a select: the list is the ~400 IANA zones filtered as you
+   type, so it needs its own popup rather than a native dropdown. Anchored to
+   the field and floated over the form — the Inspector scrolls, and a list that
+   pushed the fields below it down would move the thing you were reading. */
+.tz-field {
+  position: relative;
+}
+.tz-input {
+  width: 100%;
+}
+.tz-list {
+  position: absolute;
+  z-index: var(--z-popover);
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  margin: 0;
+  padding: var(--space-1);
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-2);
+  box-shadow: var(--shadow-pop);
+}
+.tz-option {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--r-1);
+  font-size: var(--text-md);
+  cursor: pointer;
+}
+/* Hover and keyboard share one highlight, so arrowing down and moving the
+   mouse can't leave two rows looking equally chosen. */
+.tz-option.active {
+  background: var(--surface-3);
+}
+.tz-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tz-offset {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+.tz-empty,
+.tz-more {
+  padding: var(--space-1) var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
 /* ----- Map picker (format:"geo-point", GeoPointField) ----- */
 .geo-point-field {
   display: flex;

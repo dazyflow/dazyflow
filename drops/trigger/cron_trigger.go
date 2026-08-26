@@ -66,7 +66,8 @@ func init() {
 					"tz": {
 						"type": "string",
 						"title": "Time zone",
-						"description": "IANA time zone the schedule is read in, e.g. \"Europe/Stockholm\". Empty = UTC. The editor stamps your browser's zone here automatically.",
+						"format": "timezone",
+						"description": "IANA time zone the schedule is read in, e.g. \"Europe/Stockholm\". Empty = UTC. The editor stamps your browser's zone here automatically; search the list to change it.",
 						"x_advanced": true
 					}
 				}

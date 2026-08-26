@@ -32,6 +32,7 @@ import { JsonEditor, isInvalidJSON } from "../ui/JsonEditor";
 import { ScriptEditor } from "../ui/ScriptEditor";
 import { scriptLangFor } from "../../lib/scriptHighlight";
 import { GeoPointField } from "./GeoPointField";
+import { TimezoneField } from "./TimezoneField";
 import { api } from "../../api";
 import { explainApiError } from "../../lib/explainApiError";
 import { detectTrackingParams, stripTrackingParams } from "../../lib/trackingParams";
@@ -445,18 +446,31 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
   // Enums become a select regardless of underlying type — most useful
   // for our string-enum case ("method": GET/POST/...).
   if (schema.enum && schema.enum.length > 0) {
+    const current = (value as string) ?? schema.default ?? "";
+    const unlistedValue =
+      current !== "" && !schema.enum.some((v) => String(v) === current)
+        ? current
+        : undefined;
     return (
       <FieldWrap name={name} schema={schema} required={required}>
-        <select
-          value={(value as string) ?? schema.default ?? ""}
-          onChange={(e) => onChange(e.target.value)}
-        >
+        <select value={current} onChange={(e) => onChange(e.target.value)}>
           {/* Only offer a blank "(unset)" on an optional enum with NO
               default. When the field has a default, "unset" just falls back
               to that default anyway, so the empty option is confusing noise —
               the dropdown always shows a real, sensible choice instead. */}
           {!required && schema.default === undefined && (
             <option value="">{t("schemaForm.unsetOption")}</option>
+          )}
+          {/* A stored value the enum no longer offers gets an option of its
+              own. Without it the <select> shows the FIRST option while the
+              param still holds something else — the form lies about what the
+              flow will do, and one idle click silently rewrites it. Happens
+              whenever a drop retires an option (the date step's "kitchen"
+              clock) or accepts more than it lists (any IANA timezone, where
+              the dropdown is the common ones). Labelled with the raw value,
+              because that is the only name we have for it. */}
+          {unlistedValue !== undefined && (
+            <option value={unlistedValue}>{unlistedValue}</option>
           )}
           {schema.enum.map((v, i) => (
             <option key={String(v)} value={String(v)}>
@@ -625,6 +639,19 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
       // format:"geo-point" gets the OpenStreetMap map picker — search/click to
       // set a "lat,lon" point, the string the Weather/geo Coordinate inputs
       // accept. (The Location value source uses this.)
+      // format:"timezone" gets the searchable IANA picker rather than a text
+      // box (a name typed from memory is only found to be wrong by a failed
+      // run) or a dropdown (400+ zones don't fit one).
+      if (schema.format === "timezone") {
+        return (
+          <FieldWrap name={name} schema={schema} required={required}>
+            <TimezoneField
+              value={(value as string) ?? (schema.default as string) ?? ""}
+              onChange={(v) => onChange(v === "" && !required ? undefined : v)}
+            />
+          </FieldWrap>
+        );
+      }
       if (schema.format === "geo-point") {
         return (
           <FieldWrap name={name} schema={schema} required={required}>

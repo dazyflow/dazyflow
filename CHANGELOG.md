@@ -23,6 +23,54 @@ into the image.)
 
 ## [Unreleased]
 
+### Added
+
+- **"Move to weekday" on the Date & time step.** Pick Monday and you get the
+  coming Monday's date; pick Monday with an offset of `1d` and you get Tuesday.
+  Today counts as a match, so a flow that names "the coming Monday" and runs on
+  a Monday morning means today rather than skipping a week. For the current
+  week's Monday — the "week beginning" label — add an offset of `-7d`, which the
+  field's own help says.
+
+- **A searchable timezone picker.** Type "stockholm", "new york", "GMT" — every
+  IANA zone your browser knows, each row showing its current offset, which is
+  how people actually recognise a zone and what tells Europe/Dublin from
+  Europe/London in the two months a year they differ. Arrow keys and Enter
+  work; a name the list doesn't carry can still be typed in, so nothing the old
+  text box could express is lost.
+
+  The list comes from the browser rather than a table we ship: the tz database
+  changes a few times a year, and a bundled list would be stale from the day it
+  was written and need a release to fix.
+
+  It's the picker for every timezone field, not just this one: Google
+  Calendar's "List events" had already asked for one and had been rendering a
+  plain text box for want of anything behind the name, and the Schedule
+  trigger's own time zone now gets it too.
+
+  Timezone now also decides the *calendar*, not just the label: the weekday
+  jump and the day the clock is set on are both worked out in the zone you
+  picked. Late on a Thursday in UTC it is already Friday in Sydney, and "the
+  next Friday" differs by a week between those two readings.
+
+### Changed
+
+- **The two time formats are a matched pair.** "Time" and "Clock" — names that
+  said nothing about each other, one with seconds and one without — are now
+  **Time, 24-hour** (14:05:09) and **Time, 12-hour** (2:05:09 PM). The old
+  pairing is what sent people off to write a custom format to get a 12-hour
+  clock the step already had. Flows using the old names keep rendering exactly
+  as they did.
+
+### Fixed
+
+- **A dropdown no longer misreports a value it doesn't list.** A param holding
+  something the dropdown didn't offer — a retired option, or one of the many
+  timezones no list can hold — displayed as the FIRST option while the flow
+  still ran the stored value. The form said one thing, the run did another, and
+  a single idle click made the form's version true. The stored value now gets
+  an entry of its own. This is every step's dropdowns, not just Date & time's.
+
 ## [0.16.0] - 2026-08-26
 
 ### Changed
