@@ -3747,82 +3747,6 @@ function EditorInner() {
                 <span className="toolbar-label">{t("editor.history")}</span>
               </Button>
             )}
-            {/* Single Live switch: ON = enabled AND published (automatic
-                triggers run — cron, poll, webhook, form); OFF = paused, which
-                stops them all. Flipping it goes through a confirm (going live
-                is "a thing"); going live plays the launch animation. When live
-                but the draft has drifted, "Update live" pushes the changes.
-                Gated on graph:admin, the same bar the server enforces. */}
-            {me && id && hasPerm("graph:admin") && publishInfo && (
-              <div className="editor-publish-group">
-                {(() => {
-                  const isLive = !disabled && publishInfo.published;
-                  return (
-                    <Button
-                      role="switch"
-                      aria-checked={isLive}
-                      className={
-                        "editor-publish-toggle" +
-                        (isLive ? " on" : "") +
-                        (justPublished ? " celebrate" : "")
-                      }
-                      onClick={() => setPublishConfirm(isLive ? "pause" : "live")}
-                      disabled={publishing || !!previewRef}
-                      title={
-                        previewRef
-                          ? t("editor.publishPreviewBlocked")
-                          : isLive
-                          ? t("editor.pauseTitle")
-                          : t("editor.publishFirstTitle")
-                      }
-                    >
-                      <span className="editor-publish-track" aria-hidden="true">
-                        <span className="editor-publish-knob">
-                          <Rocket size={ICON.xs} strokeWidth={2.4} />
-                        </span>
-                      </span>
-                      <span className="toolbar-label">
-                        {publishing
-                          ? t("editor.publishing")
-                          : isLive
-                          ? t("editor.live")
-                          : t("editor.publish")}
-                      </span>
-                    </Button>
-                  );
-                })()}
-                {/* Live but the draft has moved on: push the changes live
-                    (confirmed + animated) and peek at the diff. */}
-                {!disabled && publishInfo.published && publishInfo.dirty && (
-                  <>
-                    <Button
-                      className="editor-publish"
-                      onClick={() => setPublishConfirm("update")}
-                      disabled={publishing || !!previewRef}
-                      title={
-                        previewRef
-                          ? t("editor.publishPreviewBlocked")
-                          : t("editor.publishChangesTitle")
-                      }
-                    >
-                      <UploadCloud size={ICON.sm} />
-                      <span className="toolbar-label">
-                        {publishing ? t("editor.publishing") : t("editor.publishChanges")}
-                      </span>
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      onClick={() => void openDiff()}
-                      title={t("editor.diffTitle")}
-              aria-label={t("editor.diff")}
-                    >
-                      <GitCompare size={ICON.sm} />
-                      <span className="toolbar-label">{t("editor.diff")}</span>
-                    </Button>
-                  </>
-                )}
-              </div>
-            )}
           </div>
           </div>
 
@@ -3870,6 +3794,89 @@ function EditorInner() {
               }}
               onClose={() => setShowConfigList(false)}
             />
+          )}
+
+          {/* Single Live switch: ON = enabled AND published (automatic
+              triggers run — cron, poll, webhook, form); OFF = paused, which
+              stops them all. Flipping it goes through a confirm (going live
+              is "a thing"); going live plays the launch animation. When live
+              but the draft has drifted, "Update live" pushes the changes.
+              Gated on graph:admin, the same bar the server enforces.
+
+              Pinned next to Run rather than left in the scrolling region: on a
+              phone — or any width with the inspector open — the tail of that
+              region is off-screen behind the fade, so the switch and "Update
+              live" were reachable only by knowing to swipe the toolbar
+              sideways. Publishing is an action you came to press. */}
+          {me && id && hasPerm("graph:admin") && publishInfo && (
+            <div className="editor-publish-group">
+              {(() => {
+                const isLive = !disabled && publishInfo.published;
+                return (
+                  <Button
+                    role="switch"
+                    aria-checked={isLive}
+                    className={
+                      "editor-publish-toggle" +
+                      (isLive ? " on" : "") +
+                      (justPublished ? " celebrate" : "")
+                    }
+                    onClick={() => setPublishConfirm(isLive ? "pause" : "live")}
+                    disabled={publishing || !!previewRef}
+                    title={
+                      previewRef
+                        ? t("editor.publishPreviewBlocked")
+                        : isLive
+                        ? t("editor.pauseTitle")
+                        : t("editor.publishFirstTitle")
+                    }
+                  >
+                    <span className="editor-publish-track" aria-hidden="true">
+                      <span className="editor-publish-knob">
+                        <Rocket size={ICON.xs} strokeWidth={2.4} />
+                      </span>
+                    </span>
+                    <span className="toolbar-label">
+                      {publishing
+                        ? t("editor.publishing")
+                        : isLive
+                        ? t("editor.live")
+                        : t("editor.publish")}
+                    </span>
+                  </Button>
+                );
+              })()}
+              {/* Live but the draft has moved on: push the changes live
+                  (confirmed + animated) and peek at the diff. */}
+              {!disabled && publishInfo.published && publishInfo.dirty && (
+                <>
+                  <Button
+                    className="editor-publish"
+                    onClick={() => setPublishConfirm("update")}
+                    disabled={publishing || !!previewRef}
+                    title={
+                      previewRef
+                        ? t("editor.publishPreviewBlocked")
+                        : t("editor.publishChangesTitle")
+                    }
+                  >
+                    <UploadCloud size={ICON.sm} />
+                    <span className="toolbar-label">
+                      {publishing ? t("editor.publishing") : t("editor.publishChanges")}
+                    </span>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => void openDiff()}
+                    title={t("editor.diffTitle")}
+            aria-label={t("editor.diff")}
+                  >
+                    <GitCompare size={ICON.sm} />
+                    <span className="toolbar-label">{t("editor.diff")}</span>
+                  </Button>
+                </>
+              )}
+            </div>
           )}
 
           {/* Primary action — pinned to the right edge as the focal point.
@@ -3987,15 +3994,22 @@ function EditorInner() {
           </div>
         )}
         {/* Small screens: the inspector is hidden (no cramped bottom sheet);
-            this floating button opens it fullscreen. Shown when a node is
-            selected and the overlay isn't already open. */}
-        {isNarrow && selectedID && !inspectorExpanded && (
+            this floating button opens it fullscreen. It stays on screen at
+            every narrow width and goes DISABLED with nothing selected, rather
+            than appearing only once a node is picked: a control that isn't
+            there teaches nobody it exists, so the one place a phone user can
+            reach a step's settings was discoverable only by accident. The
+            disabled title says what to do instead of leaving a dead icon
+            unexplained. Still hidden while the overlay is open — it's the
+            thing that opens it. */}
+        {isNarrow && !inspectorExpanded && (
           <Button
             variant="primary"
             size="icon"
             className="inspect-fab"
-            title={t("editor.inspect")}
-              aria-label={t("editor.inspect")}
+            disabled={!selectedID}
+            title={selectedID ? t("editor.inspect") : t("editor.inspectEmpty")}
+            aria-label={selectedID ? t("editor.inspect") : t("editor.inspectEmpty")}
             onClick={() => setInspectorExpanded(true)}
           >
             <PanelRight size={ICON.lg} />

@@ -1858,6 +1858,7 @@
     "continueTitle": "Återuppta körningen till nästa pauspunkt eller slutet",
     "stepTitle": "Kör nästa steg och pausa sedan igen",
     "inspect": "Inspektera steg",
+    "inspectEmpty": "Välj ett steg för att inspektera det",
     "stopRunTooltip": "Stoppa körning {{runID}}…",
     "clearBreakpoints": "Rensa alla pauspunkter",
     "history": "Historik",

@@ -1866,6 +1866,7 @@
     "continueTitle": "Resume the run until the next pause point or the end",
     "stepTitle": "Run the next step, then pause again",
     "inspect": "Inspect step",
+    "inspectEmpty": "Select a step to inspect it",
     "stopRunTooltip": "Stop run {{runID}}…",
     "clearBreakpoints": "Clear all pause points",
     "history": "History",

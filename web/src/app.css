@@ -2620,6 +2620,13 @@ button.warning:hover:not(:disabled) {
   padding: 0;
   height: auto;
   font-size: inherit;
+  /* Re-enable taps: .editor-banner-stack is pointer-events:none so canvas
+     gestures pass through the overlay, and this readout never opted its own
+     content back in — which left "Publish changes" looking like a link and
+     doing nothing when clicked. Same pattern as .editor-conn-banner-actions;
+     only the button opts in, so the bar's text still passes taps through to a
+     node sitting under it. */
+  pointer-events: auto;
 }
 .editor-conn-banner {
   /* Let canvas taps pass through the banner's text/padding to the node
@@ -3712,6 +3719,16 @@ button.warning:hover:not(:disabled) {
 /* Mobile / narrow tablet: the inspector opens on demand as a FULLSCREEN
    overlay via the floating "Inspect" button; the canvas keeps full width. */
 @media (max-width: 1100px) {
+  /* Keep the banner stack clear of the inspect FAB. The FAB sits at top:64 /
+     right:12 with a z-index ABOVE the banners (deliberately — it's the only
+     way into the inspector on a phone), and it is now on screen at every
+     narrow width rather than only with a selection. A banner's own actions sit
+     at its right edge — Publish on the publish nudge, Dismiss on the
+     connection banner — which is exactly what the FAB would cover. Mirrors the
+     desktop rule that keeps the stack clear of the inspector panel. */
+  .editor-banner-stack {
+    right: 60px;
+  }
   .editor .inspector {
     position: absolute;
     inset: 0;
@@ -4645,6 +4662,13 @@ button.warning:hover:not(:disabled) {
 }
 /* Floating "Inspect" button (small screens): opens the inspector overlay.
    Upper-right of the canvas, primary purple so it's clearly the way in. */
+/* Disabled = nothing selected. It keeps its place (see the JSX: a control that
+   only appears once you've already found the thing it operates on teaches
+   nobody it exists) but drops the glow, so it reads as waiting for a selection
+   instead of inviting a tap. */
+.inspect-fab.icon:disabled {
+  box-shadow: none;
+}
 .inspect-fab.icon {
   position: absolute;
   top: 64px;
@@ -8856,6 +8880,18 @@ a.pa-card:hover {
   .editor-toolbar button.primary {
     padding: 0 var(--space-2);
     justify-content: center;
+  }
+  /* The status chip goes icon-only. Everything pinned to the right — chip,
+     config warning, the publish switch, "Update live", Diff, Run — has
+     flex-shrink:0, so at phone widths the widest label in that cluster
+     decides whether Run still fits on screen, and "Needs publish" is it. The
+     icon and colour carry the state (the publish switch beside it says the
+     same thing), and the chip keeps its title. */
+  .editor-toolbar .flow-status-chip > span {
+    display: none;
+  }
+  .editor-toolbar .flow-status-chip {
+    padding: var(--space-1) var(--space-1h);
   }
 }
 

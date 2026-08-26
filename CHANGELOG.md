@@ -23,6 +23,34 @@ into the image.)
 
 ## [Unreleased]
 
+### Fixed
+
+- **The inspect button no longer hides on small screens.** Below 1100px the
+  Inspector is a fullscreen overlay and the floating button at the top right is
+  the only way to open it — but that button appeared only once a step was
+  already selected, which hid the control behind the very interaction it exists
+  to complete. It is now always on screen at those widths and simply disabled
+  when nothing is selected, with a title that says to pick a step. The banner
+  stack was also inset to clear it, so the button no longer sits on top of a
+  banner's own actions.
+
+- **"Publish changes" is clickable again, and publishing is reachable on a
+  phone.** Two separate ways the editor's publish control went missing.
+
+  The draft-vs-live readout under the toolbar — the line that says edits are
+  saved but not live — offers a "Publish changes" link. It rendered, it
+  underlined on hover, and clicking it did nothing: it sits in the canvas's
+  banner overlay, which passes taps through to the nodes underneath, and this
+  one action never opted itself back in. It now does, the same way the
+  connection banner's buttons already did.
+
+  And the Live switch and "Update live" button sat in the scrolling half of the
+  toolbar, so on a phone — or any window with the Inspector open — they were
+  off the right edge, with only a faint fade to suggest a sideways swipe
+  existed. They are now pinned next to Run, which is what the toolbar's own
+  layout comment already claimed. At phone widths the status chip goes
+  icon-only to make room, so Run stays on screen.
+
 ## [0.15.9] - 2026-08-26
 
 ### Fixed

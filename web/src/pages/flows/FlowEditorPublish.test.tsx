@@ -242,3 +242,49 @@ describe("editor go live", () => {
     expect(await screen.findByText("editor.pauseSaveFirst")).toBeInTheDocument();
   });
 });
+
+// Reaching the publish control at all — the half of this feature that lives in
+// layout rather than in usePublish. Two ways it went missing: the toolbar
+// controls sat in the horizontally scrolling half of the bar, so on a phone (or
+// with the inspector open) they were off-screen behind the fade with nothing to
+// suggest a sideways swipe; and the "Publish changes" link in the draft-vs-live
+// readout inherited pointer-events:none from the banner overlay it renders in,
+// so it looked like a link and did nothing.
+describe("editor publish reachability", () => {
+  it("pins the publish controls outside the scrolling half of the toolbar", async () => {
+    getPublishedInfo.mockResolvedValue({
+      published: true,
+      published_commit: "abc123",
+      dirty: true,
+    });
+    const { container } = mount();
+    await screen.findByRole("switch");
+    // Present, and NOT inside .toolbar-scroll — that region's tail is
+    // off-screen at phone widths, which is where the button went missing.
+    expect(container.querySelector(".editor-publish-group")).not.toBeNull();
+    expect(container.querySelector(".toolbar-scroll .editor-publish-group")).toBeNull();
+  });
+
+  // Whether that button can actually be CLICKED is a stylesheet fact (the
+  // overlay it sits in is pointer-events:none), and jsdom applies no
+  // stylesheets — so it fired here even while doing nothing in a browser.
+  // scripts/check-overlay-taps.mjs guards that half.
+  it("offers Publish changes in the draft-vs-live readout", async () => {
+    getPublishedInfo.mockResolvedValue({
+      published: true,
+      published_commit: "abc123",
+      dirty: true,
+    });
+    const { container } = mount();
+    const readout = await waitFor(() => {
+      const el = container.querySelector(".editor-live-state");
+      if (!el) throw new Error("no live-state readout");
+      return el as HTMLElement;
+    });
+    // Scoped to the readout: the pinned toolbar button carries the same label.
+    await userEvent.click(await within(readout).findByText("editor.publishChanges"));
+    await confirmIn("dialog", "editor.publishChanges");
+    await waitFor(() => expect(publishFlow).toHaveBeenCalled());
+  });
+
+});

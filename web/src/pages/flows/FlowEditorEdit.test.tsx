@@ -25,6 +25,7 @@
 //   flow watch. Undoing past someone else's change would silently clobber it.
 
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
+import { EDITOR_NARROW } from "../../lib/breakpoints";
 import { render, screen, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -294,5 +295,42 @@ describe("editor undo/redo", () => {
     await user.keyboard("{Control>}z{/Control}");
     await settle();
     await waitFor(() => expect(savedFrames()).toBe(0));
+  });
+});
+
+
+// The narrow-screen route into a step's settings. Below EDITOR_NARROW the
+// inspector is a fullscreen overlay and this floating button is the ONLY way to
+// open it, so it stays on screen and goes disabled when there is nothing to
+// inspect. It used to render only once a node was selected — which hid the
+// control behind the very interaction it exists to complete, and left phone
+// users with no visible sign the inspector was there at all.
+//
+// Selecting a node is not testable here (React Flow has no pointer surface in
+// jsdom), so what is asserted is the state that was previously unreachable:
+// present-but-disabled with an empty selection.
+describe("narrow-screen inspector", () => {
+  const realWidth = window.innerWidth;
+  afterEach(() => {
+    window.innerWidth = realWidth;
+  });
+
+  it("keeps the inspect button on screen, disabled, with nothing selected", async () => {
+    window.innerWidth = EDITOR_NARROW - 200;
+    mount();
+    await ready();
+    // The label doubles as the explanation of why it's dead — a disabled icon
+    // with the same name as the live one says nothing.
+    expect(screen.getByLabelText("editor.inspectEmpty")).toBeDisabled();
+  });
+
+  it("leaves it out entirely on a wide screen", async () => {
+    // Wide layouts keep the inspector docked beside the canvas, so the button
+    // would be a second door to a room that is already open.
+    window.innerWidth = EDITOR_NARROW + 200;
+    mount();
+    await ready();
+    expect(screen.queryByLabelText("editor.inspectEmpty")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("editor.inspect")).not.toBeInTheDocument();
   });
 });
