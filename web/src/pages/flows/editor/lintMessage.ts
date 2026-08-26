@@ -43,6 +43,22 @@ export function lintMessage(
       break;
     case "secret_to_persistence":
       return t("editor.lintSecretPersist");
+    // These two quote two names rather than a field, so they read from `values`
+    // — and fall through to the English `message` if either is missing, which
+    // is the same contract the field-based cases above have.
+    case "script_language_mismatch":
+      if (issue.values?.language && issue.values?.interpreter) {
+        return t("editor.lintScriptMismatch", {
+          language: issue.values.language,
+          interpreter: issue.values.interpreter,
+        });
+      }
+      break;
+    case "script_language_unrunnable":
+      if (issue.values?.language) {
+        return t("editor.lintScriptUnrunnable", { language: issue.values.language });
+      }
+      break;
   }
   return issue.message;
 }

@@ -634,6 +634,12 @@ export type LintIssue = {
   // warning, so no node/module/field slugs leak into the help text. `message`
   // is the slug-bearing fallback for non-UI consumers.
   fields?: string[];
+  // Data the finding needs quoted in its sentence — a language name, an
+  // interpreter — so the editor can build a LOCALISED sentence instead of
+  // showing the English `message`. Keys are per-code; see the rule that sets
+  // them. Distinct from `fields`, which are param paths resolved against a
+  // schema.
+  values?: Record<string, string>;
 };
 
 // Revision is one entry in a flow's commit history (GET /me/flows/{id}/history).

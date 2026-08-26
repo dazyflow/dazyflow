@@ -130,3 +130,29 @@ func TestText_ManifestWiresTheEditorToTheLanguage(t *testing.T) {
 			len(schema.Properties.Language.Enum), len(schema.Properties.Language.EnumNames))
 	}
 }
+
+// The script-language lint compares this step's `language` against the
+// interpreter a runner step will use, and it lives in core — which cannot
+// import this package. So the enum is checked from THIS side: a language added
+// here and not taught to the classifier would silently stop the lint working
+// for it.
+func TestText_LanguagesAreAllKnownToTheLanguageLint(t *testing.T) {
+	var schema struct {
+		Properties struct {
+			Language struct {
+				Enum []string `json:"enum"`
+			} `json:"language"`
+		} `json:"properties"`
+	}
+	if err := json.Unmarshal(textManifest(t).ParamsSchema, &schema); err != nil {
+		t.Fatalf("params schema: %v", err)
+	}
+	if len(schema.Properties.Language.Enum) == 0 {
+		t.Fatal("the language enum is empty — this test would pass vacuously")
+	}
+	for _, l := range schema.Properties.Language.Enum {
+		if !core.ClassifyScriptLanguage(l).Known {
+			t.Errorf("the lint does not recognise the language %q — teach it in core/lint_script.go", l)
+		}
+	}
+}

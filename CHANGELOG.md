@@ -23,6 +23,31 @@ into the image.)
 
 ## [Unreleased]
 
+### Added
+
+- **The editor warns when a script's language contradicts what will run it.**
+  A Text step set to Python feeding a Run-on-your-machine step set to run with
+  `bash` is a flow that fails on the machine with a pile of syntax errors, and
+  each node looks correct on its own. Nothing at run time can tell them apart —
+  a script arrives as a string, and a string carries no language — so the
+  contradiction is caught while it is still being written.
+
+  A second finding covers the other shape: a script that says it is SQL, YAML or
+  JSON. Those are data formats, so no choice of interpreter makes them runnable
+  and the advice is different.
+
+  It is a warning rather than the interpreter being picked automatically from
+  the wire. Reading the language off the incoming script was the obvious
+  alternative, and it would have made the most consequential fact in the product
+  — which program runs on a machine you own — depend on a node you cannot see
+  from the step. The step keeps saying what it runs; the editor says when that
+  contradicts what it was given.
+
+  It also needed no new value on the wire: the language is a param on the
+  upstream node, so the rule is static graph analysis. Lint findings can now
+  carry data (`values`) as well as field paths, so the sentence is localised
+  rather than falling back to English.
+
 ## [0.15.3] - 2026-08-26
 
 ### Fixed

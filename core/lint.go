@@ -37,6 +37,13 @@ type LintIssue struct {
 	// raw key — so the surfaced help text carries no module/node/field slugs.
 	// Message keeps the slug-bearing phrasing as a fallback for CLI/API readers.
 	Fields []string `json:"fields,omitempty"`
+	// Values are the data a finding needs quoted in its sentence — a language
+	// name, an interpreter — so the UI can build a LOCALISED sentence instead of
+	// falling back to Message, which is English. Fields cannot carry these:
+	// those are param paths, and the UI resolves them against a schema.
+	//
+	// Keys are per-code and documented by the rule that sets them.
+	Values map[string]string `json:"values,omitempty"`
 }
 
 // secretPlaceholderPattern matches the `${scheme.<path>}` schemes that
@@ -137,6 +144,10 @@ var persistenceModules = map[string]bool{
 //     the secret value actually flows through the data, so it errs
 //     on the side of warning — the user knows their graph, the lint
 //     surfaces the question.
+//   - script_language_mismatch / script_language_unrunnable: a step that
+//     executes a script it is handed, wired to a step that says the script is
+//     in a language that step will not run. See lint_script.go for why this is
+//     a warning rather than the interpreter being chosen automatically.
 func LintGraph(g Graph) []LintIssue {
 	nodesByID := make(map[string]Node, len(g.Nodes))
 	for _, n := range g.Nodes {
@@ -148,6 +159,7 @@ func LintGraph(g Graph) []LintIssue {
 	issues = append(issues, lintSecretToPersistence(g, nodesByID)...)
 	issues = append(issues, lintTemplatePlaceholders(g)...)
 	issues = append(issues, lintDanglingReferences(g, nodesByID)...)
+	issues = append(issues, lintScriptLanguage(g, nodesByID)...)
 	issues = append(issues, lintTriggers(g)...)
 	if len(issues) == 0 {
 		return nil

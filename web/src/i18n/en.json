@@ -1955,7 +1955,9 @@
       "noRetry": "This step can't be retried automatically — nobody can know how far it got, so retrying is your call from the run."
     },
     "ctxContinueOnError": "Failing here doesn't fail the run",
-    "ctxContinueOnErrorHint": "The run carries on and finishes its other branches. Steps after this one are still skipped — there's no output to feed them."
+    "ctxContinueOnErrorHint": "The run carries on and finishes its other branches. Steps after this one are still skipped — there's no output to feed them.",
+    "lintScriptMismatch": "This step runs its script with {{interpreter}}, but the step feeding it says the script is written in {{language}}. The step decides what actually runs, so set one of them to match the other.",
+    "lintScriptUnrunnable": "This step is given a script that says it is {{language}} — a data format rather than a program, so a machine has nothing to run it with."
   },
   "iconUpload": {
     "upload": "Upload image"

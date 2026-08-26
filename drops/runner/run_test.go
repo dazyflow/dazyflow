@@ -656,3 +656,20 @@ func TestManifest_DeclaresTheExitCodeOutputs(t *testing.T) {
 		}
 	}
 }
+
+// The script-language lint compares this step's interpreter against the
+// language an upstream step claims, and it lives in core — which cannot import
+// this package. So the list is checked from THIS side: a shell added here and
+// not taught to the classifier would silently stop the lint working for it,
+// which is the quiet kind of rot nobody notices.
+func TestShells_AreAllKnownToTheLanguageLint(t *testing.T) {
+	for _, s := range Shells {
+		c := core.ClassifyScriptLanguage(s)
+		if !c.Known {
+			t.Errorf("the lint does not recognise the shell %q — teach it in core/lint_script.go", s)
+		}
+		if !c.Runnable || c.Family == "" {
+			t.Errorf("%q classifies as %+v, but this step actually executes it", s, c)
+		}
+	}
+}

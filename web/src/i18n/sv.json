@@ -1955,7 +1955,9 @@
       "noRetry": "Det här steget kan inte göras om automatiskt — ingen kan veta hur långt det kom, så att köra om är ditt beslut utifrån körningen."
     },
     "ctxContinueOnError": "Fel här stoppar inte körningen",
-    "ctxContinueOnErrorHint": "Körningen fortsätter och slutför sina andra grenar. Steg efter det här hoppas ändå över — det finns ingen utdata att mata dem med."
+    "ctxContinueOnErrorHint": "Körningen fortsätter och slutför sina andra grenar. Steg efter det här hoppas ändå över — det finns ingen utdata att mata dem med.",
+    "lintScriptMismatch": "Det här steget kör sitt skript med {{interpreter}}, men steget som matar det säger att skriptet är skrivet i {{language}}. Steget avgör vad som faktiskt körs, så ändra det ena så att det stämmer med det andra.",
+    "lintScriptUnrunnable": "Det här steget får ett skript som sägs vara {{language}} — ett dataformat snarare än ett program, så en maskin har inget att köra det med."
   },
   "iconUpload": {
     "upload": "Ladda upp bild"
