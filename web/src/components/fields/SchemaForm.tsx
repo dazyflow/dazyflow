@@ -457,14 +457,23 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
       current !== "" && !schema.enum.some((v) => String(v) === current)
         ? current
         : undefined;
+    const hasEmptyOption = schema.enum.some((v) => String(v) === "");
     return (
       <FieldWrap name={name} schema={schema} required={required}>
         <select value={current} onChange={(e) => onChange(e.target.value)}>
-          {/* Only offer a blank "(unset)" on an optional enum with NO
-              default. When the field has a default, "unset" just falls back
-              to that default anyway, so the empty option is confusing noise —
-              the dropdown always shows a real, sensible choice instead. */}
-          {!required && schema.default === undefined && (
+          {/* Only offer a blank "(unset)" on an optional enum with NO default
+              and no empty value of its own. When the field has a default,
+              "unset" just falls back to that default anyway, so the empty
+              option is confusing noise.
+              When the ENUM already carries "" — the Date & time step's "Follow
+              the flow's language", Stripe's "(none)", Fortnox's "All" — adding
+              ours puts two options with the SAME value in one select, and the
+              browser resolves that by showing the first. The symptom is a
+              dropdown that refuses to hold your choice: you pick the drop's
+              own empty option and it snaps back to "(not set)", because to the
+              select they are the same option. The drop names what empty means
+              for it, so ours steps aside. */}
+          {!required && schema.default === undefined && !hasEmptyOption && (
             <option value="">{t("schemaForm.unsetOption")}</option>
           )}
           {/* A stored value the enum no longer offers gets an option of its

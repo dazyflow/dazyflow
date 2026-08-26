@@ -79,6 +79,7 @@ func init() {
 					"locale": {
 						"type":"string",
 						"title":"Language",
+						"default":"",
 						"enum":["","en","sv"],
 						"enumNames":["Follow the flow's language","English","Svenska"],
 						"description":"Which language day and month names are written in — Thursday/August, torsdag/augusti. Leave it on the flow's language (Settings → General) unless this one step should differ. Only names are affected: numbers, and the ISO/Unix/email formats, are the same in every language."

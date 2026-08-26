@@ -23,6 +23,21 @@ into the image.)
 
 ## [Unreleased]
 
+### Fixed
+
+- **A dropdown whose own "empty" choice wouldn't stick.** The Date & time
+  step's Language field offered "Follow the flow's language" and then refused
+  to hold it: picking it snapped back to "(not set)". The form adds a blank
+  "(not set)" entry to any optional dropdown without a default, and this one
+  already had a blank entry of its own — two options with the same value in one
+  select, which the browser resolves by showing the first. The form now steps
+  aside when a step names what empty means for itself, which also fixes
+  Stripe's refund reason ("(none)") and the Fortnox invoice filter ("All").
+
+  Following the flow's language is now the Date & time step's **default**, not
+  just an option, so a step added to a Swedish flow writes Swedish without
+  anyone setting it.
+
 ## [0.16.4] - 2026-08-27
 
 ### Fixed

@@ -146,6 +146,45 @@ describe("SchemaForm (FormContext)", () => {
     expect(screen.getByRole("option", { name: "MODE" })).toBeInTheDocument();
   });
 
+  // An optional enum with no default gets a blank "(not set)" entry — unless
+  // the drop already has an empty value of its own, in which case two options
+  // would share the value "" and the select would show the first. That looked
+  // exactly like a dropdown refusing to hold your choice.
+  it("adds a blank option to an optional enum with no default", () => {
+    const schema: JSONSchema = {
+      type: "object",
+      properties: {
+        pick: { type: "string", title: "Pick", enum: ["a", "b"], enumNames: ["A", "B"] },
+      },
+    } as JSONSchema;
+    render(<SchemaForm schema={schema} value={{}} onChange={() => {}} />);
+    expect(screen.getByRole("option", { name: "schemaForm.unsetOption" })).toBeInTheDocument();
+  });
+
+  it("does not add a blank option when the enum already has an empty value", () => {
+    const schema: JSONSchema = {
+      type: "object",
+      properties: {
+        locale: {
+          type: "string",
+          title: "Language",
+          enum: ["", "en", "sv"],
+          enumNames: ["Follow the flow's language", "English", "Svenska"],
+        },
+      },
+    } as JSONSchema;
+    const { container } = render(
+      <SchemaForm schema={schema} value={{}} onChange={() => {}} />,
+    );
+    expect(screen.queryByRole("option", { name: "schemaForm.unsetOption" })).not.toBeInTheDocument();
+    // Exactly one option carries "", and it is the drop's own — so selecting
+    // it holds instead of snapping to a synthetic twin.
+    const empties = [...container.querySelectorAll("option")].filter((o) => o.value === "");
+    expect(empties).toHaveLength(1);
+    expect(empties[0].textContent).toBe("Follow the flow's language");
+    expect((container.querySelector("select") as HTMLSelectElement).value).toBe("");
+  });
+
   it("renders nothing actionable for a non-object schema (fallback hint)", () => {
     render(
       <SchemaForm
