@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.16.7] - 2026-08-27
+
 ### Fixed
 
 - **A flow's language, and its failure notification, actually save now.**
