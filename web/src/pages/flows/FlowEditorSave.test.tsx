@@ -385,3 +385,44 @@ describe("editor step name round trip", () => {
     expect(savedNodes()?.find((n) => n.id === "ntfy_1")).not.toHaveProperty("label");
   });
 });
+
+// The editor rebuilds the saved document from its own state, field by field,
+// rather than writing back the graph it loaded. That is deliberate — the canvas
+// is the source of truth for nodes and edges — but it means a graph-level field
+// the editor does not know about is DROPPED on the next save, silently, no
+// matter what set it. That is how the flow's language went missing after the
+// settings modal wrote it: the modal saved, and the next autosave wrote a
+// document rebuilt without it.
+//
+// So this asserts round-tripping, not any one field's plumbing: load a graph
+// with every graph-level setting populated, let a save fire, and require them
+// all back. A field added to core.Graph and wired into the settings UI but not
+// into the editor's state fails here instead of in someone's flow.
+describe("editor graph-level round-trip", () => {
+  const META = {
+    visibility: "private" as const,
+    owner: "owner@example.com",
+    language: "sv",
+    name: "Nightly digest",
+    icon: "rocket",
+    description: "Sends the nightly digest",
+    timeout_seconds: 600,
+    failure_notify: { webhook: "https://hooks.example/x" },
+    disabled: true,
+  };
+
+  it("preserves every graph-level setting through a save", async () => {
+    loadGraph.mockResolvedValue({ ...graphWithUnzonedSchedule(), ...META });
+    mount();
+    await letAutosaveFire();
+    await waitFor(() => expect(saveGraph).toHaveBeenCalled());
+    const saved = saveGraph.mock.calls[0].find(
+      (a) => a && typeof a === "object" && "nodes" in a,
+    ) as Record<string, unknown> | undefined;
+
+    for (const [key, want] of Object.entries(META)) {
+      expect(saved, `saved document missing`).toBeDefined();
+      expect(saved?.[key], `${key} was dropped on save`).toEqual(want);
+    }
+  });
+});

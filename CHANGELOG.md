@@ -23,6 +23,21 @@ into the image.)
 
 ## [Unreleased]
 
+### Fixed
+
+- **A flow's language, and its failure notification, survive the next save.**
+  Setting either in Settings appeared to work and then quietly reverted. The
+  editor rebuilds the document it saves from its own state, field by field,
+  rather than writing back the graph it loaded — deliberate, since the canvas
+  is the truth for steps and wires — so a graph-level field it doesn't know
+  about is dropped by the next autosave. Language was never added to that list;
+  **failure_notify never was either**, which meant a flow configured to alert
+  you on failure stopped alerting after the next canvas edit.
+
+  A test now loads a flow with every graph-level setting populated and requires
+  them all back after a save, so the next field added to Settings fails there
+  rather than in someone's flow.
+
 ## [0.16.5] - 2026-08-27
 
 ### Fixed

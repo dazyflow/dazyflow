@@ -319,6 +319,16 @@ function EditorInner() {
   const [triggers, setTriggers] = useState<GraphTrigger[]>([]);
   const [visibility, setVisibility] = useState<Visibility | undefined>(undefined);
   const [owner, setOwner] = useState<string | undefined>(undefined);
+  // The flow's OUTPUT language (Settings → General). Held here like every
+  // other graph-level field because the saved document is rebuilt from this
+  // state rather than from the loaded graph — a field missing from this list
+  // is silently dropped on the next save, whatever the settings modal set.
+  const [language, setLanguage] = useState<string | undefined>(undefined);
+  // Failure notification (Settings → Notifications). Same reason as language:
+  // the settings modal wrote it and the next autosave, rebuilding the document
+  // without it, quietly wiped it — so a flow that mailed you on failure
+  // stopped after the next canvas edit.
+  const [failureNotify, setFailureNotify] = useState<Graph["failure_notify"]>(undefined);
   // Display metadata. Edited via the settings modal; doesn't affect
   // engine behaviour but must round-trip through save() so the user's
   // chosen name/icon/description survive reloads.
@@ -627,6 +637,8 @@ function EditorInner() {
     setTriggers(g.triggers ?? []);
     setVisibility(g.visibility);
     setOwner(g.owner);
+    setLanguage(g.language);
+    setFailureNotify(g.failure_notify);
     setName(g.name);
     setIcon(g.icon);
     setDescription(g.description);
@@ -2779,6 +2791,8 @@ function EditorInner() {
     triggers: triggers.length > 0 ? triggers : undefined,
     visibility,
     owner,
+    language,
+    failure_notify: failureNotify,
     name,
     icon,
     description,
@@ -2833,6 +2847,8 @@ function EditorInner() {
       triggers,
       visibility,
       owner,
+      language,
+      failureNotify,
       name,
       icon,
       description,
@@ -2969,6 +2985,8 @@ function EditorInner() {
       setTriggers(g.triggers ?? []);
       setVisibility(g.visibility);
       setOwner(g.owner);
+      setLanguage(g.language);
+      setFailureNotify(g.failure_notify);
       setName(g.name);
       setIcon(g.icon);
       setDescription(g.description);
@@ -3013,6 +3031,8 @@ function EditorInner() {
     disabledNodes,
     visibility,
     owner,
+    language,
+    failureNotify,
     name,
     icon,
     description,
@@ -3422,6 +3442,8 @@ function EditorInner() {
     triggers,
     visibility,
     owner,
+    language,
+    failure_notify: failureNotify,
     name,
     icon,
     description,
@@ -3474,6 +3496,8 @@ function EditorInner() {
   const persistSettings = async (next: Graph) => {
     setTriggers(next.triggers ?? []);
     setVisibility(next.visibility);
+    setLanguage(next.language);
+    setFailureNotify(next.failure_notify);
     setName(next.name);
     setIcon(next.icon);
     setDescription(next.description);
