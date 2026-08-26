@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.15.5] - 2026-08-26
+
 ### Added
 
 - **You can download your own data.** Settings → Your data hands you one JSON
