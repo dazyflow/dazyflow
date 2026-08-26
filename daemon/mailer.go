@@ -13,7 +13,6 @@ import (
 	"mime"
 	"mime/quotedprintable"
 	"net"
-	"net/mail"
 	"net/smtp"
 	"net/url"
 	"strings"
@@ -107,19 +106,8 @@ func NewMailerFromURL(rawURL, from string) (*Mailer, error) {
 	}
 	// Split the bare address out of From so the envelope and Message-ID
 	// stay valid even when From carries a display name ("Dazyflow
-	// <hi@dazyflow.app>"). With a display name, re-format through
-	// mail.Address so it's MIME-encoded in the header when non-ASCII;
-	// without one, keep the bare address verbatim (no angle brackets). A
-	// From that doesn't parse (e.g. a bare hostless username) falls back
-	// to using it as-is for both — same lenient behaviour as before.
-	if parsed, err := mail.ParseAddress(m.From); err == nil {
-		m.addr = parsed.Address
-		if parsed.Name != "" {
-			m.From = parsed.String()
-		}
-	} else {
-		m.addr = m.From
-	}
+	// <hi@dazyflow.app>"). Shared with the tenant-facing send paths.
+	m.From, m.addr = smtputil.SplitSender(m.From)
 	return m, nil
 }
 

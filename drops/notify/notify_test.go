@@ -23,6 +23,16 @@ import (
 // exercised without a live mail server.
 func scriptedSMTP(t *testing.T, captured *string) string {
 	t.Helper()
+	return scriptedSMTPRecording(t, captured, nil)
+}
+
+// scriptedSMTPRecording is scriptedSMTP plus the command transcript: cmds
+// receives every command line the client sent up to the end of DATA, so a test
+// can assert on the SMTP envelope (MAIL FROM / RCPT TO) and not only on the
+// message headers. Both out-params are written before the DATA terminator is
+// acknowledged, so they're settled by the time Send returns.
+func scriptedSMTPRecording(t *testing.T, captured, cmds *string) string {
+	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
@@ -40,7 +50,7 @@ func scriptedSMTP(t *testing.T, captured *string) string {
 
 		w("220 test ESMTP")
 		inData := false
-		var data strings.Builder
+		var data, transcript strings.Builder
 		for {
 			line, err := r.ReadString('\n')
 			if err != nil {
@@ -53,12 +63,16 @@ func scriptedSMTP(t *testing.T, captured *string) string {
 					if captured != nil {
 						*captured = data.String()
 					}
+					if cmds != nil {
+						*cmds = transcript.String()
+					}
 					w("250 2.0.0 queued")
 					continue
 				}
 				data.WriteString(line + "\n")
 				continue
 			}
+			transcript.WriteString(line + "\n")
 			switch {
 			case strings.HasPrefix(line, "EHLO"):
 				w("250-test")

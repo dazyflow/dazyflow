@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/mail"
 	"net/smtp"
 	"strconv"
 	"strings"
@@ -40,8 +41,19 @@ func verifyEmail(ctx context.Context, conn map[string]string) error {
 	if host == "" {
 		return errors.New("enter your mail server")
 	}
-	if strings.TrimSpace(conn["from"]) == "" {
+	sender := strings.TrimSpace(conn["from"])
+	if sender == "" {
 		return errors.New("enter a From address")
+	}
+	// The From address may carry a display name ("Reports
+	// <reports@example.com>"), which the send splits into header and envelope
+	// forms. Anything that doesn't parse as an address at all would otherwise
+	// only surface much later, as a raw SMTP rejection mid-run — the handshake
+	// below never sends a MAIL FROM, so it can't catch it. Note this is
+	// stricter than the send itself, which passes an unparseable sender through
+	// verbatim and lets the mail server rule on it.
+	if _, err := mail.ParseAddress(sender); err != nil {
+		return errors.New(`that From address doesn't look right — use "reports@example.com", or "Reports <reports@example.com>" to include a name`)
 	}
 
 	port := 587

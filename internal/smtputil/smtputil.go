@@ -14,11 +14,42 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"net/mail"
 	"net/smtp"
 	"time"
 
 	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 )
+
+// SplitSender separates a configured sender into the two forms one send needs.
+// A sender may carry a display name in RFC 5322 form ("Reports
+// <reports@example.com>") so the recipient's client shows a friendly name —
+// that belongs in the From: header, but NOT in the SMTP envelope: a
+// reverse-path of "<Reports <reports@example.com>>" is not a valid MAIL FROM
+// and servers reject the whole send. Pass header to the message builder and
+// envelope to Send/SendTrusted.
+//
+// When a display name is present the header form is re-rendered through
+// mail.Address so a non-ASCII name is MIME-encoded rather than riding as raw
+// UTF-8 bytes. Without one the input is returned verbatim, so a bare address
+// keeps exactly the shape it was typed in. A sender that doesn't parse at all
+// (e.g. a hostless username for an internal relay) is returned verbatim for
+// both, leaving it to the mail server to accept or refuse — every caller here
+// was lenient about that before the split and stays so.
+//
+// Shared by all three senders — the Email drop, the email-template test send,
+// and the operator's transactional Mailer — so the header/envelope split
+// can't drift between them.
+func SplitSender(from string) (header, envelope string) {
+	parsed, err := mail.ParseAddress(from)
+	if err != nil {
+		return from, from
+	}
+	if parsed.Name == "" {
+		return from, parsed.Address
+	}
+	return parsed.String(), parsed.Address
+}
 
 // dial runs the shared front of the SMTP dance: dial addr (implicit-TLS or
 // plain by mode), apply ctx's deadline (fallback 30s), open a client,

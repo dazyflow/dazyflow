@@ -64,7 +64,7 @@ func init() {
 				{Key: "tls", Label: "Connection security", Placeholder: "starttls, implicit, or none"},
 				{Key: "username", Label: "Username", Placeholder: "usually your email address"},
 				{Key: "password", Label: "Password", Secret: true, Help: "Your mail server password, or an app password if the provider issues one."},
-				{Key: "from", Label: "From address", Required: true, Placeholder: "reports@example.com"},
+				{Key: "from", Label: "From address", Required: true, Placeholder: "reports@example.com", Help: `The sender recipients see. Add a display name with "Reports <reports@example.com>" — most providers require the address itself to match your login.`},
 			},
 			Inputs: []core.Port{
 				// Named after their params so the card shows inline editable
@@ -176,9 +176,9 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 	}
 	// From defaults to the username — the SMTP login is usually the sender
 	// address, and most providers require the two to match anyway.
-	from := params.StringDefault(job.Params, "from", "")
+	from := strings.TrimSpace(params.StringDefault(job.Params, "from", ""))
 	if from == "" {
-		from = params.StringDefault(job.Params, "username", "")
+		from = strings.TrimSpace(params.StringDefault(job.Params, "username", ""))
 	}
 	if from == "" {
 		return params.Err(job, "not_connected", "no sender address — set the From address on the Email integration page"), nil
@@ -273,7 +273,10 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 	if err := hfnet.CheckDialHost(addr); err != nil {
 		return params.Err(job, "ssrf_blocked", err.Error()), nil
 	}
-	msg := buildMessage(from, to, cc, subject, body, bodyContentType, atts)
+	// The configured sender may carry a display name; the header takes that
+	// form, the SMTP envelope only the bare address (smtputil.SplitSender).
+	fromHeader, fromAddr := smtputil.SplitSender(from)
+	msg := buildMessage(fromHeader, to, cc, subject, body, bodyContentType, atts)
 
 	var auth smtp.Auth
 	if username != "" {
@@ -289,7 +292,7 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 	rcpts = append(rcpts, bcc...)
 
 	emitProgress(progress, job, 0.3, "dial "+addr)
-	if err := smtputil.Send(ctx, addr, host, tlsMode, auth, from, rcpts, msg); err != nil {
+	if err := smtputil.Send(ctx, addr, host, tlsMode, auth, fromAddr, rcpts, msg); err != nil {
 		return params.Err(job, "send_failed", err.Error()), nil
 	}
 	emitProgress(progress, job, 1.0, "delivered")
@@ -297,7 +300,7 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 	meta := map[string]any{
 		"host": host,
 		"port": port,
-		"from": from,
+		"from": fromHeader,
 		"to":   to,
 		"cc":   cc,
 		// BCC is blind by design: it rides the SMTP envelope only and is
@@ -316,14 +319,16 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 	}, nil
 }
 
-// buildMessage assembles the RFC 822 message. Address headers are stripped
-// of CR/LF to defeat header injection; the subject is MIME-word encoded;
-// multipart/mixed is used only when attachments exist (same shape as
+// buildMessage assembles the RFC 822 message. fromHeader is the header form of
+// the sender, so it may carry a display name ("Reports <r@example.com>"); the
+// bare-address envelope form goes to smtputil.Send separately. Address headers
+// are stripped of CR/LF to defeat header injection; the subject is MIME-word
+// encoded; multipart/mixed is used only when attachments exist (same shape as
 // gmail send's buildRFC822). BCC is deliberately NOT a header — blind copies
 // ride the SMTP envelope only (see executeEmail), so they stay hidden.
-func buildMessage(from string, to, cc []string, subject, body, bodyContentType string, atts []mailmsg.Attachment) []byte {
+func buildMessage(fromHeader string, to, cc []string, subject, body, bodyContentType string, atts []mailmsg.Attachment) []byte {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "From: %s\r\n", mailmsg.StripCRLF(from))
+	fmt.Fprintf(&sb, "From: %s\r\n", mailmsg.StripCRLF(fromHeader))
 	fmt.Fprintf(&sb, "To: %s\r\n", mailmsg.StripCRLF(strings.Join(to, ", ")))
 	if len(cc) > 0 {
 		fmt.Fprintf(&sb, "Cc: %s\r\n", mailmsg.StripCRLF(strings.Join(cc, ", ")))

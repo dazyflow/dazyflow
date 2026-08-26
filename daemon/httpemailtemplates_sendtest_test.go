@@ -105,3 +105,48 @@ func TestSendTestEmail_Sends(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 }
+
+// A From address with a display name must split: the name rides the From:
+// header, while MAIL FROM carries only the bare address. Sending the
+// display-name form as the envelope sender ("<Reports <r@example.com>>") is an
+// invalid reverse-path and real servers reject the whole message.
+func TestSendTestEmail_DisplayNameSender(t *testing.T) {
+	h := newSecretsHarness(t)
+	srv := newFakeSMTP(t)
+	host, port, err := net.SplitHostPort(srv.addr)
+	if err != nil {
+		t.Fatalf("split addr: %v", err)
+	}
+	storeEmailConn(t, h, map[string]string{
+		"host": host,
+		"port": port,
+		"tls":  "none",
+		"from": "Reports <reports@example.com>",
+	})
+
+	rw := h.do(t, "POST", "/api/v1/email-templates/send-test", map[string]any{
+		"to":   "ops@example.com",
+		"html": "<div>{{.Body}}</div>",
+	})
+	if rw.Code != http.StatusOK {
+		t.Fatalf("want 200; got %d body=%s", rw.Code, rw.Body.String())
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		_, from, data, to := srv.snapshot()
+		if len(to) == 1 && strings.Contains(to[0], "ops@example.com") {
+			if !strings.Contains(from, "<reports@example.com>") || strings.Contains(from, "Reports") {
+				t.Errorf("MAIL FROM = %q, want the bare address only", from)
+			}
+			if !strings.Contains(data, `From: "Reports" <reports@example.com>`) {
+				t.Errorf("From header lost the display name; data=%q", data)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("test message never reached the SMTP server; last to=%v", to)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}

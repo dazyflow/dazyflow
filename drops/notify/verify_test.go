@@ -94,6 +94,12 @@ func TestVerifyEmail_ParamValidation(t *testing.T) {
 		{"bad port", map[string]string{"host": "smtp.x.test", "from": "me@x.test", "port": "abc"}, "port must be a number"},
 		{"zero port", map[string]string{"host": "smtp.x.test", "from": "me@x.test", "port": "0"}, "port must be a number"},
 		{"bad tls mode", map[string]string{"host": "smtp.x.test", "from": "me@x.test", "tls": "weird"}, "connection security must be"},
+		// A From that isn't an address at all would otherwise only fail much
+		// later, mid-send, as a raw SMTP rejection — the handshake never sends
+		// a MAIL FROM, so this check is the only place that catches it.
+		{"unparseable from", map[string]string{"host": "smtp.x.test", "from": "not an address"}, "doesn't look right"},
+		{"from missing domain", map[string]string{"host": "smtp.x.test", "from": "reports"}, "doesn't look right"},
+		{"two addresses in from", map[string]string{"host": "smtp.x.test", "from": "a@x.test, b@x.test"}, "doesn't look right"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -175,5 +181,25 @@ func TestVerifyEmail_DialError(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "couldn't connect to the mail server") {
 		t.Fatalf("err = %v, want connect-failure message", err)
+	}
+}
+
+// TestVerifyEmail_AcceptsDisplayNameFrom: the From address may carry a display
+// name, so verification must get past the From check on that form and go on to
+// dial (here a loopback host, which the egress guard then refuses — proof the
+// address itself was accepted).
+func TestVerifyEmail_AcceptsDisplayNameFrom(t *testing.T) {
+	hfnet.SetAllowPrivateEgress(false)
+	for _, from := range []string{
+		"Reports <reports@x.test>",
+		`"Klahr, Joachim" <j@x.test>`,
+		"<reports@x.test>",
+	} {
+		err := verifyEmail(context.Background(), map[string]string{
+			"host": "127.0.0.1", "from": from, "tls": "none",
+		})
+		if err == nil || !strings.Contains(err.Error(), "local/private address") {
+			t.Errorf("from %q: err = %v, want to reach the dial guard", from, err)
+		}
 	}
 }

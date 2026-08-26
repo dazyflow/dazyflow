@@ -325,6 +325,10 @@ func (h *HTTPGateway) sendTestEmail(rw http.ResponseWriter, r *http.Request, p c
 	if from == "" {
 		from = strings.TrimSpace(conn["username"]) // SMTP login is usually the sender
 	}
+	// The configured sender may carry a display name ("Reports
+	// <reports@example.com>"); that form belongs in the header only — the
+	// envelope takes the bare address, same as the Email drop's send.
+	fromHeader, fromAddr := smtputil.SplitSender(from)
 	port := 587
 	if s := strings.TrimSpace(conn["port"]); s != "" {
 		n, perr := strconv.Atoi(s)
@@ -387,7 +391,7 @@ func (h *HTTPGateway) sendTestEmail(rw http.ResponseWriter, r *http.Request, p c
 
 	const textAlt = "This is a test of your Dazyflow email template. " +
 		"Open it in an HTML-capable client to see the rendered layout."
-	msg, err := multipartMessage(from, from, to, subject, textAlt, htmlBody)
+	msg, err := multipartMessage(fromHeader, fromAddr, to, subject, textAlt, htmlBody)
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("build message: %v", err))
 		return
@@ -395,14 +399,14 @@ func (h *HTTPGateway) sendTestEmail(rw http.ResponseWriter, r *http.Request, p c
 
 	ctx, cancel := context.WithTimeout(r.Context(), connectionVerifyTimeout)
 	defer cancel()
-	if err := smtputil.Send(ctx, addr, host, mode, auth, from, []string{to}, msg); err != nil {
+	if err := smtputil.Send(ctx, addr, host, mode, auth, fromAddr, []string{to}, msg); err != nil {
 		h.audit(r.Context(), p, "email_template.test_send", to, "error="+err.Error())
 		// 502: the daemon is fine; the tenant's SMTP server rejected the send.
 		writeJSONError(rw, http.StatusBadGateway, fmt.Sprintf("send failed: %v", err))
 		return
 	}
 	h.audit(r.Context(), p, "email_template.test_send", to, "ok")
-	writeJSON(rw, http.StatusOK, map[string]any{"ok": true, "to": to, "from": from})
+	writeJSON(rw, http.StatusOK, map[string]any{"ok": true, "to": to, "from": fromHeader})
 }
 
 // deleteEmailTemplate removes an org template. Idempotent. Built-in IDs are

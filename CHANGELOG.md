@@ -23,6 +23,29 @@ into the image.)
 
 ## [Unreleased]
 
+### Fixed
+
+- **The Email app's From address takes a name, not just an address.** Typing
+  `Reports <reports@example.com>` on the Email integration page — the form
+  every mail client shows a sender in — got the send rejected by the mail
+  server. The whole string was handed to the SMTP envelope as well as to the
+  header, and `MAIL FROM:<Reports <reports@example.com>>` is not an address any
+  server will accept.
+
+  The two are now told apart: the display name rides the `From:` header, where
+  the recipient's client reads it, while the envelope carries the bare address.
+  A non-ASCII name is MIME-encoded on the way out, so it arrives as itself
+  instead of as mojibake, and a plain address still goes out exactly as typed.
+
+  This covers both places the app's sender is used — the Email step and the
+  "Send test" button on an email template. It is the same split the platform's
+  own transactional mail (`DAZYFLOW_SMTP_FROM`) has always done; all three now
+  share one implementation, so they can't drift apart again.
+
+  **Test connection** says so earlier too: a From address that isn't an address
+  at all is caught there, rather than surfacing much later as a raw SMTP
+  rejection in the middle of a run.
+
 ## [0.15.8] - 2026-08-26
 
 ### Changed

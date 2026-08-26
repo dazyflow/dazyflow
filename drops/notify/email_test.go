@@ -5,11 +5,13 @@ package notify
 
 import (
 	"encoding/base64"
+	"net"
 	"strings"
 	"testing"
 
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/mailmsg"
+	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 )
 
 func TestBuildMessage(t *testing.T) {
@@ -295,5 +297,124 @@ func TestExecuteEmail_SSRFBlocked(t *testing.T) {
 	}
 	if res.Status != core.StatusError || res.Error.Code != "ssrf_blocked" {
 		t.Fatalf("res = %+v, want error/ssrf_blocked", res)
+	}
+}
+
+func TestBuildMessage_DisplayNameFromHeader(t *testing.T) {
+	// The header form is what buildMessage receives, so a display name reaches
+	// the recipient's client.
+	msg := string(buildMessage(`"Reports" <reports@x.test>`, []string{"a@x.test"}, nil, "Hi", "body", "text/plain; charset=UTF-8", nil))
+	if !strings.Contains(msg, "From: \"Reports\" <reports@x.test>\r\n") {
+		t.Errorf("From header missing the display name:\n%s", msg)
+	}
+}
+
+// TestExecuteEmail_DisplayNameSender drives the full send with a From address
+// that carries a display name: the header must keep the name, the SMTP
+// envelope must carry only the bare address.
+func TestExecuteEmail_DisplayNameSender(t *testing.T) {
+	hfnet.SetAllowPrivateEgress(true)
+	defer hfnet.SetAllowPrivateEgress(false)
+
+	var sent, cmds string
+	host, port, _ := net.SplitHostPort(scriptedSMTPRecording(t, &sent, &cmds))
+
+	res, err := executeEmail(t.Context(), core.Job{
+		ID: "j",
+		Params: map[string]any{
+			"host":    host,
+			"port":    port,
+			"tls":     "none",
+			"from":    "Reports <reports@x.test>",
+			"to":      "you@x.test",
+			"subject": "Report",
+			"body":    "plain body",
+			"format":  "text",
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if res.Status != core.StatusOK {
+		t.Fatalf("res = %+v, want OK", res)
+	}
+	// The envelope sender: bare address, no display name, no nested brackets.
+	if !strings.Contains(cmds, "MAIL FROM:<reports@x.test>") {
+		t.Errorf("envelope sender wrong, transcript:\n%s", cmds)
+	}
+	if strings.Contains(cmds, "Reports") {
+		t.Errorf("display name leaked into the SMTP envelope:\n%s", cmds)
+	}
+	// The header: display name preserved.
+	if !strings.Contains(sent, `From: "Reports" <reports@x.test>`) {
+		t.Errorf("From header lost the display name:\n%s", sent)
+	}
+	meta, _ := res.Output["meta"].Inline.(map[string]any)
+	if meta["from"] != `"Reports" <reports@x.test>` {
+		t.Errorf("meta from = %v, want the header form", meta["from"])
+	}
+}
+
+// TestExecuteEmail_BareSenderEnvelope is the regression guard for the common
+// case: a plain From address must reach MAIL FROM and the From header exactly
+// as configured, with no brackets added to the header by the split.
+func TestExecuteEmail_BareSenderEnvelope(t *testing.T) {
+	hfnet.SetAllowPrivateEgress(true)
+	defer hfnet.SetAllowPrivateEgress(false)
+
+	var sent, cmds string
+	host, port, _ := net.SplitHostPort(scriptedSMTPRecording(t, &sent, &cmds))
+
+	res, err := executeEmail(t.Context(), core.Job{
+		ID: "j",
+		Params: map[string]any{
+			// Surrounding whitespace is trimmed off the configured sender.
+			"host": host, "port": port, "tls": "none",
+			"from": "  me@x.test  ", "to": "you@x.test",
+			"body": "b", "format": "text",
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if res.Status != core.StatusOK {
+		t.Fatalf("res = %+v, want OK", res)
+	}
+	if !strings.Contains(cmds, "MAIL FROM:<me@x.test>") {
+		t.Errorf("envelope sender wrong, transcript:\n%s", cmds)
+	}
+	// The scripted server records the DATA payload with bare newlines.
+	if !strings.Contains(sent, "From: me@x.test\n") {
+		t.Errorf("From header changed shape:\n%s", sent)
+	}
+}
+
+// TestExecuteEmail_CRLFSenderRejected guards the header-injection path through
+// the split: a sender carrying CR/LF doesn't parse, so it falls through
+// verbatim — and net/smtp then refuses to put it on the wire rather than the
+// drop smuggling an extra header into the message.
+func TestExecuteEmail_CRLFSenderRejected(t *testing.T) {
+	hfnet.SetAllowPrivateEgress(true)
+	defer hfnet.SetAllowPrivateEgress(false)
+
+	var sent, cmds string
+	host, port, _ := net.SplitHostPort(scriptedSMTPRecording(t, &sent, &cmds))
+
+	res, err := executeEmail(t.Context(), core.Job{
+		ID: "j",
+		Params: map[string]any{
+			"host": host, "port": port, "tls": "none",
+			"from": "me@x.test\r\nBcc: evil@x.test", "to": "you@x.test",
+			"body": "b", "format": "text",
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if res.Status != core.StatusError || res.Error.Code != "send_failed" {
+		t.Fatalf("res = %+v, want error/send_failed", res)
+	}
+	if strings.Contains(sent, "evil@x.test") || strings.Contains(cmds, "evil@x.test") {
+		t.Errorf("injected recipient reached the server:\ncmds:\n%s\ndata:\n%s", cmds, sent)
 	}
 }

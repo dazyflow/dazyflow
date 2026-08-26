@@ -211,3 +211,53 @@ func TestSend_ImplicitTLSDialError(t *testing.T) {
 		t.Error("expected implicit-TLS dial error")
 	}
 }
+
+// TestSplitSender covers the sender forms an operator can type on the Email
+// integration page (or in DAZYFLOW_SMTP_FROM). The envelope must always come out as the bare
+// address — a display name in MAIL FROM is not a valid reverse-path and gets
+// the send rejected outright.
+func TestSplitSender(t *testing.T) {
+	cases := []struct {
+		name             string
+		in               string
+		header, envelope string
+	}{
+		{"bare address", "reports@x.test", "reports@x.test", "reports@x.test"},
+		{"display name", "Reports <reports@x.test>", `"Reports" <reports@x.test>`, "reports@x.test"},
+		// Already quoted because the name contains a comma; the address still
+		// splits out clean.
+		{"quoted display name", `"Klahr, Joachim" <j@x.test>`, `"Klahr, Joachim" <j@x.test>`, "j@x.test"},
+		// Angle brackets with no name: valid in a header, never in the envelope.
+		{"angle addr only", "<reports@x.test>", "<reports@x.test>", "reports@x.test"},
+		// Unparseable (a hostless relay username): kept verbatim on both sides,
+		// so the mail server decides — the same leniency as before the split.
+		{"unparseable", "relay", "relay", "relay"},
+		{"empty", "", "", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			header, envelope := SplitSender(c.in)
+			if header != c.header {
+				t.Errorf("header = %q, want %q", header, c.header)
+			}
+			if envelope != c.envelope {
+				t.Errorf("envelope = %q, want %q", envelope, c.envelope)
+			}
+		})
+	}
+}
+
+func TestSplitSender_MIMEEncodesNonASCIIName(t *testing.T) {
+	// A non-ASCII display name must not ride the header as raw UTF-8 bytes
+	// (receiving clients mojibake it), while the envelope stays plain ASCII.
+	header, envelope := SplitSender("Rapporter Ärende <r@x.test>")
+	if !strings.Contains(header, "=?utf-8?q?") {
+		t.Errorf("header = %q, want a MIME encoded-word", header)
+	}
+	if strings.Contains(header, "Ärende") {
+		t.Errorf("header = %q, want the name encoded, not raw UTF-8", header)
+	}
+	if envelope != "r@x.test" {
+		t.Errorf("envelope = %q, want r@x.test", envelope)
+	}
+}

@@ -970,6 +970,8 @@ export const SV_CONNECTION_TEXT: Record<string, string> = {
     "Från Roaring-portalen under Development → Access keys.",
   "Generated in nShift Delivery under API settings.":
     "Genereras i nShift Delivery under API settings.",
+  "The sender recipients see. Add a display name with \"Reports <reports@example.com>\" — most providers require the address itself to match your login.":
+    "Avsändaren som mottagarna ser. Lägg till ett visningsnamn med \"Reports <reports@example.com>\" — de flesta leverantörer kräver att själva adressen stämmer med din inloggning.",
   "Your mail server password, or an app password if the provider issues one.":
     "Lösenordet till din e-postserver, eller ett app-lösenord om leverantören utfärdar ett.",
   "starttls, implicit, or none": "starttls, implicit eller none",
