@@ -4267,6 +4267,20 @@ button.warning:hover:not(:disabled) {
   opacity: 1;
   color: var(--status-warning);
 }
+/* What the text on this node is written in. Full opacity like the other two
+   chips that answer a question about the node rather than decorate it. */
+.dz-node-lang {
+  opacity: 1;
+  color: var(--muted);
+}
+/* The code editor on a card sits in a tighter box than the inspector's. The
+   layers keep their own metrics (they are scoped under .dz-code-editor, which
+   is what stops the .dz-node-params rules above reaching into them) — this only
+   sizes the frame. */
+.dz-node-params .dz-code-editor {
+  min-height: 0;
+  resize: vertical;
+}
 .dz-node-subtitle {
   font-size: var(--text-xs);
   color: var(--muted);
@@ -9119,7 +9133,16 @@ a.pa-card:hover {
    A transparent <textarea> layered over an aria-hidden highlighted <pre>.
    Both layers MUST share identical metrics (font, size, line-height,
    padding, wrapping) so the caret sits exactly over its highlighted glyph;
-   the component syncs scrollTop/Left between them. See JsonEditor.tsx. */
+   the component syncs scrollTop/Left between them. See JsonEditor.tsx.
+
+   Every layer rule is written as a CHILD of its container, and that is not
+   tidiness — it is what makes the metrics hold. A bare `.dz-json-ta` is
+   specificity (0,1,0), which LOSES to any ambient form-control rule reaching
+   into wherever the editor is dropped: on a node card, `.dz-node-params
+   textarea` (0,1,1) gave the textarea 4px/6px padding while the <pre> behind
+   it kept 8px, so the caret sat off the text everywhere a JSON node was edited
+   on the canvas. Scoped, the pair is (0,2,0) and out of reach.
+   check-overlay-metrics.mjs enforces the shape. */
 .dz-json-editor,
 .dz-code-editor {
   position: relative;
@@ -9136,10 +9159,10 @@ a.pa-card:hover {
 .dz-json-editor:focus-within {
   border-color: var(--accent);
 }
-.dz-json-pre,
-.dz-json-ta,
-.dz-code-pre,
-.dz-code-ta {
+.dz-json-editor .dz-json-pre,
+.dz-json-editor .dz-json-ta,
+.dz-code-editor .dz-code-pre,
+.dz-code-editor .dz-code-ta {
   margin: 0;
   border: 0;
   padding: 8px;
@@ -9159,8 +9182,8 @@ a.pa-card:hover {
      behaviour rather than breaking anything. */
   scrollbar-gutter: stable;
 }
-.dz-json-pre,
-.dz-code-pre {
+.dz-json-editor .dz-json-pre,
+.dz-code-editor .dz-code-pre {
   position: absolute;
   inset: 0;
   overflow: hidden;
@@ -9168,12 +9191,12 @@ a.pa-card:hover {
   color: var(--code-fg);
   background: transparent;
 }
-.dz-json-pre code,
-.dz-code-pre code {
+.dz-json-editor .dz-json-pre code,
+.dz-code-editor .dz-code-pre code {
   font: inherit;
 }
-.dz-json-ta,
-.dz-code-ta {
+.dz-json-editor .dz-json-ta,
+.dz-code-editor .dz-code-ta {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -9215,8 +9238,8 @@ a.pa-card:hover {
  * It is also what a code box should do. Wrapping a shell pipeline or a long
  * URL mid-token to fit a narrow inspector panel is worse than scrolling it,
  * which is why every code editor scrolls. */
-.dz-code-pre,
-.dz-code-ta {
+.dz-code-editor .dz-code-pre,
+.dz-code-editor .dz-code-ta {
   white-space: pre;
   word-break: normal;
   overflow-wrap: normal;
@@ -9599,8 +9622,8 @@ a.pa-card:hover {
 .cel-editor:focus-within {
   border-color: var(--accent);
 }
-.cel-highlight,
-.cel-textarea {
+.cel-editor .cel-highlight,
+.cel-editor .cel-textarea {
   margin: 0;
   padding: var(--space-2);
   font-family: var(--font-mono);
@@ -9611,14 +9634,14 @@ a.pa-card:hover {
   word-break: break-word;
   overflow-wrap: break-word;
 }
-.cel-highlight {
+.cel-editor .cel-highlight {
   position: absolute;
   inset: 0;
   pointer-events: none;
   color: var(--ink);
   overflow: auto;
 }
-.cel-textarea {
+.cel-editor .cel-textarea {
   position: relative;
   display: block;
   width: 100%;
@@ -9630,7 +9653,7 @@ a.pa-card:hover {
   color: transparent;
   caret-color: var(--ink);
 }
-.cel-textarea::placeholder {
+.cel-editor .cel-textarea::placeholder {
   color: var(--faint);
 }
 /* Token colors — readable on the dark surface. */

@@ -3,13 +3,16 @@
 
 import { memo, useState } from "react";
 import { Handle, Position, useStore, type NodeProps } from "@xyflow/react";
-import { AlertTriangle, Check, ChevronRight, Plug, Repeat, ShieldOff, X } from "lucide-react";
+import { AlertTriangle, Braces, Check, ChevronRight, Database, FileCode, FileText, Plug, Repeat, ShieldOff, Terminal, X } from "lucide-react";
 import i18n from "../../i18n";
 import { portTypeLabel } from "../../lib/ports";
 import { telFieldFlag, regionDisplayName } from "../../lib/phoneFlag";
 import { Switch } from "../ui/Switch";
 import { iconFor, isBrandedIcon, dropColor, ICON } from "../../icons";
-import { dropSubtitle, nodeStateText, portLabel } from "../../lib/dropText";
+import { glyphFor, languageOf, type LangGlyph } from "../../lib/langBadge";
+import { ScriptEditor } from "../ui/ScriptEditor";
+import { scriptLangFor, type ScriptLang } from "../../lib/scriptHighlight";
+import { dropSubtitle, enumLabel, nodeStateText, portLabel } from "../../lib/dropText";
 import { isRunnerStep, runnerTargetOf } from "../../lib/runnerStep";
 import type { Manifest, Port, JSONSchema, Ref } from "../../types";
 import {
@@ -234,6 +237,31 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
   // input connector, since you can't wire a value into a literal. Triggers
   // are input-less too but carry no literal field, so they're not sources.
   const isValueSource = !hasDeclaredInputs && literalFields.length > 0;
+  // The language a text field on this node is written in, when it says so.
+  //
+  // Read from whichever field carries x_lang_param, so this works for Text's
+  // "Written in" and the runner step's "Run it with" without the card knowing
+  // either name. Empty when the node is on its param's own default, which is
+  // how both steps spell "no language chosen".
+  //
+  // Two values, one lookup: the raw one picks the glyph, the localised one is
+  // the label. Computed together so they can never describe different fields.
+  const language = (() => {
+    if (!schemaProps) return { value: "", label: "" };
+    for (const key of Object.keys(schemaProps)) {
+      const langParam = schemaProps[key]?.x_lang_param;
+      if (!langParam) continue;
+      const value = languageOf(d.params, langParam, schemaProps[langParam]?.default);
+      if (!value) continue;
+      // Localised through the param's own enumNames, so the chip reads
+      // "JavaScript" and not "javascript" — and reads Swedish in Swedish.
+      const opts = schemaProps[langParam]?.enum ?? [];
+      const names = schemaProps[langParam]?.enumNames ?? [];
+      const at = opts.indexOf(value);
+      return { value, label: at >= 0 && names[at] ? enumLabel(names[at], i18n.language) : value };
+    }
+    return { value: "", label: "" };
+  })();
   // Required literal fields show ALWAYS — no hidden config on a card. They
   // identify the node at a glance (the spreadsheet, the ntfy topic) the way
   // the Google Form trigger always shows its form. Pickers and ordinary
@@ -379,6 +407,18 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
               {nodeStateText(d.manifest.node_state.label, i18n.language)}
             </div>
           )}
+          {/* What the text on this node is written in. A Text node holding a
+              SQL query and one holding an email body are different nodes to
+              anyone reading the flow, and without this they look identical. */}
+          {language.label && (
+            <div
+              className="dz-node-chip dz-node-lang"
+              title={i18n.t("nodeCard.languageHint", { lang: language.label })}
+            >
+              <LangGlyphIcon glyph={glyphFor(language.value)} />
+              {language.label}
+            </div>
+          )}
           {/* A step whose failure does not fail the run. Worth a chip for the
               same reason the runner one is: someone reading the flow to work
               out why a run went green needs to see which steps could not have
@@ -522,6 +562,11 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
                     value={d.params?.[key] ?? s.default ?? ""}
                     onChange={(v) => d.setParam?.(key, v)}
                     tokenLabels={d.tokenLabels}
+                    // Code in a proportional font is the wrong shape: the
+                    // indentation that carries a script's structure does not
+                    // line up. Highlighted for the same reason the JSON node's
+                    // card box is.
+                    lang={language.value ? scriptLangFor(language.value) : undefined}
                   />
                 </label>
               );
@@ -727,6 +772,28 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
   );
 }
 
+// LangGlyphIcon draws the KIND of thing a language is — a terminal, a
+// database, a pair of braces — rather than the language itself.
+//
+// Only three of the languages on offer have a mark anyone would recognise
+// (Python, JavaScript, PowerShell); SQL is a standard rather than a product,
+// and YAML and shell have no logo at all. A row where three chips carry real
+// brand marks and four carry invented ones reads as broken, so none of them
+// does: the glyph groups, and the label beside it identifies.
+function LangGlyphIcon({ glyph }: { glyph: LangGlyph }) {
+  const Glyph =
+    glyph === "terminal"
+      ? Terminal
+      : glyph === "database"
+        ? Database
+        : glyph === "braces"
+          ? Braces
+          : glyph === "text"
+            ? FileText
+            : FileCode;
+  return <Glyph size={ICON.xs} strokeWidth={2.2} />;
+}
+
 // DazyNode is the memoised node renderer registered with React Flow. With
 // FlowEditor handing each node a referentially-stable `data` object, memo lets
 // an unedited card skip re-rendering when another node's field changes.
@@ -741,11 +808,15 @@ function ParamInput({
   value,
   onChange,
   tokenLabels,
+  lang,
 }: {
   schema: JSONSchema;
   value: unknown;
   onChange: (v: unknown) => void;
   tokenLabels?: TokenLabels;
+  // The language this box is written in, when the node says. Set, it renders
+  // the highlighted editor instead of a plain textarea.
+  lang?: ScriptLang;
 }) {
   // When the whole value is one ${…} reference, show it the way the {}
   // menu words it ("Gmail · Matching emails → first → id") — the raw
@@ -824,6 +895,20 @@ function ParamInput({
     return <JsonEditor value={text} onChange={onChange} rows={4} invalid={isInvalidJSON(text)} />;
   }
   if (s.type === "string" && s.format === "multiline") {
+    // A node that says its text is a language gets the same treatment on the
+    // card that the JSON node has always had: the real editor, highlighted.
+    // There is no reason for the two to differ — a card is where you read a
+    // flow, and coloured code is easier to read than a grey block of it.
+    if (lang) {
+      return (
+        <ScriptEditor
+          value={String(value ?? "")}
+          lang={lang}
+          onChange={onChange}
+          rows={4}
+        />
+      );
+    }
     return (
       <textarea rows={2} value={String(value ?? "")} onChange={(e) => onChange(e.target.value)} />
     );

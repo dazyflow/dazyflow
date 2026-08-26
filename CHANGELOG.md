@@ -23,6 +23,42 @@ into the image.)
 
 ## [Unreleased]
 
+### Fixed
+
+- **The JSON node's editor on a card had its caret offset from the text.** The
+  overlay editors style their two layers with a bare class, `(0,1,0)` — which
+  loses to `.dz-node-params textarea` at `(0,1,1)`, the rule that styles fields
+  on a node card. So on the canvas the textarea took 4px/6px padding while the
+  highlight layer behind it kept 8px, and the caret sat a few pixels off the
+  text: the metrics matched in the stylesheet and not on the screen.
+
+  Every layer is now written as a child of its own editor, putting the pair at
+  `(0,2,0)` and out of reach of whatever ambient form-control rules exist
+  wherever the editor is dropped. The overlay guard enforces that shape, so a
+  layer cannot lose its scoping later — and it is what made it safe to put the
+  highlighted editor on a card at all.
+
+### Changed
+
+- **A Text step that holds code says so on the canvas.** Its box on the card is
+  the real editor when a language is set — monospace and syntax-coloured, the
+  same treatment the JSON node's card box has always had — and the card carries
+  a chip naming the language. A node holding a SQL query
+  and one holding an email body are different nodes to anyone reading a flow,
+  and they used to look identical.
+
+  The chip appears wherever a step names its language, so the runner step's card
+  shows the interpreter it will use too. "No language chosen" is the param's own
+  default, which is how one rule covers both steps without knowing that Text
+  spells it `plain` and the runner spells it `default`.
+
+  Its icon says what KIND of thing the language is — a terminal, a database, a
+  pair of braces — rather than which language it is. Only three of the seven on
+  offer have a mark anyone would recognise (Python, JavaScript, PowerShell); SQL
+  is a standard rather than a product, and YAML and shell have no logo at all,
+  so a row of three real brand marks beside four invented ones would read as
+  broken. The glyph groups; the label identifies.
+
 ## [0.15.2] - 2026-08-26
 
 ### Added

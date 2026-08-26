@@ -122,10 +122,18 @@ if (rules.length < 100) {
 const declaredProps = (body) =>
   [...body.matchAll(/(^|;)\s*([a-z-]+)\s*:/g)].map((m) => m[2]);
 
+// The SUBJECT of one comma-part: the last simple selector in a descendant
+// chain, which is the element the rule actually styles. `.cel-editor
+// .cel-highlight` is a rule about `.cel-highlight`, and reading the whole part
+// instead mistook the overlay's own layers for token spans the moment they were
+// scoped under their containers.
+const subject = (part) => part.trim().split(/\s+/).pop() ?? "";
+
+const parts = (selector) => selector.split(",").map((p) => p.trim()).filter(Boolean);
+
 for (const { selector, body } of rules) {
-  const isToken = selector
-    .split(",")
-    .map((s) => s.trim())
+  const isToken = parts(selector)
+    .map(subject)
     .some((s) => TOKEN_PREFIXES.some((p) => s.startsWith(p)) && !NOT_TOKENS.has(s));
   if (!isToken) continue;
   for (const prop of declaredProps(body)) {
@@ -149,8 +157,8 @@ for (const [pre, ta] of LAYER_PAIRS) {
     [ta, pre],
   ]) {
     for (const { selector, body } of rules) {
-      const parts = selector.split(",").map((s) => s.trim());
-      if (!parts.includes(self) || parts.includes(other)) continue;
+      const subjects = parts(selector).map(subject);
+      if (!subjects.includes(self) || subjects.includes(other)) continue;
       for (const prop of declaredProps(body)) {
         if (METRIC_PROPS.includes(prop)) {
           fail.push(
@@ -160,6 +168,36 @@ for (const [pre, ta] of LAYER_PAIRS) {
           );
         }
       }
+    }
+  }
+}
+
+// Every layer rule must name its CONTAINER too, which is what keeps its
+// specificity above the ambient form-control rules of wherever the editor is
+// dropped.
+//
+// Not a style preference. A bare `.dz-json-ta` is (0,1,0) and loses to
+// `.dz-node-params textarea` (0,1,1) — the rule that styles fields on a node
+// card. That gave the textarea 4px/6px padding while the <pre> behind it kept
+// 8px, so the caret sat off the text everywhere a JSON node was edited on the
+// canvas: the metrics matched in the stylesheet and not on the screen.
+const CONTAINERS = {
+  ".dz-json-pre": ".dz-json-editor",
+  ".dz-json-ta": ".dz-json-editor",
+  ".dz-code-pre": ".dz-code-editor",
+  ".dz-code-ta": ".dz-code-editor",
+  ".cel-highlight": ".cel-editor",
+  ".cel-textarea": ".cel-editor",
+};
+for (const { selector } of rules) {
+  for (const part of parts(selector)) {
+    const container = CONTAINERS[subject(part)];
+    if (container && !part.includes(container)) {
+      fail.push(
+        `"${part}" styles an overlay layer without naming ${container}. At (0,1,0) it ` +
+          `loses to any ambient rule that reaches into wherever the editor is used ` +
+          `— write it as "${container} ${subject(part)}".`,
+      );
     }
   }
 }

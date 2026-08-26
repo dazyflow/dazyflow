@@ -1476,7 +1476,8 @@
     "geoUnset": "No location set",
     "portValueOnly": "takes a value, not a file",
     "continueOnError": "Can't fail the run",
-    "continueOnErrorHint": "If this step fails the run carries on and finishes its other branches. Anything after it is still skipped."
+    "continueOnErrorHint": "If this step fails the run carries on and finishes its other branches. Anything after it is still skipped.",
+    "languageHint": "Written in {{lang}}."
   },
   "issueKey": {
     "title": "Issue API key",

@@ -1476,7 +1476,8 @@
     "geoUnset": "Ingen plats angiven",
     "portValueOnly": "tar ett värde, inte en fil",
     "continueOnError": "Kan inte stoppa körningen",
-    "continueOnErrorHint": "Om det här steget misslyckas fortsätter körningen och slutför sina andra grenar. Allt efter det hoppas ändå över."
+    "continueOnErrorHint": "Om det här steget misslyckas fortsätter körningen och slutför sina andra grenar. Allt efter det hoppas ändå över.",
+    "languageHint": "Skrivet i {{lang}}."
   },
   "issueKey": {
     "title": "Skapa API-nyckel",
