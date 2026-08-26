@@ -41,7 +41,7 @@ func TestAssembleInput_Cov(t *testing.T) {
 		"c": {Output: map[string]core.Ref{"out": {Inline: "C"}}},
 	}
 
-	input := assembleInput(graph, "sink", manifest, prior)
+	input := AssembleInput(graph, "sink", manifest, prior)
 
 	key0 := core.VariadicInputKey("items", 0)
 	key1 := core.VariadicInputKey("items", 1)

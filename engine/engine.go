@@ -357,7 +357,7 @@ func (e *Engine) buildAndExecute(
 	// Without it, transport.Manifest() reports those ports as single-value and
 	// the many→one auto-fan would wrongly iterate a node that takes a whole list.
 	manifest := core.MarkListPorts(transport.Manifest())
-	input := assembleInput(graph, node.ID, manifest, prior)
+	input := AssembleInput(graph, node.ID, manifest, prior)
 	// A port declared InlineOnly cannot take a file on the daemon's disk. The
 	// flag was advisory until now — only a tooltip read it — so `run_on_runner`
 	// silently ran its script with EMPTY stdin when a file-producing step was
@@ -492,11 +492,20 @@ func (e *Engine) buildAndExecute(
 	return result, execErr
 }
 
-// assembleInput walks incoming edges and builds the Job.Input map by reading
-// each upstream node's Result.Output. Variadic input ports get one entry per
+// AssembleInput walks incoming edges and builds the Job.Input map by reading
+// each upstream node's Result.Output.
+//
+// Exported because it is also how a run is EXPLAINED after the fact. A node
+// record stores what a node produced, never what it received — the inputs are
+// assembled here, in memory, at execution time — so the run viewer's "Inputs"
+// section has to rebuild them from the run's own graph and its stored outputs.
+// Calling this rather than re-deriving "the upstream output for each edge"
+// keeps the explanation honest: variadic fan-in, fallback edges that carry no
+// data, and the one→many auto-lift are all decisions made here, and a second
+// implementation would quietly disagree with the first. Variadic input ports get one entry per
 // edge keyed as "port[idx]" — module authors recover the list with
 // core.VariadicInputs. Non-variadic ports use the plain port name.
-func assembleInput(graph core.Graph, nodeID string, manifest core.Manifest, prior map[string]core.Result) map[string]core.Ref {
+func AssembleInput(graph core.Graph, nodeID string, manifest core.Manifest, prior map[string]core.Result) map[string]core.Ref {
 	input := make(map[string]core.Ref)
 	variadicCount := make(map[string]int)
 

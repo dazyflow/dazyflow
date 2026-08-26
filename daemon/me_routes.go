@@ -19,6 +19,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1300,7 +1301,86 @@ func (h *HTTPGateway) listRunNodesMe(rw http.ResponseWriter, r *http.Request, p 
 	for _, n := range nodes {
 		out = append(out, newNodeRunView(n))
 	}
+	// Every node's record is already in hand, so the inputs cost nothing beyond
+	// the graph the run stored.
+	h.fillRunNodeInputs(r.Context(), p, runID, nodes, out)
 	writeJSON(rw, http.StatusOK, map[string]any{"nodes": out})
+}
+
+// fillRunNodeInputs reconstructs what each node RECEIVED and writes it onto the
+// views that don't already carry it.
+//
+// A node record stores what the node produced, never what it consumed: the
+// dispatcher enqueues a record holding only the graph and node id, and the
+// engine assembles the inputs in memory when it executes. So `inputs` was
+// always absent, and the run viewer's Inputs section — which reads it — never
+// appeared for any run since it was written.
+//
+// The inputs are recoverable, exactly, without storing them: they are a
+// function of the run's own graph (kept on the run record as GraphPayload) and
+// the outputs of the upstream nodes (kept on their records). engine.AssembleInput
+// is that function, and calling the engine's own rather than re-deriving
+// "the upstream output per edge" is what keeps this honest — variadic fan-in,
+// fallback edges carrying no data, and the one→many auto-lift all live there.
+//
+// It exposes nothing new: an input value IS an upstream node's output value,
+// already shown on that node in the same view, behind the same authorization.
+//
+// Best-effort throughout. A run whose graph payload is gone, a predecessor
+// pruned by retention, or a drop no longer registered leaves the section as it
+// was — absent — rather than failing the request. Nodes inside a for-each body
+// are the known incomplete case: the fan-out feeds them, not an edge (see
+// engine/autofan.go), so their inputs stay empty.
+func (h *HTTPGateway) fillRunNodeInputs(
+	ctx context.Context,
+	p core.Principal,
+	runID string,
+	recs []core.JobRecord,
+	views []nodeRunView,
+) {
+	need := false
+	for i := range views {
+		if len(views[i].Inputs) == 0 {
+			need = true
+			break
+		}
+	}
+	if !need || h.svc == nil || h.svc.Jobs == nil {
+		return
+	}
+	graph, err := loadGraphFromRun(ctx, h.svc.Jobs, runID)
+	if err != nil {
+		return
+	}
+	manifests, err := h.svc.ListDrops(ctx, p)
+	if err != nil {
+		manifests = nil // no port metadata: variadic/list ports degrade, edges still resolve
+	}
+	prior := make(map[string]core.Result, len(recs))
+	for _, rec := range recs {
+		if rec.Result != nil {
+			prior[rec.NodeID] = *rec.Result
+		}
+	}
+	for i := range views {
+		if len(views[i].Inputs) > 0 {
+			continue
+		}
+		in := engine.AssembleInput(graph, views[i].NodeID, manifests[nodeModule(graph, views[i].NodeID)], prior)
+		if len(in) > 0 {
+			views[i].Inputs = in
+		}
+	}
+}
+
+// nodeModule is the module a node in this graph runs, or "" when the graph no
+// longer has that node (a record from a since-edited flow).
+func nodeModule(g core.Graph, nodeID string) string {
+	n, ok := g.Node(nodeID)
+	if !ok {
+		return ""
+	}
+	return n.Module
 }
 
 func (h *HTTPGateway) getRunNodeMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
@@ -1318,7 +1398,27 @@ func (h *HTTPGateway) getRunNodeMe(rw http.ResponseWriter, r *http.Request, p co
 		writeAPIError(rw, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
-	writeJSON(rw, http.StatusOK, newNodeRunView(nodeRec))
+	view := newNodeRunView(nodeRec)
+	// One node asked for on its own: its predecessors' records have to be read
+	// to say what it received. Cheap — a node has a handful of inbound edges.
+	if len(view.Inputs) == 0 {
+		if graph, err := loadGraphFromRun(r.Context(), h.svc.Jobs, runID); err == nil {
+			recs := []core.JobRecord{nodeRec}
+			for _, e := range graph.Edges {
+				if e.To != nodeRec.NodeID {
+					continue
+				}
+				pred, perr := h.svc.Jobs.Get(r.Context(), NodeJobID(runID, e.From))
+				if perr == nil {
+					recs = append(recs, pred)
+				}
+			}
+			views := []nodeRunView{view}
+			h.fillRunNodeInputs(r.Context(), p, runID, recs, views)
+			view = views[0]
+		}
+	}
+	writeJSON(rw, http.StatusOK, view)
 }
 
 func (h *HTTPGateway) runEventsMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {

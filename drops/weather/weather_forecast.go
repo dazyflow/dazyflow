@@ -65,7 +65,7 @@ func init() {
 					"lat":{"type":"number","minimum":-90,"maximum":90,"title":"Latitude","description":"Latitude of the point, -90..90. Overridden by a \"lat,lon\" value on the Coordinate input."},
 					"lon":{"type":"number","minimum":-180,"maximum":180,"title":"Longitude","description":"Longitude of the point, -180..180. Overridden by the Coordinate input."},
 					"days":{"type":"integer","minimum":1,"maximum":5,"default":5,"title":"Days","description":"How many days to return, counting from today (1..5)."},
-					"units":{"type":"string","enum":["metric","imperial","standard"],"default":"metric","title":"Units","description":"metric = °C + m/s, imperial = °F + mph, standard = K + m/s."},
+					"units":{"type":"string","enum":["metric","imperial","standard"],"enumNames":["Metric (°C, m/s)","Imperial (°F, mph)","Kelvin (K, m/s)"],"default":"metric","title":"Units","description":"metric = °C + m/s, imperial = °F + mph, standard = K + m/s."},
 					"lang":{"type":"string","title":"Language","description":"Optional ISO language code for the per-day conditions (e.g. sv, de, es). Defaults to English."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				}

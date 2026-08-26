@@ -58,7 +58,7 @@ func init() {
 				"properties":{
 					"topic":{"type":"string","title":"Topic","examples":["home/livingroom/light"],"description":"Topic to publish to. Overridden by the 'Topic' input."},
 					"payload":{"type":"string","title":"Payload","description":"Message body. Overridden by the 'Payload' input."},
-					"qos":{"type":"integer","title":"QoS","enum":[0,1,2],"default":0,"description":"Delivery guarantee: 0 at-most-once, 1 at-least-once, 2 exactly-once."},
+					"qos":{"type":"integer","title":"QoS","enum":[0,1,2],"enumNames":["0 — at most once","1 — at least once","2 — exactly once"],"default":0,"description":"Delivery guarantee: 0 at-most-once, 1 at-least-once, 2 exactly-once."},
 					"retain":{"type":"boolean","title":"Retain","default":false,"description":"Broker keeps this as the topic's last known message for new subscribers."},
 					"client_id":{"type":"string","title":"Client ID","x_advanced":true,"description":"MQTT client id. Defaults to a dazyflow-derived id."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for connect + publish, in milliseconds."}

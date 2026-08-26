@@ -55,9 +55,9 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"algo":{"type":"string","enum":["sha256","sha512","sha1","md5"],"default":"sha256","title":"Algorithm","description":"Hash algorithm. Use sha256 or stronger for security; sha1/md5 are for checksums/compatibility only."},
+					"algo":{"type":"string","enum":["sha256","sha512","sha1","md5"],"enumNames":["SHA-256","SHA-512","SHA-1","MD5"],"default":"sha256","title":"Algorithm","description":"Hash algorithm. Use sha256 or stronger for security; sha1/md5 are for checksums/compatibility only."},
 					"key":{"type":"string","title":"HMAC key","description":"When set, compute a keyed HMAC with this secret instead of a plain hash. Connect a ${secret.NAME} in rather than pasting the key."},
-					"encoding":{"type":"string","enum":["hex","base64"],"default":"hex","title":"Output encoding","description":"Render the digest as lowercase hex (default) or standard Base64."}
+					"encoding":{"type":"string","enum":["hex","base64"],"enumNames":["Hex","Base64"],"default":"hex","title":"Output encoding","description":"Render the digest as lowercase hex (default) or standard Base64."}
 				}
 			}`),
 			Idempotent: true,

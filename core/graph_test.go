@@ -4,7 +4,9 @@
 package core
 
 import (
+	"encoding/json"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -227,5 +229,40 @@ func TestEffectiveVisibility(t *testing.T) {
 		if got := (Graph{Visibility: tt.in}).EffectiveVisibility(); got != tt.want {
 			t.Errorf("EffectiveVisibility(%q) = %q, want %q", tt.in, got, tt.want)
 		}
+	}
+}
+
+// A step's display name is stored on the node, and the wire shape matters in
+// both directions: it has to survive a round trip (the editor dropped it for a
+// long time, so a rename never reached the next reload), and it has to be
+// ABSENT on a step nobody renamed. The default name is the drop's own label,
+// which the editor localizes — writing it out would pin one language into the
+// flow and add a field to every node for nothing.
+func TestNodeLabel_RoundTripsAndOmitsWhenEmpty(t *testing.T) {
+	g := Graph{
+		ID: "f1",
+		Nodes: []Node{
+			{ID: "a", Module: "cron_trigger", Label: "Every morning"},
+			{ID: "b", Module: "ntfy"},
+		},
+	}
+	b, err := json.Marshal(g)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(b), `"label":"Every morning"`) {
+		t.Errorf("named step lost its label: %s", b)
+	}
+	// The unnamed step carries no key at all, not an empty one.
+	if strings.Count(string(b), `"label"`) != 1 {
+		t.Errorf("expected exactly one label in %s", b)
+	}
+
+	var back Graph
+	if err := json.Unmarshal(b, &back); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if back.Nodes[0].Label != "Every morning" || back.Nodes[1].Label != "" {
+		t.Errorf("labels after round trip: %q, %q", back.Nodes[0].Label, back.Nodes[1].Label)
 	}
 }

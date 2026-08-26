@@ -55,7 +55,7 @@ func init() {
 					"account":{"type":"string","default":"default"},
 					"file_id":{"type":"string","format":"google-drive-file","title":"File","description":"The Drive file to download — pick from your account's files. The File ID input overrides this when connected."},
 					"path":{"type":"string","title":"File name","description":"What to call the downloaded file — also the attachment name when emailed. Leave blank to use the file's own name in the run's scratch space."},
-					"format":{"type":"string","enum":["pdf","docx","xlsx","pptx","csv","txt","html"],"default":"pdf","title":"Export as","description":"Only used for Google Docs, Sheets and Slides (which have no raw download) — they're exported to this format. PDF works for all; docx/txt/html for Docs, xlsx/csv for Sheets, pptx for Slides. Ignored for regular files."},
+					"format":{"type":"string","enum":["pdf","docx","xlsx","pptx","csv","txt","html"],"enumNames":["PDF","Word (.docx)","Excel (.xlsx)","PowerPoint (.pptx)","CSV","Plain text (.txt)","HTML"],"default":"pdf","title":"Export as","description":"Only used for Google Docs, Sheets and Slides (which have no raw download) — they're exported to this format. PDF works for all; docx/txt/html for Docs, xlsx/csv for Sheets, pptx for Slides. Ignored for regular files."},
 					"timeout_ms":{"type":"integer","default":60000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
 				"required":["file_id"]

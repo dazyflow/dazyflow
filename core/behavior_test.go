@@ -37,6 +37,7 @@ func TestBehaviorEqual_IgnoresEditorOnlyEdits(t *testing.T) {
 		edit func(g *Graph)
 	}{
 		{"moved step", func(g *Graph) { g.Nodes[0].Position = &Position{X: 900, Y: 900} }},
+		{"step renamed", func(g *Graph) { g.Nodes[0].Label = "Every morning" }},
 		{"position dropped", func(g *Graph) { g.Nodes[0].Position = nil }},
 		{"note added", func(g *Graph) {
 			g.Frames = []Frame{{ID: "fr1", Title: "Morning path", Width: 360, Height: 240}}
@@ -137,7 +138,7 @@ func TestBehaviorEqual_FieldSetIsReviewed(t *testing.T) {
 			"ContinueOnError",
 		},
 		"Node": {
-			"ID", "Module", "Params", "Env", "Position", "TimeoutSeconds",
+			"ID", "Module", "Params", "Env", "Label", "Position", "TimeoutSeconds",
 			"Breakpoint", "Disabled", "ContinueOnError",
 		},
 		"Edge": {"From", "FromPort", "To", "ToPort", "OnError", "Waypoints"},

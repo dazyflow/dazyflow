@@ -66,7 +66,7 @@ func init() {
 					"lat":{"type":"number","minimum":-90,"maximum":90,"title":"Latitude","description":"Latitude of the point, -90..90. Overridden by a \"lat,lon\" value on the Coordinate input."},
 					"lon":{"type":"number","minimum":-180,"maximum":180,"title":"Longitude","description":"Longitude of the point, -180..180. Overridden by the Coordinate input."},
 					"days":{"type":"integer","minimum":1,"maximum":16,"default":7,"title":"Days","description":"How many days to return, counting from today (1..16)."},
-					"units":{"type":"string","enum":["metric","imperial"],"default":"metric","title":"Units","description":"metric = °C + m/s, imperial = °F + mph."},
+					"units":{"type":"string","enum":["metric","imperial"],"enumNames":["Metric (°C, m/s)","Imperial (°F, mph)"],"default":"metric","title":"Units","description":"metric = °C + m/s, imperial = °F + mph."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				}
 			}`),

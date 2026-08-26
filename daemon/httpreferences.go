@@ -180,9 +180,17 @@ func (h *HTTPGateway) upstreamRefs(ctx context.Context, p core.Principal, g core
 			continue // a node can't reference its own (not-yet-produced) output
 		}
 		m, hasManifest := manifests[n.Module]
+		// What to call the step in the picker: the author's own name when they
+		// gave it one, else the drop's. A reference reads as "<step> · <port>",
+		// and naming the step differently here to the way it is named on the
+		// canvas is how you end up hunting for a step that is right in front of
+		// you.
 		nodeLabel := n.Module
 		if hasManifest && m.Label != "" {
 			nodeLabel = m.Label
+		}
+		if n.Label != "" {
+			nodeLabel = n.Label
 		}
 		ports := m.Outputs
 		if len(ports) == 0 {

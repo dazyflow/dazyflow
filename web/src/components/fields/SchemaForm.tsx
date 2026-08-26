@@ -451,7 +451,7 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
               to that default anyway, so the empty option is confusing noise —
               the dropdown always shows a real, sensible choice instead. */}
           {!required && schema.default === undefined && (
-            <option value="">(unset)</option>
+            <option value="">{t("schemaForm.unsetOption")}</option>
           )}
           {schema.enum.map((v, i) => (
             <option key={String(v)} value={String(v)}>
@@ -1833,7 +1833,9 @@ function SuggestField({
           value={inList ? cur : ((schema.default as string | undefined) ?? "")}
           onChange={(e) => onChange(e.target.value)}
         >
-          {!required && schema.default === undefined && <option value="">(unset)</option>}
+          {!required && schema.default === undefined && (
+            <option value="">{t("schemaForm.unsetOption")}</option>
+          )}
           {opts.map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}

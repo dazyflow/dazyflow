@@ -267,8 +267,10 @@ function TierEditor({
           <label>
             {t("admin.platformTiers.plan")}
             <select value={draft.plan} onChange={(e) => setDraft({ ...draft, plan: e.target.value })}>
-              <option value="free">free</option>
-              <option value="pro">pro</option>
+              {/* The value is the plan's own name (what the API stores); the
+                  label is the word the rest of the product shows for it. */}
+              <option value="free">{t("usage.planValueFree")}</option>
+              <option value="pro">{t("usage.planValuePro")}</option>
             </select>
           </label>
           <label>

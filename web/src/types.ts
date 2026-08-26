@@ -10,6 +10,10 @@ export type Node = {
   module: string;
   params: Record<string, unknown>;
   env?: Record<string, string>;
+  // The step's display name, when the author has renamed it. Absent on a step
+  // still called after its drop — the editor falls back to the drop's own
+  // (localized) label, so storing the default would freeze it in one language.
+  label?: string;
   position?: Position;
   timeout_seconds?: number;
   // Pause the run after this node completes (debugging) — see #12.

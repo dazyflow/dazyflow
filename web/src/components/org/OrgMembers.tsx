@@ -15,7 +15,15 @@ import { ErrorNotice } from "../ui/ErrorNotice";
 import { ICON } from "../../icons";
 import { Notice } from "../ui/Notice";
 
+// The three team roles, with the label keys that already name them elsewhere
+// (the invite form, the API-key wizard). The VALUE stays the role's own name —
+// it is what the API takes — while the option shows the word a reader knows.
 const ROLE_NAMES = ["viewer", "editor", "admin"] as const;
+const ROLE_LABEL_KEYS: Record<(typeof ROLE_NAMES)[number], string> = {
+  viewer: "admin.users.roleViewer",
+  editor: "admin.users.roleEditor",
+  admin: "admin.users.roleAdmin",
+};
 
 // teamRoleOf collapses a member's role set to the single catalog name the
 // dropdown shows (admin > editor > viewer).
@@ -129,7 +137,7 @@ export function MembersSection({ tenant }: { tenant: string }) {
               >
                 {ROLE_NAMES.map((n) => (
                   <option key={n} value={n}>
-                    {n}
+                    {t(ROLE_LABEL_KEYS[n])}
                   </option>
                 ))}
               </select>
@@ -167,7 +175,7 @@ export function MembersSection({ tenant }: { tenant: string }) {
         <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value)}>
           {ROLE_NAMES.map((n) => (
             <option key={n} value={n}>
-              {n}
+              {t(ROLE_LABEL_KEYS[n])}
             </option>
           ))}
         </select>

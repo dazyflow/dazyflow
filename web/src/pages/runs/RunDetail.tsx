@@ -7,7 +7,7 @@ import { AlertCircle, Check, ChevronDown, ChevronRight, Copy, RotateCw, RotateCc
 import { useTranslation } from "react-i18next";
 import i18n from "../../i18n/index";
 import { api, APIError } from "../../api";
-import { dropLabel, dropSubtitle } from "../../lib/dropText";
+import { dropLabel, dropSubtitle, portLabel } from "../../lib/dropText";
 import { useAuth } from "../../auth";
 import { BackLink } from "../../components/ui/BackLink";
 import { Button } from "../../components/ui/Button";
@@ -145,14 +145,36 @@ export function RunDetail() {
     };
   };
 
+  // What to call a step in the timeline. The author's own name for it when they
+  // gave it one — a run is where you go to read what happened, and reading it
+  // under different names to the ones on the canvas is the whole problem — else
+  // the drop's name. The subtitle stays either way: with a custom name it is
+  // what says which KIND of step this is.
   const nodeLabel = (nodeID: string): string => {
-    const moduleID = graph?.nodes?.find((n) => n.id === nodeID)?.module;
-    if (!moduleID) return nodeID;
-    const m = manifests.get(moduleID);
-    if (!m) return moduleID;
-    const label = dropLabel(m, i18n.language);
-    const sub = dropSubtitle(m, i18n.language);
+    const node = graph?.nodes?.find((n) => n.id === nodeID);
+    if (!node) return nodeID;
+    const m = manifests.get(node.module);
+    const label = node.label || (m ? dropLabel(m, i18n.language) : node.module);
+    const sub = m ? dropSubtitle(m, i18n.language) : "";
     return sub ? `${label} · ${sub}` : label;
+  };
+
+  // What to call a port in the Inputs / Output sections. The canvas names its
+  // pins with the drop's own port labels, translated ("Rader", "HTML-tabell"),
+  // and this section was naming the same pins by their wire ids ("rows",
+  // "html") — so the two halves of one run read as different vocabularies.
+  //
+  // A variadic port arrives as "port[0]", "port[1]" (core.VariadicInputKey),
+  // which no manifest declares: the index is split off, resolved against the
+  // base port, and put back as a number a reader counts from 1.
+  const portLabelFor = (nodeID: string, port: string, dir: "in" | "out"): string => {
+    const node = graph?.nodes?.find((n) => n.id === nodeID);
+    const m = node ? manifests.get(node.module) : undefined;
+    const variadic = /^(.*)\[(\d+)\]$/.exec(port);
+    const base = variadic ? variadic[1] : port;
+    const declared = (dir === "in" ? m?.inputs : m?.outputs)?.find((p) => p.port === base);
+    const name = declared?.label ? portLabel(declared.label, i18n.language) : base;
+    return variadic ? `${name} ${Number(variadic[2]) + 1}` : name;
   };
 
   useEffect(() => {
@@ -596,7 +618,9 @@ export function RunDetail() {
                       {Object.entries(n.Job.Input).map(([port, ref]) => (
                         <details key={port} className="node-port">
                           <summary>
-                            <span className="node-port-name">{port}</span>
+                            <span className="node-port-name" title={port}>
+                              {portLabelFor(n.NodeID, port, "in")}
+                            </span>
                             {ref?.mime && (
                               <span className="node-port-mime">{ref.mime}</span>
                             )}
@@ -614,7 +638,9 @@ export function RunDetail() {
                       {Object.entries(n.Result.output).map(([port, ref]) => (
                         <details key={port} className="node-port">
                           <summary>
-                            <span className="node-port-name">{port}</span>
+                            <span className="node-port-name" title={port}>
+                              {portLabelFor(n.NodeID, port, "out")}
+                            </span>
                             {ref?.mime && (
                               <span className="node-port-mime">{ref.mime}</span>
                             )}

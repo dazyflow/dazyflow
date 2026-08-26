@@ -36,6 +36,14 @@ type Node struct {
 	Params map[string]any    `json:"params"`
 	Env    map[string]string `json:"env"`
 
+	// Label is the step's display name on the canvas, when the author has
+	// given it one. Editor metadata, like Position: the engine never reads it,
+	// and a node without one is named after its drop (the manifest's Label) —
+	// which is why this is empty on almost every node rather than carrying a
+	// copy of the default. Storing the default would also freeze it in ONE
+	// language, since the editor's fallback is localized.
+	Label string `json:"label,omitempty"`
+
 	// Position is layout metadata for the visual editor — ignored by
 	// the engine. Optional; nil-position nodes are auto-laid-out by
 	// the UI on first open.

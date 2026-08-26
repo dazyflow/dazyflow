@@ -1597,6 +1597,7 @@
     "add": "Add",
     "multiSelectCustom": "Add another…",
     "keyPlaceholder": "key",
+    "unsetOption": "(not set)",
     "uploading": "Uploading…",
     "dropOrBrowse": "Drop a file here or click to browse",
     "workspacePathPlaceholder": "workspace-relative path",

@@ -89,7 +89,9 @@ function stripCosmetic(g: Graph): unknown {
     ...g,
     disabled: false,
     frames: undefined,
-    nodes: (g.nodes ?? []).map((n) => ({ ...n, position: undefined })),
+    // A step's name and position are both editor presentation — see
+    // core.BehaviorEqual for why the name is here and the FLOW's name isn't.
+    nodes: (g.nodes ?? []).map((n) => ({ ...n, position: undefined, label: undefined })),
     edges: (g.edges ?? []).map((e) => ({ ...e, waypoints: undefined })),
   };
 }

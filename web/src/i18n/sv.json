@@ -1597,6 +1597,7 @@
     "add": "Lägg till",
     "multiSelectCustom": "Lägg till en till…",
     "keyPlaceholder": "nyckel",
+    "unsetOption": "(inte angivet)",
     "uploading": "Laddar upp…",
     "dropOrBrowse": "Släpp en fil här eller klicka för att bläddra",
     "workspacePathPlaceholder": "sökväg relativt arbetsytan",

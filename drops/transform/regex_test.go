@@ -201,3 +201,127 @@ func TestRegex_WiredInputBeatsTextParam(t *testing.T) {
 		t.Errorf("out = %v, want the wired text to win", got)
 	}
 }
+
+// ----- the Replacements table ---------------------------------------
+//
+// Where this came from: an author wrote the pattern "(Clouds)|(Rain)" and tried
+// "(?1Molnigt)(?2Regn)" as the replacement — Boost/PCRE conditional-replacement
+// syntax, which Go's RE2 template has no notion of, so it came out literally.
+// The thing being asked for is a lookup, and a table says it directly.
+
+func TestRegex_ReplacementsTableTranslatesEachMatch(t *testing.T) {
+	res := runRegex(t, "Clouds today, Rain tomorrow", map[string]any{
+		"mode": "replace",
+		// No pattern: the words to look for are the table's own keys.
+		"replacements": map[string]any{"Clouds": "Molnigt", "Rain": "Regn"},
+	})
+	if got := regexOut(t, res).Inline; got != "Molnigt today, Regn tomorrow" {
+		t.Errorf("out = %v, want \"Molnigt today, Regn tomorrow\"", got)
+	}
+}
+
+func TestRegex_ReplacementsLeaveUnlistedMatchesAlone(t *testing.T) {
+	// The author's own pattern matches more than the table mentions. The table
+	// lists what to change; everything else is not ours to touch.
+	res := runRegex(t, "Clouds and Fog", map[string]any{
+		"pattern": `Clouds|Fog`, "mode": "replace",
+		"replacements": map[string]any{"Clouds": "Molnigt"},
+	})
+	if got := regexOut(t, res).Inline; got != "Molnigt and Fog" {
+		t.Errorf("out = %v, want \"Molnigt and Fog\"", got)
+	}
+}
+
+func TestRegex_ReplacementsFollowTheirOwnPattern(t *testing.T) {
+	// (?i) in the pattern decides what counts as a match; the table is then
+	// consulted case-insensitively, since one row unambiguously covers it.
+	res := runRegex(t, "CLOUDS then clouds", map[string]any{
+		"pattern": `(?i)clouds`, "mode": "replace",
+		"replacements": map[string]any{"Clouds": "Molnigt"},
+	})
+	if got := regexOut(t, res).Inline; got != "Molnigt then Molnigt" {
+		t.Errorf("out = %v, want both replaced: %v", got, got)
+	}
+}
+
+func TestRegex_ReplacementsAmbiguousCaseIsLeftAlone(t *testing.T) {
+	// Two rows differing only in case: neither is guessed at, and the exact
+	// one still wins for its own spelling.
+	res := runRegex(t, "clouds CLOUDS Clouds", map[string]any{
+		"pattern": `(?i)clouds`, "mode": "replace",
+		"replacements": map[string]any{"Clouds": "Molnigt", "clouds": "molnigt"},
+	})
+	if got := regexOut(t, res).Inline; got != "molnigt CLOUDS Molnigt" {
+		t.Errorf("out = %v, want the exact spellings replaced and CLOUDS untouched", got)
+	}
+}
+
+func TestRegex_ReplacementsLongestKeyWins(t *testing.T) {
+	// RE2 alternation is leftmost-first, so a shorter key listed first would
+	// otherwise eat the start of a longer phrase and leave the rest behind.
+	res := runRegex(t, "Rain shower later", map[string]any{
+		"mode":         "replace",
+		"replacements": map[string]any{"Rain": "Regn", "Rain shower": "Regnskur"},
+	})
+	if got := regexOut(t, res).Inline; got != "Regnskur later" {
+		t.Errorf("out = %v, want \"Regnskur later\"", got)
+	}
+}
+
+func TestRegex_ReplacementsQuoteTheirKeys(t *testing.T) {
+	// A key is a word to find, not an expression: punctuation is literal.
+	res := runRegex(t, "cost is 5 (approx.)", map[string]any{
+		"mode":         "replace",
+		"replacements": map[string]any{"(approx.)": "(cirka)"},
+	})
+	if got := regexOut(t, res).Inline; got != "cost is 5 (cirka)" {
+		t.Errorf("out = %v, want the parens matched literally", got)
+	}
+}
+
+func TestRegex_ReplacementsIgnoreBlankKeys(t *testing.T) {
+	// A half-typed row in the editor must not compile into a pattern that
+	// matches the empty string everywhere.
+	res := runRegex(t, "Clouds", map[string]any{
+		"mode":         "replace",
+		"replacements": map[string]any{"": "x", "Clouds": "Molnigt"},
+	})
+	if got := regexOut(t, res).Inline; got != "Molnigt" {
+		t.Errorf("out = %v, want Molnigt", got)
+	}
+}
+
+func TestRegex_ReplacementsTableWinsOverReplacement(t *testing.T) {
+	// Documented precedence: with a table, the single replacement string is not
+	// consulted at all (it has no per-match answer).
+	res := runRegex(t, "Clouds", map[string]any{
+		"mode": "replace", "replacement": "IGNORED",
+		"replacements": map[string]any{"Clouds": "Molnigt"},
+	})
+	if got := regexOut(t, res).Inline; got != "Molnigt" {
+		t.Errorf("out = %v, want Molnigt", got)
+	}
+}
+
+func TestRegex_ReplacementsBadShapeIsAnError(t *testing.T) {
+	for _, v := range []any{map[string]any{"Clouds": 42}, "Clouds=Molnigt", []any{"Clouds"}} {
+		res := runRegex(t, "Clouds", map[string]any{"mode": "replace", "replacements": v})
+		if res.Status != core.StatusError || res.Error.Code != "bad_param" {
+			t.Errorf("replacements=%v: status/code = %v/%v, want error/bad_param", v, res.Status, res.Error)
+		}
+	}
+}
+
+func TestRegex_NoPatternAndNoTableIsAnError(t *testing.T) {
+	// The table is the only thing that can stand in for a pattern, and only in
+	// replace mode.
+	for _, params := range []map[string]any{
+		{"mode": "replace"},
+		{"mode": "extract", "replacements": map[string]any{"Clouds": "Molnigt"}},
+	} {
+		res := runRegex(t, "Clouds", params)
+		if res.Status != core.StatusError || res.Error.Code != "bad_param" {
+			t.Errorf("params=%v: status/code = %v/%v, want error/bad_param", params, res.Status, res.Error)
+		}
+	}
+}

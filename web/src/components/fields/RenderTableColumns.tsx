@@ -414,6 +414,25 @@ export function RenderTableColumns({
     else if (s.axis === "") startEdit(col); // a tap (no drag) renames the header
   };
 
+  // Whatever is still being typed when this panel goes away.
+  //
+  // Blur alone is not enough, and the gap is not a corner case: clicking the
+  // canvas is how you leave a panel, and React Flow calls preventDefault on the
+  // pane's mousedown so it can start a drag — which means focus never leaves the
+  // box, no blur fires, and the click then deselects the step and unmounts this
+  // whole editor. React does not fire blur on unmount either. A name typed into
+  // the box and left that way was simply discarded.
+  //
+  // Held in a ref so the cleanup runs the LATEST version rather than the one
+  // captured when the effect was registered. onApply reaches the Inspector,
+  // which is still mounted — only this child is going.
+  const flushPending = useRef<() => void>(() => {});
+  flushPending.current = () => {
+    if (editing) commitEdit();
+    else if (addValue.trim()) addColumn();
+  };
+  useEffect(() => () => flushPending.current(), []);
+
   const step = stepRef.current || 40;
   const isEmpty = order.length === 0 && hidden.length === 0;
 

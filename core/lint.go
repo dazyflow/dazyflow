@@ -160,6 +160,7 @@ func LintGraph(g Graph) []LintIssue {
 	issues = append(issues, lintTemplatePlaceholders(g)...)
 	issues = append(issues, lintDanglingReferences(g, nodesByID)...)
 	issues = append(issues, lintScriptLanguage(g, nodesByID)...)
+	issues = append(issues, lintRegexPattern(g)...)
 	issues = append(issues, lintTriggers(g)...)
 	if len(issues) == 0 {
 		return nil

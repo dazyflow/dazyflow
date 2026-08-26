@@ -438,8 +438,8 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     sv: "Infoga eller uppdatera (upsert) rader i en Postgres-tabell. Ange konfliktkolumnerna — Postgres matchar befintliga rader på dem och uppdaterar dem på plats, medan nya rader infogas. Välj vilka kolumner som uppdateras vid en träff om du vill bevara några befintliga värden.",
   },
   regex: {
-    en: "bc6c9730",
-    sv: "Kör ett reguljärt uttryck över text — koppla in texten, eller skriv den på steget (så att du inuti en För varje kan läsa ${item.description} utan något föregående steg). 'mode' väljer vad som ska göras: extract plockar ut varje träff (med grupper som kolumner — den första träffen kommer också ut på 'out'), replace ersätter träffar (använd $1 eller ${name} i ersättningen), split delar texten på mönstret till en lista, och match testar om mönstret finns (ett Ja/Nej för ett Förgrening-steg). Mönstren använder RE2-syntax; lägg till inbyggda flaggor som (?i) för skiftlägesokänslighet. Namngivna grupper (?P<name>…) blir namngivna kolumner; onamngivna blir 1, 2, … och hela träffen är 'match'.",
+    en: "f40b3c9b",
+    sv: "Kör ett reguljärt uttryck över text — koppla in texten, eller skriv den på steget (så att du inuti en För varje kan läsa ${item.description} utan något föregående steg). 'mode' väljer vad som ska göras: extract plockar ut varje träff (med grupper som kolumner — den första träffen kommer också ut på 'out'), replace ersätter träffar (använd $1 eller ${name} i ersättningen, eller fyll i tabellen 'replacements' för att skriva om flera olika ord i ett och samma steg), split delar texten på mönstret till en lista, och match testar om mönstret finns (ett Ja/Nej för ett Förgrening-steg). Mönstren använder RE2-syntax; lägg till inbyggda flaggor som (?i) för skiftlägesokänslighet. Namngivna grupper (?P<name>…) blir namngivna kolumner; onamngivna blir 1, 2, … och hela träffen är 'match'.",
   },
   render_table: {
     en: "bfb00eec",

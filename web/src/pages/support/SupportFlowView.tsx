@@ -321,6 +321,10 @@ function SupportCanvas({
         position: n.position ?? { x: 80 + i * 240, y: 80 },
         draggable: false,
         data: {
+          // The drop's name, deliberately, not the author's own name for the
+          // step: a step name is free text somebody typed, so it belongs with
+          // the params the bundle redacts rather than with the structure it
+          // keeps. An agent sees what KIND of step this is.
           label: (() => {
             const m = manifestById.get(n.module);
             return m ? dropLabel(m, i18n.language) : n.module;

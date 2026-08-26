@@ -58,7 +58,9 @@ func init() {
 					},
 					"keep":{
 						"type":"string",
+						"title":"Keep",
 						"enum":["first","last"],
+						"enumNames":["The first one","The last one"],
 						"default":"first",
 						"description":"Which member of a duplicate group survives."
 					}

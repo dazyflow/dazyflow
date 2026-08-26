@@ -654,7 +654,7 @@ func loadGraphFromRun(ctx context.Context, store core.JobStore, graphRunID strin
 }
 
 // fetchPredecessors collects the Result of every node that feeds into rec.NodeID,
-// keyed by upstream node ID so engine.assembleInput can look them up.
+// keyed by upstream node ID so engine.AssembleInput can look them up.
 // Predecessors that didn't produce data (failed or skipped) are silently
 // omitted — analyzeDependent has already verified those non-success
 // states are tolerated by the edge's on_error, so omission means the

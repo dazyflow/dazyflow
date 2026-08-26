@@ -135,6 +135,7 @@ export const SV_FIELD_TITLES: Record<string, string> = {
   "Inline file bytes": "Bädda in filens byte",
   "Into folder": "Till mapp",
   "Issue or PR number": "Ärende- eller PR-nummer",
+  Keep: "Behåll",
   "Keep numbers as numbers": "Behåll tal som tal",
   "Key field": "Nyckelfält",
   "Labels": "Etiketter",
@@ -196,6 +197,7 @@ export const SV_FIELD_TITLES: Record<string, string> = {
   "Question to ask": "Fråga att ställa",
   "Reason": "Orsak",
   "Replacement": "Ersättning",
+  "Replacements": "Ersättningar",
   "Reply in thread": "Svara i tråden",
   "Reply language": "Svarsspråk",
   "Repo name": "Repons namn",
@@ -531,6 +533,7 @@ export const SV_FIELD_HELP: Record<string, string> = {
   "Recipient(s), comma-separated. Overridden by the 'To' input.": "Mottagare, kommaseparerade. Ingången Till vinner över detta.",
   "Rename headers: the column as it appears in the data on the left, the heading you want on the right. Columns you don't list keep their own name, and listing one does not hide the others — this only changes the text in the header row.": "Byt rubriker: kolumnen som den heter i datat till vänster, rubriken du vill ha till höger. Kolumner du inte listar behåller sina egna namn, och att lista en döljer inte de andra — det här ändrar bara texten i rubrikraden.",
   "Render the digest as lowercase hex (default) or standard Base64.": "Skriv ut summan som gemener i hex (standard) eller som vanlig Base64.",
+  "Replace mode, many words at once: what to look for on the left, what to write on the right. Each match becomes whatever its row says; a match no row mentions is left as it is. Leave Pattern empty and the words are looked for literally, or write a pattern (e.g. with (?i)) and each match is looked up in this table.": "Läget replace, många ord på en gång: vad som ska letas efter till vänster, vad som ska skrivas till höger. Varje träff blir det som dess rad säger; en träff som ingen rad nämner lämnas som den är. Lämna Mönster tomt så letas orden efter ordagrant, eller skriv ett mönster (t.ex. med (?i)) så slås varje träff upp i den här tabellen.",
   "Request headers (e.g. Authorization). Values may include ${secret.NAME} secrets.": "Rubriker i förfrågan (t.ex. Authorization). Värdena får innehålla hemligheter som ${secret.NAMN}.",
   "Request headers. Values may include ${secret.NAME} secret placeholders (e.g. an Authorization bearer token).": "Rubriker i förfrågan. Värdena får innehålla platshållare för hemligheter som ${secret.NAMN} (t.ex. en Authorization-bearer-token).",
   "Restrict to files inside this folder — pick from your account's folders. Leave blank to search all of Drive.": "Begränsa till filer i den här mappen — välj bland kontots mappar. Lämna tomt för att söka i hela Drive.",
@@ -689,6 +692,30 @@ export const SV_FIELD_HELP: Record<string, string> = {
 
 // Dropdown option labels (schema.enumNames), including the currency list.
 export const SV_ENUM_LABELS: Record<string, string> = {
+  // Regex modes.
+  "Extract matches": "Plocka ut träffar",
+  "Replace matches": "Ersätt träffar",
+  "Split on the pattern": "Dela på mönstret",
+  "Test for a match": "Testa om det finns en träff",
+  // Base64 / hash. The algorithm and encoding names (SHA-256, Hex, Base64,
+  // Standard) are the same word in Swedish and are left to the fallback.
+  Encode: "Koda",
+  Decode: "Avkoda",
+  "URL-safe": "URL-säker",
+  // Dedupe rows: which member of a duplicate group survives.
+  "The first one": "Den första",
+  "The last one": "Den sista",
+  // Drive export formats — the file types keep their own names; only the
+  // English word next to one needs translating.
+  "Plain text (.txt)": "Vanlig text (.txt)",
+  // Gmail: how much of the message to fetch.
+  Everything: "Allt",
+  "Headers only": "Bara huvudena",
+  "Smallest — ids and labels": "Minsta — id och etiketter",
+  // MQTT delivery guarantees.
+  "0 — at most once": "0 — högst en gång",
+  "1 — at least once": "1 — minst en gång",
+  "2 — exactly once": "2 — exakt en gång",
   "Plain text": "Vanlig text",
   Shell: "Skal",
   "Fail this step": "Låt steget misslyckas",

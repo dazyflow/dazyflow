@@ -53,8 +53,8 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"mode":{"type":"string","enum":["encode","decode"],"default":"encode","title":"Mode","description":"encode text → Base64, or decode Base64 → text."},
-					"variant":{"type":"string","enum":["standard","url"],"default":"standard","title":"Alphabet","description":"standard Base64, or the URL-safe alphabet (- and _ instead of + and /)."}
+					"mode":{"type":"string","enum":["encode","decode"],"enumNames":["Encode","Decode"],"default":"encode","title":"Mode","description":"encode text → Base64, or decode Base64 → text."},
+					"variant":{"type":"string","enum":["standard","url"],"enumNames":["Standard","URL-safe"],"default":"standard","title":"Alphabet","description":"standard Base64, or the URL-safe alphabet (- and _ instead of + and /)."}
 				}
 			}`),
 			Idempotent: true,

@@ -157,3 +157,53 @@ func TestReferences_NoNodeListsAllNodes(t *testing.T) {
 		t.Errorf("with no node, all nodes should be listed: %v", up)
 	}
 }
+
+// The picker names each upstream step, and a step the author renamed has to be
+// named the way they named it: a reference reads as "<step> · <port>", and
+// naming it differently here to the way it is named on the canvas is how you
+// end up hunting for a step that is right in front of you.
+func TestReferences_UpstreamCarriesTheAuthorsStepName(t *testing.T) {
+	h := newSecretsHarness(t)
+	g := core.Graph{
+		ID: "named", Tenant: "t", Workspace: "ws",
+		Nodes: []core.Node{
+			{ID: "read", Module: "sheets_read_range", Label: "Yesterday's orders",
+				Params: map[string]any{"spreadsheet_id": "S"}},
+			{ID: "plain", Module: "sheets_read_range", Params: map[string]any{"spreadsheet_id": "T"}},
+			{ID: "append", Module: "sheets_append_row", Params: map[string]any{"spreadsheet_id": "S"}},
+		},
+		Edges: []core.Edge{
+			{From: "read", FromPort: "rows", To: "append", ToPort: "rows"},
+			{From: "plain", FromPort: "rows", To: "append", ToPort: "rows"},
+		},
+	}
+	if _, err := h.ws.Save(g, "test"); err != nil {
+		t.Fatalf("save graph: %v", err)
+	}
+	rw := h.do(t, "GET", "/api/v1/me/flows/"+url.PathEscape("t/ws/named")+"/references?node=append", nil)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rw.Code, rw.Body.String())
+	}
+	var out struct {
+		Groups struct {
+			Upstream []struct {
+				NodeID    string `json:"node_id"`
+				NodeLabel string `json:"node_label"`
+			} `json:"upstream"`
+		} `json:"groups"`
+	}
+	if err := json.Unmarshal(rw.Body.Bytes(), &out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	seen := map[string]string{}
+	for _, i := range out.Groups.Upstream {
+		seen[i.NodeID] = i.NodeLabel
+	}
+	if got := seen["read"]; got != "Yesterday's orders" {
+		t.Errorf("renamed step is called %q in the picker, want its own name", got)
+	}
+	// A step nobody renamed still goes by its drop's name.
+	if got := seen["plain"]; got == "" || got == "plain" {
+		t.Errorf("unnamed step is called %q, want the drop's label", got)
+	}
+}

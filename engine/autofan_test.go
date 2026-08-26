@@ -234,7 +234,7 @@ func TestRunMaybeFanned_PreservesRefPayload(t *testing.T) {
 // input is empty runs zero times, and must still emit its declared output ports
 // as empty lists ("many" with zero items). Emitting nothing made the ports vanish:
 // downstream, an edge from an absent port classifies as dormant and skips the
-// branch, and on the in-process path assembleInput omits the input entirely so a
+// branch, and on the in-process path AssembleInput omits the input entirely so a
 // loop-body node can run with a required input unwired.
 func TestRunMaybeFanned_EmptyList(t *testing.T) {
 	ctx := context.Background()

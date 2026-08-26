@@ -23,6 +23,151 @@ into the image.)
 
 ## [Unreleased]
 
+### Changed
+
+- **Dropdowns read as words, in your own language.** A choice field shows its
+  raw value when the param carries no display names, and fourteen of them
+  didn't: the Regex step offered `extract / replace / split / match`, Hash
+  offered `sha256`, MQTT offered `0 / 1 / 2`, Drive offered `docx`. Those are
+  API vocabulary, correct in the flow and wrong on screen.
+
+  They now read as what they mean — "Extract matches", "SHA-256",
+  "1 — at least once", "Word (.docx)" — translated like every other dropdown,
+  with the units spelled out where a word alone didn't say enough ("Metric (°C,
+  m/s)", "Kelvin (K, m/s)"). MQTT's QoS levels name their delivery guarantee,
+  and Gmail's fetch detail says "Everything / Headers only / Smallest" instead
+  of `full / metadata / minimal`. Deduplicate rows also gains the field label
+  it never had.
+
+  **The stored values are untouched**, so flows, the API and the MCP tools keep
+  the names they always had. HTTP methods deliberately keep theirs on screen
+  too: GET and POST are what a user knows them by, and "Fetch" would be worse
+  than the raw value, not better.
+
+  A test now asks every enum for its labels, so the next one can't ship without
+  them — with those four HTTP fields named as the deliberate exception.
+
+  The same sweep over the choices that aren't drop params found three more: a
+  member's role read `viewer / editor / admin` in the org's member list and its
+  invite form, though the words for those roles were already written and
+  translated elsewhere; a platform tier's plan read `free / pro`; and an
+  optional dropdown's blank entry read `(unset)` in every language. All three
+  now show the same words the rest of the product uses. Flow-level choices —
+  visibility, a connection's error handling — were already translated and are
+  unchanged.
+
+### Added
+
+- **The Regex step can rewrite several different words in one pass.** Fill in
+  its new Replacements table — `Clouds → Molnigt`, `Rain → Regn` — and each
+  match becomes whatever its row says. A match no row mentions is left alone,
+  because the table lists what to change and nothing else is the step's
+  business.
+
+  Leave Pattern empty and the words to look for are the table's own keys, so
+  the everyday find-and-replace needs no regular expression at all. Write a
+  pattern and it decides what counts as a match while the table decides what it
+  becomes — which is how `(?i)clouds` catches "CLOUDS" and still writes
+  "Molnigt" (a match is looked up exactly, then case-insensitively when exactly
+  one row covers it; two rows differing only in case are left alone rather than
+  guessed at). Keys are matched literally, so punctuation needs no escaping,
+  and a longer key wins over a shorter one that starts the same way — RE2
+  alternation is leftmost-first, and "Rain" listed before "Rain shower" would
+  otherwise eat the first two words of the longer phrase.
+
+  This replaces reaching for a conditional replacement like
+  `(?1Molnigt)(?2Regn)`, which is Boost/PCRE syntax that Go's RE2 template has
+  no notion of — it came out in the text verbatim. What that expresses is a
+  lookup, and a table says it directly.
+
+  Pattern has left the schema's required list, since the table can stand in for
+  it. A step with neither is now caught by a lint rule instead, which is
+  strictly better: it understands the mode, so it can say "give it an
+  expression, or fill in its Replacements table" while the flow is still being
+  written rather than failing at run time.
+
+### Fixed
+
+- **A run's ports are named the way the canvas names them.** The Inputs and
+  Output sections listed each port by its wire id — `rows`, `html`, `out` —
+  while the canvas names the same pins with the drop's own labels, translated:
+  "Rader", "HTML-tabell". One run, read in two vocabularies. They now use the
+  labels, with the id kept on hover for anyone writing a `${upstream.…}`
+  reference by hand. A variadic port, which arrives as `items[0]` and `items[1]`
+  and no manifest declares, reads as "Indata 1" and "Indata 2".
+
+- **A run now shows what each step received, not just what it produced.** The
+  step detail has had an Inputs section since it was written and it has never
+  once appeared: it reads `inputs` off the node record, and a node record only
+  ever carries what the node PRODUCED. The dispatcher enqueues a record holding
+  the graph and node id, the engine assembles the inputs in memory when it
+  executes, and nothing writes them back.
+
+  They didn't need writing back — they're recoverable exactly. The run keeps its
+  own graph, and every step keeps its outputs, which is everything the engine
+  used to build the inputs in the first place; the API now rebuilds them through
+  `engine.AssembleInput`, the same function the run itself went through. Calling
+  the engine's own rather than re-deriving "the upstream output for each edge" is
+  what keeps the explanation honest: variadic fan-in, fallback edges that carry
+  no data, and the one→many auto-lift are all decisions that live there, and a
+  second implementation would quietly disagree with the first.
+
+  This makes a run readable in a way it wasn't: a sort step now shows the rows
+  going in unsorted and coming out sorted, instead of one half of the story.
+  Nothing new is exposed — an input value IS an upstream step's output value,
+  already on screen a row below, behind the same permission check. Storing them
+  instead would have duplicated every value once per consuming edge.
+
+  Best-effort, so the section is absent rather than wrong: a run whose graph is
+  gone, a step whose predecessor was pruned by retention, or a drop no longer
+  registered leaves it out. Steps inside a for-each body stay empty too — the
+  fan-out feeds them, not an edge.
+
+- **A renamed step is called that everywhere, not just on its card.** Storing
+  the name was half the job: three places derived a step's name from its drop's
+  manifest and so kept showing the old one. The run timeline now names each step
+  the way the canvas does — a run is where you go to read what happened, and
+  reading it under different names is the whole problem — and so do the
+  reference picker's `${upstream.…}` entries, on both the daemon and the editor
+  side, where a reference reads as "<step> · <port>".
+
+  One place deliberately still shows the drop's name: the flow a support agent
+  can view. A step name is free text somebody typed, so it belongs with the
+  params that view redacts rather than with the structure it keeps.
+
+- **Renaming a step now sticks.** The inspector has always let you rename a
+  step, and the name went nowhere: the save wrote a node's id, module, params,
+  position and debug flags, and the load re-derived the name from the drop's
+  manifest. So a rename reverted on the next reload — with an autosave in
+  between, reporting "Saved".
+
+  A step's name is now part of the node (`label`), and the editor keeps it
+  through the paths that rebuild a node: the mount load, undo/redo, and the
+  watch that reconciles an edit made elsewhere. Only a name you chose is
+  stored; a step still called after its drop carries no label at all, because
+  the default is the drop's own LOCALIZED label and writing that out would pin
+  one language into the flow.
+
+  It counts as canvas presentation rather than publishable behaviour — the
+  engine never reads it and nothing outside the editor shows it — so renaming a
+  step doesn't raise the "publish your changes" prompt, exactly like moving one.
+  A flow's own name is deliberately not in that category: it reaches people
+  through the flow list and failure mail.
+
+- **A column's custom name is kept when you click away from the box.** Leaving
+  the field by any route that moves focus — Tab, another field, another step —
+  already saved. Clicking the canvas did not, and that is the ordinary way to
+  leave a panel: React Flow calls preventDefault on the pane's mousedown so it
+  can start a drag, so focus never leaves the box and no blur fires; the click
+  then deselects the step and takes the panel with it, and React fires no blur
+  on unmount either. The name was discarded without a trace.
+
+  Anything still being typed is now written when the panel goes away — an open
+  row's heading, a column re-pointed in an open row, or a column half-entered
+  in the add row. Nothing is written when nothing was being typed, so opening a
+  step and closing it still leaves the flow alone.
+
+
 ## [0.15.7] - 2026-08-26
 
 ### Fixed

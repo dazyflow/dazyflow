@@ -19,7 +19,7 @@
 // that has quietly stopped guarding.
 
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, act } from "@testing-library/react";
+import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { installLayoutStubs, makeStreamJob, manifests, twoStepGraph } from "./editorTestHarness";
 
@@ -318,5 +318,70 @@ describe("editor edit lock", () => {
     });
     // Only runs while locked, so there's no idle polling cost.
     expect(listRuns.mock.calls.length).toBe(atMount);
+  });
+});
+
+// A step's NAME. The inspector has always offered to rename one and the value
+// went nowhere: buildGraph wrote id/module/params/position and the debug flags,
+// so the name never reached the server, and the load re-derived it from the
+// drop's manifest — a rename reverted on the next reload, with an autosave in
+// between reporting "Saved".
+describe("editor step name round trip", () => {
+  const savedNodes = () =>
+    (
+      saveGraph.mock.calls.at(-1)?.find((a) => a && typeof a === "object" && "nodes" in a) as
+        | { nodes: { id: string; label?: string }[] }
+        | undefined
+    )?.nodes;
+
+  // The unzoned schedule is what makes the editor dirty on load, so autosave
+  // fires without needing a canvas gesture — the same trick the policy tests
+  // above use.
+  const graphNamed = (label?: string) => {
+    const g = graphWithUnzonedSchedule();
+    return {
+      ...g,
+      nodes: g.nodes.map((n) => (n.id === "ntfy_1" && label ? { ...n, label } : n)),
+    };
+  };
+
+  it("keeps a name through a save instead of dropping it", async () => {
+    // The data-loss shape: a name the flow already had, silently absent from
+    // the next write.
+    loadGraph.mockResolvedValue(graphNamed("Tell the barista"));
+    mount();
+    await letAutosaveFire();
+    await waitFor(() => expect(saveGraph).toHaveBeenCalled());
+    expect(savedNodes()?.find((n) => n.id === "ntfy_1")?.label).toBe("Tell the barista");
+  });
+
+  it("shows a saved name on the canvas instead of the drop's own", async () => {
+    loadGraph.mockResolvedValue(graphNamed("Tell the barista"));
+    mount();
+    expect(await screen.findByText("Tell the barista")).toBeInTheDocument();
+    // The drop's own label is what it replaced.
+    expect(screen.queryByText("Send notification")).toBeNull();
+  });
+
+  it("writes no name for a step still called after its drop", async () => {
+    // The default is the drop's LOCALIZED label. Storing it would freeze the
+    // flow in one language and grow a field on every node for nothing.
+    loadGraph.mockResolvedValue(graphNamed());
+    mount();
+    await letAutosaveFire();
+    await waitFor(() => expect(saveGraph).toHaveBeenCalled());
+    for (const n of savedNodes() ?? []) {
+      expect(n).not.toHaveProperty("label");
+    }
+  });
+
+  it("drops a stored name that only repeats the drop's own label", async () => {
+    // Same reason: it carries no intent, and keeping it would pin the English
+    // wording into a flow a Swedish reader opens.
+    loadGraph.mockResolvedValue(graphNamed("Send notification"));
+    mount();
+    await letAutosaveFire();
+    await waitFor(() => expect(saveGraph).toHaveBeenCalled());
+    expect(savedNodes()?.find((n) => n.id === "ntfy_1")).not.toHaveProperty("label");
   });
 });

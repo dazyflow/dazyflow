@@ -22,6 +22,12 @@ import "reflect"
 // web/src/lib/diffGraphs.ts — keep the two in lockstep):
 //
 //	Node.Position    where a step sits on the canvas
+//	Node.Label       what a step is called on the canvas. Editor presentation,
+//	                 like its position: the engine never reads it, and nothing
+//	                 outside the editor shows it — so promoting it changes
+//	                 nothing about the live flow. (Graph.Name is NOT in this
+//	                 list, and the difference is real: a flow's name reaches
+//	                 people through the flow list and failure mail.)
 //	Edge.Waypoints   hand-tuned wire routing
 //	Graph.Frames     comment boxes grouping steps
 //
@@ -61,6 +67,7 @@ func stripCosmetic(g Graph) Graph {
 		out.Nodes = make([]Node, len(g.Nodes))
 		for i, n := range g.Nodes {
 			n.Position = nil
+			n.Label = ""
 			out.Nodes[i] = n
 		}
 	}

@@ -226,7 +226,7 @@ func TestFallback_NoFallbackPathStillAborts(t *testing.T) {
 	}
 }
 
-// Sanity check at the assembleInput level — a fallback edge from a
+// Sanity check at the AssembleInput level — a fallback edge from a
 // succeeded source must not push the source's ref into the destination's
 // port. We can validate this indirectly through the merge example above
 // (only one ref collected), but a focused engine-level test is cheap.

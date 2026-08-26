@@ -277,3 +277,73 @@ describe("RenderTableColumns — discovering the columns", () => {
     expect(document.querySelectorAll(".rtc-hidden-row")).toHaveLength(1);
   });
 });
+
+// Leaving the panel without leaving the field. Clicking the canvas is how you
+// leave a panel, and React Flow preventDefaults the pane's mousedown so it can
+// start a drag — focus stays in the box, no blur fires, and the click then
+// deselects the step and unmounts this editor. React fires no blur on unmount
+// either, so a name typed and left that way was discarded.
+describe("RenderTableColumns — the panel going away mid-edit", () => {
+  it("saves a heading typed into an open row", async () => {
+    const onApply = vi.fn();
+    const { unmount } = render(
+      <RenderTableColumns params={{ columns: ["total"] }} onApply={onApply} />,
+    );
+    await tapRow("total");
+    // Typed, never confirmed: no Enter, no blur.
+    await userEvent.type(nameBoxes()[0], "Belopp");
+    expect(onApply).not.toHaveBeenCalled();
+
+    unmount();
+    expect(onApply).toHaveBeenCalledWith({
+      columns: [{ column: "total", label: "Belopp" }],
+    });
+  });
+
+  it("saves a column re-pointed in an open row", async () => {
+    const onApply = vi.fn();
+    const { unmount } = render(
+      <RenderTableColumns params={{ columns: ["total"] }} onApply={onApply} />,
+    );
+    await tapRow("total");
+    const col = screen.getByRole("textbox", { name: "renderTableColumns.columnField" });
+    await userEvent.clear(col);
+    await userEvent.type(col, "amount");
+    unmount();
+    expect(onApply).toHaveBeenCalledWith({ columns: ["amount"] });
+  });
+
+  it("saves a column half-added in the add row", async () => {
+    const onApply = vi.fn();
+    const { unmount } = render(
+      <RenderTableColumns params={{ columns: ["name"] }} onApply={onApply} />,
+    );
+    await userEvent.type(addBox(), "total");
+    await userEvent.type(addNameBox(), "Belopp");
+    unmount();
+    expect(onApply).toHaveBeenCalledWith({
+      columns: ["name", { column: "total", label: "Belopp" }],
+    });
+  });
+
+  it("writes nothing when there was nothing being typed", () => {
+    const onApply = vi.fn();
+    const { unmount } = render(
+      <RenderTableColumns params={{ columns: ["name"] }} onApply={onApply} />,
+    );
+    unmount();
+    // Opening a panel and closing it must not touch the flow.
+    expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it("writes nothing when the add row holds only a heading", async () => {
+    const onApply = vi.fn();
+    const { unmount } = render(
+      <RenderTableColumns params={{ columns: ["name"] }} onApply={onApply} />,
+    );
+    await userEvent.type(addNameBox(), "Belopp");
+    unmount();
+    // A heading with no column names nothing.
+    expect(onApply).not.toHaveBeenCalled();
+  });
+});

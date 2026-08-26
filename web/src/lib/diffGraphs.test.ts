@@ -32,6 +32,7 @@ function fixture(): Graph {
 // Each of these is a canvas gesture, not a change to what the flow does.
 const cosmetic: [string, (g: Graph) => void][] = [
   ["moved step", (g) => void (g.nodes[0].position = { x: 900, y: 900 })],
+  ["step renamed", (g) => void (g.nodes[0].label = "Every morning")],
   ["position dropped", (g) => void (g.nodes[0].position = undefined)],
   [
     "note added",

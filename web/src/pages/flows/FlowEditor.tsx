@@ -227,6 +227,41 @@ function EditorInner() {
     return m;
   }, [manifests]);
 
+  // What a step is called: the name its author gave it, else the drop's own
+  // (localized) label, else the module id for a drop whose manifest hasn't
+  // arrived. The fallback chain lives here because three paths need the same
+  // answer — the mount load, the reconcile that undo/redo and the flow-watch
+  // run through, and the save that decides whether the name is worth storing.
+  const labelFor = useCallback(
+    (n: { module: string; label?: string }) => {
+      if (n.label) return n.label;
+      const m = manifestByID.get(n.module);
+      return m ? dropLabel(m, i18n.language) : n.module;
+    },
+    [manifestByID],
+  );
+
+  // customNodeLabel reports whether a node's on-canvas name is one the author
+  // chose, rather than the name its drop came with.
+  //
+  // dropLabelIsDefault does the comparing, and it has to: the default is
+  // localized, so a step named "Gör en tabell" by a Swedish author is still
+  // unnamed, and comparing against the CURRENT language's default alone would
+  // store it as a custom name for everyone else to read.
+  const customNodeLabel = useCallback(
+    (n: FlowNode<DazyNodeData>) => {
+      const label = (n.data.label ?? "").trim();
+      if (label === "") return false;
+      const m = manifestByID.get(n.data.moduleID);
+      // No manifest (a drop that hasn't loaded, or a tenant runner's own): the
+      // name it falls back to is the module id, so that is what "unnamed"
+      // looks like — storing it would write the id into every such node.
+      if (!m) return label !== n.data.moduleID;
+      return !dropLabelIsDefault(m, label);
+    },
+    [manifestByID],
+  );
+
   const [nodes, setNodes] = useState<FlowNode<DazyNodeData>[]>([]);
   const [edges, setEdges] = useState<FlowEdge[]>([]);
   // Transient animation state for an AI/MCP build or edit landing on the
@@ -549,6 +584,7 @@ function EditorInner() {
           position: n.position ?? { x: 80 + i * 240, y: 80 },
           data: {
             label: (() => {
+              if (n.label) return n.label;
               const m = mm.get(n.module);
               return m ? dropLabel(m, i18n.language) : n.module;
             })(),
@@ -2065,7 +2101,10 @@ function EditorInner() {
       const d = n.data as DazyNodeData;
       const man = d.manifest ?? manifestByID.get(d.moduleID);
       if (!man) continue;
-      const nodeLabel = man.label || d.moduleID;
+      // d.label is the name on the canvas — the author's if they set one, the
+      // drop's otherwise — so a renamed step is named the same way in a
+      // reference as it is on the card.
+      const nodeLabel = d.label || man.label || d.moduleID;
       for (const p of man.outputs ?? []) {
         m[`${n.id}.${p.port}`] = `${nodeLabel} · ${p.label ?? p.port}`;
       }
@@ -2703,6 +2742,11 @@ function EditorInner() {
       id: n.id,
       module: n.data.moduleID,
       params: paramsByID[n.id] ?? {},
+      // Only a name the author actually chose. The default is the drop's own
+      // label, which is LOCALIZED — writing that would bake one language into
+      // the flow, so a Swedish author's graph would show Swedish step names to
+      // an English reader. Absent means "call it after the drop".
+      ...(customNodeLabel(n) ? { label: n.data.label } : {}),
       position: n.position,
       ...(breakpoints.has(n.id) ? { breakpoint: true } : {}),
       ...(disabledNodes.has(n.id) ? { disabled: true } : {}),
@@ -2860,7 +2904,9 @@ function EditorInner() {
             idOfExisting: (n) => n.id,
             idOfTarget: (t) => t.id,
             isUnchanged: (n, t) =>
-              n.data.moduleID === t.module && samePosition(n.position, t.position),
+              n.data.moduleID === t.module &&
+              samePosition(n.position, t.position) &&
+              n.data.label === labelFor(t),
             build: (t, prev) => {
               const m = manifestByID.get(t.module);
               return {
@@ -2869,7 +2915,7 @@ function EditorInner() {
                 type: "dazy",
                 position: t.position ?? { x: 80, y: 80 },
                 data: {
-                  label: m ? dropLabel(m, i18n.language) : t.module,
+                  label: labelFor(t),
                   moduleID: t.module,
                   manifest: m,
                 },

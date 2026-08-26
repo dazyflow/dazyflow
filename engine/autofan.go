@@ -118,7 +118,7 @@ func runMaybeFanned(
 	// declared ports vanish instead of reading as "zero items". Downstream that
 	// misleads both execution paths: an edge from an absent port classifies as
 	// dormant (classifyEdge), skipping the rest of the branch, and on the
-	// in-process path assembleInput simply omits the input, so a loop-body node
+	// in-process path AssembleInput simply omits the input, so a loop-body node
 	// can run with a required input unwired. Emit each declared output port as an
 	// empty list instead — "many" with zero items, the shape for_each already
 	// returns for an empty input.
