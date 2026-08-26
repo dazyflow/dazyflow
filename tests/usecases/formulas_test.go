@@ -76,12 +76,17 @@ func nowPlus(t *testing.T, h int) string {
 // Use case 3: "email me a summary every Monday" — the week filter and the
 // per-salesperson totals.
 func TestDigestFormulas(t *testing.T) {
+	// The two dates are relative to the run because the filter is: one day
+	// inside the 168h window, one month outside it. A literal date here is a
+	// test with an expiry date — this pair was written as 2026-08-19, one day
+	// old against a 7-day window, and started failing six days later when the
+	// window moved past it. That is what nowPlus is for.
 	out := runDrop(t, "compute_rows", map[string]any{
 		"compute": map[string]any{"amount": "double(row.amount)"},
 		"filter":  "timestamp(row.date) > now - duration('168h')",
 	}, map[string]core.Ref{"rows": jsonRef([]any{
-		map[string]any{"date": "2026-08-19T10:00:00Z", "salesperson": "Ida", "amount": "1200"},
-		map[string]any{"date": "2020-01-02T10:00:00Z", "salesperson": "Nils", "amount": "5000"},
+		map[string]any{"date": nowPlus(t, -24), "salesperson": "Ida", "amount": "1200"},
+		map[string]any{"date": nowPlus(t, -24*30), "salesperson": "Nils", "amount": "5000"},
 	})})
 	rows := rowsOf(t, out["rows"])
 	if len(rows) != 1 || rows[0]["salesperson"] != "Ida" {
