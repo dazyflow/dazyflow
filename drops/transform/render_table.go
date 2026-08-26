@@ -25,7 +25,7 @@ func init() {
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"transform", "table", "html", "render", "format", "email", "message", "report"},
-			Description: "Turn a rows list straight into a ready-to-send HTML table — the column names become the header row and every row becomes a table row. Unlike Make text there is no template to write and no column names to type: the headers come from whatever columns the data actually has, so it can't drift from the source (no \"no such key\" at run time). Connect a rows list into `rows` and the `html` output into a message step — e.g. a Send email step's Body. Headers are the data's own column names unless `columns` gives one a `label`, which renames just the header and keeps reading the same column — so a table can say \"Customer\" over a `customer_email` column. Set `title` to name the table and it renders as a caption above the header row — a ${upstream.…} reference works there, so the name can carry the run's data (\"Orders for 2026-08-26\"). With zero rows it emits `empty` (default \"\") so an empty result yields a chosen fallback instead of a blank table.",
+			Description: "Turn a rows list straight into a ready-to-send HTML table — the column names become the header row and every row becomes a table row. Unlike Make text there is no template to write and no column names to type: the headers come from whatever columns the data actually has, so it can't drift from the source (no \"no such key\" at run time). Connect a rows list into `rows` and the `html` output into a message step — e.g. a Send email step's Body. Headers are the data's own column names unless you rename them. `column_labels` is a plain {column: heading} map — {\"customer_email\":\"Customer\"} heads that column \"Customer\" and leaves every other column alone, so renaming one heading doesn't mean listing them all. `columns` can also carry a per-entry `label`, which wins over the map for that column. Set `title` to name the table and it renders as a caption above the header row — a ${upstream.…} reference works there, so the name can carry the run's data (\"Orders for 2026-08-26\"). With zero rows it emits `empty` (default \"\") so an empty result yields a chosen fallback instead of a blank table.",
 			Summary:     "Turn rows into a ready-to-send HTML table — columns become the header row, no template needed.",
 			Examples: []core.ParamsExample{
 				{
@@ -44,8 +44,13 @@ func init() {
 				},
 				{
 					Title:  "Readable headers over technical column names",
+					Params: json.RawMessage(`{"column_labels":{"customer_email":"Customer","created_at":"Ordered"}}`),
+					Notes:  "Renames those two headings and leaves the rest of the columns as they are. The cells still come from the named columns.",
+				},
+				{
+					Title:  "Chosen columns, in order, with their own headings",
 					Params: json.RawMessage(`{"columns":[{"column":"customer_email","label":"Customer"},{"column":"created_at","label":"Ordered"}]}`),
-					Notes:  "`label` renames the header only — the cells still come from the named column. A plain string, as above, heads the column with the data's own name.",
+					Notes:  "Use this when the selection, the order and the headings are all being set together; a per-entry `label` wins over `column_labels`.",
 				},
 				{
 					Title:  "Fallback when there are no rows",
@@ -68,6 +73,7 @@ func init() {
 				"type":"object",
 				"properties":{
 					"title":   {"type":"string","title":"Table name","description":"An optional name for the table, shown as a caption above the header row. Leave blank for no caption. Takes a reference, so it can name the run's own data — e.g. \"Orders for ${upstream.today.out}\"."},
+					"column_labels": {"type":"object","additionalProperties":{"type":"string"},"title":"Column names","x_key_placeholder":"customer_email","x_value_placeholder":"Customer","description":"Rename headers: the column as it appears in the data on the left, the heading you want on the right. Columns you don't list keep their own name, and listing one does not hide the others — this only changes the text in the header row."},
 					"columns": {"type":"array","items":{"oneOf":[{"type":"string"},{"type":"object","properties":{"column":{"type":"string"},"label":{"type":"string"}},"required":["column"]}]},"x_advanced":true,"description":"Which columns to include, in order. A plain name uses the data's own column name as the header; {\"column\":\"customer_email\",\"label\":\"Customer\"} keeps reading that column but heads it \"Customer\". Leave empty to use every column the data has, in its natural order. The inspector's column editor writes this for you."},
 					"empty":   {"type":"string","title":"If there are no rows","description":"What to show instead of an empty table when the input has zero rows — plain text or HTML, e.g. \"No results yet\". Leave blank to output nothing at all."}
 				}
@@ -109,6 +115,24 @@ func executeRenderTable(_ context.Context, job core.Job, _ chan<- core.Progress)
 		}
 	}
 
+	// Renames from the {column: heading} map, applied to every column that
+	// didn't state a heading of its own in `columns`. Most specific wins, the
+	// same shape as Sort rows' Direction against its per-column prefixes.
+	if raw, present := job.Params["column_labels"]; present && raw != nil {
+		labels, err := normalizeStringMap(raw, "column_labels")
+		if err != nil {
+			return errResult(job, "bad_param", err.Error()), nil
+		}
+		for i := range cols {
+			if cols[i].named {
+				continue
+			}
+			if l, ok := labels[cols[i].key]; ok && strings.TrimSpace(l) != "" {
+				cols[i].label = l
+			}
+		}
+	}
+
 	// Zero rows emits the `empty` fallback verbatim — no table, and so no
 	// caption either. A caption with nothing under it would be a heading for a
 	// table that isn't there, and `empty` is the whole message in that case.
@@ -134,6 +158,11 @@ func executeRenderTable(_ context.Context, job core.Job, _ chan<- core.Progress)
 type tableColumn struct {
 	key   string
 	label string
+	// named records that this column's heading was set on the column itself
+	// (a `label` in its `columns` entry), so the column_labels map leaves it
+	// alone. Without it the map would quietly overrule the more specific
+	// setting, which is the wrong way round.
+	named bool
 }
 
 // dataColumns heads each of the data's own columns with its own name — the
@@ -176,10 +205,11 @@ func parseTableColumns(v any) ([]tableColumn, error) {
 					return nil, fmt.Errorf("columns[%d]: 'column' missing", i)
 				}
 				label, _ := it["label"].(string)
-				if strings.TrimSpace(label) == "" {
+				named := strings.TrimSpace(label) != ""
+				if !named {
 					label = key
 				}
-				out = append(out, tableColumn{key: key, label: label})
+				out = append(out, tableColumn{key: key, label: label, named: named})
 			default:
 				return nil, fmt.Errorf("columns[%d]: expected a name or {column,label}, got %T", i, item)
 			}

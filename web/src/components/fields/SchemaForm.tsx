@@ -853,6 +853,8 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
           <FieldWrap name={name} schema={schema} required={required}>
             <DictField
               confirmRemove={!!schema.x_confirm_remove}
+              keyPlaceholder={schema.x_key_placeholder}
+              valuePlaceholder={schema.x_value_placeholder}
               valueSchema={schema.additionalProperties}
               value={(value as Record<string, unknown>) ?? {}}
               onChange={onChange}
@@ -2688,10 +2690,16 @@ function DictField({
   value,
   onChange,
   confirmRemove,
+  keyPlaceholder,
+  valuePlaceholder,
 }: {
   valueSchema: JSONSchema;
   value: Record<string, unknown>;
   onChange: (v: Record<string, unknown>) => void;
+  // Examples for the two boxes (x_key_placeholder / x_value_placeholder). A
+  // map's meaning is in the pairing, and "key"/"" doesn't carry it.
+  keyPlaceholder?: string;
+  valuePlaceholder?: string;
   // Ask before removing a row (x_confirm_remove on the field).
   //
   // Opt-in rather than always, because a confirm on every row of every map
@@ -2771,7 +2779,7 @@ function DictField({
           <input
             value={k}
             onChange={(e) => updateAt(idx, e.target.value, v)}
-            placeholder={t("schemaForm.keyPlaceholder")}
+            placeholder={keyPlaceholder ?? t("schemaForm.keyPlaceholder")}
             aria-invalid={duplicated.has(k) || undefined}
             title={duplicated.has(k) ? t("schemaForm.dictDuplicate", { key: k }) : undefined}
             style={{ fontFamily: "var(--font-mono)" }}
@@ -2779,6 +2787,7 @@ function DictField({
           <DictValueCell
             schema={valueSchema}
             value={v}
+            placeholder={valuePlaceholder}
             onChange={(nv) => updateAt(idx, k, nv)}
           />
           <Button
@@ -3175,10 +3184,15 @@ function ScalarValue({
   schema,
   value,
   onChange,
+  placeholder,
 }: {
   schema: JSONSchema;
   value: unknown;
   onChange: (v: unknown) => void;
+  // An example for the text case (a dict row's value box). The typed cases
+  // below carry their own affordances — a select shows its options, a number
+  // box its spinner — so nothing else here needs one.
+  placeholder?: string;
 }) {
   const { t } = useTranslation();
   if (schema.enum) {
@@ -3233,6 +3247,7 @@ function ScalarValue({
         <input
           type="text"
           value={(value as string) ?? ""}
+          placeholder={placeholder}
           onChange={(e) => onChange(e.target.value)}
         />
       );
@@ -3248,21 +3263,31 @@ function DictValueCell({
   schema,
   value,
   onChange,
+  placeholder,
 }: {
   schema: JSONSchema;
   value: unknown;
   onChange: (v: unknown) => void;
+  placeholder?: string;
 }) {
   const { references, extraReferenceItems, tokenLabels } = useFormCtx();
   const isString =
     !schema.enum && (schema.type === "string" || schema.type == null);
   if (!isString || !references) {
-    return <ScalarValue schema={schema} value={value} onChange={onChange} />;
+    return (
+      <ScalarValue
+        schema={schema}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+      />
+    );
   }
   return (
     <TokenInput
       value={value}
       onChange={onChange}
+      placeholder={placeholder}
       references={references}
       extraReferenceItems={extraReferenceItems}
       tokenLabels={tokenLabels}

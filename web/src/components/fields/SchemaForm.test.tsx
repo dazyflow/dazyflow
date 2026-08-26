@@ -486,3 +486,50 @@ describe("SchemaForm — a two-way choice", () => {
     expect(screen.getByRole("combobox")).toBeInTheDocument();
   });
 });
+
+describe("SchemaForm — a name/value map with example boxes", () => {
+  // render_table's column headings: the field a user reaches for to rename one
+  // heading. Two unlabelled boxes and a "key" placeholder is what made the
+  // same capability look absent when it was reachable only through the
+  // canvas-side column editor.
+  const mapSchema: JSONSchema = {
+    type: "object",
+    properties: {
+      column_labels: {
+        type: "object",
+        additionalProperties: { type: "string" },
+        title: "Column names",
+        x_key_placeholder: "customer_email",
+        x_value_placeholder: "Customer",
+      },
+    },
+  } as JSONSchema;
+
+  it("shows what goes in each box", async () => {
+    render(<SchemaForm schema={mapSchema} value={{}} onChange={() => {}} />);
+    await userEvent.click(screen.getByRole("button", { name: "schemaForm.add" }));
+    expect(screen.getByPlaceholderText("customer_email")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Customer")).toBeInTheDocument();
+  });
+
+  it("falls back to the generic placeholder when a map doesn't set one", async () => {
+    const plain: JSONSchema = {
+      type: "object",
+      properties: {
+        env: { type: "object", additionalProperties: { type: "string" }, title: "Env" },
+      },
+    } as JSONSchema;
+    render(<SchemaForm schema={plain} value={{}} onChange={() => {}} />);
+    await userEvent.click(screen.getByRole("button", { name: "schemaForm.add" }));
+    expect(screen.getByPlaceholderText("schemaForm.keyPlaceholder")).toBeInTheDocument();
+  });
+
+  it("writes the pair into the params object", async () => {
+    const onChange = vi.fn();
+    render(<SchemaForm schema={mapSchema} value={{}} onChange={onChange} />);
+    await userEvent.click(screen.getByRole("button", { name: "schemaForm.add" }));
+    await userEvent.type(screen.getByPlaceholderText("customer_email"), "created_at");
+    const last = onChange.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+    expect(Object.keys(last.column_labels as object)).toContain("created_at");
+  });
+});

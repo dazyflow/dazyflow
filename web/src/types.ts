@@ -325,6 +325,14 @@ export type JSONSchema = {
   // input linking to the CEL language docs, so the formula language is named
   // in the form rather than buried in a tooltip.
   x_cel?: boolean;
+  // x_key_placeholder / x_value_placeholder are examples shown in the two boxes
+  // of a name/value map row. The generic "key" placeholder says nothing about
+  // what a particular map is keyed BY, and a map whose meaning lives only in
+  // the field's help text reads as two empty boxes — the shape of thing a user
+  // gives up on. Set them where the pair is not obvious from the field name
+  // (render_table's column headings: a data column → the heading you want).
+  x_key_placeholder?: string;
+  x_value_placeholder?: string;
   // x_confirm_remove asks before deleting a row of a name/value map. Set where
   // the value costs something to reconstruct — an environment variable holding
   // a ${secret.…} reference — rather than everywhere, since a confirm on every

@@ -118,6 +118,30 @@ into the image.)
 
 ### Fixed
 
+- **Renaming a table column was not reachable from the editor.** The previous
+  release made a heading and a data column two separate things, but the only
+  GUI for it was the canvas-side column editor — which can only offer columns
+  it has discovered, and discovery works for almost nothing: the input-fields
+  probe answers only for declared row sources (a form, a spreadsheet), and the
+  "run it once" advice in its empty state cannot work at all, because a node
+  record never stores the inputs it received. Feed a table from a JSON step, a
+  query or an HTTP call and the list is permanently empty, with nothing to tap
+  and rename.
+
+  Make a table now has a **Column names** field in the form: a plain
+  {column → heading} map. It needs no discovery and no column list, renaming
+  one heading doesn't mean enumerating the rest, and it doesn't hide the
+  columns you didn't mention — the trap in doing this through `columns`, which
+  also restricts the table to what it lists. A heading set on a column in
+  `columns` still wins over the map, the same most-specific-wins shape as Sort
+  rows' Direction against its per-column prefixes.
+
+  Two smaller things came with it: a name/value map field can now show an
+  example in each box (`customer_email` → `Customer`), because two empty boxes
+  and a "key" placeholder is what made this look absent; and the column
+  editor's empty state now says what actually helps instead of promising a run
+  that changes nothing.
+
 - **Collections shouted your column names back at you.** The table shares its
   styling with every other table in the app, where a header is a fixed label we
   wrote and small-caps reads well — `STATUS`, `STARTED`. In Collections the

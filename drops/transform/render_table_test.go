@@ -110,6 +110,128 @@ func TestRenderTable_LabelRenamesTheHeaderOnly(t *testing.T) {
 	}
 }
 
+// ----- column_labels: renaming without listing every column ---------
+//
+// The reachable-from-the-GUI path. `columns` renames a heading too, but only as
+// part of stating the whole column list, and the editor that writes it can only
+// offer columns it has discovered — which for most producers is none. A plain
+// map needs no list and no discovery.
+
+func TestRenderTable_ColumnLabelsRenameHeadings(t *testing.T) {
+	got := renderedTable(t,
+		map[string]any{"column_labels": map[string]any{
+			"customer_email": "Customer",
+			"created_at":     "Ordered",
+		}},
+		[]map[string]any{{"customer_email": "ada@example.com", "created_at": "2026-08-01"}},
+		[]string{"customer_email", "created_at"})
+
+	if !strings.Contains(got, ">Customer<") || !strings.Contains(got, ">Ordered<") {
+		t.Errorf("headings not renamed: %s", got)
+	}
+	if !strings.Contains(got, ">ada@example.com<") || !strings.Contains(got, ">2026-08-01<") {
+		t.Errorf("renamed columns lost their cells: %s", got)
+	}
+}
+
+func TestRenderTable_ColumnLabelsLeaveOtherColumnsAlone(t *testing.T) {
+	// The whole point: renaming one heading must not drop, reorder or rename
+	// the columns you didn't mention.
+	got := renderedTable(t,
+		map[string]any{"column_labels": map[string]any{"customer_email": "Customer"}},
+		[]map[string]any{{"customer_email": "ada@example.com", "created_at": "2026-08-01", "total": "12"}},
+		[]string{"customer_email", "created_at", "total"})
+
+	for _, want := range []string{">Customer<", ">created_at<", ">total<", ">12<"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %s in %s", want, got)
+		}
+	}
+	if strings.Contains(got, ">customer_email<") {
+		t.Errorf("renamed column still shows its data name: %s", got)
+	}
+}
+
+func TestRenderTable_ColumnLabelsNameAColumnNotInTheData(t *testing.T) {
+	// A stale entry (the column was renamed upstream, or a typo) must be
+	// ignored rather than adding a phantom column.
+	got := renderedTable(t,
+		map[string]any{"column_labels": map[string]any{"gone": "Ghost"}},
+		[]map[string]any{{"name": "Ada"}}, []string{"name"})
+	if strings.Contains(got, "Ghost") {
+		t.Errorf("a label for a column that isn't there invented one: %s", got)
+	}
+	if !strings.Contains(got, ">name<") {
+		t.Errorf("real column missing: %s", got)
+	}
+}
+
+func TestRenderTable_ColumnLabelsComposeWithColumns(t *testing.T) {
+	// Selection and order from `columns`, headings from the map.
+	got := renderedTable(t,
+		map[string]any{
+			"columns":       []any{"total", "customer_email"},
+			"column_labels": map[string]any{"customer_email": "Customer", "total": "Amount"},
+		},
+		[]map[string]any{{"customer_email": "ada@example.com", "created_at": "x", "total": "12"}},
+		[]string{"customer_email", "created_at", "total"})
+
+	if i, j := strings.Index(got, ">Amount<"), strings.Index(got, ">Customer<"); i < 0 || j < 0 || i > j {
+		t.Errorf("want Amount then Customer: %s", got)
+	}
+	if strings.Contains(got, "created_at") {
+		t.Errorf("unselected column leaked: %s", got)
+	}
+}
+
+func TestRenderTable_ColumnEntryLabelWinsOverTheMap(t *testing.T) {
+	// Most specific wins: a heading set on the column itself is not overruled
+	// by the map.
+	got := renderedTable(t,
+		map[string]any{
+			"columns":       []any{map[string]any{"column": "name", "label": "Who"}},
+			"column_labels": map[string]any{"name": "Person"},
+		},
+		[]map[string]any{{"name": "Ada"}}, []string{"name"})
+	if !strings.Contains(got, ">Who<") || strings.Contains(got, ">Person<") {
+		t.Errorf("per-column label should win: %s", got)
+	}
+}
+
+func TestRenderTable_ColumnLabelsBlankFallsBackToTheDataName(t *testing.T) {
+	// An emptied box in the editor means "stop renaming this", not "a column
+	// with no heading".
+	got := renderedTable(t,
+		map[string]any{"column_labels": map[string]any{"name": "   "}},
+		[]map[string]any{{"name": "Ada"}}, []string{"name"})
+	if !strings.Contains(got, ">name<") {
+		t.Errorf("blank label should leave the data name: %s", got)
+	}
+}
+
+func TestRenderTable_ColumnLabelsAreEscaped(t *testing.T) {
+	got := renderedTable(t,
+		map[string]any{"column_labels": map[string]any{"name": "<b>Who</b>"}},
+		[]map[string]any{{"name": "Ada"}}, []string{"name"})
+	if strings.Contains(got, "<b>Who</b>") {
+		t.Errorf("label markup was not escaped: %s", got)
+	}
+}
+
+func TestRenderTable_BadColumnLabelsIsAnError(t *testing.T) {
+	for _, v := range []any{
+		map[string]any{"name": 42},
+		"name=Who",
+		[]any{"name"},
+	} {
+		res := runRenderTable(t, map[string]any{"column_labels": v},
+			[]map[string]any{{"name": "Ada"}}, []string{"name"})
+		if res.Status != core.StatusError || res.Error.Code != "bad_param" {
+			t.Errorf("column_labels=%+v: status=%q code=%q, want bad_param", v, res.Status, res.Error.Code)
+		}
+	}
+}
+
 func TestRenderTable_LabelIsOptional(t *testing.T) {
 	// {column} with no label, a blank label, and the bare string form must all
 	// head the column with the data's own name.

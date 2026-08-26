@@ -502,7 +502,10 @@ export function RenderTableColumns({
           </li>
         ))}
       </ul>
-      <div className="rtc-help">{t("renderTableColumns.help")}</div>
+      {/* The gesture help is about rows: drag, tap, swipe. With nothing in the
+          list it describes moves you can't make, under a hint that just said
+          so. */}
+      {!isEmpty && <div className="rtc-help">{t("renderTableColumns.help")}</div>}
     </div>
   );
 }

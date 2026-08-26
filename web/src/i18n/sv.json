@@ -1749,7 +1749,7 @@
     "help": "Dra i handtaget för att ändra ordning, tryck på en kolumn för att ändra dess rubriktext, eller svep den i sidled för att ta bort den. Att byta namn ändrar bara rubriken — kolumnen läser fortfarande samma fält, som står angivet under. Tabellen visar kolumnerna från vänster till höger i den här ordningen.",
     "hiddenTitle": "Dolda kolumner",
     "restore": "Tryck för att visa kolumnen igen",
-    "empty": "Kolumner visas här när steget känner till sin indata. Kör det en gång, eller koppla ett steg vars kolumner är kända."
+    "empty": "Det här steget känner inte till sina kolumner än — bara några få steg (ett formulär, ett kalkylblad) kan säga vad de ger innan en körning. Du behöver inte ha dem listade för att byta rubrik: använd Kolumnnamn nedan. Lägg bara till en kolumn här för att bestämma vilka kolumner tabellen visar, och i vilken ordning."
   },
   "celInput": {
     "label": "Formel",

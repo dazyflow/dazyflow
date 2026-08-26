@@ -1749,7 +1749,7 @@
     "help": "Drag the handle to reorder, tap a column to change its header text, or swipe it sideways to remove. Renaming changes the header only — the column still reads the same field, named underneath. The table shows columns left to right in this order.",
     "hiddenTitle": "Hidden columns",
     "restore": "Tap to show this column again",
-    "empty": "Columns show up here once this step knows its input. Run it once, or connect a step whose columns are known."
+    "empty": "This step doesn't know its columns yet — only a few steps (a form, a spreadsheet) can say what they produce before a run. You don't need them listed to rename a heading: use Column names below. Add a column here only to pin which columns the table shows, and in what order."
   },
   "celInput": {
     "label": "Formula",
