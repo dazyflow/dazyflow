@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.16.2] - 2026-08-26
+
 ### Added
 
 - **Weekday as a format.** Pick **Weekday** and a date comes out as "Thursday";
