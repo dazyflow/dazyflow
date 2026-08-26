@@ -168,7 +168,6 @@ export const SV_FIELD_TITLES: Record<string, string> = {
   "Name in Drive": "Namn i Drive",
   "Number": "Tal",
   "At time of day": "Tid på dygnet",
-  "Language": "Språk",
   "Custom format": "Eget format",
   "Offset": "Förskjutning",
   "Only in channel": "Bara i kanal",
