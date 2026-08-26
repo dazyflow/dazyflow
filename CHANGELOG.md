@@ -23,6 +23,17 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.16.4] - 2026-08-27
+
+### Fixed
+
+- **0.16.3 didn't build.** The Swedish field vocabulary gained a second
+  `"Language"` entry — the Date & time step's new field name, which the file
+  already carried for another step — and two properties with the same name in
+  one object literal is a TypeScript error, so `tsc` failed the web image
+  (`TS1117`). The duplicate is gone; the label resolves through the entry that
+  was always there.
+
 ## [0.16.3] - 2026-08-27
 
 ### Added
