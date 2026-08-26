@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.16.5] - 2026-08-27
+
 ### Fixed
 
 - **A dropdown whose own "empty" choice wouldn't stick.** The Date & time
