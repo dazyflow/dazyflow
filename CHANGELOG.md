@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-08-26
+
 ### Changed
 
 - **The Date & time step's format field is one you can actually type.** It took
