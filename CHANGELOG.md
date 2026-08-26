@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.15.3] - 2026-08-26
+
 ### Fixed
 
 - **The JSON node's editor on a card had its caret offset from the text.** The
