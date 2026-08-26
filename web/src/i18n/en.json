@@ -340,6 +340,18 @@
     "supportReplyLabel": "Email me when support replies",
     "supportReplyDesc": "Get an email when support answers or resolves one of your tickets. Turn this off and you'll only see replies when you open the Support page."
   },
+  "dataExport": {
+    "title": "Your data",
+    "intro": "Download a copy of everything Dazyflow holds about you, as one JSON file. Yours to keep, read, or take elsewhere.",
+    "itemProfile": "Your profile: email, when the account was created, whether two-factor is on, and the roles you hold.",
+    "itemMemberships": "Your organisation memberships and any invitations sent to your address.",
+    "itemKeys": "Your API keys — when each was made and last used, never the key itself.",
+    "itemFlows": "The flows in your workspace and your most recent runs.",
+    "orgNote": "The full definition of every flow comes with the organisation export, in the organisation switcher.",
+    "download": "Download my data",
+    "preparing": "Preparing…",
+    "saved": "Saved to your downloads."
+  },
   "twoFactor": {
     "title": "Two-factor authentication",
     "intro": "Add a second step to sign-in using an authenticator app (such as Google Authenticator, 1Password, or Authy).",
@@ -1246,6 +1258,7 @@
     "emptyTitle": "No collections yet",
     "emptyBody": "Add a “Collections · Save rows” step to a flow and the rows it saves show up here as a collection you can revisit.",
     "searchPlaceholder": "Search rows…",
+    "sortBy": "Sort by {{column}}",
     "downloadCsv": "Download CSV",
     "clear": "Clear",
     "clearing": "Clearing…",

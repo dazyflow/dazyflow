@@ -25,6 +25,47 @@ into the image.)
 
 ### Added
 
+- **You can download your own data.** Settings → Your data hands you one JSON
+  file: your profile and sign-in details, your org memberships and invitations,
+  your API keys (when each was made and last used — never the key itself), the
+  flows in your workspace and your recent runs. GDPR's right of access and to
+  portability is a right to *receive* the data, so it can't require asking
+  anyone, and the card lists what's in the file before you commit to a click.
+
+  The daemon has assembled this document since the support work; nothing in the
+  app ever asked for it, so the honest answer to "can I have my data?" was "yes,
+  if you can write a curl command". The file is fetched and then saved from
+  memory rather than linked to — the endpoint needs an Authorization header, so
+  a plain link to it downloads a 401 — which also means a refusal lands in the
+  card instead of inside a saved file. Filenames are dated, because a folder of
+  files all called `dazyflow-my-data.json` says nothing about which is current.
+
+  The full definition of every flow still comes with the organisation export,
+  next to Delete in the organisation switcher. Collection rows and run logs are
+  deliberately not in the personal export: rows your flows saved are usually
+  *other people's* data that you are the controller of, not your own personal
+  data, and they already download as CSV per collection.
+
+- **Collections sorts by column, and the download follows.** Click a header to
+  order by it: ascending, descending, then back to the order the rows were
+  saved in — that third state matters, because insertion order is a real answer
+  for a collection and there was otherwise no way back to it but a reload. The
+  sorted column holds full ink with an arrow, and the header carries `aria-sort`
+  so it isn't only the arrow that says so.
+
+  The CSV button reads the same array the table renders, so a download can
+  never disagree with the page it was asked for from — a spreadsheet ordered
+  differently to the screen is one nobody can check. Search and sort share
+  their scope (the loaded rows, as the "first N loaded" note already says).
+
+  Values sort by what they are rather than how they're spelled: the store is
+  all TEXT, so "9" would otherwise come after "100". Blanks stay at the top in
+  both directions, so flipping the direction doesn't drag empty rows through
+  the data — the same rule the Sort rows step applies. Text collates by the
+  reader's own alphabet, which is the one deliberate difference from the engine
+  comparator: å sorts after z for a Swedish reader and beside a for an English
+  one.
+
 - **A table can be named.** Make a table produced a bare grid: sending two of
   them in one email left the reader to work out which was which. The new Table
   name field renders as the table's `<caption>` — the element HTML has for
@@ -74,6 +115,15 @@ into the image.)
   entirely on a canvas you can't edit.
 
 ### Fixed
+
+- **Collections shouted your column names back at you.** The table shares its
+  styling with every other table in the app, where a header is a fixed label we
+  wrote and small-caps reads well — `STATUS`, `STARTED`. In Collections the
+  headers are data: your own column names, upper-cased into something that
+  appears nowhere else. `orderTotal` came out as `ORDERTOTAL`, which is neither
+  the name to type into a step nor the name the CSV button on the same page
+  writes. Column names now print exactly as stored, case and all; every other
+  table keeps its labels.
 
 - **Renaming a column in Make a table emptied it.** The column editor has
   always offered "tap a column to rename it", and with only a name to write it

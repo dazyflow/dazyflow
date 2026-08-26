@@ -37,6 +37,7 @@ import { useAuth } from "../auth";
 import { ActiveFlowContext, FLOWS_CHANGED_EVENT } from "../activeFlow";
 import { shouldShowTenantID } from "../lib/visibleTenant";
 import { tenantDisplayName } from "../lib/orgDisplayName";
+import { downloadJson } from "../lib/download";
 import { Button } from "./ui/Button";
 import { OrgSwitcherModal } from "./dialogs/OrgSwitcherModal";
 import { ConnectMcpClientModal } from "./dialogs/ConnectMcpClientModal";
@@ -52,23 +53,6 @@ import { savedCollapsePref, initialNavCollapsed } from "../lib/navCollapse";
 // orgGlyph renders an org's icon: an uploaded image (data: URL) as an
 // <img>, otherwise the generic Building2 mark. Shared by the tenant
 // switcher trigger + rows.
-// downloadJson saves an object as a pretty-printed .json file via a transient
-// blob URL — used for the org export (the fetch carries the auth token, so a
-// plain <a href> to the endpoint wouldn't work).
-function downloadJson(data: unknown, filename: string) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], {
-    type: "application/json",
-  });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
-
 function orgGlyph(icon: string | undefined, size: number) {
   return isImageIcon(icon) ? (
     <img

@@ -3,11 +3,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Bell, Monitor, Moon, ShieldCheck, Sun } from "lucide-react";
+import { Bell, Download, Monitor, Moon, ShieldCheck, Sun } from "lucide-react";
 import { applyTheme, getThemeMode, type ThemeMode } from "../theme";
 import { useAuth } from "../auth";
 import { api, APIError, type TOTPSetup, type TOTPStatus } from "../api";
 import { explainApiError } from "../lib/explainApiError";
+import { downloadJson } from "../lib/download";
 import { OtpInput } from "../components/ui/OtpInput";
 import { Switch } from "../components/ui/Switch";
 import { Button } from "../components/ui/Button";
@@ -125,6 +126,75 @@ export function Settings() {
 
       <NotificationsCard />
       <TwoFactorCard />
+      <DataExportCard />
+    </div>
+  );
+}
+
+// DataExportCard is the user's own copy of their data — GDPR's right of access
+// and to portability (Art. 15/20), which is a right to RECEIVE the data, so it
+// has to be reachable without asking anyone. The daemon has assembled this
+// document since the support work; until now nothing in the app asked for it,
+// which meant the answer to "can I have my data?" was "yes, if you can write a
+// curl command".
+//
+// The file is fetched and then saved from memory rather than linked to: the
+// endpoint needs the Authorization header, so a plain <a href> to it downloads
+// a 401. That also lets a refusal land in this card instead of in a file.
+function DataExportCard() {
+  const { t } = useTranslation();
+  const { token } = useAuth();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  if (!token) return null;
+
+  const run = async () => {
+    setErr(null);
+    setDone(false);
+    setBusy(true);
+    try {
+      const data = await api.exportMyData(token);
+      // Dated, because a data export is a snapshot and a folder of files all
+      // called dazyflow-my-data.json tells you nothing about which is current.
+      const day = new Date().toISOString().slice(0, 10);
+      downloadJson(data, `dazyflow-my-data-${day}.json`);
+      setDone(true);
+      window.setTimeout(() => setDone(false), FEEDBACK.copied);
+    } catch (e) {
+      setErr(explainApiError(e, t));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="card settings-card">
+      <div className="sf-field">
+        <div className="label-row">
+          <label>
+            <Download className="icon-inline" size={ICON.md} />{" "}
+            {t("dataExport.title")}
+          </label>
+        </div>
+        <div className="desc">{t("dataExport.intro")}</div>
+        <ul className="desc data-export-list">
+          <li>{t("dataExport.itemProfile")}</li>
+          <li>{t("dataExport.itemMemberships")}</li>
+          <li>{t("dataExport.itemKeys")}</li>
+          <li>{t("dataExport.itemFlows")}</li>
+        </ul>
+        <div className="desc">{t("dataExport.orgNote")}</div>
+        <div className="totp-actions">
+          <Button variant="primary" disabled={busy} onClick={() => void run()}>
+            <Download size={ICON.sm} />
+            {busy ? t("dataExport.preparing") : t("dataExport.download")}
+          </Button>
+          {done && <span className="desc">{t("dataExport.saved")}</span>}
+        </div>
+        {err && <div className="error">{err}</div>}
+      </div>
     </div>
   );
 }

@@ -1283,6 +1283,18 @@
 .settings-page .settings-card {
   max-width: 520px;
 }
+
+/* The "what's in the export" list inside a settings card. Bulleted because it
+   is a list of contents a reader scans before deciding to download, and
+   indented just enough to hang the markers inside the card's padding. */
+.data-export-list {
+  margin: var(--space-2) 0;
+  padding-left: var(--space-4);
+  list-style: disc;
+}
+.data-export-list li {
+  margin-bottom: var(--space-1);
+}
 /* .card carries no margin, so stacked sections would touch. Space each
    section below the first off the one above it. */
 .settings-page .settings-card + .settings-card {
@@ -6727,6 +6739,45 @@ img[src$="/brands/smhi.svg"] {
   font-weight: 500;
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border);
+}
+/* Collections' header row is DATA — the user's own column names — where every
+   other .run-table's headers are fixed labels we wrote. The uppercase, tracked
+   treatment above is right for "STATUS" and "STARTED"; on a column name it
+   misreports what is stored: `orderTotal` reads ORDERTOTAL, which is neither
+   the name to type into a step nor the name the CSV download writes. Data is
+   shown as it is. */
+.run-table.data-headers th {
+  text-transform: none;
+  letter-spacing: normal;
+}
+/* A sortable header: the whole label is the control, so the target is the
+   header you are already reading rather than a separate arrow to hit. The cell
+   keeps its own padding, so this button is padding-free and inherits the type
+   — a header that changes size or weight when it becomes clickable reads as a
+   different kind of thing. */
+.run-table th .col-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.run-table th .col-sort:hover {
+  color: var(--ink);
+}
+/* The sorted column is the one fact the header row carries beyond the names,
+   so it holds full ink against the muted others. */
+.run-table th .col-sort.active {
+  color: var(--ink);
+  font-weight: 600;
 }
 .run-table td {
   padding: var(--space-3) var(--space-4);

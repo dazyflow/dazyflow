@@ -711,6 +711,16 @@ export const api = {
   // keys you're changing (the independent Settings controls each send
   // their own field) and the server leaves the rest untouched, echoing
   // the full resolved state back.
+  // exportMyData downloads the caller's own personal data — GDPR Art. 15/20,
+  // the right of access and to portability. One document, assembled server-side
+  // from every store that holds something about the subject.
+  //
+  // Session-only by design: the daemon rejects an API-key caller with 403
+  // (`session_required`), so a leaked key can't be used to exfiltrate an
+  // account's data. The web app always holds a session token, so this is only
+  // a constraint on scripted callers.
+  exportMyData: (token: string) =>
+    request<Record<string, unknown>>(token, "GET", "/me/export"),
   getPreferences: (token: string) =>
     request<Preferences>(token, "GET", "/me/preferences"),
   updatePreferences: (token: string, patch: Partial<Preferences>) =>

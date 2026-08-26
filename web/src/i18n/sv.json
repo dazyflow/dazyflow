@@ -340,6 +340,18 @@
     "supportReplyLabel": "Mejla mig när supporten svarar",
     "supportReplyDesc": "Få ett mejl när supporten svarar på eller löser ett av dina ärenden. Stänger du av detta ser du bara svaren när du öppnar Support-sidan."
   },
+  "dataExport": {
+    "title": "Dina uppgifter",
+    "intro": "Ladda ner en kopia av allt Dazyflow har om dig, som en JSON-fil. Din att spara, läsa eller ta med någon annanstans.",
+    "itemProfile": "Din profil: e-post, när kontot skapades, om tvåfaktor är på och vilka roller du har.",
+    "itemMemberships": "Dina organisationsmedlemskap och eventuella inbjudningar till din adress.",
+    "itemKeys": "Dina API-nycklar — när var och en skapades och senast användes, aldrig själva nyckeln.",
+    "itemFlows": "Flödena i din arbetsyta och dina senaste körningar.",
+    "orgNote": "Den fullständiga definitionen av varje flöde följer med organisationsexporten, i organisationsväljaren.",
+    "download": "Ladda ner mina uppgifter",
+    "preparing": "Förbereder…",
+    "saved": "Sparad bland dina nedladdningar."
+  },
   "twoFactor": {
     "title": "Tvåfaktorsautentisering",
     "intro": "Lägg till ett extra steg vid inloggning med en autentiseringsapp (till exempel Google Authenticator, 1Password eller Authy).",
@@ -1246,6 +1258,7 @@
     "emptyTitle": "Inga samlingar än",
     "emptyBody": "Lägg till ett steg av typen ”Samlingar · Spara rader” i ett flöde, så dyker raderna det sparar upp här som en samling du kan återkomma till.",
     "searchPlaceholder": "Sök rader…",
+    "sortBy": "Sortera på {{column}}",
     "downloadCsv": "Ladda ner CSV",
     "clear": "Töm",
     "clearing": "Tömmer…",

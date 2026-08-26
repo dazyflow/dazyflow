@@ -2,13 +2,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useEffect, useMemo, useState } from "react";
-import { Table2, Download, Search, Trash2, RefreshCw } from "lucide-react";
+import { Table2, Download, Search, Trash2, RefreshCw, ArrowDown, ArrowUp } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, type BoardSummary, type BoardPage } from "../api";
 import { Button } from "../components/ui/Button";
 import { ConfirmModal } from "../components/ui/ConfirmModal";
 import { explainApiError } from "../lib/explainApiError";
+import { sortRowsByColumn } from "../lib/compareCells";
+import { downloadText } from "../lib/download";
 import { ErrorNotice } from "../components/ui/ErrorNotice";
 import { ICON } from "../icons";
 import { Loading } from "../components/ui/Loading";
@@ -20,7 +22,7 @@ import { Notice } from "../components/ui/Notice";
 // table with client-side search, CSV download, and a Clear action. Mirrors
 // the data-fetching + layout conventions of RunList.
 export function Results() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { token, activeTenant, activeWorkspace, me } = useAuth();
   const [boards, setBoards] = useState<BoardSummary[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -29,6 +31,11 @@ export function Results() {
   const [tableLoading, setTableLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  // Which column the table is ordered by, and which way. null = the order the
+  // rows came back in, which is the order the flows saved them — a real answer
+  // for a collection, and the reason clicking a header cycles back to it
+  // instead of only toggling between the two directions.
+  const [sort, setSort] = useState<{ column: string; desc: boolean } | null>(null);
   const [clearing, setClearing] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   // rowPendingDelete holds the rowid a per-row delete is awaiting confirmation
@@ -79,6 +86,9 @@ export function Results() {
     }
     setTableLoading(true);
     setQuery("");
+    // A different collection has different columns, so the old sort column
+    // usually doesn't exist in it.
+    setSort(null);
     api
       .getBoard(token, selected, { tenant, workspace })
       .then((p) => {
@@ -96,28 +106,38 @@ export function Results() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, selected]);
 
-  // Client-side search: keep rows where any cell contains the query.
-  const filteredRows = useMemo(() => {
+  // What the table shows: the loaded rows, searched and then ordered. Search is
+  // client-side over the loaded page (see the "first N loaded" note) and so is
+  // the sort — the two agree about their scope.
+  //
+  // ONE array for the screen and the file. The CSV button reads this too, so
+  // the download can't drift from what is on screen: a table sorted by spend
+  // that exports in insertion order is a spreadsheet nobody can check against
+  // the page they asked for it from.
+  const visibleRows = useMemo(() => {
     if (!page) return [];
     const q = query.trim().toLowerCase();
-    if (!q) return page.rows;
-    return page.rows.filter((row) =>
-      page.columns.some((c) => formatCell(row[c]).toLowerCase().includes(q)),
-    );
-  }, [page, query]);
+    const found = q
+      ? page.rows.filter((row) =>
+          page.columns.some((c) => formatCell(row[c]).toLowerCase().includes(q)),
+        )
+      : page.rows;
+    if (!sort) return found;
+    return sortRowsByColumn(found, sort.column, sort.desc, i18n.language);
+  }, [page, query, sort]);
+
+  // Clicking a header cycles ascending → descending → back to saved order.
+  const cycleSort = (column: string) => {
+    setSort((cur) => {
+      if (!cur || cur.column !== column) return { column, desc: false };
+      if (!cur.desc) return { column, desc: true };
+      return null;
+    });
+  };
 
   const downloadCSV = () => {
     if (!page) return;
-    const csv = toCSV(page.columns, filteredRows);
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${page.name}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    downloadText(toCSV(page.columns, visibleRows), "text/csv;charset=utf-8", `${page.name}.csv`);
   };
 
   // doClearBoard performs the (irreversible) clear once the user has
@@ -287,18 +307,45 @@ export function Results() {
                       directions; the named wrapper is the one pattern every other table
                       here uses, and adds momentum scrolling on touch. */}
                   <div className="run-table-scroll">
-                    <table className="run-table">
+                    {/* data-headers: these column names come from the
+                        collection, not from us, so they are not label-cased
+                        like every other table's headers here. */}
+                    <table className="run-table data-headers">
                       <thead>
                         <tr>
-                          {page.columns.map((c) => (
-                            <th key={c}>{c}</th>
-                          ))}
+                          {page.columns.map((c) => {
+                            const on = sort?.column === c;
+                            return (
+                              // aria-sort is what tells a screen reader the
+                              // table is ordered and by which column; the arrow
+                              // is the same fact for everyone else.
+                              <th
+                                key={c}
+                                aria-sort={on ? (sort.desc ? "descending" : "ascending") : "none"}
+                              >
+                                <button
+                                  type="button"
+                                  className={"col-sort" + (on ? " active" : "")}
+                                  onClick={() => cycleSort(c)}
+                                  title={t("results.sortBy", { column: c })}
+                                >
+                                  <span>{c}</span>
+                                  {on &&
+                                    (sort.desc ? (
+                                      <ArrowDown size={ICON.xs} aria-hidden="true" />
+                                    ) : (
+                                      <ArrowUp size={ICON.xs} aria-hidden="true" />
+                                    ))}
+                                </button>
+                              </th>
+                            );
+                          })}
                           {/* Trailing action column for the per-row delete. */}
                           <th aria-label={t("results.deleteRow")} style={{ width: 1 }} />
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredRows.map((row, i) => {
+                        {visibleRows.map((row, i) => {
                           const rowid = Number(row[ROWID_KEY]);
                           return (
                             <tr key={Number.isFinite(rowid) ? rowid : i}>
@@ -323,7 +370,7 @@ export function Results() {
                       </tbody>
                     </table>
                   </div>
-                  {filteredRows.length === 0 && (
+                  {visibleRows.length === 0 && (
                     <Notice inline>
                       {query ? t("results.noMatches") : t("results.boardEmpty")}
                     </Notice>
@@ -336,7 +383,7 @@ export function Results() {
                     fontSize: "var(--text-xs)",
                   }}
                 >
-                  {t("results.rowCount", { shown: filteredRows.length, total: page.total })}
+                  {t("results.rowCount", { shown: visibleRows.length, total: page.total })}
                   {page.truncated && " " + t("results.truncatedNote", { limit: page.rows.length })}
                 </div>
               </>
