@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.15.9] - 2026-08-26
+
 ### Fixed
 
 - **The Email app's From address takes a name, not just an address.** Typing
