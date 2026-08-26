@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.15.4] - 2026-08-26
+
 ### Added
 
 - **The editor warns when a script's language contradicts what will run it.**
