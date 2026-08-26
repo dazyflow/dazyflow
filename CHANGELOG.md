@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.16.3] - 2026-08-27
+
 ### Added
 
 - **The platform's own emails speak Swedish.** Invitations, the welcome mail,
