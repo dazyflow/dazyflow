@@ -94,8 +94,8 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     sv: "Startar flödet enligt ett återkommande schema — välj dagligen, varje vecka, varje månad eller varje timme på steget (ett eget cron-uttryck fungerar också). Utgången Tid är när det utlöstes. Utan schema körs flödet bara när du trycker på Kör.",
   },
   date: {
-    en: "fb4a9f45",
-    sv: "Arbeta med datum och tid: läs aktuell tid, tolka en tidsstämpel som kommit in som text, flytta den med en förskjutning, växla till en tidszon och skriv ut den i det format du vill. Koppla in ett värde i 'in' (en ISO 8601-sträng, en Unix-tidsstämpel eller vanlig datumtext) eller lämna porten okopplad för att använda aktuell tid. 'add' flyttar tiden med en förskjutning som \"3d\", \"-2h30m\" eller \"1w\"; 'tz' anger en IANA-tidszon (t.ex. \"Europe/Stockholm\") för utdatat; 'format' väljer en förinställning (iso, date, time, datetime, unix, rfc1123, kitchen) eller en egen Go-layout. Skickar ut den formaterade strängen på 'out' och de uppdelade delarna (år, månad, veckodag, …) på 'value'.",
+    en: "e79e242e",
+    sv: "Arbeta med datum och tid: läs aktuell tid, tolka en tidsstämpel som kommit in som text, flytta den med en förskjutning, lås den till en tid på dygnet, växla till en tidszon och skriv ut den i det format du vill. Koppla in ett värde i 'in' (en ISO 8601-sträng, en Unix-tidsstämpel eller vanlig datumtext) eller lämna porten okopplad för att använda aktuell tid. 'add' flyttar tiden med en förskjutning som \"3d\", \"-2h30m\" eller \"1w\" — så \"1d\" är i morgon; 'at' sätter sedan klockan (\"09:00\"), vilket är det som gör \"24 timmar från nu\" till \"i morgon bitti\"; 'tz' anger en IANA-tidszon (t.ex. \"Europe/Stockholm\") för utdatat. 'format' väljer ett namngivet format, eller Custom för ett eget som du skriver med tokens som YYYY MM DD HH mm ss — \"DD/MM/YYYY\", \"ddd D MMM\" — med bokstavlig text inom hakparenteser (\"[week of] D MMM\"). Skickar ut den formaterade strängen på 'out' och de uppdelade delarna (år, månad, veckodag, …) på 'value'; lägg in det i vilken text som helst med ${upstream.<step>.out}.",
   },
   dedupe_rows: {
     en: "9c4a95e1",

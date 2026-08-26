@@ -19,6 +19,7 @@ import { HelpPopover } from "../ui/HelpPopover";
 import { Trans, useTranslation } from "react-i18next";
 import i18n from "../../i18n";
 import { enumLabel, fieldHelp, fieldTitle } from "../../lib/dropText";
+import { isFieldVisible } from "../../lib/schemaFields";
 import type {
   EmailTemplateSummary,
   JSONSchema,
@@ -222,6 +223,10 @@ export function SchemaForm({
   const advanced: [string, JSONSchema][] = [];
   for (const [key, propSchema] of Object.entries(props)) {
     if (HIDDEN_FIELD_KEYS.has(key) || omit.has(key)) continue;
+    // Conditional fields (x_visible_when) render only while the sibling they
+    // depend on has the right value — a Custom format box appears when Format
+    // says Custom, and takes its stored value with it when it goes.
+    if (!isFieldVisible(propSchema, value, props)) continue;
     if (isAdvancedField(key, propSchema, props)) advanced.push([key, propSchema]);
     else basic.push([key, propSchema]);
   }

@@ -167,6 +167,8 @@ export const SV_FIELD_TITLES: Record<string, string> = {
   "Name contains": "Namnet innehåller",
   "Name in Drive": "Namn i Drive",
   "Number": "Tal",
+  "At time of day": "Tid på dygnet",
+  "Custom format": "Eget format",
   "Offset": "Förskjutning",
   "Only in channel": "Bara i kanal",
   "Only new items": "Bara nya poster",
@@ -483,7 +485,8 @@ export const SV_FIELD_HELP: Record<string, string> = {
   "Or wire it into the Text input.": "Eller koppla in det i ingången Text.",
   "Ordered list of routing rules. Each row is sent to the FIRST matching route; unmatched rows land on the default slot.": "Ordnad lista med dirigeringsregler. Varje rad skickas till den FÖRSTA vägen som matchar; rader utan träff hamnar på standardutgången.",
   "Ordered list of {slot, equals}. The FIRST case whose value matches the key wins; the payload rides out that slot. Unmatched payloads go to default.": "Ordnad lista med {slot, equals}. Det FÖRSTA fallet vars värde matchar nyckeln vinner; nyttolasten går ut på den utgången. Nyttolaster utan träff går till default.",
-  "Output format: a preset (iso, date, time, datetime, unix, unixms, rfc1123, kitchen) or a custom Go reference layout like \"Mon 2 Jan 2006\".": "Utdataformat: en förinställning (iso, date, time, datetime, unix, unixms, rfc1123, kitchen) eller en egen Go-referenslayout som \"Mon 2 Jan 2006\".",
+  "How the date is written on the 'out' port. Pick Custom to write your own — a field for it appears below.": "Hur datumet skrivs på porten 'out'. Välj Eget för att skriva ett eget — då visas ett fält för det nedanför.",
+  "Build it from tokens: YYYY (2026) YY (26) MM (08) M (8) DD (27) D (27) HH (14) mm (05) ss (09), MMM/MMMM for a month name (Aug/August), ddd/dddd for a weekday (Thu/Thursday), hh with A for a 12-hour clock (02 PM), Z for the zone offset. Everything else — slashes, dots, spaces — is kept as typed, and literal words go in square brackets: \"[week of] D MMM\" → \"week of 27 Aug\". Tokens are case-sensitive (MM is the month, mm the minute); an unknown one fails the step rather than being printed as-is.": "Bygg det av tokens: YYYY (2026) YY (26) MM (08) M (8) DD (27) D (27) HH (14) mm (05) ss (09), MMM/MMMM för ett månadsnamn (Aug/August), ddd/dddd för en veckodag (Thu/Thursday), hh med A för 12-timmarsklocka (02 PM), Z för tidszonens avvikelse. Allt annat — snedstreck, punkter, mellanslag — behålls som du skrivit det, och bokstavlig text sätts inom hakparenteser: \"[week of] D MMM\" → \"week of 27 Aug\". Tokens är skiftlägeskänsliga (MM är månaden, mm minuten); en okänd token gör att steget misslyckas i stället för att skrivas ut som den är.",
   "Output numbers and TRUE/FALSE as real values instead of text.": "Skicka ut tal och TRUE/FALSE som riktiga värden i stället för text.",
   "Output port name. One of case_1..case_8.": "Utgångens namn. En av case_1..case_8.",
   "Output port name. One of rows_1..rows_8.": "Utgångens namn. En av rows_1..rows_8.",
@@ -550,7 +553,8 @@ export const SV_FIELD_HELP: Record<string, string> = {
   "Set this to run the flow automatically every N minutes/hours/days — e.g. every 5 minutes. Leave it empty and the flow never runs on its own; it runs only when you press Run.": "Sätt detta för att köra flödet automatiskt var N:e minut/timme/dag — t.ex. var 5:e minut. Lämnar du det tomt körs flödet aldrig av sig själv; det körs bara när du trycker Kör.",
   "Set this to run the flow automatically on a schedule — picked with the schedule editor. (Stored as a 5-field cron expression; \"0 9 * * *\" = every day at 09:00.) Leave it empty and the flow never runs on its own; it runs only when you press Run.": "Sätt detta för att köra flödet automatiskt enligt ett schema — som du väljer i schemaredigeraren. (Sparas som ett cron-uttryck med 5 fält; \"0 9 * * *\" = varje dag kl. 09:00.) Lämnar du det tomt körs flödet aldrig av sig själv; det körs bara när du trycker Kör.",
   "Shallow-clone depth. 0 (default) clones the full history.": "Djup för ytlig klon. 0 (standard) klonar hela historiken.",
-  "Shift the time by an offset, e.g. \"3d\", \"-2h30m\", \"1w\". Units: w (weeks), d (days), h, m, s. Empty = no shift.": "Flytta tiden med en förskjutning, t.ex. \"3d\", \"-2h30m\", \"1w\". Enheter: w (veckor), d (dagar), h, m, s. Tomt = ingen förskjutning.",
+  "Shift the time by an offset, e.g. \"3d\", \"-2h30m\", \"1w\" — \"1d\" is tomorrow. Units: w (weeks), d (days), h, m, s. Empty = no shift.": "Flytta tiden med en förskjutning, t.ex. \"3d\", \"-2h30m\", \"1w\" — \"1d\" är i morgon. Enheter: w (veckor), d (dagar), h, m, s. Tomt = ingen förskjutning.",
+  "Set the clock to this time of day, e.g. \"09:00\" or \"17:30:15\". Applied after the offset and in the output timezone, so Offset \"1d\" with At \"09:00\" is tomorrow morning rather than 24 hours from now. Empty keeps the time it already had.": "Sätt klockan till den här tiden på dygnet, t.ex. \"09:00\" eller \"17:30:15\". Tillämpas efter förskjutningen och i utdatats tidszon, så Förskjutning \"1d\" med Tid på dygnet \"09:00\" blir i morgon bitti i stället för 24 timmar från nu. Tomt behåller tiden som den var.",
   "Show the interactive map on the step card. Turn off for a compact card — you can still pick in the inspector or drive it with the Coordinate input.": "Visa den interaktiva kartan på stegkortet. Slå av för ett kompakt kort — du kan fortfarande välja i inspektorn eller styra det med ingången Koordinat.",
   "Show the interactive map on the step card. Turn off for a compact card — you can still pick in the inspector or drive it with the Place input.": "Visa den interaktiva kartan på stegkortet. Slå av för ett kompakt kort — du kan fortfarande välja i inspektorn eller styra det med ingången Plats.",
   "Single user message (used when no Prompt input and no messages).": "Ett enda användarmeddelande (används när det varken finns en Prompt-ingång eller messages).",
@@ -692,6 +696,17 @@ export const SV_FIELD_HELP: Record<string, string> = {
 
 // Dropdown option labels (schema.enumNames), including the currency list.
 export const SV_ENUM_LABELS: Record<string, string> = {
+  // Date & time output formats. The format NAMES and their sample renderings
+  // are the same in both languages; only the words around them differ.
+  "ISO-8601 (2026-08-27T14:05:09Z)": "ISO 8601 (2026-08-27T14:05:09Z)",
+  "Date (2026-08-27)": "Datum (2026-08-27)",
+  "Time (14:05:09)": "Tid (14:05:09)",
+  "Date and time (2026-08-27 14:05:09)": "Datum och tid (2026-08-27 14:05:09)",
+  "Unix seconds": "Unix-sekunder",
+  "Unix milliseconds": "Unix-millisekunder",
+  "Email/HTTP (Thu, 27 Aug 2026 14:05:09 UTC)": "E-post/HTTP (Thu, 27 Aug 2026 14:05:09 UTC)",
+  "Clock (2:05PM)": "Klockslag (2:05PM)",
+  "Custom…": "Eget…",
   // Regex modes.
   "Extract matches": "Plocka ut träffar",
   "Replace matches": "Ersätt träffar",

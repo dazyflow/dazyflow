@@ -13,6 +13,7 @@ import { glyphFor, languageOf, type LangGlyph } from "../../lib/langBadge";
 import { ScriptEditor } from "../ui/ScriptEditor";
 import { scriptLangFor, type ScriptLang } from "../../lib/scriptHighlight";
 import { dropSubtitle, enumLabel, nodeStateText, portLabel } from "../../lib/dropText";
+import { isFieldVisible } from "../../lib/schemaFields";
 import { isRunnerStep, runnerTargetOf } from "../../lib/runnerStep";
 import type { Manifest, Port, JSONSchema, Ref } from "../../types";
 import {
@@ -156,8 +157,11 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
       .map((e) => [e.key, e.message]),
   );
   const required = d.manifest?.params_schema?.required ?? [];
+  // A conditional field (x_visible_when) is only eligible while the sibling it
+  // depends on has the right value, same as in the Inspector — otherwise a
+  // field could be conditional in one form and permanent in the other.
   const inlineEligible = (s?: JSONSchema): s is JSONSchema =>
-    !!s && !isAdvanced(s) && isPrimitive(s);
+    !!s && !isAdvanced(s) && isPrimitive(s) && isFieldVisible(s, d.params, schemaProps);
 
   // Inline value editors come from two sources:
   //   1. Unconnected input PORTS backed by a primitive param (e.g. HTTP

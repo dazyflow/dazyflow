@@ -44,6 +44,55 @@ describe("SchemaForm (FormContext)", () => {
     expect(last).toMatchObject({ note: expect.any(String) });
   });
 
+  // x_visible_when: a field that only applies once a sibling says so. The Date
+  // & time step's Custom format is the case — beside a Format dropdown, a
+  // permanent second format box reads as two ways of saying the same thing.
+  const conditional: JSONSchema = {
+    type: "object",
+    properties: {
+      format: {
+        type: "string",
+        title: "Format",
+        default: "iso",
+        enum: ["iso", "custom"],
+        enumNames: ["ISO-8601", "Custom…"],
+      },
+      custom_format: {
+        type: "string",
+        title: "Custom format",
+        x_visible_when: { format: "custom" },
+      },
+    },
+  } as JSONSchema;
+
+  it("hides a conditional field until its sibling selects it", () => {
+    // Fresh node: format is unset, so its default "iso" is in force.
+    const { rerender } = render(
+      <SchemaForm schema={conditional} value={{}} onChange={() => {}} />,
+    );
+    expect(screen.queryByText("Custom format")).not.toBeInTheDocument();
+
+    rerender(
+      <SchemaForm schema={conditional} value={{ format: "custom" }} onChange={() => {}} />,
+    );
+    expect(screen.getByText("Custom format")).toBeInTheDocument();
+  });
+
+  it("keeps a hidden conditional field's stored value", () => {
+    // Switching away must not clear what was typed — flip back and it's there.
+    const onChange = vi.fn();
+    render(
+      <SchemaForm
+        schema={conditional}
+        value={{ format: "iso", custom_format: "DD/MM/YYYY" }}
+        onChange={onChange}
+      />,
+    );
+    expect(screen.queryByText("Custom format")).not.toBeInTheDocument();
+    // Hiding is a render decision only: nothing was written back.
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it("renders nothing actionable for a non-object schema (fallback hint)", () => {
     render(
       <SchemaForm

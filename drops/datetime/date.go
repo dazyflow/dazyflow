@@ -35,7 +35,7 @@ func init() {
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"date", "time", "datetime", "now", "timestamp", "format", "timezone"},
-			Description: "Work with a date/time: read the current time, parse a timestamp that came in as text, shift it by an offset, convert it to a timezone, and render it in the format you want. Connect a value into 'in' (an ISO-8601 string, a Unix timestamp, or common date text) or leave it unwired to use the current time. 'add' shifts by an offset like \"3d\", \"-2h30m\", or \"1w\"; 'tz' names an IANA timezone (e.g. \"Europe/Stockholm\") for the output; 'format' picks a preset (iso, date, time, datetime, unix, rfc1123, kitchen) or a custom Go layout. Emits the formatted string on 'out' and the broken-out parts (year, month, weekday, …) on 'value'.",
+			Description: "Work with a date/time: read the current time, parse a timestamp that came in as text, shift it by an offset, pin it to a time of day, convert it to a timezone, and render it in the format you want. Connect a value into 'in' (an ISO-8601 string, a Unix timestamp, or common date text) or leave it unwired to use the current time. 'add' shifts by an offset like \"3d\", \"-2h30m\", or \"1w\" — so \"1d\" is tomorrow; 'at' then sets the clock (\"09:00\"), which is what turns \"24 hours from now\" into \"tomorrow morning\"; 'tz' names an IANA timezone (e.g. \"Europe/Stockholm\") for the output. 'format' picks a named format, or Custom for one you write from YYYY MM DD HH mm ss tokens — \"DD/MM/YYYY\", \"ddd D MMM\" — with literal words in brackets (\"[week of] D MMM\"). Emits the formatted string on 'out' and the broken-out parts (year, month, weekday, …) on 'value'; drop it into any text with ${upstream.<step>.out}.",
 			Summary:     "Read/parse a date, shift and re-timezone it, and render it in a chosen format.",
 			Examples: []core.ParamsExample{
 				{
@@ -46,6 +46,16 @@ func init() {
 				{
 					Title:  "Deadline 3 days from now, Stockholm time",
 					Params: json.RawMessage(`{"add":"3d","tz":"Europe/Stockholm","format":"datetime"}`),
+				},
+				{
+					Title:  "Tomorrow, written the way a person writes it",
+					Params: json.RawMessage(`{"add":"1d","format":"custom","custom_format":"ddd D MMM YYYY"}`),
+					Notes:  "Renders e.g. \"Fri 28 Aug 2026\". Reference it from any text field with ${upstream.<this step's id>.out}.",
+				},
+				{
+					Title:  "Tomorrow at nine, local time",
+					Params: json.RawMessage(`{"add":"1d","at":"09:00","tz":"Europe/Stockholm","format":"custom","custom_format":"DD/MM/YYYY HH:mm"}`),
+					Notes:  "The offset moves the day; 'at' sets the clock, so this is tomorrow morning rather than 24 hours from now.",
 				},
 				{
 					Title:  "Reformat an incoming timestamp",
@@ -65,9 +75,33 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"add":    {"type":"string","title":"Offset","description":"Shift the time by an offset, e.g. \"3d\", \"-2h30m\", \"1w\". Units: w (weeks), d (days), h, m, s. Empty = no shift."},
+					"add":    {"type":"string","title":"Offset","description":"Shift the time by an offset, e.g. \"3d\", \"-2h30m\", \"1w\" — \"1d\" is tomorrow. Units: w (weeks), d (days), h, m, s. Empty = no shift."},
+					"at":     {"type":"string","title":"At time of day","description":"Set the clock to this time of day, e.g. \"09:00\" or \"17:30:15\". Applied after the offset and in the output timezone, so Offset \"1d\" with At \"09:00\" is tomorrow morning rather than 24 hours from now. Empty keeps the time it already had."},
 					"tz":     {"type":"string","title":"Timezone","description":"IANA timezone for the output, e.g. \"Europe/Stockholm\", \"America/New_York\". Empty or \"UTC\" = UTC."},
-					"format": {"type":"string","title":"Format","default":"iso","description":"Output format: a preset (iso, date, time, datetime, unix, unixms, rfc1123, kitchen) or a custom Go reference layout like \"Mon 2 Jan 2006\"."}
+					"format": {
+						"type":"string",
+						"title":"Format",
+						"default":"iso",
+						"enum":["iso","date","time","datetime","unix","unixms","rfc1123","kitchen","custom"],
+						"enumNames":[
+							"ISO-8601 (2026-08-27T14:05:09Z)",
+							"Date (2026-08-27)",
+							"Time (14:05:09)",
+							"Date and time (2026-08-27 14:05:09)",
+							"Unix seconds",
+							"Unix milliseconds",
+							"Email/HTTP (Thu, 27 Aug 2026 14:05:09 UTC)",
+							"Clock (2:05PM)",
+							"Custom…"
+						],
+						"description":"How the date is written on the 'out' port. Pick Custom to write your own — a field for it appears below."
+					},
+					"custom_format": {
+						"type":"string",
+						"title":"Custom format",
+						"x_visible_when":{"format":"custom"},
+						"description":"Build it from tokens: YYYY (2026) YY (26) MM (08) M (8) DD (27) D (27) HH (14) mm (05) ss (09), MMM/MMMM for a month name (Aug/August), ddd/dddd for a weekday (Thu/Thursday), hh with A for a 12-hour clock (02 PM), Z for the zone offset. Everything else — slashes, dots, spaces — is kept as typed, and literal words go in square brackets: \"[week of] D MMM\" → \"week of 27 Aug\". Tokens are case-sensitive (MM is the month, mm the minute); an unknown one fails the step rather than being printed as-is."
+					}
 				}
 			}`),
 			Idempotent: true,
@@ -77,7 +111,8 @@ func init() {
 }
 
 // executeDate resolves the base time (the 'in' input, or now when unwired),
-// applies the timezone and offset, then renders the result per 'format'.
+// applies the offset, timezone and time-of-day, then renders the result per
+// 'format'.
 func executeDate(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	// Base time: parse the 'in' input if present and non-empty, else now.
 	base := time.Now().UTC()
@@ -107,9 +142,24 @@ func executeDate(_ context.Context, job core.Job, _ chan<- core.Progress) (core.
 	}
 	t := base.In(loc)
 
+	// Time of day, applied AFTER the offset and IN the output timezone: with
+	// an offset of "1d", "at 09:00" has to mean nine o'clock where the reader
+	// is, not nine UTC re-expressed as some other hour. Without this the
+	// offset alone can only say "24 hours from now", which lands at whatever
+	// time the flow happened to run — fine for a date, wrong for a deadline.
+	if at := strings.TrimSpace(params.StringDefault(job.Params, "at", "")); at != "" {
+		hour, min, sec, cErr := parseClock(at)
+		if cErr != nil {
+			return params.Err(job, "bad_param", cErr.Error()), nil
+		}
+		t = time.Date(t.Year(), t.Month(), t.Day(), hour, min, sec, 0, loc)
+	}
+
 	// Render.
-	format := strings.TrimSpace(params.StringDefault(job.Params, "format", "iso"))
-	out := renderTime(t, format)
+	out, err := renderFormat(t, job)
+	if err != nil {
+		return params.Err(job, "bad_param", err.Error()), nil
+	}
 
 	return core.Result{
 		JobID:  job.ID,
@@ -206,30 +256,52 @@ func loadLocation(tz string) (*time.Location, error) {
 	return loc, nil
 }
 
-// renderTime formats t per a preset name or, failing that, a custom Go
-// reference layout passed through verbatim.
-func renderTime(t time.Time, format string) string {
+// renderFormat resolves the Format field and renders t. Three cases, tried in
+// this order:
+//
+//	a named format → its preset rendering
+//	"custom"       → the Custom format field, in the token vocabulary
+//	anything else  → a format typed into `format` itself, which is what this
+//	                 drop took before Format became a dropdown; saved graphs
+//	                 still carry Go reference layouts there, so they keep
+//	                 working (see renderLegacyFormat).
+func renderFormat(t time.Time, job core.Job) (string, error) {
+	format := strings.TrimSpace(params.StringDefault(job.Params, "format", "iso"))
+	if strings.EqualFold(format, "custom") {
+		custom := strings.TrimSpace(params.StringDefault(job.Params, "custom_format", ""))
+		if custom == "" {
+			return "", fmt.Errorf("Format is Custom but the Custom format field is empty — write one (e.g. \"DD/MM/YYYY\") or pick a named format")
+		}
+		return renderCustom(t, custom)
+	}
+	if out, ok := renderPreset(t, format); ok {
+		return out, nil
+	}
+	return renderLegacyFormat(t, format)
+}
+
+// renderPreset formats t per a named format, reporting false for a name it
+// doesn't know so the caller can treat the value as a format string.
+func renderPreset(t time.Time, format string) (string, bool) {
 	switch strings.ToLower(format) {
 	case "", "iso", "rfc3339":
-		return t.Format(time.RFC3339)
+		return t.Format(time.RFC3339), true
 	case "date":
-		return t.Format("2006-01-02")
+		return t.Format("2006-01-02"), true
 	case "time":
-		return t.Format("15:04:05")
+		return t.Format("15:04:05"), true
 	case "datetime":
-		return t.Format("2006-01-02 15:04:05")
+		return t.Format("2006-01-02 15:04:05"), true
 	case "unix":
-		return strconv.FormatInt(t.Unix(), 10)
+		return strconv.FormatInt(t.Unix(), 10), true
 	case "unixms":
-		return strconv.FormatInt(t.UnixMilli(), 10)
+		return strconv.FormatInt(t.UnixMilli(), 10), true
 	case "rfc1123":
-		return t.Format(time.RFC1123)
+		return t.Format(time.RFC1123), true
 	case "kitchen":
-		return t.Format(time.Kitchen)
-	default:
-		// A custom Go reference layout, e.g. "Mon 2 Jan 2006".
-		return t.Format(format)
+		return t.Format(time.Kitchen), true
 	}
+	return "", false
 }
 
 // timeParts breaks a time into the fields a downstream drop is likely to

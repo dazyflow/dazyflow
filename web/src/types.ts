@@ -320,6 +320,17 @@ export type JSONSchema = {
   // either spelling and the UI accepts both.
   x_advanced?: boolean;
   "x-advanced"?: boolean;
+  // x_visible_when hides a field until sibling params have particular values:
+  // {"format": "custom"} shows it only while the sibling `format` is "custom",
+  // and an array of values means any of them. Distinct from x_advanced, which
+  // hides a field behind a disclosure whatever the rest of the form says — the
+  // wrong shape for a field that becomes THE field to fill in once an option
+  // is picked. Read through lib/schemaFields.ts by both form renderers; a
+  // hidden field keeps its stored value. A conditional field must not be in
+  // `required` (the form would hide what the config checklist demands) — the
+  // drop validates the pair in Execute instead, and
+  // drops/param_visibility_test.go enforces both ends.
+  x_visible_when?: Record<string, unknown>;
   // x_mono renders a multiline field in a monospace (code) font — for fields
   // whose value is code/markup (e.g. render_template's HTML template) rather
   // than prose (an email body), so the markup reads correctly.

@@ -168,3 +168,97 @@ func TestParseOffset(t *testing.T) {
 		}
 	}
 }
+
+// "Tomorrow" is the case this step gets reached for most, and the one the
+// offset alone gets subtly wrong: "1d" lands at whatever time the flow ran, so
+// a deadline written from it drifts by however late in the day it fired. 'at'
+// pins the clock, in the OUTPUT timezone.
+func TestDate_TomorrowAtNineLocal(t *testing.T) {
+	res := runDate(t, "2026-08-27T23:40:00Z", map[string]any{
+		"add":           "1d",
+		"at":            "09:00",
+		"tz":            "Europe/Stockholm",
+		"format":        "custom",
+		"custom_format": "DD/MM/YYYY HH:mm",
+	})
+	// 23:40Z on the 27th is 01:40 on the 28th in Stockholm (UTC+2 in August);
+	// +1d makes it the 29th, and 'at' sets the clock to nine that morning.
+	if got := outOf(t, res); got != "29/08/2026 09:00" {
+		t.Errorf("got %q, want 29/08/2026 09:00", got)
+	}
+}
+
+func TestDate_AtSetsTheClockInTheOutputZone(t *testing.T) {
+	// No offset: same day, clock replaced, and the zone offset proves the time
+	// is nine LOCAL rather than nine UTC relabelled.
+	res := runDate(t, "2026-08-27T23:40:00Z", map[string]any{
+		"at": "09:00", "tz": "Europe/Stockholm", "format": "iso",
+	})
+	if got := outOf(t, res); got != "2026-08-28T09:00:00+02:00" {
+		t.Errorf("got %q, want 2026-08-28T09:00:00+02:00", got)
+	}
+}
+
+func TestDate_AtStartOfDay(t *testing.T) {
+	// Midnight is what makes 'at' a truncate-to-day as well: a date compared
+	// or printed from here doesn't carry the run's clock time.
+	res := runDate(t, "2026-08-27T13:45:07Z", map[string]any{"at": "00:00", "format": "datetime"})
+	if got := outOf(t, res); got != "2026-08-27 00:00:00" {
+		t.Errorf("got %q, want 2026-08-27 00:00:00", got)
+	}
+}
+
+func TestDate_AtRejectsNonsense(t *testing.T) {
+	res := runDate(t, "2026-08-27T13:45:07Z", map[string]any{"at": "25:00"})
+	if res.Status != core.StatusError || res.Error.Code != "bad_param" {
+		t.Fatalf("res = %+v, want error/bad_param", res)
+	}
+}
+
+func TestDate_CustomFormat(t *testing.T) {
+	res := runDate(t, "2026-08-27T13:45:07Z", map[string]any{
+		"format": "custom", "custom_format": "ddd D MMM YYYY",
+	})
+	if got := outOf(t, res); got != "Thu 27 Aug 2026" {
+		t.Errorf("got %q, want Thu 27 Aug 2026", got)
+	}
+}
+
+// A bad custom format fails the step. The whole reason for the token
+// vocabulary is that the old behaviour — printing the format string itself —
+// put "YYYY-MM-DD" into live email with nothing anywhere reporting it.
+func TestDate_CustomFormatRejectsUnknownToken(t *testing.T) {
+	res := runDate(t, "2026-08-27T13:45:07Z", map[string]any{
+		"format": "custom", "custom_format": "YYYY-MM-DD at HH:mm",
+	})
+	if res.Status != core.StatusError || res.Error.Code != "bad_param" {
+		t.Fatalf("res = %+v, want error/bad_param (\"at\" is not a token — it needs brackets)", res)
+	}
+}
+
+// Half-configured rather than wrong: Custom picked, nothing written. Falling
+// back to ISO would be a silent guess at what the flow author meant.
+func TestDate_CustomWithNoFormatIsAnError(t *testing.T) {
+	res := runDate(t, "2026-08-27T13:45:07Z", map[string]any{"format": "custom"})
+	if res.Status != core.StatusError || res.Error.Code != "bad_param" {
+		t.Fatalf("res = %+v, want error/bad_param", res)
+	}
+}
+
+// Graphs saved before Format became a dropdown carry a Go reference layout in
+// `format` itself. They must keep rendering exactly as they did.
+func TestDate_LegacyGoLayoutInFormatParam(t *testing.T) {
+	res := runDate(t, "2026-08-27T13:45:07Z", map[string]any{"format": "Mon 2 Jan 2006"})
+	if got := outOf(t, res); got != "Thu 27 Aug 2026" {
+		t.Errorf("got %q, want Thu 27 Aug 2026", got)
+	}
+}
+
+// And the bug that was in that field: a format time.Format could not read came
+// back verbatim. Now the token vocabulary gets a turn at it.
+func TestDate_LegacyFormatParamAcceptsTokens(t *testing.T) {
+	res := runDate(t, "2026-08-27T13:45:07Z", map[string]any{"format": "DD/MM/YYYY"})
+	if got := outOf(t, res); got != "27/08/2026" {
+		t.Errorf("got %q, want 27/08/2026 — the format string must not be echoed", got)
+	}
+}

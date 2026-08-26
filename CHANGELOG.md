@@ -23,6 +23,46 @@ into the image.)
 
 ## [Unreleased]
 
+### Changed
+
+- **The Date & time step's format field is one you can actually type.** It took
+  a Go reference layout — `02/01/2006` for a European date — and that failed in
+  the two ways people actually write a format. `YYYY-MM-DD`, the spelling
+  everyone reaches for and the one this step's own example was titled with, is
+  not a layout: it came back verbatim, so the literal text "YYYY-MM-DD" went
+  into the email, with no error anywhere. And a literal word sharing letters
+  with the reference date was silently rewritten — `Due Monday 2 January`
+  rendered as "Due Thursday 27 August".
+
+  Format is now a named dropdown (ISO-8601, Date, Time, Date and time, Unix,
+  Email/HTTP, Clock) plus **Custom**, where you write it from the tokens
+  spreadsheets and date pickers already use: `DD/MM/YYYY`, `ddd D MMM YYYY`,
+  `HH:mm`, `hh:mm A`. Literal words go in square brackets — `[week of] D MMM` —
+  and are left exactly as typed, because a custom format is now rendered token
+  by token rather than handed to Go. An unknown token **fails the step** and
+  says what to write instead, rather than printing itself into your message; a
+  near miss gets named ("mmm" → did you mean "MMM"?), including the
+  case-sensitivity that trips everyone once (MM is the month, mm the minute).
+
+  The Custom format field appears only once you pick Custom, so the everyday
+  case is one dropdown and nothing else — a permanent second format box beside
+  a format dropdown reads as two ways of saying the same thing, and invites
+  filling in the wrong one. Switching away keeps whatever you typed, so
+  flipping to Date and back doesn't lose it.
+
+  Formats already saved in your flows keep working: a Go layout typed into the
+  old field renders exactly as it did. And `YYYY-MM-DD` sitting in that field
+  from before now renders as a date instead of as itself.
+
+### Added
+
+- **"At time of day" on the Date & time step.** The offset alone could only say
+  "24 hours from now", so a deadline built from it drifted by however late in
+  the day the flow happened to run. Set At to `09:00` and Offset to `1d` and you
+  get tomorrow morning — in the step's own timezone, so nine means nine where
+  the reader is. `00:00` doubles as "start of the day", for a date that doesn't
+  carry the run's clock time.
+
 ### Fixed
 
 - **The inspect button no longer hides on small screens.** Below 1100px the
