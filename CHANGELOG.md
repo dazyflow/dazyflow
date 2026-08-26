@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.15.6] - 2026-08-26
+
 ### Fixed
 
 - **Renaming a table column was not reachable from the editor.** The previous
