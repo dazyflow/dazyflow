@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { tokenizeValue, serializeEditable } from "./SchemaForm";
+import { serializeEditable } from "./SchemaForm";
+import { tokenizeValue } from "../editor/nodeCardShared";
 
 // chip builds a token chip span the way the editor's renderInto does: a
 // contenteditable=false span whose data-token carries the raw ${…} and whose

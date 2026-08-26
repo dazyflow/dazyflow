@@ -4,6 +4,7 @@
 package datetime
 
 import (
+	"git.sr.ht/~klahr/dazyflow/internal/datenames"
 	"strings"
 	"testing"
 	"time"
@@ -45,7 +46,7 @@ func TestRenderCustom(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got, err := renderCustom(ref, c.format)
+			got, err := renderCustom(ref, c.format, datenames.English)
 			if err != nil {
 				t.Fatalf("renderCustom(%q): %v", c.format, err)
 			}
@@ -75,7 +76,7 @@ func TestRenderCustom_RejectsUnknownTokens(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.format, func(t *testing.T) {
-			out, err := renderCustom(ref, c.format)
+			out, err := renderCustom(ref, c.format, datenames.English)
 			if err == nil {
 				t.Fatalf("renderCustom(%q) = %q, want an error", c.format, out)
 			}
@@ -87,7 +88,7 @@ func TestRenderCustom_RejectsUnknownTokens(t *testing.T) {
 }
 
 func TestRenderCustom_UnclosedBracket(t *testing.T) {
-	if _, err := renderCustom(ref, "[week of D MMM"); err == nil {
+	if _, err := renderCustom(ref, "[week of D MMM", datenames.English); err == nil {
 		t.Fatal("an unclosed [ should be an error, not a silent literal")
 	}
 }
@@ -102,7 +103,7 @@ func TestRenderLegacyFormat_KeepsGoLayouts(t *testing.T) {
 		{"15:04", "14:05"},
 	}
 	for _, c := range cases {
-		got, err := renderLegacyFormat(ref, c.format)
+		got, err := renderLegacyFormat(ref, c.format, datenames.English)
 		if err != nil {
 			t.Fatalf("renderLegacyFormat(%q): %v", c.format, err)
 		}
@@ -116,7 +117,7 @@ func TestRenderLegacyFormat_KeepsGoLayouts(t *testing.T) {
 // it used to come back as itself and land in the message. Now the token
 // vocabulary gets a turn.
 func TestRenderLegacyFormat_FallsBackToTokens(t *testing.T) {
-	got, err := renderLegacyFormat(ref, "YYYY-MM-DD")
+	got, err := renderLegacyFormat(ref, "YYYY-MM-DD", datenames.English)
 	if err != nil {
 		t.Fatalf("renderLegacyFormat: %v", err)
 	}
@@ -124,7 +125,7 @@ func TestRenderLegacyFormat_FallsBackToTokens(t *testing.T) {
 		t.Errorf("got %q, want 2026-08-27 (not the format string itself)", got)
 	}
 	// And a format that is neither errors rather than shipping itself.
-	if out, err := renderLegacyFormat(ref, "sometime soon"); err == nil {
+	if out, err := renderLegacyFormat(ref, "sometime soon", datenames.English); err == nil {
 		t.Errorf("got %q, want an error", out)
 	}
 }

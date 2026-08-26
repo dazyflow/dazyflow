@@ -16,7 +16,9 @@ import (
 
 	"git.sr.ht/~klahr/dazyflow/auth"
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/internal/datenames"
 	"git.sr.ht/~klahr/dazyflow/internal/emailtheme"
+	"git.sr.ht/~klahr/dazyflow/internal/maillang"
 )
 
 // Email verification. Active only on deployments with a transactional
@@ -65,25 +67,22 @@ func (h *HTTPGateway) sendVerificationEmail(r *http.Request, user auth.User) boo
 	// Keep this strictly about confirming the address — the separate
 	// welcome email (welcome_email.go) does the greeting. Leading both
 	// with "Welcome to Dazyflow" made the pair read as one mail sent twice.
-	expFmt := exp.Format("2 January 2006")
-	body := fmt.Sprintf(
-		"Confirm your email address to finish setting up your Dazyflow account.\n\n"+
-			"Verify this address:\n%s\n\n"+
-			"The link expires %s. If you didn't create this account, ignore this email.",
-		link, expFmt)
+	// The account exists, so it can carry a language choice — though at signup
+	// it usually has not been made yet, which reads as English.
+	lang := h.mailLang(r.Context(), user.Email)
+	m := maillang.For(lang)
+	expFmt := datenames.FormatDate(exp, lang)
 	content := emailtheme.Content{
-		Subject:   "Confirm your email",
-		Preheader: "Confirm your address to finish setting up your account.",
-		Eyebrow:   "Confirm your email",
-		Heading:   "One quick step to finish",
-		Intro:     []string{"Confirm your email address to finish setting up your Dazyflow account."},
-		Button:    &emailtheme.Button{Label: "Verify email address", URL: link},
-		Outro: []string{fmt.Sprintf(
-			"This link expires %s. If you didn't create a Dazyflow account, you can ignore this email.",
-			expFmt)},
-		LogoURL: emailLogoURL(h.svc.PublicBaseURL),
+		Subject:   m.VerifySubject,
+		Preheader: m.VerifyPreheader,
+		Eyebrow:   m.VerifyEyebrow,
+		Heading:   m.VerifyHeading,
+		Intro:     []string{m.VerifyIntro},
+		Button:    &emailtheme.Button{Label: m.VerifyButton, URL: link},
+		Outro:     []string{fmt.Sprintf(m.VerifyExpiry, expFmt)},
+		LogoURL:   emailLogoURL(h.svc.PublicBaseURL),
 	}
-	if err := h.svc.Mailer.SendThemed(r.Context(), user.Email, body, content); err != nil {
+	if err := h.svc.Mailer.SendThemed(r.Context(), user.Email, emailtheme.PlainText(content), content); err != nil {
 		h.logger.Printf("verification email for %s: send: %v", user.Email, err)
 		return false
 	}

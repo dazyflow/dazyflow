@@ -136,6 +136,9 @@ export function diffGraphs(baseline: Graph, draft: Graph): GraphDiff {
     metaChanged.push("timeout_seconds");
   if ((baseline.visibility ?? "org") !== (draft.visibility ?? "org"))
     metaChanged.push("visibility");
+  // The flow's output language: publishing it changes the words a run writes
+  // (day and month names), so it belongs in the diff a publish confirms.
+  if ((baseline.language ?? "") !== (draft.language ?? "")) metaChanged.push("language");
   if ((baseline.icon ?? "") !== (draft.icon ?? "")) metaChanged.push("icon");
   if ((baseline.description ?? "") !== (draft.description ?? ""))
     metaChanged.push("description");

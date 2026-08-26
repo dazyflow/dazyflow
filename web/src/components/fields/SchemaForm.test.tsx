@@ -118,6 +118,34 @@ describe("SchemaForm (FormContext)", () => {
     expect(screen.getByRole("option", { name: "Africa/Nairobi" })).toBeInTheDocument();
   });
 
+  // A dropdown fed from a reference: an <option> can only hold text, so it
+  // shows the {} menu's words. What it must never show is the raw ${…}, which
+  // is the wire format of a reference and not its name.
+  it("labels a reference in a dropdown with words, not syntax", () => {
+    const schema: JSONSchema = {
+      type: "object",
+      properties: {
+        mode: {
+          type: "string",
+          title: "Mode",
+          enum: ["a", "b"],
+          enumNames: ["A", "B"],
+        },
+      },
+    } as JSONSchema;
+    const { container } = render(
+      <SchemaForm
+        schema={schema}
+        value={{ mode: "${secret.MODE}" }}
+        onChange={() => {}}
+      />,
+    );
+    const select = container.querySelector("select") as HTMLSelectElement;
+    expect(select.value).toBe("${secret.MODE}");
+    expect(select.textContent).not.toContain("${");
+    expect(screen.getByRole("option", { name: "MODE" })).toBeInTheDocument();
+  });
+
   it("renders nothing actionable for a non-object schema (fallback hint)", () => {
     render(
       <SchemaForm

@@ -4590,6 +4590,15 @@ button.warning:hover:not(:disabled) {
 /* Token chip on the canvas card's inline editor — a whole-value ${…}
    reference rendered as readable words ("Gmail · Matching emails → first →
    id"). Click switches to the raw editable token. */
+/* Wrapper for a value rendered as chips-and-text in place of an input: it
+   holds a row of chips, interleaved text and the clear button on one line. */
+.dz-token-chip-line {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+  max-width: 100%;
+}
 .dz-token-chip {
   display: inline-flex;
   align-items: center;
@@ -4602,6 +4611,13 @@ button.warning:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent) 10%, var(--surface));
   border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
   border-radius: 999px;
+}
+/* A chip standing for a secret reads as one: the value is a credential, and
+   telling that from an ordinary upstream reference at a glance matters more on
+   a card (which you scan) than in the Inspector (which you read). */
+.dz-token-chip-secret {
+  background: color-mix(in srgb, var(--warning) 12%, var(--surface));
+  border-color: color-mix(in srgb, var(--warning) 40%, var(--border));
 }
 .dz-token-chip-text {
   overflow: hidden;

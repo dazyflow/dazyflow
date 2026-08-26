@@ -9,6 +9,7 @@ import (
 
 	"git.sr.ht/~klahr/dazyflow/auth"
 	"git.sr.ht/~klahr/dazyflow/internal/emailtheme"
+	"git.sr.ht/~klahr/dazyflow/internal/maillang"
 )
 
 // Welcome email. Sent once, right after an account is created, on every
@@ -30,30 +31,22 @@ func (h *HTTPGateway) sendWelcomeEmail(r *http.Request, user auth.User) bool {
 	}
 	// Link to the app when we know its public URL; otherwise a
 	// link-less welcome is still worth sending.
-	var cta string
+	m := maillang.For(h.mailLang(r.Context(), user.Email))
 	var button *emailtheme.Button
 	if base := strings.TrimRight(h.svc.PublicBaseURL, "/"); base != "" {
-		cta = "Jump in and build your first flow:\n" + base + "/welcome\n\n"
-		button = &emailtheme.Button{Label: "Build your first flow", URL: base + "/welcome"}
+		button = &emailtheme.Button{Label: m.WelcomeButton, URL: base + "/welcome"}
 	}
-	body := "Welcome to Dazyflow! Your account is ready.\n\n" +
-		cta +
-		"Need a hand? Reply to this email or visit the docs from the app.\n\n" +
-		"Happy automating."
 	content := emailtheme.Content{
-		Subject:   "Welcome to Dazyflow",
-		Preheader: "Your account is ready — build your first flow.",
-		Eyebrow:   "Welcome",
-		Heading:   "Your account is ready",
-		Intro: []string{
-			"Welcome to Dazyflow! Everything's set up and waiting for you.",
-			"A flow automates a task for you — on a schedule, when a form is submitted, or when another app sends it data. Start from a template or describe what you want in plain words.",
-		},
-		Button:  button,
-		Outro:   []string{"Need a hand? Just reply to this email, or open the docs from inside the app."},
-		LogoURL: emailLogoURL(h.svc.PublicBaseURL),
+		Subject:   m.WelcomeSubject,
+		Preheader: m.WelcomePreheader,
+		Eyebrow:   m.WelcomeEyebrow,
+		Heading:   m.WelcomeHeading,
+		Intro:     []string{m.WelcomeIntro1, m.WelcomeIntro2},
+		Button:    button,
+		Outro:     []string{m.WelcomeOutro},
+		LogoURL:   emailLogoURL(h.svc.PublicBaseURL),
 	}
-	if err := h.svc.Mailer.SendThemed(r.Context(), user.Email, body, content); err != nil {
+	if err := h.svc.Mailer.SendThemed(r.Context(), user.Email, emailtheme.PlainText(content), content); err != nil {
 		h.logger.Printf("welcome email for %s: send: %v", user.Email, err)
 		return false
 	}

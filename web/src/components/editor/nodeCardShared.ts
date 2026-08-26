@@ -61,6 +61,58 @@ export function friendlyTokenText(raw: string, labels?: TokenLabels): string | n
   return null;
 }
 
+// TOKEN_SCAN finds every ${scheme.path} token in a string — FULL_TOKEN
+// unanchored, so it matches tokens embedded in surrounding prose
+// ("Deadline: ${upstream.date_1.out}") as well as a whole-value one.
+const TOKEN_SCAN = /\$\{[A-Za-z]+\.[^}]*\}/g;
+
+// SECRET_FULL_REF matches a token that is exactly one secret reference, whose
+// friendly label is just the secret's name.
+const SECRET_FULL_REF = /^\$\{secret\.([^}]+)\}$/;
+
+export type TokenSegment =
+  | { kind: "text"; text: string }
+  | { kind: "token"; token: string };
+
+// tokenizeValue splits a raw value into ordered text/token segments — the
+// model both the Inspector's editable field and the node card's read-only
+// display render from. Exported for unit tests.
+export function tokenizeValue(value: string): TokenSegment[] {
+  const segs: TokenSegment[] = [];
+  let last = 0;
+  for (const m of value.matchAll(TOKEN_SCAN)) {
+    const i = m.index ?? 0;
+    if (i > last) segs.push({ kind: "text", text: value.slice(last, i) });
+    segs.push({ kind: "token", token: m[0] });
+    last = i + m[0].length;
+  }
+  if (last < value.length) segs.push({ kind: "text", text: value.slice(last) });
+  return segs;
+}
+
+// hasToken reports whether a value carries any ${…} reference at all. The
+// question a display surface asks: raw token syntax is never shown to a user,
+// so a value containing one renders as chips rather than as text.
+export function hasToken(value: string): boolean {
+  TOKEN_SCAN.lastIndex = 0;
+  return TOKEN_SCAN.test(value);
+}
+
+// tokenChipLabel is the words one chip shows: a secret's own name, else the
+// {} menu's phrasing, else the raw token — which is the honest fallback for
+// something we cannot parse, and better than an empty chip.
+export function tokenChipLabel(token: string, labels?: TokenLabels): string {
+  const sec = SECRET_FULL_REF.exec(token);
+  if (sec) return sec[1];
+  return friendlyTokenText(token, labels) ?? token;
+}
+
+// isSecretToken says whether a chip should read as a secret (it gets its own
+// styling, so a credential in a field is recognisable at a glance).
+export function isSecretToken(token: string): boolean {
+  return SECRET_FULL_REF.test(token);
+}
+
 // DazyNodeData is the shape we stash on each React Flow node. We carry the
 // live manifest so the canvas can render the same icon and label as the
 // catalog without a second lookup.

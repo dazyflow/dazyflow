@@ -13,7 +13,9 @@ import (
 
 	"git.sr.ht/~klahr/dazyflow/auth"
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/internal/datenames"
 	"git.sr.ht/~klahr/dazyflow/internal/emailtheme"
+	"git.sr.ht/~klahr/dazyflow/internal/maillang"
 )
 
 // Platform signup-invites. On a deployment with self-serve signup
@@ -129,26 +131,24 @@ func (h *HTTPGateway) createSignupInvite(rw http.ResponseWriter, r *http.Request
 	signupURL := h.signupInviteURL(email, token)
 	emailSent := false
 	if h.svc.Mailer != nil && strings.HasPrefix(signupURL, "http") {
-		expFmt := inv.ExpiresAt.Format("2 January 2006")
-		msg := fmt.Sprintf(
-			"You've been invited to create an account on Dazyflow.\n\n"+
-				"Set your password and finish signing up:\n%s\n\n"+
-				"The link expires %s. If you weren't expecting this, ignore this email.",
-			signupURL, expFmt)
+		// The invitee has no account by definition, so there is no preference
+		// of theirs to read: follow the inviter, who knows who they are
+		// writing to.
+		lang := h.inviteLang(r.Context(), email, p.Subject)
+		m := maillang.For(lang)
+		expFmt := datenames.FormatDate(inv.ExpiresAt, lang)
 		content := emailtheme.Content{
-			Subject:   "You're invited to Dazyflow",
-			Preheader: "Create your account to get started.",
-			Eyebrow:   "Invitation",
-			Heading:   "Create your Dazyflow account",
-			Intro:     []string{"You've been invited to create an account on Dazyflow. Set a password and you're in."},
-			Button:    &emailtheme.Button{Label: "Set your password", URL: signupURL},
-			Outro: []string{fmt.Sprintf(
-				"This link expires %s. If you weren't expecting it, you can ignore this email.",
-				expFmt)},
-			FooterNote: "You're receiving this because someone invited you to Dazyflow.",
+			Subject:    m.InviteSubject,
+			Preheader:  m.InvitePreheader,
+			Eyebrow:    m.InviteEyebrow,
+			Heading:    m.InviteHeading,
+			Intro:      []string{m.InviteIntro},
+			Button:     &emailtheme.Button{Label: m.InviteButton, URL: signupURL},
+			Outro:      []string{fmt.Sprintf(m.InviteExpiry, expFmt)},
+			FooterNote: m.InviteFooter,
 			LogoURL:    emailLogoURL(h.svc.PublicBaseURL),
 		}
-		if err := h.svc.Mailer.SendThemed(r.Context(), email, msg, content); err != nil {
+		if err := h.svc.Mailer.SendThemed(r.Context(), email, emailtheme.PlainText(content), content); err != nil {
 			h.logger.Printf("signup-invite email to %s: %v", email, err)
 		} else {
 			emailSent = true

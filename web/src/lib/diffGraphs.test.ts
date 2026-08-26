@@ -68,6 +68,9 @@ const behavioural: [string, (g: Graph) => void][] = [
   ["description changed", (g) => void (g.description = "Sends the nightly digest")],
   ["visibility", (g) => void (g.visibility = "private")],
   ["graph timeout", (g) => void (g.timeout_seconds = 600)],
+  // Publishing a language change changes the words a run writes, so it has to
+  // appear in the diff the publish confirm shows — mirrors core.BehaviorEqual.
+  ["output language", (g) => void (g.language = "sv")],
   ["failure notify", (g) => void (g.failure_notify = { webhook: "https://hooks.example/x" })],
 ];
 

@@ -23,6 +23,89 @@ into the image.)
 
 ## [Unreleased]
 
+### Added
+
+- **The platform's own emails speak Swedish.** Invitations, the welcome mail,
+  email verification, password resets, flow-failure notices, approval requests
+  and their outcomes, and the two support notifications now go out in the
+  reader's language — including the dates inside them.
+
+  Whose language it is depends on the email, and that is the point rather than
+  an accident:
+
+  - Mail to an account holder — verification, reset, welcome, a failed flow, a
+    support reply — uses **that person's own** language preference.
+  - An **invitation** has no account behind the address, so it follows the
+    person doing the inviting, who knows who they are writing to. If the
+    invitee already has an account, theirs wins.
+  - Mail a **flow** sends (an approval request and its outcome) follows the
+    **flow's** language, the same field the Date & time step reads. Its
+    recipients are addresses typed into a step and often have no account here
+    at all, so there is frequently no preference to read — and it is the flow
+    speaking either way.
+
+  Anything not translated falls back to English rather than to blanks, and a
+  language lookup that fails sends the English mail rather than no mail.
+
+  The two support-queue notices — a customer replied, a ticket was filed — stay
+  English on purpose: they go to the operator's own staff at an address that
+  comes from configuration, and a config-file address carries no language to
+  read.
+
+### Changed
+
+- **An email's plain-text half is generated from the same content as its HTML.**
+  Every notification used to hand-build the two separately — the same facts and
+  the same link, written twice — and they had drifted: the text version of an
+  approval request carried the run's URL and the HTML one didn't. One source
+  now renders both, so they cannot disagree, and a translated string is
+  translated once instead of twice.
+
+### Added
+
+- **Flows write dates in your language.** Set **Flow language** under Settings →
+  General and the Date & time step's day and month names come out in it —
+  `torsdag 27 augusti` rather than `Thursday 27 August`. Swedish is the second
+  language; anything else reads as English.
+
+  It is the *flow's* language, not yours, and that distinction is the whole
+  point: a scheduled run has no one logged in, and the person receiving what a
+  flow sends is rarely the person who built it. Your own interface language
+  stays in account settings and changes only what you see.
+
+  Casing follows the language rather than a rule — Swedish writes `måndag` and
+  `augusti` lowercase, English capitalises — so `D MMMM` is right in both
+  without anyone typing a different format. A single step can override the flow
+  (its own **Language** field) for the one message that has to differ.
+
+  **The machine formats stay English, deliberately.** ISO, Unix and Email/HTTP
+  are read by machines, and RFC 1123 *mandates* English abbreviations: a
+  Swedish `tors, 27 aug` in a `Date:` header is a malformed header, not a
+  translation. A Go reference layout saved in an older flow stays English too —
+  it asked for English by construction, and changing it would quietly alter
+  what those flows already send.
+
+### Fixed
+
+- **A step card no longer shows `${…}` reference syntax.** A card chipped a
+  field whose value was *entirely* one reference and printed raw text for
+  everything else — so the exact shape the `{ }` menu produces, a reference
+  inserted into a sentence at the cursor ("Deadline: `${upstream.date_1.out}`"),
+  was the shape that leaked the syntax onto the canvas. References now render
+  as chips wherever they appear in a value, with the text around them intact,
+  and a reference to a secret is styled as one so a credential in a field is
+  recognisable at a glance.
+
+  Five other places on the card showed a reference as something worse than
+  itself: a resource picker showed a never-ending "…" while it tried to resolve
+  a reference as an id, a schedule ran a reference through the
+  cron-to-words reader, an interval reported "no interval", and a location
+  summary printed the raw token. All of them now show the reference.
+
+  A dropdown whose value is a reference shows the reference's words too — an
+  `<option>` can hold only text, so it can't be a chip, but it was printing the
+  raw `${…}`.
+
 ## [0.16.2] - 2026-08-26
 
 ### Added

@@ -588,7 +588,11 @@
       "dangerZone": "Riskzon",
       "deleteFlowDesc": "Tar bort flödet och hela dess historik permanent. Detta kan inte ångras.",
       "storedInGit": "Varje sparning behålls som en version du kan gå tillbaka till — tekniskt sett lagras de i ett git-repo.",
-      "mirrorLink": "Spegla till din egen git"
+      "mirrorLink": "Spegla till din egen git",
+      "language": "Flödets språk",
+      "languageDesc": "Språket det här flödet SKRIVER på — namn på veckodagar och månader från steget Datum och tid, och allt annat ett steg formulerar i ord. Det är vad en schemalagd körning skickar till sina läsare, så det följer inte den som råkar titta i redigeraren. Ditt eget gränssnittsspråk finns i kontoinställningarna.",
+      "languageEnglish": "English",
+      "languageSwedish": "Svenska"
     }
   },
   "triggers": {

@@ -21,7 +21,9 @@ package emailtheme
 
 import (
 	"bytes"
+	"fmt"
 	"html/template"
+	"strings"
 )
 
 // Button is the single primary call-to-action. URL is the destination; Label
@@ -208,3 +210,54 @@ const htmlTemplate = `<!DOCTYPE html>
   </table>
 </body>
 </html>`
+
+// PlainText renders the same Content as the text/plain alternative of a
+// multipart message.
+//
+// It exists because every caller used to hand-build that alternative next to
+// the Content — the same facts, the same link, written twice — and the two
+// drifted: one said "Failed step", the other "Failed step:  " with its own
+// column alignment, and adding a fact to the HTML left the text version
+// missing it. Worse, once the copy is translated, a hand-built twin doubles
+// every string in the catalogue for no reader's benefit.
+//
+// The Preheader and Eyebrow are deliberately absent: the preheader exists to
+// be the snippet an inbox list shows beside the subject, which a text body
+// already is, and the eyebrow is a visual kicker above a heading that the
+// heading itself repeats in words.
+func PlainText(c Content) string {
+	var b strings.Builder
+	para := func(s string) {
+		if s = strings.TrimSpace(s); s != "" {
+			b.WriteString(s)
+			b.WriteString("\n\n")
+		}
+	}
+	para(c.Heading)
+	for _, p := range c.Intro {
+		para(p)
+	}
+	// Facts as an aligned block, so a long error value doesn't make the
+	// labels unreadable. Width from the longest label present.
+	if len(c.Facts) > 0 {
+		width := 0
+		for _, f := range c.Facts {
+			if n := len([]rune(f.Label)); n > width {
+				width = n
+			}
+		}
+		for _, f := range c.Facts {
+			pad := strings.Repeat(" ", width-len([]rune(f.Label)))
+			fmt.Fprintf(&b, "%s:%s  %s\n", f.Label, pad, f.Value)
+		}
+		b.WriteString("\n")
+	}
+	if c.Button != nil && c.Button.URL != "" {
+		fmt.Fprintf(&b, "%s:\n%s\n\n", strings.TrimSpace(c.Button.Label), c.Button.URL)
+	}
+	for _, p := range c.Outro {
+		para(p)
+	}
+	para(c.FooterNote)
+	return strings.TrimRight(b.String(), "\n") + "\n"
+}

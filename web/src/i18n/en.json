@@ -588,7 +588,11 @@
       "dangerZone": "Danger zone",
       "deleteFlowDesc": "Permanently deletes this flow and its entire history. This cannot be undone.",
       "storedInGit": "Every save is kept as a version you can go back to — stored as a git repository behind the scenes.",
-      "mirrorLink": "Mirror to your own git"
+      "mirrorLink": "Mirror to your own git",
+      "language": "Flow language",
+      "languageDesc": "The language this flow WRITES in — day and month names from the Date & time step, and anything else a step spells out. It's what a scheduled run sends to its readers, so it doesn't follow whoever is looking at the editor. Your own interface language lives in account settings.",
+      "languageEnglish": "English",
+      "languageSwedish": "Svenska"
     }
   },
   "triggers": {

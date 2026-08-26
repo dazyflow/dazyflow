@@ -5,6 +5,7 @@ package datetime
 
 import (
 	"fmt"
+	"git.sr.ht/~klahr/dazyflow/internal/datenames"
 	"strconv"
 	"strings"
 	"time"
@@ -32,11 +33,26 @@ import (
 // use, so it is the one a user has already met.
 
 // formatToken is one vocabulary entry: the token a user writes and the Go
-// reference layout that renders that piece.
+// reference layout that renders that piece. A token whose output is a NAME
+// (month, weekday) carries no layout — Go's names are English-only, so those
+// four come from the localized table instead (see names.go).
 type formatToken struct {
 	tok    string
 	layout string
+	name   nameKind
 }
+
+// nameKind marks the tokens rendered from the name table rather than by
+// time.Format.
+type nameKind uint8
+
+const (
+	nameNone nameKind = iota
+	nameMonthLong
+	nameMonthShort
+	nameDayLong
+	nameDayShort
+)
 
 // formatTokens is scanned in order at each position, so a token must never
 // precede a LONGER token it is a prefix of (YYYY before YY, MMMM before MM
@@ -46,28 +62,28 @@ type formatToken struct {
 // ("15" is always padded), so `H` would have to be faked; it errors instead,
 // with the hint to use HH. Week numbers are absent for the same reason.
 var formatTokens = []formatToken{
-	{"YYYY", "2006"},
-	{"YY", "06"},
-	{"MMMM", "January"},
-	{"MMM", "Jan"},
-	{"MM", "01"},
-	{"M", "1"},
-	{"dddd", "Monday"},
-	{"ddd", "Mon"},
-	{"DD", "02"},
-	{"D", "2"},
-	{"HH", "15"},
-	{"hh", "03"},
-	{"h", "3"},
-	{"mm", "04"},
-	{"m", "4"},
-	{"ss", "05"},
-	{"s", "5"},
-	{"A", "PM"},
-	{"a", "pm"},
-	{"ZZ", "-0700"},
-	{"Z", "-07:00"},
-	{"z", "MST"},
+	{"YYYY", "2006", nameNone},
+	{"YY", "06", nameNone},
+	{"MMMM", "", nameMonthLong},
+	{"MMM", "", nameMonthShort},
+	{"MM", "01", nameNone},
+	{"M", "1", nameNone},
+	{"dddd", "", nameDayLong},
+	{"ddd", "", nameDayShort},
+	{"DD", "02", nameNone},
+	{"D", "2", nameNone},
+	{"HH", "15", nameNone},
+	{"hh", "03", nameNone},
+	{"h", "3", nameNone},
+	{"mm", "04", nameNone},
+	{"m", "4", nameNone},
+	{"ss", "05", nameNone},
+	{"s", "5", nameNone},
+	{"A", "PM", nameNone},
+	{"a", "pm", nameNone},
+	{"ZZ", "-0700", nameNone},
+	{"Z", "-07:00", nameNone},
+	{"z", "MST", nameNone},
 }
 
 // tokenHints answers the near-misses worth naming rather than listing the
@@ -88,7 +104,7 @@ var tokenHints = map[string]string{
 // anything else that is not a letter (punctuation, spaces, digits) passes
 // through. A letter run that is not a token is an error — that is the whole
 // point, since the alternative is emitting it verbatim into someone's email.
-func renderCustom(t time.Time, format string) (string, error) {
+func renderCustom(t time.Time, format string, names datenames.Names) (string, error) {
 	var sb strings.Builder
 	for i := 0; i < len(format); {
 		// [literal] — the escape hatch for words made of token letters.
@@ -111,7 +127,7 @@ func renderCustom(t time.Time, format string) (string, error) {
 			if next := i + len(tok.tok); next < len(format) && format[next] == tok.tok[len(tok.tok)-1] {
 				return "", unknownTokenErr(letterRun(format[i:]))
 			}
-			sb.WriteString(t.Format(tok.layout))
+			sb.WriteString(tok.render(t, names))
 			i += len(tok.tok)
 			continue
 		}
@@ -135,6 +151,23 @@ func unknownTokenErr(run string) error {
 		return fmt.Errorf("%q isn't a format token — did you mean %q? (tokens are case-sensitive: MM is the month, mm the minute)", run, want)
 	}
 	return fmt.Errorf("%q isn't a format token — use YYYY MM DD for the date, HH mm ss for the time, MMM/MMMM for a month name, ddd/dddd for a weekday, and put literal words in brackets like \"[on] D MMM\"", run)
+}
+
+// render renders one token: from the localized table when it is a name, and
+// through time.Format otherwise (digits and offsets are the same in every
+// language, so there is nothing to localize about them).
+func (tok formatToken) render(t time.Time, names datenames.Names) string {
+	switch tok.name {
+	case nameMonthLong:
+		return names.Months[int(t.Month())-1]
+	case nameMonthShort:
+		return names.MonthsShort[int(t.Month())-1]
+	case nameDayLong:
+		return names.Days[int(t.Weekday())]
+	case nameDayShort:
+		return names.DaysShort[int(t.Weekday())]
+	}
+	return t.Format(tok.layout)
 }
 
 // matchToken returns the longest vocabulary token at the start of s.
@@ -175,11 +208,15 @@ func letterRun(s string) string {
 // again as the custom vocabulary. So the spelling that used to leak into the
 // message now renders, and a format that is neither reports an error instead
 // of shipping itself.
-func renderLegacyFormat(t time.Time, format string) (string, error) {
+func renderLegacyFormat(t time.Time, format string, names datenames.Names) (string, error) {
+	// A Go reference layout is English by construction ("Mon 2 Jan 2006" names
+	// English months), and a graph that saved one asked for exactly that
+	// output. Localizing it would silently change what those flows send, so
+	// the legacy path stays English; only the token vocabulary localizes.
 	if out := t.Format(format); out != format {
 		return out, nil
 	}
-	return renderCustom(t, format)
+	return renderCustom(t, format, names)
 }
 
 // parseClock reads a time of day: "9:00", "09:00", "17:30:15". Seconds are

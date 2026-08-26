@@ -54,6 +54,11 @@ type Job struct {
 	// (e.g. quota checks). Set by the engine before Execute.
 	Tenant string `json:"tenant,omitempty"`
 
+	// Language is the flow's output language (Graph.Language) — the language a
+	// step writes WORDS in when it emits any. Empty means English. Set by the
+	// engine before Execute, like Tenant.
+	Language string `json:"language,omitempty"`
+
 	// QuotaLimit is the tenant's byte budget at the time the job
 	// started. Zero means unlimited.
 	QuotaLimit int64 `json:"quota_limit,omitempty"`

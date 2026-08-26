@@ -196,6 +196,16 @@ type Graph struct {
 	// time when this field is unset.
 	TimeoutSeconds int `json:"timeout_seconds,omitempty"`
 
+	// Language is the flow's output language, as a BCP-47 primary subtag
+	// ("en", "sv"). It is what steps that emit WORDS read to know which
+	// language to write them in — today the Date & time step's day and month
+	// names, since Go's time package has none. It is deliberately a property
+	// of the FLOW and not of a user: a scheduled run has no user, and the
+	// person reading the email a flow sends is rarely the person who built it.
+	// Empty means English, which is also what any code no step recognises
+	// falls back to. Engine-visible via core.Job.Language.
+	Language string `json:"language,omitempty"`
+
 	// Disabled, when true, suspends all automatic firing of this flow:
 	// the scheduler skips cron + poll triggers, and webhook + form
 	// endpoints reject inbound calls with 403 + code "flow_disabled".

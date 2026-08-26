@@ -12,6 +12,7 @@ import { iconFor, isBrandedIcon, dropColor, ICON } from "../../icons";
 import { glyphFor, languageOf, type LangGlyph } from "../../lib/langBadge";
 import { ScriptEditor } from "../ui/ScriptEditor";
 import { scriptLangFor, type ScriptLang } from "../../lib/scriptHighlight";
+import { TokenText } from "./TokenText";
 import { dropSubtitle, enumLabel, nodeStateText, portLabel } from "../../lib/dropText";
 import { isFieldVisible } from "../../lib/schemaFields";
 import { isRunnerStep, runnerTargetOf } from "../../lib/runnerStep";
@@ -20,7 +21,7 @@ import {
   type DazyNodeData,
   type TokenLabels,
   portColor,
-  friendlyTokenText,
+  hasToken,
   cronToWords,
   secondsToWords,
 } from "./nodeCardShared";
@@ -468,7 +469,13 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
                 return (
                   <label key={key} className="dz-param">
                     <span className="dz-param-label">{label}</span>
-                    <span className="dz-param-readonly">{summary}</span>
+                    <span className="dz-param-readonly">
+                      {hasToken(summary) ? (
+                        <TokenText value={summary} labels={d.tokenLabels} />
+                      ) : (
+                        summary
+                      )}
+                    </span>
                   </label>
                 );
               }
@@ -523,7 +530,15 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
                 <label key={key} className="dz-param">
                   <span className="dz-param-label">{label}</span>
                   <span className="dz-param-readonly" title={name || undefined}>
-                    {text}
+                    {/* A picker whose id is a reference has no name to
+                        resolve — show the reference rather than the "…"
+                        placeholder, which would look like a lookup that
+                        never finishes. */}
+                    {hasToken(idStr) ? (
+                      <TokenText value={idStr} labels={d.tokenLabels} />
+                    ) : (
+                      text
+                    )}
                   </span>
                 </label>
               );
@@ -532,11 +547,18 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
             // seconds; edited via the inspector's value+unit field.
             if (s.format === "duration-seconds") {
               const secs = d.params?.[key] ?? s.default;
+              // An interval set from a reference can't be put into words —
+              // show the reference, not "no interval".
+              const secsRef = typeof secs === "string" && hasToken(secs) ? secs : null;
               return (
                 <label key={key} className="dz-param">
                   <span className="dz-param-label">{label}</span>
                   <span className="dz-param-readonly">
-                    {secondsToWords(typeof secs === "number" ? secs : null)}
+                    {secsRef ? (
+                      <TokenText value={secsRef} labels={d.tokenLabels} />
+                    ) : (
+                      secondsToWords(typeof secs === "number" ? secs : null)
+                    )}
                   </span>
                 </label>
               );
@@ -550,7 +572,15 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
               return (
                 <label key={key} className="dz-param">
                   <span className="dz-param-label">{label}</span>
-                  <span className="dz-param-readonly">{cronToWords(cronVal)}</span>
+                  <span className="dz-param-readonly">
+                    {/* cronToWords has nothing to say about a reference, and
+                        would echo it back as an unparseable expression. */}
+                    {hasToken(cronVal) ? (
+                      <TokenText value={cronVal} labels={d.tokenLabels} />
+                    ) : (
+                      cronToWords(cronVal)
+                    )}
+                  </span>
                 </label>
               );
             }
@@ -577,13 +607,15 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
             }
             const rawVal = d.params?.[key] ?? s.default ?? "";
             const strVal = typeof rawVal === "string" ? rawVal : String(rawVal);
-            const friendly =
-              typeof rawVal === "string" ? friendlyTokenText(rawVal, d.tokenLabels) : null;
             return (
               <label key={key} className="dz-param">
                 <span className="dz-param-label">{label}</span>
                 <span className="dz-param-readonly">
-                  {friendly ?? (strVal || i18n.t("nodeCard.pickerUnset"))}
+                  {hasToken(strVal) ? (
+                    <TokenText value={strVal} labels={d.tokenLabels} />
+                  ) : (
+                    strVal || i18n.t("nodeCard.pickerUnset")
+                  )}
                 </span>
               </label>
             );
@@ -827,11 +859,14 @@ function ParamInput({
   // syntax is NEVER revealed. The × clears the value (an empty box then
   // appears); re-pick a reference via the field's {} menu in the inspector.
   const rawStr = typeof value === "string" ? value : "";
-  const friendly = rawStr ? friendlyTokenText(rawStr, tokenLabels) : null;
-  if (friendly) {
+  // A value carrying ANY reference renders as chips-and-text, not as an input:
+  // the syntax is never shown, and text mixed with chips is not editable in an
+  // <input> — the Inspector's field is. The × clears the value, which puts the
+  // plain editor back.
+  if (rawStr && hasToken(rawStr)) {
     return (
-      <span className="dz-token-chip nodrag">
-        <span className="dz-token-chip-text">{friendly}</span>
+      <span className="dz-token-chip-line nodrag">
+        <TokenText value={rawStr} labels={tokenLabels} />
         <Button
           className="dz-token-chip-x"
           aria-label={i18n.t("common.remove")}

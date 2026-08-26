@@ -16,7 +16,9 @@ import (
 	"time"
 
 	"git.sr.ht/~klahr/dazyflow/auth"
+	"git.sr.ht/~klahr/dazyflow/internal/datenames"
 	"git.sr.ht/~klahr/dazyflow/internal/emailtheme"
+	"git.sr.ht/~klahr/dazyflow/internal/maillang"
 )
 
 // Password reset. Active only where a transactional mailer AND a public
@@ -111,25 +113,22 @@ func (h *HTTPGateway) sendPasswordResetEmail(ctx context.Context, user auth.User
 	}
 	link := strings.TrimRight(h.svc.PublicBaseURL, "/") + "/reset-password?email=" +
 		url.QueryEscape(user.Email) + "&token=" + token
-	expFmt := exp.Format("2 January 2006, 15:04 MST")
-	body := fmt.Sprintf(
-		"We received a request to reset your Dazyflow password.\n\n"+
-			"Choose a new password:\n%s\n\n"+
-			"The link expires %s. If you didn't request this, ignore this email — your password is unchanged.",
-		link, expFmt)
+	lang := h.mailLang(ctx, user.Email)
+	m := maillang.For(lang)
+	// Date AND time here: a reset link is short-lived, so the hour is the
+	// part that matters.
+	expFmt := datenames.FormatDateTime(exp, lang)
 	content := emailtheme.Content{
-		Subject:   "Reset your Dazyflow password",
-		Preheader: "Choose a new password for your account.",
-		Eyebrow:   "Password reset",
-		Heading:   "Reset your password",
-		Intro:     []string{"We received a request to reset the password for your Dazyflow account."},
-		Button:    &emailtheme.Button{Label: "Choose a new password", URL: link},
-		Outro: []string{fmt.Sprintf(
-			"This link expires %s. If you didn't request this, ignore this email — your password is unchanged.",
-			expFmt)},
-		LogoURL: emailLogoURL(h.svc.PublicBaseURL),
+		Subject:   m.ResetSubject,
+		Preheader: m.ResetPreheader,
+		Eyebrow:   m.ResetEyebrow,
+		Heading:   m.ResetHeading,
+		Intro:     []string{m.ResetIntro},
+		Button:    &emailtheme.Button{Label: m.ResetButton, URL: link},
+		Outro:     []string{fmt.Sprintf(m.ResetExpiry, expFmt)},
+		LogoURL:   emailLogoURL(h.svc.PublicBaseURL),
 	}
-	if err := h.svc.Mailer.SendThemed(ctx, user.Email, body, content); err != nil {
+	if err := h.svc.Mailer.SendThemed(ctx, user.Email, emailtheme.PlainText(content), content); err != nil {
 		h.logger.Printf("password reset for %s: send: %v", user.Email, err)
 		return false
 	}

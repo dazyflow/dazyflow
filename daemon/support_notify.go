@@ -79,26 +79,28 @@ func (h *HTTPGateway) notifySupportReplied(t core.Ticket) {
 			return
 		}
 		url := h.ticketURLFor(t, false)
+		// Goes to the customer, who has an account here, so it is written in
+		// THEIR language.
+		m := h.svc.mailMsgs(ctx, to)
 		c := emailtheme.Content{
-			Subject:   fmt.Sprintf("Support replied: %s", t.Subject),
-			Preheader: "Support has answered your ticket.",
-			Eyebrow:   "Support",
-			Heading:   "Support replied to your ticket",
+			Subject:   fmt.Sprintf(m.SupportRepliedSubject, t.Subject),
+			Preheader: m.SupportRepliedPreheader,
+			Eyebrow:   m.SupportEyebrow,
+			Heading:   m.SupportRepliedHeading,
 			Tone:      "info",
 			Intro: []string{
-				fmt.Sprintf("Someone from support answered “%s”.", t.Subject),
+				fmt.Sprintf(m.SupportRepliedIntro, t.Subject),
 			},
 			// The reply text itself is deliberately NOT included: it is stored
 			// secret-scrubbed, but email is the one channel that leaves our
 			// trust boundary, so the message stays behind the login.
-			Outro:   []string{"Open the ticket to read the full reply and respond."},
+			Outro:   []string{m.SupportRepliedOutro},
 			LogoURL: emailLogoURL(h.svc.PublicBaseURL),
 		}
 		if url != "" {
-			c.Button = &emailtheme.Button{Label: "View ticket", URL: url}
+			c.Button = &emailtheme.Button{Label: m.SupportButton, URL: url}
 		}
-		text := fmt.Sprintf("Support replied to your ticket %q.\n\nOpen it to read the reply: %s\n", t.Subject, url)
-		h.sendSupportMail(ctx, to, text, c, t)
+		h.sendSupportMail(ctx, to, emailtheme.PlainText(c), c, t)
 	})
 }
 
@@ -113,25 +115,31 @@ func (h *HTTPGateway) notifyTicketResolved(t core.Ticket) {
 			return
 		}
 		url := h.ticketURLFor(t, false)
+		// Goes to the customer, who has an account here, so it is written in
+		// THEIR language.
+		m := h.svc.mailMsgs(ctx, to)
 		c := emailtheme.Content{
-			Subject:   fmt.Sprintf("Resolved: %s", t.Subject),
-			Preheader: "Your support ticket was marked resolved.",
-			Eyebrow:   "Support",
-			Heading:   "Your ticket was marked resolved",
+			Subject:   fmt.Sprintf(m.SupportResolvedSubject, t.Subject),
+			Preheader: m.SupportResolvedPreheader,
+			Eyebrow:   m.SupportEyebrow,
+			Heading:   m.SupportResolvedHeading,
 			Tone:      "success",
-			Intro:     []string{fmt.Sprintf("Support marked “%s” resolved.", t.Subject)},
-			Outro:     []string{"If it isn't actually fixed, reply on the ticket and it reopens."},
+			Intro:     []string{fmt.Sprintf(m.SupportResolvedIntro, t.Subject)},
+			Outro:     []string{m.SupportResolvedOutro},
 			LogoURL:   emailLogoURL(h.svc.PublicBaseURL),
 		}
 		if url != "" {
-			c.Button = &emailtheme.Button{Label: "View ticket", URL: url}
+			c.Button = &emailtheme.Button{Label: m.SupportButton, URL: url}
 		}
-		text := fmt.Sprintf("Support marked your ticket %q resolved.\n\nReply here if it isn't fixed: %s\n", t.Subject, url)
-		h.sendSupportMail(ctx, to, text, c, t)
+		h.sendSupportMail(ctx, to, emailtheme.PlainText(c), c, t)
 	})
 }
 
-// notifyUserReplied mails the support side that the customer came back. Goes to
+// notifyUserReplied mails the support side that the customer came back.
+//
+// English, deliberately: this goes to the operator's own staff — the assigned
+// agent, or the shared inbox from configuration — and a config-file address
+// carries no language preference to read. Same for notifyTicketFiled below. Goes to
 // the assigned agent when there is one, otherwise the shared inbox — an
 // unclaimed ticket is nobody's personal responsibility.
 func (h *HTTPGateway) notifyUserReplied(t core.Ticket) {

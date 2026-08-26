@@ -208,6 +208,26 @@ export function SettingsModal({ graph, onClose, onSave, onDelete }: Props) {
               </div>
               <div className="sf-field">
                 <div className="label-row">
+                  <label>{t("settings.general.language")}</label>
+                </div>
+                {/* The flow's OUTPUT language, which is why it lives here and
+                    not in account preferences: it decides the words a
+                    scheduled run sends to its readers, and those readers are
+                    usually not the person who set it. Empty is English, so an
+                    existing flow reads exactly as it did. */}
+                <select
+                  value={draft.language ?? ""}
+                  onChange={(e) =>
+                    setDraft({ ...draft, language: e.target.value || undefined })
+                  }
+                >
+                  <option value="">{t("settings.general.languageEnglish")}</option>
+                  <option value="sv">{t("settings.general.languageSwedish")}</option>
+                </select>
+                <div className="desc">{t("settings.general.languageDesc")}</div>
+              </div>
+              <div className="sf-field">
+                <div className="label-row">
                   <label>{t("settings.general.timeout")}</label>
                 </div>
                 <input

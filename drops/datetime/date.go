@@ -21,6 +21,7 @@ import (
 	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/reltime"
 	"git.sr.ht/~klahr/dazyflow/engine"
+	"git.sr.ht/~klahr/dazyflow/internal/datenames"
 )
 
 func init() {
@@ -35,7 +36,7 @@ func init() {
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"date", "time", "datetime", "now", "timestamp", "format", "timezone"},
-			Description: "Work with a date/time: read the current time, parse a timestamp that came in as text, shift it by an offset, pin it to a time of day, convert it to a timezone, and render it in the format you want. Connect a value into 'in' (an ISO-8601 string, a Unix timestamp, or common date text) or leave it unwired to use the current time. The steps apply in that order, which is what lets them combine: 'add' shifts by \"3d\", \"-2h30m\" or \"1w\" — so \"1d\" is tomorrow — and 'at' then sets the clock (\"09:00\"), which is what turns \"24 hours from now\" into \"tomorrow morning\". 'tz' picks the timezone the output is written in — search any IANA zone — and it decides which day and which hour, not just how the offset is labelled. 'format' picks a named format — date, date and time, a 12- or 24-hour clock, the weekday's name (\"Thursday\" / \"Thu\"), Unix, email/HTTP — or Custom for one you write from YYYY MM DD HH mm ss tokens (\"DD/MM/YYYY\", \"ddd D MMM\"), with literal words in brackets (\"[week of] D MMM\"). Emits the formatted string on 'out' and the broken-out parts (year, month, weekday, …) on 'value'; drop it into any text with ${upstream.<step>.out}.",
+			Description: "Work with a date/time: read the current time, parse a timestamp that came in as text, shift it by an offset, pin it to a time of day, convert it to a timezone, and render it in the format you want. Connect a value into 'in' (an ISO-8601 string, a Unix timestamp, or common date text) or leave it unwired to use the current time. The steps apply in that order, which is what lets them combine: 'add' shifts by \"3d\", \"-2h30m\" or \"1w\" — so \"1d\" is tomorrow — and 'at' then sets the clock (\"09:00\"), which is what turns \"24 hours from now\" into \"tomorrow morning\". 'tz' picks the timezone the output is written in — search any IANA zone — and it decides which day and which hour, not just how the offset is labelled. 'locale' writes day and month names in a language — English or Swedish, following the flow's own language unless this step overrides it (the ISO/Unix/email formats stay English, being machine formats). 'format' picks a named format — date, date and time, a 12- or 24-hour clock, the weekday's name (\"Thursday\" / \"torsdag\"), Unix, email/HTTP — or Custom for one you write from YYYY MM DD HH mm ss tokens (\"DD/MM/YYYY\", \"ddd D MMM\"), with literal words in brackets (\"[week of] D MMM\"). Emits the formatted string on 'out' and the broken-out parts (year, month, weekday, …) on 'value'; drop it into any text with ${upstream.<step>.out}.",
 			Summary:     "Read/parse a date, shift and re-timezone it, and render it in a chosen format.",
 			Examples: []core.ParamsExample{
 				{
@@ -75,6 +76,13 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
+					"locale": {
+						"type":"string",
+						"title":"Language",
+						"enum":["","en","sv"],
+						"enumNames":["Follow the flow's language","English","Svenska"],
+						"description":"Which language day and month names are written in — Thursday/August, torsdag/augusti. Leave it on the flow's language (Settings → General) unless this one step should differ. Only names are affected: numbers, and the ISO/Unix/email formats, are the same in every language."
+					},
 					"add":    {"type":"string","title":"Offset","description":"Shift the time by an offset, e.g. \"3d\", \"-2h30m\", \"1w\" — \"1d\" is tomorrow. Units: w (weeks), d (days), h, m, s. Empty = no shift."},
 					"at":     {"type":"string","title":"At time of day","description":"Set the clock to this time of day, e.g. \"09:00\" or \"17:30:15\". Applied after the offset and in the output timezone, so Offset \"1d\" with At \"09:00\" is tomorrow morning rather than 24 hours from now. Empty keeps the time it already had."},
 					"tz": {
@@ -169,8 +177,12 @@ func executeDate(_ context.Context, job core.Job, _ chan<- core.Progress) (core.
 		t = time.Date(t.Year(), t.Month(), t.Day(), hour, min, sec, 0, loc)
 	}
 
-	// Render.
-	out, err := renderFormat(t, job)
+	// Render. The language is the step's own choice when it made one, the
+	// flow's otherwise (Graph.Language, carried on the job) — so a flow set to
+	// Swedish writes Swedish dates without touching every date step, and a
+	// single step can still be pinned when one message needs another language.
+	names := datenames.For(localeFor(job))
+	out, err := renderFormat(t, job, names)
 	if err != nil {
 		return params.Err(job, "bad_param", err.Error()), nil
 	}
@@ -279,24 +291,31 @@ func loadLocation(tz string) (*time.Location, error) {
 //	                 drop took before Format became a dropdown; saved graphs
 //	                 still carry Go reference layouts there, so they keep
 //	                 working (see renderLegacyFormat).
-func renderFormat(t time.Time, job core.Job) (string, error) {
+func localeFor(job core.Job) string {
+	if l := strings.TrimSpace(params.StringDefault(job.Params, "locale", "")); l != "" {
+		return l
+	}
+	return job.Language
+}
+
+func renderFormat(t time.Time, job core.Job, names datenames.Names) (string, error) {
 	format := strings.TrimSpace(params.StringDefault(job.Params, "format", "iso"))
 	if strings.EqualFold(format, "custom") {
 		custom := strings.TrimSpace(params.StringDefault(job.Params, "custom_format", ""))
 		if custom == "" {
 			return "", fmt.Errorf("Format is Custom but the Custom format field is empty — write one (e.g. \"DD/MM/YYYY\") or pick a named format")
 		}
-		return renderCustom(t, custom)
+		return renderCustom(t, custom, names)
 	}
-	if out, ok := renderPreset(t, format); ok {
+	if out, ok := renderPreset(t, format, names); ok {
 		return out, nil
 	}
-	return renderLegacyFormat(t, format)
+	return renderLegacyFormat(t, format, names)
 }
 
 // renderPreset formats t per a named format, reporting false for a name it
 // doesn't know so the caller can treat the value as a format string.
-func renderPreset(t time.Time, format string) (string, bool) {
+func renderPreset(t time.Time, format string, names datenames.Names) (string, bool) {
 	switch strings.ToLower(format) {
 	case "", "iso", "rfc3339":
 		return t.Format(time.RFC3339), true
@@ -308,14 +327,19 @@ func renderPreset(t time.Time, format string) (string, bool) {
 		return t.Format("15:04:05"), true
 	case "time12":
 		return t.Format("3:04:05 PM"), true
-	// The day's NAME, not its number — "Thursday". Available as ddd/dddd in a
-	// custom format too, but a named option is the discoverable form: wanting
-	// the weekday out of a date is a common enough ask that it should not
-	// require learning the token vocabulary first.
+	// The day's NAME, not its number — "Thursday", "torsdag". Available as
+	// ddd/dddd in a custom format too, but a named option is the discoverable
+	// form: wanting the weekday out of a date is a common enough ask that it
+	// should not require learning the token vocabulary first.
+	//
+	// These two and the name tokens are the ONLY localized formats. iso, unix,
+	// unixms and rfc1123 are wire formats read by machines — RFC 1123 mandates
+	// English abbreviations, so a Swedish "tors, 27 aug" in a Date: header is
+	// a malformed header rather than a translation.
 	case "weekday":
-		return t.Format("Monday"), true
+		return names.Days[int(t.Weekday())], true
 	case "weekday_short":
-		return t.Format("Mon"), true
+		return names.DaysShort[int(t.Weekday())], true
 	// "time" and "kitchen" are what the 24- and 12-hour options were called
 	// before they were a pair, and saved graphs still carry them. Kept
 	// renderable, and out of the dropdown: the two names said nothing about

@@ -156,6 +156,13 @@ export type Graph = {
   description?: string;
   timeout_seconds?: number;
   failure_notify?: FailureNotify;
+  // language is the flow's OUTPUT language (core.Graph.Language) — the language
+  // steps write words in when they emit any, today the Date & time step's day
+  // and month names. A property of the flow, not of the viewer: it decides what
+  // a scheduled run sends to someone who never opens this UI. Empty = English.
+  // Distinct from the UI language in account preferences, which only changes
+  // what YOU see.
+  language?: string;
   // disabled pauses all automatic firing (scheduler + webhook/form) without
   // deleting the flow — the dev "off switch". Manual Run still works.
   disabled?: boolean;

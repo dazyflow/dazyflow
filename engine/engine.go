@@ -589,13 +589,15 @@ func forwardProgress(
 	}
 }
 
-// populateSandbox sets Job.WorkspaceRoot and snapshots quota state from
+// populateSandbox sets Job.Tenant, Job.Language, Job.WorkspaceRoot and
+// snapshots quota state from
 // the configured providers. Failures here short-circuit before
 // transport.Execute so a misconfigured sandbox never lets a module run
 // unsandboxed, and a quota-lookup error fails the job rather than
 // silently allowing unmetered writes.
 func (e *Engine) populateSandbox(job *core.Job, graph core.Graph, runID string) error {
 	job.Tenant = graph.Tenant
+	job.Language = graph.Language
 	if e.Sandbox != nil {
 		root, err := e.Sandbox.Root(graph.Tenant, graph.Workspace)
 		if err != nil {

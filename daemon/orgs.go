@@ -13,7 +13,9 @@ import (
 
 	"git.sr.ht/~klahr/dazyflow/auth"
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/internal/datenames"
 	"git.sr.ht/~klahr/dazyflow/internal/emailtheme"
+	"git.sr.ht/~klahr/dazyflow/internal/maillang"
 )
 
 // switchOrg re-issues the caller's session against a tenant they
@@ -650,28 +652,23 @@ func (h *HTTPGateway) createInvitation(rw http.ResponseWriter, r *http.Request, 
 	// carries the link for copy/paste, emailed or not.
 	emailSent := false
 	if acceptURL := h.inviteURL(token); h.svc.Mailer != nil && strings.HasPrefix(acceptURL, "http") {
-		expFmt := inv.ExpiresAt.Format("2 January 2006")
-		body := fmt.Sprintf(
-			"%s invited you to join their organization on Dazyflow.\n\n"+
-				"Accept the invitation:\n%s\n\n"+
-				"The link expires %s. If you weren't expecting this, ignore this email.",
-			p.Subject, acceptURL, expFmt)
+		// An org invitation may reach someone who already has an account, so
+		// their own preference wins; failing that, the inviter's.
+		lang := h.inviteLang(r.Context(), email, p.Subject)
+		m := maillang.For(lang)
+		expFmt := datenames.FormatDate(inv.ExpiresAt, lang)
 		content := emailtheme.Content{
-			Subject:   "You're invited to Dazyflow",
-			Preheader: fmt.Sprintf("%s invited you to join their organization.", p.Subject),
-			Eyebrow:   "Invitation",
-			Heading:   "You've been invited",
-			Intro: []string{fmt.Sprintf(
-				"%s invited you to join their organization on Dazyflow, where teams build and run automations together.",
-				p.Subject)},
-			Button: &emailtheme.Button{Label: "Accept invitation", URL: acceptURL},
-			Outro: []string{fmt.Sprintf(
-				"This invitation expires %s. If you weren't expecting it, you can ignore this email.",
-				expFmt)},
-			FooterNote: "You're receiving this because someone invited you to Dazyflow.",
+			Subject:    m.OrgInviteSubject,
+			Preheader:  fmt.Sprintf(m.OrgInvitePreheader, p.Subject),
+			Eyebrow:    m.OrgInviteEyebrow,
+			Heading:    m.OrgInviteHeading,
+			Intro:      []string{fmt.Sprintf(m.OrgInviteIntro, p.Subject)},
+			Button:     &emailtheme.Button{Label: m.OrgInviteButton, URL: acceptURL},
+			Outro:      []string{fmt.Sprintf(m.OrgInviteExpiry, expFmt)},
+			FooterNote: m.OrgInviteFooter,
 			LogoURL:    emailLogoURL(h.svc.PublicBaseURL),
 		}
-		if err := h.svc.Mailer.SendThemed(r.Context(), email, body, content); err != nil {
+		if err := h.svc.Mailer.SendThemed(r.Context(), email, emailtheme.PlainText(content), content); err != nil {
 			h.logger.Printf("invite email to %s: %v", email, err)
 		} else {
 			emailSent = true

@@ -27,7 +27,13 @@ import type {
   ReferenceItem,
   RunnerTarget,
 } from "../../types";
-import { type TokenLabels, friendlyTokenText } from "../editor/nodeCardShared";
+import {
+  type TokenLabels,
+  hasToken,
+  isSecretToken,
+  tokenChipLabel,
+  tokenizeValue,
+} from "../editor/nodeCardShared";
 import { JsonEditor, isInvalidJSON } from "../ui/JsonEditor";
 import { ScriptEditor } from "../ui/ScriptEditor";
 import { scriptLangFor } from "../../lib/scriptHighlight";
@@ -470,7 +476,12 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
               the dropdown is the common ones). Labelled with the raw value,
               because that is the only name we have for it. */}
           {unlistedValue !== undefined && (
-            <option value={unlistedValue}>{unlistedValue}</option>
+            // An <option> can hold only text, so a reference here shows the
+            // {} menu's words rather than a chip — but never the raw ${…},
+            // which is the one thing a user should not have to read.
+            <option value={unlistedValue}>
+              {hasToken(unlistedValue) ? tokenChipLabel(unlistedValue, tokenLabels) : unlistedValue}
+            </option>
           )}
           {schema.enum.map((v, i) => (
             <option key={String(v)} value={String(v)}>
@@ -1796,17 +1807,6 @@ function ResourcePickerField({
   );
 }
 
-// SECRET_FULL_REF matches when a string field's ENTIRE value is one
-// ${secret.NAME} expression — no surrounding text. That's the case
-// where rendering an editable input is actively harmful: a non-
-// technical user is likely to overwrite the placeholder thinking
-// they need to "fill it in", silently breaking the template. The
-// chip surface below replaces the input with a clear "this field
-// uses credential NAME" label + a Set-up link and an explicit
-// Replace affordance for when the user really does want to type
-// something else.
-const SECRET_FULL_REF = /^\$\{secret\.([^}]+)\}$/;
-
 // SuggestField backs format:"suggest" string fields: an obvious dropdown of
 // the schema's enum/enumNames (currency: "USD — US Dollar" → stores "usd")
 // with an escape-hatch toggle to a free-text box + {} reference menu — for a
@@ -2451,29 +2451,6 @@ function ReferenceMenu({
 // typing and token inserts never trigger a re-render that resets the caret.
 // DOM→value flows through onInput/insert via serializeEditable.
 
-// TOKEN_SCAN finds every ${scheme.path} token in a string (scheme = letters,
-// path = anything up to the closing brace). Like FULL_TOKEN but unanchored.
-const TOKEN_SCAN = /\$\{[A-Za-z]+\.[^}]*\}/g;
-
-export type TokenSegment =
-  | { kind: "text"; text: string }
-  | { kind: "token"; token: string };
-
-// tokenizeValue splits a raw value into ordered text/token segments — the
-// model the editor renders from. Exported for unit tests.
-export function tokenizeValue(value: string): TokenSegment[] {
-  const segs: TokenSegment[] = [];
-  let last = 0;
-  for (const m of value.matchAll(TOKEN_SCAN)) {
-    const i = m.index ?? 0;
-    if (i > last) segs.push({ kind: "text", text: value.slice(last, i) });
-    segs.push({ kind: "token", token: m[0] });
-    last = i + m[0].length;
-  }
-  if (last < value.length) segs.push({ kind: "text", text: value.slice(last) });
-  return segs;
-}
-
 // serializeEditable walks the editable DOM back into the raw string: text
 // nodes contribute their text, token chips contribute their data-token, and a
 // browser-inserted wrapper is recursed into. Inverse of renderInto. Exported
@@ -2497,12 +2474,6 @@ export function serializeEditable(root: Node): string {
 // tokenChipLabel is the human text inside a chip — the secret name for
 // ${secret.X}, otherwise the {} menu's friendly description, falling back to
 // the raw token when unparseable.
-function tokenChipLabel(token: string, labels?: TokenLabels): string {
-  const sec = SECRET_FULL_REF.exec(token);
-  if (sec) return sec[1];
-  return friendlyTokenText(token, labels) ?? token;
-}
-
 function buildChip(
   token: string,
   labels: TokenLabels | undefined,
@@ -2510,7 +2481,7 @@ function buildChip(
 ): HTMLSpanElement {
   const chip = document.createElement("span");
   chip.className =
-    "token-chip" + (SECRET_FULL_REF.test(token) ? " token-chip--secret" : "");
+    "token-chip" + (isSecretToken(token) ? " token-chip--secret" : "");
   chip.setAttribute("contenteditable", "false");
   chip.setAttribute("data-token", token);
   const label = document.createElement("span");

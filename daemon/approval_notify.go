@@ -11,6 +11,7 @@ import (
 
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/internal/emailtheme"
+	"git.sr.ht/~klahr/dazyflow/internal/maillang"
 )
 
 // Approval mail: who gets told a flow is waiting on a person, and who gets
@@ -143,46 +144,40 @@ func (s *Service) NotifyApprovalRequested(ctx context.Context, graph core.Graph,
 	// Approve/Reject. It is deliberately not the run page: that shows the node
 	// parked and gives you no way to act on it.
 	approvalsURL := buildApprovalsURL(s.PublicBaseURL, graph.Tenant)
-	link, linkLabel, shareWarning := approvalURL, "Open the approval", true
+	// This email is sent BY A FLOW, so it speaks the flow's language — the same
+	// field the Date & time step reads — rather than any reader's preference.
+	// Its recipients are addresses typed into the step and often have no
+	// account here at all, so there is frequently no preference to read.
+	m := maillang.For(flowLang(graph))
+	link, linkLabel, shareWarning := approvalURL, m.ApprovalOpenLink, true
 	if link == "" {
-		link, linkLabel, shareWarning = approvalsURL, "Open Approvals", false
+		link, linkLabel, shareWarning = approvalsURL, m.ApprovalOpenInbox, false
 	}
 
-	var b strings.Builder
-	fmt.Fprintf(&b, "The flow %q is waiting for a decision.\n\n", name)
-	if prompt != "" {
-		fmt.Fprintf(&b, "%s\n\n", prompt)
-	}
-	if approvalURL != "" {
-		fmt.Fprintf(&b, "Approve or reject:  %s\n", approvalURL)
-	}
-	if approvalURL == "" && approvalsURL != "" {
-		fmt.Fprintf(&b, "Approve or reject:  %s\n", approvalsURL)
-	}
+	facts := []emailtheme.Fact{{Label: m.FactFlow, Value: name}, {Label: m.FactStep, Value: nodeID}}
+	// The run's own URL used to appear only in the plain-text half of this
+	// message, so an HTML reader never got it. As a fact it reaches both,
+	// while the button stays the thing that actually decides the approval.
 	if runURL != "" {
-		fmt.Fprintf(&b, "Run details:        %s\n", runURL)
+		facts = append(facts, emailtheme.Fact{Label: m.FactRun, Value: runURL})
 	}
-	if approvalURL == "" && approvalsURL == "" {
-		b.WriteString("Open Approvals in Dazyflow to approve or reject.\n")
-	}
-
-	facts := []emailtheme.Fact{{Label: "Flow", Value: name}, {Label: "Step", Value: nodeID}}
-	intro := []string{fmt.Sprintf("The flow “%s” has paused and needs someone to decide before it can carry on.", name)}
+	intro := []string{fmt.Sprintf(m.ApprovalIntro, name)}
 	if prompt != "" {
+		// The prompt is the flow author's own words — never translated.
 		intro = append(intro, prompt)
 	}
 	// The don't-forward warning is only true of the signed link, which is a
 	// bearer capability. The run page is access-controlled, so saying it there
 	// would be false and would train people to ignore the real warning.
-	outro := []string{"Whoever decides first resolves it — we'll email everyone the outcome."}
+	outro := []string{m.ApprovalOutro}
 	if shareWarning {
-		outro = append([]string{"Anyone with this link can approve or reject, so please don't forward it."}, outro...)
+		outro = append([]string{m.ApprovalShareWarning}, outro...)
 	}
 	content := emailtheme.Content{
-		Subject:   fmt.Sprintf("Approval needed: %s", name),
-		Preheader: "A flow has paused and is waiting for your decision.",
-		Eyebrow:   "Approval needed",
-		Heading:   "A flow is waiting on you",
+		Subject:   fmt.Sprintf(m.ApprovalSubject, name),
+		Preheader: m.ApprovalPreheader,
+		Eyebrow:   m.ApprovalEyebrow,
+		Heading:   m.ApprovalHeading,
 		Intro:     intro,
 		Facts:     facts,
 		Outro:     outro,
@@ -191,7 +186,7 @@ func (s *Service) NotifyApprovalRequested(ctx context.Context, graph core.Graph,
 	if link != "" {
 		content.Button = &emailtheme.Button{Label: linkLabel, URL: link}
 	}
-	s.sendApprovalMail(ctx, "requested", graph, to, b.String(), content)
+	s.sendApprovalMail(ctx, "requested", graph, to, emailtheme.PlainText(content), content)
 }
 
 // NotifyApprovalDecided closes the loop: the same people who were asked now
@@ -213,57 +208,58 @@ func (s *Service) NotifyApprovalDecided(
 	}
 	name := flowDisplayName(graph, graph.ID)
 	runURL := buildRunURL(s.PublicBaseURL, graph.Tenant, runID)
+	m := maillang.For(flowLang(graph))
 	approved := decision.Decision == "approve"
-	verb := "rejected"
 	tone := "danger"
 	if approved {
-		verb = "approved"
 		tone = "success"
+	}
+	// Each outcome is its own set of whole sentences rather than a verb slotted
+	// into a shared template. English gets away with "was %s" because
+	// "approved" and "rejected" are interchangeable there; Swedish inflects
+	// them differently as verb and adjective ("godkände"/"avslog",
+	// "godkänt"/"avslaget"), so a template could only ever be right in one of
+	// them. Title-casing the verb by byte, as this used to, is the same class
+	// of mistake — it assumes a language whose first letter is one byte.
+	subjectFmt, preheaderFmt, heading, introFmt, outro, decided :=
+		m.DecidedRejectedSubject, m.DecidedRejectedPreheader, m.DecidedRejectedHeading,
+		m.DecidedRejectedIntro, m.DecidedRejectedOutro, m.DecidedRejectedValue
+	if approved {
+		subjectFmt, preheaderFmt, heading, introFmt, outro, decided =
+			m.DecidedApprovedSubject, m.DecidedApprovedPreheader, m.DecidedApprovedHeading,
+			m.DecidedApprovedIntro, m.DecidedApprovedOutro, m.DecidedApprovedValue
 	}
 	// The HMAC link path has no session, so Approver can be blank or a
 	// self-declared label. Say so rather than printing an empty field.
 	who := strings.TrimSpace(decision.Approver)
 	if who == "" {
-		who = "someone with the approval link"
-	}
-
-	var b strings.Builder
-	fmt.Fprintf(&b, "The flow %q was %s by %s.\n\n", name, verb, who)
-	if c := strings.TrimSpace(decision.Comment); c != "" {
-		fmt.Fprintf(&b, "Comment: %s\n\n", c)
-	}
-	if runURL != "" {
-		fmt.Fprintf(&b, "Run details: %s\n", runURL)
+		who = m.DecidedAnonymous
 	}
 
 	facts := []emailtheme.Fact{
-		{Label: "Flow", Value: name},
-		{Label: "Step", Value: nodeID},
-		{Label: "Decision", Value: strings.ToUpper(verb[:1]) + verb[1:]},
-		{Label: "Decided by", Value: who},
+		{Label: m.FactFlow, Value: name},
+		{Label: m.FactStep, Value: nodeID},
+		{Label: m.FactDecision, Value: decided},
+		{Label: m.FactDecidedBy, Value: who},
 	}
 	if c := strings.TrimSpace(decision.Comment); c != "" {
-		facts = append(facts, emailtheme.Fact{Label: "Comment", Value: c})
-	}
-	outro := []string{"Nothing further is needed from you — this is just so you know it's handled."}
-	if approved {
-		outro = []string{"The flow has resumed and is running the steps after the approval."}
+		facts = append(facts, emailtheme.Fact{Label: m.FactComment, Value: c})
 	}
 	content := emailtheme.Content{
-		Subject:   fmt.Sprintf("%s: %s", strings.ToUpper(verb[:1])+verb[1:], name),
-		Preheader: fmt.Sprintf("The approval on “%s” was %s.", name, verb),
-		Eyebrow:   "Decision made",
-		Heading:   fmt.Sprintf("The approval was %s", verb),
+		Subject:   fmt.Sprintf(subjectFmt, name),
+		Preheader: fmt.Sprintf(preheaderFmt, name),
+		Eyebrow:   m.DecidedEyebrow,
+		Heading:   heading,
 		Tone:      tone,
-		Intro:     []string{fmt.Sprintf("%s %s the pending approval on “%s”.", who, verb, name)},
+		Intro:     []string{fmt.Sprintf(introFmt, who, name)},
 		Facts:     facts,
-		Outro:     outro,
+		Outro:     []string{outro},
 		LogoURL:   emailLogoURL(s.PublicBaseURL),
 	}
 	if runURL != "" {
-		content.Button = &emailtheme.Button{Label: "View run details", URL: runURL}
+		content.Button = &emailtheme.Button{Label: m.DecidedButton, URL: runURL}
 	}
-	s.sendApprovalMail(ctx, "decided", graph, to, b.String(), content)
+	s.sendApprovalMail(ctx, "decided", graph, to, emailtheme.PlainText(content), content)
 }
 
 // sendApprovalMail fans the message out one recipient at a time. One
