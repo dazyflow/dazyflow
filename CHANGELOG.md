@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.15.7] - 2026-08-26
+
 ### Fixed
 
 - **"Run it once and I'll know your columns" now happens.** Make a table's
