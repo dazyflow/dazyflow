@@ -263,67 +263,6 @@ func TestDate_LegacyFormatParamAcceptsTokens(t *testing.T) {
 	}
 }
 
-// The weekday dropdown, and the pairing that motivates it: pick a day, then
-// let the offset carry it forward. Monday + 1d is Tuesday.
-func TestDate_WeekdayThenOffset(t *testing.T) {
-	// 2026-08-27 is a Thursday, so the coming Monday is the 31st.
-	res := runDate(t, "2026-08-27T10:00:00Z", map[string]any{
-		"weekday": "monday", "add": "1d", "format": "custom", "custom_format": "dddd D MMM",
-	})
-	if got := outOf(t, res); got != "Tuesday 1 Sep" {
-		t.Errorf("got %q, want Tuesday 1 Sep", got)
-	}
-}
-
-func TestDate_WeekdayCountsToday(t *testing.T) {
-	// A flow that names "the coming Monday" and runs on a Monday means today.
-	// Skipping to next week the moment it fires on the day it names would make
-	// every weekly schedule a week late.
-	res := runDate(t, "2026-08-31T10:00:00Z", map[string]any{ // a Monday
-		"weekday": "monday", "format": "date",
-	})
-	if got := outOf(t, res); got != "2026-08-31" {
-		t.Errorf("got %q, want 2026-08-31 (today, not next week)", got)
-	}
-}
-
-func TestDate_WeekdayThisWeekViaNegativeOffset(t *testing.T) {
-	// The documented way to get the CURRENT week's Monday — the "week
-	// beginning" label — rather than the next one.
-	res := runDate(t, "2026-08-27T10:00:00Z", map[string]any{ // Thursday
-		"weekday": "monday", "add": "-7d", "format": "date",
-	})
-	if got := outOf(t, res); got != "2026-08-24" {
-		t.Errorf("got %q, want 2026-08-24", got)
-	}
-}
-
-func TestDate_WeekdayKeepsTheClock(t *testing.T) {
-	res := runDate(t, "2026-08-27T13:45:07Z", map[string]any{"weekday": "friday", "format": "datetime"})
-	if got := outOf(t, res); got != "2026-08-28 13:45:07" {
-		t.Errorf("got %q, want 2026-08-28 13:45:07", got)
-	}
-}
-
-func TestDate_WeekdayRejectsNonsense(t *testing.T) {
-	res := runDate(t, "2026-08-27T10:00:00Z", map[string]any{"weekday": "someday"})
-	if res.Status != core.StatusError || res.Error.Code != "bad_param" {
-		t.Fatalf("res = %+v, want error/bad_param", res)
-	}
-}
-
-// The weekday is a CALENDAR question, so it has to be asked in the output
-// timezone. Late Thursday in UTC is already Friday in Sydney, and "the next
-// Friday" differs by a week between those two readings.
-func TestDate_WeekdayUsesTheOutputTimezone(t *testing.T) {
-	res := runDate(t, "2026-08-27T23:00:00Z", map[string]any{ // Thu 23:00Z = Fri 09:00 Sydney
-		"weekday": "friday", "tz": "Australia/Sydney", "format": "date",
-	})
-	if got := outOf(t, res); got != "2026-08-28" {
-		t.Errorf("got %q, want 2026-08-28 (already Friday there, so today)", got)
-	}
-}
-
 func TestDate_TimeFormats(t *testing.T) {
 	// The 12/24-hour pair, and the names they had when they weren't a pair.
 	for _, c := range []struct{ format, want string }{
@@ -374,5 +313,41 @@ func TestDate_LegacyArbitraryTimezone(t *testing.T) {
 	})
 	if got := outOf(t, res); got != "2026-08-27 17:05:09" {
 		t.Errorf("got %q, want 2026-08-27 17:05:09", got)
+	}
+}
+
+// Weekday as a FORMAT: the day's name out of whatever date you have. This is
+// the common ask ("what day is that?"), distinct from next_weekday, which
+// changes WHICH date you have.
+func TestDate_WeekdayFormat(t *testing.T) {
+	for _, c := range []struct{ format, want string }{
+		{"weekday", "Thursday"},
+		{"weekday_short", "Thu"},
+	} {
+		res := runDate(t, "2026-08-27T14:05:09Z", map[string]any{"format": c.format})
+		if got := outOf(t, res); got != c.want {
+			t.Errorf("format %q = %q, want %q", c.format, got, c.want)
+		}
+	}
+}
+
+// The pairing that motivated it: today's weekday plus an offset, as a name.
+func TestDate_WeekdayFormatWithOffset(t *testing.T) {
+	res := runDate(t, "2026-08-31T09:00:00Z", map[string]any{ // a Monday
+		"add": "1d", "format": "weekday",
+	})
+	if got := outOf(t, res); got != "Tuesday" {
+		t.Errorf("got %q, want Tuesday", got)
+	}
+}
+
+// The weekday name is read in the OUTPUT timezone, like every other calendar
+// answer this step gives: Monday evening in UTC is already Tuesday in Sydney.
+func TestDate_WeekdayFormatUsesTheOutputTimezone(t *testing.T) {
+	res := runDate(t, "2026-08-31T23:00:00Z", map[string]any{ // Mon 23:00Z
+		"tz": "Australia/Sydney", "format": "weekday",
+	})
+	if got := outOf(t, res); got != "Tuesday" {
+		t.Errorf("got %q, want Tuesday", got)
 	}
 }

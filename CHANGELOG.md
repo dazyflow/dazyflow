@@ -23,6 +23,25 @@ into the image.)
 
 ## [Unreleased]
 
+### Added
+
+- **Weekday as a format.** Pick **Weekday** and a date comes out as "Thursday";
+  **Weekday, short** gives "Thu". With an offset of `1d` on a Monday you get
+  "Tuesday". It was already reachable as `dddd`/`ddd` in a custom format, which
+  is no help to anyone who hasn't learned the tokens — and getting the day's
+  name out of a date is common enough to be one of the named options. (The
+  names come out in English, the same as a custom format's `dddd`.)
+
+### Removed
+
+- **"Move to weekday" is gone from the Date & time step.** It shipped in 0.16.1
+  on a misreading of a request for the Weekday *format* above: it moved the
+  date forward to the coming named day rather than writing the day's name, which
+  next to a list of formats is not what the label sounded like. The format is
+  what was wanted, so the field goes rather than sitting in every Date & time
+  step as a thing to scroll past. A flow that set it keeps the stored value
+  harmlessly; nothing reads it any more.
+
 ## [0.16.1] - 2026-08-26
 
 ### Added

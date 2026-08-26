@@ -35,7 +35,7 @@ func init() {
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"date", "time", "datetime", "now", "timestamp", "format", "timezone"},
-			Description: "Work with a date/time: read the current time, parse a timestamp that came in as text, jump to a named weekday, shift it by an offset, pin it to a time of day, convert it to a timezone, and render it in the format you want. Connect a value into 'in' (an ISO-8601 string, a Unix timestamp, or common date text) or leave it unwired to use the current time. The steps apply in that order, which is what lets them combine: 'weekday' jumps forward to the next Monday (today counts), 'add' then shifts by \"3d\", \"-2h30m\" or \"1w\" — so Monday with \"1d\" is Tuesday, and \"1d\" alone is tomorrow — and 'at' sets the clock (\"09:00\"), which is what turns \"24 hours from now\" into \"tomorrow morning\". 'tz' picks the timezone the output is written in — search any IANA zone — and it decides which day and which hour, not just how the offset is labelled. 'format' picks a named format — date, date and time, a 12- or 24-hour clock, Unix, email/HTTP — or Custom for one you write from YYYY MM DD HH mm ss tokens (\"DD/MM/YYYY\", \"ddd D MMM\"), with literal words in brackets (\"[week of] D MMM\"). Emits the formatted string on 'out' and the broken-out parts (year, month, weekday, …) on 'value'; drop it into any text with ${upstream.<step>.out}.",
+			Description: "Work with a date/time: read the current time, parse a timestamp that came in as text, shift it by an offset, pin it to a time of day, convert it to a timezone, and render it in the format you want. Connect a value into 'in' (an ISO-8601 string, a Unix timestamp, or common date text) or leave it unwired to use the current time. The steps apply in that order, which is what lets them combine: 'add' shifts by \"3d\", \"-2h30m\" or \"1w\" — so \"1d\" is tomorrow — and 'at' then sets the clock (\"09:00\"), which is what turns \"24 hours from now\" into \"tomorrow morning\". 'tz' picks the timezone the output is written in — search any IANA zone — and it decides which day and which hour, not just how the offset is labelled. 'format' picks a named format — date, date and time, a 12- or 24-hour clock, the weekday's name (\"Thursday\" / \"Thu\"), Unix, email/HTTP — or Custom for one you write from YYYY MM DD HH mm ss tokens (\"DD/MM/YYYY\", \"ddd D MMM\"), with literal words in brackets (\"[week of] D MMM\"). Emits the formatted string on 'out' and the broken-out parts (year, month, weekday, …) on 'value'; drop it into any text with ${upstream.<step>.out}.",
 			Summary:     "Read/parse a date, shift and re-timezone it, and render it in a chosen format.",
 			Examples: []core.ParamsExample{
 				{
@@ -58,11 +58,6 @@ func init() {
 					Notes:  "The offset moves the day; 'at' sets the clock, so this is tomorrow morning rather than 24 hours from now.",
 				},
 				{
-					Title:  "The coming Monday's date",
-					Params: json.RawMessage(`{"weekday":"monday","tz":"Europe/Stockholm","format":"date"}`),
-					Notes:  "Today counts, so on a Monday this is today. Add an offset of \"-7d\" for the current week's Monday instead.",
-				},
-				{
 					Title:  "Reformat an incoming timestamp",
 					Params: json.RawMessage(`{"format":"rfc1123"}`),
 					Notes:  "Connect an ISO-8601 string or Unix seconds into 'in'; it's parsed then re-rendered.",
@@ -80,13 +75,6 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"weekday": {
-						"type":"string",
-						"title":"Move to weekday",
-						"enum":["monday","tuesday","wednesday","thursday","friday","saturday","sunday"],
-						"enumNames":["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"],
-						"description":"Jump forward to the next named day — the coming Monday, say — before the offset is applied, so Monday with an offset of \"1d\" gives Tuesday. Today counts as a match, so on a Monday \"Monday\" means today. For the CURRENT week's Monday rather than the next one, add an offset of \"-7d\". Empty leaves the day alone."
-					},
 					"add":    {"type":"string","title":"Offset","description":"Shift the time by an offset, e.g. \"3d\", \"-2h30m\", \"1w\" — \"1d\" is tomorrow. Units: w (weeks), d (days), h, m, s. Empty = no shift."},
 					"at":     {"type":"string","title":"At time of day","description":"Set the clock to this time of day, e.g. \"09:00\" or \"17:30:15\". Applied after the offset and in the output timezone, so Offset \"1d\" with At \"09:00\" is tomorrow morning rather than 24 hours from now. Empty keeps the time it already had."},
 					"tz": {
@@ -100,13 +88,15 @@ func init() {
 						"type":"string",
 						"title":"Format",
 						"default":"iso",
-						"enum":["iso","date","datetime","time24","time12","unix","unixms","rfc1123","custom"],
+						"enum":["iso","date","datetime","time24","time12","weekday","weekday_short","unix","unixms","rfc1123","custom"],
 						"enumNames":[
 							"ISO-8601 (2026-08-27T14:05:09Z)",
 							"Date (2026-08-27)",
 							"Date and time (2026-08-27 14:05:09)",
 							"Time, 24-hour (14:05:09)",
 							"Time, 12-hour (2:05:09 PM)",
+							"Weekday (Thursday)",
+							"Weekday, short (Thu)",
 							"Unix seconds",
 							"Unix milliseconds",
 							"Email/HTTP (Thu, 27 Aug 2026 14:05:09 UTC)",
@@ -154,16 +144,6 @@ func executeDate(_ context.Context, job core.Job, _ chan<- core.Progress) (core.
 		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	t := base.In(loc)
-
-	// Named weekday, before the offset: "Monday" plus "1d" is Tuesday, which
-	// is the whole point of having both.
-	if wd := strings.TrimSpace(params.StringDefault(job.Params, "weekday", "")); wd != "" {
-		day, wErr := parseWeekday(wd)
-		if wErr != nil {
-			return params.Err(job, "bad_param", wErr.Error()), nil
-		}
-		t = nextWeekday(t, day)
-	}
 
 	// Offset. Applied to the absolute instant, so a "1d" that crosses a
 	// daylight-saving boundary moves 24 hours rather than one calendar day —
@@ -274,42 +254,6 @@ func parseOffset(s string) (time.Duration, error) {
 	return reltime.ParseOffset(s)
 }
 
-// parseWeekday reads a day name from the Move-to-weekday dropdown. Case
-// doesn't matter, and the three-letter form is accepted too, so a value set by
-// API or template ("Mon") behaves like the dropdown's own.
-func parseWeekday(s string) (time.Weekday, error) {
-	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "monday", "mon":
-		return time.Monday, nil
-	case "tuesday", "tue", "tues":
-		return time.Tuesday, nil
-	case "wednesday", "wed":
-		return time.Wednesday, nil
-	case "thursday", "thu", "thur", "thurs":
-		return time.Thursday, nil
-	case "friday", "fri":
-		return time.Friday, nil
-	case "saturday", "sat":
-		return time.Saturday, nil
-	case "sunday", "sun":
-		return time.Sunday, nil
-	}
-	return 0, fmt.Errorf("unknown weekday %q — use a day name like \"Monday\"", s)
-}
-
-// nextWeekday moves t forward to the next occurrence of day, counting t's own
-// day as a match, and keeps the clock time it already had.
-//
-// Today-counts is the reading that makes a schedule stable: a flow that says
-// "the coming Monday" and runs every Monday morning should mean today, not
-// skip a week the moment it fires on the day it names. The current week's
-// Monday — the other thing people want, for a "week beginning" label — is this
-// plus an offset of -7d, which is what the field's help says.
-func nextWeekday(t time.Time, day time.Weekday) time.Time {
-	delta := (int(day) - int(t.Weekday()) + 7) % 7
-	return t.AddDate(0, 0, delta)
-}
-
 // loadLocation resolves a timezone name. Empty and "UTC" are UTC; "Local" is
 // the host's zone; anything else goes through the IANA database.
 func loadLocation(tz string) (*time.Location, error) {
@@ -364,6 +308,14 @@ func renderPreset(t time.Time, format string) (string, bool) {
 		return t.Format("15:04:05"), true
 	case "time12":
 		return t.Format("3:04:05 PM"), true
+	// The day's NAME, not its number — "Thursday". Available as ddd/dddd in a
+	// custom format too, but a named option is the discoverable form: wanting
+	// the weekday out of a date is a common enough ask that it should not
+	// require learning the token vocabulary first.
+	case "weekday":
+		return t.Format("Monday"), true
+	case "weekday_short":
+		return t.Format("Mon"), true
 	// "time" and "kitchen" are what the 24- and 12-hour options were called
 	// before they were a pair, and saved graphs still carry them. Kept
 	// renderable, and out of the dropdown: the two names said nothing about
