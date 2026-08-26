@@ -23,6 +23,31 @@ into the image.)
 
 ## [Unreleased]
 
+### Fixed
+
+- **A flow's language, and its failure notification, actually save now.**
+  Setting either in Settings appeared to work and then reverted — reopen the
+  dialog and it still said English.
+
+  The editor keeps two hand-written lists of what a flow's settings are, and
+  both were incomplete. It rebuilds the document it saves from its own React
+  state (the canvas is the truth for steps and wires), so a field missing from
+  that list is dropped by the next autosave; and the settings dialog passes its
+  fields as explicit overrides, because a `setState` a few lines earlier hasn't
+  applied yet — read state there and you save the value the user just replaced.
+  Language was absent from both lists, so it never survived a save at all.
+  **failure_notify was absent from one**, which meant a flow configured to
+  alert you on failure stopped alerting after the next canvas edit.
+
+  There is now one list, in `lib/graphMeta.ts`, and the compiler checks it: add
+  a field to a flow and TypeScript names it until you say whether it's a
+  setting or part of the flow's structure. Three tests cover the rest — the
+  dialog saves the language you picked and shows it when reopened, and a flow
+  with every setting populated gets them all back after a save.
+
+  The language field's label is also properly associated with its control now;
+  it was announcing as an unlabelled dropdown to a screen reader.
+
 ## [0.16.6] - 2026-08-27
 
 ### Fixed

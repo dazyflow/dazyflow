@@ -130,6 +130,7 @@ import type {
 } from "../../types";
 import { formatDateTime } from "../../lib/datetime";
 import { EDITOR_NARROW, isNarrower } from "../../lib/breakpoints";
+import { pickGraphSettings } from "../../lib/graphMeta";
 import { Inspector } from "../../components/editor/Inspector";
 import { FlowStatusChip } from "../../components/ui/FlowStatusChip";
 import { flowRunStatusPublished } from "../../flowStatus";
@@ -3510,13 +3511,15 @@ function EditorInner() {
     try {
       const res = await api.saveGraph(
         token,
+        // From `next`, not from state: the setState calls above have not
+        // applied yet in this tick, so reading state here would save the
+        // values the modal just replaced. pickGraphSettings is the single
+        // list of what a flow's settings are (lib/graphMeta.ts) — the two
+        // hand-written copies of it are how language and failure_notify went
+        // missing.
         buildGraph({
           triggers: (next.triggers ?? []).length > 0 ? next.triggers : undefined,
-          visibility: next.visibility,
-          name: next.name,
-          icon: next.icon,
-          description: next.description,
-          timeout_seconds: next.timeout_seconds,
+          ...pickGraphSettings(next),
         }),
       );
       setDirty(false);

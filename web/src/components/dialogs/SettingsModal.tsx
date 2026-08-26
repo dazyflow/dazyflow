@@ -208,7 +208,10 @@ export function SettingsModal({ graph, onClose, onSave, onDelete }: Props) {
               </div>
               <div className="sf-field">
                 <div className="label-row">
-                  <label>{t("settings.general.language")}</label>
+                  {/* htmlFor/id, unlike the fields around it: a bare <label>
+                      next to a control names nothing, so a screen reader
+                      announces this as an unlabelled select. */}
+                  <label htmlFor="flow-language">{t("settings.general.language")}</label>
                 </div>
                 {/* The flow's OUTPUT language, which is why it lives here and
                     not in account preferences: it decides the words a
@@ -216,6 +219,7 @@ export function SettingsModal({ graph, onClose, onSave, onDelete }: Props) {
                     usually not the person who set it. Empty is English, so an
                     existing flow reads exactly as it did. */}
                 <select
+                  id="flow-language"
                   value={draft.language ?? ""}
                   onChange={(e) =>
                     setDraft({ ...draft, language: e.target.value || undefined })
