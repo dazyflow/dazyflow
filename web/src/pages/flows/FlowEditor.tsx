@@ -135,7 +135,7 @@ import { FlowStatusChip } from "../../components/ui/FlowStatusChip";
 import { flowRunStatusPublished } from "../../flowStatus";
 import { DazyNode } from "../../components/editor/NodeCard";
 import { portColor, type DazyNodeData } from "../../components/editor/nodeCardShared";
-import { CommentNode } from "../../components/editor/CommentNode";
+import { CommentNode, FRAME_COLOR_DEFAULT } from "../../components/editor/CommentNode";
 import { RerouteEdge } from "../../components/editor/RerouteEdge";
 import { SettingsModal } from "../../components/dialogs/SettingsModal";
 import { ConfigChecklistModal } from "../../components/editor/ConfigChecklistModal";
@@ -2433,6 +2433,12 @@ function EditorInner() {
             );
             setDirty(true);
           },
+          onColorChange: (color: string) => {
+            setFrameNodes((fns) =>
+              fns.map((x) => (x.id === f.id ? { ...x, data: { ...x.data, color } } : x)),
+            );
+            setDirty(true);
+          },
           // Touch-device delete: frames aren't reachable from the Inspector,
           // so the comment's own trash button removes it from frame state.
           onRequestDelete: () => {
@@ -2507,7 +2513,7 @@ function EditorInner() {
         position: { x: c.x - 180, y: c.y - 120 },
         width: 360,
         height: 240,
-        data: { title: "", color: "#9f83fe" },
+        data: { title: "", color: FRAME_COLOR_DEFAULT },
         zIndex: -1,
         connectable: false,
       },

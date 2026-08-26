@@ -23,6 +23,22 @@ into the image.)
 
 ## [Unreleased]
 
+### Added
+
+- **A comment can be coloured.** The colour was already stored, round-tripped
+  and drawn — the note's tint, its border and its resize handles all read it —
+  but nothing could change it, so every note on every canvas was the same
+  violet. Grouping two halves of a flow meant two boxes that looked identical.
+
+  Selecting a note now shows a row of swatches next to its delete button: six
+  hues, the ones the canvas already uses for step categories, so a coloured
+  note reads as part of the drawing. A fixed palette rather than a colour
+  picker, because the tint is mixed at 9% over the canvas and 55% into the
+  border, and most of the values a picker offers come out as an invisible wash
+  or an unreadable border in one of the two themes. The row wraps under the
+  title on a note narrowed to its 140px minimum, and it stays out of the way
+  entirely on a canvas you can't edit.
+
 ### Fixed
 
 - **The editor asked you to publish changes it then reported as no changes.**

@@ -15,7 +15,6 @@ without them the same suggestions arrive again every review.
 
 ---
 
-[ ] Comments field shall have a color setting
 [ ] Row sorting step shall have a toggle for Ascend/descend sorting
 [ ] In the create HTML table step one should be able to set a custom table name
 [ ] The collections view shows columns with capital letters - it shall show the real values

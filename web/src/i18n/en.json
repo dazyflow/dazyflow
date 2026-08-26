@@ -120,6 +120,15 @@
     "auditReason": "Reason (recorded in the audit log)"
   },
   "commentNode": {
+    "color": "Comment colour",
+    "colors": {
+      "violet": "Violet",
+      "blue": "Blue",
+      "green": "Green",
+      "amber": "Amber",
+      "red": "Red",
+      "slate": "Grey"
+    },
     "delete": "Delete comment",
     "placeholder": "Comment"
   },

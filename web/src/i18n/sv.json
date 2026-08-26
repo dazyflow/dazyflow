@@ -120,6 +120,15 @@
     "auditReason": "Orsak (loggas i granskningsloggen)"
   },
   "commentNode": {
+    "color": "Kommentarens färg",
+    "colors": {
+      "violet": "Violett",
+      "blue": "Blå",
+      "green": "Grön",
+      "amber": "Bärnsten",
+      "red": "Röd",
+      "slate": "Grå"
+    },
     "delete": "Ta bort kommentar",
     "placeholder": "Kommentar"
   },

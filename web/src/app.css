@@ -8599,14 +8599,51 @@ a.pa-card:hover {
   border-radius: var(--r-3);
   box-sizing: border-box;
 }
+/* Title and the selected-only tools (colour, delete) on one row. It wraps:
+   a frame is resized by hand down to 140px, and there the swatches drop
+   below the title instead of covering it. */
+.dz-frame-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  padding: var(--space-1h) var(--space-2);
+}
+.dz-frame-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1h);
+}
+/* The note's colour, as a row of swatches rather than a popover: a popover
+   opened inside a frame would paint behind the steps it groups (frames sit at
+   z-index -1 so wires and cards stay readable over them), and one click beats
+   two for a choice this small. */
+.dz-frame-colors {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+.dz-frame-swatch {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1.5px solid color-mix(in srgb, var(--ink) 25%, transparent);
+  border-radius: 50%;
+  cursor: pointer;
+}
+.dz-frame-swatch:hover {
+  border-color: var(--ink);
+}
+.dz-frame-swatch.active {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--ink);
+}
 /* Delete affordance, shown only while the frame is selected — the touch
    path to remove a comment (frames aren't in the Inspector, and a phone has
    no Delete key). Sized as a comfortable tap target. */
 .dz-frame-delete {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  z-index: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -8624,9 +8661,8 @@ a.pa-card:hover {
   border-color: var(--danger);
 }
 .dz-frame-title {
-  width: auto;
-  max-width: calc(100% - 42px);
-  margin: var(--space-1h) var(--space-2);
+  flex: 1 1 6rem;
+  min-width: 0;
   background: transparent;
   border: none;
   padding: var(--space-0) var(--space-1);
