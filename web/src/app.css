@@ -9889,18 +9889,36 @@ a.pa-card:hover {
 }
 .rtc-fg:hover .rtc-grip { color: var(--muted); }
 .rtc-grip:active { cursor: grabbing; color: var(--accent); }
-.rtc-col { overflow-wrap: anywhere; }
-/* The data column a renamed header sits over. Quiet and monospace: it is the
-   field name from the data, not prose, and the header text is what the row is
-   about. Shown only when the two differ. */
-.rtc-key {
+.rtc-col {
   flex: 0 1 auto;
-  margin-left: auto;
-  padding-left: var(--space-2);
+  min-width: 0;
   font-family: var(--font-mono);
   font-size: var(--text-2xs);
-  color: var(--faint);
   overflow-wrap: anywhere;
+}
+/* A row is a pair: the data column, an arrow, then the heading the table will
+   show. The arrow is what makes the pair read as one statement instead of two
+   adjacent words — it is the same glyph in a resting row and in the two boxes
+   you type into, so editing looks like what it edits. */
+.rtc-arrow {
+  flex: 0 0 auto;
+  color: var(--faint);
+  font-size: var(--text-xs);
+}
+/* The custom name. Prose, not an identifier — it is the text a reader of the
+   table will see — so it keeps the body font while the column name beside it
+   stays monospace. */
+.rtc-as {
+  flex: 0 1 auto;
+  min-width: 0;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+/* The second box of an editing/add row. Narrower than the column box by
+   default: a heading is usually shorter than the field name it replaces, and
+   the column is the half that must stay readable. */
+.rtc-label-input {
+  flex: 1 1 40%;
 }
 /* Hidden columns live in the same list, below the shown ones: dimmed, dashed,
    with a + to bring them back. A faint divider labels the group. */

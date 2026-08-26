@@ -85,6 +85,11 @@ type Props = {
   // whichever run is latest, which is why no decision control (approvals)
   // hangs off it — see ApprovalPanel.
   currentRunID: string | null;
+  // rowsSource: the node+port feeding this step's `rows` input, so an editor
+  // can read its columns off the producer's own output. The resolved input on
+  // this node's run record is always empty (see inspectorRowsSource in
+  // FlowEditor), which is why the producer is the one to ask.
+  rowsSource?: { nodeId: string; port: string };
   // upstreamRows: for a render_text step, the rows its `rows` producer emitted
   // on the last run — the parent resolves it from the run outputs so the
   // Make-text editor can discover real columns and seed its preview.
@@ -165,6 +170,7 @@ export function Inspector({
   tokenLabels,
   currentRunID,
   upstreamRows,
+  rowsSource,
   liveLogs,
   workspace,
   onSample,
@@ -593,6 +599,7 @@ export function Inspector({
                 references={refCtx}
                 currentRunID={currentRunID}
                 upstreamRows={upstreamRows}
+                rowsSource={rowsSource}
                 onApply={(patch) =>
                   onParamsChange(selected.id, { ...currentParams, ...patch })
                 }
@@ -603,6 +610,8 @@ export function Inspector({
                 params={currentParams}
                 references={refCtx}
                 currentRunID={currentRunID}
+                upstreamRows={upstreamRows}
+                rowsSource={rowsSource}
                 onApply={(patch) =>
                   onParamsChange(selected.id, { ...currentParams, ...patch })
                 }
@@ -630,9 +639,17 @@ export function Inspector({
               // A drop with a dedicated editor above hides its raw field here so
               // it isn't edited in two places: render_table's `columns` (its
               // whole Advanced section) and the Expression drop's `expr`.
+              //
+              // `column_labels` is omitted for the same reason: the column
+              // editor above now carries the custom name in the row you add the
+              // column in, and a second field for the same decision, sitting
+              // apart from the list it applies to, is what made this confusing.
+              // The param still works — it is the shape an LLM writes, and it
+              // renames without restricting the column set — it just isn't a
+              // second place to do it by hand.
               omitKeys={
                 d.moduleID === "render_table"
-                  ? ["columns"]
+                  ? ["columns", "column_labels"]
                   : d.moduleID === "expression"
                     ? ["expr"]
                     : undefined

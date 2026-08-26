@@ -1789,18 +1789,31 @@ function EditorInner() {
     [nodes, selectedID],
   );
 
-  // inspectorUpstreamRows: for a selected render_text step, the rows its `rows`
-  // producer emitted on the last run — read from that upstream node's OUTPUT in
-  // the run (the resolved node INPUT isn't persisted, so this is the reliable
-  // source, and it covers fixed-shape producers like RSS). Lets the Make-text
-  // editor discover the real columns and seed its preview from real data.
+  // inspectorRowsSource: which node+port feeds the selected step's `rows`
+  // input. The two editors that need to know their input's columns — Make text
+  // and Make a table — both have to read them off the UPSTREAM node's output,
+  // because the resolved node INPUT is never persisted: the dispatcher enqueues
+  // a record whose Job carries only the graph and node id, the engine assembles
+  // the inputs in memory at execution time, and nothing writes them back. So
+  // "run it once and I'll know your columns" is only true of the producer's
+  // side of the wire.
+  const inspectorRowsSource = useMemo(() => {
+    if (!inspectorSelected) return undefined;
+    const e = edges.find(
+      (x) => x.target === inspectorSelected.id && (x.targetHandle ?? "") === "rows",
+    );
+    return e ? { nodeId: e.source, port: e.sourceHandle ?? "out" } : undefined;
+  }, [inspectorSelected, edges]);
+
+  // The rows that producer emitted on the run this editor is showing. Live from
+  // the run stream, so it covers the run you just pressed; a reload has no
+  // stream to read and falls back to fetching the producer's record (see
+  // RenderTableColumns / RenderTextPreview).
   const inspectorUpstreamRows = useMemo(() => {
-    if (!inspectorSelected || inspectorSelected.data.moduleID !== "render_text") return undefined;
-    const e = edges.find((x) => x.target === inspectorSelected.id && (x.targetHandle ?? "") === "rows");
-    if (!e) return undefined;
-    const data = runOutputs[e.source]?.[e.sourceHandle ?? "out"]?.data;
+    if (!inspectorRowsSource) return undefined;
+    const data = runOutputs[inspectorRowsSource.nodeId]?.[inspectorRowsSource.port]?.data;
     return Array.isArray(data) ? (data as Record<string, unknown>[]) : undefined;
-  }, [inspectorSelected, edges, runOutputs]);
+  }, [inspectorRowsSource, runOutputs]);
 
   const onInspectorChange = (id: string, patch: Partial<DazyNodeData>) => {
     setNodes((nds) =>
@@ -4608,6 +4621,7 @@ function EditorInner() {
           onToggleDisabled={toggleNodeDisabled}
           onResetState={canEdit ? resetNodeStateAction : undefined}
           upstreamRows={inspectorUpstreamRows}
+          rowsSource={inspectorRowsSource}
           tokenLabels={tokenLabels}
           runCoordinate={
             inspectorSelected && typeof runOutputs[inspectorSelected.id]?.coordinate?.data === "string"

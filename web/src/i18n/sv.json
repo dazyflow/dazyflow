@@ -1741,15 +1741,15 @@
     "typeToPreview": "Lägg till en mall ovan — eller välj en layout — för att se den här."
   },
   "renderTableColumns": {
-    "title": "Kolumnordning",
+    "title": "Kolumner",
     "drag": "Dra för att ändra ordning",
-    "rename": "Rubriktext",
-    "fromField": "Datakolumnen som rubriken står över",
+    "columnField": "Kolumn i datat",
+    "customName": "Eget namn (valfritt)",
     "addPlaceholder": "Lägg till en kolumn…",
-    "help": "Dra i handtaget för att ändra ordning, tryck på en kolumn för att ändra dess rubriktext, eller svep den i sidled för att ta bort den. Att byta namn ändrar bara rubriken — kolumnen läser fortfarande samma fält, som står angivet under. Tabellen visar kolumnerna från vänster till höger i den här ordningen.",
+    "help": "Varje rad är en kolumn i tabellen: namnet den har i ditt data och — om du vill ha en annan rubrik — ett eget namn intill. Lämna det egna namnet tomt för att använda datats eget namn. Dra i handtaget för att ändra ordning, tryck på en rad för att ändra den, svep den i sidled för att ta bort den. Bara kolumnerna som listas här visas, från vänster till höger i den här ordningen.",
     "hiddenTitle": "Dolda kolumner",
     "restore": "Tryck för att visa kolumnen igen",
-    "empty": "Det här steget känner inte till sina kolumner än — bara några få steg (ett formulär, ett kalkylblad) kan säga vad de ger innan en körning. Du behöver inte ha dem listade för att byta rubrik: använd Kolumnnamn nedan. Lägg bara till en kolumn här för att bestämma vilka kolumner tabellen visar, och i vilken ordning."
+    "empty": "Det här steget känner inte till sina kolumner än — bara några få steg (ett formulär, ett kalkylblad) kan säga vad de ger innan en körning. Lägg till dem nedan: skriv kolumnens namn i ditt data, och ett eget namn om du vill ha en annan rubrik."
   },
   "celInput": {
     "label": "Formel",

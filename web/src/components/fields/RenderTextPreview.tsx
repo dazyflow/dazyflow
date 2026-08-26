@@ -6,7 +6,6 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "../../auth";
 import { api } from "../../api";
 import { explainApiError } from "../../lib/explainApiError";
-import type { Ref } from "../../types";
 import { humanize, type ReferenceCtx } from "./SchemaForm";
 
 
@@ -18,13 +17,12 @@ function uniq(...lists: string[][]): string[] {
   return out;
 }
 
-// rowsData reads the resolved `rows` input off a run record — the exact rows
-// (and columns) this step received, inlined as Ref.data. Empty when the step
-// hasn't run or the input wasn't a list of objects.
-function rowsData(ref: Ref | undefined): Record<string, unknown>[] {
-  const d = ref?.data;
-  if (!Array.isArray(d)) return [];
-  return d.filter(
+// rowsData reads a rows value off a run record's port — the exact rows (and
+// columns) that crossed the wire, inlined as Ref.data. Empty when the step
+// hasn't run or the port didn't hold a list of objects.
+function rowsData(value: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
     (x): x is Record<string, unknown> => !!x && typeof x === "object" && !Array.isArray(x),
   );
 }
@@ -144,11 +142,16 @@ export function RenderTextPreview({
   references,
   currentRunID,
   upstreamRows,
+  rowsSource,
 }: {
   params: Record<string, unknown>;
   onApply: (patch: Record<string, unknown>) => void;
   references?: ReferenceCtx;
   currentRunID?: string | null;
+  // Which node+port feeds this step's `rows`, so the rows can be read back off
+  // the stored run after a reload (upstreamRows only survives while the run
+  // stream is live).
+  rowsSource?: { nodeId: string; port: string };
   // upstreamRows: the rows the node feeding this step's `rows` input emitted on
   // the last run (the producer's OUTPUT, read from the run by the parent). This
   // is the discovery source that actually covers every producer — including
@@ -195,20 +198,25 @@ export function RenderTextPreview({
     };
   }, [refToken, tenant, ws, flowId, nodeId]);
 
+  // Same correction as RenderTableColumns: read the PRODUCER's output, not this
+  // node's resolved input. The input is never persisted on a node record, so
+  // this branch had been returning nothing since it was written — the preview
+  // only ever had real rows when the parent happened to hand them over live.
   useEffect(() => {
-    if (!token || !currentRunID || !nodeId) {
+    const src = rowsSource;
+    if (upstreamRows?.length || !token || !currentRunID || !src) {
       setRunRows([]);
       return;
     }
     let live = true;
     api
-      .getNodeRecord(token, currentRunID, nodeId)
-      .then((rec) => live && setRunRows(rowsData(rec.Job?.Input?.rows)))
+      .getNodeRecord(token, currentRunID, src.nodeId)
+      .then((rec) => live && setRunRows(rowsData(rec.Result?.output?.[src.port]?.data)))
       .catch(() => live && setRunRows([]));
     return () => {
       live = false;
     };
-  }, [token, currentRunID, nodeId]);
+  }, [token, currentRunID, rowsSource, upstreamRows]);
 
   // The real columns to build presets from, best source first: the upstream
   // producer's output rows (covers everything, incl. RSS), then this step's

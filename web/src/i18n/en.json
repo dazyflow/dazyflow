@@ -1741,15 +1741,15 @@
     "typeToPreview": "Add a template above — or pick a layout — to see it here."
   },
   "renderTableColumns": {
-    "title": "Column order",
+    "title": "Columns",
     "drag": "Drag to reorder",
-    "rename": "Header text",
-    "fromField": "The data column this header sits over",
+    "columnField": "Column in the data",
+    "customName": "Custom name (optional)",
     "addPlaceholder": "Add a column…",
-    "help": "Drag the handle to reorder, tap a column to change its header text, or swipe it sideways to remove. Renaming changes the header only — the column still reads the same field, named underneath. The table shows columns left to right in this order.",
+    "help": "Each row is a column of the table: the name it has in your data, and — if you want a different heading — a custom name beside it. Leave the custom name blank to use the data's own name. Drag the handle to reorder, tap a row to edit it, swipe it sideways to remove. Only the columns listed here appear, left to right in this order.",
     "hiddenTitle": "Hidden columns",
     "restore": "Tap to show this column again",
-    "empty": "This step doesn't know its columns yet — only a few steps (a form, a spreadsheet) can say what they produce before a run. You don't need them listed to rename a heading: use Column names below. Add a column here only to pin which columns the table shows, and in what order."
+    "empty": "This step doesn't know its columns yet — only a few steps (a form, a spreadsheet) can say what they produce before a run. Add them below: type the column's name in your data, and a custom name if you want a different heading."
   },
   "celInput": {
     "label": "Formula",

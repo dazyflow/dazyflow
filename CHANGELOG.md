@@ -23,6 +23,50 @@ into the image.)
 
 ## [Unreleased]
 
+### Fixed
+
+- **"Run it once and I'll know your columns" now happens.** Make a table's
+  column editor asked for the columns this step *received* — and a node record
+  never carries them. The dispatcher enqueues a record whose Job holds only the
+  graph and node id, the engine assembles the inputs in memory when it
+  executes, and nothing writes them back. So the field it read was always
+  empty, the advice in its empty state could never come true, and for any
+  producer that can't declare its own fields — a JSON step, a query, an HTTP
+  call — the list stayed empty for ever, leaving nothing to reorder, hide or
+  rename.
+
+  It now reads the columns off the PRODUCER's output, which the run does store:
+  live from the run stream right after you press Run, and fetched back from the
+  stored run after a reload. Make text's preview had the same dead read and the
+  same fix — its real-rows path only ever worked when the canvas happened to
+  hand the rows over live.
+
+  Columns are also collected across all the rows rather than from the first one.
+  A ragged CSV, an API that omits nulls, a merged rowset — the first row is a
+  sample, not a schema, and a column that appears in row two was simply
+  invisible.
+
+### Changed
+
+- **A table's columns and their headings are one list again.** The heading
+  arrived last release as its own params field, which split one decision across
+  two places: you added a column in the column editor and renamed it in a field
+  below, with nothing on screen connecting the two. Reading the form told you
+  neither that they were related nor which won.
+
+  A row in the column editor is now the pair — the column as it appears in your
+  data, an arrow, and an optional custom name for the heading over it. The add
+  row carries both boxes, so a column and its heading are typed in one go;
+  leaving the custom name blank uses the data's own name. Editing a row opens
+  the same two boxes, and the column half is editable too, so a row can be
+  re-pointed at a different field instead of only renamed.
+
+  The `column_labels` param still works and is still the shape to write from an
+  LLM or the API — it renames without restricting which columns show — it just
+  isn't a second place to do it by hand. Two things the pair made checkable: the
+  add row no longer commits when focus moves between its own boxes (which made
+  the second box unreachable), and two rows can't be pointed at the same column.
+
 ## [0.15.6] - 2026-08-26
 
 ### Fixed

@@ -6,8 +6,8 @@ import { useTranslation } from "react-i18next";
 import { Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../auth";
 import { api } from "../../api";
-import type { Ref } from "../../types";
 import type { ReferenceCtx } from "./SchemaForm";
+import { columnsOfRows } from "../../lib/rowColumns";
 import { ICON } from "../../icons";
 
 // GripIcon is the 6-dot drag gripper (mirrors hazydo's task-row handle): two
@@ -71,16 +71,6 @@ function sameColumns(a: TableColumn[], b: TableColumn[]): boolean {
   );
 }
 
-// rowsKeys reads the column names off a run record's resolved `rows` input —
-// the exact columns (and casing) this step received, inlined as Ref.data.
-function rowsKeys(ref: Ref | undefined): string[] {
-  const d = ref?.data;
-  if (Array.isArray(d) && d.length > 0 && d[0] && typeof d[0] === "object" && !Array.isArray(d[0])) {
-    return Object.keys(d[0] as Record<string, unknown>);
-  }
-  return [];
-}
-
 function uniq(...lists: string[][]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -114,11 +104,18 @@ const AXIS_LOCK_PX = 8;
 // omitted from the Inspector's Advanced section), so everything happens here.
 //
 // One list holds everything: shown columns on top — drag the grip to reorder,
-// tap a column to rename it, swipe it aside to hide it — then a row to add a
-// new column, then any hidden columns (dimmed, tap to bring back). Columns are
+// tap a column to edit it, swipe it aside to hide it — then a row to add a new
+// column, then any hidden columns (dimmed, tap to bring back). Columns are
 // seeded from discovery (the step's last run, plus the upstream producer's
 // declared fields) but fully editable, so a table can be built by hand before
 // the step has ever run.
+//
+// A row is a PAIR: the data column, and optionally the heading to show over it.
+// The heading used to be a separate params field, which put the two halves of
+// one decision in two places — you added a column here and renamed it over
+// there, with nothing on screen connecting them. They are one row now: the
+// custom name sits in the same row you type the column into, empty by default,
+// and empty means "use the column's own name".
 //
 // Drag and swipe are hand-rolled on pointer events: the dragged row tracks the
 // finger 1:1, grip-drag is locked to vertical, and the row body owns the
@@ -128,11 +125,20 @@ export function RenderTableColumns({
   onApply,
   references,
   currentRunID,
+  upstreamRows,
+  rowsSource,
 }: {
   params: Record<string, unknown>;
   onApply: (patch: Record<string, unknown>) => void;
   references?: ReferenceCtx;
   currentRunID?: string | null;
+  // The rows the producer emitted on the run this editor is showing, live from
+  // the run stream. Present right after a Run; gone after a reload, which is
+  // what the fetch below covers.
+  upstreamRows?: Record<string, unknown>[];
+  // Which node+port feeds this step's `rows`. The producer is the one that
+  // knows the columns — see the note in FlowEditor's inspectorRowsSource.
+  rowsSource?: { nodeId: string; port: string };
 }) {
   const { t } = useTranslation();
   const { token } = useAuth();
@@ -148,6 +154,15 @@ export function RenderTableColumns({
   const [editing, setEditing] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [addValue, setAddValue] = useState("");
+  const [addLabel, setAddLabel] = useState("");
+  // The label being typed for the row under edit, alongside editValue (its
+  // column). Two boxes, so two pieces of working text.
+  const [editLabel, setEditLabel] = useState("");
+  // The add row commits on Enter, or when focus leaves the ROW — not when it
+  // leaves either box. Committing on a box blur made the second field
+  // unreachable: tabbing from the column into the custom name added the row
+  // and took the box away mid-keystroke.
+  const addRowRef = useRef<HTMLDivElement | null>(null);
   // True during any live interaction (gesture or rename) — guards the resync
   // effect so an async column fetch can't yank the list mid-edit.
   const busy = useRef(false);
@@ -177,24 +192,44 @@ export function RenderTableColumns({
     };
   }, [refToken, tenant, ws, flowId, nodeId]);
 
-  // Exact columns from the last run — works for any producer once it has run.
+  // Exact columns from the last run — works for ANY producer once it has run,
+  // which is the point: the declared-fields probe above only answers for a
+  // handful of introspectable sources (a form, a spreadsheet), so for a JSON
+  // step, a query or an HTTP call this is the only source there is.
+  //
+  // It reads the PRODUCER's output. Reading this node's own resolved input is
+  // the obvious thing and it never works: node records are enqueued with a Job
+  // carrying only the graph and node id, the engine assembles the inputs in
+  // memory when it executes, and nothing writes them back — so the field is
+  // always empty and the editor's "run it once" advice could never come true.
+  //
+  // Skipped when the parent already handed us live rows from the run stream.
   useEffect(() => {
-    if (!token || !currentRunID || !nodeId) {
+    const src = rowsSource;
+    if (upstreamRows?.length || !token || !currentRunID || !src) {
       setRunCols([]);
       return;
     }
     let live = true;
     api
-      .getNodeRecord(token, currentRunID, nodeId)
-      .then((rec) => live && setRunCols(rowsKeys(rec.Job?.Input?.rows)))
+      .getNodeRecord(token, currentRunID, src.nodeId)
+      .then((rec) => live && setRunCols(columnsOfRows(rec.Result?.output?.[src.port]?.data)))
       .catch(() => live && setRunCols([]));
     return () => {
       live = false;
     };
-  }, [token, currentRunID, nodeId]);
+  }, [token, currentRunID, rowsSource, upstreamRows]);
 
   const paramCols = useMemo(() => asColumnList(params.columns), [params.columns]);
-  const discovered = useMemo(() => uniq(runCols, schemaCols), [runCols, schemaCols]);
+  // Best source first: the rows the producer just emitted, then the same rows
+  // read back off the stored run, then whatever the producer could declare
+  // without running. uniq keeps the earliest position for a column named by
+  // more than one, so the order is the producer's own.
+  const liveCols = useMemo(() => columnsOfRows(upstreamRows), [upstreamRows]);
+  const discovered = useMemo(
+    () => uniq(liveCols, runCols, schemaCols),
+    [liveCols, runCols, schemaCols],
+  );
   // Shown columns: the saved set if the user has curated one (authoritative, so
   // hidden/renamed columns stick), else every discovered column in data order.
   const shown = useMemo(
@@ -238,31 +273,51 @@ export function RenderTableColumns({
 
   const addColumn = () => {
     const name = addValue.trim();
+    const label = addLabel.trim();
     setAddValue("");
+    setAddLabel("");
     if (!name || order.some((c) => c.key === name)) return; // blank or already shown
-    const next = [...order, { key: name, label: name }];
+    const next = [...order, { key: name, label: label || name }];
     setOrder(next);
     persist(next);
+  };
+
+  // Only commit when focus lands outside the add row — moving between its two
+  // boxes is still one unfinished entry.
+  const onAddBlur = (e: React.FocusEvent) => {
+    const to = e.relatedTarget as Node | null;
+    if (to && addRowRef.current?.contains(to)) return;
+    addColumn();
   };
 
   const startEdit = (col: TableColumn) => {
     busy.current = true; // don't let a resync reshuffle the list while typing
     setEditing(col.key);
-    setEditValue(col.label);
+    setEditValue(col.key);
+    // Blank rather than the key when nothing was renamed, so the box reads as
+    // "no custom name" instead of pre-filling the value it is meant to replace.
+    setEditLabel(col.label === col.key ? "" : col.label);
   };
   const cancelEdit = () => {
     busy.current = false;
     setEditing(null);
   };
   const commitEdit = () => {
-    const key = editing;
-    const label = editValue.trim();
+    const editingKey = editing;
+    const key = editValue.trim();
+    const label = editLabel.trim();
     busy.current = false;
     setEditing(null);
+    if (!editingKey) return;
+    // Emptying the column box is not a request to delete the row (that is the
+    // swipe) — it leaves the row as it was.
     if (!key) return;
-    // A blank box means "go back to the data's own name" rather than a column
-    // with no header at all.
-    const next = order.map((c) => (c.key === key ? { key: c.key, label: label || c.key } : c));
+    // Re-pointing a row at a column another row already has would give the
+    // table the same column twice.
+    if (key !== editingKey && order.some((c) => c.key === key)) return;
+    const next = order.map((c) =>
+      c.key === editingKey ? { key, label: label || key } : c,
+    );
     setOrder(next);
     persist(next);
   };
@@ -381,6 +436,22 @@ export function RenderTableColumns({
           const dx = swipe?.col === col.key ? swipe.dx : 0;
           const swiping = dx !== 0;
           if (isEditing) {
+            // Enter commits from either box, Escape abandons, and a blur only
+            // commits when focus leaves the row — the same rule as the add row,
+            // for the same reason.
+            const keys = (e: React.KeyboardEvent) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commitEdit();
+              } else if (e.key === "Escape") {
+                cancelEdit();
+              }
+            };
+            const blur = (e: React.FocusEvent) => {
+              const to = e.relatedTarget as Node | null;
+              if (to && e.currentTarget.parentElement?.contains(to)) return;
+              commitEdit();
+            };
             return (
               <li key={col.key} className="rtc-item">
                 <div className="rtc-fg rtc-editing">
@@ -392,17 +463,22 @@ export function RenderTableColumns({
                     className="rtc-edit-input"
                     autoFocus
                     value={editValue}
-                    aria-label={t("renderTableColumns.rename")}
+                    aria-label={t("renderTableColumns.columnField")}
                     onChange={(e) => setEditValue(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        commitEdit();
-                      } else if (e.key === "Escape") {
-                        cancelEdit();
-                      }
-                    }}
-                    onBlur={commitEdit}
+                    onKeyDown={keys}
+                    onBlur={blur}
+                  />
+                  <span className="rtc-arrow" aria-hidden="true">
+                    →
+                  </span>
+                  <input
+                    className="rtc-edit-input rtc-label-input"
+                    value={editLabel}
+                    placeholder={t("renderTableColumns.customName")}
+                    aria-label={t("renderTableColumns.customName")}
+                    onChange={(e) => setEditLabel(e.target.value)}
+                    onKeyDown={keys}
+                    onBlur={blur}
                   />
                 </div>
               </li>
@@ -446,22 +522,30 @@ export function RenderTableColumns({
                 >
                   <GripIcon />
                 </span>
-                <span className="rtc-col">{col.label}</span>
-                {/* A renamed column names the field it still reads, so the
-                    header text can't be mistaken for the data's own name —
-                    and so a rename is visibly a rename, not a re-point. */}
+                {/* The data column, then the heading the table will show over
+                    it. Reading order matches the row you type: column first,
+                    custom name second, and nothing at all when the two are the
+                    same. */}
+                <span className="rtc-col">{col.key}</span>
                 {col.label !== col.key && (
-                  <span className="rtc-key" title={t("renderTableColumns.fromField")}>
-                    {col.key}
-                  </span>
+                  <>
+                    <span className="rtc-arrow" aria-hidden="true">
+                      →
+                    </span>
+                    <span className="rtc-as" title={t("renderTableColumns.customName")}>
+                      {col.label}
+                    </span>
+                  </>
                 )}
               </div>
             </li>
           );
         })}
-        {/* Add a new column by name — works even before the step has run. */}
+        {/* Add a column, and name its heading in the same row — works even
+            before the step has run, which for most producers is the only way
+            the list is ever populated. */}
         <li className="rtc-item rtc-add-row">
-          <div className="rtc-fg">
+          <div className="rtc-fg" ref={addRowRef}>
             <span className="rtc-restore" aria-hidden="true">
               <Plus size={ICON.sm} />
             </span>
@@ -477,7 +561,24 @@ export function RenderTableColumns({
                   addColumn();
                 }
               }}
-              onBlur={addColumn}
+              onBlur={onAddBlur}
+            />
+            <span className="rtc-arrow" aria-hidden="true">
+              →
+            </span>
+            <input
+              className="rtc-edit-input rtc-label-input"
+              placeholder={t("renderTableColumns.customName")}
+              value={addLabel}
+              aria-label={t("renderTableColumns.customName")}
+              onChange={(e) => setAddLabel(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addColumn();
+                }
+              }}
+              onBlur={onAddBlur}
             />
           </div>
         </li>
