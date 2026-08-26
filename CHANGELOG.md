@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.15.8] - 2026-08-26
+
 ### Changed
 
 - **Dropdowns read as words, in your own language.** A choice field shows its
