@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-08-26
+
 ### Added
 
 - **"Move to weekday" on the Date & time step.** Pick Monday and you get the
