@@ -659,7 +659,6 @@ function EditorInner() {
   });
   const {
     publishInfo,
-    setPublishInfo,
     publishing,
     justPublished,
     diffOpen,
@@ -2743,24 +2742,25 @@ function EditorInner() {
     loadedID: loadedIDRef,
     onError: setError,
     onConflict: refreshLock,
-    onSaved: (res, isAutosave) => {
+    onSaved: (res) => {
       // Remember our own commit so the flow-watch can ignore its echo.
       if (res.commit) ownCommitsRef.current.add(res.commit);
       // Lint findings are advisory — the save already succeeded. Show them; the
       // user can fix-and-resave or dismiss.
       setLintIssues(res.lint ?? []);
-      // The draft moved, so the "unpublished changes" pill must flip on. A
-      // manual save does a real status probe; autosave bursts skip the network
-      // call (it would hammer the endpoint) and flip the pill optimistically,
-      // since a successful save means HEAD now differs from the published
-      // revision.
-      if (!isAutosave) {
-        void publish.loadPublishInfo();
-      } else {
-        setPublishInfo((prev) =>
-          prev && prev.published && !prev.dirty ? { ...prev, dirty: true } : prev,
-        );
-      }
+      // The draft moved, so re-read the draft-vs-live status the toolbar pill
+      // and the live-state banner render.
+      //
+      // Autosaves used to flip the pill optimistically instead, on the
+      // reasoning that a successful save means HEAD differs from the published
+      // revision. It does — but "differs" is not the question the pill asks.
+      // Dragging a step or dropping a note on the canvas saves, and neither
+      // changes what the live version does, so the pill lit up over changes
+      // the diff view then reported as none. A save is already debounced, so
+      // the probe this replaces it with is one small GET per editing burst,
+      // not one per keystroke — and the server answers honestly (see
+      // core.BehaviorEqual).
+      void publish.loadPublishInfo();
     },
     // Any content change restarts the idle timer.
     reArmOn: [

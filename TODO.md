@@ -15,6 +15,13 @@ without them the same suggestions arrive again every review.
 
 ---
 
+[ ] Comments field shall have a color setting
+[ ] Row sorting step shall have a toggle for Ascend/descend sorting
+[ ] In the create HTML table step one should be able to set a custom table name
+[ ] The collections view shows columns with capital letters - it shall show the real values
+[ ] The collections view shall have support to sort by column. That setting shall be kept when exporting as CSV
+[ ] We need a way for a user to download its data as JSON (GDPR thing)
+
 ## Open
 
 ### Runners — the 2026-08-25 review, worked through

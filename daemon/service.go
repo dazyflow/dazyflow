@@ -17,7 +17,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -1208,8 +1207,13 @@ func (s *Service) DropSuggestions(ctx context.Context, p core.Principal, tenant,
 
 // PublishInfo describes a flow's draft-vs-published state for the editor's
 // publish control. Published is false when the flow has never been
-// published; Dirty means the draft (HEAD) differs from the live published
-// revision (always true when never published — there's nothing live yet).
+// published; Dirty means the draft (HEAD) would BEHAVE differently from the
+// live published revision (always true when never published — there's
+// nothing live yet).
+//
+// Dirty is not "the revisions differ": canvas layout, notes, wire routing
+// and the pause switch are all excluded, because publishing is not what
+// carries them. See core.BehaviorEqual.
 type PublishInfo struct {
 	Published       bool   `json:"published"`
 	PublishedCommit string `json:"published_commit,omitempty"`
@@ -1350,9 +1354,16 @@ func (s *Service) PublishedInfo(ctx context.Context, p core.Principal, tenant, w
 	}
 	// Content compare rather than commit-hash compare: the workspace repo
 	// is shared across flows, so an unrelated flow's edit advances repo
-	// HEAD without changing this flow. DeepEqual on the loaded graphs is
-	// the honest "does the draft differ from what's live" test.
-	info.Dirty = !reflect.DeepEqual(head, pubGraph)
+	// HEAD without changing this flow.
+	//
+	// BehaviorEqual rather than DeepEqual: Dirty drives a "publish your
+	// changes" prompt, so it has to mean "the live version would behave
+	// differently", not "the bytes differ". Moving a step, adding a note or
+	// bending a wire changes the bytes and nothing else — prompting for
+	// those left the editor contradicting its own diff view, which reported
+	// the draft as identical to what's live. See core.BehaviorEqual for the
+	// exact set it ignores and why.
+	info.Dirty = !core.BehaviorEqual(head, pubGraph)
 	return info, nil
 }
 

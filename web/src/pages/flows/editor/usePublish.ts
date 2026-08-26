@@ -202,9 +202,6 @@ export function usePublish({
 
   return {
     publishInfo,
-    // Autosave flips the "unpublished changes" pill optimistically after a
-    // successful write, rather than paying for a status probe per keystroke.
-    setPublishInfo,
     publishing,
     justPublished,
     diffOpen,

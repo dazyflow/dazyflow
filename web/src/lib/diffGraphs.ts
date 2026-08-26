@@ -8,11 +8,24 @@ import type { Graph, Node, Edge } from "../types";
 // per-node params/module — the things that change what a run does. Purely
 // cosmetic deltas (node positions, frames, editor waypoints) are ignored
 // so "your draft differs from live" doesn't fire on a drag.
+//
+// The cosmetic set here is the mirror of core.BehaviorEqual (Go), which
+// decides whether the editor prompts to publish at all — keep the two in
+// lockstep. When they drift the editor contradicts itself: the toolbar
+// announces unpublished changes and this view calls the draft identical.
 export type NodeChange = {
   id: string;
   // Which fields changed — module swap and/or params edit. Empty for an
   // added/removed node (the whole node is the change).
-  fields: ("module" | "params" | "env" | "disabled")[];
+  fields: (
+    | "module"
+    | "params"
+    | "env"
+    | "disabled"
+    | "breakpoint"
+    | "continue_on_error"
+    | "timeout_seconds"
+  )[];
 };
 
 export type GraphDiff = {
@@ -23,7 +36,9 @@ export type GraphDiff = {
   removedEdges: string[];
   // metaChanged lists graph-level settings that differ (name, triggers,
   // failure_notify, timeout, visibility) — they affect behaviour or
-  // routing even though they aren't nodes/edges.
+  // routing even though they aren't nodes/edges. The catch-all "other"
+  // appears when the two revisions differ somewhere this diff doesn't
+  // itemize (see diffGraphs), so an empty diff always means "identical".
   metaChanged: string[];
 };
 
@@ -54,7 +69,29 @@ function nodeFieldChanges(a: Node, b: Node): NodeChange["fields"] {
   if (stable(a.params ?? {}) !== stable(b.params ?? {})) fields.push("params");
   if (stable(a.env ?? {}) !== stable(b.env ?? {})) fields.push("env");
   if (!!a.disabled !== !!b.disabled) fields.push("disabled");
+  // Not cosmetic despite being setup-time aids: a breakpoint pauses the
+  // run, continue_on_error changes whether a failure fails the run, and a
+  // node timeout can cancel one.
+  if (!!a.breakpoint !== !!b.breakpoint) fields.push("breakpoint");
+  if (!!a.continue_on_error !== !!b.continue_on_error) fields.push("continue_on_error");
+  if ((a.timeout_seconds ?? 0) !== (b.timeout_seconds ?? 0)) fields.push("timeout_seconds");
   return fields;
+}
+
+// stripCosmetic clears the editor-only fields, mirroring core.stripCosmetic
+// (Go). Used for the catch-all check below, so a difference this diff has no
+// itemizer for is still reported rather than shown as "identical".
+//
+// Note `disabled` (the flow-level pause) is cleared too: it takes effect from
+// HEAD the moment it's saved, so it is never something to publish.
+function stripCosmetic(g: Graph): unknown {
+  return {
+    ...g,
+    disabled: false,
+    frames: undefined,
+    nodes: (g.nodes ?? []).map((n) => ({ ...n, position: undefined })),
+    edges: (g.edges ?? []).map((e) => ({ ...e, waypoints: undefined })),
+  };
 }
 
 // diffGraphs compares a draft against a baseline (published) graph. The
@@ -97,6 +134,27 @@ export function diffGraphs(baseline: Graph, draft: Graph): GraphDiff {
     metaChanged.push("timeout_seconds");
   if ((baseline.visibility ?? "org") !== (draft.visibility ?? "org"))
     metaChanged.push("visibility");
+  if ((baseline.icon ?? "") !== (draft.icon ?? "")) metaChanged.push("icon");
+  if ((baseline.description ?? "") !== (draft.description ?? ""))
+    metaChanged.push("description");
+  if ((baseline.owner ?? "") !== (draft.owner ?? "")) metaChanged.push("owner");
+
+  // Catch-all. Everything above is an itemizer for a field we know about,
+  // and the graph grows fields faster than this list does. The server's
+  // publish prompt compares whole revisions (core.BehaviorEqual), so
+  // without this a new field would show up there as "you have unpublished
+  // changes" and here as "your draft matches what's live" — the exact
+  // contradiction this file's cosmetic set exists to avoid.
+  const itemized =
+    addedNodes.length > 0 ||
+    removedNodes.length > 0 ||
+    changedNodes.length > 0 ||
+    addedEdges.length > 0 ||
+    removedEdges.length > 0 ||
+    metaChanged.length > 0;
+  if (!itemized && stable(stripCosmetic(baseline)) !== stable(stripCosmetic(draft))) {
+    metaChanged.push("other");
+  }
 
   return {
     addedNodes,

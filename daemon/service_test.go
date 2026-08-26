@@ -186,6 +186,51 @@ func TestService_PublishUnpublishFlow(t *testing.T) {
 	}
 }
 
+// The editor's "your draft has changes that aren't live yet" prompt reads
+// Dirty, and the diff view next to it ignores canvas cosmetics. So a moved
+// step, a note, a bent wire, or a pause must not report Dirty — that is the
+// state where the toolbar prompts to publish and the diff it links to says
+// the draft matches the live version.
+func TestService_PublishedInfo_DirtyIgnoresCosmetics(t *testing.T) {
+	h := newGatewayHarness(t)
+	ctx := context.Background()
+	covSeedFlow(t, h, "cosm")
+
+	if _, err := h.svc.PublishFlow(ctx, covAdminPrincipal, "t", "ws", "cosm", "", ""); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	info, err := h.svc.PublishedInfo(ctx, covAdminPrincipal, "t", "ws", "cosm")
+	if err != nil {
+		t.Fatalf("published info: %v", err)
+	}
+	if info.Dirty {
+		t.Fatal("freshly published flow reported dirty")
+	}
+
+	// Canvas-only edits, saved the way the editor's autosave saves them.
+	g, _ := h.ws.Load("cosm")
+	g.Nodes[0].Position = &core.Position{X: 420, Y: 240}
+	g.Frames = []core.Frame{{ID: "fr1", Title: "Intake", Width: 360, Height: 240}}
+	g.Disabled = true
+	if _, err := h.ws.Save(g, "u"); err != nil {
+		t.Fatalf("save layout: %v", err)
+	}
+	info, _ = h.svc.PublishedInfo(ctx, covAdminPrincipal, "t", "ws", "cosm")
+	if info.Dirty {
+		t.Fatal("layout/pause-only edit reported as unpublished changes")
+	}
+
+	// A real change still does.
+	g.Nodes[0].Params = map[string]any{"to": "ops@example.com"}
+	if _, err := h.ws.Save(g, "u"); err != nil {
+		t.Fatalf("save params: %v", err)
+	}
+	info, _ = h.svc.PublishedInfo(ctx, covAdminPrincipal, "t", "ws", "cosm")
+	if !info.Dirty {
+		t.Fatal("param edit not reported as unpublished changes")
+	}
+}
+
 func TestService_RestoreAndPromoteFlow(t *testing.T) {
 	h := newGatewayHarness(t)
 	ctx := context.Background()

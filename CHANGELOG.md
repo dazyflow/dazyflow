@@ -23,6 +23,27 @@ into the image.)
 
 ## [Unreleased]
 
+### Fixed
+
+- **The editor asked you to publish changes it then reported as no changes.**
+  Tidying the canvas — moving a step, dropping a note, bending a wire — saves,
+  and the toolbar took any save to mean the live version had fallen behind:
+  "Published, but your draft has changes that aren't live yet". Opening the
+  diff it links to answered "your draft matches the published version",
+  because that view has always ignored cosmetics. Two readouts of the same
+  pair of revisions, disagreeing, with no way to tell which one was lying.
+
+  The prompt now asks the question it displays: would publishing change what
+  the flow does? Canvas layout, notes and wire routing are excluded, as is the
+  pause switch — pausing takes effect from the draft the moment it is saved, so
+  it was never something to publish either, and pausing a flow used to raise
+  the same phantom prompt. Everything else still counts, including a step's
+  breakpoint, its non-critical flag and its timeout, which the diff view had
+  not been itemizing. The two now share one definition (`core.BehaviorEqual`
+  and the cosmetic set in `diffGraphs.ts`), a test fails if a new field on a
+  flow slips past either of them, and the diff view reports "other" rather
+  than claiming a match it cannot account for.
+
 ## [0.15.4] - 2026-08-26
 
 ### Added

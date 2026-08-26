@@ -836,7 +836,13 @@ export type ScheduleEntry = {
 
 // PublishInfo is GET /me/flows/{id}/published: the draft-vs-live state.
 // published=false means nothing is live yet; dirty means the draft (HEAD)
-// differs from the published revision (always true when never published).
+// would BEHAVE differently from the published revision (always true when
+// never published).
+//
+// Not "the revisions differ" — the daemon excludes canvas layout, notes,
+// wire routing and the pause switch (core.BehaviorEqual), the same set
+// diffGraphs ignores. Moving a step is not something to publish, and the
+// pill and the diff view have to agree about that.
 export type PublishInfo = {
   published: boolean;
   published_commit?: string;
