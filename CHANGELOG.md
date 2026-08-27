@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.18.1] - 2026-08-27
+
 ### Added
 
 - **MCP steps use the tool's own display title.** The protocol has carried an
