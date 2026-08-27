@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Blocks,
+  Globe,
   KeyRound,
   Users,
   Building2,
@@ -78,6 +79,7 @@ export function Admin() {
         <AdminCard to="/admin/git-credentials" icon={<KeyRound size={ICON.lg} />} title={t("admin.cardGitTitle")} desc={t("admin.cardGitDesc")} />
         <AdminCard to="/admin/runners" icon={<Plug size={ICON.lg} />} title={t("runners.title")} desc={t("admin.cardRunnersDesc")} />
         <AdminCard to="/admin/mcp-servers" icon={<Blocks size={ICON.lg} />} title={t("mcp.title")} desc={t("admin.cardMCPDesc")} />
+        <AdminCard to="/admin/web-apis" icon={<Globe size={ICON.lg} />} title={t("webapi.title")} desc={t("admin.cardWebAPIDesc")} />
         <AdminCard to="/admin/sso" icon={<ShieldCheck size={ICON.lg} />} title={t("admin.cardSSOTitle")} desc={t("admin.cardSSODesc")} />
         <AdminCard to="/admin/audit" icon={<ScrollText size={ICON.lg} />} title={t("admin.cardAuditTitle")} desc={t("admin.cardAuditDesc")} />
         <AdminCard to="/admin/support" icon={<LifeBuoy size={ICON.lg} />} title={t("admin.cardSupportTitle", "Support access")} desc={t("admin.cardSupportDesc", "Approve or deny read-only access support requests for a flow.")} />

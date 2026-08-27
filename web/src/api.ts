@@ -44,6 +44,8 @@ import type {
   GitCredential,
   MCPServer,
   MCPServerInput,
+  WebAPI,
+  WebAPIInput,
   Runner,
   RunnerTarget,
   RunnerToken,
@@ -994,6 +996,24 @@ export const api = {
   // Flows referencing them stay valid graphs but stop resolving at run time.
   deleteMCPServer: (token: string, name: string) =>
     request<{ deleted: string }>(token, "DELETE", `/admin/mcp-servers/${encodeURIComponent(name)}`),
+  // listWebAPIs returns the org's described HTTP APIs with the live
+  // registration state of the daemon answering this request.
+  listWebAPIs: (token: string) => request<{ web_apis: WebAPI[] }>(token, "GET", "/admin/web-apis"),
+  // saveWebAPI creates or edits. One call for both, for the same reason
+  // saveMCPServer is one: a catalog is identified by its name, and saving an
+  // existing name replaces it.
+  //
+  // There is no refresh twin. A described API has nothing to re-handshake with —
+  // its operations are the ones it was saved with — so re-reading them from a
+  // spec is a save, not a refresh.
+  saveWebAPI: (token: string, input: WebAPIInput, existingName?: string) =>
+    existingName
+      ? request<WebAPI>(token, "PUT", `/admin/web-apis/${encodeURIComponent(existingName)}`, input)
+      : request<WebAPI>(token, "POST", "/admin/web-apis", input),
+  // deleteWebAPI removes the catalog and takes its steps out of the palette.
+  // Flows referencing them stay valid graphs but stop resolving at run time.
+  deleteWebAPI: (token: string, name: string) =>
+    request<{ deleted: string }>(token, "DELETE", `/admin/web-apis/${encodeURIComponent(name)}`),
   // listRunners returns the org's registered machines and whether each has
   // checked in recently. Never returns a credential.
   listRunners: (token: string) =>

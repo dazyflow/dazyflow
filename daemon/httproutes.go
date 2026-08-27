@@ -356,6 +356,15 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/admin/mcp-servers/{name}/refresh", h.requireAuth(h.refreshMCPServer))
 	mux.HandleFunc("DELETE /api/v1/admin/mcp-servers/{name}", h.requireAuth(h.deleteMCPServer))
 
+	// Admin → Web APIs: the org's own described HTTP APIs. No refresh route,
+	// unlike MCP servers: there is nothing to re-handshake with, and the
+	// operations a catalog holds are the ones it was saved with. Re-importing
+	// from a spec is a save, and belongs to the spec importer when it exists.
+	mux.HandleFunc("GET /api/v1/admin/web-apis", h.requireAuth(h.listWebAPIs))
+	mux.HandleFunc("POST /api/v1/admin/web-apis", h.requireAuth(h.saveWebAPI))
+	mux.HandleFunc("PUT /api/v1/admin/web-apis/{name}", h.requireAuth(h.saveWebAPI))
+	mux.HandleFunc("DELETE /api/v1/admin/web-apis/{name}", h.requireAuth(h.deleteWebAPI))
+
 	// Tenant runners: an org's own code, reachable as a step in its flows.
 	// Gated on organization:admin or module:register — see requireStepSourceAdmin
 	// for why that is deliberately not graph:edit.

@@ -11520,6 +11520,56 @@ button:active,
   gap: var(--space-2);
 }
 
+/* ---- Web APIs ------------------------------------------------------------ */
+/* Admin → Web APIs. The page reuses the MCP page's table, form and id/url
+   rules; what is new is the operation editor, which is the only nested form in
+   the admin section — an operation holds a list of arguments, and each argument
+   is a row of four controls. */
+
+/* One operation, as a card inside the form. The legend carries the operation
+   number and its remove button, so the two sit on one line. */
+.webapi-op {
+  margin: var(--space-3) 0;
+}
+.webapi-op > legend {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+}
+/* Step id, method and path on one line: they are read together as "POST
+   /orders", and stacking them would make the commonest scan the slowest. Method
+   is sized to its content (a fixed vocabulary of six words) while the id and the
+   path share what is left — the path being the one that needs the room. */
+.webapi-op-row {
+  display: grid;
+  grid-template-columns: minmax(10ch, 1fr) auto minmax(16ch, 2fr);
+  gap: var(--space-3);
+  align-items: start;
+}
+.webapi-args {
+  margin-top: var(--space-3);
+}
+/* An argument: name, where it goes, type, required, remove. Grid rather than
+   flex so the columns line up DOWN the list — with flex, each row would size to
+   its own content and the eye would have nothing to follow. */
+.webapi-arg-row {
+  display: grid;
+  grid-template-columns: minmax(8ch, 1.5fr) auto auto auto auto;
+  gap: var(--space-2);
+  align-items: center;
+  margin-bottom: var(--space-2);
+}
+/* Narrow screens: the two grids collapse to stacked rows rather than shrinking
+   every control past usefulness. An argument name field of four characters is
+   worse than a taller form. */
+@media (max-width: 720px) {
+  .webapi-op-row,
+  .webapi-arg-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ---- Glyphs sitting in text ---------------------------------------------- */
 /* A glyph inside a line of prose — a status line, a card heading, a label.
    Unlike a button, these containers can't simply be flexed: `.sso-test-ok` and

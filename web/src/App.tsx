@@ -57,6 +57,7 @@ import { EmailTemplates } from "./pages/admin/EmailTemplates";
 import { AdminGitCredentials } from "./pages/admin/AdminGitCredentials";
 import { AdminRunners } from "./pages/admin/AdminRunners";
 import { AdminMCPServers } from "./pages/admin/AdminMCPServers";
+import { AdminWebAPIs } from "./pages/admin/AdminWebAPIs";
 import { AdminRunnerDetail } from "./pages/admin/AdminRunnerDetail";
 import { AcceptInvite } from "./pages/auth/AcceptInvite";
 import { PublicOverview } from "./pages/PublicOverview";
@@ -170,6 +171,7 @@ export function App() {
         <Route path="/admin/email-templates" element={<EmailTemplates />} />
         <Route path="/admin/git-credentials" element={<AdminGitCredentials />} />
         <Route path="/admin/mcp-servers" element={<AdminMCPServers />} />
+        <Route path="/admin/web-apis" element={<AdminWebAPIs />} />
         <Route path="/admin/runners" element={<AdminRunners />} />
         <Route path="/admin/runners/:name" element={<AdminRunnerDetail />} />
         <Route path="/invite/:token" element={<AcceptInvite />} />

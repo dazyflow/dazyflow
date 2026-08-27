@@ -79,39 +79,46 @@ const (
 )
 
 // Arg is one declared argument of an operation.
+//
+// The JSON tags are load-bearing: this type is both the admin API's request
+// shape and the stored form of a catalog (daemon.WebAPI persists operations as
+// JSON), so a field renamed without its tag would silently orphan every stored
+// descriptor. Tagged explicitly rather than left to Go's field names for
+// exactly that reason.
 type Arg struct {
-	Name string
-	In   ArgIn
+	Name string `json:"name"`
+	In   ArgIn  `json:"in"`
 	// Type is the JSON Schema type: a string, or an array for a union like
 	// ["string","null"]. It decides whether the argument earns a port and how
 	// its value is coerced into a JSON body.
-	Type        any
-	Required    bool
-	Label       string
-	Description string
+	Type        any    `json:"type,omitempty"`
+	Required    bool   `json:"required,omitempty"`
+	Label       string `json:"label,omitempty"`
+	Description string `json:"description,omitempty"`
 	// Schema, when set, is this argument's full JSON Schema, rendered verbatim
 	// by the params form. It is how an enum, a pattern, or a nested body object
 	// keeps its detail after Type has reduced it to a word.
-	Schema json.RawMessage
+	Schema json.RawMessage `json:"schema,omitempty"`
 }
 
-// Operation is one HTTP call, described.
+// Operation is one HTTP call, described. Its JSON tags are load-bearing for the
+// reason Arg's are.
 type Operation struct {
 	// ID is the step-id suffix: api:<catalog>:<ID>. An OpenAPI import takes it
 	// from operationId. Renaming it is not an edit — it is a new step, and
 	// flows referencing the old id stop resolving.
-	ID     string
-	Method string
+	ID     string `json:"id"`
+	Method string `json:"method"`
 	// Path is joined onto the catalog's base URL and may carry {placeholders},
 	// each of which must have a required InPath argument of the same name.
-	Path        string
-	Summary     string
-	Description string
-	Args        []Arg
-	BodyMode    BodyMode
+	Path        string   `json:"path"`
+	Summary     string   `json:"summary,omitempty"`
+	Description string   `json:"description,omitempty"`
+	Args        []Arg    `json:"args,omitempty"`
+	BodyMode    BodyMode `json:"body_mode,omitempty"`
 	// Deprecated marks an operation the API itself has deprecated. Surfaced in
 	// the step's description, since core.Manifest has nowhere better yet.
-	Deprecated bool
+	Deprecated bool `json:"deprecated,omitempty"`
 }
 
 // Descriptor is one tenant-owned catalog of operations.

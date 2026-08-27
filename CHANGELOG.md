@@ -23,6 +23,49 @@ into the image.)
 
 ## [Unreleased]
 
+### Added
+
+- **Web APIs — describe your own service and get steps out of it.**
+  Admin → Web APIs takes a base address and a list of operations (method, path,
+  arguments) and turns each operation into a first-class step,
+  `api:<catalog>:<operation>`: named in the palette, with typed pins for its
+  scalar arguments, required fields the editor validates, and a description the
+  flow generator can compose against. Previously an org's own service meant a
+  hand-assembled `http_request` in every flow — with the address and
+  `${secret.…}` re-typed on each step — or writing and hosting an MCP server.
+
+  The address and the credential are NOT stored with the catalog: each described
+  API gets a connection under Apps, so it is connected once, encrypted, and
+  never visible inside a flow. Rotating a token is one edit instead of one per
+  step.
+
+  Idempotency comes from the HTTP method, so a retry edge that targets a GET,
+  HEAD, PUT or DELETE validates and one that targets a POST does not — the
+  honest answer, where an MCP tool has to be assumed unsafe. POSTs and PATCHes
+  carry a stable `Idempotency-Key` so a retry whose response was lost dedupes on
+  any service that honours it. Calls go through the same guarded path as
+  `http_request`: SSRF dial guard, per-tenant egress allowlist, per-host rate
+  limit and 429 cooldown, response cap.
+
+  Steps resolve only for the org that configured them, and a catalog can be
+  turned off without deleting it. An org cannot name its API after an app
+  Dazyflow already has — connection fields are found by slug with first-match
+  wins, so a collision would have made the real app's connection page show the
+  wrong fields at random. See
+  [docs/own-service-steps-design.md](docs/own-service-steps-design.md) for the
+  design, including what phases 2 (importing an OpenAPI spec) and 3 (reaching a
+  service inside your own network through a runner) would add.
+
+### Changed
+
+- The rules a tenant-configured step source obeys — the id slug and its
+  diacritic folding, the id charset, the numbered uniqueness pass, and the
+  https-unless-private-egress URL policy — moved to `daemon/stepsources.go` and
+  are now shared by MCP servers and web APIs instead of living in the MCP file.
+  Port synthesis moved the same way, to `internal/schemaports`: which arguments
+  earn a pin, in what order, and the twelve-pin cap are one policy about the
+  editor, shared by both catalogs.
+
 ## [0.18.1] - 2026-08-27
 
 ### Added
@@ -64,7 +107,6 @@ into the image.)
   connection and reported as `protocol_version` on the admin API, which is the
   first thing to check when icons do not appear. The stdio transport is
   unchanged.
-
 ## [0.18.0] - 2026-08-27
 
 ### Added

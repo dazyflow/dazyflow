@@ -965,6 +965,96 @@ export type MCPServerInput = {
   enabled?: boolean;
 };
 
+// WebAPIOperation is one described HTTP call. Every operation becomes a step
+// named api:<catalog>:<id>.
+export type WebAPIOperation = {
+  // id is the step-id suffix and is frozen once flows reference it: renaming it
+  // is a NEW step, and the old id stops resolving.
+  id: string;
+  method: "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE";
+  // path is joined onto the catalog's base URL. {placeholders} in it must each
+  // have a required path argument of the same name — the daemon refuses the save
+  // otherwise, naming the placeholder.
+  path: string;
+  summary?: string;
+  description?: string;
+  args?: WebAPIArg[];
+  // body_mode decides what the request carries: nothing, a JSON object built
+  // from the body arguments, or whatever is wired into the step's Body pin.
+  body_mode?: "none" | "json" | "raw";
+  deprecated?: boolean;
+};
+
+// WebAPIArg is one argument of an operation. `in` is the field with no
+// counterpart in an MCP tool: HTTP splits one call's arguments across the path,
+// the query string, the headers and the body, and the daemon needs to know which
+// is which to assemble the request.
+export type WebAPIArg = {
+  name: string;
+  // type is the JSON Schema type. Scalars earn a pin on the node (up to twelve,
+  // required ones first); anything else stays a param.
+  in: "path" | "query" | "header" | "body";
+  type?: string;
+  required?: boolean;
+  label?: string;
+  description?: string;
+};
+
+// WebAPI is one described HTTP API the org has configured, from
+// GET /admin/web-apis.
+//
+// Unlike MCPServer there is no has_token, because this feature stores no
+// credential: the address and the token live in the org's CONNECTION for the
+// integration (the Apps page), and the engine injects them into each step at run
+// time.
+export type WebAPI = {
+  // name is the id flows reference, derived from the label at creation and
+  // frozen from then on.
+  name: string;
+  label: string;
+  base_url: string;
+  // integration is the Apps-page grouping the connection attaches to.
+  integration?: string;
+  auth_kind: "none" | "bearer" | "header";
+  // auth_header is the header name for auth_kind "header". The name is not a
+  // secret; the value it carries is, and it is not stored here.
+  auth_header?: string;
+  operations: WebAPIOperation[];
+  timeout_ms?: number;
+  max_body_bytes?: number;
+  enabled: boolean;
+  // registered is the live fact: this catalog is in the answering daemon's
+  // engine catalog right now. It is NOT a health check — nothing was dialed —
+  // and the page must not present it as one.
+  registered: boolean;
+  // step_ids are the ids this catalog contributed, so the page can show what was
+  // gained rather than only a count.
+  step_ids?: string[];
+  // last_error is set only when a stored catalog could not be registered — a
+  // descriptor a later release refuses. Normally empty.
+  last_error?: string;
+  created_by?: string;
+  created_at: string;
+  updated_at: string;
+};
+
+// WebAPIInput is what the form submits.
+export type WebAPIInput = {
+  label: string;
+  // name is never sent by this app — the daemon derives the id. It stays on the
+  // type because the endpoint still accepts an explicit one.
+  name?: string;
+  base_url: string;
+  integration?: string;
+  auth_kind: "none" | "bearer" | "header";
+  auth_header?: string;
+  operations: WebAPIOperation[];
+  timeout_ms?: number;
+  max_body_bytes?: number;
+  enabled: boolean;
+};
+
+
 // RunnerTarget is one machine as the flow editor sees it, from GET /runners:
 // what the Run on your machine step needs to be pointed somewhere, and nothing
 // about administering the fleet.

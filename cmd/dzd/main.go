@@ -516,6 +516,7 @@ func main() {
 	// this are the next commit, and until then it resolves nothing. Wired here
 	// so the resolver and the guarded HTTP caller are in place first.
 	webAPICatalog := webapi.NewCatalog()
+	tenantWebAPIs := setupTenantWebAPIs(ctx, pgPool, webAPICatalog)
 
 	// Write dedupe for non-idempotent external writes (Twilio SMS, Gmail/
 	// Discord/Sheets/Home Assistant). Postgres-backed and shared so a lease
@@ -709,17 +710,18 @@ func main() {
 		bufferedUsage.Run(ctx, 5*time.Second)
 	}()
 	startBackgroundJobs(ctx, backgroundDeps{
-		svc:         svc,
-		jobs:        jobs,
-		bus:         bus,
-		eng:         eng,
-		pgPool:      pgPool,
-		metrics:     appMetrics,
-		usage:       bufferedUsage,
-		runLogs:     stores.runLogs,
-		workerCount: workerCount,
-		runnerTasks: runnerTasks,
-		tenantMCP:   tenantMCP,
+		svc:           svc,
+		jobs:          jobs,
+		bus:           bus,
+		eng:           eng,
+		pgPool:        pgPool,
+		metrics:       appMetrics,
+		usage:         bufferedUsage,
+		runLogs:       stores.runLogs,
+		workerCount:   workerCount,
+		runnerTasks:   runnerTasks,
+		tenantMCP:     tenantMCP,
+		tenantWebAPIs: tenantWebAPIs,
 	}, &bgWg)
 
 	// Git mirror: push each workspace's flow repository to a remote the
@@ -836,6 +838,7 @@ func main() {
 			runners:          runners,
 			runnerTasks:      runnerTasks,
 			tenantMCP:        tenantMCP,
+			tenantWebAPIs:    tenantWebAPIs,
 			mirrors:          stores.mirrors,
 			mirrorPusher:     mirrorPusher,
 			oauth:            oauthRegistry,
@@ -1128,6 +1131,9 @@ type backgroundDeps struct {
 	// runnerTasks drives the orphaned-task sweep. Nil when runners are not
 	// configured, which leaves the sweep unstarted rather than half-running.
 	runnerTasks daemon.RunnerTaskStore
+	// tenantWebAPIs drives the per-org web-API reconcile loop. Nil when the
+	// feature is unavailable (no Postgres).
+	tenantWebAPIs *daemon.WebAPIs
 	// tenantMCP drives the per-org MCP reconcile loop. Nil when the feature is
 	// not configured, which leaves the loop unstarted.
 	tenantMCP *daemon.MCPServers
@@ -1184,6 +1190,18 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 		go func() {
 			defer bgWg.Done()
 			d.tenantMCP.RunReconciler(ctx, log.Printf)
+		}()
+	}
+
+	// The same loop for each org's described web APIs, and mostly for the first
+	// of those reasons: a catalog is rows in Postgres, and the engine catalog it
+	// feeds is rebuilt in memory on every boot. Cheaper than the MCP pass —
+	// there is nothing to dial, so an unchanged fleet costs one query.
+	if d.tenantWebAPIs != nil {
+		bgWg.Add(1)
+		go func() {
+			defer bgWg.Done()
+			d.tenantWebAPIs.RunReconciler(ctx, log.Printf)
 		}()
 	}
 
@@ -1511,6 +1529,7 @@ type gatewayDeps struct {
 	runners          *daemon.Runners
 	runnerTasks      daemon.RunnerTaskStore
 	tenantMCP        *daemon.MCPServers
+	tenantWebAPIs    *daemon.WebAPIs
 	mirrors          daemon.GitMirrorStore
 	mirrorPusher     *daemon.MirrorPusher
 	oauth            *daemon.OAuthRegistry
@@ -1571,8 +1590,9 @@ func buildGateway(ctx context.Context, bgWg *sync.WaitGroup, d gatewayDeps) {
 	gw.EncryptedSecrets = d.encryptedSecrets // nil disables /api/v1/secrets endpoints
 	gw.Runners = d.runners                   // nil leaves the runner endpoints at 501
 	gw.RunnerTasks = d.runnerTasks
-	gw.MCPServers = d.tenantMCP // nil leaves the MCP-server endpoints at 501
-	gw.GitMirrors = d.mirrors   // nil disables /api/v1/git/mirror endpoints
+	gw.MCPServers = d.tenantMCP  // nil leaves the MCP-server endpoints at 501
+	gw.WebAPIs = d.tenantWebAPIs // nil leaves the web-API endpoints at 501
+	gw.GitMirrors = d.mirrors    // nil disables /api/v1/git/mirror endpoints
 	gw.MirrorPusher = d.mirrorPusher
 	gw.OAuth = d.oauth                 // nil disables /api/v1/oauth/* endpoints
 	gw.Approval = d.approval           // nil leaves POST /approve/ unregistered
@@ -2426,6 +2446,57 @@ func setupRunners(ctx context.Context, pool *pgxpool.Pool, secrets *daemon.Encry
 // a server needing a token cannot be saved (Save says so), but a server needing
 // none still works, so this wires up either way and lets the error land where
 // someone can read it.
+// setupTenantWebAPIs wires the per-org described-API store.
+//
+// No secret store parameter, and that absence is the design: a catalog's
+// credential lives in the org's connection for its integration, injected into
+// the step's params by the engine at run time, so this feature stores nothing
+// that needs sealing.
+func setupTenantWebAPIs(
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	catalog *webapi.Catalog,
+) *daemon.WebAPIs {
+	if pool == nil {
+		return nil
+	}
+	store, err := daemon.NewPgWebAPIStore(ctx, pool)
+	if err != nil {
+		log.Printf("per-org web APIs disabled: %v", err)
+		return nil
+	}
+	return &daemon.WebAPIs{
+		Store:   store,
+		Catalog: catalog,
+		// A described API is connected on its own Apps page, keyed by the slug of
+		// its integration name — the same key space the built-in connectors use.
+		// So an org must not be able to claim "Gmail": connection fields are
+		// looked up by slug with first-match-wins over a map, and a collision
+		// would make Gmail's own page show the wrong fields at random. The
+		// registry is the authority on which names are taken.
+		ReservedIntegration: nativeIntegrationSlugs(),
+	}
+}
+
+// nativeIntegrationSlugs reports which connection slugs the built-in drops own.
+//
+// Computed once at startup: the native registry does not change while the
+// process runs, and this is consulted on every save.
+func nativeIntegrationSlugs() func(string) bool {
+	taken := map[string]bool{}
+	for _, m := range engine.Default.Manifests() {
+		if m.Integration == "" {
+			continue
+		}
+		// Every integration a drop names, not only the connectable ones. A
+		// tenant claiming a name that today has no ConnectionFields would still
+		// collide with the palette grouping, and would become a real collision
+		// the day that integration gains a connection.
+		taken[core.ConnectionSlug(m.Integration)] = true
+	}
+	return func(slug string) bool { return taken[slug] }
+}
+
 func setupTenantMCPServers(
 	ctx context.Context,
 	pool *pgxpool.Pool,

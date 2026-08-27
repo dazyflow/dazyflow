@@ -54,6 +54,11 @@ type HTTPGateway struct {
 	// the feature — the same shape as Runners above.
 	MCPServers *MCPServers
 
+	// WebAPIs powers Admin → Web APIs: the org's own service, described once
+	// and turned into one step per operation. Nil leaves those endpoints
+	// answering 501, the same shape as MCPServers above.
+	WebAPIs *WebAPIs
+
 	// WildcardDomain, when set (e.g. "dazyflow.app"), treats every
 	// subdomain "<org>.dazyflow.app" as an allowed browser origin for
 	// the CORS allowlist + the CSRF origin check, on top of the exact

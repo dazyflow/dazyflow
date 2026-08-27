@@ -399,7 +399,7 @@ func TestMCPServers_SaveRefusesCleartextHTTP(t *testing.T) {
 	// And with the operator's opt-in, http is how someone reaches an MCP
 	// server on their own laptop — so it must be allowed again.
 	hfnet.SetAllowPrivateEgress(true)
-	if err := validMCPServerURL("http://localhost:9000/mcp"); err != nil {
+	if err := validStepSourceURL("http://localhost:9000/mcp"); err != nil {
 		t.Fatalf("private egress is on, so http should be accepted: %v", err)
 	}
 }
@@ -487,14 +487,14 @@ func TestSlugMCPServerName(t *testing.T) {
 		"":    "",
 	}
 	for in, want := range cases {
-		if got := slugMCPServerName(in); got != want {
-			t.Errorf("slugMCPServerName(%q) = %q, want %q", in, got, want)
+		if got := slugStepSourceName(in); got != want {
+			t.Errorf("slugStepSourceName(%q) = %q, want %q", in, got, want)
 		}
 	}
 	// Truncation cannot leave a trailing hyphen, which would be a legal but
 	// ugly id.
-	long := slugMCPServerName(strings.Repeat("ab ", 40))
-	if len(long) > maxMCPServerNameLen || strings.HasSuffix(long, "-") {
+	long := slugStepSourceName(strings.Repeat("ab ", 40))
+	if len(long) > maxStepSourceNameLen || strings.HasSuffix(long, "-") {
 		t.Errorf("long slug = %q (len %d)", long, len(long))
 	}
 }

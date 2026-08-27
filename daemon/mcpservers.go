@@ -8,12 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 	"time"
 
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
 	"git.sr.ht/~klahr/dazyflow/engine/mcp"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -176,123 +174,17 @@ const mcpSecretDomain = "mcp_server"
 // High enough that nobody legitimate meets it.
 const maxMCPServersPerTenant = 50
 
-// maxMCPServerNameLen bounds the generated id. It is a component of every step
-// id the server contributes, and those are read in a palette.
-const maxMCPServerNameLen = 48
-
-// maxMCPServerLabelLen bounds the display name. Long enough for a sentence
-// fragment an admin would actually type, short enough that the list stays a
-// list.
-const maxMCPServerLabelLen = 96
-
-// validMCPServerName keeps a name usable inside a step id and readable in a
-// palette.
-//
-// Stricter than it looks for one reason: the name goes into "mcp:<name>:<tool>",
-// so a colon in it would produce an id that splits two ways. Lowercase letters,
-// digits, hyphen and underscore only — the same shape a runner name takes, so
-// an admin does not have to learn two rules.
-//
-// Admins do not meet this rule any more: they type a Label and the id is
-// derived from it by slugMCPServerName. It still guards the API, which accepts
-// an explicit name from a caller that wants to choose its own id.
-func validMCPServerName(name string) error {
-	if name == "" {
-		return fmt.Errorf("name is empty")
-	}
-	if len(name) > maxMCPServerNameLen {
-		return fmt.Errorf("name too long (max %d)", maxMCPServerNameLen)
-	}
-	for _, r := range name {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-', r == '_':
-		default:
-			return fmt.Errorf("name may use lowercase letters, digits, - and _ only")
-		}
-	}
-	return nil
-}
-
-// slugMCPServerName derives a step-id-safe name from what a human typed.
-//
-// "MCP Test" → "mcp-test", "Kundregister (test)" → "kundregister-test". The
-// point is that an admin never has to think about the id rule: they name the
-// server the way they would name anything else, and the identifier the flows
-// hold is generated once and then frozen.
-//
-// Diacritics fold rather than vanish, so "Bokföring" is "bokforing" and not
-// "bokf-ring" — the id is read by people, in a palette and in flow JSON.
-// Anything left over collapses to single hyphens. A label with nothing
-// slug-able in it at all (say, entirely CJK) yields "", and the caller falls
-// back to a generic base rather than saving an empty id.
-func slugMCPServerName(label string) string {
-	var b strings.Builder
-	prevDash := false
-	for _, r := range strings.ToLower(strings.TrimSpace(label)) {
-		if folded, ok := asciiFold[r]; ok {
-			b.WriteString(folded)
-			prevDash = false
-			continue
-		}
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
-			b.WriteRune(r)
-			prevDash = false
-		default:
-			// Underscore is legal in an id but a hyphen is what a typed name
-			// wants; one separator keeps generated ids uniform.
-			if !prevDash && b.Len() > 0 {
-				b.WriteByte('-')
-				prevDash = true
-			}
-		}
-	}
-	out := strings.Trim(b.String(), "-")
-	if len(out) > maxMCPServerNameLen {
-		out = strings.Trim(out[:maxMCPServerNameLen], "-")
-	}
-	return out
-}
-
-// asciiFold maps the accented Latin letters a European org actually types onto
-// their base letter. Deliberately a table and not a Unicode normalisation pass:
-// the set that matters here is small and closed, and a table cannot pull a
-// text-segmentation dependency into the daemon.
-var asciiFold = map[rune]string{
-	'á': "a", 'à': "a", 'â': "a", 'ä': "a", 'ã': "a", 'å': "a", 'ā': "a",
-	'æ': "ae",
-	'ç': "c", 'ć': "c", 'č': "c",
-	'é': "e", 'è': "e", 'ê': "e", 'ë': "e", 'ē': "e", 'ę': "e",
-	'í': "i", 'ì': "i", 'î': "i", 'ï': "i", 'ī': "i",
-	'ñ': "n", 'ń': "n",
-	'ó': "o", 'ò': "o", 'ô': "o", 'ö': "o", 'õ': "o", 'ø': "o", 'ō': "o",
-	'ú': "u", 'ù': "u", 'û': "u", 'ü': "u", 'ū': "u",
-	'ý': "y", 'ÿ': "y",
-	'ß': "ss",
-	'đ': "d", 'ð': "d",
-	'ł': "l",
-	'ś': "s", 'š': "s",
-	'ż': "z", 'ź': "z", 'ž': "z",
-	'þ': "th",
-}
-
-// fallbackMCPServerName is the base used when a label slugs to nothing —
-// a name in a script with no Latin letters, or one made only of punctuation.
-// The uniqueness pass then makes it mcp-server, mcp-server-2, and so on.
+// fallbackMCPServerName is the base used when a label slugs to nothing — a name
+// in a script with no Latin letters, or one made only of punctuation. The
+// uniqueness pass then makes it mcp-server, mcp-server-2, and so on.
 const fallbackMCPServerName = "mcp-server"
 
-// uniqueMCPServerName resolves a generated base to a name no one is using.
-//
-// Numbered rather than random: the id shows up in the palette and in flow JSON,
-// so "mcp-test-2" is worth the lookup that a "mcp-test-x7f2" would save. The
-// scan covers the org's own rows AND the instance-wide servers an operator
+// uniqueMCPServerName picks a free id, deciding what "taken" means for an MCP
+// server: the org's own rows AND the instance-wide servers an operator
 // registered, because the catalog refuses a tenant name that collides with one
 // of those — better to pick a free id here than to save a row that can never
 // connect.
 func (m *MCPServers) uniqueMCPServerName(ctx context.Context, tenant, base string) (string, error) {
-	if base == "" {
-		base = fallbackMCPServerName
-	}
 	rows, err := m.Store.List(ctx, tenant)
 	if err != nil {
 		return "", err
@@ -308,59 +200,13 @@ func (m *MCPServers) uniqueMCPServerName(ctx context.Context, tenant, base strin
 			}
 		}
 	}
-	if !taken[base] {
-		return base, nil
-	}
-	// One more than the per-tenant cap, so the loop cannot run out of numbers
-	// before Save runs out of rows it would allow.
-	for n := 2; n <= maxMCPServersPerTenant+1; n++ {
-		suffix := fmt.Sprintf("-%d", n)
-		stem := base
-		if len(stem)+len(suffix) > maxMCPServerNameLen {
-			stem = strings.Trim(stem[:maxMCPServerNameLen-len(suffix)], "-")
-		}
-		candidate := stem + suffix
-		if !taken[candidate] {
-			return candidate, nil
-		}
-	}
-	return "", fmt.Errorf("could not derive a free name from %q — every variant is taken", base)
+	return uniqueStepSourceName(base, fallbackMCPServerName, taken, maxMCPServersPerTenant)
 }
 
-// validMCPServerURL refuses what should never be dialed before the request is
-// ever made.
-//
-// The dial guard is the real defence — it sees the resolved IP and so catches
-// a hostname pointed inward — but a URL is worth refusing at SAVE time when it
-// can be: an admin who typos gets told immediately rather than watching a
-// server sit permanently in error.
-//
-// Cleartext http is refused because the credential rides in a header. The one
-// exception is a deployment that opted into private egress, which is how a
-// developer reaches an MCP server on their own laptop; on such a deployment
-// the operator has already said the network is trusted.
-func validMCPServerURL(raw string) error {
-	if strings.TrimSpace(raw) == "" {
-		return fmt.Errorf("URL is empty")
-	}
-	u, err := url.Parse(raw)
-	if err != nil {
-		return fmt.Errorf("URL is not valid: %w", err)
-	}
-	switch u.Scheme {
-	case "https":
-	case "http":
-		if !hfnet.PrivateEgressAllowed() {
-			return fmt.Errorf("URL must be https — a token sent over http is readable in transit")
-		}
-	default:
-		return fmt.Errorf("URL must start with https://")
-	}
-	if u.Host == "" {
-		return fmt.Errorf("URL has no host")
-	}
-	return nil
-}
+// maxMCPServerLabelLen bounds the display name. Long enough for a sentence
+// fragment an admin would actually type, short enough that the list stays a
+// list.
+const maxMCPServerLabelLen = 96
 
 // validMCPAuth checks the credential fields hang together.
 func validMCPAuth(kind MCPAuthKind, header string) error {
@@ -499,13 +345,13 @@ func (m *MCPServers) Save(ctx context.Context, tenant, actor string, in MCPServe
 		if label == "" {
 			return MCPServer{}, fmt.Errorf("name is empty")
 		}
-		name, err := m.uniqueMCPServerName(ctx, tenant, slugMCPServerName(label))
+		name, err := m.uniqueMCPServerName(ctx, tenant, slugStepSourceName(label))
 		if err != nil {
 			return MCPServer{}, err
 		}
 		return m.save(ctx, tenant, actor, in, name, label)
 	}
-	if err := validMCPServerName(name); err != nil {
+	if err := validStepSourceName(name); err != nil {
 		return MCPServer{}, err
 	}
 	return m.save(ctx, tenant, actor, in, name, label)
@@ -516,7 +362,7 @@ func (m *MCPServers) Save(ctx context.Context, tenant, actor string, in MCPServe
 // one decision instead of threading a flag through eighty lines.
 func (m *MCPServers) save(ctx context.Context, tenant, actor string, in MCPServerInput, name, label string) (MCPServer, error) {
 	rawURL := strings.TrimSpace(in.URL)
-	if err := validMCPServerURL(rawURL); err != nil {
+	if err := validStepSourceURL(rawURL); err != nil {
 		return MCPServer{}, err
 	}
 	kind := in.AuthKind

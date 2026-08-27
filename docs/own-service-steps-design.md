@@ -1,10 +1,10 @@
 # Steps for your own service — design note
 
-Status: **PHASE 1 ENGINE HALF BUILT** (`internal/schemaports`, `engine/webapi`,
-resolver + `cmd/dzd` wiring; no store, no admin API, no UI — so nothing
-registers a catalog yet and no step exists in any palette). Everything below
-about phases 2 and 3 is still design only. See "Commit 1 as built" at the end
-for what the build changed about this note. Written 2026-08-27, the same day as
+Status: **PHASE 1 BUILT** — a tenant can describe their own service in Admin →
+Web APIs and get one step per operation, in the palette and in the flow
+generator. Phases 2 (OpenAPI import) and 3 (reach through a runner) are still
+design only. The two "as built" sections at the end record what the build changed
+about this note. Written 2026-08-27, the same day as
 [docs/mcp-on-runners-design.md](./mcp-on-runners-design.md) and for the same
 reason: per-org HTTP MCP servers had just shipped, the shape of a *tenant-owned
 catalog* was fresh, and this is the other thing that shape is good for. Not
@@ -189,10 +189,10 @@ visible inside a flow — and a token rotation is one edit instead of forty. Thi
 is the single biggest ergonomic difference from `http_request` and it costs
 almost nothing to claim.
 
-Two things to check before relying on it: that the connection scans see
-*tenant-scoped* manifests (they scan a manifest map — confirm which one), and
-that `core.ConnectionSlug` of a tenant-chosen integration name cannot collide
-with a built-in's. The name is tenant-supplied, so that check has to be real.
+Two things to check before relying on it — **both since checked, and the second
+was a real bug**; see "Commit 2 as built": the connection scans do see
+tenant-scoped manifests, and a tenant-chosen integration name absolutely could
+collide with a built-in's slug.
 
 ## The hard parts
 
@@ -269,7 +269,7 @@ means calls land on any of them, which is right for HTTP and needs no caveat.
 1. **Custom HTTP step, tenant-defined, with `ConnectionFields`.** Descriptor,
    synthesis, executor via `drops/net.Do`, store, reconcile, admin page. The
    smallest thing that closes the actual gap, and it establishes everything the
-   next two phases reuse.
+   next two phases reuse. **Built** — see the two sections below.
 2. **OpenAPI import** as a second front end onto the same descriptor: fetch or
    paste, parse, pick operations, refresh-as-diff.
 3. **Reach through a runner** — one field, for the internal-service case.
@@ -398,3 +398,87 @@ manifests reaching the generator the way `daemon/mcpservers_flowgen_test.go`
 pins MCP's. Also worth doing then: `drops/internal/mimetype` is walled off from
 `engine/` by Go's internal rule and now has a second caller that wants it, so it
 belongs in `internal/`.
+
+## Commit 2 as built (2026-08-27)
+
+Persistence, the admin API, the page, and the grounding test. `daemon/webapis.go`
++ `daemon/webapis_pg.go` (store, service, reconcile), `daemon/httpwebapis.go`
+(four routes under `/api/v1/admin/web-apis`), `web/src/pages/admin/AdminWebAPIs.tsx`,
+and `daemon/webapis_flowgen_test.go`.
+
+**The prediction held: no credential storage.** `tenant_web_apis` has no
+`auth_secret` column, no sealing, no `SealedToken`, and `WebAPIs` needs no
+`EncryptedSecrets` dependency — the whole of MCP's write-only-column care is
+absent because there is nothing here to protect. The credential lives in the
+org's connection for the integration and reaches the step as an injected param.
+One consequence worth stating: `daemon.WebAPI` is safe to log, return, and audit
+*by construction* rather than by convention, and the API test asserts the wire
+row has nowhere to put a token.
+
+**One validation, called twice over.** `Save` builds the descriptor and calls
+`webapi.Descriptor.Validate()` rather than restating its rules, so a row that
+saves is a row that registers, and the message an admin sees next to the field is
+the engine's own. The daemon adds only what is POLICY and not assemblability:
+https-unless-private-egress (shared with MCP servers), the label length, the
+name derivation, and the caps.
+
+**What the shared step-source rules turned out to be.** Extracted to
+`daemon/stepsources.go` when the second source arrived: the slug (with its
+diacritic-folding table), the id charset, the numbered uniqueness pass, and the
+URL policy. `requireStepSourceAdmin` already used that vocabulary, which is how
+the file got its name. MCP keeps only what differs — its taken-set includes the
+operator's instance-wide servers, a web API's does not.
+
+**Where the two features genuinely diverge, and why the UI says so.** There is no
+`refresh` route and no "connected" chip. A described API has nothing to
+re-handshake with, so re-reading its operations is a save (and belongs to the
+importer); and since no call was made, the strong status is *"in your palette"* —
+the daemon holds the catalog and the steps resolve. A green light implying the
+service answers would be the one lie the page could tell. `last_error` therefore
+means something narrower than MCP's: the reconcile loop could not register a
+STORED row, which is only reachable when a later release tightens validation.
+Without it an org would experience that as steps quietly gone.
+
+**The integration-slug collision was real, and worse than the note guessed.**
+`connectionFieldsForSlug` scans the tenant's whole manifest map and takes the
+FIRST match — over a Go map, so the order is random. A tenant naming their
+catalog's app "Gmail" would therefore make the Gmail connection page show their
+web-API fields on some requests and Gmail's on others. Two rules now stop it: a
+`ReservedIntegration` hook (the `RemoteCatalog.Reserved` pattern), wired at
+startup from every integration the native registry names — not only the
+connectable ones, since a name that has no connection today would collide the day
+it gains one — and a per-org uniqueness check, because two catalogs sharing a
+slug would share one connection and send one's address from the other.
+
+A second, quieter version of the same bug: the slug lands inside a secret name
+(`conn.<slug>.<field>`) and that validator allows only `[A-Za-z0-9_.-]`. An app
+called "Ordrar!" would have saved fine and then failed at CONNECT time, with an
+error about secret names on a page the admin could not connect to what they
+typed. The name is validated where it is entered instead.
+
+Where an app name is DERIVED rather than typed it falls back to the catalog's own
+id when the label is taken, because a duplicate label is legal — that is what the
+numbered ids are for, and refusing the second "Order service" would make the id
+derivation pointless. And an existing app name is never re-derived: an edit that
+changed only the base URL would otherwise resolve from an empty label, land on
+the id, and quietly orphan the address and credential the org had already
+entered. Moving the connection now requires asking for the move.
+
+**Caps chosen.** 100 catalogs per org, 60 operations per catalog, 40 arguments
+per operation. The operation cap is the curation guard this note argues for, and
+it is set where a hand-built catalog never meets it and a vendor spec import
+always will — which is the intended pressure: the importer must offer selection
+rather than raise the number.
+
+**The operation editor is where the UI effort went**, because it is where the
+value is entered: a step beats a generic web request only if its arguments are
+named, typed and placed. Two decisions inside it are worth keeping — a body
+argument is offered only when the operation sends a JSON body (the daemon would
+refuse it otherwise, and preventing beats explaining), and switching a body mode
+away from JSON REHOMES body arguments to the query string rather than dropping
+what the admin typed.
+
+**Still owed.** `drops/internal/mimetype` is walled off from `engine/` by Go's
+internal rule and now has a second caller that wants it; it belongs in
+`internal/`. `engine/mcp` still hands port text to tools uncoerced (see commit
+1). Neither is this feature's business to fix.
