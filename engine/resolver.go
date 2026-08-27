@@ -10,6 +10,7 @@ import (
 
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/engine/mcp"
+	"git.sr.ht/~klahr/dazyflow/engine/webapi"
 )
 
 // Resolver looks up the Transport responsible for executing a given module
@@ -50,13 +51,14 @@ func WithResolver(ctx context.Context, r Resolver) context.Context {
 }
 
 // NodeResolver is the default Resolver. It consults catalogs in order:
-// native registry → remote (gRPC) modules → MCP tools. (A subprocess
-// "local descriptor" catalog existed in the plugin era; it was never
+// native registry → remote (gRPC) modules → MCP tools → web-API steps. (A
+// subprocess "local descriptor" catalog existed in the plugin era; it was never
 // wired into dzd and was removed once every drop went native.)
 type NodeResolver struct {
 	Native *Registry
 	Remote *RemoteCatalog
 	MCP    *mcp.Catalog
+	WebAPI *webapi.Catalog
 
 	// DropGate, when set, is the platform-admin killswitch. It's consulted
 	// after a transport is found but before it's returned, receiving the
@@ -91,7 +93,7 @@ func (r *NodeResolver) Resolve(ctx context.Context, moduleID string) (core.Trans
 }
 
 // lookup returns the first transport for id across the catalogs, in
-// priority order (native → remote → MCP).
+// priority order (native → remote → MCP → web API).
 //
 // Takes a ctx solely to read the executing tenant: native and MCP drops are
 // instance-wide, but a remote belongs to exactly one tenant and must not be
@@ -118,6 +120,15 @@ func (r *NodeResolver) lookup(ctx context.Context, id string) (core.Transport, b
 		// instance-wide servers.
 		tenant, _ := core.TenantFromContext(ctx)
 		if t, ok := r.MCP.Get(tenant, id); ok {
+			return t, true
+		}
+	}
+	if r.WebAPI != nil {
+		// Every web-API catalog belongs to exactly one tenant — there is no
+		// instance-wide population — so an absent tenant resolves nothing here
+		// rather than falling back to something shared.
+		tenant, _ := core.TenantFromContext(ctx)
+		if t, ok := r.WebAPI.Get(tenant, id); ok {
 			return t, true
 		}
 	}
@@ -165,6 +176,12 @@ func (r *NodeResolver) ManifestsForTenant(tenant string) map[string]core.Manifes
 		// Instance-wide servers plus this org's own — the same two populations
 		// Get resolves across, so the palette shows exactly what will resolve.
 		addKeeping(out, r.MCP.ManifestsFor(tenant))
+	}
+	if r.WebAPI != nil {
+		// This org's own described APIs. Empty tenant yields nothing, matching
+		// Get. keepExisting for the same reason as the two above, though an
+		// `api:`-prefixed id cannot collide with a native one by construction.
+		addKeeping(out, r.WebAPI.ManifestsFor(tenant))
 	}
 	return out
 }

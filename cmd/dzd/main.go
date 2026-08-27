@@ -66,6 +66,7 @@ import (
 	"git.sr.ht/~klahr/dazyflow/engine"
 	"git.sr.ht/~klahr/dazyflow/engine/jobstore"
 	"git.sr.ht/~klahr/dazyflow/engine/mcp"
+	"git.sr.ht/~klahr/dazyflow/engine/webapi"
 	"git.sr.ht/~klahr/dazyflow/pollstate"
 )
 
@@ -510,6 +511,11 @@ func main() {
 	// two populations are keyed apart inside the catalog (instance-wide vs
 	// tenant), so an org's server is resolvable only by that org.
 	tenantMCP := setupTenantMCPServers(ctx, pgPool, mcpCatalog, encryptedSecrets)
+	// An org's described HTTP APIs — their own service, one step per operation.
+	// Nothing registers a catalog yet: the store and the admin page that fill
+	// this are the next commit, and until then it resolves nothing. Wired here
+	// so the resolver and the guarded HTTP caller are in place first.
+	webAPICatalog := webapi.NewCatalog()
 
 	// Write dedupe for non-idempotent external writes (Twilio SMS, Gmail/
 	// Discord/Sheets/Home Assistant). Postgres-backed and shared so a lease
@@ -529,6 +535,7 @@ func main() {
 			Native: engine.Default,
 			Remote: remoteCatalog,
 			MCP:    mcpCatalog,
+			WebAPI: webAPICatalog,
 			// Platform-admin killswitch: refuse a drop a platform admin has
 			// switched off, globally or for the executing tenant. Checked
 			// per node, lock-free from the store's in-memory snapshot.
@@ -977,6 +984,14 @@ func applyNetworkPolicy(httpEgressAllow string, devMode bool) {
 	// engine/mcp cannot reach drops/net without an import cycle — and set
 	// AFTER the private-egress opt-in above, whose value it reads.
 	mcp.SetDialControl(hfnet.SSRFDialControl())
+
+	// A web-API step calls a URL its own org supplied, so it must go through
+	// exactly the caller http_request uses: the SSRF dial guard, the per-tenant
+	// egress allowlist, the per-(tenant, host) rate limit and 429 cooldown, and
+	// a response cap. engine/webapi cannot import drops/net (drops/net imports
+	// engine), so the function is injected here — the same hook pattern, and the
+	// same cycle, as SetDialControl above.
+	webapi.SetDoer(hfnet.Do)
 }
 
 // coreStores bundles the durable control-plane stores that share one pool.
