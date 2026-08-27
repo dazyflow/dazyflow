@@ -165,6 +165,19 @@ into the image.)
   (`Cron / schedule` → `#cron--schedule`), with GitHub's `-1` suffix for a
   repeated heading so no page emits a duplicate id.
 
+### Changed
+
+- **MCP servers are named, not slugged.** The Name field in Admin → MCP servers
+  now takes whatever you would actually call the server — `MCP Test`,
+  `Kundregister (test)` — instead of demanding lowercase and hyphens. Dazyflow
+  derives a short id from it once (`mcp-test`), shows it under the name in the
+  list, and builds the step ids from that, so a tool is still
+  `mcp:mcp-test:<tool>`. Two servers whose names derive the same id get
+  `-2`, `-3`, and so on rather than colliding.
+- **An MCP server can be renamed.** The derived id is what flows reference, so
+  the display name is now free to change: its steps re-caption in the palette
+  and every flow keeps working. The id itself is still fixed at creation.
+
 ## [0.17.0] - 2026-08-27
 
 ### Added

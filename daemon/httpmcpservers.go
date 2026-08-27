@@ -26,7 +26,13 @@ import (
 // carry one back to a browser even if a future handler forgets to think
 // about it.
 type mcpServerRow struct {
-	Name     string `json:"name"`
+	// Name is the id flows reference. Read-only after creation: the client
+	// shows it, it does not offer to change it.
+	Name string `json:"name"`
+	// Label is the display name. Always populated on the wire — a row saved
+	// before labels existed reports its id here, so a client never has to
+	// implement the fallback itself.
+	Label    string `json:"label"`
 	URL      string `json:"url"`
 	AuthKind string `json:"auth_kind"`
 	// AuthHeader is the header name for auth_kind "header". The NAME is not a
@@ -53,7 +59,13 @@ type mcpServerRow struct {
 }
 
 type mcpServerRequest struct {
-	Name       string `json:"name"`
+	// Label is the display name and, on a create, what the id is derived from.
+	// Blank on an edit keeps the stored one.
+	Label string `json:"label,omitempty"`
+	// Name sets the id explicitly. The UI never sends it on a create — it
+	// sends Label and lets the daemon derive one. Kept for an API caller that
+	// wants to choose the id its flows will reference.
+	Name       string `json:"name,omitempty"`
 	URL        string `json:"url"`
 	AuthKind   string `json:"auth_kind"`
 	AuthHeader string `json:"auth_header,omitempty"`
@@ -84,6 +96,7 @@ func (h *HTTPGateway) mcpRowFor(s MCPServer, live map[string][]string) mcpServer
 	ids, connected := live[s.Name]
 	return mcpServerRow{
 		Name:          s.Name,
+		Label:         s.DisplayName(),
 		URL:           s.URL,
 		AuthKind:      string(s.AuthKind),
 		AuthHeader:    s.AuthHeader,
@@ -151,11 +164,13 @@ func (h *HTTPGateway) saveMCPServer(rw http.ResponseWriter, r *http.Request, p c
 	}
 	// On PUT the name is in the path and the body's copy is ignored, so a
 	// mismatched body cannot rename (and thereby re-key) a server behind the
-	// caller's back.
+	// caller's back. The LABEL is free to change on the same request: nothing
+	// references it, so renaming what a human sees costs nothing.
 	if pathName := r.PathValue("name"); pathName != "" {
 		req.Name = pathName
 	}
 	in := MCPServerInput{
+		Label:      req.Label,
 		Name:       req.Name,
 		URL:        req.URL,
 		AuthKind:   MCPAuthKind(req.AuthKind),

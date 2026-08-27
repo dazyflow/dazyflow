@@ -70,6 +70,13 @@ func SetDialControl(fn DialControl) {
 type HTTPDescriptor struct {
 	// Name is the server identifier used in tool IDs (mcp:<name>:<tool>).
 	Name string
+	// Label is the display name shown on the steps this server contributes.
+	// Empty falls back to Name — an operator's instance-wide server has no
+	// separate label, and neither does a row saved before labels existed.
+	//
+	// Display only: nothing is keyed by it, so an org editing it re-registers
+	// the same tools under the same ids with new captions.
+	Label string
 	// Tenant owning this server. Empty means instance-wide — the operator's
 	// own servers, visible to every org. A tenant's server is reachable ONLY
 	// by that tenant: the catalog is keyed by (tenant, id), so a lookup for

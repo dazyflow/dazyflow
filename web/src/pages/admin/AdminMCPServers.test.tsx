@@ -39,6 +39,7 @@ import { AdminMCPServers } from "./AdminMCPServers";
 
 const connected = {
   name: "vendor",
+  label: "Vendor Tools",
   url: "https://vendor.test/mcp",
   auth_kind: "bearer" as const,
   has_token: true,
@@ -65,7 +66,7 @@ describe("AdminMCPServers", () => {
 
   it("does not ask for the token again when one is already stored", async () => {
     render(<AdminMCPServers />);
-    await screen.findByText("vendor");
+    await screen.findByText("Vendor Tools");
     await userEvent.click(screen.getByLabelText("common.edit"));
 
     const token = await screen.findByLabelText("mcp.tokenLabel");
@@ -75,19 +76,62 @@ describe("AdminMCPServers", () => {
     expect(token).toHaveAttribute("placeholder", "mcp.tokenKeepPlaceholder");
   });
 
-  it("locks the name when editing, because flows reference it", async () => {
+  it("shows the id under the name, because that is what the palette says", async () => {
     render(<AdminMCPServers />);
-    await screen.findByText("vendor");
+    // Both, and distinctly: an admin who called it "Vendor Tools" is looking
+    // for mcp:vendor:* among their steps.
+    expect(await screen.findByText("Vendor Tools")).toBeInTheDocument();
+    expect(screen.getByText("vendor")).toBeInTheDocument();
+  });
+
+  it("lets the name be edited while the id stays put", async () => {
+    saveMCPServer.mockResolvedValue({ ...connected, label: "Vendor tools (prod)" });
+    render(<AdminMCPServers />);
+    await screen.findByText("Vendor Tools");
     await userEvent.click(screen.getByLabelText("common.edit"));
 
-    expect(await screen.findByLabelText("mcp.nameLabel")).toBeDisabled();
-    expect(screen.getByText("mcp.nameLockedHint")).toBeInTheDocument();
+    const name = await screen.findByLabelText("mcp.nameLabel");
+    // Editable, unlike before: nothing references the display name.
+    expect(name).toBeEnabled();
+    expect(name).toHaveValue("Vendor Tools");
+    // And the hint names the id that is NOT changing, quoting it.
+    expect(screen.getByText(/mcp.nameEditHint.*vendor/)).toBeInTheDocument();
+
+    await userEvent.clear(name);
+    await userEvent.type(name, "Vendor tools (prod)");
+    await userEvent.click(screen.getByText("mcp.saveAndConnect"));
+
+    await waitFor(() => expect(saveMCPServer).toHaveBeenCalled());
+    const [, input, existingName] = saveMCPServer.mock.calls[0];
+    // The edit is addressed to the id, and carries the new label only.
+    expect(existingName).toBe("vendor");
+    expect(input.label).toBe("Vendor tools (prod)");
+    expect(input.name).toBeUndefined();
+  });
+
+  it("sends a new server by name alone and lets the daemon derive the id", async () => {
+    saveMCPServer.mockResolvedValue({ ...connected, name: "mcp-test", label: "MCP Test" });
+    render(<AdminMCPServers />);
+    await screen.findByText("Vendor Tools");
+    await userEvent.click(screen.getByText("mcp.add"));
+
+    await userEvent.type(await screen.findByLabelText("mcp.nameLabel"), "MCP Test");
+    await userEvent.type(screen.getByLabelText("mcp.urlLabel"), "https://mcp.test/mcp");
+    await userEvent.click(screen.getByText("mcp.saveAndConnect"));
+
+    await waitFor(() => expect(saveMCPServer).toHaveBeenCalled());
+    const [, input, existingName] = saveMCPServer.mock.calls[0];
+    expect(existingName).toBeUndefined();
+    expect(input.label).toBe("MCP Test");
+    // No id is invented client-side: two clients slugging differently would be
+    // two ids for the same typed name.
+    expect(input.name).toBeUndefined();
   });
 
   it("sends no token field when the box was left blank, so the stored one is kept", async () => {
     saveMCPServer.mockResolvedValue({ ...connected, url: "https://moved.test/mcp" });
     render(<AdminMCPServers />);
-    await screen.findByText("vendor");
+    await screen.findByText("Vendor Tools");
     await userEvent.click(screen.getByLabelText("common.edit"));
 
     const url = await screen.findByLabelText("mcp.urlLabel");
@@ -111,7 +155,7 @@ describe("AdminMCPServers", () => {
       last_error: "mcp server refused the credential (HTTP 401)",
     });
     render(<AdminMCPServers />);
-    await screen.findByText("vendor");
+    await screen.findByText("Vendor Tools");
     await userEvent.click(screen.getByLabelText("common.edit"));
     await userEvent.click(screen.getByText("mcp.saveAndConnect"));
 
@@ -121,7 +165,7 @@ describe("AdminMCPServers", () => {
   it("confirms before removing, because flows stop running", async () => {
     deleteMCPServer.mockResolvedValue({ deleted: "vendor" });
     render(<AdminMCPServers />);
-    await screen.findByText("vendor");
+    await screen.findByText("Vendor Tools");
     await userEvent.click(screen.getByLabelText("common.remove"));
 
     expect(await screen.findByText(/mcp.removeReally/)).toBeInTheDocument();
@@ -143,7 +187,7 @@ describe("AdminMCPServers", () => {
   it("offers the add form with no server preloaded", async () => {
     saveMCPServer.mockResolvedValue(connected);
     render(<AdminMCPServers />);
-    await screen.findByText("vendor");
+    await screen.findByText("Vendor Tools");
     await userEvent.click(screen.getByText("mcp.add"));
 
     const name = await screen.findByLabelText("mcp.nameLabel");

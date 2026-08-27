@@ -33,13 +33,13 @@ func NewPgMCPServerStore(ctx context.Context, pool *pgxpool.Pool) (*PgMCPServerS
 // order. auth_secret is absent on purpose: a credential leaves the table only
 // through SealedToken, so no ordinary list or lookup can carry one into a log
 // line or an API response by accident.
-const mcpServerColumns = `tenant, name, url, auth_kind, auth_header, enabled,
+const mcpServerColumns = `tenant, name, label, url, auth_kind, auth_header, enabled,
 	created_by, created_at, updated_at, tool_count, last_error, last_connected`
 
 func scanMCPServer(row pgx.Row) (MCPServer, error) {
 	var s MCPServer
 	var lastConnected *time.Time
-	if err := row.Scan(&s.Tenant, &s.Name, &s.URL, &s.AuthKind, &s.AuthHeader, &s.Enabled,
+	if err := row.Scan(&s.Tenant, &s.Name, &s.Label, &s.URL, &s.AuthKind, &s.AuthHeader, &s.Enabled,
 		&s.CreatedBy, &s.CreatedAt, &s.UpdatedAt, &s.ToolCount, &s.LastError, &lastConnected); err != nil {
 		return MCPServer{}, err
 	}
@@ -51,7 +51,7 @@ func scanMCPServer(row pgx.Row) (MCPServer, error) {
 
 func (s *PgMCPServerStore) List(ctx context.Context, tenant string) ([]MCPServer, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT `+mcpServerColumns+` FROM tenant_mcp_servers WHERE tenant = $1 ORDER BY name`, tenant)
+		`SELECT `+mcpServerColumns+` FROM tenant_mcp_servers WHERE tenant = $1 ORDER BY COALESCE(NULLIF(label, ''), name), name`, tenant)
 	if err != nil {
 		return nil, err
 	}
@@ -103,17 +103,18 @@ func (s *PgMCPServerStore) Get(ctx context.Context, tenant, name string) (MCPSer
 func (s *PgMCPServerStore) Put(ctx context.Context, m MCPServer, sealedToken []byte) error {
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO tenant_mcp_servers
-			(tenant, name, url, auth_kind, auth_header, auth_secret, enabled,
+			(tenant, name, label, url, auth_kind, auth_header, auth_secret, enabled,
 			 created_by, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		ON CONFLICT (tenant, name) DO UPDATE SET
+			label       = EXCLUDED.label,
 			url         = EXCLUDED.url,
 			auth_kind   = EXCLUDED.auth_kind,
 			auth_header = EXCLUDED.auth_header,
 			auth_secret = COALESCE(EXCLUDED.auth_secret, tenant_mcp_servers.auth_secret),
 			enabled     = EXCLUDED.enabled,
 			updated_at  = EXCLUDED.updated_at`,
-		m.Tenant, m.Name, m.URL, string(m.AuthKind), m.AuthHeader, sealedToken, m.Enabled,
+		m.Tenant, m.Name, m.Label, m.URL, string(m.AuthKind), m.AuthHeader, sealedToken, m.Enabled,
 		m.CreatedBy, m.CreatedAt, m.UpdatedAt)
 	return err
 }

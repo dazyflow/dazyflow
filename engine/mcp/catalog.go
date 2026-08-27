@@ -177,7 +177,7 @@ func (c *Catalog) RegisterStdio(desc StdioDescriptor) error {
 		}
 	}
 
-	if err := c.attach("", desc.Name, client, info.ServerInfo, tools, closer); err != nil {
+	if err := c.attach("", desc.Name, "", client, info.ServerInfo, tools, closer); err != nil {
 		killSubprocess(cmd, stdin)
 		return err
 	}
@@ -214,7 +214,7 @@ func (c *Catalog) RegisterHTTP(desc HTTPDescriptor) error {
 		_ = client.Close()
 		return fmt.Errorf("list tools %q: %w", desc.Name, err)
 	}
-	if err := c.attach(desc.Tenant, desc.Name, client, info.ServerInfo, tools, client.Close); err != nil {
+	if err := c.attach(desc.Tenant, desc.Name, desc.Label, client, info.ServerInfo, tools, client.Close); err != nil {
 		_ = client.Close()
 		return err
 	}
@@ -232,7 +232,7 @@ func (c *Catalog) RegisterStream(name string, client *Client, info ServerInfo, t
 
 // RegisterStreamFor is RegisterStream with an explicit tenant.
 func (c *Catalog) RegisterStreamFor(tenant, name string, client *Client, info ServerInfo, tools []Tool, closer func() error) error {
-	return c.attach(tenant, name, client, info, tools, closer)
+	return c.attach(tenant, name, "", client, info, tools, closer)
 }
 
 func (c *Catalog) handshakeTimeout() time.Duration {
@@ -250,7 +250,10 @@ func (c *Catalog) handshakeTimeout() time.Duration {
 // two would disagree silently: NodeResolver prefers the tenant's entry, so an
 // org that named its server "github" would keep composing flows against the
 // operator's tool descriptions while every run went somewhere else.
-func (c *Catalog) attach(tenant, name string, client session, info ServerInfo, tools []Tool, closer func() error) error {
+func (c *Catalog) attach(tenant, name, label string, client session, info ServerInfo, tools []Tool, closer func() error) error {
+	if label == "" {
+		label = name
+	}
 	if tenant != "" {
 		c.mu.RLock()
 		_, clash := c.servers[serverKey{tenant: "", name: name}]
@@ -263,7 +266,7 @@ func (c *Catalog) attach(tenant, name string, client session, info ServerInfo, t
 	// An HTTP session takes concurrent calls; a stdio one shares a single pair
 	// of pipes and must not.
 	_, isHTTP := client.(*HTTPClient)
-	conn := &serverConn{name: name, tenant: tenant, client: client, info: info, closer: closer, concurrent: isHTTP}
+	conn := &serverConn{name: name, label: label, tenant: tenant, client: client, info: info, closer: closer, concurrent: isHTTP}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -282,7 +285,7 @@ func (c *Catalog) attach(tenant, name string, client session, info ServerInfo, t
 		c.tools[toolKey{tenant: tenant, id: "mcp:" + name + ":" + tool.Name}] = &Transport{
 			serverName: name,
 			toolName:   tool.Name,
-			manifest:   synthesizeManifest(name, tool),
+			manifest:   synthesizeManifest(name, label, tool),
 			server:     conn,
 		}
 	}
@@ -364,7 +367,9 @@ func (c *Catalog) ManifestsFor(tenant string) map[string]core.Manifest {
 // name flows reference it by, what the server called itself at handshake, and
 // the tools it contributed.
 type ServerStatus struct {
-	Name    string
+	Name string
+	// Label is the display name, defaulted to Name when the server has none.
+	Label   string
 	Tenant  string
 	Info    ServerInfo
 	ToolIDs []string
@@ -380,7 +385,7 @@ func (c *Catalog) ServersFor(tenant string) []ServerStatus {
 		if key.tenant != "" && key.tenant != tenant {
 			continue
 		}
-		st := ServerStatus{Name: key.name, Tenant: key.tenant, Info: conn.info}
+		st := ServerStatus{Name: key.name, Label: conn.label, Tenant: key.tenant, Info: conn.info}
 		for id, t := range c.tools {
 			if id.tenant == key.tenant && t.serverName == key.name {
 				st.ToolIDs = append(st.ToolIDs, id.id)

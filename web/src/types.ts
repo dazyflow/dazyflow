@@ -914,9 +914,14 @@ export type Runner = {
 // server-side and the read path does not select it. has_token is what the edit
 // form needs instead — whether there is something stored to keep.
 export type MCPServer = {
-  // name is what flows reference. Saving under a different name is a NEW
-  // server, not a rename: the old step ids stop resolving.
+  // name is the id flows reference, derived from the label when the server was
+  // created and frozen from then on: renaming it would be a NEW server, and
+  // the old step ids would stop resolving.
   name: string;
+  // label is the display name — what the admin typed, free of the id rules.
+  // Always populated: a server saved before labels existed reports its id
+  // here, so nothing on this side needs a fallback.
+  label: string;
   url: string;
   auth_kind: "none" | "bearer" | "header";
   // auth_header is the header name for auth_kind "header". The name is not
@@ -943,7 +948,12 @@ export type MCPServer = {
 // MCPServerInput is what the form submits. token empty on an edit means "keep
 // the stored one".
 export type MCPServerInput = {
-  name: string;
+  // label is what the admin typed. On a create the daemon derives the id from
+  // it; on an edit it is the one part of the identity that can still change.
+  label: string;
+  // name is never sent by this app — the daemon derives the id. It stays on
+  // the type because the endpoint still accepts an explicit one.
+  name?: string;
   url: string;
   auth_kind: "none" | "bearer" | "header";
   auth_header?: string;

@@ -11487,6 +11487,14 @@ button:active,
   overflow-wrap: anywhere;
   max-width: 32ch;
 }
+/* The id under a server's display name. Monospaced and quiet: it is what the
+   palette and flow JSON show, worth being able to find but not the thing being
+   read down the column. */
+.mcp-id {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 400;
+}
 .mcp-tools {
   font-family: var(--font-mono);
   font-size: var(--text-sm);

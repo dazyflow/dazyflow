@@ -450,3 +450,184 @@ func TestSecretReference(t *testing.T) {
 		}
 	}
 }
+
+func TestSlugMCPServerName(t *testing.T) {
+	cases := map[string]string{
+		"MCP Test":            "mcp-test",
+		"GitHub":              "github",
+		"  Vendor   Tools  ":  "vendor-tools",
+		"Kundregister (test)": "kundregister-test",
+		// Diacritics fold to their base letter rather than being dropped: the
+		// id is read by people, and "bokf-ring" is not a name.
+		"Bokföring":  "bokforing",
+		"Grüße":      "grusse",
+		"Ærø Data":   "aero-data",
+		"---weird--": "weird",
+		"v2.1 API":   "v2-1-api",
+		// Nothing slug-able at all. The caller substitutes a generic base.
+		"日本語": "",
+		"!!!": "",
+		"":    "",
+	}
+	for in, want := range cases {
+		if got := slugMCPServerName(in); got != want {
+			t.Errorf("slugMCPServerName(%q) = %q, want %q", in, got, want)
+		}
+	}
+	// Truncation cannot leave a trailing hyphen, which would be a legal but
+	// ugly id.
+	long := slugMCPServerName(strings.Repeat("ab ", 40))
+	if len(long) > maxMCPServerNameLen || strings.HasSuffix(long, "-") {
+		t.Errorf("long slug = %q (len %d)", long, len(long))
+	}
+}
+
+// TestMCPServers_SaveDerivesIdFromLabel is the whole point of labels: an admin
+// types a name with a space and a capital in it, and the step ids their flows
+// will hold are still ids.
+func TestMCPServers_SaveDerivesIdFromLabel(t *testing.T) {
+	srv := (&fakeMCPEndpoint{toolNames: []string{"search"}}).start(t)
+	svc, cat := newTestMCPServers(t)
+	ctx := context.Background()
+
+	saved, err := svc.Save(ctx, "acme", "admin@acme.test", MCPServerInput{
+		Label: "MCP Test", URL: srv.URL, Enabled: true,
+	})
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if saved.Name != "mcp-test" {
+		t.Fatalf("derived name = %q, want mcp-test", saved.Name)
+	}
+	if saved.Label != "MCP Test" {
+		t.Fatalf("label = %q, want it kept verbatim", saved.Label)
+	}
+	if _, ok := cat.Get("acme", "mcp:mcp-test:search"); !ok {
+		t.Fatal("step not resolvable under the derived id")
+	}
+	// The palette caption is the human name, not the id — otherwise deriving
+	// one would just be a worse name.
+	man, ok := cat.ManifestsFor("acme")["mcp:mcp-test:search"]
+	if !ok {
+		t.Fatal("no manifest for the derived id")
+	}
+	if man.Label != "MCP Test — search" {
+		t.Fatalf("manifest label = %q, want the typed name", man.Label)
+	}
+}
+
+// TestMCPServers_DerivedIdsDoNotCollide covers two servers a human would call
+// different things that slug to the same id. The second gets a number rather
+// than replacing the first, which would silently re-point every flow using it.
+func TestMCPServers_DerivedIdsDoNotCollide(t *testing.T) {
+	srv := (&fakeMCPEndpoint{toolNames: []string{"search"}}).start(t)
+	svc, _ := newTestMCPServers(t)
+	ctx := context.Background()
+
+	first, err := svc.Save(ctx, "acme", "a", MCPServerInput{Label: "MCP Test", URL: srv.URL, Enabled: true})
+	if err != nil {
+		t.Fatalf("first Save: %v", err)
+	}
+	second, err := svc.Save(ctx, "acme", "a", MCPServerInput{Label: "mcp test!", URL: srv.URL, Enabled: true})
+	if err != nil {
+		t.Fatalf("second Save: %v", err)
+	}
+	if first.Name != "mcp-test" || second.Name != "mcp-test-2" {
+		t.Fatalf("names = %q, %q; want mcp-test and mcp-test-2", first.Name, second.Name)
+	}
+	rows, err := svc.List(ctx, "acme")
+	if err != nil || len(rows) != 2 {
+		t.Fatalf("List = %d rows, %v; want both kept", len(rows), err)
+	}
+}
+
+// TestMCPServers_DerivedIdAvoidsAnInstanceWideName guards a save that would
+// otherwise store a row that can never connect: the catalog refuses a tenant
+// server whose name collides with an operator's instance-wide one.
+func TestMCPServers_DerivedIdAvoidsAnInstanceWideName(t *testing.T) {
+	srv := (&fakeMCPEndpoint{toolNames: []string{"search"}}).start(t)
+	svc, cat := newTestMCPServers(t)
+	ctx := context.Background()
+	if err := cat.RegisterHTTP(mcp.HTTPDescriptor{Name: "vendor", URL: srv.URL}); err != nil {
+		t.Fatalf("operator register: %v", err)
+	}
+
+	saved, err := svc.Save(ctx, "acme", "a", MCPServerInput{Label: "Vendor", URL: srv.URL, Enabled: true})
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if saved.Name != "vendor-2" {
+		t.Fatalf("derived name = %q, want vendor-2", saved.Name)
+	}
+	if saved.LastError != "" {
+		t.Fatalf("saved with error: %s", saved.LastError)
+	}
+}
+
+// TestMCPServers_LabelEditsWithoutMovingTheId is what labels buy an admin:
+// renaming a server is now an ordinary edit, because the ids the flows hold
+// are not the name any more.
+func TestMCPServers_LabelEditsWithoutMovingTheId(t *testing.T) {
+	srv := (&fakeMCPEndpoint{toolNames: []string{"search"}}).start(t)
+	svc, cat := newTestMCPServers(t)
+	ctx := context.Background()
+
+	saved, err := svc.Save(ctx, "acme", "a", MCPServerInput{Label: "MCP Test", URL: srv.URL, Enabled: true})
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	edited, err := svc.Save(ctx, "acme", "a", MCPServerInput{
+		Name: saved.Name, Label: "MCP Test (prod)", URL: srv.URL, Enabled: true,
+	})
+	if err != nil {
+		t.Fatalf("edit: %v", err)
+	}
+	if edited.Name != "mcp-test" {
+		t.Fatalf("id moved to %q on a rename", edited.Name)
+	}
+	if edited.Label != "MCP Test (prod)" {
+		t.Fatalf("label = %q, want the new one", edited.Label)
+	}
+	if _, ok := cat.Get("acme", "mcp:mcp-test:search"); !ok {
+		t.Fatal("the step id stopped resolving after a rename")
+	}
+
+	// A caller that sends no label at all — an older client changing only the
+	// URL — must not blank the stored one.
+	kept, err := svc.Save(ctx, "acme", "a", MCPServerInput{Name: saved.Name, URL: srv.URL, Enabled: true})
+	if err != nil {
+		t.Fatalf("URL-only edit: %v", err)
+	}
+	if kept.Label != "MCP Test (prod)" {
+		t.Fatalf("label = %q after a URL-only edit, want it kept", kept.Label)
+	}
+}
+
+// TestMCPServers_SaveWithNeitherNameNorLabel keeps the empty case an error
+// rather than a server called "mcp-server".
+func TestMCPServers_SaveWithNeitherNameNorLabel(t *testing.T) {
+	svc, _ := newTestMCPServers(t)
+	_, err := svc.Save(context.Background(), "acme", "a", MCPServerInput{URL: "https://x.test/mcp"})
+	if err == nil || !strings.Contains(err.Error(), "empty") {
+		t.Fatalf("err = %v, want a complaint about the missing name", err)
+	}
+}
+
+// TestMCPServers_LabelWithNoSlugStillGetsAnId covers a name in a script the
+// slug rule has nothing to say about. It must still save.
+func TestMCPServers_LabelWithNoSlugStillGetsAnId(t *testing.T) {
+	srv := (&fakeMCPEndpoint{toolNames: []string{"search"}}).start(t)
+	svc, _ := newTestMCPServers(t)
+	saved, err := svc.Save(context.Background(), "acme", "a", MCPServerInput{
+		Label: "日本語ツール", URL: srv.URL, Enabled: true,
+	})
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if saved.Name != fallbackMCPServerName {
+		t.Fatalf("name = %q, want the generic base", saved.Name)
+	}
+	if saved.Label != "日本語ツール" {
+		t.Fatalf("label = %q, want it kept verbatim", saved.Label)
+	}
+}

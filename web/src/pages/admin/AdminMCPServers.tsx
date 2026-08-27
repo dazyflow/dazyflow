@@ -53,7 +53,9 @@ export function AdminMCPServers() {
   const save = async (input: MCPServerInput, existingName?: string) => {
     if (!token) return;
     setError(null);
-    setBusy(existingName ?? input.name);
+    // A create has no id yet — the daemon derives one — so the busy key is the
+    // label until the row comes back with its name.
+    setBusy(existingName ?? input.label);
     try {
       const saved = await api.saveMCPServer(token, input, existingName);
       setEditing(null);
@@ -150,7 +152,14 @@ export function AdminMCPServers() {
                     key={s.name}
                     className={confirmRemove === s.name ? "row-confirming" : undefined}
                   >
-                    <td className="run-name-cell">{s.name}</td>
+                    <td className="run-name-cell">
+                      {s.label}
+                      {/* The id is shown under the name because it is what
+                          appears in the palette and in flow JSON — an admin
+                          looking for "MCP Test" among their steps needs to
+                          know it is mcp-test there. */}
+                      <div className="muted mcp-id">{s.name}</div>
+                    </td>
                     {/* The URL is shown in full. It is the field most likely to
                         be wrong, and a truncated one cannot be checked. */}
                     <td className="muted mcp-url">{s.url}</td>
@@ -220,9 +229,10 @@ export function AdminMCPServers() {
 
 // MCPServerForm is add and edit in one, because they are one operation.
 //
-// The name is locked once a server exists. Renaming would silently re-key every
-// step id the org's flows reference — so it is not offered, and the hint says
-// what to do instead.
+// The name here is the DISPLAY name and is always editable. The id underneath
+// it is derived from the name once, when the server is created, and then frozen
+// — re-deriving it on an edit would silently re-key every step id the org's
+// flows reference. The hint shows the id so the two are never confused.
 function MCPServerForm({
   server,
   busy,
@@ -235,7 +245,7 @@ function MCPServerForm({
   onSave: (input: MCPServerInput, existingName?: string) => void | Promise<void>;
 }) {
   const { t } = useTranslation();
-  const [name, setName] = useState(server?.name ?? "");
+  const [label, setLabel] = useState(server?.label ?? "");
   const [url, setUrl] = useState(server?.url ?? "");
   const [authKind, setAuthKind] = useState<MCPServerInput["auth_kind"]>(server?.auth_kind ?? "none");
   const [authHeader, setAuthHeader] = useState(server?.auth_header ?? "");
@@ -251,7 +261,7 @@ function MCPServerForm({
     e.preventDefault();
     void onSave(
       {
-        name: name.trim().toLowerCase(),
+        label: label.trim(),
         url: url.trim(),
         auth_kind: authKind,
         auth_header: authKind === "header" ? authHeader.trim() : undefined,
@@ -264,19 +274,24 @@ function MCPServerForm({
 
   return (
     <form className="card mcp-form" onSubmit={submit}>
-      <h2>{server ? t("mcp.editHead", { name: server.name }) : t("mcp.addHead")}</h2>
+      <h2>{server ? t("mcp.editHead", { name: server.label }) : t("mcp.addHead")}</h2>
 
       <div className="sf-field">
         <label htmlFor="mcp-name">{t("mcp.nameLabel")}</label>
         <input
           id="mcp-name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          disabled={!!server}
-          placeholder="github"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          placeholder="GitHub"
+          maxLength={96}
           required
         />
-        <div className="desc">{server ? t("mcp.nameLockedHint") : t("mcp.nameHint")}</div>
+        {/* Editable even on an existing server: the id was fixed at creation
+            and is shown separately, so changing what people call it re-captions
+            its steps without touching a single flow. */}
+        <div className="desc">
+          {server ? t("mcp.nameEditHint", { id: server.name }) : t("mcp.nameHint")}
+        </div>
       </div>
 
       <div className="sf-field">

@@ -168,7 +168,13 @@ func contentSummary(content []ContentItem) string {
 // manifest the engine can validate against. Tool IDs follow the
 // "mcp:<server>:<tool>" convention so graph authors see clearly where
 // the node lives.
-func synthesizeManifest(server string, tool Tool) core.Manifest {
+//
+// The label is what a human called the server and the name is what its ids are
+// built from, so "MCP Test" captions a step whose id is mcp:mcp-test:search.
+func synthesizeManifest(server, label string, tool Tool) core.Manifest {
+	if label == "" {
+		label = server
+	}
 	desc := tool.Description
 	if desc == "" {
 		desc = "Tool " + tool.Name + " from MCP server " + server + "."
@@ -190,7 +196,7 @@ func synthesizeManifest(server string, tool Tool) core.Manifest {
 	return core.Manifest{
 		ID:             "mcp:" + server + ":" + tool.Name,
 		Version:        "1.0",
-		Label:          server + " — " + tool.Name,
+		Label:          label + " — " + tool.Name,
 		Color:          "#7a5",
 		Category:       "external",
 		Provider:       "mcp:" + server,
@@ -393,6 +399,8 @@ func scalarMIME(declared any) ([]string, bool) {
 // its tools share this connection.
 type serverConn struct {
 	name string
+	// label is the display name, already defaulted to name at attach time.
+	label string
 	// tenant owns this server; "" is an operator's instance-wide one.
 	tenant string
 	client session

@@ -68,9 +68,17 @@ const (
 type MCPServer struct {
 	Tenant string
 	// Name is what flows reference: a tool from this server is the step
-	// mcp:<name>:<tool>. Renaming is therefore not an edit — it is a new
-	// server, and the old ids stop resolving. The UI says so.
-	Name       string
+	// mcp:<name>:<tool>. It is DERIVED from Label at creation and never
+	// changes afterwards — renaming would silently re-key every step id the
+	// org's flows hold.
+	Name string
+	// Label is what a human called this server, kept verbatim: "MCP Test",
+	// "Kunddatabas (test)". Free to edit, because nothing references it — it
+	// is display only, and Name carries the identity.
+	//
+	// Empty on rows created before labels existed. Display reads through
+	// DisplayName so those still render as something.
+	Label      string
 	URL        string
 	AuthKind   MCPAuthKind
 	AuthHeader string
@@ -91,6 +99,16 @@ type MCPServer struct {
 
 // HasAuth reports whether this server presents a credential.
 func (s MCPServer) HasAuth() bool { return s.AuthKind == MCPAuthBearer || s.AuthKind == MCPAuthHeader }
+
+// DisplayName is what to show a human: the label when there is one, and the
+// id when there is not. Rows written before labels existed have no label, and
+// so do rows created through the API by id alone.
+func (s MCPServer) DisplayName() string {
+	if s.Label != "" {
+		return s.Label
+	}
+	return s.Name
+}
 
 // MCPServerStore persists an org's MCP server registrations.
 type MCPServerStore interface {
@@ -116,6 +134,7 @@ const pgMCPServerSchema = `
 CREATE TABLE IF NOT EXISTS tenant_mcp_servers (
     tenant         TEXT NOT NULL,
     name           TEXT NOT NULL,
+    label          TEXT NOT NULL DEFAULT '',
     url            TEXT NOT NULL,
     auth_kind      TEXT NOT NULL DEFAULT 'none',
     auth_header    TEXT NOT NULL DEFAULT '',
@@ -134,6 +153,9 @@ CREATE TABLE IF NOT EXISTS tenant_mcp_servers (
 -- The reconcile loop reads every enabled row on a timer; without this it is a
 -- sequential scan of the table on each pass.
 CREATE INDEX IF NOT EXISTS tenant_mcp_servers_enabled_idx ON tenant_mcp_servers (enabled);
+-- Added after the table shipped: name used to be both the id and the display
+-- name. Existing rows keep an empty label and render by name.
+ALTER TABLE tenant_mcp_servers ADD COLUMN IF NOT EXISTS label TEXT NOT NULL DEFAULT '';
 `
 
 // EnsurePgMCPServerSchema creates the MCP server table.
@@ -154,6 +176,15 @@ const mcpSecretDomain = "mcp_server"
 // High enough that nobody legitimate meets it.
 const maxMCPServersPerTenant = 50
 
+// maxMCPServerNameLen bounds the generated id. It is a component of every step
+// id the server contributes, and those are read in a palette.
+const maxMCPServerNameLen = 48
+
+// maxMCPServerLabelLen bounds the display name. Long enough for a sentence
+// fragment an admin would actually type, short enough that the list stays a
+// list.
+const maxMCPServerLabelLen = 96
+
 // validMCPServerName keeps a name usable inside a step id and readable in a
 // palette.
 //
@@ -161,12 +192,16 @@ const maxMCPServersPerTenant = 50
 // so a colon in it would produce an id that splits two ways. Lowercase letters,
 // digits, hyphen and underscore only — the same shape a runner name takes, so
 // an admin does not have to learn two rules.
+//
+// Admins do not meet this rule any more: they type a Label and the id is
+// derived from it by slugMCPServerName. It still guards the API, which accepts
+// an explicit name from a caller that wants to choose its own id.
 func validMCPServerName(name string) error {
 	if name == "" {
 		return fmt.Errorf("name is empty")
 	}
-	if len(name) > 48 {
-		return fmt.Errorf("name too long (max 48)")
+	if len(name) > maxMCPServerNameLen {
+		return fmt.Errorf("name too long (max %d)", maxMCPServerNameLen)
 	}
 	for _, r := range name {
 		switch {
@@ -176,6 +211,120 @@ func validMCPServerName(name string) error {
 		}
 	}
 	return nil
+}
+
+// slugMCPServerName derives a step-id-safe name from what a human typed.
+//
+// "MCP Test" → "mcp-test", "Kundregister (test)" → "kundregister-test". The
+// point is that an admin never has to think about the id rule: they name the
+// server the way they would name anything else, and the identifier the flows
+// hold is generated once and then frozen.
+//
+// Diacritics fold rather than vanish, so "Bokföring" is "bokforing" and not
+// "bokf-ring" — the id is read by people, in a palette and in flow JSON.
+// Anything left over collapses to single hyphens. A label with nothing
+// slug-able in it at all (say, entirely CJK) yields "", and the caller falls
+// back to a generic base rather than saving an empty id.
+func slugMCPServerName(label string) string {
+	var b strings.Builder
+	prevDash := false
+	for _, r := range strings.ToLower(strings.TrimSpace(label)) {
+		if folded, ok := asciiFold[r]; ok {
+			b.WriteString(folded)
+			prevDash = false
+			continue
+		}
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+			prevDash = false
+		default:
+			// Underscore is legal in an id but a hyphen is what a typed name
+			// wants; one separator keeps generated ids uniform.
+			if !prevDash && b.Len() > 0 {
+				b.WriteByte('-')
+				prevDash = true
+			}
+		}
+	}
+	out := strings.Trim(b.String(), "-")
+	if len(out) > maxMCPServerNameLen {
+		out = strings.Trim(out[:maxMCPServerNameLen], "-")
+	}
+	return out
+}
+
+// asciiFold maps the accented Latin letters a European org actually types onto
+// their base letter. Deliberately a table and not a Unicode normalisation pass:
+// the set that matters here is small and closed, and a table cannot pull a
+// text-segmentation dependency into the daemon.
+var asciiFold = map[rune]string{
+	'á': "a", 'à': "a", 'â': "a", 'ä': "a", 'ã': "a", 'å': "a", 'ā': "a",
+	'æ': "ae",
+	'ç': "c", 'ć': "c", 'č': "c",
+	'é': "e", 'è': "e", 'ê': "e", 'ë': "e", 'ē': "e", 'ę': "e",
+	'í': "i", 'ì': "i", 'î': "i", 'ï': "i", 'ī': "i",
+	'ñ': "n", 'ń': "n",
+	'ó': "o", 'ò': "o", 'ô': "o", 'ö': "o", 'õ': "o", 'ø': "o", 'ō': "o",
+	'ú': "u", 'ù': "u", 'û': "u", 'ü': "u", 'ū': "u",
+	'ý': "y", 'ÿ': "y",
+	'ß': "ss",
+	'đ': "d", 'ð': "d",
+	'ł': "l",
+	'ś': "s", 'š': "s",
+	'ż': "z", 'ź': "z", 'ž': "z",
+	'þ': "th",
+}
+
+// fallbackMCPServerName is the base used when a label slugs to nothing —
+// a name in a script with no Latin letters, or one made only of punctuation.
+// The uniqueness pass then makes it mcp-server, mcp-server-2, and so on.
+const fallbackMCPServerName = "mcp-server"
+
+// uniqueMCPServerName resolves a generated base to a name no one is using.
+//
+// Numbered rather than random: the id shows up in the palette and in flow JSON,
+// so "mcp-test-2" is worth the lookup that a "mcp-test-x7f2" would save. The
+// scan covers the org's own rows AND the instance-wide servers an operator
+// registered, because the catalog refuses a tenant name that collides with one
+// of those — better to pick a free id here than to save a row that can never
+// connect.
+func (m *MCPServers) uniqueMCPServerName(ctx context.Context, tenant, base string) (string, error) {
+	if base == "" {
+		base = fallbackMCPServerName
+	}
+	rows, err := m.Store.List(ctx, tenant)
+	if err != nil {
+		return "", err
+	}
+	taken := make(map[string]bool, len(rows))
+	for _, r := range rows {
+		taken[r.Name] = true
+	}
+	if m.Catalog != nil {
+		for _, st := range m.Catalog.ServersFor(tenant) {
+			if st.Tenant == "" {
+				taken[st.Name] = true
+			}
+		}
+	}
+	if !taken[base] {
+		return base, nil
+	}
+	// One more than the per-tenant cap, so the loop cannot run out of numbers
+	// before Save runs out of rows it would allow.
+	for n := 2; n <= maxMCPServersPerTenant+1; n++ {
+		suffix := fmt.Sprintf("-%d", n)
+		stem := base
+		if len(stem)+len(suffix) > maxMCPServerNameLen {
+			stem = strings.Trim(stem[:maxMCPServerNameLen-len(suffix)], "-")
+		}
+		candidate := stem + suffix
+		if !taken[candidate] {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("could not derive a free name from %q — every variant is taken", base)
 }
 
 // validMCPServerURL refuses what should never be dialed before the request is
@@ -293,6 +442,15 @@ func (m *MCPServers) ready() error {
 // MCPServerInput is what an admin submits. Token is separate from MCPServer
 // precisely because MCPServer is the shape that gets returned and logged.
 type MCPServerInput struct {
+	// Label is what the admin typed — free-form. On a NEW server it is what
+	// the id is derived from; on an edit it is the one part of the identity
+	// that can still change. Empty on an edit means "keep the stored one", so
+	// a caller that only wants to change the URL cannot blank it by omission.
+	Label string
+	// Name is the id. Empty on a create means "derive it from Label", which is
+	// what the UI sends. A caller that supplies one is choosing its own id and
+	// gets it validated as before. On an edit it identifies the row and is
+	// never changed.
 	Name       string
 	URL        string
 	AuthKind   MCPAuthKind
@@ -329,10 +487,34 @@ func (m *MCPServers) Save(ctx context.Context, tenant, actor string, in MCPServe
 	if m.Secrets == nil && in.Token != "" {
 		return MCPServer{}, fmt.Errorf("this deployment has no encrypted secret store, so a token cannot be stored safely")
 	}
+	label := strings.TrimSpace(in.Label)
+	if len([]rune(label)) > maxMCPServerLabelLen {
+		return MCPServer{}, fmt.Errorf("name too long (max %d characters)", maxMCPServerLabelLen)
+	}
 	name := strings.ToLower(strings.TrimSpace(in.Name))
+	// A create with no explicit id derives one from the label. This is the
+	// path the UI takes, and the reason an admin can call a server "MCP Test"
+	// while its steps stay addressable as mcp:mcp-test:<tool>.
+	if name == "" {
+		if label == "" {
+			return MCPServer{}, fmt.Errorf("name is empty")
+		}
+		name, err := m.uniqueMCPServerName(ctx, tenant, slugMCPServerName(label))
+		if err != nil {
+			return MCPServer{}, err
+		}
+		return m.save(ctx, tenant, actor, in, name, label)
+	}
 	if err := validMCPServerName(name); err != nil {
 		return MCPServer{}, err
 	}
+	return m.save(ctx, tenant, actor, in, name, label)
+}
+
+// save is Save once the identity is settled: name is final, whether it came
+// from the caller or from the label. Split out so the derivation above reads as
+// one decision instead of threading a flag through eighty lines.
+func (m *MCPServers) save(ctx context.Context, tenant, actor string, in MCPServerInput, name, label string) (MCPServer, error) {
 	rawURL := strings.TrimSpace(in.URL)
 	if err := validMCPServerURL(rawURL); err != nil {
 		return MCPServer{}, err
@@ -350,6 +532,12 @@ func (m *MCPServers) Save(ctx context.Context, tenant, actor string, in MCPServe
 	isNew := errors.Is(err, ErrMCPServerNotFound)
 	if err != nil && !isNew {
 		return MCPServer{}, err
+	}
+	// Blank keeps the stored label, for the same reason a blank token keeps
+	// the stored credential: an API caller changing only the URL must not
+	// erase a display name it never sent.
+	if label == "" {
+		label = existing.Label
 	}
 	if isNew {
 		rows, err := m.Store.List(ctx, tenant)
@@ -373,6 +561,7 @@ func (m *MCPServers) Save(ctx context.Context, tenant, actor string, in MCPServe
 	row := MCPServer{
 		Tenant:     tenant,
 		Name:       name,
+		Label:      label,
 		URL:        rawURL,
 		AuthKind:   kind,
 		AuthHeader: header,
@@ -499,6 +688,7 @@ func (m *MCPServers) toolCount(tenant, name string) int {
 func (m *MCPServers) descriptor(ctx context.Context, row MCPServer) (mcp.HTTPDescriptor, error) {
 	desc := mcp.HTTPDescriptor{
 		Name:   row.Name,
+		Label:  row.DisplayName(),
 		Tenant: row.Tenant,
 		URL:    row.URL,
 		Header: http.Header{},

@@ -18,10 +18,11 @@ Add one in **Admin → MCP servers**. You need the address and, usually, a token
 
 ## What you get
 
-A server called `github` publishing a `create_issue` tool gives you a step
-called `mcp:github:create_issue`. It appears in the catalog under **Apps &
-services**, and hands its result to the next step. Search the palette for the
-server's name to find everything it brought.
+A server called `GitHub` publishing a `create_issue` tool gives you a step
+labelled *GitHub — create_issue*, whose id is `mcp:github:create_issue`. It
+appears in the catalog under **Apps & services**, and hands its result to the
+next step. Search the palette for the server's name to find everything it
+brought.
 
 Nothing else about the flow changes. The step branches, loops, retries and
 appears in the run log exactly like a built-in one.
@@ -57,7 +58,7 @@ contain a `title`, which in turn beats what you typed.
 
 | Field | What to put in it |
 | --- | --- |
-| **Name** | Short, lowercase — `github`, `linear`, `our-warehouse`. It becomes part of every step id. |
+| **Name** | Whatever you call it — `GitHub`, `Linear`, `Our warehouse (test)`. A short id is derived from it for the step names. |
 | **Endpoint URL** | The server's MCP address, over `https`. |
 | **Authentication** | **Bearer token** for most; **custom header** for the vendors that use `X-Api-Key` or similar; **none** for an open one. |
 | **Token** | Pasted once. Stored encrypted, and never shown again. |
@@ -68,9 +69,14 @@ credential"*, which is the one you will actually hit. A server that will not
 connect is still saved, so you fix the field that was wrong rather than typing
 everything again.
 
-> **The name is permanent.** Your flows reference its steps by it, so renaming
-> would quietly break every one of them. The form locks the name once a server
-> exists; to use a different one, add a second server.
+> **The id is permanent, the name is not.** Saving a server called `MCP Test`
+> derives the id `mcp-test` once, and its steps are `mcp:mcp-test:<tool>` from
+> then on. Rename the server whenever you like — the steps re-caption and your
+> flows keep working, because they reference the id. The id itself never moves;
+> to get a different one, add a second server.
+>
+> The id is shown under the name in the list, since that is what you will see
+> in the palette and in exported flows.
 
 ### Using a token you already keep here
 
