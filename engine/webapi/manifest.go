@@ -70,17 +70,23 @@ func synthesizeManifest(desc Descriptor, op Operation) core.Manifest {
 		Icon:     "globe",
 		// The service's own favicon, when icon.go found one. The globe above is
 		// what a catalog with no resolvable mark keeps wearing.
-		BrandLogo:      desc.Logo,
-		Category:       "external",
-		Provider:       "api:" + desc.Name,
-		Integration:    integration,
-		Tags:           []string{"api", "http", desc.Name},
-		Description:    description(desc, op, method),
-		Summary:        summary(desc, op, method),
-		Examples:       []core.ParamsExample{example(desc, op, method)},
-		ExecutionModel: core.ExecutionBatch,
-		ProcessModel:   core.ProcessLongLived,
-		Inputs:         inputs,
+		BrandLogo:   desc.Logo,
+		Category:    "external",
+		Provider:    "api:" + desc.Name,
+		Integration: integration,
+		// The catalog's own blurb, which reaches the Apps page through the
+		// integration group rather than through this step. Deliberately NOT
+		// folded into the step's Description below: the same paragraph repeated
+		// on sixty manifests is what the flow generator would read instead of
+		// grounding, and the reader of a step wants the call, not the service.
+		IntegrationDescription: desc.Description,
+		Tags:                   []string{"api", "http", desc.Name},
+		Description:            description(desc, op, method),
+		Summary:                summary(desc, op, method),
+		Examples:               []core.ParamsExample{example(desc, op, method)},
+		ExecutionModel:         core.ExecutionBatch,
+		ProcessModel:           core.ProcessLongLived,
+		Inputs:                 inputs,
 		Outputs: []core.Port{
 			// The same three http_request emits, in the same order and for the
 			// same reason: flows branch on the status code, so it is a port and

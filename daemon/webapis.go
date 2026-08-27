@@ -75,7 +75,12 @@ type WebAPI struct {
 	// catalog, and the old ids stop resolving. The UI says so.
 	Name string
 	// Label is the display name. Free-form; nothing references it.
-	Label        string
+	Label string
+	// Description is what the service IS, in the org's own words. It is the
+	// prose the Apps page shows under the app's name, and the only description
+	// of an org's own API that nobody else can write — a built-in integration's
+	// blurb is curated in the app and there is nowhere to curate an org's.
+	Description  string
 	BaseURL      string
 	Integration  string
 	AuthKind     webapi.AuthKind
@@ -142,6 +147,7 @@ func (w WebAPI) Descriptor() webapi.Descriptor {
 		// every step this catalog contributes is captioned by its slug —
 		// "order-service — get_order" where the admin typed "Order service".
 		Label:        w.DisplayName(),
+		Description:  w.Description,
 		BaseURL:      w.BaseURL,
 		Integration:  w.Integration,
 		Auth:         webapi.Auth{Kind: w.AuthKind, Header: w.AuthHeader},
@@ -181,6 +187,7 @@ CREATE TABLE IF NOT EXISTS tenant_web_apis (
     tenant         TEXT NOT NULL,
     name           TEXT NOT NULL,
     label          TEXT NOT NULL DEFAULT '',
+    description    TEXT NOT NULL DEFAULT '',
     base_url       TEXT NOT NULL,
     integration    TEXT NOT NULL DEFAULT '',
     auth_kind      TEXT NOT NULL DEFAULT 'none',
@@ -201,6 +208,9 @@ CREATE TABLE IF NOT EXISTS tenant_web_apis (
 -- Added after the table shipped: the service's favicon, inlined as a data: URI.
 -- A row predating this simply has no logo and picks one up on its next save.
 ALTER TABLE tenant_web_apis ADD COLUMN IF NOT EXISTS logo TEXT NOT NULL DEFAULT '';
+-- Added after the table shipped: the org's own blurb about the service, shown
+-- on its page under Apps. Empty is normal — the page renders without it.
+ALTER TABLE tenant_web_apis ADD COLUMN IF NOT EXISTS description TEXT NOT NULL DEFAULT '';
 -- Where that logo came from. 'auto' is the default because it is what every row
 -- written before the column existed did: took the guess, or took nothing.
 ALTER TABLE tenant_web_apis ADD COLUMN IF NOT EXISTS logo_mode TEXT NOT NULL DEFAULT 'auto';
@@ -226,6 +236,14 @@ const maxWebAPIsPerTenant = 100
 
 // maxWebAPILabelLen bounds the display name, as maxMCPServerLabelLen does.
 const maxWebAPILabelLen = 96
+
+// maxWebAPIDescriptionLen bounds the org's blurb about its service.
+//
+// Room for a real paragraph, because the Apps page renders it as one and the
+// reader is deciding whether this is the app they want. Not room for a manual:
+// the operations carry their own prose, and a page-long intro would push the
+// connection form — the thing someone came here to fill in — off the screen.
+const maxWebAPIDescriptionLen = 600
 
 // maxWebAPIIntegrationLen bounds the Apps-page grouping label.
 const maxWebAPIIntegrationLen = 64
@@ -323,7 +341,13 @@ type WebAPIInput struct {
 	Label string
 	// Name is the id. Empty on a create means "derive it from Label", which is
 	// what the UI sends. On an edit it identifies the row and is never changed.
-	Name         string
+	Name string
+	// Description is the org's blurb about the service. A pointer, so an API
+	// caller that sends only a new base URL does not erase prose it never sent —
+	// the same care Label gets, by a different mechanism because blank is a
+	// legitimate value here (an org clearing the paragraph) rather than a
+	// fallback.
+	Description  *string
 	BaseURL      string
 	Integration  string
 	AuthKind     webapi.AuthKind
@@ -431,6 +455,17 @@ func (m *WebAPIs) save(ctx context.Context, tenant, actor string, in WebAPIInput
 	if label == "" {
 		label = existing.Label
 	}
+	// The blurb gets the same protection by a different mechanism: blank is a
+	// legitimate value here (an org clearing the paragraph), so "not sent" has to
+	// be a nil pointer rather than an empty string.
+	description := existing.Description
+	if in.Description != nil {
+		description = strings.TrimSpace(*in.Description)
+	}
+	if len([]rune(description)) > maxWebAPIDescriptionLen {
+		return WebAPI{}, fmt.Errorf("description too long (max %d characters) — the operations carry their own prose",
+			maxWebAPIDescriptionLen)
+	}
 
 	// The Apps page this catalog is connected on. Resolved AFTER the label above,
 	// and only when there is nothing stored to keep — moving it is moving where
@@ -467,6 +502,7 @@ func (m *WebAPIs) save(ctx context.Context, tenant, actor string, in WebAPIInput
 		Tenant:       tenant,
 		Name:         name,
 		Label:        label,
+		Description:  description,
 		BaseURL:      baseURL,
 		Integration:  integration,
 		AuthKind:     kind,

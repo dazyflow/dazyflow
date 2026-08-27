@@ -86,6 +86,26 @@ anything a non-technical colleague will pick from the palette.
 An operation's **Summary** is a different field again: a sentence, shown under
 the name as the step's subtitle. Put the sentence there, not in the name.
 
+### What this service is
+
+The catalog also takes a **description** — a short paragraph about the service
+itself, not about any one call. It appears on the service's page under **Apps**,
+under its name, and it is searchable from the apps list.
+
+This is the one piece of prose about your own API that nobody else can write.
+Every built-in app's description ships with Dazyflow; yours has no such source,
+so an undescribed catalog is a card with a name and nothing else on it — which is
+what a colleague sees when they are trying to work out whether this is the app
+they need.
+
+Say what the service does, in the language the reader uses. The operations carry
+their own summaries, so this is not the place to list them:
+
+> Our order system. Look up an order, place one, or cancel one.
+
+It is optional, and it can be edited or cleared at any time — nothing references
+it.
+
 ### The icon
 
 Every step a catalog contributes wears the same mark — on the node, in the

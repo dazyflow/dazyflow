@@ -181,6 +181,15 @@ type Descriptor struct {
 	BaseURL string
 	// Integration is the palette/Apps grouping label. Empty falls back to Name.
 	Integration string
+	// Description is what this service IS, in the org's own words — shown on the
+	// catalog's page under Apps, where the reader is someone deciding whether
+	// the app is the one they want rather than someone reading a step.
+	//
+	// Separate from an operation's Description, which is about one call. This
+	// one is about the service, and it is the only prose about an org's own API
+	// that nobody else could write: a built-in integration's blurb is curated in
+	// the app, and there is nowhere to curate an org's.
+	Description string
 	Auth        Auth
 	Operations  []Operation
 	// TimeoutMS bounds one call. Zero means DefaultTimeoutMS.

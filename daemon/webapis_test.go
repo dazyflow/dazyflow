@@ -1006,3 +1006,81 @@ func TestWebAPIs_RefusesAnUnknownLogoMode(t *testing.T) {
 		t.Fatalf("error = %v, want a refusal naming the three sources", err)
 	}
 }
+
+// The org's blurb reaches the manifest, where the Apps page and the catalog API
+// both read it off the integration group.
+func TestWebAPIs_DescriptionReachesTheManifest(t *testing.T) {
+	m := webAPIService(t)
+	m.ResolveLogo = func(context.Context, string) string { return "" }
+	in := sampleInput()
+	blurb := "Our order system. Look up an order, place one, or cancel one."
+	in.Description = &blurb
+	saved, err := m.Save(context.Background(), "acme", "alice", in)
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if saved.Description != blurb {
+		t.Errorf("description = %q", saved.Description)
+	}
+	transport, ok := m.Catalog.Get("acme", "api:order-service:get_order")
+	if !ok {
+		t.Fatal("the step is not registered")
+	}
+	man := transport.Manifest()
+	if man.IntegrationDescription != blurb {
+		t.Errorf("IntegrationDescription = %q, want the catalog's blurb", man.IntegrationDescription)
+	}
+	// And NOT folded into the step's own description: the same paragraph on
+	// sixty manifests is what the flow generator would read instead of grounding.
+	if strings.Contains(man.Description, blurb) {
+		t.Errorf("the step description repeats the service blurb: %q", man.Description)
+	}
+}
+
+// Blank is a real value here — an org clearing the paragraph — so "not sent" is
+// a nil pointer, and an edit of something else must keep the prose.
+func TestWebAPIs_DescriptionIsKeptAndClearedDeliberately(t *testing.T) {
+	m := webAPIService(t)
+	m.ResolveLogo = func(context.Context, string) string { return "" }
+	in := sampleInput()
+	blurb := "Our order system."
+	in.Description = &blurb
+	saved, err := m.Save(context.Background(), "acme", "alice", in)
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	silent := sampleInput()
+	silent.Name = saved.Name
+	kept, err := m.Save(context.Background(), "acme", "alice", silent)
+	if err != nil {
+		t.Fatalf("re-Save: %v", err)
+	}
+	if kept.Description != blurb {
+		t.Errorf("description = %q after an edit that said nothing about it", kept.Description)
+	}
+
+	blank := ""
+	cleared := sampleInput()
+	cleared.Name = saved.Name
+	cleared.Description = &blank
+	after, err := m.Save(context.Background(), "acme", "alice", cleared)
+	if err != nil {
+		t.Fatalf("clearing Save: %v", err)
+	}
+	if after.Description != "" {
+		t.Errorf("description = %q, want it cleared", after.Description)
+	}
+}
+
+func TestWebAPIs_RefusesAnOverlongDescription(t *testing.T) {
+	m := webAPIService(t)
+	m.ResolveLogo = func(context.Context, string) string { return "" }
+	in := sampleInput()
+	long := strings.Repeat("ö", maxWebAPIDescriptionLen+1)
+	in.Description = &long
+	_, err := m.Save(context.Background(), "acme", "alice", in)
+	if err == nil || !strings.Contains(err.Error(), "description") {
+		t.Fatalf("error = %v, want a refusal naming the field", err)
+	}
+}

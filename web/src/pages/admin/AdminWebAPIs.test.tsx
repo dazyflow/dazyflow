@@ -339,6 +339,28 @@ describe("AdminWebAPIs", () => {
     expect(container.querySelector("img.step-source-logo")).toBeNull();
   });
 
+  // The blurb the Apps page shows. It round-trips through the form, because the
+  // alternative — retyping it on every edit — is how it ends up blank.
+  it("edits the service description", async () => {
+    listWebAPIs.mockResolvedValue({
+      web_apis: [{ ...orders, description: "Our order system." }],
+    });
+    saveWebAPI.mockResolvedValue(orders);
+    render(<AdminWebAPIs />);
+    await screen.findByText("Order service");
+    await userEvent.click(screen.getByLabelText("common.edit"));
+
+    const field = await screen.findByLabelText("webapi.descriptionLabel");
+    expect(field).toHaveValue("Our order system.");
+    await userEvent.clear(field);
+    await userEvent.type(field, "Warehouse picking and dispatch.");
+    await userEvent.click(screen.getByText("webapi.save"));
+
+    await waitFor(() => expect(saveWebAPI).toHaveBeenCalled());
+    const input = saveWebAPI.mock.calls[0][1] as { description?: string };
+    expect(input.description).toBe("Warehouse picking and dispatch.");
+  });
+
   // The three sources are a choice the form has to carry, because a guess that
   // found nothing and a glyph the admin chose are the same empty image.
   it("submits the chosen icon source", async () => {

@@ -23,6 +23,53 @@ into the image.)
 
 ## [Unreleased]
 
+### Added
+
+- **A web API can describe itself, and the description reaches the Apps page.**
+  An org's own catalog appeared under **Apps** as a card with a name and nothing
+  else: every built-in app's blurb is curated in the product, and there is
+  nowhere to curate an org's — so the one app whose purpose only that org knows
+  was the one app that could not say it.
+
+  The admin form now takes a short paragraph about the service. It shows on the
+  catalog's page under its name, is matched by the apps list's search box, and is
+  reported as the integration's `summary` by the catalog API, which is what the
+  flow assistant reads. Curated prose still wins where it exists, since that can
+  be translated and edited without a release.
+
+  Carried on the manifest (`integration_description`) and borrowed for the group
+  by the first step that declares it — the same mechanism as `brand_logo`, since
+  an integration is a derived view over manifests with no record of its own.
+  Deliberately not folded into each step's description: the same paragraph on
+  sixty manifests is what the flow generator would read instead of grounding.
+
+- **The template gallery reads in the reader's language.** Its buttons and
+  chrome were translated and its content was not, so a Swedish reader got
+  Swedish controls over twelve English cards — the one screen most likely to be
+  someone's first, since it is where a new flow starts.
+
+  Every template's title, one-liner and group heading now resolves through a
+  Swedish vocabulary, the same shape and the same drift guard the drop catalog
+  uses: keyed by template id with a fingerprint of the English it was made from,
+  so rewording `templates/index.json` shows the new English rather than a
+  Swedish sentence about the old one. Cards still GROUP by the English category,
+  so which cards sit together — and the `?category=` link that reproduces it —
+  does not depend on the language.
+
+  Coverage is now guarded by a test, for the reason the gap went unnoticed in
+  the first place: every lookup falls back to English, so an untranslated
+  template renders perfectly well and says nothing. A template added without a
+  translation, or whose English drifts, now fails the suite.
+
+### Fixed
+
+- **An uncurated app is named the way it was typed.** The Apps page derived an
+  app's display name by title-casing its URL slug, so a catalog an admin called
+  *Order service* appeared as *Order Service* — a change nobody asked for and
+  nothing explained. The name now comes off the manifest's own `integration`
+  string, with the slug kept only as the fallback for steps that name no
+  integration at all.
+
 ## [0.20.0] - 2026-08-27
 
 ### Added

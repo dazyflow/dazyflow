@@ -452,6 +452,14 @@ func (h *HTTPGateway) collectCatalog(ctx context.Context, p core.Principal) (
 		if g.Icon == "" {
 			g.Icon = m.Icon
 		}
+		// An integration an ORG created has no curated blurb and never will —
+		// integrationSummaries is a table in this repo. So a manifest may carry
+		// the prose itself, and the first module that does speaks for the group.
+		// Curated text still wins: it is translated and edited without a release,
+		// which is exactly what a first-party integration wants.
+		if g.Summary == "" {
+			g.Summary = m.IntegrationDescription
+		}
 		g.Drops = append(g.Drops, IntegrationDrop{
 			ID:    m.ID,
 			Label: m.Label,

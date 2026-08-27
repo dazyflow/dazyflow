@@ -275,6 +275,24 @@ type Manifest struct {
 	// to a specific vendor; those fall back to Category-based grouping.
 	Integration string `json:"integration,omitempty" xml:"integration,omitempty"`
 
+	// IntegrationDescription is a blurb about the INTEGRATION, not about this
+	// module — what the service is and what an org can do with it. It is what
+	// the Apps page shows under the app's name, and what the catalog API reports
+	// as an integration's summary.
+	//
+	// Carried per manifest, and borrowed for the group by whichever module
+	// declares it first, for the same reason BrandLogo is: an integration is a
+	// derived view over manifests and has no record of its own to hang prose on.
+	// Modules in one integration are expected to agree, or to leave it empty and
+	// let one of them speak.
+	//
+	// Built-in integrations do NOT set this — their prose is curated (see
+	// daemon.integrationSummaries and web/src/integrationMeta.ts, which can be
+	// translated and edited without a release of the drop). It exists for the
+	// integrations an ORG creates, where nobody but that org can write the
+	// sentence: today, a described web API.
+	IntegrationDescription string `json:"integration_description,omitempty" xml:"integration_description,omitempty"`
+
 	// Tags are free-form keywords for finer-grained discovery. Search
 	// filters match any tag (OR semantics within the tags slice).
 	Tags []string `json:"tags,omitempty" xml:"tags>tag,omitempty"`

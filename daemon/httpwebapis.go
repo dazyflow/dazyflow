@@ -30,8 +30,11 @@ import (
 type webAPIRow struct {
 	// Name is the id flows reference. Read-only after creation: the client
 	// shows it, it does not offer to change it.
-	Name        string `json:"name"`
-	Label       string `json:"label"`
+	Name  string `json:"name"`
+	Label string `json:"label"`
+	// Description is the org's blurb about the service, shown on its page under
+	// Apps. Round-tripped so the form can edit it.
+	Description string `json:"description,omitempty"`
 	BaseURL     string `json:"base_url"`
 	Integration string `json:"integration,omitempty"`
 	AuthKind    string `json:"auth_kind"`
@@ -74,7 +77,10 @@ type webAPIRequest struct {
 	// Name sets the id explicitly. The UI never sends it on a create — it sends
 	// Label and lets the daemon derive one. Kept for an API caller that wants to
 	// choose the id its flows will reference.
-	Name         string             `json:"name,omitempty"`
+	Name string `json:"name,omitempty"`
+	// Description is a pointer because blank is a real value here — an org
+	// clearing the paragraph — so "not sent" cannot be spelled as "".
+	Description  *string            `json:"description,omitempty"`
 	BaseURL      string             `json:"base_url"`
 	Integration  string             `json:"integration,omitempty"`
 	AuthKind     string             `json:"auth_kind,omitempty"`
@@ -128,6 +134,7 @@ func (h *HTTPGateway) webAPIRowFor(w WebAPI, live map[string][]string) webAPIRow
 	return webAPIRow{
 		Name:         w.Name,
 		Label:        w.DisplayName(),
+		Description:  w.Description,
 		BaseURL:      w.BaseURL,
 		Integration:  w.Integration,
 		AuthKind:     string(w.AuthKind),
@@ -198,6 +205,7 @@ func (h *HTTPGateway) saveWebAPI(rw http.ResponseWriter, r *http.Request, p core
 	in := WebAPIInput{
 		Label:        req.Label,
 		Name:         req.Name,
+		Description:  req.Description,
 		BaseURL:      req.BaseURL,
 		Integration:  req.Integration,
 		AuthKind:     webapi.AuthKind(req.AuthKind),

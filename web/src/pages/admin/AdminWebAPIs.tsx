@@ -284,6 +284,7 @@ function WebAPIForm({
 }) {
   const { t } = useTranslation();
   const [label, setLabel] = useState(webapi?.label ?? "");
+  const [description, setDescription] = useState(webapi?.description ?? "");
   const [baseURL, setBaseURL] = useState(webapi?.base_url ?? "");
   const [authKind, setAuthKind] = useState<WebAPIInput["auth_kind"]>(
     webapi?.auth_kind ?? "bearer",
@@ -309,6 +310,7 @@ function WebAPIForm({
     void onSave(
       {
         label: label.trim(),
+        description: description.trim(),
         base_url: baseURL.trim(),
         auth_kind: authKind,
         auth_header: authKind === "header" ? authHeader.trim() : undefined,
@@ -352,6 +354,23 @@ function WebAPIForm({
             ? t("webapi.nameEditHint", { id: webapi.name })
             : t("webapi.nameHint")}
         </div>
+      </div>
+
+      {/* The blurb the Apps page shows under this app's name. It is the one
+          piece of prose about an org's own service that nobody else can write:
+          every built-in app's description is curated in the product, and there
+          is nowhere to curate an org's. */}
+      <div className="sf-field">
+        <label htmlFor="wa-description">{t("webapi.descriptionLabel")}</label>
+        <textarea
+          id="wa-description"
+          rows={3}
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder={t("webapi.descriptionPlaceholder")}
+          maxLength={600}
+        />
+        <div className="desc">{t("webapi.descriptionHint")}</div>
       </div>
 
       <div className="sf-field">

@@ -579,10 +579,7 @@ export function AppDetail() {
   const { meta, integrationDrops } = useMemo(() => {
     const all = drops ?? [];
     const filtered = all.filter((m) => integrationSlugFor(m) === slug);
-    const base = integrationMeta[slug] ?? {
-      name: integrationNameFromSlug(slug),
-      description: "",
-    };
+    const base = integrationMeta[slug] ?? uncuratedMeta(slug, filtered);
     const m = { ...base, name: groupDisplayName(slug, base.name, t) };
     return { meta: m, integrationDrops: filtered };
   }, [drops, slug, t]);
@@ -1651,6 +1648,30 @@ function hasWiringDetails(d: Manifest): boolean {
   ) as boolean;
 }
 
+// uncuratedMeta is what an app looks like when integrationMeta has no entry for
+// it — which is permanent for an app an ORG created, since that table lives in
+// this repo and only the org can describe its own service.
+//
+// So both fields come off the manifests instead, from whichever drop carries
+// them first. The daemon does the same for the catalog API (daemon/catalog.go),
+// reading the same field.
+//
+// The name is taken from `integration` rather than title-cased back out of the
+// slug, because that round trip is lossy: an admin who types "Order service"
+// gets "Order Service" on the page for no reason they could discover. The slug
+// remains the fallback for the catch-all bucket, whose drops name no integration
+// at all.
+function uncuratedMeta(
+  slug: string,
+  drops: Manifest[],
+): { name: string; description: string } {
+  return {
+    name: drops.find((d) => d.integration)?.integration ?? integrationNameFromSlug(slug),
+    description:
+      drops.find((d) => d.integration_description)?.integration_description ?? "",
+  };
+}
+
 // groupDisplayName is a group's heading.
 //
 // Two slugs get a localized name instead of integrationMeta's: the catch-all
@@ -1708,10 +1729,7 @@ function buildGroups(all: Manifest[]) {
   for (const slug of tail) {
     out.push({
       slug,
-      meta: {
-        name: integrationNameFromSlug(slug),
-        description: "",
-      },
+      meta: uncuratedMeta(slug, bySlug.get(slug)!),
       drops: bySlug.get(slug)!,
     });
   }

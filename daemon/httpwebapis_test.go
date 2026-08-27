@@ -13,17 +13,29 @@ import (
 	"testing"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/engine"
 	"git.sr.ht/~klahr/dazyflow/engine/webapi"
 	"git.sr.ht/~klahr/dazyflow/workspace"
 )
 
 // webAPIHarness is a gateway with the feature wired, plus the catalog so a test
 // can check what the palette actually gained.
+//
+// The catalog is wired into the RESOLVER as well, as cmd/dzd does. Without that
+// the steps this feature registers are reachable through WebAPIs.Catalog and
+// nowhere else — so nothing that reads the drop list (the palette, the
+// integrations endpoint, the Apps page's data) could be tested at all.
 func webAPIHarness(t *testing.T) (*gatewayHarness, *WebAPIs) {
 	t.Helper()
 	h := newGatewayHarness(t)
-	svc := &WebAPIs{Store: NewMemWebAPIStore(), Catalog: webapi.NewCatalog()}
+	cat := webapi.NewCatalog()
+	svc := &WebAPIs{Store: NewMemWebAPIStore(), Catalog: cat}
 	h.gw.WebAPIs = svc
+	resolver, ok := h.svc.Engine.Resolver.(*engine.NodeResolver)
+	if !ok {
+		t.Fatalf("resolver is %T, not the node resolver this harness assumes", h.svc.Engine.Resolver)
+	}
+	resolver.WebAPI = cat
 	return h, svc
 }
 
@@ -354,5 +366,82 @@ func TestHTTP_RowReportsTheLogoSource(t *testing.T) {
 	}
 	if got := decodeRow(t, rw.Body.Bytes()).LogoMode; got != string(WebAPILogoAuto) {
 		t.Errorf("logo_mode = %q, want %q", got, WebAPILogoAuto)
+	}
+}
+
+// The blurb has to arrive where the Apps page and the LLM-facing catalog API
+// read it: the integration group's summary. An org's own app has no curated
+// entry to fall back on, so this is the only description it can ever have.
+func TestHTTP_DescriptionBecomesTheIntegrationSummary(t *testing.T) {
+	h, svc := webAPIHarness(t)
+	svc.ResolveLogo = func(context.Context, string) string { return "" }
+	blurb := "Our order system. Look up an order, place one, or cancel one."
+	body := saveBody()
+	body["description"] = blurb
+	if rw := h.adminDo(t, "POST", "/api/v1/admin/web-apis", body); rw.Code != http.StatusOK {
+		t.Fatalf("POST = %d: %s", rw.Code, rw.Body)
+	}
+
+	rw := h.adminDo(t, "GET", "/api/v1/catalog/integrations", nil)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("GET integrations = %d: %s", rw.Code, rw.Body)
+	}
+	var list struct {
+		Items []map[string]any `json:"items"`
+	}
+	decodeJSON(t, rw, &list)
+	var found map[string]any
+	for _, it := range list.Items {
+		if it["id"] == "Order service" {
+			found = it
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("the org's own app is not listed: %s", rw.Body)
+	}
+	if got, _ := found["summary"].(string); got != blurb {
+		t.Errorf("summary = %q, want the org's blurb", got)
+	}
+}
+
+// A curated blurb still wins: it is translated and edited without a release,
+// which is what a first-party integration wants and an org's cannot have.
+func TestHTTP_CuratedSummaryOutranksAManifestBlurb(t *testing.T) {
+	h, _ := webAPIHarness(t)
+	rw := h.adminDo(t, "GET", "/api/v1/catalog/integrations", nil)
+	var list struct {
+		Items []map[string]any `json:"items"`
+	}
+	decodeJSON(t, rw, &list)
+	for _, it := range list.Items {
+		if it["id"] != "Stripe" {
+			continue
+		}
+		if got, _ := it["summary"].(string); got != integrationSummaries["Stripe"] {
+			t.Errorf("Stripe summary = %q, want the curated one", got)
+		}
+		return
+	}
+	t.Fatal("Stripe is not listed")
+}
+
+// The blurb round-trips so the form can edit it, and a save that omits it keeps
+// what is stored.
+func TestHTTP_PutWithoutDescriptionKeepsIt(t *testing.T) {
+	h, svc := webAPIHarness(t)
+	svc.ResolveLogo = func(context.Context, string) string { return "" }
+	blurb := "Our order system."
+	body := saveBody()
+	body["description"] = blurb
+	if rw := h.adminDo(t, "POST", "/api/v1/admin/web-apis", body); rw.Code != http.StatusOK {
+		t.Fatalf("POST = %d: %s", rw.Code, rw.Body)
+	}
+	rw := h.adminDo(t, "PUT", "/api/v1/admin/web-apis/order-service", saveBody())
+	if rw.Code != http.StatusOK {
+		t.Fatalf("PUT = %d: %s", rw.Code, rw.Body)
+	}
+	if got := decodeRow(t, rw.Body.Bytes()).Description; got != blurb {
+		t.Errorf("description = %q after an unrelated edit, want it kept", got)
 	}
 }

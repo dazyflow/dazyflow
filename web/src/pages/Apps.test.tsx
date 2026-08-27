@@ -146,6 +146,61 @@ describe("Apps index", () => {
     expect(screen.getByText("46elks")).toBeInTheDocument();
   });
 
+  // An app an ORG created has no curated entry in integrationMeta and never
+  // will — the table lives in this repo. Its own steps carry the prose, so the
+  // card reads like every other card.
+  it("shows an uncurated app's own description", async () => {
+    listDrops.mockResolvedValue({
+      drops: [
+        drop("api:order-service:get_order", "Order service", {
+          label: "Fetch an order",
+          integration_description: "Our order system, in our own words.",
+        }),
+      ],
+    });
+    renderApps();
+    expect(
+      await screen.findByText("Our order system, in our own words."),
+    ).toBeInTheDocument();
+  });
+
+  // The slug round trip is lossy, so the name comes off the manifest: an admin
+  // who typed "Order service" must not find "Order Service" on the page.
+  it("names an uncurated app the way it was typed", async () => {
+    listDrops.mockResolvedValue({
+      drops: [drop("api:order-service:get_order", "Order service")],
+    });
+    renderApps();
+    expect(await screen.findByText("Order service")).toBeInTheDocument();
+    expect(screen.queryByText("Order Service")).toBeNull();
+  });
+
+  // And it is searchable by it, which is the other half of a description
+  // earning its place on a page built to be read at catalog scale.
+  it("finds an uncurated app by its own description", async () => {
+    listDrops.mockResolvedValue({
+      drops: [
+        drop("api:order-service:get_order", "Order service", {
+          label: "Fetch an order",
+          integration_description: "Warehouse picking and dispatch.",
+        }),
+        ...manyApps(5),
+      ],
+    });
+    renderApps();
+    await waitFor(() =>
+      expect(screen.getByText("Order service")).toBeInTheDocument(),
+    );
+    await userEvent.type(
+      screen.getByLabelText("integrations.searchPlaceholder"),
+      "dispatch",
+    );
+    await waitFor(() =>
+      expect(screen.queryByText("App 01")).not.toBeInTheDocument(),
+    );
+    expect(screen.getByText("Order service")).toBeInTheDocument();
+  });
+
   // Diacritics fold, so a user types what their keyboard has.
   it("matches across diacritics", async () => {
     listDrops.mockResolvedValue({ drops: [drop("fortnox_x", "Bokföring")] });

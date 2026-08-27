@@ -15,6 +15,11 @@ import {
 import { browserTimeZone } from "./editor/TriggersModal";
 import { Button } from "./ui/Button";
 import type { Graph, OAuthProviderStatus, TemplateSummary } from "../types";
+import {
+  templateBlurb,
+  templateCategory,
+  templateTitle,
+} from "../lib/templateText";
 import { ErrorNotice } from "./ui/ErrorNotice";
 import { Loading } from "./ui/Loading";
 
@@ -36,7 +41,7 @@ import { Loading } from "./ui/Loading";
 const SHARED_NTFY_PLACEHOLDER = "my-daily-hello";
 
 export function TemplateGallery() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { token, activeTenant, activeWorkspace, hasPerm } = useAuth();
   // Forking a template creates a flow → needs graph:edit. Viewers can
   // browse templates but the "Use this template" action is disabled.
@@ -171,7 +176,12 @@ export function TemplateGallery() {
       navigate(`/flows/${encodeURIComponent(newID)}`);
     } catch (e) {
       const msg = explainApiError(e, t);
-      setError(t("templates.forkFailed", { title: tpl.title, error: msg }));
+      setError(
+        t("templates.forkFailed", {
+          title: templateTitle(tpl, i18n.language),
+          error: msg,
+        }),
+      );
     } finally {
       setBusy(null);
     }
@@ -216,9 +226,12 @@ export function TemplateGallery() {
     : categoryFilter
       ? templates.filter((tpl) => tpl.category === categoryFilter)
       : templates;
+  // Grouped by the ENGLISH category and translated at render, so which cards
+  // sit together — and the ?category= link that reproduces it — do not depend on
+  // the reader's language.
   const groups: { category: string; items: TemplateSummary[] }[] = [];
   for (const tpl of visible) {
-    const cat = tpl.category?.trim() || t("templates.uncategorized");
+    const cat = tpl.category?.trim() ?? "";
     let g = groups.find((x) => x.category === cat);
     if (!g) {
       g = { category: cat, items: [] };
@@ -234,9 +247,15 @@ export function TemplateGallery() {
           <span>
             {templateFilter
               ? t("templates.filteredByTemplate", {
-                  title: focusedTpl?.title ?? templateFilter,
+                  title: focusedTpl
+                    ? templateTitle(focusedTpl, i18n.language)
+                    : templateFilter,
                 })
-              : t("templates.filteredBy", { category: categoryFilter })}
+              : t("templates.filteredBy", {
+                  // Non-null in this branch — the chip only renders when one of
+                  // the two params is set, and templateFilter took the other.
+                  category: templateCategory(categoryFilter ?? "", i18n.language),
+                })}
           </span>
           <Button
             variant="ghost"
@@ -259,7 +278,11 @@ export function TemplateGallery() {
       )}
       {groups.map((group) => (
         <section key={group.category} className="template-group">
-          <h2 className="template-group-head">{group.category}</h2>
+          <h2 className="template-group-head">
+            {group.category
+              ? templateCategory(group.category, i18n.language)
+              : t("templates.uncategorized")}
+          </h2>
           <div className="template-grid">
             {group.items.map((tpl) => {
               const Icon = iconFor(tpl.icon);
@@ -290,12 +313,14 @@ export function TemplateGallery() {
                     <span className="template-icon">
                       <Icon size={ICON.lg} strokeWidth={2.2} />
                     </span>
-                    <h3>{tpl.title}</h3>
+                    <h3>{templateTitle(tpl, i18n.language)}</h3>
                   </div>
                   {tpl.integrations && tpl.integrations.length > 0 && (
                     <TemplateIntegrationRow slugs={tpl.integrations} />
                   )}
-                  <p className="template-desc">{tpl.use_case || tpl.description}</p>
+                  <p className="template-desc">
+                    {templateBlurb(tpl, i18n.language)}
+                  </p>
                   {adminBlocked && (
                     <p className="template-admin-blocked-note">
                       {t("templates.adminBlocked", {

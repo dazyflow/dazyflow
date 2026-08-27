@@ -247,6 +247,12 @@ export type Manifest = {
   category?: string;
   provider?: string;
   integration?: string;
+  // integration_description is a blurb about the INTEGRATION rather than this
+  // drop — what the service is, shown on the Apps page under the app's name.
+  // Only integrations an ORG created set it: a built-in's prose is curated in
+  // integrationMeta.ts, where it can be translated. Borrowed for the group from
+  // whichever drop declares it first, the way brand_logo is.
+  integration_description?: string;
   tags?: string[];
   description?: string;
   inputs?: Port[];
@@ -1046,6 +1052,9 @@ export type WebAPI = {
   // frozen from then on.
   name: string;
   label: string;
+  // description is the org's blurb about the service, shown on its page under
+  // Apps. Absent means the page renders without one.
+  description?: string;
   base_url: string;
   // integration is the Apps-page grouping the connection attaches to.
   integration?: string;
@@ -1087,6 +1096,9 @@ export type WebAPILogoMode = "auto" | "custom" | "none";
 // WebAPIInput is what the form submits.
 export type WebAPIInput = {
   label: string;
+  // description is omitted to mean "leave the stored blurb alone" — blank is a
+  // real value here (clearing the paragraph), so it cannot double as "unset".
+  description?: string;
   // name is never sent by this app — the daemon derives the id. It stays on the
   // type because the endpoint still accepts an explicit one.
   name?: string;
