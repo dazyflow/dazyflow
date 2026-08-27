@@ -1047,8 +1047,12 @@ export const api = {
   // mintRunnerToken creates a registration token, shown once. POST rather than
   // GET because it creates something — and because a token in a URL ends up in
   // a proxy log.
-  mintRunnerToken: (token: string) =>
-    request<RunnerToken>(token, "POST", "/admin/runners/token", {}),
+  //
+  // name, when given, pins the token to that one machine so it may REPLACE an
+  // existing runner (a rebuilt host reclaiming its name). Omitted, the token is
+  // open: it adds a new machine but cannot overwrite one already registered.
+  mintRunnerToken: (token: string, name?: string) =>
+    request<RunnerToken>(token, "POST", "/admin/runners/token", name ? { name } : {}),
   // setRunnerLabels replaces which pools a machine belongs to, so an existing
   // machine can be retagged from the admin page instead of only at install
   // time via --labels. Replaces the whole set rather than adding or removing

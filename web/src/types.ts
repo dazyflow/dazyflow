@@ -1141,6 +1141,11 @@ export type RunnerTarget = {
 export type RunnerToken = {
   token: string;
   expires_at: string;
+  // name, when set, is the one machine this token may register (or replace).
+  // Empty/absent is an open token: it brings a new machine in but cannot
+  // overwrite one already registered, so a leaked token cannot evict and
+  // impersonate a live runner.
+  name?: string;
 };
 
 // GitCredential is one named per-org git credential from

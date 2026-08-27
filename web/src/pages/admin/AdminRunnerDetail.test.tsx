@@ -22,11 +22,13 @@ vi.mock("../../auth", () => {
 
 const listRunners = vi.fn();
 const setRunnerLabels = vi.fn();
+const mintRunnerToken = vi.fn();
 vi.mock("../../api", () => ({
   APIError: class extends Error {},
   api: {
     listRunners: (...a: unknown[]) => listRunners(...a),
     setRunnerLabels: (...a: unknown[]) => setRunnerLabels(...a),
+    mintRunnerToken: (...a: unknown[]) => mintRunnerToken(...a),
   },
 }));
 
@@ -57,6 +59,7 @@ const mount = (name = "invoices-box") =>
   );
 
 beforeEach(() => {
+  mintRunnerToken.mockReset();
   listRunners.mockResolvedValue({ runners: [box] });
   setRunnerLabels.mockImplementation((_tok: string, name: string, labels: string[]) =>
     // The server normalizes and returns the saved row; the page shows what came
@@ -165,5 +168,26 @@ describe("AdminRunnerDetail", () => {
       "href",
       "/admin/runners",
     );
+  });
+
+  // Re-registering mints a token PINNED to this machine's name — the only kind
+  // that may replace a live runner — and the install command names the machine
+  // explicitly, so a rebuilt host with a different hostname still reclaims it.
+  it("mints a token pinned to this machine and names it in the command", async () => {
+    mintRunnerToken.mockResolvedValue({
+      token: "dzrt_pinned",
+      expires_at: "2026-08-27T10:30:00Z",
+      name: "invoices-box",
+    });
+    mount();
+    await screen.findByRole("heading", { name: "invoices-box" });
+
+    await userEvent.click(screen.getByRole("button", { name: /runners.reregister/ }));
+
+    // The name reached the API, so the token can overwrite this runner.
+    await waitFor(() => expect(mintRunnerToken).toHaveBeenCalledWith("tok", "invoices-box"));
+    // And the command carries --name, not just --token.
+    const cmd = await screen.findByText(/--token dzrt_pinned --name invoices-box --service/);
+    expect(cmd).toBeInTheDocument();
   });
 });

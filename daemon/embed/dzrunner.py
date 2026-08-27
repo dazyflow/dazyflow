@@ -36,7 +36,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 
 # How long to wait after an empty poll.
 #
@@ -195,6 +195,25 @@ def register(url, token, name, labels):
                 "That registration token is not valid.\n"
                 "Tokens expire after 30 minutes and can only be used once — "
                 "get a fresh one from Admin → Runners."
+            ) from e
+        if e.status == 409:
+            # An open token, and this name is already a registered machine. The
+            # server refuses rather than overwriting it — that would retire the
+            # running machine's credential and hand its work to this one.
+            raise SystemExit(
+                f'A machine named "{name}" is already registered.\n'
+                "This token adds a new machine, so pick a name that is free "
+                "(--name NAME). To REPLACE that machine — a rebuilt host "
+                "reclaiming its name — use “Re-register this machine” on its "
+                "page in Admin → Runners, which gives a command scoped to it."
+            ) from e
+        if e.status == 403:
+            # A name-pinned token used for some other name. The pin is the
+            # authorisation, so it simply will not register anything else.
+            raise SystemExit(
+                f'This registration token is not for "{name}".\n'
+                "It was minted to register one specific machine. Install with "
+                "the name it names, or mint a token for this one."
             ) from e
         raise SystemExit(f"Could not register: {e}") from e
     if not body or "credential" not in body:

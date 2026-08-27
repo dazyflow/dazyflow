@@ -48,9 +48,20 @@ func runnerStoreContract(t *testing.T, store RunnerStore) {
 
 	mint := func(tenant string) string {
 		t.Helper()
-		tok, err := rs.MintToken(ctx, tenant, "admin@"+tenant)
+		tok, err := rs.MintToken(ctx, tenant, "admin@"+tenant, "")
 		if err != nil {
 			t.Fatalf("MintToken: %v", err)
+		}
+		return tok.Token
+	}
+
+	// mintFor mints a token pinned to one machine — the only kind that may
+	// replace a runner that already exists.
+	mintFor := func(tenant, name string) string {
+		t.Helper()
+		tok, err := rs.MintToken(ctx, tenant, "admin@"+tenant, name)
+		if err != nil {
+			t.Fatalf("MintToken(%q): %v", name, err)
 		}
 		return tok.Token
 	}
@@ -174,7 +185,12 @@ func runnerStoreContract(t *testing.T, store RunnerStore) {
 		if err != nil {
 			t.Fatalf("Register: %v", err)
 		}
-		second, newCred, err := rs.Register(ctx, mint("acme"), "rebuilt", []string{"new"}, "0.2.0")
+		// An open token cannot overwrite a live runner — that would be a
+		// takeover. Replacing this machine takes a token minted for its name.
+		if _, _, err := rs.Register(ctx, mint("acme"), "rebuilt", []string{"new"}, "0.2.0"); !errors.Is(err, ErrRunnerNameTaken) {
+			t.Fatalf("open-token overwrite: err = %v, want ErrRunnerNameTaken", err)
+		}
+		second, newCred, err := rs.Register(ctx, mintFor("acme", "rebuilt"), "rebuilt", []string{"new"}, "0.2.0")
 		if err != nil {
 			t.Fatalf("re-Register: %v", err)
 		}
@@ -192,6 +208,32 @@ func runnerStoreContract(t *testing.T, store RunnerStore) {
 		}
 		if _, err := rs.Authenticate(ctx, newCred); err != nil {
 			t.Errorf("the new credential does not work: %v", err)
+		}
+	})
+
+	t.Run("a name-pinned token registers only its own name", func(t *testing.T) {
+		tok := mintFor("acme", "pinned-a")
+		if _, _, err := rs.Register(ctx, tok, "pinned-b", nil, "0.1.0"); !errors.Is(err, ErrRunnerNameMismatch) {
+			t.Fatalf("wrong name: err = %v, want ErrRunnerNameMismatch", err)
+		}
+		// The mismatch did not spend the token — it is still good for its name.
+		if _, _, err := rs.Register(ctx, tok, "pinned-a", nil, "0.1.0"); err != nil {
+			t.Fatalf("pinned token refused its own name after a mismatch: %v", err)
+		}
+	})
+
+	t.Run("a rejected open-token collision does not spend the token", func(t *testing.T) {
+		if _, _, err := rs.Register(ctx, mint("acme"), "occupied", nil, "0.1.0"); err != nil {
+			t.Fatalf("Register: %v", err)
+		}
+		tok := mint("acme")
+		if _, _, err := rs.Register(ctx, tok, "occupied", nil, "0.1.0"); !errors.Is(err, ErrRunnerNameTaken) {
+			t.Fatalf("collision: err = %v, want ErrRunnerNameTaken", err)
+		}
+		// Same token, a free name: the earlier rejection must have rolled back
+		// the "used" mark, or an honest typo would cost a fresh token.
+		if _, _, err := rs.Register(ctx, tok, "free-name", nil, "0.1.0"); err != nil {
+			t.Fatalf("token was consumed by a rejected collision: %v", err)
 		}
 	})
 
@@ -408,7 +450,7 @@ func TestPgRunnerStore_SurvivesARestart(t *testing.T) {
 		t.Fatalf("truncate: %v", err)
 	}
 	rs := &Runners{Store: first}
-	tok, err := rs.MintToken(ctx, "acme", "admin@acme")
+	tok, err := rs.MintToken(ctx, "acme", "admin@acme", "")
 	if err != nil {
 		t.Fatalf("MintToken: %v", err)
 	}
@@ -444,7 +486,7 @@ func TestPgRunnerStore_SurvivesARestart(t *testing.T) {
 
 func mustMint(t *testing.T, rs *Runners, tenant string) string {
 	t.Helper()
-	tok, err := rs.MintToken(t.Context(), tenant, "admin@"+tenant)
+	tok, err := rs.MintToken(t.Context(), tenant, "admin@"+tenant, "")
 	if err != nil {
 		t.Fatalf("MintToken: %v", err)
 	}

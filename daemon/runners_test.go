@@ -25,7 +25,7 @@ func testRunners(t *testing.T) *Runners {
 // register mints a token and redeems it, which is what the real flow does.
 func register(t *testing.T, rs *Runners, tenant, name string, labels ...string) (Runner, string) {
 	t.Helper()
-	tok, err := rs.MintToken(t.Context(), tenant, "admin@"+tenant)
+	tok, err := rs.MintToken(t.Context(), tenant, "admin@"+tenant, "")
 	if err != nil {
 		t.Fatalf("MintToken: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestRedeemToken_OverridesAnyCallerSuppliedTenant(t *testing.T) {
 	if err != nil {
 		t.Fatalf("secret: %v", err)
 	}
-	if err := store.MintToken(t.Context(), "acme", "admin@acme", hash, time.Now().Add(time.Hour)); err != nil {
+	if err := store.MintToken(t.Context(), "acme", "admin@acme", "", hash, time.Now().Add(time.Hour)); err != nil {
 		t.Fatalf("MintToken: %v", err)
 	}
 	// A hostile agent naming someone else's organisation.
@@ -77,7 +77,7 @@ func TestRedeemToken_OverridesAnyCallerSuppliedTenant(t *testing.T) {
 // likely to survive in a scrollback or a chat message. Using it burns it.
 func TestRegister_TokenIsSingleUse(t *testing.T) {
 	rs := testRunners(t)
-	tok, err := rs.MintToken(t.Context(), "acme", "admin@acme")
+	tok, err := rs.MintToken(t.Context(), "acme", "admin@acme", "")
 	if err != nil {
 		t.Fatalf("MintToken: %v", err)
 	}
@@ -94,14 +94,14 @@ func TestRegister_TokenExpires(t *testing.T) {
 	rs := testRunners(t)
 	now := time.Now()
 	rs.Now = func() time.Time { return now }
-	tok, err := rs.MintToken(t.Context(), "acme", "admin@acme")
+	tok, err := rs.MintToken(t.Context(), "acme", "admin@acme", "")
 	if err != nil {
 		t.Fatalf("MintToken: %v", err)
 	}
 	// The store checks against the wall clock, so move the token's expiry into
 	// the past by minting it in the past.
 	rs.Now = func() time.Time { return now.Add(-2 * RunnerTokenTTL) }
-	expired, err := rs.MintToken(t.Context(), "acme", "admin@acme")
+	expired, err := rs.MintToken(t.Context(), "acme", "admin@acme", "")
 	if err != nil {
 		t.Fatalf("MintToken: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestRegister_UnknownTokenIsRefused(t *testing.T) {
 // and confusing them is a plausible mistake. A token must not authenticate.
 func TestAuthenticate_RejectsARegistrationToken(t *testing.T) {
 	rs := testRunners(t)
-	tok, err := rs.MintToken(t.Context(), "acme", "admin@acme")
+	tok, err := rs.MintToken(t.Context(), "acme", "admin@acme", "")
 	if err != nil {
 		t.Fatalf("MintToken: %v", err)
 	}
@@ -177,18 +177,72 @@ func TestDelete_RevokesTheCredential(t *testing.T) {
 	}
 }
 
-// A rebuilt machine registers again under the same name. The new credential
-// must work and the old one must not, or a decommissioned host keeps a way in.
+// A rebuilt machine registers again under the same name, using a token minted
+// for that name. The new credential must work and the old one must not, or a
+// decommissioned host keeps a way in.
 func TestRegister_ReplacingARunnerRetiresTheOldCredential(t *testing.T) {
 	rs := testRunners(t)
 	_, first := register(t, rs, "acme", "box")
-	_, second := register(t, rs, "acme", "box")
+
+	tok, err := rs.MintToken(t.Context(), "acme", "admin@acme", "box")
+	if err != nil {
+		t.Fatalf("MintToken(box): %v", err)
+	}
+	_, second, err := rs.Register(t.Context(), tok.Token, "box", nil, "0.2.0")
+	if err != nil {
+		t.Fatalf("re-Register: %v", err)
+	}
 
 	if _, err := rs.Authenticate(t.Context(), second); err != nil {
 		t.Fatalf("new credential refused: %v", err)
 	}
 	if _, err := rs.Authenticate(t.Context(), first); !errors.Is(err, ErrBadRunnerCredential) {
 		t.Fatalf("err = %v, want the superseded credential dead", err)
+	}
+}
+
+// The takeover the name scoping exists to stop: an OPEN token must not be able
+// to overwrite a runner that already exists, because overwriting retires that
+// machine's credential (kicking it offline) and redirects its work to whoever
+// redeemed the token.
+func TestRegister_OpenTokenCannotOverwriteAnExistingRunner(t *testing.T) {
+	rs := testRunners(t)
+	_, victimCred := register(t, rs, "acme", "prod-box")
+
+	// A fresh, valid open token — the kind minted for adding any machine.
+	tok, err := rs.MintToken(t.Context(), "acme", "admin@acme", "")
+	if err != nil {
+		t.Fatalf("MintToken: %v", err)
+	}
+	if _, _, err := rs.Register(t.Context(), tok.Token, "prod-box", []string{"attacker"}, "9.9.9"); !errors.Is(err, ErrRunnerNameTaken) {
+		t.Fatalf("err = %v, want ErrRunnerNameTaken", err)
+	}
+	// The victim's credential still works: it was never retired.
+	if _, err := rs.Authenticate(t.Context(), victimCred); err != nil {
+		t.Fatalf("victim credential died after a rejected takeover: %v", err)
+	}
+	// And the rejected token was not spent, so the honest operator who simply
+	// mistyped a colliding name can retry under a free one.
+	if _, _, err := rs.Register(t.Context(), tok.Token, "prod-box-2", nil, "9.9.9"); err != nil {
+		t.Fatalf("token was consumed by a rejected registration: %v", err)
+	}
+}
+
+// A name-pinned token registers only its name; pointed at any other, it is
+// refused — so a token minted to replace one machine cannot be redirected onto
+// another.
+func TestRegister_PinnedTokenRejectsAnotherName(t *testing.T) {
+	rs := testRunners(t)
+	tok, err := rs.MintToken(t.Context(), "acme", "admin@acme", "build-01")
+	if err != nil {
+		t.Fatalf("MintToken(build-01): %v", err)
+	}
+	if _, _, err := rs.Register(t.Context(), tok.Token, "build-02", nil, "0.1.0"); !errors.Is(err, ErrRunnerNameMismatch) {
+		t.Fatalf("err = %v, want ErrRunnerNameMismatch", err)
+	}
+	// Still usable for the name it was minted for.
+	if _, _, err := rs.Register(t.Context(), tok.Token, "build-01", nil, "0.1.0"); err != nil {
+		t.Fatalf("pinned token refused its own name: %v", err)
 	}
 }
 
@@ -206,7 +260,7 @@ func TestRegister_NormalizesLabels(t *testing.T) {
 func TestRegister_RejectsBadNames(t *testing.T) {
 	rs := testRunners(t)
 	for _, name := range []string{"", "Has Spaces", "UPPER", "path/like", "dots.out", strings.Repeat("x", 65)} {
-		tok, err := rs.MintToken(t.Context(), "acme", "admin@acme")
+		tok, err := rs.MintToken(t.Context(), "acme", "admin@acme", "")
 		if err != nil {
 			t.Fatalf("MintToken: %v", err)
 		}

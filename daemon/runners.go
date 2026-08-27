@@ -49,6 +49,18 @@ var (
 	// ErrBadRunnerCredential is returned when a credential identifies no
 	// registered runner.
 	ErrBadRunnerCredential = errors.New("runner credential is not valid")
+	// ErrRunnerNameTaken is returned when an OPEN registration token (one not
+	// pinned to a name) is redeemed for a name a runner in the tenant already
+	// holds. An open token may bring a NEW machine in; it may not overwrite an
+	// existing one, because overwriting retires that machine's credential and
+	// redirects its work — a takeover, not a registration. Replacing a machine
+	// is a deliberate act that needs a token minted for that name.
+	ErrRunnerNameTaken = errors.New("a runner with this name already exists")
+	// ErrRunnerNameMismatch is returned when a name-pinned registration token
+	// is redeemed for a different name than it was minted for. The pin is the
+	// authorisation: a token for "build-01" registers "build-01" and nothing
+	// else, so a stolen one cannot be pointed at another machine.
+	ErrRunnerNameMismatch = errors.New("this registration token is for a different runner name")
 )
 
 // Runner is one registered machine.
@@ -164,15 +176,28 @@ func hashRunnerSecret(plain string) []byte {
 type RunnerToken struct {
 	Token     string    `json:"token"`
 	ExpiresAt time.Time `json:"expires_at"`
+	// Name is the machine this token is scoped to, echoed back so the admin
+	// page and the install command can name it. Empty for an open token.
+	Name string `json:"name,omitempty"`
 }
 
 // ---- store ------------------------------------------------------------
 
 // RunnerStore persists runners, their credentials, and registration tokens.
 type RunnerStore interface {
-	MintToken(ctx context.Context, tenant, createdBy string, hash []byte, expires time.Time) error
+	// MintToken stores a token hash. name is the machine the token may
+	// register, or "" for an open token (a new name only, no overwrite).
+	MintToken(ctx context.Context, tenant, createdBy, name string, hash []byte, expires time.Time) error
 	// RedeemToken consumes a token and registers the runner in ONE step, so a
 	// token cannot be spent twice even by two agents racing.
+	//
+	// The token's own name scoping is enforced here, against r.Name:
+	//   - a token pinned to a name registers (or replaces) only that name, and
+	//     any other name is ErrRunnerNameMismatch;
+	//   - an open token registers only a name no runner holds yet, and a
+	//     collision is ErrRunnerNameTaken rather than a silent overwrite.
+	// A name-rule rejection must NOT consume the token: it is a recoverable
+	// caller mistake (a mistyped --name), not a spent secret.
 	//
 	// Returns ErrBadRunnerToken for a token that is unknown, expired, or spent.
 	RedeemToken(ctx context.Context, tokenHash []byte, r Runner, credHash []byte) (Runner, error)
@@ -210,10 +235,21 @@ CREATE TABLE IF NOT EXISTS runner_tokens (
     token_hash  BYTEA PRIMARY KEY,
     tenant      TEXT NOT NULL,
     created_by  TEXT NOT NULL DEFAULT '',
+    -- The one name this token may register, or '' for an OPEN token. An open
+    -- token brings a new machine in but cannot overwrite an existing one; a
+    -- named token registers (or replaces) exactly that machine. This is what
+    -- keeps a leaked token from evicting and impersonating a live runner.
+    name        TEXT NOT NULL DEFAULT '',
     expires_at  TIMESTAMPTZ NOT NULL,
     used_at     TIMESTAMPTZ,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- name was added after runner_tokens shipped. A pre-existing deployment's
+-- table has no such column, and CREATE TABLE IF NOT EXISTS above does nothing
+-- to one that already exists — so the column has to be added on its own. The
+-- default '' means every token minted before this change reads as an open one,
+-- which is the safe reading: it cannot overwrite an existing runner.
+ALTER TABLE runner_tokens ADD COLUMN IF NOT EXISTS name TEXT NOT NULL DEFAULT '';
 -- MintToken sweeps expired tokens on the request path, so that DELETE runs
 -- while an admin waits for their install command. Without this it is a
 -- sequential scan of every token ever minted.
@@ -321,22 +357,37 @@ func (rs *Runners) now() time.Time {
 
 // MintToken creates a registration token. The plaintext is returned once and
 // never stored.
-func (rs *Runners) MintToken(ctx context.Context, tenant, createdBy string) (RunnerToken, error) {
+// MintToken issues a registration token.
+//
+// name scopes it. Left blank, the token is OPEN: it registers a new machine
+// but cannot overwrite one already registered — so a token that leaks from a
+// scrollback or a process list is not a way to evict and impersonate a running
+// machine. Set to a name, the token registers (or replaces) exactly that
+// machine, which is how a rebuilt host deliberately reclaims its name.
+//
+// The name is validated the same way registration validates it, so a token can
+// never be pinned to a name no machine could ever register under.
+func (rs *Runners) MintToken(ctx context.Context, tenant, createdBy, name string) (RunnerToken, error) {
 	if rs == nil || rs.Store == nil {
 		return RunnerToken{}, fmt.Errorf("runners: not configured")
 	}
 	if tenant == "" {
 		return RunnerToken{}, fmt.Errorf("runner token: tenant required")
 	}
+	if name != "" {
+		if err := validRunnerName(name); err != nil {
+			return RunnerToken{}, fmt.Errorf("runner name: %w", err)
+		}
+	}
 	plain, hash, err := newRunnerSecret(runnerTokenPrefix)
 	if err != nil {
 		return RunnerToken{}, err
 	}
 	expires := rs.now().Add(RunnerTokenTTL)
-	if err := rs.Store.MintToken(ctx, tenant, createdBy, hash, expires); err != nil {
+	if err := rs.Store.MintToken(ctx, tenant, createdBy, name, hash, expires); err != nil {
 		return RunnerToken{}, err
 	}
-	return RunnerToken{Token: plain, ExpiresAt: expires}, nil
+	return RunnerToken{Token: plain, ExpiresAt: expires, Name: name}, nil
 }
 
 // Register redeems a token and returns the credential the agent keeps.
@@ -478,8 +529,11 @@ type runnerRef struct{ tenant, name string }
 type memRunnerToken struct {
 	tenant    string
 	createdBy string
-	expires   time.Time
-	used      bool
+	// name is the one machine this token may register, or "" for an open
+	// token. See MintToken / RedeemToken for what each allows.
+	name    string
+	expires time.Time
+	used    bool
 }
 
 func NewMemRunnerStore() *MemRunnerStore {
@@ -490,10 +544,10 @@ func NewMemRunnerStore() *MemRunnerStore {
 	}
 }
 
-func (m *MemRunnerStore) MintToken(_ context.Context, tenant, createdBy string, hash []byte, expires time.Time) error {
+func (m *MemRunnerStore) MintToken(_ context.Context, tenant, createdBy, name string, hash []byte, expires time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.tokens[hex.EncodeToString(hash)] = &memRunnerToken{tenant: tenant, createdBy: createdBy, expires: expires}
+	m.tokens[hex.EncodeToString(hash)] = &memRunnerToken{tenant: tenant, createdBy: createdBy, name: name, expires: expires}
 	return nil
 }
 
@@ -503,6 +557,18 @@ func (m *MemRunnerStore) RedeemToken(_ context.Context, tokenHash []byte, r Runn
 	tok, ok := m.tokens[hex.EncodeToString(tokenHash)]
 	if !ok || tok.used || time.Now().After(tok.expires) {
 		return Runner{}, ErrBadRunnerToken
+	}
+	// The name rules are checked BEFORE the token is marked used: a mistyped
+	// --name or a collision is a recoverable mistake, and spending the token on
+	// it would force the operator to get a fresh one to try again.
+	if tok.name != "" {
+		// Pinned: this token registers exactly its own name.
+		if r.Name != tok.name {
+			return Runner{}, ErrRunnerNameMismatch
+		}
+	} else if _, exists := m.runners[tok.tenant][r.Name]; exists {
+		// Open: a new name only, never an overwrite of a live runner.
+		return Runner{}, ErrRunnerNameTaken
 	}
 	tok.used = true
 	r.Tenant = tok.tenant

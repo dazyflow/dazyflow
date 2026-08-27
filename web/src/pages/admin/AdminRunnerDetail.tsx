@@ -7,7 +7,8 @@ import { Plug, Plus, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../auth";
 import { api } from "../../api";
-import type { Runner } from "../../types";
+import type { Runner, RunnerToken } from "../../types";
+import { InstallCommand } from "./AdminRunners";
 import { BackLink } from "../../components/ui/BackLink";
 import { Button } from "../../components/ui/Button";
 import { ErrorNotice } from "../../components/ui/ErrorNotice";
@@ -102,9 +103,59 @@ export function AdminRunnerDetail() {
             onError={setError}
             onClearError={() => setError(null)}
           />
+
+          <RunnerReregister runner={runner} onError={setError} />
         </>
       )}
     </div>
+  );
+}
+
+// RunnerReregister mints a token PINNED to this machine's name — the one kind
+// that may replace a runner that already exists.
+//
+// This is the deliberate "rebuilt host reclaims its name" path. An ordinary Add
+// mints an OPEN token, which cannot overwrite a live runner (that would retire
+// its credential and redirect its work — a takeover). Replacing in place keeps
+// the machine's history and tags; the alternative is to remove it and add it
+// back as a new machine.
+function RunnerReregister({
+  runner,
+  onError,
+}: {
+  runner: Runner;
+  onError: (msg: string) => void;
+}) {
+  const { t } = useTranslation();
+  const { token } = useAuth();
+  const [minted, setMinted] = useState<RunnerToken | null>(null);
+  const [minting, setMinting] = useState(false);
+
+  const mint = async () => {
+    if (!token) return;
+    setMinting(true);
+    onError("");
+    try {
+      setMinted(await api.mintRunnerToken(token, runner.name));
+    } catch (e) {
+      onError(explainApiError(e, t));
+    } finally {
+      setMinting(false);
+    }
+  };
+
+  return (
+    <section className="card">
+      <h2>{t("runners.reregisterHead")}</h2>
+      <p className="desc">{t("runners.reregisterIntro")}</p>
+      {minted ? (
+        <InstallCommand token={minted} onDone={() => setMinted(null)} />
+      ) : (
+        <Button onClick={() => void mint()} disabled={minting}>
+          {minting ? t("runners.adding") : t("runners.reregister")}
+        </Button>
+      )}
+    </section>
   );
 }
 

@@ -44,6 +44,15 @@ requirement, and it is already on most systems.
 The token lasts 30 minutes and works once. Add another runner to get a fresh
 one.
 
+A token from **Add a runner** is *open*: it brings a **new** machine in, but it
+cannot overwrite one that is already registered. If the name you install under
+is already taken, registration is refused rather than silently replacing that
+machine — so a token that leaks from a scrollback or a process list cannot be
+used to evict a running machine and take over its work. To replace a machine in
+place (a rebuilt or reinstalled host reclaiming its name), use **Re-register
+this machine** on that runner's page: it mints a token scoped to that one name,
+and the command it gives you names the machine explicitly.
+
 ### If you'd rather not pipe a script into a shell
 
 Reasonable. Both files are deliberately readable, so read them first — starting

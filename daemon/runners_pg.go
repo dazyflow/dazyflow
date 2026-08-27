@@ -5,11 +5,22 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// isPgUniqueViolation reports whether err is Postgres' unique_violation
+// (SQLSTATE 23505). RedeemToken leans on it to turn an open token's INSERT into
+// an already-registered name into ErrRunnerNameTaken, rather than reading the
+// raw driver error.
+func isPgUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}
 
 // PgRunnerStore is the durable RunnerStore.
 //
@@ -48,7 +59,7 @@ func scanRunner(row pgx.Row) (Runner, error) {
 	return r, nil
 }
 
-func (s *PgRunnerStore) MintToken(ctx context.Context, tenant, createdBy string, hash []byte, expires time.Time) error {
+func (s *PgRunnerStore) MintToken(ctx context.Context, tenant, createdBy, name string, hash []byte, expires time.Time) error {
 	// Sweep tokens that are long past usable while we are here. They are
 	// write-once and read once, so nothing else would ever collect them, and a
 	// token minted every time someone adds a machine accumulates forever. The
@@ -59,8 +70,8 @@ func (s *PgRunnerStore) MintToken(ctx context.Context, tenant, createdBy string,
 		return err
 	}
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO runner_tokens (token_hash, tenant, created_by, expires_at)
-		VALUES ($1, $2, $3, $4)`, hash, tenant, createdBy, expires)
+		INSERT INTO runner_tokens (token_hash, tenant, created_by, name, expires_at)
+		VALUES ($1, $2, $3, $4, $5)`, hash, tenant, createdBy, name, expires)
 	return err
 }
 
@@ -82,17 +93,31 @@ func (s *PgRunnerStore) RedeemToken(ctx context.Context, tokenHash []byte, r Run
 	// row to update. Expiry is checked here too, so an expired token and a
 	// spent one are indistinguishable to the caller — deliberately, since
 	// telling them apart helps someone probing for a live token.
-	var tenant, createdBy string
+	var tenant, createdBy, tokenName string
 	err = tx.QueryRow(ctx, `
 		UPDATE runner_tokens
 		   SET used_at = now()
 		 WHERE token_hash = $1 AND used_at IS NULL AND expires_at > now()
-		 RETURNING tenant, created_by`, tokenHash).Scan(&tenant, &createdBy)
+		 RETURNING tenant, created_by, name`, tokenHash).Scan(&tenant, &createdBy, &tokenName)
 	if err != nil {
 		if isPgNoRows(err) {
 			return Runner{}, ErrBadRunnerToken
 		}
 		return Runner{}, err
+	}
+
+	// Enforce the token's name scoping. A violation returns before commit, so
+	// the deferred Rollback un-does the "used" mark above — a mistyped --name
+	// or a collision leaves the token usable rather than spending it on a
+	// mistake the operator can simply fix and retry.
+	//
+	// A pinned token registers only its own name. An open token (tokenName
+	// == "") registers only a name no runner holds yet — enforced below by a
+	// plain INSERT whose unique-violation on (tenant, name) is the collision,
+	// rather than an upsert that would silently overwrite the live runner and
+	// retire its credential.
+	if tokenName != "" && r.Name != tokenName {
+		return Runner{}, ErrRunnerNameMismatch
 	}
 
 	// The tenant comes from the token, never from the caller.
@@ -107,13 +132,18 @@ func (s *PgRunnerStore) RedeemToken(ctx context.Context, tokenHash []byte, r Run
 		labels = []string{}
 	}
 
-	// Re-registering under an existing name replaces it — that is how a
-	// rebuilt machine comes back. Overwriting cred_hash on the same row is
-	// what retires the old credential: the unique index means one row holds
-	// one credential, so there is no orphan left to clean up. created_at is
-	// left out of the SET list so the machine keeps the date it first
-	// appeared.
-	stored, err := scanRunner(tx.QueryRow(ctx, `
+	// A pinned token may REPLACE the machine it names — that is how a rebuilt
+	// host comes back. Overwriting cred_hash on the same row is what retires
+	// the old credential: the unique index means one row holds one credential,
+	// so there is no orphan left to clean up. created_at is left out of the SET
+	// list so the machine keeps the date it first appeared.
+	//
+	// An open token may NOT replace: it inserts, and a name already taken is a
+	// unique-violation the caller sees as ErrRunnerNameTaken. The two SQL
+	// statements differ only in the ON CONFLICT clause, which is precisely the
+	// permission that separates "bring a new machine in" from "take an existing
+	// one over".
+	const insertReplacing = `
 		INSERT INTO tenant_runners
 		    (tenant, name, labels, cred_hash, version, last_seen, created_by)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -123,9 +153,25 @@ func (s *PgRunnerStore) RedeemToken(ctx context.Context, tokenHash []byte, r Run
 		       version    = EXCLUDED.version,
 		       last_seen  = EXCLUDED.last_seen,
 		       created_by = EXCLUDED.created_by
-		RETURNING `+runnerColumns,
+		RETURNING ` + runnerColumns
+	const insertNew = `
+		INSERT INTO tenant_runners
+		    (tenant, name, labels, cred_hash, version, last_seen, created_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		RETURNING ` + runnerColumns
+	query := insertNew
+	if tokenName != "" {
+		query = insertReplacing
+	}
+	stored, err := scanRunner(tx.QueryRow(ctx, query,
 		r.Tenant, r.Name, labels, credHash, r.Version, nullTime(r.LastSeen), r.CreatedBy))
 	if err != nil {
+		if isPgUniqueViolation(err) {
+			// Open token, name already registered: reject rather than clobber.
+			// Returning before commit preserves the token for a retry under a
+			// free name.
+			return Runner{}, ErrRunnerNameTaken
+		}
 		return Runner{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {

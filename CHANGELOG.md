@@ -70,6 +70,22 @@ into the image.)
   string, with the slug kept only as the fallback for steps that name no
   integration at all.
 
+### Security
+
+- **A registration token can no longer take over an existing runner.** A token
+  minted from **Add a runner** is now *open*: it registers a machine whose name
+  is not yet taken, and a collision is refused (`409`) instead of silently
+  overwriting the runner that holds that name. Overwriting retired the running
+  machine's credential — kicking it offline — and redirected its work,
+  including any secrets a flow injects as env or stdin, to whoever redeemed the
+  token; a token seen in a scrollback or a process list was enough. Replacing a
+  machine in place is now a deliberate act: **Re-register this machine** on a
+  runner's page mints a token scoped to that one name, and the install command
+  it produces names the machine explicitly. The stored token gains a `name`
+  column (blank for existing tokens, i.e. open — the safe reading), applied as
+  an in-place migration. Agent bumped to 0.2.1 for the clearer registration
+  errors.
+
 ## [0.20.0] - 2026-08-27
 
 ### Added

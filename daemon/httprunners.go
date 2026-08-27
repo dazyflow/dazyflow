@@ -6,6 +6,7 @@ package daemon
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -163,6 +164,17 @@ func (h *HTTPGateway) listRunnerTargets(rw http.ResponseWriter, r *http.Request,
 	writeJSON(rw, http.StatusOK, map[string]any{"runners": out})
 }
 
+// mintTokenRequest is the optional body of a mint call.
+type mintTokenRequest struct {
+	// Name pins the token to one machine: it may register (or replace) only a
+	// runner of this name. Blank mints an OPEN token, which may bring a new
+	// machine in but cannot overwrite one already registered — so a token that
+	// leaks cannot be used to evict and impersonate a live runner. Replacing a
+	// specific machine (a rebuilt host reclaiming its name) is what a named
+	// token is for.
+	Name string `json:"name,omitempty"`
+}
+
 // mintRunnerToken returns a registration token, shown once.
 //
 // POST rather than GET because it creates something, and because a token in a
@@ -171,13 +183,28 @@ func (h *HTTPGateway) mintRunnerToken(rw http.ResponseWriter, r *http.Request, p
 	if !requireStepSourceAdmin(rw, p) || !h.runnersConfigured(rw) {
 		return
 	}
-	tok, err := h.Runners.MintToken(r.Context(), p.Tenant, p.Subject)
+	// The body is optional: callers minting an open token send none, so an
+	// empty body (io.EOF) is not an error — only a body that is present and
+	// malformed is.
+	var req mintTokenRequest
+	if err := decodeRunnerBody(r, &req); err != nil && !errors.Is(err, io.EOF) {
+		writeJSONError(rw, http.StatusBadRequest, "malformed request body")
+		return
+	}
+	if req.Name != "" {
+		if err := validRunnerName(req.Name); err != nil {
+			writeAPIError(rw, http.StatusBadRequest, "invalid_name", "runner name: "+err.Error())
+			return
+		}
+	}
+	tok, err := h.Runners.MintToken(r.Context(), p.Tenant, p.Subject, req.Name)
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
 	// Audited: this is the moment a new machine becomes able to join the org.
-	h.audit(r.Context(), p, "runner.token", "", "")
+	// The name (or "" for an open token) records what the token may register.
+	h.audit(r.Context(), p, "runner.token", req.Name, "")
 	writeJSON(rw, http.StatusOK, tok)
 }
 
@@ -281,14 +308,27 @@ func (h *HTTPGateway) registerRunner(rw http.ResponseWriter, r *http.Request) {
 	}
 	runner, cred, err := h.Runners.Register(r.Context(), req.Token, req.Name, req.Labels, req.Version)
 	if err != nil {
-		if errors.Is(err, ErrBadRunnerToken) {
+		switch {
+		case errors.Is(err, ErrBadRunnerToken):
 			// 401, not 400: the token is a credential, and this is an
 			// authentication failure. The message stays vague on purpose —
 			// distinguishing expired from unknown would help someone probing.
 			writeJSONError(rw, http.StatusUnauthorized, "registration token is not valid")
-			return
+		case errors.Is(err, ErrRunnerNameTaken):
+			// 409: the token is good, but this name is already a live runner
+			// and an open token may not overwrite it. A conflict, not an auth
+			// failure — and the operator can retry under a free name, or an
+			// admin can mint a token pinned to this name to replace it.
+			writeJSONError(rw, http.StatusConflict,
+				"a runner with this name already exists; choose another name, "+
+					"or have an admin mint a token for this name to replace it")
+		case errors.Is(err, ErrRunnerNameMismatch):
+			// 403: the token authorises one specific name and this is not it.
+			writeJSONError(rw, http.StatusForbidden,
+				"this registration token is for a different runner name")
+		default:
+			writeJSONError(rw, http.StatusBadRequest, err.Error())
 		}
-		writeJSONError(rw, http.StatusBadRequest, err.Error())
 		return
 	}
 	h.logger.Printf("runner %q registered for tenant %q", runner.Name, runner.Tenant)

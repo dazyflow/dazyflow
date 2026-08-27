@@ -208,7 +208,13 @@ export function AdminRunners() {
 // Shown inline rather than in a dialog. A dialog would have to be dismissed to
 // get at the terminal behind it, and the token is unrecoverable once gone — so
 // it stays on the page until the operator says they are done with it.
-function InstallCommand({ token, onDone }: { token: RunnerToken; onDone: () => void }) {
+export function InstallCommand({
+  token,
+  onDone,
+}: {
+  token: RunnerToken;
+  onDone: () => void;
+}) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
 
@@ -222,9 +228,15 @@ function InstallCommand({ token, onDone }: { token: RunnerToken; onDone: () => v
   // silently — the machine simply stops appearing, days later, with nothing to
   // point at. Someone who genuinely wants a foreground agent can drop the flag;
   // the far more common mistake is not knowing it existed.
+  // A pinned token (one minted to replace a specific machine) carries --name,
+  // because the token registers only that name and the agent otherwise defaults
+  // to the machine's hostname — which need not match. An open token omits it
+  // and the hostname stands.
   const command =
     `curl -fsSL ${window.location.origin}/runner.sh | sh -s -- ` +
-    `--token ${token.token} --service`;
+    `--token ${token.token}` +
+    (token.name ? ` --name ${token.name}` : "") +
+    ` --service`;
 
   const copy = async () => {
     try {

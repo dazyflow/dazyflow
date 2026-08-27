@@ -24,7 +24,7 @@ func targetsGateway(t *testing.T) *HTTPGateway {
 	t.Helper()
 	store := NewMemRunnerStore()
 	rs := &Runners{Store: store}
-	tok, err := rs.MintToken(context.Background(), "acme", "admin@acme")
+	tok, err := rs.MintToken(context.Background(), "acme", "admin@acme", "")
 	if err != nil {
 		t.Fatalf("MintToken: %v", err)
 	}
@@ -130,7 +130,7 @@ func TestListRunnerTargets_AStaleMachineReadsAsOffline(t *testing.T) {
 	store := NewMemRunnerStore()
 	long := time.Now().Add(-2 * RunnerOnlineWindow)
 	rs := &Runners{Store: store, Now: func() time.Time { return long }}
-	tok, err := rs.MintToken(context.Background(), "acme", "admin@acme")
+	tok, err := rs.MintToken(context.Background(), "acme", "admin@acme", "")
 	if err != nil {
 		t.Fatalf("MintToken: %v", err)
 	}
