@@ -653,18 +653,22 @@ function WebAPIStatusChip({ webapi }: { webapi: WebAPI }) {
       </span>
     );
   }
+  // The pill stays neutral and the DOT carries the tone, which is how every
+  // status chip in the app works: only `.status-dot.<tone>` has rules. Six call
+  // sites used to pass the tone to the pill as well, where it matched nothing;
+  // CI's class guard caught this one (the only one written as a literal) and the
+  // rest were cleaned out with it.
   if (webapi.last_error) {
     return (
-      <span className="status-chip failed" title={webapi.last_error}>
+      <span className="status-chip" title={webapi.last_error}>
         <span className="status-dot failed" />
         {t("webapi.broken")}
       </span>
     );
   }
-  const tone = webapi.registered ? "succeeded" : "";
   return (
-    <span className={"status-chip " + tone}>
-      <span className={"status-dot " + tone} />
+    <span className="status-chip">
+      <span className={webapi.registered ? "status-dot succeeded" : "status-dot"} />
       {webapi.registered ? t("webapi.inPalette") : t("webapi.pending")}
     </span>
   );

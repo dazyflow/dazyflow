@@ -115,7 +115,7 @@ function RunnerStatus({ runner }: { runner: Runner }) {
   const { t } = useTranslation();
   const tone = runner.online ? "succeeded" : "failed";
   return (
-    <span className={"status-chip " + tone}>
+    <span className="status-chip">
       <span className={"status-dot " + tone} />
       {runner.online
         ? t("runners.online")

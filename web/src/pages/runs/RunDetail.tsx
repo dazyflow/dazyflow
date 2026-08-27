@@ -1112,7 +1112,7 @@ function NodeError({
 function StatusChip({ status }: { status: JobStatus }) {
   const { t } = useTranslation();
   return (
-    <span className={"status-chip " + status}>
+    <span className="status-chip">
       <span className={"status-dot " + status} />
       {statusLabel(status, t)}
     </span>

@@ -30,7 +30,7 @@ export function BundleView({ bundle }: { bundle: SupportBundle }) {
         <div>
           <div className="bundle-section-head">{t("bundle.runHead")}</div>
           <div>
-            <span className={"status-chip " + run.status}>
+            <span className="status-chip">
               <span className={"status-dot " + run.status} /> {run.status}
             </span>
           </div>
@@ -58,7 +58,7 @@ export function BundleView({ bundle }: { bundle: SupportBundle }) {
                   <span className="bundle-node-module">{n.module}</span>
                   {n.disabled && <span className="count-pill">{t("bundle.disabled")}</span>}
                   {nr && (
-                    <span className={"status-chip " + nr.status}>
+                    <span className="status-chip">
                       <span className={"status-dot " + nr.status} /> {nr.status}
                     </span>
                   )}

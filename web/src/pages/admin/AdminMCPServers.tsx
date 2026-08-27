@@ -416,7 +416,7 @@ function MCPStatusChip({ server }: { server: MCPServer }) {
   }
   const tone = server.connected ? "succeeded" : "failed";
   return (
-    <span className={"status-chip " + tone} title={server.last_error || undefined}>
+    <span className="status-chip" title={server.last_error || undefined}>
       <span className={"status-dot " + tone} />
       {server.connected
         ? t("mcp.connected")
