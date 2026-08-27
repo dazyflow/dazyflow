@@ -278,6 +278,16 @@ export type Manifest = {
   // has switched this drop off. The editor shows it greyed-out and un-pickable
   // rather than hiding it; it can't be added to a flow.
   disabled?: boolean;
+  // unavailable is set at registration when the drop's provider is reachable
+  // in principle but not right now — an MCP server whose endpoint is down or
+  // whose credential was rotated away.
+  //
+  // The manifest is still COMPLETE: ports, params schema and icon all come
+  // from the last tool list the server was seen publishing. That is the whole
+  // point — without it a flow wired into the step renders with a bare in/out
+  // pair and looks like it lost its edges. The card shows a "needs connection"
+  // banner instead, and the step cannot be picked for new work.
+  unavailable?: boolean;
 };
 
 // JSONSchema is a relaxed subset of the JSON Schema spec — enough to
@@ -947,6 +957,26 @@ export type MCPServer = {
   created_by?: string;
   created_at: string;
   updated_at: string;
+};
+
+// MCPServerUse is one flow that references an MCP server's steps, from
+// GET /admin/mcp-servers/{name}/usage. It exists to answer one question, asked
+// at one moment: what breaks if this server is deleted.
+export type MCPServerUse = {
+  workspace: string;
+  flow_id: string;
+  name?: string;
+  // steps are the referencing step ids, e.g. "mcp:mcp-test:search".
+  steps: string[];
+  // published is the difference between an inconvenience and an outage.
+  published: boolean;
+};
+
+// MCPServerUsage is the whole answer. hidden counts flows the caller may not
+// view: an admin needs the blast radius even where they may not see the title.
+export type MCPServerUsage = {
+  flows: MCPServerUse[];
+  hidden: number;
 };
 
 // MCPServerInput is what the form submits. token empty on an edit means "keep

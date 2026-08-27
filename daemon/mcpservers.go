@@ -87,6 +87,15 @@ type MCPServer struct {
 	CreatedBy string
 	CreatedAt time.Time
 	UpdatedAt time.Time
+	// Snapshot is the tool list this server was last seen publishing.
+	//
+	// Persisted for one reason: a tool's manifest is what tells the editor a
+	// step's PORTS, so losing it when the endpoint goes down makes every flow
+	// wired into that step look like it lost its edges. With the snapshot the
+	// steps stay fully described and merely unavailable. It outlives a daemon
+	// restart because "the server is still down after a deploy" is exactly
+	// when an author would otherwise open a flow that looks broken.
+	Snapshot MCPSnapshot
 	// ToolCount, LastError and LastConnected are the outcome of the last
 	// connection attempt, persisted so the list can explain a server that is
 	// not working without every page load re-handshaking with it.
@@ -94,6 +103,23 @@ type MCPServer struct {
 	LastError     string
 	LastConnected time.Time
 }
+
+// MCPSnapshot is what a server was last seen publishing: enough to describe
+// its steps with no connection open.
+//
+// Stored as JSON on the row rather than as synthesized manifests, because a
+// manifest is DERIVED — the shape synthesizeManifest produces changes between
+// versions, and a stored one would pin an old release's idea of the ports.
+type MCPSnapshot struct {
+	Tools []mcp.Tool `json:"tools,omitempty"`
+	// Logos are resolved icons by tool name. Kept alongside the tools so a
+	// disconnected step keeps its identity as well as its shape, and so a
+	// reconcile pass over a dead server costs no icon fetches.
+	Logos map[string]string `json:"logos,omitempty"`
+}
+
+// Empty reports whether there is nothing to describe.
+func (s MCPSnapshot) Empty() bool { return len(s.Tools) == 0 }
 
 // HasAuth reports whether this server presents a credential.
 func (s MCPServer) HasAuth() bool { return s.AuthKind == MCPAuthBearer || s.AuthKind == MCPAuthHeader }
@@ -122,6 +148,10 @@ type MCPServerStore interface {
 	Delete(ctx context.Context, tenant, name string) error
 	// SealedToken returns the stored credential blob, still sealed.
 	SealedToken(ctx context.Context, tenant, name string) ([]byte, error)
+	// SetSnapshot records what the server was last seen publishing. Separate
+	// from Put for the same reason SetStatus is: it is written by the connect
+	// path, not by an admin's edit, and must not disturb the configuration.
+	SetSnapshot(ctx context.Context, tenant, name string, snap MCPSnapshot) error
 	// SetStatus records the outcome of a connection attempt. Deliberately
 	// separate from Put: a status write must not disturb the configuration,
 	// and the reconcile loop writes status far more often than anyone edits.
@@ -133,6 +163,7 @@ CREATE TABLE IF NOT EXISTS tenant_mcp_servers (
     tenant         TEXT NOT NULL,
     name           TEXT NOT NULL,
     label          TEXT NOT NULL DEFAULT '',
+    snapshot       JSONB NOT NULL DEFAULT '{}'::jsonb,
     url            TEXT NOT NULL,
     auth_kind      TEXT NOT NULL DEFAULT 'none',
     auth_header    TEXT NOT NULL DEFAULT '',
@@ -154,6 +185,10 @@ CREATE INDEX IF NOT EXISTS tenant_mcp_servers_enabled_idx ON tenant_mcp_servers 
 -- Added after the table shipped: name used to be both the id and the display
 -- name. Existing rows keep an empty label and render by name.
 ALTER TABLE tenant_mcp_servers ADD COLUMN IF NOT EXISTS label TEXT NOT NULL DEFAULT '';
+-- The last tool list the server was seen publishing, so its steps stay
+-- described while it is unreachable. Added after the table shipped; an
+-- existing row starts with none and gets one on its next successful connect.
+ALTER TABLE tenant_mcp_servers ADD COLUMN IF NOT EXISTS snapshot JSONB NOT NULL DEFAULT '{}'::jsonb;
 `
 
 // EnsurePgMCPServerSchema creates the MCP server table.
@@ -419,6 +454,12 @@ func (m *MCPServers) save(ctx context.Context, tenant, actor string, in MCPServe
 	if !isNew {
 		row.CreatedBy = existing.CreatedBy
 		row.CreatedAt = existing.CreatedAt
+		// Carried, not re-derived: the connect below may fail (a URL typo is
+		// the usual way), and it needs the cached tool list to fall back on.
+		// Without this, fixing one field would strip every flow's ports until
+		// the next successful handshake. The stores keep it on Put for the same
+		// reason; this is the in-memory half of that promise.
+		row.Snapshot = existing.Snapshot
 	}
 
 	// nil means keep. Auth cleared to none drops the stored blob outright
@@ -498,27 +539,67 @@ func (m *MCPServers) connect(ctx context.Context, row MCPServer) MCPServer {
 	}
 	now := m.now()
 	if err != nil {
-		// Unregister as well as record: a server that WAS working and has just
-		// had its token rotated away must stop offering steps, not keep serving
-		// from a connection that no longer authenticates.
+		// The live registration goes: a server whose token has just been
+		// rotated away must stop SERVING, not keep answering from a connection
+		// that no longer authenticates.
+		//
+		// What replaces it is a description, not a connection. The steps stay
+		// in the catalog, fully specified and marked unavailable, so a flow
+		// wired into them keeps its ports and its edges; running one fails
+		// with the reason. Without this the manifests vanish and every such
+		// flow opens looking like it lost its wiring — see engine/mcp/offline.go.
 		//
 		// forget rather than remember, so the next reconcile pass tries again.
 		// A failing server is retried every interval, indefinitely — which is
 		// what makes it come back on its own when the vendor's outage ends,
 		// without anyone revisiting the page.
-		m.Catalog.Unregister(row.Tenant, row.Name)
 		m.forget(mcpKey{row.Tenant, row.Name})
 		row.LastError = err.Error()
-		row.ToolCount = 0
-		_ = m.Store.SetStatus(ctx, row.Tenant, row.Name, 0, row.LastError, now)
+		row.ToolCount = m.describeOffline(row, row.LastError)
+		_ = m.Store.SetStatus(ctx, row.Tenant, row.Name, row.ToolCount, row.LastError, now)
 		return row
 	}
 	row.ToolCount = m.toolCount(row.Tenant, row.Name)
 	row.LastError = ""
 	row.LastConnected = now
 	m.remember(mcpKey{row.Tenant, row.Name}, row.UpdatedAt)
+	// Snapshot what it is publishing NOW, so the next failure has something
+	// current to describe. Written only on success: a snapshot taken from a
+	// failed handshake would be empty, which is the state this exists to avoid.
+	if tools, logos, ok := m.Catalog.SnapshotFor(row.Tenant, row.Name); ok && len(tools) > 0 {
+		snap := MCPSnapshot{Tools: tools, Logos: logos}
+		row.Snapshot = snap
+		_ = m.Store.SetSnapshot(ctx, row.Tenant, row.Name, snap)
+	}
 	_ = m.Store.SetStatus(ctx, row.Tenant, row.Name, row.ToolCount, "", now)
 	return row
+}
+
+// describeOffline re-registers a failed server's cached tools as unavailable
+// and reports how many it described.
+//
+// A server that has never connected has no snapshot; there is nothing to
+// describe and it is unregistered outright, which is the old behaviour and the
+// right one — inventing placeholder steps for a URL that has never answered
+// would put fiction in the palette.
+func (m *MCPServers) describeOffline(row MCPServer, reason string) int {
+	if row.Snapshot.Empty() {
+		m.Catalog.Unregister(row.Tenant, row.Name)
+		return 0
+	}
+	err := m.Catalog.RegisterOffline(mcp.OfflineDescriptor{
+		Tenant: row.Tenant,
+		Name:   row.Name,
+		Label:  row.DisplayName(),
+		Tools:  row.Snapshot.Tools,
+		Logos:  row.Snapshot.Logos,
+		Reason: reason,
+	})
+	if err != nil {
+		m.Catalog.Unregister(row.Tenant, row.Name)
+		return 0
+	}
+	return m.toolCount(row.Tenant, row.Name)
 }
 
 func (m *MCPServers) toolCount(tenant, name string) int {

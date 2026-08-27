@@ -5,6 +5,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"sort"
 	"sync"
 	"time"
@@ -33,15 +34,22 @@ func NewPgMCPServerStore(ctx context.Context, pool *pgxpool.Pool) (*PgMCPServerS
 // order. auth_secret is absent on purpose: a credential leaves the table only
 // through SealedToken, so no ordinary list or lookup can carry one into a log
 // line or an API response by accident.
-const mcpServerColumns = `tenant, name, label, url, auth_kind, auth_header, enabled,
+const mcpServerColumns = `tenant, name, label, url, auth_kind, auth_header, enabled, snapshot,
 	created_by, created_at, updated_at, tool_count, last_error, last_connected`
 
 func scanMCPServer(row pgx.Row) (MCPServer, error) {
 	var s MCPServer
 	var lastConnected *time.Time
-	if err := row.Scan(&s.Tenant, &s.Name, &s.Label, &s.URL, &s.AuthKind, &s.AuthHeader, &s.Enabled,
+	var snapshot []byte
+	if err := row.Scan(&s.Tenant, &s.Name, &s.Label, &s.URL, &s.AuthKind, &s.AuthHeader, &s.Enabled, &snapshot,
 		&s.CreatedBy, &s.CreatedAt, &s.UpdatedAt, &s.ToolCount, &s.LastError, &lastConnected); err != nil {
 		return MCPServer{}, err
+	}
+	// A snapshot that will not parse is treated as absent: it is a cache, and
+	// refusing to load the whole row over it would take the server out of the
+	// palette entirely — the opposite of what the cache is for.
+	if len(snapshot) > 0 {
+		_ = json.Unmarshal(snapshot, &s.Snapshot)
 	}
 	if lastConnected != nil {
 		s.LastConnected = *lastConnected
@@ -106,6 +114,9 @@ func (s *PgMCPServerStore) Put(ctx context.Context, m MCPServer, sealedToken []b
 			(tenant, name, label, url, auth_kind, auth_header, auth_secret, enabled,
 			 created_by, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		-- snapshot is deliberately absent: an edit must not clear the cached
+		-- tool list, or saving a URL typo would strip every flow's ports until
+		-- the next successful handshake.
 		ON CONFLICT (tenant, name) DO UPDATE SET
 			label       = EXCLUDED.label,
 			url         = EXCLUDED.url,
@@ -142,6 +153,21 @@ func (s *PgMCPServerStore) SealedToken(ctx context.Context, tenant, name string)
 		return nil, err
 	}
 	return blob, nil
+}
+
+// SetSnapshot stores what the server was last seen publishing. Like SetStatus
+// it leaves updated_at alone: this is an outcome of connecting, not an edit,
+// and moving that column would make every replica re-handshake on every pass.
+func (s *PgMCPServerStore) SetSnapshot(ctx context.Context, tenant, name string, snap MCPSnapshot) error {
+	blob, err := json.Marshal(snap)
+	if err != nil {
+		return err
+	}
+	_, err = s.pool.Exec(ctx, `
+		UPDATE tenant_mcp_servers
+		   SET snapshot = $3
+		 WHERE tenant = $1 AND name = $2`, tenant, name, blob)
+	return err
 }
 
 // SetStatus records a connection outcome. It deliberately does NOT touch
@@ -224,6 +250,8 @@ func (s *MemMCPServerStore) Put(_ context.Context, m MCPServer, sealedToken []by
 	k := mcpKey{m.Tenant, m.Name}
 	if old, ok := s.rows[k]; ok {
 		m.ToolCount, m.LastError, m.LastConnected = old.ToolCount, old.LastError, old.LastConnected
+		// An edit must not clear the cached tool list.
+		m.Snapshot = old.Snapshot
 	}
 	s.rows[k] = m
 	// nil keeps, matching the Postgres COALESCE.
@@ -253,6 +281,19 @@ func (s *MemMCPServerStore) SealedToken(_ context.Context, tenant, name string) 
 		return nil, ErrMCPServerNotFound
 	}
 	return s.toks[k], nil
+}
+
+func (s *MemMCPServerStore) SetSnapshot(_ context.Context, tenant, name string, snap MCPSnapshot) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	k := mcpKey{tenant, name}
+	row, ok := s.rows[k]
+	if !ok {
+		return ErrMCPServerNotFound
+	}
+	row.Snapshot = snap
+	s.rows[k] = row
+	return nil
 }
 
 func (s *MemMCPServerStore) SetStatus(_ context.Context, tenant, name string, toolCount int, lastErr string, at time.Time) error {

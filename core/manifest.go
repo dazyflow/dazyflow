@@ -338,6 +338,22 @@ type Manifest struct {
 	// resolver still hard-blocks execution if a disabled drop is referenced.
 	Disabled bool `json:"disabled,omitempty" xml:"disabled,omitempty"`
 
+	// Unavailable reports that this drop's provider is registered but not
+	// reachable right now — an MCP server whose endpoint is down or whose
+	// credential has been rotated away.
+	//
+	// The difference from Disabled matters: a disabled drop was switched off
+	// deliberately and there is nothing for the author to do, while an
+	// unavailable one is a configuration the author (or their admin) can fix,
+	// and it is expected to come back.
+	//
+	// A drop that is unavailable is still DESCRIBED in full — its ports, its
+	// params schema, its icon — because a flow already referencing it has to
+	// keep its wiring. Losing the description is what turns a disconnected
+	// server into a flow that appears to have lost its edges. The engine still
+	// refuses to execute it; see the MCP transport.
+	Unavailable bool `json:"unavailable,omitempty" xml:"unavailable,omitempty"`
+
 	// Egress is the allowlist of external hosts a sandboxed (out-of-process)
 	// drop may reach via the broker's guarded fetch — the drop's *declared*
 	// network surface, enforced on top of the global SSRF guard + egress policy.

@@ -22,6 +22,7 @@ vi.mock("../../auth", () => {
 });
 
 const listMCPServers = vi.fn();
+const mcpServerUsage = vi.fn();
 const saveMCPServer = vi.fn();
 const refreshMCPServer = vi.fn();
 const deleteMCPServer = vi.fn();
@@ -29,6 +30,7 @@ vi.mock("../../api", () => ({
   APIError: class extends Error {},
   api: {
     listMCPServers: (...a: unknown[]) => listMCPServers(...a),
+    mcpServerUsage: (...a: unknown[]) => mcpServerUsage(...a),
     saveMCPServer: (...a: unknown[]) => saveMCPServer(...a),
     refreshMCPServer: (...a: unknown[]) => refreshMCPServer(...a),
     deleteMCPServer: (...a: unknown[]) => deleteMCPServer(...a),
@@ -54,6 +56,7 @@ const connected = {
 beforeEach(() => {
   vi.clearAllMocks();
   listMCPServers.mockResolvedValue({ servers: [connected] });
+  mcpServerUsage.mockResolvedValue({ flows: [], hidden: 0 });
 });
 
 describe("AdminMCPServers", () => {
@@ -179,13 +182,73 @@ describe("AdminMCPServers", () => {
     expect(await screen.findByText(/mcp.savedButFailed/)).toBeInTheDocument();
   });
 
+  it("names the flows that will break when removing a server in use", async () => {
+    mcpServerUsage.mockResolvedValue({
+      flows: [
+        { workspace: "ws1", flow_id: "nightly", name: "Nightly sync", steps: ["mcp:vendor:search"], published: true },
+        { workspace: "ws1", flow_id: "alerts", name: "Alerts", steps: ["mcp:vendor:create"], published: false },
+      ],
+      hidden: 0,
+    });
+    render(<AdminMCPServers />);
+    await screen.findByText("Vendor Tools");
+    await userEvent.click(screen.getByLabelText("common.remove"));
+
+    // The count and the names, not the old unconditional sentence.
+    const warning = await screen.findByText(/mcp.removeInUse/);
+    expect(warning.textContent).toContain("Nightly sync");
+    expect(warning.textContent).toContain("Alerts");
+    // A published flow among them is worth saying out loud.
+    expect(warning.textContent).toContain("mcp.removePublished");
+    await waitFor(() => expect(mcpServerUsage).toHaveBeenCalledWith("tok", "vendor"));
+  });
+
+  it("says plainly when nothing uses the server", async () => {
+    render(<AdminMCPServers />);
+    await screen.findByText("Vendor Tools");
+    await userEvent.click(screen.getByLabelText("common.remove"));
+
+    // The case the old copy could not express: removing this breaks nothing.
+    expect(await screen.findByText(/mcp.removeUnused/)).toBeInTheDocument();
+    expect(screen.queryByText(/mcp.removeInUse/)).toBeNull();
+  });
+
+  it("counts flows it may not name", async () => {
+    mcpServerUsage.mockResolvedValue({ flows: [], hidden: 2 });
+    render(<AdminMCPServers />);
+    await screen.findByText("Vendor Tools");
+    await userEvent.click(screen.getByLabelText("common.remove"));
+
+    // Two private flows: the blast radius is shown, the titles are not, and
+    // the sentence does not trail off into an empty list.
+    const warning = await screen.findByText(/mcp.removeInUseHidden/);
+    expect(warning.textContent).toContain('"count":2');
+    expect(screen.queryByText(/mcp.removeUnused/)).toBeNull();
+  });
+
+  it("still warns when the usage lookup fails, rather than claiming safety", async () => {
+    mcpServerUsage.mockRejectedValue(new Error("boom"));
+    render(<AdminMCPServers />);
+    await screen.findByText("Vendor Tools");
+    await userEvent.click(screen.getByLabelText("common.remove"));
+
+    // Never "nothing uses it" — that is a claim a failed lookup cannot make.
+    expect(await screen.findByText(/mcp.removeReally/)).toBeInTheDocument();
+    expect(screen.queryByText(/mcp.removeUnused/)).toBeNull();
+    // And the delete still works.
+    deleteMCPServer.mockResolvedValue({ deleted: "vendor" });
+    await userEvent.click(screen.getByText("common.remove"));
+    await waitFor(() => expect(deleteMCPServer).toHaveBeenCalledWith("tok", "vendor"));
+  });
+
   it("confirms before removing, because flows stop running", async () => {
     deleteMCPServer.mockResolvedValue({ deleted: "vendor" });
     render(<AdminMCPServers />);
     await screen.findByText("Vendor Tools");
     await userEvent.click(screen.getByLabelText("common.remove"));
 
-    expect(await screen.findByText(/mcp.removeReally/)).toBeInTheDocument();
+    // Usage resolves to "nothing uses it" in this test's default mock.
+    expect(await screen.findByText(/mcp.remove(Really|Unused)/)).toBeInTheDocument();
     expect(deleteMCPServer).not.toHaveBeenCalled();
 
     await userEvent.click(screen.getByText("common.remove"));

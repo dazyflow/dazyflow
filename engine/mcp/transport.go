@@ -6,6 +6,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 
 	"git.sr.ht/~klahr/dazyflow/core"
@@ -25,6 +26,21 @@ type Transport struct {
 func (t *Transport) Manifest() core.Manifest { return t.manifest }
 
 func (t *Transport) Execute(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
+	// Checked before the arguments are even built: a step whose server is
+	// down must report the connection, not a complaint about a param. An
+	// author looking at this failure needs to be sent to the admin page, and
+	// "missing required argument" would send them into the step instead.
+	if t.server != nil && t.server.offlineReason != "" {
+		return core.Result{
+			JobID:  job.ID,
+			Status: core.StatusError,
+			Error: &core.JobError{
+				Code: "mcp_disconnected",
+				Message: fmt.Sprintf("MCP server %q is not connected: %s",
+					t.server.displayName(), t.server.offlineReason),
+			},
+		}, nil
+	}
 	args, err := buildArguments(job, t.manifest)
 	if err != nil {
 		return core.Result{
@@ -95,6 +111,28 @@ func contentSummary(content []ContentItem) string {
 		return content[0].Text
 	}
 	return "tool reported error"
+}
+
+// offlineAware stamps a manifest that describes a server with no connection.
+//
+// The manifest is otherwise COMPLETE — ports, params schema, icon — because a
+// flow already using the step needs its shape. Only the flag changes, and the
+// flag is what the editor renders the "needs connection" banner from.
+func offlineAware(m core.Manifest, offlineReason string) core.Manifest {
+	if offlineReason == "" {
+		return m
+	}
+	m.Unavailable = true
+	return m
+}
+
+// displayName is the server's label when it has one, else its id — for an
+// error message a human reads.
+func (c *serverConn) displayName() string {
+	if c.label != "" {
+		return c.label
+	}
+	return c.name
 }
 
 // synthesizeManifest converts an MCP tool descriptor into a Dazyflow
@@ -199,6 +237,14 @@ type serverConn struct {
 	instructions string
 	// protocolVersion is the MCP revision the server answered with.
 	protocolVersion string
+	// offlineReason is set when this registration describes cached tools with
+	// no live session. See offline.go.
+	offlineReason string
+	// tools and logos are what this registration was built from, retained so
+	// the daemon can persist them as the snapshot that keeps a disconnected
+	// server's steps described. Not read on any execution path.
+	tools []Tool
+	logos map[string]string
 	// tenant owns this server; "" is an operator's instance-wide one.
 	tenant string
 	client session

@@ -70,6 +70,9 @@ type serverIdentity struct {
 	// necessarily the one we asked for. Recorded because it is the answer to
 	// "why does this server have no icons".
 	protocolVersion string
+	// offlineReason, when set, means this registration describes a server's
+	// cached tools with no live session behind them. See offline.go.
+	offlineReason string
 }
 
 // toolKey scopes a tool id to its owning tenant.
@@ -196,7 +199,7 @@ func (c *Catalog) RegisterStdio(desc StdioDescriptor) error {
 
 	id := serverIdentity{name: desc.Name, info: info.ServerInfo,
 		instructions: info.Instructions, protocolVersion: info.ProtocolVersion}
-	if err := c.attach(hctx, id, client, tools, closer); err != nil {
+	if err := c.attach(hctx, id, client, tools, nil, closer); err != nil {
 		killSubprocess(cmd, stdin)
 		return err
 	}
@@ -235,7 +238,7 @@ func (c *Catalog) RegisterHTTP(desc HTTPDescriptor) error {
 	}
 	id := serverIdentity{tenant: desc.Tenant, name: desc.Name, label: desc.Label,
 		info: info.ServerInfo, instructions: info.Instructions, protocolVersion: info.ProtocolVersion}
-	if err := c.attach(hctx, id, client, tools, client.Close); err != nil {
+	if err := c.attach(hctx, id, client, tools, nil, client.Close); err != nil {
 		_ = client.Close()
 		return err
 	}
@@ -254,7 +257,7 @@ func (c *Catalog) RegisterStream(name string, client *Client, info ServerInfo, t
 // RegisterStreamFor is RegisterStream with an explicit tenant.
 func (c *Catalog) RegisterStreamFor(tenant, name string, client *Client, info ServerInfo, tools []Tool, closer func() error) error {
 	return c.attach(context.Background(), serverIdentity{tenant: tenant, name: name, info: info},
-		client, tools, closer)
+		client, tools, nil, closer)
 }
 
 func (c *Catalog) handshakeTimeout() time.Duration {
@@ -272,7 +275,9 @@ func (c *Catalog) handshakeTimeout() time.Duration {
 // two would disagree silently: NodeResolver prefers the tenant's entry, so an
 // org that named its server "github" would keep composing flows against the
 // operator's tool descriptions while every run went somewhere else.
-func (c *Catalog) attach(ctx context.Context, id serverIdentity, client session, tools []Tool, closer func() error) error {
+// logos, when non-nil, is used as-is; nil means resolve them from the tools'
+// own icon descriptors, which is what a live handshake does.
+func (c *Catalog) attach(ctx context.Context, id serverIdentity, client session, tools []Tool, logos map[string]string, closer func() error) error {
 	tenant, name := id.tenant, id.name
 	label := id.label
 	if label == "" {
@@ -291,13 +296,16 @@ func (c *Catalog) attach(ctx context.Context, id serverIdentity, client session,
 	// of pipes and must not.
 	_, isHTTP := client.(*HTTPClient)
 	conn := &serverConn{name: name, label: label, instructions: id.instructions,
-		protocolVersion: id.protocolVersion, tenant: tenant,
+		protocolVersion: id.protocolVersion, offlineReason: id.offlineReason, tenant: tenant,
+		tools: tools, logos: logos,
 		client: client, info: id.info, closer: closer, concurrent: isHTTP}
 
 	// Before the lock: fetching icons is network work, and holding the
 	// catalog's mutex across someone else's outage would stall every lookup
 	// on the instance for the icon budget.
-	logos := resolveToolIcons(ctx, nil, tools)
+	if logos == nil {
+		logos = resolveToolIcons(ctx, nil, tools)
+	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -316,7 +324,7 @@ func (c *Catalog) attach(ctx context.Context, id serverIdentity, client session,
 		c.tools[toolKey{tenant: tenant, id: "mcp:" + name + ":" + tool.Name}] = &Transport{
 			serverName: name,
 			toolName:   tool.Name,
-			manifest:   synthesizeManifest(name, label, tool, logos[tool.Name]),
+			manifest:   offlineAware(synthesizeManifest(name, label, tool, logos[tool.Name]), id.offlineReason),
 			server:     conn,
 		}
 	}
@@ -408,7 +416,36 @@ type ServerStatus struct {
 	Instructions string
 	// ProtocolVersion is the MCP revision the server settled on.
 	ProtocolVersion string
-	ToolIDs         []string
+	// OfflineReason is set when this registration is a cached description with
+	// no connection behind it.
+	OfflineReason string
+	ToolIDs       []string
+}
+
+// SnapshotFor returns what a registered server was last seen publishing: its
+// tool list and the icons already resolved for it.
+//
+// The one caller is the daemon's connect path, which persists this so the
+// steps stay described after the connection goes. Returns false when nothing
+// is registered under (tenant, name).
+func (c *Catalog) SnapshotFor(tenant, name string) ([]Tool, map[string]string, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	conn, ok := c.servers[serverKey{tenant: tenant, name: name}]
+	if !ok || conn == nil {
+		return nil, nil, false
+	}
+	// Copied: the caller serializes these and the catalog keeps its originals.
+	tools := make([]Tool, len(conn.tools))
+	copy(tools, conn.tools)
+	var logos map[string]string
+	if len(conn.logos) > 0 {
+		logos = make(map[string]string, len(conn.logos))
+		for k, v := range conn.logos {
+			logos[k] = v
+		}
+	}
+	return tools, logos, true
 }
 
 // ServersFor lists the servers tenant can see, its own and the operator's,
@@ -422,7 +459,8 @@ func (c *Catalog) ServersFor(tenant string) []ServerStatus {
 			continue
 		}
 		st := ServerStatus{Name: key.name, Label: conn.label, Tenant: key.tenant,
-			Info: conn.info, Instructions: conn.instructions, ProtocolVersion: conn.protocolVersion}
+			Info: conn.info, Instructions: conn.instructions, ProtocolVersion: conn.protocolVersion,
+			OfflineReason: conn.offlineReason}
 		for id, t := range c.tools {
 			if id.tenant == key.tenant && t.serverName == key.name {
 				st.ToolIDs = append(st.ToolIDs, id.id)

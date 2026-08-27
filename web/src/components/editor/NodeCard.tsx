@@ -3,7 +3,7 @@
 
 import { memo, useState } from "react";
 import { Handle, Position, useStore, type NodeProps } from "@xyflow/react";
-import { AlertTriangle, Braces, Check, ChevronRight, Database, FileCode, FileText, Plug, Repeat, ShieldOff, Terminal, X } from "lucide-react";
+import { AlertTriangle, Braces, Check, ChevronRight, Database, FileCode, FileText, Plug, Repeat, ShieldOff, Terminal, Unplug, X } from "lucide-react";
 import i18n from "../../i18n";
 import { portTypeLabel } from "../../lib/ports";
 import { telFieldFlag, regionDisplayName } from "../../lib/phoneFlag";
@@ -768,8 +768,33 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
           footer-bar shape as the Connect/issues banners, so it reads as the
           card's call to action rather than a floating control. The Inspector
           panel stays the place to add a comment with the decision. */}
+      {/* The step's provider is registered but unreachable — an MCP server
+          whose endpoint is down or whose token was rotated away. The card is
+          otherwise INTACT: its ports and params come from the last tool list
+          the server was seen publishing, so the flow keeps its wiring and this
+          banner says why it will not run and where the fix lives.
+
+          A link, not a note: the admin page is where the server is repaired,
+          and an author staring at a step that stopped working should not have
+          to guess that. */}
+      {d.manifest?.unavailable && (
+        <a
+          className="dz-node-setup dz-node-offline nodrag"
+          href="/admin/mcp-servers"
+          title={i18n.t("nodeCard.offlineTitle")}
+          aria-label={i18n.t("nodeCard.offlineAria")}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Unplug size={ICON.sm} className="dz-node-setup-logo" />
+          <span className="dz-node-setup-label">{i18n.t("nodeCard.offlineNeedsConnection")}</span>
+          <ChevronRight size={ICON.sm} className="dz-node-setup-arrow" />
+        </a>
+      )}
       {d.onApprove && <NodeApproveBar onApprove={d.onApprove} />}
-      {d.setupNeeded &&
+      {/* Suppressed while the provider is unreachable: "Connect Slack" next to
+          "needs connection" would offer a fix for the wrong thing. */}
+      {!d.manifest?.unavailable &&
+        d.setupNeeded &&
         (() => {
           const name = d.setupNeeded.integration;
           // A user without secret:write can't connect apps (the Apps card is

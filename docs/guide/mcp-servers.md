@@ -98,6 +98,46 @@ the index is English-only"*. When one does, it appears under the endpoint in
 the list. It is the server's own text, shown as-is: Dazyflow does not act on
 it, and neither should you without reading it first.
 
+### When a server stops answering
+
+A server can stop working without anyone touching it: the endpoint goes down,
+or its token is revoked. When that happens **your flows keep their shape.**
+
+Dazyflow remembers the tool list from the last time the server worked, so every
+step it contributed keeps its ports, its arguments and its icon. A flow wired
+into those steps opens exactly as you left it — nothing to re-wire, nothing to
+repair. Each affected step shows a **Needs connection** banner along its bottom
+edge, linking straight to **Admin → MCP servers**.
+
+What you cannot do is run it. A step whose server is unreachable fails with
+*"MCP server "…" is not connected"* and the endpoint's own reason. You can
+still edit, save and publish the flow; it will start working again the moment
+the server does, without another edit.
+
+The steps also drop out of the palette while the server is down — greyed out
+rather than gone, so a step you used yesterday does not appear to have never
+existed. Dazyflow keeps retrying in the background, so a vendor's outage
+resolves itself.
+
+> A server that has **never** connected is different: there is no remembered
+> tool list, so it contributes no steps at all until its first successful
+> handshake.
+
+### Removing a server
+
+The remove button asks first, and the question names what breaks. Dazyflow
+scans your org's flows for steps belonging to the server and tells you which
+ones will stop working — and says so plainly when none will, which is the
+common case for a server added by mistake. Published flows are called out
+separately: those are running now.
+
+A flow whose steps you cannot see (a private flow of someone else's) is counted
+but not named.
+
+Removing is still allowed either way. Flows referencing a deleted server stay
+valid flows; their runs fail with *no transport registered* until you point
+them somewhere else.
+
 ### Using a token you already keep here
 
 Instead of pasting the token, you can enter `${secret.NAME}` to point at a

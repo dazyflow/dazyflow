@@ -126,7 +126,7 @@ export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAl
       // alphabetised list opens on those operators, which reads as cryptic
       // jargon to anyone who isn't a developer.
       const tier = (d: Manifest) => {
-        if (d.disabled) return 9; // platform-disabled — sink to the bottom
+        if (d.disabled || d.unavailable) return 9; // not pickable — sink to the bottom
         if (!d.integration) return d.category === "logic" ? 3 : 2;
         return 1; // a real connector
       };
@@ -230,7 +230,7 @@ export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAl
         e.preventDefault();
         const hit = matches[active];
         // A platform-disabled drop is shown for awareness but can't be added.
-        if (hit && !hit.drop.disabled) onPick(hit.drop);
+        if (hit && !hit.drop.disabled && !hit.drop.unavailable) onPick(hit.drop);
         return;
       }
     };
@@ -352,9 +352,13 @@ function QuickRow({
   const Icon = iconFor(drop.icon, drop.category);
   const color = dropColor(drop.category, drop.color);
   const branded = isBrandedIcon(drop.icon);
-  // A platform admin has switched this drop off: it stays in the list for
-  // awareness (greyed-out) but can't be picked into a flow.
-  const disabled = !!drop.disabled;
+  // Not pickable, for one of two reasons. Either a platform admin switched
+  // this drop off, or its provider is registered but unreachable — an MCP
+  // server that is down. Both stay in the list for awareness, greyed-out:
+  // vanishing from the palette is what makes an author think a step they used
+  // yesterday never existed.
+  const unavailable = !!drop.unavailable;
+  const disabled = !!drop.disabled || unavailable;
   return (
     <div
       className={
@@ -417,7 +421,9 @@ function QuickRow({
       </div>
       {disabled ? (
         <span className="quick-palette-row-disabled">
-          {t("quickPalette.disabled", "Disabled")}
+          {unavailable
+            ? t("quickPalette.unavailable", "Needs connection")
+            : t("quickPalette.disabled", "Disabled")}
         </span>
       ) : (
         drop.category && (

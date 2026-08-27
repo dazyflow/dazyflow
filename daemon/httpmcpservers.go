@@ -6,6 +6,7 @@ package daemon
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -44,8 +45,9 @@ type mcpServerRow struct {
 	// save.
 	HasToken bool `json:"has_token"`
 	Enabled  bool `json:"enabled"`
-	// Connected is the live fact: this row is registered in THIS process's
-	// catalog right now. Distinct from last_connected, which is the last time
+	// Connected is the live fact: this row has a working session in THIS
+	// process right now. A server whose steps are being described from cache
+	// is NOT connected. Distinct from last_connected, which is the last time
 	// any replica managed it.
 	Connected bool `json:"connected"`
 	// ToolIDs are the step ids this server contributes, so the page can show
@@ -107,7 +109,12 @@ func decodeMCPBody(r *http.Request, v any) error {
 
 // mcpRowFor renders one stored row with this process's live view merged in.
 func (h *HTTPGateway) mcpRowFor(s MCPServer, live map[string]mcp.ServerStatus) mcpServerRow {
-	st, connected := live[s.Name]
+	st, registered := live[s.Name]
+	// Registered is not the same as connected any more: a server whose
+	// handshake failed stays in the catalog DESCRIBING its cached tools, so
+	// flows keep their ports. Only a live session counts as connected, or this
+	// chip would report a broken server as working.
+	connected := registered && st.OfflineReason == ""
 	return mcpServerRow{
 		Name:            s.Name,
 		Label:           s.DisplayName(),
@@ -215,6 +222,38 @@ func (h *HTTPGateway) saveMCPServer(rw http.ResponseWriter, r *http.Request, p c
 	writeJSON(rw, http.StatusOK, h.mcpRowFor(saved, h.liveMCPServers(p.Tenant)))
 }
 
+// mcpServerUsage answers "what breaks if I delete this".
+//
+// Its own endpoint rather than a field on the row: it loads every graph in the
+// org, which is fine once, when an admin opens a delete confirmation, and
+// wasteful on every render of the list.
+func (h *HTTPGateway) mcpServerUsage(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	if !requireStepSourceAdmin(rw, p) || !h.mcpServersConfigured(rw) {
+		return
+	}
+	name := r.PathValue("name")
+	// Report usage only for a server that exists, so a typo'd name cannot be
+	// answered with a confident "nothing uses this".
+	if _, err := h.MCPServers.Store.Get(r.Context(), p.Tenant, name); err != nil {
+		if errors.Is(err, ErrMCPServerNotFound) {
+			writeJSONError(rw, http.StatusNotFound, "no MCP server named "+name)
+			return
+		}
+		writeJSONError(rw, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if h.svc == nil {
+		writeJSONError(rw, http.StatusNotImplemented, "flow storage is not configured on this deployment")
+		return
+	}
+	usage, err := h.svc.FlowsUsingMCPServer(r.Context(), p, p.Tenant, name)
+	if err != nil {
+		writeJSONError(rw, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(rw, http.StatusOK, usage)
+}
+
 func (h *HTTPGateway) refreshMCPServer(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !requireStepSourceAdmin(rw, p) || !h.mcpServersConfigured(rw) {
 		return
@@ -245,6 +284,15 @@ func (h *HTTPGateway) deleteMCPServer(rw http.ResponseWriter, r *http.Request, p
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
-	h.audit(r.Context(), p, "mcp_server.delete", name, "")
+	// Audited with what it broke, not just what was removed: "deleted vendor"
+	// and "deleted vendor, which 4 flows were using" are different events to
+	// whoever reads this back.
+	detail := ""
+	if h.svc != nil {
+		if usage, uerr := h.svc.FlowsUsingMCPServer(r.Context(), p, p.Tenant, name); uerr == nil && usage.InUse() {
+			detail = fmt.Sprintf("in use by %d flow(s)", len(usage.Flows)+usage.Hidden)
+		}
+	}
+	h.audit(r.Context(), p, "mcp_server.delete", name, detail)
 	writeJSON(rw, http.StatusOK, map[string]any{"deleted": name})
 }

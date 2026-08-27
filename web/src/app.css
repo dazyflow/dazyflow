@@ -4784,6 +4784,18 @@ button.warning:hover:not(:disabled) {
   background: var(--btn-hover);
   text-decoration: none;
 }
+/* Provider-unreachable footer: the needs-setup bar in a warning tone. It IS a
+   link — the admin page is where an MCP server is repaired — but amber rather
+   than purple, because this is something that broke rather than something the
+   author has yet to set up. */
+.dz-node-offline {
+  background: var(--warning);
+}
+.dz-node-offline:hover {
+  /* No lighten/darken: --warning is a status colour and the hover only needs
+     to register as a hover, which the underline from :hover already does. */
+  background: var(--warning);
+}
 /* Config-error footer: same flush CTA-bar shape as needs-setup, but danger
    red and informational (not a link) — it names the missing config in words,
    complementing the red pins. No hover/pointer since it doesn't navigate. */

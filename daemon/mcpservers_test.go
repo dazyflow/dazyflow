@@ -755,3 +755,133 @@ func TestMCPServers_NegotiatedProtocolIsRecorded(t *testing.T) {
 		t.Fatalf("protocol version = %q, want what the server answered", got)
 	}
 }
+
+// TestMCPServers_LostConnectionKeepsTheStepsDescribed is the reported bug: a
+// server goes down and every flow using it opens looking like it lost its
+// ports and edges, because the manifests that DEFINE those ports went away
+// with the connection.
+func TestMCPServers_LostConnectionKeepsTheStepsDescribed(t *testing.T) {
+	fake := &fakeMCPEndpoint{
+		toolNames: []string{"create_issue"},
+		titles:    map[string]string{"create_issue": "Create an issue"},
+		schemas: map[string]string{"create_issue": `{
+			"type": "object",
+			"properties": {"repo": {"type": "string"}, "title": {"type": "string"}},
+			"required": ["repo", "title"]
+		}`},
+	}
+	srv := fake.start(t)
+	svc, cat := newTestMCPServers(t)
+	ctx := context.Background()
+
+	saved, err := svc.Save(ctx, "acme", "a", MCPServerInput{
+		Label: "Vendor Tools", URL: srv.URL, Enabled: true,
+	})
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if saved.Snapshot.Empty() {
+		t.Fatal("a successful connect stored no snapshot to fall back on")
+	}
+	live := cat.ManifestsFor("acme")["mcp:vendor-tools:create_issue"]
+	wantPorts := len(live.Inputs)
+	if wantPorts < 2 {
+		t.Fatalf("the live manifest has %d inputs; the test needs argument ports", wantPorts)
+	}
+
+	// The endpoint starts refusing — a rotated token, in effect.
+	fake.status = http.StatusUnauthorized
+	broken, err := svc.Refresh(ctx, "acme", "vendor-tools")
+	if err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+	if broken.LastError == "" {
+		t.Fatal("a refused handshake was recorded as success")
+	}
+
+	// The step is still there, still fully described.
+	man, ok := cat.ManifestsFor("acme")["mcp:vendor-tools:create_issue"]
+	if !ok {
+		t.Fatal("the step vanished when the server went down — flows lose their wiring")
+	}
+	if !man.Unavailable {
+		t.Error("the step is not marked unavailable")
+	}
+	if len(man.Inputs) != wantPorts {
+		t.Errorf("inputs = %d, want the %d the live manifest had", len(man.Inputs), wantPorts)
+	}
+	if man.Label != "Vendor Tools — Create an issue" {
+		t.Errorf("Label = %q, want the cached caption", man.Label)
+	}
+
+	// It comes back on its own when the endpoint does.
+	fake.status = 0
+	fixed, err := svc.Refresh(ctx, "acme", "vendor-tools")
+	if err != nil {
+		t.Fatalf("Refresh after recovery: %v", err)
+	}
+	if fixed.LastError != "" {
+		t.Fatalf("still failing after the endpoint recovered: %s", fixed.LastError)
+	}
+	if again := cat.ManifestsFor("acme")["mcp:vendor-tools:create_issue"]; again.Unavailable {
+		t.Error("the step is still marked unavailable after reconnecting")
+	}
+}
+
+// TestMCPServers_NeverConnectedHasNothingToDescribe: the fallback describes a
+// server from what it WAS publishing. One that has never answered has nothing,
+// and must not gain placeholder steps.
+func TestMCPServers_NeverConnectedHasNothingToDescribe(t *testing.T) {
+	fake := &fakeMCPEndpoint{toolNames: []string{"search"}, status: http.StatusUnauthorized}
+	srv := fake.start(t)
+	svc, cat := newTestMCPServers(t)
+
+	saved, err := svc.Save(context.Background(), "acme", "a", MCPServerInput{
+		Label: "Vendor", URL: srv.URL, Enabled: true,
+	})
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if saved.LastError == "" {
+		t.Fatal("expected the save to record a failure")
+	}
+	if saved.ToolCount != 0 {
+		t.Errorf("tool count = %d, want none for a server that never worked", saved.ToolCount)
+	}
+	if len(cat.ManifestsFor("acme")) != 0 {
+		t.Errorf("manifests = %v, want none", cat.ManifestsFor("acme"))
+	}
+}
+
+// TestMCPServers_EditDoesNotClearTheSnapshot: saving a URL typo must not strip
+// the cached tool list, or fixing one field would break every flow's ports
+// until the next successful handshake.
+func TestMCPServers_EditDoesNotClearTheSnapshot(t *testing.T) {
+	fake := &fakeMCPEndpoint{toolNames: []string{"search"}}
+	srv := fake.start(t)
+	svc, cat := newTestMCPServers(t)
+	ctx := context.Background()
+
+	if _, err := svc.Save(ctx, "acme", "a", MCPServerInput{
+		Label: "Vendor", URL: srv.URL, Enabled: true,
+	}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	// An edit pointing at nothing: the save succeeds, the connection does not.
+	edited, err := svc.Save(ctx, "acme", "a", MCPServerInput{
+		Name: "vendor", URL: "https://127.0.0.1:1/mcp", Enabled: true,
+	})
+	if err != nil {
+		t.Fatalf("edit: %v", err)
+	}
+	if edited.LastError == "" {
+		t.Fatal("expected the bad URL to fail to connect")
+	}
+	if edited.Snapshot.Empty() {
+		t.Fatal("the edit cleared the cached tool list")
+	}
+	man, ok := cat.ManifestsFor("acme")["mcp:vendor:search"]
+	if !ok || !man.Unavailable {
+		t.Fatalf("step after a bad edit: ok=%v unavailable=%v", ok, man.Unavailable)
+	}
+}

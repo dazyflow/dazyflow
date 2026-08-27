@@ -44,6 +44,7 @@ import type {
   GitCredential,
   MCPServer,
   MCPServerInput,
+  MCPServerUsage,
   WebAPI,
   WebAPIInput,
   Runner,
@@ -992,6 +993,15 @@ export const api = {
   // that has gained or lost tools since it was registered.
   refreshMCPServer: (token: string, name: string) =>
     request<MCPServer>(token, "POST", `/admin/mcp-servers/${encodeURIComponent(name)}/refresh`, {}),
+  // mcpServerUsage lists the flows referencing a server's steps. Called when
+  // an admin asks to delete one — it loads every graph in the org, so it is
+  // not something the list polls.
+  mcpServerUsage: (token: string, name: string) =>
+    request<MCPServerUsage>(
+      token,
+      "GET",
+      `/admin/mcp-servers/${encodeURIComponent(name)}/usage`,
+    ),
   // deleteMCPServer removes the server and takes its steps out of the palette.
   // Flows referencing them stay valid graphs but stop resolving at run time.
   deleteMCPServer: (token: string, name: string) =>

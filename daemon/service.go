@@ -1827,6 +1827,18 @@ func (s *Service) listDrops(ctx context.Context, p core.Principal, includeDisabl
 			}
 		}
 	}
+	// An unavailable drop (an MCP server that is registered but not reachable)
+	// is shaped like a disabled one for picking purposes: the editor keeps it
+	// so a flow already using it renders with its real ports, and every other
+	// surface — search, flow generation, the control API — hides it, because
+	// building something NEW on a step that cannot run today is not a choice
+	// worth offering. Unlike Disabled the flag is set at registration, by the
+	// MCP catalog, so this only has to filter.
+	for id, m := range out {
+		if m.Unavailable && !includeDisabled {
+			delete(out, id)
+		}
+	}
 	return out, nil
 }
 

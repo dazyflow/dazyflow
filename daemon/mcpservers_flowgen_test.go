@@ -192,3 +192,74 @@ func TestMCPTool_RequiredArgumentIsEnforced(t *testing.T) {
 		t.Fatalf("the error does not name the missing argument: %v", err)
 	}
 }
+
+// TestSearchDrops_HidesAnUnreachableServersTools: a step that cannot run today
+// is not a step to build something new on, so it is kept out of search and out
+// of flow generation — while the EDITOR still gets it (include_disabled), or a
+// flow already using it would render with no ports.
+func TestSearchDrops_HidesAnUnreachableServersTools(t *testing.T) {
+	srv := (&fakeMCPEndpoint{toolNames: []string{"create_issue"}}).start(t)
+	cat := mcp.NewCatalog()
+	t.Cleanup(func() { _ = cat.Close() })
+	if err := cat.RegisterHTTP(mcp.HTTPDescriptor{Name: "vendor", Tenant: "acme", URL: srv.URL}); err != nil {
+		t.Fatalf("RegisterHTTP: %v", err)
+	}
+	svc := &Service{Engine: &engine.Engine{
+		Resolver: &engine.NodeResolver{Native: engine.Default, MCP: cat},
+	}}
+	ctx := context.Background()
+	p := adminPrincipal("acme")
+
+	// While connected it is offered like any other step.
+	if !hasDrop(t, svc, ctx, p, "mcp:vendor:create_issue") {
+		t.Fatal("a connected server's tool is missing from search")
+	}
+
+	// Now describe it from cache, as a failed handshake does.
+	tools := []mcp.Tool{{Name: "create_issue"}}
+	if err := cat.RegisterOffline(mcp.OfflineDescriptor{
+		Tenant: "acme", Name: "vendor", Tools: tools, Reason: "HTTP 401",
+	}); err != nil {
+		t.Fatalf("RegisterOffline: %v", err)
+	}
+	if hasDrop(t, svc, ctx, p, "mcp:vendor:create_issue") {
+		t.Error("an unreachable server's tool is still offered for new work")
+	}
+	// The editor's listing keeps it, stamped, so an existing flow renders. This
+	// is the request FlowEditor actually makes (include_disabled=1).
+	mans, err := svc.SearchDrops(ctx, p, DropSearch{IncludeDisabled: true})
+	if err != nil {
+		t.Fatalf("SearchDrops: %v", err)
+	}
+	var man *core.Manifest
+	for i := range mans {
+		if mans[i].ID == "mcp:vendor:create_issue" {
+			man = &mans[i]
+		}
+	}
+	if man == nil {
+		t.Fatal("the editor's catalog lost the step — this is what breaks a flow's wiring")
+	}
+	if !man.Unavailable {
+		t.Error("the step is not stamped unavailable")
+	}
+	// Still fully described, which is the reason to keep it at all.
+	if len(man.Inputs) == 0 || len(man.Outputs) == 0 {
+		t.Errorf("the step arrived without ports: %+v", man)
+	}
+}
+
+// hasDrop reports whether SearchDrops offers an id.
+func hasDrop(t *testing.T, svc *Service, ctx context.Context, p core.Principal, id string) bool {
+	t.Helper()
+	mans, err := svc.SearchDrops(ctx, p, DropSearch{})
+	if err != nil {
+		t.Fatalf("SearchDrops: %v", err)
+	}
+	for _, m := range mans {
+		if m.ID == id {
+			return true
+		}
+	}
+	return false
+}

@@ -353,6 +353,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/admin/mcp-servers", h.requireAuth(h.listMCPServers))
 	mux.HandleFunc("POST /api/v1/admin/mcp-servers", h.requireAuth(h.saveMCPServer))
 	mux.HandleFunc("PUT /api/v1/admin/mcp-servers/{name}", h.requireAuth(h.saveMCPServer))
+	mux.HandleFunc("GET /api/v1/admin/mcp-servers/{name}/usage", h.requireAuth(h.mcpServerUsage))
 	mux.HandleFunc("POST /api/v1/admin/mcp-servers/{name}/refresh", h.requireAuth(h.refreshMCPServer))
 	mux.HandleFunc("DELETE /api/v1/admin/mcp-servers/{name}", h.requireAuth(h.deleteMCPServer))
 

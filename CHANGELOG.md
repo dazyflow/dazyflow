@@ -66,6 +66,48 @@ into the image.)
   earn a pin, in what order, and the twelve-pin cap are one policy about the
   editor, shared by both catalogs.
 
+### Fixed
+
+- **Deleting an MCP server now says what will actually break.** The
+  confirmation warned that "flows using its steps will stop running" whether or
+  not any flow used it — a warning nobody could act on, and one that made
+  cleaning up a mistyped server feel dangerous. It now names the flows: *"2
+  flows use its steps and will stop running: Nightly sync, Alerts"*, with
+  published ones sorted first and called out, since those are running now. When
+  nothing uses the server it says so.
+
+  A flow the admin may not view is counted but never named — the blast radius
+  is not a reason to show someone a private flow's title. A failed lookup falls
+  back to the old unconditional warning rather than claiming safety it cannot
+  verify, and never blocks the delete. The new
+  `GET /admin/mcp-servers/{name}/usage` backs it, and the delete audit record
+  now carries how many flows were affected.
+
+- **A disconnected MCP server no longer makes flows look broken.** When a
+  server's endpoint went down or its token was revoked, its tools left the
+  catalog — and a tool's manifest is what tells the editor a step's PORTS. Every
+  flow wired into that step opened with a bare in/out pair instead of the
+  arguments its edges were attached to, so the wiring looked lost. Nothing on
+  disk had changed, but it looked like corruption and one save in that state
+  could have made it real.
+
+  A failed handshake now REPLACES the connection with a description rather than
+  removing the steps. The tool list from the last successful connect is
+  persisted on the server row (surviving a daemon restart, which is exactly when
+  an author would otherwise open a flow that looks broken), and the steps stay
+  in the catalog fully specified — ports, params schema, caption, icon — marked
+  unavailable. The card grows a **Needs connection** banner along its bottom
+  edge linking to Admin → MCP servers, and the palette greys the steps out
+  instead of dropping them.
+
+  Describable is not runnable: an unavailable step refuses before it builds its
+  arguments, failing with `mcp_disconnected` and the endpoint's own reason, so
+  the author is pointed at the server rather than at a param. Flows can still be
+  edited, saved and published while a server is down, and start working again
+  when it does. A server that has never connected has nothing to describe and
+  still contributes no steps. `connected` on the admin API now means a live
+  session, not merely a registration.
+
 ## [0.18.1] - 2026-08-27
 
 ### Added

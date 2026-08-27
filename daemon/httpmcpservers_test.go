@@ -11,6 +11,7 @@ import (
 
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/engine/mcp"
+	"git.sr.ht/~klahr/dazyflow/workspace"
 )
 
 func mcpGateway(t *testing.T) (*HTTPGateway, *fakeMCPEndpoint, string) {
@@ -211,6 +212,59 @@ func TestMCPServersEndpoints_PutOmittingEnabledKeepsItOn(t *testing.T) {
 	if !saved.Enabled {
 		t.Fatal("an edit that omitted `enabled` switched the server off")
 	}
+}
+
+// TestMCPServersEndpoints_Usage covers the lookup behind the delete warning:
+// scoped to a server that exists, and answered for the caller's own org.
+func TestMCPServersEndpoints_Usage(t *testing.T) {
+	svc, _ := newTestMCPServers(t)
+	srv := (&fakeMCPEndpoint{toolNames: []string{"search"}}).start(t)
+	ws, err := workspace.OpenFS(t.TempDir())
+	if err != nil {
+		t.Fatalf("OpenFS: %v", err)
+	}
+	h := &HTTPGateway{MCPServers: svc, svc: &Service{Workspaces: MapWorkspaces{"acme/ws1": ws}}}
+
+	if rw := mcpPost(t, h, adminPrincipal("acme"), `{"label":"MCP Test","url":"`+srv.URL+`"}`); rw.Code != 200 {
+		t.Fatalf("save code %d body %s", rw.Code, rw.Body)
+	}
+	if _, err := ws.Save(core.Graph{
+		ID: "nightly", Name: "Nightly sync", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{{ID: "a", Module: "mcp:mcp-test:search"}},
+	}, "tester"); err != nil {
+		t.Fatalf("save graph: %v", err)
+	}
+
+	usage := mcpUsage(t, h, adminPrincipal("acme"), "mcp-test")
+	if usage.Code != 200 {
+		t.Fatalf("usage code %d body %s", usage.Code, usage.Body)
+	}
+	var got MCPServerUsage
+	if err := json.Unmarshal(usage.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got.Flows) != 1 || got.Flows[0].FlowID != "nightly" {
+		t.Fatalf("flows = %+v, want the one referencing flow", got.Flows)
+	}
+
+	// A name that is not a server of this org gets a 404, not a confident
+	// "nothing uses this".
+	if rw := mcpUsage(t, h, adminPrincipal("acme"), "typo"); rw.Code != 404 {
+		t.Errorf("unknown server usage code %d, want 404", rw.Code)
+	}
+	// And it is admin-only, like every other route on this page.
+	if rw := mcpUsage(t, h, editorPrincipal("acme"), "mcp-test"); rw.Code != 403 {
+		t.Errorf("editor usage code %d, want 403", rw.Code)
+	}
+}
+
+func mcpUsage(t *testing.T, h *HTTPGateway, p core.Principal, name string) *httptest.ResponseRecorder {
+	t.Helper()
+	rw := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/v1/admin/mcp-servers/"+name+"/usage", nil)
+	req.SetPathValue("name", name)
+	h.mcpServerUsage(rw, req, p)
+	return rw
 }
 
 func TestMCPServersEndpoints_DeleteUnknownIs404(t *testing.T) {

@@ -7,7 +7,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/Button";
 import { useAuth } from "../../auth";
 import { api } from "../../api";
-import type { MCPServer, MCPServerInput } from "../../types";
+import type { MCPServer, MCPServerInput, MCPServerUsage } from "../../types";
 import { explainApiError } from "../../lib/explainApiError";
 import { ErrorNotice } from "../../components/ui/ErrorNotice";
 import { EmptyState } from "../../components/ui/EmptyState";
@@ -35,6 +35,11 @@ export function AdminMCPServers() {
   const [editing, setEditing] = useState<MCPServer | "new" | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
+  // usage is what the server being confirmed is actually used by, keyed by
+  // server name. undefined means "still asking" — the confirm renders without
+  // a count rather than waiting, so the button is never dead while a scan of
+  // the org's graphs runs.
+  const [usage, setUsage] = useState<Record<string, MCPServerUsage>>({});
 
   const load = useCallback(() => {
     if (!token) return;
@@ -84,6 +89,19 @@ export function AdminMCPServers() {
     } finally {
       setBusy(null);
     }
+  };
+
+  // askToRemove opens the confirmation and, in parallel, finds out what the
+  // server is used by. The warning fills in when the answer arrives.
+  const askToRemove = (name: string) => {
+    setConfirmRemove(name);
+    if (!token || usage[name]) return;
+    api
+      .mcpServerUsage(token, name)
+      .then((u) => setUsage((prev) => ({ ...prev, [name]: u })))
+      // A failed lookup must not block the delete or claim nothing is using
+      // the server. The confirm falls back to the unconditional warning.
+      .catch(() => {});
   };
 
   const remove = async (name: string) => {
@@ -183,7 +201,7 @@ export function AdminMCPServers() {
                     <td className="runner-actions">
                       {confirmRemove === s.name ? (
                         <span className="inline-confirm">
-                          {t("mcp.removeReally")}{" "}
+                          <MCPRemoveWarning usage={usage[s.name]} />{" "}
                           <Button variant="danger" onClick={() => void remove(s.name)}>
                             {t("common.remove")}
                           </Button>
@@ -213,7 +231,7 @@ export function AdminMCPServers() {
                           <Button
                             variant="ghost"
                             className="danger"
-                            onClick={() => setConfirmRemove(s.name)}
+                            onClick={() => askToRemove(s.name)}
                             title={t("common.remove")}
                             aria-label={t("common.remove")}
                           >
@@ -235,6 +253,49 @@ export function AdminMCPServers() {
         {t("mcp.securityNote")}
       </Notice>
     </div>
+  );
+}
+
+// MCPRemoveWarning is the sentence next to the Remove button.
+//
+// Three states, because there are three genuinely different situations and the
+// page used to render one sentence for all of them: we do not know yet (or the
+// lookup failed), nothing uses it, or these flows do. The middle one is the
+// reason this exists — an admin cleaning up a server they added by mistake was
+// being told their flows would stop running.
+function MCPRemoveWarning({ usage }: { usage?: MCPServerUsage }) {
+  const { t } = useTranslation();
+  // No answer yet, or the lookup failed: warn unconditionally. Never the
+  // "nothing uses it" line, which would be a claim we cannot make.
+  if (!usage) return <>{t("mcp.removeReally")}</>;
+
+  const total = usage.flows.length + usage.hidden;
+  if (total === 0) return <>{t("mcp.removeUnused")}</>;
+
+  // Published ones are already sorted to the front by the daemon. The list is
+  // capped: a warning is for deciding, not for auditing.
+  const shown = usage.flows.slice(0, 3);
+  const names = shown.map((f) => f.name || f.flow_id).join(", ");
+  const rest = total - shown.length;
+  const published = usage.flows.some((f) => f.published);
+
+  // Every user is a flow this admin may not view: the count is the whole
+  // warning, and a sentence ending in an empty list would be worse than one
+  // that says so.
+  if (names === "") {
+    return (
+      <>
+        {t("mcp.removeInUseHidden", { count: total })}
+        {published && ` ${t("mcp.removePublished")}`}
+      </>
+    );
+  }
+  return (
+    <>
+      {t("mcp.removeInUse", { count: total, flows: names })}
+      {rest > 0 && ` ${t("mcp.andMore", { n: rest })}`}
+      {published && ` ${t("mcp.removePublished")}`}
+    </>
   );
 }
 
