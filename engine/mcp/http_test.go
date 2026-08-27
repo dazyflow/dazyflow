@@ -30,6 +30,11 @@ type fakeHTTPServer struct {
 	calls    atomic.Int64
 	// toolErr makes tools/call answer with isError.
 	toolErr bool
+	// recordArgs stores the arguments of the last tools/call, so a test can
+	// assert what actually reached the tool rather than only that it was
+	// called.
+	recordArgs bool
+	lastArgs   atomic.Value
 	// status, when non-zero, short-circuits every request with that code.
 	status int
 }
@@ -70,6 +75,13 @@ func (f *fakeHTTPServer) handler() http.HandlerFunc {
 			result = map[string]any{"tools": f.tools}
 		case "tools/call":
 			f.calls.Add(1)
+			if f.recordArgs {
+				var p struct {
+					Arguments json.RawMessage `json:"arguments"`
+				}
+				_ = json.Unmarshal(req.Params, &p)
+				f.lastArgs.Store(string(p.Arguments))
+			}
 			result = map[string]any{
 				"content": []map[string]any{{"type": "text", "text": "pong"}},
 				"isError": f.toolErr,

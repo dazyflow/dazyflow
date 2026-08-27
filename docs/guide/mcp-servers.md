@@ -20,12 +20,36 @@ Add one in **Admin → MCP servers**. You need the address and, usually, a token
 
 A server called `github` publishing a `create_issue` tool gives you a step
 called `mcp:github:create_issue`. It appears in the catalog under **Apps &
-services**, takes the tool's own arguments as settings, and hands its result to
-the next step. Search the palette for the server's name to find everything it
-brought.
+services**, and hands its result to the next step. Search the palette for the
+server's name to find everything it brought.
 
 Nothing else about the flow changes. The step branches, loops, retries and
 appears in the run log exactly like a built-in one.
+
+### The tool's arguments are ports
+
+Each of the tool's arguments becomes an input you can **wire** — so a title can
+come from an earlier step rather than being typed. You can also just fill it in
+as a setting, exactly as elsewhere in Dazyflow: type a default, connect one when
+you have something better.
+
+Not every argument gets a pin, and the rules are worth knowing:
+
+| The argument is… | Where you set it |
+| --- | --- |
+| text, a number, or a yes/no | its own input, and a setting |
+| an object or a list | a setting only |
+| beyond the twelfth | a setting only — required ones are never cut |
+
+Objects and lists stay settings on purpose. A pin per nested field would either
+flatten the structure into names the tool never declared, or give you a node
+shaped like a schema instead of like a step.
+
+There is also one catch-all input, **`input`**, that takes a whole JSON object
+and merges it over the settings. It is the escape hatch for the arguments in the
+right-hand column above. If you supply the same argument two ways, the more
+specific one wins: a value wired into `title` beats an object that happens to
+contain a `title`, which in turn beats what you typed.
 
 ## Adding one
 
@@ -116,6 +140,14 @@ time against the same rules as any outbound request: no loopback, no private
 range, no link-local. A hostname that resolves to an internal address is
 refused too. An MCP server on your own network needs to be reachable at a real
 address, or fronted by one.
+
+### Files
+
+An MCP step's inputs take **values, not files**. A file in Dazyflow is a path on
+the Dazyflow machine, and that means nothing to a server somewhere else — so a
+flow that wires a file into one is refused before the step runs, with that as
+the reason, rather than the tool failing on a path it cannot see. Read the file
+into a value first if the tool wants its contents.
 
 ### Retries
 

@@ -44,6 +44,27 @@ into the image.)
   those servers stay visible to every org. See
   [docs/guide/mcp-servers.md](docs/guide/mcp-servers.md).
 
+- **An MCP tool's arguments are now ports, so they can be wired.** Previously
+  every tool got a single untyped `input` port taking a whole JSON object, which
+  meant supplying one argument from an earlier step required building an object
+  with a transform first — the steps were in the palette but not really wired
+  like the built-ins they sit next to.
+
+  Top-level scalar arguments (text, number, yes/no) each get an input, ordered
+  required-then-optional and alphabetical within each so the canvas never
+  reshuffles across a restart. Objects and arrays deliberately stay params:
+  a pin per nested leaf would invent names the tool never declared. Capped at
+  twelve ports, required ones taken first. The `input` overlay port remains as
+  the escape hatch, and precedence runs least-specific-first — params, then the
+  overlay, then a wired argument.
+
+  Two smaller corrections came with it: an argument named `input`, `pass` or
+  `out`, or one whose name cannot be a port id, stays a param rather than
+  silently shadowing a pin; and every MCP input is now marked inline-only, so a
+  flow wiring a file into one is refused before the step runs (a `Ref` is a path
+  on the daemon's disk, which means nothing to a server elsewhere) instead of
+  the tool failing on a path it cannot see.
+
   Supporting work:
   - `engine/mcp` gained a streamable-HTTP transport (protocol `2025-06-18`),
     handling both response shapes a server may choose — a single JSON object,
@@ -67,6 +88,10 @@ into the image.)
     the feature works across replicas: a server added on one node is connected
     by the others within thirty seconds, and an edit or a deletion propagates
     the same way.
+  - A tenant's MCP tools reach the platform-admin step killswitch (they are in
+    `AllManifests` with their owning org) and the AI flow generator, which
+    grounds on the tenant-scoped catalog — so an org can describe a flow in a
+    sentence and have it composed against the tools it brought itself.
 
 ## [0.16.7] - 2026-08-27
 

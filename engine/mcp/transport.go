@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"sync"
 
 	"git.sr.ht/~klahr/dazyflow/core"
@@ -25,7 +26,7 @@ type Transport struct {
 func (t *Transport) Manifest() core.Manifest { return t.manifest }
 
 func (t *Transport) Execute(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
-	args, err := buildArguments(job)
+	args, err := buildArguments(job, t.manifest)
 	if err != nil {
 		return core.Result{
 			JobID:  job.ID,
@@ -62,26 +63,45 @@ func (t *Transport) Execute(ctx context.Context, job core.Job, progress chan<- c
 	}, nil
 }
 
-// buildArguments assembles the tool's arguments map. It starts from
-// job.Params (the graph-author-supplied defaults) and overlays any
-// JSON object provided via the "input" port. This lets one node's
-// output feed another node's tool call without the author hardcoding
-// values.
-func buildArguments(job core.Job) (map[string]any, error) {
+// buildArguments assembles the tool call's arguments.
+//
+// Three layers, least specific first:
+//
+//	params        — what the author typed on the step
+//	overlay port  — a whole object wired into `input`
+//	argument port — a value wired into that one argument
+//
+// Most-specific-last is the rule the rest of the product already states: "a
+// connected input, when present, overrides the typed setting". A value wired
+// into `title` is a statement about `title` and beats an object that merely
+// happens to contain one.
+func buildArguments(job core.Job, manifest core.Manifest) (map[string]any, error) {
 	args := make(map[string]any, len(job.Params))
 	for k, v := range job.Params {
 		args[k] = v
 	}
-	input, ok := job.Input["input"]
-	if !ok {
-		return args, nil
+	if input, ok := job.Input[toolOverlayPort]; ok {
+		overlay, err := inlineToObject(input.Inline)
+		if err != nil {
+			return nil, fmt.Errorf("input port: %w", err)
+		}
+		for k, v := range overlay {
+			args[k] = v
+		}
 	}
-	overlay, err := inlineToObject(input.Inline)
-	if err != nil {
-		return nil, fmt.Errorf("input port: %w", err)
-	}
-	for k, v := range overlay {
-		args[k] = v
+	// Driven by the MANIFEST rather than by whatever the job happens to carry:
+	// the ports this drop declared are exactly the argument names it may set,
+	// so a stray input key cannot introduce an argument the tool never
+	// declared.
+	for _, port := range manifest.Inputs {
+		if port.Port == toolOverlayPort || port.Port == core.PassPort {
+			continue
+		}
+		ref, ok := job.Input[port.Port]
+		if !ok || ref.Inline == nil {
+			continue
+		}
+		args[port.Port] = ref.Inline
 	}
 	return args, nil
 }
@@ -153,6 +173,20 @@ func synthesizeManifest(server string, tool Tool) core.Manifest {
 	if desc == "" {
 		desc = "Tool " + tool.Name + " from MCP server " + server + "."
 	}
+	// The tool's own arguments become ports, so an author can wire a value
+	// straight into `title` instead of assembling an object first. Everything
+	// the schema declares is still settable as a param — see toolInputPorts for
+	// what earns a port and what does not.
+	inputs := append(toolInputPorts(tool.InputSchema), core.Port{
+		Port:  toolOverlayPort,
+		Label: "Optional JSON object merged with params before the tool call",
+		// Every MCP input is inline-only: the server is another process (and
+		// over HTTP, another machine), while a Ref's path is on the DAEMON's
+		// disk. A job carrying one is refused before the step runs, with that
+		// as the reason, rather than the tool receiving a path into a
+		// filesystem it cannot see. Same rule, same reason, as a runner drop.
+		InlineOnly: true,
+	})
 	return core.Manifest{
 		ID:             "mcp:" + server + ":" + tool.Name,
 		Version:        "1.0",
@@ -164,10 +198,7 @@ func synthesizeManifest(server string, tool Tool) core.Manifest {
 		Description:    desc,
 		ExecutionModel: core.ExecutionBatch,
 		ProcessModel:   core.ProcessLongLived,
-		Inputs: []core.Port{{
-			Port:  "input",
-			Label: "Optional JSON object merged with params before the tool call",
-		}},
+		Inputs:         inputs,
 		Outputs: []core.Port{{
 			Port:  "out",
 			Label: "Tool result",
@@ -178,6 +209,183 @@ func synthesizeManifest(server string, tool Tool) core.Manifest {
 		// validation rather than silently double-firing. Authors who
 		// know a tool is safe can wrap with a relaxed manifest.
 		Idempotent: false,
+	}
+}
+
+// toolOverlayPort is the catch-all input: a whole JSON object merged over the
+// params. It stays even now that arguments get their own ports, because it is
+// the only way to supply an argument this synthesis declines to expose — a
+// nested object, an array, a name that cannot be a port.
+const toolOverlayPort = "input"
+
+// maxToolPorts caps how many arguments become ports.
+//
+// A node is a box on a canvas. A tool declaring forty arguments would produce
+// one nobody can read, and the arguments past the first handful are nearly
+// always the optional long tail — still settable as params, just not worth a
+// pin each. Required arguments are taken first, so the cap never hides one
+// that must be supplied.
+const maxToolPorts = 12
+
+// toolSchema is the slice of JSON Schema this package reads. Everything else a
+// schema may declare is left to the params form, which renders the raw schema.
+type toolSchema struct {
+	Properties map[string]json.RawMessage `json:"properties"`
+	Required   []string                   `json:"required"`
+}
+
+// toolProperty is the slice of one property's schema that decides its port.
+type toolProperty struct {
+	// Type is a string, or an array for a union like ["string","null"].
+	Type        any    `json:"type"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+}
+
+// toolInputPorts turns a tool's argument schema into ports.
+//
+// Deliberately shallow: a top-level property of scalar type gets a port, and
+// nothing else does. An object or array argument keeps its structure, and a
+// port per leaf would either flatten that structure into invented names or
+// produce a node shaped like the schema rather than like a step — so those stay
+// params (or arrive through the overlay port). This maps the common case fully
+// and refuses to guess at the rest.
+//
+// Order is required-then-optional, alphabetical within each. It has to be
+// deterministic and independent of map iteration: ports are identified by
+// position in the editor's layout, so a set that reshuffled between restarts
+// would move every wire on the canvas.
+func toolInputPorts(schema json.RawMessage) []core.Port {
+	if len(schema) == 0 {
+		return nil
+	}
+	var s toolSchema
+	if err := json.Unmarshal(schema, &s); err != nil || len(s.Properties) == 0 {
+		// A schema we cannot read is not an error: the tool still works
+		// through params and the overlay port. Reporting it here would fail a
+		// whole server's registration over one tool's unusual schema.
+		return nil
+	}
+	required := make(map[string]bool, len(s.Required))
+	for _, r := range s.Required {
+		required[r] = true
+	}
+
+	// Resolve every property once, then order. Two passes over the map with a
+	// re-parse in each was the obvious shape and the wrong one: the schema
+	// would be decoded twice per port, and the two passes could disagree about
+	// what qualifies if either rule were ever edited alone.
+	type arg struct {
+		name  string
+		label string
+		mime  []string
+	}
+	var req, opt []arg
+	for name, raw := range s.Properties {
+		if !portableArgName(name) {
+			continue
+		}
+		var p toolProperty
+		if err := json.Unmarshal(raw, &p); err != nil {
+			continue
+		}
+		mime, ok := scalarMIME(p.Type)
+		if !ok {
+			continue
+		}
+		label := p.Title
+		if label == "" {
+			label = name
+		}
+		a := arg{name: name, label: label, mime: mime}
+		if required[name] {
+			req = append(req, a)
+		} else {
+			opt = append(opt, a)
+		}
+	}
+	byName := func(s []arg) func(i, j int) bool {
+		return func(i, j int) bool { return s[i].name < s[j].name }
+	}
+	sort.Slice(req, byName(req))
+	sort.Slice(opt, byName(opt))
+
+	ports := make([]core.Port, 0, maxToolPorts)
+	for _, a := range append(req, opt...) {
+		if len(ports) == maxToolPorts {
+			break
+		}
+		ports = append(ports, core.Port{
+			Port:     a.name,
+			Label:    a.label,
+			MIME:     a.mime,
+			Required: required[a.name],
+			// See synthesizeManifest: an MCP server cannot read the daemon's
+			// disk, so no MCP input may take a file reference.
+			InlineOnly: true,
+		})
+	}
+	return ports
+}
+
+// portableArgName reports whether an argument name can be a port id.
+//
+// Two rules. It must be spellable as an id — a property called "user name" or
+// "a/b" would produce an edge nothing can address. And it must not be one of
+// the names this manifest already uses: an argument called "input" would
+// shadow the overlay port, and one called "pass" the universal passthrough
+// pin, in both cases silently. Such an argument stays a param, which still
+// reaches the tool.
+func portableArgName(name string) bool {
+	if name == "" || name == toolOverlayPort || name == core.PassPort || name == "out" {
+		return false
+	}
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_', r == '-':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// scalarMIME maps a JSON Schema type to a port type, and reports whether it is
+// one this synthesis exposes at all.
+//
+// A union is read through its first non-null member, so the ["string","null"]
+// that generators emit for an optional argument lands as text rather than
+// being skipped for not being a plain string.
+func scalarMIME(declared any) ([]string, bool) {
+	switch t := declared.(type) {
+	case string:
+		switch t {
+		case "string":
+			return []string{"text/plain"}, true
+		case "number", "integer":
+			// Numbers travel as text on a port, the same as every built-in
+			// numeric input (a Twilio amount, a Gmail count).
+			return []string{"text/plain"}, true
+		case "boolean":
+			return []string{core.MIMEBool}, true
+		default:
+			// object, array, null, or something unknown: params only.
+			return nil, false
+		}
+	case []any:
+		for _, one := range t {
+			s, ok := one.(string)
+			if !ok || s == "null" {
+				continue
+			}
+			return scalarMIME(s)
+		}
+		return nil, false
+	default:
+		// No declared type at all. The value could be anything, so the port
+		// would have to be untyped — and an untyped pin next to typed ones
+		// reads as a mistake. Params only.
+		return nil, false
 	}
 }
 

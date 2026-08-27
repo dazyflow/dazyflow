@@ -21,8 +21,12 @@ import (
 // handshake, list one tool, and record the credential it was given.
 type fakeMCPEndpoint struct {
 	toolNames []string
-	authSeen  atomic.Value
-	status    int
+	// schemas, when set, gives a tool its inputSchema by name. Tools not
+	// listed here are published with no schema, which is the shape most of
+	// these tests want.
+	schemas  map[string]string
+	authSeen atomic.Value
+	status   int
 }
 
 func (f *fakeMCPEndpoint) start(t *testing.T) *httptest.Server {
@@ -50,7 +54,11 @@ func (f *fakeMCPEndpoint) start(t *testing.T) *httptest.Server {
 		case "tools/list":
 			tools := []map[string]any{}
 			for _, n := range f.toolNames {
-				tools = append(tools, map[string]any{"name": n})
+				tool := map[string]any{"name": n}
+				if raw, ok := f.schemas[n]; ok {
+					tool["inputSchema"] = json.RawMessage(raw)
+				}
+				tools = append(tools, tool)
 			}
 			result = map[string]any{"tools": tools}
 		default:
