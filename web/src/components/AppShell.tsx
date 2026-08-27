@@ -39,6 +39,7 @@ import { shouldShowTenantID } from "../lib/visibleTenant";
 import { tenantDisplayName } from "../lib/orgDisplayName";
 import { downloadJson } from "../lib/download";
 import { Button } from "./ui/Button";
+import { useAnchoredPop } from "./ui/useAnchoredPop";
 import { OrgSwitcherModal } from "./dialogs/OrgSwitcherModal";
 import { ConnectMcpClientModal } from "./dialogs/ConnectMcpClientModal";
 import { CommandPalette } from "./CommandPalette";
@@ -955,14 +956,30 @@ function AccountMenu({
 // (mirrors dazy's per-context menu). Today it has one action — open the
 // flow-settings modal, which lives inside the editor and is invoked via
 // the callback the editor registered on ActiveFlowContext.
+//
+// Portaled to <body> like the account menu, for the same reason: .topbar is a
+// stacking context (z-index var(--z-topbar), 20), so an absolute dropdown
+// inside it can never rise above the editor's inspector, which is
+// var(--z-inspector-sheet) — 30 — as a full-height sheet below 1100px. The
+// menu's own z-index competed only with the topbar's other children, so the
+// inspector painted straight over it. Fixed coords also keep it on screen.
 function FlowMenu({ onOpenSettings }: { onOpenSettings: () => void }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const { trigger, pop, style } = useAnchoredPop<
+    HTMLButtonElement,
+    HTMLDivElement
+  >(open);
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      if (!target.closest(".flow-menu")) setOpen(false);
+      // .flow-menu-pop as well as .flow-menu: the pop is portaled out of the
+      // trigger's subtree, and closing on its own mousedown would unmount the
+      // row before the click that should have opened flow settings landed.
+      if (!target.closest(".flow-menu") && !target.closest(".flow-menu-pop")) {
+        setOpen(false);
+      }
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
@@ -977,6 +994,7 @@ function FlowMenu({ onOpenSettings }: { onOpenSettings: () => void }) {
   return (
     <div className="flow-menu">
       <Button
+        ref={trigger}
         variant="ghost"
         size="icon"
         onClick={() => setOpen((v) => !v)}
@@ -987,21 +1005,28 @@ function FlowMenu({ onOpenSettings }: { onOpenSettings: () => void }) {
       >
         <MoreVertical size={ICON.lg} />
       </Button>
-      {open && (
-        <div className="workspace-pop account-pop" role="menu">
-          <Button
-            role="menuitem"
-            className="workspace-pop-row account-pop-row"
-            onClick={() => {
-              setOpen(false);
-              onOpenSettings();
-            }}
+      {open &&
+        createPortal(
+          <div
+            className="workspace-pop account-pop flow-menu-pop"
+            role="menu"
+            ref={pop}
+            style={style}
           >
-            <SettingsIcon size={ICON.sm} />
-            {t("flowMenu.settings")}
-          </Button>
-        </div>
-      )}
+            <Button
+              role="menuitem"
+              className="workspace-pop-row account-pop-row"
+              onClick={() => {
+                setOpen(false);
+                onOpenSettings();
+              }}
+            >
+              <SettingsIcon size={ICON.sm} />
+              {t("flowMenu.settings")}
+            </Button>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

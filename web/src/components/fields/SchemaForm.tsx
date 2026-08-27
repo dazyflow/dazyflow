@@ -16,6 +16,10 @@ import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { Plus, Upload, X } from "lucide-react";
 import { HelpPopover } from "../ui/HelpPopover";
+import {
+  fillTokensForPreview,
+  previewTokenSpan,
+} from "../../lib/previewTokens";
 import { Trans, useTranslation } from "react-i18next";
 import i18n from "../../i18n";
 import { enumLabel, fieldHelp, fieldTitle } from "../../lib/dropText";
@@ -1407,6 +1411,9 @@ function EmailTemplatePicker({
   format?: string;
 }) {
   const { t } = useTranslation();
+  // tokenLabels words a ${…} reference the way the {} menu does, so the
+  // preview can stand in for the references it can't resolve.
+  const { tokenLabels } = useFormCtx();
   const [opts, setOpts] = useState<EmailTemplateSummary[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   // preview holds the rendered HTML shown in the modal; null = modal closed.
@@ -1441,8 +1448,23 @@ function EmailTemplatePicker({
     if (!token) return;
     setErr(null);
     setPreviewing(true);
+    // Stand in for every ${…} reference before rendering: the preview shows
+    // the message as a recipient sees it, and nothing has run, so raw token
+    // syntax in the subject line (or the body) is the one thing a recipient
+    // will never see. The body's substitutions get a marker span; the subject
+    // stays plain text because html/template escapes .Subject.
     api
-      .previewEmailTemplate(token, { id: value || undefined, body, subject })
+      .previewEmailTemplate(token, {
+        id: value || undefined,
+        body:
+          body === undefined
+            ? undefined
+            : fillTokensForPreview(body, tokenLabels, previewTokenSpan),
+        subject:
+          subject === undefined
+            ? undefined
+            : fillTokensForPreview(subject, tokenLabels),
+      })
       .then((r) => setPreview(r.html))
       .catch((e) => setErr(explainApiError(e, t)))
       .finally(() => setPreviewing(false));

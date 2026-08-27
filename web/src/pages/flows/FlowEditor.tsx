@@ -3494,6 +3494,28 @@ function EditorInner() {
       ),
     [disabled, triggers, nodes, paramsByID, publishInfo],
   );
+  // chipAddsInfo: whether the run-status chip is worth rendering next to the
+  // control that sits beside it.
+  //
+  // The Live switch (graph:admin) shows the publish/paused state in its own
+  // label — "Live" / "Off" / "Publish" — so beside it the chip repeats itself
+  // in three of its four states. The exception is "Manual only": nothing is
+  // configured to fire the flow, which no switch position can say and which a
+  // switch reading "Live" actively hides. The plain On/Off button that
+  // graph:edit-only users get instead speaks only to enabled/disabled, so
+  // there the chip keeps everything except "Off". With neither control on
+  // screen (read-only) the chip is the whole status display.
+  //
+  // Plain const, not a useMemo: three boolean tests are cheaper than the
+  // dependency array, and hasPerm gets a fresh identity on every auth
+  // re-render, so memoising it would recompute anyway.
+  const chipAddsInfo = (() => {
+    if (me && id && hasPerm("graph:admin") && publishInfo) {
+      return runStatus === "manual";
+    }
+    if (id && hasPerm("graph:edit")) return runStatus !== "paused";
+    return true;
+  })();
   const persistSettings = async (next: Graph) => {
     setTriggers(next.triggers ?? []);
     setVisibility(next.visibility);
@@ -3777,9 +3799,19 @@ function EditorInner() {
           </div>
           </div>
 
-          {/* Run-status chip: tells the owner at a glance whether this flow
-              fires on its own (Live), only on Run (Manual), or is paused. */}
-          <FlowStatusChip status={runStatus} />
+          {/* Run-status chip — shown only when it says something the adjacent
+              control does not.
+
+              It used to sit here in every state, next to a Live switch whose
+              own label already read "Live"/"Off"/"Publish": the same fact
+              twice, in two shapes, one of them looking like a control and one
+              not. The switch now carries the publish/paused state (see its
+              label below), so the chip is left with the one state a switch
+              cannot express — "Manual only", i.e. nothing is configured to
+              fire this flow, so the switch being ON still won't run it. That
+              is the opposite of redundant: it's the case where the switch
+              alone would mislead. */}
+          {chipAddsInfo && <FlowStatusChip status={runStatus} />}
 
           {/* Config verification (#13): how many drops are still missing
               required values. Sits next to Run as a non-blocking heads-up. */}
@@ -3855,6 +3887,8 @@ function EditorInner() {
                         ? t("editor.publishPreviewBlocked")
                         : isLive
                         ? t("editor.pauseTitle")
+                        : disabled
+                        ? t("editor.resumeTitle")
                         : t("editor.publishFirstTitle")
                     }
                   >
@@ -3863,11 +3897,18 @@ function EditorInner() {
                         <Rocket size={ICON.xs} strokeWidth={2.4} />
                       </span>
                     </span>
+                    {/* OFF has two meanings and now says which: a flow that
+                        was turned off reads "Off", one that has simply never
+                        been published reads "Publish" — the action it needs.
+                        Labelling both "Publish" is what left the status chip
+                        with work to do beside a switch that showed the state. */}
                     <span className="toolbar-label">
                       {publishing
                         ? t("editor.publishing")
                         : isLive
                         ? t("editor.live")
+                        : disabled
+                        ? t("editor.paused")
                         : t("editor.publish")}
                     </span>
                   </Button>

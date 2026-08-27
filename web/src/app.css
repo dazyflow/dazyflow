@@ -11322,6 +11322,15 @@ button:active,
 .flow-menu {
   position: relative;
 }
+/* The dropdown itself is portaled to <body> and given left/top by
+   useAnchoredPop — .topbar is a stacking context, so an absolute pop inside it
+   could not clear the inspector sheet (--z-inspector-sheet) no matter its own
+   z-index. Fixed here rather than only in the inline style so the positioning
+   scheme is visible to whoever reads the CSS; the coordinates stay in JS,
+   which is the only side that can measure the trigger. */
+.flow-menu-pop {
+  position: fixed;
+}
 
 /* The standalone auth screens (verify, reset) centre a single card. */
 .auth-page {
@@ -11664,7 +11673,6 @@ button:active,
    A native tooltip never fires on touch, so this content was unreachable on a
    tablet; and it cannot scroll, which a 131-word drop description needs. */
 .help-pop-wrap {
-  position: relative;
   display: inline-grid;
   place-items: center;
 }
@@ -11677,15 +11685,20 @@ button:active,
   font: inherit;
   cursor: pointer;
 }
+/* Portaled to <body> and given fixed left/top by useAnchoredPop, which
+   clamps it to the viewport. It used to be an absolute panel anchored
+   top:100%/right:0 on the (i), which .inspector-body's scroll container clipped
+   on both axes — the prose was cut in half near the panel's bottom or left
+   edge. The placement lives in JS because CSS cannot ask "is there room". */
 .help-pop {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
+  position: fixed;
   z-index: var(--z-help-popover);
   display: block;
   width: max-content;
   /* Wide enough for a paragraph, never wider than a narrow inspector or a
-     phone. max-height + scroll is what the native tooltip could not do. */
+     phone. max-height + scroll is what the native tooltip could not do. The
+     100vw cap leaves both 8px keep-out margins anchorBelow() clamps to, so a
+     panel at full width still lands inside them. */
   max-width: min(34ch, calc(100vw - var(--space-4)));
   max-height: 60vh;
   overflow-y: auto;

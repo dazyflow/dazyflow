@@ -1,9 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Joachim Klahr
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useState } from "react";
+import { createPortal } from "react-dom";
 import { Info } from "lucide-react";
 import { ICON } from "../../icons";
+import { useAnchoredPop } from "./useAnchoredPop";
 
 // The (i) affordance on a step header or a form field.
 //
@@ -20,11 +22,20 @@ import { ICON } from "../../icons";
 // body deliberately does NOT also live in `title`: two copies of the same
 // prose on one control read as a duplicate to a screen reader and flicker a
 // native tooltip over the panel on desktop.
+//
+// The panel is portaled to <body> and positioned from the trigger's rect
+// (useAnchoredPop). Both call sites live inside .inspector-body, which scrolls
+// — and a scroll container clips on BOTH axes, so an absolutely-positioned
+// panel was sliced off at the panel's edge whenever the (i) sat near the
+// bottom or the body was narrower than the prose. Fixed coords, clamped to the
+// viewport, cannot be cut in half.
 export function HelpPopover({ label, body }: { label: string; body: string }) {
   const [open, setOpen] = useState(false);
-  const wrap = useRef<HTMLSpanElement>(null);
-  const btn = useRef<HTMLButtonElement>(null);
   const id = useId();
+  const { trigger, pop, style } = useAnchoredPop<
+    HTMLButtonElement,
+    HTMLSpanElement
+  >(open);
 
   useEffect(() => {
     if (!open) return;
@@ -35,10 +46,15 @@ export function HelpPopover({ label, body }: { label: string; body: string }) {
       // so one press loses the step you were reading about.
       e.stopPropagation();
       setOpen(false);
-      btn.current?.focus();
+      trigger.current?.focus();
     };
     const onDown = (e: PointerEvent) => {
-      if (!wrap.current?.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      // The panel is portaled, so it is not a descendant of the trigger:
+      // both have to be checked or scrolling the prose would dismiss it.
+      if (trigger.current?.contains(target)) return;
+      if (pop.current?.contains(target)) return;
+      setOpen(false);
     };
     // Capture on both: the canvas and the inspector stop propagation on their
     // own handlers, so a bubbling listener never sees the click that should
@@ -49,12 +65,12 @@ export function HelpPopover({ label, body }: { label: string; body: string }) {
       document.removeEventListener("keydown", onKey, true);
       document.removeEventListener("pointerdown", onDown, true);
     };
-  }, [open]);
+  }, [open, trigger, pop]);
 
   return (
-    <span className="help-pop-wrap" ref={wrap}>
+    <span className="help-pop-wrap">
       <button
-        ref={btn}
+        ref={trigger}
         type="button"
         className="inspector-info"
         aria-expanded={open}
@@ -68,11 +84,13 @@ export function HelpPopover({ label, body }: { label: string; body: string }) {
       >
         <Info size={ICON.sm} aria-hidden="true" />
       </button>
-      {open && (
-        <span className="help-pop" id={id} role="note">
-          {body}
-        </span>
-      )}
+      {open &&
+        createPortal(
+          <span className="help-pop" id={id} role="note" ref={pop} style={style}>
+            {body}
+          </span>,
+          document.body,
+        )}
     </span>
   );
 }
