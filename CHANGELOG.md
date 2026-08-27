@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-08-27
+
 ### Added
 
 - **A web API can describe itself, and the description reaches the Apps page.**
