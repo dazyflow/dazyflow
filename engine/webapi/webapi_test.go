@@ -902,3 +902,77 @@ func TestExecute_RuntimeBaseURLIsValidated(t *testing.T) {
 		}
 	}
 }
+
+// TestManifest_CaptionedByHumanNames is the difference between a palette a
+// non-technical author can read and one full of identifiers. The step ids are
+// unchanged by it — a name is display only.
+func TestManifest_CaptionedByHumanNames(t *testing.T) {
+	desc := ordersDescriptor()
+	desc.Label = "Order service"
+	desc.Operations[0].Title = "Fetch an order"
+	cat := mustRegister(t, desc)
+
+	m := transport(t, cat, "acme", "api:orders:get_order").Manifest()
+	if m.Label != "Order service — Fetch an order" {
+		t.Errorf("Label = %q, want the typed names", m.Label)
+	}
+	// The id is built from the ids, not the names.
+	if m.ID != "api:orders:get_order" {
+		t.Errorf("ID = %q, want it unmoved by naming", m.ID)
+	}
+	if m.Provider != "api:orders" {
+		t.Errorf("Provider = %q", m.Provider)
+	}
+}
+
+// TestManifest_ProseNamesTheCatalogByItsName covers the generated-prose branch:
+// an operation with no summary of its own gets a sentence built from the
+// catalog, and that sentence should name it the way a human does.
+func TestManifest_ProseNamesTheCatalogByItsName(t *testing.T) {
+	desc := ordersDescriptor()
+	desc.Label = "Order service"
+	desc.Operations[0].Summary = "" // force the generated sentence
+	cat := mustRegister(t, desc)
+
+	m := transport(t, cat, "acme", "api:orders:get_order").Manifest()
+	if !strings.Contains(m.Description, "Order service") {
+		t.Errorf("Description names the slug, not the catalog: %q", m.Description)
+	}
+	if !strings.Contains(m.Summary, "Order service") {
+		t.Errorf("Summary names the slug, not the catalog: %q", m.Summary)
+	}
+}
+
+// TestManifest_CaptionFallsBackToIDs: naming is optional, and an unnamed
+// catalog must still be captioned with something.
+func TestManifest_CaptionFallsBackToIDs(t *testing.T) {
+	cat := mustRegister(t, ordersDescriptor())
+	m := transport(t, cat, "acme", "api:orders:get_order").Manifest()
+	if m.Label != "orders — get_order" {
+		t.Errorf("Label = %q, want the ids as the fallback", m.Label)
+	}
+}
+
+// TestDisplayName bounds what a typed name can do to a palette row.
+func TestDisplayName(t *testing.T) {
+	cases := []struct {
+		title, id, want string
+	}{
+		{"", "get_order", "get_order"},
+		{"  Fetch an order  ", "get_order", "Fetch an order"},
+		{"   ", "get_order", "get_order"},
+		// A pasted paragraph is not a caption: first line only.
+		{"Fetch an order\nUse the id from the previous step.", "get_order", "Fetch an order"},
+		{strings.Repeat("x", 200), "get_order", strings.Repeat("x", 60) + "…"},
+	}
+	for _, c := range cases {
+		got := webapi.Operation{ID: c.id, Title: c.title}.DisplayName()
+		if got != c.want {
+			t.Errorf("Operation{%q,%q}.DisplayName() = %q, want %q", c.id, c.title, got, c.want)
+		}
+		// The catalog half uses the same rule.
+		if d := (webapi.Descriptor{Name: c.id, Label: c.title}).DisplayName(); d != c.want {
+			t.Errorf("Descriptor{%q,%q}.DisplayName() = %q, want %q", c.id, c.title, d, c.want)
+		}
+	}
+}

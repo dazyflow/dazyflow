@@ -65,6 +65,29 @@ is the same kind of change as editing any other step.
 
 ---
 
+## Names, and what they are not
+
+Two of the fields on the admin page are **names** and the rest are
+identifiers, and it is worth knowing which is which.
+
+The catalog's **Name** and each operation's **Display name** are display only. They are
+what the palette shows — *Order service — Fetch an order* — and you can change
+them whenever you like: nothing references them, so renaming re-captions the
+steps and every flow keeps working.
+
+The catalog's **id** and each operation's **id** are what flows hold
+(`api:<catalog>:<operation>`). Those are fixed: renaming one is a new step, and
+flows using the old one stop resolving.
+
+Leave a name blank and the step falls back to the id — which reads like the
+identifier it is (*order-service — get_order*), so it is worth filling in for
+anything a non-technical colleague will pick from the palette.
+
+An operation's **Summary** is a different field again: a sentence, shown under
+the name as the step's subtitle. Put the sentence there, not in the name.
+
+---
+
 ## Describing an operation
 
 Each operation needs four things and benefits from a fifth.

@@ -2417,6 +2417,8 @@
     "operationN": "Operation {{n}}",
     "removeOperation": "Ta bort den här operationen",
     "addOperation": "Lägg till en operation",
+    "opTitleLabel": "Visningsnamn",
+    "opTitleHint": "Vad den här operationen heter i paletten. Valfritt — steg faller tillbaka på id:t, som ser ut som ett id.",
     "opIdLabel": "Steg-id",
     "opIdHint": "Kort och stabilt, till exempel get_order. Byter du namn senare slutar flöden som använder det att fungera.",
     "opMethodLabel": "Metod",

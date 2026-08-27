@@ -1001,6 +1001,10 @@ export type WebAPIOperation = {
   // id is the step-id suffix and is frozen once flows reference it: renaming it
   // is a NEW step, and the old id stops resolving.
   id: string;
+  // title is the operation's display name — what captions its step in the
+  // palette. Optional; the step falls back to the id, which reads like the
+  // identifier it is. Not an identifier itself, so it is free to change.
+  title?: string;
   method: "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE";
   // path is joined onto the catalog's base URL. {placeholders} in it must each
   // have a required path argument of the same name — the daemon refuses the save

@@ -25,6 +25,25 @@ into the image.)
 
 ### Fixed
 
+- **Web API steps are captioned by their names, not their ids.** A described
+  API's steps read *"order-service — get_order"* in the palette: the catalog's
+  slug and the operation's id, both identifiers, where MCP steps have read
+  *"Vendor Tools — Create an issue"* since titles landed.
+
+  Two causes, one each way. The catalog's display name already existed on the
+  admin row and simply was not passed into the descriptor the manifest is built
+  from — so it was captioned by its id with nothing failing anywhere. And an
+  operation had no name at all: id, method, path and a summary sentence, but no
+  short label. Operations now take a **Display name**, shown first in the admin form
+  since it is the field that decides how the step reads, and the manifest uses
+  `Descriptor.DisplayName()` / `Operation.DisplayName()` for both halves of the
+  caption. Generated prose names the catalog the same way.
+
+  Neither name is an identifier: step ids still come from the ids, so naming
+  something re-captions its step and moves no flow. Both fall back to the id
+  when blank, and both are clamped to one short line — the summary is where a
+  sentence belongs, and the save says so if you put one in the name.
+
 - **A web API's service address is no longer settable from its Apps
   connection.** It appeared in two places — Admin → Web APIs, and again as a
   field on the connection card — and the second one won: a connection value is

@@ -240,6 +240,40 @@ describe("AdminWebAPIs", () => {
     ).toBe("query");
   });
 
+  it("offers a name for each operation, so its step is not captioned by an id", async () => {
+    listWebAPIs.mockResolvedValue({ web_apis: [] });
+    saveWebAPI.mockResolvedValue({ ...orders });
+    render(<AdminWebAPIs />);
+    await waitFor(() =>
+      expect(screen.getByText("webapi.emptyTitle")).toBeInTheDocument(),
+    );
+
+    await userEvent.click(screen.getByText("webapi.add"));
+    await userEvent.type(screen.getByLabelText("common.name"), "Order service");
+    await userEvent.type(
+      screen.getByLabelText("webapi.urlLabel"),
+      "https://api.example.com/v1",
+    );
+    // The operation's own name — the field this test exists for.
+    await userEvent.type(
+      screen.getByLabelText("webapi.opTitleLabel"),
+      "Fetch an order",
+    );
+    await userEvent.type(screen.getByLabelText("webapi.opIdLabel"), "get_order");
+    const path = screen.getByLabelText("webapi.opPathLabel");
+    await userEvent.clear(path);
+    await userEvent.type(path, "/orders/1");
+    await userEvent.click(screen.getByText("webapi.save"));
+
+    await waitFor(() => expect(saveWebAPI).toHaveBeenCalled());
+    const [, input] = saveWebAPI.mock.calls[0];
+    expect(input.label).toBe("Order service");
+    expect(input.operations[0].title).toBe("Fetch an order");
+    // A name is sent ALONGSIDE the id, never instead of it: the id is what
+    // flows reference and it stays frozen.
+    expect(input.operations[0].id).toBe("get_order");
+  });
+
   it("names the flows that will break when removing a catalog in use", async () => {
     webAPIUsage.mockResolvedValue({
       flows: [

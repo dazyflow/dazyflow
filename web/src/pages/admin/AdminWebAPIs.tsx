@@ -463,6 +463,22 @@ function OperationEditor({
         )}
       </legend>
 
+      {/* The name comes first because it is the field that decides how this
+          operation reads in the palette. Without one the step is captioned by
+          its id — "order-service — get_order" — which is an identifier, not a
+          name. The id stays below it, and stays frozen. */}
+      <div className="sf-field">
+        <label htmlFor={`wa-op-${index}-title`}>{t("webapi.opTitleLabel")}</label>
+        <input
+          id={`wa-op-${index}-title`}
+          value={op.title ?? ""}
+          onChange={(e) => onPatch({ title: e.target.value })}
+          placeholder="Fetch an order"
+          maxLength={96}
+        />
+        <div className="desc">{t("webapi.opTitleHint")}</div>
+      </div>
+
       <div className="webapi-op-row">
         <div className="sf-field">
           <label htmlFor={`wa-op-${index}-id`}>{t("webapi.opIdLabel")}</label>

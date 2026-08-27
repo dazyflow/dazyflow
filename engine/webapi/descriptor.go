@@ -107,7 +107,12 @@ type Operation struct {
 	// ID is the step-id suffix: api:<catalog>:<ID>. An OpenAPI import takes it
 	// from operationId. Renaming it is not an edit — it is a new step, and
 	// flows referencing the old id stop resolving.
-	ID     string `json:"id"`
+	ID string `json:"id"`
+	// Title is the operation's display name — "Create an issue" where ID is
+	// create_issue. Optional, and NOT an identifier: the step id keeps using
+	// ID, so naming an operation re-captions its step without moving anything
+	// a flow references.
+	Title  string `json:"title,omitempty"`
 	Method string `json:"method"`
 	// Path is joined onto the catalog's base URL and may carry {placeholders},
 	// each of which must have a required InPath argument of the same name.
@@ -121,6 +126,38 @@ type Operation struct {
 	Deprecated bool `json:"deprecated,omitempty"`
 }
 
+// DisplayName is what to caption this operation with: its title when one was
+// given, its id otherwise.
+//
+// Bounded for the same reason a palette row is: a name is typed by an admin,
+// not validated by a schema, and a paragraph pasted into it would break the
+// layout rather than inform anyone. The summary is where a sentence belongs,
+// and it is already shown as the step's subtitle.
+func (o Operation) DisplayName() string {
+	return displayName(o.Title, o.ID)
+}
+
+// maxDisplayNameLen bounds a caption to what a palette row can show.
+const maxDisplayNameLen = 60
+
+// displayName trims a typed title to one short line, falling back to the id.
+func displayName(title, id string) string {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return id
+	}
+	if i := strings.IndexAny(title, "\r\n"); i >= 0 {
+		title = strings.TrimSpace(title[:i])
+	}
+	if r := []rune(title); len(r) > maxDisplayNameLen {
+		title = strings.TrimSpace(string(r[:maxDisplayNameLen])) + "…"
+	}
+	if title == "" {
+		return id
+	}
+	return title
+}
+
 // Descriptor is one tenant-owned catalog of operations.
 type Descriptor struct {
 	// Tenant owns this catalog. Empty is refused: unlike an MCP server there is
@@ -129,6 +166,12 @@ type Descriptor struct {
 	Tenant string
 	// Name is what steps are referenced by: api:<Name>:<operation>.
 	Name string
+	// Label is what a human called this catalog: "Order service". Display
+	// only — Name carries the identity — so it is free to change.
+	//
+	// Empty falls back to Name, which is a slug and reads like one. Passing it
+	// in is what stops a step being captioned "order-service — get_order".
+	Label string
 	// BaseURL is the service address, typed at import time and required.
 	//
 	// The catalog owns it, and only an admin can change it: it used to be
@@ -144,6 +187,12 @@ type Descriptor struct {
 	TimeoutMS int
 	// MaxBodyBytes caps a response. Zero means DefaultMaxBodyBytes.
 	MaxBodyBytes int
+}
+
+// DisplayName is what to caption this catalog with: its label when one was
+// given, its id otherwise. See Label.
+func (d Descriptor) DisplayName() string {
+	return displayName(d.Label, d.Name)
 }
 
 const (

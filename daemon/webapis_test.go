@@ -643,3 +643,64 @@ func TestWebAPIs_EditKeepsTheIntegration(t *testing.T) {
 		t.Errorf("integration = %q, want the explicit move honoured", after.Integration)
 	}
 }
+
+// TestWebAPIs_LabelReachesTheManifest guards the wiring the caption depends on.
+//
+// The label lives on the row and the manifest is built from the Descriptor, so
+// a Descriptor() that forgets to pass it leaves every step captioned by its
+// slug — with nothing failing anywhere. Exactly the kind of gap a test has to
+// hold, because the feature still "works".
+func TestWebAPIs_LabelReachesTheManifest(t *testing.T) {
+	m := webAPIService(t)
+	in := sampleInput()
+	in.Label = "Order service"
+	saved, err := m.Save(context.Background(), "acme", "admin@acme.test", in)
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if saved.Name != "order-service" {
+		t.Fatalf("derived name = %q", saved.Name)
+	}
+	if got := saved.Descriptor().DisplayName(); got != "Order service" {
+		t.Fatalf("Descriptor().DisplayName() = %q, want the label", got)
+	}
+	man, ok := m.Catalog.ManifestsFor("acme")["api:order-service:get_order"]
+	if !ok {
+		t.Fatalf("no manifest: %v", m.Catalog.ManifestsFor("acme"))
+	}
+	if man.Label != "Order service — get_order" {
+		t.Errorf("Label = %q, want the catalog's human name", man.Label)
+	}
+}
+
+// TestWebAPIs_OperationNameCaptionsTheStep is the other half: a per-operation
+// name, typed in the admin form, reaching the palette.
+func TestWebAPIs_OperationNameCaptionsTheStep(t *testing.T) {
+	m := webAPIService(t)
+	in := sampleInput()
+	in.Label = "Order service"
+	in.Operations[0].Title = "Fetch an order"
+	if _, err := m.Save(context.Background(), "acme", "a", in); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	man := m.Catalog.ManifestsFor("acme")["api:order-service:get_order"]
+	if man.Label != "Order service — Fetch an order" {
+		t.Errorf("Label = %q, want both typed names", man.Label)
+	}
+	// And the step id is untouched, so naming an operation never moves a flow.
+	if man.ID != "api:order-service:get_order" {
+		t.Errorf("ID = %q, want it unmoved by naming", man.ID)
+	}
+}
+
+// TestWebAPIs_OperationNameIsBounded: a name captions a palette row, and the
+// summary is the field for a sentence.
+func TestWebAPIs_OperationNameIsBounded(t *testing.T) {
+	m := webAPIService(t)
+	in := sampleInput()
+	in.Operations[0].Title = strings.Repeat("x", maxWebAPIOpTitleLen+1)
+	_, err := m.Save(context.Background(), "acme", "a", in)
+	if err == nil || !strings.Contains(err.Error(), "summary") {
+		t.Fatalf("err = %v, want a complaint pointing at the summary field", err)
+	}
+}

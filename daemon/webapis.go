@@ -93,8 +93,12 @@ func (w WebAPI) HasAuth() bool {
 // Descriptor is the engine-facing view of a stored row.
 func (w WebAPI) Descriptor() webapi.Descriptor {
 	return webapi.Descriptor{
-		Tenant:       w.Tenant,
-		Name:         w.Name,
+		Tenant: w.Tenant,
+		Name:   w.Name,
+		// The human name reaches the manifest here, and only here. Without it
+		// every step this catalog contributes is captioned by its slug —
+		// "order-service — get_order" where the admin typed "Order service".
+		Label:        w.DisplayName(),
 		BaseURL:      w.BaseURL,
 		Integration:  w.Integration,
 		Auth:         webapi.Auth{Kind: w.AuthKind, Header: w.AuthHeader},
@@ -185,6 +189,10 @@ const maxWebAPIIntegrationLen = 64
 // this; the OpenAPI importer is expected to meet it and must offer selection
 // rather than raising it.
 const maxWebAPIOperations = 60
+
+// maxWebAPIOpTitleLen bounds an operation's display name. It captions a palette
+// row; the summary is where a sentence belongs, and that is a separate field.
+const maxWebAPIOpTitleLen = 96
 
 // maxWebAPIArgs bounds one operation's arguments. Twelve become ports and the
 // rest are params, so this is a bound on the params form — generous, and still
@@ -324,6 +332,10 @@ func (m *WebAPIs) save(ctx context.Context, tenant, actor string, in WebAPIInput
 	for _, op := range in.Operations {
 		if len(op.Args) > maxWebAPIArgs {
 			return WebAPI{}, fmt.Errorf("operation %q declares %d arguments (max %d)", op.ID, len(op.Args), maxWebAPIArgs)
+		}
+		if len([]rune(strings.TrimSpace(op.Title))) > maxWebAPIOpTitleLen {
+			return WebAPI{}, fmt.Errorf("operation %q has a name longer than %d characters — put the sentence in its summary instead",
+				op.ID, maxWebAPIOpTitleLen)
 		}
 	}
 

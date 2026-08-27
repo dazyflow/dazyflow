@@ -2417,6 +2417,8 @@
     "operationN": "Operation {{n}}",
     "removeOperation": "Remove this operation",
     "addOperation": "Add an operation",
+    "opTitleLabel": "Display name",
+    "opTitleHint": "What this operation is called in the palette. Optional — steps fall back to the id, which reads like one.",
     "opIdLabel": "Step id",
     "opIdHint": "Short and stable, like get_order. Renaming it later breaks flows that use it.",
     "opMethodLabel": "Method",

@@ -64,7 +64,7 @@ func synthesizeManifest(desc Descriptor, op Operation) core.Manifest {
 	return core.Manifest{
 		ID:             StepID(desc.Name, op.ID),
 		Version:        "1.0",
-		Label:          desc.Name + " — " + op.ID,
+		Label:          desc.DisplayName() + " — " + op.DisplayName(),
 		Subtitle:       subtitle(op, method),
 		Color:          "#5599ee",
 		Icon:           "globe",
@@ -142,7 +142,7 @@ func description(desc Descriptor, op Operation, method string) string {
 	} else if op.Summary != "" {
 		b.WriteString(op.Summary)
 	} else {
-		fmt.Fprintf(&b, "Calls %s %s on %s.", method, op.Path, desc.Name)
+		fmt.Fprintf(&b, "Calls %s %s on %s.", method, op.Path, desc.DisplayName())
 	}
 	fmt.Fprintf(&b, " (%s %s)", method, op.Path)
 	return b.String()
@@ -152,7 +152,7 @@ func summary(desc Descriptor, op Operation, method string) string {
 	if op.Summary != "" {
 		return op.Summary
 	}
-	return fmt.Sprintf("Call %s %s on %s.", method, op.Path, desc.Name)
+	return fmt.Sprintf("Call %s %s on %s.", method, op.Path, desc.DisplayName())
 }
 
 // example gives the flow generator a params shape to copy. Required arguments
@@ -170,7 +170,7 @@ func example(desc Descriptor, op Operation, method string) core.ParamsExample {
 	if err != nil {
 		raw = json.RawMessage(`{}`)
 	}
-	notes := fmt.Sprintf("The credential comes from the %s connection, so it is not a param here. The service address comes from the catalog itself.", desc.Name)
+	notes := fmt.Sprintf("The credential comes from the %s connection, so it is not a param here. The service address comes from the catalog itself.", desc.DisplayName())
 	if desc.Auth.Kind == AuthNone || desc.Auth.Kind == "" {
 		notes = "The service address comes from the catalog itself, so it is not a param here."
 	}
