@@ -149,6 +149,7 @@ into the image.)
   connection and reported as `protocol_version` on the admin API, which is the
   first thing to check when icons do not appear. The stdio transport is
   unchanged.
+
 ## [0.18.0] - 2026-08-27
 
 ### Added
