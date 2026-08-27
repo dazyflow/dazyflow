@@ -26,6 +26,11 @@ import (
 // OPERATOR capability — configured in the environment by whoever runs the
 // instance. A tenant-supplied stdio server would be arbitrary code execution
 // as the daemon user, available to any org admin. Tenants get HTTPDescriptor.
+//
+// The way to give a TENANT a command-distributed MCP server is to run it on a
+// machine the org owns — a runner — where the same process grants no capability
+// `run_on_runner` does not already grant. Designed but not built: see
+// docs/mcp-on-runners-design.md.
 type StdioDescriptor struct {
 	// Name is the server identifier used in tool IDs (mcp:<name>:<tool>).
 	Name string

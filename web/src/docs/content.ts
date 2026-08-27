@@ -9,6 +9,7 @@
 import {
   Workflow,
   BookText,
+  Blocks,
   Boxes,
   Plug,
   Globe,
@@ -135,6 +136,7 @@ export const NAV: NavGroup[] = [
     items: [
       { text: "How Dazyflow works", link: "/guide/concepts", icon: Workflow },
       { text: "Runners", link: "/guide/runners", icon: Plug },
+      { text: "MCP servers", link: "/guide/mcp-servers", icon: Blocks },
       { text: "Glossary", link: "/guide/glossary", icon: BookText },
     ],
   },
