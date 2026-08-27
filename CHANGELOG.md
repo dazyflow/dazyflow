@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-08-27
+
 ### Added
 
 - **Web API steps wear your service's own logo.** A described API was the one
