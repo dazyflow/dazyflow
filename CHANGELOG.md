@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-08-27
+
 ### Added
 
 - **A 46elks template: "Web form → text me".** A hosted form (public link, or
