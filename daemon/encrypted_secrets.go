@@ -157,6 +157,19 @@ type secretsStore interface {
 	// — the UI shows "Slack token: set", never the value back.
 	listSecretNames(ctx context.Context, tenant string) ([]string, error)
 
+	// deleteTenant removes every secret for a tenant AND the tenant's
+	// wrapped DEK, returning the number of secret rows removed (the DEK
+	// is not counted). Idempotent: a tenant with nothing stored returns
+	// (0, nil). This is the erasure-cascade entry point (GDPR Art. 17) —
+	// deleteSecret's per-name form can't serve it, because erasure must
+	// not depend on the caller knowing every name that was ever written.
+	//
+	// The DEK goes too, and that is the point: dropping it crypto-shreds
+	// any ciphertext that somehow outlives this call (a backup, a row
+	// written by a racing process), since without the wrapped DEK there
+	// is nothing left to unwrap even with the master key in hand.
+	deleteTenant(ctx context.Context, tenant string) (int, error)
+
 	// getWrappedDEK returns the tenant's wrapped DEK or
 	// ErrSecretNotFound if no DEK has been generated yet. Called on
 	// first secret access per tenant per process; subsequent calls
@@ -510,6 +523,38 @@ func (e *EncryptedSecrets) Delete(ctx context.Context, tenant, name string) erro
 		return fmt.Errorf("delete secret %q: tenant required", name)
 	}
 	return e.store.deleteSecret(ctx, tenant, name)
+}
+
+// DeleteByTenant erases every secret a tenant holds — connector
+// credentials, OAuth tokens, the lot — plus the tenant's wrapped DEK,
+// returning the number of secrets removed. It is the secrets half of the
+// GDPR erasure cascade (Art. 17); see deleteOrgData in gdpr.go.
+//
+// Delete(tenant, name) cannot stand in for this: the cascade doesn't know
+// what names a tenant accumulated over its lifetime, and a secret it
+// failed to name would outlive the org it belonged to.
+func (e *EncryptedSecrets) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
+	if tenant == "" {
+		return 0, fmt.Errorf("delete tenant secrets: tenant required")
+	}
+	n, err := e.store.deleteTenant(ctx, tenant)
+	// Drop the cached AEAD even on error: the store may have committed
+	// before failing to report, and a cached DEK whose wrapped form is gone
+	// is worse than a cold cache. Any secret written under it would be
+	// sealed by a key no other process — and not this one after a restart —
+	// can reconstruct, i.e. silently unreadable ciphertext.
+	//
+	// Eviction follows the delete rather than preceding it so a concurrent
+	// dekFor can't re-cache from rows that are still there. A write racing
+	// the erasure of its own org can still lose that way; erasure is
+	// terminal for the tenant, so there is no state left worth protecting.
+	e.mu.Lock()
+	delete(e.deks, tenant)
+	e.mu.Unlock()
+	if err != nil {
+		return 0, fmt.Errorf("delete secrets for %q: %w", tenant, err)
+	}
+	return n, nil
 }
 
 // List returns secret names for a tenant. The values are

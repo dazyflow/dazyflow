@@ -107,6 +107,26 @@ func (s *PgGitMirrorStore) Upsert(ctx context.Context, m GitMirror) error {
 
 // Delete removes the mirror entirely, status included — "stop mirroring and
 // forget where it went". Idempotent.
+func (s *PgGitMirrorStore) AnonymizeSubject(ctx context.Context, ident string) (int, error) {
+	if ident == "" {
+		return 0, nil
+	}
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE git_mirrors SET updated_by = $2 WHERE updated_by = $1`, ident, core.ErasedIdentity)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
+func (s *PgGitMirrorStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM git_mirrors WHERE tenant = $1`, tenant)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
 func (s *PgGitMirrorStore) Delete(ctx context.Context, tenant, workspace string) error {
 	_, err := s.pool.Exec(ctx,
 		`DELETE FROM git_mirrors WHERE tenant = $1 AND workspace = $2`, tenant, workspace)

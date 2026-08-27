@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"git.sr.ht/~klahr/dazyflow/core"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -142,6 +143,26 @@ func (s *PgMCPServerStore) Delete(ctx context.Context, tenant, name string) erro
 	return nil
 }
 
+func (s *PgMCPServerStore) AnonymizeSubject(ctx context.Context, ident string) (int, error) {
+	if ident == "" {
+		return 0, nil
+	}
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE tenant_mcp_servers SET created_by = $2 WHERE created_by = $1`, ident, core.ErasedIdentity)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
+func (s *PgMCPServerStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM tenant_mcp_servers WHERE tenant = $1`, tenant)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
 func (s *PgMCPServerStore) SealedToken(ctx context.Context, tenant, name string) ([]byte, error) {
 	var blob []byte
 	err := s.pool.QueryRow(ctx,
@@ -271,6 +292,37 @@ func (s *MemMCPServerStore) Delete(_ context.Context, tenant, name string) error
 	delete(s.rows, k)
 	delete(s.toks, k)
 	return nil
+}
+
+func (s *MemMCPServerStore) AnonymizeSubject(_ context.Context, ident string) (int, error) {
+	if ident == "" {
+		return 0, nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for k, v := range s.rows {
+		if v.CreatedBy == ident {
+			v.CreatedBy = core.ErasedIdentity
+			s.rows[k] = v
+			n++
+		}
+	}
+	return n, nil
+}
+
+func (s *MemMCPServerStore) DeleteByTenant(_ context.Context, tenant string) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for k := range s.rows {
+		if k.tenant == tenant {
+			delete(s.rows, k)
+			delete(s.toks, k)
+			n++
+		}
+	}
+	return n, nil
 }
 
 func (s *MemMCPServerStore) SealedToken(_ context.Context, tenant, name string) ([]byte, error) {

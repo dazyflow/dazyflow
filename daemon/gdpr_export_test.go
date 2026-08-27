@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+	"time"
 
 	"git.sr.ht/~klahr/dazyflow/auth"
 	"git.sr.ht/~klahr/dazyflow/core"
@@ -139,5 +140,186 @@ func TestExportHandler_Cov(t *testing.T) {
 	}
 	if rw := sessionDo(t, h, gtok, "GET", "/api/v1/me/export", nil); rw.Code != http.StatusNotFound {
 		t.Fatalf("ghost export = %d, want 404", rw.Code)
+	}
+}
+
+// TestAssembleExport_IncludesSupportAuditAndRoles covers the Art. 15 sections
+// added after the first export shipped: support correspondence, the subject's
+// own audit trail, and platform roles held.
+func TestAssembleExport_IncludesSupportAuditAndRoles(t *testing.T) {
+	ctx := context.Background()
+	const email = "alice@example.com"
+	const tenant = "acme"
+
+	users, _ := auth.OpenJSONUserStore("")
+	_ = users.PutUser(ctx, auth.User{
+		Email: email, Subject: email, Tenant: tenant, Workspace: "default",
+	})
+
+	tickets := NewMemTicketStore()
+	_ = tickets.Create(ctx, core.Ticket{
+		ID: "t1", Tenant: tenant, CreatedBy: email, Subject: "Flow broke",
+		Status: core.TicketAwaitingSupport, CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	})
+	_ = tickets.AppendMessage(ctx, core.TicketMessage{
+		ID: "m1", TicketID: "t1", Author: email, AuthorKind: core.AuthorUser,
+		Body: "my flow is broken", CreatedAt: time.Now(),
+	})
+	_ = tickets.AppendMessage(ctx, core.TicketMessage{
+		ID: "m2", TicketID: "t1", Author: "agent@vendor.test", AuthorKind: core.AuthorSupport,
+		Body: "looking into it", CreatedAt: time.Now(),
+	})
+	// Another member's thread in the SAME org must not appear: it is their
+	// personal data, not this subject's.
+	_ = tickets.Create(ctx, core.Ticket{
+		ID: "t2", Tenant: tenant, CreatedBy: "bob@example.com", Subject: "Bob's problem",
+		Status: core.TicketAwaitingSupport, CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	})
+
+	audit := &fakeAuditLog{}
+	_ = audit.Append(ctx, core.AuditEvent{
+		Tenant: tenant, Actor: email, Action: "auth.login", Detail: "ip=1.2.3.4",
+	})
+	_ = audit.Append(ctx, core.AuditEvent{
+		Tenant: tenant, Actor: "bob@example.com", Action: "auth.login", Detail: "ip=5.6.7.8",
+	})
+
+	admins := newMemPlatformAdmins()
+	_ = admins.Grant(ctx, email, "root@platform.test")
+	agents := NewMemSupportAgentStore()
+
+	h := &HTTPGateway{
+		svc:                 &Service{},
+		Users:               users,
+		Tickets:             tickets,
+		Audit:               audit,
+		PlatformAdminGrants: admins,
+		SupportAgents:       agents,
+	}
+	p := core.Principal{Subject: email, Tenant: tenant}
+
+	exp, err := h.assembleExport(ctx, p)
+	if err != nil {
+		t.Fatalf("assembleExport: %v", err)
+	}
+
+	// Support: their thread, with both sides of the conversation.
+	if len(exp.SupportTickets) != 1 {
+		t.Fatalf("SupportTickets = %d, want 1 (theirs only)", len(exp.SupportTickets))
+	}
+	got := exp.SupportTickets[0]
+	if got.ID != "t1" {
+		t.Errorf("exported the wrong ticket: %q", got.ID)
+	}
+	if len(got.Messages) != 2 {
+		t.Errorf("messages = %d, want 2 (their message and the reply)", len(got.Messages))
+	}
+	var foundBody bool
+	for _, m := range got.Messages {
+		if m.Body == "my flow is broken" {
+			foundBody = true
+		}
+	}
+	if !foundBody {
+		t.Error("the subject's own words are missing from their support history")
+	}
+
+	// Audit: theirs, including the source IP; not their colleague's.
+	if len(exp.AuditEvents) != 1 {
+		t.Fatalf("AuditEvents = %d, want 1", len(exp.AuditEvents))
+	}
+	if exp.AuditEvents[0].Detail != "ip=1.2.3.4" {
+		t.Errorf("audit detail = %q, want the subject's source IP", exp.AuditEvents[0].Detail)
+	}
+
+	// Roles held.
+	if !exp.RoleGrants.PlatformAdmin {
+		t.Error("platform-admin grant missing from the export")
+	}
+	if exp.RoleGrants.SupportAgent {
+		t.Error("reported a support-agent role the subject does not hold")
+	}
+
+	// The document says what it left out.
+	if len(exp.Excluded) == 0 {
+		t.Error("Excluded is empty — a DSAR that silently omits a category is " +
+			"indistinguishable from one with nothing to report")
+	}
+}
+
+// TestAssembleExport_ExcludesOtherPeoplesData is the Art. 15(4) boundary: an
+// access request is for the requester's data, not their colleagues'.
+func TestAssembleExport_ExcludesOtherPeoplesData(t *testing.T) {
+	ctx := context.Background()
+	const email = "alice@example.com"
+	const tenant = "acme"
+
+	users, _ := auth.OpenJSONUserStore("")
+	_ = users.PutUser(ctx, auth.User{Email: email, Subject: email, Tenant: tenant, Workspace: "default"})
+
+	tickets := NewMemTicketStore()
+	for _, other := range []string{"bob@example.com", "carol@example.com"} {
+		_ = tickets.Create(ctx, core.Ticket{
+			ID: "t-" + other, Tenant: tenant, CreatedBy: other, Subject: "private",
+			Status: core.TicketAwaitingSupport, CreatedAt: time.Now(), UpdatedAt: time.Now(),
+		})
+		_ = tickets.AppendMessage(ctx, core.TicketMessage{
+			ID: "m-" + other, TicketID: "t-" + other, Author: other,
+			AuthorKind: core.AuthorUser, Body: "confidential", CreatedAt: time.Now(),
+		})
+	}
+	audit := &fakeAuditLog{}
+	_ = audit.Append(ctx, core.AuditEvent{Tenant: tenant, Actor: "bob@example.com", Action: "auth.login", Detail: "ip=5.6.7.8"})
+
+	h := &HTTPGateway{svc: &Service{}, Users: users, Tickets: tickets, Audit: audit}
+	exp, err := h.assembleExport(ctx, core.Principal{Subject: email, Tenant: tenant})
+	if err != nil {
+		t.Fatalf("assembleExport: %v", err)
+	}
+	if len(exp.SupportTickets) != 0 {
+		t.Errorf("export leaked %d colleague tickets", len(exp.SupportTickets))
+	}
+	if len(exp.AuditEvents) != 0 {
+		t.Errorf("export leaked %d colleague audit events (incl. their IP)", len(exp.AuditEvents))
+	}
+}
+
+// TestAssembleExport_SurvivesUnconfiguredStores pins the best-effort contract
+// the function documents: a deployment missing a store gets an empty section,
+// not a failed export.
+//
+// It did not hold. ListFlowSummaries opens s.Workspaces with no nil check of
+// its own, so an export on a daemon without a workspace store panicked the
+// request instead of returning what it could.
+func TestAssembleExport_SurvivesUnconfiguredStores(t *testing.T) {
+	ctx := context.Background()
+	const email = "alice@example.com"
+
+	users, _ := auth.OpenJSONUserStore("")
+	_ = users.PutUser(ctx, auth.User{Email: email, Subject: email, Tenant: "acme", Workspace: "default"})
+
+	// Nothing wired but the user store — every other section must degrade.
+	h := &HTTPGateway{svc: &Service{}, Users: users}
+
+	exp, err := h.assembleExport(ctx, core.Principal{Subject: email, Tenant: "acme"})
+	if err != nil {
+		t.Fatalf("assembleExport with no stores: %v", err)
+	}
+	if exp.Profile.Email != email {
+		t.Errorf("profile = %q, want the subject's row to still be present", exp.Profile.Email)
+	}
+	// Empty, non-nil sections so the JSON has [] rather than null.
+	for name, n := range map[string]int{
+		"Flows": len(exp.Flows), "Runs": len(exp.Runs),
+		"SupportTickets": len(exp.SupportTickets), "AuditEvents": len(exp.AuditEvents),
+		"Boards": len(exp.Boards), "Memberships": len(exp.Memberships),
+	} {
+		if n != 0 {
+			t.Errorf("%s = %d, want 0 with no store configured", name, n)
+		}
+	}
+	// Marshals cleanly — the document is the deliverable.
+	if _, err := json.Marshal(exp); err != nil {
+		t.Fatalf("export does not marshal: %v", err)
 	}
 }

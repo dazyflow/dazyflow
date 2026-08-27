@@ -61,6 +61,12 @@ the operator's `/data` volume) — nothing is sent to the vendor. Tables are in
 | API keys (subject, salted SHA-256 hash) | `api_keys` (`auth/postgres.go`) | Secret never stored in clear. |
 | Audit events — actor (email), action, target, and **source IP for auth events** | `audit_events` (`daemon/audit.go`) | IP is personal data; retained 90 days by default. |
 | Run logs & job payloads / node outputs | `run_logs`, `jobs`, `bus_events` (`daemon/runlog_pg.go`, `engine/jobstore`, `daemon/eventbus_pg.go`) | **May contain arbitrary personal data from the flows themselves** (e.g. emails in a processed CSV). Secrets are redacted (`engine/redact.go`); personal data is **not**. |
+| Connector credentials & OAuth tokens (AES-256-GCM, per-tenant DEK) | `encrypted_secrets`, `encrypted_secret_deks` (`daemon/encrypted_secrets_store.go`) | Grant access to a person's third-party account (Gmail, Slack, …). Erased with the org. |
+| Integration config — MCP servers, web-API catalogs, git mirrors (remote URL + account + editor email), runner registrations and tokens | `tenant_mcp_servers`, `tenant_web_apis`, `git_mirrors`, `tenant_runners`, `runner_tokens` | Carry admin emails and sealed credentials. Erased with the org. |
+| Queued/running runner tasks — script, env, stdin | `runner_tasks` (`daemon/runner_tasks.go`) | **May contain arbitrary personal data**, same as run logs. Swept by `DAZYFLOW_RUNNER_TASK_RETENTION`; erased with the org. |
+| Billing pointer (Stripe customer/subscription id, status), entitlement overrides + admin notes, monthly usage counters | `tenant_plans`, `tenant_entitlements`, `usage_counters` | Erased with the org. Invoices themselves live in Stripe under your own retention obligation. |
+| Platform-admin and support-agent grants (email + who granted it) | `platform_admins`, `support_agents` | Email is the primary key. Revoked on account erasure; the granter's email is pseudonymised. |
+| Blocklist entries (banned email/domain, reason, blocking admin) | `blocked_identities` (`auth/blocklist.go`) | **Retained on erasure** — see below. The blocking admin's email is pseudonymised. |
 | Flow graph definitions | git repos under `/data` (`daemon/service.go`) | On disk, not in Postgres. May embed personal data in literals. |
 
 ## Personal data sent to third parties
@@ -110,9 +116,9 @@ Each right now has a supported endpoint (built 2026-06-15).
 
 | Right (Article) | Product support | How to service it |
 |---|---|---|
-| **Access (15) / Portability (20)** | **Built in** — `GET /api/v1/me/export` returns a single machine-readable JSON document (profile, memberships, invitations, redacted API keys, flows, run history), served as a download. | Call the export endpoint as the subject. |
+| **Access (15) / Portability (20)** | **Built in** — `GET /api/v1/me/export` returns a single machine-readable JSON document (profile, memberships, invitations, redacted API keys, flows, run history, **support correspondence with full message bodies, the subject's own audit trail including source IPs, Collections boards by name/row-count, and platform roles held**), served as a download. Scoped to the requester: a colleague's tickets and audit events are never included (Art. 15(4)). An `excluded` field names each category deliberately left out and why. | Call the export endpoint as the subject. |
 | **Rectification (16)** | **Built in** — `POST /api/v1/me/password` (change password) and `POST /api/v1/me/email` (supervised email re-key: re-points memberships + API keys, revokes sessions). Org display-name via `PUT /api/v1/admin/org/profile`. | Use the self-service endpoints. |
-| **Erasure (17)** | **Built in** — `DELETE /api/v1/me/account` (self-serve, `?confirm=<email>`), `DELETE /api/v1/admin/users/{email}` (platform admin), `DELETE /api/v1/admin/orgs/{tenant}`. Cascades across users, sessions, api_keys, memberships, invitations, jobs, run_logs, bus_events, org config/profile, and the tenant's `/data`; audit is pseudonymised (user) or deleted (org). | Call the deletion endpoint; member removal (`DELETE …/admin/members/{email}`) still exists for the lighter "remove from org" case. |
+| **Erasure (17)** | **Built in** — `DELETE /api/v1/me/account` (self-serve, `?confirm=<email>`), `DELETE /api/v1/admin/users/{email}` (platform admin), `DELETE /api/v1/admin/orgs/{tenant}`. Cascades across users, sessions, api_keys, memberships, invitations, jobs, run_logs, bus_events, shares, support tickets/bundles/grants, encrypted secrets (values **and** the tenant's wrapped DEK, so leftover ciphertext is crypto-shredded), MCP servers, web-API catalogs, git mirrors, runners + registration tokens, runner tasks, per-tenant drop switches, billing/entitlement/usage rows, org config/profile, and the tenant's `/data`. Account erasure additionally revokes platform-admin/support-agent grants and pseudonymises the erased address **everywhere it authored a row an org keeps** — `created_by` / `updated_by` / `invited_by` / `disabled_by` across integrations, runners, mirrors, shares, bundles, memberships and invitations, plus grant records and blocklist entries. This is the shared-org path: the org carries on, so its rows are kept and scrubbed rather than deleted. Every person-naming column is enumerated with its disposition in `daemon/gdpr_coverage_test.go`, which fails the build if an undeclared one is added. Audit is pseudonymised (user) or deleted (org). A `deliberatelyRetained` disposition is required in code for any tenant-scoped table that is *not* erased, and a test fails the build when a new one appears without one (`daemon/gdpr_coverage_test.go`). Erasing an org does **not** cancel a live Stripe subscription — the erase report warns when it removes the pointer to one, and cancelling it is an operator step. | Call the deletion endpoint; member removal (`DELETE …/admin/members/{email}`) still exists for the lighter "remove from org" case. |
 | **Restriction (18) / Objection (21)** | Disable the account's sessions/keys to halt processing. | Revoke sessions + API keys; pause the org's flows. |
 | **Automated decisions (22)** | dzd runs operator-authored flows; any profiling is in your flow logic, not the platform. | Assess per flow. |
 
@@ -139,6 +145,41 @@ Results page or by deleting the workspace/account (the store lives under the
 sandbox subtree, so it rides the erasure cascade; see Erasure). Boards are
 user-curated output, not machine exhaust, so treat them as data you keep until
 you decide otherwise.
+
+### What the export deliberately leaves out
+
+The export document carries an `excluded` array naming these in-band, so a
+recipient can tell an omission from an empty category:
+
+- **Collections board contents.** Boards are listed by name and row count, not
+  dumped. Their rows are flow output — leads, form responses, collected
+  contacts — and so are usually personal data about **third parties**; returning
+  them under one member's access request would disclose other people's data,
+  which Art. 15(4) exists to prevent. Row-level export stays on the Results
+  page, used by someone acting for the org rather than for themselves. (This
+  matches how run history is already treated: ids and status, never payloads.)
+- **Anti-abuse blocklist entries.** Disclosing the fact and reason of a ban
+  through an automated endpoint would undermine the measure. Service that part
+  of an access request manually, with a balancing test.
+
+### What erasure deliberately keeps
+
+Two things survive an erasure request, both on stated grounds:
+
+- **Blocklist entries naming the erased person** (`blocked_identities.value`).
+  A ban a person can lift by asking to be forgotten is not a ban. The entry is
+  kept under **legitimate interest** (Art. 17(1)(c) / 6(1)(f)) — preventing
+  abuse and re-registration by an account the operator already removed. Only
+  the *blocking admin's* email on the row is pseudonymised. Record this in your
+  Record of Processing; a data subject who objects is entitled to a
+  balancing-test answer, not an automatic deletion.
+- **Audit events**, pseudonymised rather than deleted (Art. 17(3), Recital 26)
+  so the security trail survives without the identifier.
+
+Note also that platform-admin status has a second source the daemon cannot
+edit: the `DAZYFLOW_PLATFORM_ADMINS` env allowlist. Erasing such an account
+emits a warning in the erase report — remove the address from your deployment
+config too, or it silently re-elevates if that person ever signs up again.
 
 ## Security of processing (Art. 32)
 

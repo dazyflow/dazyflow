@@ -175,6 +175,28 @@ func mergeErase(a, b EraseReport) EraseReport {
 	a.Jobs += b.Jobs
 	a.RunLogs += b.RunLogs
 	a.BusEvents += b.BusEvents
+	// Every counting field belongs here. Shares, Tickets, Bundles and Grants
+	// were added to EraseReport after this function and never folded in, so a
+	// combined account+personal-org deletion reported them as the identity
+	// pass left them — usually zero — while the org pass had in fact erased
+	// rows.
+	a.Shares += b.Shares
+	a.Secrets += b.Secrets
+	a.Tickets += b.Tickets
+	a.Bundles += b.Bundles
+	a.Grants += b.Grants
+	a.MCPServers += b.MCPServers
+	a.WebAPIs += b.WebAPIs
+	a.Runners += b.Runners
+	a.RunnerTasks += b.RunnerTasks
+	a.GitMirrors += b.GitMirrors
+	a.DropSwitches += b.DropSwitches
+	a.Plans += b.Plans
+	a.Entitlements += b.Entitlements
+	a.UsageCounters += b.UsageCounters
+	a.RoleGrants += b.RoleGrants
+	a.GrantedByRefs += b.GrantedByRefs
+	a.AuthoredRefs += b.AuthoredRefs
 	a.WorkspaceWiped = a.WorkspaceWiped || b.WorkspaceWiped
 	a.SandboxWiped = a.SandboxWiped || b.SandboxWiped
 	a.OrgAuthDeleted = a.OrgAuthDeleted || b.OrgAuthDeleted
@@ -184,7 +206,7 @@ func mergeErase(a, b EraseReport) EraseReport {
 }
 
 func summarizeErase(r EraseReport) string {
-	return fmt.Sprintf("user=%t sessions=%d keys=%d memberships=%d invitations=%d jobs=%d run_logs=%d bus=%d audit=%d ws=%t sandbox=%t warnings=%d",
+	return fmt.Sprintf("user=%t sessions=%d keys=%d memberships=%d invitations=%d jobs=%d run_logs=%d bus=%d secrets=%d audit=%d ws=%t sandbox=%t warnings=%d",
 		r.UserDeleted, r.Sessions, r.APIKeys, r.Memberships, r.Invitations,
-		r.Jobs, r.RunLogs, r.BusEvents, r.AuditEvents, r.WorkspaceWiped, r.SandboxWiped, len(r.Warnings))
+		r.Jobs, r.RunLogs, r.BusEvents, r.Secrets, r.AuditEvents, r.WorkspaceWiped, r.SandboxWiped, len(r.Warnings))
 }

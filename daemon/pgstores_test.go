@@ -481,3 +481,112 @@ func TestPgAuditLog_Operations(t *testing.T) {
 		t.Fatalf("DeleteByTenant = %d", d)
 	}
 }
+
+// TestPgDropSwitchStore_DeleteByTenant covers the erasure hook against the real
+// DB: per-tenant switches go, the GLOBAL switch stays, and an empty tenant is
+// refused rather than matching every global row.
+func TestPgDropSwitchStore_DeleteByTenant(t *testing.T) {
+	pool, ctx := covPGPool(t)
+	if err := EnsurePgDropSwitchSchema(ctx, pool); err != nil {
+		t.Fatalf("schema: %v", err)
+	}
+	if _, err := pool.Exec(ctx, "TRUNCATE drop_switches"); err != nil {
+		t.Fatalf("truncate: %v", err)
+	}
+	store, err := NewPgDropSwitchStore(ctx, pool)
+	if err != nil {
+		t.Fatalf("NewPgDropSwitchStore: %v", err)
+	}
+	for _, sw := range []DropSwitch{
+		{DropID: "http", Tenant: "doomed", DisabledBy: "ops@platform.test"},
+		{DropID: "slack.post", Tenant: "doomed", DisabledBy: "ops@platform.test"},
+		{DropID: "http", Tenant: "keeper", DisabledBy: "ops@platform.test"},
+		{DropID: "smtp", Tenant: "", DisabledBy: "ops@platform.test"}, // global
+	} {
+		if err := store.Disable(ctx, sw); err != nil {
+			t.Fatalf("seed %v: %v", sw, err)
+		}
+	}
+
+	// An empty tenant must be refused: the WHERE clause would match exactly the
+	// global switches, silently re-enabling a drop the platform turned off.
+	if _, err := store.DeleteByTenant(ctx, ""); err == nil {
+		t.Fatal("DeleteByTenant(\"\") = nil, want error")
+	}
+	if !store.Disabled("smtp", "anyone") {
+		t.Fatal("the refused call still cleared the global switch")
+	}
+
+	n, err := store.DeleteByTenant(ctx, "doomed")
+	if err != nil {
+		t.Fatalf("DeleteByTenant: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("n = %d, want 2", n)
+	}
+	// Reads go through the in-memory snapshot, so this also proves the reload
+	// ran — a stale cache would keep enforcing an erased org's switches.
+	if store.Disabled("http", "doomed") || store.Disabled("slack.post", "doomed") {
+		t.Error("erased tenant's switches still enforced (cache not reloaded?)")
+	}
+	if !store.Disabled("http", "keeper") {
+		t.Error("other tenant's switch was collateral damage")
+	}
+	if !store.Disabled("smtp", "anyone") {
+		t.Error("global switch was collateral damage")
+	}
+}
+
+// TestPgRunnerStore_DeleteByTenant covers the two-table transaction: runners and
+// unspent registration tokens both go, scoped to one tenant.
+func TestPgRunnerStore_DeleteByTenant(t *testing.T) {
+	pool, ctx := covPGPool(t)
+	store, err := NewPgRunnerStore(ctx, pool)
+	if err != nil {
+		t.Fatalf("NewPgRunnerStore: %v", err)
+	}
+	if _, err := pool.Exec(ctx, "TRUNCATE tenant_runners, runner_tokens"); err != nil {
+		t.Fatalf("truncate: %v", err)
+	}
+
+	for _, tn := range []string{"doomed", "keeper"} {
+		if err := store.MintToken(ctx, tn, "admin@"+tn, "box", []byte("spent-"+tn), time.Now().Add(time.Hour)); err != nil {
+			t.Fatalf("mint %s: %v", tn, err)
+		}
+		if _, err := store.RedeemToken(ctx, []byte("spent-"+tn),
+			Runner{Tenant: tn, Name: "box"}, []byte("cred-"+tn)); err != nil {
+			t.Fatalf("redeem %s: %v", tn, err)
+		}
+		if err := store.MintToken(ctx, tn, "admin@"+tn, "box2", []byte("live-"+tn), time.Now().Add(time.Hour)); err != nil {
+			t.Fatalf("mint unspent %s: %v", tn, err)
+		}
+	}
+
+	n, err := store.DeleteByTenant(ctx, "doomed")
+	if err != nil {
+		t.Fatalf("DeleteByTenant: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("n = %d, want 1 runner", n)
+	}
+	if got, _ := store.List(ctx, "doomed"); len(got) != 0 {
+		t.Errorf("runners survived: %v", got)
+	}
+	// Count tokens directly — nothing in the interface lists them.
+	var tokens int
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM runner_tokens WHERE tenant=$1`, "doomed").Scan(&tokens); err != nil {
+		t.Fatalf("count tokens: %v", err)
+	}
+	if tokens != 0 {
+		t.Errorf("%d registration tokens survived — live credentials for an erased org", tokens)
+	}
+
+	if got, _ := store.List(ctx, "keeper"); len(got) != 1 {
+		t.Errorf("other tenant's runners = %d, want 1", len(got))
+	}
+	if _, err := store.RedeemToken(ctx, []byte("live-keeper"),
+		Runner{Tenant: "keeper", Name: "box2"}, []byte("cred-new")); err != nil {
+		t.Errorf("other tenant's token stopped working: %v", err)
+	}
+}

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"git.sr.ht/~klahr/dazyflow/core"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -52,6 +53,16 @@ type BlocklistStore interface {
 	Unblock(ctx context.Context, value string) error
 	// List returns every entry, newest first — the platform-admin view.
 	List(ctx context.Context) ([]Blocked, error)
+	// AnonymizeCreatedBy replaces an erased person's email where it appears as
+	// the ADMIN who created an entry, returning the rows changed.
+	//
+	// Note what this deliberately does NOT do: it does not remove a blocklist
+	// entry that names the erased person as its subject. A ban a person can
+	// clear by asking to be forgotten is not a ban, and the entry is kept under
+	// legitimate interest (Art. 17(1)(c) / 6(1)(f)) — preventing abuse and
+	// re-registration by an account the operator already removed. Only the
+	// staff email attached to the row is pseudonymised. See docs/PRIVACY.md.
+	AnonymizeCreatedBy(ctx context.Context, email string) (int, error)
 }
 
 // NormalizeBlockEmail lowercases and trims an email for blocklist
@@ -154,6 +165,19 @@ func (s *PgBlocklistStore) Unblock(ctx context.Context, value string) error {
 	value = NormalizeBlockEmail(value)
 	_, err := s.pool.Exec(ctx, `DELETE FROM blocked_identities WHERE value=$1`, value)
 	return err
+}
+
+func (s *PgBlocklistStore) AnonymizeCreatedBy(ctx context.Context, email string) (int, error) {
+	email = NormalizeBlockEmail(email)
+	if email == "" {
+		return 0, fmt.Errorf("email required")
+	}
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE blocked_identities SET created_by = $2 WHERE created_by = $1`, email, core.ErasedIdentity)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
 }
 
 func (s *PgBlocklistStore) List(ctx context.Context) ([]Blocked, error) {

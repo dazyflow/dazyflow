@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"git.sr.ht/~klahr/dazyflow/core"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -45,6 +46,10 @@ type SupportAgentStore interface {
 	Grant(ctx context.Context, email, grantedBy string) error
 	Revoke(ctx context.Context, email string) error
 	List(ctx context.Context) ([]SupportAgentGrant, error)
+	// AnonymizeGrantedBy replaces an erased person's email where it appears as
+	// the GRANTER of someone else's agent role, returning the rows changed.
+	// See PlatformAdminStore.AnonymizeGrantedBy — same shape, same reason.
+	AnonymizeGrantedBy(ctx context.Context, email string) (int, error)
 }
 
 // ---- In-memory (tests + single-node) ---------------------------------------
@@ -98,6 +103,24 @@ func (s *MemSupportAgentStore) Revoke(_ context.Context, email string) error {
 	defer s.mu.Unlock()
 	delete(s.grants, email)
 	return nil
+}
+
+func (s *MemSupportAgentStore) AnonymizeGrantedBy(_ context.Context, email string) (int, error) {
+	email = normalizeEmail(email)
+	if email == "" {
+		return 0, fmt.Errorf("email required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for k, g := range s.grants {
+		if normalizeEmail(g.GrantedBy) == email {
+			g.GrantedBy = core.ErasedIdentity
+			s.grants[k] = g
+			n++
+		}
+	}
+	return n, nil
 }
 
 func (s *MemSupportAgentStore) List(_ context.Context) ([]SupportAgentGrant, error) {
@@ -186,6 +209,19 @@ func (s *PgSupportAgentStore) Revoke(ctx context.Context, email string) error {
 		return err
 	}
 	return s.reload(ctx)
+}
+
+func (s *PgSupportAgentStore) AnonymizeGrantedBy(ctx context.Context, email string) (int, error) {
+	email = normalizeEmail(email)
+	if email == "" {
+		return 0, fmt.Errorf("email required")
+	}
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE support_agents SET granted_by = $2 WHERE granted_by = $1`, email, core.ErasedIdentity)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
 }
 
 func (s *PgSupportAgentStore) List(ctx context.Context) ([]SupportAgentGrant, error) {

@@ -146,6 +146,20 @@ type MCPServerStore interface {
 	// save with AuthKind none.
 	Put(ctx context.Context, s MCPServer, sealedToken []byte) error
 	Delete(ctx context.Context, tenant, name string) error
+	// DeleteByTenant removes every server a tenant configured, returning the
+	// count. The erasure-cascade entry point (GDPR Art. 17): erasure cannot
+	// go name-by-name, because it does not know what an org configured over
+	// its lifetime.
+	DeleteByTenant(ctx context.Context, tenant string) (int, error)
+	// AnonymizeSubject replaces an erased person's identifier wherever it
+	// appears in this store's rows, returning the rows changed.
+	//
+	// The rows belong to an ORG and outlive the person, so their identifier is
+	// pseudonymised rather than deleted — the same treatment the audit trail
+	// gets. Deleting an org takes these rows anyway; this is the OTHER path,
+	// where a member of a shared org erases their account and the org carries
+	// on with their address still in it.
+	AnonymizeSubject(ctx context.Context, ident string) (int, error)
 	// SealedToken returns the stored credential blob, still sealed.
 	SealedToken(ctx context.Context, tenant, name string) ([]byte, error)
 	// SetSnapshot records what the server was last seen publishing. Separate
@@ -506,6 +520,38 @@ func (m *MCPServers) Delete(ctx context.Context, tenant, name string) error {
 	m.Catalog.Unregister(tenant, name)
 	m.forget(mcpKey{tenant, name})
 	return nil
+}
+
+// DeleteByTenant removes every MCP server an org configured and takes each one
+// out of the live catalog, returning the count. The erasure cascade's hook
+// (GDPR Art. 17); see deleteOrgData in gdpr.go.
+//
+// It lists and then deletes one at a time rather than issuing a single
+// tenant-wide statement, because unregistering is half the job: a row deleted
+// straight from under the catalog would leave this process still holding the
+// org's transports — and the sealed token in memory — until a restart. Erasure
+// is rare enough that the extra queries cost nothing worth having.
+func (m *MCPServers) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
+	if err := m.ready(); err != nil {
+		return 0, err
+	}
+	servers, err := m.Store.List(ctx, tenant)
+	if err != nil {
+		return 0, fmt.Errorf("list mcp servers for %q: %w", tenant, err)
+	}
+	for _, s := range servers {
+		m.Catalog.Unregister(tenant, s.Name)
+		m.forget(mcpKey{tenant, s.Name})
+	}
+	// The tenant-wide delete still runs, and its count is what we report: a
+	// row written between the List and here is caught by it, and must be —
+	// this is the erasure path, and "all but the one that raced" is not
+	// erasure. Such a row's catalog entry is dropped by the next reconcile.
+	n, err := m.Store.DeleteByTenant(ctx, tenant)
+	if err != nil {
+		return 0, fmt.Errorf("delete mcp servers for %q: %w", tenant, err)
+	}
+	return n, nil
 }
 
 // Refresh re-handshakes with a server and re-reads its tool list.

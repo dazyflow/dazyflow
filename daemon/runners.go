@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"git.sr.ht/~klahr/dazyflow/core"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -213,6 +214,25 @@ type RunnerStore interface {
 	// end with one of their intended sets, not an interleaving of both.
 	SetLabels(ctx context.Context, tenant, name string, labels []string) (Runner, error)
 	Delete(ctx context.Context, tenant, name string) error
+	// DeleteByTenant removes every runner registration AND every outstanding
+	// registration token belonging to a tenant, returning the runner count.
+	// The erasure-cascade entry point (GDPR Art. 17).
+	//
+	// Tokens go with the runners deliberately. A token outliving its org is a
+	// live credential for an org that no longer exists — and unlike a runner
+	// row, nothing else expires it early.
+	DeleteByTenant(ctx context.Context, tenant string) (int, error)
+	// AnonymizeSubject replaces an erased person's identifier wherever it
+	// appears in this store's rows, returning the rows changed.
+	//
+	// The rows belong to an ORG and outlive the person, so their identifier is
+	// pseudonymised rather than deleted — the same treatment the audit trail
+	// gets. Deleting an org takes these rows anyway; this is the OTHER path,
+	// where a member of a shared org erases their account and the org carries
+	// on with their address still in it.
+	// Covers BOTH created_by columns this store owns: tenant_runners and
+	// runner_tokens.
+	AnonymizeSubject(ctx context.Context, ident string) (int, error)
 }
 
 const pgRunnerSchema = `
@@ -513,6 +533,17 @@ func (rs *Runners) Delete(ctx context.Context, tenant, name string) error {
 	return rs.Store.Delete(ctx, tenant, name)
 }
 
+// DeleteByTenant erases an org's whole runner fleet — registrations and unspent
+// tokens alike — returning the number of runners removed. The erasure cascade's
+// hook (GDPR Art. 17); see deleteOrgData in gdpr.go.
+//
+// Deleting the rows is also the revocation: an agent's credential lives on its
+// runner row, so a machine still running somewhere stops being able to claim
+// work the moment this lands.
+func (rs *Runners) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
+	return rs.Store.DeleteByTenant(ctx, tenant)
+}
+
 // ---- in-memory store --------------------------------------------------
 
 // MemRunnerStore implements RunnerStore in process, for tests and for
@@ -640,6 +671,48 @@ func (m *MemRunnerStore) SetLabels(_ context.Context, tenant, name string, label
 	// stored runner sharing its backing array would change under the store.
 	r.Labels = append([]string(nil), labels...)
 	return *r, nil
+}
+
+func (m *MemRunnerStore) AnonymizeSubject(_ context.Context, ident string) (int, error) {
+	if ident == "" {
+		return 0, nil
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := 0
+	for _, byName := range m.runners {
+		for _, r := range byName {
+			if r.CreatedBy == ident {
+				r.CreatedBy = core.ErasedIdentity
+				n++
+			}
+		}
+	}
+	for _, tok := range m.tokens {
+		if tok.createdBy == ident {
+			tok.createdBy = core.ErasedIdentity
+			n++
+		}
+	}
+	return n, nil
+}
+
+func (m *MemRunnerStore) DeleteByTenant(_ context.Context, tenant string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := len(m.runners[tenant])
+	delete(m.runners, tenant)
+	for h, ref := range m.creds {
+		if ref.tenant == tenant {
+			delete(m.creds, h)
+		}
+	}
+	for h, tok := range m.tokens {
+		if tok.tenant == tenant {
+			delete(m.tokens, h)
+		}
+	}
+	return n, nil
 }
 
 func (m *MemRunnerStore) Delete(_ context.Context, tenant, name string) error {

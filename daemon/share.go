@@ -59,6 +59,15 @@ type ShareStore interface {
 	// DeleteByTenant erases every share for a tenant — the GDPR/org-erasure
 	// cascade hook (see gdpr.go's tenantEraser).
 	DeleteByTenant(ctx context.Context, tenant string) (int, error)
+	// AnonymizeSubject replaces an erased person's identifier wherever it
+	// appears in this store's rows, returning the rows changed.
+	//
+	// The rows belong to an ORG and outlive the person, so their identifier is
+	// pseudonymised rather than deleted — the same treatment the audit trail
+	// gets. Deleting an org takes these rows anyway; this is the OTHER path,
+	// where a member of a shared org erases their account and the org carries
+	// on with their address still in it.
+	AnonymizeSubject(ctx context.Context, ident string) (int, error)
 }
 
 // newShareToken mints a 32-byte cryptic token, hex-encoded (64 chars). Same

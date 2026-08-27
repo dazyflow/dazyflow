@@ -70,6 +70,23 @@ func (s *PgPlanStore) GetPlan(ctx context.Context, tenant string) (TenantPlan, e
 // MarkStripeEvent records a webhook event id; the INSERT's conflict
 // outcome is the atomic first-time test, so concurrent replicas
 // processing the same retry agree on exactly one "first".
+// DeleteByTenant removes a tenant's billing row, returning the number deleted
+// (0 or 1). The erasure cascade's hook (GDPR Art. 17).
+//
+// This erases the LOCAL row only — the customer id, the subscription id and the
+// mirrored status. It does not touch Stripe, where the invoices live: those are
+// the operator's own accounting records, kept under their retention obligation
+// (Art. 17(3)(b)), and are not dazyflow's to delete. Nor does it cancel a live
+// subscription; deleteOrgData warns when it erases the pointer to one, because
+// after this row is gone nothing here can map that subscription back to an org.
+func (s *PgPlanStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM tenant_plans WHERE tenant=$1`, tenant)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
 func (s *PgPlanStore) MarkStripeEvent(ctx context.Context, id string) (bool, error) {
 	tag, err := s.pool.Exec(ctx,
 		`INSERT INTO stripe_webhook_events (id) VALUES ($1) ON CONFLICT (id) DO NOTHING`, id)

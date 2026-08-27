@@ -28,10 +28,9 @@ import (
 // a busy queue can't return an unbounded result set.
 const defaultTicketListLimit = 200
 
-// erasedIdentity is what replaces a person's identifier once they have been
-// erased. Same marker the audit trail uses, so a reader sees one word for
-// "someone was here and is gone" across every surface.
-const erasedIdentity = "[erased]"
+// erasedIdentity is the package-local alias for the shared marker. See
+// core.ErasedIdentity for why it is single-sourced.
+const erasedIdentity = core.ErasedIdentity
 
 var (
 	errTicketExists    = errors.New("ticket already exists")

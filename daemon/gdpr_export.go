@@ -37,7 +37,62 @@ type DataExport struct {
 	APIKeys     []APIKeySummary    `json:"api_keys"`
 	Flows       []FlowSummary      `json:"flows"`
 	Runs        []exportRun        `json:"runs"`
-	Note        string             `json:"note,omitempty"`
+	// SupportTickets is the subject's correspondence with support: threads they
+	// opened, with the replies. They wrote the words, so the bodies are theirs
+	// under Art. 15 — a support history is the classic DSAR inclusion.
+	SupportTickets []exportTicket `json:"support_tickets"`
+	// AuditEvents is what this person DID, as recorded about them — including
+	// the source IPs kept on auth events.
+	AuditEvents []exportAuditEvent `json:"audit_events"`
+	// Boards lists the Collections boards in their workspace by name and shape,
+	// deliberately without the rows. See assembleExport.
+	Boards []exportBoard `json:"boards"`
+	// Roles records platform-level roles held, which are personal data about
+	// the subject even though no row of "theirs" carries them.
+	RoleGrants exportRoleGrants `json:"role_grants"`
+	Note       string           `json:"note,omitempty"`
+	// Excluded says, in the document itself, what was deliberately left out and
+	// why. A DSAR response that silently omits a category is indistinguishable
+	// from one that has nothing to report.
+	Excluded []string `json:"excluded,omitempty"`
+}
+
+type exportTicket struct {
+	ID        string            `json:"id"`
+	Tenant    string            `json:"tenant"`
+	Subject   string            `json:"subject"`
+	Status    string            `json:"status"`
+	FlowID    string            `json:"flow_id,omitempty"`
+	RunID     string            `json:"run_id,omitempty"`
+	CreatedAt time.Time         `json:"created_at"`
+	UpdatedAt time.Time         `json:"updated_at"`
+	Messages  []exportTicketMsg `json:"messages"`
+}
+
+type exportTicketMsg struct {
+	Author     string    `json:"author"`
+	AuthorKind string    `json:"author_kind"`
+	Body       string    `json:"body"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+type exportAuditEvent struct {
+	Time   time.Time `json:"time"`
+	Tenant string    `json:"tenant"`
+	Action string    `json:"action"`
+	Target string    `json:"target,omitempty"`
+	Detail string    `json:"detail,omitempty"`
+}
+
+type exportBoard struct {
+	Workspace string `json:"workspace"`
+	Name      string `json:"name"`
+	Rows      int64  `json:"rows"`
+}
+
+type exportRoleGrants struct {
+	PlatformAdmin bool `json:"platform_admin"`
+	SupportAgent  bool `json:"support_agent"`
 }
 
 type exportProfile struct {
@@ -74,7 +129,16 @@ type exportRun struct {
 	Status  string `json:"status"`
 }
 
-const exportRunCap = 1000
+const (
+	exportRunCap = 1000
+	// exportAuditCap bounds the subject's own trail. Audit retention defaults to
+	// 90 days, so this is generous for one person's activity in that window.
+	exportAuditCap = 5000
+	// exportTicketCap bounds how many of the org's tickets are scanned to find
+	// the subject's own. Scanning is needed because the store lists by tenant,
+	// not by author.
+	exportTicketCap = 500
+)
 
 // OrgExport is a portable copy of one organization's restorable data — its
 // profile, members, and every flow's full graph definition across all its
@@ -339,12 +403,15 @@ func (h *HTTPGateway) exportHandler(rw http.ResponseWriter, r *http.Request, p c
 // section rather than failing the whole export.
 func (h *HTTPGateway) assembleExport(ctx context.Context, p core.Principal) (DataExport, error) {
 	exp := DataExport{
-		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
-		Memberships: []exportMembership{},
-		Invitations: []exportInvitation{},
-		APIKeys:     []APIKeySummary{},
-		Flows:       []FlowSummary{},
-		Runs:        []exportRun{},
+		GeneratedAt:    time.Now().UTC().Format(time.RFC3339),
+		Memberships:    []exportMembership{},
+		Invitations:    []exportInvitation{},
+		APIKeys:        []APIKeySummary{},
+		Flows:          []FlowSummary{},
+		Runs:           []exportRun{},
+		SupportTickets: []exportTicket{},
+		AuditEvents:    []exportAuditEvent{},
+		Boards:         []exportBoard{},
 	}
 	email := p.Subject // Subject is the email for human (session) principals.
 
@@ -393,10 +460,18 @@ func (h *HTTPGateway) assembleExport(ctx context.Context, p core.Principal) (Dat
 		}
 	}
 	// Flows + runs in the subject's home workspace.
-	if flows, err := h.svc.ListFlowSummaries(ctx, p, u.Tenant, u.Workspace); err == nil && flows != nil {
-		exp.Flows = flows
+	//
+	// The Workspaces guard is not decoration: ListFlowSummaries calls
+	// s.Workspaces.Open with no nil check of its own, so on a deployment
+	// without a workspace store this panicked the whole endpoint — the one
+	// section that could take the export down instead of coming back empty,
+	// which is what the rest of this function promises.
+	if h.svc != nil && h.svc.Workspaces != nil {
+		if flows, err := h.svc.ListFlowSummaries(ctx, p, u.Tenant, u.Workspace); err == nil && flows != nil {
+			exp.Flows = flows
+		}
 	}
-	if h.svc.Jobs != nil {
+	if h.svc != nil && h.svc.Jobs != nil {
 		runs, err := h.svc.Jobs.ListGraphRuns(ctx, core.ListGraphRunsOpts{
 			Tenant: u.Tenant, Workspace: u.Workspace, Limit: exportRunCap,
 		})
@@ -411,5 +486,143 @@ func (h *HTTPGateway) assembleExport(ctx context.Context, p core.Principal) (Dat
 			}
 		}
 	}
+
+	// Support correspondence: threads this person opened, with the replies.
+	// The store lists by tenant, so their own are filtered out here — and only
+	// their own: another member's thread is that member's personal data, not
+	// this subject's, and Art. 15 does not entitle anyone to it (Art. 15(4)).
+	if h.Tickets != nil {
+		if ts, err := h.Tickets.ListForTenant(ctx, u.Tenant, core.TicketListOpts{Limit: exportTicketCap}); err == nil {
+			for _, t := range ts {
+				if !identityMatches(t.CreatedBy, u.Subject, email) {
+					continue
+				}
+				out := exportTicket{
+					ID: t.ID, Tenant: t.Tenant, Subject: t.Subject, Status: string(t.Status),
+					FlowID: t.FlowID, RunID: t.RunID,
+					CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
+					Messages: []exportTicketMsg{},
+				}
+				// The whole thread, including support's replies: a reply
+				// written TO this person about their problem is part of the
+				// correspondence they are entitled to a copy of.
+				if msgs, err := h.Tickets.ListMessages(ctx, t.ID); err == nil {
+					for _, m := range msgs {
+						out.Messages = append(out.Messages, exportTicketMsg{
+							Author: m.Author, AuthorKind: string(m.AuthorKind),
+							Body: m.Body, CreatedAt: m.CreatedAt,
+						})
+					}
+				}
+				exp.SupportTickets = append(exp.SupportTickets, out)
+			}
+		}
+	}
+
+	// Their own audit trail — what they did, and the source IPs recorded with
+	// it. Scoped to this actor in SQL, so it carries none of the org's other
+	// activity.
+	if h.Audit != nil {
+		for _, actor := range dedupeNonEmpty(u.Subject, email) {
+			evs, err := h.Audit.List(ctx, core.AuditQuery{
+				Tenant: u.Tenant, Actor: actor, Limit: exportAuditCap,
+			})
+			if err != nil {
+				continue
+			}
+			for _, e := range evs {
+				// Re-check the actor here rather than trusting the store to
+				// have applied AuditQuery.Actor. The field is newer than the
+				// AuditLog interface, so an implementation predating it — or
+				// any future one that overlooks it — would return the whole
+				// tenant's trail, and this loop would copy a colleague's
+				// actions and source IP straight into someone else's access
+				// request. The SQL filter is for efficiency; this is the
+				// guarantee.
+				if !identityMatches(e.Actor, u.Subject, email) {
+					continue
+				}
+				exp.AuditEvents = append(exp.AuditEvents, exportAuditEvent{
+					Time: e.Time, Tenant: e.Tenant, Action: e.Action,
+					Target: e.Target, Detail: e.Detail,
+				})
+			}
+		}
+		if len(exp.AuditEvents) >= exportAuditCap {
+			exp.Note = strings.TrimSpace(exp.Note + " audit trail truncated to the most recent " +
+				strconv.Itoa(exportAuditCap) + " events.")
+		}
+	}
+
+	// Collections boards: named and counted, NOT dumped.
+	//
+	// A board holds rows a flow collected — leads, form responses, scraped
+	// contacts — which are usually personal data about THIRD PARTIES. Handing
+	// one member a copy of all of it under their own access request would
+	// disclose other people's data, which Art. 15(4) exists to prevent. The
+	// row-level export stays where it belongs: the Results page's per-board
+	// CSV, used by someone acting for the org rather than for themselves.
+	//
+	// This mirrors how runs are already treated — ids and status, never the
+	// payloads.
+	//
+	// ListBoards does no authorization of its own (its HTTP handler gates it),
+	// so the same permission check is applied here. Without it the export would
+	// be a way around it.
+	if h.svc != nil && core.Require(p, core.PermGraphRun) == nil {
+		if boards, err := h.svc.ListBoards(ctx, p, u.Tenant, u.Workspace); err == nil {
+			for _, b := range boards {
+				exp.Boards = append(exp.Boards, exportBoard{
+					Workspace: u.Workspace, Name: b.Name, Rows: b.Rows,
+				})
+			}
+		}
+		if len(exp.Boards) > 0 {
+			exp.Excluded = append(exp.Excluded,
+				"Collections board CONTENTS are listed by name and row count only — the rows are "+
+					"usually personal data about third parties, and Art. 15(4) limits disclosing "+
+					"it through one member's access request. Export rows from the Results page.")
+		}
+	}
+
+	// Platform-level roles held. No row of the subject's carries these, but
+	// "this person is a platform admin" is personal data about them.
+	if h.PlatformAdminGrants != nil {
+		exp.RoleGrants.PlatformAdmin = h.PlatformAdminGrants.Granted(email)
+	}
+	for _, a := range h.PlatformAdmins {
+		if strings.EqualFold(strings.TrimSpace(a), email) {
+			exp.RoleGrants.PlatformAdmin = true
+		}
+	}
+	if h.SupportAgents != nil {
+		exp.RoleGrants.SupportAgent = h.SupportAgents.Granted(email)
+	}
+
+	// Said outright rather than silently omitted: a blocklist entry naming this
+	// person is personal data being processed about them, and it is left out of
+	// the self-serve download on purpose — disclosing the reason and the fact of
+	// a ban through an automated endpoint would undermine the anti-abuse measure
+	// it exists to be. Operators service that part of an access request by hand.
+	exp.Excluded = append(exp.Excluded,
+		"Anti-abuse blocklist entries are not included in the self-serve export. "+
+			"If you believe one concerns you, ask the operator directly.")
+
 	return exp, nil
+}
+
+// identityMatches reports whether a stored identifier is this subject, under
+// either of the forms rows are written with (the principal subject or the
+// email) and ignoring case.
+func identityMatches(stored string, forms ...string) bool {
+	stored = strings.TrimSpace(stored)
+	if stored == "" {
+		return false
+	}
+	for _, f := range forms {
+		if f != "" && strings.EqualFold(stored, strings.TrimSpace(f)) {
+			return true
+		}
+	}
+	return false
 }

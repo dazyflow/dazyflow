@@ -57,6 +57,23 @@ func (s *inlineShareStore) Lookup(_ context.Context, token string) (Share, error
 	}
 	return Share{}, core.ErrNotFound
 }
+func (s *inlineShareStore) AnonymizeSubject(_ context.Context, ident string) (int, error) {
+	if ident == "" {
+		return 0, nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for k, sh := range s.m {
+		if sh.CreatedBy == ident {
+			sh.CreatedBy = core.ErasedIdentity
+			s.m[k] = sh
+			n++
+		}
+	}
+	return n, nil
+}
+
 func (s *inlineShareStore) DeleteByTenant(_ context.Context, tenant string) (int, error) {
 	return 0, nil
 }

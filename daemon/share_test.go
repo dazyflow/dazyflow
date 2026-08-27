@@ -65,6 +65,23 @@ func (s *memShareStore) Lookup(_ context.Context, token string) (daemon.Share, e
 	return daemon.Share{}, core.ErrNotFound
 }
 
+func (s *memShareStore) AnonymizeSubject(_ context.Context, ident string) (int, error) {
+	if ident == "" {
+		return 0, nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for k, sh := range s.m {
+		if sh.CreatedBy == ident {
+			sh.CreatedBy = core.ErasedIdentity
+			s.m[k] = sh
+			n++
+		}
+	}
+	return n, nil
+}
+
 func (s *memShareStore) DeleteByTenant(_ context.Context, tenant string) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

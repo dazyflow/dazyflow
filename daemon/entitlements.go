@@ -521,6 +521,28 @@ func (s *PgEntitlementStore) PutEntitlement(ctx context.Context, e TenantEntitle
 	return s.reload(ctx)
 }
 
+// DeleteByTenant removes a tenant's entitlement override, returning the number
+// deleted (0 or 1). The erasure cascade's hook (GDPR Art. 17).
+//
+// The notes column is why this matters beyond tidiness: it is free text a
+// platform admin wrote about the org, and it routinely names the person they
+// agreed the deal with.
+func (s *PgEntitlementStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
+	if tenant == "" {
+		return 0, fmt.Errorf("tenant required")
+	}
+	tag, err := s.pool.Exec(ctx, `DELETE FROM tenant_entitlements WHERE tenant=$1`, tenant)
+	if err != nil {
+		return 0, err
+	}
+	// Refresh the cache Entitlement() reads, as PutEntitlement does — a stale
+	// entry would keep granting an erased org's overrides to the tenant id.
+	if err := s.reload(ctx); err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
 func (s *PgEntitlementStore) ListEntitlements(ctx context.Context) ([]TenantEntitlement, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT tenant, tier_id, grant_json, notes, updated_at FROM tenant_entitlements`)

@@ -396,6 +396,9 @@ func (c *countingStore) deleteSecret(ctx context.Context, tenant, name string) e
 func (c *countingStore) listSecretNames(ctx context.Context, tenant string) ([]string, error) {
 	return c.inner.listSecretNames(ctx, tenant)
 }
+func (c *countingStore) deleteTenant(ctx context.Context, tenant string) (int, error) {
+	return c.inner.deleteTenant(ctx, tenant)
+}
 func (c *countingStore) getWrappedDEK(ctx context.Context, tenant string) ([]byte, []byte, error) {
 	c.mu.Lock()
 	c.getWrappedDEKCalls++
@@ -650,5 +653,72 @@ func TestPgSecretsStore_DEKRotationMethods(t *testing.T) {
 	// replaceWrappedDEK on an unknown tenant -> ErrSecretNotFound.
 	if err := store.replaceWrappedDEK(ctx, "ghost", []byte("x"), []byte("y")); err != ErrSecretNotFound {
 		t.Fatalf("replaceWrappedDEK(ghost) = %v, want ErrSecretNotFound", err)
+	}
+}
+
+// TestPgSecretsStore_DeleteTenant exercises the erasure sweep against the real
+// DB: both tables cleared for the target tenant in one transaction, and the
+// neighbouring tenant untouched. The in-memory store can't cover this — the
+// two-statement transaction and the WHERE clauses only exist in the Pg path.
+func TestPgSecretsStore_DeleteTenant(t *testing.T) {
+	dsn := os.Getenv("DAZYFLOW_TEST_DB")
+	if dsn == "" {
+		t.Skip("set DAZYFLOW_TEST_DB to run Postgres integration tests")
+	}
+	ctx := t.Context()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("pgxpool: %v", err)
+	}
+	defer pool.Close()
+
+	store, err := NewPgSecretsStore(ctx, pool)
+	if err != nil {
+		t.Fatalf("NewPgSecretsStore: %v", err)
+	}
+	_, _ = pool.Exec(ctx, "TRUNCATE encrypted_secrets, encrypted_secret_deks")
+
+	es, err := NewEncryptedSecrets(randomKey(t), store)
+	if err != nil {
+		t.Fatalf("NewEncryptedSecrets: %v", err)
+	}
+	if err := es.Put(ctx, "doomed", "slack_token", "xoxb-a"); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	if err := es.Put(ctx, "doomed", "gmail_oauth", "ya29-b"); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	if err := es.Put(ctx, "keeper", "slack_token", "xoxb-c"); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+
+	n, err := es.DeleteByTenant(ctx, "doomed")
+	if err != nil {
+		t.Fatalf("DeleteByTenant: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("n = %d, want 2", n)
+	}
+
+	// Count rows directly: List goes through the cache-bearing wrapper, and
+	// what matters here is what is left on disk.
+	var secrets, deks int
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM encrypted_secrets WHERE tenant=$1`, "doomed").Scan(&secrets); err != nil {
+		t.Fatalf("count secrets: %v", err)
+	}
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM encrypted_secret_deks WHERE tenant=$1`, "doomed").Scan(&deks); err != nil {
+		t.Fatalf("count deks: %v", err)
+	}
+	if secrets != 0 {
+		t.Errorf("%d secret rows survived erasure", secrets)
+	}
+	if deks != 0 {
+		t.Errorf("wrapped DEK survived erasure (%d rows) — ciphertext stays openable", deks)
+	}
+
+	if got, err := es.GetExact(ctx, "keeper", "slack_token"); err != nil || got != "xoxb-c" {
+		t.Errorf("neighbouring tenant = %q / %v, want xoxb-c", got, err)
 	}
 }

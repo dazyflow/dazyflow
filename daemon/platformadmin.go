@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"git.sr.ht/~klahr/dazyflow/core"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -46,6 +47,15 @@ type PlatformAdminStore interface {
 	Grant(ctx context.Context, email, grantedBy string) error
 	Revoke(ctx context.Context, email string) error
 	List(ctx context.Context) ([]PlatformAdminGrant, error)
+	// AnonymizeGrantedBy replaces an erased person's email where it appears as
+	// the GRANTER of someone else's role, returning the rows changed.
+	//
+	// Their own grant row is removed by Revoke; this is the other half. A
+	// granter's address sits in rows belonging to people who are still here, so
+	// it cannot be deleted with them — it is pseudonymised, like the audit
+	// trail. Without this an erased admin's address survives in every role they
+	// ever handed out.
+	AnonymizeGrantedBy(ctx context.Context, email string) (int, error)
 }
 
 const pgPlatformAdminSchema = `
@@ -128,6 +138,21 @@ func (s *PgPlatformAdminStore) Revoke(ctx context.Context, email string) error {
 		return err
 	}
 	return s.reload(ctx)
+}
+
+func (s *PgPlatformAdminStore) AnonymizeGrantedBy(ctx context.Context, email string) (int, error) {
+	email = normalizeEmail(email)
+	if email == "" {
+		return 0, fmt.Errorf("email required")
+	}
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE platform_admins SET granted_by = $2 WHERE granted_by = $1`, email, core.ErasedIdentity)
+	if err != nil {
+		return 0, err
+	}
+	// granted_by does not feed the cached grant set (only email does), so no
+	// reload is needed here — unlike Grant/Revoke.
+	return int(tag.RowsAffected()), nil
 }
 
 func (s *PgPlatformAdminStore) List(ctx context.Context) ([]PlatformAdminGrant, error) {

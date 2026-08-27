@@ -100,6 +100,19 @@ type GitMirrorStore interface {
 	Get(ctx context.Context, tenant, workspace string) (GitMirror, error)
 	Upsert(ctx context.Context, m GitMirror) error
 	Delete(ctx context.Context, tenant, workspace string) error
+	// DeleteByTenant removes every mirror config a tenant holds, returning the
+	// count. The erasure-cascade entry point (GDPR Art. 17): a row carries the
+	// remote URL, the account it pushes as, and who last edited it.
+	DeleteByTenant(ctx context.Context, tenant string) (int, error)
+	// AnonymizeSubject replaces an erased person's identifier wherever it
+	// appears in this store's rows, returning the rows changed.
+	//
+	// The rows belong to an ORG and outlive the person, so their identifier is
+	// pseudonymised rather than deleted — the same treatment the audit trail
+	// gets. Deleting an org takes these rows anyway; this is the OTHER path,
+	// where a member of a shared org erases their account and the org carries
+	// on with their address still in it.
+	AnonymizeSubject(ctx context.Context, ident string) (int, error)
 	// RecordAttempt writes just the status fields, leaving config alone. A
 	// separate method so a push can never accidentally rewrite the URL or
 	// re-enable a mirror the user just switched off.

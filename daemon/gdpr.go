@@ -44,6 +44,14 @@ type actorAnonymizer interface {
 	AnonymizeActor(ctx context.Context, actor string) (int, error)
 }
 
+// roleRevoker is the shape the platform-admin and support-agent grant stores
+// share: drop the subject's own grant, then pseudonymise them where they appear
+// as the granter of somebody else's.
+type roleRevoker interface {
+	Revoke(ctx context.Context, email string) error
+	AnonymizeGrantedBy(ctx context.Context, email string) (int, error)
+}
+
 // subjectAnonymizer is the support stores' erasure surface. Support rows are ORG
 // records that happen to carry a person's identity, so a departing member is
 // scrubbed OUT of them rather than taking them along — see
@@ -70,6 +78,19 @@ type EraseReport struct {
 	Jobs           int      `json:"jobs_deleted"`
 	RunLogs        int      `json:"run_logs_deleted"`
 	Shares         int      `json:"shares_deleted"`
+	Secrets        int      `json:"secrets_deleted"`
+	MCPServers     int      `json:"mcp_servers_deleted"`
+	WebAPIs        int      `json:"web_apis_deleted"`
+	Runners        int      `json:"runners_deleted"`
+	RunnerTasks    int      `json:"runner_tasks_deleted"`
+	GitMirrors     int      `json:"git_mirrors_deleted"`
+	DropSwitches   int      `json:"drop_switches_deleted"`
+	Plans          int      `json:"billing_rows_deleted"`
+	Entitlements   int      `json:"entitlements_deleted"`
+	UsageCounters  int      `json:"usage_counters_deleted"`
+	RoleGrants     int      `json:"role_grants_revoked"`
+	GrantedByRefs  int      `json:"granted_by_refs_anonymized"`
+	AuthoredRefs   int      `json:"authored_refs_anonymized"`
 	BusEvents      int      `json:"bus_events_deleted"`
 	Tickets        int      `json:"support_tickets_deleted"`
 	Bundles        int      `json:"support_bundles_deleted"`
@@ -185,7 +206,71 @@ func (h *HTTPGateway) eraseUserIdentity(ctx context.Context, email string) (Eras
 		} else if h.Grants != nil {
 			rep.warnf("access_grants: store does not support subject anonymisation; scrub manually")
 		}
+
+		// Every other store that records WHO did something. These rows belong
+		// to an org, not to the subject, so they survive this erasure — and
+		// used to survive it still carrying the person's address in
+		// created_by / updated_by / invited_by / disabled_by.
+		//
+		// Deleting the org takes these rows outright, so this path only matters
+		// on the one it does not cover: a member of a SHARED org erases their
+		// account and the org carries on. That is also the most common erasure
+		// there is, which is what made the residue worth closing.
+		//
+		// nil-safe: a store the deployment does not run is a nil interface and
+		// fails the assertion, so it is skipped rather than warned about.
+		for name, store := range h.authorshipStores() {
+			if a, ok := store.(subjectAnonymizer); ok {
+				rep.eraseStep(name, func() (int, error) { return a.AnonymizeSubject(ctx, ident) },
+					func(n int) { rep.AuthoredRefs += n })
+			}
+		}
 	}
+	// Platform-admin and support-agent grants. Two things per store: drop the
+	// subject's own grant row (their email is the primary key), and scrub them
+	// out of anyone else's granted_by. Skipping this left a deleted person's
+	// address as a live role holder AND as the granter on every role they had
+	// handed out.
+	for name, store := range map[string]any{
+		"platform_admin_grant": h.PlatformAdminGrants,
+		"support_agent_grant":  h.SupportAgents,
+	} {
+		rv, ok := store.(roleRevoker)
+		if !ok {
+			continue
+		}
+		if err := rv.Revoke(ctx, email); err != nil {
+			rep.warnf("%s: %v", name, err)
+		} else {
+			rep.RoleGrants++
+		}
+		rep.eraseStep(name+"_granted_by",
+			func() (int, error) { return rv.AnonymizeGrantedBy(ctx, email) },
+			func(n int) { rep.GrantedByRefs += n })
+	}
+	// The env allowlist ($DAZYFLOW_PLATFORM_ADMINS) is the other half of
+	// platform-admin status, and it is deployment config this process cannot
+	// rewrite. Erasing the account while the address still sits in that list
+	// would silently re-elevate it if the person ever signed up again, so say
+	// so rather than reporting a clean erasure.
+	for _, a := range h.PlatformAdmins {
+		if strings.EqualFold(strings.TrimSpace(a), email) {
+			rep.warnf("platform_admins: %q is in the $DAZYFLOW_PLATFORM_ADMINS env allowlist, "+
+				"which this process cannot edit — remove it from the deployment config", email)
+		}
+	}
+	// The blocklist keeps any entry that BANS this person: a ban liftable by
+	// asking to be forgotten is not a ban, and the entry stands on legitimate
+	// interest (Art. 17(1)(c)). Only their email as the blocking ADMIN is
+	// scrubbed.
+	if bl, ok := h.Blocklist.(interface {
+		AnonymizeCreatedBy(ctx context.Context, email string) (int, error)
+	}); ok {
+		rep.eraseStep("blocklist_created_by",
+			func() (int, error) { return bl.AnonymizeCreatedBy(ctx, email) },
+			func(n int) { rep.GrantedByRefs += n })
+	}
+
 	// Finally the user row itself.
 	if del, ok := h.Users.(userDeleter); ok {
 		if err := del.DeleteUser(ctx, email); err != nil {
@@ -261,10 +346,113 @@ func (h *HTTPGateway) deleteOrgData(ctx context.Context, tenant string) (EraseRe
 			rep.OrgProfileGone = true
 		}
 	}
+	// Every secret the tenant holds, plus its wrapped DEK. Deliberately
+	// AFTER DeleteOrgAuth: that path deletes the one SSO client secret by
+	// name, and letting it run first keeps its own erasure honest instead of
+	// silently no-opping against rows this sweep already took.
+	//
+	// Until this ran, org deletion left the whole encrypted_secrets table
+	// intact — connector credentials and OAuth tokens for a deleted org,
+	// still decryptable, because the DEK stayed behind with them.
+	if secrets := h.secretsStoreForErase(); secrets != nil {
+		rep.eraseStep("secrets", func() (int, error) { return secrets.DeleteByTenant(ctx, tenant) },
+			func(n int) { rep.Secrets = n })
+	}
+	// Tenant-scoped integration config. Each of these arrived after the
+	// original cascade was written and had to be added here; the table-coverage
+	// test in gdpr_coverage_test.go exists so the next one cannot be forgotten.
+	//
+	// MCPServers/WebAPIs/Runners are the wrapper types rather than their bare
+	// stores, because each has in-process state — a live catalog, a credential
+	// index — that a raw row delete would leave behind.
+	if h.MCPServers != nil {
+		rep.tallyByTenant(ctx, "mcp_servers", h.MCPServers, tenant, func(n int) { rep.MCPServers = n })
+	}
+	if h.WebAPIs != nil {
+		rep.tallyByTenant(ctx, "web_apis", h.WebAPIs, tenant, func(n int) { rep.WebAPIs = n })
+	}
+	if h.Runners != nil {
+		rep.tallyByTenant(ctx, "runners", h.Runners, tenant, func(n int) { rep.Runners = n })
+	}
+	// Queued/running tasks carry the org's script, env and stdin.
+	rep.tallyByTenant(ctx, "runner_tasks", h.RunnerTasks, tenant, func(n int) { rep.RunnerTasks = n })
+	rep.tallyByTenant(ctx, "git_mirrors", h.GitMirrors, tenant, func(n int) { rep.GitMirrors = n })
+	rep.tallyByTenant(ctx, "drop_switches", h.DropSwitches, tenant, func(n int) { rep.DropSwitches = n })
+
+	// Billing, entitlements and usage. The plan row is erased with the org, but
+	// a subscription that is still billing outlives it in Stripe — and once
+	// this row is gone nothing here can map that subscription back. Warn while
+	// the pointer is still readable, so the operator knows to cancel it.
+	if h.svc != nil {
+		if h.svc.Plans != nil {
+			if plan, err := h.svc.Plans.GetPlan(ctx, tenant); err == nil && liveSubscription(plan) {
+				rep.warnf("billing: Stripe subscription %s (%s) is still live — cancel it in Stripe; "+
+					"the local mapping to this org is being erased",
+					plan.StripeSubscriptionID, plan.SubscriptionStatus)
+			}
+			rep.tallyByTenant(ctx, "billing", h.svc.Plans, tenant, func(n int) { rep.Plans = n })
+		}
+		rep.tallyByTenant(ctx, "entitlements", h.svc.Entitlements, tenant, func(n int) { rep.Entitlements = n })
+		rep.tallyByTenant(ctx, "usage_counters", h.svc.Usage, tenant, func(n int) { rep.UsageCounters = n })
+	}
+
 	// The tenant is gone, so there is no security trail to preserve —
 	// hard-delete its audit events.
 	rep.tallyByTenant(ctx, "audit", h.Audit, tenant, func(n int) { rep.AuditEvents = n })
 	return rep, nil
+}
+
+// authorshipStores are the stores holding a "who did this" column on rows owned
+// by an org: created_by, updated_by, invited_by, disabled_by.
+//
+// Collected in one place so the erasure loop is a loop rather than a dozen
+// near-identical blocks, and so the set is greppable next to the coverage test
+// that enumerates the same columns (gdpr_coverage_test.go).
+func (h *HTTPGateway) authorshipStores() map[string]any {
+	m := map[string]any{
+		"git_mirrors":     h.GitMirrors,
+		"drop_switches":   h.DropSwitches,
+		"mcp_servers":     nil,
+		"web_apis":        nil,
+		"runners":         nil,
+		"memberships":     h.Memberships,
+		"invitations":     h.Invitations,
+		"support_bundles": h.Bundles,
+	}
+	// The wrapper types hold the store behind a nil-able pointer, so unwrap
+	// them rather than asserting on a non-nil interface wrapping a nil value.
+	if h.MCPServers != nil {
+		m["mcp_servers"] = h.MCPServers.Store
+	}
+	if h.WebAPIs != nil {
+		m["web_apis"] = h.WebAPIs.Store
+	}
+	if h.Runners != nil {
+		m["runners"] = h.Runners.Store
+	}
+	if h.svc != nil {
+		m["shares"] = h.svc.Shares
+	}
+	return m
+}
+
+// secretsStoreForErase returns the encrypted secret store, or nil when the
+// deployment has none (no master key configured).
+//
+// It checks both homes the store has. cmd/dzd wires the same *EncryptedSecrets
+// into the gateway and the service as separate assignments, and handlers in
+// this package read whichever one their author reached for. On an erasure path
+// that split is a hazard rather than a style question: reading only one field
+// turns a half-wired deployment into a silent skip, and a silent skip here is
+// undeleted credentials that the report still calls erased.
+func (h *HTTPGateway) secretsStoreForErase() *EncryptedSecrets {
+	if h.EncryptedSecrets != nil {
+		return h.EncryptedSecrets
+	}
+	if h.svc != nil {
+		return h.svc.EncryptedSecrets
+	}
+	return nil
 }
 
 // tenantHasOtherMembers reports whether anyone besides `email` is a member

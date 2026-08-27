@@ -81,6 +81,15 @@ func (m *MemSecretsStore) deleteSecret(_ context.Context, tenant, name string) e
 	return nil
 }
 
+func (m *MemSecretsStore) deleteTenant(_ context.Context, tenant string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := len(m.secrets[tenant])
+	delete(m.secrets, tenant)
+	delete(m.deks, tenant)
+	return n, nil
+}
+
 func (m *MemSecretsStore) listSecretNames(_ context.Context, tenant string) ([]string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -224,6 +233,30 @@ func (p *PgSecretsStore) getSecret(ctx context.Context, tenant, name string) ([]
 func (p *PgSecretsStore) deleteSecret(ctx context.Context, tenant, name string) error {
 	_, err := p.pool.Exec(ctx, `DELETE FROM encrypted_secrets WHERE tenant=$1 AND name=$2`, tenant, name)
 	return err
+}
+
+func (p *PgSecretsStore) deleteTenant(ctx context.Context, tenant string) (int, error) {
+	// Both tables in one transaction. Halfway through is the one outcome
+	// worth engineering against: secrets gone but the DEK left behind is a
+	// dangling key, and the DEK gone but secrets left behind is ciphertext
+	// nobody can ever open — reported as erased either way. Commit or
+	// neither.
+	tx, err := p.pool.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	tag, err := tx.Exec(ctx, `DELETE FROM encrypted_secrets WHERE tenant=$1`, tenant)
+	if err != nil {
+		return 0, err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM encrypted_secret_deks WHERE tenant=$1`, tenant); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
 }
 
 func (p *PgSecretsStore) listSecretNames(ctx context.Context, tenant string) ([]string, error) {

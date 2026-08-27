@@ -100,6 +100,18 @@ func (s *PgShareStore) Lookup(ctx context.Context, token string) (Share, error) 
 
 // DeleteByTenant removes every share for a tenant — the org-erasure cascade
 // hook (gdpr.go's tenantEraser).
+func (s *PgShareStore) AnonymizeSubject(ctx context.Context, ident string) (int, error) {
+	if ident == "" {
+		return 0, nil
+	}
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE workspace_shares SET created_by = $2 WHERE created_by = $1`, ident, core.ErasedIdentity)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
 func (s *PgShareStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
 	tag, err := s.pool.Exec(ctx, `DELETE FROM workspace_shares WHERE tenant = $1`, tenant)
 	if err != nil {

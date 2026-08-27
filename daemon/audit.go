@@ -137,7 +137,7 @@ func (p *PgAuditLog) Prune(ctx context.Context, olderThan time.Duration, batch i
 // (Art. 17(3), Recital 26). Returns the number of rows affected.
 func (p *PgAuditLog) AnonymizeActor(ctx context.Context, actor string) (int, error) {
 	tag, err := p.pool.Exec(ctx,
-		`UPDATE audit_events SET actor = '[erased]', detail = '' WHERE actor = $1`, actor)
+		`UPDATE audit_events SET actor = $2, detail = '' WHERE actor = $1`, actor, core.ErasedIdentity)
 	if err != nil {
 		return 0, err
 	}
@@ -170,9 +170,12 @@ func (p *PgAuditLog) List(ctx context.Context, q core.AuditQuery) ([]core.AuditE
 	if offset < 0 {
 		offset = 0
 	}
+	// $4 = "" means "any actor", so one statement serves both the admin trail
+	// and the per-subject export.
 	rows, err := p.pool.Query(ctx,
 		`SELECT ts, tenant, actor, action, target, detail FROM audit_events
-		  WHERE tenant=$1 ORDER BY id DESC LIMIT $2 OFFSET $3`, q.Tenant, limit, offset)
+		  WHERE tenant=$1 AND ($4 = '' OR actor = $4)
+		  ORDER BY id DESC LIMIT $2 OFFSET $3`, q.Tenant, limit, offset, q.Actor)
 	if err != nil {
 		return nil, err
 	}

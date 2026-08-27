@@ -264,3 +264,75 @@ func TestPgOrgProfileStore_RoundTrip(t *testing.T) {
 		t.Error("unknown tenant should not appear in bulk result")
 	}
 }
+
+// TestPgOrgStores_AnonymizeSubject covers the invited_by scrub against the real
+// DB, for both org tables.
+//
+// The match is on lower(invited_by) rather than a plain equality, because these
+// columns are written from whatever case the inviter typed while the erasure
+// path normalises to lowercase. An exact match would silently miss
+// "Alice@ACME.com" and leave the address behind — which is the whole bug.
+func TestPgOrgStores_AnonymizeSubject(t *testing.T) {
+	pool, ctx := orgsPool(t)
+
+	members, err := NewPgMembershipStore(ctx, pool)
+	if err != nil {
+		t.Fatalf("NewPgMembershipStore: %v", err)
+	}
+	invites, err := NewPgInvitationStore(ctx, pool)
+	if err != nil {
+		t.Fatalf("NewPgInvitationStore: %v", err)
+	}
+
+	// Stored in mixed case, deliberately.
+	if err := members.PutMembership(ctx, Membership{
+		UserEmail: "bob@acme.com", Tenant: "acme", InvitedBy: "Alice@ACME.com",
+	}); err != nil {
+		t.Fatalf("PutMembership: %v", err)
+	}
+	if err := members.PutMembership(ctx, Membership{
+		UserEmail: "carol@acme.com", Tenant: "acme", InvitedBy: "someone@else.com",
+	}); err != nil {
+		t.Fatalf("PutMembership (other): %v", err)
+	}
+	if err := invites.PutInvitation(ctx, Invitation{
+		Token: "inv1", Email: "dave@acme.com", Tenant: "acme",
+		InvitedBy: "ALICE@acme.com", ExpiresAt: time.Now().Add(time.Hour),
+	}); err != nil {
+		t.Fatalf("PutInvitation: %v", err)
+	}
+
+	n, err := members.AnonymizeSubject(ctx, "alice@acme.com")
+	if err != nil {
+		t.Fatalf("members.AnonymizeSubject: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("members n = %d, want 1 (case-insensitive match)", n)
+	}
+	if n, err := invites.AnonymizeSubject(ctx, "alice@acme.com"); err != nil || n != 1 {
+		t.Errorf("invites.AnonymizeSubject = %d / %v, want 1", n, err)
+	}
+
+	got, err := members.GetMembership(ctx, "bob@acme.com", "acme")
+	if err != nil {
+		t.Fatalf("GetMembership: %v", err)
+	}
+	if got.InvitedBy != core.ErasedIdentity {
+		t.Errorf("memberships.invited_by = %q, want %q", got.InvitedBy, core.ErasedIdentity)
+	}
+	// An unrelated inviter is untouched.
+	other, err := members.GetMembership(ctx, "carol@acme.com", "acme")
+	if err != nil {
+		t.Fatalf("GetMembership(carol): %v", err)
+	}
+	if other.InvitedBy != "someone@else.com" {
+		t.Errorf("unrelated inviter was scrubbed: %q", other.InvitedBy)
+	}
+	inv, err := invites.GetByToken(ctx, "inv1")
+	if err != nil {
+		t.Fatalf("GetByToken: %v", err)
+	}
+	if inv.InvitedBy != core.ErasedIdentity {
+		t.Errorf("invitations.invited_by = %q, want %q", inv.InvitedBy, core.ErasedIdentity)
+	}
+}

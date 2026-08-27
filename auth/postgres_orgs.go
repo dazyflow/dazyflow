@@ -137,6 +137,21 @@ func NewPgMembershipStore(ctx context.Context, pool *pgxpool.Pool) (*PgMembershi
 	return &PgMembershipStore{pool: pool}, nil
 }
 
+// AnonymizeSubject replaces an erased person's email where it appears as the
+// INVITER on someone else's membership row. See PgInvitationStore's method.
+func (s *PgMembershipStore) AnonymizeSubject(ctx context.Context, ident string) (int, error) {
+	ident = strings.ToLower(strings.TrimSpace(ident))
+	if ident == "" {
+		return 0, nil
+	}
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE memberships SET invited_by = $2 WHERE lower(invited_by) = $1`, ident, core.ErasedIdentity)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
 func (s *PgMembershipStore) PutMembership(ctx context.Context, m Membership) error {
 	email := strings.ToLower(strings.TrimSpace(m.UserEmail))
 	if email == "" {
@@ -235,6 +250,26 @@ func NewPgInvitationStore(ctx context.Context, pool *pgxpool.Pool) (*PgInvitatio
 		return nil, err
 	}
 	return &PgInvitationStore{pool: pool}, nil
+}
+
+// AnonymizeSubject replaces an erased person's email where it appears as the
+// INVITER, returning the rows changed.
+//
+// The row belongs to somebody else — the person invited — and survives the
+// inviter's erasure, so the identifier is pseudonymised rather than deleted.
+// Probed by the erasure cascade rather than declared on the interface, matching
+// how DeleteByEmail is already handled for this store.
+func (s *PgInvitationStore) AnonymizeSubject(ctx context.Context, ident string) (int, error) {
+	ident = strings.ToLower(strings.TrimSpace(ident))
+	if ident == "" {
+		return 0, nil
+	}
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE invitations SET invited_by = $2 WHERE lower(invited_by) = $1`, ident, core.ErasedIdentity)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
 }
 
 func (s *PgInvitationStore) PutInvitation(ctx context.Context, inv Invitation) error {

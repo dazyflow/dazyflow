@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sort"
@@ -87,6 +88,21 @@ func (b *covBlocklist) IsBlocked(_ context.Context, email string) (bool, auth.Bl
 	}
 	return false, auth.Blocked{}, nil
 }
+func (b *covBlocklist) AnonymizeCreatedBy(_ context.Context, email string) (int, error) {
+	e := auth.NormalizeBlockEmail(email)
+	if e == "" {
+		return 0, fmt.Errorf("email required")
+	}
+	n := 0
+	for k, bl := range b.rows {
+		if auth.NormalizeBlockEmail(bl.CreatedBy) == e {
+			bl.CreatedBy = core.ErasedIdentity
+			b.rows[k] = bl
+			n++
+		}
+	}
+	return n, nil
+}
 func (b *covBlocklist) Block(_ context.Context, bl auth.Blocked) error {
 	b.rows[bl.Value] = bl
 	return nil
@@ -125,6 +141,33 @@ func (d *covMemDropSwitch) Disable(_ context.Context, sw DropSwitch) error {
 func (d *covMemDropSwitch) Enable(_ context.Context, dropID, tenant string) error {
 	delete(d.rows, dropSwitchKey(dropID, tenant))
 	return nil
+}
+func (d *covMemDropSwitch) AnonymizeSubject(_ context.Context, ident string) (int, error) {
+	if ident == "" {
+		return 0, nil
+	}
+	n := 0
+	for k, sw := range d.rows {
+		if sw.DisabledBy == ident {
+			sw.DisabledBy = core.ErasedIdentity
+			d.rows[k] = sw
+			n++
+		}
+	}
+	return n, nil
+}
+func (d *covMemDropSwitch) DeleteByTenant(_ context.Context, tenant string) (int, error) {
+	if tenant == "" {
+		return 0, fmt.Errorf("tenant required")
+	}
+	n := 0
+	for k, sw := range d.rows {
+		if sw.Tenant == tenant {
+			delete(d.rows, k)
+			n++
+		}
+	}
+	return n, nil
 }
 func (d *covMemDropSwitch) List(_ context.Context) ([]DropSwitch, error) {
 	out := make([]DropSwitch, 0, len(d.rows))
@@ -321,6 +364,20 @@ func (m *memPlatformAdmins) Grant(_ context.Context, email, by string) error {
 func (m *memPlatformAdmins) Revoke(_ context.Context, email string) error {
 	delete(m.set, normalizeEmail(email))
 	return nil
+}
+func (m *memPlatformAdmins) AnonymizeGrantedBy(_ context.Context, email string) (int, error) {
+	e := normalizeEmail(email)
+	if e == "" {
+		return 0, fmt.Errorf("email required")
+	}
+	n := 0
+	for k, by := range m.set {
+		if normalizeEmail(by) == e {
+			m.set[k] = core.ErasedIdentity
+			n++
+		}
+	}
+	return n, nil
 }
 func (m *memPlatformAdmins) List(_ context.Context) ([]PlatformAdminGrant, error) {
 	out := make([]PlatformAdminGrant, 0, len(m.set))

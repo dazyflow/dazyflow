@@ -8,6 +8,7 @@ import (
 	"sort"
 	"sync"
 
+	"git.sr.ht/~klahr/dazyflow/core"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -148,6 +149,26 @@ func (s *PgWebAPIStore) Delete(ctx context.Context, tenant, name string) error {
 	return nil
 }
 
+func (s *PgWebAPIStore) AnonymizeSubject(ctx context.Context, ident string) (int, error) {
+	if ident == "" {
+		return 0, nil
+	}
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE tenant_web_apis SET created_by = $2 WHERE created_by = $1`, ident, core.ErasedIdentity)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
+func (s *PgWebAPIStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM tenant_web_apis WHERE tenant = $1`, tenant)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
 // SetError records why a stored row could not be registered. It deliberately
 // does NOT touch updated_at: that column is what every replica's reconcile
 // compares against to decide whether a registration is current, so a status
@@ -242,6 +263,36 @@ func (s *MemWebAPIStore) Delete(_ context.Context, tenant, name string) error {
 	}
 	delete(s.rows, k)
 	return nil
+}
+
+func (s *MemWebAPIStore) AnonymizeSubject(_ context.Context, ident string) (int, error) {
+	if ident == "" {
+		return 0, nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for k, v := range s.rows {
+		if v.CreatedBy == ident {
+			v.CreatedBy = core.ErasedIdentity
+			s.rows[k] = v
+			n++
+		}
+	}
+	return n, nil
+}
+
+func (s *MemWebAPIStore) DeleteByTenant(_ context.Context, tenant string) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for k := range s.rows {
+		if k.tenant == tenant {
+			delete(s.rows, k)
+			n++
+		}
+	}
+	return n, nil
 }
 
 func (s *MemWebAPIStore) SetError(_ context.Context, tenant, name, lastErr string) error {

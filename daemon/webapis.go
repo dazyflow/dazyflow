@@ -176,6 +176,20 @@ type WebAPIStore interface {
 	Get(ctx context.Context, tenant, name string) (WebAPI, error)
 	Put(ctx context.Context, w WebAPI) error
 	Delete(ctx context.Context, tenant, name string) error
+	// DeleteByTenant removes every catalog a tenant configured, returning the
+	// count. The erasure-cascade entry point (GDPR Art. 17): erasure cannot go
+	// name-by-name, because it does not know what an org configured over its
+	// lifetime.
+	DeleteByTenant(ctx context.Context, tenant string) (int, error)
+	// AnonymizeSubject replaces an erased person's identifier wherever it
+	// appears in this store's rows, returning the rows changed.
+	//
+	// The rows belong to an ORG and outlive the person, so their identifier is
+	// pseudonymised rather than deleted — the same treatment the audit trail
+	// gets. Deleting an org takes these rows anyway; this is the OTHER path,
+	// where a member of a shared org erases their account and the org carries
+	// on with their address still in it.
+	AnonymizeSubject(ctx context.Context, ident string) (int, error)
 	// SetError records why a stored row could not be registered. Deliberately
 	// separate from Put: it must not disturb UpdatedAt, which is what every
 	// replica's reconcile compares against.
@@ -633,6 +647,32 @@ func (m *WebAPIs) Delete(ctx context.Context, tenant, name string) error {
 	m.Catalog.Unregister(tenant, name)
 	m.forget(webAPIKey{tenant, name})
 	return nil
+}
+
+// DeleteByTenant removes every web-API catalog an org configured and takes each
+// one out of the live palette, returning the count. The erasure cascade's hook
+// (GDPR Art. 17); see deleteOrgData in gdpr.go.
+//
+// Lists then deletes, for the reason MCPServers.DeleteByTenant does: a row
+// dropped straight from under the catalog leaves this process still serving the
+// org's steps until a restart.
+func (m *WebAPIs) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
+	if err := m.ready(); err != nil {
+		return 0, err
+	}
+	apis, err := m.Store.List(ctx, tenant)
+	if err != nil {
+		return 0, fmt.Errorf("list web apis for %q: %w", tenant, err)
+	}
+	for _, a := range apis {
+		m.Catalog.Unregister(tenant, a.Name)
+		m.forget(webAPIKey{tenant, a.Name})
+	}
+	n, err := m.Store.DeleteByTenant(ctx, tenant)
+	if err != nil {
+		return 0, fmt.Errorf("delete web apis for %q: %w", tenant, err)
+	}
+	return n, nil
 }
 
 // Reconcile makes this process's catalog match the store.

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"time"
 
+	"git.sr.ht/~klahr/dazyflow/core"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -268,6 +269,58 @@ func (s *PgRunnerStore) Delete(ctx context.Context, tenant, name string) error {
 		return ErrRunnerNotFound
 	}
 	return nil
+}
+
+// DeleteByTenant removes an org's runners and its unspent registration tokens
+// in one transaction, returning the number of runners removed.
+//
+// One transaction because the two halves are one revocation: tokens gone but
+// runners left is a fleet nobody can re-register, and runners gone but tokens
+// left is a live credential for an erased org.
+func (s *PgRunnerStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	tag, err := tx.Exec(ctx, `DELETE FROM tenant_runners WHERE tenant = $1`, tenant)
+	if err != nil {
+		return 0, err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM runner_tokens WHERE tenant = $1`, tenant); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
+// AnonymizeSubject scrubs an erased person from both of this store's tables.
+func (s *PgRunnerStore) AnonymizeSubject(ctx context.Context, ident string) (int, error) {
+	if ident == "" {
+		return 0, nil
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	total := 0
+	for _, q := range []string{
+		`UPDATE tenant_runners SET created_by = $2 WHERE created_by = $1`,
+		`UPDATE runner_tokens  SET created_by = $2 WHERE created_by = $1`,
+	} {
+		tag, err := tx.Exec(ctx, q, ident, core.ErasedIdentity)
+		if err != nil {
+			return 0, err
+		}
+		total += int(tag.RowsAffected())
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, err
+	}
+	return total, nil
 }
 
 // nullTime keeps a zero time out of the database as NULL. "Never checked in"

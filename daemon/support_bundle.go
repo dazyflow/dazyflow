@@ -214,6 +214,23 @@ func (s *PgBundleStore) ListForTenant(ctx context.Context, tenant string) ([]cor
 // DeleteByTenant removes every stored diagnostic bundle belonging to one org.
 // Bundles are redacted by construction, but they still describe the org's flow
 // structure — so they leave with the org (gdpr.go tenantEraser).
+func (s *MemBundleStore) AnonymizeSubject(_ context.Context, ident string) (int, error) {
+	if ident == "" {
+		return 0, nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for id, rec := range s.byID {
+		if rec.CreatedBy == ident {
+			rec.CreatedBy = core.ErasedIdentity
+			s.byID[id] = rec
+			n++
+		}
+	}
+	return n, nil
+}
+
 func (s *MemBundleStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -228,6 +245,21 @@ func (s *MemBundleStore) DeleteByTenant(ctx context.Context, tenant string) (int
 }
 
 // DeleteByTenant removes an org's stored bundles.
+// AnonymizeSubject scrubs an erased person from created_by. Not on
+// core.BundleStore, matching DeleteByTenant: the cascade probes for both rather
+// than making every bundle store implement erasure.
+func (s *PgBundleStore) AnonymizeSubject(ctx context.Context, ident string) (int, error) {
+	if ident == "" {
+		return 0, nil
+	}
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE support_bundles SET created_by = $2 WHERE created_by = $1`, ident, core.ErasedIdentity)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
 func (s *PgBundleStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
 	ct, err := s.pool.Exec(ctx, `DELETE FROM support_bundles WHERE tenant = $1`, tenant)
 	if err != nil {

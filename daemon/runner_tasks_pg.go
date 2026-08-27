@@ -521,4 +521,19 @@ func (s *PgRunnerTaskStore) Prune(ctx context.Context, olderThan time.Duration, 
 	}
 }
 
+// DeleteByTenant removes every task row an org ever queued, whatever its state,
+// returning the count. The erasure cascade's hook (GDPR Art. 17).
+//
+// Unlike Prune this takes running and queued rows too. An org being erased has
+// nothing left that could legitimately claim them, and a queued row left behind
+// stays claimable — the machine that picks it up would run a deleted org's
+// script.
+func (s *PgRunnerTaskStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM runner_tasks WHERE tenant = $1`, tenant)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
 var _ RunnerTaskStore = (*PgRunnerTaskStore)(nil)

@@ -243,6 +243,15 @@ type RunnerTaskStore interface {
 	// ever read the result. Rows carrying no timeout fall back to
 	// queuedCeiling.
 	OrphanedTasks(ctx context.Context, now time.Time, grace, queuedCeiling time.Duration, limit int) ([]RunnerTask, error)
+	// DeleteByTenant removes every queued, running and terminal task belonging
+	// to a tenant, returning the count. The erasure-cascade entry point (GDPR
+	// Art. 17).
+	//
+	// The retention sweep is not a substitute: Prune only collects terminal
+	// rows, and only once they age out. A task row carries the script, its
+	// env and its stdin — the org's data, and the reason erasure cannot wait
+	// for a retention window to pass.
+	DeleteByTenant(ctx context.Context, tenant string) (int, error)
 }
 
 // ErrNoTask means the queue had nothing for this runner. Not a failure — it is
@@ -336,6 +345,19 @@ func (m *MemRunnerTaskStore) Enqueue(_ context.Context, t RunnerTask) error {
 	stored := t
 	m.tasks[t.ID] = &stored
 	return nil
+}
+
+func (m *MemRunnerTaskStore) DeleteByTenant(_ context.Context, tenant string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := 0
+	for id, t := range m.tasks {
+		if t.Tenant == tenant {
+			delete(m.tasks, id)
+			n++
+		}
+	}
+	return n, nil
 }
 
 func (m *MemRunnerTaskStore) Claim(_ context.Context, r Runner, now time.Time, lease time.Duration) (RunnerTask, error) {

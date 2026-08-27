@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"git.sr.ht/~klahr/dazyflow/core"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -40,6 +41,24 @@ type DropSwitchStore interface {
 	Enable(ctx context.Context, dropID, tenant string) error
 	// List returns every active switch, for the platform-admin UI.
 	List(ctx context.Context) ([]DropSwitch, error)
+	// DeleteByTenant clears every per-tenant switch set against a tenant,
+	// returning the count. The erasure-cascade entry point (GDPR Art. 17): a
+	// row names the admin who set it and the reason they gave.
+	//
+	// GLOBAL switches (tenant "") are never touched, and an empty tenant is
+	// refused outright rather than treated as "all". A global switch is the
+	// platform's own kill-switch on a broken drop; taking those out while
+	// erasing one org would silently re-enable it for everybody.
+	// AnonymizeSubject replaces an erased person's identifier wherever it
+	// appears in this store's rows, returning the rows changed.
+	//
+	// The rows belong to an ORG and outlive the person, so their identifier is
+	// pseudonymised rather than deleted — the same treatment the audit trail
+	// gets. Deleting an org takes these rows anyway; this is the OTHER path,
+	// where a member of a shared org erases their account and the org carries
+	// on with their address still in it.
+	AnonymizeSubject(ctx context.Context, ident string) (int, error)
+	DeleteByTenant(ctx context.Context, tenant string) (int, error)
 }
 
 const pgDropSwitchSchema = `
@@ -165,6 +184,35 @@ func (s *PgDropSwitchStore) Enable(ctx context.Context, dropID, tenant string) e
 		return err
 	}
 	return s.reload(ctx)
+}
+
+func (s *PgDropSwitchStore) AnonymizeSubject(ctx context.Context, ident string) (int, error) {
+	if ident == "" {
+		return 0, nil
+	}
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE drop_switches SET disabled_by = $2 WHERE disabled_by = $1`, ident, core.ErasedIdentity)
+	if err != nil {
+		return 0, err
+	}
+	// disabled_by does not feed the Disabled() snapshot, so no reload here.
+	return int(tag.RowsAffected()), nil
+}
+
+func (s *PgDropSwitchStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
+	if tenant == "" {
+		return 0, fmt.Errorf("drop switches: tenant required (empty would match the global switches)")
+	}
+	tag, err := s.pool.Exec(ctx, `DELETE FROM drop_switches WHERE tenant=$1`, tenant)
+	if err != nil {
+		return 0, err
+	}
+	// Refresh the snapshot Disabled() reads, exactly as Disable/Enable do —
+	// otherwise this process keeps enforcing an erased org's switches.
+	if err := s.reload(ctx); err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
 }
 
 func (s *PgDropSwitchStore) List(ctx context.Context) ([]DropSwitch, error) {

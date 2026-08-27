@@ -52,6 +52,36 @@ func (m *memGitMirrorStore) Delete(_ context.Context, tenant, ws string) error {
 	return nil
 }
 
+func (m *memGitMirrorStore) AnonymizeSubject(_ context.Context, ident string) (int, error) {
+	if ident == "" {
+		return 0, nil
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := 0
+	for k, row := range m.rows {
+		if row.UpdatedBy == ident {
+			row.UpdatedBy = core.ErasedIdentity
+			m.rows[k] = row
+			n++
+		}
+	}
+	return n, nil
+}
+
+func (m *memGitMirrorStore) DeleteByTenant(_ context.Context, tenant string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := 0
+	for k, row := range m.rows {
+		if row.Tenant == tenant {
+			delete(m.rows, k)
+			n++
+		}
+	}
+	return n, nil
+}
+
 func (m *memGitMirrorStore) RecordAttempt(_ context.Context, tenant, ws string, st MirrorAttempt) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

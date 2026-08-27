@@ -125,6 +125,37 @@ func (s *JSONInvitationStore) PutInvitation(_ context.Context, inv Invitation) e
 	return s.flushLocked()
 }
 
+// AnonymizeSubject replaces an erased person's email where it appears as the
+// INVITER, returning the rows changed.
+//
+// The row belongs to somebody else — the person invited — and survives the
+// inviter's erasure, so the identifier is pseudonymised rather than deleted.
+// Probed by the erasure cascade rather than declared on the interface, matching
+// how DeleteByEmail is already handled for this store.
+func (s *JSONInvitationStore) AnonymizeSubject(_ context.Context, ident string) (int, error) {
+	ident = strings.ToLower(strings.TrimSpace(ident))
+	if ident == "" {
+		return 0, nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for token, inv := range s.items {
+		if strings.ToLower(strings.TrimSpace(inv.InvitedBy)) == ident {
+			inv.InvitedBy = core.ErasedIdentity
+			s.items[token] = inv
+			n++
+		}
+	}
+	if n == 0 {
+		return 0, nil
+	}
+	if err := s.flushLocked(); err != nil {
+		return 0, err
+	}
+	return n, nil
+}
+
 func (s *JSONInvitationStore) GetByToken(_ context.Context, token string) (Invitation, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
