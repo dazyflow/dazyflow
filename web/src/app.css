@@ -1952,28 +1952,10 @@
 }
 /* ----- Integrations index + detail ----- */
 /* Section heading on the integrations index — "Connected" / "Available". */
-.integrations-section-head {
-  margin: var(--space-5) 0 var(--space-3);
-  font-size: var(--text-base);
-  color: var(--muted);
-}
-/* Active-filter banner: the index is scoped to a category (e.g. arriving
-   from "Connect Claude or ChatGPT"). The pill names the filter and offers
-   a one-click "Show all" to drop it. */
-.integrations-filter {
-  margin: var(--space-3) 0 var(--space-1);
-}
-.integrations-filter-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-2);
-  border: 1px solid var(--border);
-  border-radius: var(--r-pill);
-  background: var(--surface-2);
-  font-size: var(--text-sm);
-  color: var(--ink);
-}
+/* "Show all", in the filter toolbar. It was the clear control on a category
+   banner that the filter dropdowns replaced; the toolbar is where it belongs
+   now, and it stays link-weight rather than becoming a fourth button competing
+   with the two selects. */
 .integrations-filter-clear {
   padding: 0;
   background: none;
@@ -1985,6 +1967,59 @@
 .integrations-filter-clear:hover {
   opacity: 0.8;
   background: none;
+}
+/* The result count, between the toolbar and the grid. Quiet, but it is what
+   makes the filters legible: it names how many matched and which slice is on
+   screen, so a short page reads as "the end of the results" rather than as a
+   bug. */
+.integrations-count {
+  margin: var(--space-2) 0 var(--space-3);
+  font-size: var(--text-sm);
+}
+/* The card's own footer: step count on the left, connection state on the right.
+   It carries what the section headings used to say, per card, now that the list
+   is one flat paginated grid. */
+.integration-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  font-size: var(--text-xs);
+}
+/* The state word. Toned like the dot beside the name — green for connected,
+   amber for an account that needs reconnecting, plain for "needs setup", which
+   is a to-do and not a fault. */
+.integration-card-state {
+  white-space: nowrap;
+}
+.integration-card-state.on {
+  color: var(--success);
+}
+.integration-card-state.ailing {
+  color: var(--warning);
+}
+/* The page strip. Centred under the grid, wrapping on narrow screens rather
+   than scrolling sideways — the windowed page list is short enough that two
+   rows is the worst case. */
+.integrations-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  margin: var(--space-4) 0 var(--space-2);
+}
+/* The current page reads as pressed rather than as a link: with numbers this
+   small, weight alone is not enough of a difference to find at a glance. */
+.integrations-pager-current {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.integrations-pager-gap {
+  color: var(--faint);
+  padding: 0 var(--space-1);
 }
 .integration-grid {
   display: grid;

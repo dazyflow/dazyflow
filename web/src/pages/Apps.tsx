@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Box } from "lucide-react";
+import { Box, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, APIError } from "../api";
 import { explainApiError } from "../lib/explainApiError";
@@ -27,6 +27,7 @@ import {
   oauthProviderDisplay,
 } from "../integrationMeta";
 import { ErrorNotice } from "../components/ui/ErrorNotice";
+import { EmptyState } from "../components/ui/EmptyState";
 import type {
   ConnectionField,
   ConnectionRequirement,
@@ -36,21 +37,37 @@ import type {
 import { featureUnavailable } from "../lib/explainApiError";
 import { Loading } from "../components/ui/Loading";
 
-// Apps is the index page — one card per integration ("app") the daemon
-// knows about, derived from the live manifest registry plus curated
-// prose from integrationMeta. Drops without an Integration field land in
-// a "Built-in" bucket so the page covers everything the catalog shows in
-// the editor. Cards are grouped into "Ready to use" vs "Needs setup".
+// Apps is the index page — one card per integration ("app") the daemon knows
+// about, derived from the live manifest registry plus curated prose from
+// integrationMeta. Drops without an Integration field land in a "Built-in"
+// bucket so the page covers everything the catalog shows in the editor.
+//
+// Built to be read at CATALOG SCALE. The page used to render every app at once
+// in two sections ("Ready to use" / "Needs setup"), which works at forty apps
+// and stops working well before a thousand: the browser lays out every card,
+// and finding one means scrolling past all of them.
+//
+// So the two sections became a FILTER instead of a layout. That is the trade
+// worth naming: a section heading tells you the answer without asking, but two
+// headings over a paginated list make the count meaningless ("page 3 of 12" of
+// what?) and split every page in half. Status is now one dropdown, each card
+// says its own state, and nothing that was visible before is gone — it is one
+// click away and, unlike a heading, it composes with search and category.
+//
+// Every control lives in the URL (?q, ?status, ?category, ?page) so a filtered
+// view is linkable, survives a reload, and works with the back button. The
+// pre-existing ?category=ai deep link (from "Connect Claude or ChatGPT") keeps
+// working unchanged — it is the same parameter.
 export function Apps() {
   const { t, i18n } = useTranslation();
   const { token } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [drops, setDrops] = useState<Manifest[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Connection state, used only to bucket cards into Connected vs
-  // Available. A feature being off / forbidden isn't an error here — it
-  // just means "nothing is connected", so those fetches fall back to []
-  // rather than blocking the page.
+  // Connection state, used to bucket cards and to drive the status filter. A
+  // feature being off / forbidden isn't an error here — it just means "nothing
+  // is connected", so those fetches fall back to [] rather than blocking the
+  // page.
   const [secrets, setSecrets] = useState<string[] | null>(null);
   const [providers, setProviders] = useState<OAuthProviderStatus[] | null>(null);
 
@@ -90,12 +107,9 @@ export function Apps() {
     };
   }, [token]);
 
-  // Group drops by integration slug. The standard-library bucket
-  // catches anything without an Integration field — matches the
-  // NodeCatalog grouping rules.
-  // Alphabetical by display name (the standard-library bucket shows as
-  // "Built-in"). Both sections preserve this order, so one sort covers
-  // Ready to use + Needs setup.
+  // Group drops by integration slug, alphabetically by display name. The
+  // standard-library bucket catches anything without an Integration field —
+  // matches the NodeCatalog grouping rules.
   const groups = useMemo(() => {
     const nameOf = (g: { slug: string; meta: { name: string } }) =>
       g.slug === "standard-library" ? t("integrations.builtinGroup") : g.meta.name;
@@ -104,44 +118,93 @@ export function Apps() {
     );
   }, [drops, t]);
 
-  // Split into "Ready to use" (usable right now — no-setup integrations
-  // plus connected ones) vs "Needs setup" (declares a connection that
-  // isn't configured yet). connectedSlugs drives the green dot, so a
-  // connected app still reads distinctly from an always-available one
-  // within the Ready section. Re-buckets once secrets/providers load.
-  const { ready, needsSetup, connectedSlugs, ailingSlugs } = useMemo(() => {
-    const ready: typeof groups = [];
-    const needsSetup: typeof groups = [];
-    const connectedSlugs = new Set<string>();
-    const ailingSlugs = new Set<string>();
+  // Connection state per app, computed once for the whole list rather than per
+  // card: the status filter needs every app's state to count the options, and
+  // recomputing it inside the card would do the work twice for the page's slice
+  // and not at all for the rest.
+  const states = useMemo(() => {
+    const out = new Map<string, ReturnType<typeof appConnectionState>>();
     for (const g of groups) {
-      const st = appConnectionState(g.slug, g.drops, secrets, providers);
-      (st.needsSetup ? needsSetup : ready).push(g);
-      if (st.connected) connectedSlugs.add(g.slug);
-      if (st.ailing) ailingSlugs.add(g.slug);
+      out.set(g.slug, appConnectionState(g.slug, g.drops, secrets, providers));
     }
-    return { ready, needsSetup, connectedSlugs, ailingSlugs };
+    return out;
   }, [groups, secrets, providers]);
 
-  // Optional ?category= filter narrows the index to integrations whose
-  // catalog steps carry that drop category. The "Connect Claude or ChatGPT"
-  // entry points deep-link here with ?category=ai so the page opens scoped
-  // to just the AI providers. An empty/absent param shows everything.
-  const categoryFilter = searchParams.get("category");
-  const inCategory = (g: (typeof groups)[number]) =>
-    g.drops.some((d) => d.category === categoryFilter);
-  const filteredReady = categoryFilter ? ready.filter(inCategory) : ready;
-  const filteredNeedsSetup = categoryFilter
-    ? needsSetup.filter(inCategory)
-    : needsSetup;
-  const filterLabel = categoryFilter
-    ? categoryLabel(categoryFilter, t, i18n.language)
-    : "";
-  const clearFilter = () => {
+  // The searchable text for each app, built once. Includes the steps INSIDE the
+  // app, which is the difference between a search box and a useful one:
+  // somebody looking for SMS does not know the app is called 46elks.
+  const haystacks = useMemo(() => {
+    const out = new Map<string, string>();
+    for (const g of groups) {
+      const name =
+        g.slug === "standard-library" ? t("integrations.builtinGroup") : g.meta.name;
+      const parts = [name, g.slug, g.meta.description];
+      for (const d of g.drops) {
+        parts.push(dropLabel(d, i18n.language), d.id, dropSubtitle(d, i18n.language) ?? "");
+      }
+      out.set(g.slug, foldForSearch(parts.join(" ")));
+    }
+    return out;
+  }, [groups, t, i18n.language]);
+
+  const query = searchParams.get("q") ?? "";
+  const statusFilter = (searchParams.get("status") ?? "all") as AppStatusFilter;
+  const categoryFilter = searchParams.get("category") ?? "";
+  const page = Math.max(1, Number(searchParams.get("page") ?? "1") || 1);
+
+  // setParam writes one control and, for anything that changes the RESULT SET,
+  // drops the page back to 1. Staying on page 7 while narrowing to three
+  // results is the classic paginated-filter bug: the user sees an empty page
+  // and reads it as "no matches".
+  const setParam = (key: string, value: string) => {
     const next = new URLSearchParams(searchParams);
-    next.delete("category");
+    if (value) next.set(key, value);
+    else next.delete(key);
+    if (key !== "page") next.delete("page");
     setSearchParams(next, { replace: true });
   };
+  const clearFilters = () => {
+    const next = new URLSearchParams(searchParams);
+    for (const key of ["q", "status", "category", "page"]) next.delete(key);
+    setSearchParams(next, { replace: true });
+  };
+
+  // Every category present in the catalog, so the dropdown stays right as the
+  // catalog grows instead of naming a curated list that drifts out of date.
+  const categories = useMemo(() => {
+    const seen = new Set<string>();
+    for (const g of groups) for (const d of g.drops) if (d.category) seen.add(d.category);
+    return [...seen]
+      .map((c) => ({ value: c, label: categoryLabel(c, t, i18n.language) }))
+      .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
+  }, [groups, t, i18n.language]);
+
+  const filtered = useMemo(() => {
+    const needle = foldForSearch(query);
+    return groups.filter((g) => {
+      if (needle && !(haystacks.get(g.slug) ?? "").includes(needle)) return false;
+      if (categoryFilter && !g.drops.some((d) => d.category === categoryFilter)) return false;
+      const st = states.get(g.slug);
+      switch (statusFilter) {
+        case "connected":
+          return !!st?.connected;
+        case "needs_setup":
+          return !!st?.needsSetup;
+        case "ailing":
+          return !!st?.ailing;
+        default:
+          return true;
+      }
+    });
+  }, [groups, haystacks, states, query, categoryFilter, statusFilter]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / APPS_PER_PAGE));
+  // Clamp rather than trusting the URL: ?page=99 (a stale link, or a filter
+  // applied by hand) must show the last page of results, not nothing.
+  const current = Math.min(page, pageCount);
+  const from = (current - 1) * APPS_PER_PAGE;
+  const shown = filtered.slice(from, from + APPS_PER_PAGE);
+  const filtersActive = !!(query || categoryFilter || statusFilter !== "all");
 
   if (error) {
     return (
@@ -160,59 +223,174 @@ export function Apps() {
     );
   }
 
-  const filterEmpty =
-    categoryFilter &&
-    filteredReady.length === 0 &&
-    filteredNeedsSetup.length === 0;
-
   return (
     <div className="page">
       <h1>{t("integrations.title")}</h1>
       <p className="page-sub">{t("integrations.intro")}</p>
-      {categoryFilter && (
-        <div className="integrations-filter">
-          <span className="integrations-filter-chip">
-            {t("integrations.filterShowing", { label: filterLabel })}
-            <Button
-              className="integrations-filter-clear"
-              onClick={clearFilter}
-            >
-              {t("integrations.filterClear")}
-            </Button>
-          </span>
+
+      <div className="flow-toolbar">
+        <div className="search-box flow-search">
+          <Search size={ICON.sm} aria-hidden />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setParam("q", e.target.value)}
+            placeholder={t("integrations.searchPlaceholder")}
+            aria-label={t("integrations.searchPlaceholder")}
+          />
         </div>
-      )}
-      {filterEmpty && (
-        <div className="card">
-          {t("integrations.filterEmpty", { label: filterLabel })}
-        </div>
-      )}
-      {filteredReady.length > 0 && (
+        <label className="flow-filter">
+          <span>{t("common.status")}</span>
+          <select value={statusFilter} onChange={(e) => setParam("status", e.target.value)}>
+            <option value="all">{t("integrations.statusAll")}</option>
+            <option value="connected">{t("integrations.connectedTip")}</option>
+            <option value="needs_setup">{t("integrations.needsSetupHead")}</option>
+            <option value="ailing">{t("integrations.statusAiling")}</option>
+          </select>
+        </label>
+        <label className="flow-filter">
+          <span>{t("integrations.categoryFilter")}</span>
+          <select value={categoryFilter} onChange={(e) => setParam("category", e.target.value)}>
+            <option value="">{t("integrations.categoryAll")}</option>
+            {categories.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {filtersActive && (
+          <Button className="integrations-filter-clear" onClick={clearFilters}>
+            {t("integrations.filterClear")}
+          </Button>
+        )}
+      </div>
+
+      {/* The count is what makes a filter honest: it says how much was matched,
+          and with pagination it says which slice is on screen. role=status so a
+          screen reader hears the new total after a keystroke, rather than the
+          grid silently changing under it. */}
+      <div className="integrations-count muted" role="status">
+        {filtered.length === 0
+          ? t("integrations.countNone")
+          : t("integrations.countRange", {
+              from: from + 1,
+              to: from + shown.length,
+              total: filtered.length,
+            })}
+      </div>
+
+      {filtered.length === 0 ? (
+        <EmptyState
+          icon={Box}
+          title={t("integrations.noResultsTitle")}
+          action={
+            filtersActive ? (
+              <Button onClick={clearFilters}>{t("integrations.filterClear")}</Button>
+            ) : undefined
+          }
+        >
+          {t("integrations.noResultsBody")}
+        </EmptyState>
+      ) : (
         <>
-          <h2 className="integrations-section-head">{t("integrations.readyHead")}</h2>
           <div className="integration-grid">
-            {filteredReady.map((g) => (
+            {shown.map((g) => (
               <IntegrationCard
                 key={g.slug}
                 {...g}
-                connected={connectedSlugs.has(g.slug)}
-                ailing={ailingSlugs.has(g.slug)}
+                connected={!!states.get(g.slug)?.connected}
+                ailing={!!states.get(g.slug)?.ailing}
+                needsSetup={!!states.get(g.slug)?.needsSetup}
               />
             ))}
           </div>
-        </>
-      )}
-      {filteredNeedsSetup.length > 0 && (
-        <>
-          <h2 className="integrations-section-head">{t("integrations.needsSetupHead")}</h2>
-          <div className="integration-grid">
-            {filteredNeedsSetup.map((g) => (
-              <IntegrationCard key={g.slug} {...g} connected={false} ailing={false} />
-            ))}
-          </div>
+          <Pager
+            page={current}
+            pageCount={pageCount}
+            onPage={(n) => setParam("page", String(n))}
+          />
         </>
       )}
     </div>
+  );
+}
+
+// APPS_PER_PAGE bounds what one page lays out.
+//
+// 24 fills three or four rows of the auto-fill grid at common widths — enough
+// that scanning is worthwhile, few enough that the page stays cheap when the
+// catalog is thousands of apps long.
+const APPS_PER_PAGE = 24;
+
+type AppStatusFilter = "all" | "connected" | "needs_setup" | "ailing";
+
+// foldForSearch normalises text for matching: lowercase, and diacritics folded
+// so "bokforing" finds "Bokföring". A Swedish user typing on a keyboard they
+// have is the common case, not the exception.
+function foldForSearch(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .trim();
+}
+
+// Pager is the page strip. Local to this page on purpose: it is the first
+// pagination in the app, and one caller does not tell you what the second one
+// would need. Extract it when there is a second.
+//
+// Windowed rather than every page: a 2,000-app catalog filtered to nothing is
+// 84 pages, and 84 buttons is not navigation. First and last are always
+// reachable, with an ellipsis standing in for the gap.
+function Pager({
+  page,
+  pageCount,
+  onPage,
+}: {
+  page: number;
+  pageCount: number;
+  onPage: (n: number) => void;
+}) {
+  const { t } = useTranslation();
+  if (pageCount <= 1) return null;
+  const pages: Array<number | "gap"> = [];
+  const window = 1; // pages either side of the current one
+  let last = 0;
+  for (let n = 1; n <= pageCount; n++) {
+    const near = Math.abs(n - page) <= window;
+    if (n === 1 || n === pageCount || near) {
+      if (last && n - last > 1) pages.push("gap");
+      pages.push(n);
+      last = n;
+    }
+  }
+  return (
+    <nav className="integrations-pager" aria-label={t("integrations.pagerLabel")}>
+      <Button disabled={page <= 1} onClick={() => onPage(page - 1)}>
+        {t("integrations.pagePrev")}
+      </Button>
+      {pages.map((p, i) =>
+        p === "gap" ? (
+          <span key={`gap-${i}`} className="integrations-pager-gap" aria-hidden>
+            …
+          </span>
+        ) : (
+          <Button
+            key={p}
+            className={p === page ? "integrations-pager-current" : undefined}
+            aria-current={p === page ? "page" : undefined}
+            aria-label={t("integrations.pageN", { n: p })}
+            onClick={() => onPage(p)}
+          >
+            {p}
+          </Button>
+        ),
+      )}
+      <Button disabled={page >= pageCount} onClick={() => onPage(page + 1)}>
+        {t("integrations.pageNext")}
+      </Button>
+    </nav>
   );
 }
 
@@ -232,15 +410,20 @@ function categoryLabel(
   return named.charAt(0).toUpperCase() + named.slice(1);
 }
 
-// IntegrationCard is one tile in the index grid. `connected` shows a
-// green status dot next to the name — the at-a-glance "this is set up"
-// signal that pairs with the Connected section heading.
+// IntegrationCard is one tile in the index grid.
+//
+// The card now carries its own state, because the page no longer groups by it:
+// with the sections gone, a card that said nothing would leave "is this set up?"
+// answerable only by opening it. The dot is the at-a-glance signal and the label
+// under it is the unambiguous one — a dot alone cannot distinguish "nothing to
+// set up" from "set up".
 function IntegrationCard({
   slug,
   meta,
   drops,
   connected,
   ailing,
+  needsSetup,
 }: {
   slug: string;
   meta: { name: string; description: string; brand_logo?: string };
@@ -250,6 +433,9 @@ function IntegrationCard({
   // "set up" and "working" are different claims, and only the second one is
   // what someone scanning this page is actually asking.
   ailing: boolean;
+  // needsSetup: declares a connection nobody has filled in. Distinct from
+  // !connected, which is also true of an app that needs no connection at all.
+  needsSetup: boolean;
 }) {
   const { t, i18n } = useTranslation();
   // Logo fallback chain: curated override → any drop's brand_logo →
@@ -299,6 +485,21 @@ function IntegrationCard({
         <p className="integration-card-desc">
           {integrationProse(`${slug}.description`, meta.description, i18n.language)}
         </p>
+        <div className="integration-card-foot muted">
+          <span>{t("integrations.stepCount", { count: drops.length })}</span>
+          {/* Only the states worth acting on are named. "Ready to use" on an app
+              that needs no setup is a label on every second card, saying nothing
+              — the absence of a warning is the message there. */}
+          {ailing ? (
+            <span className="integration-card-state ailing">
+              {t("integrations.statusAiling")}
+            </span>
+          ) : connected ? (
+            <span className="integration-card-state on">{t("integrations.connectedTip")}</span>
+          ) : needsSetup ? (
+            <span className="integration-card-state">{t("integrations.needsSetupHead")}</span>
+          ) : null}
+        </div>
       </div>
     </Link>
   );
