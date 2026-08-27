@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-08-27
+
 ### Added
 
 - **Each org can now add its own MCP servers, in Admin → MCP servers.** Point
