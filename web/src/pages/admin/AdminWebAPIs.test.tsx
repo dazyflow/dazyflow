@@ -320,6 +320,111 @@ describe("AdminWebAPIs", () => {
     await waitFor(() => expect(deleteWebAPI).toHaveBeenCalledWith("tok", "order-service"));
   });
 
+  // The guessed favicon is shown where the address that produced it can be
+  // corrected — and a catalog with no mark shows no broken image.
+  it("shows the guessed brand mark beside the name, when there is one", async () => {
+    const logo = "data:image/png;base64,AAAA";
+    listWebAPIs.mockResolvedValue({ web_apis: [{ ...orders, logo }] });
+    const { container } = render(<AdminWebAPIs />);
+    await screen.findByText("Order service");
+    const img = container.querySelector("img.step-source-logo");
+    expect(img).toHaveAttribute("src", logo);
+    // Decorative: the name beside it already says which service this is.
+    expect(img).toHaveAttribute("alt", "");
+  });
+
+  it("renders no mark for a catalog whose favicon was not found", async () => {
+    const { container } = render(<AdminWebAPIs />);
+    await screen.findByText("Order service");
+    expect(container.querySelector("img.step-source-logo")).toBeNull();
+  });
+
+  // The three sources are a choice the form has to carry, because a guess that
+  // found nothing and a glyph the admin chose are the same empty image.
+  it("submits the chosen icon source", async () => {
+    saveWebAPI.mockResolvedValue({ ...orders, logo_mode: "none" });
+    render(<AdminWebAPIs />);
+    await screen.findByText("Order service");
+    await userEvent.click(screen.getByLabelText("common.edit"));
+
+    await userEvent.selectOptions(
+      await screen.findByLabelText("webapi.iconLabel"),
+      "none",
+    );
+    await userEvent.click(screen.getByText("webapi.save"));
+
+    await waitFor(() => expect(saveWebAPI).toHaveBeenCalled());
+    const input = saveWebAPI.mock.calls[0][1] as {
+      logo_mode?: string;
+      logo?: string;
+    };
+    expect(input.logo_mode).toBe("none");
+    // No image is sent for a mode that does not read one.
+    expect(input.logo).toBeUndefined();
+  });
+
+  // An edit of something else must resend the uploaded mark, or the daemon's
+  // "keep what is stored" is the only thing standing between the admin and a
+  // lost logo.
+  it("resends a custom icon the admin did not change", async () => {
+    const logo = "data:image/png;base64,AAAA";
+    listWebAPIs.mockResolvedValue({
+      web_apis: [{ ...orders, logo, logo_mode: "custom" }],
+    });
+    saveWebAPI.mockResolvedValue({ ...orders, logo, logo_mode: "custom" });
+    render(<AdminWebAPIs />);
+    await screen.findByText("Order service");
+    await userEvent.click(screen.getByLabelText("common.edit"));
+    await screen.findByLabelText("webapi.iconLabel");
+    await userEvent.click(screen.getByText("webapi.save"));
+
+    await waitFor(() => expect(saveWebAPI).toHaveBeenCalled());
+    const input = saveWebAPI.mock.calls[0][1] as {
+      logo_mode?: string;
+      logo?: string;
+    };
+    expect(input).toMatchObject({ logo_mode: "custom", logo });
+  });
+
+  // The file picker only belongs to the one mode that uses it.
+  it("offers a file to upload only for a chosen image", async () => {
+    render(<AdminWebAPIs />);
+    await screen.findByText("Order service");
+    await userEvent.click(screen.getByLabelText("common.edit"));
+    await screen.findByLabelText("webapi.iconLabel");
+    expect(screen.queryByLabelText("webapi.iconFileLabel")).toBeNull();
+
+    await userEvent.selectOptions(
+      screen.getByLabelText("webapi.iconLabel"),
+      "custom",
+    );
+    expect(screen.getByLabelText("webapi.iconFileLabel")).toBeInTheDocument();
+  });
+
+  // A file the picker lets through can still be one we cannot store, and the
+  // form has to say which — the alternative is a Save that quietly kept the old
+  // mark. (An SVG is chosen here because a type outside `accept` never reaches
+  // the change handler at all, in a browser or in this test.)
+  it("says why a rejected file was rejected, rather than saving nothing", async () => {
+    render(<AdminWebAPIs />);
+    await screen.findByText("Order service");
+    await userEvent.click(screen.getByLabelText("common.edit"));
+    await userEvent.selectOptions(
+      await screen.findByLabelText("webapi.iconLabel"),
+      "custom",
+    );
+    const bloated = `<svg xmlns="http://www.w3.org/2000/svg">${"<path d='M0 0'/>".repeat(
+      3000,
+    )}</svg>`;
+    await userEvent.upload(
+      screen.getByLabelText("webapi.iconFileLabel"),
+      new File([bloated], "logo.svg", { type: "image/svg+xml" }),
+    );
+    expect(
+      await screen.findByText("webapi.icon_svgTooBig"),
+    ).toBeInTheDocument();
+  });
+
   it("confirms before removing, because flows stop running", async () => {
     deleteWebAPI.mockResolvedValue({ deleted: "order-service" });
     render(<AdminWebAPIs />);

@@ -12,8 +12,10 @@ import type {
   WebAPI,
   WebAPIArg,
   WebAPIInput,
+  WebAPILogoMode,
   WebAPIOperation,
 } from "../../types";
+import { fileToLogo, LOGO_ACCEPT } from "../../lib/logoUpload";
 import { StepSourceRemoveWarning } from "../../components/admin/StepSourceRemoveWarning";
 import { explainApiError } from "../../lib/explainApiError";
 import { ErrorNotice } from "../../components/ui/ErrorNotice";
@@ -169,7 +171,22 @@ export function AdminWebAPIs() {
                     }
                   >
                     <td className="run-name-cell">
-                      {w.label}
+                      <span className="step-source-name">
+                        {/* The mark the palette will use, guessed from the
+                            service's favicon. Shown here because a guess that
+                            landed on the wrong logo is worth seeing where the
+                            address that produced it can be corrected — and
+                            because a save is what re-runs the guess. */}
+                        {w.logo ? (
+                          <img
+                            className="step-source-logo"
+                            src={w.logo}
+                            alt=""
+                            draggable={false}
+                          />
+                        ) : null}
+                        {w.label}
+                      </span>
                       {/* The id is shown under the name because it is what
                           appears in the palette and in flow JSON — an admin
                           looking for "Order service" among their steps needs to
@@ -273,6 +290,11 @@ function WebAPIForm({
   );
   const [authHeader, setAuthHeader] = useState(webapi?.auth_header ?? "");
   const [enabled, setEnabled] = useState(webapi?.enabled ?? true);
+  const [logoMode, setLogoMode] = useState<WebAPILogoMode>(
+    webapi?.logo_mode ?? "auto",
+  );
+  const [logo, setLogo] = useState(webapi?.logo ?? "");
+  const [logoError, setLogoError] = useState<string | null>(null);
   const [operations, setOperations] = useState<WebAPIOperation[]>(
     webapi?.operations?.length ? webapi.operations : [blankOperation()],
   );
@@ -291,6 +313,11 @@ function WebAPIForm({
         auth_kind: authKind,
         auth_header: authKind === "header" ? authHeader.trim() : undefined,
         enabled,
+        logo_mode: logoMode,
+        // Only sent for the mode that reads it. The stored image is resent
+        // unchanged when the admin did not pick a new file, which is what makes
+        // "edit the address" keep the mark.
+        logo: logoMode === "custom" ? logo : undefined,
         operations: operations.map((op) => ({
           ...op,
           id: op.id.trim(),
@@ -371,6 +398,56 @@ function WebAPIForm({
           />
         </div>
       )}
+
+      {/* The mark every step of this catalog will wear. Three sources rather
+          than one upload field, because a guess that found nothing has to be
+          retried on the next save while a glyph the admin CHOSE must not be —
+          the two are the same empty image and only this choice tells them
+          apart. */}
+      <div className="sf-field">
+        <label htmlFor="wa-logo-mode">{t("webapi.iconLabel")}</label>
+        <div className="step-source-icon-row">
+          <span className="step-source-icon-preview">
+            {logoMode !== "none" && logo ? (
+              <img src={logo} alt="" draggable={false} />
+            ) : (
+              <Globe size={ICON.lg} />
+            )}
+          </span>
+          <select
+            id="wa-logo-mode"
+            value={logoMode}
+            onChange={(e) => {
+              setLogoError(null);
+              setLogoMode(e.target.value as WebAPILogoMode);
+            }}
+          >
+            <option value="auto">{t("webapi.iconAuto")}</option>
+            <option value="custom">{t("webapi.iconCustom")}</option>
+            <option value="none">{t("webapi.iconNone")}</option>
+          </select>
+        </div>
+        {logoMode === "custom" && (
+          <input
+            type="file"
+            aria-label={t("webapi.iconFileLabel")}
+            accept={LOGO_ACCEPT}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              setLogoError(null);
+              void fileToLogo(file).then(
+                (uri) => setLogo(uri),
+                // The codes fileToLogo rejects with each need their own
+                // suggestion, so they are keys rather than sentences.
+                (err: Error) => setLogoError(t(`webapi.icon_${err.message}`)),
+              );
+            }}
+          />
+        )}
+        {logoError && <div className="field-error">{logoError}</div>}
+        <div className="desc">{t("webapi.iconHint")}</div>
+      </div>
 
       <h3>{t("webapi.operationsHead")}</h3>
       <div className="desc">{t("webapi.operationsHint")}</div>

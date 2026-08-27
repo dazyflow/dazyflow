@@ -1057,6 +1057,13 @@ export type WebAPI = {
   timeout_ms?: number;
   max_body_bytes?: number;
   enabled: boolean;
+  // logo is the catalog's brand mark as a data: URI — the same image every step
+  // of this catalog wears in the palette. Absent means the globe glyph.
+  logo?: string;
+  // logo_mode is where that mark came from. "auto" is the service's favicon,
+  // guessed at save time; "custom" is an image an admin chose; "none" is the
+  // plain glyph, on purpose. Always sent, so the form opens on the right choice.
+  logo_mode: WebAPILogoMode;
   // registered is the live fact: this catalog is in the answering daemon's
   // engine catalog right now. It is NOT a health check — nothing was dialed —
   // and the page must not present it as one.
@@ -1072,6 +1079,11 @@ export type WebAPI = {
   updated_at: string;
 };
 
+// WebAPILogoMode is where a catalog's brand mark comes from. The three are
+// distinct because a guess that found nothing is retried on the next save and a
+// glyph the admin chose must not be.
+export type WebAPILogoMode = "auto" | "custom" | "none";
+
 // WebAPIInput is what the form submits.
 export type WebAPIInput = {
   label: string;
@@ -1086,6 +1098,11 @@ export type WebAPIInput = {
   timeout_ms?: number;
   max_body_bytes?: number;
   enabled: boolean;
+  // logo_mode and logo are omitted to mean "leave the icon alone": a save that
+  // sent them as empty would throw away an uploaded mark. logo is the image
+  // itself, a data: URI, and is only read when logo_mode is "custom".
+  logo_mode?: WebAPILogoMode;
+  logo?: string;
 };
 
 

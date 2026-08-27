@@ -23,6 +23,43 @@ into the image.)
 
 ## [Unreleased]
 
+### Added
+
+- **Web API steps wear your service's own logo.** A described API was the one
+  step source that arrived with no artwork — a built-in step names a file in
+  `/brands` and an MCP tool can declare icons in its manifest, so every
+  operation an org imported wore the same grey globe and a flow calling three of
+  its own services looked like three copies of one step.
+
+  Saving a catalog now looks for the service's favicon and inlines it as the
+  brand mark on every step the catalog contributes: the node, the palette, the
+  inspector, and the catalog's page under **Apps**. The base URL's own host is
+  tried first, then the domain one label up, since an API host
+  (`api.example.com`) usually serves no site while `example.com` does; declared
+  `<link rel="icon">` artwork is preferred over `/favicon.ico`, largest first,
+  because the latter is often a 16×16 that renders as four grey pixels.
+
+  It is a guess, and it fails soft: no favicon means the globe the step had
+  before, and nothing about the save depends on the result. The fetch goes
+  through the same guarded caller a web-API step uses — SSRF dial guard,
+  per-tenant egress allowlist, rate limit, response cap — and the bytes are
+  stored inlined as a `data:` URI rather than as a URL, so the app never asks a
+  third party for an image and never tells one who opened a flow. The mark is
+  resolved once and stored, so the reconcile loop stays a query and a map
+  compare; pressing **Save** is the retry, and a catalog that already has an
+  icon keeps it unless its address changes. Catalogs saved before this have no
+  icon until their next save.
+
+  A guess can also be overruled. The form's new **Icon** field offers three
+  sources — the service's favicon, **an image you choose**, or **no icon** — and
+  the three are distinct on purpose: a guess that found nothing is retried on
+  the next save, while a glyph an admin chose must never be, or the wrong logo
+  comes back every time. A chosen image also survives a change of address, which
+  is exactly when a guess must not. Oversized uploads are redrawn to 64×64 in
+  the browser before they are sent, so the storage limit is not something an
+  admin has to think about; a very large SVG is refused instead, since there is
+  nothing in one to shrink.
+
 ## [0.19.1] - 2026-08-27
 
 ### Fixed

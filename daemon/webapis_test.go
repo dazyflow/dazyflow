@@ -5,6 +5,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/base64"
 	"strings"
 	"testing"
 	"time"
@@ -702,5 +703,306 @@ func TestWebAPIs_OperationNameIsBounded(t *testing.T) {
 	_, err := m.Save(context.Background(), "acme", "a", in)
 	if err == nil || !strings.Contains(err.Error(), "summary") {
 		t.Fatalf("err = %v, want a complaint pointing at the summary field", err)
+	}
+}
+
+// The catalog's brand mark is guessed once, from the base URL, and reaches
+// every step this catalog contributes — the point of the guess.
+func TestWebAPIs_SaveResolvesTheLogo(t *testing.T) {
+	m := webAPIService(t)
+	var asked []string
+	m.ResolveLogo = func(_ context.Context, baseURL string) string {
+		asked = append(asked, baseURL)
+		return "data:image/png;base64,AAAA"
+	}
+	saved, err := m.Save(context.Background(), "acme", "alice", sampleInput())
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if saved.Logo != "data:image/png;base64,AAAA" {
+		t.Errorf("logo = %q", saved.Logo)
+	}
+	if len(asked) != 1 || asked[0] != "https://api.example.com/v1" {
+		t.Errorf("resolver asked %v, want the catalog's base URL once", asked)
+	}
+	transport, ok := m.Catalog.Get("acme", "api:order-service:get_order")
+	if !ok {
+		t.Fatal("the step is not registered")
+	}
+	if got := transport.Manifest().BrandLogo; got != saved.Logo {
+		t.Errorf("the step's BrandLogo = %q, want the catalog's logo", got)
+	}
+}
+
+// An ordinary edit must not cost outbound requests: a relabel or one more
+// operation is not a new service, and a save should not be able to hang on
+// someone else's web server for a decoration it already has.
+func TestWebAPIs_SaveKeepsTheLogoWhenTheAddressHasNotMoved(t *testing.T) {
+	m := webAPIService(t)
+	calls := 0
+	m.ResolveLogo = func(_ context.Context, baseURL string) string {
+		calls++
+		return "data:image/png;base64," + baseURL
+	}
+	first, err := m.Save(context.Background(), "acme", "alice", sampleInput())
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	relabel := sampleInput()
+	relabel.Name = first.Name
+	relabel.Label = "Orders"
+	again, err := m.Save(context.Background(), "acme", "alice", relabel)
+	if err != nil {
+		t.Fatalf("re-Save: %v", err)
+	}
+	if calls != 1 {
+		t.Errorf("resolver ran %d times across two saves of the same address", calls)
+	}
+	if again.Logo != first.Logo {
+		t.Errorf("logo = %q, want the stored one kept", again.Logo)
+	}
+
+	// A new address is a new service, and gets a fresh guess.
+	moved := relabel
+	moved.BaseURL = "https://api.example.org/v2"
+	after, err := m.Save(context.Background(), "acme", "alice", moved)
+	if err != nil {
+		t.Fatalf("moved Save: %v", err)
+	}
+	if calls != 2 {
+		t.Errorf("resolver ran %d times, want a second guess for the new address", calls)
+	}
+	if after.Logo != "data:image/png;base64,https://api.example.org/v2" {
+		t.Errorf("logo = %q, want one resolved from the new address", after.Logo)
+	}
+}
+
+// A catalog with nothing to keep tries again, which is what makes "press Save"
+// the retry for a service whose site was down the first time.
+func TestWebAPIs_SaveRetriesAnUnresolvedLogo(t *testing.T) {
+	m := webAPIService(t)
+	calls := 0
+	m.ResolveLogo = func(context.Context, string) string {
+		calls++
+		return ""
+	}
+	first, err := m.Save(context.Background(), "acme", "alice", sampleInput())
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if first.Logo != "" {
+		t.Errorf("logo = %q, want none", first.Logo)
+	}
+	again := sampleInput()
+	again.Name = first.Name
+	if _, err := m.Save(context.Background(), "acme", "alice", again); err != nil {
+		t.Fatalf("re-Save: %v", err)
+	}
+	if calls != 2 {
+		t.Errorf("resolver ran %d times, want the second save to try again", calls)
+	}
+}
+
+// A guess that fails is not a save that fails: the whole feature is decoration.
+func TestWebAPIs_SaveSurvivesAResolverThatFindsNothing(t *testing.T) {
+	m := webAPIService(t)
+	m.ResolveLogo = func(context.Context, string) string { return "" }
+	saved, err := m.Save(context.Background(), "acme", "alice", sampleInput())
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if _, ok := m.Catalog.Get("acme", "api:"+saved.Name+":get_order"); !ok {
+		t.Error("the step is not registered")
+	}
+}
+
+// pngLogo is a real 1x1 PNG as a data: URI — the shape an admin's upload
+// arrives in, and valid enough to survive the normaliser.
+func pngLogo() string {
+	png := []byte{
+		0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a,
+		0, 0, 0, 0x0d, 'I', 'H', 'D', 'R',
+		0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0,
+		0x1f, 0x15, 0xc4, 0x89,
+		0, 0, 0, 0x0a, 'I', 'D', 'A', 'T',
+		0x78, 0x9c, 0x63, 0, 1, 0, 0, 5, 0, 1,
+		0x0d, 0x0a, 0x2d, 0xb4,
+		0, 0, 0, 0, 'I', 'E', 'N', 'D', 0xae, 0x42, 0x60, 0x82,
+	}
+	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(png)
+}
+
+func logoMode(m WebAPILogoMode) *WebAPILogoMode { return &m }
+
+// An uploaded mark wins over the guess, and keeps winning: the address moving is
+// exactly when a guess must be re-run and an admin's choice must not be.
+func TestWebAPIs_CustomLogoOutranksTheGuess(t *testing.T) {
+	m := webAPIService(t)
+	guesses := 0
+	m.ResolveLogo = func(context.Context, string) string {
+		guesses++
+		return "data:image/png;base64,GUESS"
+	}
+	in := sampleInput()
+	chosen := pngLogo()
+	in.Logo = &chosen
+	saved, err := m.Save(context.Background(), "acme", "alice", in)
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if saved.Logo != chosen {
+		t.Errorf("logo = %.40q…, want the chosen image", saved.Logo)
+	}
+	// An image and no mode is a statement: use this.
+	if saved.LogoMode != WebAPILogoCustom {
+		t.Errorf("mode = %q, want %q", saved.LogoMode, WebAPILogoCustom)
+	}
+	if guesses != 0 {
+		t.Errorf("guessed %d times for a catalog that supplied its own mark", guesses)
+	}
+
+	moved := sampleInput()
+	moved.Name = saved.Name
+	moved.BaseURL = "https://api.example.org/v2"
+	after, err := m.Save(context.Background(), "acme", "alice", moved)
+	if err != nil {
+		t.Fatalf("moved Save: %v", err)
+	}
+	if after.Logo != chosen || after.LogoMode != WebAPILogoCustom {
+		t.Errorf("logo/mode = %.20q…/%q after moving the address, want the upload kept",
+			after.Logo, after.LogoMode)
+	}
+	if guesses != 0 {
+		t.Errorf("guessed %d times, want none while a custom mark is set", guesses)
+	}
+}
+
+// The plain glyph, chosen. It must not be mistaken for a guess that found
+// nothing, or the wrong logo comes back on the next save.
+func TestWebAPIs_LogoModeNoneIsNotRetried(t *testing.T) {
+	m := webAPIService(t)
+	guesses := 0
+	m.ResolveLogo = func(context.Context, string) string {
+		guesses++
+		return "data:image/png;base64,GUESS"
+	}
+	in := sampleInput()
+	in.LogoMode = logoMode(WebAPILogoNone)
+	saved, err := m.Save(context.Background(), "acme", "alice", in)
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if saved.Logo != "" || saved.LogoMode != WebAPILogoNone {
+		t.Fatalf("logo/mode = %q/%q", saved.Logo, saved.LogoMode)
+	}
+	again := sampleInput()
+	again.Name = saved.Name
+	after, err := m.Save(context.Background(), "acme", "alice", again)
+	if err != nil {
+		t.Fatalf("re-Save: %v", err)
+	}
+	if after.Logo != "" || after.LogoMode != WebAPILogoNone {
+		t.Errorf("logo/mode = %q/%q, want the choice kept", after.Logo, after.LogoMode)
+	}
+	if guesses != 0 {
+		t.Errorf("guessed %d times for a catalog that asked for no mark", guesses)
+	}
+}
+
+// Going back to automatic drops the upload and looks again — the point of
+// choosing automatic is to see what the service publishes.
+func TestWebAPIs_BackToAutoDropsTheUpload(t *testing.T) {
+	m := webAPIService(t)
+	m.ResolveLogo = func(context.Context, string) string { return "data:image/png;base64,GUESS" }
+	in := sampleInput()
+	chosen := pngLogo()
+	in.Logo = &chosen
+	saved, err := m.Save(context.Background(), "acme", "alice", in)
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	back := sampleInput()
+	back.Name = saved.Name
+	back.LogoMode = logoMode(WebAPILogoAuto)
+	after, err := m.Save(context.Background(), "acme", "alice", back)
+	if err != nil {
+		t.Fatalf("re-Save: %v", err)
+	}
+	if after.Logo != "data:image/png;base64,GUESS" || after.LogoMode != WebAPILogoAuto {
+		t.Errorf("logo/mode = %.40q…/%q, want the guess", after.Logo, after.LogoMode)
+	}
+}
+
+// An edit of something else must not blank a mark the admin uploaded.
+func TestWebAPIs_EditKeepsACustomLogo(t *testing.T) {
+	m := webAPIService(t)
+	m.ResolveLogo = func(context.Context, string) string { return "data:image/png;base64,GUESS" }
+	in := sampleInput()
+	chosen := pngLogo()
+	in.Logo = &chosen
+	saved, err := m.Save(context.Background(), "acme", "alice", in)
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	relabel := sampleInput()
+	relabel.Name = saved.Name
+	relabel.Label = "Orders"
+	after, err := m.Save(context.Background(), "acme", "alice", relabel)
+	if err != nil {
+		t.Fatalf("re-Save: %v", err)
+	}
+	if after.Logo != chosen || after.LogoMode != WebAPILogoCustom {
+		t.Errorf("logo/mode = %.20q…/%q, want the upload kept", after.Logo, after.LogoMode)
+	}
+}
+
+// An admin is a likelier source of a bad image than a favicon host is, and the
+// refusal has to say what was wrong rather than fall back to the globe.
+func TestWebAPIs_RefusesABadCustomLogo(t *testing.T) {
+	cases := map[string]string{
+		"a link rather than the image": "https://example.com/logo.png",
+		"not an image at all":          "data:image/png;base64," + base64.StdEncoding.EncodeToString([]byte("nope")),
+		"a type we cannot show":        "data:application/pdf;base64,JVBERi0=",
+	}
+	for name, logo := range cases {
+		t.Run(name, func(t *testing.T) {
+			m := webAPIService(t)
+			m.ResolveLogo = func(context.Context, string) string { return "" }
+			in := sampleInput()
+			in.Logo = &logo
+			_, err := m.Save(context.Background(), "acme", "alice", in)
+			if err == nil {
+				t.Fatal("Save accepted it")
+			}
+			if !strings.Contains(err.Error(), "icon") {
+				t.Errorf("error = %v, want it to name the field", err)
+			}
+			if _, ok := m.Catalog.Get("acme", "api:order-service:get_order"); ok {
+				t.Error("the catalog registered despite the refusal")
+			}
+		})
+	}
+}
+
+// Choosing "uploaded" with nothing uploaded is a mistake worth a message, not a
+// silently empty mark.
+func TestWebAPIs_RefusesCustomWithNoImage(t *testing.T) {
+	m := webAPIService(t)
+	in := sampleInput()
+	in.LogoMode = logoMode(WebAPILogoCustom)
+	if _, err := m.Save(context.Background(), "acme", "alice", in); err == nil {
+		t.Fatal("Save accepted a custom icon with no image")
+	}
+}
+
+func TestWebAPIs_RefusesAnUnknownLogoMode(t *testing.T) {
+	m := webAPIService(t)
+	in := sampleInput()
+	in.LogoMode = logoMode("favicon-maybe")
+	_, err := m.Save(context.Background(), "acme", "alice", in)
+	if err == nil || !strings.Contains(err.Error(), "auto") {
+		t.Fatalf("error = %v, want a refusal naming the three sources", err)
 	}
 }

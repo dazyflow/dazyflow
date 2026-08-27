@@ -11555,6 +11555,49 @@ button:active,
   font-size: var(--text-xs);
   font-weight: 400;
 }
+/* A described API's brand mark beside its name in Admin → Web APIs, so the
+   admin sees the SAME image the palette and the Apps page will draw. The source
+   is a favicon we guessed (engine/webapi/icon.go), so it can be any aspect
+   ratio and any resolution: the fixed box keeps every row the same height and
+   object-fit stops a wide mark being stretched into one. */
+.step-source-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.step-source-logo {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  border-radius: var(--r-1);
+}
+/* The icon chooser in the Web APIs form: the mark as it will appear, beside
+   where its source is chosen. A fixed box with a faint ground, so a pale logo is
+   still visible and the row does not change height when the fallback glyph is
+   swapped for an image. */
+.step-source-icon-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.step-source-icon-preview {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  background: var(--surface-2);
+  color: var(--faint);
+}
+.step-source-icon-preview img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
 .mcp-tools {
   font-family: var(--font-mono);
   font-size: var(--text-sm);

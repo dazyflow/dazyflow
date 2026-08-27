@@ -187,6 +187,15 @@ type Descriptor struct {
 	TimeoutMS int
 	// MaxBodyBytes caps a response. Zero means DefaultMaxBodyBytes.
 	MaxBodyBytes int
+	// Logo is the catalog's brand mark as a data: URI, and becomes every
+	// operation's Manifest.BrandLogo — the image the node card, the palette and
+	// the Apps page draw instead of the category glyph.
+	//
+	// A data: URI and nothing else, enforced by Validate. The app's CSP does not
+	// load third-party images (see icon.go), so an https URL here would render
+	// as a broken image rather than as a logo, and the descriptor is the last
+	// boundary that can say so out loud. Empty is normal and means the globe.
+	Logo string
 }
 
 // DisplayName is what to caption this catalog with: its label when one was
@@ -252,6 +261,12 @@ func (d Descriptor) Validate() error {
 		}
 	default:
 		return fmt.Errorf("web api catalog %q: unknown auth kind %q", d.Name, d.Auth.Kind)
+	}
+	if d.Logo != "" && !strings.HasPrefix(d.Logo, "data:") {
+		// Not a user-facing message in practice — the only writer is
+		// ResolveLogo, which emits data: or nothing — so this is here to keep
+		// that true for the next writer.
+		return fmt.Errorf("web api catalog %q: logo must be an inlined data: URI", d.Name)
 	}
 	if len(d.Operations) == 0 {
 		return fmt.Errorf("web api catalog %q: no operations selected", d.Name)

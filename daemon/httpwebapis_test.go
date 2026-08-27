@@ -5,6 +5,7 @@ package daemon
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -292,4 +293,66 @@ func webAPIUsageReq(t *testing.T, h *gatewayHarness, p core.Principal, name stri
 	req.SetPathValue("name", name)
 	h.gw.webAPIUsage(rw, req, p)
 	return rw
+}
+
+// The pointer fields exist so an edit of something else cannot throw away an
+// uploaded mark. That is a JSON-layer property, so it is tested at the JSON
+// layer: a PUT that says nothing about the icon keeps it.
+func TestHTTP_PutWithoutLogoKeepsTheUploadedOne(t *testing.T) {
+	h, svc := webAPIHarness(t)
+	svc.ResolveLogo = func(context.Context, string) string { return "" }
+	chosen := pngLogo()
+
+	body := saveBody()
+	body["logo"] = chosen
+	rw := h.adminDo(t, "POST", "/api/v1/admin/web-apis", body)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("POST = %d: %s", rw.Code, rw.Body)
+	}
+	row := decodeRow(t, rw.Body.Bytes())
+	if row.Logo != chosen {
+		t.Fatalf("logo = %.40q…, want the uploaded image", row.Logo)
+	}
+	if row.LogoMode != string(WebAPILogoCustom) {
+		t.Fatalf("logo_mode = %q, want %q", row.LogoMode, WebAPILogoCustom)
+	}
+
+	rw = h.adminDo(t, "PUT", "/api/v1/admin/web-apis/order-service", saveBody())
+	if rw.Code != http.StatusOK {
+		t.Fatalf("PUT = %d: %s", rw.Code, rw.Body)
+	}
+	row = decodeRow(t, rw.Body.Bytes())
+	if row.Logo != chosen || row.LogoMode != string(WebAPILogoCustom) {
+		t.Errorf("logo/mode = %.20q…/%q after an unrelated edit, want the upload kept",
+			row.Logo, row.LogoMode)
+	}
+}
+
+// A refused icon is the admin's mistake, so it is a 400 with the reason — not a
+// 500, and not a silent fallback to the glyph.
+func TestHTTP_BadLogoIsA400WithTheReason(t *testing.T) {
+	h, _ := webAPIHarness(t)
+	body := saveBody()
+	body["logo"] = "https://example.com/logo.png"
+	rw := h.adminDo(t, "POST", "/api/v1/admin/web-apis", body)
+	if rw.Code != http.StatusBadRequest {
+		t.Fatalf("POST = %d: %s", rw.Code, rw.Body)
+	}
+	if !strings.Contains(rw.Body.String(), "not a link") {
+		t.Errorf("body = %s, want it to say why", rw.Body)
+	}
+}
+
+// "auto" is what a row stored before the column existed means, so the row must
+// report it rather than an empty string the form cannot open on.
+func TestHTTP_RowReportsTheLogoSource(t *testing.T) {
+	h, svc := webAPIHarness(t)
+	svc.ResolveLogo = func(context.Context, string) string { return "" }
+	rw := h.adminDo(t, "POST", "/api/v1/admin/web-apis", saveBody())
+	if rw.Code != http.StatusOK {
+		t.Fatalf("POST = %d: %s", rw.Code, rw.Body)
+	}
+	if got := decodeRow(t, rw.Body.Bytes()).LogoMode; got != string(WebAPILogoAuto) {
+		t.Errorf("logo_mode = %q, want %q", got, WebAPILogoAuto)
+	}
 }

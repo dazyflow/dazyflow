@@ -41,6 +41,28 @@ var (
 	ErrWebAPIsUnconfigured = errors.New("web apis are not configured")
 )
 
+// WebAPILogoMode says where a catalog's brand mark comes from.
+//
+// Three modes rather than one nullable image, because "no mark" has two
+// different meanings and a store that conflated them would fight the admin. A
+// guess that found nothing must be retried — that is what makes pressing Save
+// the retry. A globe the admin CHOSE must never be retried, or the wrong logo
+// comes back on every save. And an uploaded mark must survive a change of
+// address, which is exactly when a guess must not.
+type WebAPILogoMode string
+
+const (
+	// WebAPILogoAuto takes the mark from the service's favicon, and is the
+	// default for a catalog that has never said otherwise.
+	WebAPILogoAuto WebAPILogoMode = "auto"
+	// WebAPILogoCustom uses the image an admin chose. The resolver never runs.
+	WebAPILogoCustom WebAPILogoMode = "custom"
+	// WebAPILogoNone is the plain glyph, on purpose. Also the answer when the
+	// guess landed on a shared platform's logo and the org has nothing of its
+	// own to upload.
+	WebAPILogoNone WebAPILogoMode = "none"
+)
+
 // WebAPI is one org's described HTTP API.
 //
 // Every field is safe to log, return to a browser, and put in an audit record —
@@ -65,6 +87,19 @@ type WebAPI struct {
 	// reversible half of deleting, for a catalog an org wants to stop calling
 	// while it works out why it misbehaved.
 	Enabled bool
+	// Logo is the catalog's brand mark as a data: URI — guessed from the
+	// service's favicon (engine/webapi/icon.go) or chosen by an admin, per
+	// LogoMode — and then STORED.
+	//
+	// Stored rather than resolved on demand for two reasons. The reconcile loop
+	// runs on every replica every 30s and must stay a query and a map compare,
+	// not a fan-out of favicon requests; and a logo that changed on every pass
+	// would be a manifest that changed on every pass. Empty means the globe,
+	// which is the common case for an internal service.
+	Logo string
+	// LogoMode is where Logo came from. Empty reads as WebAPILogoAuto, which is
+	// what every row stored before this field existed means.
+	LogoMode WebAPILogoMode
 	// LastError is set when the RECONCILE loop could not register a stored row.
 	// Save validates before writing, so a row is always registerable when it is
 	// written; this exists for the one case that survives that — validation
@@ -83,6 +118,14 @@ func (w WebAPI) DisplayName() string {
 		return w.Label
 	}
 	return w.Name
+}
+
+// logoMode is LogoMode with the stored default filled in.
+func (w WebAPI) logoMode() WebAPILogoMode {
+	if w.LogoMode == "" {
+		return WebAPILogoAuto
+	}
+	return w.LogoMode
 }
 
 // HasAuth reports whether this catalog presents a credential.
@@ -105,6 +148,7 @@ func (w WebAPI) Descriptor() webapi.Descriptor {
 		Operations:   w.Operations,
 		TimeoutMS:    w.TimeoutMS,
 		MaxBodyBytes: w.MaxBodyBytes,
+		Logo:         w.Logo,
 	}
 }
 
@@ -154,6 +198,12 @@ CREATE TABLE IF NOT EXISTS tenant_web_apis (
     updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant, name)
 );
+-- Added after the table shipped: the service's favicon, inlined as a data: URI.
+-- A row predating this simply has no logo and picks one up on its next save.
+ALTER TABLE tenant_web_apis ADD COLUMN IF NOT EXISTS logo TEXT NOT NULL DEFAULT '';
+-- Where that logo came from. 'auto' is the default because it is what every row
+-- written before the column existed did: took the guess, or took nothing.
+ALTER TABLE tenant_web_apis ADD COLUMN IF NOT EXISTS logo_mode TEXT NOT NULL DEFAULT 'auto';
 -- The reconcile loop reads every enabled row on a timer; without this it is a
 -- sequential scan of the table on each pass.
 CREATE INDEX IF NOT EXISTS tenant_web_apis_enabled_idx ON tenant_web_apis (enabled);
@@ -226,6 +276,10 @@ type WebAPIs struct {
 	ReservedIntegration func(slug string) bool
 	// Now is overridable for tests; nil means time.Now.
 	Now func() time.Time
+	// ResolveLogo guesses a catalog's brand mark from its base URL, returning a
+	// data: URI or "". Nil means webapi.ResolveLogo, which is what production
+	// wants; a test injects one to keep saves deterministic and off the network.
+	ResolveLogo func(ctx context.Context, baseURL string) string
 
 	// mu guards applied.
 	mu sync.Mutex
@@ -245,6 +299,13 @@ func (m *WebAPIs) now() time.Time {
 		return m.Now()
 	}
 	return time.Now()
+}
+
+func (m *WebAPIs) resolveLogo(ctx context.Context, baseURL string) string {
+	if m != nil && m.ResolveLogo != nil {
+		return m.ResolveLogo(ctx, baseURL)
+	}
+	return webapi.ResolveLogo(ctx, baseURL)
 }
 
 func (m *WebAPIs) ready() error {
@@ -272,6 +333,15 @@ type WebAPIInput struct {
 	MaxBodyBytes int
 	// Enabled defaults true for a new catalog.
 	Enabled bool
+	// LogoMode chooses where the brand mark comes from. Nil keeps the stored
+	// choice: an API caller editing an operation must not silently move a
+	// catalog back to guessing.
+	LogoMode *WebAPILogoMode
+	// Logo is the mark itself, a data: URI, for WebAPILogoCustom. Nil keeps the
+	// stored image, so an edit that touched something else cannot blank it.
+	//
+	// Sending an image and no mode means "use this": see resolveWebAPILogo.
+	Logo *string
 }
 
 // List returns an org's catalogs.
@@ -387,6 +457,11 @@ func (m *WebAPIs) save(ctx context.Context, tenant, actor string, in WebAPIInput
 		}
 	}
 
+	logo, logoMode, err := m.resolveWebAPILogo(ctx, in, existing, baseURL)
+	if err != nil {
+		return WebAPI{}, err
+	}
+
 	now := m.now()
 	row := WebAPI{
 		Tenant:       tenant,
@@ -400,6 +475,8 @@ func (m *WebAPIs) save(ctx context.Context, tenant, actor string, in WebAPIInput
 		TimeoutMS:    in.TimeoutMS,
 		MaxBodyBytes: in.MaxBodyBytes,
 		Enabled:      in.Enabled,
+		Logo:         logo,
+		LogoMode:     logoMode,
 		CreatedBy:    actor,
 		CreatedAt:    now,
 		UpdatedAt:    now,
@@ -429,6 +506,71 @@ func (m *WebAPIs) save(ctx context.Context, tenant, actor string, in WebAPIInput
 	}
 	row.LastError = ""
 	return row, nil
+}
+
+// resolveWebAPILogo settles the catalog's brand mark: which of the three
+// sources it comes from, and the image itself.
+//
+// This is the only place in the feature that reaches the network — see the
+// package comment, which promised a save performs no I/O and now promises
+// slightly less: a save performs no I/O it can FAIL on.
+func (m *WebAPIs) resolveWebAPILogo(ctx context.Context, in WebAPIInput, existing WebAPI, baseURL string) (string, WebAPILogoMode, error) {
+	mode := existing.logoMode()
+	switch {
+	case in.LogoMode != nil:
+		mode = *in.LogoMode
+	case in.Logo != nil && strings.TrimSpace(*in.Logo) != "":
+		// An image and no mode is a statement: use this. It saves an API caller
+		// from a save that accepted the icon it uploaded and then ignored it,
+		// which is the failure this branch exists to prevent.
+		mode = WebAPILogoCustom
+	}
+
+	switch mode {
+	case WebAPILogoNone:
+		return "", WebAPILogoNone, nil
+
+	case WebAPILogoCustom:
+		chosen := existing.Logo
+		if in.Logo != nil {
+			chosen = strings.TrimSpace(*in.Logo)
+		}
+		if chosen == "" {
+			return "", "", fmt.Errorf("choose an image for the icon, or let it be taken from the service")
+		}
+		// Validated through the engine's own normaliser, which re-encodes from
+		// bytes it decoded itself: an admin is a likelier source of a mis-typed
+		// or oversized image than a favicon host is, and a stored logo is
+		// something every viewer of the flow then renders.
+		normalized, err := webapi.NormalizeLogo(chosen)
+		if err != nil {
+			return "", "", fmt.Errorf("icon: %w", err)
+		}
+		return normalized, WebAPILogoCustom, nil
+
+	case WebAPILogoAuto:
+		logo := existing.Logo
+		if existing.logoMode() != WebAPILogoAuto {
+			// Coming BACK to automatic. The stored image is the admin's old
+			// upload rather than a guess, so it is not something to keep — the
+			// point of choosing automatic is to see what the service publishes.
+			logo = ""
+		}
+		// Kept when the address has not moved, so an ordinary edit (a relabel,
+		// one more operation, a timeout bump) costs no outbound requests and
+		// cannot be delayed by someone else's web server. A catalog with no
+		// logo to keep does try again, which is deliberate: it makes "press
+		// Save" the retry for a service whose site was down the first time, and
+		// there is nothing else on this page that could be.
+		if logo == "" || existing.BaseURL != baseURL {
+			logo = m.resolveLogo(ctx, baseURL)
+		}
+		return logo, WebAPILogoAuto, nil
+
+	default:
+		return "", "", fmt.Errorf("unknown icon source %q (want %q, %q or %q)",
+			mode, WebAPILogoAuto, WebAPILogoCustom, WebAPILogoNone)
+	}
 }
 
 // register files a row in the live catalog and remembers what was applied.

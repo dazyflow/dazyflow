@@ -43,6 +43,16 @@ type webAPIRow struct {
 	TimeoutMS    int                `json:"timeout_ms,omitempty"`
 	MaxBodyBytes int                `json:"max_body_bytes,omitempty"`
 	Enabled      bool               `json:"enabled"`
+	// Logo is the service's brand mark as a data: URI, guessed from its favicon
+	// when the catalog was saved. Sent so the admin page can show the SAME image
+	// the palette and the Apps page will use — a mark that turned out to be the
+	// wrong one is worth seeing where it can be corrected, not only downstream.
+	Logo string `json:"logo,omitempty"`
+	// LogoMode is where that mark came from: "auto" (the service's favicon),
+	// "custom" (an image an admin chose) or "none" (the plain glyph, on
+	// purpose). Always sent, because the form has to open on the right choice
+	// and "absent" would read as auto for a catalog that had said none.
+	LogoMode string `json:"logo_mode"`
 	// Registered is the live fact: this catalog is in THIS process's engine
 	// catalog right now. There is no "connected" for a described API — nothing
 	// was dialed — so this is the honest equivalent, and the page must not
@@ -75,6 +85,15 @@ type webAPIRequest struct {
 	// Enabled is a pointer so "not sent" is distinguishable from "false": a PUT
 	// that omits it must not silently disable a working catalog.
 	Enabled *bool `json:"enabled,omitempty"`
+	// Logo and LogoMode are pointers for the same reason, and it matters more
+	// here: a save that omitted them and was read as "auto, no image" would
+	// throw away an uploaded mark on every edit of anything else.
+	//
+	// Logo is a data: URI — the image itself, not a link to one, because the
+	// app's CSP does not load third-party images. Sending it without a mode
+	// means "use this".
+	Logo     *string `json:"logo,omitempty"`
+	LogoMode *string `json:"logo_mode,omitempty"`
 }
 
 func (h *HTTPGateway) webAPIsConfigured(rw http.ResponseWriter) bool {
@@ -117,6 +136,8 @@ func (h *HTTPGateway) webAPIRowFor(w WebAPI, live map[string][]string) webAPIRow
 		TimeoutMS:    w.TimeoutMS,
 		MaxBodyBytes: w.MaxBodyBytes,
 		Enabled:      w.Enabled,
+		Logo:         w.Logo,
+		LogoMode:     string(w.logoMode()),
 		Registered:   registered,
 		StepIDs:      ids,
 		LastError:    w.LastError,
@@ -185,9 +206,17 @@ func (h *HTTPGateway) saveWebAPI(rw http.ResponseWriter, r *http.Request, p core
 		TimeoutMS:    req.TimeoutMS,
 		MaxBodyBytes: req.MaxBodyBytes,
 		Enabled:      true,
+		Logo:         req.Logo,
 	}
 	if req.Enabled != nil {
 		in.Enabled = *req.Enabled
+	}
+	if req.LogoMode != nil {
+		// Passed through unvalidated on purpose: the service owns the vocabulary
+		// and refuses an unknown source with a message naming the three, which
+		// is one place to change rather than two to keep in step.
+		mode := WebAPILogoMode(*req.LogoMode)
+		in.LogoMode = &mode
 	}
 
 	saved, err := h.WebAPIs.Save(r.Context(), p.Tenant, p.Subject, in)

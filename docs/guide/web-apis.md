@@ -86,6 +86,46 @@ anything a non-technical colleague will pick from the palette.
 An operation's **Summary** is a different field again: a sentence, shown under
 the name as the step's subtitle. Put the sentence there, not in the name.
 
+### The icon
+
+Every step a catalog contributes wears the same mark — on the node, in the
+palette, and on the catalog's page under **Apps**. The **Icon** field on the
+admin form picks where it comes from, and there are three answers.
+
+**Taken from the service** (the default). When you save, Dazyflow looks for the
+service's **favicon**: the base URL's own host first, then the domain one label
+up, since an API host (`api.example.com`) usually serves no site while
+`example.com` does. It prefers the artwork a page declares over
+`/favicon.ico`, largest first — the latter is often a 16×16 that renders as four
+grey pixels.
+
+It is a guess, and it is allowed to fail: a service with no favicon keeps the
+plain globe and nothing else changes. Pressing **Save** is how you retry, so a
+site that was down the first time gets another chance, and changing the address
+looks again. A catalog that already has an icon keeps it, so ordinary edits cost
+nothing.
+
+**An image you choose.** Pick a file and it wins over the guess, permanently:
+the favicon is never consulted again for this catalog, not even when you change
+its address. Use this when the service publishes no mark, or when the guess
+borrowed the wrong one — a shared platform's logo, say, from that domain one
+label up.
+
+The mark is stored inside Dazyflow rather than linked, so a large file is not
+just wasteful, it is copied onto every step in the catalog. Oversized images are
+shrunk in your browser before they are sent, so in practice you can pick
+whatever you have; a very large SVG is refused instead, because there is nothing
+in an SVG to shrink.
+
+**No icon.** The plain globe, on purpose — and, unlike a guess that found
+nothing, it stays that way. This is the answer when the guess is wrong and you
+have nothing of your own to upload.
+
+> The icon shown next to a catalog's name in Admin → Web APIs is the one your
+> flows will use. If a guess landed somewhere odd, that is where you will see it.
+
+Catalogs saved before this shipped have no icon until their next save.
+
 ---
 
 ## Describing an operation

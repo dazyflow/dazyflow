@@ -62,12 +62,15 @@ func synthesizeManifest(desc Descriptor, op Operation) core.Manifest {
 	})
 
 	return core.Manifest{
-		ID:             StepID(desc.Name, op.ID),
-		Version:        "1.0",
-		Label:          desc.DisplayName() + " — " + op.DisplayName(),
-		Subtitle:       subtitle(op, method),
-		Color:          "#5599ee",
-		Icon:           "globe",
+		ID:       StepID(desc.Name, op.ID),
+		Version:  "1.0",
+		Label:    desc.DisplayName() + " — " + op.DisplayName(),
+		Subtitle: subtitle(op, method),
+		Color:    "#5599ee",
+		Icon:     "globe",
+		// The service's own favicon, when icon.go found one. The globe above is
+		// what a catalog with no resolvable mark keeps wearing.
+		BrandLogo:      desc.Logo,
 		Category:       "external",
 		Provider:       "api:" + desc.Name,
 		Integration:    integration,
