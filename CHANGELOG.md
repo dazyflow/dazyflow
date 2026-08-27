@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.19.1] - 2026-08-27
+
 ### Fixed
 
 - **Web API steps are captioned by their names, not their ids.** A described
