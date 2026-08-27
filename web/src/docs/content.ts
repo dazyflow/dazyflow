@@ -25,6 +25,10 @@ import {
   Bell,
   Layers,
   Sparkles,
+  Rocket,
+  KeyRound,
+  CalendarClock,
+  AlertTriangle,
   type LucideIcon,
 } from "lucide-react";
 
@@ -135,6 +139,23 @@ export const NAV: NavGroup[] = [
     text: "Guide",
     items: [
       { text: "How Dazyflow works", link: "/guide/concepts", icon: Workflow },
+      { text: "Build your first flow", link: "/guide/first-flow", icon: Rocket },
+      { text: "Connect an app", link: "/guide/connect-an-app", icon: KeyRound },
+      {
+        text: "Triggers & schedules",
+        link: "/guide/triggers-and-schedules",
+        icon: CalendarClock,
+      },
+      {
+        text: "Forms & webhooks",
+        link: "/guide/forms-and-webhooks",
+        icon: Webhook,
+      },
+      {
+        text: "When a run fails",
+        link: "/guide/when-a-flow-fails",
+        icon: AlertTriangle,
+      },
       { text: "Runners", link: "/guide/runners", icon: Plug },
       { text: "MCP servers", link: "/guide/mcp-servers", icon: Blocks },
       { text: "Glossary", link: "/guide/glossary", icon: BookText },

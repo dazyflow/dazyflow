@@ -146,5 +146,10 @@ Four steps, wired output-to-input, running on their own. That's Dazyflow.
 
 ## Where next
 
+- Put it into practice: [Build your first flow](./first-flow) — ten minutes, no accounts needed.
+- [Connect an app](./connect-an-app) so a flow can reach Gmail, Slack, Fortnox and the rest.
+- [Make a flow run by itself](./triggers-and-schedules) — schedules, triggers and publishing.
+- [Forms & webhooks](./forms-and-webhooks) — let the outside world start a flow.
+- [When a run fails](./when-a-flow-fails) — reading a failure and retrying it safely.
 - Browse everything you can add in the [Step catalog](../reference/steps/).
 - Look up any unfamiliar word in the [Glossary](./glossary).

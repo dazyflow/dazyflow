@@ -9,6 +9,7 @@ import {
   unavailableSecretRefs,
   nodeSetupNeeded,
   missingConnectionApps,
+  setupDestination,
 } from "./requiredConnections";
 import type { ConnectionField, Manifest, OAuthProviderStatus } from "../types";
 
@@ -355,5 +356,64 @@ describe("missingConnectionApps", () => {
     ]);
     // Connection present → nothing missing.
     expect(missingConnectionApps(nodes, mm, {}, ["conn.claude.api_key"])).toEqual([]);
+  });
+});
+
+// The pre-run gate's primary button used to say "Go to Connections" in every
+// case — a page this product doesn't have — and always navigated to /apps,
+// which is a dead end when what's missing is a secret: nothing on the Apps page
+// adds one. Target and label are derived together here so they can't drift.
+describe("setupDestination", () => {
+  it("deep-links the one app that needs connecting", () => {
+    expect(setupDestination(["fortnox"], [], true)).toEqual({
+      to: "/apps/fortnox",
+      labelKey: "connGate.connect",
+    });
+    // Repeats of the same app are still one app.
+    expect(setupDestination(["slack", "slack"], [], true).to).toBe("/apps/slack");
+  });
+
+  it("falls back to the Apps list for several apps", () => {
+    expect(setupDestination(["slack", "gmail"], [], true)).toEqual({
+      to: "/apps",
+      labelKey: "connGate.connect",
+    });
+  });
+
+  it("sends a secrets-only gap to the secret store, focused when there's one", () => {
+    expect(setupDestination([], ["FORTNOX_TOKEN"], true)).toEqual({
+      to: "/admin/secrets?focus=FORTNOX_TOKEN",
+      labelKey: "connGate.connectSecrets",
+    });
+    // Several secrets: the store, unfocused — there's no one row to highlight.
+    expect(setupDestination([], ["A", "B"], true)).toEqual({
+      to: "/admin/secrets",
+      labelKey: "connGate.connectSecrets",
+    });
+  });
+
+  it("escapes a secret name that isn't URL-safe", () => {
+    expect(setupDestination([], ["MY TOKEN/v2"], true).to).toBe(
+      "/admin/secrets?focus=MY%20TOKEN%2Fv2",
+    );
+  });
+
+  it("prefers the app page when both an app and a secret are missing", () => {
+    // Connecting the app is the bigger, more likely blocker, and the Apps list
+    // is the honest destination when one page can't fix everything.
+    expect(setupDestination(["slack"], ["TOKEN"], true)).toEqual({
+      to: "/apps",
+      labelKey: "connGate.connect",
+    });
+  });
+
+  it("defaults to the Apps list when nothing is user-fixable", () => {
+    // Everything is admin-blocked: the button isn't the way out, so don't
+    // promise a deep link that fixes it.
+    expect(setupDestination(["slack"], [], false)).toEqual({
+      to: "/apps",
+      labelKey: "connGate.connect",
+    });
+    expect(setupDestination([], [], false).to).toBe("/apps");
   });
 });

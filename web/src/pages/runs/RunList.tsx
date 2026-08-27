@@ -18,6 +18,7 @@ import { POLL } from "../../lib/timing";
 import { formatDuration } from "../../lib/format";
 import { Loading } from "../../components/ui/Loading";
 import { Notice } from "../../components/ui/Notice";
+import { EmptyState } from "../../components/ui/EmptyState";
 
 const PAGE_SIZE = 50;
 
@@ -80,6 +81,11 @@ export function RunList() {
   // paginated — unlike the text `query`, which only narrows loaded rows.
   const [since, setSince] = useState("");
   const [until, setUntil] = useState("");
+  // Whether the FETCH was narrowed — status chip, flow picker, date range.
+  // Deliberately excludes `query`, which only filters rows already loaded and
+  // has its own "no matches" state below. This is what tells an empty response
+  // "nothing matched your filter" apart from "this account has no runs".
+  const hasServerFilter = !!filter || !!flowFilter || !!since || !!until;
   const [hasMore, setHasMore] = useState(false);
   // Failed-runs inbox: ids the user has checked for bulk retry. Only
   // populated/shown in the Failed filter, where retrying makes sense.
@@ -409,10 +415,29 @@ export function RunList() {
       {!error && loading && runs.length === 0 && (
         <Loading />
       )}
-      {!error && !loading && runs.length === 0 && (
+      {/* Two different nothings, and they were sharing one sentence. The
+          fetch is narrowed server-side by the status chip, the flow picker and
+          the date range, so an empty response means "nothing matched" only when
+          one of those is set. With none of them set it means the account has
+          never run anything — and telling that person "No runs match this
+          filter" blames a filter they never touched, on their first visit. */}
+      {!error && !loading && runs.length === 0 && hasServerFilter && (
         <Notice>
           {t("runList.empty")}
         </Notice>
+      )}
+      {!error && !loading && runs.length === 0 && !hasServerFilter && (
+        <EmptyState
+          icon={Activity}
+          title={t("runList.emptyFirstTitle")}
+          action={
+            <Button variant="primary" onClick={() => navigate("/flows")}>
+              {t("runList.emptyFirstCta")}
+            </Button>
+          }
+        >
+          {t("runList.emptyFirstBody")}
+        </EmptyState>
       )}
 
       {visibleRuns.length > 0 && (

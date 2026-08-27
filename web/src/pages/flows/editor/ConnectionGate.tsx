@@ -20,6 +20,7 @@ export function ConnectionGate({
   adminBlockedSecretRefs,
   slackChannels,
   canConnect,
+  connectLabel,
   onConnect,
   onRunAnyway,
   onCancel,
@@ -40,6 +41,11 @@ export function ConnectionGate({
   adminBlockedProviders: string[];
   adminBlockedSecretRefs: string[];
   slackChannels: string[];
+  // The primary button's text, resolved by the caller because only it knows
+  // where onConnect actually goes — the Apps page, one app's own page, or the
+  // org's secret store. A single label ("Go to Connections") named a page this
+  // product doesn't have.
+  connectLabel: string;
   onConnect: () => void;
   onRunAnyway: () => void;
   onCancel: () => void;
@@ -138,7 +144,7 @@ export function ConnectionGate({
           </Button>
           {canConnect && (
             <Button variant="primary" onClick={onConnect}>
-              {t("connGate.connect")}
+              {connectLabel}
             </Button>
           )}
         </div>

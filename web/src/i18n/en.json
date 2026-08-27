@@ -728,7 +728,8 @@
     "adminBlockedHead": "Your administrator needs to enable",
     "adminBlockedBody": "These aren't switched on in your Dazyflow workspace yet. You can't enable them yourself — ask whoever set this up for you.",
     "runAnyway": "Run anyway",
-    "connect": "Go to Connections",
+    "connect": "Go to Apps",
+    "connectSecrets": "Go to Secrets",
     "noPermNote": "You don't have permission to connect apps — ask an org admin to set these up."
   },
   "approvals": {
@@ -1291,6 +1292,9 @@
     "statusFailed": "Failed",
     "statusCancelled": "Stopped",
     "empty": "No runs match this filter.",
+    "emptyFirstTitle": "No runs yet",
+    "emptyFirstBody": "A run appears here every time a flow runs \u2014 whether you press Run yourself or a trigger fires it.",
+    "emptyFirstCta": "Go to your flows",
     "colStarted": "Started",
     "colDuration": "Duration",
     "inProgress": "in progress",

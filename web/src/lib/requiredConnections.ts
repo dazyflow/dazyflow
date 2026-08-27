@@ -293,3 +293,38 @@ export function unavailableSecretRefs(
   for (const n of nodes) collectTenantRefs(paramsByID[n.id] ?? {}, referenced);
   return [...referenced].filter((nm) => !written.has(nm)).sort();
 }
+
+// SetupDestination is where the pre-run gate's primary button goes, and the
+// i18n key naming it. The two travel together on purpose: the button used to
+// say "Go to Connections" for every case, which is not a page this product
+// has — the sidebar calls it Apps and the org's secret store is Admin →
+// Secrets — so the label has to be derived wherever the target is.
+export type SetupDestination = { to: string; labelKey: string };
+
+// setupDestination picks the one place that fixes what a flow is missing.
+//
+//   one app, nothing else   that app's own page — no hunting through the list
+//   several apps            the Apps list
+//   only secrets            the org's secret store, deep-linked with ?focus=
+//                           when there's exactly one, matching the convention
+//                           SchemaForm's inline "Set up" link already uses
+//
+// The secrets case is the one that was wrong rather than merely vague: a
+// ${secret.NAME} ref has no app page, and the Apps page has nothing on it that
+// adds a secret, so sending that user there was a dead end.
+export function setupDestination(
+  appSlugs: string[],
+  missingSecrets: string[],
+  userFixable: boolean,
+): SetupDestination {
+  const slugs = [...new Set(appSlugs)];
+  if (userFixable && slugs.length === 0 && missingSecrets.length > 0) {
+    const focus =
+      missingSecrets.length === 1
+        ? `?focus=${encodeURIComponent(missingSecrets[0])}`
+        : "";
+    return { to: `/admin/secrets${focus}`, labelKey: "connGate.connectSecrets" };
+  }
+  const one = userFixable && missingSecrets.length === 0 && slugs.length === 1;
+  return { to: one ? `/apps/${slugs[0]}` : "/apps", labelKey: "connGate.connect" };
+}

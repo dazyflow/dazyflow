@@ -39,6 +39,36 @@ import {
   Split,
   House,
   CloudSun,
+  MessageSquare,
+  Activity,
+  Binary,
+  Braces,
+  Building2,
+  Calendar,
+  CalendarClock,
+  CalendarPlus,
+  ClipboardList,
+  Code,
+  CodeXml,
+  CreditCard,
+  Download,
+  FileSpreadsheet,
+  FileText,
+  Fingerprint,
+  Folder,
+  MailOpen,
+  MapPin,
+  PackageSearch,
+  Phone,
+  Radio,
+  Regex,
+  Rss,
+  Search,
+  SquareFunction,
+  Trash2,
+  Truck,
+  Upload,
+  UserPlus,
   type LucideIcon,
 } from "lucide-react";
 import { GitIcon } from "./components/brand/GitIcon";
@@ -93,6 +123,50 @@ const iconRegistry: Record<string, LucideIcon> = {
   split: Split,
   house: House,
   "cloud-sun": CloudSun,
+
+  // Every remaining glyph a drop manifest names. These were declared in Go and
+  // absent here, so iconFor fell through to the step's CATEGORY default and the
+  // icon its author chose was silently discarded — 30 of them, which is why a
+  // regex step, a phone step and a folder step all wore the same glyph. The
+  // branded integrations hid it (their node card shows a brand mark instead);
+  // the unbranded primitives, where the glyph is the only thing telling two
+  // steps apart, did not.
+  //
+  // tests/scenarios/icons_test.go keeps the two sides in step: a new drop
+  // naming an icon nobody added here now fails a test rather than quietly
+  // losing its glyph. Add the lucide import above and the entry below when you
+  // add a manifest Icon.
+  "activity": Activity,
+  "binary": Binary,
+  "braces": Braces,
+  "building-2": Building2,
+  "calendar": Calendar,
+  "calendar-clock": CalendarClock,
+  "calendar-plus": CalendarPlus,
+  "clipboard-list": ClipboardList,
+  "code": Code,
+  "code-xml": CodeXml,
+  "credit-card": CreditCard,
+  "download": Download,
+  "file-spreadsheet": FileSpreadsheet,
+  "file-text": FileText,
+  "fingerprint": Fingerprint,
+  "folder": Folder,
+  "function-square": SquareFunction,
+  "mail-open": MailOpen,
+  "map-pin": MapPin,
+  "message-square": MessageSquare,
+  "package-search": PackageSearch,
+  "phone": Phone,
+  "radio": Radio,
+  "regex": Regex,
+  "rss": Rss,
+  "search": Search,
+  "table-2": Table2,
+  "trash-2": Trash2,
+  "truck": Truck,
+  "upload": Upload,
+  "user-plus": UserPlus,
 };
 
 // categoryFallback picks a sensible default icon when a manifest didn't

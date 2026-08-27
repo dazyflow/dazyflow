@@ -91,6 +91,28 @@
       "graph_file": "/templates/email-to-slack.json"
     },
     {
+      "id": "form-to-sms",
+      "title": "Web form → text me",
+      "use_case": "Put a contact form on your site and get a text message the moment someone fills it in — with their name, their number and what they wrote, so you can call straight back.",
+      "category": "Notifications",
+      "description": "A hosted form (public link, or embed it on your own site) sends you an SMS for every submission, via 46elks. Set your own mobile number on the Send SMS step. No Google or Slack account needed — 46elks is a key you paste in yourself.",
+      "icon": "message-square",
+      "tags": [
+        "46elks",
+        "sms",
+        "text",
+        "form",
+        "notify",
+        "lead",
+        "sweden",
+        "nordic"
+      ],
+      "integrations": [
+        "46elks"
+      ],
+      "graph_file": "/templates/form-to-sms.json"
+    },
+    {
       "id": "watch-a-page",
       "title": "Watch a page → ping my phone",
       "use_case": "Keep an eye on a web page — a tender list, a status page, a price — and get a notification only when what it says actually changes.",

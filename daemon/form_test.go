@@ -290,3 +290,184 @@ func TestForm_FieldNameAndTitleEscaped(t *testing.T) {
 		t.Errorf("field name not escaped — raw <img onerror> present in form HTML")
 	}
 }
+
+// TestForm_SpeaksTheFlowsLanguage — the hosted form is the flow speaking to a
+// stranger, so its own words follow core.Graph.Language (the rule
+// internal/maillang documents for an approval email), and <html lang> is set
+// from the same resolution so the attribute can't contradict the copy.
+//
+// Note what is NOT translated, deliberately: the heading and the field labels
+// are the OWNER's text, humanized from the field names they typed. Only the
+// product's own words — the button, the confirmation, the error banners — come
+// from the catalogue.
+func TestForm_SpeaksTheFlowsLanguage(t *testing.T) {
+	_, wh, _, _, wsStore := startWebhookHarness(t)
+	sv := core.Graph{
+		ID: "kontakt", Tenant: "acme", Workspace: "ws1", Language: "sv",
+		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}, "public_form": true, "form_title": "Kontakta oss"}}},
+	}
+	savePublished(t, wsStore, sv)
+	// Language empty means English — the same fallback For() gives.
+	en := core.Graph{
+		ID: "contact-en", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}, "public_form": true}}},
+	}
+	savePublished(t, wsStore, en)
+	ts := formServer(t, wh)
+
+	get := func(id string) string {
+		t.Helper()
+		res, err := http.Get(ts.URL + "/form/acme/ws1/" + id)
+		if err != nil {
+			t.Fatalf("get %s: %v", id, err)
+		}
+		defer res.Body.Close()
+		body, _ := io.ReadAll(res.Body)
+		return string(body)
+	}
+
+	svHTML := get("kontakt")
+	for _, want := range []string{`<html lang="sv">`, ">Skicka<", "Kontakta oss"} {
+		if !strings.Contains(svHTML, want) {
+			t.Errorf("Swedish form missing %q", want)
+		}
+	}
+	if strings.Contains(svHTML, ">Submit<") {
+		t.Error("Swedish form still shows the English Submit button")
+	}
+
+	enHTML := get("contact-en")
+	for _, want := range []string{`<html lang="en">`, ">Submit<"} {
+		if !strings.Contains(enHTML, want) {
+			t.Errorf("English form missing %q", want)
+		}
+	}
+
+	// The confirmation follows the same language as the form that produced it.
+	res, err := http.PostForm(ts.URL+"/form/acme/ws1/kontakt", url.Values{"name": {"Ada"}})
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
+	if !strings.Contains(string(body), "Tack!") {
+		t.Errorf("Swedish confirmation missing \"Tack!\", got: %s", string(body))
+	}
+}
+
+// TestForm_FailedSubmitKeepsWhatTheVisitorTyped — a submission that can't be
+// accepted re-renders the form with a banner and the values still in the
+// fields. It used to answer with a plain-text http.Error page, which lost
+// everything the visitor had written on the one surface of the product they
+// ever see.
+//
+// The graph here carries an edge to a node that doesn't exist, so core.Validate
+// refuses it at submit time — an OWNER-side refusal, which must say "get in
+// touch another way" rather than "try again": the next attempt fails too.
+func TestForm_FailedSubmitKeepsWhatTheVisitorTyped(t *testing.T) {
+	_, wh, _, _, wsStore := startWebhookHarness(t)
+	g := core.Graph{
+		ID: "broken", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}, "public_form": true}}},
+		Edges: []core.Edge{{From: "in", FromPort: "body", To: "nope", ToPort: "in"}},
+	}
+	savePublished(t, wsStore, g)
+	ts := formServer(t, wh)
+
+	res, err := http.PostForm(ts.URL+"/form/acme/ws1/broken",
+		url.Values{"name": {"Ada Lovelace"}, "email": {"ada@shop.se"}, "message": {"Hej!"}})
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want 503 (owner-side refusal)", res.StatusCode)
+	}
+	if ct := res.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
+		t.Errorf("Content-Type = %q, want an HTML page rather than a plain-text error", ct)
+	}
+	body, _ := io.ReadAll(res.Body)
+	html := string(body)
+	// The banner, and the "don't just retry" wording rather than the transient one.
+	if !strings.Contains(html, "Something went wrong") {
+		t.Errorf("no error banner in the re-rendered form: %s", html)
+	}
+	if !strings.Contains(html, "get in touch another way") {
+		t.Errorf("owner-side refusal should not tell the visitor to try again: %s", html)
+	}
+	// Every value they typed is back in the form.
+	for _, want := range []string{`value="Ada Lovelace"`, `value="ada@shop.se"`, ">Hej!</textarea>"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("re-rendered form lost %q", want)
+		}
+	}
+	if strings.Contains(html, "Thanks") {
+		t.Error("a failed submission must not show the confirmation")
+	}
+}
+
+// TestForm_UnreadableBodyStillRendersAPage — an unparseable body (or one over
+// the 1 MiB cap) is answered with the styled form and a banner, not a bare
+// status. Nothing can be re-filled here, because the body never parsed.
+func TestForm_UnreadableBodyStillRendersAPage(t *testing.T) {
+	_, wh, _, _, wsStore := startWebhookHarness(t)
+	g := core.Graph{
+		ID: "unreadable", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}, "public_form": true}}},
+	}
+	savePublished(t, wsStore, g)
+	ts := formServer(t, wh)
+
+	// "%zz" is not a valid percent-escape, so ParseForm fails.
+	res, err := http.Post(ts.URL+"/form/acme/ws1/unreadable",
+		"application/x-www-form-urlencoded", strings.NewReader("name=%zz"))
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", res.StatusCode)
+	}
+	body, _ := io.ReadAll(res.Body)
+	html := string(body)
+	if !strings.Contains(html, "Something went wrong") || !strings.Contains(html, "please try again") {
+		t.Errorf("expected the transient banner on the re-rendered form, got: %s", html)
+	}
+	if !strings.Contains(html, "<form method=\"post\">") {
+		t.Errorf("expected the form itself to be rendered again, got: %s", html)
+	}
+}
+
+// TestForm_RefilledValuesAreEscaped — re-filling the fields reflects a
+// visitor's input back into the page, which the form never did before. It is
+// html/template that makes that safe (contextual escaping inside an attribute
+// and inside the textarea), so pin it: a value trying to close its attribute
+// or open a tag must come back as text.
+func TestForm_RefilledValuesAreEscaped(t *testing.T) {
+	_, wh, _, _, wsStore := startWebhookHarness(t)
+	g := core.Graph{
+		ID: "reflect", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}, "public_form": true}}},
+		// Invalid on purpose, so the submit fails and the values come back.
+		Edges: []core.Edge{{From: "in", FromPort: "body", To: "nope", ToPort: "in"}},
+	}
+	savePublished(t, wsStore, g)
+	ts := formServer(t, wh)
+
+	const attack = `"><script>alert(1)</script>`
+	res, err := http.PostForm(ts.URL+"/form/acme/ws1/reflect",
+		url.Values{"name": {attack}, "message": {attack}})
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
+	html := string(body)
+	if strings.Contains(html, "<script>alert(1)</script>") {
+		t.Errorf("posted value was reflected unescaped: %s", html)
+	}
+	// It should still be THERE, just as text — losing it would defeat the point.
+	if !strings.Contains(html, "&lt;script&gt;") {
+		t.Errorf("posted value was dropped rather than escaped: %s", html)
+	}
+}

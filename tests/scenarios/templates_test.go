@@ -4,7 +4,9 @@
 package scenarios
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,6 +16,7 @@ import (
 	"testing"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/internal/rendertext"
 )
 
 // knownBrokenTemplates are shipped templates with a real defect that
@@ -167,6 +170,60 @@ func TestShippedTemplatesCompose(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// A render_text step's `template` is a CEL expression, and nothing above
+// compiles it: ValidateWithManifests checks wiring, paramSchemaIssues checks
+// that the param is a string. So a template shipping an expression with a typo
+// — an unbalanced quote, a stray operator — composed cleanly and then failed at
+// run time with "bad_param", which is precisely the "runtime error they can't
+// diagnose" this file exists to prevent. Every template shipping a render_text
+// now has its expression compiled.
+//
+// It is compiled, not evaluated for a result: the row a real run supplies comes
+// from a Gmail message or a form submission, which this test has no way to
+// synthesize faithfully. So a missing field on the probe row (an EvalError) is
+// expected and ignored — only a ParseError, which is a defect in the shipped
+// expression whatever data arrives, fails the test.
+func TestShippedTemplateExpressionsCompile(t *testing.T) {
+	dir := filepath.Join("..", "..", "web", "public", "templates")
+	files, err := filepath.Glob(filepath.Join(dir, "*.json"))
+	if err != nil || len(files) == 0 {
+		t.Fatalf("no templates found under %s: %v", dir, err)
+	}
+	checked := 0
+	for _, f := range files {
+		if filepath.Base(f) == "index.json" {
+			continue
+		}
+		data, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatalf("read %s: %v", f, err)
+		}
+		var g core.Graph
+		if err := json.Unmarshal(data, &g); err != nil {
+			t.Fatalf("parse %s: %v", f, err)
+		}
+		for _, n := range g.Nodes {
+			if n.Module != "render_text" {
+				continue
+			}
+			if _, ok := n.Params["template"].(string); !ok {
+				continue // a `column` renderer has no expression to compile
+			}
+			checked++
+			probe := []map[string]any{{"probe": ""}}
+			_, err := rendertext.Render(context.Background(), rendertext.SpecFromParams(n.Params), probe, 0)
+			var pe *rendertext.ParseError
+			if errors.As(err, &pe) {
+				t.Errorf("%s: node %q has a template that does not compile: %v",
+					filepath.Base(f), n.ID, pe)
+			}
+		}
+	}
+	if checked == 0 {
+		t.Error("no render_text templates were compiled — the glob or the module name is wrong, so this guard is passing vacuously")
 	}
 }
 

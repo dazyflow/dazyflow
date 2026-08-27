@@ -4,6 +4,7 @@
 package daemon
 
 import (
+	"errors"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"strings"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/internal/maillang"
 )
 
 // defaultFormFields is the contact-form shape a hosted form falls back
@@ -73,18 +75,32 @@ func (w *WebhookListener) handleForm(rw http.ResponseWriter, r *http.Request) {
 		title = g.ID
 	}
 
+	// The flow's language, resolved once: every page this handler can serve —
+	// the form, the confirmation, either error — must be in the same one.
+	view := formView{
+		Title:  title,
+		Fields: fields,
+		Lang:   maillang.Primary(g.Language),
+		M:      maillang.For(g.Language),
+	}
+
 	switch r.Method {
 	case http.MethodGet:
-		renderForm(rw, formView{Title: title, Fields: fields, Submitted: false})
+		renderForm(rw, http.StatusOK, view)
 	case http.MethodPost:
 		// Cap the urlencoded body before ParseForm materializes it all into
 		// url.Values — the global 200 MiB limit is far too loose for a public,
 		// unauthenticated form (mirrors the 1 MiB webhook cap).
 		r.Body = http.MaxBytesReader(rw, r.Body, 1<<20)
 		if err := r.ParseForm(); err != nil {
-			http.Error(rw, "could not read form", http.StatusBadRequest)
+			// Unreadable or over the 1 MiB cap. Nothing to re-fill (the body
+			// never parsed), but the visitor still gets a page rather than
+			// Times New Roman on white.
+			view.Error = view.M.FormErrorRetry
+			renderForm(rw, http.StatusBadRequest, view)
 			return
 		}
+		view.Values = declaredFormValues(fields, r.PostForm)
 		values := collectFormValues(fields, r.PostForm)
 		seed := buildFormSeed(values)
 		seeds := map[string]core.Result{}
@@ -94,21 +110,54 @@ func (w *WebhookListener) handleForm(rw http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if len(seeds) == 0 {
-			http.Error(rw, "this form's flow has no webhook step to receive it", http.StatusBadRequest)
+			// Unreachable by construction: publicFormConfig above already
+			// found a live (non-paused) webhook_input, and this loop's
+			// predicate is the weaker one. Kept as a guard, answering the
+			// same way the owner-side refusals below do rather than with a
+			// bare status, so a future edit that breaks the invariant still
+			// shows a visitor a page.
+			view.Error = view.M.FormErrorClosed
+			renderForm(rw, http.StatusBadRequest, view)
 			return
 		}
 		principal := SystemPrincipal("dazyflow-form", g.Tenant, g.Workspace)
 		runID, err := w.svc.SubmitGraphWithSeed(r.Context(), principal, g, seeds)
 		if err != nil {
 			w.logger.Printf("form submit %s/%s/%s: %v", tenant, workspace, graphID, err)
-			http.Error(rw, "could not submit the form", http.StatusInternalServerError)
+			// "Try again" is only honest for a transient failure. A refusal the
+			// OWNER has to act on — over the plan's run allowance, a suspended
+			// org, a graph that no longer validates — will refuse the next
+			// attempt too, and the visitor has no way to know that. Tell them
+			// to reach the owner another way instead of leaving them retyping.
+			view.Error = view.M.FormErrorRetry
+			status := http.StatusInternalServerError
+			if ownerMustFix(err) {
+				view.Error = view.M.FormErrorClosed
+				status = http.StatusServiceUnavailable
+			}
+			renderForm(rw, status, view)
 			return
 		}
 		w.logger.Printf("form %s/%s/%s → %s", tenant, workspace, graphID, runID)
-		renderForm(rw, formView{Title: title, Submitted: true})
+		view.Submitted = true
+		renderForm(rw, http.StatusOK, view)
 	default:
 		http.Error(rw, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+// ownerMustFix reports whether a submission failure is one the flow's OWNER
+// has to resolve, rather than something a visitor's second attempt could get
+// past. The sentinels are the submission gates in SubmitGraphOpts; an invalid
+// graph joins them because it will keep failing validation until the flow is
+// edited. Anything unrecognised counts as transient — telling someone to try
+// again when they can't is a smaller wrong than telling them not to bother
+// when they could.
+func ownerMustFix(err error) bool {
+	return errors.Is(err, core.ErrPlanLimit) ||
+		errors.Is(err, core.ErrOrgSuspended) ||
+		errors.Is(err, core.ErrGraphTooLarge) ||
+		strings.Contains(err.Error(), "invalid graph")
 }
 
 // maxFormFields caps the total field count on a single hosted-form
@@ -198,6 +247,19 @@ func formStringSlice(v any) []string {
 	return nil
 }
 
+// declaredFormValues picks out just the fields the form actually RENDERS, as
+// strings, so a failed submission can hand them back in the inputs. It is
+// deliberately not collectFormValues: that one keeps undeclared extras (utm_*
+// and friends) because the flow wants them, whereas re-filling a field the page
+// never drew would silently drop them anyway.
+func declaredFormValues(declared []string, posted url.Values) map[string]string {
+	out := make(map[string]string, len(declared))
+	for _, f := range declared {
+		out[f] = posted.Get(f)
+	}
+	return out
+}
+
 // buildFormSeed mirrors buildWebhookSeed's output shape (body + headers
 // ports) but takes an already-parsed field map, so webhook_input
 // downstream sees the same {key: value} object it would from a JSON
@@ -217,6 +279,18 @@ type formView struct {
 	Title     string
 	Fields    []string
 	Submitted bool
+	// Lang is the BCP-47 primary subtag for <html lang>, and M the copy in the
+	// same language. Both come from the flow's own Language: a form is the flow
+	// speaking to a visitor, exactly as an approval email is (see
+	// internal/maillang), and the visitor has no account to hold a preference.
+	Lang string
+	M    maillang.Messages
+	// Error, when set, renders a banner above the form instead of the
+	// confirmation. Values re-fills the fields, so a failure never costs the
+	// visitor what they typed — the previous behaviour was a plain-text
+	// http.Error page, which lost it and offered no way back.
+	Error  string
+	Values map[string]string
 }
 
 // humanizeField turns a field key ("first_name") into a label
@@ -230,7 +304,12 @@ func humanizeField(s string) string {
 	return strings.ToUpper(s[:1]) + s[1:]
 }
 
-func renderForm(rw http.ResponseWriter, v formView) {
+func renderForm(rw http.ResponseWriter, status int, v formView) {
+	if v.Values == nil {
+		// The template indexes Values for every field; a nil map would work in
+		// html/template but not in any reader's head.
+		v.Values = map[string]string{}
+	}
 	rw.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// Allow the form to be iframed onto any site — the "Put this form on
 	// my own website" embed snippet relies on it. Set frame-ancestors
@@ -238,6 +317,7 @@ func renderForm(rw http.ResponseWriter, v formView) {
 	// so the intent is deliberate. Clickjacking risk is low: the form is
 	// secret-less and submits only public, owner-declared fields.
 	rw.Header().Set("Content-Security-Policy", "frame-ancestors *")
+	rw.WriteHeader(status)
 	if err := formTemplate.Execute(rw, v); err != nil {
 		// Headers may already be written; nothing useful to do but log
 		// via the default logger and bail.
@@ -250,12 +330,22 @@ func renderForm(rw http.ResponseWriter, v formView) {
 // markup. "message" (and any field whose name contains "message") gets a
 // textarea; everything else a single-line input, with email/name getting
 // the matching input type for nicer mobile keyboards.
+//
+// Its own words — the button, the confirmation, either error — come from the
+// flow's language rather than being written in English here, and `lang` is set
+// from the same resolution so the attribute cannot contradict the copy. This
+// is the only page in the product a stranger sees, so it was also the only one
+// that still spoke English to a Swedish visitor.
+//
+// On a failed submission it renders the form again, banner on top and the
+// posted values back in the fields, instead of the plain-text http.Error page
+// that used to lose what the visitor had typed.
 var formTemplate = template.Must(template.New("form").Funcs(template.FuncMap{
 	"label":     humanizeField,
 	"inputType": formInputType,
 	"isArea":    func(f string) bool { return strings.Contains(strings.ToLower(f), "message") },
 }).Parse(`<!doctype html>
-<html lang="en"><head>
+<html lang="{{.Lang}}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.Title}}</title>
 <style>
@@ -269,17 +359,19 @@ textarea{min-height:120px;resize:vertical}
 button{margin-top:20px;padding:11px 18px;border:0;border-radius:8px;background:#6d5dff;color:#fff;font:inherit;font-weight:600;cursor:pointer}
 button:hover{background:#5a49e6}
 .done{padding:16px 18px;border-radius:8px;background:rgba(109,93,255,.1);border:1px solid rgba(109,93,255,.35)}
+.err{padding:14px 16px;border-radius:8px;background:rgba(201,68,68,.1);border:1px solid rgba(201,68,68,.4);margin-bottom:4px}
 </style></head><body>
 <h1>{{.Title}}</h1>
 {{if .Submitted}}
-<div class="done"><strong>Thanks!</strong> Your submission was received.</div>
+<div class="done"><strong>{{.M.FormThanksTitle}}</strong> {{.M.FormThanksBody}}</div>
 {{else}}
+{{if .Error}}<div class="err" role="alert"><strong>{{.M.FormErrorTitle}}</strong> {{.Error}}</div>{{end}}
 <form method="post">
 {{range .Fields}}
 <label for="{{.}}">{{label .}}</label>
-{{if isArea .}}<textarea id="{{.}}" name="{{.}}"></textarea>{{else}}<input id="{{.}}" name="{{.}}" type="{{inputType .}}">{{end}}
+{{if isArea .}}<textarea id="{{.}}" name="{{.}}">{{index $.Values .}}</textarea>{{else}}<input id="{{.}}" name="{{.}}" type="{{inputType .}}" value="{{index $.Values .}}">{{end}}
 {{end}}
-<button type="submit">Submit</button>
+<button type="submit">{{.M.FormSubmit}}</button>
 </form>
 {{end}}
 </body></html>`))

@@ -728,7 +728,8 @@
     "adminBlockedHead": "Administratören behöver aktivera",
     "adminBlockedBody": "De här är inte påslagna i din Dazyflow-arbetsyta ännu. Du kan inte aktivera dem själv — fråga personen som satte upp det åt dig.",
     "runAnyway": "Kör ändå",
-    "connect": "Gå till Anslutningar",
+    "connect": "Gå till Appar",
+    "connectSecrets": "Gå till Hemligheter",
     "noPermNote": "Du har inte behörighet att ansluta appar — be en organisationsadministratör att konfigurera dem."
   },
   "approvals": {
@@ -1291,6 +1292,9 @@
     "statusFailed": "Misslyckad",
     "statusCancelled": "Stoppad",
     "empty": "Inga körningar matchar det här filtret.",
+    "emptyFirstTitle": "Inga körningar ännu",
+    "emptyFirstBody": "En körning visas här varje gång ett flöde körs \u2014 antingen du trycker på Kör själv eller en utlösare startar det.",
+    "emptyFirstCta": "Gå till dina flöden",
     "colStarted": "Startad",
     "colDuration": "Varaktighet",
     "inProgress": "pågår",

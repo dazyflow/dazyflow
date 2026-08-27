@@ -83,6 +83,7 @@ import {
   slackChannels,
   nodeSetupNeeded,
   missingConnectionApps,
+  setupDestination,
   type SetupNeed,
 } from "../../lib/requiredConnections";
 import { mimeCompatible, pickPort, portsConnectable, connectionHint, PASS_PORT } from "../../lib/ports";
@@ -3256,14 +3257,27 @@ function EditorInner() {
   const needsSetup = userFixableSetup || adminBlockedSetup;
   // setupTarget deep-links the banner's "Set up" button straight to the one
   // app that needs connecting when there's exactly one (each node's SetupNeed
-  // carries its integration slug). With several apps, or any ${secret} ref
-  // that has no app page, fall back to the Apps list.
-  const setupTarget = useMemo(() => {
-    const slugs = new Set([...setupNeededByNode.values()].map((s) => s.slug));
-    return userFixableSetup && missingSecrets.length === 0 && slugs.size === 1
-      ? `/apps/${[...slugs][0]}`
-      : "/apps";
-  }, [setupNeededByNode, userFixableSetup, missingSecrets]);
+  // carries its integration slug). With several apps, fall back to the Apps
+  // list.
+  //
+  // A ${secret} ref has no app page, so when secrets are ALL that's missing the
+  // destination is the org's secret store instead — following the same
+  // /admin/secrets?focus=NAME convention SchemaForm's inline "Set up" link
+  // uses, which lands on the Values tab with that secret highlighted. Sending
+  // those to /apps was a dead end: nothing on the Apps page adds a secret.
+  //
+  // setupLabelKey travels with it so the button can NAME where it goes. It said
+  // "Go to Connections" for every case, which is not a page this product has —
+  // the sidebar calls it Apps, and the secret store is Admin → Secrets.
+  const { to: setupTarget, labelKey: setupLabelKey } = useMemo(
+    () =>
+      setupDestination(
+        [...setupNeededByNode.values()].map((s) => s.slug),
+        missingSecrets,
+        userFixableSetup,
+      ),
+    [setupNeededByNode, userFixableSetup, missingSecrets],
+  );
   // setupBlockerNames lists what's unconfigured in the words the user sees
   // elsewhere (app display names, ${secret} refs). Feeds the publish gate's
   // warning so it names the actual gap instead of saying "something is
@@ -5102,6 +5116,7 @@ function EditorInner() {
           adminBlockedSecretRefs={adminBlockedSecretRefs}
           slackChannels={slackTargets}
           canConnect={canConnect}
+          connectLabel={t(setupLabelKey)}
           onConnect={() => navigate(setupTarget)}
           onRunAnyway={() => void doRun()}
           onCancel={() => setGateOpen(false)}

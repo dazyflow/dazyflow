@@ -1,0 +1,66 @@
+{
+  "id": "form-to-sms",
+  "version": "1",
+  "name": "Web form → text me",
+  "description": "A hosted contact form (you get a public link, and a snippet to embed it on your own site) sends you an SMS the moment someone fills it in — their name, their number and what they wrote, so you can call straight back. Put your own mobile number in the Send SMS step's 'To'. Needs no Google or Slack account: 46elks is a key you paste in yourself on the Apps page. Keep the message short — an SMS over 160 characters is billed as more than one.",
+  "icon": "message-square",
+  "nodes": [
+    {
+      "id": "form",
+      "module": "webhook_input",
+      "params": {
+        "public_form": true,
+        "form_fields": [
+          "name",
+          "phone",
+          "message"
+        ],
+        "form_title": "Contact us"
+      },
+      "position": {
+        "x": 200,
+        "y": 200
+      }
+    },
+    {
+      "id": "compose",
+      "module": "render_text",
+      "params": {
+        "template": "row.name + ' (' + row.phone + ')\\n' + row.message",
+        "prefix": "New form message\n"
+      },
+      "position": {
+        "x": 540,
+        "y": 200
+      }
+    },
+    {
+      "id": "sms",
+      "module": "elks_send_sms",
+      "params": {
+        "to": "REPLACE_WITH_YOUR_MOBILE_NUMBER",
+        "from": "Website"
+      },
+      "position": {
+        "x": 880,
+        "y": 200
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "form",
+      "from_port": "body",
+      "to": "compose",
+      "to_port": "rows",
+      "on_error": ""
+    },
+    {
+      "from": "compose",
+      "from_port": "text",
+      "to": "sms",
+      "to_port": "message",
+      "on_error": ""
+    }
+  ]
+}

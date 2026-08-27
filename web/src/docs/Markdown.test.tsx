@@ -23,6 +23,37 @@ describe("docs Markdown", () => {
     expect(container.innerHTML).not.toContain("{#");
   });
 
+  it("slugs headings that carry no {#id}, GitHub-style, so in-page links resolve", () => {
+    const { container } = render(
+      <MemoryRouter>
+        <Markdown
+          source={"### Cron / schedule\n\n### Yes/no\n\n### Header (HTTP)\n\n### Run\n"}
+          base="/guide/glossary"
+        />
+      </MemoryRouter>,
+    );
+    // These exact ids are what the Glossary's own cross-references and the
+    // guide pages' `./glossary#run` links point at.
+    expect([...container.querySelectorAll("h3")].map((h) => h.getAttribute("id"))).toEqual([
+      "cron--schedule",
+      "yesno",
+      "header-http",
+      "run",
+    ]);
+  });
+
+  it("de-duplicates repeated headings instead of emitting the same id twice", () => {
+    const { container } = render(
+      <MemoryRouter>
+        <Markdown source={"## Retry\n\n## Retry\n"} base="/guide/glossary" />
+      </MemoryRouter>,
+    );
+    expect([...container.querySelectorAll("h2")].map((h) => h.getAttribute("id"))).toEqual([
+      "retry",
+      "retry-1",
+    ]);
+  });
+
   it("renders the page brand icon on the H1 when given", () => {
     const { container } = render(
       <MemoryRouter>

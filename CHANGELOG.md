@@ -23,6 +23,148 @@ into the image.)
 
 ## [Unreleased]
 
+### Added
+
+- **A 46elks template: "Web form → text me".** A hosted form (public link, or
+  embedded on your own site) sends you an SMS for every submission — the
+  sender's name, their number and what they wrote, so you can call straight
+  back.
+
+  It is the first template for any of the Nordic connectors that are the reason
+  to pick Dazyflow over Zapier/Make/n8n, and it was chosen to fix a specific
+  problem rather than just to demo one: **on a fresh self-hosted install, 8 of
+  the 11 shipped templates were greyed out**, because they need Gmail, Sheets,
+  Slack or Notion and those require an administrator to register OAuth client
+  credentials first. The create page opens on the gallery, so a self-hoster's
+  front door was mostly walls. 46elks is a static-key connector — the user
+  pastes username and password on the Apps page themselves, with no admin step
+  and no OAuth mapping, so the card stays enabled. Usable-on-arrival templates
+  go from 3 to 4, and this is the only *form* template among them.
+
+  (Fortnox, the other obvious Nordic demo, is OAuth — it would have landed in
+  the greyed-out eight. Worth knowing when picking the next one.)
+
+- **Every icon a step declares now actually renders.** A drop's
+  `Manifest.Icon` is a name the frontend has to know: `iconFor()` looks it up in
+  `web/src/icons.tsx` and, finding nothing, falls back to the step's CATEGORY
+  glyph. Nothing fails when a name is missing — no build error, no console
+  warning — so 30 names declared in Go had quietly drifted out of the registry,
+  and **57 steps were wearing a glyph their author didn't choose**.
+
+  Most visibly, **11 of the transformation primitives all shared one CPU chip**:
+  base64, build_csv, date, expression, hash, json, parse_json, parse_xml, phone,
+  regex and render_template. They now show binary, table, calendar-clock,
+  function, fingerprint, braces, braces, code-xml, phone, regex and code
+  respectively — for an unbranded primitive the glyph is the only thing telling
+  two steps apart in the palette. `http_download` and `http_upload` had likewise
+  been identical (both the `io` default) and are now a down- and an up-arrow.
+  The other 42 are branded connectors, where a brand mark was already carrying
+  the node card, so they change less.
+
+  `function-square` maps to lucide's `SquareFunction`: lucide renamed that
+  glyph, and the old name is a legacy alias, so the canonical component is
+  imported while the manifest keeps the name it declares. The other 29 were
+  already canonical.
+
+- **A guard keeps the two sides in step.**
+  `TestManifestIconsAreRegisteredInTheWebUI` walks the real registered
+  manifests and parses the registry out of `icons.tsx` — rather than restating
+  the list, which would drift in exactly the way it guards against. A new drop
+  naming an unregistered icon now fails a test instead of silently losing its
+  glyph. It also fails if the catalog doesn't register or the regex stops
+  matching the file, so it can't pass vacuously.
+
+- **Shipped templates now have their CEL expressions compiled by CI.** The
+  template guard validated wiring, ports and param types but never compiled a
+  `render_text` template, so an expression with a typo composed cleanly and
+  failed at run time with `bad_param` — exactly the "runtime error they can't
+  diagnose" that test exists to prevent. Expressions are compiled, not
+  evaluated: a missing field on the probe row is expected and ignored, since
+  only a parse failure is a defect whatever data arrives.
+
+- **The guide now teaches the product, not just its vocabulary.** Five
+  task-oriented pages join *How Dazyflow works* and the *Glossary*: **Build your
+  first flow**, **Connect an app**, **Make a flow run by itself** (triggers,
+  schedules, publishing), **Forms & webhooks**, and **When a run fails**.
+
+  Until now `docs/guide/` held two conceptual pages plus two operator topics
+  (runners, MCP servers), and everything else a reader could reach was the
+  generated step catalog. So a stuck user got an explanation of what a step *is*
+  and a reference for all 152 of them, with nothing in between telling them how
+  to connect Gmail, why their published flow wasn't firing, or what Retry does
+  that Replay doesn't. The new pages are written against the UI's actual labels
+  and copy, and they say the things the app can only hint at in a tooltip — that
+  Run always uses your draft, that Replay re-sends the emails Retry doesn't,
+  that connecting Slack isn't enough without `/invite @Dazyflow`, and that a
+  "monthly on the 31st" schedule skips February.
+
+### Fixed
+
+- **A brand-new account's Runs page no longer blames a filter nobody set.** An
+  empty response rendered "No runs match this filter." in every case, including
+  the first visit of someone who has never run anything — so the product's
+  answer to "where are my runs?" was to imply the person had filtered them
+  away. The status chip, the flow picker and the date range narrow the fetch
+  server-side, so an empty result only means "nothing matched" when one of them
+  is set; with none set it now reads "No runs yet", explains that a run appears
+  for every flow run whether started by hand or by a trigger, and offers a way
+  to the Flows page. (The dashboard already said "No runs yet." — the wording
+  existed, this page just wasn't using it.)
+
+- **The pre-run gate's button now names where it goes, and goes somewhere
+  useful.** It said "Go to Connections" in every case — not a page this product
+  has; the sidebar calls it **Apps** and the org's credential store is
+  **Admin → Secrets** — and it always navigated to `/apps`.
+
+  For a missing app that was merely vague. For a missing `${secret.NAME}` it was
+  a dead end: nothing on the Apps page adds a secret. A secrets-only gap now
+  goes to the secret store, deep-linked with `?focus=NAME` when there is exactly
+  one — the convention SchemaForm's inline "Set up" link already used — and the
+  button reads "Go to Secrets". Target and label are derived together by
+  `setupDestination`, so they cannot drift apart again.
+
+- **The hosted form now speaks the flow's language.** It hardcoded
+  `<html lang="en">`, "Submit" and "Thanks! Your submission was received." —
+  and it is the only surface of the product a stranger ever sees, so a Swedish
+  business's contact form, embedded on their own site, addressed their customers
+  in English.
+
+  It now follows `core.Graph.Language`, which is the rule `internal/maillang`
+  already documents for the mail a flow sends: *it is the flow speaking, and its
+  author chose the language its steps write in*. A visitor has no account to
+  hold a preference, so the flow's own language is the only answer available.
+  The form's six strings moved into that catalogue, where the existing guards
+  hold them to the same standard as every email — no language may be missing
+  one, and Swedish may not be a copy of the English. `maillang.Primary` is new
+  and exists so `<html lang>` is derived from the same resolution as the copy
+  and cannot contradict it.
+
+  What is deliberately NOT translated: the form's heading and its field labels.
+  Those are the owner's own words, humanized from the field names they typed.
+
+- **A failed form submission no longer throws away what the visitor typed.**
+  The three failure paths answered with `http.Error` — an unstyled plain-text
+  page, in English, with no way back — on the highest-stakes public page in the
+  product. They now re-render the form itself with a banner on top and every
+  value back in its field.
+
+  The banner also distinguishes what a second attempt can fix. A transient
+  failure says the details are still there and to try again; a refusal the
+  OWNER has to act on (over the plan's run allowance, a suspended org, a flow
+  that no longer validates) says to get in touch another way and answers 503,
+  because retrying will fail identically and the visitor has no way to know
+  that. Re-filling reflects a visitor's input into the page for the first time,
+  so the contextual escaping that makes it safe is now pinned by a test.
+
+- **In-page documentation links now actually jump.** Headings only got a DOM id
+  when they carried the generated catalog's `{#custom-id}` anchor, so every
+  cross-reference in a hand-written page pointed at nothing — all 19 of the
+  Glossary's *"See also [Connection]"* links navigated to the page and then sat
+  still. Headings without an explicit anchor now get a GitHub-style slug of
+  their own text, which is the rule those links were already written against
+  (`Cron / schedule` → `#cron--schedule`), with GitHub's `-1` suffix for a
+  repeated heading so no page emits a duplicate id.
+
 ## [0.17.0] - 2026-08-27
 
 ### Added

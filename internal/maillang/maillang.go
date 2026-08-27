@@ -1,8 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Joachim Klahr
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package maillang holds the copy for the platform's transactional email, in
-// every language the product speaks.
+// Package maillang holds the copy the daemon addresses to a PERSON, in every
+// language the product speaks — its transactional email, and the hosted intake
+// form, which is the same problem on a different channel: copy written at the
+// point of sending, in whatever language the author of the code happened to
+// speak. (The package keeps its name: mail is the bulk of it, and renaming a
+// package to add six strings buys nothing a reader needs.)
 //
 // The web UI has i18next and a JSON catalogue per language; the daemon had
 // nothing, because until now every string it mailed was written in English at
@@ -153,6 +157,17 @@ type Messages struct {
 	FactDecision   string
 	FactDecidedBy  string
 	FactComment    string
+
+	// ── The hosted intake form ──
+	// Not email, but the same rule and the same resolution: a form is the
+	// FLOW speaking to a visitor, so it follows core.Graph.Language. It is
+	// also the only surface of the product a stranger ever sees.
+	FormSubmit      string // the submit button
+	FormThanksTitle string // bolded lead on the confirmation
+	FormThanksBody  string
+	FormErrorTitle  string // bolded lead on either error banner
+	FormErrorRetry  string // transient — their input is still in the fields
+	FormErrorClosed string // the form can't receive; not the visitor's fault
 }
 
 // English is the source language and the fallback for anything else.
@@ -255,6 +270,13 @@ var English = Messages{
 	FactDecision:   "Decision",
 	FactDecidedBy:  "Decided by",
 	FactComment:    "Comment",
+
+	FormSubmit:      "Submit",
+	FormThanksTitle: "Thanks!",
+	FormThanksBody:  "Your submission was received.",
+	FormErrorTitle:  "Something went wrong",
+	FormErrorRetry:  "Your details are still in the form below — please try again.",
+	FormErrorClosed: "This form can't accept submissions right now. Please try again later, or get in touch another way.",
 }
 
 // Swedish. Written as Swedish rather than word-for-word from the English: the
@@ -361,6 +383,13 @@ var Swedish = Messages{
 	FactDecision:   "Beslut",
 	FactDecidedBy:  "Beslutat av",
 	FactComment:    "Kommentar",
+
+	FormSubmit:      "Skicka",
+	FormThanksTitle: "Tack!",
+	FormThanksBody:  "Vi har tagit emot ditt svar.",
+	FormErrorTitle:  "Något gick fel",
+	FormErrorRetry:  "Dina uppgifter finns kvar i formuläret nedan — försök igen.",
+	FormErrorClosed: "Det här formuläret kan inte ta emot svar just nu. Försök igen senare, eller kontakta oss på annat sätt.",
 }
 
 // For resolves a language code to its messages. Only the primary subtag is
@@ -369,14 +398,29 @@ var Swedish = Messages{
 // text rather than to blanks. Mirrors datenames.For, deliberately: the two are
 // always resolved from the same code.
 func For(code string) Messages {
+	switch Primary(code) {
+	case "sv":
+		return Swedish
+	default:
+		return English
+	}
+}
+
+// Primary reports the language code For actually resolved to — "en" or "sv",
+// never a region ("sv-SE" → "sv") and never empty. It exists so a caller that
+// must NAME the language it is writing in, rather than just look up words,
+// cannot disagree with the catalogue For handed back: the hosted form's
+// `<html lang>` is derived from this, so the attribute and the copy on the page
+// are always the same language.
+func Primary(code string) string {
 	primary := strings.ToLower(strings.TrimSpace(code))
 	if i := strings.IndexAny(primary, "-_"); i >= 0 {
 		primary = primary[:i]
 	}
 	switch primary {
 	case "sv":
-		return Swedish
+		return "sv"
 	default:
-		return English
+		return "en"
 	}
 }

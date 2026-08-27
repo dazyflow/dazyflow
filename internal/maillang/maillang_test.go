@@ -27,7 +27,7 @@ func TestEveryLanguageHasEveryMessage(t *testing.T) {
 		v := reflect.ValueOf(msgs)
 		for i := 0; i < v.NumField(); i++ {
 			if strings.TrimSpace(v.Field(i).String()) == "" {
-				t.Errorf("%s: %s is empty — an email would render a blank line where this belongs",
+				t.Errorf("%s: %s is empty — the email or form page using it would render a blank where this belongs",
 					code, v.Type().Field(i).Name)
 			}
 		}
@@ -87,6 +87,29 @@ func TestFor(t *testing.T) {
 	for _, code := range []string{"", "en", "en-GB", "de", "zz"} {
 		if For(code).InviteSubject != English.InviteSubject {
 			t.Errorf("%q did not fall back to English", code)
+		}
+	}
+}
+
+// Primary is what the hosted form's <html lang> is built from, so it must
+// resolve exactly as For does — a page whose attribute says one language and
+// whose words are another is worse than one that never claimed.
+func TestPrimaryAgreesWithFor(t *testing.T) {
+	for _, code := range []string{"sv", "sv-SE", "SV", "sv_FI", " sv "} {
+		if got := Primary(code); got != "sv" {
+			t.Errorf("Primary(%q) = %q, want \"sv\"", code, got)
+		}
+	}
+	for _, code := range []string{"", "en", "en-GB", "de", "zz"} {
+		if got := Primary(code); got != "en" {
+			t.Errorf("Primary(%q) = %q, want \"en\"", code, got)
+		}
+	}
+	// The pairing that matters: the code Primary names must be the code whose
+	// catalogue For returns, for every input either of them accepts.
+	for _, code := range []string{"", "sv", "sv-SE", "en", "de", "zz", " SV "} {
+		if For(code).FormSubmit != For(Primary(code)).FormSubmit {
+			t.Errorf("For(%q) and For(Primary(%q)) disagree — <html lang> would contradict the copy", code, code)
 		}
 	}
 }
