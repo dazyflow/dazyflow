@@ -112,7 +112,12 @@ func (r *NodeResolver) lookup(ctx context.Context, id string) (core.Transport, b
 		}
 	}
 	if r.MCP != nil {
-		if t, ok := r.MCP.Get(id); ok {
+		// Same tenant argument, same reason as Remote: an org's own MCP server
+		// holds that org's credential, and a job reaching a transport carries
+		// RESOLVED secrets. An absent tenant sees only the operator's
+		// instance-wide servers.
+		tenant, _ := core.TenantFromContext(ctx)
+		if t, ok := r.MCP.Get(tenant, id); ok {
 			return t, true
 		}
 	}
@@ -122,10 +127,12 @@ func (r *NodeResolver) lookup(ctx context.Context, id string) (core.Transport, b
 // ManifestsForTenant gathers every manifest visible to the tenant, for
 // ValidateWithManifests before execution.
 //
-// Native and MCP drops are instance-wide. Remotes are not: a tenant runner's
-// drops belong to one tenant, and showing them to another would put a step in
-// the palette that tenant cannot resolve — and, worse, would tell them a runner
-// by that name exists somewhere.
+// Native drops are instance-wide. Remotes and MCP servers are not — or rather,
+// not entirely: each has an operator-configured instance-wide population and a
+// per-org one. A tenant runner's drops belong to one tenant, and showing them
+// to another would put a step in the palette that tenant cannot resolve — and,
+// worse, would tell them a runner by that name exists somewhere. The same holds
+// for an org's own MCP server.
 func (r *NodeResolver) ManifestsForTenant(tenant string) map[string]core.Manifest {
 	out := map[string]core.Manifest{}
 	add := func(src map[string]core.Manifest) {
@@ -155,7 +162,9 @@ func (r *NodeResolver) ManifestsForTenant(tenant string) map[string]core.Manifes
 		addKeeping(out, r.Remote.ManifestsFor(tenant))
 	}
 	if r.MCP != nil {
-		addKeeping(out, r.MCP.Manifests())
+		// Instance-wide servers plus this org's own — the same two populations
+		// Get resolves across, so the palette shows exactly what will resolve.
+		addKeeping(out, r.MCP.ManifestsFor(tenant))
 	}
 	return out
 }
@@ -190,12 +199,28 @@ func (r *NodeResolver) Manifests() map[string]core.Manifest {
 // confusion remoteKey exists to prevent.
 func (r *NodeResolver) AllManifests() (map[string]core.Manifest, map[string][]string) {
 	out := r.ManifestsForTenant("")
-	if r.Remote == nil {
-		return out, nil
+	var tenants map[string][]string
+	if r.Remote != nil {
+		remotes, remoteTenants := r.Remote.AllManifests()
+		for id, m := range remotes {
+			out[id] = core.MarkListPorts(core.WithPassthrough(m))
+		}
+		tenants = remoteTenants
 	}
-	remotes, tenants := r.Remote.AllManifests()
-	for id, m := range remotes {
-		out[id] = core.MarkListPorts(core.WithPassthrough(m))
+	if r.MCP != nil {
+		// Tenant MCP servers need the same treatment as tenant runners: a
+		// platform admin cannot switch off a misbehaving tool that never
+		// appears on the page the killswitch lives on.
+		mcps, mcpTenants := r.MCP.AllManifests()
+		for id, m := range mcps {
+			out[id] = core.MarkListPorts(core.WithPassthrough(m))
+		}
+		if tenants == nil {
+			tenants = map[string][]string{}
+		}
+		for id, ts := range mcpTenants {
+			tenants[id] = append(tenants[id], ts...)
+		}
 	}
 	return out, tenants
 }

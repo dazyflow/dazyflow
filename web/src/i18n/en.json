@@ -1253,7 +1253,8 @@
       "addedAt": "added {{date}}",
       "removeConfirm": "Remove support-agent access for {{email}}?"
     },
-    "cardRunnersDesc": "Machines you own that your flows can run scripts on."
+    "cardRunnersDesc": "Machines you own that your flows can run scripts on.",
+    "cardMCPDesc": "Tool catalogues your flows can use as steps."
   },
   "results": {
     "title": "Collections",
@@ -2277,6 +2278,43 @@
     "stop": "Stop",
     "stopping": "Stopping…",
     "stopTitle": "Stop this run before it finishes"
+  },
+  "mcp": {
+    "title": "MCP servers",
+    "subtitle": "Point Dazyflow at a tool catalogue someone else runs, and its tools become steps in your flows.",
+    "add": "Add a server",
+    "addHead": "Add an MCP server",
+    "editHead": "Edit {{name}}",
+    "emptyTitle": "No MCP servers yet",
+    "emptyBody": "An MCP server publishes tools over one URL. Add one and every tool it offers appears in your palette as a step — no connector to write and nothing to install.",
+    "colEndpoint": "Endpoint",
+    "colSteps": "Steps",
+    "connected": "Connected",
+    "connecting": "Connecting…",
+    "failing": "Not connecting",
+    "disabled": "Turned off",
+    "lastOk": "last worked {{at}}",
+    "andMore": "and {{n}} more",
+    "refresh": "Re-read its tools",
+    "removeReally": "Remove? Flows using its steps will stop running.",
+    "securityNote": "A server you add here receives whatever your flows send it, and its tools run with your org's data. Add endpoints you trust, and give each one its own token so you can revoke it.",
+    "savedButFailed": "Saved, but it did not connect: {{error}}",
+    "nameLabel": "Name",
+    "nameHint": "Lowercase letters, digits, - and _. Its steps will be called mcp:<name>:<tool>.",
+    "nameLockedHint": "The name is fixed: your flows reference its steps by it. To use a different name, add a second server.",
+    "urlLabel": "Endpoint URL",
+    "urlHint": "The server's MCP endpoint, over https.",
+    "authLabel": "Authentication",
+    "authNone": "None",
+    "authBearer": "Bearer token",
+    "authHeader": "Custom header",
+    "headerNameLabel": "Header name",
+    "tokenLabel": "Access token",
+    "tokenHint": "Stored encrypted and never shown again. You can also enter ${secret.NAME} to use a secret you already keep here.",
+    "tokenKeepPlaceholder": "Leave blank to keep the stored token",
+    "enabledLabel": "Use this server",
+    "enabledHint": "Turn this off to take its steps out of the palette without deleting the server or its token.",
+    "saveAndConnect": "Save and connect"
   },
   "runners": {
     "title": "Runners",

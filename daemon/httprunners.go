@@ -45,14 +45,16 @@ type runnerRow struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// requireRunnerAdmin gates the admin endpoints.
+// requireStepSourceAdmin gates the endpoints that add or remove a SOURCE of
+// steps — a runner here, an MCP server in httpmcpservers.go.
 //
 // organization:admin is what a human managing the org already holds;
 // module:register is what an API key for automation can carry without also
 // being able to administer everything else. Deliberately NOT graph:edit —
 // registering a runner is what makes a machine available at all, which is a
-// different act from using it in a flow.
-func requireRunnerAdmin(rw http.ResponseWriter, p core.Principal) bool {
+// different act from using it in a flow, and the same distinction applies to
+// pointing the daemon at someone else's MCP endpoint.
+func requireStepSourceAdmin(rw http.ResponseWriter, p core.Principal) bool {
 	if core.CanAdminOrg(p) || p.Has(core.PermModuleRegister) {
 		return true
 	}
@@ -85,7 +87,7 @@ func (h *HTTPGateway) runnerTasksConfigured(rw http.ResponseWriter) bool {
 }
 
 func (h *HTTPGateway) listRunners(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !requireRunnerAdmin(rw, p) || !h.runnersConfigured(rw) {
+	if !requireStepSourceAdmin(rw, p) || !h.runnersConfigured(rw) {
 		return
 	}
 	rows, err := h.Runners.List(r.Context(), p.Tenant)
@@ -128,7 +130,7 @@ type runnerTargetRow struct {
 // listRunnerTargets answers the "Where to run it" tag picker on the Run on your
 // machine step.
 //
-// Gated on graph:edit rather than requireRunnerAdmin, and that difference is the
+// Gated on graph:edit rather than requireStepSourceAdmin, and that difference is the
 // whole reason this route exists next to the admin one. Using a runner in a flow
 // already needs graph:edit and nothing more (see docs/guide/runners.md), so an
 // editor who may target a machine may obviously be told which machines there
@@ -166,7 +168,7 @@ func (h *HTTPGateway) listRunnerTargets(rw http.ResponseWriter, r *http.Request,
 // POST rather than GET because it creates something, and because a token in a
 // URL would end up in a proxy log.
 func (h *HTTPGateway) mintRunnerToken(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !requireRunnerAdmin(rw, p) || !h.runnersConfigured(rw) {
+	if !requireStepSourceAdmin(rw, p) || !h.runnersConfigured(rw) {
 		return
 	}
 	tok, err := h.Runners.MintToken(r.Context(), p.Tenant, p.Subject)
@@ -199,7 +201,7 @@ type setRunnerLabelsRequest struct {
 // pulled into, or out of, work it was never meant for without anyone touching
 // a flow.
 func (h *HTTPGateway) setRunnerLabels(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !requireRunnerAdmin(rw, p) || !h.runnersConfigured(rw) {
+	if !requireStepSourceAdmin(rw, p) || !h.runnersConfigured(rw) {
 		return
 	}
 	var req setRunnerLabelsRequest
@@ -232,7 +234,7 @@ func (h *HTTPGateway) setRunnerLabels(rw http.ResponseWriter, r *http.Request, p
 }
 
 func (h *HTTPGateway) deleteRunner(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !requireRunnerAdmin(rw, p) || !h.runnersConfigured(rw) {
+	if !requireStepSourceAdmin(rw, p) || !h.runnersConfigured(rw) {
 		return
 	}
 	name := r.PathValue("name")

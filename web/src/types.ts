@@ -906,6 +906,51 @@ export type Runner = {
   created_at: string;
 };
 
+// MCPServer is one MCP endpoint the org has configured, from
+// GET /admin/mcp-servers. Every tool the endpoint publishes becomes a step
+// named mcp:<name>:<tool>.
+//
+// There is no token field and there never will be: the credential is sealed
+// server-side and the read path does not select it. has_token is what the edit
+// form needs instead — whether there is something stored to keep.
+export type MCPServer = {
+  // name is what flows reference. Saving under a different name is a NEW
+  // server, not a rename: the old step ids stop resolving.
+  name: string;
+  url: string;
+  auth_kind: "none" | "bearer" | "header";
+  // auth_header is the header name for auth_kind "header". The name is not
+  // secret; the value it carries is.
+  auth_header?: string;
+  has_token: boolean;
+  enabled: boolean;
+  // connected is the live fact — registered in the daemon answering this
+  // request, right now. On a multi-replica deployment a server saved seconds
+  // ago on another node may be enabled and not yet connected here.
+  connected: boolean;
+  // tool_ids are the step ids this server contributes.
+  tool_ids?: string[];
+  tool_count: number;
+  // last_error is why the last connection attempt failed, verbatim from the
+  // endpoint where that helps ("refused the credential").
+  last_error?: string;
+  last_connected?: string;
+  created_by?: string;
+  created_at: string;
+  updated_at: string;
+};
+
+// MCPServerInput is what the form submits. token empty on an edit means "keep
+// the stored one".
+export type MCPServerInput = {
+  name: string;
+  url: string;
+  auth_kind: "none" | "bearer" | "header";
+  auth_header?: string;
+  token?: string;
+  enabled?: boolean;
+};
+
 // RunnerTarget is one machine as the flow editor sees it, from GET /runners:
 // what the Run on your machine step needs to be pointed somewhere, and nothing
 // about administering the fleet.

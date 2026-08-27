@@ -11463,6 +11463,33 @@ button:active,
   margin-top: var(--space-4);
 }
 
+/* ---- MCP servers --------------------------------------------------------- */
+/* Admin → MCP servers. It borrows the runner page's table and action column;
+   only the three columns that carry different content need rules of their own. */
+.mcp-form {
+  margin-bottom: var(--space-4);
+}
+/* The endpoint and the step ids are identifiers, not prose — monospaced for
+   the same reason runner labels are. The URL wraps rather than truncating: it
+   is the field most likely to be wrong, and a clipped one cannot be checked. */
+.mcp-url {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+  max-width: 32ch;
+}
+.mcp-tools {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+/* A checkbox and its label on one line, aligned on the control rather than on
+   the text box the other .sf-field rows contain. */
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 /* ---- Glyphs sitting in text ---------------------------------------------- */
 /* A glyph inside a line of prose — a status line, a card heading, a label.
    Unlike a button, these containers can't simply be flexed: `.sso-test-ok` and

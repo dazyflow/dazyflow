@@ -1253,7 +1253,8 @@
       "addedAt": "tillagd {{date}}",
       "removeConfirm": "Ta bort supportagentåtkomst för {{email}}?"
     },
-    "cardRunnersDesc": "Maskiner du äger som dina flöden kan köra skript på."
+    "cardRunnersDesc": "Maskiner du äger som dina flöden kan köra skript på.",
+    "cardMCPDesc": "Verktygskataloger som dina flöden kan använda som steg."
   },
   "results": {
     "title": "Samlingar",
@@ -2277,6 +2278,43 @@
     "stop": "Stoppa",
     "stopping": "Stoppar…",
     "stopTitle": "Stoppa körningen innan den är klar"
+  },
+  "mcp": {
+    "title": "MCP-servrar",
+    "subtitle": "Peka Dazyflow mot en verktygskatalog som någon annan driver, så blir dess verktyg steg i dina flöden.",
+    "add": "Lägg till en server",
+    "addHead": "Lägg till en MCP-server",
+    "editHead": "Redigera {{name}}",
+    "emptyTitle": "Inga MCP-servrar än",
+    "emptyBody": "En MCP-server publicerar verktyg via en enda URL. Lägg till en så dyker alla dess verktyg upp som steg i din palett — ingen koppling att skriva och inget att installera.",
+    "colEndpoint": "Adress",
+    "colSteps": "Steg",
+    "connected": "Ansluten",
+    "connecting": "Ansluter…",
+    "failing": "Ansluter inte",
+    "disabled": "Avstängd",
+    "lastOk": "fungerade senast {{at}}",
+    "andMore": "och {{n}} till",
+    "refresh": "Läs om dess verktyg",
+    "removeReally": "Ta bort? Flöden som använder dess steg slutar fungera.",
+    "securityNote": "En server du lägger till här tar emot det dina flöden skickar till den, och dess verktyg körs med din organisations data. Lägg till adresser du litar på, och ge varje server en egen token som du kan spärra.",
+    "savedButFailed": "Sparad, men anslutningen misslyckades: {{error}}",
+    "nameLabel": "Namn",
+    "nameHint": "Små bokstäver, siffror, - och _. Dess steg kommer att heta mcp:<namn>:<verktyg>.",
+    "nameLockedHint": "Namnet är låst: dina flöden refererar till dess steg med det. Vill du ha ett annat namn, lägg till en till server.",
+    "urlLabel": "Adress (URL)",
+    "urlHint": "Serverns MCP-adress, via https.",
+    "authLabel": "Autentisering",
+    "authNone": "Ingen",
+    "authBearer": "Bearer-token",
+    "authHeader": "Egen header",
+    "headerNameLabel": "Headernamn",
+    "tokenLabel": "Åtkomsttoken",
+    "tokenHint": "Lagras krypterad och visas aldrig igen. Du kan också ange ${secret.NAMN} för att använda en hemlighet du redan har här.",
+    "tokenKeepPlaceholder": "Lämna tomt för att behålla lagrad token",
+    "enabledLabel": "Använd den här servern",
+    "enabledHint": "Stäng av för att ta bort dess steg ur paletten utan att radera servern eller dess token.",
+    "saveAndConnect": "Spara och anslut"
   },
   "runners": {
     "title": "Körnoder",

@@ -344,8 +344,20 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// OAuth provider configuration: paste client_id + client_secret in
 	// the admin UI instead of DAZYFLOW_OAUTH_*_CLIENT_ID env vars + a
 	// restart. Persisted creds win over env on the next boot.
+	// Tenant MCP servers: someone else's tool catalog, reachable as steps in
+	// this org's flows. Same gate as runners — both add a SOURCE of steps —
+	// see requireStepSourceAdmin.
+	//
+	// POST creates, PUT edits under the name in the path. Both reconnect, so
+	// the response says whether the server actually answered.
+	mux.HandleFunc("GET /api/v1/admin/mcp-servers", h.requireAuth(h.listMCPServers))
+	mux.HandleFunc("POST /api/v1/admin/mcp-servers", h.requireAuth(h.saveMCPServer))
+	mux.HandleFunc("PUT /api/v1/admin/mcp-servers/{name}", h.requireAuth(h.saveMCPServer))
+	mux.HandleFunc("POST /api/v1/admin/mcp-servers/{name}/refresh", h.requireAuth(h.refreshMCPServer))
+	mux.HandleFunc("DELETE /api/v1/admin/mcp-servers/{name}", h.requireAuth(h.deleteMCPServer))
+
 	// Tenant runners: an org's own code, reachable as a step in its flows.
-	// Gated on organization:admin or module:register — see requireRunnerAdmin
+	// Gated on organization:admin or module:register — see requireStepSourceAdmin
 	// for why that is deliberately not graph:edit.
 	mux.HandleFunc("GET /api/v1/admin/runners", h.requireAuth(h.listRunners))
 	mux.HandleFunc("POST /api/v1/admin/runners/token", h.requireAuth(h.mintRunnerToken))

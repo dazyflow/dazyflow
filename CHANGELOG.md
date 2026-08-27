@@ -23,6 +23,51 @@ into the image.)
 
 ## [Unreleased]
 
+### Added
+
+- **Each org can now add its own MCP servers, in Admin → MCP servers.** Point
+  Dazyflow at an MCP endpoint and every tool it publishes becomes a step —
+  `mcp:<server>:<tool>` — in that org's palette. No connector to write, nothing
+  to install. Add, edit, pause, re-read the tool list, and remove, all from the
+  page; saving handshakes with the endpoint straight away, so a wrong URL or a
+  rejected token is reported while the person who pasted it is still there.
+
+  Previously MCP servers existed only as `DAZYFLOW_MCP_SERVERS`, an operator's
+  environment variable applying to the whole deployment — so an org could not
+  bring its own tools without someone editing the daemon's config and
+  restarting it.
+
+  Tenant servers are **HTTP only**, and that is the security boundary rather
+  than a limitation to lift later: the stdio transport starts a process on the
+  daemon host, so exposing it to an org admin would be remote code execution by
+  any customer. `DAZYFLOW_MCP_SERVERS` keeps the stdio path for operators, and
+  those servers stay visible to every org. See
+  [docs/guide/mcp-servers.md](docs/guide/mcp-servers.md).
+
+  Supporting work:
+  - `engine/mcp` gained a streamable-HTTP transport (protocol `2025-06-18`),
+    handling both response shapes a server may choose — a single JSON object,
+    or the response carried among other events on an SSE stream.
+  - The MCP catalog is now keyed by `(tenant, tool id)` the way the remote-module
+    catalog already was, so an org's server resolves for that org and no other.
+    This matters more than ordinary scoping: a job reaching a transport carries
+    *resolved* secrets, so a lookup that could cross tenants is a place one
+    org's credentials could be sent to another org's endpoint. A tenant may not
+    take a name an instance-wide server already uses; the registration is
+    refused rather than shadowed.
+  - Tokens are sealed under the tenant's DEK, bound to `(tenant, "mcp_server",
+    name)`, and the store's read columns exclude them — so no list or lookup can
+    carry one back to a browser. A token entered as `${secret.NAME}` resolves
+    through the org's secret store instead, so a credential rotated there is
+    rotated here.
+  - Requests to a tenant's endpoint go through the same SSRF dial guard as
+    `http_request`: no loopback, private or link-local address, checked after
+    DNS resolution so a hostname pointed inward is caught too.
+  - Registrations live in Postgres and every daemon reconciles against them, so
+    the feature works across replicas: a server added on one node is connected
+    by the others within thirty seconds, and an edit or a deletion propagates
+    the same way.
+
 ## [0.16.7] - 2026-08-27
 
 ### Fixed

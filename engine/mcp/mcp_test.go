@@ -63,7 +63,7 @@ func echoArgsServer(seen *map[string]any) *mcptest.FakeServer {
 // returning the synthesized manifest.
 func TestTransport_Manifest(t *testing.T) {
 	cat := covRegister(t, "srv", &mcptest.FakeServer{Tools: []mcp.Tool{{Name: "t1", Description: "d"}}})
-	tr, ok := cat.Get("mcp:srv:t1")
+	tr, ok := cat.Get("", "mcp:srv:t1")
 	if !ok {
 		t.Fatal("transport not registered")
 	}
@@ -123,7 +123,7 @@ func TestTransport_InputPort_Variants(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var seen map[string]any
 			cat := covRegister(t, "demo", echoArgsServer(&seen))
-			tr, _ := cat.Get("mcp:demo:noop")
+			tr, _ := cat.Get("", "mcp:demo:noop")
 			job := core.Job{
 				ID:     "j1",
 				Params: map[string]any{"p": "param"},
@@ -157,7 +157,7 @@ func TestTransport_BadInputBecomesBadInputError(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var seen map[string]any
 			cat := covRegister(t, "demo", echoArgsServer(&seen))
-			tr, _ := cat.Get("mcp:demo:noop")
+			tr, _ := cat.Get("", "mcp:demo:noop")
 			job := core.Job{
 				ID:    "j1",
 				Input: map[string]core.Ref{"input": {Inline: tc.inline}},
@@ -186,7 +186,7 @@ func TestTransport_EmptyContentEmptyText(t *testing.T) {
 		},
 	}
 	cat := covRegister(t, "demo", srv)
-	tr, _ := cat.Get("mcp:demo:empty")
+	tr, _ := cat.Get("", "mcp:demo:empty")
 	res, err := tr.Execute(t.Context(), core.Job{ID: "j1"}, nil)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -214,7 +214,7 @@ func TestTransport_SingleNonTextContentIsJSON(t *testing.T) {
 		},
 	}
 	cat := covRegister(t, "demo", srv)
-	tr, _ := cat.Get("mcp:demo:img")
+	tr, _ := cat.Get("", "mcp:demo:img")
 	res, err := tr.Execute(t.Context(), core.Job{ID: "j1"}, nil)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -245,7 +245,7 @@ func TestTransport_ToolErrorNonTextSummary(t *testing.T) {
 		},
 	}
 	cat := covRegister(t, "demo", srv)
-	tr, _ := cat.Get("mcp:demo:errimg")
+	tr, _ := cat.Get("", "mcp:demo:errimg")
 	res, err := tr.Execute(t.Context(), core.Job{ID: "j1"}, nil)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -268,7 +268,7 @@ func TestTransport_ToolErrorEmptyContentSummary(t *testing.T) {
 		},
 	}
 	cat := covRegister(t, "demo", srv)
-	tr, _ := cat.Get("mcp:demo:erre")
+	tr, _ := cat.Get("", "mcp:demo:erre")
 	res, _ := tr.Execute(t.Context(), core.Job{ID: "j1"}, nil)
 	if res.Error == nil || res.Error.Message != "tool reported error" {
 		t.Errorf("error = %+v, want generic summary", res.Error)
@@ -282,7 +282,7 @@ func TestTransport_ToolErrorEmptyContentSummary(t *testing.T) {
 func TestTransport_CallFailsWhenConnectionClosed(t *testing.T) {
 	var seen map[string]any
 	cat := covRegister(t, "demo", echoArgsServer(&seen))
-	tr, _ := cat.Get("mcp:demo:noop")
+	tr, _ := cat.Get("", "mcp:demo:noop")
 
 	// Tear the connection down before calling.
 	_ = cat.Close()
@@ -409,7 +409,7 @@ func TestRegisterStdio_RealServerRoundTrip(t *testing.T) {
 		t.Fatalf("expected tool mcp:ap:lookup_user in %v", keys(man))
 	}
 
-	tr, ok := cat.Get("mcp:ap:categorize")
+	tr, ok := cat.Get("", "mcp:ap:categorize")
 	if !ok {
 		t.Fatal("categorize transport missing")
 	}

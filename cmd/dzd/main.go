@@ -505,6 +505,11 @@ func main() {
 	if err := registerMCPServers(mcpCatalog, mcpServers); err != nil {
 		log.Fatalf("DAZYFLOW_MCP_SERVERS: %v", err)
 	}
+	// The same catalog also holds each ORG's own HTTP MCP servers, configured
+	// in Admin → MCP servers rather than in this process's environment. The
+	// two populations are keyed apart inside the catalog (instance-wide vs
+	// tenant), so an org's server is resolvable only by that org.
+	tenantMCP := setupTenantMCPServers(ctx, pgPool, mcpCatalog, encryptedSecrets)
 
 	// Write dedupe for non-idempotent external writes (Twilio SMS, Gmail/
 	// Discord/Sheets/Home Assistant). Postgres-backed and shared so a lease
@@ -707,6 +712,7 @@ func main() {
 		runLogs:     stores.runLogs,
 		workerCount: workerCount,
 		runnerTasks: runnerTasks,
+		tenantMCP:   tenantMCP,
 	}, &bgWg)
 
 	// Git mirror: push each workspace's flow repository to a remote the
@@ -822,6 +828,7 @@ func main() {
 			encryptedSecrets: encryptedSecrets,
 			runners:          runners,
 			runnerTasks:      runnerTasks,
+			tenantMCP:        tenantMCP,
 			mirrors:          stores.mirrors,
 			mirrorPusher:     mirrorPusher,
 			oauth:            oauthRegistry,
@@ -963,6 +970,13 @@ func applyNetworkPolicy(httpEgressAllow string, devMode bool) {
 			log.Printf("outbound egress rate limit active: %d/min per (tenant, host)", egressRate)
 		}
 	}
+
+	// An org's MCP server is a URL that org supplied, so the daemon's requests
+	// to it get the same dial guard as http_request: no loopback, no RFC 1918,
+	// no link-local (cloud metadata). Injected rather than imported —
+	// engine/mcp cannot reach drops/net without an import cycle — and set
+	// AFTER the private-egress opt-in above, whose value it reads.
+	mcp.SetDialControl(hfnet.SSRFDialControl())
 }
 
 // coreStores bundles the durable control-plane stores that share one pool.
@@ -1099,6 +1113,9 @@ type backgroundDeps struct {
 	// runnerTasks drives the orphaned-task sweep. Nil when runners are not
 	// configured, which leaves the sweep unstarted rather than half-running.
 	runnerTasks daemon.RunnerTaskStore
+	// tenantMCP drives the per-org MCP reconcile loop. Nil when the feature is
+	// not configured, which leaves the loop unstarted.
+	tenantMCP *daemon.MCPServers
 }
 
 // runnerSweepInterval is how often the orphaned-runner-task sweep runs. A
@@ -1137,6 +1154,21 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 			if err := w.Run(ctx); err != nil && err != context.Canceled {
 				log.Printf("worker stopped: %v", err)
 			}
+		}()
+	}
+
+	// Reconnect each org's MCP servers, and keep doing it.
+	//
+	// The first pass is why an org's steps are in its palette at all after a
+	// restart: registrations live in Postgres, and a connection does not
+	// survive a process. Every later pass is what makes the feature work on
+	// more than one dzd — a server added on another replica is a row, and this
+	// is where this replica notices it. See MCPServers.Reconcile.
+	if d.tenantMCP != nil {
+		bgWg.Add(1)
+		go func() {
+			defer bgWg.Done()
+			d.tenantMCP.RunReconciler(ctx, log.Printf)
 		}()
 	}
 
@@ -1463,6 +1495,7 @@ type gatewayDeps struct {
 	encryptedSecrets *daemon.EncryptedSecrets
 	runners          *daemon.Runners
 	runnerTasks      daemon.RunnerTaskStore
+	tenantMCP        *daemon.MCPServers
 	mirrors          daemon.GitMirrorStore
 	mirrorPusher     *daemon.MirrorPusher
 	oauth            *daemon.OAuthRegistry
@@ -1523,7 +1556,8 @@ func buildGateway(ctx context.Context, bgWg *sync.WaitGroup, d gatewayDeps) {
 	gw.EncryptedSecrets = d.encryptedSecrets // nil disables /api/v1/secrets endpoints
 	gw.Runners = d.runners                   // nil leaves the runner endpoints at 501
 	gw.RunnerTasks = d.runnerTasks
-	gw.GitMirrors = d.mirrors // nil disables /api/v1/git/mirror endpoints
+	gw.MCPServers = d.tenantMCP // nil leaves the MCP-server endpoints at 501
+	gw.GitMirrors = d.mirrors   // nil disables /api/v1/git/mirror endpoints
 	gw.MirrorPusher = d.mirrorPusher
 	gw.OAuth = d.oauth                 // nil disables /api/v1/oauth/* endpoints
 	gw.Approval = d.approval           // nil leaves POST /approve/ unregistered
@@ -2362,6 +2396,39 @@ func setupRunners(ctx context.Context, pool *pgxpool.Pool, secrets *daemon.Encry
 	dispatcher := &daemon.RunnerDispatcher{Tasks: tasks, Runners: runners}
 	runnerdrop.SetDispatcher(runnerBridge{inner: dispatcher})
 	return runners, tasks
+}
+
+// setupTenantMCPServers wires the per-org MCP catalog: where an org's server
+// registrations live, and the service that connects them.
+//
+// Returns nil when it cannot be configured — no Postgres — which leaves the
+// admin endpoints answering 501 and the feature simply absent, the same
+// posture setupRunners takes. Deliberately NOT fatal: an operator running
+// without the store still gets DAZYFLOW_MCP_SERVERS, and refusing to boot over
+// an optional feature would be worse than not offering it.
+//
+// The encrypted store is required in practice rather than in code. Without one
+// a server needing a token cannot be saved (Save says so), but a server needing
+// none still works, so this wires up either way and lets the error land where
+// someone can read it.
+func setupTenantMCPServers(
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	catalog *mcp.Catalog,
+	secrets *daemon.EncryptedSecrets,
+) *daemon.MCPServers {
+	if pool == nil {
+		return nil
+	}
+	store, err := daemon.NewPgMCPServerStore(ctx, pool)
+	if err != nil {
+		log.Printf("per-org MCP servers disabled: %v", err)
+		return nil
+	}
+	if secrets == nil {
+		log.Print("per-org MCP servers: DAZYFLOW_MASTER_KEY is not set, so only servers that need no token can be configured")
+	}
+	return &daemon.MCPServers{Store: store, Catalog: catalog, Secrets: secrets}
 }
 
 // runnerBridge adapts the daemon's dispatcher to the step's interface.

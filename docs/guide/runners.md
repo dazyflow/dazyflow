@@ -14,6 +14,11 @@ Dazyflow has never heard of.
 This is how you use a tool, a library, or a system that no built-in step covers:
 write a script, and let a flow call it.
 
+> If the thing you want already speaks **MCP**, there is a shorter route: add it
+> in [Admin → MCP servers](./mcp-servers) and its tools become steps directly,
+> with no machine to set up and no script to write. A runner is for what has no
+> such interface — your own code, a local tool, something on your network.
+
 ---
 
 ## Set one up

@@ -42,6 +42,8 @@ import type {
   ScheduleEntry,
   PublishInfo,
   GitCredential,
+  MCPServer,
+  MCPServerInput,
   Runner,
   RunnerTarget,
   RunnerToken,
@@ -964,6 +966,34 @@ export const api = {
         nodeID,
       )}/${enabled ? "enable" : "disable"}`,
     ),
+  // listMCPServers returns the org's configured MCP endpoints with the live
+  // connection state of the daemon answering this request.
+  listMCPServers: (token: string) =>
+    request<{ servers: MCPServer[] }>(token, "GET", "/admin/mcp-servers"),
+  // saveMCPServer creates or edits. One call for both, because the server is
+  // identified by its name and saving an existing name replaces it — the same
+  // shape the daemon's handler has, so the two cannot drift.
+  //
+  // The response is the SAVED row including last_error, because saving
+  // reconnects: a bad URL or a rejected token is reported by this call, not by
+  // a later refresh.
+  saveMCPServer: (token: string, input: MCPServerInput, existingName?: string) =>
+    existingName
+      ? request<MCPServer>(
+          token,
+          "PUT",
+          `/admin/mcp-servers/${encodeURIComponent(existingName)}`,
+          input,
+        )
+      : request<MCPServer>(token, "POST", "/admin/mcp-servers", input),
+  // refreshMCPServer re-handshakes and re-reads the tool list, for a server
+  // that has gained or lost tools since it was registered.
+  refreshMCPServer: (token: string, name: string) =>
+    request<MCPServer>(token, "POST", `/admin/mcp-servers/${encodeURIComponent(name)}/refresh`, {}),
+  // deleteMCPServer removes the server and takes its steps out of the palette.
+  // Flows referencing them stay valid graphs but stop resolving at run time.
+  deleteMCPServer: (token: string, name: string) =>
+    request<{ deleted: string }>(token, "DELETE", `/admin/mcp-servers/${encodeURIComponent(name)}`),
   // listRunners returns the org's registered machines and whether each has
   // checked in recently. Never returns a credential.
   listRunners: (token: string) =>

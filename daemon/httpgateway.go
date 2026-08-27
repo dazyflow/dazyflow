@@ -48,6 +48,12 @@ type HTTPGateway struct {
 	Runners     *Runners
 	RunnerTasks RunnerTaskStore
 
+	// MCPServers powers Admin → MCP servers: the org's own MCP endpoints,
+	// whose tools become steps in its palette. Nil leaves those endpoints
+	// answering 501, so a deployment without the store simply does not offer
+	// the feature — the same shape as Runners above.
+	MCPServers *MCPServers
+
 	// WildcardDomain, when set (e.g. "dazyflow.app"), treats every
 	// subdomain "<org>.dazyflow.app" as an allowed browser origin for
 	// the CORS allowlist + the CSRF origin check, on top of the exact

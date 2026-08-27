@@ -86,7 +86,7 @@ func TestTransport_ExecuteEchoesToolResult(t *testing.T) {
 	}
 	cat := registerInProcess(t, "demo", srv)
 
-	transport, ok := cat.Get("mcp:demo:echo")
+	transport, ok := cat.Get("", "mcp:demo:echo")
 	if !ok {
 		t.Fatal("transport not registered")
 	}
@@ -119,7 +119,7 @@ func TestTransport_InputPortMergesIntoArguments(t *testing.T) {
 		},
 	}
 	cat := registerInProcess(t, "demo", srv)
-	transport, _ := cat.Get("mcp:demo:noop")
+	transport, _ := cat.Get("", "mcp:demo:noop")
 
 	job := core.Job{
 		ID:     "j1",
@@ -156,7 +156,7 @@ func TestTransport_InputPortAcceptsJSONString(t *testing.T) {
 		},
 	}
 	cat := registerInProcess(t, "demo", srv)
-	transport, _ := cat.Get("mcp:demo:noop")
+	transport, _ := cat.Get("", "mcp:demo:noop")
 
 	job := core.Job{
 		ID: "j1",
@@ -187,7 +187,7 @@ func TestTransport_ToolErrorBecomesNodeFailure(t *testing.T) {
 		},
 	}
 	cat := registerInProcess(t, "demo", srv)
-	transport, _ := cat.Get("mcp:demo:bad")
+	transport, _ := cat.Get("", "mcp:demo:bad")
 
 	res, err := transport.Execute(t.Context(), core.Job{ID: "j1"}, nil)
 	if err != nil {
@@ -217,7 +217,7 @@ func TestTransport_MultiPartContentReturnsArray(t *testing.T) {
 		},
 	}
 	cat := registerInProcess(t, "demo", srv)
-	transport, _ := cat.Get("mcp:demo:multi")
+	transport, _ := cat.Get("", "mcp:demo:multi")
 
 	res, err := transport.Execute(t.Context(), core.Job{ID: "j1"}, nil)
 	if err != nil {
@@ -240,7 +240,7 @@ func TestTransport_MultiPartContentReturnsArray(t *testing.T) {
 
 func TestCatalog_GetReturnsFalseForUnknown(t *testing.T) {
 	cat := registerInProcess(t, "any", &mcptest.FakeServer{})
-	if _, ok := cat.Get("mcp:any:nope"); ok {
+	if _, ok := cat.Get("", "mcp:any:nope"); ok {
 		t.Error("Get should return false for unknown tool")
 	}
 }

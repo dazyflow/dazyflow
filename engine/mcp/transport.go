@@ -34,8 +34,7 @@ func (t *Transport) Execute(ctx context.Context, job core.Job, progress chan<- c
 		}, nil
 	}
 
-	t.server.callMu.Lock()
-	defer t.server.callMu.Unlock()
+	defer t.server.lock()()
 
 	result, err := t.server.client.CallTool(ctx, t.toolName, args)
 	if err != nil {
@@ -183,11 +182,31 @@ func synthesizeManifest(server string, tool Tool) core.Manifest {
 }
 
 // serverConn holds one long-lived connection to an MCP server. All of
-// its tools share this connection; calls are serialized through callMu.
+// its tools share this connection.
 type serverConn struct {
-	name   string
-	client *Client
+	name string
+	// tenant owns this server; "" is an operator's instance-wide one.
+	tenant string
+	client session
 	closer func() error
 	info   ServerInfo
-	callMu sync.Mutex
+	// callMu serializes calls over a SHARED stream. It is held only by the
+	// stdio transport, whose tools all speak over one pair of pipes.
+	//
+	// An HTTP server leaves it unlocked (see serialized): each call there is
+	// its own request/response round trip, so serializing would queue a flow's
+	// parallel MCP steps behind each other for no protocol reason — a for_each
+	// fanned over ten rows would call the tool ten times in sequence.
+	callMu     sync.Mutex
+	concurrent bool
+}
+
+// lock serializes the call unless the transport can take concurrent ones.
+// Returns the matching unlock so callers can defer it without branching.
+func (s *serverConn) lock() func() {
+	if s.concurrent {
+		return func() {}
+	}
+	s.callMu.Lock()
+	return s.callMu.Unlock
 }
