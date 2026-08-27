@@ -171,7 +171,11 @@ func contentSummary(content []ContentItem) string {
 //
 // The label is what a human called the server and the name is what its ids are
 // built from, so "MCP Test" captions a step whose id is mcp:mcp-test:search.
-func synthesizeManifest(server, label string, tool Tool) core.Manifest {
+// The tool half of the caption is the server's own title when it offers one:
+// "MCP Test — Weather Information Provider" over "MCP Test — get_weather".
+// Neither half is an identifier, so a server that starts sending titles
+// re-captions its steps without moving anything a flow holds.
+func synthesizeManifest(server, label string, tool Tool, brandLogo string) core.Manifest {
 	if label == "" {
 		label = server
 	}
@@ -194,11 +198,14 @@ func synthesizeManifest(server, label string, tool Tool) core.Manifest {
 		InlineOnly: true,
 	})
 	return core.Manifest{
-		ID:             "mcp:" + server + ":" + tool.Name,
-		Version:        "1.0",
-		Label:          label + " — " + tool.Name,
-		Color:          "#7a5",
-		Category:       "external",
+		ID:       "mcp:" + server + ":" + tool.Name,
+		Version:  "1.0",
+		Label:    label + " — " + tool.DisplayName(),
+		Color:    "#7a5",
+		Category: "external",
+		// BrandLogo is already a data: URI when it is set at all — see
+		// icons.go for why nothing else may reach here.
+		BrandLogo:      brandLogo,
 		Provider:       "mcp:" + server,
 		Tags:           []string{"mcp", server},
 		Description:    desc,
@@ -401,6 +408,11 @@ type serverConn struct {
 	name string
 	// label is the display name, already defaulted to name at attach time.
 	label string
+	// instructions is the server's own guidance from the handshake, verbatim.
+	// Shown to the admin who registered it; never acted on.
+	instructions string
+	// protocolVersion is the MCP revision the server answered with.
+	protocolVersion string
 	// tenant owns this server; "" is an operator's instance-wide one.
 	tenant string
 	client session

@@ -23,6 +23,46 @@ into the image.)
 
 ## [Unreleased]
 
+### Added
+
+- **MCP steps use the tool's own display title.** The protocol has carried an
+  optional `title` on every tool since revision 2025-06-18 — the one we already
+  negotiate — and we were dropping it, captioning steps with the raw wire name.
+  A server offering one now gets *GitHub — Create an issue* instead of
+  *GitHub — create_issue*. The step id is untouched, so search by `create_issue`
+  still works and no existing flow moves. A title is third-party text landing in
+  a palette row, so it is taken as its first line and clamped to 60 characters;
+  the description, which is shown in full, is where prose belongs.
+- **A server's handshake note is shown to the admin who added it.** MCP servers
+  may return `instructions` — their own guidance on how they expect to be used
+  (*"ask in English; the index is English-only"*) — and it now appears under the
+  endpoint in Admin → MCP servers. Live-only, like the connection state: it is
+  read from the connection this process holds rather than stored, so it is
+  always what the server says now. Rendered as text, and nothing acts on it.
+- **MCP tools bring their own icons.** A server publishing icons (MCP revision
+  2025-11-25, SEP-973) now gives its steps a real vendor mark in the palette
+  instead of the generic *external* glyph.
+
+  Icons are **fetched by the daemon at handshake and inlined**, never linked.
+  That is not caution for its own sake: the app's CSP is
+  `img-src 'self' data: blob:`, so a third party's URL would not have loaded at
+  all. Inlining also means an icon host cannot see who is looking at which
+  admin page, and a dead one costs nothing. The fetch goes through the same
+  post-DNS SSRF guard that dials the MCP endpoint itself, refuses redirects and
+  cleartext http, and is bounded: 32 KB an icon, 8 distinct sources a server, 3
+  seconds for the whole phase, with identical sources fetched once. `data:`
+  icons are decoded and re-encoded rather than passed through, so a src
+  carrying anything but the image it claims cannot survive. Anything that fails
+  any of those checks is simply skipped — the tool still works, wearing the
+  category glyph.
+
+  The HTTP transport now negotiates **2025-11-25** (was 2025-06-18), which is
+  the revision icons arrived in. A server speaking an older one answers with
+  the revision it will use and sends no icons; that revision is recorded on the
+  connection and reported as `protocol_version` on the admin API, which is the
+  first thing to check when icons do not appear. The stdio transport is
+  unchanged.
+
 ## [0.18.0] - 2026-08-27
 
 ### Added

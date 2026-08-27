@@ -55,6 +55,23 @@ type serverKey struct {
 	name   string
 }
 
+// serverIdentity is everything attach needs about a server that is not the
+// live connection: who owns it, what it is called, and what it said about
+// itself at handshake. Grouped rather than passed as six positional arguments,
+// which is how the label ended up in the wrong slot twice while this grew.
+type serverIdentity struct {
+	tenant string
+	name   string
+	// label is the human display name; empty falls back to name.
+	label        string
+	info         ServerInfo
+	instructions string
+	// protocolVersion is the revision the server answered with, which is not
+	// necessarily the one we asked for. Recorded because it is the answer to
+	// "why does this server have no icons".
+	protocolVersion string
+}
+
 // toolKey scopes a tool id to its owning tenant.
 //
 // Keyed rather than filtered on read, for the same reason RemoteCatalog is: a
@@ -177,7 +194,9 @@ func (c *Catalog) RegisterStdio(desc StdioDescriptor) error {
 		}
 	}
 
-	if err := c.attach("", desc.Name, "", client, info.ServerInfo, tools, closer); err != nil {
+	id := serverIdentity{name: desc.Name, info: info.ServerInfo,
+		instructions: info.Instructions, protocolVersion: info.ProtocolVersion}
+	if err := c.attach(hctx, id, client, tools, closer); err != nil {
 		killSubprocess(cmd, stdin)
 		return err
 	}
@@ -214,7 +233,9 @@ func (c *Catalog) RegisterHTTP(desc HTTPDescriptor) error {
 		_ = client.Close()
 		return fmt.Errorf("list tools %q: %w", desc.Name, err)
 	}
-	if err := c.attach(desc.Tenant, desc.Name, desc.Label, client, info.ServerInfo, tools, client.Close); err != nil {
+	id := serverIdentity{tenant: desc.Tenant, name: desc.Name, label: desc.Label,
+		info: info.ServerInfo, instructions: info.Instructions, protocolVersion: info.ProtocolVersion}
+	if err := c.attach(hctx, id, client, tools, client.Close); err != nil {
 		_ = client.Close()
 		return err
 	}
@@ -232,7 +253,8 @@ func (c *Catalog) RegisterStream(name string, client *Client, info ServerInfo, t
 
 // RegisterStreamFor is RegisterStream with an explicit tenant.
 func (c *Catalog) RegisterStreamFor(tenant, name string, client *Client, info ServerInfo, tools []Tool, closer func() error) error {
-	return c.attach(tenant, name, "", client, info, tools, closer)
+	return c.attach(context.Background(), serverIdentity{tenant: tenant, name: name, info: info},
+		client, tools, closer)
 }
 
 func (c *Catalog) handshakeTimeout() time.Duration {
@@ -250,7 +272,9 @@ func (c *Catalog) handshakeTimeout() time.Duration {
 // two would disagree silently: NodeResolver prefers the tenant's entry, so an
 // org that named its server "github" would keep composing flows against the
 // operator's tool descriptions while every run went somewhere else.
-func (c *Catalog) attach(tenant, name, label string, client session, info ServerInfo, tools []Tool, closer func() error) error {
+func (c *Catalog) attach(ctx context.Context, id serverIdentity, client session, tools []Tool, closer func() error) error {
+	tenant, name := id.tenant, id.name
+	label := id.label
 	if label == "" {
 		label = name
 	}
@@ -266,7 +290,14 @@ func (c *Catalog) attach(tenant, name, label string, client session, info Server
 	// An HTTP session takes concurrent calls; a stdio one shares a single pair
 	// of pipes and must not.
 	_, isHTTP := client.(*HTTPClient)
-	conn := &serverConn{name: name, label: label, tenant: tenant, client: client, info: info, closer: closer, concurrent: isHTTP}
+	conn := &serverConn{name: name, label: label, instructions: id.instructions,
+		protocolVersion: id.protocolVersion, tenant: tenant,
+		client: client, info: id.info, closer: closer, concurrent: isHTTP}
+
+	// Before the lock: fetching icons is network work, and holding the
+	// catalog's mutex across someone else's outage would stall every lookup
+	// on the instance for the icon budget.
+	logos := resolveToolIcons(ctx, nil, tools)
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -285,7 +316,7 @@ func (c *Catalog) attach(tenant, name, label string, client session, info Server
 		c.tools[toolKey{tenant: tenant, id: "mcp:" + name + ":" + tool.Name}] = &Transport{
 			serverName: name,
 			toolName:   tool.Name,
-			manifest:   synthesizeManifest(name, label, tool),
+			manifest:   synthesizeManifest(name, label, tool, logos[tool.Name]),
 			server:     conn,
 		}
 	}
@@ -369,10 +400,15 @@ func (c *Catalog) ManifestsFor(tenant string) map[string]core.Manifest {
 type ServerStatus struct {
 	Name string
 	// Label is the display name, defaulted to Name when the server has none.
-	Label   string
-	Tenant  string
-	Info    ServerInfo
-	ToolIDs []string
+	Label  string
+	Tenant string
+	Info   ServerInfo
+	// Instructions is the server's own guidance from the handshake, verbatim
+	// and untrusted — text a third party wrote, for a human to read.
+	Instructions string
+	// ProtocolVersion is the MCP revision the server settled on.
+	ProtocolVersion string
+	ToolIDs         []string
 }
 
 // ServersFor lists the servers tenant can see, its own and the operator's,
@@ -385,7 +421,8 @@ func (c *Catalog) ServersFor(tenant string) []ServerStatus {
 		if key.tenant != "" && key.tenant != tenant {
 			continue
 		}
-		st := ServerStatus{Name: key.name, Label: conn.label, Tenant: key.tenant, Info: conn.info}
+		st := ServerStatus{Name: key.name, Label: conn.label, Tenant: key.tenant,
+			Info: conn.info, Instructions: conn.instructions, ProtocolVersion: conn.protocolVersion}
 		for id, t := range c.tools {
 			if id.tenant == key.tenant && t.serverName == key.name {
 				st.ToolIDs = append(st.ToolIDs, id.id)

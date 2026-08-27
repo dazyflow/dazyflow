@@ -100,6 +100,41 @@ func TestMCPServersEndpoints_SaveThenList(t *testing.T) {
 	}
 }
 
+// TestMCPServersEndpoints_ReportsWhatTheServerSaidAboutItself: the handshake
+// note reaches the admin page, and does so as a live fact rather than a stored
+// one — nothing persists a paragraph a third party can change at will.
+func TestMCPServersEndpoints_ReportsWhatTheServerSaidAboutItself(t *testing.T) {
+	svc, _ := newTestMCPServers(t)
+	fake := &fakeMCPEndpoint{
+		toolNames:    []string{"search"},
+		instructions: "Ask in English; the index is English-only.",
+	}
+	srv := fake.start(t)
+	h := &HTTPGateway{MCPServers: svc}
+
+	rw := mcpPost(t, h, adminPrincipal("acme"), `{"label":"Vendor","url":"`+srv.URL+`"}`)
+	if rw.Code != 200 {
+		t.Fatalf("code %d body %s", rw.Code, rw.Body)
+	}
+	var saved mcpServerRow
+	if err := json.Unmarshal(rw.Body.Bytes(), &saved); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if saved.Instructions != "Ask in English; the index is English-only." {
+		t.Fatalf("instructions = %q", saved.Instructions)
+	}
+	// A server that says nothing leaves the field off the wire entirely.
+	quiet := &fakeMCPEndpoint{toolNames: []string{"search"}}
+	quietSrv := quiet.start(t)
+	rw = mcpPost(t, h, adminPrincipal("acme"), `{"label":"Quiet","url":"`+quietSrv.URL+`"}`)
+	if rw.Code != 200 {
+		t.Fatalf("code %d body %s", rw.Code, rw.Body)
+	}
+	if strings.Contains(rw.Body.String(), "instructions") {
+		t.Fatalf("a silent server still sent an instructions field: %s", rw.Body)
+	}
+}
+
 // TestMCPServersEndpoints_ListIsTenantScoped: the page shows the caller's org
 // and nobody else's.
 func TestMCPServersEndpoints_ListIsTenantScoped(t *testing.T) {

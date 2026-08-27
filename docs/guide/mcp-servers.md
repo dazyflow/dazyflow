@@ -24,6 +24,11 @@ appears in the catalog under **Apps & services**, and hands its result to the
 next step. Search the palette for the server's name to find everything it
 brought.
 
+If the server offers a display title for a tool, that is used instead of the
+raw name — *GitHub — Create an issue*. The id is unaffected either way, so
+searching for `create_issue` still finds it and flows built before the server
+started sending titles keep working.
+
 Nothing else about the flow changes. The step branches, loops, retries and
 appears in the run log exactly like a built-in one.
 
@@ -77,6 +82,21 @@ everything again.
 >
 > The id is shown under the name in the list, since that is what you will see
 > in the palette and in exported flows.
+
+If the server publishes an icon for a tool, the step wears it in the palette
+instead of the generic glyph. Icons are fetched once, when the server connects,
+and stored inline — nothing on the page loads an image from the server's own
+host, so an icon host that is slow or down costs you nothing and cannot see who
+is looking. An icon that is too large (over 32 KB), is not actually an image,
+or lives behind a redirect is skipped; the step still works.
+
+Icons arrived in MCP revision 2025-11-25. A server on an older revision simply
+sends none — the admin list shows which revision each connection settled on.
+
+Some servers send a note about how they expect to be used — *"ask in English;
+the index is English-only"*. When one does, it appears under the endpoint in
+the list. It is the server's own text, shown as-is: Dazyflow does not act on
+it, and neither should you without reading it first.
 
 ### Using a token you already keep here
 

@@ -76,6 +76,23 @@ describe("AdminMCPServers", () => {
     expect(token).toHaveAttribute("placeholder", "mcp.tokenKeepPlaceholder");
   });
 
+  it("shows what the server said about itself, when it said anything", async () => {
+    listMCPServers.mockResolvedValue({
+      servers: [{ ...connected, instructions: "Ask in English; the index is English-only." }],
+    });
+    render(<AdminMCPServers />);
+    expect(
+      await screen.findByText("Ask in English; the index is English-only."),
+    ).toBeInTheDocument();
+  });
+
+  it("says nothing extra for a server that sent no instructions", async () => {
+    // Most servers send none. The row must not grow an empty note for them.
+    render(<AdminMCPServers />);
+    await screen.findByText("Vendor Tools");
+    expect(document.querySelector(".mcp-instructions")).toBeNull();
+  });
+
   it("shows the id under the name, because that is what the palette says", async () => {
     render(<AdminMCPServers />);
     // Both, and distinctly: an admin who called it "Vendor Tools" is looking

@@ -21,6 +21,13 @@ import (
 // handshake, list one tool, and record the credential it was given.
 type fakeMCPEndpoint struct {
 	toolNames []string
+	// titles, when set, gives a tool the display name the server offers for
+	// it. Absent means the tool publishes none, which is most of them.
+	titles map[string]string
+	// instructions is the server's own prose from the handshake.
+	instructions string
+	// icons, when set, gives a tool an icon source by name.
+	icons map[string]string
 	// schemas, when set, gives a tool its inputSchema by name. Tools not
 	// listed here are published with no schema, which is the shape most of
 	// these tests want.
@@ -49,12 +56,22 @@ func (f *fakeMCPEndpoint) start(t *testing.T) *httptest.Server {
 		var result any
 		switch req.Method {
 		case "initialize":
-			result = map[string]any{"protocolVersion": "2025-06-18", "capabilities": map[string]any{},
+			init := map[string]any{"protocolVersion": "2025-06-18", "capabilities": map[string]any{},
 				"serverInfo": map[string]any{"name": "fake", "version": "1"}}
+			if f.instructions != "" {
+				init["instructions"] = f.instructions
+			}
+			result = init
 		case "tools/list":
 			tools := []map[string]any{}
 			for _, n := range f.toolNames {
 				tool := map[string]any{"name": n}
+				if title, ok := f.titles[n]; ok {
+					tool["title"] = title
+				}
+				if src, ok := f.icons[n]; ok {
+					tool["icons"] = []map[string]any{{"src": src, "mimeType": "image/png"}}
+				}
 				if raw, ok := f.schemas[n]; ok {
 					tool["inputSchema"] = json.RawMessage(raw)
 				}
@@ -629,5 +646,112 @@ func TestMCPServers_LabelWithNoSlugStillGetsAnId(t *testing.T) {
 	}
 	if saved.Label != "日本語ツール" {
 		t.Fatalf("label = %q, want it kept verbatim", saved.Label)
+	}
+}
+
+// TestMCPServers_HandshakeInstructionsReachTheAdmin covers the server's own
+// prose about itself: read at handshake, carried on the live status, and never
+// acted on.
+func TestMCPServers_HandshakeInstructionsReachTheAdmin(t *testing.T) {
+	fake := &fakeMCPEndpoint{
+		toolNames:    []string{"search"},
+		instructions: "Call search with a full sentence, not keywords.",
+	}
+	srv := fake.start(t)
+	svc, cat := newTestMCPServers(t)
+
+	if _, err := svc.Save(context.Background(), "acme", "a", MCPServerInput{
+		Label: "Vendor", URL: srv.URL, Enabled: true,
+	}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	var got string
+	for _, st := range cat.ServersFor("acme") {
+		if st.Tenant == "acme" {
+			got = st.Instructions
+		}
+	}
+	if got != "Call search with a full sentence, not keywords." {
+		t.Fatalf("instructions = %q, want the server's own text", got)
+	}
+}
+
+// TestMCPServers_ToolTitleCaptionsTheStep is the same fact one layer up from
+// the engine's own test: a title from a real handshake reaches the palette,
+// and the step id is unchanged by it.
+func TestMCPServers_ToolTitleCaptionsTheStep(t *testing.T) {
+	fake := &fakeMCPEndpoint{
+		toolNames: []string{"search"},
+		titles:    map[string]string{"search": "Search the catalogue"},
+	}
+	srv := fake.start(t)
+	svc, cat := newTestMCPServers(t)
+
+	if _, err := svc.Save(context.Background(), "acme", "a", MCPServerInput{
+		Label: "MCP Test", URL: srv.URL, Enabled: true,
+	}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	man, ok := cat.ManifestsFor("acme")["mcp:mcp-test:search"]
+	if !ok {
+		t.Fatal("a titled tool moved its id")
+	}
+	if man.Label != "MCP Test — Search the catalogue" {
+		t.Fatalf("Label = %q, want the server's title", man.Label)
+	}
+}
+
+// TestMCPServers_ToolIconReachesThePalette follows an icon the whole way: a
+// real handshake over HTTP, through the tenant's catalog, onto the manifest
+// field the palette renders.
+//
+// The icon is a data: URI so the test needs no second server. What the fetch
+// path does with an https one is engine/mcp's own business, and tested there.
+func TestMCPServers_ToolIconReachesThePalette(t *testing.T) {
+	const png = "data:image/png;base64," +
+		"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+	fake := &fakeMCPEndpoint{
+		toolNames: []string{"search", "create"},
+		icons:     map[string]string{"search": png},
+	}
+	srv := fake.start(t)
+	svc, cat := newTestMCPServers(t)
+
+	if _, err := svc.Save(context.Background(), "acme", "a", MCPServerInput{
+		Label: "MCP Test", URL: srv.URL, Enabled: true,
+	}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	manifests := cat.ManifestsFor("acme")
+	if got := manifests["mcp:mcp-test:search"].BrandLogo; got != png {
+		t.Errorf("BrandLogo = %.40q…, want the server's icon", got)
+	}
+	if got := manifests["mcp:mcp-test:create"].BrandLogo; got != "" {
+		t.Errorf("a tool with no icon got BrandLogo %.40q", got)
+	}
+}
+
+// TestMCPServers_NegotiatedProtocolIsRecorded: icons need revision 2025-11-25,
+// so the revision a server actually settled on is the first thing to look at
+// when they do not appear.
+func TestMCPServers_NegotiatedProtocolIsRecorded(t *testing.T) {
+	srv := (&fakeMCPEndpoint{toolNames: []string{"search"}}).start(t)
+	svc, cat := newTestMCPServers(t)
+	if _, err := svc.Save(context.Background(), "acme", "a", MCPServerInput{
+		Label: "Vendor", URL: srv.URL, Enabled: true,
+	}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	var got string
+	for _, st := range cat.ServersFor("acme") {
+		if st.Tenant == "acme" {
+			got = st.ProtocolVersion
+		}
+	}
+	// The fake answers with an older revision than we ask for, which is what a
+	// real server on 2025-06-18 does. It must be reported, not corrected.
+	if got != "2025-06-18" {
+		t.Fatalf("protocol version = %q, want what the server answered", got)
 	}
 }

@@ -162,7 +162,18 @@ export function AdminMCPServers() {
                     </td>
                     {/* The URL is shown in full. It is the field most likely to
                         be wrong, and a truncated one cannot be checked. */}
-                    <td className="muted mcp-url">{s.url}</td>
+                    <td className="muted">
+                      <div className="mcp-url">{s.url}</div>
+                      {/* What the server says about itself at handshake. Text,
+                          not markup, and not every server sends any — it is a
+                          note under the endpoint rather than a column, because
+                          it is prose and most rows have none. */}
+                      {s.instructions && (
+                        <div className="mcp-instructions" title={s.instructions}>
+                          {s.instructions}
+                        </div>
+                      )}
+                    </td>
                     <td>
                       <MCPStatusChip server={s} />
                     </td>

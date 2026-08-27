@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/engine/mcp"
 )
 
 // The admin API behind Admin → MCP servers.
@@ -49,13 +50,26 @@ type mcpServerRow struct {
 	Connected bool `json:"connected"`
 	// ToolIDs are the step ids this server contributes, so the page can show
 	// what was actually gained rather than only a count.
-	ToolIDs       []string  `json:"tool_ids,omitempty"`
-	ToolCount     int       `json:"tool_count"`
-	LastError     string    `json:"last_error,omitempty"`
-	LastConnected time.Time `json:"last_connected,omitempty"`
-	CreatedBy     string    `json:"created_by,omitempty"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	ToolIDs []string `json:"tool_ids,omitempty"`
+	// Instructions is what the server said about itself at handshake, verbatim.
+	// Live-only, like Connected and ToolIDs: it comes from the connection this
+	// process holds, so a row connected on another replica reports none.
+	//
+	// Third-party text on an admin page. It is rendered as text, never as
+	// markup, and nothing here or downstream acts on it.
+	Instructions string `json:"instructions,omitempty"`
+	// ProtocolVersion is the MCP revision this connection settled on, which
+	// is not necessarily the one we asked for. Live-only, and here because it
+	// is the answer to "the server has tools but none of them have icons" —
+	// icons arrived in 2025-11-25, and a server on an older revision sends
+	// none.
+	ProtocolVersion string    `json:"protocol_version,omitempty"`
+	ToolCount       int       `json:"tool_count"`
+	LastError       string    `json:"last_error,omitempty"`
+	LastConnected   time.Time `json:"last_connected,omitempty"`
+	CreatedBy       string    `json:"created_by,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 type mcpServerRequest struct {
@@ -92,24 +106,26 @@ func decodeMCPBody(r *http.Request, v any) error {
 }
 
 // mcpRowFor renders one stored row with this process's live view merged in.
-func (h *HTTPGateway) mcpRowFor(s MCPServer, live map[string][]string) mcpServerRow {
-	ids, connected := live[s.Name]
+func (h *HTTPGateway) mcpRowFor(s MCPServer, live map[string]mcp.ServerStatus) mcpServerRow {
+	st, connected := live[s.Name]
 	return mcpServerRow{
-		Name:          s.Name,
-		Label:         s.DisplayName(),
-		URL:           s.URL,
-		AuthKind:      string(s.AuthKind),
-		AuthHeader:    s.AuthHeader,
-		HasToken:      s.HasAuth(),
-		Enabled:       s.Enabled,
-		Connected:     connected,
-		ToolIDs:       ids,
-		ToolCount:     s.ToolCount,
-		LastError:     s.LastError,
-		LastConnected: s.LastConnected,
-		CreatedBy:     s.CreatedBy,
-		CreatedAt:     s.CreatedAt,
-		UpdatedAt:     s.UpdatedAt,
+		Name:            s.Name,
+		Label:           s.DisplayName(),
+		URL:             s.URL,
+		AuthKind:        string(s.AuthKind),
+		AuthHeader:      s.AuthHeader,
+		HasToken:        s.HasAuth(),
+		Enabled:         s.Enabled,
+		Connected:       connected,
+		ToolIDs:         st.ToolIDs,
+		Instructions:    st.Instructions,
+		ProtocolVersion: st.ProtocolVersion,
+		ToolCount:       s.ToolCount,
+		LastError:       s.LastError,
+		LastConnected:   s.LastConnected,
+		CreatedBy:       s.CreatedBy,
+		CreatedAt:       s.CreatedAt,
+		UpdatedAt:       s.UpdatedAt,
 	}
 }
 
@@ -119,13 +135,13 @@ func (h *HTTPGateway) mcpRowFor(s MCPServer, live map[string][]string) mcpServer
 // Only the tenant's OWN servers: an operator's instance-wide server is not
 // something an org configured and must not appear on a page whose every other
 // control would edit or delete it.
-func (h *HTTPGateway) liveMCPServers(tenant string) map[string][]string {
-	out := map[string][]string{}
+func (h *HTTPGateway) liveMCPServers(tenant string) map[string]mcp.ServerStatus {
+	out := map[string]mcp.ServerStatus{}
 	for _, st := range h.MCPServers.Catalog.ServersFor(tenant) {
 		if st.Tenant != tenant {
 			continue
 		}
-		out[st.Name] = st.ToolIDs
+		out[st.Name] = st
 	}
 	return out
 }

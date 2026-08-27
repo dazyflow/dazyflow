@@ -935,6 +935,10 @@ export type MCPServer = {
   connected: boolean;
   // tool_ids are the step ids this server contributes.
   tool_ids?: string[];
+  // instructions is what the server says about itself at handshake — prose a
+  // third party wrote, for a human to read. Live-only, like connected: absent
+  // when this row is registered on another replica. Render as TEXT.
+  instructions?: string;
   tool_count: number;
   // last_error is why the last connection attempt failed, verbatim from the
   // endpoint where that helps ("refused the credential").

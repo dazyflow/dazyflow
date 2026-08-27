@@ -270,3 +270,82 @@ func TestCatalog_RejectsDuplicateServerName(t *testing.T) {
 		}
 	}
 }
+
+// TestCatalog_CaptionsWithTheToolTitle covers the display half of a tool
+// descriptor: the server's own title becomes the caption, while the id — the
+// part a flow holds — stays on the wire name.
+func TestCatalog_CaptionsWithTheToolTitle(t *testing.T) {
+	srv := &mcptest.FakeServer{
+		Tools: []mcp.Tool{
+			{Name: "get_weather", Title: "Weather Information Provider"},
+			{Name: "list_dir"},
+		},
+	}
+	cat := registerInProcess(t, "fs", srv)
+	manifests := cat.Manifests()
+
+	titled, ok := manifests["mcp:fs:get_weather"]
+	if !ok {
+		t.Fatal("a titled tool changed its id")
+	}
+	if titled.Label != "fs — Weather Information Provider" {
+		t.Errorf("Label = %q, want the server's title", titled.Label)
+	}
+	// A tool with no title is captioned by its wire name, as before.
+	if untitled := manifests["mcp:fs:list_dir"]; untitled.Label != "fs — list_dir" {
+		t.Errorf("untitled Label = %q", untitled.Label)
+	}
+}
+
+// TestToolDisplayName bounds what a third party can put in a palette row.
+func TestToolDisplayName(t *testing.T) {
+	cases := []struct {
+		name, title, want string
+	}{
+		{"get_weather", "", "get_weather"},
+		{"get_weather", "  Weather  ", "Weather"},
+		{"get_weather", "   ", "get_weather"},
+		// A paragraph is not a caption: first line only.
+		{"get_weather", "Weather\nUse this for forecasts.", "Weather"},
+		{"get_weather", strings.Repeat("x", 200), strings.Repeat("x", 60) + "…"},
+	}
+	for _, c := range cases {
+		got := mcp.Tool{Name: c.name, Title: c.title}.DisplayName()
+		if got != c.want {
+			t.Errorf("Tool{%q, %q}.DisplayName() = %q, want %q", c.name, c.title, got, c.want)
+		}
+	}
+}
+
+// TestCatalog_InlinesAToolIcon covers the wiring from a tool descriptor to the
+// manifest field the palette reads. A data: icon keeps this off the network:
+// what is under test here is that the logo reaches the manifest at all.
+func TestCatalog_InlinesAToolIcon(t *testing.T) {
+	const png = "data:image/png;base64," +
+		"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+	srv := &mcptest.FakeServer{
+		Tools: []mcp.Tool{
+			{Name: "with_icon", Icons: []mcp.Icon{{Src: png, MimeType: "image/png"}}},
+			{Name: "without_icon"},
+			// A source we will not fetch or inline leaves the tool bare rather
+			// than failing the handshake.
+			{Name: "bad_icon", Icons: []mcp.Icon{{Src: "http://example.test/x.png"}}},
+		},
+	}
+	cat := registerInProcess(t, "fs", srv)
+	manifests := cat.Manifests()
+
+	if got := manifests["mcp:fs:with_icon"].BrandLogo; got != png {
+		t.Errorf("BrandLogo = %.40q…, want the inlined icon", got)
+	}
+	if got := manifests["mcp:fs:without_icon"].BrandLogo; got != "" {
+		t.Errorf("a tool with no icon got BrandLogo %.40q", got)
+	}
+	if got := manifests["mcp:fs:bad_icon"].BrandLogo; got != "" {
+		t.Errorf("a refused icon reached a manifest: %.40q", got)
+	}
+	// The tool is still there and still callable — an icon is decoration.
+	if _, ok := cat.Get("", "mcp:fs:bad_icon"); !ok {
+		t.Error("a tool lost its transport over an icon")
+	}
+}

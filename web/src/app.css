@@ -11487,6 +11487,19 @@ button:active,
   overflow-wrap: anywhere;
   max-width: 32ch;
 }
+/* A server's own handshake note, under its endpoint. Clamped to three lines
+   with the full text on hover: it is a paragraph a third party wrote, and an
+   unbounded one would push every other row off the screen. */
+.mcp-instructions {
+  font-size: var(--text-xs);
+  margin-top: var(--space-1);
+  max-width: 48ch;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 /* The id under a server's display name. Monospaced and quiet: it is what the
    palette and flow JSON show, worth being able to find but not the thing being
    read down the column. */
