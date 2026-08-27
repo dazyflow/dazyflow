@@ -113,6 +113,26 @@ func contentSummary(content []ContentItem) string {
 	return "tool reported error"
 }
 
+// Integration is what every MCP-provided step reports as its app.
+//
+// Without one the palette badges these steps "Built-in" (its fallback for a
+// manifest with no integration) and the Apps page files them under the
+// standard library — which is the opposite of true: they come from someone
+// else's server, over a protocol, and an org added them deliberately.
+//
+// One shared value rather than one per server, because the step's LABEL
+// already names the server it came from ("Vendor Tools — Create an issue").
+// A badge repeating that would carry no information; a badge saying how the
+// step got here does. It matches the vocabulary the product already uses in
+// Admin → MCP servers.
+//
+// Safe to set despite Integration being the connection machinery's key: that
+// machinery gates on ConnectionFields (which these manifests do not have) and
+// on an explicit OAuth allowlist (which "MCP" is not in), so an MCP step is
+// never asked to be "connected" like a vendor app. Its credential lives on the
+// server row.
+const Integration = "MCP"
+
 // offlineAware stamps a manifest that describes a server with no connection.
 //
 // The manifest is otherwise COMPLETE — ports, params schema, icon — because a
@@ -178,6 +198,7 @@ func synthesizeManifest(server, label string, tool Tool, brandLogo string) core.
 		// icons.go for why nothing else may reach here.
 		BrandLogo:      brandLogo,
 		Provider:       "mcp:" + server,
+		Integration:    Integration,
 		Tags:           []string{"mcp", server},
 		Description:    desc,
 		ExecutionModel: core.ExecutionBatch,

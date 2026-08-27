@@ -112,7 +112,7 @@ export function Apps() {
   // matches the NodeCatalog grouping rules.
   const groups = useMemo(() => {
     const nameOf = (g: { slug: string; meta: { name: string } }) =>
-      g.slug === "standard-library" ? t("integrations.builtinGroup") : g.meta.name;
+      groupDisplayName(g.slug, g.meta.name, t);
     return buildGroups(drops ?? []).sort((a, b) =>
       nameOf(a).localeCompare(nameOf(b), undefined, { sensitivity: "base" }),
     );
@@ -136,8 +136,7 @@ export function Apps() {
   const haystacks = useMemo(() => {
     const out = new Map<string, string>();
     for (const g of groups) {
-      const name =
-        g.slug === "standard-library" ? t("integrations.builtinGroup") : g.meta.name;
+      const name = groupDisplayName(g.slug, g.meta.name, t);
       const parts = [name, g.slug, g.meta.description];
       for (const d of g.drops) {
         parts.push(dropLabel(d, i18n.language), d.id, dropSubtitle(d, i18n.language) ?? "");
@@ -467,7 +466,7 @@ function IntegrationCard({
             </span>
           )}
           <h2>
-            {slug === "standard-library" ? t("integrations.builtinGroup") : meta.name}
+            {groupDisplayName(slug, meta.name, t)}
           </h2>
           {connected && (
             <span
@@ -584,12 +583,7 @@ export function AppDetail() {
       name: integrationNameFromSlug(slug),
       description: "",
     };
-    // The catch-all bucket reads as "Built-in" to non-technical users,
-    // not "Standard Library".
-    const m =
-      slug === "standard-library"
-        ? { ...base, name: t("integrations.builtinGroup") }
-        : base;
+    const m = { ...base, name: groupDisplayName(slug, base.name, t) };
     return { meta: m, integrationDrops: filtered };
   }, [drops, slug, t]);
 
@@ -1655,6 +1649,23 @@ function hasWiringDetails(d: Manifest): boolean {
     (d.inputs && d.inputs.length > 0) ||
     (d.outputs && d.outputs.length > 0)
   ) as boolean;
+}
+
+// groupDisplayName is a group's heading.
+//
+// Two slugs get a localized name instead of integrationMeta's: the catch-all
+// bucket, which reads as "Built-in" rather than "Standard library" to anyone
+// who is not a programmer, and the MCP bucket, whose steps come from servers
+// the org added rather than from a connector we wrote. Everything else uses
+// its curated name, which is a product name and not translated.
+function groupDisplayName(
+  slug: string,
+  metaName: string,
+  t: (key: string) => string,
+): string {
+  if (slug === "standard-library") return t("integrations.builtinGroup");
+  if (slug === "mcp") return t("integrations.mcpGroup");
+  return metaName;
 }
 
 // integrationSlugFor returns the slug a drop belongs to. Drops

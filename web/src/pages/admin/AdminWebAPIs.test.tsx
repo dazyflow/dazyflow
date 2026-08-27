@@ -28,12 +28,14 @@ vi.mock("../../auth", () => {
 const listWebAPIs = vi.fn();
 const saveWebAPI = vi.fn();
 const deleteWebAPI = vi.fn();
+const webAPIUsage = vi.fn();
 vi.mock("../../api", () => ({
   APIError: class extends Error {},
   api: {
     listWebAPIs: (...a: unknown[]) => listWebAPIs(...a),
     saveWebAPI: (...a: unknown[]) => saveWebAPI(...a),
     deleteWebAPI: (...a: unknown[]) => deleteWebAPI(...a),
+    webAPIUsage: (...a: unknown[]) => webAPIUsage(...a),
   },
 }));
 
@@ -75,6 +77,7 @@ const orders = {
 beforeEach(() => {
   vi.clearAllMocks();
   listWebAPIs.mockResolvedValue({ web_apis: [orders] });
+  webAPIUsage.mockResolvedValue({ flows: [], hidden: 0 });
 });
 
 describe("AdminWebAPIs", () => {
@@ -237,6 +240,52 @@ describe("AdminWebAPIs", () => {
     ).toBe("query");
   });
 
+  it("names the flows that will break when removing a catalog in use", async () => {
+    webAPIUsage.mockResolvedValue({
+      flows: [
+        {
+          workspace: "ws1",
+          flow_id: "invoices",
+          name: "Nightly invoices",
+          steps: ["api:order-service:create_order"],
+          published: true,
+        },
+      ],
+      hidden: 0,
+    });
+    render(<AdminWebAPIs />);
+    await screen.findByText("Order service");
+    await userEvent.click(screen.getByLabelText("common.remove"));
+
+    const warning = await screen.findByText(/webapi.removeInUse/);
+    expect(warning.textContent).toContain("Nightly invoices");
+    expect(warning.textContent).toContain("webapi.removePublished");
+    await waitFor(() => expect(webAPIUsage).toHaveBeenCalledWith("tok", "order-service"));
+  });
+
+  it("says plainly when nothing uses the catalog", async () => {
+    render(<AdminWebAPIs />);
+    await screen.findByText("Order service");
+    await userEvent.click(screen.getByLabelText("common.remove"));
+
+    expect(await screen.findByText(/webapi.removeUnused/)).toBeInTheDocument();
+    expect(screen.queryByText(/webapi.removeInUse/)).toBeNull();
+  });
+
+  it("still warns when the usage lookup fails, rather than claiming safety", async () => {
+    webAPIUsage.mockRejectedValue(new Error("boom"));
+    deleteWebAPI.mockResolvedValue({ deleted: "order-service" });
+    render(<AdminWebAPIs />);
+    await screen.findByText("Order service");
+    await userEvent.click(screen.getByLabelText("common.remove"));
+
+    expect(await screen.findByText(/webapi.removeReally/)).toBeInTheDocument();
+    expect(screen.queryByText(/webapi.removeUnused/)).toBeNull();
+    // And the delete still works.
+    await userEvent.click(screen.getByText("common.remove"));
+    await waitFor(() => expect(deleteWebAPI).toHaveBeenCalledWith("tok", "order-service"));
+  });
+
   it("confirms before removing, because flows stop running", async () => {
     deleteWebAPI.mockResolvedValue({ deleted: "order-service" });
     render(<AdminWebAPIs />);
@@ -245,7 +294,7 @@ describe("AdminWebAPIs", () => {
     );
     await userEvent.click(screen.getByLabelText("common.remove"));
     expect(deleteWebAPI).not.toHaveBeenCalled();
-    expect(screen.getByText(/webapi.removeReally/)).toBeInTheDocument();
+    expect(screen.getByText(/webapi.remove(Really|Unused)/)).toBeInTheDocument();
     await userEvent.click(screen.getByText("common.remove"));
     await waitFor(() =>
       expect(deleteWebAPI).toHaveBeenCalledWith("tok", "order-service"),

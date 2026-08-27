@@ -257,6 +257,14 @@ export const SV_INTEGRATION_PROSE: DescriptionMap = {
     en: "f9b435a6",
     sv: "Ingen anslutningspool — att öppna filen tar mikrosekunder, så en ny handtag per anrop går bra. .sqlite-filen ligger i arbetsytans sandlåda som alla andra filer där; sandlådans regler gäller.",
   },
+  "mcp.description": {
+    en: "1a4554a8",
+    sv: "Steg som kommer från en MCP-server som din organisation har lagt till, i stället för från en koppling som vi har skrivit. Peka Dazyflow mot en servers adress under Admin → MCP-servrar, så dyker varje verktyg den publicerar upp här som ett steg — inget att installera, och ingen koppling att vänta på. Servern har sin egen inloggning, så dessa steg behöver ingen separat anslutning.",
+  },
+  "mcp.technical_notes": {
+    en: "ec20240d",
+    sv: "Verktygen läses vid handskakningen över streamable HTTP (MCP-revision 2025-11-25) och blir steg med id:t mcp:<server>:<verktyg>; ett verktygs argument blir stegets pinnar. Varje server tillhör den organisation som registrerade den och kan bara nås av den organisationens flöden. En server som slutar svara behåller sina steg beskrivna — de visar en \"Kräver anslutning\"-banner och vägrar att köra — så flöden som använder dem behåller sina kopplingar.",
+  },
   "standard-library.description": {
     en: "23ca5ac2",
     sv: "Inbyggda flödesprimitiver som inte hör till någon leverantör: dirigering (branch, split_rows, route_rows), väntan (await_approval, sleep), filhantering (läs, skriv), omvandlingsfamiljen (map / sort / dedupe / join / group / compute), databasdroppar (Postgres / MySQL / SQLite) och schematriggrar (cron, poll, webhook). Verktygslådan du tar till mellan tredjepartsanslutningarna.",

@@ -6,6 +6,7 @@ package daemon
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -207,6 +208,38 @@ func (h *HTTPGateway) saveWebAPI(rw http.ResponseWriter, r *http.Request, p core
 	writeJSON(rw, http.StatusOK, h.webAPIRowFor(saved, h.liveWebAPIs(p.Tenant)))
 }
 
+// webAPIUsage answers "what breaks if I delete this".
+//
+// Same shape and same reasoning as the MCP servers' usage route: its own
+// endpoint because it loads every graph in the org, which is fine once when a
+// delete confirmation opens and wasteful on every render of the list.
+func (h *HTTPGateway) webAPIUsage(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	if !requireStepSourceAdmin(rw, p) || !h.webAPIsConfigured(rw) {
+		return
+	}
+	name := r.PathValue("name")
+	// Report usage only for a catalog that exists, so a typo'd name cannot be
+	// answered with a confident "nothing uses this".
+	if _, err := h.WebAPIs.Store.Get(r.Context(), p.Tenant, name); err != nil {
+		if errors.Is(err, ErrWebAPINotFound) {
+			writeJSONError(rw, http.StatusNotFound, "no web API named "+name)
+			return
+		}
+		writeJSONError(rw, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if h.svc == nil {
+		writeJSONError(rw, http.StatusNotImplemented, "flow storage is not configured on this deployment")
+		return
+	}
+	usage, err := h.svc.FlowsUsingWebAPI(r.Context(), p, p.Tenant, name)
+	if err != nil {
+		writeJSONError(rw, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(rw, http.StatusOK, usage)
+}
+
 func (h *HTTPGateway) deleteWebAPI(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !requireStepSourceAdmin(rw, p) || !h.webAPIsConfigured(rw) {
 		return
@@ -220,6 +253,14 @@ func (h *HTTPGateway) deleteWebAPI(rw http.ResponseWriter, r *http.Request, p co
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
-	h.audit(r.Context(), p, "web_api.delete", name, "")
+	// Audited with what it broke, not just what was removed — same as the MCP
+	// servers' delete.
+	detail := ""
+	if h.svc != nil {
+		if usage, uerr := h.svc.FlowsUsingWebAPI(r.Context(), p, p.Tenant, name); uerr == nil && usage.InUse() {
+			detail = fmt.Sprintf("in use by %d flow(s)", len(usage.Flows)+usage.Hidden)
+		}
+	}
+	h.audit(r.Context(), p, "web_api.delete", name, detail)
 	writeJSON(rw, http.StatusOK, map[string]any{"deleted": name})
 }

@@ -364,6 +364,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/admin/web-apis", h.requireAuth(h.listWebAPIs))
 	mux.HandleFunc("POST /api/v1/admin/web-apis", h.requireAuth(h.saveWebAPI))
 	mux.HandleFunc("PUT /api/v1/admin/web-apis/{name}", h.requireAuth(h.saveWebAPI))
+	mux.HandleFunc("GET /api/v1/admin/web-apis/{name}/usage", h.requireAuth(h.webAPIUsage))
 	mux.HandleFunc("DELETE /api/v1/admin/web-apis/{name}", h.requireAuth(h.deleteWebAPI))
 
 	// Tenant runners: an org's own code, reachable as a step in its flows.

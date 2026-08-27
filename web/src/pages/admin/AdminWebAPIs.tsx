@@ -8,11 +8,13 @@ import { Button } from "../../components/ui/Button";
 import { useAuth } from "../../auth";
 import { api } from "../../api";
 import type {
+  StepSourceUsage,
   WebAPI,
   WebAPIArg,
   WebAPIInput,
   WebAPIOperation,
 } from "../../types";
+import { StepSourceRemoveWarning } from "../../components/admin/StepSourceRemoveWarning";
 import { explainApiError } from "../../lib/explainApiError";
 import { ErrorNotice } from "../../components/ui/ErrorNotice";
 import { EmptyState } from "../../components/ui/EmptyState";
@@ -39,6 +41,11 @@ export function AdminWebAPIs() {
   const [editing, setEditing] = useState<WebAPI | "new" | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
+  // usage is what the catalog being confirmed is actually used by, keyed by
+  // name. undefined means "still asking" — the confirm renders without a count
+  // rather than waiting, so the button is never dead while a scan of the org's
+  // graphs runs.
+  const [usage, setUsage] = useState<Record<string, StepSourceUsage>>({});
 
   const load = useCallback(() => {
     if (!token) return;
@@ -74,6 +81,19 @@ export function AdminWebAPIs() {
     } finally {
       setBusy(null);
     }
+  };
+
+  // askToRemove opens the confirmation and, in parallel, finds out what the
+  // catalog is used by. The warning fills in when the answer arrives.
+  const askToRemove = (name: string) => {
+    setConfirmRemove(name);
+    if (!token || usage[name]) return;
+    api
+      .webAPIUsage(token, name)
+      .then((u) => setUsage((prev) => ({ ...prev, [name]: u })))
+      // A failed lookup must not block the delete or claim nothing is using the
+      // catalog. The confirm falls back to the unconditional warning.
+      .catch(() => {});
   };
 
   const remove = async (name: string) => {
@@ -168,7 +188,7 @@ export function AdminWebAPIs() {
                     <td className="runner-actions">
                       {confirmRemove === w.name ? (
                         <span className="inline-confirm">
-                          {t("webapi.removeReally")}{" "}
+                          <StepSourceRemoveWarning usage={usage[w.name]} ns="webapi" />{" "}
                           <Button
                             variant="danger"
                             onClick={() => void remove(w.name)}
@@ -195,7 +215,7 @@ export function AdminWebAPIs() {
                           <Button
                             variant="ghost"
                             className="danger"
-                            onClick={() => setConfirmRemove(w.name)}
+                            onClick={() => askToRemove(w.name)}
                             title={t("common.remove")}
                             aria-label={t("common.remove")}
                           >

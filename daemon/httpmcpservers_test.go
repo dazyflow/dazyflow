@@ -239,7 +239,7 @@ func TestMCPServersEndpoints_Usage(t *testing.T) {
 	if usage.Code != 200 {
 		t.Fatalf("usage code %d body %s", usage.Code, usage.Body)
 	}
-	var got MCPServerUsage
+	var got StepSourceUsage
 	if err := json.Unmarshal(usage.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}

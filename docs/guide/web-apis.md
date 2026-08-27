@@ -39,14 +39,29 @@ Three things you did not have before:
 
 ### The address and the key are not in the flow
 
-This is the part that saves the most work. A described API gets its own page
-under **Apps**, exactly like Gmail or Stripe: you fill in the address and the
-credential **once**, and every step of every flow uses them without holding
-either. Rotating a key is one edit, not one per step.
+This is the part that saves the most work. Neither the address nor the
+credential is typed into a flow: every step of every flow uses them without
+holding either, and rotating a key is one edit, not one per step.
 
-That is also why the auth question on the admin page only asks for the *shape* —
-bearer token, or a header the service names. The value itself is entered on the
-Apps page after you save.
+They live in two different places, on purpose:
+
+| | Where it is set | Who can change it |
+| --- | --- | --- |
+| **Service address** | Admin → Web APIs, on the catalog | An org admin |
+| **Credential** | The catalog's page under **Apps**, like Gmail or Stripe | Anyone who manages secrets |
+
+That split is why the auth question on the admin page only asks for the *shape*
+— bearer token, or a header the service names. The value itself is entered on
+the Apps page after you save.
+
+It is also a boundary worth knowing about. The token is sent to whatever address
+the call resolves, so letting the address be set alongside the credential would
+mean anyone who can manage secrets could point your calls at another host and be
+handed the key. The address belongs to the catalog, and only an admin edits it.
+
+If one step genuinely needs a different host — a staging instance, a one-off —
+set the `base_url` param on that step. That changes one step in one flow, which
+is the same kind of change as editing any other step.
 
 ---
 
@@ -119,7 +134,13 @@ while everything you described stays. It is the reversible half of removing.
 
 Removing is not reversible in the way that matters: flows referencing
 `api:<name>:<operation>` stay valid flows, but their steps stop resolving and a
-run fails at that step. The page says so before it removes anything.
+run fails at that step.
+
+The page says so before it removes anything, and it says it with the actual
+numbers: it scans your org's flows and names the ones that will stop working,
+calling out any that are published and running now. When nothing uses the
+catalog, it says that instead — which is the common case for one added by
+mistake. A flow whose steps you cannot see is counted but not named.
 
 ---
 

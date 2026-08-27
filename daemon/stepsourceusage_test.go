@@ -75,7 +75,7 @@ func TestFlowsUsingMCPServer_FindsReferencesAcrossWorkspaces(t *testing.T) {
 	if usage.Hidden != 0 {
 		t.Errorf("hidden = %d, want 0 for an admin", usage.Hidden)
 	}
-	byID := map[string]MCPServerUse{}
+	byID := map[string]StepSourceUse{}
 	for _, f := range usage.Flows {
 		byID[f.FlowID] = f
 	}
@@ -152,5 +152,50 @@ func TestFlowsUsingMCPServer_RefusesAnotherOrg(t *testing.T) {
 	svc, _, _ := usageService(t)
 	if _, err := svc.FlowsUsingMCPServer(context.Background(), adminPrincipal("acme"), "globex", "mcp-test"); err == nil {
 		t.Fatal("an admin read another org's flow usage")
+	}
+}
+
+// TestFlowsUsingWebAPI covers the other step source through the same scan: a
+// web API catalog's steps carry api:<name>:<operation>, and deleting one has
+// the same consequence a disabled MCP server does.
+func TestFlowsUsingWebAPI(t *testing.T) {
+	svc, ws1, _ := usageService(t)
+
+	saveGraph(t, ws1, core.Graph{
+		ID: "billing", Name: "Nightly invoices", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{
+			{ID: "a", Module: "api:order-service:create_order"},
+			{ID: "b", Module: "api:order-service:get_order"},
+			{ID: "c", Module: "http_request"},
+		},
+	})
+	// A neighbouring catalog whose name shares a prefix must not match, and
+	// neither must an MCP server that happens to share the name.
+	saveGraph(t, ws1, core.Graph{
+		ID: "other", Name: "Unrelated", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{
+			{ID: "a", Module: "api:order-service-2:get_order"},
+			{ID: "b", Module: "mcp:order-service:get_order"},
+		},
+	})
+
+	usage, err := svc.FlowsUsingWebAPI(context.Background(), adminPrincipal("acme"), "acme", "order-service")
+	if err != nil {
+		t.Fatalf("FlowsUsingWebAPI: %v", err)
+	}
+	if len(usage.Flows) != 1 || usage.Flows[0].FlowID != "billing" {
+		t.Fatalf("flows = %+v, want only the referencing flow", usage.Flows)
+	}
+	if len(usage.Flows[0].Steps) != 2 {
+		t.Errorf("steps = %v, want both operations", usage.Flows[0].Steps)
+	}
+
+	// And the two schemes do not see each other's flows.
+	mcpUsage, err := svc.FlowsUsingMCPServer(context.Background(), adminPrincipal("acme"), "acme", "order-service")
+	if err != nil {
+		t.Fatalf("FlowsUsingMCPServer: %v", err)
+	}
+	if len(mcpUsage.Flows) != 1 || mcpUsage.Flows[0].FlowID != "other" {
+		t.Fatalf("mcp flows = %+v, want only the flow using the MCP step", mcpUsage.Flows)
 	}
 }

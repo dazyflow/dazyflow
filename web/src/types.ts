@@ -959,10 +959,10 @@ export type MCPServer = {
   updated_at: string;
 };
 
-// MCPServerUse is one flow that references an MCP server's steps, from
-// GET /admin/mcp-servers/{name}/usage. It exists to answer one question, asked
-// at one moment: what breaks if this server is deleted.
-export type MCPServerUse = {
+// StepSourceUse is one flow that references a step source's steps, from
+// GET /admin/{mcp-servers,web-apis}/{name}/usage. It exists to answer one
+// question, asked at one moment: what breaks if this source is deleted.
+export type StepSourceUse = {
   workspace: string;
   flow_id: string;
   name?: string;
@@ -972,10 +972,10 @@ export type MCPServerUse = {
   published: boolean;
 };
 
-// MCPServerUsage is the whole answer. hidden counts flows the caller may not
+// StepSourceUsage is the whole answer. hidden counts flows the caller may not
 // view: an admin needs the blast radius even where they may not see the title.
-export type MCPServerUsage = {
-  flows: MCPServerUse[];
+export type StepSourceUsage = {
+  flows: StepSourceUse[];
   hidden: number;
 };
 

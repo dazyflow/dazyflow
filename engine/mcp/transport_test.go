@@ -349,3 +349,30 @@ func TestCatalog_InlinesAToolIcon(t *testing.T) {
 		t.Error("a tool lost its transport over an icon")
 	}
 }
+
+// TestCatalog_StepsReportMCPAsTheirApp: without an Integration the palette
+// badges these steps "Built-in" — its fallback for a manifest with no app —
+// and the Apps page files them under the standard library. Both are wrong: the
+// step came from someone else's server that an org added deliberately.
+func TestCatalog_StepsReportMCPAsTheirApp(t *testing.T) {
+	srv := &mcptest.FakeServer{Tools: []mcp.Tool{{Name: "create_issue"}}}
+	cat := registerInProcess(t, "vendor", srv)
+
+	man, ok := cat.Manifests()["mcp:vendor:create_issue"]
+	if !ok {
+		t.Fatal("missing manifest")
+	}
+	if man.Integration != mcp.Integration {
+		t.Errorf("Integration = %q, want %q", man.Integration, mcp.Integration)
+	}
+	// The provider stays per-server: it is what scopes a step to the server it
+	// came from, and only the APP grouping is shared.
+	if man.Provider != "mcp:vendor" {
+		t.Errorf("Provider = %q, want it to stay per-server", man.Provider)
+	}
+	// Carrying an Integration must not make an MCP step look like a vendor app
+	// awaiting a connection — that machinery keys on ConnectionFields.
+	if len(man.ConnectionFields) != 0 {
+		t.Errorf("ConnectionFields = %+v, want none", man.ConnectionFields)
+	}
+}

@@ -23,6 +23,58 @@ into the image.)
 
 ## [Unreleased]
 
+### Fixed
+
+- **A web API's service address is no longer settable from its Apps
+  connection.** It appeared in two places — Admin → Web APIs, and again as a
+  field on the connection card — and the second one won: a connection value is
+  injected into the matching param, and an injected param beats the catalog's
+  own address.
+
+  That put the address behind the WRONG permission. A connection is writable
+  with `secret:write`, which the plain editor role holds, while the catalog is
+  edited behind `organization:admin` / `module:register`. Since the token is
+  sent as a header to whatever address resolved, an editor could point the org's
+  catalog at a host of their choosing and be handed the credential. The
+  connection now carries the credential and nothing else.
+
+  Nothing is lost: a catalog belongs to exactly one tenant and there is no
+  instance-wide population, so there was never a shared-catalog-per-deployment
+  case for the override to answer. A single step that needs a different host
+  still sets the `base_url` param — flow-shaping power `graph:edit` already has.
+  An address previously saved on a connection is simply ignored (injection is
+  manifest-driven, so an undeclared field is never read) and can be left alone.
+
+- **Deleting a web API now says what will actually break, like MCP servers do.**
+  Admin → Web APIs shipped with the same unconditional warning MCP servers had
+  ("flows using its steps will stop running", whether or not any did). It now
+  names the flows, with published ones called out, and says plainly when nothing
+  uses the catalog. Backed by `GET /admin/web-apis/{name}/usage`, and the delete
+  audit record carries how many flows were affected.
+
+  The scan and the warning are now SHARED rather than duplicated: the flow scan
+  moved to `daemon/stepsourceusage.go` keyed on a step-id prefix (`mcp:<name>:`
+  or `api:<name>:`), joining the slug and URL policy already shared in
+  `stepsources.go`, and both admin pages render one `StepSourceRemoveWarning`.
+  The states worth getting right are the easy ones to get wrong twice — a failed
+  lookup must not read as "safe to delete", and flows the admin cannot see must
+  be counted without being named.
+
+- **MCP steps are no longer labelled "Built-in".** They carried no app, and the
+  palette's fallback for a step with no app is a faint *Built-in* badge — so a
+  tool from a server the org added deliberately read as one of our own
+  primitives, and the Apps page filed it under the standard library. They now
+  report **MCP** as their app: the palette badges it, and Apps gives them their
+  own **MCP servers** group with prose explaining where the steps come from.
+
+  One shared app rather than one per server, because a step's label already
+  names its server (*Vendor Tools — Create an issue*) — a badge repeating that
+  carries nothing, while a badge saying how the step got here does. The provider
+  stays per-server, since that is what scopes a step to the server it came from.
+  MCP steps are still never asked to be "connected" like a vendor app: that
+  machinery keys on connection fields, which these manifests do not have, and
+  the credential lives on the server row.
+
 ## [0.19.0] - 2026-08-27
 
 ### Added

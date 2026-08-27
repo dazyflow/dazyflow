@@ -207,8 +207,15 @@ func TestConnectionFields_FoundForADescribedAPI(t *testing.T) {
 		keys[f.Key] = true
 		secret[f.Key] = f.Secret
 	}
-	if !keys["base_url"] || !keys["token"] {
-		t.Fatalf("fields = %+v, want base_url and token", fields)
+	// The credential, and only that. The service address is the catalog's and
+	// is set in Admin → Web APIs: a connection is writable with secret:write,
+	// so offering the address here would let an editor repoint the whole org's
+	// calls — and be handed the token, which is sent to whatever address won.
+	if !keys["token"] {
+		t.Fatalf("fields = %+v, want the credential", fields)
+	}
+	if keys["base_url"] {
+		t.Errorf("the service address is offered on the connection page: %+v", fields)
 	}
 	if !secret["token"] {
 		t.Error("the credential field is not Secret: it would render unmasked and skip redaction")

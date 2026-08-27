@@ -4,12 +4,16 @@
 package daemon
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/engine/webapi"
+	"git.sr.ht/~klahr/dazyflow/workspace"
 )
 
 // webAPIHarness is a gateway with the feature wired, plus the catalog so a test
@@ -232,4 +236,60 @@ func TestHTTP_RowCarriesNoCredentialField(t *testing.T) {
 	if generic["auth_header"] != "X-Api-Key" {
 		t.Errorf("auth_header = %v, want it returned", generic["auth_header"])
 	}
+}
+
+// TestWebAPIsEndpoints_Usage: the lookup behind the delete warning, scoped to a
+// catalog that exists and answered for the caller's own org.
+func TestWebAPIsEndpoints_Usage(t *testing.T) {
+	h, _ := webAPIHarness(t)
+	ws, err := workspace.OpenFS(t.TempDir())
+	if err != nil {
+		t.Fatalf("OpenFS: %v", err)
+	}
+	h.gw.svc = &Service{Workspaces: MapWorkspaces{"acme/ws1": ws}}
+
+	body, _ := json.Marshal(saveBody())
+	rw := httptest.NewRecorder()
+	h.gw.saveWebAPI(rw, httptest.NewRequest("POST", "/api/v1/admin/web-apis", bytes.NewReader(body)),
+		adminPrincipal("acme"))
+	if rw.Code != 200 {
+		t.Fatalf("save code %d body %s", rw.Code, rw.Body)
+	}
+	if _, err := ws.Save(core.Graph{
+		ID: "billing", Name: "Nightly invoices", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{{ID: "a", Module: "api:order-service:get_order"}},
+	}, "tester"); err != nil {
+		t.Fatalf("save graph: %v", err)
+	}
+
+	usage := webAPIUsageReq(t, h, adminPrincipal("acme"), "order-service")
+	if usage.Code != 200 {
+		t.Fatalf("usage code %d body %s", usage.Code, usage.Body)
+	}
+	var got StepSourceUsage
+	if err := json.Unmarshal(usage.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got.Flows) != 1 || got.Flows[0].FlowID != "billing" {
+		t.Fatalf("flows = %+v", got.Flows)
+	}
+
+	// A name that is not a catalog of this org gets a 404, not a confident
+	// "nothing uses this".
+	if rw := webAPIUsageReq(t, h, adminPrincipal("acme"), "typo"); rw.Code != 404 {
+		t.Errorf("unknown catalog usage code %d, want 404", rw.Code)
+	}
+	// Admin-only, like every other route on this page.
+	if rw := webAPIUsageReq(t, h, editorPrincipal("acme"), "order-service"); rw.Code != 403 {
+		t.Errorf("editor usage code %d, want 403", rw.Code)
+	}
+}
+
+func webAPIUsageReq(t *testing.T, h *gatewayHarness, p core.Principal, name string) *httptest.ResponseRecorder {
+	t.Helper()
+	rw := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/v1/admin/web-apis/"+name+"/usage", nil)
+	req.SetPathValue("name", name)
+	h.gw.webAPIUsage(rw, req, p)
+	return rw
 }

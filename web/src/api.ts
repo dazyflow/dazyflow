@@ -44,7 +44,7 @@ import type {
   GitCredential,
   MCPServer,
   MCPServerInput,
-  MCPServerUsage,
+  StepSourceUsage,
   WebAPI,
   WebAPIInput,
   Runner,
@@ -997,7 +997,7 @@ export const api = {
   // an admin asks to delete one — it loads every graph in the org, so it is
   // not something the list polls.
   mcpServerUsage: (token: string, name: string) =>
-    request<MCPServerUsage>(
+    request<StepSourceUsage>(
       token,
       "GET",
       `/admin/mcp-servers/${encodeURIComponent(name)}/usage`,
@@ -1020,6 +1020,15 @@ export const api = {
     existingName
       ? request<WebAPI>(token, "PUT", `/admin/web-apis/${encodeURIComponent(existingName)}`, input)
       : request<WebAPI>(token, "POST", "/admin/web-apis", input),
+  // webAPIUsage lists the flows referencing a catalog's steps. Called when an
+  // admin asks to delete one — it loads every graph in the org, so it is not
+  // something the list polls.
+  webAPIUsage: (token: string, name: string) =>
+    request<StepSourceUsage>(
+      token,
+      "GET",
+      `/admin/web-apis/${encodeURIComponent(name)}/usage`,
+    ),
   // deleteWebAPI removes the catalog and takes its steps out of the palette.
   // Flows referencing them stay valid graphs but stop resolving at run time.
   deleteWebAPI: (token: string, name: string) =>

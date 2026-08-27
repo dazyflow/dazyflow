@@ -170,9 +170,9 @@ func example(desc Descriptor, op Operation, method string) core.ParamsExample {
 	if err != nil {
 		raw = json.RawMessage(`{}`)
 	}
-	notes := fmt.Sprintf("The service address and credential come from the %s connection, so they are not params here.", desc.Name)
+	notes := fmt.Sprintf("The credential comes from the %s connection, so it is not a param here. The service address comes from the catalog itself.", desc.Name)
 	if desc.Auth.Kind == AuthNone || desc.Auth.Kind == "" {
-		notes = fmt.Sprintf("The service address comes from the %s connection, so it is not a param here.", desc.Name)
+		notes = "The service address comes from the catalog itself, so it is not a param here."
 	}
 	return core.ParamsExample{
 		Title:  fmt.Sprintf("%s %s", method, op.Path),
@@ -228,18 +228,30 @@ func retryPolicy(method string) core.RetryPolicy {
 // the address and the ${secret.X} are re-typed in every step of every flow, and
 // rotating the token is forty edits.
 //
-// Neither field is marked Required. Required here means "counts toward fully
-// connected", and it does — but base_url has a descriptor default and both are
-// injected rather than typed, so flagging them would mark every node incomplete
-// until the connection exists. That check belongs to the connection, not the
-// node.
+// The credential and NOTHING ELSE. The service address deliberately is not a
+// connection field, though it was one until it became clear what that cost.
+//
+// A connection is writable with secret:write, which the plain editor role
+// holds; the catalog's address is set in Admin → Web APIs behind
+// organization:admin / module:register. Because an injected connection value
+// beats the descriptor's own (see Transport.buildRequest), declaring the
+// address here let the LESS privileged of the two sources override the more
+// privileged one — and since the token is sent as a header to whatever address
+// resolved, an editor could have pointed the org's catalog at a host of their
+// choosing and been handed the credential. The address has one owner now.
+//
+// Nothing is lost by it: a catalog belongs to exactly one tenant (Descriptor
+// requires it, and there is no instance-wide population), so there was never a
+// shared-catalog-per-deployment case for the connection to answer. A genuine
+// per-step exception is still the base_url PARAM, which is flow-shaping power
+// graph:edit already has.
+//
+// The credential is not marked Required. Required here means "counts toward
+// fully connected", and it does — but it is injected rather than typed, so
+// flagging it would mark every node incomplete until the connection exists.
+// That check belongs to the connection, not the node.
 func connectionFields(desc Descriptor) []core.ConnectionField {
-	fields := []core.ConnectionField{{
-		Key:         "base_url",
-		Label:       "Service address",
-		Placeholder: "https://api.example.com",
-		Help:        "The base address of your service. Operation paths are joined onto it.",
-	}}
+	var fields []core.ConnectionField
 	switch desc.Auth.Kind {
 	case AuthBearer:
 		fields = append(fields, core.ConnectionField{

@@ -388,8 +388,15 @@ func TestManifest_ConnectionFields(t *testing.T) {
 	for _, f := range m.ConnectionFields {
 		keys[f.Key] = f
 	}
-	if _, ok := keys["base_url"]; !ok {
-		t.Fatalf("fields = %+v, want base_url", m.ConnectionFields)
+	// The credential and nothing else. The service address is the catalog's,
+	// set by an admin — a connection is writable with secret:write, so
+	// declaring the address here would let an editor repoint the org's calls
+	// (and be handed the token, which is sent to whatever address resolved).
+	if _, ok := keys["base_url"]; ok {
+		t.Errorf("the service address is a connection field: %+v", m.ConnectionFields)
+	}
+	if len(m.ConnectionFields) != 1 {
+		t.Errorf("fields = %+v, want only the credential", m.ConnectionFields)
 	}
 	tok, ok := keys["token"]
 	if !ok {
@@ -408,10 +415,36 @@ func TestManifest_NoCredentialFieldWithoutAuth(t *testing.T) {
 	desc.Auth = webapi.Auth{Kind: webapi.AuthNone}
 	cat := mustRegister(t, desc)
 	m := transport(t, cat, "acme", "api:orders:get_order").Manifest()
+	// Nothing to connect at all: no credential, and the address is not a
+	// connection field either, so the Apps page has no form to offer.
+	if len(m.ConnectionFields) != 0 {
+		t.Errorf("fields = %+v, want none for a catalog with no auth", m.ConnectionFields)
+	}
+}
+
+// TestTransport_ConnectionCannotRepointTheService is the privilege boundary the
+// field removal exists for.
+//
+// A connection value reaches a step by being injected into a param of the same
+// name (engine/secrets.go), and an injected param beats the descriptor. So the
+// test simulates exactly that: a base_url arriving as a param, as an injected
+// connection value would. The address must still be the catalog's.
+//
+// It is a deliberate asymmetry, not an oversight: an author with graph:edit CAN
+// override one step this way, and that is flow-shaping power they already have.
+// What must not happen is secret:write doing it for the whole org at once.
+func TestTransport_ConnectionCannotRepointTheService(t *testing.T) {
+	cat := mustRegister(t, ordersDescriptor())
+	m := transport(t, cat, "acme", "api:orders:get_order").Manifest()
 	for _, f := range m.ConnectionFields {
-		if f.Key == "token" {
-			t.Error("a catalog with no auth must not ask for a credential")
+		if f.Key == "base_url" {
+			t.Fatal("base_url is injectable from a connection again — an editor can repoint the org's calls")
 		}
+	}
+	// And the params schema still offers the per-step override, so the
+	// documented escape hatch has not gone with it.
+	if !strings.Contains(string(m.ParamsSchema), "base_url") {
+		t.Errorf("the per-step base_url override is gone: %s", m.ParamsSchema)
 	}
 }
 

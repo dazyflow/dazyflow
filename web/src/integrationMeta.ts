@@ -421,6 +421,13 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Save rows to a built-in collection with no setup, then query them back — it's the storage behind the in-app Collections page. Reach for it to collect a flow's output for review, build a lightweight dashboard, or keep running totals without provisioning a real database.",
   },
+  mcp: {
+    name: "MCP servers",
+    description:
+      "Steps that come from an MCP server your organisation added, rather than from a connector we wrote. Point Dazyflow at a server's address in Admin → MCP servers and every tool it publishes appears here as a step — nothing to install, and no connector to wait for. The server keeps its own credential, so these steps need no separate connection.",
+    technical_notes:
+      "Tools are read at handshake over streamable HTTP (MCP revision 2025-11-25) and become steps with the id mcp:<server>:<tool>; a tool's arguments become the step's pins. Each server belongs to the organisation that registered it and is reachable only by that organisation's flows. A server that stops answering keeps its steps described — they show a \"Needs connection\" banner and refuse to run — so flows using them keep their wiring.",
+  },
   "standard-library": {
     name: "Standard library",
     description:

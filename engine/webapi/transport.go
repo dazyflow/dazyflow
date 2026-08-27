@@ -130,7 +130,7 @@ func (t *Transport) buildRequest(args map[string]any, job core.Job) (request, er
 		base = strings.TrimSpace(t.desc.BaseURL)
 	}
 	if base == "" {
-		return request{}, fmt.Errorf("no service address: set up the %s connection, or set the base_url param", t.desc.Name)
+		return request{}, fmt.Errorf("no service address for %s: set one in Admin → Web APIs, or set the base_url param on this step", t.desc.Name)
 	}
 	if err := validBaseURL(base); err != nil {
 		return request{}, err

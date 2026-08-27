@@ -129,9 +129,12 @@ type Descriptor struct {
 	Tenant string
 	// Name is what steps are referenced by: api:<Name>:<operation>.
 	Name string
-	// BaseURL is the default service address, typed at import time. The
-	// tenant's connection can override it per deployment (staging vs prod)
-	// without re-importing, and a node param overrides both.
+	// BaseURL is the service address, typed at import time and required.
+	//
+	// The catalog owns it, and only an admin can change it: it used to be
+	// overridable through the tenant's connection, which put it behind
+	// secret:write instead — see connectionFields for why that is gone. A node
+	// param still overrides it for the one-step exception.
 	BaseURL string
 	// Integration is the palette/Apps grouping label. Empty falls back to Name.
 	Integration string
