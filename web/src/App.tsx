@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useEffect, useState } from "react";
@@ -16,6 +16,7 @@ import { AppShell } from "./components/AppShell";
 import { SignIn } from "./pages/auth/SignIn";
 import { SignUp } from "./pages/auth/SignUp";
 import { Welcome } from "./pages/Welcome";
+import { NotFound } from "./pages/NotFound";
 import { Dashboard } from "./pages/Dashboard";
 import { CreateFlow } from "./pages/flows/CreateFlow";
 import { Apps, AppDetail } from "./pages/Apps";
@@ -98,7 +99,10 @@ export function App() {
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/invite/:token" element={<AcceptInvite />} />
-        <Route path="*" element={<SignIn />} />
+        {/* Signed-out catch-all. Tell the visitor the page wasn't found —
+            landing on a bare sign-in form reads as "you were logged out",
+            which is a different and more alarming thing than a bad link. */}
+        <Route path="*" element={<SignIn notFound />} />
       </Routes>
     );
   }
@@ -175,7 +179,10 @@ export function App() {
         <Route path="/admin/runners" element={<AdminRunners />} />
         <Route path="/admin/runners/:name" element={<AdminRunnerDetail />} />
         <Route path="/invite/:token" element={<AcceptInvite />} />
-        <Route path="*" element={<Navigate to="/flows" replace />} />
+        {/* Say the page wasn't found rather than teleporting to /flows: a
+            silent redirect leaves the reader unsure whether they mis-clicked
+            or whether what they wanted is gone. */}
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </AppShell>
     </UploadsProvider>

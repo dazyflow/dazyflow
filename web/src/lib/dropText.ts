@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { SV_DESCRIPTIONS } from "../i18n/drops/descriptions.sv";

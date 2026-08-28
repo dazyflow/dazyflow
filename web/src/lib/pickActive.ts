@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // pickActive resolves which entry to surface as "current" when the

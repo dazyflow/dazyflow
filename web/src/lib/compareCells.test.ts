@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Mirrors the sort_rows cases in drops/transform/sort_dedupe_test.go, because

@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useState } from "react";
@@ -6,6 +6,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Trans, useTranslation } from "react-i18next";
 import { AlertCircle, Mail, ShieldCheck } from "lucide-react";
 import { Button } from "../../components/ui/Button";
+import { AuthLayout } from "../../components/auth/AuthLayout";
 import { useAuth } from "../../auth";
 import { api } from "../../api";
 import { explainApiError } from "../../lib/explainApiError";
@@ -65,33 +66,33 @@ export function AcceptInvite() {
 
   if (!inviteToken) {
     return (
-      <div className="signin-wrap">
+      <AuthLayout>
         <div className="signin">
           <h1>{t("acceptInvite.missingToken")}</h1>
         </div>
-      </div>
+      </AuthLayout>
     );
   }
   if (error && !details) {
     return (
-      <div className="signin-wrap">
+      <AuthLayout>
         <div className="signin">
           <h1>{t("acceptInvite.title")}</h1>
           <div className="error">
             <AlertCircle className="icon-inline" size={ICON.sm} /> {error}
           </div>
         </div>
-      </div>
+      </AuthLayout>
     );
   }
   if (!details) {
     return (
-      <div className="signin-wrap">
+      <AuthLayout>
         <div className="signin">
           <h1>{t("acceptInvite.title")}</h1>
           <Loading inline />
         </div>
-      </div>
+      </AuthLayout>
     );
   }
 
@@ -106,7 +107,7 @@ export function AcceptInvite() {
   const signedInAsRight = !!me?.subject && !signedInAsOther;
 
   return (
-    <div className="signin-wrap">
+    <AuthLayout>
       <div className="signin invite-card">
         <div className="invite-card-icon">
           <Mail size={28} />
@@ -199,6 +200,6 @@ export function AcceptInvite() {
           </div>
         )}
       </div>
-    </div>
+    </AuthLayout>
   );
 }

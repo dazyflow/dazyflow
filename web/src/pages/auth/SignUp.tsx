@@ -1,10 +1,11 @@
-// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/Button";
+import { AuthLayout } from "../../components/auth/AuthLayout";
 import { PasswordField } from "../../components/ui/PasswordField";
 import { useAuth } from "../../auth";
 import { api } from "../../api";
@@ -88,11 +89,11 @@ export function SignUp() {
   // on a slow connection.
   if (signupAllowed === null) {
     return (
-      <div className="signin-wrap">
+      <AuthLayout>
         <div className="signin muted" style={{ textAlign: "center" }}>
           {t("common.loading")}
         </div>
-      </div>
+      </AuthLayout>
     );
   }
   if (!signupAllowed) {
@@ -105,7 +106,7 @@ export function SignUp() {
   const passwordMismatch = password !== "" && confirm !== "" && password !== confirm;
 
   return (
-    <div className="signin-wrap">
+    <AuthLayout>
       <form
         className="signin"
         onSubmit={async (e) => {
@@ -194,6 +195,6 @@ export function SignUp() {
           {t("signUp.haveAccount")} <Link to="/signin">{t("common.signIn")}</Link>
         </div>
       </form>
-    </div>
+    </AuthLayout>
   );
 }

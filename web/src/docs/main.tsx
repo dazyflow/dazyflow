@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Entry for the public docs SPA (docs.dazyflow.app). It deliberately reuses the
@@ -9,6 +9,8 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { DocsApp } from "./DocsApp";
+import { ErrorBoundary } from "../components/ErrorBoundary";
+import { DOCS_HOME } from "./links";
 import "../theme.css";
 import "../app.css";
 import "./docs.css";
@@ -23,8 +25,10 @@ document.documentElement.setAttribute("data-theme", "light");
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <DocsApp />
-    </BrowserRouter>
+    <ErrorBoundary home={DOCS_HOME}>
+      <BrowserRouter>
+        <DocsApp />
+      </BrowserRouter>
+    </ErrorBoundary>
   </React.StrictMode>,
 );

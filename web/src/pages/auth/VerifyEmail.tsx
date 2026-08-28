@@ -1,10 +1,11 @@
-// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { CheckCircle2, MailWarning } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { AuthLayout } from "../../components/auth/AuthLayout";
 import { api } from "../../api";
 import { explainApiError } from "../../lib/explainApiError";
 import { useAuth } from "../../auth";
@@ -52,8 +53,11 @@ export function VerifyEmail() {
   }, []);
 
   return (
-    <div className="auth-page">
-      <div className="card" style={{ maxWidth: 440, textAlign: "center", padding: "var(--space-6)" }}>
+    <AuthLayout>
+      {/* The same card the other five auth screens use. It was a `.card` with
+          three inline styles and a width 20px off theirs — the odd one out of
+          six for no reason anyone recorded. */}
+      <div className="signin auth-centered">
         {state === "working" && <p>{t("verifyEmail.working")}</p>}
         {state === "ok" && (
           <>
@@ -87,6 +91,6 @@ export function VerifyEmail() {
           </>
         )}
       </div>
-    </div>
+    </AuthLayout>
   );
 }

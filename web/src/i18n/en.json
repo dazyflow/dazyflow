@@ -171,6 +171,11 @@
     "noSubject": "(no subject)",
     "overview": "Overview"
   },
+  "notFound": {
+    "title": "Page not found",
+    "body": "We couldn't find that page. It may have been moved or deleted, or the link may be incomplete.",
+    "backToFlows": "Back to your flows"
+  },
   "verifyEmail": {
     "working": "Confirming your email…",
     "okTitle": "Email confirmed",
@@ -379,6 +384,7 @@
     "submitting": "Signing in…",
     "newHere": "New here?",
     "createAccount": "Create an account",
+    "notFound": "That page doesn’t exist — sign in to continue.",
     "inviteOnly": "Accounts here are by invitation only — ask an admin to send you an invite.",
     "forgotPassword": "Forgot your password?",
     "continueWithGoogle": "Continue with Google",

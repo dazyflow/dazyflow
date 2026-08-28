@@ -25,6 +25,43 @@ into the image.)
 
 ### Added
 
+- **A render error shows a page instead of blanking one.** Neither the app nor
+  the docs had an error boundary, and React's default for an error during
+  render is to unmount the whole tree — so any such bug left an empty document:
+  no message, no reload, nothing to distinguish it from the product having
+  died.
+
+  Both entries are now wrapped in one. It offers a reload (a full one — the
+  tree that threw is still in memory, and re-rendering it walks back into the
+  same error), a way home, and the error message collapsed under **Technical
+  details**, which is the part that makes a support report actionable.
+
+  It takes no dependencies on purpose: no i18n, no router, no design-system
+  button. This renders precisely when something else has failed, and every
+  import is another thing that can be the reason it cannot. `react-i18next` in
+  particular reads a module-global a failed bootstrap may never have
+  initialised, so a translated crash screen is one that vanishes exactly when a
+  bootstrap error is what you needed to see. A test asserts that, so adding
+  `useTranslation` to the fallback fails the suite.
+
+- **Every signed-out screen says what it is.** The sign-in card read "Sign in"
+  over an otherwise empty page — no mark, no wordmark, nothing naming the
+  product. The one branded path, `signin-org`, needs a wildcard-subdomain
+  deploy with an org icon set, so the hosted product's own front door was the
+  one with no name on it. Someone following a password reset, an invite, or a
+  mistyped link met an unlabelled box and had to infer where they were.
+
+  All six auth screens — sign in, sign up, forgot and reset password, accept
+  invite, verify email — now share one frame: the mark and wordmark above the
+  card, a quiet Docs · Source · copyright line below it. The mark sits outside
+  the card deliberately; inside, it competes with the form's own heading and
+  pushes the first field down.
+
+  `VerifyEmail` joined them on the way past. It was the odd one of the six —
+  a `.card` with three inline styles at a width 20px off the others — and is
+  now the same card, centred, with the difference that matters (its states are
+  a glyph over prose, not a form) carried by one class.
+
 - **The docs site has chrome of its own.** The header carried the product's
   wordmark and nothing else, so the one thing on screen never said which of the
   two sites you were in; and the page simply stopped at the end of the last
@@ -48,6 +85,13 @@ into the image.)
 
 ### Changed
 
+- **Copyright is held by Angels' Ware.** Every `SPDX-FileCopyrightText` header
+  in the tree — 1351 files — and the copyright line in both footers now name
+  Angels' Ware rather than an individual. Nothing about the licence changes:
+  the project stays AGPL-3.0-or-later, and the FSF's own notice on the licence
+  text in `LICENSE` is untouched, since that is their copyright on the document
+  rather than ours on the software.
+
 - **The docs render light.** They were pinned dark to match the marketing site.
   But a reference page is read at length rather than glanced at, and light is
   what most readers' machines are already in — the same reasoning `theme.ts`
@@ -62,6 +106,21 @@ into the image.)
   hardcoded colour, so it had a light rendering already.
 
 ### Fixed
+
+- **A dead link inside the app says so.** The signed-in catch-all was
+  `<Navigate to="/flows" replace />`, so a bookmark to a deleted flow, a link
+  from an old email, or a typo silently teleported the reader to the flow list
+  — leaving them to work out whether they had mis-clicked, whether the thing
+  was gone, or whether the product had just wandered off. There is now a page
+  that says the address was not found and echoes it back, since half the time
+  the path itself is the evidence: a truncated copy-paste, or an id the reader
+  recognises as one they deleted.
+
+- **A bad link while signed out no longer looks like a session expiry.** The
+  catch-all route renders the sign-in form, so any mistyped or dead URL
+  produced a bare password prompt the visitor had not asked for — which reads
+  as "you have been logged out", a different and more alarming thing than a
+  wrong address. It now says the page doesn't exist, above the form.
 
 - **The docs' brand mark no longer leads to "Page not found".** It was an
   `<a href="/">`, and `/` is not in the page map — nginx answers every

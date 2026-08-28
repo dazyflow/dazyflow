@@ -1,10 +1,11 @@
-// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/Button";
+import { AuthLayout } from "../../components/auth/AuthLayout";
 import { PasswordField } from "../../components/ui/PasswordField";
 import { api } from "../../api";
 import { explainApiError } from "../../lib/explainApiError";
@@ -31,7 +32,7 @@ export function ResetPassword() {
 
   if (badLink) {
     return (
-      <div className="signin-wrap">
+      <AuthLayout>
         <div className="signin">
           <h1>{t("resetPassword.badLinkTitle")}</h1>
           <p className="sub">{t("resetPassword.badLinkBody")}</p>
@@ -39,13 +40,13 @@ export function ResetPassword() {
             <Link to="/forgot-password">{t("resetPassword.requestNew")}</Link>
           </div>
         </div>
-      </div>
+      </AuthLayout>
     );
   }
 
   if (done) {
     return (
-      <div className="signin-wrap">
+      <AuthLayout>
         <div className="signin">
           <h1>{t("resetPassword.doneTitle")}</h1>
           <p className="sub">{t("resetPassword.doneBody")}</p>
@@ -55,12 +56,12 @@ export function ResetPassword() {
             </Link>
           </div>
         </div>
-      </div>
+      </AuthLayout>
     );
   }
 
   return (
-    <div className="signin-wrap">
+    <AuthLayout>
       <form
         className="signin"
         onSubmit={async (e) => {
@@ -123,6 +124,6 @@ export function ResetPassword() {
           <Link to="/signin">{t("resetPassword.backToSignin")}</Link>
         </div>
       </form>
-    </div>
+    </AuthLayout>
   );
 }

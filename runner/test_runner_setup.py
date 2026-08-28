@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-FileCopyrightText: 2026 Joachim Klahr
+# SPDX-FileCopyrightText: 2026 Angels' Ware
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Tests for runner.sh in its SETUP life — the one file every organisation runs.
 

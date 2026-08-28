@@ -1,31 +1,13 @@
-// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The off-site addresses the docs chrome points at, in one place because the
-// header and the footer point at the same ones. INVITE in particular was
-// already duplicated the moment a second component wanted it.
+// The docs chrome's addresses. The off-site ones live in lib/externalLinks —
+// the app's auth pages point at the same product, source and licence, and two
+// copies of a URL is one that gets left behind when the host moves.
 //
-// Everything here leaves the docs. In-site destinations are NEVER written out
-// as strings — they come off NAV (see DocsFooter), so a page that moves cannot
-// leave a dead link behind.
-
-// The product itself. Caddy serves the app on the apex domain and
-// reverse-proxies docs.dazyflow.app to the docs container, so this is a
-// sibling host rather than a path on this one.
-export const SITE = "https://dazyflow.app";
-
-export const SOURCE = "https://git.sr.ht/~klahr/dazyflow";
-
-// Deep-linked to the licence file rather than to gnu.org: what governs the
-// project is the copy in the tree, and a reader following this is usually
-// checking the self-hosting terms against the version they have.
-export const LICENSE = "https://git.sr.ht/~klahr/dazyflow/tree/master/item/LICENSE";
-
-export const CONTACT = "mailto:hi@dazyflow.app";
-
-// The waitlist. A subject line so the reply lands in the right place without
-// the sender having to explain themselves.
-export const INVITE = "mailto:hi@dazyflow.app?subject=Dazyflow%20early%20access";
+// In-site destinations are NEVER written out as strings: they come off NAV
+// (see DocsFooter), so a page that moves cannot leave a dead link behind.
+export { SITE, SOURCE, LICENSE, CONTACT, INVITE } from "../lib/externalLinks";
 
 // Where the docs' own brand mark leads. NOT "/" — nginx serves index.html for
 // any unmatched path, so "/" boots the SPA at a route the page map has no

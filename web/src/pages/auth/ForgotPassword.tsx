@@ -1,10 +1,11 @@
-// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/Button";
+import { AuthLayout } from "../../components/auth/AuthLayout";
 import { api } from "../../api";
 
 // ForgotPassword is the "email me a reset link" form. The server is
@@ -21,7 +22,7 @@ export function ForgotPassword() {
 
   if (sent) {
     return (
-      <div className="signin-wrap">
+      <AuthLayout>
         <div className="signin">
           <h1>{t("forgotPassword.sentTitle")}</h1>
           <p className="sub">{t("forgotPassword.sentBody", { email })}</p>
@@ -29,12 +30,12 @@ export function ForgotPassword() {
             <Link to="/signin">{t("forgotPassword.backToSignin")}</Link>
           </div>
         </div>
-      </div>
+      </AuthLayout>
     );
   }
 
   return (
-    <div className="signin-wrap">
+    <AuthLayout>
       <form
         className="signin"
         onSubmit={async (e) => {
@@ -71,6 +72,6 @@ export function ForgotPassword() {
           <Link to="/signin">{t("forgotPassword.backToSignin")}</Link>
         </div>
       </form>
-    </div>
+    </AuthLayout>
   );
 }

@@ -171,6 +171,11 @@
     "noSubject": "(okänt konto)",
     "overview": "Översikt"
   },
+  "notFound": {
+    "title": "Sidan hittades inte",
+    "body": "Vi kunde inte hitta den sidan. Den kan ha flyttats eller tagits bort, eller så är länken ofullständig.",
+    "backToFlows": "Tillbaka till dina flöden"
+  },
   "verifyEmail": {
     "working": "Bekräftar din e-postadress…",
     "okTitle": "E-postadressen bekräftad",
@@ -379,6 +384,7 @@
     "submitting": "Loggar in…",
     "newHere": "Ny här?",
     "createAccount": "Skapa ett konto",
+    "notFound": "Den sidan finns inte – logga in för att fortsätta.",
     "inviteOnly": "Konton här skapas endast via inbjudan — be en administratör skicka en inbjudan till dig.",
     "forgotPassword": "Glömt lösenordet?",
     "continueWithGoogle": "Fortsätt med Google",

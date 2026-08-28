@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { createPortal } from "react-dom";
@@ -10,6 +10,7 @@ import { useAuth } from "../../auth";
 import { supportContactHref } from "../../lib/supportContact";
 import { ICON } from "../../icons";
 import { useEscapeToClose } from "../ui/useEscapeToClose";
+import { DOCS } from "../../lib/externalLinks";
 
 // HelpModal is what the header's "?" button and the "?" key open.
 //
@@ -20,7 +21,6 @@ import { useEscapeToClose } from "../ui/useEscapeToClose";
 // the modal now leads with the two things a stuck user actually wants — the
 // docs and a human — and keeps the shortcuts below, where they cost a power
 // user one extra glance and nothing else.
-const DOCS_URL = "https://docs.dazyflow.app";
 
 const isMac =
   typeof navigator !== "undefined" && /mac/i.test(navigator.platform);
@@ -89,7 +89,7 @@ export function HelpModal({ onClose }: { onClose: () => void }) {
           <div className="help-links">
             <a
               className="help-link"
-              href={DOCS_URL}
+              href={DOCS}
               target="_blank"
               rel="noreferrer noopener"
             >

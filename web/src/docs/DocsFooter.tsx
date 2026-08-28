@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // The site footer, under the prev/next pair at the foot of every page.
@@ -17,14 +17,13 @@
 import { Link } from "react-router-dom";
 import { NAV } from "./content";
 import { SITE, SOURCE, LICENSE, CONTACT, INVITE } from "./links";
+import { COPYRIGHT_YEAR } from "../lib/externalLinks";
 
 // The guide, split at the point where it stops being a walkthrough and starts
 // being reference. slice() rather than two hand-written lists so a page added
 // to the sidebar lands in a column instead of going missing.
 const GUIDE = NAV[0].items.slice(0, 5);
 const REFERENCE = [...NAV[0].items.slice(5), ...NAV[1].items.slice(0, 1)];
-
-const YEAR = 2026;
 
 export function DocsFooter() {
   return (
@@ -84,7 +83,7 @@ export function DocsFooter() {
       </div>
 
       <div className="docs-footer-legal">
-        <span>© {YEAR} Joachim Klahr</span>
+        <span>© {COPYRIGHT_YEAR} Angels' Ware</span>
         {/* Named in full rather than as a bare "AGPL" badge: the licence is the
             reason self-hosting is an option at all, and the version is the part
             that carries the obligation. */}

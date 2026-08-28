@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 Joachim Klahr
+// SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useEffect, useState } from "react";
@@ -9,6 +9,7 @@ import { api } from "../../api";
 import { orgFromHost } from "../../lib/orgFromHost";
 import { isImageIcon } from "../../lib/iconImage";
 import { Button, ButtonLink } from "../../components/ui/Button";
+import { AuthLayout } from "../../components/auth/AuthLayout";
 import { PasswordField } from "../../components/ui/PasswordField";
 import { OtpInput } from "../../components/ui/OtpInput";
 
@@ -22,7 +23,10 @@ import { OtpInput } from "../../components/ui/OtpInput";
 //                "Sign in with Google" button alongside the password
 //                form. The org is also the tenant the Google round-trip
 //                lands the user in.
-export function SignIn() {
+//   notFound   → rendered by the signed-out catch-all route, so a mistyped or
+//                expired link says so instead of looking like a plain sign-in
+//                prompt the visitor was asked for out of nowhere.
+export function SignIn({ notFound = false }: { notFound?: boolean } = {}) {
   const { t } = useTranslation();
   const { signInWithPassword, verifyTOTP, error, loading, clearError } = useAuth();
   const [searchParams] = useSearchParams();
@@ -180,7 +184,7 @@ export function SignIn() {
       }
     };
     return (
-      <div className="signin-wrap">
+      <AuthLayout>
         <form
           className="signin"
           onSubmit={(e) => {
@@ -263,12 +267,12 @@ export function SignIn() {
             </Button>
           </div>
         </form>
-      </div>
+      </AuthLayout>
     );
   }
 
   return (
-    <div className="signin-wrap">
+    <AuthLayout>
       <form
         className="signin"
         onSubmit={async (e) => {
@@ -292,6 +296,9 @@ export function SignIn() {
           }
         }}
       >
+        {notFound && (
+          <div className="signin-notice">{t("signIn.notFound")}</div>
+        )}
         {orgBrand ? (
           <div className="signin-org">
             {isImageIcon(orgBrand.icon) && (
@@ -378,6 +385,6 @@ export function SignIn() {
           <div className="signin-alt">{t("signIn.inviteOnly")}</div>
         )}
       </form>
-    </div>
+    </AuthLayout>
   );
 }

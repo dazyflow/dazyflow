@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Angels' Ware
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { describe, it, expect } from "vitest";
 import { serializeEditable } from "./SchemaForm";
 import { tokenizeValue } from "../editor/nodeCardShared";

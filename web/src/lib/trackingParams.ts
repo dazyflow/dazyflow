@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Angels' Ware
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Detection + removal of well-known URL tracking / analytics query params, for
 // the edit-time hint on URL fields (schema.format === "uri"). This is a HINT,
 // not validation: a tracking param doesn't make a URL invalid, so we never
