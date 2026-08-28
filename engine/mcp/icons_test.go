@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -33,9 +34,11 @@ func pngDataURI() string {
 // what reaches a manifest is bytes from our own origin, never the third
 // party's URL — the app's CSP would refuse to load that.
 func TestResolveToolIcons_InlinesAFetchedIcon(t *testing.T) {
-	var hits int
+	// Atomic: the resolver fetches distinct sources concurrently, so the
+	// handler counts from several goroutines at once.
+	var hits atomic.Int64
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hits++
+		hits.Add(1)
 		w.Header().Set("Content-Type", "image/png")
 		_, _ = w.Write(onePixelPNG)
 	}))
@@ -59,8 +62,8 @@ func TestResolveToolIcons_InlinesAFetchedIcon(t *testing.T) {
 	if _, ok := got["c"]; ok {
 		t.Error("a tool with no icons got one")
 	}
-	if hits != 1 {
-		t.Errorf("fetched %d times, want the source deduplicated to 1", hits)
+	if n := hits.Load(); n != 1 {
+		t.Errorf("fetched %d times, want the source deduplicated to 1", n)
 	}
 }
 
@@ -181,9 +184,11 @@ func TestPickIcon(t *testing.T) {
 // TestResolveToolIcons_BoundsDistinctSources stops a server with hundreds of
 // separately-iconed tools from turning one handshake into hundreds of requests.
 func TestResolveToolIcons_BoundsDistinctSources(t *testing.T) {
-	var hits int
+	// Atomic: the resolver fetches distinct sources concurrently, so the
+	// handler counts from several goroutines at once.
+	var hits atomic.Int64
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hits++
+		hits.Add(1)
 		w.Header().Set("Content-Type", "image/png")
 		_, _ = w.Write(onePixelPNG)
 	}))
@@ -197,8 +202,8 @@ func TestResolveToolIcons_BoundsDistinctSources(t *testing.T) {
 		})
 	}
 	got := resolveWithClient(t, srv.Client(), tools)
-	if hits > maxIconsPerServer {
-		t.Errorf("fetched %d sources, want at most %d", hits, maxIconsPerServer)
+	if n := hits.Load(); n > maxIconsPerServer {
+		t.Errorf("fetched %d sources, want at most %d", n, maxIconsPerServer)
 	}
 	if len(got) > maxIconsPerServer {
 		t.Errorf("resolved %d icons, want at most %d", len(got), maxIconsPerServer)
