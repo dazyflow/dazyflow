@@ -409,6 +409,14 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
       "OpenAI Chat Completions API, authenticated with the API key set on this connection — flows pick it up automatically, no key on the step. Structured steps (Extract fields, Classify) use OpenAI function tool-calls.",
     docs_url: "https://platform.openai.com/docs",
   },
+  gemini: {
+    name: "Gemini",
+    description:
+      "Run prompts through Gemini, Google's AI model. Use it the same way as Claude or ChatGPT — summarise text, classify inputs, extract fields, draft replies — wherever you would rather use a Google model, or already have a Google AI Studio key.",
+    technical_notes:
+      "Google's Gemini API (generateContent), authenticated with the API key set on this connection — flows pick it up automatically, no key on the step. The key travels as an x-goog-api-key header rather than a query parameter, so it stays out of proxy logs. Structured steps (Extract fields, Classify) use Gemini function calling in ANY mode, which forces the call. Get a key from Google AI Studio; the free tier is rate-limited rather than unavailable, so a busy flow may need a billed project.",
+    docs_url: "https://ai.google.dev/gemini-api/docs",
+  },
   ollama: {
     name: "Ollama",
     description:

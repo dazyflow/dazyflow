@@ -47,6 +47,7 @@ const GROUP_BRANDS: Record<string, string> = {
   git: "/brands/git.svg",
   ntfy: "/brands/ntfy.svg",
   ollama: "/brands/ollama.svg",
+  gemini: "/brands/gemini.svg",
 };
 
 const GROUP_ICONS: Record<string, LucideIcon> = {
@@ -66,6 +67,7 @@ const GROUP_ICONS: Record<string, LucideIcon> = {
   chatgpt: Sparkles,
   claude: Sparkles,
   ollama: Sparkles,
+  gemini: Sparkles,
 };
 
 const raw = import.meta.glob("./content/**/*.md", {

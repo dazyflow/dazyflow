@@ -77,6 +77,14 @@ export const SV_INTEGRATION_PROSE: DescriptionMap = {
     en: "0f749f7f",
     sv: "Fortnox OAuth 2.0 (authorize hos apps.fortnox.se/oauth-v1) med scope per resurs — customer, invoice och companyinformation täcker de steg som finns. Token-ändpunkten använder client_secret_basic (uppgifterna i en HTTP Basic-rubrik), och refresh-tokens roterar vid varje förnyelse; daemonen sparar den roterade token och förnyar vid utgång, så långlivade flöden fortsätter fungera — men ett konto som stått stilla längre än Fortnox fönster för refresh-tokens (~31 dagar) måste anslutas om. Anrop och svar använder Fortnox singulara PascalCase-hölje ({\"Customer\":…}, {\"Invoice\":…}). Fortnox har ingen idempotensnyckel, så skapa-stegen gör inga automatiska omförsök (ett omförsök skulle ge dubbletter); och inga webhooks, så 'utlös vid betald faktura' byggs som Schema → Lista fakturor (filter=fullypaid) → För varje → dubblettrensning på DocumentNumber.",
   },
+  "gemini.description": {
+    en: "6b44b880",
+    sv: "Kör prompter genom Gemini, Googles AI-modell. Använd den på samma sätt som Claude eller ChatGPT — sammanfatta text, klassificera indata, extrahera fält, skriv utkast till svar — när du hellre vill använda en Google-modell, eller redan har en nyckel från Google AI Studio.",
+  },
+  "gemini.technical_notes": {
+    en: "6f0f3bbd",
+    sv: "Googles Gemini-API (generateContent), autentiserat med API-nyckeln som är satt på den här anslutningen — flöden hämtar den automatiskt, ingen nyckel på steget. Nyckeln skickas som en x-goog-api-key-header i stället för som frågeparameter, så den hamnar inte i proxyloggar. Strukturerade steg (Extrahera fält, Klassificera) använder Geminis function calling i läget ANY, vilket tvingar fram anropet. Hämta en nyckel i Google AI Studio; den kostnadsfria nivån är hastighetsbegränsad snarare än otillgänglig, så ett flöde med mycket trafik kan behöva ett projekt med fakturering.",
+  },
   "git.description": {
     en: "c69a927c",
     sv: "Klona repon och checka ut grenar inne i din arbetsyta. Ta det när ett flöde behöver granska källkod, hämta mallar från ett känt repo, eller lägga upp filer innan ett annat steg arbetar på dem.",

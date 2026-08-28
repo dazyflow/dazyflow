@@ -181,6 +181,26 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     en: "e7fcf80d",
     sv: "Lista händelser från en Google-kalender. Avgränsa med ett tidsfönster som följer med schemat — \"tomorrow\" till \"tomorrow+1d\" för morgondagens bokningar, \"-7d\" till \"now\" för förra veckan — eller ange absoluta tidsstämplar; båda ändarna kan också kopplas in. Återkommande händelser expanderas till enskilda tillfällen och returneras i starttidsordning. Varje händelse blir ett objekt med id, summary, description, location, start/end, status och attendees.",
   },
+  gemini: {
+    en: "76d1996e",
+    sv: "Skicka en prompt och få ett svar tillbaka — sammanfatta text från ett tidigare steg, klassificera ett indata eller generera text. Koppla in texten som ska bearbetas i ingången Prompt, eller skriv en prompt direkt på steget.",
+  },
+  gemini_classify: {
+    en: "0c748850",
+    sv: "Ge AI:n en lista med kategorier och den väljer den enda som passar bäst — dirigera supportmejl, märk upp leads, flagga skräppost. Koppla utgången Kategori till ett Förgrening-steg.",
+  },
+  gemini_draft_reply: {
+    en: "f32ad9ad",
+    sv: "Mata in ett inkommande mejl eller meddelande och få tillbaka ett färdigt utkast. Välj tonläge och lägg till instruktioner. Kombinera med Vänta på godkännande innan något skickas.",
+  },
+  gemini_extract: {
+    en: "3cc059e0",
+    sv: "Beskriv fälten du vill ha — som belopp, förfallodatum eller kundnamn — och AI:n läser texten och fyller i dem. Perfekt för att göra rader av fakturor, mejl och formulärsvar.",
+  },
+  gemini_summarize: {
+    en: "37e982bf",
+    sv: "Mata in vilken text som helst — ett mejl, ett dokument, en rad med anteckningar — och få tillbaka en kort sammanfattning. Välj hur kort den ska vara och om du vill ha en mening, ett stycke eller punktlista.",
+  },
   geo_location: {
     en: "0ef9a8a7",
     sv: "Välj en plats och skicka ut dess Koordinat (\"lat,lon\") för en väderuppslagning. Sätt en nål på OpenStreetMap-kartan direkt på kortet (sök, klicka eller dra). Eller ange en Plats — en stad eller adress — antingen skriven eller inkopplad från ett annat steg (ett formulärfält, ett meddelande): när en Plats är angiven geokodas den och ÖVERTRUMFAR kartnålen. Kartan är alltså standard, och Plats-ingången vinner när den finns. Använder OpenStreetMap — inget konto och ingen nyckel.",

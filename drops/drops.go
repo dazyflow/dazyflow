@@ -23,6 +23,7 @@ import (
 	_ "git.sr.ht/~klahr/dazyflow/drops/flow"
 	_ "git.sr.ht/~klahr/dazyflow/drops/fortnox"
 	_ "git.sr.ht/~klahr/dazyflow/drops/gcal"
+	_ "git.sr.ht/~klahr/dazyflow/drops/gemini"
 	_ "git.sr.ht/~klahr/dazyflow/drops/geo"
 	_ "git.sr.ht/~klahr/dazyflow/drops/git"
 	_ "git.sr.ht/~klahr/dazyflow/drops/github"

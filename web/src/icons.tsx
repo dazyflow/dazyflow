@@ -76,6 +76,7 @@ import { NtfyIcon } from "./components/brand/NtfyIcon";
 import { ClaudeIcon } from "./components/brand/ClaudeIcon";
 import { OpenAIIcon } from "./components/brand/OpenAIIcon";
 import { OllamaIcon } from "./components/brand/OllamaIcon";
+import { GeminiIcon } from "./components/brand/GeminiIcon";
 import { isImageIcon } from "./lib/iconImage";
 
 // iconRegistry maps the kebab-case logical names manifests carry
@@ -90,6 +91,7 @@ const iconRegistry: Record<string, LucideIcon> = {
   claude: ClaudeIcon as unknown as LucideIcon,
   openai: OpenAIIcon as unknown as LucideIcon,
   ollama: OllamaIcon as unknown as LucideIcon,
+  gemini: GeminiIcon as unknown as LucideIcon,
   "git-branch": GitBranch,
   "git-merge": GitMerge,
   timer: Timer,
@@ -260,7 +262,7 @@ export function dropColor(category?: string, brandColor?: string): string {
 // brandedIcons are self-coloured logos (e.g. the official Git mark)
 // that look wrong inside a gradient backdrop. The node card and catalog
 // row skip the coloured box and render them at their native colour.
-const brandedIcons = new Set(["git", "ntfy", "claude", "openai", "ollama"]);
+const brandedIcons = new Set(["git", "ntfy", "claude", "openai", "ollama", "gemini"]);
 
 export function isBrandedIcon(name?: string): boolean {
   return !!name && brandedIcons.has(name);

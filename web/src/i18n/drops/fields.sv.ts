@@ -410,6 +410,7 @@ export const SV_FIELD_HELP: Record<string, string> = {
   "Include files in the trash.": "Ta med filer i papperskorgen.",
   "Injected from the ChatGPT connection — leave unset.": "Sätts automatiskt från ChatGPT-anslutningen — lämna oställt.",
   "Injected from the Ollama connection — leave unset.": "Sätts automatiskt från Ollama-anslutningen — lämna oställt.",
+  "Injected from the Gemini connection — leave unset.": "Sätts automatiskt från Gemini-anslutningen — lämna oställt.",
   "Injected from the Claude connection — leave unset.": "Sätts automatiskt från Claude-anslutningen — lämna oställt.",
   "Invoice rows as Fortnox InvoiceRow objects (Description, Price, DeliveredQuantity, ArticleNumber, VAT…). Overridden by the 'Rows' input.": "Fakturarader som Fortnox InvoiceRow-objekt (Description, Price, DeliveredQuantity, ArticleNumber, VAT …). Ingången Rader vinner över detta.",
   "Issue text (Markdown works). Overridden by the 'Body' input.": "Ärendets text (Markdown fungerar). Ingången Innehåll vinner över detta.",
