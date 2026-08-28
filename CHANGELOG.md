@@ -23,6 +23,25 @@ into the image.)
 
 ## [Unreleased]
 
+### Fixed
+
+- **The sign-in page no longer greets everyone with a notice about a missing
+  page.** 0.22.1 added a line above the form for visitors who arrived at the
+  signed-out catch-all. Two things were wrong with where it landed.
+
+  The bare root had no signed-out route of its own, so it fell to that
+  catch-all — meaning anyone who simply typed the domain, the most common
+  arrival there is, was told the page they asked for did not exist. `/` now has
+  an explicit route and shows the form plainly.
+
+  The wording overclaimed, too. That catch-all covers two cases it cannot tell
+  apart: a mistyped address, and a real app page the visitor is not
+  authenticated for — a deep link from an email, a session that expired
+  mid-page. The second is the common one, and "that page doesn't exist" is
+  simply false about it. The notice now says only what holds for both, that
+  signing in is the next step. Whether the page exists is settled after sign-in
+  by the authenticated catch-all, which can answer it correctly.
+
 ## [0.22.1] - 2026-08-28
 
 ### Added

@@ -384,7 +384,7 @@
     "submitting": "Loggar in…",
     "newHere": "Ny här?",
     "createAccount": "Skapa ett konto",
-    "notFound": "Den sidan finns inte – logga in för att fortsätta.",
+    "signInRequired": "Du behöver logga in för att se den sidan.",
     "inviteOnly": "Konton här skapas endast via inbjudan — be en administratör skicka en inbjudan till dig.",
     "forgotPassword": "Glömt lösenordet?",
     "continueWithGoogle": "Fortsätt med Google",

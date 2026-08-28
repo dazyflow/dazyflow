@@ -23,10 +23,12 @@ import { OtpInput } from "../../components/ui/OtpInput";
 //                "Sign in with Google" button alongside the password
 //                form. The org is also the tenant the Google round-trip
 //                lands the user in.
-//   notFound   → rendered by the signed-out catch-all route, so a mistyped or
-//                expired link says so instead of looking like a plain sign-in
-//                prompt the visitor was asked for out of nowhere.
-export function SignIn({ notFound = false }: { notFound?: boolean } = {}) {
+//   signInRequired → set by the signed-out catch-all, where the visitor asked
+//                for something other than the sign-in page. Says why the form
+//                is on screen, without claiming the page is missing: from here
+//                a protected page and a typo look identical, and only one of
+//                them is a dead link.
+export function SignIn({ signInRequired = false }: { signInRequired?: boolean } = {}) {
   const { t } = useTranslation();
   const { signInWithPassword, verifyTOTP, error, loading, clearError } = useAuth();
   const [searchParams] = useSearchParams();
@@ -296,8 +298,8 @@ export function SignIn({ notFound = false }: { notFound?: boolean } = {}) {
           }
         }}
       >
-        {notFound && (
-          <div className="signin-notice">{t("signIn.notFound")}</div>
+        {signInRequired && (
+          <div className="signin-notice">{t("signIn.signInRequired")}</div>
         )}
         {orgBrand ? (
           <div className="signin-org">

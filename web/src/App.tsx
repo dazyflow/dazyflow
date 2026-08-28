@@ -99,10 +99,19 @@ export function App() {
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/invite/:token" element={<AcceptInvite />} />
-        {/* Signed-out catch-all. Tell the visitor the page wasn't found —
-            landing on a bare sign-in form reads as "you were logged out",
-            which is a different and more alarming thing than a bad link. */}
-        <Route path="*" element={<SignIn notFound />} />
+        {/* The bare root is how most people arrive — typing the domain. It has
+            no signed-out route of its own, so without this it falls to the
+            catch-all below and greets a first-time visitor with a notice about
+            the page they asked for. */}
+        <Route path="/" element={<SignIn />} />
+        {/* Signed-out catch-all, which covers two cases this tree cannot tell
+            apart: a mistyped address, and a real app page the visitor is not
+            authenticated for (a deep link from an email, a session that
+            expired mid-page). So the notice claims only what is true of both —
+            that signing in is the next step. Whether the page actually exists
+            is decided AFTER sign-in, by the authenticated catch-all, which can
+            answer it correctly. */}
+        <Route path="*" element={<SignIn signInRequired />} />
       </Routes>
     );
   }
