@@ -23,6 +23,68 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-08-28
+
+### Added
+
+- **Gemini joins Claude, ChatGPT and Ollama as an AI provider.** The same five
+  steps — Ask, Summarize, Extract fields, Classify, Draft reply — now run on
+  Google's models. Connect it on the Apps page with an API key; the key rides a
+  header rather than the query string, so it stays out of proxy access logs.
+
+  The model is a picker (Gemini 2.5 Pro, Flash and Flash-Lite) rather than free
+  text, matching Claude and ChatGPT: Google publishes a catalogue, so a typo
+  should be impossible rather than a 404 at run time. The cost is that a model
+  released after this list was written cannot be selected until the list grows.
+  Flash is the default, because the five task steps are short, high-volume
+  calls — summarize a row, classify an email — which is what Flash is priced
+  and tuned for. An author who wants Pro picks it on the step.
+
+  Gemini is the only one of the four that does not speak the OpenAI chat shape,
+  so a little more is translated behind the step than for the others: the model
+  travels in the URL rather than the body, the system prompt is a separate
+  instruction rather than a turn, and a forced tool call comes back as part of
+  the reply rather than a field beside it. None of that surfaces in the step —
+  Extract fields and Classify behave as they do on any other provider.
+
+### Fixed
+
+- **Signing in no longer lands on "page not found".** The sign-in form
+  navigated somewhere only when the URL carried an invitation or a `return_to`;
+  a plain sign-in navigated nowhere and relied on the router happening to be on
+  a path the signed-in app also serves. From `/` that worked, because the root
+  has a signed-in route. From `/signin` — a bookmark, the link in an
+  invitation, anywhere the signed-out catch-all had already sent someone — it
+  did not: the signed-in route tree has no `/signin`, so the moment the
+  password was accepted the catch-all announced that the page did not exist.
+
+  Every success path now decides explicitly where it lands: the invitation it
+  came from, the page a `return_to` asked for, or the root. It replaces the
+  form in history rather than stacking on it, so Back does not return to a
+  sign-in page that would strand the reader the same way. The second-factor
+  step shared the gap and shares the fix, and the check that stops a crafted
+  `return_to` bouncing a freshly authenticated user off-origin now covers the
+  password path too, which it never did.
+
+- **Belonging to a second organisation no longer reports a permission error on
+  every page.** The app remembers which organisation this browser last worked
+  in, and the session is scoped to one organisation at a time. Signing in
+  scopes the session to your own organisation — so for anyone who had been
+  invited into a second one and last used *that*, the two disagreed from the
+  first render. Every request then named one organisation while the session
+  was bound to the other, and the server correctly refused: the flow list, the
+  runs, the apps, all reporting that you lack permission and to ask an
+  administrator. No amount of granting helps, because permissions were never
+  the problem.
+
+  Sign-in now reconciles the two before anything is drawn, the same way
+  switching organisation from the picker always has. Where the remembered
+  organisation is one you can still act in, the session is re-scoped to it and
+  you land where you left off. Where it isn't — an invitation withdrawn,
+  an organisation suspended — it falls back to your own and forgets the stale
+  one, so the next visit starts clean rather than retrying a door that is
+  closed.
+
 ## [0.23.0] - 2026-08-28
 
 ### Added
