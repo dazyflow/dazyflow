@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.24.1] - 2026-08-29
+
 ### Changed
 
 - **The AI steps ask the vendor which models you can use, instead of offering a
