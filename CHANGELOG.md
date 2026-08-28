@@ -23,6 +23,48 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-08-28
+
+### Added
+
+- **Ollama joins Claude and ChatGPT as an AI provider.** The same five steps —
+  Ask, Summarize, Extract fields, Classify, Draft reply — now run against a
+  model on hardware you control, so a self-hosted workspace no longer has to
+  hold an account with a cloud model vendor to use the AI steps at all.
+
+  Connect it on the Apps page with a Server URL (default
+  `http://localhost:11434`). The API key field is optional and only wanted when
+  your instance sits behind an authenticating proxy — Ollama itself has no
+  keys, and the network boundary is the authentication. The connection test
+  asks what actually fails for a local runtime: whether the daemon can reach
+  the server, and whether any model has been pulled. A server on localhost also
+  needs `DAZYFLOW_ALLOW_PRIVATE_EGRESS` set on the daemon, since the SSRF guard
+  blocks private addresses by default and that default is right.
+
+  The model field is free text rather than a picker, because the catalogue is
+  whatever you have pulled rather than anything we can list. Extract fields and
+  Classify ask the model to call a tool, and need one that supports them
+  (llama3.1, qwen2.5, mistral-nemo and similar). How reliably a forced tool
+  call is honoured varies by model and by Ollama version, so when a model
+  answers in prose instead, the step will try to read the JSON back out of the
+  reply before giving up — a best effort against a moving target rather than a
+  guarantee. If nothing usable comes back, the error names the model you ran
+  and suggests one that works.
+
+### Changed
+
+- **The chrome around AI stopped naming two vendors.** "Connect Claude or
+  ChatGPT" now reads "Connect an AI provider", and the assistant dialog no
+  longer offers Claude as its worked example. Both were wording that framed AI
+  in general while naming particular companies — already inaccurate the moment
+  a third provider existed.
+
+  The step catalogue still names Claude, ChatGPT and Ollama individually, and
+  deliberately so. Each is a separate connection with its own key, and which
+  one a step runs on decides what it costs and who sees the text; that is a
+  choice to put in front of the author, not one to hide behind a generic
+  label.
+
 ## [0.22.2] - 2026-08-28
 
 ### Changed
