@@ -53,6 +53,18 @@ export function SignIn({ signInRequired = false }: { signInRequired?: boolean } 
     !rawReturnTo.startsWith("/\\")
       ? rawReturnTo
       : "";
+  // Where a completed sign-in lands. Both paths below (password and the TOTP
+  // second factor) MUST call this: the authenticated route tree has no
+  // /signin route, so a sign-in that navigates nowhere leaves the router
+  // sitting on /signin and the authenticated catch-all renders "page not
+  // found" at the exact moment the user succeeded. "/" is the neutral
+  // default — RootRedirect decides /welcome vs /overview from there.
+  // replace:true so Back doesn't return to the form and strand them again.
+  const landAfterSignIn = () => {
+    if (inviteToken) navigate(`/invite/${inviteToken}`, { replace: true });
+    else if (ssoReturnTo) navigate(ssoReturnTo, { replace: true });
+    else navigate("/", { replace: true });
+  };
   const [email, setEmail] = useState(presetEmail);
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -174,11 +186,7 @@ export function SignIn({ signInRequired = false }: { signInRequired?: boolean } 
       setBusy(true);
       try {
         await verifyTOTP(challenge, code, recovery);
-        if (inviteToken) {
-          navigate(`/invite/${inviteToken}`);
-        } else if (ssoReturnTo) {
-          navigate(ssoReturnTo);
-        }
+        landAfterSignIn();
       } catch {
         /* error already set on context */
       } finally {
@@ -288,9 +296,7 @@ export function SignIn({ signInRequired = false }: { signInRequired?: boolean } 
               setChallenge(r.challenge);
               return;
             }
-            if (inviteToken) {
-              navigate(`/invite/${inviteToken}`);
-            }
+            landAfterSignIn();
           } catch {
             /* error already set on context */
           } finally {

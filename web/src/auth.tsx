@@ -277,8 +277,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             : localStorage.getItem(TENANT_STORAGE_KEY) ?? "",
           w.tenant ?? "",
         );
-        setActiveTenantState(chosenTenant);
-        if (chosenTenant) localStorage.setItem(TENANT_STORAGE_KEY, chosenTenant);
+        // Reconcile the SESSION with that choice before anything renders
+        // against it. The two can legitimately disagree: a fresh sign-in
+        // always binds the session to the user's home org, while
+        // localStorage still holds whichever org this browser last used,
+        // and pickActive deliberately prefers the cached one (that IS the
+        // "remember my last org" behaviour). Left unreconciled, every
+        // scoped call then carries ?tenant=<cached> against a principal
+        // bound elsewhere and comes back 403 forbidden_scope — which the
+        // UI can only render as "you don't have permission", a dead end no
+        // amount of role-granting fixes. This is the same switchOrg round
+        // trip setActiveTenant does for a manual switch; the bootstrap
+        // needs it too, because a divergence can be a whole session old.
+        //
+        // Platform admins carry no tenant binding and are exempt from the
+        // server's scope check, so they skip the round trip entirely.
+        let effectiveTenant = chosenTenant;
+        if (chosenTenant && w.tenant && chosenTenant !== w.tenant && !isPlatform) {
+          try {
+            await api.switchOrg(token, chosenTenant);
+            const rescoped = await api.whoami(token);
+            if (cancelled) return;
+            setMe(rescoped);
+          } catch {
+            // The server refused to re-scope — a revoked membership or a
+            // suspended org. Fall back to the binding we actually hold
+            // rather than pointing the client at an org it cannot read,
+            // and repair the cache so the next cold boot doesn't retry the
+            // same dead org.
+            effectiveTenant = w.tenant;
+          }
+        }
+        if (cancelled) return;
+        setActiveTenantState(effectiveTenant);
+        if (effectiveTenant) localStorage.setItem(TENANT_STORAGE_KEY, effectiveTenant);
       })
       .catch((e: unknown) => {
         if (!cancelled) {
