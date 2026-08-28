@@ -4,53 +4,159 @@
    Docs-only styling. The shell (top bar, sidebar, rail, hamburger) is styled
    entirely by the app's app.css/theme.css — this file only handles the doc
    content pane and a few docs-specific nav touches. Everything uses the app's
-   design tokens so it stays on-brand. */
+   design tokens so it stays on-brand.
+
+   ── What this page is made of ────────────────────────────────────────────
+   The corpus decides the design. Across the guide and the generated step
+   catalog there are ~11 000 table lines, 269 fenced code blocks (262 of them
+   JSON) and 87 blockquote callouts. So tables, code and callouts get the
+   attention here; they ARE the docs, and styling them like an afterthought is
+   what made the page read as raw Markdown on a dark background.
+
+   ── The brief: reference, not marketing ──────────────────────────────────
+   This shares the product's palette with the marketing site
+   (../dazyflow-web/style.css) but deliberately NOT its devices. The landing
+   page has to sell; a reference page has to be read, often for a long time and
+   usually while the reader is stuck on something. So the things that make the
+   marketing page work are exactly the things left out here: no graph-paper
+   texture behind the text, no lit-edge glass cards, no gradient headings, no
+   lift-on-hover. What carries the look instead is spacing, one accent used
+   sparingly, and surfaces that differ by a few percent rather than by a glow.
+
+   theme.css's own two-corner nebula stays — it is the app's background, the
+   docs sit on the same one, and it is far enough below the text to be felt
+   rather than seen. */
+
+:root {
+  /* The reading measure and the width of the "on this page" rail, named
+     because the layout grid and its media query both need them. */
+  --docs-measure: 780px;
+  --docs-toc-w: 15rem;
+  /* Panels — tables, the prev/next cards. A few percent off the page, which is
+     all the separation a surface needs when the border is doing the work. */
+  --docs-panel: color-mix(in srgb, var(--surface) 55%, transparent);
+}
+
+/* ============================================================
+   Layout — reading column + "on this page" rail
+   ============================================================ */
 
 /* Content pane owns its own vertical scroll (the shell is a fixed frame). */
 .docs-main {
   overflow-y: auto;
   overflow-x: hidden;
   padding: var(--space-6) var(--space-6) var(--space-7);
+  /* The rail's sticky offset is measured against this scrollport, and its own
+     scroll-padding keeps a heading clear of the top edge on an anchor jump. */
+  scroll-padding-top: var(--space-5);
 }
 
-/* A comfortable reading column, centered like a docs page. */
-.docs-content {
-  max-width: 780px;
+/* One column until there is genuinely room for two. Below the breakpoint the
+   rail is hidden and the column re-centres, so a laptop at 1280 gets the rail
+   and a tablet gets the full measure rather than a squeezed one. */
+.docs-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: clamp(var(--space-5), 4vw, var(--space-7));
+  max-width: 820px;
   margin: 0 auto;
+}
+@media (min-width: 1200px) {
+  .docs-layout {
+    grid-template-columns: minmax(0, var(--docs-measure)) var(--docs-toc-w);
+    justify-content: center;
+    max-width: none;
+  }
+}
+
+/* min-width: 0 so a wide table's scroll container can shrink inside the grid
+   track instead of blowing the column out. */
+.docs-col {
+  min-width: 0;
+}
+
+.docs-content {
   color: var(--ink);
   font-size: var(--text-lg);
   line-height: 1.7;
 }
+
+/* ============================================================
+   Typography
+   ============================================================ */
 
 .docs-content h1,
 .docs-content h2,
 .docs-content h3,
 .docs-content h4 {
   color: var(--ink);
-  font-weight: 600;
-  line-height: 1.3;
+  font-weight: 650;
+  line-height: 1.25;
+  /* Tightened as the size grows: a heading set at body tracking looks loose
+     the moment it is twice body size. */
+  letter-spacing: -0.018em;
+  /* Break a heading across lines evenly rather than leaving one orphan word. */
+  text-wrap: balance;
+  /* Clears the pane's top edge when an in-page anchor jumps here. */
   scroll-margin-top: var(--space-5);
 }
 .docs-content h1 {
   font-size: var(--text-3xl);
+  font-weight: 700;
+  letter-spacing: -0.025em;
   margin: 0 0 var(--space-4);
   display: flex;
   align-items: center;
   gap: var(--space-3);
 }
-/* Brand mark beside a group page's title (app vendor icon). */
+
+/* Brand mark beside a group page's title. A plain recessed tile: enough to
+   give the logo a frame at this size, with none of the tinted-gradient glow a
+   marketing card icon would carry. */
+.docs-h1-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: var(--r-2);
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
 .docs-h1-brand {
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
   object-fit: contain;
   flex-shrink: 0;
-  border-radius: var(--r-1);
 }
+
+/* The opening paragraph of a page reads as a standfirst, not as body text. */
+.docs-content > h1 + p {
+  margin-top: 0;
+  color: var(--ink-soft);
+  font-size: var(--text-xl);
+  line-height: 1.5;
+  letter-spacing: -0.008em;
+}
+
+/* One hairline above each section. On a catalog page an H2 is a whole step, so
+   the rule is doing real work separating them — a plain line, at the border
+   colour, is enough to do it without becoming a graphic element. */
 .docs-content h2 {
   font-size: var(--text-2xl);
   margin: var(--space-6) 0 var(--space-3);
   padding-top: var(--space-4);
   border-top: 1px solid var(--border);
+  /* Anchors the hover "#" self-link. */
+  position: relative;
+}
+/* The generated catalog puts a `---` before every `## step`, which would draw a
+   second divider immediately above the one the H2 already has. The H2's rule is
+   the one tied to the heading's own spacing, so the loose `---` is the one to
+   drop. */
+.docs-content hr:has(+ h2) {
+  display: none;
 }
 .docs-content h3 {
   font-size: var(--text-xl);
@@ -61,9 +167,38 @@
   margin: var(--space-4) 0 var(--space-2);
 }
 
+/* Self-link beside a section heading. Hidden until the heading is hovered or
+   the link itself is focused, so it never competes with the title. */
+.docs-anchor {
+  margin-left: var(--space-2);
+  color: var(--faint);
+  font-weight: 400;
+  text-decoration: none;
+  opacity: 0;
+  transition: opacity var(--dur-2) var(--ease-out);
+}
+/* The glyph is drawn here rather than written as a text child in the JSX — see
+   the note in Markdown.tsx's h2 override for why that distinction matters. */
+.docs-anchor::before {
+  content: "#";
+}
+.docs-content h2:hover .docs-anchor,
+.docs-anchor:focus-visible {
+  opacity: 1;
+}
+.docs-anchor:hover {
+  color: var(--accent);
+  text-decoration: none;
+}
+
 .docs-content p,
 .docs-content li {
   color: var(--ink-soft);
+  /* Avoids a single-word last line in a paragraph. */
+  text-wrap: pretty;
+}
+.docs-content p {
+  margin: var(--space-4) 0;
 }
 .docs-content ul,
 .docs-content ol {
@@ -72,61 +207,286 @@
 .docs-content li {
   margin: var(--space-1) 0;
 }
+.docs-content li::marker {
+  color: var(--faint);
+}
+
+/* Prose links keep their underline. In running text an underline is the thing
+   that says "link" — leaving it to hover means the reader has to sweep the
+   paragraph to find out what is clickable. The accent-tinted decoration keeps
+   it from reading as heavy as a browser default. */
 .docs-content a {
   color: var(--accent);
-  text-decoration: none;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 38%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  transition: color var(--dur-2) var(--ease-out);
 }
 .docs-content a:hover {
-  text-decoration: underline;
+  color: var(--ink-soft);
+  text-decoration-color: var(--accent);
 }
 
-/* Inline code + fenced blocks reuse the app's copyable-code well. */
+/* Two places where the underline is wrong, both of them link DIRECTORIES
+   rather than running text.
+
+   A heading that is a link is still a heading. The catalog index makes every
+   group name ("46elks", "ChatGPT", "Claude") a link, and given prose styling
+   they turn into big underlined accent-coloured text that reads as broken
+   rather than as a section title. */
+.docs-content h1 a,
+.docs-content h2 a,
+.docs-content h3 a,
+.docs-content h4 a {
+  color: inherit;
+  text-decoration: none;
+}
+.docs-content h1 a:hover,
+.docs-content h2 a:hover,
+.docs-content h3 a:hover,
+.docs-content h4 a:hover {
+  color: var(--accent);
+}
+
+/* And a list whose every item OPENS with a link is an index, not a paragraph.
+   The catalog index is ~200 such rows; the bullet, the accent colour and the
+   leading position already say "link", so the underline only adds noise. Links
+   further into the item's text are ordinary prose links and keep theirs.
+   The generated index emits the entry bolded — `<li><strong><a>…</a></strong>
+   — description` — so the wrapped form has to be named alongside the bare one. */
+.docs-content li > a:first-child,
+.docs-content li > strong:first-child > a:first-child {
+  text-decoration: none;
+}
+.docs-content li > a:first-child:hover,
+.docs-content li > strong:first-child > a:first-child:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+}
+
+/* A paragraph that is nothing but bold text is a caption, not a sentence: the
+   generated catalog uses it as the label above each table ("**Inputs (connect
+   these from earlier steps)**", "**Outputs (what comes out)**") and above each
+   worked example. :only-child is what keeps this off the many paragraphs that
+   merely OPEN with bold — "**Connect first:** Needs Google OAuth…" — which are
+   ordinary prose and must not be restyled. */
+.docs-content p:has(> strong:only-child) {
+  margin: var(--space-5) 0 var(--space-2);
+  color: var(--ink);
+  font-size: var(--text-base);
+}
+.docs-content p:has(> strong:only-child) strong {
+  font-weight: 600;
+}
+.docs-content strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* ============================================================
+   Inline code
+   ============================================================ */
 .docs-content code {
   font-family: var(--font-mono);
-  font-size: 0.9em;
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--code-fg);
-  padding: 0.12em 0.36em;
-  border-radius: var(--r-1);
-}
-.docs-content pre {
-  background: var(--code-bg);
+  font-size: 0.875em;
+  background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: var(--r-2);
-  padding: var(--space-3) var(--space-4);
-  overflow-x: auto;
-  margin: var(--space-4) 0;
-}
-.docs-content pre code {
-  background: none;
   color: var(--code-fg);
-  padding: 0;
-  font-size: var(--text-md);
+  padding: 0.1em 0.36em;
+  border-radius: var(--r-1);
+  /* A long `${item.id}` in a narrow table cell breaks rather than widening it. */
+  overflow-wrap: break-word;
+}
+.docs-content a code {
+  color: inherit;
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
 }
 
-.docs-content blockquote {
+/* ============================================================
+   Fenced code blocks (CodeBlock.tsx)
+   ============================================================ */
+.docs-code {
   margin: var(--space-4) 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  background: var(--code-bg);
+  /* Clips the bar's corners to the container's radius. */
+  overflow: hidden;
+}
+.docs-code-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-4);
+  background: color-mix(in srgb, var(--surface-2) 45%, transparent);
+  border-bottom: 1px solid var(--border);
+}
+.docs-code-lang {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.docs-code-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1h);
+  padding: var(--space-1) var(--space-2);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-1);
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background var(--dur-2) var(--ease-out),
+    color var(--dur-2) var(--ease-out),
+    border-color var(--dur-2) var(--ease-out);
+}
+.docs-code-copy:hover {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--ink);
+}
+/* The type is set on the <pre>, not only on the <code> inside it. A <pre> left
+   at the content column's 17px/1.7 keeps that line strut even when its inline
+   <code> is 14px, and the taller strut adds ~10px of dead leading above the
+   first line that no padding value explains. */
+.docs-code pre {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  overflow-x: auto;
+  background: none;
+  border: 0;
+  font-size: var(--text-md);
+  line-height: 1.6;
+}
+.docs-code pre code {
+  background: none;
+  border: 0;
+  color: var(--code-fg);
+  padding: 0;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+/* ============================================================
+   Notes (emoji-led blockquote → icon + body)
+   ============================================================ */
+.docs-content blockquote[data-icon] {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+  margin: var(--space-5) 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  background: var(--surface-2);
+  color: var(--ink-soft);
+  font-size: var(--text-base);
+  line-height: 1.6;
+}
+.docs-note-icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--accent);
+  /* Sits on the first line's optical centre without depending on the glyph's
+     own metrics. */
+  height: calc(var(--text-base) * 1.6);
+}
+.docs-note-body {
+  min-width: 0;
+}
+/* The note's own padding provides the spacing; the paragraphs inside must not
+   add their own margin at the first and last line. */
+.docs-note-body > :first-child {
+  margin-top: 0;
+}
+.docs-note-body > :last-child {
+  margin-bottom: 0;
+}
+
+/* A blockquote that opens with prose is a real quotation — the guide quotes a
+   user's sentence, *"When a customer pays an invoice…"* — and keeps the quieter
+   rule-in-the-margin treatment. */
+.docs-content blockquote:not([data-icon]) {
+  margin: var(--space-5) 0;
   padding: var(--space-1) var(--space-4);
-  border-left: 3px solid var(--accent);
+  border-left: 2px solid var(--border-strong);
   color: var(--muted);
 }
 
+/* ============================================================
+   Tables — the bulk of the catalog
+   ============================================================ */
+
+/* Every table scrolls inside its own box (wrapper from Markdown.tsx). The
+   Settings tables carry a full sentence per row and are deliberately wider than
+   a phone; this is what scrolls them, instead of the page moving sideways and
+   taking the nav with it. */
+.docs-table-scroll {
+  margin: var(--space-2) 0 var(--space-5);
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  background: var(--docs-panel);
+}
 .docs-content table {
   width: 100%;
+  /* Wide enough that the description column stays readable; narrower than this
+     and the wrapper scrolls, which is the intended behaviour on a phone. */
+  min-width: 460px;
   border-collapse: collapse;
-  margin: var(--space-4) 0;
   font-size: var(--text-base);
+  line-height: 1.5;
 }
 .docs-content th,
 .docs-content td {
-  border: 1px solid var(--border);
-  padding: var(--space-2) var(--space-3);
+  /* No vertical rules. The column gap does the separating; a full grid of
+     1px lines is what made these read as exported spreadsheets. */
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+  padding: var(--space-2) var(--space-4);
   text-align: left;
+  vertical-align: top;
 }
 .docs-content th {
-  background: var(--surface-2);
-  color: var(--ink);
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+  border-bottom: 1px solid var(--border);
+  color: var(--faint);
+  font-size: var(--text-xs);
   font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.docs-content td {
+  color: var(--ink-soft);
+}
+/* The first cell is the row's subject — a setting name, an input name — and is
+   what the reader scans down. Kept on one line: the wrapper scrolls, so there
+   is no cost to it, and a wrapped name breaks the scan. */
+.docs-content td:first-child {
+  color: var(--ink);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.docs-content tbody tr:last-child th,
+.docs-content tbody tr:last-child td {
+  border-bottom: 0;
+}
+/* "*(advanced)*" markers and similar asides inside a cell. */
+.docs-content td em {
+  color: var(--faint);
+  font-style: normal;
+  font-size: var(--text-sm);
 }
 
 .docs-content hr {
@@ -134,6 +494,135 @@
   border-top: 1px solid var(--border);
   margin: var(--space-6) 0;
 }
+
+.docs-content img {
+  max-width: 100%;
+  border-radius: var(--r-2);
+}
+
+/* ============================================================
+   "On this page" rail (Toc.tsx)
+   ============================================================ */
+.docs-toc {
+  display: none;
+}
+@media (min-width: 1200px) {
+  .docs-toc {
+    display: block;
+    /* Sticks inside .docs-main's scrollport; align-self keeps it from
+       stretching to the column's full height, which would defeat sticky. */
+    position: sticky;
+    top: 0;
+    align-self: start;
+    /* The pane's own padding is already above it, so subtract only the bar. */
+    max-height: calc(100dvh - var(--topbar-h) - var(--space-7));
+    overflow-y: auto;
+  }
+}
+.docs-toc-inner {
+  border-left: 1px solid var(--border);
+  padding-left: var(--space-4);
+}
+.docs-toc-label {
+  margin-bottom: var(--space-2);
+  color: var(--faint);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.docs-toc-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0);
+}
+.docs-toc-link {
+  position: relative;
+  padding: var(--space-1) 0;
+  color: var(--muted);
+  font-size: var(--text-md);
+  line-height: 1.45;
+  text-decoration: none;
+  transition: color var(--dur-2) var(--ease-out);
+}
+.docs-toc-link:hover {
+  color: var(--ink);
+}
+/* The active row lights its own segment of the rail's spine, so the reader's
+   position is legible from the line itself rather than from colour alone. */
+.docs-toc-link.active {
+  color: var(--ink);
+}
+.docs-toc-link.active::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--space-4) * -1 - 1px);
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--accent);
+}
+
+/* ============================================================
+   Prev / next (PageNav.tsx)
+   ============================================================ */
+.docs-pagenav {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-7);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border);
+}
+/* Holds the right-hand column when there is no previous page. */
+.docs-pagenav-gap {
+  display: block;
+}
+.docs-pagenav-link {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  background: var(--docs-panel);
+  text-decoration: none;
+  transition:
+    border-color var(--dur-2) var(--ease-out),
+    background var(--dur-2) var(--ease-out);
+}
+.docs-pagenav-link:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+.docs-pagenav-link.next {
+  text-align: right;
+}
+.docs-pagenav-dir {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1h);
+  color: var(--faint);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.docs-pagenav-link.next .docs-pagenav-dir {
+  justify-content: flex-end;
+}
+.docs-pagenav-title {
+  color: var(--ink);
+  font-size: var(--text-base);
+  font-weight: 500;
+}
+.docs-pagenav-link:hover .docs-pagenav-title {
+  color: var(--accent);
+}
+
+/* ============================================================
+   Sidebar touches (the rest comes from app.css)
+   ============================================================ */
 
 /* Space between sidebar groups; the .group-label + nav rows come from app.css. */
 .docs-nav-group + .docs-nav-group {
@@ -150,13 +639,51 @@
   border-radius: 3px;
 }
 
-/* The invite CTA collapses off the top bar on narrow screens (the hamburger
-   owns that space there). */
+/* The catalog runs to 40-odd rows, so the current page has to be findable at a
+   glance. app.css already tints the active row; weight is the cheapest way to
+   add to that without a second marker competing with the tint. */
+.sidebar a.active {
+  font-weight: 600;
+}
+
+/* ============================================================
+   Narrow screens
+   ============================================================ */
 @media (max-width: 768px) {
+  /* The invite CTA collapses off the top bar (the hamburger owns that space). */
   .docs-cta {
     display: none;
   }
   .docs-main {
     padding: var(--space-4) var(--space-4) var(--space-6);
+  }
+  .docs-content {
+    font-size: var(--text-base);
+  }
+  .docs-content h1 {
+    font-size: var(--text-2xl);
+  }
+  .docs-content > h1 + p {
+    font-size: var(--text-lg);
+  }
+  .docs-content h2 {
+    font-size: var(--text-xl);
+  }
+  /* Stack prev/next: side by side they are two ~150px cards of wrapped text. */
+  .docs-pagenav {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .docs-pagenav-gap {
+    display: none;
+  }
+}
+
+/* Motion is decoration. Anyone who has asked for less gets none of it. */
+@media (prefers-reduced-motion: reduce) {
+  .docs-pagenav-link,
+  .docs-anchor,
+  .docs-toc-link,
+  .docs-code-copy {
+    transition: none;
   }
 }

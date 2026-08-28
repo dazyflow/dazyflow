@@ -5,6 +5,8 @@ import { useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { DocsShell } from "./DocsShell";
 import { Markdown } from "./Markdown";
+import { PageNav } from "./PageNav";
+import { Toc } from "./Toc";
 import { getPage } from "./content";
 
 // The shell persists across navigations; the content pane swaps by pathname.
@@ -28,18 +30,29 @@ export function DocsApp() {
 
   return (
     <DocsShell>
-      {page ? (
-        <article className="docs-content">
-          <Markdown source={page.body} base={page.path} brand={page.icon} />
-        </article>
-      ) : (
-        <div className="docs-content">
-          <h1>Page not found</h1>
-          <p>
-            That page doesn’t exist. <Link to="/guide/concepts">Back to the guide</Link>.
-          </p>
+      {/* Reading column and the "on this page" rail sit side by side; the rail
+          drops out below 1200px and the column re-centres (docs.css). */}
+      <div className="docs-layout">
+        <div className="docs-col">
+          {page ? (
+            <>
+              <article className="docs-content">
+                <Markdown source={page.body} base={page.path} brand={page.icon} />
+              </article>
+              <PageNav path={path} />
+            </>
+          ) : (
+            <div className="docs-content">
+              <h1>Page not found</h1>
+              <p>
+                That page doesn’t exist. <Link to="/guide/concepts">Back to the guide</Link>.
+              </p>
+            </div>
+          )}
         </div>
-      )}
+        {/* Keyed by path so the rail rebuilds from the new page's headings. */}
+        {page && <Toc pathKey={path} />}
+      </div>
     </DocsShell>
   );
 }

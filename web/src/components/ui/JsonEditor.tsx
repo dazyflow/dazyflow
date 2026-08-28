@@ -87,7 +87,7 @@ export function JsonEditor({
 // Strings are matched before numbers/literals, so digits/words inside a string
 // are part of the string, not separately coloured. Untokenised text (whitespace,
 // stray characters in mid-typing input) is emitted verbatim.
-function tokenizeJSON(src: string): ReactNode[] {
+export function tokenizeJSON(src: string): ReactNode[] {
   if (!src) return [];
   const re =
     /("(?:\\.|[^"\\])*")(\s*:)|("(?:\\.|[^"\\])*")|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|\b(true|false|null)\b|([{}[\],:])/g;

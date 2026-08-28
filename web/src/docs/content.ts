@@ -170,3 +170,25 @@ export const NAV: NavGroup[] = [
     ],
   },
 ];
+
+// ── Reading order ────────────────────────────────────────────────────────
+// The sidebar flattened into one sequence, which is what the prev/next footer
+// walks. Derived from NAV rather than listed again, so a page added to the
+// sidebar joins the reading order automatically and the two can't disagree.
+export type PageRef = { text: string; link: string };
+
+export const ORDER: PageRef[] = NAV.flatMap((g) =>
+  g.items.map((i) => ({ text: i.text, link: i.link })),
+);
+
+// Trailing slashes: "/reference/steps/" is a real route (the catalog index) but
+// a reader can arrive at "/reference/steps". Compare on a slash-insensitive key
+// so both find the same neighbours — the same tolerance getPage already has.
+const orderKey = (p: string) => p.replace(/\/+$/, "") || "/";
+
+export function neighbours(path: string): { prev?: PageRef; next?: PageRef } {
+  const key = orderKey(path);
+  const i = ORDER.findIndex((p) => orderKey(p.link) === key);
+  if (i === -1) return {};
+  return { prev: ORDER[i - 1], next: ORDER[i + 1] };
+}

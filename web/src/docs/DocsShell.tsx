@@ -82,7 +82,11 @@ export function DocsShell({ children }: { children: ReactNode }) {
           <span className="brand-title">Dazyflow</span>
         </a>
         <div className="spacer" />
-        <a className="btn primary sm docs-cta" href={INVITE}>
+        {/* Ghost, not primary. A filled accent button is the loudest thing on
+            a reference page, and it is pointed away from what the reader came
+            for — someone deep in the step catalog is working, not evaluating.
+            The invite stays available; it just stops competing with the docs. */}
+        <a className="btn ghost sm docs-cta" href={INVITE}>
           Request an invite
         </a>
       </header>
