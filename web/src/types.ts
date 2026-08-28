@@ -1073,6 +1073,15 @@ export type WebAPI = {
   // guessed at save time; "custom" is an image an admin chose; "none" is the
   // plain glyph, on purpose. Always sent, so the form opens on the right choice.
   logo_mode: WebAPILogoMode;
+  // runner_tags, when non-empty, means this catalog's calls are made from one
+  // of the org's own machines carrying ALL of these tags, rather than from the
+  // daemon. It is the only way to reach a service with no public address.
+  // Always sent, so the form opens on the right state.
+  runner_tags: string[];
+  // spec_url is where an imported catalog's operations came from, so the page
+  // can offer "refresh from the spec" without asking for the address again.
+  // Absent means hand-built, or imported by pasting the document.
+  spec_url?: string;
   // registered is the live fact: this catalog is in the answering daemon's
   // engine catalog right now. It is NOT a health check — nothing was dialed —
   // and the page must not present it as one.
@@ -1115,6 +1124,76 @@ export type WebAPIInput = {
   // itself, a data: URI, and is only read when logo_mode is "custom".
   logo_mode?: WebAPILogoMode;
   logo?: string;
+  // runner_tags is omitted to mean "leave it alone", for the same reason logo
+  // is: a save that omitted it and was read as "direct" would move a catalog
+  // off its runner and onto a call the network refuses. Send [] to turn it off.
+  runner_tags?: string[];
+  // spec_url is omitted to mean "leave it alone", so editing anything else does
+  // not make an imported catalog forget where it came from.
+  spec_url?: string;
+};
+
+// WebAPISpecRequest asks the daemon to read a spec. Exactly one source: a URL it
+// fetches through the guarded caller, or a document the admin pasted.
+export type WebAPISpecRequest = {
+  url?: string;
+  spec?: string;
+  // against names an existing catalog to diff against — the refresh case.
+  against?: string;
+};
+
+// WebAPIImportWarning is one thing the parser declined to do. Every warning
+// corresponds to something NOT imported.
+export type WebAPIImportWarning = {
+  // where is the operation it concerns ("get /orders"), or absent for a warning
+  // about the document itself.
+  where?: string;
+  reason: string;
+};
+
+// WebAPIOperationChange is what a refresh would do to one operation. "removed"
+// is the one that costs something: every flow referencing its step id stops
+// resolving.
+export type WebAPIOperationChange = "added" | "changed" | "removed" | "unchanged";
+
+export type WebAPIOperationDiff = {
+  id: string;
+  change: WebAPIOperationChange;
+  title?: string;
+  method?: string;
+  path?: string;
+  // step_id is what a reader searches their flows for before confirming a
+  // removal.
+  step_id?: string;
+};
+
+export type WebAPIRefreshDiff = {
+  operations: WebAPIOperationDiff[];
+  added: number;
+  changed: number;
+  removed: number;
+  unchanged: number;
+};
+
+// WebAPISpecResponse is what the operation picker renders. The daemon stored
+// nothing to produce it: importing is the ordinary save that follows.
+export type WebAPISpecResponse = {
+  title?: string;
+  description?: string;
+  base_url?: string;
+  operations: WebAPIOperation[];
+  tags?: string[];
+  // operation_tags maps operation id to its spec tags, so the picker can select
+  // by tag without the stored operation type carrying a field it never needs
+  // after import.
+  operation_tags?: Record<string, string[]>;
+  warnings?: WebAPIImportWarning[];
+  // diff is present only for a refresh, and drives the removal confirmation.
+  diff?: WebAPIRefreshDiff;
+  // overflow means the spec offers more operations than one catalog may hold.
+  // Which to keep is the admin's choice, so nothing was truncated for them.
+  overflow?: boolean;
+  max: number;
 };
 
 

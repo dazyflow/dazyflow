@@ -445,3 +445,214 @@ func TestHTTP_PutWithoutDescriptionKeepsIt(t *testing.T) {
 		t.Errorf("description = %q after an unrelated edit, want it kept", got)
 	}
 }
+
+// --- OpenAPI import --------------------------------------------------------
+
+const specForImport = `
+openapi: 3.0.0
+info: {title: Order service}
+servers: [{url: https://api.example.com/v1}]
+paths:
+  /orders/{order_id}:
+    get:
+      operationId: get_order
+      summary: Fetch one order
+      parameters:
+        - {name: order_id, in: path, required: true, schema: {type: string}}
+      responses: {'200': {description: ok}}
+  /orders:
+    post:
+      operationId: create_order
+      summary: Place an order
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sku]
+              properties: {sku: {type: string}}
+      responses: {'201': {description: made}}
+`
+
+func decodeSpecResponse(t *testing.T, body []byte) webAPISpecResponse {
+	t.Helper()
+	var out webAPISpecResponse
+	if err := json.Unmarshal(body, &out); err != nil {
+		t.Fatalf("decode spec response: %v (%s)", err, body)
+	}
+	return out
+}
+
+// The endpoint READS. Nothing is stored until the admin picks operations and
+// the ordinary save carries them — which is what makes "import operations,
+// never register a spec" true in the wiring rather than only in the docs.
+func TestHTTP_ParseSpecStoresNothing(t *testing.T) {
+	h, svc := webAPIHarness(t)
+
+	rw := h.adminDo(t, "POST", "/api/v1/admin/web-apis/spec",
+		map[string]any{"spec": specForImport})
+	if rw.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", rw.Code, rw.Body.String())
+	}
+	got := decodeSpecResponse(t, rw.Body.Bytes())
+	if len(got.Operations) != 2 {
+		t.Fatalf("operations = %d, want 2", len(got.Operations))
+	}
+	if got.BaseURL != "https://api.example.com/v1" {
+		t.Errorf("base_url = %q", got.BaseURL)
+	}
+	if got.Max != maxWebAPIOperations {
+		t.Errorf("max = %d, want the cap the page must respect", got.Max)
+	}
+	rows, err := svc.Store.List(context.Background(), "acme")
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Errorf("parsing a spec stored %d catalogs; it must store none", len(rows))
+	}
+}
+
+func TestHTTP_ParseSpecRefusesBothOrNeitherSource(t *testing.T) {
+	h, _ := webAPIHarness(t)
+	for _, body := range []map[string]any{
+		{},
+		{"url": "https://x.example/openapi.json", "spec": specForImport},
+	} {
+		rw := h.adminDo(t, "POST", "/api/v1/admin/web-apis/spec", body)
+		if rw.Code != http.StatusBadRequest {
+			t.Errorf("status = %d for %v, want 400", rw.Code, body)
+		}
+	}
+}
+
+// The parser's refusals are written for the admin who pasted the document, so
+// they must reach them rather than being flattened into a generic 400.
+func TestHTTP_ParseSpecForwardsTheParsersMessage(t *testing.T) {
+	h, _ := webAPIHarness(t)
+	rw := h.adminDo(t, "POST", "/api/v1/admin/web-apis/spec",
+		map[string]any{"spec": `{"swagger":"2.0","info":{},"paths":{}}`})
+	if rw.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d", rw.Code)
+	}
+	if !strings.Contains(rw.Body.String(), "Swagger 2.0") {
+		t.Errorf("body = %s, want the parser's own message", rw.Body.String())
+	}
+}
+
+// A refresh diffs against what is stored, so the page can require confirmation
+// before an operation a live flow references stops resolving.
+func TestHTTP_ParseSpecDiffsAgainstAStoredCatalog(t *testing.T) {
+	h, _ := webAPIHarness(t)
+	// Imported first, then refreshed against the SAME document — the real
+	// sequence. Saving a hand-written fixture instead would diff a hand-built
+	// operation against an imported one, which genuinely differ (a spec's
+	// `summary` becomes a Title, and a hand-built operation need not have one)
+	// and would make this test about the fixture rather than about refresh.
+	importCatalog(t, h, specForImport)
+
+	rw := h.adminDo(t, "POST", "/api/v1/admin/web-apis/spec", map[string]any{
+		"spec":    specForImport,
+		"against": "order-service",
+	})
+	if rw.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", rw.Code, rw.Body.String())
+	}
+	got := decodeSpecResponse(t, rw.Body.Bytes())
+	if got.Diff == nil {
+		t.Fatal("no diff returned for a refresh")
+	}
+	// Re-importing an unchanged document must be all-unchanged, or an admin
+	// learns to click through refresh reports without reading them — which is
+	// exactly what must not happen the day one contains a removal.
+	if got.Diff.Unchanged != 2 || got.Diff.Added != 0 || got.Diff.Changed != 0 || got.Diff.Removed != 0 {
+		t.Errorf("diff = %+v, want it all unchanged", got.Diff)
+	}
+	if got.Diff.HasRemovals() {
+		t.Error("HasRemovals = true with nothing removed")
+	}
+}
+
+// importCatalog does what the page does: parse a spec, then save the operations
+// it offered.
+func importCatalog(t *testing.T, h *gatewayHarness, spec string) webAPIRow {
+	t.Helper()
+	rw := h.adminDo(t, "POST", "/api/v1/admin/web-apis/spec", map[string]any{"spec": spec})
+	if rw.Code != http.StatusOK {
+		t.Fatalf("parse: %d %s", rw.Code, rw.Body.String())
+	}
+	parsed := decodeSpecResponse(t, rw.Body.Bytes())
+	rw = h.adminDo(t, "POST", "/api/v1/admin/web-apis", map[string]any{
+		"label":      "Order service",
+		"base_url":   "https://api.example.com/v1",
+		"auth_kind":  "bearer",
+		"operations": parsed.Operations,
+	})
+	if rw.Code != http.StatusOK {
+		t.Fatalf("save: %d %s", rw.Code, rw.Body.String())
+	}
+	return decodeRow(t, rw.Body.Bytes())
+}
+
+// A spec that dropped an operation must report the removal AND name the step id,
+// which is what an admin searches their flows for before confirming.
+func TestHTTP_ParseSpecReportsRemovalsWithTheirStepIDs(t *testing.T) {
+	h, _ := webAPIHarness(t)
+	importCatalog(t, h, specForImport)
+
+	const shrunk = `
+openapi: 3.0.0
+info: {title: Order service}
+paths:
+  /orders:
+    post:
+      operationId: create_order
+      responses: {'201': {description: made}}
+`
+	rw := h.adminDo(t, "POST", "/api/v1/admin/web-apis/spec", map[string]any{
+		"spec": shrunk, "against": "order-service",
+	})
+	if rw.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", rw.Code, rw.Body.String())
+	}
+	got := decodeSpecResponse(t, rw.Body.Bytes())
+	if got.Diff == nil || got.Diff.Removed != 1 {
+		t.Fatalf("diff = %+v, want one removal", got.Diff)
+	}
+	if ids := got.Diff.RemovedStepIDs(); len(ids) != 1 || ids[0] != "api:order-service:get_order" {
+		t.Errorf("removed step ids = %v", ids)
+	}
+}
+
+// Importing is the ordinary save. Pinned because it is the whole design bet:
+// an imported operation and a hand-built one are the same object, so nothing
+// downstream needed a second path.
+func TestHTTP_ImportedOperationsBecomeStepsThroughTheOrdinarySave(t *testing.T) {
+	h, _ := webAPIHarness(t)
+
+	rw := h.adminDo(t, "POST", "/api/v1/admin/web-apis/spec",
+		map[string]any{"spec": specForImport})
+	if rw.Code != http.StatusOK {
+		t.Fatalf("parse: %d %s", rw.Code, rw.Body.String())
+	}
+	parsed := decodeSpecResponse(t, rw.Body.Bytes())
+
+	rw = h.adminDo(t, "POST", "/api/v1/admin/web-apis", map[string]any{
+		"label":      parsed.Title,
+		"base_url":   parsed.BaseURL,
+		"auth_kind":  "bearer",
+		"spec_url":   "https://api.example.com/openapi.json",
+		"operations": parsed.Operations,
+	})
+	if rw.Code != http.StatusOK {
+		t.Fatalf("save: %d %s", rw.Code, rw.Body.String())
+	}
+	row := decodeRow(t, rw.Body.Bytes())
+	if len(row.StepIDs) != 2 {
+		t.Errorf("step ids = %v, want one per imported operation", row.StepIDs)
+	}
+	// Remembered so a refresh does not make the admin find the address again.
+	if row.SpecURL != "https://api.example.com/openapi.json" {
+		t.Errorf("spec_url = %q", row.SpecURL)
+	}
+}

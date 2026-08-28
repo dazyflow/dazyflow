@@ -47,6 +47,8 @@ import type {
   StepSourceUsage,
   WebAPI,
   WebAPIInput,
+  WebAPISpecRequest,
+  WebAPISpecResponse,
   Runner,
   RunnerTarget,
   RunnerToken,
@@ -1029,6 +1031,12 @@ export const api = {
       "GET",
       `/admin/web-apis/${encodeURIComponent(name)}/usage`,
     ),
+  // parseWebAPISpec reads an OpenAPI document and reports what could be
+  // imported. It STORES NOTHING — the import is the ordinary saveWebAPI that
+  // follows, carrying only the operations the admin picked. Pass `against` to
+  // diff against a stored catalog, which is what a refresh does.
+  parseWebAPISpec: (token: string, req: WebAPISpecRequest) =>
+    request<WebAPISpecResponse>(token, "POST", "/admin/web-apis/spec", req),
   // deleteWebAPI removes the catalog and takes its steps out of the palette.
   // Flows referencing them stay valid graphs but stop resolving at run time.
   deleteWebAPI: (token: string, name: string) =>

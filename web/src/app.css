@@ -11926,3 +11926,102 @@ button:active,
   cursor: default;
   opacity: 0.6;
 }
+
+/* ── Web API spec import (WebAPISpecImport.tsx) ─────────────────────────────
+   The operation picker. A spec can offer hundreds of rows, so the list is a
+   scrolling well rather than a page that grows without limit — the admin is
+   choosing from it, not reading it end to end. */
+.wa-import {
+  margin-bottom: var(--space-4);
+}
+.wa-spec-paste {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+.wa-import-result {
+  margin-top: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.wa-tag-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.wa-op-picker {
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  background: var(--surface-2);
+}
+.wa-op-row {
+  display: grid;
+  /* Method and path are fixed-ish columns so the list scans down them; the
+     title takes what is left and truncates rather than wrapping every row. */
+  grid-template-columns: auto 4.5rem minmax(0, 1fr) minmax(0, 1.2fr);
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1h) var(--space-3);
+  cursor: pointer;
+  font-size: var(--text-sm);
+}
+.wa-op-row:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.wa-op-row + .wa-op-row {
+  border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+.wa-op-method {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  color: var(--muted);
+}
+.wa-op-path,
+.wa-op-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wa-op-title {
+  color: var(--muted);
+}
+/* The counts line of a refresh. Colour carries the meaning at a glance and the
+   words carry it for everyone else — removals are never colour alone. */
+.wa-diff-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  font-size: var(--text-sm);
+}
+.wa-diff-summary span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.wa-diff-added {
+  color: var(--success);
+}
+.wa-diff-changed {
+  color: var(--accent);
+}
+.wa-diff-removed {
+  color: var(--danger);
+}
+.wa-diff-unchanged {
+  color: var(--faint);
+}
+.wa-diff-warn {
+  color: var(--warning);
+}
+.wa-confirm {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  cursor: pointer;
+}

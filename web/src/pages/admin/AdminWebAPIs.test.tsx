@@ -29,6 +29,7 @@ const listWebAPIs = vi.fn();
 const saveWebAPI = vi.fn();
 const deleteWebAPI = vi.fn();
 const webAPIUsage = vi.fn();
+const parseWebAPISpec = vi.fn();
 vi.mock("../../api", () => ({
   APIError: class extends Error {},
   api: {
@@ -36,6 +37,7 @@ vi.mock("../../api", () => ({
     saveWebAPI: (...a: unknown[]) => saveWebAPI(...a),
     deleteWebAPI: (...a: unknown[]) => deleteWebAPI(...a),
     webAPIUsage: (...a: unknown[]) => webAPIUsage(...a),
+    parseWebAPISpec: (...a: unknown[]) => parseWebAPISpec(...a),
   },
 }));
 
@@ -187,6 +189,55 @@ describe("AdminWebAPIs", () => {
       type: "string",
       required: true,
     });
+  });
+
+  it("sends runner tags normalised into a list, and warns while they are set", async () => {
+    listWebAPIs.mockResolvedValue({ web_apis: [] });
+    saveWebAPI.mockResolvedValue({ ...orders });
+    render(<AdminWebAPIs />);
+    await waitFor(() =>
+      expect(screen.getByText("webapi.emptyTitle")).toBeInTheDocument(),
+    );
+
+    await userEvent.click(screen.getByText("webapi.add"));
+    await userEvent.type(screen.getByLabelText("common.name"), "Order service");
+    await userEvent.type(
+      screen.getByLabelText("webapi.urlLabel"),
+      "https://orders.internal.example",
+    );
+    await userEvent.type(screen.getByLabelText("webapi.opIdLabel"), "get_order");
+
+    // Blank is the normal case, so the trade-off notice must not be shown to
+    // the many admins who never touch this field.
+    expect(screen.queryByText("webapi.runnerTagsWarning")).toBeNull();
+
+    await userEvent.type(
+      screen.getByLabelText("webapi.runnerTagsLabel"),
+      " orders-box , dmz ",
+    );
+    // Filling it in skips the outbound guards, so the page says so where the
+    // choice is made rather than leaving it to the docs.
+    expect(screen.getByText("webapi.runnerTagsWarning")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText("webapi.save"));
+    await waitFor(() => expect(saveWebAPI).toHaveBeenCalled());
+    const [, input] = saveWebAPI.mock.calls[0];
+    expect(input.runner_tags).toEqual(["orders-box", "dmz"]);
+  });
+
+  // Omitting runner_tags means "leave it alone" server-side, so a form that
+  // cleared the field would be unable to move a catalog back onto a direct
+  // call. It is always sent, empty included.
+  it("sends an empty tag list when the field is cleared", async () => {
+    saveWebAPI.mockResolvedValue({ ...orders });
+    render(<AdminWebAPIs />);
+    await waitFor(() =>
+      expect(screen.getByText("Order service")).toBeInTheDocument(),
+    );
+    await userEvent.click(screen.getByLabelText("common.edit"));
+    await userEvent.click(screen.getByText("webapi.save"));
+    await waitFor(() => expect(saveWebAPI).toHaveBeenCalled());
+    expect(saveWebAPI.mock.calls[0][1].runner_tags).toEqual([]);
   });
 
   // An edit sends the existing name, so the daemon replaces rather than creating
@@ -460,5 +511,150 @@ describe("AdminWebAPIs", () => {
     await waitFor(() =>
       expect(deleteWebAPI).toHaveBeenCalledWith("tok", "order-service"),
     );
+  });
+});
+
+// --- OpenAPI import --------------------------------------------------------
+
+// parsed is what the daemon returns for a first import: two operations, no diff.
+const parsed = {
+  title: "Order service",
+  base_url: "https://api.example.com/v1",
+  max: 60,
+  operations: [
+    { id: "get_order", method: "GET", path: "/orders/{order_id}", title: "Fetch one order", args: [] },
+    { id: "create_order", method: "POST", path: "/orders", title: "Place an order", args: [] },
+  ],
+};
+
+describe("AdminWebAPIs spec import", () => {
+  beforeEach(() => {
+    listWebAPIs.mockReset();
+    saveWebAPI.mockReset();
+    parseWebAPISpec.mockReset();
+    listWebAPIs.mockResolvedValue({ web_apis: [] });
+    webAPIUsage.mockResolvedValue({ flows: [] });
+  });
+
+  const openImporter = async () => {
+    render(<AdminWebAPIs />);
+    await waitFor(() =>
+      expect(screen.getByText("webapi.emptyTitle")).toBeInTheDocument(),
+    );
+    await userEvent.click(screen.getByText("webapi.add"));
+  };
+
+  it("reads a spec and seeds the form with the operations picked", async () => {
+    parseWebAPISpec.mockResolvedValue(parsed);
+    saveWebAPI.mockResolvedValue({ ...orders });
+    await openImporter();
+
+    await userEvent.type(
+      screen.getByLabelText("webapi.specURLLabel"),
+      "https://api.example.com/openapi.json",
+    );
+    await userEvent.click(screen.getByText("webapi.specRead"));
+
+    await waitFor(() => expect(screen.getByText("/orders")).toBeInTheDocument());
+    // Everything is selected on a first import; the label says how many.
+    expect(screen.getByText(/webapi.specImport.*"count":2/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText(/webapi.specImport/));
+    await userEvent.click(screen.getByText("webapi.save"));
+
+    await waitFor(() => expect(saveWebAPI).toHaveBeenCalled());
+    const [, input] = saveWebAPI.mock.calls[0];
+    expect(input.operations).toHaveLength(2);
+    expect(input.label).toBe("Order service");
+    expect(input.base_url).toBe("https://api.example.com/v1");
+    // Remembered so a later refresh does not ask for the address again.
+    expect(input.spec_url).toBe("https://api.example.com/openapi.json");
+  });
+
+  it("reads nothing until asked, and stores nothing when it does", async () => {
+    parseWebAPISpec.mockResolvedValue(parsed);
+    await openImporter();
+    expect(parseWebAPISpec).not.toHaveBeenCalled();
+
+    await userEvent.type(screen.getByLabelText("webapi.specURLLabel"), "https://x.example/s.json");
+    await userEvent.click(screen.getByText("webapi.specRead"));
+    await waitFor(() => expect(parseWebAPISpec).toHaveBeenCalled());
+    // Reading is not importing: the save is the admin's separate act.
+    expect(saveWebAPI).not.toHaveBeenCalled();
+  });
+
+  it("lets an operation be deselected before importing", async () => {
+    parseWebAPISpec.mockResolvedValue(parsed);
+    saveWebAPI.mockResolvedValue({ ...orders });
+    await openImporter();
+    await userEvent.type(screen.getByLabelText("webapi.specURLLabel"), "https://x.example/s.json");
+    await userEvent.click(screen.getByText("webapi.specRead"));
+    await waitFor(() => expect(screen.getByText("/orders")).toBeInTheDocument());
+
+    // Curation is the feature: a spec with hundreds of operations must not put
+    // all of them in the palette.
+    const boxes = screen.getAllByRole("checkbox");
+    await userEvent.click(boxes[0]);
+    expect(screen.getByText(/webapi.specImport.*"count":1/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText(/webapi.specImport/));
+    await userEvent.click(screen.getByText("webapi.save"));
+    await waitFor(() => expect(saveWebAPI).toHaveBeenCalled());
+    expect(saveWebAPI.mock.calls[0][1].operations).toHaveLength(1);
+  });
+
+  // The safety mechanism. An operation can vanish from a spec because someone
+  // deleted a handler; the steps it contributed are referenced by saved flows.
+  it("will not import a refresh that removes operations until it is confirmed", async () => {
+    parseWebAPISpec.mockResolvedValue({
+      ...parsed,
+      diff: {
+        added: 0,
+        changed: 0,
+        removed: 1,
+        unchanged: 2,
+        operations: [
+          {
+            id: "cancel_order",
+            change: "removed",
+            step_id: "api:order-service:cancel_order",
+            method: "DELETE",
+            path: "/orders/{order_id}",
+          },
+        ],
+      },
+    });
+    saveWebAPI.mockResolvedValue({ ...orders });
+    listWebAPIs.mockResolvedValue({ web_apis: [orders] });
+
+    render(<AdminWebAPIs />);
+    await waitFor(() =>
+      expect(screen.getByText("Order service")).toBeInTheDocument(),
+    );
+    await userEvent.click(screen.getByLabelText("common.edit"));
+    await userEvent.type(screen.getByLabelText("webapi.specURLLabel"), "https://x.example/s.json");
+    await userEvent.click(screen.getByText("webapi.specRead"));
+
+    await waitFor(() =>
+      expect(screen.getByText(/webapi.specRemovalsTitle/)).toBeInTheDocument(),
+    );
+    // The step id is named, because that is what an admin searches their flows
+    // for before agreeing.
+    expect(screen.getByText("api:order-service:cancel_order")).toBeInTheDocument();
+
+    const importButton = screen.getByText(/webapi.specImport/).closest("button")!;
+    expect(importButton).toBeDisabled();
+
+    await userEvent.click(screen.getByText("webapi.specConfirmRemovals"));
+    expect(importButton).not.toBeDisabled();
+  });
+
+  // The parser's refusals are written for the admin. They must reach them.
+  it("shows why a document could not be read", async () => {
+    parseWebAPISpec.mockRejectedValue(new Error("this is a Swagger 2.0 document"));
+    await openImporter();
+    await userEvent.type(screen.getByLabelText("webapi.specURLLabel"), "https://x.example/s.json");
+    await userEvent.click(screen.getByText("webapi.specRead"));
+    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
   });
 });

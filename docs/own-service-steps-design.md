@@ -1,10 +1,11 @@
 # Steps for your own service — design note
 
-Status: **PHASE 1 BUILT** — a tenant can describe their own service in Admin →
-Web APIs and get one step per operation, in the palette and in the flow
-generator. Phases 2 (OpenAPI import) and 3 (reach through a runner) are still
-design only. The two "as built" sections at the end record what the build changed
-about this note. Written 2026-08-27, the same day as
+Status: **ALL THREE PHASES BUILT** — a tenant can describe their own service in
+Admin → Web APIs (by hand or by importing an OpenAPI spec) and get one step per
+operation, in the palette and in the flow generator, and can point that catalog
+at a runner to reach a service with no public address. The four "as built"
+sections at the end record what the builds changed about this note.
+Written 2026-08-27, the same day as
 [docs/mcp-on-runners-design.md](./mcp-on-runners-design.md) and for the same
 reason: per-org HTTP MCP servers had just shipped, the shape of a *tenant-owned
 catalog* was fresh, and this is the other thing that shape is good for. Not
@@ -271,8 +272,10 @@ means calls land on any of them, which is right for HTTP and needs no caveat.
    smallest thing that closes the actual gap, and it establishes everything the
    next two phases reuse. **Built** — see the two sections below.
 2. **OpenAPI import** as a second front end onto the same descriptor: fetch or
-   paste, parse, pick operations, refresh-as-diff.
+   paste, parse, pick operations, refresh-as-diff. **Built** — see "Commit 4 as
+   built" below.
 3. **Reach through a runner** — one field, for the internal-service case.
+   **Built** — see "Commit 3 as built" below.
 
 Anything before (1) is a workaround for the absence of (1).
 
@@ -482,3 +485,149 @@ what the admin typed.
 internal rule and now has a second caller that wants it; it belongs in
 `internal/`. `engine/mcp` still hands port text to tools uncoerced (see commit
 1). Neither is this feature's business to fix.
+
+## Commit 3 as built (2026-08-28)
+
+Phase 3, built out of order: phase 2 removes typing for a service that is public
+and already has a spec, while this removes a hard blocker for one that is not
+reachable at all — and the guide had been telling that reader to go write a
+script per operation.
+
+`engine/webapi/runner.go` (dispatcher hook, the request script, reply parsing),
+one field on the descriptor (`RunnerReach`), one column (`runner_tags`), one
+form field, and a second bridge in `cmd/dzd`. The note's estimate held: the
+descriptor, the synthesized manifests, the ports and the connection are all
+untouched, and `buildRequest` assembles the call identically for both paths.
+
+**The whole envelope goes on stdin, not just the body.** The note said "the body
+on `Stdin`", which would have left method, URL and headers to be templated into
+the script — and the auth header is one of those headers. `runner_tasks` stores
+`script` and `stdin` in separate columns and both are read while debugging a
+queue, so a templated script is a second place a token can be. Putting the whole
+request there instead makes the script a CONSTANT: it carries no request detail
+and no credential, and there is one column to reason about rather than two. A
+test asserts the credential is absent from the script and present in stdin.
+
+Two properties fell out of that which are worth stating. The script is sealed at
+rest along with stdin when `DAZYFLOW_MASTER_KEY` is set (`PayloadCipher` covers
+script, stdin and env), so the credential gets the same protection a
+`${secret.X}` in a hand-written runner script already gets. And because the
+script never varies, it can be tested by running it: `TestRunnerScript_
+ActuallyPerformsTheCall` executes the real python against a real `httptest`
+server, which a per-request templated program could not be. That test exists
+because the script is a string constant in a Go file — never compiled, never
+linted, and a typo in it would otherwise fail once, on a customer's machine.
+
+**Python, and it is not a toss-up.** `runner/dzrunner.py` IS python3 and its
+`interpreter_argv` falls back to `sys.executable` for this shell, so it is the
+one interpreter guaranteed present on a machine running an agent. A shell script
+would have needed curl, which is guaranteed nowhere. The one failure mode is a
+runner installed with `--allow` that does not permit python; its stderr is
+quoted verbatim rather than summarised, because it is the only thing that
+explains the failure.
+
+**The guard bypass is the cost, and it is stated three times on purpose** — in
+`RunnerReach`'s doc comment, in the admin form beside the field, and in the
+guide. A runner-borne call does not pass through the guarded `Doer`, so it loses
+the SSRF dial guard (that is the point), the per-tenant egress allowlist and the
+per-host rate limit. The response cap is the one that had to be REBUILT rather
+than inherited: the script re-imposes `max_bytes` itself, because a machine
+streaming a gigabyte back through a task row is a different failure from the one
+the allowlist prevents.
+
+**Decisions the note did not make.**
+
+- **A 4xx/5xx from inside the network is an answer, not a transport failure.**
+  `urllib` raises `HTTPError` for both; the script catches it and reports the
+  status, so `expect_status` behaves identically on both paths and a 404 can
+  still be an answer.
+- **Bodies are base64 across the boundary.** stdout is text and a response is
+  not; a PDF would not survive being handed through as-is.
+- **The task timeout is the HTTP timeout plus a margin**, not the same value.
+  Equal values race, and the loser is the more useful message.
+- **Tags are normalised (lower-cased, de-duplicated) at the daemon**, and an
+  un-normalised tag is REFUSED by `Validate` rather than stored — the matching
+  side lower-cases, so `"Linux"` would have matched nothing, silently.
+- **`RunnerTags` is nil-means-unsent** on both the input struct and the wire,
+  like `Enabled` and `Description`. An API caller changing only the base URL
+  must not move a catalog off its runner and onto a call the network refuses.
+  The admin form therefore always sends the field, empty included.
+
+**Still owed.** Nothing blocking, but two things a reader should not assume:
+there is no probe, so a catalog pointed at the wrong tags reports it on first
+use rather than at save time (the note already says `LastConnected` means
+something different here); and the runner path is not covered by the flowgen
+test, which grounds on manifests and cannot see which transport they use.
+
+
+## Commit 4 as built (2026-08-28)
+
+Phase 2. `engine/webapi/openapi.go` (parser + guarded fetch),
+`engine/webapi/diff.go` (refresh), one endpoint, one column (`spec_url`), and
+`web/src/components/admin/WebAPISpecImport.tsx`.
+
+**The central bet paid off again, and more visibly than in phase 3.** The
+importer produces `[]webapi.Operation` and hands it to the form; the form saves
+it through the same path a hand-built catalog uses. No second store, no second
+validation, no second synthesis. The API test that pins this
+(`TestHTTP_ImportedOperationsBecomeStepsThroughTheOrdinarySave`) is four lines
+long, which is the evidence.
+
+**A parser of our own, not a library.** The note did not take this decision and
+it turned out to be the load-bearing one. `go.yaml.in/yaml/v3` was already a
+direct dependency and a JSON document is valid YAML, so the format half was
+free; what a library would have bought is the schema grind, and what it would
+have cost is the curation stance. A library validates a DOCUMENT and refuses a
+DOCUMENT — so one operation we cannot express would block the fifty we can,
+which is the opposite of "import operations, never register a spec". Here an
+operation that does not fit is skipped with a warning naming it. It also makes
+the note's external-`$ref` rule structural rather than configured: there is no
+fetcher in the parser, so an external reference cannot be followed even by
+mistake, where a library's equivalent is a flag someone can turn off.
+
+The honest cost: 3.1's JSON-Schema unions, discriminators and `servers`
+variables get a conservative reading. Each of those surfaces as a warning, never
+as a wrong request.
+
+**Skipping is done by running the real validation.** `p.operation` calls
+`op.validate()` — the descriptor's own — rather than reimplementing its rules.
+So an operation that would fail Save is skipped at parse time with that same
+message, and the two can never disagree about what is importable.
+
+**Decisions the note left open.**
+
+- **`summary` → Title, `description` → Description, and Summary left empty.**
+  OpenAPI has two prose fields and the descriptor has three. Setting Title and
+  Summary both from `summary` put the same sentence on the node card twice;
+  leaving Summary empty lets the subtitle fall back to `GET /orders/{id}`, which
+  complements the caption. `description` absorbs `summary` when absent, because
+  Description is what the flow generator grounds on.
+- **Argument collisions are refused, not renamed.** The note offered "prefix the
+  body one, or refuse". A path-level parameter restated on the operation is
+  deduplicated (it is the same parameter); a name genuinely used in two
+  locations is left for `validate()` to refuse with its own message, so this
+  file never invents a winner.
+- **A non-object JSON body becomes `BodyRaw`,** not a skipped operation — an
+  array or an upload has no field-per-argument reading but is still a working
+  step with a `request_body` port.
+- **Operation tags ride beside the operations, not on them.** `Operation` is a
+  STORED type where a new field changes what every persisted descriptor means,
+  and tags are useful only in the picker. They travel as a separate
+  `operation_tags` map.
+- **Ids are derived deterministically** from method and path when a spec has no
+  `operationId`, because a refresh matches on id: an id that varied between
+  parses would read as a removal plus an addition on every import.
+
+**Refresh is additive until confirmed**, which is stronger than the note's
+"require confirmation for removals". `ApplyRefresh` KEEPS an unconfirmed
+removal, so the failure mode of an admin clicking through a report is a stale
+operation, not a flow that lost a step. Argument reordering is normalised out of
+the comparison for the same reason: a refresh that cried "changed" on every spec
+regeneration would train people to stop reading it, and the one that matters is
+the one with a removal in it.
+
+**Still owed.** The refresh has no scheduler — it is a button, not a poll, which
+is right for something that can require confirmation but means a spec change is
+noticed when someone looks. And `sameOperation` compares marshalled JSON so a
+new field on `Operation` is covered automatically; that is deliberate, but it
+does mean a purely cosmetic field added later would start reporting "changed".

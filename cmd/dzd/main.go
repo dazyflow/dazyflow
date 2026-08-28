@@ -2430,6 +2430,12 @@ func setupRunners(ctx context.Context, pool *pgxpool.Pool, secrets *daemon.Encry
 	runners := &daemon.Runners{Store: store}
 	dispatcher := &daemon.RunnerDispatcher{Tasks: tasks, Runners: runners}
 	runnerdrop.SetDispatcher(runnerBridge{inner: dispatcher})
+	// A web-API catalog set to be reached through a runner queues its request
+	// on this same queue, as an ordinary task. Wired here rather than beside
+	// webapi.SetDoer because the dispatcher does not exist until now; a catalog
+	// whose tags are set on a deployment with no runners configured fails
+	// naming itself, which is why this hook is allowed to stay unset.
+	webapi.SetDispatcher(webAPIRunnerBridge{inner: dispatcher})
 	return runners, tasks
 }
 
@@ -2525,6 +2531,42 @@ func setupTenantMCPServers(
 // separation, and it is worth paying — the alternative is a shared types
 // package that exists only to let two layers reach each other.
 type runnerBridge struct{ inner *daemon.RunnerDispatcher }
+
+// webAPIRunnerBridge is runnerBridge's sibling for web-API catalogs that reach
+// their service through a runner. It exists for the identical reason and pays
+// the identical price: engine/webapi must not import daemon, daemon must not
+// import engine/webapi's caller, and this file is the one place that knows both.
+//
+// Two bridges rather than one because the two source types are genuinely
+// separate — drops/runner.Request carries Env and a Shell an author chose, while
+// webapi.RunnerRequest carries a fixed script and an envelope on stdin. Merging
+// them would mean a shared types package existing only to let two layers reach
+// each other, which is the thing this shape avoids.
+type webAPIRunnerBridge struct{ inner *daemon.RunnerDispatcher }
+
+func (b webAPIRunnerBridge) Dispatch(
+	ctx context.Context,
+	req webapi.RunnerRequest,
+	onProgress func(string),
+) (webapi.RunnerResult, error) {
+	res, err := b.inner.Dispatch(ctx, daemon.DispatchRequest{
+		Tenant:  req.Tenant,
+		Tags:    req.Tags,
+		Script:  req.Script,
+		Shell:   req.Shell,
+		Stdin:   req.Stdin,
+		Timeout: req.Timeout,
+	}, onProgress)
+	if err != nil {
+		return webapi.RunnerResult{}, err
+	}
+	return webapi.RunnerResult{
+		ExitCode: res.ExitCode,
+		Stdout:   res.Stdout,
+		Stderr:   res.Stderr,
+		Error:    res.Error,
+	}, nil
+}
 
 func (b runnerBridge) Dispatch(
 	ctx context.Context,

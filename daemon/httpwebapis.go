@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"git.sr.ht/~klahr/dazyflow/core"
@@ -56,6 +57,16 @@ type webAPIRow struct {
 	// purpose). Always sent, because the form has to open on the right choice
 	// and "absent" would read as auto for a catalog that had said none.
 	LogoMode string `json:"logo_mode"`
+	// RunnerTags, when present, means this catalog's calls are made from one of
+	// the org's own machines rather than from the daemon — the only way to reach
+	// a service with no public address. Always sent (never omitted) so the form
+	// opens on the right state: "absent" would read as "direct" for a catalog
+	// that is in fact on a runner.
+	RunnerTags []string `json:"runner_tags"`
+	// SpecURL is where an imported catalog's operations came from. Sent so the
+	// page can offer "refresh from the spec" without asking for the address
+	// again; empty means hand-built (or imported by paste).
+	SpecURL string `json:"spec_url,omitempty"`
 	// Registered is the live fact: this catalog is in THIS process's engine
 	// catalog right now. There is no "connected" for a described API — nothing
 	// was dialed — so this is the honest equivalent, and the page must not
@@ -100,6 +111,13 @@ type webAPIRequest struct {
 	// means "use this".
 	Logo     *string `json:"logo,omitempty"`
 	LogoMode *string `json:"logo_mode,omitempty"`
+	// RunnerTags is a pointer-to-slice for the same reason Enabled is a pointer:
+	// a PUT that omits it must not move a catalog off its runner and back onto a
+	// direct call the network will refuse. Sending [] is how you turn it off.
+	RunnerTags *[]string `json:"runner_tags,omitempty"`
+	// SpecURL is a pointer for the same reason: an edit of anything else must
+	// not make an imported catalog forget where it came from.
+	SpecURL *string `json:"spec_url,omitempty"`
 }
 
 func (h *HTTPGateway) webAPIsConfigured(rw http.ResponseWriter) bool {
@@ -145,6 +163,8 @@ func (h *HTTPGateway) webAPIRowFor(w WebAPI, live map[string][]string) webAPIRow
 		Enabled:      w.Enabled,
 		Logo:         w.Logo,
 		LogoMode:     string(w.logoMode()),
+		RunnerTags:   w.RunnerTags,
+		SpecURL:      w.SpecURL,
 		Registered:   registered,
 		StepIDs:      ids,
 		LastError:    w.LastError,
@@ -218,6 +238,17 @@ func (h *HTTPGateway) saveWebAPI(rw http.ResponseWriter, r *http.Request, p core
 	}
 	if req.Enabled != nil {
 		in.Enabled = *req.Enabled
+	}
+	if req.RunnerTags != nil {
+		in.RunnerTags = *req.RunnerTags
+		// A non-nil empty slice must survive as non-nil: it is the caller
+		// saying "stop using a runner", which is not the same as not saying.
+		if in.RunnerTags == nil {
+			in.RunnerTags = []string{}
+		}
+	}
+	if req.SpecURL != nil {
+		in.SpecURL = req.SpecURL
 	}
 	if req.LogoMode != nil {
 		// Passed through unvalidated on purpose: the service owns the vocabulary
@@ -300,4 +331,110 @@ func (h *HTTPGateway) deleteWebAPI(rw http.ResponseWriter, r *http.Request, p co
 	}
 	h.audit(r.Context(), p, "web_api.delete", name, detail)
 	writeJSON(rw, http.StatusOK, map[string]any{"deleted": name})
+}
+
+// ── Importing an OpenAPI spec ───────────────────────────────────────────────
+
+// webAPISpecRequest asks for a spec to be read. Exactly one source is used:
+// a URL the daemon fetches through the guarded caller, or a document the admin
+// pasted.
+type webAPISpecRequest struct {
+	// URL is fetched through the same guarded Doer a step's call uses — the
+	// SSRF guard, the egress allowlist and the response cap all apply, because
+	// this address is tenant-supplied like any other.
+	URL string `json:"url,omitempty"`
+	// Spec is a pasted document, for an API whose spec is not reachable from
+	// the daemon (behind a VPN, on a laptop, generated locally).
+	Spec string `json:"spec,omitempty"`
+	// Against, when set, names an existing catalog to diff the parsed
+	// operations against — the refresh case. Empty means a first import.
+	Against string `json:"against,omitempty"`
+}
+
+// webAPISpecResponse is what the picker renders.
+type webAPISpecResponse struct {
+	Title       string             `json:"title,omitempty"`
+	Description string             `json:"description,omitempty"`
+	BaseURL     string             `json:"base_url,omitempty"`
+	Operations  []webapi.Operation `json:"operations"`
+	Tags        []string           `json:"tags,omitempty"`
+	// OperationTags maps operation id to its spec tags, so the picker can select
+	// by tag. Kept beside the operations rather than on them: Operation is a
+	// STORED type and tags are useful only before saving.
+	OperationTags map[string][]string    `json:"operation_tags,omitempty"`
+	Warnings      []webapi.ImportWarning `json:"warnings,omitempty"`
+	// Diff is present only for a refresh (`against` was sent and matched). The
+	// page uses it to show what a re-import would add, change and REMOVE, and
+	// to require confirmation for the removals.
+	Diff *webapi.RefreshDiff `json:"diff,omitempty"`
+	// Overflow says the spec offers more operations than one catalog may hold.
+	// Reported rather than truncated: which ones to keep is the admin's choice,
+	// and silently taking the first sixty would be making it for them.
+	Overflow bool `json:"overflow,omitempty"`
+	// Max is the cap, so the page can say "pick at most N" without hardcoding it.
+	Max int `json:"max"`
+}
+
+// parseWebAPISpec reads a spec and reports what could be imported from it.
+//
+// It stores NOTHING. Import is the ordinary save that follows, carrying the
+// operations the admin actually picked — which is what makes "import
+// operations, never register a spec" true in the wiring and not only in the
+// documentation.
+func (h *HTTPGateway) parseWebAPISpec(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	if !requireStepSourceAdmin(rw, p) || !h.webAPIsConfigured(rw) {
+		return
+	}
+	var req webAPISpecRequest
+	if err := decodeWebAPIBody(r, &req); err != nil {
+		writeJSONError(rw, http.StatusBadRequest, "malformed request body")
+		return
+	}
+	url, pasted := strings.TrimSpace(req.URL), strings.TrimSpace(req.Spec)
+	if (url == "") == (pasted == "") {
+		writeJSONError(rw, http.StatusBadRequest, "send either a spec address or a pasted document, not both and not neither")
+		return
+	}
+
+	var (
+		parsed webapi.SpecImport
+		err    error
+	)
+	if url != "" {
+		parsed, err = webapi.FetchSpec(r.Context(), url)
+	} else {
+		parsed, err = webapi.ParseSpec([]byte(pasted))
+	}
+	if err != nil {
+		// The parser's messages are written to be shown to the admin who pasted
+		// the document — "this is a Swagger 2.0 document…" — so they are
+		// forwarded rather than replaced with a generic 400.
+		writeJSONError(rw, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	resp := webAPISpecResponse{
+		Title:         parsed.Title,
+		Description:   parsed.Description,
+		BaseURL:       parsed.BaseURL,
+		Operations:    parsed.Operations,
+		Tags:          parsed.Tags,
+		OperationTags: parsed.OperationTags,
+		Warnings:      parsed.Warnings,
+		Max:           maxWebAPIOperations,
+		Overflow:      len(parsed.Operations) > maxWebAPIOperations,
+	}
+
+	if name := strings.TrimSpace(req.Against); name != "" {
+		existing, err := h.WebAPIs.Store.Get(r.Context(), p.Tenant, name)
+		if err != nil && !errors.Is(err, ErrWebAPINotFound) {
+			writeJSONError(rw, http.StatusInternalServerError, "could not read the stored catalog")
+			return
+		}
+		if err == nil {
+			diff := webapi.DiffOperations(existing.Name, existing.Operations, parsed.Operations)
+			resp.Diff = &diff
+		}
+	}
+	writeJSON(rw, http.StatusOK, resp)
 }

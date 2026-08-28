@@ -5,6 +5,7 @@ package webapi
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -28,8 +29,13 @@ type Transport struct {
 func (t *Transport) Manifest() core.Manifest { return t.manifest }
 
 func (t *Transport) Execute(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
+	// Which last mile this catalog uses. A catalog with runner tags is reaching
+	// a service the daemon cannot dial at all, so it needs no Doer; one without
+	// needs nothing else.
+	viaRunner := t.desc.Runner.Enabled()
+
 	do, ok := currentDoer()
-	if !ok {
+	if !ok && !viaRunner {
 		// A wiring fault, not the author's mistake: no HTTP caller was
 		// installed. Reported as an error too (not just a node error) because
 		// nothing about the graph can fix it.
@@ -61,15 +67,32 @@ func (t *Transport) Execute(ctx context.Context, job core.Job, progress chan<- c
 
 	emitProgress(progress, job, 0.1, req.method+" "+req.url)
 
-	status, body, header, err := do(ctx, req.method, req.url, req.headers, req.body, timeout, maxBytes)
+	// The two transports converge here: both yield a status, a body and flat
+	// headers, so everything below — expect_status, MIME sniffing, the three
+	// output ports — is written once and does not know which one ran.
+	var (
+		status  int
+		body    []byte
+		headers map[string]string
+	)
+	if viaRunner {
+		status, body, headers, err = t.viaRunner(ctx, req, timeout, maxBytes, func(msg string) {
+			emitProgress(progress, job, 0.4, msg)
+		})
+	} else {
+		var h http.Header
+		status, body, h, err = do(ctx, req.method, req.url, req.headers, req.body, timeout, maxBytes)
+		headers = flattenHeaders(h)
+	}
 	if err != nil {
 		if ctx.Err() != nil {
 			return errResult(job, "cancelled", ctx.Err().Error()), ctx.Err()
 		}
 		// The doer's errors are already classified prose from the guards it
-		// runs (egress_blocked, an SSRF refusal, a body cap). Passing the
-		// message through beats re-deriving a code from its text here, which
-		// would couple this package to drops/net's wording.
+		// runs (egress_blocked, an SSRF refusal, a body cap); the runner's name
+		// the machine or quote its stderr. Passing the message through beats
+		// re-deriving a code from its text here, which would couple this
+		// package to drops/net's wording.
 		return errResult(job, "http", err.Error()), nil
 	}
 
@@ -86,7 +109,7 @@ func (t *Transport) Execute(ctx context.Context, job core.Job, progress chan<- c
 		return errResult(job, "unexpected_status", msg), nil
 	}
 
-	contentType := header.Get("Content-Type")
+	contentType := headerValue(headers, "Content-Type")
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
@@ -105,7 +128,7 @@ func (t *Transport) Execute(ctx context.Context, job core.Job, progress chan<- c
 			// A bare JSON number so a Branch's numeric comparison can test it
 			// with no parse step in between. Same as http_request.
 			"status":  {MIME: "application/json", Inline: status},
-			"headers": {MIME: "application/json", Inline: flattenHeaders(header)},
+			"headers": {MIME: "application/json", Inline: headers},
 		},
 	}, nil
 }
@@ -498,6 +521,41 @@ func flattenHeaders(h http.Header) map[string]string {
 		}
 	}
 	return out
+}
+
+// headerValue reads one header out of the flattened map, case-insensitively.
+//
+// http.Header canonicalises its keys on the way in and Get would have done this
+// for free; a runner's reply does not, because it is whatever the service put on
+// the wire, printed by python's email.message parser. So the lookup has to be
+// the case-insensitive one HTTP has always specified.
+func headerValue(headers map[string]string, key string) string {
+	if v, ok := headers[key]; ok {
+		return v
+	}
+	for k, v := range headers {
+		if strings.EqualFold(k, key) {
+			return v
+		}
+	}
+	return ""
+}
+
+// b64/unb64 carry a request and response body across the runner boundary. A
+// task's stdin and stdout are text, and a body is not: a PDF, a gzip, or merely
+// a UTF-8 string with a stray byte would not survive being handed through as-is.
+func b64(body []byte) string {
+	if len(body) == 0 {
+		return ""
+	}
+	return base64.StdEncoding.EncodeToString(body)
+}
+
+func unb64(s string) ([]byte, error) {
+	if s == "" {
+		return nil, nil
+	}
+	return base64.StdEncoding.DecodeString(s)
 }
 
 func errResult(job core.Job, code, msg string) core.Result {

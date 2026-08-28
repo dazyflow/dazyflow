@@ -205,6 +205,102 @@ type Descriptor struct {
 	// as a broken image rather than as a logo, and the descriptor is the last
 	// boundary that can say so out loud. Empty is normal and means the globe.
 	Logo string
+	// Runner, when set, moves the last mile onto one of the org's own machines.
+	// Empty — the normal case — means the daemon makes the call itself.
+	Runner RunnerReach
+}
+
+// RunnerReach says to perform this catalog's calls from inside the org's
+// network instead of from the daemon.
+//
+// It is one field rather than a fourth product because nothing else changes:
+// the descriptor, the synthesized manifests, the ports and the connection are
+// identical, and an HTTP request is already the one-shot shape a runner task
+// has. See engine/webapi/runner.go.
+//
+// What it BUYS is the only thing phase 1 could not offer: a service with no
+// public address. Dazyflow refuses to dial private ranges by design, so an
+// internal API was previously reachable only by writing a script per operation.
+//
+// What it COSTS has to be stated plainly, because it is the trade a reader
+// would otherwise have to discover from behaviour: a call made from a runner
+// does not pass through the daemon's guarded Doer, so it has none of that
+// path's protections — no SSRF dial guard (that is the point), no per-tenant
+// egress allowlist, and no per-host rate limit. The response cap survives,
+// re-imposed inside the script, because a runner streaming a gigabyte back
+// through a task row is a different failure from the one the allowlist
+// prevents. Setting this is therefore an admin decision about a machine the org
+// already trusts to run arbitrary scripts, and it is gated on the same
+// permission as the rest of the catalog.
+type RunnerReach struct {
+	// Tags select the machine: one carrying ALL of them. A machine's own name is
+	// one of its tags, so pinning a catalog to a single box is a one-tag list —
+	// the same vocabulary the run_on_runner step uses, deliberately, so there is
+	// no second targeting concept to learn.
+	//
+	// Several machines matching is fine and needs no caveat: an HTTP request is
+	// stateless, so any of them is as good as any other.
+	Tags []string `json:"tags,omitempty"`
+}
+
+// Enabled reports whether this catalog is reached through a runner.
+func (r RunnerReach) Enabled() bool { return len(r.Tags) > 0 }
+
+// maxRunnerTags bounds the target. Every tag NARROWS the set of machines, so a
+// long list is a catalog that will match nothing and fail at run time with
+// "no runner carries all of these" — which is correct but late. Eight is more
+// than any real targeting rule needs.
+const maxRunnerTags = 8
+
+// maxRunnerTagLen bounds one tag, matching what a runner may be labelled with.
+const maxRunnerTagLen = 64
+
+func (r RunnerReach) validate() error {
+	if len(r.Tags) > maxRunnerTags {
+		return fmt.Errorf("%d runner tags is more than one catalog may target (max %d) — every tag narrows the machines that match",
+			len(r.Tags), maxRunnerTags)
+	}
+	for _, t := range r.Tags {
+		if t == "" {
+			return fmt.Errorf("runner tag: empty")
+		}
+		if len(t) > maxRunnerTagLen {
+			return fmt.Errorf("runner tag %q is longer than %d characters", t, maxRunnerTagLen)
+		}
+		// NormalizeRunnerTags is expected to have run first, so anything still
+		// upper-case or padded got here around the front door and would silently
+		// match no machine — runner tags are lower-cased on the machine's side.
+		if t != strings.ToLower(strings.TrimSpace(t)) {
+			return fmt.Errorf("runner tag %q must be lower-case and unpadded", t)
+		}
+	}
+	return nil
+}
+
+// NormalizeRunnerTags lower-cases, trims, drops blanks and de-duplicates, which
+// is what makes a tag typed "Linux " in the admin form match a machine labelled
+// linux.
+//
+// The same three lines live in drops/runner's targetTags, deliberately not
+// shared: that one reads a step's params and this one an admin's form, and the
+// only thing they have in common is the rule itself, which is one sentence long
+// and stated in Runner.Tags (daemon/runners.go). A shared helper would mean
+// engine/webapi and drops/runner reaching for each other to save six lines.
+func NormalizeRunnerTags(in []string) []string {
+	seen := make(map[string]struct{}, len(in))
+	out := make([]string, 0, len(in))
+	for _, t := range in {
+		t = strings.ToLower(strings.TrimSpace(t))
+		if t == "" {
+			continue
+		}
+		if _, dup := seen[t]; dup {
+			continue
+		}
+		seen[t] = struct{}{}
+		out = append(out, t)
+	}
+	return out
 }
 
 // DisplayName is what to caption this catalog with: its label when one was
@@ -276,6 +372,9 @@ func (d Descriptor) Validate() error {
 		// ResolveLogo, which emits data: or nothing — so this is here to keep
 		// that true for the next writer.
 		return fmt.Errorf("web api catalog %q: logo must be an inlined data: URI", d.Name)
+	}
+	if err := d.Runner.validate(); err != nil {
+		return fmt.Errorf("web api catalog %q: %w", d.Name, err)
 	}
 	if len(d.Operations) == 0 {
 		return fmt.Errorf("web api catalog %q: no operations selected", d.Name)

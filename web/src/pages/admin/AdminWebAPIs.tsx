@@ -17,8 +17,10 @@ import type {
 } from "../../types";
 import { fileToLogo, LOGO_ACCEPT } from "../../lib/logoUpload";
 import { StepSourceRemoveWarning } from "../../components/admin/StepSourceRemoveWarning";
+import { WebAPISpecImport } from "../../components/admin/WebAPISpecImport";
 import { explainApiError } from "../../lib/explainApiError";
 import { ErrorNotice } from "../../components/ui/ErrorNotice";
+import { Callout } from "../../components/ui/Callout";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { Loading } from "../../components/ui/Loading";
 import { Notice } from "../../components/ui/Notice";
@@ -41,6 +43,10 @@ export function AdminWebAPIs() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<WebAPI | "new" | null>(null);
+  // What the importer last produced. Held here rather than inside the form so
+  // that reading a spec re-seeds the form (via its key) instead of the form
+  // having to reconcile an external change to its own state mid-edit.
+  const [imported, setImported] = useState<ImportedSpec | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
   // usage is what the catalog being confirmed is actually used by, keyed by
@@ -72,6 +78,7 @@ export function AdminWebAPIs() {
     try {
       const saved = await api.saveWebAPI(token, input, existingName);
       setEditing(null);
+      setImported(null);
       load();
       // Normally empty. It is set only for a stored catalog the current release
       // refuses, which an admin can otherwise only experience as steps that
@@ -125,7 +132,10 @@ export function AdminWebAPIs() {
         </div>
         <Button
           variant="primary"
-          onClick={() => setEditing("new")}
+          onClick={() => {
+            setImported(null);
+            setEditing("new");
+          }}
           disabled={editing === "new"}
         >
           {t("webapi.add")}
@@ -134,11 +144,29 @@ export function AdminWebAPIs() {
 
       {error && <ErrorNotice>{error}</ErrorNotice>}
 
+      {/* The importer sits above the form because it FILLS it: reading a spec
+          produces operations the form then shows, edits and saves. It never
+          writes anything itself, which is what keeps "import operations, never
+          register a spec" true in the wiring. */}
+      {editing && (
+        <WebAPISpecImport
+          key={editing === "new" ? "new" : editing.name}
+          againstName={editing === "new" ? undefined : editing.name}
+          storedSpecURL={editing === "new" ? undefined : editing.spec_url}
+          onImport={(res) => setImported({ ...res, stamp: Date.now() })}
+        />
+      )}
+
       {editing && (
         <WebAPIForm
+          key={imported ? "imported-" + imported.stamp : "form"}
+          imported={imported}
           webapi={editing === "new" ? null : editing}
           busy={busy !== null}
-          onCancel={() => setEditing(null)}
+          onCancel={() => {
+            setEditing(null);
+            setImported(null);
+          }}
           onSave={save}
         />
       )}
@@ -223,7 +251,10 @@ export function AdminWebAPIs() {
                         <>
                           <Button
                             variant="ghost"
-                            onClick={() => setEditing(w)}
+                            onClick={() => {
+                              setImported(null);
+                              setEditing(w);
+                            }}
                             title={t("common.edit")}
                             aria-label={t("common.edit")}
                           >
@@ -266,6 +297,20 @@ const blankOperation = (): WebAPIOperation => ({
 
 const blankArg = (): WebAPIArg => ({ name: "", in: "query", type: "string" });
 
+// ImportedSpec is what the importer handed over, plus a stamp.
+//
+// The stamp exists so that reading the SAME spec twice still re-seeds the form:
+// the form is keyed on it, and two structurally identical imports would
+// otherwise produce the same key and leave the form showing the admin's
+// half-finished edits from the first read.
+type ImportedSpec = {
+  operations: WebAPIOperation[];
+  title?: string;
+  baseURL?: string;
+  specURL?: string;
+  stamp: number;
+};
+
 // WebAPIForm is add and edit in one, because they are one operation.
 //
 // The name here is the DISPLAY name and is always editable. The id underneath it
@@ -273,23 +318,35 @@ const blankArg = (): WebAPIArg => ({ name: "", in: "query", type: "string" });
 // on an edit would silently re-key every step id the org's flows reference.
 function WebAPIForm({
   webapi,
+  imported,
   busy,
   onCancel,
   onSave,
 }: {
   webapi: WebAPI | null;
+  // imported, when present, seeds the form from a spec the admin just read.
+  // It wins over the stored catalog for the fields a spec can supply, and the
+  // form is remounted (keyed on its stamp) rather than reconciled — a half-
+  // edited form silently gaining forty operations is worse than starting over.
+  imported: ImportedSpec | null;
   busy: boolean;
   onCancel: () => void;
   onSave: (input: WebAPIInput, existingName?: string) => void | Promise<void>;
 }) {
   const { t } = useTranslation();
-  const [label, setLabel] = useState(webapi?.label ?? "");
+  const [label, setLabel] = useState(imported?.title ?? webapi?.label ?? "");
   const [description, setDescription] = useState(webapi?.description ?? "");
-  const [baseURL, setBaseURL] = useState(webapi?.base_url ?? "");
+  const [baseURL, setBaseURL] = useState(imported?.baseURL ?? webapi?.base_url ?? "");
   const [authKind, setAuthKind] = useState<WebAPIInput["auth_kind"]>(
     webapi?.auth_kind ?? "bearer",
   );
   const [authHeader, setAuthHeader] = useState(webapi?.auth_header ?? "");
+  // Comma-separated, like the --labels a runner is installed with, so the two
+  // sides of the same vocabulary are typed the same way. Normalised (lower-case,
+  // de-duplicated) server-side, so what is typed here need not be exact.
+  const [runnerTags, setRunnerTags] = useState(
+    (webapi?.runner_tags ?? []).join(", "),
+  );
   const [enabled, setEnabled] = useState(webapi?.enabled ?? true);
   const [logoMode, setLogoMode] = useState<WebAPILogoMode>(
     webapi?.logo_mode ?? "auto",
@@ -297,8 +354,15 @@ function WebAPIForm({
   const [logo, setLogo] = useState(webapi?.logo ?? "");
   const [logoError, setLogoError] = useState<string | null>(null);
   const [operations, setOperations] = useState<WebAPIOperation[]>(
-    webapi?.operations?.length ? webapi.operations : [blankOperation()],
+    imported?.operations?.length
+      ? imported.operations
+      : webapi?.operations?.length
+        ? webapi.operations
+        : [blankOperation()],
   );
+  // Remembered so a refresh does not make the admin find the address again.
+  // Only sent when there is one: omitted means "keep what is stored".
+  const specURL = imported?.specURL ?? webapi?.spec_url;
 
   const patchOperation = (i: number, patch: Partial<WebAPIOperation>) =>
     setOperations((ops) =>
@@ -314,7 +378,15 @@ function WebAPIForm({
         base_url: baseURL.trim(),
         auth_kind: authKind,
         auth_header: authKind === "header" ? authHeader.trim() : undefined,
+        // Always sent, never omitted: omitting means "leave it alone", so a
+        // form that cleared the field would otherwise be unable to move a
+        // catalog back onto the direct path.
+        runner_tags: runnerTags
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean),
         enabled,
+        spec_url: specURL,
         logo_mode: logoMode,
         // Only sent for the mode that reads it. The stored image is resent
         // unchanged when the admin did not pick a new file, which is what makes
@@ -417,6 +489,23 @@ function WebAPIForm({
           />
         </div>
       )}
+
+      {/* How the call is made. Blank — the normal case — is the daemon dialling
+          the service itself. Filling it in is the only way to reach a service
+          with no public address, and it is a real trade: see the hint. */}
+      <div className="sf-field">
+        <label htmlFor="wa-runner">{t("webapi.runnerTagsLabel")}</label>
+        <input
+          id="wa-runner"
+          value={runnerTags}
+          onChange={(e) => setRunnerTags(e.target.value)}
+          placeholder="orders-box"
+        />
+        <div className="desc">{t("webapi.runnerTagsHint")}</div>
+        {runnerTags.trim() !== "" && (
+          <Callout variant="warning">{t("webapi.runnerTagsWarning")}</Callout>
+        )}
+      </div>
 
       {/* The mark every step of this catalog will wear. Three sources rather
           than one upload field, because a guess that found nothing has to be

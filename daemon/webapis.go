@@ -105,6 +105,17 @@ type WebAPI struct {
 	// LogoMode is where Logo came from. Empty reads as WebAPILogoAuto, which is
 	// what every row stored before this field existed means.
 	LogoMode WebAPILogoMode
+	// SpecURL is where this catalog's operations were imported from, remembered
+	// so a refresh can re-fetch without the admin finding the address again.
+	// Empty for a hand-built catalog, which is not a lesser thing: the two front
+	// ends produce the same descriptor and only this field tells them apart.
+	SpecURL string
+	// RunnerTags, when non-empty, moves this catalog's calls onto one of the
+	// org's own machines — the only way to reach a service with no public
+	// address, since the daemon refuses to dial private ranges. A machine
+	// carrying ALL of these tags runs the request; see webapi.RunnerReach for
+	// what the choice costs.
+	RunnerTags []string
 	// LastError is set when the RECONCILE loop could not register a stored row.
 	// Save validates before writing, so a row is always registerable when it is
 	// written; this exists for the one case that survives that — validation
@@ -155,6 +166,7 @@ func (w WebAPI) Descriptor() webapi.Descriptor {
 		TimeoutMS:    w.TimeoutMS,
 		MaxBodyBytes: w.MaxBodyBytes,
 		Logo:         w.Logo,
+		Runner:       webapi.RunnerReach{Tags: w.RunnerTags},
 	}
 }
 
@@ -230,6 +242,15 @@ ALTER TABLE tenant_web_apis ADD COLUMN IF NOT EXISTS description TEXT NOT NULL D
 ALTER TABLE tenant_web_apis ADD COLUMN IF NOT EXISTS logo_mode TEXT NOT NULL DEFAULT 'auto';
 -- The reconcile loop reads every enabled row on a timer; without this it is a
 -- sequential scan of the table on each pass.
+-- Added after the table shipped: reach this catalog through a runner carrying
+-- all of these tags, instead of dialling it from the daemon. Empty — the
+-- default, and what every row written before this column means — is the direct
+-- call the table has always described.
+ALTER TABLE tenant_web_apis ADD COLUMN IF NOT EXISTS runner_tags TEXT[] NOT NULL DEFAULT '{}';
+-- Added after the table shipped: where an imported catalog's spec came from, so
+-- a refresh can re-fetch it. Empty means hand-built (or imported by paste), and
+-- is what every row written before this column means.
+ALTER TABLE tenant_web_apis ADD COLUMN IF NOT EXISTS spec_url TEXT NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS tenant_web_apis_enabled_idx ON tenant_web_apis (enabled);
 `
 
@@ -369,6 +390,16 @@ type WebAPIInput struct {
 	Operations   []webapi.Operation
 	TimeoutMS    int
 	MaxBodyBytes int
+	// SpecURL is where the operations were imported from. A pointer for the
+	// usual reason: omitted means "keep what is stored", so an edit of anything
+	// else does not make a catalog forget where it came from.
+	SpecURL *string
+	// RunnerTags moves this catalog's calls onto the org's own machines. Nil
+	// means "not sent" and keeps whatever is stored — the same protection Label
+	// and Description get, and for the same reason: an API caller changing only
+	// the base URL must not silently move a catalog back onto the direct path.
+	// An explicitly empty (non-nil) slice is how you turn it off.
+	RunnerTags []string
 	// Enabled defaults true for a new catalog.
 	Enabled bool
 	// LogoMode chooses where the brand mark comes from. Nil keeps the stored
@@ -480,6 +511,23 @@ func (m *WebAPIs) save(ctx context.Context, tenant, actor string, in WebAPIInput
 		return WebAPI{}, fmt.Errorf("description too long (max %d characters) — the operations carry their own prose",
 			maxWebAPIDescriptionLen)
 	}
+	// Where this catalog's calls are made from, resolved beside the other two
+	// keep-what-is-stored fields and for the same reason: nil means "not sent",
+	// so an API caller changing only the base URL cannot silently move a
+	// catalog off its runner and onto a direct call the network will refuse.
+	// An explicitly empty (non-nil) slice is how a caller turns it off.
+	//
+	// Normalised here rather than at the edge so every writer — the admin page
+	// and any API caller — gets the lower-cased, de-duplicated tags a machine
+	// actually matches on.
+	runnerTags := existing.RunnerTags
+	if in.RunnerTags != nil {
+		runnerTags = webapi.NormalizeRunnerTags(in.RunnerTags)
+	}
+	specURL := existing.SpecURL
+	if in.SpecURL != nil {
+		specURL = strings.TrimSpace(*in.SpecURL)
+	}
 
 	// The Apps page this catalog is connected on. Resolved AFTER the label above,
 	// and only when there is nothing stored to keep — moving it is moving where
@@ -527,6 +575,8 @@ func (m *WebAPIs) save(ctx context.Context, tenant, actor string, in WebAPIInput
 		Enabled:      in.Enabled,
 		Logo:         logo,
 		LogoMode:     logoMode,
+		RunnerTags:   runnerTags,
+		SpecURL:      specURL,
 		CreatedBy:    actor,
 		CreatedAt:    now,
 		UpdatedAt:    now,

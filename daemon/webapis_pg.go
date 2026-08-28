@@ -32,7 +32,7 @@ func NewPgWebAPIStore(ctx context.Context, pool *pgxpool.Pool) (*PgWebAPIStore, 
 // webAPIColumns is the select list every read shares, in scan order. Unlike the
 // MCP store there is no column withheld: this table holds no credential.
 const webAPIColumns = `tenant, name, label, description, base_url, integration, auth_kind, auth_header,
-	operations, timeout_ms, max_body_bytes, enabled, logo, logo_mode, last_error,
+	operations, timeout_ms, max_body_bytes, enabled, logo, logo_mode, runner_tags, spec_url, last_error,
 	created_by, created_at, updated_at`
 
 func scanWebAPI(row pgx.Row) (WebAPI, error) {
@@ -40,7 +40,8 @@ func scanWebAPI(row pgx.Row) (WebAPI, error) {
 	var ops []byte
 	if err := row.Scan(&w.Tenant, &w.Name, &w.Label, &w.Description, &w.BaseURL, &w.Integration,
 		&w.AuthKind, &w.AuthHeader, &ops, &w.TimeoutMS, &w.MaxBodyBytes,
-		&w.Enabled, &w.Logo, &w.LogoMode, &w.LastError, &w.CreatedBy, &w.CreatedAt, &w.UpdatedAt); err != nil {
+		&w.Enabled, &w.Logo, &w.LogoMode, &w.RunnerTags, &w.SpecURL, &w.LastError,
+		&w.CreatedBy, &w.CreatedAt, &w.UpdatedAt); err != nil {
 		return WebAPI{}, err
 	}
 	parsed, err := unmarshalOperations(ops)
@@ -113,9 +114,9 @@ func (s *PgWebAPIStore) Put(ctx context.Context, w WebAPI) error {
 	_, err = s.pool.Exec(ctx, `
 		INSERT INTO tenant_web_apis
 			(tenant, name, label, description, base_url, integration, auth_kind, auth_header,
-			 operations, timeout_ms, max_body_bytes, enabled, logo, logo_mode, last_error,
+			 operations, timeout_ms, max_body_bytes, enabled, logo, logo_mode, runner_tags, spec_url, last_error,
 			 created_by, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, '', $15, $16, $17)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, '', $17, $18, $19)
 		ON CONFLICT (tenant, name) DO UPDATE SET
 			label          = EXCLUDED.label,
 			description    = EXCLUDED.description,
@@ -129,10 +130,14 @@ func (s *PgWebAPIStore) Put(ctx context.Context, w WebAPI) error {
 			enabled        = EXCLUDED.enabled,
 			logo           = EXCLUDED.logo,
 			logo_mode      = EXCLUDED.logo_mode,
+			runner_tags    = EXCLUDED.runner_tags,
+			spec_url       = EXCLUDED.spec_url,
 			last_error     = '',
 			updated_at     = EXCLUDED.updated_at`,
 		w.Tenant, w.Name, w.Label, w.Description, w.BaseURL, w.Integration, string(w.AuthKind), w.AuthHeader,
 		ops, w.TimeoutMS, w.MaxBodyBytes, w.Enabled, w.Logo, string(w.logoMode()),
+		// Never nil: a NOT NULL TEXT[] column takes an empty array, not a NULL.
+		tagsOrEmpty(w.RunnerTags), w.SpecURL,
 		w.CreatedBy, w.CreatedAt, w.UpdatedAt)
 	return err
 }

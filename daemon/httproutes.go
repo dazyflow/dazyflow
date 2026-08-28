@@ -363,6 +363,10 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// from a spec is a save, and belongs to the spec importer when it exists.
 	mux.HandleFunc("GET /api/v1/admin/web-apis", h.requireAuth(h.listWebAPIs))
 	mux.HandleFunc("POST /api/v1/admin/web-apis", h.requireAuth(h.saveWebAPI))
+	// Reads a spec and reports what it offers. Stores nothing: the import is
+	// the ordinary save that follows, carrying only the operations the admin
+	// picked.
+	mux.HandleFunc("POST /api/v1/admin/web-apis/spec", h.requireAuth(h.parseWebAPISpec))
 	mux.HandleFunc("PUT /api/v1/admin/web-apis/{name}", h.requireAuth(h.saveWebAPI))
 	mux.HandleFunc("GET /api/v1/admin/web-apis/{name}/usage", h.requireAuth(h.webAPIUsage))
 	mux.HandleFunc("DELETE /api/v1/admin/web-apis/{name}", h.requireAuth(h.deleteWebAPI))

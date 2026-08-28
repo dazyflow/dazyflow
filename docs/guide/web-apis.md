@@ -227,15 +227,87 @@ mistake. A flow whose steps you cannot see is counted but not named.
 
 ---
 
-## What this is not (yet)
+## Importing from an OpenAPI spec
 
-- **It does not import an OpenAPI spec.** If your service publishes
-  `/openapi.json` — most modern frameworks generate one — that is the obvious
-  next step and it is designed but not built. Today you describe the operations
-  you actually want, which for an in-house service is usually a handful.
-- **It cannot reach a service inside your own network.** Dazyflow refuses to dial
-  private addresses, deliberately, and a described API is no exception. For a
-  service with no public address, use a [runner](./runners) and a script.
+If your service publishes an OpenAPI document — `/openapi.json`, `/openapi.yaml`,
+whatever FastAPI, Spring, NestJS or go-swagger generated for you — you do not
+have to describe the operations by hand.
+
+Open **Add a web API**, give it the spec's address or paste the document, and
+press **Read the spec**. You get a list of every operation it describes; tick the
+ones you want and press **Use N operations**, which fills in the form below.
+Nothing is saved until you press **Save**, as usual.
+
+**Picking is the point.** A vendor's spec can run to several hundred operations,
+and every one you import is a step in your palette and a line in what the flow
+builder reads when it looks for something to use. A catalog holds at most 60. For
+your own service that limit will never come up; for someone else's, take the
+handful you actually call. Selecting by tag is there for exactly that.
+
+Some things will not import, and the panel says which and why rather than
+failing the whole document:
+
+- **Swagger 2.0 is refused.** It is a different format, not an older version of
+  this one, and reading it as if it were OpenAPI 3 would produce operations that
+  look right and send the wrong request. Convert it — most tools can — and import
+  the result.
+- **References to other documents are not followed.** A `$ref` pointing at
+  another URL would mean Dazyflow fetching an address out of a file, which is not
+  something it will do. References within the same document work normally.
+- **An operation Dazyflow cannot express is skipped**, with a note saying which
+  and why, and the rest import. A cookie parameter, or an argument named the same
+  as something a step already uses, are the usual causes.
+- **A relative server address** (`/v1`) cannot stand alone, so you type the full
+  address yourself. Same for one with `{variables}` in it.
+
+A body that is a JSON object becomes one input per field. Anything else — an
+upload, a CSV, a bare array — becomes a single **Request body** input you connect
+whatever you like into.
+
+### Refreshing after the spec changes
+
+Open the catalog for editing and press **Read the spec** again. Instead of a
+plain list you get a comparison: how many operations are new, changed, unchanged
+and **removed**.
+
+Removals are the ones to read. An operation that has disappeared from the spec —
+because someone deleted a handler — takes its step with it, and any flow using
+that step stops working. So Dazyflow will not apply a removal until you tick the
+box confirming it, and it names each step id so you can search your flows first.
+Everything else applies without ceremony: a refresh you have not confirmed only
+ever adds and updates.
+
+## Reaching a service inside your own network
+
+Dazyflow refuses to dial private addresses, deliberately, so by default a
+described API has to be one the internet can reach. If yours is not — an orders
+service on `10.0.0.x`, something only your office network can see — you do not
+have to fall back to writing a script per operation.
+
+Set **Reach it through a runner** on the catalog to one or more
+[runner](./runners) tags, and every operation in it is performed *from* that
+machine instead of from Dazyflow. Nothing else about the catalog changes: the
+same steps, the same fields, the same connection, the same outputs. Only where
+the call is made from.
+
+A machine carrying **all** of the tags you list runs the request. A machine's
+own name is one of its tags, so pinning a catalog to one box is a single tag —
+`orders-box`. If several machines match, any of them may take it, which is fine:
+an HTTP request carries no session.
+
+Two things to know before you switch it on.
+
+- **These calls skip the outbound checks.** The private-address block is the
+  point, so it goes — but so do the allowed-hosts list and the rate limit, none
+  of which exist on your own machine. The response size limit still applies. In
+  practice this is the same trust you already extend to that runner, which can
+  run any command you send it; but it is a real widening, and it is why only an
+  admin can set the field.
+- **The runner needs Python.** The request runs as a short script under the
+  agent's own interpreter, which is there by definition — the agent is a Python
+  program. The exception is a runner installed with `--allow` restricting what
+  it will run: add `python` to that list, or the step will report that the
+  machine refused to run it.
 
 ## When to use what
 
