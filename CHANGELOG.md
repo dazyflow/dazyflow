@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.22.2] - 2026-08-28
+
 ### Changed
 
 - **The welcome screen was reordered around what the reader actually needs.**
