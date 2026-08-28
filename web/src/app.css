@@ -1801,31 +1801,45 @@
    of CTAs — the lightest version of an onboarding flow that still
    signals "you're in, here's what to do next." */
 .welcome {
+  /* A column, not a card. The page holds a greeting, a resume link, and a row
+     of option cards — nesting all of that inside one more card gave every
+     element a second border and left the row looking like a panel inside a
+     panel. */
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  gap: var(--space-5);
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
   padding: var(--space-5) var(--space-3);
 }
-.welcome-card {
-  max-width: 720px;
-  width: 100%;
-  padding: var(--space-5);
+.welcome-head h1 {
+  margin: 0;
+}
+.welcome-intro {
+  /* Above every action on the page. It is the line that says what this screen
+     is for, and it used to sit below the first thing you could click. */
+  margin: var(--space-2) 0 0;
+  color: var(--ink-soft);
+  font-size: var(--text-lg);
 }
 
-/* "Continue where you left off" resume card — the most-recent flow,
-   pulled from localStorage. Reads as a prominent button at the top of
-   the welcome screen. */
+/* "Continue where you left off" — the most-recent flow, from localStorage.
+   The only element here that knows anything about this particular user, which
+   is why it is the one carrying the accent. */
 .welcome-resume {
   display: flex;
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
-  margin-bottom: var(--space-4);
   border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
   border-radius: var(--r-2);
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   text-decoration: none;
   color: var(--ink);
-  transition: background 120ms, border-color 120ms;
+  transition:
+    background var(--dur-2) var(--ease-out),
+    border-color var(--dur-2) var(--ease-out);
 }
 .welcome-resume:hover {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
@@ -1857,69 +1871,116 @@
   flex-shrink: 0;
 }
 
-.welcome-intro {
-  margin: var(--space-4) 0 var(--space-3);
-  font-size: var(--text-base);
-}
-
-/* Sub-line under the primary CTA: what pressing it will actually do. */
-.welcome-featured-desc {
-  margin: var(--space-2) 0 0;
-  font-size: var(--text-sm);
-  color: var(--muted);
-  max-width: 46ch;
-}
-/* The other two ways in, kept deliberately quiet — a beginner shouldn't have
-   to weigh three equal-looking options before seeing the product work once. */
-.welcome-alt {
-  margin: var(--space-3) 0 0;
-  font-size: var(--text-sm);
-  color: var(--muted);
-}
-
-.welcome-mcp {
+/* The zero-setup demonstration, first run only. Same shape as the resume card
+   so the two read as one family — "here is a thing to open" — but neutral
+   rather than accented, because it is a demo and the resume link is the user's
+   own work. */
+.welcome-demo {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--space-3);
-  margin-top: var(--space-4);
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-4);
   border: 1px solid var(--border);
   border-radius: var(--r-2);
+  background: var(--surface);
+  color: var(--ink);
+  text-decoration: none;
+  transition:
+    background var(--dur-2) var(--ease-out),
+    border-color var(--dur-2) var(--ease-out);
+}
+.welcome-demo:hover {
+  border-color: var(--border-strong);
   background: var(--surface-2);
+  text-decoration: none;
 }
-.welcome-mcp-body {
-  flex: 1;
+.welcome-demo-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--accent);
+  /* Optically level with the title rather than the box. */
+  margin-top: 0.1em;
+}
+.welcome-demo-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
   min-width: 0;
+  flex: 1;
 }
-.welcome-mcp-title {
+.welcome-demo-title {
   font-weight: 600;
-  font-size: var(--text-base);
 }
-.welcome-mcp-desc {
+.welcome-demo-desc {
   color: var(--muted);
   font-size: var(--text-sm);
-  margin-top: var(--space-0);
+  line-height: 1.5;
 }
-/* Keep the CTA at its natural width on desktop so the description takes
-   the slack instead of the button getting squeezed against it. */
-.welcome-mcp .welcome-cta {
+.welcome-demo-arrow {
+  color: var(--muted);
   flex-shrink: 0;
+  margin-top: 0.15em;
 }
-/* On narrow screens the side-by-side layout cramps both the text and the
-   button — stack them so the CTA sits full-width under the description. */
+
+/* ── The three ways to start something new ─────────────────────────────
+   Equal cards in one row. They were an accent button, two 13px text links and
+   a bordered box at the foot of the page — three weights for four routes that
+   differ only by ?tab=. */
+.welcome-section-title {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.welcome-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+.welcome-option {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1h);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  background: var(--surface);
+  color: var(--ink);
+  text-decoration: none;
+  transition:
+    background var(--dur-2) var(--ease-out),
+    border-color var(--dur-2) var(--ease-out);
+}
+.welcome-option:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+  text-decoration: none;
+}
+.welcome-option-icon {
+  color: var(--accent);
+  margin-bottom: var(--space-1);
+}
+.welcome-option-title {
+  font-weight: 600;
+}
+.welcome-option-desc {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
 @media (max-width: 768px) {
-  .welcome-mcp {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .welcome-mcp .welcome-cta {
-    width: 100%;
-    justify-content: center;
+  /* One per row. Three cards at phone width leaves each holding two words per
+     line, which is worse than a list. */
+  .welcome-options {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
-/* Verify-email nag banner. Mirrors .welcome-mcp's responsive behaviour:
-   message and Resend button sit side-by-side on desktop, but on narrow
+/* Verify-email nag banner. Message and Resend button sit side-by-side on
+   desktop, but on narrow
    screens the button stacks full-width under the message instead of
    getting squeezed against it. The button keeps the default (bordered)
    button styling — not .ghost — so it reads clearly as a button. */
@@ -10393,17 +10454,6 @@ a.pa-card:hover {
 .create-flow-actions {
   display: flex;
   justify-content: flex-end;
-}
-
-.welcome-create { margin-top: var(--space-2); }
-/* On narrow screens the create CTA stretches edge-to-edge instead of
-   hugging its label, matching the full-width CTAs below it. */
-@media (max-width: 768px) {
-  .welcome-create {
-    display: flex;
-    width: 100%;
-    justify-content: center;
-  }
 }
 
 /* AI draft-ready review step: the heads-up issues the generator returns,

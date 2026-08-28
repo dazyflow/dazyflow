@@ -23,6 +23,35 @@ into the image.)
 
 ## [Unreleased]
 
+### Changed
+
+- **The welcome screen was reordered around what the reader actually needs.**
+  It read: greeting, resume link, then the line introducing the page — so the
+  one sentence explaining the screen arrived after the reader had already been
+  handed something to click. The featured button repeated the mistake in
+  miniature, with the sentence describing what pressing it would do set
+  underneath it.
+
+  It now goes greeting, what this screen is for, where you left off, then what
+  you can start. The description of the demo moved inside the card it
+  describes, so it is read before the click rather than after.
+
+  The four ways into a new flow were the deeper problem. All four go to
+  `/flows/new` and differ only by `?tab=`, but they were presented at three
+  weights — an accent button, two 13px text links divided by a dot, and a
+  bordered card at the foot of the page — and the ranking followed nothing.
+  Describing a flow in plain English, the most distinctive of them, was the one
+  in the box at the bottom. Template, AI and blank are now one row of equal
+  cards, each with a line saying what it does, carrying the same icons as the
+  tabs they open so the card and its destination read as one route.
+
+  The zero-setup demo is now first-run only. Shown to someone with a flow of
+  their own to resume, it put a demonstration above their actual work. The
+  page also stops nesting: it was one card wrapping every element, which gave
+  each of them a second border and made the option row look like a panel
+  inside a panel.
+
+
 ### Fixed
 
 - **The sign-in page no longer greets everyone with a notice about a missing

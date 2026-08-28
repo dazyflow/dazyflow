@@ -415,17 +415,27 @@
   },
   "welcome": {
     "title": "Welcome to Dazyflow",
-    "continueTitle": "Pick up where you left off",
-    "intro": "So, what are we building today?",
-    "createCta": "Start from blank",
-    "featuredDesc": "Press Run and a formatted summary appears straight away — no accounts, no setup, nothing to connect. The quickest way to see how flows work.",
-    "featuredCta": "See a flow run",
-    "browseTemplates": "Browse templates",
     "titleReturning": "Welcome back to Dazyflow",
-    "introReturning": "Pick up where you left off, or start a new flow from a template.",
-    "aiBuildTitle": "Or just describe what you want",
-    "aiBuildDesc": "Tell Dazyflow what to build in plain English and it drafts the flow for you, ready to review — no steps to connect by hand.",
-    "aiBuildCta": "Describe your flow"
+    "intro": "So, what are we building today?",
+    "introReturning": "Good to see you again — what's next?",
+    "continueTitle": "Pick up where you left off",
+    "demoTitle": "See a flow run",
+    "demoDesc": "Press Run and a formatted summary appears straight away — no accounts, no setup, nothing to connect. The quickest way to see how flows work.",
+    "startHeading": "Start a new flow",
+    "option": {
+      "template": {
+        "title": "From a template",
+        "desc": "Start from a ready-made flow and adapt it to your work."
+      },
+      "ai": {
+        "title": "Describe what you want",
+        "desc": "Say it in plain English and Dazyflow drafts the flow for you, ready to review."
+      },
+      "blank": {
+        "title": "From blank",
+        "desc": "An empty canvas. Add and connect the steps yourself."
+      }
+    }
   },
   "connectMcp": {
     "title": "Connect an AI assistant",

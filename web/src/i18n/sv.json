@@ -415,17 +415,27 @@
   },
   "welcome": {
     "title": "Välkommen till Dazyflow",
-    "continueTitle": "Fortsätt där du slutade",
-    "intro": "Vad ska vi bygga idag?",
-    "createCta": "Börja från ett tomt flöde",
-    "featuredDesc": "Tryck på Kör så visas en formaterad sammanfattning direkt — inga konton, ingen konfiguration, inget att koppla. Snabbaste sättet att se hur flöden fungerar.",
-    "featuredCta": "Se ett flöde köras",
-    "browseTemplates": "Bläddra bland mallar",
     "titleReturning": "Välkommen tillbaka till Dazyflow",
-    "introReturning": "Fortsätt där du slutade, eller starta ett nytt flöde från en mall.",
-    "aiBuildTitle": "Eller beskriv bara vad du vill ha",
-    "aiBuildDesc": "Beskriv på vanlig svenska vad du vill bygga, så tar Dazyflow fram ett utkast till flöde åt dig, klart att granska — inga steg att koppla ihop för hand.",
-    "aiBuildCta": "Beskriv ditt flöde"
+    "intro": "Vad ska vi bygga idag?",
+    "introReturning": "Kul att se dig igen – vad står på tur?",
+    "continueTitle": "Fortsätt där du slutade",
+    "demoTitle": "Se ett flöde köras",
+    "demoDesc": "Tryck på Kör så visas en formaterad sammanfattning direkt — inga konton, ingen konfiguration, inget att koppla. Snabbaste sättet att se hur flöden fungerar.",
+    "startHeading": "Starta ett nytt flöde",
+    "option": {
+      "template": {
+        "title": "Från en mall",
+        "desc": "Utgå från ett färdigt flöde och anpassa det till ditt arbete."
+      },
+      "ai": {
+        "title": "Beskriv vad du vill ha",
+        "desc": "Säg det på vanlig svenska så tar Dazyflow fram ett utkast åt dig, klart att granska."
+      },
+      "blank": {
+        "title": "Från tomt",
+        "desc": "En tom yta. Lägg till och koppla ihop stegen själv."
+      }
+    }
   },
   "connectMcp": {
     "title": "Anslut en AI-assistent",
