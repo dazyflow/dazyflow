@@ -6,24 +6,18 @@ package klarna
 import (
 	"context"
 	"net/http"
-	"os"
 	"testing"
 
 	"git.sr.ht/~klahr/dazyflow/core"
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/dropstest"
 )
 
-func TestMain(m *testing.M) {
-	hfnet.SetAllowPrivateEgress(true)
-	os.Exit(m.Run())
-}
+func TestMain(m *testing.M) { dropstest.EgressTestMain(m) }
 
 func TestKlarnaDo_SSRFGuardBlocksPrivate(t *testing.T) {
-	hfnet.SetAllowPrivateEgress(false)
-	defer hfnet.SetAllowPrivateEgress(true)
-	job := core.Job{ID: "j", Params: map[string]any{"api_username": "u1", "api_password": "p1"}}
-	_, _, _, err := klarnaDo(context.Background(), job, http.MethodGet, "http://127.0.0.1:9/ordermanagement/v1/orders/o1", nil)
-	if err == nil || !hfnet.IsSSRFError(err) {
-		t.Fatalf("want ssrf_blocked, got %v", err)
-	}
+	dropstest.AssertSSRFBlocked(t, func() error {
+		job := core.Job{ID: "j", Params: map[string]any{"api_username": "u1", "api_password": "p1"}}
+		_, _, _, err := klarnaDo(context.Background(), job, http.MethodGet, "http://127.0.0.1:9/ordermanagement/v1/orders/o1", nil)
+		return err
+	})
 }

@@ -218,12 +218,12 @@ func (s *PgMCPServerStore) SetStatus(ctx context.Context, tenant, name string, t
 // this store would silently drop an org's steps out of the palette.
 type MemMCPServerStore struct {
 	mu   sync.Mutex
-	rows map[mcpKey]MCPServer
-	toks map[mcpKey][]byte
+	rows map[stepSourceKey]MCPServer
+	toks map[stepSourceKey][]byte
 }
 
 func NewMemMCPServerStore() *MemMCPServerStore {
-	return &MemMCPServerStore{rows: map[mcpKey]MCPServer{}, toks: map[mcpKey][]byte{}}
+	return &MemMCPServerStore{rows: map[stepSourceKey]MCPServer{}, toks: map[stepSourceKey][]byte{}}
 }
 
 func (s *MemMCPServerStore) List(_ context.Context, tenant string) ([]MCPServer, error) {
@@ -258,7 +258,7 @@ func (s *MemMCPServerStore) ListAll(_ context.Context) ([]MCPServer, error) {
 func (s *MemMCPServerStore) Get(_ context.Context, tenant, name string) (MCPServer, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	v, ok := s.rows[mcpKey{tenant, name}]
+	v, ok := s.rows[stepSourceKey{tenant, name}]
 	if !ok {
 		return MCPServer{}, ErrMCPServerNotFound
 	}
@@ -268,7 +268,7 @@ func (s *MemMCPServerStore) Get(_ context.Context, tenant, name string) (MCPServ
 func (s *MemMCPServerStore) Put(_ context.Context, m MCPServer, sealedToken []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	k := mcpKey{m.Tenant, m.Name}
+	k := stepSourceKey{m.Tenant, m.Name}
 	if old, ok := s.rows[k]; ok {
 		m.ToolCount, m.LastError, m.LastConnected = old.ToolCount, old.LastError, old.LastConnected
 		// An edit must not clear the cached tool list.
@@ -285,7 +285,7 @@ func (s *MemMCPServerStore) Put(_ context.Context, m MCPServer, sealedToken []by
 func (s *MemMCPServerStore) Delete(_ context.Context, tenant, name string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	k := mcpKey{tenant, name}
+	k := stepSourceKey{tenant, name}
 	if _, ok := s.rows[k]; !ok {
 		return ErrMCPServerNotFound
 	}
@@ -328,7 +328,7 @@ func (s *MemMCPServerStore) DeleteByTenant(_ context.Context, tenant string) (in
 func (s *MemMCPServerStore) SealedToken(_ context.Context, tenant, name string) ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	k := mcpKey{tenant, name}
+	k := stepSourceKey{tenant, name}
 	if _, ok := s.rows[k]; !ok {
 		return nil, ErrMCPServerNotFound
 	}
@@ -338,7 +338,7 @@ func (s *MemMCPServerStore) SealedToken(_ context.Context, tenant, name string) 
 func (s *MemMCPServerStore) SetSnapshot(_ context.Context, tenant, name string, snap MCPSnapshot) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	k := mcpKey{tenant, name}
+	k := stepSourceKey{tenant, name}
 	row, ok := s.rows[k]
 	if !ok {
 		return ErrMCPServerNotFound
@@ -351,7 +351,7 @@ func (s *MemMCPServerStore) SetSnapshot(_ context.Context, tenant, name string, 
 func (s *MemMCPServerStore) SetStatus(_ context.Context, tenant, name string, toolCount int, lastErr string, at time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	k := mcpKey{tenant, name}
+	k := stepSourceKey{tenant, name}
 	row, ok := s.rows[k]
 	if !ok {
 		return ErrMCPServerNotFound

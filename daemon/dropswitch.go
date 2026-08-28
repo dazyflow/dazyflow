@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon/internal/pgstore"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -74,7 +75,7 @@ CREATE TABLE IF NOT EXISTS drop_switches (
 
 // EnsurePgDropSwitchSchema creates the drop_switches table.
 func EnsurePgDropSwitchSchema(ctx context.Context, pool *pgxpool.Pool) error {
-	return applyPgSchema(ctx, pool, pgDropSwitchSchema)
+	return pgstore.ApplySchema(ctx, pool, pgDropSwitchSchema)
 }
 
 // dropSwitchKey is the composite cache key. The NUL separator can't
@@ -107,31 +108,8 @@ func NewPgDropSwitchStore(ctx context.Context, pool *pgxpool.Pool) (*PgDropSwitc
 	return s, nil
 }
 
-// refreshInterval bounds how stale a cross-node switch flip can be. A
-// killswitch is an abuse response — a few seconds of propagation lag is
-// acceptable, and a short poll is far cheaper than notifying every node.
-const refreshInterval = 10 * time.Second
-
-// pollReload runs reload on the refreshInterval ticker until ctx is done,
-// logging each failure via logf with errFormat. The shared body of the
-// entitlement, platform-admin, and drop-switch refresh loops.
-func pollReload(ctx context.Context, reload func(context.Context) error, logf func(string, ...any), errFormat string) {
-	t := time.NewTicker(refreshInterval)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-			if err := reload(ctx); err != nil {
-				logf(errFormat, err)
-			}
-		}
-	}
-}
-
 func (s *PgDropSwitchStore) refreshLoop(ctx context.Context) {
-	pollReload(ctx, s.reload, log.Printf, "drop-switch refresh: %v")
+	pgstore.PollReload(ctx, s.reload, log.Printf, "drop-switch refresh: %v")
 }
 
 func (s *PgDropSwitchStore) reload(ctx context.Context) error {

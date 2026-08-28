@@ -5,26 +5,18 @@ package stripe
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"git.sr.ht/~klahr/dazyflow/core"
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/dropstest"
 )
 
-func TestMain(m *testing.M) {
-	// httptest servers live on loopback, which the SSRF guard blocks by
-	// default — same opt-in every connector's test suite makes.
-	hfnet.SetAllowPrivateEgress(true)
-	os.Exit(m.Run())
-}
+func TestMain(m *testing.M) { dropstest.EgressTestMain(m) }
 
 func TestStripeDo_SSRFGuardBlocksPrivate(t *testing.T) {
-	hfnet.SetAllowPrivateEgress(false)
-	defer hfnet.SetAllowPrivateEgress(true)
-	job := core.Job{ID: "j", Params: map[string]any{"api_key": "sk_test"}}
-	_, _, err := stripeDo(context.Background(), job, "GET", "http://127.0.0.1:9/events", "")
-	if err == nil || !hfnet.IsSSRFError(err) {
-		t.Fatalf("want ssrf_blocked, got %v", err)
-	}
+	dropstest.AssertSSRFBlocked(t, func() error {
+		job := core.Job{ID: "j", Params: map[string]any{"api_key": "sk_test"}}
+		_, _, err := stripeDo(context.Background(), job, "GET", "http://127.0.0.1:9/events", "")
+		return err
+	})
 }

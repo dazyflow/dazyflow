@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
+	"git.sr.ht/~klahr/dazyflow/daemon/internal/pgstore"
 	"git.sr.ht/~klahr/dazyflow/engine/mcp"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -207,7 +207,7 @@ ALTER TABLE tenant_mcp_servers ADD COLUMN IF NOT EXISTS snapshot JSONB NOT NULL 
 
 // EnsurePgMCPServerSchema creates the MCP server table.
 func EnsurePgMCPServerSchema(ctx context.Context, pool *pgxpool.Pool) error {
-	return applyPgSchema(ctx, pool, pgMCPServerSchema)
+	return pgstore.ApplySchema(ctx, pool, pgMCPServerSchema)
 }
 
 // mcpSecretDomain scopes sealed MCP credentials in the payload AAD, so a blob
@@ -304,27 +304,17 @@ type MCPServers struct {
 	// Now is overridable for tests; nil means time.Now.
 	Now func() time.Time
 
-	// mu guards applied.
-	mu sync.Mutex
-	// applied records the UpdatedAt of the row behind each live registration.
-	//
-	// This is what makes reconcile cheap and correct across replicas: a row
-	// whose UpdatedAt still matches is already connected with the current
-	// configuration and is left alone, while an edit made on ANOTHER replica
-	// carries a newer UpdatedAt and so re-registers here on the next pass.
-	applied map[mcpKey]time.Time
-}
-
-type mcpKey struct {
-	tenant string
-	name   string
+	// stepSourceRegistry records which rows this process currently has
+	// connected, keyed by (tenant, name) and valued by the row's UpdatedAt.
+	// See stepsources_live.go: the same bookkeeping serves web-API catalogs.
+	stepSourceRegistry
 }
 
 func (m *MCPServers) now() time.Time {
-	if m != nil && m.Now != nil {
-		return m.Now()
+	if m == nil {
+		return time.Now()
 	}
-	return time.Now()
+	return nowOr(m.Now)
 }
 
 func (m *MCPServers) ready() error {
@@ -499,7 +489,7 @@ func (m *MCPServers) save(ctx context.Context, tenant, actor string, in MCPServe
 		row = m.connect(ctx, row)
 	} else {
 		m.Catalog.Unregister(tenant, name)
-		m.forget(mcpKey{tenant, name})
+		m.forget(stepSourceKey{tenant, name})
 		row.ToolCount = 0
 	}
 	return row, nil
@@ -518,7 +508,7 @@ func (m *MCPServers) Delete(ctx context.Context, tenant, name string) error {
 		return err
 	}
 	m.Catalog.Unregister(tenant, name)
-	m.forget(mcpKey{tenant, name})
+	m.forget(stepSourceKey{tenant, name})
 	return nil
 }
 
@@ -541,7 +531,7 @@ func (m *MCPServers) DeleteByTenant(ctx context.Context, tenant string) (int, er
 	}
 	for _, s := range servers {
 		m.Catalog.Unregister(tenant, s.Name)
-		m.forget(mcpKey{tenant, s.Name})
+		m.forget(stepSourceKey{tenant, s.Name})
 	}
 	// The tenant-wide delete still runs, and its count is what we report: a
 	// row written between the List and here is caught by it, and must be —
@@ -599,7 +589,7 @@ func (m *MCPServers) connect(ctx context.Context, row MCPServer) MCPServer {
 		// A failing server is retried every interval, indefinitely — which is
 		// what makes it come back on its own when the vendor's outage ends,
 		// without anyone revisiting the page.
-		m.forget(mcpKey{row.Tenant, row.Name})
+		m.forget(stepSourceKey{row.Tenant, row.Name})
 		row.LastError = err.Error()
 		row.ToolCount = m.describeOffline(row, row.LastError)
 		_ = m.Store.SetStatus(ctx, row.Tenant, row.Name, row.ToolCount, row.LastError, now)
@@ -608,7 +598,7 @@ func (m *MCPServers) connect(ctx context.Context, row MCPServer) MCPServer {
 	row.ToolCount = m.toolCount(row.Tenant, row.Name)
 	row.LastError = ""
 	row.LastConnected = now
-	m.remember(mcpKey{row.Tenant, row.Name}, row.UpdatedAt)
+	m.remember(stepSourceKey{row.Tenant, row.Name}, row.UpdatedAt)
 	// Snapshot what it is publishing NOW, so the next failure has something
 	// current to describe. Written only on success: a snapshot taken from a
 	// failed handshake would be empty, which is the state this exists to avoid.
@@ -720,38 +710,6 @@ func secretReference(v string) (string, bool) {
 	return name, true
 }
 
-func (m *MCPServers) remember(k mcpKey, updated time.Time) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.applied == nil {
-		m.applied = map[mcpKey]time.Time{}
-	}
-	m.applied[k] = updated
-}
-
-func (m *MCPServers) forget(k mcpKey) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	delete(m.applied, k)
-}
-
-func (m *MCPServers) appliedAt(k mcpKey) (time.Time, bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	t, ok := m.applied[k]
-	return t, ok
-}
-
-func (m *MCPServers) appliedKeys() []mcpKey {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	out := make([]mcpKey, 0, len(m.applied))
-	for k := range m.applied {
-		out = append(out, k)
-	}
-	return out
-}
-
 // Reconcile makes this process's live registrations match the store.
 //
 // It runs at boot and then on a timer, and it is what makes the feature work
@@ -771,54 +729,22 @@ func (m *MCPServers) Reconcile(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	desired := make(map[mcpKey]struct{}, len(rows))
-	for _, row := range rows {
-		key := mcpKey{row.Tenant, row.Name}
-		if !row.Enabled {
-			continue
-		}
-		desired[key] = struct{}{}
-		if at, ok := m.appliedAt(key); ok && at.Equal(row.UpdatedAt) {
-			continue
-		}
-		m.connect(ctx, row)
-	}
-	// Anything this replica holds that the store no longer wants: deleted or
-	// disabled, here or on another node.
-	for _, key := range m.appliedKeys() {
-		if _, want := desired[key]; want {
-			continue
-		}
-		m.Catalog.Unregister(key.tenant, key.name)
-		m.forget(key)
-	}
+	reconcileStepSources(ctx, &m.stepSourceRegistry, rows, stepSourcePlan[MCPServer]{
+		key:       func(r MCPServer) stepSourceKey { return stepSourceKey{r.Tenant, r.Name} },
+		enabled:   func(r MCPServer) bool { return r.Enabled },
+		updatedAt: func(r MCPServer) time.Time { return r.UpdatedAt },
+		// connect records its own outcome on the row (tool count or error) and
+		// remembers the key on success, so a failure needs nothing here.
+		apply:      func(ctx context.Context, r MCPServer) { m.connect(ctx, r) },
+		unregister: m.Catalog.Unregister,
+	})
 	return nil
 }
-
-// MCPReconcileInterval is how long a change made on another replica may take
-// to appear here.
-//
-// A compromise, and worth naming as one: shorter means a colleague's new
-// server shows up in your palette sooner, longer means fewer needless list
-// queries. Thirty seconds is well under the time it takes someone to add a
-// server and then go looking for its steps.
-const MCPReconcileInterval = 30 * time.Second
 
 // RunReconciler reconciles until ctx ends. Started by cmd/dzd.
 func (m *MCPServers) RunReconciler(ctx context.Context, logf func(string, ...any)) {
 	if err := m.ready(); err != nil {
 		return
 	}
-	ticker := time.NewTicker(MCPReconcileInterval)
-	defer ticker.Stop()
-	for {
-		if err := m.Reconcile(ctx); err != nil && logf != nil && ctx.Err() == nil {
-			logf("mcp servers: reconcile: %v", err)
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-		}
-	}
+	runStepSourceReconciler(ctx, "mcp servers", m.Reconcile, logf)
 }

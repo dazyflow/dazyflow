@@ -6,11 +6,13 @@ package daemon
 import (
 	"strings"
 	"testing"
+
+	"git.sr.ht/~klahr/dazyflow/daemon/support"
 )
 
 func TestSupportAgentManagement(t *testing.T) {
 	h := newGatewayHarness(t)
-	h.gw.SupportAgents = NewMemSupportAgentStore()
+	h.gw.SupportAgents = support.NewMemAgentStore()
 
 	// Grant (platform admin), email normalized.
 	rw := h.platformDo(t, "POST", "/api/v1/admin/platform/support-agents", map[string]any{"email": "Sam@Vendor.com"})

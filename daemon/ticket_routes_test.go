@@ -14,6 +14,7 @@ import (
 
 	"git.sr.ht/~klahr/dazyflow/auth"
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon/support"
 )
 
 // End-to-end test of the ticket + chat surface over real HTTP: a user files a
@@ -24,8 +25,8 @@ import (
 func TestTicketFlow_EndToEnd(t *testing.T) {
 	h := newGatewayHarness(t)
 	now := time.Unix(1_700_000_000, 0).UTC()
-	h.gw.Tickets = NewMemTicketStore()
-	h.gw.Bundles = NewMemBundleStore()
+	h.gw.Tickets = support.NewMemTicketStore()
+	h.gw.Bundles = support.NewMemBundleStore()
 	h.gw.supportNow = func() time.Time { return now }
 	ctx := context.Background()
 

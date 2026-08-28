@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon/support"
 )
 
 // ticket_routes.go wires the Support ticket + chat surface (Phase 2 of
@@ -341,7 +342,7 @@ func (h *HTTPGateway) assignSupportTicket(rw http.ResponseWriter, r *http.Reques
 
 // isProvisionedSupportAgent reports whether subject currently holds a runtime
 // support-agent grant. Session subjects are the user's email (see signup / SSO),
-// which is exactly what SupportAgentStore is keyed on. With no store wired
+// which is exactly what support.AgentStore is keyed on. With no store wired
 // (single-node / tests) there is nothing to check against, so any subject is
 // accepted — the caller already had to hold PermSupportAgent to get here.
 func (h *HTTPGateway) isProvisionedSupportAgent(subject string) bool {
@@ -543,7 +544,7 @@ func queueListOpts(r *http.Request, p core.Principal) core.TicketListOpts {
 // to fail a request over a query string.
 func ticketQueryLimit(r *http.Request) int {
 	n, err := strconv.Atoi(r.URL.Query().Get("limit"))
-	if err != nil || n <= 0 || n > defaultTicketListLimit {
+	if err != nil || n <= 0 || n > support.DefaultTicketListLimit {
 		return 0
 	}
 	return n

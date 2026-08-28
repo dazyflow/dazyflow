@@ -17,6 +17,7 @@ import (
 
 	"git.sr.ht/~klahr/dazyflow/auth"
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon/support"
 )
 
 // testPool opens the integration database, skipping when DAZYFLOW_TEST_DB is
@@ -40,7 +41,7 @@ func testPool(t *testing.T) *pgxpool.Pool {
 // tenant left its tickets, chat, bundles and grants behind forever. These lock
 // in the erasure contract gdpr.go now depends on.
 
-func seedTicket(t *testing.T, s *MemTicketStore, id, tenant string, status core.TicketStatus, updated time.Time) {
+func seedTicket(t *testing.T, s *support.MemTicketStore, id, tenant string, status core.TicketStatus, updated time.Time) {
 	t.Helper()
 	if err := s.Create(context.Background(), core.Ticket{
 		ID: id, Tenant: tenant, CreatedBy: "u@" + tenant, Subject: "s-" + id,
@@ -52,7 +53,7 @@ func seedTicket(t *testing.T, s *MemTicketStore, id, tenant string, status core.
 
 func TestMemTicketStore_DeleteByTenant(t *testing.T) {
 	ctx := context.Background()
-	s := NewMemTicketStore()
+	s := support.NewMemTicketStore()
 	now := time.Unix(1_700_000_000, 0).UTC()
 	seedTicket(t, s, "t1", "acme", core.TicketAwaitingSupport, now)
 	seedTicket(t, s, "t2", "acme", core.TicketResolved, now)
@@ -93,7 +94,7 @@ func TestMemTicketStore_DeleteByTenant(t *testing.T) {
 
 func TestMemBundleStore_DeleteByTenant(t *testing.T) {
 	ctx := context.Background()
-	s := NewMemBundleStore()
+	s := support.NewMemBundleStore()
 	now := time.Unix(1_700_000_000, 0).UTC()
 	for _, tc := range []struct{ id, tenant string }{{"b1", "acme"}, {"b2", "acme"}, {"b3", "other"}} {
 		g := core.Graph{ID: "f", Tenant: tc.tenant, Workspace: "main"}
@@ -120,7 +121,7 @@ func TestMemBundleStore_DeleteByTenant(t *testing.T) {
 
 func TestMemGrantStore_DeleteByTenant(t *testing.T) {
 	ctx := context.Background()
-	s := NewMemGrantStore()
+	s := support.NewMemGrantStore()
 	now := time.Unix(1_700_000_000, 0).UTC()
 	mk := func(id, tenant string) core.AccessGrant {
 		return core.AccessGrant{
@@ -151,15 +152,15 @@ func TestMemGrantStore_DeleteByTenant(t *testing.T) {
 // and prune both span two tables in one transaction.
 // A person's erasure must scrub them out of the support history without taking
 // the org's threads with them — the Postgres side of
-// PgTicketStore.AnonymizeSubject / PgGrantStore.AnonymizeSubject.
+// support.PgTicketStore.AnonymizeSubject / support.PgGrantStore.AnonymizeSubject.
 func TestPgSupportAnonymizeSubject(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
-	ts, err := NewPgTicketStore(ctx, pool)
+	ts, err := support.NewPgTicketStore(ctx, pool)
 	if err != nil {
 		t.Fatalf("ticket store: %v", err)
 	}
-	gs, err := NewPgGrantStore(ctx, pool)
+	gs, err := support.NewPgGrantStore(ctx, pool)
 	if err != nil {
 		t.Fatalf("grant store: %v", err)
 	}
@@ -261,15 +262,15 @@ func TestPgSupportAnonymizeSubject(t *testing.T) {
 func TestPgSupportEraseAndPrune(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
-	ts, err := NewPgTicketStore(ctx, pool)
+	ts, err := support.NewPgTicketStore(ctx, pool)
 	if err != nil {
 		t.Fatalf("ticket store: %v", err)
 	}
-	bs, err := NewPgBundleStore(ctx, pool)
+	bs, err := support.NewPgBundleStore(ctx, pool)
 	if err != nil {
 		t.Fatalf("bundle store: %v", err)
 	}
-	gs, err := NewPgGrantStore(ctx, pool)
+	gs, err := support.NewPgGrantStore(ctx, pool)
 	if err != nil {
 		t.Fatalf("grant store: %v", err)
 	}
@@ -533,7 +534,7 @@ func TestEmailOnSupportReplyEnabled_DefaultsOn(t *testing.T) {
 func TestPgQueueSummary_CacheAndInvalidation(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
-	ts, err := NewPgTicketStore(ctx, pool)
+	ts, err := support.NewPgTicketStore(ctx, pool)
 	if err != nil {
 		t.Fatalf("store: %v", err)
 	}
@@ -603,7 +604,7 @@ func TestPgQueueSummary_CacheAndInvalidation(t *testing.T) {
 func TestPgQueueSummary_ConcurrentAccess(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
-	ts, err := NewPgTicketStore(ctx, pool)
+	ts, err := support.NewPgTicketStore(ctx, pool)
 	if err != nil {
 		t.Fatalf("store: %v", err)
 	}

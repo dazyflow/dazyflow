@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon/support"
 )
 
 // support_routes.go wires the Support feature's HTTP surface (see
@@ -301,7 +302,7 @@ func (h *HTTPGateway) supportRunSnapshot(ctx context.Context, tenant, workspace,
 	if err != nil {
 		return core.RunSnapshot{}, false
 	}
-	return RunSnapshotFromRecords(runRec, nodes), true
+	return support.RunSnapshotFromRecords(runRec, nodes), true
 }
 
 // loadGrantForAdmin loads the {id} grant and enforces org-admin in its tenant.

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon/internal/pgstore"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -278,7 +279,7 @@ CREATE INDEX IF NOT EXISTS runner_tokens_expiry_idx ON runner_tokens (expires_at
 
 // EnsurePgRunnerSchema creates the runner tables.
 func EnsurePgRunnerSchema(ctx context.Context, pool *pgxpool.Pool) error {
-	return applyPgSchema(ctx, pool, pgRunnerSchema)
+	return pgstore.ApplySchema(ctx, pool, pgRunnerSchema)
 }
 
 // ---- validation -------------------------------------------------------

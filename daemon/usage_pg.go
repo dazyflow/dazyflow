@@ -8,6 +8,7 @@ import (
 	"errors"
 	"time"
 
+	"git.sr.ht/~klahr/dazyflow/daemon/internal/pgstore"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -35,7 +36,7 @@ ALTER TABLE usage_counters
 `
 
 func NewPgUsageStore(ctx context.Context, pool *pgxpool.Pool) (*PgUsageStore, error) {
-	if err := applyPgSchema(ctx, pool, pgUsageSchema); err != nil {
+	if err := pgstore.ApplySchema(ctx, pool, pgUsageSchema); err != nil {
 		return nil, err
 	}
 	return &PgUsageStore{pool: pool}, nil

@@ -45,6 +45,7 @@ import (
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/core/buildinfo"
 	"git.sr.ht/~klahr/dazyflow/daemon"
+	"git.sr.ht/~klahr/dazyflow/daemon/support"
 	_ "git.sr.ht/~klahr/dazyflow/drops"
 	"git.sr.ht/~klahr/dazyflow/drops/drive"
 	"git.sr.ht/~klahr/dazyflow/drops/fortnox"
@@ -1381,12 +1382,12 @@ func startRetentionSweeps(ctx context.Context, svc *daemon.Service, jobs core.Jo
 	}
 	var ticketPruner, bundlePruner pruner
 	if supportSweep {
-		if ts, err := daemon.NewPgTicketStore(ctx, pgPool); err != nil {
+		if ts, err := support.NewPgTicketStore(ctx, pgPool); err != nil {
 			log.Printf("retention: support ticket store: %v", err)
 		} else {
 			ticketPruner = ts
 		}
-		if bs, err := daemon.NewPgBundleStore(ctx, pgPool); err != nil {
+		if bs, err := support.NewPgBundleStore(ctx, pgPool); err != nil {
 			log.Printf("retention: support bundle store: %v", err)
 		} else {
 			bundlePruner = bs
@@ -1641,19 +1642,19 @@ func buildGateway(ctx context.Context, bgWg *sync.WaitGroup, d gatewayDeps) {
 	// support-agent. Even when enabled, the surface stays dormant until an
 	// operator grants a support agent.
 	if envBool("DAZYFLOW_SUPPORT_ENABLED", false) {
-		agents, err := daemon.NewPgSupportAgentStore(ctx, d.pgPool)
+		agents, err := support.NewPgAgentStore(ctx, d.pgPool)
 		if err != nil {
 			log.Fatalf("postgres support-agent store: %v", err)
 		}
-		grantStore, err := daemon.NewPgGrantStore(ctx, d.pgPool)
+		grantStore, err := support.NewPgGrantStore(ctx, d.pgPool)
 		if err != nil {
 			log.Fatalf("postgres support-grant store: %v", err)
 		}
-		bundleStore, err := daemon.NewPgBundleStore(ctx, d.pgPool)
+		bundleStore, err := support.NewPgBundleStore(ctx, d.pgPool)
 		if err != nil {
 			log.Fatalf("postgres support-bundle store: %v", err)
 		}
-		ticketStore, err := daemon.NewPgTicketStore(ctx, d.pgPool)
+		ticketStore, err := support.NewPgTicketStore(ctx, d.pgPool)
 		if err != nil {
 			log.Fatalf("postgres support-ticket store: %v", err)
 		}

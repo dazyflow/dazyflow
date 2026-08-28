@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"git.sr.ht/~klahr/dazyflow/daemon/internal/pgstore"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -182,7 +183,7 @@ CREATE INDEX IF NOT EXISTS runner_tasks_prune_idx
 
 // EnsurePgRunnerTaskSchema creates the task table.
 func EnsurePgRunnerTaskSchema(ctx context.Context, pool *pgxpool.Pool) error {
-	return applyPgSchema(ctx, pool, pgRunnerTaskSchema)
+	return pgstore.ApplySchema(ctx, pool, pgRunnerTaskSchema)
 }
 
 // RunnerTaskStore is the task queue.

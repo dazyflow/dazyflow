@@ -14,6 +14,7 @@ import (
 
 	"git.sr.ht/~klahr/dazyflow/auth"
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon/support"
 	"git.sr.ht/~klahr/dazyflow/engine"
 	"git.sr.ht/~klahr/dazyflow/engine/jobstore"
 	"git.sr.ht/~klahr/dazyflow/engine/mcp"
@@ -190,7 +191,7 @@ func TestEraseUserIdentity_NoResidual(t *testing.T) {
 	// Support history: a ticket Alice filed in a SHARED org, with a reply from
 	// someone else. The thread belongs to that org and must survive her
 	// erasure — carrying neither her address nor her words.
-	tickets := NewMemTicketStore()
+	tickets := support.NewMemTicketStore()
 	_ = tickets.Create(ctx, core.Ticket{
 		ID: "t1", Tenant: "acme", CreatedBy: email, AssignedTo: "agent@vendor.test",
 		Subject: "Flow broke", Status: core.TicketAwaitingSupport,
@@ -204,7 +205,7 @@ func TestEraseUserIdentity_NoResidual(t *testing.T) {
 		ID: "m2", TicketID: "t1", Author: "agent@vendor.test", AuthorKind: core.AuthorSupport,
 		Body: "looking into it", CreatedAt: time.Now(),
 	})
-	grants := NewMemGrantStore()
+	grants := support.NewMemGrantStore()
 	_ = grants.Create(ctx, core.AccessGrant{
 		ID: "g1", Tenant: "acme", FlowID: "f", AgentSubject: "agent@vendor.test",
 		Status: core.GrantApproved, RequestedAt: time.Now(), RequestedBy: "agent@vendor.test",
@@ -816,7 +817,7 @@ func TestEraseUserIdentity_RevokesRolesAndScrubsGranters(t *testing.T) {
 	// Alice granted Bob his role: her address is in HIS row, which survives her.
 	_ = admins.Grant(ctx, colleague, email)
 
-	agents := NewMemSupportAgentStore()
+	agents := support.NewMemAgentStore()
 	_ = agents.Grant(ctx, email, "root@platform.test")
 	_ = agents.Grant(ctx, colleague, email)
 
@@ -954,7 +955,7 @@ func TestEraseUserIdentity_ScrubsAuthorshipInSharedOrg(t *testing.T) {
 	_ = mirrors.Upsert(ctx, GitMirror{Tenant: tenant, Workspace: "default", RemoteURL: "git@h:a.git", UpdatedBy: email})
 	switches := newCovMemDropSwitch()
 	_ = switches.Disable(ctx, DropSwitch{DropID: "http", Tenant: tenant, DisabledBy: email})
-	bundles := NewMemBundleStore()
+	bundles := support.NewMemBundleStore()
 	_ = bundles.Create(ctx, core.SupportBundleRecord{
 		ID: "b1", Tenant: tenant, FlowID: "f", CreatedBy: email, CreatedAt: time.Now(),
 	})

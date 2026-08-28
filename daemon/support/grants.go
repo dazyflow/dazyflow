@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-package daemon
+package support
 
 import (
 	"context"
@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon/internal/pgstore"
 )
 
 // pgScanner is the shared Scan surface of pgx.Row and pgx.Rows, so one
@@ -24,7 +25,7 @@ type pgScanner interface {
 	Scan(dest ...any) error
 }
 
-// support_grant_store.go is the in-memory core.GrantStore for the Support
+// grants.go is the in-memory core.GrantStore for the Support
 // feature (tests + single-node setups). The Postgres implementation mirrors it
 // for production, the same way JobStore / AuditLog have both. All lifecycle
 // transitions go through the pure core guards (CanDecide / CanRevoke), so the
@@ -227,7 +228,7 @@ CREATE INDEX IF NOT EXISTS access_grants_tenant_idx ON access_grants (tenant);
 
 // EnsurePgGrantSchema creates the access_grants table. Idempotent.
 func EnsurePgGrantSchema(ctx context.Context, pool *pgxpool.Pool) error {
-	return applyPgSchema(ctx, pool, pgGrantSchema)
+	return pgstore.ApplySchema(ctx, pool, pgGrantSchema)
 }
 
 // PgGrantStore is the Postgres core.GrantStore. No cached snapshot: grants are

@@ -310,13 +310,13 @@ func TestMCPServers_ReconcileSkipsUnchangedRows(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	before, _ := svc.appliedAt(mcpKey{"acme", "vendor"})
+	before, _ := svc.appliedAt(stepSourceKey{"acme", "vendor"})
 	for i := 0; i < 3; i++ {
 		if err := svc.Reconcile(ctx); err != nil {
 			t.Fatalf("Reconcile: %v", err)
 		}
 	}
-	after, ok := svc.appliedAt(mcpKey{"acme", "vendor"})
+	after, ok := svc.appliedAt(stepSourceKey{"acme", "vendor"})
 	if !ok || !after.Equal(before) {
 		t.Fatalf("an unchanged row was re-registered (%v → %v)", before, after)
 	}

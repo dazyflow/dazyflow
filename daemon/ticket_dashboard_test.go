@@ -13,6 +13,7 @@ import (
 
 	"git.sr.ht/~klahr/dazyflow/auth"
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon/support"
 )
 
 // ticketDashboardHarness wires the ticket surface with an audit log + a runtime
@@ -32,9 +33,9 @@ func newTicketDashboardHarness(t *testing.T) *ticketDashboardHarness {
 		audit:          NewMemAuditLog(),
 		now:            time.Unix(1_700_000_000, 0).UTC(),
 	}
-	h.gw.Tickets = NewMemTicketStore()
+	h.gw.Tickets = support.NewMemTicketStore()
 	h.gw.Audit = d.audit
-	h.gw.SupportAgents = NewMemSupportAgentStore()
+	h.gw.SupportAgents = support.NewMemAgentStore()
 	h.gw.supportNow = func() time.Time { return d.now }
 	return d
 }
@@ -55,7 +56,7 @@ func (d *ticketDashboardHarness) do(token, method, path string, body any) *httpt
 
 // agentToken mints an API key carrying only SupportAgentRole — the weak,
 // grant-gated support role. The subject is the agent's email, matching what a
-// real session carries (see signup / SSO), which is what SupportAgentStore keys on.
+// real session carries (see signup / SSO), which is what support.AgentStore keys on.
 func (d *ticketDashboardHarness) agentToken(t *testing.T, subject string) string {
 	t.Helper()
 	// Key ids allow only letters/digits/'-', so derive one from the email.

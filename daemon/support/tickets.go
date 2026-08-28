@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-package daemon
+package support
 
 import (
 	"context"
@@ -16,17 +16,18 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon/internal/pgstore"
 )
 
-// ticket_store.go is the in-memory core.TicketStore (tests + single-node) plus
+// tickets.go is the in-memory core.TicketStore (tests + single-node) plus
 // its Postgres mirror for production — the same dual-impl pattern as GrantStore /
 // BundleStore. Tickets and their chat threads live in two tables (tickets,
 // ticket_messages); the store never scrubs bodies itself (the route layer does,
 // on ingest) and never invents a status the core model rejects.
 
-// defaultTicketListLimit bounds a listing when the caller passes Limit == 0, so
+// DefaultTicketListLimit bounds a listing when the caller passes Limit == 0, so
 // a busy queue can't return an unbounded result set.
-const defaultTicketListLimit = 200
+const DefaultTicketListLimit = 200
 
 // erasedIdentity is the package-local alias for the shared marker. See
 // core.ErasedIdentity for why it is single-sourced.
@@ -106,7 +107,7 @@ func (s *MemTicketStore) list(match func(core.Ticket) bool, opts core.TicketList
 	sort.Slice(out, func(i, j int) bool { return out[i].UpdatedAt.After(out[j].UpdatedAt) })
 	limit := opts.Limit
 	if limit <= 0 {
-		limit = defaultTicketListLimit
+		limit = DefaultTicketListLimit
 	}
 	if len(out) > limit {
 		out = out[:limit]
@@ -253,7 +254,7 @@ CREATE INDEX IF NOT EXISTS support_ticket_messages_thread_idx
 
 // EnsurePgTicketSchema creates the ticket tables. Idempotent.
 func EnsurePgTicketSchema(ctx context.Context, pool *pgxpool.Pool) error {
-	return applyPgSchema(ctx, pool, pgTicketSchema)
+	return pgstore.ApplySchema(ctx, pool, pgTicketSchema)
 }
 
 // PgTicketStore is the Postgres core.TicketStore. No cached snapshot: tickets are
@@ -474,7 +475,7 @@ func (s *PgTicketStore) queueSummaryUncached(ctx context.Context) (core.TicketQu
 
 func ticketLimit(opts core.TicketListOpts) int {
 	if opts.Limit <= 0 {
-		return defaultTicketListLimit
+		return DefaultTicketListLimit
 	}
 	return opts.Limit
 }

@@ -10,8 +10,8 @@ filters + counts, role-separation polish) 2026-08-19.
 Where the code lives: `core/support_bundle.go`, `core/support_grant.go`,
 `core/ticket.go`, `core/rbac.go` + `core/authz.go` (the permission + capability
 check); `daemon/support_routes.go`, `daemon/ticket_routes.go`,
-`daemon/support_grant_store.go`, `daemon/ticket_store.go`,
-`daemon/supportagent.go`, `daemon/admin_support_agents.go`; `web/src/pages/`
+`daemon/support/` (the store package: `grants.go`, `tickets.go`,
+`bundles.go`, `agents.go`), `daemon/admin_support_agents.go`; `web/src/pages/`
 `SupportTickets.tsx` / `SupportAgentHome.tsx` / `SupportFlowView.tsx` /
 `AdminSupport.tsx` / `AdminPlatformSupportAgents.tsx`. Off by default behind
 `DAZYFLOW_SUPPORT_ENABLED`.
@@ -207,7 +207,7 @@ sites: no cross-tenant short-circuit (confirmed by construction —
 `supportView`), and every support action audits into the ORG's log (asserted in
 `daemon/support_view_test.go`). The `GrantStore` / `TicketStore` / `BundleStore`
 implementations are all built, in-memory and Postgres
-(`daemon/support_grant_store.go`, `daemon/ticket_store.go`).
+(`daemon/support/grants.go`, `daemon/support/tickets.go`).
 
 Existing model: `core.Principal{Subject,Tenant,Workspace,Roles,Extras}`;
 `PermPlatformAdmin = "platform:admin"` is the cross-tenant super-admin and
@@ -297,8 +297,8 @@ check, never tenant-crossing.
 
 1. **Bundle + grant only (no ticket UI):** ~~`BuildSupportBundle`~~ (done),
    ~~`AccessGrant` type + `AuthorizeGraphSupportView` + `PermSupportAgent`~~ (done),
-   ~~`RunSnapshotFromRecords` adapter~~ (done, `daemon/support_bundle.go`),
-   ~~`GrantStore` + `MemGrantStore`~~ (done, `daemon/support_grant_store.go`),
+   ~~`RunSnapshotFromRecords` adapter~~ (done, `daemon/support/bundles.go`),
+   ~~`GrantStore` + `MemGrantStore`~~ (done, `daemon/support/grants.go`),
    ~~`SupportBundleRecord` + `BundleStore` + `MemBundleStore`~~ (done),
    ~~`SupportAgentStore` (runtime agent provisioning, Mem + Postgres)~~ (done),
    ~~session elevation (`elevateSupportAgent`/`elevateSessionRoles`)~~ (done),
@@ -334,7 +334,7 @@ check, never tenant-crossing.
    - `core.Ticket`/`TicketMessage`/`TicketStatus`/`AuthorKind` + `core.TicketStore`
      (`core/ticket.go`); `core.ScrubSecrets` reuses the linter's `knownSecretValue`
      detector so chat + bundles share one definition of "a secret".
-   - `MemTicketStore` + `PgTicketStore` (`daemon/ticket_store.go`, two tables:
+   - `MemTicketStore` + `PgTicketStore` (`daemon/support/tickets.go`, two tables:
      `support_tickets` + `support_ticket_messages`); gated Pg test mirrors the
      in-memory lifecycle (`daemon/ticket_store_test.go`).
    - HTTP surface (`daemon/ticket_routes.go`), gated by `DAZYFLOW_SUPPORT_ENABLED`:
@@ -433,7 +433,7 @@ Every item on the original list is covered; where it lives:
 ## Decisions taken (2026-07-03)
 
 - **Agent provisioning: runtime grant store** (not an env allowlist). Built:
-  `SupportAgentStore` (`daemon/supportagent.go`) with Mem + Postgres impls,
+  `support.AgentStore` (`daemon/support/agents.go`) with Mem + Postgres impls,
   keyed on email, cached snapshot + refresh loop — a 1:1 mirror of
   `platformadmin.go`. NO env-allowlist bootstrap: support staff are managed
   entirely at runtime. Session-issue elevation (`elevateSupportAgent`) and the

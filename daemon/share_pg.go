@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon/internal/pgstore"
 )
 
 // PgShareStore is the durable ShareStore — one row per (tenant, workspace),
@@ -36,7 +37,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS workspace_shares_token_idx ON workspace_shares
 `
 
 func NewPgShareStore(ctx context.Context, pool *pgxpool.Pool) (*PgShareStore, error) {
-	if err := applyPgSchema(ctx, pool, pgShareSchema); err != nil {
+	if err := pgstore.ApplySchema(ctx, pool, pgShareSchema); err != nil {
 		return nil, err
 	}
 	return &PgShareStore{pool: pool}, nil

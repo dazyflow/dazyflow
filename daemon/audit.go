@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon/internal/pgstore"
 )
 
 const defaultAuditLimit = 100
@@ -90,7 +91,7 @@ type PgAuditLog struct {
 }
 
 func NewPgAuditLog(ctx context.Context, pool *pgxpool.Pool) (*PgAuditLog, error) {
-	if err := applyPgSchema(ctx, pool, pgAuditSchema); err != nil {
+	if err := pgstore.ApplySchema(ctx, pool, pgAuditSchema); err != nil {
 		return nil, err
 	}
 	return &PgAuditLog{pool: pool}, nil

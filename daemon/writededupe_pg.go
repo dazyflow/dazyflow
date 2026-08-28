@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon/internal/pgstore"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -54,7 +55,7 @@ CREATE INDEX IF NOT EXISTS write_dedupe_stored_at_idx ON write_dedupe (stored_at
 
 // EnsurePgWriteDedupeSchema creates the write_dedupe table. Idempotent.
 func EnsurePgWriteDedupeSchema(ctx context.Context, pool *pgxpool.Pool) error {
-	return applyPgSchema(ctx, pool, pgWriteDedupeSchema)
+	return pgstore.ApplySchema(ctx, pool, pgWriteDedupeSchema)
 }
 
 // NewPgWriteDedupeStore creates the schema and starts the background TTL sweep.

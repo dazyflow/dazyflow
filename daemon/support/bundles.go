@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-package daemon
+package support
 
 import (
 	"context"
@@ -15,9 +15,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon/internal/pgstore"
 )
 
-// support_bundle.go is the daemon-side glue for the Support feature: it turns
+// bundles.go is the daemon-side glue for the Support feature: it turns
 // the stored run records into the raw core.RunSnapshot that core.BuildSupportBundle
 // then redacts. The redaction itself lives entirely in core — this adapter only
 // projects JobRecords into the snapshot's shape and MUST NOT pre-filter values
@@ -60,9 +61,9 @@ func RunSnapshotFromRecords(runRec core.JobRecord, nodeRecs []core.JobRecord) co
 	return rs
 }
 
-// errBundleExists is returned when creating a record with a duplicate ID; a
+// ErrBundleExists is returned when creating a record with a duplicate ID; a
 // missing record reports core.ErrNotFound.
-var errBundleExists = fmt.Errorf("support bundle already exists")
+var ErrBundleExists = fmt.Errorf("support bundle already exists")
 
 // MemBundleStore is a mutex-guarded in-memory core.BundleStore.
 type MemBundleStore struct {
@@ -85,7 +86,7 @@ func (s *MemBundleStore) Create(_ context.Context, rec core.SupportBundleRecord)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, exists := s.byID[rec.ID]; exists {
-		return fmt.Errorf("%w: %s", errBundleExists, rec.ID)
+		return fmt.Errorf("%w: %s", ErrBundleExists, rec.ID)
 	}
 	s.byID[rec.ID] = rec
 	return nil
@@ -134,7 +135,7 @@ CREATE INDEX IF NOT EXISTS support_bundles_tenant_idx ON support_bundles (tenant
 
 // EnsurePgBundleSchema creates the support_bundles table. Idempotent.
 func EnsurePgBundleSchema(ctx context.Context, pool *pgxpool.Pool) error {
-	return applyPgSchema(ctx, pool, pgBundleSchema)
+	return pgstore.ApplySchema(ctx, pool, pgBundleSchema)
 }
 
 // PgBundleStore is the Postgres core.BundleStore. Payload is stored as BYTEA to
@@ -180,7 +181,7 @@ func (s *PgBundleStore) Create(ctx context.Context, rec core.SupportBundleRecord
 		return err
 	}
 	if ct.RowsAffected() == 0 {
-		return fmt.Errorf("%w: %s", errBundleExists, rec.ID)
+		return fmt.Errorf("%w: %s", ErrBundleExists, rec.ID)
 	}
 	return nil
 }

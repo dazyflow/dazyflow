@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"git.sr.ht/~klahr/dazyflow/daemon/internal/pgstore"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -319,7 +320,7 @@ UPDATE tiers SET polling_allowed = NULL
 
 // EnsurePgEntitlementSchema creates the tiers + tenant_entitlements tables.
 func EnsurePgEntitlementSchema(ctx context.Context, pool *pgxpool.Pool) error {
-	return applyPgSchema(ctx, pool, pgEntitlementSchema)
+	return pgstore.ApplySchema(ctx, pool, pgEntitlementSchema)
 }
 
 // PgEntitlementStore is the Postgres EntitlementStore. Like the drop
@@ -367,7 +368,7 @@ func (s *PgEntitlementStore) seedBuiltins(ctx context.Context) error {
 }
 
 func (s *PgEntitlementStore) refreshLoop(ctx context.Context) {
-	pollReload(ctx, s.reload, log.Printf, "entitlement refresh: %v")
+	pgstore.PollReload(ctx, s.reload, log.Printf, "entitlement refresh: %v")
 }
 
 func (s *PgEntitlementStore) reload(ctx context.Context) error {

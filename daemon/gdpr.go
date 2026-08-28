@@ -55,7 +55,7 @@ type roleRevoker interface {
 // subjectAnonymizer is the support stores' erasure surface. Support rows are ORG
 // records that happen to carry a person's identity, so a departing member is
 // scrubbed OUT of them rather than taking them along — see
-// PgTicketStore.AnonymizeSubject.
+// support.PgTicketStore.AnonymizeSubject.
 type subjectAnonymizer interface {
 	AnonymizeSubject(ctx context.Context, ident string) (int, error)
 }

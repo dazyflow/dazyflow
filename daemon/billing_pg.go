@@ -7,6 +7,7 @@ import (
 	"context"
 	"time"
 
+	"git.sr.ht/~klahr/dazyflow/daemon/internal/pgstore"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -38,7 +39,7 @@ CREATE TABLE IF NOT EXISTS stripe_webhook_events (
 `
 
 func NewPgPlanStore(ctx context.Context, pool *pgxpool.Pool) (*PgPlanStore, error) {
-	if err := applyPgSchema(ctx, pool, pgPlanSchema); err != nil {
+	if err := pgstore.ApplySchema(ctx, pool, pgPlanSchema); err != nil {
 		return nil, err
 	}
 	return &PgPlanStore{pool: pool}, nil

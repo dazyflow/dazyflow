@@ -9,6 +9,7 @@ import (
 	"log"
 	"time"
 
+	"git.sr.ht/~klahr/dazyflow/daemon/internal/pgstore"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -82,7 +83,7 @@ const pgBusChannel = "dazy_bus"
 // mark (so brand-new subscribers don't get a backlog), and starts the
 // listener + sweep goroutines. They stop when ctx is cancelled.
 func NewPgBus(ctx context.Context, pool *pgxpool.Pool) (*PgBus, error) {
-	if err := applyPgSchema(ctx, pool, pgBusSchema); err != nil {
+	if err := pgstore.ApplySchema(ctx, pool, pgBusSchema); err != nil {
 		return nil, err
 	}
 	b := &PgBus{

@@ -131,8 +131,8 @@ and should be lifted, not copied:
   so a blob cannot be relocated into another org's row, `enabled` as the
   reversible half of delete, `SetStatus` separate from `Put`, a per-tenant cap
   like `maxMCPServersPerTenant`.
-- **The reconcile loop.** `MCPServers.Reconcile` + `MCPReconcileInterval`
-  (`daemon/mcpservers.go:603`) — `UpdatedAt`-compared, picks up another
+- **The reconcile loop.** `MCPServers.Reconcile` + `StepSourceReconcileInterval`
+  (`daemon/mcpservers.go:724`) — `UpdatedAt`-compared, picks up another
   replica's edits, unregisters what the store no longer wants. Identical needs.
 - **The executor.** `drops/net.Do` (`drops/net/do.go:33`) is already the guarded
   outbound call: SSRF dial guard, `EgressAllowedFor` per-tenant allowlist,

@@ -1,16 +1,18 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-package daemon
+package support
 
 import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon/internal/pgstore"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -31,21 +33,21 @@ import (
 // Granted lookup off the DB hot path; writes refresh it and a ticker catches
 // cross-node changes.
 
-// SupportAgentGrant is one runtime support-agent grant row.
-type SupportAgentGrant struct {
+// AgentGrant is one runtime support-agent grant row.
+type AgentGrant struct {
 	Email     string    `json:"email"`
 	GrantedBy string    `json:"granted_by"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// SupportAgentStore is the runtime support-agent grant boundary.
-type SupportAgentStore interface {
+// AgentStore is the runtime support-agent grant boundary.
+type AgentStore interface {
 	// Granted reports whether email currently holds a support-agent grant. Reads
 	// the cached snapshot, so it's cheap and safe at every session issue.
 	Granted(email string) bool
 	Grant(ctx context.Context, email, grantedBy string) error
 	Revoke(ctx context.Context, email string) error
-	List(ctx context.Context) ([]SupportAgentGrant, error)
+	List(ctx context.Context) ([]AgentGrant, error)
 	// AnonymizeGrantedBy replaces an erased person's email where it appears as
 	// the GRANTER of someone else's agent role, returning the rows changed.
 	// See PlatformAdminStore.AnonymizeGrantedBy — same shape, same reason.
@@ -54,20 +56,20 @@ type SupportAgentStore interface {
 
 // ---- In-memory (tests + single-node) ---------------------------------------
 
-// MemSupportAgentStore is a mutex-guarded in-memory SupportAgentStore.
-type MemSupportAgentStore struct {
+// MemAgentStore is a mutex-guarded in-memory AgentStore.
+type MemAgentStore struct {
 	mu     sync.RWMutex
-	grants map[string]SupportAgentGrant // keyed by normalized email
+	grants map[string]AgentGrant // keyed by normalized email
 }
 
-// NewMemSupportAgentStore returns an empty in-memory support-agent store.
-func NewMemSupportAgentStore() *MemSupportAgentStore {
-	return &MemSupportAgentStore{grants: map[string]SupportAgentGrant{}}
+// NewMemAgentStore returns an empty in-memory support-agent store.
+func NewMemAgentStore() *MemAgentStore {
+	return &MemAgentStore{grants: map[string]AgentGrant{}}
 }
 
-var _ SupportAgentStore = (*MemSupportAgentStore)(nil)
+var _ AgentStore = (*MemAgentStore)(nil)
 
-func (s *MemSupportAgentStore) Granted(email string) bool {
+func (s *MemAgentStore) Granted(email string) bool {
 	email = normalizeEmail(email)
 	if email == "" {
 		return false
@@ -78,7 +80,7 @@ func (s *MemSupportAgentStore) Granted(email string) bool {
 	return ok
 }
 
-func (s *MemSupportAgentStore) Grant(_ context.Context, email, grantedBy string) error {
+func (s *MemAgentStore) Grant(_ context.Context, email, grantedBy string) error {
 	email = normalizeEmail(email)
 	if email == "" {
 		return fmt.Errorf("email required")
@@ -87,14 +89,14 @@ func (s *MemSupportAgentStore) Grant(_ context.Context, email, grantedBy string)
 	defer s.mu.Unlock()
 	existing, ok := s.grants[email]
 	if !ok {
-		existing = SupportAgentGrant{Email: email, CreatedAt: time.Time{}}
+		existing = AgentGrant{Email: email, CreatedAt: time.Time{}}
 	}
 	existing.GrantedBy = grantedBy
 	s.grants[email] = existing
 	return nil
 }
 
-func (s *MemSupportAgentStore) Revoke(_ context.Context, email string) error {
+func (s *MemAgentStore) Revoke(_ context.Context, email string) error {
 	email = normalizeEmail(email)
 	if email == "" {
 		return fmt.Errorf("email required")
@@ -105,7 +107,7 @@ func (s *MemSupportAgentStore) Revoke(_ context.Context, email string) error {
 	return nil
 }
 
-func (s *MemSupportAgentStore) AnonymizeGrantedBy(_ context.Context, email string) (int, error) {
+func (s *MemAgentStore) AnonymizeGrantedBy(_ context.Context, email string) (int, error) {
 	email = normalizeEmail(email)
 	if email == "" {
 		return 0, fmt.Errorf("email required")
@@ -123,10 +125,10 @@ func (s *MemSupportAgentStore) AnonymizeGrantedBy(_ context.Context, email strin
 	return n, nil
 }
 
-func (s *MemSupportAgentStore) List(_ context.Context) ([]SupportAgentGrant, error) {
+func (s *MemAgentStore) List(_ context.Context) ([]AgentGrant, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := make([]SupportAgentGrant, 0, len(s.grants))
+	out := make([]AgentGrant, 0, len(s.grants))
 	for _, g := range s.grants {
 		out = append(out, g)
 	}
@@ -135,7 +137,7 @@ func (s *MemSupportAgentStore) List(_ context.Context) ([]SupportAgentGrant, err
 
 // ---- Postgres (production) -------------------------------------------------
 
-const pgSupportAgentSchema = `
+const pgAgentSchema = `
 CREATE TABLE IF NOT EXISTS support_agents (
     email      TEXT PRIMARY KEY,
     granted_by TEXT NOT NULL DEFAULT '',
@@ -143,13 +145,13 @@ CREATE TABLE IF NOT EXISTS support_agents (
 );
 `
 
-// EnsurePgSupportAgentSchema creates the support_agents table. Idempotent.
-func EnsurePgSupportAgentSchema(ctx context.Context, pool *pgxpool.Pool) error {
-	return applyPgSchema(ctx, pool, pgSupportAgentSchema)
+// EnsurePgAgentSchema creates the support_agents table. Idempotent.
+func EnsurePgAgentSchema(ctx context.Context, pool *pgxpool.Pool) error {
+	return pgstore.ApplySchema(ctx, pool, pgAgentSchema)
 }
 
-// PgSupportAgentStore is the Postgres SupportAgentStore with a cached snapshot.
-type PgSupportAgentStore struct {
+// PgAgentStore is the Postgres AgentStore with a cached snapshot.
+type PgAgentStore struct {
 	pool   *pgxpool.Pool
 	logger *log.Logger
 
@@ -157,13 +159,13 @@ type PgSupportAgentStore struct {
 	granted map[string]struct{}
 }
 
-// NewPgSupportAgentStore creates the schema, loads the snapshot, and starts the
+// NewPgAgentStore creates the schema, loads the snapshot, and starts the
 // cross-node refresh loop.
-func NewPgSupportAgentStore(ctx context.Context, pool *pgxpool.Pool) (*PgSupportAgentStore, error) {
-	if err := EnsurePgSupportAgentSchema(ctx, pool); err != nil {
+func NewPgAgentStore(ctx context.Context, pool *pgxpool.Pool) (*PgAgentStore, error) {
+	if err := EnsurePgAgentSchema(ctx, pool); err != nil {
 		return nil, err
 	}
-	s := &PgSupportAgentStore{
+	s := &PgAgentStore{
 		pool:    pool,
 		logger:  log.New(log.Writer(), "supportagent: ", log.LstdFlags),
 		granted: map[string]struct{}{},
@@ -175,7 +177,7 @@ func NewPgSupportAgentStore(ctx context.Context, pool *pgxpool.Pool) (*PgSupport
 	return s, nil
 }
 
-func (s *PgSupportAgentStore) Granted(email string) bool {
+func (s *PgAgentStore) Granted(email string) bool {
 	email = normalizeEmail(email)
 	if email == "" {
 		return false
@@ -186,7 +188,7 @@ func (s *PgSupportAgentStore) Granted(email string) bool {
 	return ok
 }
 
-func (s *PgSupportAgentStore) Grant(ctx context.Context, email, grantedBy string) error {
+func (s *PgAgentStore) Grant(ctx context.Context, email, grantedBy string) error {
 	email = normalizeEmail(email)
 	if email == "" {
 		return fmt.Errorf("email required")
@@ -200,7 +202,7 @@ func (s *PgSupportAgentStore) Grant(ctx context.Context, email, grantedBy string
 	return s.reload(ctx)
 }
 
-func (s *PgSupportAgentStore) Revoke(ctx context.Context, email string) error {
+func (s *PgAgentStore) Revoke(ctx context.Context, email string) error {
 	email = normalizeEmail(email)
 	if email == "" {
 		return fmt.Errorf("email required")
@@ -211,7 +213,7 @@ func (s *PgSupportAgentStore) Revoke(ctx context.Context, email string) error {
 	return s.reload(ctx)
 }
 
-func (s *PgSupportAgentStore) AnonymizeGrantedBy(ctx context.Context, email string) (int, error) {
+func (s *PgAgentStore) AnonymizeGrantedBy(ctx context.Context, email string) (int, error) {
 	email = normalizeEmail(email)
 	if email == "" {
 		return 0, fmt.Errorf("email required")
@@ -224,16 +226,16 @@ func (s *PgSupportAgentStore) AnonymizeGrantedBy(ctx context.Context, email stri
 	return int(tag.RowsAffected()), nil
 }
 
-func (s *PgSupportAgentStore) List(ctx context.Context) ([]SupportAgentGrant, error) {
+func (s *PgAgentStore) List(ctx context.Context) ([]AgentGrant, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT email, granted_by, created_at FROM support_agents ORDER BY email`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	out := make([]SupportAgentGrant, 0)
+	out := make([]AgentGrant, 0)
 	for rows.Next() {
-		var g SupportAgentGrant
+		var g AgentGrant
 		if err := rows.Scan(&g.Email, &g.GrantedBy, &g.CreatedAt); err != nil {
 			return nil, err
 		}
@@ -242,7 +244,7 @@ func (s *PgSupportAgentStore) List(ctx context.Context) ([]SupportAgentGrant, er
 	return out, rows.Err()
 }
 
-func (s *PgSupportAgentStore) reload(ctx context.Context) error {
+func (s *PgAgentStore) reload(ctx context.Context) error {
 	grants, err := s.List(ctx)
 	if err != nil {
 		return err
@@ -257,6 +259,16 @@ func (s *PgSupportAgentStore) reload(ctx context.Context) error {
 	return nil
 }
 
-func (s *PgSupportAgentStore) refreshLoop(ctx context.Context) {
-	pollReload(ctx, s.reload, s.logger.Printf, "refresh: %v")
+func (s *PgAgentStore) refreshLoop(ctx context.Context) {
+	pgstore.PollReload(ctx, s.reload, s.logger.Printf, "refresh: %v")
+}
+
+// normalizeEmail is the identity form of an address: case-folded and trimmed.
+//
+// Support-agent membership and every grant check compare addresses, and the
+// person who types one into an admin form does not type it the same way twice.
+// The same two calls appear in daemon/platformadmin.go and across auth/ — the
+// repo's idiom for this, spelled here because the package now stands alone.
+func normalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
 }

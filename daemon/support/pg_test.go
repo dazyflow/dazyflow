@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-package daemon
+package support
 
 import (
 	"context"
@@ -120,8 +120,8 @@ func TestPgBundleStore(t *testing.T) {
 	if err := s.Create(ctx, rec); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if err := s.Create(ctx, rec); !errors.Is(err, errBundleExists) {
-		t.Errorf("duplicate = %v, want errBundleExists", err)
+	if err := s.Create(ctx, rec); !errors.Is(err, ErrBundleExists) {
+		t.Errorf("duplicate = %v, want ErrBundleExists", err)
 	}
 	got, err := s.Get(ctx, "b1")
 	if err != nil {

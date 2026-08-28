@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon/support"
 )
 
 // The adapter projects graph + node records into a RunSnapshot, and the whole
@@ -43,7 +44,7 @@ func TestRunSnapshotFromRecords_FeedsRedactedBundle(t *testing.T) {
 		},
 	}
 
-	rs := RunSnapshotFromRecords(runRec, nodeRecs)
+	rs := support.RunSnapshotFromRecords(runRec, nodeRecs)
 
 	// Adapter shape checks.
 	if rs.RunID != "run-42" || rs.Status != core.JobStatusFailed {
@@ -81,7 +82,7 @@ func TestRunSnapshotFromRecords_FeedsRedactedBundle(t *testing.T) {
 
 func TestRunSnapshotFromRecords_NoResult(t *testing.T) {
 	// A node still running / with no Result must not panic and carries no output.
-	rs := RunSnapshotFromRecords(
+	rs := support.RunSnapshotFromRecords(
 		core.JobRecord{ID: "run-1", EnqueuedAt: time.Unix(1_700_000_000, 0)},
 		[]core.JobRecord{{NodeID: "n1", Status: core.JobStatusRunning}},
 	)

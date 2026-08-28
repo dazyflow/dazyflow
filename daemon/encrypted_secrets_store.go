@@ -6,10 +6,10 @@ package daemon
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sort"
 	"sync"
 
+	"git.sr.ht/~klahr/dazyflow/daemon/internal/pgstore"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -195,7 +195,7 @@ func NewPgSecretsStore(ctx context.Context, pool *pgxpool.Pool) (*PgSecretsStore
 	if pool == nil {
 		return nil, errors.New("NewPgSecretsStore: nil pool")
 	}
-	if err := applyPgSchema(ctx, pool, pgSecretsSchema); err != nil {
+	if err := pgstore.ApplySchema(ctx, pool, pgSecretsSchema); err != nil {
 		return nil, err
 	}
 	return &PgSecretsStore{pool: pool}, nil
@@ -333,17 +333,6 @@ func (p *PgSecretsStore) setWrappedDEK(ctx context.Context, tenant string, wrapp
 		return false, err
 	}
 	return tag.RowsAffected() == 1, nil
-}
-
-// applyPgSchema runs a store's CREATE-TABLE-IF-NOT-EXISTS DDL at
-// construction time. Every Pg*Store constructor opens the same way, so
-// this keeps the "ensure schema, bail on error" step in one place.
-func applyPgSchema(ctx context.Context, pool *pgxpool.Pool, schema string) error {
-	if pool == nil {
-		return fmt.Errorf("nil pool")
-	}
-	_, err := pool.Exec(ctx, schema)
-	return err
 }
 
 // isPgNoRows detects pgx's no-rows sentinel via errors.Is against

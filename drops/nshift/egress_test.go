@@ -6,24 +6,18 @@ package nshift
 import (
 	"context"
 	"net/http"
-	"os"
 	"testing"
 
 	"git.sr.ht/~klahr/dazyflow/core"
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/dropstest"
 )
 
-func TestMain(m *testing.M) {
-	hfnet.SetAllowPrivateEgress(true)
-	os.Exit(m.Run())
-}
+func TestMain(m *testing.M) { dropstest.EgressTestMain(m) }
 
 func TestNshiftDo_SSRFGuardBlocksPrivate(t *testing.T) {
-	hfnet.SetAllowPrivateEgress(false)
-	defer hfnet.SetAllowPrivateEgress(true)
-	job := core.Job{ID: "j", Params: map[string]any{"api_key": "k1", "base_url": "http://127.0.0.1:9"}}
-	_, _, _, err := nshiftDo(context.Background(), job, http.MethodGet, "http://127.0.0.1:9/rs-extapi/v1/shipments/1", nil)
-	if err == nil || !hfnet.IsSSRFError(err) {
-		t.Fatalf("want ssrf_blocked, got %v", err)
-	}
+	dropstest.AssertSSRFBlocked(t, func() error {
+		job := core.Job{ID: "j", Params: map[string]any{"api_key": "k1", "base_url": "http://127.0.0.1:9"}}
+		_, _, _, err := nshiftDo(context.Background(), job, http.MethodGet, "http://127.0.0.1:9/rs-extapi/v1/shipments/1", nil)
+		return err
+	})
 }

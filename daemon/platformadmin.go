@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon/internal/pgstore"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -68,7 +69,7 @@ CREATE TABLE IF NOT EXISTS platform_admins (
 
 // EnsurePgPlatformAdminSchema creates the platform_admins table. Idempotent.
 func EnsurePgPlatformAdminSchema(ctx context.Context, pool *pgxpool.Pool) error {
-	return applyPgSchema(ctx, pool, pgPlatformAdminSchema)
+	return pgstore.ApplySchema(ctx, pool, pgPlatformAdminSchema)
 }
 
 // PgPlatformAdminStore is the Postgres PlatformAdminStore with a cached snapshot.
@@ -189,5 +190,5 @@ func (s *PgPlatformAdminStore) reload(ctx context.Context) error {
 }
 
 func (s *PgPlatformAdminStore) refreshLoop(ctx context.Context) {
-	pollReload(ctx, s.reload, s.logger.Printf, "refresh: %v")
+	pgstore.PollReload(ctx, s.reload, s.logger.Printf, "refresh: %v")
 }

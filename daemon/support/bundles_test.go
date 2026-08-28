@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-package daemon
+package support
 
 import (
 	"context"
@@ -58,7 +58,7 @@ func TestMemBundleStore_Errors(t *testing.T) {
 	s := NewMemBundleStore()
 	_ = s.Create(ctx, bundleRec("b1", "acme", time.Unix(1_700_000_000, 0)))
 
-	if err := s.Create(ctx, bundleRec("b1", "acme", time.Unix(1_700_000_000, 0))); !errors.Is(err, errBundleExists) {
+	if err := s.Create(ctx, bundleRec("b1", "acme", time.Unix(1_700_000_000, 0))); !errors.Is(err, ErrBundleExists) {
 		t.Errorf("duplicate create should fail, got %v", err)
 	}
 	if _, err := s.Get(ctx, "missing"); !errors.Is(err, core.ErrNotFound) {

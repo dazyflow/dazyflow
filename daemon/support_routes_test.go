@@ -13,6 +13,7 @@ import (
 
 	"git.sr.ht/~klahr/dazyflow/auth"
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon/support"
 )
 
 // supportGateway builds a gateway with just the support stores wired + a pinned
@@ -21,8 +22,8 @@ import (
 func supportGateway() (*HTTPGateway, time.Time) {
 	now := time.Unix(1_700_000_000, 0).UTC()
 	h := &HTTPGateway{
-		Grants:     NewMemGrantStore(),
-		Bundles:    NewMemBundleStore(),
+		Grants:     support.NewMemGrantStore(),
+		Bundles:    support.NewMemBundleStore(),
 		supportNow: func() time.Time { return now },
 	}
 	return h, now
@@ -153,7 +154,7 @@ func TestSupport_DisabledReturns501(t *testing.T) {
 // Session elevation stamps SupportAgentRole for a granted email (mirrors the
 // platform-admin elevation).
 func TestElevateSupportAgent(t *testing.T) {
-	agents := NewMemSupportAgentStore()
+	agents := support.NewMemAgentStore()
 	_ = agents.Grant(context.Background(), "agent@vendor.com", "op")
 	h := &HTTPGateway{SupportAgents: agents}
 
@@ -179,4 +180,21 @@ func TestElevateSupportAgent(t *testing.T) {
 	// Nil store → no-op, no panic.
 	bare := &HTTPGateway{}
 	_ = bare.elevateSupportAgent(context.Background(), auth.User{Email: "agent@vendor.com"})
+}
+
+// reqGrant is a grant in the requested state, the state every route test here
+// starts from. The store package has its own copy for its own tests; this one
+// exists because the two packages no longer share a test binary.
+func reqGrant(id, agent string, now time.Time) core.AccessGrant {
+	return core.AccessGrant{
+		ID:           id,
+		TicketID:     "ticket-1",
+		Tenant:       "acme",
+		FlowID:       "daily-invoice",
+		AgentSubject: agent,
+		Status:       core.GrantRequested,
+		RequestedAt:  now,
+		RequestedBy:  agent,
+		ExpiresAt:    now.Add(time.Hour),
+	}
 }

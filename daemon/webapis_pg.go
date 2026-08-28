@@ -193,11 +193,11 @@ func (s *PgWebAPIStore) SetError(ctx context.Context, tenant, name, lastErr stri
 // drop an org's steps out of the palette.
 type MemWebAPIStore struct {
 	mu   sync.Mutex
-	rows map[webAPIKey]WebAPI
+	rows map[stepSourceKey]WebAPI
 }
 
 func NewMemWebAPIStore() *MemWebAPIStore {
-	return &MemWebAPIStore{rows: map[webAPIKey]WebAPI{}}
+	return &MemWebAPIStore{rows: map[stepSourceKey]WebAPI{}}
 }
 
 func (s *MemWebAPIStore) List(_ context.Context, tenant string) ([]WebAPI, error) {
@@ -232,7 +232,7 @@ func (s *MemWebAPIStore) ListAll(_ context.Context) ([]WebAPI, error) {
 func (s *MemWebAPIStore) Get(_ context.Context, tenant, name string) (WebAPI, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	v, ok := s.rows[webAPIKey{tenant, name}]
+	v, ok := s.rows[stepSourceKey{tenant, name}]
 	if !ok {
 		return WebAPI{}, ErrWebAPINotFound
 	}
@@ -255,14 +255,14 @@ func (s *MemWebAPIStore) Put(_ context.Context, w WebAPI) error {
 	w.LastError = ""
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.rows[webAPIKey{w.Tenant, w.Name}] = w
+	s.rows[stepSourceKey{w.Tenant, w.Name}] = w
 	return nil
 }
 
 func (s *MemWebAPIStore) Delete(_ context.Context, tenant, name string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	k := webAPIKey{tenant, name}
+	k := stepSourceKey{tenant, name}
 	if _, ok := s.rows[k]; !ok {
 		return ErrWebAPINotFound
 	}
@@ -303,7 +303,7 @@ func (s *MemWebAPIStore) DeleteByTenant(_ context.Context, tenant string) (int, 
 func (s *MemWebAPIStore) SetError(_ context.Context, tenant, name, lastErr string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	k := webAPIKey{tenant, name}
+	k := stepSourceKey{tenant, name}
 	row, ok := s.rows[k]
 	if !ok {
 		return ErrWebAPINotFound

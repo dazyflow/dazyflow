@@ -12,6 +12,7 @@ import (
 
 	"git.sr.ht/~klahr/dazyflow/auth"
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon/support"
 )
 
 // End-to-end test of the support-view endpoint over real HTTP + a real graph in
@@ -21,8 +22,8 @@ import (
 func TestSupportView_EndToEnd(t *testing.T) {
 	h := newGatewayHarness(t)
 	now := time.Unix(1_700_000_000, 0).UTC()
-	h.gw.Grants = NewMemGrantStore()
-	h.gw.SupportAgents = NewMemSupportAgentStore()
+	h.gw.Grants = support.NewMemGrantStore()
+	h.gw.SupportAgents = support.NewMemAgentStore()
 	h.gw.supportNow = func() time.Time { return now }
 	auditLog := NewMemAuditLog()
 	h.gw.Audit = auditLog

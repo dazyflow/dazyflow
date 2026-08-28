@@ -15,6 +15,7 @@ import (
 
 	"git.sr.ht/~klahr/dazyflow/auth"
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon/support"
 )
 
 // HTTPGateway exposes Service over JSON/HTTP so browsers and other
@@ -151,7 +152,7 @@ type HTTPGateway struct {
 	// issue; Grants persists AccessGrants (the consented, time-boxed views);
 	// Bundles persists redacted SupportBundleRecords. All nil-safe: nil leaves
 	// the support endpoints returning 501/empty, and no agent is elevated.
-	SupportAgents SupportAgentStore
+	SupportAgents support.AgentStore
 	Grants        core.GrantStore
 	Bundles       core.BundleStore
 	// Tickets persists support tickets + their chat threads (Phase 2). Nil-safe:

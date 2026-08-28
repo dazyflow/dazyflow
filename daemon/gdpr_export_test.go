@@ -12,6 +12,7 @@ import (
 
 	"git.sr.ht/~klahr/dazyflow/auth"
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon/support"
 )
 
 // TestOAuthErrorCode_Cov covers every arm of the status->code mapping.
@@ -156,7 +157,7 @@ func TestAssembleExport_IncludesSupportAuditAndRoles(t *testing.T) {
 		Email: email, Subject: email, Tenant: tenant, Workspace: "default",
 	})
 
-	tickets := NewMemTicketStore()
+	tickets := support.NewMemTicketStore()
 	_ = tickets.Create(ctx, core.Ticket{
 		ID: "t1", Tenant: tenant, CreatedBy: email, Subject: "Flow broke",
 		Status: core.TicketAwaitingSupport, CreatedAt: time.Now(), UpdatedAt: time.Now(),
@@ -186,7 +187,7 @@ func TestAssembleExport_IncludesSupportAuditAndRoles(t *testing.T) {
 
 	admins := newMemPlatformAdmins()
 	_ = admins.Grant(ctx, email, "root@platform.test")
-	agents := NewMemSupportAgentStore()
+	agents := support.NewMemAgentStore()
 
 	h := &HTTPGateway{
 		svc:                 &Service{},
@@ -257,7 +258,7 @@ func TestAssembleExport_ExcludesOtherPeoplesData(t *testing.T) {
 	users, _ := auth.OpenJSONUserStore("")
 	_ = users.PutUser(ctx, auth.User{Email: email, Subject: email, Tenant: tenant, Workspace: "default"})
 
-	tickets := NewMemTicketStore()
+	tickets := support.NewMemTicketStore()
 	for _, other := range []string{"bob@example.com", "carol@example.com"} {
 		_ = tickets.Create(ctx, core.Ticket{
 			ID: "t-" + other, Tenant: tenant, CreatedBy: other, Subject: "private",

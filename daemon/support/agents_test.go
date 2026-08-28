@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-package daemon
+package support
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 
 func TestMemSupportAgentStore_GrantRevoke(t *testing.T) {
 	ctx := context.Background()
-	s := NewMemSupportAgentStore()
+	s := NewMemAgentStore()
 
 	if s.Granted("agent@vendor.com") {
 		t.Fatal("no grants yet")
@@ -38,7 +38,7 @@ func TestMemSupportAgentStore_GrantRevoke(t *testing.T) {
 
 func TestMemSupportAgentStore_EmptyEmail(t *testing.T) {
 	ctx := context.Background()
-	s := NewMemSupportAgentStore()
+	s := NewMemAgentStore()
 	if s.Granted("") {
 		t.Error("empty email is never granted")
 	}

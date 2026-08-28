@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon/internal/pgstore"
 )
 
 // PgGitMirrorStore is the durable GitMirrorStore — one row per
@@ -49,7 +50,7 @@ const gitMirrorColumns = `tenant, workspace, remote_url, account, enabled, push_
     updated_at, updated_by, last_attempt_at, last_success_at, last_commit, last_error`
 
 func NewPgGitMirrorStore(ctx context.Context, pool *pgxpool.Pool) (*PgGitMirrorStore, error) {
-	if err := applyPgSchema(ctx, pool, pgGitMirrorSchema); err != nil {
+	if err := pgstore.ApplySchema(ctx, pool, pgGitMirrorSchema); err != nil {
 		return nil, err
 	}
 	return &PgGitMirrorStore{pool: pool}, nil

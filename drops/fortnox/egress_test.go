@@ -5,22 +5,16 @@ package fortnox
 
 import (
 	"context"
-	"os"
 	"testing"
 
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	"git.sr.ht/~klahr/dazyflow/drops/internal/dropstest"
 )
 
-func TestMain(m *testing.M) {
-	hfnet.SetAllowPrivateEgress(true)
-	os.Exit(m.Run())
-}
+func TestMain(m *testing.M) { dropstest.EgressTestMain(m) }
 
 func TestFortnoxDo_SSRFGuardBlocksPrivate(t *testing.T) {
-	hfnet.SetAllowPrivateEgress(false)
-	defer hfnet.SetAllowPrivateEgress(true)
-	_, _, err := fortnoxDo(context.Background(), "GET", "http://127.0.0.1:9/3/customers", "tok", nil, 2000)
-	if err == nil || !hfnet.IsSSRFError(err) {
-		t.Fatalf("want ssrf_blocked, got %v", err)
-	}
+	dropstest.AssertSSRFBlocked(t, func() error {
+		_, _, err := fortnoxDo(context.Background(), "GET", "http://127.0.0.1:9/3/customers", "tok", nil, 2000)
+		return err
+	})
 }

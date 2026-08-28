@@ -9,10 +9,10 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"git.sr.ht/~klahr/dazyflow/core"
+	"git.sr.ht/~klahr/dazyflow/daemon/internal/pgstore"
 	"git.sr.ht/~klahr/dazyflow/engine/webapi"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -256,7 +256,7 @@ CREATE INDEX IF NOT EXISTS tenant_web_apis_enabled_idx ON tenant_web_apis (enabl
 
 // EnsurePgWebAPISchema creates the web-API table.
 func EnsurePgWebAPISchema(ctx context.Context, pool *pgxpool.Pool) error {
-	return applyPgSchema(ctx, pool, pgWebAPISchema)
+	return pgstore.ApplySchema(ctx, pool, pgWebAPISchema)
 }
 
 // ---- validation -------------------------------------------------------
@@ -334,24 +334,17 @@ type WebAPIs struct {
 	// wants; a test injects one to keep saves deterministic and off the network.
 	ResolveLogo func(ctx context.Context, baseURL string) string
 
-	// mu guards applied.
-	mu sync.Mutex
-	// applied records the UpdatedAt of the row behind each live registration,
-	// so a reconcile pass can skip a row that is already current and re-register
-	// one another replica edited.
-	applied map[webAPIKey]time.Time
-}
-
-type webAPIKey struct {
-	tenant string
-	name   string
+	// stepSourceRegistry records which rows this process currently has
+	// registered, keyed by (tenant, name) and valued by the row's UpdatedAt.
+	// See stepsources_live.go: the same bookkeeping serves MCP servers.
+	stepSourceRegistry
 }
 
 func (m *WebAPIs) now() time.Time {
-	if m != nil && m.Now != nil {
-		return m.Now()
+	if m == nil {
+		return time.Now()
 	}
-	return time.Now()
+	return nowOr(m.Now)
 }
 
 func (m *WebAPIs) resolveLogo(ctx context.Context, baseURL string) string {
@@ -602,7 +595,7 @@ func (m *WebAPIs) save(ctx context.Context, tenant, actor string, in WebAPIInput
 		}
 	} else {
 		m.Catalog.Unregister(tenant, name)
-		m.forget(webAPIKey{tenant, name})
+		m.forget(stepSourceKey{tenant, name})
 	}
 	row.LastError = ""
 	return row, nil
@@ -678,7 +671,7 @@ func (m *WebAPIs) register(row WebAPI) error {
 	if err := m.Catalog.Register(row.Descriptor()); err != nil {
 		return err
 	}
-	m.remember(webAPIKey{row.Tenant, row.Name}, row.UpdatedAt)
+	m.remember(stepSourceKey{row.Tenant, row.Name}, row.UpdatedAt)
 	return nil
 }
 
@@ -695,7 +688,7 @@ func (m *WebAPIs) Delete(ctx context.Context, tenant, name string) error {
 		return err
 	}
 	m.Catalog.Unregister(tenant, name)
-	m.forget(webAPIKey{tenant, name})
+	m.forget(stepSourceKey{tenant, name})
 	return nil
 }
 
@@ -716,7 +709,7 @@ func (m *WebAPIs) DeleteByTenant(ctx context.Context, tenant string) (int, error
 	}
 	for _, a := range apis {
 		m.Catalog.Unregister(tenant, a.Name)
-		m.forget(webAPIKey{tenant, a.Name})
+		m.forget(stepSourceKey{tenant, a.Name})
 	}
 	n, err := m.Store.DeleteByTenant(ctx, tenant)
 	if err != nil {
@@ -739,64 +732,39 @@ func (m *WebAPIs) Reconcile(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	desired := make(map[webAPIKey]struct{}, len(rows))
-	for _, row := range rows {
-		key := webAPIKey{row.Tenant, row.Name}
-		if !row.Enabled {
-			continue
-		}
-		desired[key] = struct{}{}
-		if at, ok := m.appliedAt(key); ok && at.Equal(row.UpdatedAt) {
-			continue
-		}
-		if err := m.register(row); err != nil {
-			// A stored descriptor the current code refuses — see WebAPI.LastError.
-			// Recorded rather than logged and forgotten, because the org needs to
-			// be able to see why its steps are missing.
-			_ = m.Store.SetError(ctx, row.Tenant, row.Name, err.Error())
-			continue
-		}
-		if row.LastError != "" {
-			_ = m.Store.SetError(ctx, row.Tenant, row.Name, "")
-		}
-	}
-	// Anything this replica holds that the store no longer wants: deleted or
-	// disabled, here or on another node.
-	for _, key := range m.appliedKeys() {
-		if _, want := desired[key]; want {
-			continue
-		}
-		m.Catalog.Unregister(key.tenant, key.name)
-		m.forget(key)
-	}
+	reconcileStepSources(ctx, &m.stepSourceRegistry, rows, stepSourcePlan[WebAPI]{
+		key:        func(r WebAPI) stepSourceKey { return stepSourceKey{r.Tenant, r.Name} },
+		enabled:    func(r WebAPI) bool { return r.Enabled },
+		updatedAt:  func(r WebAPI) time.Time { return r.UpdatedAt },
+		apply:      m.applyRow,
+		unregister: m.Catalog.Unregister,
+	})
 	return nil
 }
 
-// WebAPIReconcileInterval is how long a change made on another replica may take
-// to appear here. Matches MCPReconcileInterval: the two features are edited on
-// the same page-flow and a user should not learn two different latencies.
-const WebAPIReconcileInterval = 30 * time.Second
+// applyRow registers one stored row and keeps LastError in step with the
+// outcome.
+//
+// A stored descriptor the current code refuses — see WebAPI.LastError — is
+// RECORDED rather than logged and forgotten, because the org needs to be able
+// to see why its steps are missing. A row that registers cleanly has any stale
+// error cleared.
+func (m *WebAPIs) applyRow(ctx context.Context, row WebAPI) {
+	if err := m.register(row); err != nil {
+		_ = m.Store.SetError(ctx, row.Tenant, row.Name, err.Error())
+		return
+	}
+	if row.LastError != "" {
+		_ = m.Store.SetError(ctx, row.Tenant, row.Name, "")
+	}
+}
 
 // RunReconciler reconciles until ctx ends. Started by cmd/dzd.
 func (m *WebAPIs) RunReconciler(ctx context.Context, logf func(string, ...any)) {
 	if err := m.ready(); err != nil {
 		return
 	}
-	if err := m.Reconcile(ctx); err != nil && logf != nil {
-		logf("web api reconcile: %v", err)
-	}
-	t := time.NewTicker(WebAPIReconcileInterval)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-			if err := m.Reconcile(ctx); err != nil && logf != nil {
-				logf("web api reconcile: %v", err)
-			}
-		}
-	}
+	runStepSourceReconciler(ctx, "web apis", m.Reconcile, logf)
 }
 
 // resolveIntegration settles which Apps page this catalog is connected on.
@@ -889,38 +857,6 @@ func (m *WebAPIs) uniqueWebAPIName(ctx context.Context, tenant, base string) (st
 		taken[r.Name] = true
 	}
 	return uniqueStepSourceName(base, fallbackWebAPIName, taken, maxWebAPIsPerTenant)
-}
-
-func (m *WebAPIs) remember(k webAPIKey, updated time.Time) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.applied == nil {
-		m.applied = map[webAPIKey]time.Time{}
-	}
-	m.applied[k] = updated
-}
-
-func (m *WebAPIs) forget(k webAPIKey) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	delete(m.applied, k)
-}
-
-func (m *WebAPIs) appliedAt(k webAPIKey) (time.Time, bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	at, ok := m.applied[k]
-	return at, ok
-}
-
-func (m *WebAPIs) appliedKeys() []webAPIKey {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	out := make([]webAPIKey, 0, len(m.applied))
-	for k := range m.applied {
-		out = append(out, k)
-	}
-	return out
 }
 
 // marshalOperations is the store's encoding of the described operations. Kept
