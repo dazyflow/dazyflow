@@ -13,8 +13,13 @@ import "../theme.css";
 import "../app.css";
 import "./docs.css";
 
-// Docs render dark, matching the marketing site + the editor's default look.
-document.documentElement.setAttribute("data-theme", "dark");
+// Docs render light. A reference page is read at length rather than glanced
+// at, and light is what most readers' machines are already in — the same
+// reasoning theme.ts gives for the app defaulting to the OS rather than to
+// dark. Pinned rather than following prefers-color-scheme because the docs
+// carry no theme control of their own: a reader who landed in the wrong one
+// would have no way to change it.
+document.documentElement.setAttribute("data-theme", "light");
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

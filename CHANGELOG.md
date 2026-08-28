@@ -23,6 +23,53 @@ into the image.)
 
 ## [Unreleased]
 
+### Added
+
+- **The docs site has chrome of its own.** The header carried the product's
+  wordmark and nothing else, so the one thing on screen never said which of the
+  two sites you were in; and the page simply stopped at the end of the last
+  table, with no answer to the two questions a reader most often reaches the
+  bottom with — what is this, and where do I get it.
+
+  The top bar now reads **Dazyflow · Docs** and carries quiet links to the
+  product and to the source, left of the invite button. Below the prev/next
+  pair there is a real footer: guide and reference columns, a Project column
+  (product site, source, licence, contact, invite), and a legal line naming the
+  AGPL. The link columns are derived from `NAV`, the same decision the reading
+  order makes — a footer holding its own copy of the sidebar is a second list
+  to keep in step, and its failure mode is pointing at a page that moved. Only
+  the off-site addresses are written out, in one module the header and footer
+  share.
+
+  Scoped to `.docs-topbar` rather than the bare `.topbar` the docs borrow from
+  the app: the shell renders the product's own chrome markup on purpose, and a
+  rule written on the shared class would restyle the product from the docs
+  stylesheet.
+
+### Changed
+
+- **The docs render light.** They were pinned dark to match the marketing site.
+  But a reference page is read at length rather than glanced at, and light is
+  what most readers' machines are already in — the same reasoning `theme.ts`
+  gives for the app following the OS instead of defaulting to dark. Pinned
+  rather than resolved from `prefers-color-scheme` because the docs ship no
+  theme control: a reader who landed in the wrong one would have no way out.
+
+  The shell's `<html data-theme>` and its `theme-color` meta moved with it;
+  left behind, they painted the page dark for a beat before the module ran,
+  which is the flash the pre-paint attribute exists to prevent. No stylesheet
+  work was needed — `docs.css` holds 149 token references and not one
+  hardcoded colour, so it had a light rendering already.
+
+### Fixed
+
+- **The docs' brand mark no longer leads to "Page not found".** It was an
+  `<a href="/">`, and `/` is not in the page map — nginx answers every
+  unmatched path with `index.html`, so the SPA booted at a route it had no
+  entry for. The control a lost reader is most likely to press was the one
+  that lost them. It now routes to the first guide page, the docs' actual
+  front door.
+
 ## [0.22.0] - 2026-08-28
 
 ### Added

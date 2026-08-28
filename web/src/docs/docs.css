@@ -2,9 +2,11 @@
    SPDX-License-Identifier: AGPL-3.0-or-later
 
    Docs-only styling. The shell (top bar, sidebar, rail, hamburger) is styled
-   entirely by the app's app.css/theme.css — this file only handles the doc
-   content pane and a few docs-specific nav touches. Everything uses the app's
-   design tokens so it stays on-brand.
+   by the app's app.css/theme.css — this file handles the doc content pane, the
+   site footer, and a few docs-specific nav touches. Where it does reach the
+   chrome it goes through .docs-topbar, never bare .topbar, so nothing here can
+   restyle the product. Everything uses the app's design tokens so it stays
+   on-brand.
 
    ── What this page is made of ────────────────────────────────────────────
    The corpus decides the design. Across the guide and the generated step
@@ -647,12 +649,157 @@
 }
 
 /* ============================================================
+   Top bar (docs only)
+   ============================================================
+   The shell renders the app's own .topbar markup so app.css styles it
+   identically — see DocsShell. Everything here therefore hangs off
+   .docs-topbar, never off .topbar: a rule written on the bare class would
+   restyle the product's chrome from the docs stylesheet, which is exactly
+   the coupling the shared markup is supposed to buy us out of. */
+
+/* "Docs" beside the wordmark. A sibling label rather than part of
+   .brand-title, so the app's brand rules keep owning the name itself and this
+   is free to be quieter than it. */
+.docs-topbar .docs-wordmark {
+  padding: 0.1rem var(--space-1h);
+  border: 1px solid var(--border);
+  border-radius: var(--r-1);
+  background: var(--surface-2);
+  color: var(--faint);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  /* Off the cap-height midline: uppercase at this size sits high against the
+     wordmark's lowercase. */
+  transform: translateY(-0.05em);
+}
+
+/* Off-site links, left of the CTA. Text, not buttons: three buttons in a row
+   is a toolbar, and only one of them is a call to action. */
+.docs-topbar .docs-topnav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-right: var(--space-4);
+}
+.docs-topbar .docs-toplink {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  text-decoration: none;
+  transition: color var(--dur-2) var(--ease-out);
+}
+.docs-topbar .docs-toplink:hover {
+  color: var(--ink);
+}
+
+/* ============================================================
+   Site footer
+   ============================================================ */
+.docs-footer {
+  margin-top: var(--space-7);
+  padding-top: var(--space-6);
+  /* The rule is the page's own ending. Everything above it is content; the
+     footer is the site talking. */
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.docs-footer-main {
+  display: grid;
+  /* The blurb column is wider than the link columns and gives up its width
+     first — the links are fixed-length strings and wrapping them reads as a
+     mistake, while a blurb wraps as prose is meant to. */
+  grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, 1fr));
+  gap: var(--space-6);
+}
+.docs-footer-brand {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.docs-footer-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.docs-footer-name {
+  color: var(--ink);
+  font-weight: 600;
+}
+.docs-footer-blurb {
+  margin: 0;
+  max-width: 34ch;
+  color: var(--faint);
+  line-height: 1.5;
+}
+.docs-footer-cols {
+  display: contents;
+}
+.docs-footer-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+/* An <h2> for the outline's sake — a column of links wants a real heading, not
+   a styled div. Reset hard: the content rules two sections up give h2 a page
+   heading's size, weight and margin. */
+.docs-footer-heading {
+  margin: 0 0 var(--space-1);
+  padding: 0;
+  border: 0;
+  color: var(--ink);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.docs-footer-link {
+  color: var(--muted);
+  text-decoration: none;
+  transition: color var(--dur-2) var(--ease-out);
+}
+.docs-footer-link:hover {
+  color: var(--accent);
+}
+.docs-footer-legal {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  margin-top: var(--space-6);
+  padding: var(--space-4) 0 var(--space-6);
+  border-top: 1px solid var(--border);
+  color: var(--faint);
+  font-size: var(--text-xs);
+}
+.docs-footer-legal-link {
+  color: var(--faint);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+.docs-footer-legal-link:hover {
+  color: var(--accent);
+}
+
+/* ============================================================
    Narrow screens
    ============================================================ */
 @media (max-width: 768px) {
-  /* The invite CTA collapses off the top bar (the hamburger owns that space). */
-  .docs-cta {
+  /* The invite CTA and the off-site links collapse off the top bar (the
+     hamburger owns that space). Both are in the footer, which is the whole
+     reason it can afford to take them off the header. */
+  .docs-cta,
+  .docs-topbar .docs-topnav {
     display: none;
+  }
+  /* Two columns rather than one: the link lists are short, and stacking all
+     four leaves a phone scrolling through a screen of footer. */
+  .docs-footer-main {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-5);
+  }
+  .docs-footer-brand {
+    grid-column: 1 / -1;
   }
   .docs-main {
     padding: var(--space-4) var(--space-4) var(--space-6);
@@ -683,7 +830,9 @@
   .docs-pagenav-link,
   .docs-anchor,
   .docs-toc-link,
-  .docs-code-copy {
+  .docs-code-copy,
+  .docs-topbar .docs-toplink,
+  .docs-footer-link {
     transition: none;
   }
 }

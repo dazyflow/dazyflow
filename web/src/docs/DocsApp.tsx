@@ -7,6 +7,7 @@ import { DocsShell } from "./DocsShell";
 import { Markdown } from "./Markdown";
 import { PageNav } from "./PageNav";
 import { Toc } from "./Toc";
+import { DocsFooter } from "./DocsFooter";
 import { getPage } from "./content";
 
 // The shell persists across navigations; the content pane swaps by pathname.
@@ -49,6 +50,11 @@ export function DocsApp() {
               </p>
             </div>
           )}
+          {/* Below the prev/next pair, and inside the reading column so it
+              stops at the rail rather than running under it. Rendered on the
+              not-found page too: that is exactly where a reader needs a way
+              out. */}
+          <DocsFooter />
         </div>
         {/* Keyed by path so the rail rebuilds from the new page's headings. */}
         {page && <Toc pathKey={path} />}

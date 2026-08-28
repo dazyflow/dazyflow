@@ -7,9 +7,10 @@
 // identically — same top bar, same collapsible sidebar + icon rail, same
 // mobile hamburger drawer. Only the contents differ (docs nav, no auth).
 import { ReactNode, useCallback, useEffect, useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { NAV } from "./content";
+import { DOCS_HOME, INVITE, SITE, SOURCE } from "./links";
 import { MOBILE, isNarrower, mediaQuery } from "../lib/breakpoints";
 import { ICON } from "../icons";
 import { savedCollapsePref, initialNavCollapsed } from "../lib/navCollapse";
@@ -17,7 +18,6 @@ import { savedCollapsePref, initialNavCollapsed } from "../lib/navCollapse";
 // Mirrors AppShell's rail behaviour: a persisted desktop collapse choice; small
 // viewports default to the icons-only rail / slide-over drawer.
 const COLLAPSE_KEY = "dazyflow.docs.sidebar.collapsed";
-const INVITE = "mailto:hi@dazyflow.app?subject=Dazyflow%20early%20access";
 
 
 export function DocsShell({ children }: { children: ReactNode }) {
@@ -57,7 +57,7 @@ export function DocsShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="app-shell" data-nav-collapsed={navCollapsed ? "true" : "false"}>
-      <header className="topbar">
+      <header className="topbar docs-topbar">
         <button
           className="btn ghost icon hamburger"
           onClick={toggleNav}
@@ -70,7 +70,11 @@ export function DocsShell({ children }: { children: ReactNode }) {
             <span className="burger-bar burger-bot" />
           </span>
         </button>
-        <a href="/" className="brand" title="Dazyflow">
+        {/* A Link, not an <a href="/">. "/" is not in the page map, and nginx
+            answers every unmatched path with index.html, so the old brand link
+            booted the SPA straight onto "Page not found" — from the one control
+            a lost reader is most likely to press. */}
+        <Link to={DOCS_HOME} className="brand" title="Dazyflow documentation">
           <img
             src="/logo.svg"
             alt=""
@@ -80,8 +84,19 @@ export function DocsShell({ children }: { children: ReactNode }) {
             draggable={false}
           />
           <span className="brand-title">Dazyflow</span>
-        </a>
+          {/* The site had no name of its own: "Dazyflow" alone is what the app
+              wears, so nothing on screen said which of the two you were in. */}
+          <span className="docs-wordmark">Docs</span>
+        </Link>
         <div className="spacer" />
+        <nav className="docs-topnav" aria-label="Elsewhere">
+          <a className="docs-toplink" href={SITE}>
+            Product
+          </a>
+          <a className="docs-toplink" href={SOURCE}>
+            Source
+          </a>
+        </nav>
         {/* Ghost, not primary. A filled accent button is the loudest thing on
             a reference page, and it is pointed away from what the reader came
             for — someone deep in the step catalog is working, not evaluating.
