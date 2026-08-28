@@ -33,6 +33,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"git.sr.ht/~klahr/dazyflow/core"
@@ -146,9 +147,12 @@ func init() {
 		Name:         "ollama",
 		Integration:  "Ollama",
 		DefaultModel: defaultModel,
-		// No Models: the registry's pickers fall back to free text, because
-		// the catalog is whatever this operator pulled.
-		Provider: provider{},
+		// No Models: there is no catalog to compile in, because it is whatever
+		// this operator pulled. ListModels asks the server instead, so a
+		// reachable Ollama gets a real picker of exactly what it can run, and
+		// an unreachable one falls back to free text rather than to a guess.
+		ListModels: listModels,
+		Provider:   provider{},
 	})
 	llmtask.RegisterAll(llmtask.Config{
 		Provider:    provider{},
@@ -330,4 +334,52 @@ func ollamaError(body []byte) string {
 		return nested.Error.Message
 	}
 	return string(body)
+}
+
+// listModels asks this Ollama which models are pulled. Backs the model picker.
+//
+// Ollama is the provider where a live list matters most, because there is no
+// catalog to fall back to: defaultModel is a guess at what is commonly pulled,
+// and on a machine without it every step fails with a 404 naming a model the
+// operator never chose. /api/tags is the same free GET verifyReachable already
+// makes, and its answer is exactly the set of models that can run here.
+func listModels(ctx context.Context, apiKey, base string) ([]llm.ModelOption, error) {
+	headers := map[string]string{}
+	if apiKey != "" {
+		headers["authorization"] = "Bearer " + apiKey
+	}
+	status, body, err := llmtask.GetStatus(ctx, baseOr(base)+"/api/tags", headers)
+	if err != nil {
+		return nil, fmt.Errorf("could not reach Ollama at %s: %w", baseOr(base), err)
+	}
+	if status < 200 || status >= 300 {
+		return nil, fmt.Errorf("Ollama returned HTTP %d: %s", status, ollamaError(body))
+	}
+	var tags struct {
+		Models []struct {
+			Name  string `json:"name"`
+			Model string `json:"model"`
+		} `json:"models"`
+	}
+	if err := json.Unmarshal(body, &tags); err != nil {
+		return nil, fmt.Errorf("could not read Ollama's model list: %w", err)
+	}
+	out := make([]llm.ModelOption, 0, len(tags.Models))
+	for _, m := range tags.Models {
+		id := m.Name
+		if id == "" {
+			id = m.Model
+		}
+		if id == "" {
+			continue
+		}
+		// The tag IS the name here — "qwen3-coder:30b" is what the operator
+		// typed to pull it and what they will recognise. Nothing to prettify.
+		out = append(out, llm.ModelOption{ID: id, Label: id})
+	}
+	if len(out) == 0 {
+		return nil, errors.New("Ollama is reachable but has no models pulled")
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, nil
 }

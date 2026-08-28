@@ -289,6 +289,12 @@ type Service struct {
 	subtreeOnce    sync.Once
 	subtreeBudgetV *subtreeBudget
 
+	// modelsCache holds the per-tenant live model catalogs the AI steps'
+	// pickers are built from (llmmodels.go). Lazily initialized via
+	// modelsOnce so a zero-value Service literal works.
+	modelsOnce  sync.Once
+	modelsCache *modelCatalog
+
 	// EncryptedSecrets is the per-tenant encrypted secret store that
 	// integration drops (Gmail OAuth, Claude API key, etc.) read from.
 	// Nil leaves the store CRUD endpoints + any drop that depends on
@@ -1839,6 +1845,10 @@ func (s *Service) listDrops(ctx context.Context, p core.Principal, includeDisabl
 			delete(out, id)
 		}
 	}
+	// Last, so it only runs over the drops that survived: swap each AI step's
+	// compiled-in model list for what this tenant's credential can actually
+	// call. Non-blocking — see llmmodels.go.
+	s.overlayLiveModels(p, out)
 	return out, nil
 }
 

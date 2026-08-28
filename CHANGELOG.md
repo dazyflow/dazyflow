@@ -23,6 +23,45 @@ into the image.)
 
 ## [Unreleased]
 
+### Changed
+
+- **The AI steps ask the vendor which models you can use, instead of offering a
+  list compiled into the release.** A model picker built from a list baked into
+  the binary is wrong in two directions, and only one of them was anticipated.
+  It cannot offer a model published after the release — expected, and the price
+  of a picker. It also goes on offering one the vendor has since withdrawn,
+  which is the worse half: it fails inside somebody's flow at run time rather
+  than at the moment they chose.
+
+  Gemini did exactly that. `gemini-2.5-pro` was closed to new keys while
+  staying in Google's catalogue, so a step that had been offering it for weeks
+  began answering `NOT_FOUND` — and the list a release ships can never be
+  right about that, because availability follows the credential rather than the
+  build. Every provider that has a catalogue endpoint is now asked, per
+  connection, and the answer replaces what the picker offers.
+
+  Ollama gains the most, having had no picker at all: the model was free text
+  because the catalogue is whatever the operator pulled, so a typo was a 404 at
+  run time and the default named a model many machines do not have. It now
+  lists exactly what that server can run. Where the compiled-in default is not
+  something your credential can call, the first model that can stands in — so
+  the steps nobody has configured stop being the ones that break.
+
+  The palette never waits for any of this. The editor renders from the list it
+  already had and the vendor is asked behind the request, so the answer is
+  right from the second render on; a vendor that is slow, down or not connected
+  costs nothing and shows nothing. It applies wherever steps are read, not just
+  in the editor — an agent reading `describe_drop` over MCP sees the same live
+  catalogue, because a picker that is honest in the UI and stale over MCP would
+  only move the failure somewhere quieter.
+
+  Two things are deliberately NOT filtered out of what the vendor returns.
+  Models that cannot do a text step's job at all — image, audio, transcription,
+  robotics — are dropped, because they would only ever fail. Everything else
+  stays, including previews and the ones that look like an odd fit for a flow:
+  hiding a model the vendor is offering is the same failure as offering one it
+  has withdrawn, just in the other direction.
+
 ## [0.24.0] - 2026-08-28
 
 ### Added

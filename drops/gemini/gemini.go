@@ -36,6 +36,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 
 	"git.sr.ht/~klahr/dazyflow/core"
@@ -46,11 +47,30 @@ import (
 // geminiModels is shared by the task drops and the shared LLM registry.
 //
 // A picker rather than free text, matching Claude and ChatGPT: Google publishes
-// a catalog, so a typo should be impossible rather than a 404 at run time. The
-// cost is that a model released after this list was written cannot be selected
-// until the list grows — adding an entry here is the whole change.
+// a catalog, so a typo should be impossible rather than a 404 at run time.
+//
+// The list is led by Google's own moving aliases (…-latest), because a pinned
+// version here goes stale in BOTH directions and only one of those was
+// anticipated. A model released after this list was written cannot be selected
+// until the list grows — that much was expected. But an entry can also expire
+// under a key that never used it: gemini-2.5-pro was withdrawn "for new users"
+// while staying in the catalog, so it listed fine and failed at run time with
+// NOT_FOUND. An alias is maintained by the vendor and cannot rot that way.
+//
+// Pinned versions stay on the list underneath, because an alias moves without
+// warning and a flow that must keep answering the same way needs to say which
+// model it meant. Preview IDs are marked as such: they are the only route to
+// the Pro tier right now, and they can be withdrawn on Google's schedule.
 var geminiModels = []llmtask.ModelOption{
-	{ID: "gemini-2.5-pro", Label: "Gemini 2.5 Pro"},
+	{ID: "gemini-flash-latest", Label: "Gemini Flash (latest)"},
+	{ID: "gemini-flash-lite-latest", Label: "Gemini Flash-Lite (latest)"},
+	{ID: "gemini-pro-latest", Label: "Gemini Pro (latest)"},
+	{ID: "gemini-3.7-flash", Label: "Gemini 3.7 Flash"},
+	{ID: "gemini-3.6-flash", Label: "Gemini 3.6 Flash"},
+	{ID: "gemini-3.5-flash", Label: "Gemini 3.5 Flash"},
+	{ID: "gemini-3.5-flash-lite", Label: "Gemini 3.5 Flash-Lite"},
+	{ID: "gemini-3.1-flash-lite", Label: "Gemini 3.1 Flash-Lite"},
+	{ID: "gemini-3.1-pro-preview", Label: "Gemini 3.1 Pro (preview)"},
 	{ID: "gemini-2.5-flash", Label: "Gemini 2.5 Flash"},
 	{ID: "gemini-2.5-flash-lite", Label: "Gemini 2.5 Flash-Lite"},
 }
@@ -61,7 +81,13 @@ const (
 	// short, high-volume calls (summarize a row, classify an email), which is
 	// exactly what Flash is priced and tuned for. An author who wants Pro picks
 	// it on the step.
-	defaultModel = "gemini-2.5-flash"
+	//
+	// The alias rather than a pinned version, because this is the value a step
+	// runs on when its author never chose a model — the case with the least
+	// standing to break on an upgrade. A pinned default was how gemini-2.5-pro
+	// took every unconfigured step down with it when Google closed it to new
+	// users. An author who needs a fixed model picks one from the list.
+	defaultModel = "gemini-flash-latest"
 )
 
 type provider struct{}
@@ -208,6 +234,7 @@ func init() {
 		Integration:  "Gemini",
 		DefaultModel: defaultModel,
 		Models:       geminiModels,
+		ListModels:   listModels,
 		Provider:     provider{},
 	})
 	llmtask.RegisterAll(llmtask.Config{
@@ -355,4 +382,104 @@ func geminiError(body []byte) string {
 		return e.Error.Message
 	}
 	return string(body)
+}
+
+// nonTextFamilies are ID fragments for models that answer generateContent but
+// cannot do a task step's job: they emit audio, images or transcripts, or want
+// input a step never has (a robot's camera, a screen to drive).
+//
+// The filter is deliberately about OUTPUT KIND and nothing else. It is
+// tempting to also drop the models that look wrong for a flow — the agentic
+// research ones, the previews — but those return text and someone may have a
+// reason. A picker that hides a model the vendor is offering is the same
+// failure as a list that offers one the vendor has withdrawn, just quieter.
+var nonTextFamilies = []string{
+	"-tts", "tts-", "image", "nano-banana", "transcribe", "robotics",
+	"computer-use", "lyria", "embedding", "aqa",
+}
+
+// listModels asks Google which models this key may call. Backs the model
+// picker, replacing the compiled-in geminiModels fallback whenever it answers.
+//
+// Same free, read-only endpoint verifyKey uses. It is the only source that can
+// be right: gemini-2.5-pro stayed IN this catalog after Google closed it to
+// new users, so the list alone does not prove a model is callable — but a
+// model missing from it certainly is not, and everything Google has since
+// launched only appears here.
+//
+// Paged, because the catalog has outgrown one page and silently keeping the
+// first 50 would reintroduce exactly the staleness this replaces. Capped at a
+// few pages so a pathological response cannot spin.
+func listModels(ctx context.Context, apiKey, base string) ([]llm.ModelOption, error) {
+	var out []llm.ModelOption
+	seen := map[string]bool{}
+	token := ""
+	for fetched := 0; fetched < 8; fetched++ {
+		u := baseOr(base) + "/v1beta/models?pageSize=200"
+		if token != "" {
+			u += "&pageToken=" + url.QueryEscape(token)
+		}
+		status, body, err := llmtask.GetStatus(ctx, u, map[string]string{"x-goog-api-key": apiKey})
+		if err != nil {
+			return nil, fmt.Errorf("could not reach Gemini: %w", err)
+		}
+		if status < 200 || status >= 300 {
+			return nil, fmt.Errorf("Gemini returned HTTP %d: %s", status, geminiError(body))
+		}
+		var resp struct {
+			Models []struct {
+				Name        string   `json:"name"`
+				DisplayName string   `json:"displayName"`
+				Methods     []string `json:"supportedGenerationMethods"`
+			} `json:"models"`
+			NextPageToken string `json:"nextPageToken"`
+		}
+		if err := json.Unmarshal(body, &resp); err != nil {
+			return nil, fmt.Errorf("could not read Gemini's model list: %w", err)
+		}
+		for _, m := range resp.Models {
+			id := strings.TrimPrefix(m.Name, "models/")
+			if id == "" || seen[id] || !generates(m.Methods) || nonText(id) {
+				continue
+			}
+			seen[id] = true
+			label := m.DisplayName
+			if label == "" {
+				label = id
+			}
+			out = append(out, llm.ModelOption{ID: id, Label: label})
+		}
+		if resp.NextPageToken == "" {
+			break
+		}
+		token = resp.NextPageToken
+	}
+	if len(out) == 0 {
+		return nil, errors.New("Gemini listed no models this key can generate with")
+	}
+	// Google's aliases first — they are the entries that stay correct — then
+	// the rest in the order the catalog gave them, which puts the current
+	// generation above the previous one.
+	sort.SliceStable(out, func(i, j int) bool {
+		return strings.HasSuffix(out[i].ID, "-latest") && !strings.HasSuffix(out[j].ID, "-latest")
+	})
+	return out, nil
+}
+
+func generates(methods []string) bool {
+	for _, m := range methods {
+		if m == "generateContent" {
+			return true
+		}
+	}
+	return false
+}
+
+func nonText(id string) bool {
+	for _, f := range nonTextFamilies {
+		if strings.Contains(id, f) {
+			return true
+		}
+	}
+	return false
 }

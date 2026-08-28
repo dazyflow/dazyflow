@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 
 	"git.sr.ht/~klahr/dazyflow/core"
@@ -62,6 +63,20 @@ type ModelOption struct {
 	Label string
 }
 
+// ModelLister asks the vendor which models THIS credential can actually use.
+//
+// Optional. A provider without one keeps its compiled-in Models list, which is
+// the honest answer when there is no catalog endpoint to ask. A provider WITH
+// one is saying its catalog moves faster than our releases — which is the
+// normal case, and which a static list gets wrong in both directions: it
+// cannot offer a model published after the list was written, and it goes on
+// offering one the vendor has since withdrawn. Only the vendor knows, and only
+// per credential: availability varies by key, project and tier.
+//
+// Implementations must be read-only and free (a catalog GET, not a
+// generation), because this runs without the user asking for it.
+type ModelLister func(ctx context.Context, apiKey, baseURL string) ([]ModelOption, error)
+
 // ProviderInfo is a registered backend: its stable id, the integration name
 // that keys its connection secret (conn.<slug>.api_key), its models, and the
 // Provider that makes the call.
@@ -69,8 +84,12 @@ type ProviderInfo struct {
 	Name         string // stable id, e.g. "claude", "openai"
 	Integration  string // "Claude" / "ChatGPT" — drives conn.<slug>.api_key
 	DefaultModel string
-	Models       []ModelOption
-	Provider     Provider
+	// Models is the fallback catalog: what the picker offers before
+	// ListModels has answered, and what it keeps offering when there is no
+	// ListModels, no connection, or the vendor is unreachable.
+	Models     []ModelOption
+	ListModels ModelLister
+	Provider   Provider
 }
 
 var (
@@ -135,4 +154,20 @@ func Generate(ctx context.Context, name, apiKey string, req Request) (Result, er
 		return Result{}, fmt.Errorf("%s", jerr.Message)
 	}
 	return res, nil
+}
+
+// ByIntegration finds a provider by the integration name that keys its
+// connection secret ("Gemini", "Ollama"). The daemon's catalog layer starts
+// from a drop manifest, which carries the integration rather than the
+// provider id. Case-insensitive: the manifest and the registration are written
+// by hand in two different files.
+func ByIntegration(integration string) (ProviderInfo, bool) {
+	mu.RLock()
+	defer mu.RUnlock()
+	for _, n := range order {
+		if strings.EqualFold(providers[n].Integration, integration) {
+			return providers[n], true
+		}
+	}
+	return ProviderInfo{}, false
 }
