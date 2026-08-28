@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.22.1] - 2026-08-28
+
 ### Added
 
 - **A render error shows a page instead of blanking one.** Neither the app nor
