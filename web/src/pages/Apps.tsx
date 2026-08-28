@@ -56,7 +56,7 @@ import { Loading } from "../components/ui/Loading";
 //
 // Every control lives in the URL (?q, ?status, ?category, ?page) so a filtered
 // view is linkable, survives a reload, and works with the back button. The
-// pre-existing ?category=ai deep link (from "Connect Claude or ChatGPT") keeps
+// pre-existing ?category=ai deep link (from "Connect an AI provider") keeps
 // working unchanged — it is the same parameter.
 export function Apps() {
   const { t, i18n } = useTranslation();

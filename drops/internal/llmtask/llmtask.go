@@ -60,6 +60,20 @@ type Config struct {
 	KeyPlaceholder string
 	AskID          string // "claude" / "chatgpt"
 	TaskIDPrefix   string // "claude" / "gpt" → <prefix>_summarize
+	// KeyOptional marks a provider that needs no API key — a local runtime
+	// (Ollama) rather than a metered cloud API. The connection's api_key field
+	// stops being required, an empty key stops being a run-time error, and the
+	// connection verifier checks reachability instead of credentials.
+	KeyOptional bool
+	// BaseURLLabel, when set, ALSO puts the API host on the connection instead
+	// of only on the step. For a cloud vendor the host is a rare override and
+	// the advanced per-step base_url is the right home; for a local runtime the
+	// host IS the configuration, and retyping it on every step is unusable.
+	// The field is plain (not secret) so it stays visible in node output, and
+	// injectConnectionDefaults leaves an author's per-step override alone.
+	BaseURLLabel       string
+	BaseURLPlaceholder string
+	BaseURLHelp        string
 	// VerifyKey, when set, checks that an API key is usable WITHOUT a
 	// token-costing generation — typically a GET to the provider's models
 	// endpoint (see GetStatus). RegisterAll wires it into the connection
@@ -82,10 +96,10 @@ func RegisterAll(cfg Config) {
 		integration := cfg.Integration
 		engine.RegisterConnectionVerifier(integration, func(ctx context.Context, conn map[string]string) error {
 			key := strings.TrimSpace(conn["api_key"])
-			if key == "" {
+			if key == "" && !cfg.KeyOptional {
 				return fmt.Errorf("no API key — paste your %s API key to connect", integration)
 			}
-			return verify(ctx, key, "")
+			return verify(ctx, key, strings.TrimSpace(conn["base_url"]))
 		})
 	}
 }
@@ -192,7 +206,7 @@ func HTTPError(codePrefix, label string, status int, detail string) *core.JobErr
 
 func resolveKey(job core.Job, cfg Config) (string, *core.JobError) {
 	k, _ := params.StringOpt(job.Params, "api_key")
-	if k == "" {
+	if k == "" && !cfg.KeyOptional {
 		return "", &core.JobError{Code: "bad_param", Message: "no API key — connect " + cfg.Integration + " on the Apps page to set it"}
 	}
 	return k, nil
@@ -266,9 +280,37 @@ func coerceText(v any) string {
 // --- manifest helpers -------------------------------------------------------
 
 func connFields(cfg Config) []core.ConnectionField {
-	return []core.ConnectionField{
-		{Key: "api_key", Label: "API key", Secret: true, Required: true, Placeholder: cfg.KeyPlaceholder},
+	fields := []core.ConnectionField{
+		{Key: "api_key", Label: "API key", Secret: true, Required: !cfg.KeyOptional, Placeholder: cfg.KeyPlaceholder},
 	}
+	if cfg.BaseURLLabel != "" {
+		fields = append(fields, core.ConnectionField{
+			Key: "base_url", Label: cfg.BaseURLLabel, Required: true,
+			Placeholder: cfg.BaseURLPlaceholder, Help: cfg.BaseURLHelp,
+		})
+	}
+	return fields
+}
+
+// connNote and unsetHint are the "where do credentials come from" line on a
+// params example. They differ per provider because the mistake each one heads
+// off differs: a keyed provider's reader is about to paste an API key onto the
+// step, while a keyless one has no key to paste and instead needs to know the
+// server address is not a per-step setting either.
+func connNote(cfg Config) string {
+	if cfg.KeyOptional {
+		return "The server URL comes from the connection — leave base_url unset."
+	}
+	return "The API key comes from the connection — leave api_key unset."
+}
+
+// unsetHint is the same fact as a trailing clause, for examples that run it on
+// after a semicolon rather than as its own sentence.
+func unsetHint(cfg Config) string {
+	if cfg.KeyOptional {
+		return "leave base_url unset."
+	}
+	return "leave api_key unset."
 }
 
 func taskID(cfg Config, task string) string { return cfg.TaskIDPrefix + "_" + task }
@@ -276,14 +318,22 @@ func taskID(cfg Config, task string) string { return cfg.TaskIDPrefix + "_" + ta
 // baseProps returns the params every drop shares: the model picker plus the
 // advanced api_key / base_url / timeout knobs.
 func baseProps(cfg Config) map[string]any {
-	enum := make([]any, len(cfg.Models))
-	names := make([]any, len(cfg.Models))
-	for i, m := range cfg.Models {
-		enum[i] = m.ID
-		names[i] = m.Label
+	// A vendor with a published catalog gets a picker. A local runtime serves
+	// whatever the operator has pulled, so it gets a free-text field instead —
+	// an enum there would be a guess that hides every model the user has.
+	modelProp := map[string]any{"type": "string", "title": "Model", "x_advanced": true, "default": cfg.DefaultModel}
+	if len(cfg.Models) > 0 {
+		enum := make([]any, len(cfg.Models))
+		names := make([]any, len(cfg.Models))
+		for i, m := range cfg.Models {
+			enum[i] = m.ID
+			names[i] = m.Label
+		}
+		modelProp["enum"] = enum
+		modelProp["enumNames"] = names
 	}
 	return map[string]any{
-		"model":      map[string]any{"type": "string", "title": "Model", "x_advanced": true, "enum": enum, "enumNames": names, "default": cfg.DefaultModel},
+		"model":      modelProp,
 		"api_key":    map[string]any{"type": "string", "x_advanced": true, "description": "Injected from the " + cfg.Integration + " connection — leave unset."},
 		"base_url":   map[string]any{"type": "string", "x_advanced": true, "description": "Override the API host."},
 		"timeout_ms": map[string]any{"type": "integer", "default": 60000, "minimum": 1, "description": "Hard deadline for the AI request, in milliseconds."},

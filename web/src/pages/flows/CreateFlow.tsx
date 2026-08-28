@@ -43,8 +43,8 @@ type CreateTab = "ai" | "blank" | "template";
 //    beginner a WORKING flow without them designing anything, and the only one
 //    with no external dependency. AI used to be the default on the theory that
 //    it was the fastest path for a non-technical user — but it needs a
-//    connected Claude/OpenAI account, so on a fresh or self-hosted workspace
-//    the default tab was a dead end that asked the user to go connect a paid
+//    connected AI provider, so on a fresh or self-hosted workspace the
+//    default tab was a dead end that asked the user to go connect a paid
 //    service before they had seen the product do anything.
 //  - "AI assisted": describe a flow and let AI draft it.
 //  - "Blank": name + description, an empty graph opened in the editor.

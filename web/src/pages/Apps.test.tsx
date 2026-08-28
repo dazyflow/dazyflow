@@ -245,7 +245,7 @@ describe("Apps index", () => {
     expect(screen.getByText("Needy")).toBeInTheDocument();
   });
 
-  // The pre-existing deep link (?category=ai, from "Connect Claude or ChatGPT")
+  // The pre-existing deep link (?category=ai, from "Connect an AI provider")
   // has to keep working: it is the same parameter the dropdown now writes.
   it("honours a ?category= deep link", async () => {
     listDrops.mockResolvedValue({

@@ -35,6 +35,7 @@ import (
 	_ "git.sr.ht/~klahr/dazyflow/drops/notify"
 	_ "git.sr.ht/~klahr/dazyflow/drops/notion"
 	_ "git.sr.ht/~klahr/dazyflow/drops/nshift"
+	_ "git.sr.ht/~klahr/dazyflow/drops/ollama"
 	_ "git.sr.ht/~klahr/dazyflow/drops/openai"
 	_ "git.sr.ht/~klahr/dazyflow/drops/openmeteo"
 	_ "git.sr.ht/~klahr/dazyflow/drops/roaring"

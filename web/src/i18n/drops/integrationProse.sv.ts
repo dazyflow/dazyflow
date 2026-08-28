@@ -201,6 +201,14 @@ export const SV_INTEGRATION_PROSE: DescriptionMap = {
     en: "c0599cd8",
     sv: "Push-notiser till din telefon via ntfy.sh eller en egen ntfy-server. Snabbt att koppla upp — ingen app att installera, du prenumererar bara på ett ämne — så det passar utmärkt för driftaviseringar som snabbt måste nå någon.",
   },
+  "ollama.description": {
+    en: "9d016eb4",
+    sv: "Kör prompter genom en modell på hårdvara du själv styr över — din egen dator eller en server du driftar — i stället för ett molnkonto. Använd den på samma sätt som Claude eller ChatGPT: sammanfatta text, klassificera indata, extrahera fält, skriv utkast till svar. Ta den när texten inte bör lämna din infrastruktur, eller när du hellre slipper betala per anrop.",
+  },
+  "ollama.technical_notes": {
+    en: "220ac7cd",
+    sv: "Ollamas OpenAI-kompatibla chattändpunkt. Server-URL:en sitter på den här anslutningen (standard http://localhost:11434); en API-nyckel är valfri och behövs bara om din instans står bakom en proxy som kräver autentisering. Modellerna är de du har hämtat hem, så modellfältet är fritext i stället för en lista. Extrahera fält och Klassificera kräver en modell som klarar tool-calls (llama3.1, qwen2.5, mistral-nemo och liknande) — om en modell ignorerar det påtvingade verktygsanropet faller steget tillbaka på att läsa JSON ur svaret. En server på localhost kräver dessutom att DAZYFLOW_ALLOW_PRIVATE_EGRESS är satt på daemonen, eftersom SSRF-skyddet blockerar privata adresser som standard.",
+  },
   "open-meteo.description": {
     en: "1d59e78f",
     sv: "Läs vädret för vilken punkt som helst på kartan — kostnadsfritt för privat, icke-kommersiell användning, utan konto och API-nyckel. Ge ett steg en koordinat — skriven, eller inkopplad från en geokodning, ett formulärfält eller en enhets GPS — och få aktuellt väderläge (en sammanfattning på en rad, temperaturen och ett Clear/Rain/Snow-ord du kan förgrena på) eller en flerdygnsprognos. Bygg ett flöde som \"sms:a mig om det regnar i morgon\", en morgonbriefing eller en frostvarning för växthuset. För kommersiell användning lägger du till en API-nyckel, varpå den växlar till Open-Meteos betalda ändpunkt.",

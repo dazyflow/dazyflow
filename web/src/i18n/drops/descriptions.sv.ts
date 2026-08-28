@@ -393,6 +393,26 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     en: "21c290ba",
     sv: "Skickar ut ett fast numeriskt värde. Senare steg ser det som ett JSON-tal på porten 'out' — koppla det till en jämförelse (Inom intervall, Jämför), en operator eller ett numeriskt indata som varaktigheten i ett Fördröjning-steg.",
   },
+  ollama: {
+    en: "76d1996e",
+    sv: "Skicka en prompt och få ett svar tillbaka — sammanfatta text från ett tidigare steg, klassificera ett indata eller generera text. Koppla in texten som ska bearbetas i ingången Prompt, eller skriv en prompt direkt på steget.",
+  },
+  ollama_classify: {
+    en: "0c748850",
+    sv: "Ge AI:n en lista med kategorier och den väljer den enda som passar bäst — dirigera supportmejl, märk upp leads, flagga skräppost. Koppla utgången Kategori till ett Förgrening-steg.",
+  },
+  ollama_draft_reply: {
+    en: "f32ad9ad",
+    sv: "Mata in ett inkommande mejl eller meddelande och få tillbaka ett färdigt utkast. Välj tonläge och lägg till instruktioner. Kombinera med Vänta på godkännande innan något skickas.",
+  },
+  ollama_extract: {
+    en: "3cc059e0",
+    sv: "Beskriv fälten du vill ha — som belopp, förfallodatum eller kundnamn — och AI:n läser texten och fyller i dem. Perfekt för att göra rader av fakturor, mejl och formulärsvar.",
+  },
+  ollama_summarize: {
+    en: "37e982bf",
+    sv: "Mata in vilken text som helst — ett mejl, ett dokument, en rad med anteckningar — och få tillbaka en kort sammanfattning. Välj hur kort den ska vara och om du vill ha en mening, ett stycke eller punktlista.",
+  },
   openmeteo_current: {
     en: "671a4553",
     sv: "Slå upp vädret just nu för vilken punkt som helst på kartan med Open-Meteos kostnadsfria prognos — inget konto och ingen API-nyckel för privat, icke-kommersiell användning. Ge den en koordinat — skriv Latitud och Longitud, eller koppla in ett \"lat,lon\"-värde från ett Plats-/geokodningssteg — och du får tillbaka en Sammanfattning på en rad plus Temperaturen och ett Väderläge-ord (Clear, Rain, Snow …) som du kan förgrena på, samt hela svaret som JSON. För kommersiell användning lägger du in din Open-Meteo API-nyckel på integrationssidan, varpå den växlar till den betalda ändpunkten.",

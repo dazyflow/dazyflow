@@ -39,7 +39,7 @@ func askDrop(cfg Config) engine.NativeDrop {
 			Provider:    "internal",
 			Tags:        tags(cfg, "prompt", "llm", "ask"),
 			Examples: []core.ParamsExample{
-				{Title: "One-shot summary", Params: json.RawMessage(`{"prompt":"Summarize the text from an earlier step in one sentence."}`), Notes: "Connect the text into the Prompt input. The API key comes from the connection — leave api_key unset."},
+				{Title: "One-shot summary", Params: json.RawMessage(`{"prompt":"Summarize the text from an earlier step in one sentence."}`), Notes: "Connect the text into the Prompt input. " + connNote(cfg)},
 			},
 			ConnectionFields: connFields(cfg),
 			ExecutionModel:   core.ExecutionBatch,
@@ -113,7 +113,7 @@ func summarizeDrop(cfg Config) engine.NativeDrop {
 			Integration: cfg.Integration, Category: "ai", Icon: cfg.Icon, Color: cfg.Color, BrandLogo: cfg.BrandLogo,
 			Provider: "internal", Tags: tags(cfg, "summary", "summarize", "text", "tldr"),
 			Examples: []core.ParamsExample{
-				{Title: "One-sentence summary", Params: json.RawMessage(`{"style":"one_line"}`), Notes: "Connect the text to summarize into the Text input; leave api_key unset."},
+				{Title: "One-sentence summary", Params: json.RawMessage(`{"style":"one_line"}`), Notes: "Connect the text to summarize into the Text input; " + unsetHint(cfg)},
 			},
 			ConnectionFields: connFields(cfg),
 			ExecutionModel:   core.ExecutionBatch, ProcessModel: core.ProcessLongLived,

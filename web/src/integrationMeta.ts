@@ -409,6 +409,14 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
       "OpenAI Chat Completions API, authenticated with the API key set on this connection — flows pick it up automatically, no key on the step. Structured steps (Extract fields, Classify) use OpenAI function tool-calls.",
     docs_url: "https://platform.openai.com/docs",
   },
+  ollama: {
+    name: "Ollama",
+    description:
+      "Run prompts through a model on hardware you control — your own machine or a server you host — instead of a cloud account. Use it the same way as Claude or ChatGPT: summarise text, classify inputs, extract fields, draft replies. Reach for it when the text should not leave your infrastructure, or when you would rather not pay per request.",
+    technical_notes:
+      "Ollama's OpenAI-compatible chat endpoint. The Server URL lives on this connection (default http://localhost:11434); an API key is optional and only needed when your instance sits behind an authenticating proxy. Models are whatever you have pulled, so the model field is free text rather than a picker. Extract fields and Classify need a tool-capable model (llama3.1, qwen2.5, mistral-nemo and similar) — when a model ignores the forced tool call, the step falls back to reading JSON out of the reply. A localhost server also needs DAZYFLOW_ALLOW_PRIVATE_EGRESS set on the daemon, since the SSRF guard blocks private addresses by default.",
+    docs_url: "https://ollama.com/",
+  },
   git: {
     name: "Git",
     description:
