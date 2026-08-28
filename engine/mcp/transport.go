@@ -179,8 +179,21 @@ func synthesizeManifest(server, label string, tool Tool, brandLogo string) core.
 	// the schema declares is still settable as a param — see toolInputPorts for
 	// what earns a port and what does not.
 	inputs := append(toolInputPorts(tool.InputSchema), core.Port{
-		Port:  toolOverlayPort,
-		Label: "Optional JSON object merged with params before the tool call",
+		Port: toolOverlayPort,
+		// A NAME, not a sentence. Label is what the editor prints on the port
+		// and what the docs put in the catalog's "Name" column, and this used
+		// to read "Optional JSON object merged with params before the tool
+		// call" — 60 characters against a mean of 9 across the 700 ports in the
+		// tree, and half again longer than the next longest.
+		//
+		// Nothing was lost in shortening it: the two tables that show a port
+		// already carry "optional" (the Required column) and "JSON object" (the
+		// Type column), so the label was repeating both and only "extra params
+		// merged in" was its own. core.Port has no description field — that is
+		// the actual gap, and why a sentence ended up in the name — so if this
+		// wants explaining at length, give Port a Description rather than
+		// growing the label back.
+		Label: "Extra params",
 		// Every MCP input is inline-only: the server is another process (and
 		// over HTTP, another machine), while a Ref's path is on the DAEMON's
 		// disk. A job carrying one is refused before the step runs, with that

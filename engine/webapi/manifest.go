@@ -56,8 +56,10 @@ func synthesizeManifest(desc Descriptor, op Operation) core.Manifest {
 		})
 	}
 	inputs = append(inputs, core.Port{
-		Port:       overlayPort,
-		Label:      "Optional JSON object merged with params before the call",
+		Port: overlayPort,
+		// Kept in step with engine/mcp's overlay port, which carries the note
+		// on why this is a short name and not the sentence it used to be.
+		Label:      "Extra params",
 		InlineOnly: true,
 	})
 
