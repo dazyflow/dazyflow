@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.26.5] - 2026-08-29
+
 ### Added
 
 - **A running script now says what it is doing.** The "Run on your machine"
