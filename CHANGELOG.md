@@ -23,6 +23,19 @@ into the image.)
 
 ## [Unreleased]
 
+### Fixed
+
+- **Release images now carry the commit they were built from.** CI built them
+  with no `--build-arg`, so the Dockerfile's `ARG COMMIT=unknown` default stood
+  and every published image reported `commit: unknown` — 0.26.2 shipped that
+  way. The version was right only because `ARG VERSION=` falls back to the
+  committed `./VERSION`; `COMMIT` has no such fallback, and a build you cannot
+  trace to a commit is one you cannot bisect against.
+
+  `VERSION` is still passed as the tag, which is deliberately EMPTY on a branch
+  build so the `./VERSION` fallback keeps working — a non-empty placeholder
+  there is what once made every non-Makefile build call itself `dev`.
+
 ## [0.26.2] - 2026-08-29
 
 ### Added

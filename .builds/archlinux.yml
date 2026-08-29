@@ -194,7 +194,18 @@ tasks:
       cd dazyflow
       TAG=$(git describe --exact-match --tags HEAD 2>/dev/null || true)
       VER=${TAG:-ci}
-      podman build -t dazyflow-dzd:$VER .
+      # Stamp the binary. VERSION is passed as $TAG, which is EMPTY on a branch
+      # build — deliberately: the Dockerfile falls back to the committed
+      # ./VERSION when this arg is empty, and a non-empty placeholder would
+      # SHADOW that fallback, which is the bug that had every non-Makefile
+      # build reporting itself as "dev". COMMIT has no fallback at all
+      # (ARG COMMIT=unknown), so without passing it a running binary cannot be
+      # traced back to a commit — 0.26.2 shipped reporting commit=unknown.
+      podman build \
+        --build-arg VERSION="$TAG" \
+        --build-arg COMMIT="$(git rev-parse --short HEAD)" \
+        --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        -t dazyflow-dzd:$VER .
       # The docs site image (docs.dazyflow.app) — deploy/ references it but
       # nothing exercises Dockerfile.docs otherwise. Same rootless podman.
       podman build -f Dockerfile.docs -t dazyflow-docs:$VER .
