@@ -61,10 +61,23 @@ export function friendlyTokenText(raw: string, labels?: TokenLabels): string | n
   return null;
 }
 
-// TOKEN_SCAN finds every ${scheme.path} token in a string — FULL_TOKEN
-// unanchored, so it matches tokens embedded in surrounding prose
-// ("Deadline: ${upstream.date_1.out}") as well as a whole-value one.
-const TOKEN_SCAN = /\$\{[A-Za-z]+\.[^}]*\}/g;
+// TOKEN_PATTERN finds a ${scheme.path} token — FULL_TOKEN unanchored, so it
+// matches one embedded in surrounding prose ("Deadline: ${upstream.date_1.out}")
+// as well as a whole-value one.
+//
+// Kept as SOURCE, not as a shared /g RegExp, and that is load-bearing. A
+// global regex carries lastIndex between calls: `test()` leaves it at the end
+// of the match it just found, and `matchAll` starts from wherever it was left.
+// Since every display surface asks hasToken() first and then tokenizes, the
+// scan began PAST the only token in the value and found nothing — so the chip
+// container rendered around zero chips and the raw ${…} syntax showed through,
+// on every card, for every scheme. Resetting lastIndex in one of the two
+// functions is what made it look fixed while staying broken.
+const TOKEN_PATTERN = String.raw`\$\{[A-Za-z]+\.[^}]*\}`;
+
+// Stateless: no /g, so there is no lastIndex to carry and test() cannot leave
+// anything behind for the next caller.
+const TOKEN_TEST = new RegExp(TOKEN_PATTERN);
 
 // SECRET_FULL_REF matches a token that is exactly one secret reference, whose
 // friendly label is just the secret's name.
@@ -80,7 +93,9 @@ export type TokenSegment =
 export function tokenizeValue(value: string): TokenSegment[] {
   const segs: TokenSegment[] = [];
   let last = 0;
-  for (const m of value.matchAll(TOKEN_SCAN)) {
+  // A fresh instance per call — matchAll copies the regex's lastIndex, so a
+  // shared one would resume mid-string.
+  for (const m of value.matchAll(new RegExp(TOKEN_PATTERN, "g"))) {
     const i = m.index ?? 0;
     if (i > last) segs.push({ kind: "text", text: value.slice(last, i) });
     segs.push({ kind: "token", token: m[0] });
@@ -94,8 +109,7 @@ export function tokenizeValue(value: string): TokenSegment[] {
 // question a display surface asks: raw token syntax is never shown to a user,
 // so a value containing one renders as chips rather than as text.
 export function hasToken(value: string): boolean {
-  TOKEN_SCAN.lastIndex = 0;
-  return TOKEN_SCAN.test(value);
+  return TOKEN_TEST.test(value);
 }
 
 // tokenChipLabel is the words one chip shows: a secret's own name, else the

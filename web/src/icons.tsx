@@ -268,6 +268,82 @@ export function isBrandedIcon(name?: string): boolean {
   return !!name && brandedIcons.has(name);
 }
 
+// DROP_ICON_TINT is how strongly a drop's colour shows behind its glyph.
+// One number, because the four surfaces that draw a step used to each carry
+// their own treatment and drifted: the canvas node and this palette painted a
+// saturated gradient behind a near-black glyph while the Inspector used a soft
+// tint behind a coloured one, so the same step looked like two different things
+// depending on which half of the screen you read.
+export const DROP_ICON_TINT = "22%";
+
+// DropIcon is the ONE way a step's icon reaches a screen — the canvas node, the
+// Ctrl+K palette, the Apps cards, the config checklist and the Inspector header.
+// It existed as four hand-copied blocks before, which is how they diverged.
+//
+// Three cases, in order:
+//
+//  1. brand_logo — a real vendor mark (Ollama's llama). An <img>, no backdrop:
+//     the logo carries its own shape and colour.
+//  2. a BRANDED glyph (isBrandedIcon: Git's orange mark, ntfy, the model
+//     logos) — self-coloured, so it renders flush too. A tint behind it fights
+//     the colour it already has. The Inspector used to tint these; it no
+//     longer does, which is the one visible change from unifying this.
+//  3. anything else — a lucide glyph in the drop's colour, on that colour at
+//     DROP_ICON_TINT.
+//
+// The CONTAINER class stays the caller's (`icon`, `inspector-drop-icon`, …):
+// each surface sizes its own box in CSS, and only the treatment inside is
+// shared. glyphSize is passed because a 28px node and a 32px panel header want
+// different glyphs in the same box.
+export function DropIcon({
+  icon,
+  category,
+  brandColor,
+  brandLogo,
+  glyphSize,
+  className = "icon",
+}: {
+  icon?: string;
+  category?: string;
+  brandColor?: string;
+  brandLogo?: string;
+  glyphSize: number;
+  className?: string;
+}) {
+  if (brandLogo) {
+    return (
+      <div className={className + " brand-logo"}>
+        <img src={brandLogo} alt="" draggable={false} />
+      </div>
+    );
+  }
+  const Glyph = iconFor(icon, category);
+  if (isBrandedIcon(icon)) {
+    // color: inherit is set HERE rather than left to CSS, because leaving it
+    // to CSS is what made the Ollama and Git marks invisible in the Ctrl+K
+    // palette. Three surfaces had a `.icon.branded { color: inherit }` rule
+    // and one did not — and that one also set `color: var(--accent-ink)`
+    // (#140d30) on `.icon`, so the glyph rendered near-black on a dark
+    // surface. Nothing was missing; it was drawn in the background colour.
+    //
+    // Inline, it cannot be forgotten by the next surface that renders a step.
+    return (
+      <div className={className + " branded"} style={{ color: "inherit", background: "transparent" }}>
+        <Glyph size={glyphSize} strokeWidth={2.2} />
+      </div>
+    );
+  }
+  const color = dropColor(category, brandColor);
+  return (
+    <div
+      className={className}
+      style={{ color, background: `color-mix(in srgb, ${color} ${DROP_ICON_TINT}, transparent)` }}
+    >
+      <Glyph size={glyphSize} strokeWidth={2.2} />
+    </div>
+  );
+}
+
 // FlowIcon renders a flow's icon consistently wherever it appears (the
 // sidebar list, the flow cards): an uploaded image (data: URL / path)
 // as an <img>, otherwise the logical lucide glyph via iconFor, falling

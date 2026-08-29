@@ -527,7 +527,7 @@
       "bearerSecret": "Secret keys",
       "generateTitle": "Add a new random key (the existing keys keep working)",
       "generate": "Generate a key",
-      "bearerSecretDesc": "Callers send <0>Authorization: Bearer &lt;a key&gt;</0> with every request. Any listed key works — add a new one, switch your callers over, then revoke the old one without downtime.",
+      "bearerSecretDesc": "Callers send <0>Authorization: Bearer …</0> with every request. Any listed key works — add a new one, switch your callers over, then revoke the old one without downtime.",
       "curlLabel": "Example request (curl)",
       "curlDesc": "The command works exactly as shown. A plain-text body arrives on the step's Data output as text; a JSON body (Content-Type: application/json) arrives as structured data you can pick fields from.",
       "cronExpression": "Cron expression",

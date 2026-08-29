@@ -8,7 +8,7 @@ import { useTranslation } from "react-i18next";
 import { api, APIError } from "../api";
 import { explainApiError } from "../lib/explainApiError";
 import { useAuth } from "../auth";
-import { iconFor, isBrandedIcon, dropColor, ICON } from "../icons";
+import { DropIcon, ICON, iconFor, isBrandedIcon } from "../icons";
 import {
   connectionText,
   integrationProse,
@@ -1542,30 +1542,16 @@ function dedupeRequirements(drops: Manifest[]): ConnectionRequirement[] {
 // JSON, for a page whose job is "what does this app do".
 function DropCard({ drop }: { drop: Manifest }) {
   const { t, i18n } = useTranslation();
-  const Icon = iconFor(drop.icon, drop.category);
-  const branded = isBrandedIcon(drop.icon);
-  const color = dropColor(drop.category, drop.color);
   return (
     <div className="drop-card">
       <div className="drop-card-head">
-        {drop.brand_logo ? (
-          <div className="icon brand-logo">
-            <img src={drop.brand_logo} alt="" draggable={false} />
-          </div>
-        ) : branded ? (
-          <div className="icon branded">
-            <Icon size={22} strokeWidth={2.2} />
-          </div>
-        ) : (
-          <div
-            className="icon"
-            style={{
-              background: `linear-gradient(135deg, ${color}, color-mix(in srgb, ${color} 70%, #fff))`,
-            }}
-          >
-            <Icon size={ICON.md} color="#140d30" strokeWidth={2.2} />
-          </div>
-        )}
+        <DropIcon
+          icon={drop.icon}
+          category={drop.category}
+          brandColor={drop.color}
+          brandLogo={drop.brand_logo}
+          glyphSize={ICON.md}
+        />
         <div className="drop-card-title">
           <h3>
             {dropLabel(drop, i18n.language)}

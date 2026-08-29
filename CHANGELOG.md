@@ -46,7 +46,88 @@ into the image.)
   codes) still falls through to the value, matching `rawValueEnums` on the Go
   side.
 
+- **A guard against `.test()` on a global regex.** It is always a bug: a `/g`
+  regex carries `lastIndex`, `test()` advances it, so the same question asked
+  twice gives different answers and any later scan of that regex starts
+  mid-string. That is what hid the reference chips.
+
+  The rule is deliberately narrow rather than a general ban on shared regex
+  state. `test()` wants a boolean and gains nothing from statefulness, so
+  there are no legitimate exceptions to carve out — while an `exec()` loop
+  that resets at entry, and `matchAll()`, which clones rather than mutates,
+  are both fine and both still in use here.
+
+  It catches all three shapes: a binding from a literal, one from
+  `new RegExp(…, "g")`, and an inline `/…/g.test(x)`. An audit alongside it
+  found no other instance — the five remaining global regexes are either
+  function-local, `matchAll`-only, or disciplined `exec` loops.
+
+- **One `DropIcon` component draws every step icon.** The canvas node, the
+  Ctrl+K palette, the Apps cards, the config checklist and the Inspector header
+  each hand-rolled the same three-way branch — brand logo, self-coloured glyph,
+  tinted glyph — and had drifted apart in every way they could. The canvas and
+  palette painted a saturated gradient behind a near-black glyph while the
+  Inspector used a soft tint behind a coloured one, so the same step looked
+  like two different things depending on which half of the screen you read.
+  The checklist rendered branded glyphs at one size and tiled ones at another,
+  in the same list.
+
+  They now share one component, one tint, and one answer to what a branded
+  glyph looks like. Two visible consequences, both deliberate: the Inspector no
+  longer tints self-coloured marks (Git's orange, the model logos), matching
+  what the other four surfaces always did and the reason the card gave for it;
+  and its tint moved from 14% to the shared 22%.
+
+
 ### Fixed
+
+- **Self-coloured icons were invisible in the step search.** Ollama, Git and
+  ntfy render as their own marks with no backdrop, taking their colour from
+  whatever contains them. Three surfaces set that colour; the Ctrl+K palette
+  did not — and it also set `color: var(--accent-ink)` (#140d30) on the icon
+  box, so the glyph was drawn near-black on a dark panel. Nothing was missing
+  from the row; the icon was painted in the background colour.
+
+  `DropIcon` now sets that colour itself rather than leaving it to whichever
+  stylesheet rule happens to match, so a surface cannot forget it.
+
+- **Node cards showed raw `${…}` syntax instead of reference chips.** On every
+  card, for every reference — a trigger field, an upstream port, a secret, one
+  embedded in a sentence. The chip container rendered; it just had nothing in
+  it, with the raw token showing through beside the × that clears it.
+
+  Two helpers shared one global regex. A `/g` regex carries `lastIndex`, and
+  `test()` leaves it at the end of the match it just found. Every display
+  surface asks `hasToken()` first and tokenizes only if it says yes — so by
+  the time the tokenizer ran, the scan started PAST the only token in the
+  value and found none. `hasToken` reset `lastIndex` before testing, which is
+  what made the bug look impossible: the reset was there, on the wrong side of
+  the call that mattered.
+
+  The pattern is now held as source, with a stateless (non-global) regex for
+  the test and a fresh instance per tokenize, so there is no shared state left
+  to carry.
+
+  The existing tests all passed against this. Each called the tokenizer on a
+  fresh value with `lastIndex` still at zero — the one order the real code
+  never uses. The new tests call `hasToken` first, which is the only way to
+  see it.
+
+- **`&lt;` and `&gt;` were showing up on screen.** The bearer-key help read
+  "Callers send `Authorization: Bearer &lt;a key&gt;`" — in English and in
+  Swedish, since the escape was copied into both. HTML entities do not decode
+  on either rendering path: a `<Trans>` string is parsed for its component
+  slots, not un-escaped, and a plain `t()` string is inserted as text.
+
+  The escape was the careful-looking move that made it worse. A literal
+  `<a key>` inside a Trans string really would be eaten as a tag, so escaping
+  it swapped a placeholder that vanished for one that was visibly broken. The
+  answer was to stop needing the brackets: a sibling string a few keys away
+  already wrote `Authorization: Bearer …`, and that is now what both say.
+
+  A guard walks every translation file and fails on any HTML entity, naming
+  the two ways out — reword, or interpolate the value in, which is not parsed
+  as markup either way.
 
 - **Read JSON refused to hand you a single field.** Its `path` is a dot-path,
   and pointing it at one value — `version` in `{"version":"0.27.0"}` — dug

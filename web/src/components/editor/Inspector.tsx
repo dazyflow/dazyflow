@@ -7,7 +7,7 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { X, Trash2, Play, Square, BellRing, Repeat } from "lucide-react";
 import { HelpPopover } from "../ui/HelpPopover";
-import { iconFor, dropColor as resolveDropColor, ICON } from "../../icons";
+import { DropIcon, ICON, iconFor } from "../../icons";
 import type { DazyNodeData } from "./nodeCardShared";
 import {
   SchemaForm,
@@ -288,12 +288,14 @@ export function Inspector({
     !!schema &&
     schema.type === "object" &&
     Object.keys(schema.properties ?? {}).length === 0;
-  // Drop identity for the header — the same icon + color the canvas node
-  // shows, so the inspector reads as "this drop" at a glance rather than a
-  // generic panel. Mirrors NodeCard's icon resolution.
-  const DropIcon = iconFor(d.manifest?.icon, d.manifest?.category);
-  const dropColor = resolveDropColor(d.manifest?.category, d.manifest?.color);
+  // Drop identity for the header — literally the same component the canvas
+  // node, the step palette and the Apps cards draw, so "this drop" looks like
+  // itself wherever you meet it. This used to be a hand-copied variant that
+  // resolved the icon the same way but painted it differently.
   const brandLogo = d.manifest?.brand_logo;
+  // The bare glyph, for the "connect this app" button below — that one wants
+  // an icon inside a button, not the tiled DropIcon treatment.
+  const Glyph = iconFor(d.manifest?.icon, d.manifest?.category);
   // The cron_trigger node owns its schedule (Phase 2). In form mode we
   // render the friendly preset picker (presets + time + "next fires"
   // preview) instead of a raw cron text box — the same control the
@@ -357,19 +359,14 @@ export function Inspector({
         <span className="inspector-identity">
           {/* The drop's own icon + color, matching the canvas node, so the
               panel reads as the thing you're editing. */}
-          <span
+          <DropIcon
+            icon={d.manifest?.icon}
+            category={d.manifest?.category}
+            brandColor={d.manifest?.color}
+            brandLogo={brandLogo}
+            glyphSize={ICON.lg}
             className="inspector-drop-icon"
-            style={{
-              color: dropColor,
-              background: `color-mix(in srgb, ${dropColor} 14%, transparent)`,
-            }}
-          >
-            {brandLogo ? (
-              <img src={brandLogo} alt="" draggable={false} />
-            ) : (
-              <DropIcon size={ICON.lg} strokeWidth={2.2} />
-            )}
-          </span>
+          />
           <span className="inspector-identity-text">
             {/* The node's display name, edited inline as the title — this
                 replaces the old separate "Label" field. */}
@@ -443,7 +440,7 @@ export function Inspector({
                   {brandLogo ? (
                     <img src={brandLogo} alt="" draggable={false} />
                   ) : (
-                    <DropIcon size={ICON.sm} strokeWidth={2.2} />
+                    <Glyph size={ICON.sm} strokeWidth={2.2} />
                   )}
                   {t("nodeCard.connect", { name: setupNeeded.integration })}
                 </Button>

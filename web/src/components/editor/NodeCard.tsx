@@ -8,7 +8,7 @@ import i18n from "../../i18n";
 import { portTypeLabel } from "../../lib/ports";
 import { telFieldFlag, regionDisplayName } from "../../lib/phoneFlag";
 import { Switch } from "../ui/Switch";
-import { iconFor, isBrandedIcon, dropColor, ICON } from "../../icons";
+import { DropIcon, ICON, dropColor, iconFor } from "../../icons";
 import { glyphFor, languageOf, type LangGlyph } from "../../lib/langBadge";
 import { ScriptEditor } from "../ui/ScriptEditor";
 import { scriptLangFor, type ScriptLang } from "../../lib/scriptHighlight";
@@ -354,24 +354,13 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
       )}
 
       <div className="dz-node-main">
-        {d.manifest?.brand_logo ? (
-          <div className="icon brand-logo">
-            <img src={d.manifest.brand_logo} alt="" draggable={false} />
-          </div>
-        ) : isBrandedIcon(d.manifest?.icon) ? (
-          <div className="icon branded">
-            <Icon size={22} strokeWidth={2.2} />
-          </div>
-        ) : (
-          <div
-            className="icon"
-            style={{
-              background: `linear-gradient(135deg, ${color}, color-mix(in srgb, ${color} 70%, #fff))`,
-            }}
-          >
-            <Icon size={ICON.md} color="#140d30" strokeWidth={2.2} />
-          </div>
-        )}
+        <DropIcon
+          icon={d.manifest?.icon}
+          category={d.manifest?.category}
+          brandColor={d.manifest?.color}
+          brandLogo={d.manifest?.brand_logo}
+          glyphSize={ICON.md}
+        />
         <div className="dz-node-body">
           <div className="label">{d.label}</div>
           {d.manifest?.subtitle && (

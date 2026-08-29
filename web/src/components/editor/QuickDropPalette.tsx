@@ -11,7 +11,7 @@ import {
 } from "react";
 import { Search, Box } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { iconFor, isBrandedIcon, dropColor, ICON } from "../../icons";
+import { DropIcon, ICON } from "../../icons";
 import { Button } from "../ui/Button";
 import { scoreDrop } from "../../lib/dropSearch";
 import { dropCategoryLabel, dropLabel, dropSubtitle } from "../../lib/dropText";
@@ -349,9 +349,6 @@ function QuickRow({
 }) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
-  const Icon = iconFor(drop.icon, drop.category);
-  const color = dropColor(drop.category, drop.color);
-  const branded = isBrandedIcon(drop.icon);
   // Not pickable, for one of two reasons. Either a platform admin switched
   // this drop off, or its provider is registered but unreachable — an MCP
   // server that is down. Both stay in the list for awareness, greyed-out:
@@ -379,24 +376,13 @@ function QuickRow({
       aria-selected={active}
       aria-disabled={disabled}
     >
-      {drop.brand_logo ? (
-        <div className="icon brand-logo">
-          <img src={drop.brand_logo} alt="" draggable={false} />
-        </div>
-      ) : branded ? (
-        <div className="icon branded">
-          <Icon size={24} strokeWidth={2.2} />
-        </div>
-      ) : (
-        <div
-          className="icon"
-          style={{
-            background: `linear-gradient(135deg, ${color}, color-mix(in srgb, ${color} 70%, #fff))`,
-          }}
-        >
-          <Icon size={ICON.md} color="#140d30" strokeWidth={2.2} />
-        </div>
-      )}
+      <DropIcon
+        icon={drop.icon}
+        category={drop.category}
+        brandColor={drop.color}
+        brandLogo={drop.brand_logo}
+        glyphSize={ICON.md}
+      />
       <div className="quick-palette-row-text">
         <div className="quick-palette-row-name">{dropLabel(drop, lang)}</div>
         <div className="quick-palette-row-meta">

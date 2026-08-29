@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { AlertCircle, ChevronRight, X } from "lucide-react";
 import { Button } from "../ui/Button";
-import { iconFor, isBrandedIcon, dropColor, ICON } from "../../icons";
+import { DropIcon, ICON } from "../../icons";
 import { useEscapeToClose } from "../ui/useEscapeToClose";
 
 // ConfigChecklistModal replaces the old "N to configure" popover with a
@@ -29,36 +29,19 @@ export type ConfigChecklistEntry = {
   };
 };
 
-// StepIcon renders the same icon tile a node shows on the canvas: a brand
-// logo image, a self-coloured branded glyph, or a category-tinted gradient
-// tile with a lucide glyph. Mirrors the three-way branch in NodeCard so the
-// checklist reads as the flow does.
+// StepIcon adapts this modal's entry shape onto the shared DropIcon, so the
+// checklist reads exactly as the canvas does. It used to hand-roll the same
+// three-way branch, and had drifted into rendering branded glyphs at ICON.lg
+// and tiled ones at ICON.sm — two sizes in one list.
 function StepIcon({ icon }: { icon?: ConfigChecklistEntry["icon"] }) {
-  if (icon?.brandLogo) {
-    return (
-      <div className="icon brand-logo">
-        <img src={icon.brandLogo} alt="" draggable={false} />
-      </div>
-    );
-  }
-  const Glyph = iconFor(icon?.name, icon?.category);
-  if (isBrandedIcon(icon?.name)) {
-    return (
-      <div className="icon branded">
-        <Glyph size={ICON.lg} strokeWidth={2.2} />
-      </div>
-    );
-  }
-  const color = dropColor(icon?.category, icon?.color);
   return (
-    <div
-      className="icon"
-      style={{
-        background: `linear-gradient(135deg, ${color}, color-mix(in srgb, ${color} 70%, #fff))`,
-      }}
-    >
-      <Glyph size={ICON.sm} color="#140d30" strokeWidth={2.2} />
-    </div>
+    <DropIcon
+      icon={icon?.name}
+      category={icon?.category}
+      brandColor={icon?.color}
+      brandLogo={icon?.brandLogo}
+      glyphSize={ICON.md}
+    />
   );
 }
 

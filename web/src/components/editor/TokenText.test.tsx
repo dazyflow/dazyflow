@@ -14,6 +14,7 @@ vi.mock("../../i18n", () => ({
 }));
 
 import { TokenText } from "./TokenText";
+import { hasToken, tokenizeValue } from "./nodeCardShared";
 
 const labels = { "date_1.out": "Date & time · Formatted" };
 
@@ -73,5 +74,46 @@ describe("TokenText", () => {
       <TokenText value="${upstream.weird[}" labels={labels} />,
     );
     expect(container.textContent).toContain("upstream.weird");
+  });
+});
+
+// Every display surface asks hasToken() first and tokenizes only if it says
+// yes. That ORDER is the whole test: the helpers shared one global regex, and
+// a global regex carries lastIndex — test() left it at the end of the match it
+// had just found, so the tokenizer then started past the only token in the
+// value and found none. The chip container rendered around nothing and the raw
+// ${…} showed through.
+//
+// Every test above passes against that bug, because each calls the tokenizer
+// on a fresh value with lastIndex still at zero. Only the pair reproduces it.
+describe("after hasToken has run", () => {
+  it("still tokenizes the same value", () => {
+    const value = "${trigger.body.email}";
+    expect(hasToken(value)).toBe(true);
+    const segs = tokenizeValue(value);
+    expect(segs.filter((s) => s.kind === "token")).toHaveLength(1);
+  });
+
+  it("still chips, which is what the card actually does", () => {
+    const value = "${upstream.date_1.out}";
+    expect(hasToken(value)).toBe(true);
+    const { container } = render(<TokenText value={value} labels={labels} />);
+    expect(container.querySelectorAll(".dz-token-chip")).toHaveLength(1);
+    expect(container.textContent).not.toContain("${");
+  });
+
+  it("survives hasToken being asked about several values first", () => {
+    // A card asks per field, so by the time the third one tokenizes the shared
+    // state had been advanced repeatedly.
+    for (const v of ["${a.b}", "${c.d}", "prose ${e.f} more"]) hasToken(v);
+    expect(tokenizeValue("${trigger.body.id}").filter((s) => s.kind === "token")).toHaveLength(1);
+  });
+
+  it("reports the same answer when asked twice", () => {
+    // test() on a global regex alternates true/false on a repeated call —
+    // hasToken must be a pure question about the value.
+    const value = "${item.email}";
+    expect(hasToken(value)).toBe(true);
+    expect(hasToken(value)).toBe(true);
   });
 });

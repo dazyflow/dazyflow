@@ -527,7 +527,7 @@
       "bearerSecret": "Hemliga nycklar",
       "generateTitle": "Lägg till en ny slumpmässig nyckel (befintliga nycklar fortsätter fungera)",
       "generate": "Skapa en nyckel",
-      "bearerSecretDesc": "Anroparen skickar <0>Authorization: Bearer &lt;en nyckel&gt;</0> i varje anrop. Vilken som helst av nycklarna fungerar — lägg till en ny, ställ om dina anropare och återkalla sedan den gamla utan avbrott.",
+      "bearerSecretDesc": "Anroparen skickar <0>Authorization: Bearer …</0> i varje anrop. Vilken som helst av nycklarna fungerar — lägg till en ny, ställ om dina anropare och återkalla sedan den gamla utan avbrott.",
       "curlLabel": "Exempelanrop (curl)",
       "curlDesc": "Kommandot fungerar precis som det står. En body i klartext landar som text på stegets Data-utgång; en JSON-body (Content-Type: application/json) kommer in som strukturerad data du kan plocka fält ur.",
       "cronExpression": "Cron-uttryck",
