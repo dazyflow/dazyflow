@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../auth";
 import { api } from "../api";
-import { formatRelative, formatDateTime } from "../lib/datetime";
+import { formatRelative, formatDateTime, formatDate } from "../lib/datetime";
 import { ShareOverviewModal } from "../components/dialogs/ShareOverviewModal";
 import { Button } from "../components/ui/Button";
 import type { FlowSummary, PendingApproval, RunSummary } from "../types";
@@ -135,6 +135,12 @@ export function Dashboard() {
   const flowName = (id: string) =>
     flows.find((f) => f.id === id)?.name || id;
 
+  // Each stat tile deep-links to the runs page with the filter it counted by,
+  // so the number on the card and the list you land on agree. The runs page
+  // reads ?since=/?until= as local calendar days, so "today" is the same day
+  // startOfToday() used above.
+  const today = formatDate(new Date());
+
   const greeting = me?.subject ? me.subject.split("@")[0] : "";
 
   return (
@@ -171,7 +177,7 @@ export function Dashboard() {
           icon={<Activity size={ICON.lg} />}
           label={t("dashboard.runsToday")}
           value={loading ? "—" : String(stats.runsToday)}
-          to="/runs"
+          to={`/runs?since=${today}&until=${today}`}
         />
         <StatCard
           icon={<CheckCircle2 size={ICON.lg} />}
@@ -191,7 +197,7 @@ export function Dashboard() {
               ? "warn"
               : "good"
           }
-          to="/runs"
+          to="/runs?status=succeeded"
         />
         <StatCard
           icon={<AlertTriangle size={ICON.lg} />}

@@ -79,8 +79,10 @@ export function RunList() {
   // <input type="date">; they're resolved to local-midnight ISO instants
   // before the fetch (see dayStartISO/dayEndExclusiveISO). Server-side and
   // paginated — unlike the text `query`, which only narrows loaded rows.
-  const [since, setSince] = useState("");
-  const [until, setUntil] = useState("");
+  // Seeded from ?since=/?until= the same way the status chip is seeded from
+  // ?status=, so the dashboard's "Runs today" card lands on today's runs.
+  const [since, setSince] = useState(() => dateParam(searchParams, "since"));
+  const [until, setUntil] = useState(() => dateParam(searchParams, "until"));
   // Whether the FETCH was narrowed — status chip, flow picker, date range.
   // Deliberately excludes `query`, which only filters rows already loaded and
   // has its own "no matches" state below. This is what tells an empty response
@@ -624,6 +626,14 @@ export function RunList() {
   );
 }
 
+
+// dateParam reads a "YYYY-MM-DD" deep-link param into the date inputs.
+// Anything else is ignored rather than half-applied: <input type="date">
+// won't display it and the fetch bounds would drop it silently.
+function dateParam(sp: URLSearchParams, key: string): string {
+  const v = sp.get(key) ?? "";
+  return /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : "";
+}
 
 // dayStartISO turns a "YYYY-MM-DD" date (from <input type="date">) into the
 // RFC3339 instant for that day's LOCAL midnight — the inclusive ?since= bound.

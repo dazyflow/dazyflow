@@ -23,6 +23,23 @@ into the image.)
 
 ## [Unreleased]
 
+### Fixed
+
+- **The overview's four stat tiles now open the runs they counted.** Each tile
+  is a claim about a subset of runs — how many ran today, how many succeeded,
+  how many failed — but clicking one dropped you on the unfiltered run list.
+  The number you had just read was nowhere on the page you landed on, which
+  reads as the tile being wrong rather than the link being lazy. Only "Needs
+  attention" carried its filter (`?status=failed`).
+
+  Runs today now lands on today's date range, Success rate on the succeeded
+  runs, and Approvals waiting keeps going to the approvals page. The runs page
+  learned `?since=` and `?until=` (local `YYYY-MM-DD` calendar days, the same
+  values its date inputs take) alongside the `?status=` it already honoured, so
+  a date-scoped view is a link anyone can share, not just something the tile
+  can produce. A param that isn't a calendar date is ignored rather than
+  half-applied.
+
 ## [0.24.1] - 2026-08-29
 
 ### Changed
