@@ -44,7 +44,7 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"watch", "monitor", "change", "poll", "scrape", "price", "diff", "alert"},
 			Summary:     "Fetch a page on a schedule and fire only when what it says has changed.",
-			Description: "Keep an eye on a web page and let the flow run only when it actually changes — a price, a status page, a tender list, a job board. Pair it with an Interval trigger. The first check quietly records what the page says today; from then on, every check compares. Steps connected to 'On change' stay dormant while nothing changes, so an alert only goes out when there's something to say. By default it compares the words on the page, not the HTML behind them, which keeps invisible markup churn from crying wolf. To watch one number rather than the whole page, give a 'Watch just this' pattern.",
+			Description: "Keep an eye on a web page and let the flow run only when it actually changes — a price, a status page, a tender list, a job board. Pair it with an Interval trigger. The first check quietly records what the page says today; from then on, every check compares. Steps connected to 'On change' stay dormant while nothing changes, so an alert only goes out when there's something to say. By default it compares the words on the page, not the HTML behind them, which keeps invisible markup churn from crying wolf. To watch one number rather than the whole page, give a 'Watch just this' pattern. One exception worth knowing: the pass-through pin carries its value on every check, changed or not — so wire from 'On change' when you mean \"only when it changed\".",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Alert when a page changes at all",

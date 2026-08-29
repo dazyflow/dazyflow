@@ -31,7 +31,7 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"uptime", "monitor", "health", "check", "down", "alert", "poll"},
 			Summary:     "Check a site on a schedule and fire once when it goes down, once when it recovers.",
-			Description: "Watch a site and hear about it only when something actually changes. Pair it with an Interval trigger: 'Went down' fires on the check where it stops answering properly, 'Came back' fires when it starts again, and nothing fires while the state is unchanged — so a site that's been down for an hour doesn't page you twelve times. A site that is already down on the very first check does fire, because that's news. Optionally require a phrase on the page, which catches the server that answers 200 with an error page.",
+			Description: "Watch a site and hear about it only when something actually changes. Pair it with an Interval trigger: 'Went down' fires on the check where it stops answering properly, 'Came back' fires when it starts again, and nothing fires while the state is unchanged — so a site that's been down for an hour doesn't page you twelve times. A site that is already down on the very first check does fire, because that's news. Optionally require a phrase on the page, which catches the server that answers 200 with an error page. One exception worth knowing: the pass-through pin carries its value on every successful check, not only on a transition — so wire from 'Went down' or 'Came back' when you mean \"only when it changed\".",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Alert when the site stops answering",

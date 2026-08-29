@@ -3403,18 +3403,38 @@ function EditorInner() {
   // the flow is webhook-triggered we offer "Send test event" instead: it
   // fires the flow with a synthetic sample payload so the canvas lights
   // up exactly as a real submission would.
-  const hasWebhookTrigger =
-    triggers.some((tr) => tr.type === "webhook") &&
-    nodes.some((n) => n.data.moduleID === "webhook_input");
+  //
+  // Keyed off the NODE, not g.triggers. This used to require a graph-level
+  // webhook trigger as well, and trigger config moved onto the nodes when the
+  // Triggers menu went away (see daemon/me_routes.go: the webhook_input node
+  // carries the secret and the hosted-form opt-in). Every webhook flow built
+  // since then has `triggers: null`, so the condition was never true and the
+  // button was unreachable — the affordance existed, the endpoint worked, and
+  // nothing rendered. hasAnyTrigger below was updated for node-based config;
+  // this was missed.
+  //
+  // The node alone is the right test: a secret gates the PUBLIC /trigger
+  // endpoint, while test-trigger runs under the user's own token, so an
+  // unconfigured webhook node is still worth firing a sample at.
+  const webhookNode = nodes.find(
+    (n) => (n.data as DazyNodeData | undefined)?.moduleID === "webhook_input",
+  );
+  const hasWebhookTrigger = webhookNode !== undefined;
 
   // openTestEvent pre-fills the sample editor with a payload shaped to the
-  // trigger's configured form_fields (so a {phone, company} form gets a
-  // matching sample, not the legacy {name, email, message} shape), then
-  // opens the dialog so the user can edit it before firing.
+  // configured form_fields (so a {phone, company} form gets a matching
+  // sample, not the legacy {name, email, message} shape), then opens the
+  // dialog so the user can edit it before firing.
   const openTestEvent = () => {
-    const webhookTrigger = triggers.find((tr) => tr.type === "webhook");
+    // Node params live in paramsByID, not n.data — the same trap that kept
+    // the run-status chip reading "Manual only" over a configured webhook.
+    // Fall back to the graph-level trigger for flows predating the move.
+    const nodeFields = webhookNode
+      ? (paramsByID[webhookNode.id]?.form_fields as string[] | undefined)
+      : undefined;
+    const legacyFields = triggers.find((tr) => tr.type === "webhook")?.form_fields;
     setTestEventJSON(
-      JSON.stringify(buildTestEventSample(webhookTrigger?.form_fields), null, 2),
+      JSON.stringify(buildTestEventSample(nodeFields ?? legacyFields), null, 2),
     );
     setTestEventErr(null);
     setTestEventOpen(true);
@@ -3541,12 +3561,13 @@ function EditorInner() {
   };
 
   // A flow can start on its own via a graph-level trigger (webhook/poll/
-  // cron in g.triggers) OR a *configured* Schedule node — a cron_trigger
-  // whose cron param is set (the scheduler fires from it). Only cron_trigger
-  // is self-starting from the canvas: webhook_input still needs a webhook
-  // secret and poll_trigger a poll interval (both graph-level), so a bare
-  // such node must NOT suppress the "add a trigger" nudge. An unconfigured
-  // Schedule node (blank cron) doesn't fire either, so it doesn't count.
+  // cron in g.triggers, on flows predating the move) OR a trigger NODE.
+  // Presence is all this asks: it drives the "add a trigger" nudge, so a
+  // bare node counts — the nudge would be wrong on a canvas that already
+  // has the node the user is midway through configuring. Whether a trigger
+  // is actually configured to FIRE is runStatus's question, just below, and
+  // it reads the params (a blank cron or an unset secret reads "Manual
+  // only" there rather than a false "Live").
   const hasAnyTrigger =
     triggers.length > 0 ||
     nodes.some((n) => {

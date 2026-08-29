@@ -125,6 +125,10 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     en: "de5e8cf8",
     sv: "Skicka ett SMS via 46elks. Mottagaren ('Till') och meddelandet ('Meddelande') kan skrivas på steget eller kopplas in från ett tidigare steg (motsvarande ingång vinner över parametern). 'Från' är antingen ett av dina 46elks-nummer (E.164, som +46700000000) eller ett alfanumeriskt avsändarnamn (upp till 11 tecken, t.ex. \"Acme\" — måste innehålla en bokstav, och mottagarna kan inte svara på det). Anslut ditt 46elks-konto en gång på Appar-sidan. Sätt 'Testkörning' för att validera utan att skicka (eller bli fakturerad).",
   },
+  email: {
+    en: "78cba9e8",
+    sv: "Håll en e-postadress — skriv den direkt på steget eller koppla in en sträng i ingången 'email' — och skicka ut den på 'out', men först efter en kontroll att den går att tolka som en riktig adress. En felaktig adress fäller steget direkt, i stället för att dyka upp senare som en studs eller ett kryptiskt SMTP-avslag. Formen med visningsnamn förstås: \"Ada Lovelace <ada@acme.com>\" lägger den rena adressen på 'out' och \"Ada Lovelace\" på 'name'. Adressen delas också upp så att du kan agera på delarna utan strängfiffel: 'local' (ada) och 'domain' (acme.com, med gemener) — så ett flöde kan dirigera alla från ett och samma företag till en egen gren. Koppla 'out' direkt in i stegen Skicka e-post eller Gmail.",
+  },
   email_send: {
     en: "285b1497",
     sv: "Skicka e-post via din egen e-postserver (SMTP). Till, Ämne och Innehåll kan skrivas på steget eller kopplas in från ett tidigare steg (motsvarande ingång vinner över parametern) — praktiskt för utskick per mottagare eller för att mejla utdatat från ett annat steg. Bifoga filer genom att koppla filproducerande steg (t.ex. Exportera blad som PDF) till den variadiska ingången Bilagor. Ställ in e-postservern (värd, säkerhet, inloggning, avsändare) en gång på integrationssidan för E-post.",
@@ -534,8 +538,8 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     sv: "Ändra celler i rader som redan finns i bladet, i stället för att lägga till nya. Slå på 'Ta med radnummer' i steget Läs område, behåll raderna du agerat på och skicka hit dem tillsammans med de kolumner du vill ändra — varje rad skrivs tillbaka till den rad den kom från. Så här markerar ett flöde arbete som utfört (Status = Fakturerad, Påmind = idag) så att nästa körning hoppar över det. Kolumner som inte listas lämnas orörda, och en kolumn som bladet inte har ännu läggs till sist.",
   },
   site_check: {
-    en: "a58e1975",
-    sv: "Bevaka en sajt och få veta det bara när något faktiskt ändras. Kombinera med en Intervall-trigger: Gick ner utlöses vid den kontroll där sajten slutar svara ordentligt, Kom tillbaka när den svarar igen, och ingenting utlöses medan läget är oförändrat — så en sajt som varit nere i en timme larmar inte tolv gånger. En sajt som redan är nere vid allra första kontrollen utlöser dock, för det är en nyhet. Du kan också kräva att en viss fras finns på sidan, vilket fångar servern som svarar 200 med en felsida.",
+    en: "ea6296f6",
+    sv: "Bevaka en sajt och få veta det bara när något faktiskt ändras. Kombinera med en Intervall-trigger: Gick ner utlöses vid den kontroll där sajten slutar svara ordentligt, Kom tillbaka när den svarar igen, och ingenting utlöses medan läget är oförändrat — så en sajt som varit nere i en timme larmar inte tolv gånger. En sajt som redan är nere vid allra första kontrollen utlöser dock, för det är en nyhet. Du kan också kräva att en viss fras finns på sidan, vilket fångar servern som svarar 200 med en felsida. Ett undantag är värt att känna till: genomsläppsstiftet för vidare sitt värde vid varje lyckad kontroll, inte bara vid en förändring — koppla därför från Gick ner eller Kom tillbaka när du menar \"bara när något ändrades\".",
   },
   slack_list_channels: {
     en: "5b42dfee",
@@ -658,8 +662,8 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     sv: "Se några dagar framåt för en punkt på kartan. Ge den en koordinat — skriv Latitud och Longitud, eller koppla in ett \"lat,lon\"-värde från ett annat steg — och välj antal dagar (1–5). Du får en läsbar Sammanfattning dag för dag plus arrayen Per dygn som JSON (min-/maxtemperatur, väderläge och regnrisk per dag), sammanställd från OpenWeathers kostnadsfria 5-dygnsprognos i 3-timmarssteg. Vilken vanlig nyckel som helst fungerar, ingen betald prenumeration.",
   },
   web_watch: {
-    en: "59b51546",
-    sv: "Håll ett öga på en webbsida och låt flödet köra bara när den faktiskt ändras — ett pris, en statussida, en upphandlingslista, en jobbannonssida. Kombinera med en Intervall-trigger. Första kontrollen registrerar tyst vad sidan säger idag; från och med då jämför varje kontroll. Steg som är kopplade till Vid ändring ligger vilande så länge inget ändras, så ett larm går bara ut när det finns något att säga. Som standard jämförs orden på sidan, inte HTML:en bakom dem, vilket hindrar osynliga ändringar i markup från att slå falskt alarm. Vill du bevaka ett enda tal i stället för hela sidan anger du ett mönster i 'Bevaka bara detta'.",
+    en: "3bdc7a9c",
+    sv: "Håll ett öga på en webbsida och låt flödet köra bara när den faktiskt ändras — ett pris, en statussida, en upphandlingslista, en jobbannonssida. Kombinera med en Intervall-trigger. Första kontrollen registrerar tyst vad sidan säger idag; från och med då jämför varje kontroll. Steg som är kopplade till Vid ändring ligger vilande så länge inget ändras, så ett larm går bara ut när det finns något att säga. Som standard jämförs orden på sidan, inte HTML:en bakom dem, vilket hindrar osynliga ändringar i markup från att slå falskt alarm. Vill du bevaka ett enda tal i stället för hela sidan anger du ett mönster i 'Bevaka bara detta'. Ett undantag är värt att känna till: genomsläppsstiftet för vidare sitt värde vid varje kontroll, ändrad eller inte — koppla därför från Vid ändring när du menar \"bara när något ändrades\".",
   },
   webhook_input: {
     en: "793f69eb",

@@ -23,6 +23,57 @@ into the image.)
 
 ## [Unreleased]
 
+### Added
+
+- **An Email step.** A typed source field beside URL and Phone: type an address
+  inline or connect a string in, and it emits the address on `out` — but only
+  after checking it parses. A malformed address fails the step where it was
+  entered, instead of surfacing much later as a bounce or a cryptic SMTP
+  rejection, which is the same argument the Phone step makes for numbers.
+
+  It also splits the address, so acting on its parts stops being string
+  surgery: `local`, `domain`, and the display name from
+  `Ada Lovelace <ada@acme.com>` on its own pin (with the bare address still on
+  `out`, ready for a Send email step). Routing everyone from one company down
+  their own branch is now `domain` into an If step.
+
+  **Validation is `net/mail.ParseAddress`, not a regular expression.** RFC 5322
+  admits quoted local parts, escapes and comments, so a short email regex is
+  wrong in both directions at once — it rejects addresses that work and accepts
+  ones that don't. The stdlib parser is also already what `internal/smtputil`
+  and the notify steps use to decide whether an address is sendable, and a
+  check that disagreed with the step that actually sends the mail would be
+  worse than no check.
+
+  Two deliberate limits. The domain is lower-cased and the local part is not:
+  domains are case-insensitive by spec, local parts are the receiving server's
+  business, and folding them is how a working address becomes a bounce. And
+  there is no MX lookup — deliverability is a network call with its own failure
+  modes, and "the domain resolves" is not the same claim as "this is an
+  address". A dotless domain (`ada@acme`) is refused with a message that says
+  which of the two it is: legal in the RFC for an intranet host, and in a flow
+  about to send mail essentially always a typo.
+
+- **A guard on the passthrough pin.** `NoPassthrough` is a hand-set bool, and
+  forgetting it on a router is a correctness bug, not a cosmetic one: `pass` is
+  re-emitted whenever the node succeeds, regardless of which port the payload
+  took, so anything wired to a router's pass pin fires on every branch at once
+  — a hole straight through the routing the author drew. Nothing checked, and a
+  new routing drop that forgot the flag would have passed every existing test
+  while quietly running both branches.
+
+  The guard is deliberately two partial checks rather than one complete one,
+  because "these output ports are mutually exclusive" is not derivable from a
+  manifest. It pins the fifteen drops that opt out today, so a refactor cannot
+  quietly drop the flag; and it trips on any NEW drop whose output ports look
+  exclusive (`then`/`else`, `matched`/`unmatched`, …) while keeping the pin.
+  `split_rows` is the standing exception, with its reason recorded: its
+  matched/unmatched halves are two outputs emitted on every run, not two
+  branches, so the pin is right there.
+
+  Both checks were verified by breaking them — removing the flag from If, and
+  hiding split_rows' exemption — rather than by watching them pass.
+
 ### Changed
 
 - **The If step now says the same thing in all three places.** Its pins read
@@ -50,6 +101,75 @@ into the image.)
   `field`, because a saved graph stores edges by port ID and params by name; a
   rename there would silently drop the values in every flow already using the
   step.
+
+- **Site check and Watch a web page say what the pass-through pin does.** Both
+  steps are built around firing rarely — "nothing fires while the state is
+  unchanged", "steps connected to 'On change' stay dormant" — and the
+  pass-through pin is the one pin that does not behave that way: it carries its
+  value on every successful check, changed or not. Someone reading either
+  description and wiring from `pass` would reasonably have expected the
+  conditional behaviour the rest of the step promises, and nothing on the
+  canvas distinguishes the two kinds of port. Each description now says so, and
+  points at the port that does mean "only when it changed".
+
+### Fixed
+
+- **"Send test event" was unreachable on every webhook flow built in the last
+  year.** The control that replaces Run on a webhook-triggered flow — it fires
+  the flow with a synthetic payload through the same seed-building path a real
+  `/trigger` hit uses — was gated on a graph-level webhook entry in
+  `g.triggers`. Trigger config moved onto the nodes when the Triggers menu was
+  removed, so a flow built since then has `triggers: null` and its webhook
+  secret on the `webhook_input` node. The condition could not be true, and the
+  button was never drawn.
+
+  Nothing failed. The endpoint worked, the dialog worked, the affordance
+  existed in the code — the only symptom was someone hunting the UI for a
+  button that was never rendered, with no way to tell it apart from not knowing
+  where to look. The sibling check forty lines below had been updated for
+  node-based config; this one was missed.
+
+  It is now keyed off the node. A secret gates the PUBLIC `/trigger` endpoint,
+  while test-trigger runs under the caller's own token, so an unconfigured
+  webhook node is still worth firing a sample at. The sample's `form_fields`
+  now come from the node's params too, falling back to the graph-level trigger
+  for flows predating the move.
+
+  The regression test fixture deliberately has NO `triggers` array: one
+  carrying a legacy trigger passes against the broken code, which is how this
+  survived as long as it did.
+
+- **The editor's live flow-watch reconnects.** It was one-shot: `watchFlow`
+  resolves when its SSE body ends, nothing retried, and the effect resubscribed
+  only on a flow or auth change. So any drop — a laptop sleeping, a network
+  change, a phone backgrounding the tab — left that window permanently deaf
+  while its canvas went on looking live. The 25s server ping defends against
+  idle proxy timeouts and none of those.
+
+  Every path that ends the stream now schedules a retry, with backoff from one
+  second to thirty; a received frame resets it, so a long-healthy stream that
+  drops retries promptly rather than inheriting an old delay. A tab becoming
+  visible, or the browser coming back online, retries at once instead of
+  sitting out the wait.
+
+  Each reconnect also re-reads the flow. The frame carries only
+  `{flow_id, commit, author, autosave}` and no graph, so edits that landed
+  while the stream was down were never delivered to anyone and nothing will
+  resend them — a reconnect without that fetch would come back and still show
+  a stale canvas.
+
+  This does not make edits appear instantly in a second window, and two other
+  things still gate that by design: nothing publishes until the 1.5s autosave
+  debounce elapses, and a window holding unsaved edits deliberately ignores
+  incoming changes rather than clobbering them.
+
+- **Phone's Swedish field help came back.** Its translation is keyed on the
+  English string, and the English had been reworded from "or wire a string"
+  to "or connect a string" without the key following. The lookup missed and
+  fell back to English — the natural-key design degrading safely rather than
+  showing stale Swedish, but silently, and the translation had simply stopped
+  applying. This is the failure that generated catalogue plus the coverage
+  guard exist to catch for descriptions; field strings have no such guard.
 
 ## [0.26.5] - 2026-08-29
 
