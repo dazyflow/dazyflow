@@ -711,3 +711,124 @@ func TestEmitProgress_NilAndBufferFull(t *testing.T) {
 	ch := make(chan core.Progress) // unbuffered, no reader
 	emitProgress(ch, core.Job{ID: "j"}, 0.5, "x")
 }
+
+// TestExecuteGitCheckout_QuotaPreflight covers the cheap refusal: an org
+// already at its limit fails without the transfer ever happening. The URL
+// guard still runs first (a security check must not be skippable by being
+// out of disk), so this uses a URL that passes it.
+func TestExecuteGitCheckout_QuotaPreflight(t *testing.T) {
+	src, _ := buildSource(t)
+	url := serveBareRepoHTTPS(t, src)
+	ws := t.TempDir()
+
+	res, _ := executeGitCheckout(t.Context(), core.Job{
+		ID: "j", NodeID: "n", GraphID: "g", WorkspaceRoot: ws,
+		QuotaLimit: 1000, QuotaUsed: 1000,
+		Params: map[string]any{"url": url},
+	}, nil)
+	if res.Status != core.StatusError {
+		t.Fatalf("status = %q, want error", res.Status)
+	}
+	if res.Error.Code != "quota_exceeded" {
+		t.Errorf("code = %q, want quota_exceeded", res.Error.Code)
+	}
+	dst := filepath.Join(ws, filepath.FromSlash(core.GitCheckoutRel("g", "n")))
+	if _, err := os.Stat(dst); !os.IsNotExist(err) {
+		t.Errorf("a full org must not start a clone at all, stat err = %v", err)
+	}
+}
+
+// TestExecuteGitCheckout_QuotaRollsBackClone drives a real clone against a
+// budget too small to hold it: the job must fail quota_exceeded AND leave
+// no tree behind, since a fresh clone that overshot would otherwise wedge
+// every later write in the org.
+func TestExecuteGitCheckout_QuotaRollsBackClone(t *testing.T) {
+	src, _ := buildSource(t)
+	url := serveBareRepoHTTPS(t, src)
+	ws := t.TempDir()
+
+	res, _ := executeGitCheckout(t.Context(), core.Job{
+		ID: "j", NodeID: "n", GraphID: "g", WorkspaceRoot: ws,
+		QuotaLimit: 1, QuotaUsed: 0,
+		Params: map[string]any{"url": url},
+	}, nil)
+	if res.Status != core.StatusError {
+		t.Fatalf("status = %q, want error", res.Status)
+	}
+	if res.Error.Code != "quota_exceeded" {
+		t.Fatalf("code = %q, want quota_exceeded", res.Error.Code)
+	}
+	dst := filepath.Join(ws, filepath.FromSlash(core.GitCheckoutRel("g", "n")))
+	if _, err := os.Stat(dst); !os.IsNotExist(err) {
+		t.Errorf("overshooting clone must be rolled back, stat err = %v", err)
+	}
+}
+
+// TestExecuteGitCheckout_QuotaNoDoubleCount is the regression guard for the
+// re-run accounting: on a pull the existing clone's bytes are ALREADY in
+// job.QuotaUsed, so a budget that comfortably holds the repo must not fail
+// just because the tree is measured again.
+func TestExecuteGitCheckout_QuotaNoDoubleCount(t *testing.T) {
+	src, _ := buildSource(t)
+	url := serveBareRepoHTTPS(t, src)
+	ws := t.TempDir()
+
+	job := core.Job{ID: "j", NodeID: "n", GraphID: "g", WorkspaceRoot: ws,
+		Params: map[string]any{"url": url}}
+	if res, _ := executeGitCheckout(t.Context(), job, nil); res.Status != core.StatusOK {
+		t.Fatalf("seed clone: status = %q, err = %+v", res.Status, res.Error)
+	}
+	dst := filepath.Join(ws, filepath.FromSlash(core.GitCheckoutRel("g", "n")))
+	size := dirSize(dst)
+	if size == 0 {
+		t.Fatal("expected a non-empty clone to measure")
+	}
+	// Simulate the engine's snapshot: usage already includes the clone, and
+	// the limit leaves only a sliver of headroom. Naive accounting would
+	// add the tree a second time and blow the budget.
+	job.QuotaUsed = size
+	job.QuotaLimit = size + 4096
+	res, _ := executeGitCheckout(t.Context(), job, nil)
+	if res.Status != core.StatusOK {
+		t.Fatalf("re-run status = %q, err = %+v (clone double-counted?)", res.Status, res.Error)
+	}
+	if meta := res.Output["meta"].Inline.(map[string]any); meta["mode"] != "pulled" {
+		t.Errorf("mode = %v, want pulled", meta["mode"])
+	}
+}
+
+// TestCheckoutFitsQuota_PullKeepsTree pins the asymmetric rollback: an
+// overshooting PULL fails but must NOT delete the pre-existing clone.
+func TestCheckoutFitsQuota_PullKeepsTree(t *testing.T) {
+	dst := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dst, "f"), make([]byte, 500), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	job := core.Job{ID: "j", QuotaLimit: 600, QuotaUsed: 400}
+	res, ok := checkoutFitsQuota(job, dst, "gitcache/g/n", "pulled", 100)
+	if ok {
+		t.Fatal("expected the pull to exceed quota")
+	}
+	if res.Error.Code != "quota_exceeded" {
+		t.Errorf("code = %q, want quota_exceeded", res.Error.Code)
+	}
+	if _, err := os.Stat(filepath.Join(dst, "f")); err != nil {
+		t.Errorf("a pre-existing clone must survive an overshooting pull: %v", err)
+	}
+}
+
+// TestCheckoutFitsQuota_Unlimited: a zero limit means unlimited, so no walk
+// and no refusal regardless of size.
+func TestCheckoutFitsQuota_Unlimited(t *testing.T) {
+	if _, ok := checkoutFitsQuota(core.Job{ID: "j"}, t.TempDir(), "r", "cloned", 0); !ok {
+		t.Error("zero QuotaLimit must mean unlimited")
+	}
+}
+
+// TestDirSize_MissingRoot: a not-yet-cloned destination measures as zero
+// rather than erroring, which is what the fresh-clone path relies on.
+func TestDirSize_MissingRoot(t *testing.T) {
+	if got := dirSize(filepath.Join(t.TempDir(), "nope")); got != 0 {
+		t.Errorf("dirSize(missing) = %d, want 0", got)
+	}
+}

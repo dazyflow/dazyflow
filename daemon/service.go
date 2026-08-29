@@ -662,6 +662,61 @@ func (s *Service) removeGitCache(tenant, ws, id string) {
 	}
 }
 
+// pruneGitCache removes the checkout caches under gitcache/<flow> whose
+// owning node is no longer part of the flow.
+//
+// Flow deletion was for a long time the ONLY thing that reclaimed a
+// checkout, which left the per-node caches to leak: the cache directory is
+// keyed by node ID, so deleting a git_checkout step — or rebuilding it,
+// which mints a fresh node ID — stranded its clone forever. Nothing
+// referenced it, no TTL swept it, and it kept counting against the org's
+// disk quota. An edit-heavy flow could accumulate a full repository per
+// edit cycle.
+//
+// Pruning is by node-ID membership alone, not by module: a directory
+// survives when ANY node in the saved graph still carries that ID. That is
+// the conservative reading — it reclaims exactly the orphans, and it can
+// never delete a live step's clone just because module naming shifted
+// under it.
+//
+// Best-effort, and called only after the graph has been committed: the
+// saved node set is the authority for what's live, so pruning against a
+// graph that then failed to save could delete a clone whose step still
+// exists. A cleanup failure must never fail the save.
+func (s *Service) pruneGitCache(tenant, ws string, g core.Graph) {
+	if s.Engine == nil || s.Engine.Sandbox == nil {
+		return
+	}
+	root, err := s.Engine.Sandbox.Root(tenant, ws)
+	if err != nil {
+		return
+	}
+	graphDir := filepath.Join(root, filepath.FromSlash(core.GitCacheGraphRel(g.ID)))
+	entries, err := os.ReadDir(graphDir)
+	if err != nil {
+		return // no cache for this flow yet — the common case
+	}
+	// The on-disk directory name is the SANITIZED node ID, so derive the
+	// live set through the same helper that placed it rather than from the
+	// raw IDs; otherwise a node whose ID needed sanitizing would never
+	// match its own folder and would be pruned out from under itself.
+	live := make(map[string]struct{}, len(g.Nodes))
+	for _, n := range g.Nodes {
+		live[filepath.Base(filepath.FromSlash(core.GitCheckoutRel(g.ID, n.ID)))] = struct{}{}
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		if _, ok := live[e.Name()]; ok {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(graphDir, e.Name())); err != nil && s.Logger != nil {
+			s.Logger.Printf("git cache prune for %s/%s/%s node %s: %v", tenant, ws, g.ID, e.Name(), err)
+		}
+	}
+}
+
 // DuplicateGraph creates an independent copy of an existing flow under a
 // fresh, immutable ID. The copy carries over the source's nodes, edges,
 // triggers, frames, and display metadata, but starts as a DISABLED draft
@@ -846,6 +901,9 @@ func (s *Service) saveGraph(ctx context.Context, p core.Principal, g core.Graph,
 	if err != nil {
 		return "", err
 	}
+	// Reclaim the checkout caches of steps this save removed or renamed.
+	// After the commit, so the saved node set is what we prune against.
+	s.pruneGitCache(g.Tenant, g.Workspace, g)
 	// Notify any editor watching this flow so it can live-reflect the change
 	// (e.g. an AI assistant editing through MCP). Fire-and-forget, mirroring
 	// the rest of the Bus contract; Commit lets the saver suppress the echo

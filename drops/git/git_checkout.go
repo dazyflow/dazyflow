@@ -109,9 +109,29 @@ func executeGitCheckout(ctx context.Context, job core.Job, progress chan<- core.
 	cleanRel := core.GitCheckoutRel(job.GraphID, job.NodeID)
 	dst := filepath.Join(job.WorkspaceRoot, cleanRel)
 
+	// Refuse before dialing when the org has no budget left at all — a
+	// clone that cannot possibly fit shouldn't cost a transfer. See
+	// quota.go for why enforcement here is pre-flight + rollback rather
+	// than the reservation file_write takes.
+	if job.QuotaLimit > 0 && job.QuotaUsed >= job.QuotaLimit {
+		return params.Err(job, "quota_exceeded", fmt.Sprintf(
+			"this organization is at its %d-byte storage limit (%d used); free space before checking out a repository",
+			job.QuotaLimit, job.QuotaUsed)), nil
+	}
+	// Measured before the transfer so a re-run can subtract what this
+	// checkout already contributed to job.QuotaUsed. Skipped entirely for
+	// unlimited tenants so the common case pays no walk.
+	var sizeBefore int64
+	if job.QuotaLimit > 0 {
+		sizeBefore = dirSize(dst)
+	}
+
 	repo, mode, err := openOrClone(ctx, dst, url, ref, depth, progress, job)
 	if err != nil {
 		return params.Err(job, mode, err.Error()), nil
+	}
+	if res, ok := checkoutFitsQuota(job, dst, cleanRel, mode, sizeBefore); !ok {
+		return res, nil
 	}
 
 	var sha string
