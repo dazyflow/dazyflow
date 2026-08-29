@@ -23,6 +23,25 @@ into the image.)
 
 ## [Unreleased]
 
+### Added
+
+- **A published release asks to be deployed.** After CI pushes a release's
+  images it POSTs to the flow's webhook trigger, so a tagged push carries all
+  the way through to production instead of stopping at "the images exist
+  somewhere".
+
+  Deliberately a `curl` at the end of the publish step rather than a
+  builds.sr.ht `triggers:` entry. That block POSTs with no way to set headers,
+  and the trigger endpoint reads the bearer key only from `Authorization` —
+  there is no query-parameter fallback — so it could not authenticate. It would
+  also fire on every green build rather than only on releases. Hanging the call
+  off the publish path instead means it inherits that path's two gates for
+  free: branch builds and credential-less builds never reach it.
+
+  A failed trigger fails the build. A release that published and then quietly
+  did not deploy is precisely the invisible half-success this setup exists to
+  eliminate.
+
 ## [0.26.3] - 2026-08-29
 
 ### Changed
