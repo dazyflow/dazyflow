@@ -23,6 +23,20 @@ into the image.)
 
 ## [Unreleased]
 
+### Added
+
+- **`scripts/deploy.sh`** — the entry point for a runner-driven deploy, now
+  version-controlled instead of living as an untracked file on the deployment
+  host. It resolves the checkout from its own location, so it needs no
+  site-specific path, and runs `PROD=1 make upgrade` under `set -e`.
+
+  It is tracked because the untracked version drifted, invisibly, through an
+  entire architecture change: it still opened with `git pull`, which fails on
+  the detached HEAD every successful deploy leaves behind, and which nothing
+  reported because the script had no `set -e`. A file nobody reviews is a file
+  that keeps its bugs. Name this script in a runner's allow-list to stop that
+  runner being able to execute anything else.
+
 ## [0.26.1] - 2026-08-29
 
 ### Fixed
