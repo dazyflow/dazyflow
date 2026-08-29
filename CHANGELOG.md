@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.26.1] - 2026-08-29
+
 ### Fixed
 
 - **The registry password hash has to be escaped in `.env`, and nothing said
