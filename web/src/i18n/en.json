@@ -2077,6 +2077,8 @@
     "live": "Live",
     "reconnecting": "Reconnecting…",
     "fullscreen": "Toggle full screen",
+    "themeDark": "Switch to dark",
+    "themeLight": "Switch to light",
     "running": "Running",
     "noFlows": "No flows to show.",
     "neverRun": "Never run",

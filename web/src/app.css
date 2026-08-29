@@ -10711,39 +10711,104 @@ button:active,
 }
 
 /* ── Public TV board ──────────────────────────────────────────────────── */
-/* Full-viewport, dark, large type for across-the-room legibility. A single
-   ambient accent (--tv-accent) is tinted by board health and threaded through
-   the background wash, the top hairline, and the live indicator so the whole
+/* Full-viewport, dark, large type for across-the-room legibility. This is the
+   one surface strangers see without ever signing in — a screen on a wall in
+   someone's office — so it is dressed like the marketing site rather than like
+   app chrome: the same nebula wash, the same graph-paper grid bleeding through
+   from the editor canvas, the same lit-edge glass cards, the same brand
+   gradient on the eyebrow. (../dazyflow-web/style.css is the sibling.)
+
+   A single ambient accent (--tv-accent) is tinted by board health and threaded
+   through the background wash, the top hairline and the eyebrow, so the whole
    surface reads as one calm, coherent state at a glance. */
 .tv-view {
   --tv-accent: var(--accent);
+  /* Glass card fill + elevation, shared by the stat tiles and the flow tiles
+     so the board is built from one material. Translucent on purpose: the
+     nebula and the grid show through, which is what stops a wall of boxes
+     from reading as a stack of opaque bricks. */
+  --tv-fill: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface) 88%, transparent) 0%,
+    color-mix(in srgb, var(--surface) 60%, transparent) 100%
+  );
+  --tv-elevation:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 18px 44px -26px rgba(0, 0, 0, 0.85);
+  /* Paper rules, derived from the editor's canvas grid. The major line is
+     dialled well back from the canvas value: that one is tuned for a viewport
+     you lean into, and at wall scale it draws a table across the board. */
+  --tv-rule: var(--canvas-grid);
+  --tv-rule-major: color-mix(in srgb, var(--canvas-grid-major) 40%, transparent);
   position: fixed;
   inset: 0;
   display: flex;
   flex-direction: column;
   gap: clamp(var(--space-4), 2.2vw, var(--space-6));
-  padding: clamp(var(--space-5), 3.2vw, 56px);
+  padding: clamp(var(--space-5), 3vw, 52px);
   color: var(--ink);
   overflow: auto;
   background:
     radial-gradient(
-      1200px 560px at 12% -10%,
-      color-mix(in srgb, var(--tv-accent) 16%, transparent),
+      ellipse 70vw 46vh at 78% -12%,
+      color-mix(in srgb, var(--tv-accent) 26%, transparent) 0%,
+      transparent 62%
+    ),
+    radial-gradient(
+      ellipse 60vw 55vh at -12% 30%,
+      color-mix(in srgb, var(--accent-2) 16%, transparent) 0%,
       transparent 58%
     ),
     radial-gradient(
-      900px 620px at 110% -6%,
-      color-mix(in srgb, var(--accent-2) 9%, transparent),
-      transparent 55%
+      ellipse 80vw 40vh at 50% 112%,
+      color-mix(in srgb, var(--accent-3) 13%, transparent) 0%,
+      transparent 62%
     ),
     var(--bg);
   transition: background 0.8s ease;
 }
-/* A whisper-thin luminous rule across the very top, health-tinted. */
+/* Graph paper, straight off the editor canvas: a fine grid with a brighter
+   major line every fifth cell, masked to a wash that fades out before it
+   reaches the middle of the board. The page you watch and the canvas you
+   build on sit on the same paper. */
+.tv-view::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  /* The canvas grid tokens, so the paper flips with the theme instead of
+     drawing white lines on a white board. */
+  background-image:
+    linear-gradient(to right, var(--tv-rule-major) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--tv-rule-major) 1px, transparent 1px),
+    linear-gradient(to right, var(--tv-rule) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--tv-rule) 1px, transparent 1px);
+  background-size:
+    280px 280px,
+    280px 280px,
+    56px 56px,
+    56px 56px;
+  mask-image: radial-gradient(
+    ellipse 130% 105% at 50% -12%,
+    #000 0%,
+    rgba(0, 0, 0, 0.45) 48%,
+    transparent 92%
+  );
+  opacity: 0.6;
+}
+/* Everything the board actually says sits above the paper. */
+.tv-view > * {
+  position: relative;
+  z-index: 1;
+}
+/* A whisper-thin luminous rule across the very top, health-tinted. Above the
+   content layer so nothing can paint over the board's status line. */
 .tv-view::before {
   content: "";
   position: fixed;
   inset: 0 0 auto 0;
+  z-index: 2;
   height: 2px;
   background: linear-gradient(
     90deg,
@@ -10762,12 +10827,40 @@ button:active,
 .tv-health-good {
   --tv-accent: var(--status-completed);
 }
+/* Light board. Same composition, different physics: cards go opaque-ish white
+   and the elevation becomes a diffuse grey drop instead of the dark theme's
+   near-black well, which on a light canvas reads as dirt. The paper is dialled
+   up because the light canvas grid is deliberately faint for an editor that is
+   mostly nodes — a wall board is mostly empty space and needs the texture. */
+:root[data-theme="light"] .tv-view {
+  --tv-fill: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface) 92%, transparent) 0%,
+    color-mix(in srgb, var(--surface) 72%, transparent) 100%
+  );
+  --tv-elevation:
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    0 18px 40px -26px rgba(16, 24, 40, 0.45);
+}
+:root[data-theme="light"] .tv-view::after {
+  /* The light canvas grid is near-invisible by design — an editor that is
+     mostly nodes wants it out of the way. A board is mostly open space, so the
+     paper is redrawn a little stronger here or the texture simply is not
+     there. */
+  --tv-rule: rgba(27, 34, 51, 0.045);
+  --tv-rule-major: rgba(27, 34, 51, 0.07);
+  opacity: 1;
+}
 
 /* Centered message states (loading / invalid link). */
 .tv-message {
   align-items: center;
   justify-content: center;
   text-align: center;
+}
+.tv-message .tv-brand {
+  justify-content: center;
+  margin-bottom: var(--space-5);
 }
 .tv-message h1 {
   font-size: var(--text-3xl);
@@ -10778,11 +10871,17 @@ button:active,
   font-size: var(--text-lg);
 }
 
+/* ── Masthead ── */
+/* Org identity leads (this is the customer's board, not ours); the clock and
+   the live indicator anchor the right. A hairline under the row gives the
+   board a top edge to hang from instead of floating type. */
 .tv-head {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
   gap: var(--space-4);
+  padding-bottom: clamp(var(--space-3), 1.4vw, var(--space-5));
+  border-bottom: 1px solid var(--hairline);
   flex: 0 0 auto;
 }
 /* Left cluster: optional org logo + the title stack. min-width:0 lets the
@@ -10811,22 +10910,27 @@ button:active,
 .tv-titles {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
   min-width: 0;
 }
-/* Small uppercase context line above the org name. */
+/* Small uppercase context line above the org name, painted with the brand
+   gradient — the site's eyebrow, and the one gradient-text moment here. */
 .tv-eyebrow {
-  font-size: var(--text-sm);
-  font-weight: 600;
+  font-size: var(--text-md);
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.16em;
-  color: color-mix(in srgb, var(--tv-accent) 55%, var(--muted));
+  letter-spacing: 0.18em;
+  background: var(--grad-brand);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
 }
 .tv-title {
   margin: 0;
   font-size: clamp(var(--text-2xl), 3.2vw, 46px);
-  font-weight: 650;
-  letter-spacing: -0.02em;
+  font-weight: 700;
+  letter-spacing: -0.03em;
   line-height: 1.05;
   color: var(--ink);
   white-space: nowrap;
@@ -10838,12 +10942,27 @@ button:active,
   align-items: center;
   gap: clamp(var(--space-3), 1.4vw, var(--space-5));
 }
+/* Clock over date, right-aligned — the two together read as a wall clock
+   rather than as a stray number. */
+.tv-time {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
 .tv-clock {
   font-variant-numeric: tabular-nums;
   font-size: clamp(var(--text-xl), 2.2vw, 34px);
   font-weight: 600;
   letter-spacing: 0.01em;
+  line-height: 1.05;
   color: var(--ink);
+}
+.tv-date {
+  font-size: var(--text-md);
+  color: var(--faint);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 /* Live / reconnecting indicator — a glassy pill tinted by the running hue. */
 .tv-pulse {
@@ -10865,7 +10984,22 @@ button:active,
   border-color: color-mix(in srgb, var(--status-awaiting) 34%, transparent);
   color: color-mix(in srgb, var(--status-awaiting) 60%, var(--ink));
 }
-.tv-fs {
+/* The board's two controls (theme, full screen), sitting together as one
+   segmented cluster. Deliberately quiet — they exist for the person setting
+   the screen up, not for the room watching it, so they fade back once the
+   pointer leaves and come back on hover or keyboard focus. */
+.tv-ctls {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  opacity: 0.45;
+  transition: opacity var(--dur-3) var(--ease-out);
+}
+.tv-ctls:hover,
+.tv-ctls:focus-within {
+  opacity: 1;
+}
+.tv-ctl {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -10877,18 +11011,21 @@ button:active,
   height: 42px;
   cursor: pointer;
   transition:
-    color 0.15s ease,
-    border-color 0.15s ease,
-    background 0.15s ease;
+    color var(--dur-2) var(--ease-out),
+    border-color var(--dur-2) var(--ease-out),
+    background var(--dur-2) var(--ease-out),
+    opacity var(--dur-2) var(--ease-out);
 }
-.tv-fs:hover {
+.tv-ctl:hover {
   color: var(--ink);
   border-color: var(--border-strong);
   background: var(--surface-2);
 }
 
-/* Headline counters — four glass tiles, each with a health-toned accent
-   line and an oversized tabular number. */
+/* ── Headline counters ── */
+/* Four glass tiles with a lit top-left rim. The number is the tile: a neutral
+   one wears the brand gradient, a meaningful one (failures, work in flight)
+   wears its status colour and lights the tile behind it. */
 .tv-stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -10898,122 +11035,191 @@ button:active,
 .tv-stat {
   --tone: var(--accent);
   position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding: clamp(var(--space-4), 1.8vw, 28px);
-  border-radius: 18px;
-  border: 1px solid var(--border);
+  padding: clamp(var(--space-4), 1.8vw, 30px);
+  border-radius: var(--r-4);
+  /* Gradient hairline rim: fill clipped to the padding box, rim gradient
+     clipped to the border box. */
   background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--surface) 88%, #fff 5%),
-      var(--surface)
-    );
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, #fff 6%, transparent),
-    0 10px 30px -18px rgba(0, 0, 0, 0.6);
+    var(--tv-fill) padding-box,
+    var(--grad-rim) border-box;
+  border: 1px solid transparent;
+  box-shadow: var(--tv-elevation);
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
   overflow: hidden;
 }
-/* Tone accent: a soft bar pinned to the top edge of the card. */
+/* Tone bloom: light pooling up from the bottom of a tile that is saying
+   something. Softer than a coloured border, and it leaves the rim alone. */
 .tv-stat::before {
   content: "";
   position: absolute;
-  inset: 0 0 auto 0;
-  height: 3px;
-  background: linear-gradient(
-    90deg,
-    var(--tone),
-    color-mix(in srgb, var(--tone) 25%, transparent)
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(
+    120% 100% at 50% 118%,
+    color-mix(in srgb, var(--tone) 22%, transparent) 0%,
+    transparent 68%
   );
-  opacity: 0.85;
+  opacity: 0;
+  transition: opacity var(--dur-3) var(--ease-out);
 }
 .tv-stat-value {
-  font-size: clamp(var(--text-3xl), 4.6vw, 60px);
-  font-weight: 700;
+  font-size: clamp(var(--text-3xl), 4.6vw, 62px);
+  font-weight: 800;
   line-height: 1;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.04em;
   font-variant-numeric: tabular-nums;
+  /* Neutral default: the brand gradient, as on the site's stat row. Toned
+     tiles below paint over it with a flat status colour. */
+  background: var(--grad-brand);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
 }
 .tv-stat-label {
-  font-size: var(--text-sm);
+  font-size: var(--text-md);
   color: var(--muted);
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
   font-weight: 600;
+}
+.tv-stat-good,
+.tv-stat-warn,
+.tv-stat-bad,
+.tv-stat-live {
+  /* A toned number is a flat status colour, not a gradient: the colour IS the
+     message, and a gradient would dilute it. */
+}
+.tv-stat-good .tv-stat-value,
+.tv-stat-warn .tv-stat-value,
+.tv-stat-bad .tv-stat-value,
+.tv-stat-live .tv-stat-value {
+  background: none;
+  color: var(--tone);
+  -webkit-text-fill-color: var(--tone);
 }
 .tv-stat-good {
   --tone: var(--status-completed);
 }
-.tv-stat-good .tv-stat-value {
-  color: var(--status-completed);
-}
 .tv-stat-warn {
   --tone: var(--status-awaiting);
-}
-.tv-stat-warn .tv-stat-value {
-  color: var(--status-awaiting);
 }
 .tv-stat-bad {
   --tone: var(--status-failed);
 }
-.tv-stat-bad .tv-stat-value {
-  color: var(--status-failed);
-}
 .tv-stat-live {
   --tone: var(--status-running);
 }
-.tv-stat-live .tv-stat-value {
-  color: var(--status-running);
+/* Only the tiles that are actually raising a hand get the bloom — a board of
+   four glowing tiles glows about as usefully as a board of none. */
+.tv-stat-bad::before,
+.tv-stat-warn::before,
+.tv-stat-live::before {
+  opacity: 1;
 }
 
-/* The per-flow grid fills the remaining height; tiles stretch (auto-fit) so
-   a handful of flows fill the wall instead of huddling top-left, and dozens
-   wrap cleanly. Rows are centred vertically for a balanced board. */
+/* ── The flow board ── */
+/* The grid composes itself for the number of flows: a handful get poster
+   tiles that fill the wall, a screenful get rows. Without this a two-flow
+   board is two slabs marooned in the middle of a 65" screen, which is the
+   single loudest way for a status display to look unfinished. */
 .tv-grid {
   flex: 1 1 auto;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  grid-auto-rows: minmax(92px, auto);
   gap: clamp(var(--space-3), 1.2vw, var(--space-4));
-  align-content: safe center;
+  /* --tv-cols comes from the component, which knows how many flows there are
+     and picks a count that divides them evenly (see columns()). minmax(0, 1fr)
+     rather than plain 1fr so a long flow name can't push a column wider than
+     its share. Below, narrow viewports drop back to auto-fit — a board being
+     previewed on a laptop or a phone is not a wall. */
+  grid-template-columns: repeat(var(--tv-cols, 3), minmax(0, 1fr));
+  /* Rows share out whatever height is left, down to a floor. Packing them to
+     the top instead leaves a dead band under the board that reads as a bug;
+     stretching, the tiles simply breathe more when there are fewer of them.
+     Past the floor the rows stop growing and the board scrolls. */
+  grid-auto-rows: minmax(96px, auto);
+  align-content: stretch;
 }
+/* Few flows: poster tiles, generous but capped, and the block is centred on
+   the wall. Left to stretch they become voids with a border — there is only so
+   much a name and a status pill can fill. */
+.tv-grid[data-density="sparse"] {
+  grid-auto-rows: minmax(clamp(220px, 32vh, 380px), auto);
+  align-content: center;
+}
+/* A screenful: a slightly taller floor than the dense board's. */
+.tv-grid[data-density="roomy"] {
+  grid-auto-rows: minmax(110px, auto);
+}
+/* Wall-of-flows: the same two lines as a roomy tile, squeezed. Everything on
+   one line was the obvious thing to try and it costs the wrong thing — the
+   pill, the pipes and "2 hours ago" take two thirds of a column, so every name
+   truncates to "Invoice…", and a status board whose flow names are unreadable
+   is not a status board. Stacked, the name gets the full width of the tile. */
+.tv-grid[data-density="dense"] {
+  grid-auto-rows: minmax(78px, auto);
+}
+
 .tv-flow {
   --tone: var(--border-strong);
   position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  /* Name pinned to the top of the tile, status to the bottom. Tiles in a grid
+     row are the same height, so this makes the row scan as a row — four
+     independently centred blocks do not line up with each other. */
+  justify-content: space-between;
   gap: var(--space-3);
-  padding: clamp(var(--space-4), 1.5vw, 24px);
-  border-radius: 18px;
-  border: 1px solid var(--border);
+  padding: clamp(var(--space-4), 1.5vw, 26px);
+  padding-left: clamp(var(--space-5), 2vw, 32px);
+  border-radius: var(--r-4);
   background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--surface) 88%, #fff 4%),
-      var(--surface)
-    );
-  box-shadow: 0 10px 30px -20px rgba(0, 0, 0, 0.6);
+    var(--tv-fill) padding-box,
+    var(--grad-rim) border-box;
+  border: 1px solid transparent;
+  box-shadow: var(--tv-elevation);
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
   overflow: hidden;
 }
-/* Left status rail with a soft outward glow. */
+/* Left status rail: a soft spindle rather than a hard bar — brightest at the
+   middle, gone at the corners, so it follows the tile's radius instead of
+   fighting it. */
 .tv-flow::before {
   content: "";
   position: absolute;
   inset: 0 auto 0 0;
   width: 4px;
-  background: var(--tone);
-  box-shadow: 0 0 18px -2px color-mix(in srgb, var(--tone) 70%, transparent);
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    var(--tone) 18%,
+    var(--tone) 82%,
+    transparent 100%
+  );
+  box-shadow: 0 0 22px -2px color-mix(in srgb, var(--tone) 70%, transparent);
 }
+/* A failing flow also warms its whole fill, so the eye lands on it from the
+   doorway rather than having to read the rails. */
 .tv-flow-failed {
   --tone: var(--status-failed);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--status-failed) 12%, var(--surface)),
-      color-mix(in srgb, var(--status-failed) 5%, var(--surface))
-    );
+}
+.tv-flow-failed::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--status-failed) 16%, transparent) 0%,
+    transparent 62%
+  );
 }
 .tv-flow-running,
 .tv-flow-queued {
@@ -11028,20 +11234,29 @@ button:active,
   gap: var(--space-3);
   min-width: 0;
 }
+/* Icon tile — the site's card-icon: a rounded well lit from inside, not a
+   grey square with a picture in it. */
 .tv-flow-ico {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
+  width: 46px;
+  height: 46px;
+  border-radius: var(--r-3);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--tone) 20%, var(--surface-2)) 0%,
+    color-mix(in srgb, var(--tone) 6%, var(--surface)) 100%
+  );
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 26%, transparent),
+    0 8px 20px -12px color-mix(in srgb, var(--tone) 60%, transparent);
 }
 .tv-flow-name {
-  font-size: clamp(var(--text-lg), 1.5vw, 24px);
-  font-weight: 600;
+  font-size: clamp(var(--text-lg), 1.5vw, 25px);
+  font-weight: 650;
+  letter-spacing: -0.015em;
   line-height: 1.2;
   /* Wrap to at most two lines instead of harshly clipping mid-word. */
   display: -webkit-box;
@@ -11049,10 +11264,18 @@ button:active,
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+/* Two deliberate lines: the status pill, then the run history and the times.
+   One wrapping line was the honest first try and it reads as an accident —
+   at four columns on a 16:9 wall the pill, the run pipes, "7 minutes ago" and
+   "next in 44 minutes" do not fit across, so each tile broke in a different
+   place. Dense boards below put it back on one line, where the type is
+   smaller and there is no next-run to carry. */
 .tv-flow-bottom {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   gap: var(--space-2);
+  min-width: 0;
 }
 /* Status pill — tinted glass with a glowing dot, mirrors the rail colour. */
 .tv-pill {
@@ -11060,13 +11283,15 @@ button:active,
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  padding: 5px 12px;
+  padding: 5px 13px;
   border-radius: var(--r-pill);
-  font-size: var(--text-sm);
+  font-size: var(--text-md);
   font-weight: 600;
   letter-spacing: 0.02em;
-  background: color-mix(in srgb, var(--pill) 16%, transparent);
-  color: color-mix(in srgb, var(--pill) 50%, var(--ink));
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--pill) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--pill) 26%, transparent);
+  color: color-mix(in srgb, var(--pill) 45%, var(--ink));
 }
 .tv-pill-failed {
   --pill: var(--status-failed);
@@ -11078,25 +11303,28 @@ button:active,
 .tv-pill-queued {
   --pill: var(--status-running);
 }
-/* Right-hand cluster of a flow card's bottom row: the recent-run history
-   strip + the relative time, pushed to the far edge. */
+/* The second line: recent-run history strip, when it last ran, when it runs
+   next. Wraps rather than clipping on a narrow tile. */
 .tv-flow-meta {
-  margin-left: auto;
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: clamp(var(--space-2), 0.8vw, var(--space-3));
+  row-gap: var(--space-1);
+  min-width: 0;
 }
 .tv-flow-time {
   font-variant-numeric: tabular-nums;
-  font-size: var(--text-sm);
+  font-size: var(--text-md);
   color: var(--faint);
+  white-space: nowrap;
 }
 /* Next scheduled fire — accented (vs the muted last-run time beside it) so a
    glance separates "ran 5m ago" from "runs again in 5m". Only shown for live,
    scheduler-driven flows; absent flows just don't render it. */
 .tv-flow-next {
   font-variant-numeric: tabular-nums;
-  font-size: var(--text-sm);
+  font-size: var(--text-md);
   font-weight: 600;
   color: color-mix(in srgb, var(--status-running) 60%, var(--ink));
   white-space: nowrap;
@@ -11105,13 +11333,13 @@ button:active,
    coloured by outcome — the same green/red palette as the status dots. */
 .tv-spark {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 3px;
-  height: 22px;
+  height: 24px;
 }
 .tv-spark-bar {
   width: 5px;
-  height: 22px;
+  height: 24px;
   border-radius: 2px;
   background: var(--faint); /* cancelled / skipped — present but quiet */
 }
@@ -11126,9 +11354,107 @@ button:active,
 .tv-spark-bar.queued {
   background: var(--status-running);
 }
+/* The newest pipe breathes while that run is still going. Only the last one:
+   it is the only bar that can still change, and a strip of pulsing bars would
+   be a light show rather than a signal. The board polls on a timer, so this is
+   also the one thing on screen that proves the wall is not showing a frozen
+   snapshot. */
+.tv-spark-bar:last-child.running,
+.tv-spark-bar:last-child.queued {
+  animation: tv-spark-pulse 1.6s ease-in-out infinite;
+}
+/* Same shape and timing as .status-dot.running's pulse, so the pipe and the
+   dot beside it breathe together rather than beating against each other. */
+@keyframes tv-spark-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 10px 1px
+      color-mix(in srgb, var(--status-running) 70%, transparent);
+  }
+  50% {
+    opacity: 0.45;
+    box-shadow: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tv-spark-bar:last-child.running,
+  .tv-spark-bar:last-child.queued {
+    animation: none;
+  }
+}
 .tv-spark-bar.awaiting {
   background: var(--status-awaiting);
 }
+
+/* Poster tiles: the icon gets its own line above the name, and everything
+   scales up — at four flows on a 65" screen there is room to be generous. */
+.tv-grid[data-density="sparse"] .tv-flow {
+  justify-content: space-between;
+  gap: var(--space-5);
+}
+.tv-grid[data-density="sparse"] .tv-flow-top {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+.tv-grid[data-density="sparse"] .tv-flow-ico {
+  width: 62px;
+  height: 62px;
+  border-radius: var(--r-4);
+}
+.tv-grid[data-density="sparse"] .tv-flow-name {
+  font-size: clamp(var(--text-xl), 1.9vw, 32px);
+}
+.tv-grid[data-density="sparse"] .tv-flow-bottom {
+  gap: var(--space-3);
+}
+.tv-grid[data-density="sparse"] .tv-spark,
+.tv-grid[data-density="sparse"] .tv-spark-bar {
+  height: 30px;
+}
+.tv-grid[data-density="sparse"] .tv-spark-bar {
+  width: 6px;
+}
+
+/* Dense tiles trade detail for count: a smaller icon, one line of name, and
+   the second line back on a single row with the history and the last run
+   pushed to the right edge. The next scheduled run drops out — it is the least
+   urgent thing on a crowded board and the first thing worth the width. */
+.tv-grid[data-density="dense"] .tv-flow {
+  padding: var(--space-3) var(--space-4);
+  padding-left: var(--space-5);
+}
+.tv-grid[data-density="dense"] .tv-flow-bottom {
+  flex-direction: row;
+  align-items: center;
+}
+.tv-grid[data-density="dense"] .tv-flow-meta {
+  margin-left: auto;
+  flex-wrap: nowrap;
+}
+.tv-grid[data-density="dense"] .tv-flow-next {
+  display: none;
+}
+.tv-grid[data-density="dense"] .tv-flow-ico {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-2);
+}
+.tv-grid[data-density="dense"] .tv-flow-name {
+  font-size: var(--text-lg);
+  -webkit-line-clamp: 1;
+}
+.tv-grid[data-density="dense"] .tv-pill,
+.tv-grid[data-density="dense"] .tv-flow-time,
+.tv-grid[data-density="dense"] .tv-flow-next {
+  font-size: var(--text-sm);
+}
+.tv-grid[data-density="dense"] .tv-spark,
+.tv-grid[data-density="dense"] .tv-spark-bar {
+  height: 18px;
+}
+
 .tv-empty {
   flex: 1 1 auto;
   display: grid;
@@ -11137,25 +11463,59 @@ button:active,
   font-size: var(--text-lg);
 }
 
+/* ── Footer ── */
+/* Our mark sits down here, quietly: the board belongs to whoever's wall it is
+   hanging on, and the product signs it rather than heading it. */
 .tv-foot {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
+  padding-top: clamp(var(--space-3), 1.2vw, var(--space-4));
+  border-top: 1px solid var(--hairline);
   color: var(--faint);
   font-size: var(--text-md);
   letter-spacing: 0.02em;
+}
+.tv-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--muted);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.tv-brand img {
+  width: 22px;
+  height: 22px;
+  opacity: 0.85;
+}
+.tv-foot-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.tv-foot-dot {
+  color: var(--border-strong);
 }
 .tv-updated {
   font-variant-numeric: tabular-nums;
 }
 
+/* Narrow viewports: the computed column count assumes a wall, so hand the grid
+   back to auto-fit and let it find its own width. */
+@media (max-width: 1280px) {
+  .tv-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  }
+}
 @media (max-width: 900px) {
   .tv-stats {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
 
 /* ----- Timezone picker (format:"timezone", TimezoneField) ----- */
 /* A combobox, not a select: the list is the ~400 IANA zones filtered as you

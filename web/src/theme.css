@@ -15,6 +15,12 @@
   --accent-ink: #140d30;
   --btn: #470696;
   --btn-hover: #5d09c7;
+  /* Cool third stop. The brand gradient runs magenta -> violet -> blue so it
+     never reads as a flat two-colour default. This value and the three
+     gradients below are kept IDENTICAL to the marketing site's tokens
+     (../dazyflow-web/style.css) on purpose: the product and the site are one
+     brand, so a brand colour changes in both files or in neither. */
+  --accent-3: #6ba8ff;
 
   /* Ink */
   --ink: #e9ecf3;
@@ -95,6 +101,31 @@
   --script-number: #6cb6ff;
   --script-var: #e0a93a;
 
+  /* Brand gradient — for the one or two things on a surface that carry the
+     brand: an eyebrow, a headline number. Gradient text is thinner to read,
+     so it stays a highlight and never becomes a default text colour. Built
+     from the accent tokens, so the light theme gets its own version for free
+     by overriding those. */
+  --grad-brand: linear-gradient(
+    112deg,
+    var(--accent-2) 0%,
+    var(--accent) 46%,
+    var(--accent-3) 100%
+  );
+  /* Card rim: a lit top-left edge falling off to nothing, painted as a
+     gradient border via the two-background-clip trick — fill clipped to the
+     padding box, this gradient clipped to the border box, border transparent.
+     Reads as light catching an edge rather than as a drawn stroke. */
+  --grad-rim: linear-gradient(
+    150deg,
+    rgba(255, 255, 255, 0.16) 0%,
+    rgba(255, 255, 255, 0.04) 34%,
+    rgba(255, 255, 255, 0) 62%
+  );
+  /* Barely-there divider, for glass surfaces where --border reads as a drawn
+     box rather than a seam. */
+  --hairline: rgba(255, 255, 255, 0.07);
+
   /* Shadows + synthwave glow */
   --shadow: 0 1px 2px rgba(8, 2, 30, 0.45);
   --shadow-lg: 0 2px 10px rgba(8, 2, 30, 0.55);
@@ -154,10 +185,15 @@
   --space-6: 32px;
   --space-7: 48px;
 
-  /* Radii */
+  /* Radii. The first three are app-chrome sizes — controls, chips, panels.
+     --r-4 and --r-5 are the poster sizes, for large standalone cards on
+     surfaces that are read from a distance rather than worked in (the TV
+     board), and they match the marketing site's top two steps. */
   --r-1: 4px;
   --r-2: 8px;
   --r-3: 12px;
+  --r-4: 18px;
+  --r-5: 24px;
   --r-pill: 999px;
 
   /* Motion — one source of truth for durations + easings so every transition
@@ -235,6 +271,16 @@
   --accent-ink: #ffffff;
   --btn: #6d28d9;
   --btn-hover: #5b21b6;    /* violet-800 */
+  --accent-3: #2563eb;     /* blue-600 — cool third stop, AA on white */
+  /* The lit-edge rim inverts on light surfaces: a white highlight on white
+     is invisible, so the rim becomes a soft ink shadow instead. */
+  --grad-rim: linear-gradient(
+    150deg,
+    rgba(27, 34, 51, 0.1) 0%,
+    rgba(27, 34, 51, 0.045) 34%,
+    rgba(27, 34, 51, 0.02) 62%
+  );
+  --hairline: rgba(27, 34, 51, 0.08);
 
   /* Ink — slate rather than pure black, softer and more professional. */
   --ink: #1b2233;

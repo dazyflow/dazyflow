@@ -2077,6 +2077,8 @@
     "live": "Live",
     "reconnecting": "Återansluter…",
     "fullscreen": "Växla helskärm",
+    "themeDark": "Byt till mörkt",
+    "themeLight": "Byt till ljust",
     "running": "Pågående",
     "noFlows": "Inga flöden att visa.",
     "neverRun": "Aldrig kört",

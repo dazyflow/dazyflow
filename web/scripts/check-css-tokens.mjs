@@ -35,6 +35,7 @@ import { join } from "node:path";
 const RUNTIME_SET = {
   "--enter-delay": "components/NodeCard.tsx",
   "--draw-delay": "components/RerouteEdge.tsx",
+  "--tv-cols": "pages/PublicOverview.tsx",
 };
 
 function stylesheets(dir, out = []) {
