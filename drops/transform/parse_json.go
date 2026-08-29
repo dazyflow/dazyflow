@@ -24,7 +24,7 @@ func init() {
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"transform", "json", "parse", "rows", "etl"},
-			Description: "Turn JSON text into rows. Feed it the text output of an AI step or an HTTP response and it parses the JSON into the standard rows + headers shape that Sheets, Excel, Postgres, and the transform family consume. A JSON array of objects becomes one row each; a single object becomes one row. Tolerates the wrappers models add: leading/trailing prose and Markdown code fences (```json … ```) are stripped before parsing. Use 'path' to reach an array nested inside an envelope (e.g. \"data.items\").",
+			Description: "Turn JSON text into rows. Feed it the text output of an AI step or an HTTP response and it parses the JSON into the standard rows + headers shape that Sheets, Excel, Postgres, and the transform family consume. A JSON array of objects becomes one row each; a single object becomes one row. Tolerates the wrappers models add: leading/trailing prose and Markdown code fences (```json … ```) are stripped before parsing. Use 'path' to reach an array nested inside an envelope (e.g. \"data.items\"), or to read a single field out — point it at one value and 'Rows' is empty while 'Value' carries it.",
 			Summary:     "Parse JSON text (incl. fenced AI output) into rows + headers for the table steps that follow.",
 			Examples: []core.ParamsExample{
 				{
@@ -36,6 +36,11 @@ func init() {
 					Title:  "Pull the array out of an API envelope",
 					Params: json.RawMessage(`{"path":"data.results"}`),
 					Notes:  "When the JSON is {\"data\":{\"results\":[…]}}, path digs to the array before turning it into rows.",
+				},
+				{
+					Title:  "Read one field out of a small payload",
+					Params: json.RawMessage(`{"path":"version"}`),
+					Notes:  "For {\"version\":\"0.27.0\"} this puts \"0.27.0\" on 'Value'. A single value is not a table, so 'Rows' comes out empty — take the answer from 'Value'.",
 				},
 			},
 			ExecutionModel: core.ExecutionBatch,
@@ -50,7 +55,7 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"path":  {"type":"string","description":"Optional dot-path into the parsed JSON before rows are built, e.g. \"data.items\". Each segment indexes an object key."},
+					"path":  {"type":"string","description":"Optional dot-path into the parsed JSON before rows are built, e.g. \"data.items\". Each segment indexes an object key. Point it at an object or a list of objects to get rows; point it at a single value (a version string, an id) and 'Rows' comes out empty while 'Value' carries what you asked for."},
 					"fence": {"type":"boolean","default":true,"description":"Strip a leading/trailing Markdown code fence and surrounding prose before parsing. On by default so raw LLM output parses cleanly."}
 				}
 			}`),
@@ -78,7 +83,9 @@ func executeParseJSON(_ context.Context, job core.Job, _ chan<- core.Progress) (
 		return errResult(job, "bad_input", err.Error()), nil
 	}
 
-	if pathRaw, ok := job.Params["path"].(string); ok && pathRaw != "" {
+	pathRaw, _ := job.Params["path"].(string)
+	dug := pathRaw != ""
+	if dug {
 		value, err = digPath(value, pathRaw)
 		if err != nil {
 			return errResult(job, "bad_param", err.Error()), nil
@@ -87,7 +94,23 @@ func executeParseJSON(_ context.Context, job core.Job, _ chan<- core.Progress) (
 
 	rows, err := rowsFromValue(value)
 	if err != nil {
-		return errResult(job, "not_tabular", err.Error()), nil
+		// A path is an explicit instruction to dig to one place, and what sits
+		// there is very often a scalar — a version string, an id, a count. To
+		// fail the whole step for that is wrong twice over: the caller got
+		// exactly what they asked for, and the `value` pin that exists to
+		// carry it was unreachable, because rows are built first. So a dug
+		// value that isn't row-shaped yields EMPTY rows and a populated value.
+		//
+		// Only with a path, though. Without one, "the JSON you handed me is
+		// not row-shaped" is a genuine mistake — an AI step that returned
+		// prose, an API that answered with a bare string — and it still fails
+		// rather than handing back zero rows for someone to discover three
+		// steps later. Asking for a scalar is a choice; being given one is a
+		// surprise.
+		if !dug {
+			return errResult(job, "not_tabular", err.Error()), nil
+		}
+		rows = []map[string]any{}
 	}
 
 	return core.Result{
@@ -208,8 +231,10 @@ func digPath(v any, path string) (any, error) {
 
 // rowsFromValue turns a parsed JSON value into rows: an array becomes
 // one row per element, a single object becomes a one-row table. Scalars
-// and arrays of non-objects are rejected — there's no sensible row shape
-// for them (use the 'value' output instead).
+// and arrays of non-objects have no sensible row shape, so they error
+// here — the caller decides what that means. With an explicit `path` it
+// is not a failure but an answer, and executeParseJSON serves it on the
+// 'value' output with empty rows; without one it fails the step.
 func rowsFromValue(v any) ([]map[string]any, error) {
 	switch t := v.(type) {
 	case []any:

@@ -22,7 +22,7 @@ import {
 } from "../../lib/previewTokens";
 import { Trans, useTranslation } from "react-i18next";
 import i18n from "../../i18n";
-import { enumLabel, fieldHelp, fieldTitle } from "../../lib/dropText";
+import { enumOptionLabel, fieldHelp, fieldTitle } from "../../lib/dropText";
 import { isFieldVisible } from "../../lib/schemaFields";
 import type {
   EmailTemplateSummary,
@@ -435,9 +435,7 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
         >
           {schema.enum.map((v, i) => {
             const val = String(v);
-            const label = schema.enumNames?.[i]
-              ? enumLabel(schema.enumNames[i], i18n.language)
-              : val;
+            const label = enumOptionLabel(schema, i, i18n.language);
             return (
               <Button
                 key={val}
@@ -498,9 +496,7 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
           )}
           {schema.enum.map((v, i) => (
             <option key={String(v)} value={String(v)}>
-              {schema.enumNames?.[i]
-                  ? enumLabel(schema.enumNames[i], i18n.language)
-                  : String(v)}
+              {enumOptionLabel(schema, i, i18n.language)}
             </option>
           ))}
         </select>
@@ -983,9 +979,7 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
       if (schema.format === "string-multiselect" && schema.items?.enum) {
         const opts = schema.items.enum.map((v, i) => ({
           value: String(v),
-          label: schema.items!.enumNames?.[i]
-            ? enumLabel(schema.items!.enumNames![i], i18n.language)
-            : String(v),
+          label: enumOptionLabel(schema.items, i, i18n.language),
         }));
         return (
           <FieldWrap name={name} schema={schema} required={required}>
@@ -1867,9 +1861,7 @@ function SuggestField({
   const { t } = useTranslation();
   const opts = (schema.enum ?? []).map((v, i) => ({
     value: String(v),
-    label: schema.enumNames?.[i]
-      ? enumLabel(schema.enumNames[i], i18n.language)
-      : String(v),
+    label: enumOptionLabel(schema, i, i18n.language),
   }));
   const cur = typeof value === "string" ? value : "";
   const inList = opts.some((o) => o.value === cur);
@@ -3239,9 +3231,7 @@ function ScalarValue({
       >
         {schema.enum.map((v, i) => (
           <option key={String(v)} value={String(v)}>
-            {schema.enumNames?.[i]
-                  ? enumLabel(schema.enumNames[i], i18n.language)
-                  : String(v)}
+            {enumOptionLabel(schema, i, i18n.language)}
           </option>
         ))}
       </select>

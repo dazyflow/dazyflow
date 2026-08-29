@@ -23,6 +23,84 @@ into the image.)
 
 ## [Unreleased]
 
+### Added
+
+- **A guard that the UI actually uses `enumNames`.** The Go side has insisted
+  for a while that every enum carries display names; nothing checked that any
+  screen rendered them. `enumNames` is now read in exactly one module, and
+  `lib/dropText` exports the two ways a dropdown value may reach a screen —
+  `enumOptionLabel` when walking `schema.enum` to build a list, and
+  `enumValueLabel` for a value already stored. A test walks the source and
+  fails on any other file touching the field.
+
+  The mapping had been open-coded in **eight** places. Writing the guard found
+  three more than the audit that prompted it, including one that skipped
+  `enumLabel` entirely — a dropdown on the node card printing its English
+  labels in every language, which no amount of Swedish translation would have
+  fixed because the lookup was never reached.
+
+  Both helpers take the schema rather than the names array, so no caller has a
+  reason to touch `.enumNames` at all; the rule is structural now instead of
+  remembered. A value the schema no longer lists still renders as itself, and
+  an enum whose values ARE the names people know (HTTP methods, currency
+  codes) still falls through to the value, matching `rawValueEnums` on the Go
+  side.
+
+### Fixed
+
+- **Read JSON refused to hand you a single field.** Its `path` is a dot-path,
+  and pointing it at one value — `version` in `{"version":"0.27.0"}` — dug
+  correctly and then failed the whole step with `not_tabular`, because rows
+  were built from the result unconditionally and a bare string is not a table.
+  The step has a `Value` output for exactly this, and it was unreachable: rows
+  are built first, so the failure came before anything could be emitted.
+
+  A path is an explicit instruction to dig to one place, and what sits there is
+  very often a scalar — a version, an id, a count. That now yields an empty
+  `Rows` and a populated `Value` instead of an error.
+
+  Only with a path. Without one, "the JSON you handed me is not row-shaped" is
+  a genuine mistake — an AI step that answered in prose, an API that returned a
+  bare string — and it still fails rather than handing back zero rows for
+  someone to discover three steps later. Asking for a scalar is a choice; being
+  given one is a surprise. A path matching nothing also still fails, before
+  rows are considered, so a typo cannot pass as a field that held nothing.
+
+  The `path` help now says which shapes give you rows and which give you a
+  value, rather than implying any path works.
+
+- **A dropdown's value on a node card read as its identifier, not its label.**
+  The card printed the stored param value while the Inspector rendered the
+  same field through `enumNames`, so the two disagreed about the field you
+  were looking at — and the canvas, which people read first, was the one
+  showing API vocabulary. On the If step a node said `not_equals` while the
+  panel beside it said "does not equal".
+
+  Every read-only enum literal on a card now goes through the same lookup the
+  language chip a few lines above already used. A value the schema no longer
+  lists still renders as itself rather than blanking, and a `${...}` reference
+  keeps its own token rendering — it is never an enum member.
+
+### Changed
+
+- **Retention no longer deletes approvals.** The audit sweep pruned every
+  action alike on the tenant's retention window — 90 days on Pro, 7 on Free —
+  which put an expiry on the one entry nobody wants expired. An approval is the
+  record of who authorised something, and that is characteristically asked
+  about long after the window closes: during an incident review, or when
+  someone asks who signed off on the release that broke it. At 90 days the
+  authorisation for a production deploy is gone within a quarter; on Free,
+  within a week.
+
+  Approvals are now exempt from the sweep. Routine chatter — key reads, config
+  edits, sign-ins — still ages out as before, which is what retention is
+  actually for. Keeping approvals costs little: one is a deliberate human act,
+  so the volume is bounded by how often people click rather than by traffic.
+
+  It does not weaken erasure either. A user erasure pseudonymises the actor on
+  these rows rather than deleting them, so the authorisation survives while the
+  person stops being identifiable — which is what both rules want.
+
 ## [0.27.0] - 2026-08-29
 
 ### Added

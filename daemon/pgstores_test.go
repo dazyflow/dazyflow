@@ -482,6 +482,59 @@ func TestPgAuditLog_Operations(t *testing.T) {
 	}
 }
 
+// TestPgAuditLog_PruneKeepsApprovals pins the one action retention must not
+// reach. Retention is there to stop routine chatter accumulating; an approval
+// is the record of who authorised something, and that is asked about long
+// after the window closes — at Pro's 90 days a production deploy's
+// authorisation is gone within a quarter, on Free within a week.
+//
+// The old rows here are FAR past any cutoff, so a regression that drops the
+// exemption deletes the approval and this fails; it cannot pass by being
+// inside the window.
+func TestPgAuditLog_PruneKeepsApprovals(t *testing.T) {
+	pool, ctx := covPGPool(t)
+	log, err := NewPgAuditLog(ctx, pool)
+	if err != nil {
+		t.Fatalf("NewPgAuditLog: %v", err)
+	}
+	if _, err := pool.Exec(ctx, "TRUNCATE audit_events"); err != nil {
+		t.Fatalf("truncate: %v", err)
+	}
+
+	old := time.Now().UTC().Add(-365 * 24 * time.Hour)
+	for _, e := range []core.AuditEvent{
+		{Time: old, Tenant: "t1", Actor: "alice", Action: "approval", Target: "run1/await_1", Detail: "approve"},
+		{Time: old, Tenant: "t1", Actor: "alice", Action: "graph.save", Target: "g1"},
+		{Time: old, Tenant: "t1", Actor: "bob", Action: "secret.read", Target: "s1"},
+	} {
+		if err := log.Append(ctx, e); err != nil {
+			t.Fatalf("Append: %v", err)
+		}
+	}
+
+	n, err := log.Prune(ctx, 24*time.Hour, 100)
+	if err != nil {
+		t.Fatalf("Prune: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("pruned %d rows, want 2 (both non-approval rows, and only those)", n)
+	}
+
+	left, err := log.List(ctx, core.AuditQuery{Tenant: "t1"})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(left) != 1 {
+		t.Fatalf("%d rows survived, want 1", len(left))
+	}
+	if left[0].Action != "approval" {
+		t.Errorf("survivor is %q, want the approval", left[0].Action)
+	}
+	if left[0].Target != "run1/await_1" {
+		t.Errorf("survivor target = %q, want run1/await_1 — the run it authorised", left[0].Target)
+	}
+}
+
 // TestPgDropSwitchStore_DeleteByTenant covers the erasure hook against the real
 // DB: per-tenant switches go, the GLOBAL switch stays, and an empty tenant is
 // refused rather than matching every global row.

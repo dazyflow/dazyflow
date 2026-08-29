@@ -100,6 +100,22 @@ func NewPgAuditLog(ctx context.Context, pool *pgxpool.Pool) (*PgAuditLog, error)
 // Prune deletes audit rows older than the cutoff in bounded batches so a
 // large backlog doesn't lock the table in one statement. Returns the
 // total deleted. olderThan <= 0 is a no-op (retention disabled).
+//
+// AUTHORISATIONS ARE EXEMPT. Retention exists to stop routine chatter — key
+// reads, config edits, sign-ins — accumulating forever, and for that a window
+// is right. An approval is a different kind of record: it is the answer to
+// "who authorised this", and that question is characteristically asked long
+// after the fact, during an incident review or when someone asks who signed
+// off on the change that broke something. Pruning it puts an expiry on the
+// one entry nobody wants expired: at the Pro tier's 90 days the record of a
+// production deploy is gone within a quarter, and on Free within a week.
+//
+// Keeping them costs nothing worth counting — an approval is a deliberate
+// human act, so the volume is bounded by how often people click, not by
+// traffic. And it does not undercut erasure: a user erasure pseudonymises the
+// actor on these rows rather than deleting them (see gdpr_coverage_test), so
+// the authorisation survives while the person stops being identifiable, which
+// is the outcome both rules actually want.
 func (p *PgAuditLog) Prune(ctx context.Context, olderThan time.Duration, batch int) (int, error) {
 	if olderThan <= 0 {
 		return 0, nil
@@ -112,7 +128,8 @@ func (p *PgAuditLog) Prune(ctx context.Context, olderThan time.Duration, batch i
 	for {
 		tag, err := p.pool.Exec(ctx,
 			`DELETE FROM audit_events WHERE id IN (
-			     SELECT id FROM audit_events WHERE ts < $1 LIMIT $2)`, cutoff, batch)
+			     SELECT id FROM audit_events
+			      WHERE ts < $1 AND action <> 'approval' LIMIT $2)`, cutoff, batch)
 		if err != nil {
 			return total, err
 		}

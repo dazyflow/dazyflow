@@ -585,6 +585,51 @@ export function enumLabel(label: string, lang?: string): string {
   return vocabularyFor(lang)?.enums[label] ?? label;
 }
 
+// enumOptionLabel and enumValueLabel are the ONLY two ways a dropdown value
+// should reach a screen. Both wrap enumLabel above; they exist because the
+// mapping was open-coded in five places (three in SchemaForm, two in
+// NodeCard) and the surface that had NOT open-coded it — a read-only enum on
+// a node card — spent its life printing the stored identifier. So a canvas
+// node read "not_equals" while the Inspector beside it read "does not equal",
+// and nothing was wrong enough anywhere to notice.
+//
+// The two shapes are genuinely different and mixing them is the mistake worth
+// preventing: building the list of options maps by INDEX (you are walking
+// schema.enum), while showing what is currently set maps by VALUE (you have a
+// stored string and need its label). enumValueLabel does the lookup so no
+// caller has to remember which it is holding.
+
+// enumOptionLabel: what the i-th option of an enum is called. Falls back to
+// the raw value, which is the right answer for enums whose value IS the name
+// a user knows (HTTP methods, currency codes — see rawValueEnums in the Go
+// enum_labels guard).
+export function enumOptionLabel(
+  schema: { enum?: unknown[]; enumNames?: string[] } | undefined,
+  i: number,
+  lang?: string,
+): string {
+  // Takes the SCHEMA, not the names array, so no caller has to touch
+  // .enumNames to use this — which is what the guard checks for, and what
+  // keeps a sixth open-coded copy from creeping back in.
+  const name = schema?.enumNames?.[i];
+  return name ? enumLabel(name, lang) : String(schema?.enum?.[i] ?? "");
+}
+
+// enumValueLabel: what a STORED enum value is called. A value the schema no
+// longer lists returns as itself rather than blank — a graph saved against an
+// older version still has to render.
+export function enumValueLabel(
+  schema: { enum?: unknown[]; enumNames?: string[] } | undefined,
+  value: unknown,
+  lang?: string,
+): string {
+  const str = value === undefined || value === null ? "" : String(value);
+  const opts = schema?.enum ?? [];
+  const i = opts.findIndex((v) => String(v) === str);
+  if (i < 0) return str;
+  return enumOptionLabel(schema, i, lang);
+}
+
 export function connectionText(text: string, lang?: string): string {
   if (!text) return "";
   return vocabularyFor(lang)?.connections[text] ?? text;

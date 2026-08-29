@@ -454,8 +454,8 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     sv: "Gör om CSV-text till rader. Mata in ett HTTP-svar, innehållet i en nedladdad fil eller vilken kommaseparerad text som helst, och den tolkas till den vanliga formen med rader + rubriker som Sheets, Excel, Postgres och omvandlingsfamiljen använder. Som standard är första raden rubrikrad och namnger kolumnerna; sätt 'header' till false för data utan rubriker (kolumnerna blir col1, col2, …). 'delimiter' byter avgränsare — använd \"\\t\" eller \"tab\" för tabbseparerade värden, \";\" för europeiska CSV-filer. Rader som är kortare än rubriken fylls ut med tomma strängar; längre rader behåller sina extra celler under de utfyllda namnen.",
   },
   parse_json: {
-    en: "eb683527",
-    sv: "Gör om JSON-text till rader. Mata in textutdatat från ett AI-steg eller ett HTTP-svar och JSON:en tolkas till den vanliga formen med rader + rubriker som Sheets, Excel, Postgres och omvandlingsfamiljen använder. En JSON-array med objekt blir en rad per objekt; ett enskilt objekt blir en rad. Tål de omslag modeller lägger till: inledande och avslutande prosa och Markdown-kodstaket (```json … ```) tas bort före tolkningen. Använd 'path' för att nå en array som ligger inne i ett hölje (t.ex. \"data.items\").",
+    en: "7b8eb1e0",
+    sv: "Gör om JSON-text till rader. Mata in textutdatat från ett AI-steg eller ett HTTP-svar och JSON:en tolkas till den vanliga formen med rader + rubriker som Sheets, Excel, Postgres och omvandlingsfamiljen använder. En JSON-array med objekt blir en rad per objekt; ett enskilt objekt blir en rad. Tål de omslag modeller lägger till: inledande och avslutande prosa och Markdown-kodstaket (```json … ```) tas bort före tolkningen. Använd 'path' för att nå en array som ligger inne i ett hölje (t.ex. \"data.items\"), eller för att läsa ut ett enda fält — peka den på ett enskilt värde så blir Rader tomt medan Värde bär det.",
   },
   parse_xml: {
     en: "bbb18f23",

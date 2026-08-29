@@ -13,7 +13,7 @@ import { glyphFor, languageOf, type LangGlyph } from "../../lib/langBadge";
 import { ScriptEditor } from "../ui/ScriptEditor";
 import { scriptLangFor, type ScriptLang } from "../../lib/scriptHighlight";
 import { TokenText } from "./TokenText";
-import { dropSubtitle, enumLabel, nodeStateText, portLabel } from "../../lib/dropText";
+import { dropSubtitle, enumOptionLabel, enumValueLabel, nodeStateText, portLabel } from "../../lib/dropText";
 import { isFieldVisible } from "../../lib/schemaFields";
 import { isRunnerStep, runnerTargetOf } from "../../lib/runnerStep";
 import type { Manifest, Port, JSONSchema, Ref } from "../../types";
@@ -260,10 +260,7 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
       if (!value) continue;
       // Localised through the param's own enumNames, so the chip reads
       // "JavaScript" and not "javascript" — and reads Swedish in Swedish.
-      const opts = schemaProps[langParam]?.enum ?? [];
-      const names = schemaProps[langParam]?.enumNames ?? [];
-      const at = opts.indexOf(value);
-      return { value, label: at >= 0 && names[at] ? enumLabel(names[at], i18n.language) : value };
+      return { value, label: enumValueLabel(schemaProps[langParam], value, i18n.language) };
     }
     return { value: "", label: "" };
   })();
@@ -607,14 +604,24 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
             }
             const rawVal = d.params?.[key] ?? s.default ?? "";
             const strVal = typeof rawVal === "string" ? rawVal : String(rawVal);
+            // An enum's VALUE is API vocabulary ("not_equals", "in_range");
+            // enumNames is what a person reads. The Inspector's form renders
+            // through enumNames, so without this the card and the Inspector
+            // disagree about the same field — the card showing an identifier
+            // the UI never uses anywhere else. Same mapping the language chip
+            // above does, and the reason enum_labels_test insists every enum
+            // carries labels at all.
+            const display = enumValueLabel(s, rawVal, i18n.language);
             return (
               <label key={key} className="dz-param">
                 <span className="dz-param-label">{label}</span>
                 <span className="dz-param-readonly">
+                  {/* A token is a reference, never an enum member, so it keeps
+                      its own rendering and never reaches the lookup above. */}
                   {hasToken(strVal) ? (
                     <TokenText value={strVal} labels={d.tokenLabels} />
                   ) : (
-                    strVal || i18n.t("nodeCard.pickerUnset")
+                    display || i18n.t("nodeCard.pickerUnset")
                   )}
                 </span>
               </label>
@@ -915,7 +922,10 @@ function ParamInput({
         {unlisted !== undefined && <option value={unlisted}>{unlisted}</option>}
         {s.enum.map((o, i) => (
           <option key={String(o)} value={String(o)}>
-            {s.enumNames?.[i] ?? String(o)}
+            {/* Through the helper, so this list is localised like every
+                other dropdown — it used to print the English enumName
+                verbatim, in every language. */}
+            {enumOptionLabel(s, i, i18n.language)}
           </option>
         ))}
       </select>

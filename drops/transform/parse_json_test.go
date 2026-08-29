@@ -102,6 +102,44 @@ func TestParseJSON_DerivesHeaders(t *testing.T) {
 	}
 }
 
+// A path pointing at one value is a question with a scalar answer, and the
+// answer arrives on 'value'. Rows come out empty because a single value is
+// not a table — not because anything went wrong.
+func TestParseJSON_PathToOneFieldAnswersOnValue(t *testing.T) {
+	res := runParseJSON(t, `{"version":"0.27.0"}`, map[string]any{"path": "version"})
+	if res.Status != core.StatusOK {
+		t.Fatalf("status = %v, error = %+v — digging to a field is a request, not a mistake", res.Status, res.Error)
+	}
+	if got := res.Output["value"].Inline; got != "0.27.0" {
+		t.Errorf("value = %#v, want \"0.27.0\"", got)
+	}
+	rows, ok := res.Output["rows"].Inline.([]map[string]any)
+	if !ok || len(rows) != 0 {
+		t.Errorf("rows = %#v, want empty", res.Output["rows"].Inline)
+	}
+}
+
+func TestParseJSON_PathToListOfScalarsAnswersOnValue(t *testing.T) {
+	res := runParseJSON(t, `{"tags":["a","b"]}`, map[string]any{"path": "tags"})
+	if res.Status != core.StatusOK {
+		t.Fatalf("status = %v, error = %+v", res.Status, res.Error)
+	}
+	got, _ := res.Output["value"].Inline.([]any)
+	if len(got) != 2 || got[0] != "a" {
+		t.Errorf("value = %#v, want [a b]", res.Output["value"].Inline)
+	}
+}
+
+// The softening is scoped to an explicit path. A typo still fails at digPath,
+// before rows are ever considered — a path that matched nothing must not look
+// like a field that held nothing.
+func TestParseJSON_UnknownPathStillFails(t *testing.T) {
+	res := runParseJSON(t, `{"version":"0.27.0"}`, map[string]any{"path": "versoin"})
+	if res.Status != core.StatusError {
+		t.Fatalf("status = %v, want an error for a path that matches nothing", res.Status)
+	}
+}
+
 func TestParseJSON_ScalarIsRejected(t *testing.T) {
 	res := runParseJSON(t, `42`, nil)
 	if res.Status != core.StatusError {
