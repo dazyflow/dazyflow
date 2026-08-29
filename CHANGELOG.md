@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-08-29
+
 ### Added
 
 - **An Email step.** A typed source field beside URL and Phone: type an address
