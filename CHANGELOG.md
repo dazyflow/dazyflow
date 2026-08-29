@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.26.4] - 2026-08-29
+
 ### Added
 
 - **A published release asks to be deployed.** After CI pushes a release's
