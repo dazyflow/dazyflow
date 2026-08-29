@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.27.1] - 2026-08-30
+
 ### Added
 
 - **A guard that the UI actually uses `enumNames`.** The Go side has insisted
