@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.26.2] - 2026-08-29
+
 ### Added
 
 - **`scripts/deploy.sh`** — the entry point for a runner-driven deploy, now
