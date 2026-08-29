@@ -23,6 +23,34 @@ into the image.)
 
 ## [Unreleased]
 
+### Added
+
+- **A running script now says what it is doing.** The "Run on your machine"
+  step showed nothing until the command exited, so a deploy — or any script
+  taking more than a moment — was a blank line for its whole duration, and
+  indistinguishable from a stuck one.
+
+  Almost all of the machinery for this already existed: the agent's heartbeat
+  endpoint has always accepted an optional message, the daemon has always
+  stored it on the task row, and the dispatcher has always polled that row and
+  forwarded a changed value to the step's progress channel. The one missing
+  piece was the agent, which posted an empty body and captured the command's
+  output with `subprocess.run(capture_output=True)` — which hands the output
+  over only once the command has exited, too late to tell anyone anything.
+
+  The agent now runs the command under `Popen` and drains its pipes as they
+  fill, tracking the most recent non-empty line and sending it with each
+  heartbeat. Draining incrementally also stops a chatty command blocking on a
+  full pipe. The heartbeat drops from 30s to 10s, which is now the rate at
+  which progress appears rather than only how often the claim is held; beats
+  happen only while a task is running, so an idle machine is unaffected.
+
+  Progress is a side channel, never the output. The full stdout and stderr
+  still travel in the result, so a dropped beat costs a status line and no
+  data. A line is sent only when it changes, matching what the daemon does
+  with it — an empty message leaves the stored line standing, so an unchanged
+  line would be pure noise.
+
 ## [0.26.4] - 2026-08-29
 
 ### Added

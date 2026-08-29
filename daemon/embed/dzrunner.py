@@ -47,7 +47,22 @@ POLL_SECONDS = 5
 
 # How often a running command reports in to hold its claim. Well inside the
 # server's lease, so a slow network does not lose the task.
-HEARTBEAT_SECONDS = 30
+# How often the agent reports in while a command runs. This is both the
+# claim-holding heartbeat and the rate at which the script's latest output line
+# reaches the run view, which is why it is seconds rather than the minute the
+# lease alone would allow: a deploy that takes a minute should not be a blank
+# progress line for the whole of it. Beats only happen while a task is running,
+# so this costs nothing on an idle machine.
+HEARTBEAT_SECONDS = 10
+
+# The longest progress line sent to the server. A status line, not a log: the
+# full output still goes back in the result.
+MAX_PROGRESS_CHARS = 500
+
+# How long to wait for the output pumps after the command exits. A script that
+# spawned a background child which inherited the pipe can hold it open forever;
+# that is a reason to report what we have, not to hang the agent.
+DRAIN_SECONDS = 5
 
 DEFAULT_TIMEOUT_SECONDS = 600
 
@@ -397,6 +412,83 @@ def trim(stream, limit=MAX_OUTPUT_BYTES):
     return raw[-limit:].decode("utf-8", "replace"), len(raw) - limit
 
 
+class _Progress:
+    """The most recent non-empty output line, for the heartbeat to report.
+
+    Written by the pump threads, read by the heartbeat thread, hence the lock.
+
+    `take` returns the line only when it has CHANGED since the last call, which
+    lines up exactly with what the server does with it: an empty message leaves
+    the previous progress line standing, so an unchanged line costs nothing to
+    omit and a quiet command does not overwrite the last thing it said.
+    """
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._line = ""
+        self._sent = ""
+
+    def note(self, line):
+        line = line.strip()
+        if not line:
+            # A blank line is the command formatting its output, not a status
+            # update. Keeping the previous line is more useful than clearing it.
+            return
+        if len(line) > MAX_PROGRESS_CHARS:
+            line = line[: MAX_PROGRESS_CHARS - 1] + "\u2026"
+        with self._lock:
+            self._line = line
+
+    def take(self):
+        with self._lock:
+            if self._line == self._sent:
+                return ""
+            self._sent = self._line
+            return self._line
+
+
+def _pump(stream, sink, progress):
+    """Drain one pipe line by line, keeping every line and tracking the last.
+
+    Reading incrementally is the whole point: `subprocess.run(capture_output=1)`
+    hands the output over only once the command has exited, which is too late to
+    show anyone what it is doing.
+    """
+    try:
+        for line in stream:
+            sink.append(line)
+            progress.note(line)
+    except (OSError, ValueError):
+        # The pipe closed under us (the command was killed). Whatever arrived
+        # before that is still worth reporting.
+        pass
+    finally:
+        try:
+            stream.close()
+        except OSError:
+            pass
+
+
+def _feed(stdin, text):
+    """Write the wired-in value to the command, in its own thread.
+
+    Its own thread because a command that never reads stdin lets the pipe fill,
+    and a main-thread write would block there forever instead of running.
+    """
+    try:
+        if text:
+            stdin.write(text)
+    except (OSError, ValueError):
+        # Broken pipe: the command exited without reading its input, which is
+        # its prerogative and not a failure of the agent.
+        pass
+    finally:
+        try:
+            stdin.close()
+        except OSError:
+            pass
+
+
 class Agent:
     def __init__(self, cfg, allowed):
         self.cfg = cfg
@@ -483,38 +575,66 @@ class Agent:
         # org's own machine and its environment is theirs to arrange.
         env.update(task.get("env") or {})
 
-        stop_beat = self.heartbeat(task["id"])
         try:
-            proc = subprocess.run(
+            proc = subprocess.Popen(
                 command,
                 shell=use_shell,
-                input=task.get("stdin") or "",
-                capture_output=True,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 # errors="replace" so a command emitting bytes that are not
                 # UTF-8 comes back mangled rather than raising out of the
                 # agent and leaving the task unreported.
                 text=True,
                 errors="replace",
-                timeout=timeout,
                 env=env,
             )
-        except subprocess.TimeoutExpired as e:
-            return self._sized({
-                "stdout": _text(e.stdout),
-                "stderr": _text(e.stderr),
-                "error": f"the command was still running after {timeout}s and was stopped",
-            })
         except OSError as e:
             # Could not start at all — a missing interpreter, a permission
             # problem. Distinct from a command that ran and failed.
             return {"error": f"could not run the command: {e}"}
+
+        # Popen rather than subprocess.run because run() only hands over the
+        # output once the command has exited. Draining the pipes as they fill
+        # is what lets the heartbeat report the latest line while the command
+        # is still working — and it is also what keeps a chatty command from
+        # blocking on a full pipe.
+        progress = _Progress()
+        out, err = [], []
+        workers = [
+            threading.Thread(target=_pump, args=(proc.stdout, out, progress), daemon=True),
+            threading.Thread(target=_pump, args=(proc.stderr, err, progress), daemon=True),
+            threading.Thread(target=_feed, args=(proc.stdin, task.get("stdin") or ""), daemon=True),
+        ]
+        for t in workers:
+            t.start()
+
+        stop_beat = self.heartbeat(task["id"], progress)
+        timed_out = False
+        try:
+            proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            proc.kill()
+            proc.wait()
         finally:
             stop_beat()
 
+        # Bounded: see DRAIN_SECONDS. Whatever the pumps collected before the
+        # deadline is reported rather than waiting on a pipe nobody will close.
+        for t in workers:
+            t.join(DRAIN_SECONDS)
+
+        if timed_out:
+            return self._sized({
+                "stdout": "".join(out),
+                "stderr": "".join(err),
+                "error": f"the command was still running after {timeout}s and was stopped",
+            })
         return self._sized({
             "exit_code": proc.returncode,
-            "stdout": proc.stdout,
-            "stderr": proc.stderr,
+            "stdout": "".join(out),
+            "stderr": "".join(err),
         })
 
     @staticmethod
@@ -539,7 +659,7 @@ class Agent:
                 )
         return result
 
-    def heartbeat(self, task_id):
+    def heartbeat(self, task_id, progress=None):
         """Hold the claim while the command works.
 
         Without this a command that says nothing for the length of the lease
@@ -550,15 +670,26 @@ class Agent:
         an arbitrary script got, so a lapsed claim is failed rather than retried.
         That makes this heartbeat the only thing standing between a long, quiet
         command and a step that reports a failure which did not happen.
+
+        It carries the command's latest output line as it goes, which is what
+        puts a running script's progress on the run view. That is a side
+        channel, not the output: the full stdout/stderr still travels in the
+        result, so a dropped beat costs a status line and never any output.
         """
         done = threading.Event()
 
         def beat():
             while not done.wait(HEARTBEAT_SECONDS):
                 try:
+                    body = {}
+                    # Only when it changed: the server leaves the stored line
+                    # alone for an empty message, so repeating it is pure noise.
+                    line = progress.take() if progress is not None else ""
+                    if line:
+                        body["message"] = line
                     post(
                         self.url(f"/api/v1/runner/tasks/{task_id}/progress"),
-                        {},
+                        body,
                         self.cfg["credential"],
                     )
                 except HTTPError:

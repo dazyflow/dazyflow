@@ -75,6 +75,11 @@ class StubDaemon(BaseHTTPRequestHandler):
 
         if self.path.endswith("/progress"):
             s["beats"] = s.get("beats", 0) + 1
+            # The daemon stores a non-empty message as the task's progress line
+            # and ignores an empty one; record what actually gets sent so the
+            # tests can tell those apart.
+            if body.get("message"):
+                s.setdefault("progress", []).append(body["message"])
             self._send(204)
             return
 
@@ -237,6 +242,39 @@ class AgentTest(unittest.TestCase):
         self.state["queue"].append({"id": "t1", "script": "cat", "stdin": "from the flow"})
         dzrunner.Agent(cfg, []).run(once=True)
         self.assertEqual(self.state["results"][0]["stdout"], "from the flow")
+
+    def test_the_latest_output_line_is_reported_while_the_command_runs(self):
+        cfg = self.register()
+        self.state["queue"].append(
+            {"id": "t1", "script": "echo first; sleep 1; echo second; sleep 1"}
+        )
+        prev = dzrunner.HEARTBEAT_SECONDS
+        dzrunner.HEARTBEAT_SECONDS = 0.2
+        try:
+            dzrunner.Agent(cfg, []).run(once=True)
+        finally:
+            dzrunner.HEARTBEAT_SECONDS = prev
+
+        sent = self.state.get("progress", [])
+        self.assertIn("first", sent)
+        self.assertIn("second", sent)
+        # Each line is sent once however many beats fall between them: the
+        # server keeps the stored line when the message is empty.
+        self.assertEqual(sent.count("first"), 1)
+        # The full output still comes back in the result. Progress is an extra,
+        # never a replacement — a dropped beat must not lose output.
+        self.assertIn("second", self.state["results"][0]["stdout"])
+
+    def test_stderr_counts_as_progress_too(self):
+        cfg = self.register()
+        self.state["queue"].append({"id": "t1", "script": "echo working >&2; sleep 1"})
+        prev = dzrunner.HEARTBEAT_SECONDS
+        dzrunner.HEARTBEAT_SECONDS = 0.2
+        try:
+            dzrunner.Agent(cfg, []).run(once=True)
+        finally:
+            dzrunner.HEARTBEAT_SECONDS = prev
+        self.assertIn("working", self.state.get("progress", []))
 
     def test_a_failing_command_reports_its_exit_code_and_stderr(self):
         cfg = self.register()
@@ -504,6 +542,37 @@ class ScriptTest(unittest.TestCase):
         )
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertIn("--token", out.stdout)
+
+
+class ProgressTest(unittest.TestCase):
+    """The latest-line tracker behind the progress heartbeat."""
+
+    def test_reports_a_line_once_and_then_stays_quiet(self):
+        p = dzrunner._Progress()
+        p.note("Pulling 0.26.4\n")
+        self.assertEqual(p.take(), "Pulling 0.26.4")
+        # Unchanged: the server keeps the stored line when the message is
+        # empty, so resending it would be pure noise.
+        self.assertEqual(p.take(), "")
+        p.note("Deployed 0.26.4\n")
+        self.assertEqual(p.take(), "Deployed 0.26.4")
+
+    def test_a_blank_line_does_not_erase_the_last_message(self):
+        p = dzrunner._Progress()
+        p.note("Upgrading to 0.26.4\n")
+        p.note("\n")
+        p.note("   \n")
+        self.assertEqual(p.take(), "Upgrading to 0.26.4")
+
+    def test_a_very_long_line_is_truncated(self):
+        p = dzrunner._Progress()
+        p.note("x" * (dzrunner.MAX_PROGRESS_CHARS + 400))
+        line = p.take()
+        self.assertEqual(len(line), dzrunner.MAX_PROGRESS_CHARS)
+        self.assertTrue(line.endswith("\u2026"))
+
+    def test_nothing_to_report_before_any_output(self):
+        self.assertEqual(dzrunner._Progress().take(), "")
 
 
 if __name__ == "__main__":
