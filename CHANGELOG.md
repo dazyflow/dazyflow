@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-08-29
+
 ### Changed
 
 - **Production deploys pull prebuilt images instead of compiling on the box.**
