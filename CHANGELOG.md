@@ -81,6 +81,25 @@ into the image.)
 
 ### Fixed
 
+- **A number and its unit now have a space between them.** Durations read
+  "94ms", "4.6s", "3.5m". A space is required there — SI says so for unit
+  symbols, and Swedish writing rules say so too, which settles it for a UI
+  shipping in both: this was not a house style to pick, it was wrong in one of
+  our two languages. It is now "94 ms", and the space is non-breaking, so a
+  wrapping cell cannot leave the number on one line and the unit on the next.
+
+  **"min", not "m".** `m` is the symbol for metre, so a three-and-a-half minute
+  run rendered as "3.5m" — three and a half metres. Familiar from developer
+  tooling ("3m29s"), and ambiguous the moment it is read as a unit rather than
+  as jargon.
+
+  `formatBytes` in the same file already wrote "1.0 KiB" with a space, so the
+  two halves of one module disagreed; both now use the same separator. The
+  retry countdown, the workspace timeout and the plan-limits timeout carried
+  their own unspaced copies and were fixed with it. CSS durations
+  (`--enter-delay: 0.2s`) are untouched — a space there is a syntax error, not
+  a typo.
+
 - **Self-coloured icons were invisible in the step search.** Ollama, Git and
   ntfy render as their own marks with no backdrop, taking their colour from
   whatever contains them. Three surfaces set that colour; the Ctrl+K palette

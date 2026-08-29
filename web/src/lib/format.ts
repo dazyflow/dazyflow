@@ -11,8 +11,19 @@
 // (1024), because it measures disk quota and file sizes, which is what the
 // daemon reports. Was duplicated verbatim in Files, AdminWorkspace and
 // PlanComparison.
+// NBSP separates a number from its unit. A space is required there — SI says
+// so for unit symbols, and Swedish writing rules say so too, which settles it
+// for a UI that ships in both: "94ms" is not a house style we get to pick, it
+// is wrong in one of our two languages.
+//
+// Non-breaking, and written as an escape rather than typed, so it is visible
+// in the source and cannot be mistaken for an ordinary space. It keeps "94"
+// and "ms" on the same line when a cell wraps — a value split across a line
+// break reads as two things.
+export const NBSP = "\u00A0";
+
 export function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
+  if (n < 1024) return `${n}${NBSP}B`;
   const units = ["KiB", "MiB", "GiB", "TiB"];
   let v = n / 1024;
   let i = 0;
@@ -20,11 +31,15 @@ export function formatBytes(n: number): string {
     v /= 1024;
     i++;
   }
-  return `${v.toFixed(1)} ${units[i]}`;
+  return `${v.toFixed(1)}${NBSP}${units[i]}`;
 }
 
 // formatDuration renders the gap between two RFC3339 instants as a short
-// human string: "840ms", "4.6s", "3.5m".
+// human string: "840 ms", "4.6 s", "3.5 min".
+//
+// "min", not "m": m is the symbol for METRE. A three-and-a-half minute run
+// used to render as "3.5m". Familiar from developer tooling ("3m29s"), and
+// ambiguous the moment it is read as a unit rather than as jargon.
 //
 // This is the one that had actually drifted. The runs list and the run-detail
 // page each carried their own copy, and they rounded differently — so ONE run
@@ -41,9 +56,9 @@ export function formatDuration(startedISO: string, finishedISO: string): string 
   const end = Date.parse(finishedISO);
   if (!Number.isFinite(start) || !Number.isFinite(end)) return "";
   const ms = Math.max(0, end - start);
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${(ms / 60_000).toFixed(1)}m`;
+  if (ms < 1000) return `${ms}${NBSP}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}${NBSP}s`;
+  return `${(ms / 60_000).toFixed(1)}${NBSP}min`;
 }
 
 // slugify turns a display name into an id-safe slug. Returns "" for input with

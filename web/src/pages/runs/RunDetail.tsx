@@ -25,7 +25,7 @@ import { formatDateTime, formatRelative } from "../../lib/datetime";
 import { ErrorNotice } from "../../components/ui/ErrorNotice";
 import { ICON } from "../../icons";
 import { POLL, TICK, FEEDBACK } from "../../lib/timing";
-import { formatDuration } from "../../lib/format";
+import { NBSP, formatDuration } from "../../lib/format";
 import { Notice } from "../../components/ui/Notice";
 
 // RunDetail is the post-failure "what happened" page — and the
@@ -1149,8 +1149,9 @@ function retryCountdown(iso: string | null | undefined): string {
   if (!iso) return "";
   const secs = Math.round((Date.parse(iso) - Date.now()) / 1000);
   if (!Number.isFinite(secs) || secs <= 0) return "";
-  if (secs < 60) return `${secs}s`;
-  return `${Math.round(secs / 60)}m`;
+  if (secs < 60) return `${secs}${NBSP}s`;
+  // "min", not "m" — m is metre. See NBSP/formatDuration in lib/format.
+  return `${Math.round(secs / 60)}${NBSP}min`;
 }
 
 

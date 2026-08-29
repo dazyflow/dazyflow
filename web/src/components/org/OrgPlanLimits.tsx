@@ -18,6 +18,7 @@ import { Button } from "../ui/Button";
 import { ErrorNotice } from "../ui/ErrorNotice";
 import { ICON } from "../../icons";
 import { useEscapeToClose } from "../ui/useEscapeToClose";
+import { NBSP } from "../../lib/format";
 
 // PlanLimitsSection shows an org's effective plan + limits and lets a
 // platform admin assign a tier, grant/force a plan (trial, comp, force
@@ -94,7 +95,7 @@ export function PlanLimitsSection({ tenant }: { tenant: string }) {
             <dt>{t("common.flows")}</dt>
             <dd>{fmt(eff.max_flows)}</dd>
             <dt>{t("admin.platformTiers.timeout")}</dt>
-            <dd>{eff.max_timeout_seconds > 0 ? `${eff.max_timeout_seconds}s` : t("admin.platformPlan.unlimited")}</dd>
+            <dd>{eff.max_timeout_seconds > 0 ? `${eff.max_timeout_seconds}${NBSP}s` : t("admin.platformPlan.unlimited")}</dd>
             <dt>{t("admin.platformTiers.disk")}</dt>
             <dd>{disk}</dd>
             <dt>{t("admin.platformTiers.polling")}</dt>

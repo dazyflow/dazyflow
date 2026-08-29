@@ -12,7 +12,7 @@ import type { WorkspaceLimits } from "../../types";
 import { explainApiError } from "../../lib/explainApiError";
 import { ErrorNotice } from "../../components/ui/ErrorNotice";
 import { ICON } from "../../icons";
-import { formatBytes } from "../../lib/format";
+import { NBSP, formatBytes } from "../../lib/format";
 import { Loading } from "../../components/ui/Loading";
 
 // AdminWorkspace is a read-only view of the effective limits for the
@@ -124,7 +124,7 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 function fmtSeconds(t: (k: string) => string, s: number): string {
-  return s > 0 ? `${s}s` : t("admin.workspace.none");
+  return s > 0 ? `${s}${NBSP}s` : t("admin.workspace.none");
 }
 
 // OrgProfileEditor lets the owner rename their organization. The
