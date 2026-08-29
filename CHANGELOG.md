@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-08-29
+
 ### Fixed
 
 - **The overview's four stat tiles now open the runs they counted.** Each tile
