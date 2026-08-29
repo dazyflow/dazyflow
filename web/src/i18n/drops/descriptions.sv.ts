@@ -322,8 +322,8 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     sv: "Skicka en fil från arbetsytan till en webbadress, strömmad från disk. Som standard skickas filens byte direkt — vilket är vad uppladdningslänkar från S3/GCS/Azure förväntar sig; slå på 'Skicka som formuläruppladdning' för tjänster som vill ha filen som en formulärbilaga. Läser även scratch://-sökvägar. Adresser i privata nät är blockerade som standard.",
   },
   if: {
-    en: "032948c3",
-    sv: "Testa värdet på A och skicka det ut på Ja eller Nej i ett och samma steg. Välj testet i en lista på vanlig svenska — är lika med, innehåller, är större än, är någon av, ligger inom intervall och mer. A är både värdet som testas och nyttolasten som går vidare: den lämnar steget via Ja när testet stämmer, via Nej när det inte gör det. Koppla in B från ett tidigare steg eller skriv ett fast standardvärde. Det här är Jämför + Förgrening sammanslaget för det vanliga fallet med ett enda villkor; ta Jämför → Förgrening när du behöver dirigera en annan nyttolast än den du testar, eller kombinera villkor med Och/Eller/Inte.",
+    en: "ac690608",
+    sv: "Testa det inkommande värdet och skicka det ut på Ja eller Nej i ett och samma steg. Välj testet i en lista på vanlig svenska — är lika med, innehåller, är större än, är någon av, ligger inom intervallet och mer. Värdet är både det som testas och nyttolasten som går vidare: den lämnar steget via Ja när testet stämmer, via Nej när det inte gör det. Koppla in Jämför med från ett tidigare steg, eller skriv ett fast värde. Det här är Jämför + Förgrening sammanslaget för det vanliga fallet med ett enda villkor; ta Jämför → Förgrening när du behöver dirigera en annan nyttolast än den du testar, eller kombinera villkor med Och/Eller/Inte.",
   },
   join_rows: {
     en: "e9b3181a",

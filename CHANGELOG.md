@@ -23,6 +23,34 @@ into the image.)
 
 ## [Unreleased]
 
+### Changed
+
+- **The If step now says the same thing in all three places.** Its pins read
+  **Value** and **Compare to**, but its operator list still said "A equals B"
+  and the literal field was titled just "B" — three vocabularies for two
+  things, so nothing on the form told you which side was which.
+
+  The operators are now plain predicates on the value — "equals", "contains",
+  "is one of", "is within range" — and the literal field takes the name of the
+  pin it stands in for, "Compare to". The form reads left to right as
+  *Value · contains · urgent*. The range bounds and the field path follow the
+  same vocabulary, and the step's description and examples were reworded off
+  A/B.
+
+  Compare is deliberately untouched: it labels its own pins A and B, so "A
+  equals B" is coherent there. If was the step that renamed its pins to plain
+  language and left the operator list behind. The A/B labels stay in the
+  Swedish file for Compare's sake, alongside the new set.
+
+  The Contains preset had a milder version of the same thing — pins reading
+  Text and Substring, help text referring to A and B — and now matches its own
+  pins too.
+
+  Only labels changed. The port IDs and param names are still `A`, `B` and
+  `field`, because a saved graph stores edges by port ID and params by name; a
+  rename there would silently drop the values in every flow already using the
+  step.
+
 ## [0.26.5] - 2026-08-29
 
 ### Added
