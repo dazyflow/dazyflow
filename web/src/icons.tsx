@@ -291,28 +291,40 @@ export const DROP_ICON_TINT = "22%";
 //  3. anything else — a lucide glyph in the drop's colour, on that colour at
 //     DROP_ICON_TINT.
 //
-// The CONTAINER class stays the caller's (`icon`, `inspector-drop-icon`, …):
-// each surface sizes its own box in CSS, and only the treatment inside is
-// shared. glyphSize is passed because a 28px node and a 32px panel header want
-// different glyphs in the same box.
+// The box always carries `icon`, and a surface adds its own class beside it
+// (`inspector-drop-icon`) to size the box in CSS. `icon` is not optional
+// because every modifier rule is a COMPOUND — `.dz-node .icon.brand-logo`,
+// `.quick-palette-row .icon.branded` — so a box without it wears `brand-logo`
+// as a class nothing matches and renders unstyled. Building the list by
+// concatenating a prop hid exactly that from check-css-classes, which reasons
+// over the class literals it can see; writing `icon` literally is what lets it
+// keep working. glyphSize is separate because a 28px node and a 32px panel
+// header want different glyphs in the same box.
 export function DropIcon({
   icon,
   category,
   brandColor,
   brandLogo,
   glyphSize,
-  className = "icon",
+  className,
 }: {
   icon?: string;
   category?: string;
   brandColor?: string;
   brandLogo?: string;
   glyphSize: number;
+  /** Extra class for the box, beside the always-present `icon`. */
   className?: string;
 }) {
+  // `icon` is written literally in each template below rather than folded
+  // into a variable: check-css-classes reads a template by stripping its
+  // ${…} interpolations and keeping the static text, so a partner class
+  // hidden behind an interpolation is invisible to it — and a modifier whose
+  // partner it cannot see is exactly what it is built to report.
+  const extra = className ?? "";
   if (brandLogo) {
     return (
-      <div className={className + " brand-logo"}>
+      <div className={`icon ${extra} brand-logo`}>
         <img src={brandLogo} alt="" draggable={false} />
       </div>
     );
@@ -328,7 +340,7 @@ export function DropIcon({
     //
     // Inline, it cannot be forgotten by the next surface that renders a step.
     return (
-      <div className={className + " branded"} style={{ color: "inherit", background: "transparent" }}>
+      <div className={`icon ${extra} branded`} style={{ color: "inherit", background: "transparent" }}>
         <Glyph size={glyphSize} strokeWidth={2.2} />
       </div>
     );
@@ -336,7 +348,7 @@ export function DropIcon({
   const color = dropColor(category, brandColor);
   return (
     <div
-      className={className}
+      className={`icon ${extra}`}
       style={{ color, background: `color-mix(in srgb, ${color} ${DROP_ICON_TINT}, transparent)` }}
     >
       <Glyph size={glyphSize} strokeWidth={2.2} />
