@@ -308,19 +308,43 @@ LATEST_TAG = git tag -l '[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -Ex '[0-
 latest: ## Print the newest release tag (deploy scripts: use `make -s latest`)
 	@$(LATEST_TAG)
 
+# Deploy the newest release tag.
+#
+# The commentary lives out here rather than inside the recipe because make
+# ECHOES recipe lines, comments included. This target is normally run by a
+# flow step, so every one of those lines lands in the run log and buries the
+# three that say what actually happened.
+#
+# `git fetch --tags --force --prune-tags`
+#     --force updates a tag that was moved upstream; --prune-tags drops one
+#     deleted upstream. Without them a stale local tag can win the selection.
+#
+# The caddy guard
+#     Refuses to recreate a running production stack with a file set that omits
+#     the overlay: that would tear down Caddy (TLS) and the docs site and bring
+#     dzd back bare. The test compares what is RUNNING against what THIS
+#     invocation would apply, rather than testing PROD directly — a host that
+#     configures the overlay through compose's own COMPOSE_FILE is correctly
+#     set up and must not be nagged about a flag it doesn't need. caddy exists
+#     only in the overlay, so it stands in for "the overlay is in play"; we
+#     look for the running one with the overlay merged, since a compose
+#     invocation without it doesn't know the service exists.
+#
+# `set -e`
+#     Load-bearing, and its absence was a real outage. The body is ONE
+#     continued line, which make hands to a single shell — so make only ever
+#     saw the exit status of the LAST command, the trailing `if`, which returns
+#     0 unconditionally. A failed build therefore reported a SUCCESSFUL upgrade
+#     while the box kept serving the previous release with its tree checked out
+#     at the new tag. Not hypothetical: that is exactly how 0.25.0 "deployed"
+#     onto images that were still 15 hours old.
+#
+# The registry branch
+#     A host running the production overlay pulls prebuilt images. Anything
+#     else — a self-host without the overlay — still builds from source, which
+#     is why the else branch stays.
 upgrade: ## Deploy the latest release tag, pulling its prebuilt images (PROD=1 on a production host)
-	# --force updates a tag that was moved upstream; --prune-tags drops one
-	# deleted upstream. Without them a stale local tag can win the selection.
 	git fetch --tags --force --prune-tags
-	# Refuse to recreate a running production stack with a file set that omits
-	# the overlay: that would tear down Caddy (TLS) and the docs site and bring
-	# dzd back bare. The test compares what is RUNNING against what THIS
-	# invocation would apply, rather than testing PROD directly — a host that
-	# configures the overlay through compose's own COMPOSE_FILE is correctly
-	# set up and must not be nagged about a flag it doesn't need. caddy exists
-	# only in the overlay, so it stands in for "the overlay is in play"; we look
-	# for the running one with the overlay merged, since a compose invocation
-	# without it doesn't know the service exists.
 	@if docker compose -f docker-compose.yml -f docker-compose.prod.yml ps \
 	     --services --status running 2>/dev/null | grep -qx caddy && \
 	   ! $(COMPOSE) config --services 2>/dev/null | grep -qx caddy; then \
@@ -330,13 +354,6 @@ upgrade: ## Deploy the latest release tag, pulling its prebuilt images (PROD=1 o
 		echo "  echo COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml >> .env   (once)"; \
 		exit 1; \
 	fi
-	# `set -e` is load-bearing, and its absence was a real outage. Everything
-	# below is ONE continued line, which make hands to a single shell — so make
-	# only ever saw the exit status of the LAST command, the trailing `if`, which
-	# returns 0 unconditionally. A failed build therefore reported a successful
-	# upgrade while the box kept serving the previous release with its tree
-	# checked out at the new tag. Not hypothetical: that is exactly how 0.25.0
-	# "deployed" onto images that were still 15 hours old.
 	@set -e; \
 	LATEST=$$($(LATEST_TAG)); \
 	if [ -z "$$LATEST" ]; then \

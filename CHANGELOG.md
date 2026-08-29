@@ -23,6 +23,15 @@ into the image.)
 
 ## [Unreleased]
 
+### Changed
+
+- **`make upgrade` no longer buries its own output.** Make echoes recipe lines,
+  comments included, so the target's explanatory blocks were reprinted on every
+  deploy — and since a deploy is normally driven by a flow step, they filled the
+  run log, leaving the three lines that say what happened at the bottom of about
+  fifteen that do not. The commentary moved above the target, where it still
+  documents the recipe without being executed. A deploy now echoes one line.
+
 ### Fixed
 
 - **Release images now carry the commit they were built from.** CI built them
