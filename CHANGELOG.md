@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.26.3] - 2026-08-29
+
 ### Changed
 
 - **`make upgrade` no longer buries its own output.** Make echoes recipe lines,
