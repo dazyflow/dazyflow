@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.27.2] - 2026-08-30
+
 ### Fixed
 
 - **Step icons could render unstyled, and the Inspector's did.** Every icon
