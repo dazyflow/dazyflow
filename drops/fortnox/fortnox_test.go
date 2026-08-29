@@ -196,3 +196,98 @@ func TestListCustomers_Picker(t *testing.T) {
 		t.Errorf("option[1].Name = %q, want 43", got[1].Name)
 	}
 }
+
+// TestResolveRows covers every shape the 'Rows' input can arrive in. Rows pass
+// through to Fortnox verbatim as InvoiceRow objects, so the only job here is to
+// get them into a []any — and to reject a shape that isn't one with a message
+// naming the port, rather than sending Fortnox something it will refuse.
+func TestResolveRows(t *testing.T) {
+	rowsJSON := `[{"ArticleNumber":"A1","DeliveredQuantity":2}]`
+
+	withInput := func(inline any) core.Job {
+		return core.Job{ID: "j", Input: map[string]core.Ref{"rows": {Inline: inline}}}
+	}
+
+	t.Run("a wired []any passes straight through", func(t *testing.T) {
+		want := []any{map[string]any{"ArticleNumber": "A1"}}
+		got, err := resolveRows(withInput(want))
+		if err != nil || len(got) != 1 {
+			t.Fatalf("resolveRows = %v, %v", got, err)
+		}
+	})
+
+	t.Run("a JSON string is decoded", func(t *testing.T) {
+		got, err := resolveRows(withInput(rowsJSON))
+		if err != nil {
+			t.Fatalf("resolveRows: %v", err)
+		}
+		if len(got) != 1 {
+			t.Fatalf("got %d rows, want 1", len(got))
+		}
+		row, ok := got[0].(map[string]any)
+		if !ok || row["ArticleNumber"] != "A1" {
+			t.Errorf("row = %#v, want the PascalCase fields preserved", got[0])
+		}
+	})
+
+	t.Run("JSON bytes are decoded", func(t *testing.T) {
+		got, err := resolveRows(withInput([]byte(rowsJSON)))
+		if err != nil || len(got) != 1 {
+			t.Fatalf("resolveRows = %v, %v", got, err)
+		}
+	})
+
+	t.Run("a non-array shape is rejected", func(t *testing.T) {
+		// A single object, a bare scalar, and truncated JSON all fail the same
+		// way: the input is documented as an ARRAY of row objects.
+		for _, bad := range []any{
+			`{"ArticleNumber":"A1"}`,
+			`"just a string"`,
+			`[{"a":1}`,
+			`not json at all`,
+			42,
+			true,
+			map[string]any{"ArticleNumber": "A1"},
+		} {
+			_, err := resolveRows(withInput(bad))
+			if err == nil {
+				t.Errorf("resolveRows accepted %#v", bad)
+				continue
+			}
+			if !strings.Contains(err.Error(), "'Rows'") {
+				t.Errorf("error for %#v = %q, want it to name the Rows port", bad, err)
+			}
+		}
+	})
+
+	t.Run("an unwired port falls back to the param", func(t *testing.T) {
+		job := core.Job{ID: "j", Params: map[string]any{
+			"rows": []any{map[string]any{"ArticleNumber": "P1"}},
+		}}
+		got, err := resolveRows(job)
+		if err != nil || len(got) != 1 {
+			t.Fatalf("resolveRows = %v, %v", got, err)
+		}
+	})
+
+	t.Run("nothing set is not an error", func(t *testing.T) {
+		// An invoice with no rows is the caller's business, not this helper's —
+		// the drop's own validation decides whether that is allowed.
+		got, err := resolveRows(core.Job{ID: "j"})
+		if err != nil || got != nil {
+			t.Errorf("resolveRows(empty) = %v, %v; want nil, nil", got, err)
+		}
+	})
+
+	t.Run("a present but nil inline falls through to the param", func(t *testing.T) {
+		job := core.Job{
+			ID:     "j",
+			Input:  map[string]core.Ref{"rows": {Inline: nil}},
+			Params: map[string]any{"rows": []any{map[string]any{"ArticleNumber": "P2"}}},
+		}
+		got, err := resolveRows(job)
+		if err != nil || len(got) != 1 {
+			t.Fatalf("resolveRows = %v, %v", got, err)
+		}
+	})
+}

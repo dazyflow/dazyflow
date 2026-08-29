@@ -4,6 +4,10 @@
 package webapi_test
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -471,5 +475,117 @@ func TestParseThenRefresh_IsAllUnchanged(t *testing.T) {
 	d := webapi.DiffOperations("orders", first.Operations, second.Operations)
 	if d.Changed != 0 || d.Added != 0 || d.Removed != 0 {
 		t.Errorf("re-importing an unchanged spec reported %+v", d)
+	}
+}
+
+// TestFetchSpec covers the guarded spec fetch. A spec URL is tenant-supplied,
+// so the note's rule is that it goes through the same Doer a step's call does —
+// never a bare http.Client. These pin the boundary conditions around that: no
+// Doer wired, a non-https address, a non-2xx answer, and the happy path.
+func TestFetchSpec(t *testing.T) {
+	ctx := context.Background()
+
+	// With no Doer installed the fetch must refuse rather than quietly fall
+	// back to an unguarded client — that fallback would make every SSRF and
+	// egress guard in the package opt-in.
+	webapi.SetDoer(nil)
+	if _, err := webapi.FetchSpec(ctx, "https://api.example.com/spec.yaml"); err == nil {
+		t.Fatal("FetchSpec succeeded with no guarded caller wired")
+	} else if !strings.Contains(err.Error(), "no guarded HTTP caller") {
+		t.Errorf("error = %q, want it to name the missing caller", err)
+	}
+
+	// A Doer that records what it was asked for and returns the running example.
+	var gotURL, gotMethod string
+	var gotAccept string
+	var gotMaxBytes int
+	install := func(status int, body string) {
+		webapi.SetDoer(func(_ context.Context, method, u string, headers map[string]string,
+			_ []byte, _, maxBytes int) (int, []byte, http.Header, error) {
+			gotMethod, gotURL = method, u
+			gotAccept = headers["Accept"]
+			gotMaxBytes = maxBytes
+			return status, []byte(body), nil, nil
+		})
+		t.Cleanup(func() { webapi.SetDoer(nil) })
+	}
+	install(200, ordersSpec)
+
+	// https only, held at the same boundary as a catalog's base URL: a spec
+	// fetched over cleartext is one an intermediary can rewrite, and what it
+	// would rewrite is where every step of the catalog calls.
+	for _, bad := range []string{
+		"http://api.example.com/spec.yaml",
+		"HTTP://api.example.com/spec.yaml",
+		"ftp://api.example.com/spec.yaml",
+		"file:///etc/passwd",
+		"//api.example.com/spec.yaml", // no scheme
+		"https://",                    // no host
+		"not a url at all",
+		"",
+		"   ",
+	} {
+		if _, err := webapi.FetchSpec(ctx, bad); err == nil {
+			t.Errorf("FetchSpec(%q) was accepted", bad)
+		} else if !strings.Contains(err.Error(), "https://") {
+			t.Errorf("FetchSpec(%q) error = %q, want it to state the https rule", bad, err)
+		}
+	}
+	// None of those should have reached the caller.
+	if gotURL != "" {
+		t.Errorf("a rejected address still hit the network: %q", gotURL)
+	}
+
+	// The happy path: parsed, and fetched through the guarded caller with the
+	// response cap applied.
+	got, err := webapi.FetchSpec(ctx, "  https://api.example.com/spec.yaml  ")
+	if err != nil {
+		t.Fatalf("FetchSpec: %v", err)
+	}
+	if len(got.Operations) == 0 {
+		t.Error("FetchSpec returned no operations")
+	}
+	if gotMethod != http.MethodGet {
+		t.Errorf("method = %q, want GET", gotMethod)
+	}
+	// The surrounding whitespace is trimmed before the request.
+	if gotURL != "https://api.example.com/spec.yaml" {
+		t.Errorf("url = %q, want it trimmed", gotURL)
+	}
+	if !strings.Contains(gotAccept, "application/json") || !strings.Contains(gotAccept, "yaml") {
+		t.Errorf("Accept = %q, want it to offer json and yaml", gotAccept)
+	}
+	if gotMaxBytes <= 0 {
+		t.Errorf("maxBytes = %d, want the response cap applied", gotMaxBytes)
+	}
+
+	// A non-2xx answer is reported with its status, not parsed as a document.
+	for _, status := range []int{301, 404, 401, 500} {
+		install(status, `{"error":"nope"}`)
+		_, err := webapi.FetchSpec(ctx, "https://api.example.com/spec.yaml")
+		if err == nil {
+			t.Errorf("status %d was accepted", status)
+			continue
+		}
+		if !strings.Contains(err.Error(), fmt.Sprint(status)) {
+			t.Errorf("status %d error = %q, want it to name the status", status, err)
+		}
+	}
+
+	// A transport failure surfaces as a fetch error, not a parse error.
+	webapi.SetDoer(func(_ context.Context, _, _ string, _ map[string]string,
+		_ []byte, _, _ int) (int, []byte, http.Header, error) {
+		return 0, nil, nil, errors.New("dial guard blocked a private address")
+	})
+	if _, err := webapi.FetchSpec(ctx, "https://api.example.com/spec.yaml"); err == nil {
+		t.Fatal("a transport failure was not reported")
+	} else if !strings.Contains(err.Error(), "could not fetch") {
+		t.Errorf("error = %q, want a fetch failure", err)
+	}
+
+	// A 200 carrying something that isn't a spec still fails at the parser.
+	install(200, `{"hello":"world"}`)
+	if _, err := webapi.FetchSpec(ctx, "https://api.example.com/spec.yaml"); err == nil {
+		t.Fatal("a non-spec 200 body was accepted")
 	}
 }

@@ -539,7 +539,9 @@ func TestPlatformDrops_ListDisableEnable(t *testing.T) {
 		break
 	}
 	if dropID == "" {
-		t.Skip("no manifests in catalog")
+		// The catalog is populated in this binary; an empty one means the
+		// killswitch test below would assert nothing at all.
+		t.Fatal("no manifests in catalog — nothing to exercise the killswitch on")
 	}
 
 	rw := h.platformDo(t, "GET", "/api/v1/admin/platform/drops", nil)

@@ -349,3 +349,89 @@ func TestHTTPFailure(t *testing.T) {
 		}
 	})
 }
+
+func TestTimeoutMS(t *testing.T) {
+	// The clamp every HTTP drop applies before handing the value to net.Do: a
+	// missing, zero or negative timeout must never reach the client, or the
+	// request would either hang forever or fail instantly.
+	cases := []struct {
+		name   string
+		params map[string]any
+		def    int
+		want   int
+	}{
+		{"absent falls back", map[string]any{}, 5000, 5000},
+		{"nil params falls back", nil, 5000, 5000},
+		{"positive is honoured", map[string]any{"timeout_ms": 250}, 5000, 250},
+		{"zero falls back", map[string]any{"timeout_ms": 0}, 5000, 5000},
+		{"negative falls back", map[string]any{"timeout_ms": -1}, 5000, 5000},
+		// JSON numbers arrive as float64, which is the shape that actually
+		// reaches a drop at runtime.
+		{"json float is honoured", map[string]any{"timeout_ms": float64(1500)}, 5000, 1500},
+		{"wrong type falls back", map[string]any{"timeout_ms": "soon"}, 5000, 5000},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			job := core.Job{ID: "j", Params: c.params}
+			if got := TimeoutMS(job, c.def); got != c.want {
+				t.Fatalf("TimeoutMS = %d, want %d", got, c.want)
+			}
+		})
+	}
+}
+
+func TestTruncate(t *testing.T) {
+	cases := []struct {
+		name  string
+		s     string
+		limit int
+		want  string
+	}{
+		{"under limit", "abc", 10, "abc"},
+		{"trims surrounding space", "  abc\n\t", 10, "abc"},
+		// Trimming happens BEFORE the cap, so padding can't eat the budget.
+		{"trims before capping", "   abcdef   ", 3, "abc"},
+		{"exactly at limit", "abcd", 4, "abcd"},
+		{"over limit", "abcdef", 3, "abc"},
+		{"zero limit yields empty", "abc", 0, ""},
+		{"empty stays empty", "   ", 10, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := Truncate(c.s, c.limit); got != c.want {
+				t.Fatalf("Truncate(%q,%d) = %q, want %q", c.s, c.limit, got, c.want)
+			}
+		})
+	}
+}
+
+func TestJSONFieldMessage(t *testing.T) {
+	cases := []struct {
+		name  string
+		body  string
+		field string
+		limit int
+		want  string
+	}{
+		{"named field", `{"message":"bad request"}`, "message", 100, "bad request"},
+		{"other field name", `{"reason":"quota"}`, "reason", 100, "quota"},
+		// Absent, empty, or non-string → fall back to the raw body so the
+		// operator still sees what the vendor actually said.
+		{"field absent falls back", `{"other":"x"}`, "message", 100, `{"other":"x"}`},
+		{"empty field falls back", `{"message":""}`, "message", 100, `{"message":""}`},
+		{"non-string field falls back", `{"message":42}`, "message", 100, `{"message":42}`},
+		{"not json falls back", `<html>oops</html>`, "message", 100, "<html>oops</html>"},
+		{"fallback is truncated", `0123456789`, "message", 4, "0123"},
+		{"empty body", ``, "message", 100, ""},
+		// A nested shape is NOT unwrapped — vendors with nested error JSON keep
+		// their own extractor, and silently digging would mask that.
+		{"nested is not unwrapped", `{"error":{"message":"deep"}}`, "message", 100, `{"error":{"message":"deep"}}`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := JSONFieldMessage([]byte(c.body), c.field, c.limit); got != c.want {
+				t.Fatalf("JSONFieldMessage = %q, want %q", got, c.want)
+			}
+		})
+	}
+}

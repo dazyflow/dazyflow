@@ -260,3 +260,73 @@ func TestBaseURL_OverrideWinsOverEnv(t *testing.T) {
 		t.Errorf("baseURL = %q, want the trimmed override", got)
 	}
 }
+
+// TestDecodeObject covers the shared JSON-object decoder. It names the PORT in
+// its error because the mistake it catches is a wiring one — the run viewer has
+// to say which input was wrong, not just that some JSON was.
+func TestDecodeObject(t *testing.T) {
+	t.Run("decodes an object", func(t *testing.T) {
+		m, err := decodeObject([]byte(`{"a":1,"b":"x"}`), "options")
+		if err != nil {
+			t.Fatalf("decodeObject: %v", err)
+		}
+		if m["b"] != "x" {
+			t.Errorf("m = %#v", m)
+		}
+	})
+
+	t.Run("empty and whitespace are unset, not errors", func(t *testing.T) {
+		// An unwired optional port arrives as empty bytes; that is absence, and
+		// must not read as a malformed object.
+		for _, raw := range []string{"", "   ", "\n\t ", "\r\n"} {
+			m, err := decodeObject([]byte(raw), "options")
+			if err != nil || m != nil {
+				t.Errorf("decodeObject(%q) = %v, %v; want nil, nil", raw, m, err)
+			}
+		}
+	})
+
+	t.Run("surrounding whitespace is tolerated", func(t *testing.T) {
+		m, err := decodeObject([]byte("  \n{\"a\":1}\t "), "options")
+		if err != nil || m["a"] == nil {
+			t.Fatalf("decodeObject = %v, %v", m, err)
+		}
+	})
+
+	t.Run("a non-object is rejected and names the port", func(t *testing.T) {
+		// An array, a scalar and truncated JSON are all the same wiring error:
+		// the port wants an object.
+		for _, raw := range []string{
+			`[{"a":1}]`, `"a string"`, `42`, `true`, `{"a":1`, `not json`,
+		} {
+			m, err := decodeObject([]byte(raw), "options")
+			if err == nil {
+				t.Errorf("decodeObject(%q) was accepted as %v", raw, m)
+				continue
+			}
+			if !strings.Contains(err.Error(), "'options'") {
+				t.Errorf("error for %q = %q, want it to name the port", raw, err)
+			}
+			if !strings.Contains(err.Error(), "JSON object") {
+				t.Errorf("error for %q = %q, want it to say a JSON object is expected", raw, err)
+			}
+		}
+	})
+
+	t.Run("JSON null is absence, not a malformed object", func(t *testing.T) {
+		// `null` unmarshals into a nil map without error, so it lands in the
+		// same place as an unwired port. That is the right reading — a caller
+		// that computed "no options" upstream should not get a wiring error.
+		m, err := decodeObject([]byte(`null`), "options")
+		if err != nil || m != nil {
+			t.Errorf("decodeObject(null) = %v, %v; want nil, nil", m, err)
+		}
+	})
+
+	t.Run("the port name is carried through verbatim", func(t *testing.T) {
+		_, err := decodeObject([]byte(`[]`), "receiver")
+		if err == nil || !strings.Contains(err.Error(), "'receiver'") {
+			t.Errorf("error = %v, want it to name 'receiver'", err)
+		}
+	})
+}

@@ -3,7 +3,10 @@
 
 package celexpr
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestValidate(t *testing.T) {
 	cases := []struct {
@@ -54,5 +57,65 @@ func TestValidate_MatchesDropEnv(t *testing.T) {
 func TestNewEnv_StringHelpers(t *testing.T) {
 	if issue, _ := Validate(`input.substring(0, 3).upperAscii() + input.split(" ")[1].trim()`); issue != nil {
 		t.Errorf("string helpers should compile: %+v", issue)
+	}
+}
+
+// TestValidate_LengthGate covers the cap that exists so an unbounded
+// expression never reaches the parser at all. The gate is checked BEFORE
+// Compile, so an over-long formula costs nothing to reject — and it is
+// reported as an Issue rather than a Go error so the editor renders it inline
+// beside any other problem with the formula.
+func TestValidate_LengthGate(t *testing.T) {
+	// Valid CEL, just too much of it: the gate must fire on length, not on
+	// the expression being malformed.
+	long := "input + " + strings.Repeat("1 + ", MaxExpressionLen) + "1"
+	if len(long) <= MaxExpressionLen {
+		t.Fatalf("test fixture is only %d chars, need > %d", len(long), MaxExpressionLen)
+	}
+	issue, err := Validate(long)
+	if err != nil {
+		t.Fatalf("the length gate must not surface a Go error: %v", err)
+	}
+	if issue == nil {
+		t.Fatal("an over-long formula was accepted")
+	}
+	if !strings.Contains(issue.Message, "too long") {
+		t.Errorf("message = %q, want it to say the formula is too long", issue.Message)
+	}
+	// No location: there is no position to point at when nothing was parsed.
+	if issue.Line != 0 || issue.Column != 0 {
+		t.Errorf("issue carries a location %d:%d, want none", issue.Line, issue.Column)
+	}
+
+	// Exactly at the limit is still checked normally, so the boundary is
+	// inclusive and a formula right at the cap is not rejected out of hand.
+	atLimit := "input" + strings.Repeat(" ", MaxExpressionLen-len("input"))
+	if len(atLimit) != MaxExpressionLen {
+		t.Fatalf("fixture is %d chars, want exactly %d", len(atLimit), MaxExpressionLen)
+	}
+	if issue, err := Validate(atLimit); err != nil || issue != nil {
+		t.Errorf("a formula exactly at the cap was rejected: issue=%+v err=%v", issue, err)
+	}
+}
+
+// TestValidate_IssueLocation pins the 1-based column translation. CEL reports
+// columns 0-based; the editor's gutter is 1-based, so an off-by-one here puts
+// the caret on the wrong character.
+func TestValidate_IssueLocation(t *testing.T) {
+	issue, err := Validate("input + ")
+	if err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	if issue == nil {
+		t.Fatal("expected an issue")
+	}
+	if issue.Line != 1 {
+		t.Errorf("Line = %d, want 1", issue.Line)
+	}
+	if issue.Column < 1 {
+		t.Errorf("Column = %d, want 1-based (never 0)", issue.Column)
+	}
+	if issue.Message == "" {
+		t.Error("issue has no message")
 	}
 }

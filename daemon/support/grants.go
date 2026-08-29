@@ -399,31 +399,37 @@ func (s *PgGrantStore) ListForAgent(ctx context.Context, agent string) ([]core.A
 // requested, decided or revoked it) is replaced by '[erased]'. The grant rows
 // themselves stay, because they are the record that someone looked at a tenant's
 // flow and when — the same reason PgAuditLog.AnonymizeActor keeps its events.
-// Returns the number of rows changed.
+//
+// Returns the number of ROWS changed, counting a grant once however many of
+// its columns named the person. MemGrantStore counts the same way.
 func (s *PgGrantStore) AnonymizeSubject(ctx context.Context, ident string) (int, error) {
 	ident = strings.TrimSpace(ident)
 	if ident == "" {
 		return 0, nil
 	}
-	tx, err := s.pool.Begin(ctx)
+	// All four columns move in ONE statement, so a grant counts once however
+	// many of them named the person — and no transaction is needed to make the
+	// four consistent. As separate UPDATEs their RowsAffected were summed, and
+	// since an agent is normally both the subject and the requester of their own
+	// grant, the commonest row counted twice: the erase report then claimed more
+	// grants than exist. Returns rows changed, as documented.
+	//
+	// erasedIdentity is bound as $2 rather than concatenated, matching
+	// PgTicketStore.AnonymizeSubject — the constant was not injectable, but a
+	// concatenated literal next to a properly bound $1 is the pattern that
+	// eventually gets copied to a value that ISN'T a constant.
+	ct, err := s.pool.Exec(ctx,
+		`UPDATE access_grants
+		    SET agent_subject = CASE WHEN agent_subject = $1 THEN $2 ELSE agent_subject END,
+		        requested_by  = CASE WHEN requested_by  = $1 THEN $2 ELSE requested_by  END,
+		        decided_by    = CASE WHEN decided_by    = $1 THEN $2 ELSE decided_by    END,
+		        revoked_by    = CASE WHEN revoked_by    = $1 THEN $2 ELSE revoked_by    END
+		  WHERE agent_subject = $1 OR requested_by = $1
+		     OR decided_by = $1 OR revoked_by = $1`, ident, erasedIdentity)
 	if err != nil {
 		return 0, err
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	total := 0
-	for _, col := range []string{"agent_subject", "requested_by", "decided_by", "revoked_by"} {
-		// The column name is from this fixed list, never from input.
-		ct, err := tx.Exec(ctx,
-			`UPDATE access_grants SET `+col+` = '`+erasedIdentity+`' WHERE `+col+` = $1`, ident)
-		if err != nil {
-			return 0, err
-		}
-		total += int(ct.RowsAffected())
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return 0, err
-	}
-	return total, nil
+	return int(ct.RowsAffected()), nil
 }
 
 // DeleteByTenant removes every access grant naming one org — requested,

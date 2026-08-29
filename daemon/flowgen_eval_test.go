@@ -596,7 +596,10 @@ func TestFlowGenScenariosScripted(t *testing.T) {
 		}
 	}
 	if good.Num == 0 || bad.Num == 0 {
-		t.Skip("scenarios 1 and 2 are no longer in the corpus")
+		// Both scenarios are in the corpus today. If one is renumbered away this
+		// must fail loudly — skipping would silently retire the only test that
+		// proves the scoring works on GENERATED graphs.
+		t.Fatal("scenarios 1 and 2 are no longer in the corpus — update the eval")
 	}
 
 	// The scripted model answers in call order: the first scenario gets the

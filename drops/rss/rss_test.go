@@ -263,3 +263,76 @@ func TestStateResetKeys_MatchesCursorName(t *testing.T) {
 		t.Errorf("unregistered module should have no reset keys, got %v", got)
 	}
 }
+
+// TestResolveURL pins the precedence rule: a wired 'url' input beats the node's
+// param, so the feed address can be computed upstream (a Text drop, a lookup)
+// instead of being hardcoded on the node. An empty or non-string input falls
+// through to the param rather than resolving to "" and failing as bad_param.
+func TestResolveURL(t *testing.T) {
+	const paramURL = "https://example.com/param.xml"
+	const inputURL = "https://example.com/input.xml"
+
+	withParam := core.Job{Params: map[string]any{"url": paramURL}}
+	if got := resolveURL(withParam); got != paramURL {
+		t.Errorf("param only = %q, want %q", got, paramURL)
+	}
+
+	// A wired input wins.
+	wired := core.Job{
+		Params: map[string]any{"url": paramURL},
+		Input:  map[string]core.Ref{"url": {Inline: inputURL}},
+	}
+	if got := resolveURL(wired); got != inputURL {
+		t.Errorf("wired input = %q, want it to beat the param", got)
+	}
+
+	// An empty wired input is treated as "not supplied" — an upstream node that
+	// produced nothing must not blank out a perfectly good param.
+	empty := core.Job{
+		Params: map[string]any{"url": paramURL},
+		Input:  map[string]core.Ref{"url": {Inline: ""}},
+	}
+	if got := resolveURL(empty); got != paramURL {
+		t.Errorf("empty input = %q, want the param %q", got, paramURL)
+	}
+
+	// A non-string input (a number, a row list) falls through to the param.
+	wrongType := core.Job{
+		Params: map[string]any{"url": paramURL},
+		Input:  map[string]core.Ref{"url": {Inline: 42}},
+	}
+	if got := resolveURL(wrongType); got != paramURL {
+		t.Errorf("non-string input = %q, want the param %q", got, paramURL)
+	}
+
+	// Neither set: empty, which executeRSS reports as bad_param.
+	if got := resolveURL(core.Job{}); got != "" {
+		t.Errorf("nothing set = %q, want empty", got)
+	}
+}
+
+// TestAllRows covers the dedupe-off projection: every feed item becomes one row
+// with the full itemHeaders column set, in feed order.
+func TestAllRows(t *testing.T) {
+	if rows := allRows(nil); rows == nil || len(rows) != 0 {
+		t.Errorf("allRows(nil) = %v, want empty non-nil", rows)
+	}
+
+	rows := allRows([]feedItem{item("A"), item("B")})
+	if len(rows) != 2 {
+		t.Fatalf("rows = %d, want 2", len(rows))
+	}
+	// Feed order is preserved — a reader shows newest-first as the feed sent it.
+	if rows[0]["id"] != "A" || rows[1]["id"] != "B" {
+		t.Errorf("order = %v, %v; want A then B", rows[0]["id"], rows[1]["id"])
+	}
+	// Every declared column is present, so a downstream table has no ragged rows.
+	for _, col := range itemHeaders {
+		if _, ok := rows[0][col]; !ok {
+			t.Errorf("row is missing the %q column", col)
+		}
+	}
+	if len(rows[0]) != len(itemHeaders) {
+		t.Errorf("row has %d keys, want exactly the %d itemHeaders", len(rows[0]), len(itemHeaders))
+	}
+}

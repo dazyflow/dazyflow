@@ -292,7 +292,11 @@ func TestHTTPGateway_ListModules(t *testing.T) {
 	}
 	_ = json.Unmarshal(rw.Body.Bytes(), &out)
 	if len(out.Modules) == 0 {
-		t.Skip("module registry is empty in this test binary — daemon tests don't import modules/")
+		// The worker imports modules/ transitively, so the registry IS populated
+		// in this binary. Skipping here instead would make the whole test vacuous:
+		// a regression that empties the registry would report a pass, not a skip
+		// anyone reads.
+		t.Fatal("module registry is empty — /api/v1/modules returned no drops")
 	}
 }
 

@@ -625,7 +625,11 @@ func (s *PgTicketStore) DeleteByTenant(ctx context.Context, tenant string) (int,
 // anonymous reporter, which is the intended trade.
 //
 // Matches on the identifier as stored, so callers should pass both the email and
-// the subject when they can differ. Returns the number of rows changed.
+// the subject when they can differ.
+//
+// Returns the number of ROWS changed — each ticket once however many of its
+// columns named the person, plus one per message they wrote. MemTicketStore
+// counts the same way; the erase report shows this as a count of tickets.
 func (s *PgTicketStore) AnonymizeSubject(ctx context.Context, ident string) (int, error) {
 	ident = strings.TrimSpace(ident)
 	if ident == "" {
@@ -637,22 +641,34 @@ func (s *PgTicketStore) AnonymizeSubject(ctx context.Context, ident string) (int
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	total := 0
-	// Bound as a parameter, not concatenated. erasedIdentity is a compile-time
-	// constant so the old form was not injectable — but it was the one place
-	// in this file that built SQL by concatenation while the same statements
-	// bound $1 properly two characters away, and that inconsistency is what
-	// eventually gets copied to a value that ISN'T a constant.
-	for _, q := range []string{
-		`UPDATE support_tickets SET created_by = $2 WHERE created_by = $1`,
-		`UPDATE support_tickets SET assigned_to = $2 WHERE assigned_to = $1`,
-		`UPDATE support_ticket_messages SET author = $2, body = '' WHERE author = $1`,
-	} {
-		ct, err := tx.Exec(ctx, q, ident, erasedIdentity)
-		if err != nil {
-			return 0, err
-		}
-		total += int(ct.RowsAffected())
+	// erasedIdentity is bound as a parameter, not concatenated. It is a
+	// compile-time constant so the old form was not injectable — but it was the
+	// one place in this file that built SQL by concatenation while the same
+	// statements bound $1 properly two characters away, and that inconsistency
+	// is what eventually gets copied to a value that ISN'T a constant.
+	//
+	// Both ticket columns move in ONE statement so a ticket counts once. As two
+	// separate UPDATEs their RowsAffected were summed, and the person who filed
+	// a ticket and was then assigned it — the ordinary self-service case —
+	// counted twice, so the erase report claimed more tickets than exist.
+	ct, err := tx.Exec(ctx,
+		`UPDATE support_tickets
+		    SET created_by  = CASE WHEN created_by  = $1 THEN $2 ELSE created_by  END,
+		        assigned_to = CASE WHEN assigned_to = $1 THEN $2 ELSE assigned_to END
+		  WHERE created_by = $1 OR assigned_to = $1`, ident, erasedIdentity)
+	if err != nil {
+		return 0, err
 	}
+	total += int(ct.RowsAffected())
+	// Messages are counted on top of the tickets, matching MemTicketStore: a
+	// thread is not a ticket, and each message the person wrote is its own row.
+	ct, err = tx.Exec(ctx,
+		`UPDATE support_ticket_messages SET author = $2, body = '' WHERE author = $1`,
+		ident, erasedIdentity)
+	if err != nil {
+		return 0, err
+	}
+	total += int(ct.RowsAffected())
 	if err := tx.Commit(ctx); err != nil {
 		return 0, err
 	}

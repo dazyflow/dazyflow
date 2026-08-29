@@ -218,8 +218,16 @@ func (s *PgAgentStore) AnonymizeGrantedBy(ctx context.Context, email string) (in
 	if email == "" {
 		return 0, fmt.Errorf("email required")
 	}
+	// Compare on the NORMALIZED stored value, not the raw column. Grant()
+	// normalizes the grantee's email but stores grantedBy exactly as the admin
+	// form supplied it, so a granter recorded as "Operator@Acme.COM" would not
+	// match the normalized identifier an erasure request arrives with — leaving
+	// the erased person's address in the table and reporting 0 rows changed.
+	// MemAgentStore.AnonymizeGrantedBy already normalizes both sides; this is
+	// the same comparison in SQL, and it also repairs rows already stored.
 	tag, err := s.pool.Exec(ctx,
-		`UPDATE support_agents SET granted_by = $2 WHERE granted_by = $1`, email, core.ErasedIdentity)
+		`UPDATE support_agents SET granted_by = $2 WHERE lower(btrim(granted_by)) = $1`,
+		email, core.ErasedIdentity)
 	if err != nil {
 		return 0, err
 	}

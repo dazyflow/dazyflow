@@ -169,3 +169,62 @@ func countName(ps []ProviderInfo, name string) int {
 	}
 	return n
 }
+
+// TestByIntegration covers the lookup the daemon's catalog layer uses: it
+// starts from a drop manifest, which names the INTEGRATION ("Gemini") rather
+// than the provider id. The manifest and the registration are written by hand
+// in two different files, which is why the match is case-insensitive.
+func TestByIntegration(t *testing.T) {
+	Register(ProviderInfo{
+		Name: "byint-a", Integration: "ByIntAcme", DefaultModel: "m-a",
+		Provider: &fakeProvider{reply: "a"},
+	})
+
+	// Exact, and in every casing the two hand-written files might disagree on.
+	for _, in := range []string{"ByIntAcme", "byintacme", "BYINTACME", "bYiNtAcMe"} {
+		p, ok := ByIntegration(in)
+		if !ok {
+			t.Errorf("ByIntegration(%q) not found", in)
+			continue
+		}
+		if p.Name != "byint-a" || p.DefaultModel != "m-a" {
+			t.Errorf("ByIntegration(%q) = %+v, want byint-a", in, p)
+		}
+	}
+
+	// Unknown integration reports not-found with a zero value, rather than a
+	// half-populated provider the caller might use anyway.
+	p, ok := ByIntegration("no-such-integration")
+	if ok {
+		t.Errorf("unknown integration returned %+v", p)
+	}
+	if p.Name != "" || p.Provider != nil {
+		t.Errorf("not-found should yield the zero ProviderInfo, got %+v", p)
+	}
+
+	// Whitespace is NOT trimmed — the integration name comes from a manifest,
+	// not from a person typing, so a padded value is a manifest bug worth
+	// surfacing rather than silently accepting.
+	if _, ok := ByIntegration(" ByIntAcme "); ok {
+		t.Error("ByIntegration should not trim; a padded manifest value is a bug")
+	}
+
+	// An empty integration must not match a provider that left it blank by
+	// accident — guard the "everything matches nothing" case explicitly.
+	if _, ok := ByIntegration(""); ok {
+		t.Error(`ByIntegration("") should not match any registered provider`)
+	}
+
+	// Re-registering the same id updates it in place, so the integration lookup
+	// follows the new value rather than resolving to a stale one.
+	Register(ProviderInfo{
+		Name: "byint-a", Integration: "ByIntRenamed", DefaultModel: "m-a2",
+		Provider: &fakeProvider{reply: "a2"},
+	})
+	if _, ok := ByIntegration("ByIntAcme"); ok {
+		t.Error("the old integration still resolves after a re-registration")
+	}
+	if p, ok := ByIntegration("byintrenamed"); !ok || p.DefaultModel != "m-a2" {
+		t.Errorf("renamed integration = %+v, ok=%v", p, ok)
+	}
+}
