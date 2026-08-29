@@ -92,6 +92,7 @@ var reservedSubdomains = map[string]bool{
 	"static": true, "assets": true, "cdn": true, "mail": true, "smtp": true,
 	"ftp": true, "ns": true, "ns1": true, "ns2": true, "blog": true,
 	"docs": true, "status": true, "help": true, "support": true,
+	"registry": true,
 }
 
 // servedInfraSubdomains are the reserved infrastructure hosts Dazyflow actually
@@ -103,6 +104,11 @@ var reservedSubdomains = map[string]bool{
 // subset of reservedSubdomains: only names we truly front.
 var servedInfraSubdomains = map[string]bool{
 	"docs": true,
+	// The private image registry the production deploy pulls from. CI pushes
+	// releases to it over HTTPS (Caddy terminates TLS and checks basic_auth);
+	// prod itself pulls over 127.0.0.1:5000, which needs no certificate. It is
+	// listed here only so the on-demand gate issues the cert CI's push needs.
+	"registry": true,
 }
 
 // IsServedInfraSubdomain reports whether label is a reserved infrastructure

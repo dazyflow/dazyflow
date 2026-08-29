@@ -9,6 +9,10 @@ packages:
   - podman
 secrets:
   - 6a3daa36-3866-48d4-8846-ecfa57a0d0dd
+  # File secret -> ~/.registry-credentials, holding REGISTRY_USER and
+  # REGISTRY_PASSWORD for registry.dazyflow.app (see the docker-image task).
+  # Add its UUID here once created in builds.sr.ht; without it, tag builds
+  # still pass, they just skip publishing.
 sources:
   - git@git.sr.ht:~klahr/dazyflow
 # Test databases. The bulk of the suite's integration tests skip unless these
@@ -171,16 +175,53 @@ tasks:
   - docs: |
       cd dazyflow
       make docs-site
-  # Confirm the deployable image actually builds — deploy/ references it
-  # but nothing exercised the Dockerfile until now. Rootless podman, no
-  # daemon needed in the build VM. Not pushed anywhere; releases tag and
-  # push by hand (see deploy/README.md).
+  # Build BOTH deployable images, and on a tag build, publish them to the
+  # private registry the production box pulls from.
+  #
+  # This is what stops prod compiling its own releases. That droplet is
+  # s-1vcpu-2gb: a Go build plus two Vite builds on one core cannot finish
+  # inside a runner step's 10-minute timeout, and the attempt starved the whole
+  # site (kswapd pegged, TLS handshakes timing out) before being killed. Here it
+  # is free — the VM is already warm from the test tasks.
+  #
+  # Branch builds still BUILD both images, because that is the only thing
+  # exercising the Dockerfiles; they just do not push. Pushing is gated twice,
+  # and both gates exit 0 rather than failing: a fork or a contributor without
+  # the secret gets a green build, not a confusing red one.
   - docker-image: |
       cd dazyflow
-      podman build -t dazyflow/dzd:ci .
+      TAG=$(git describe --exact-match --tags HEAD 2>/dev/null || true)
+      VER=${TAG:-ci}
+      podman build -t dazyflow-dzd:$VER .
       # The docs site image (docs.dazyflow.app) — deploy/ references it but
       # nothing exercises Dockerfile.docs otherwise. Same rootless podman.
-      podman build -f Dockerfile.docs -t dazyflow/docs:ci .
+      podman build -f Dockerfile.docs -t dazyflow-docs:$VER .
+
+      if [ -z "$TAG" ]; then
+        echo "not a tag build — images built but not published"
+        exit 0
+      fi
+      if [ ! -e ~/.registry-credentials ]; then
+        echo "no ~/.registry-credentials secret — images built but not published"
+        exit 0
+      fi
+
+      # A builds.sr.ht file secret holding REGISTRY_USER + REGISTRY_PASSWORD.
+      . ~/.registry-credentials
+      echo "$REGISTRY_PASSWORD" \
+        | podman login registry.dazyflow.app -u "$REGISTRY_USER" --password-stdin
+
+      # Every release is published twice: under its own version, which is what
+      # `make upgrade` pins, and as :latest, so a bare `docker compose pull`
+      # with no VERSION set still lands on the newest release rather than on
+      # nothing. See the image: lines in docker-compose.prod.yml.
+      for img in dzd docs; do
+        podman tag dazyflow-$img:$VER registry.dazyflow.app/dazyflow-$img:$VER
+        podman tag dazyflow-$img:$VER registry.dazyflow.app/dazyflow-$img:latest
+        podman push registry.dazyflow.app/dazyflow-$img:$VER
+        podman push registry.dazyflow.app/dazyflow-$img:latest
+      done
+      echo "published dazyflow-dzd and dazyflow-docs at $VER"
 
 triggers:
   - action: email

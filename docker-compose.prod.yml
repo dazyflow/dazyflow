@@ -36,6 +36,39 @@ services:
       - dzd
       - docs
 
+  # Private image registry. Releases are built in CI and pushed here; this box
+  # only ever pulls. Two doors into one blob store, and they are not symmetric
+  # (deploy/Caddyfile has the long version): CI pushes over
+  # https://registry.dazyflow.app with basic auth, while THIS host pulls over
+  # 127.0.0.1:5000, which Docker exempts from its HTTPS requirement — so the
+  # pull path needs no certificate and no credential.
+  #
+  # Published on loopback ONLY. The registry port is never exposed off the box;
+  # the sole route in from outside is Caddy, which is authenticated.
+  registry:
+    image: registry:2
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5000:5000"
+    volumes:
+      - registry_data:/var/lib/registry
+    environment:
+      # Without this, `registry garbage-collect` cannot reclaim blobs from
+      # superseded tags. On a 50GB droplet that is the difference between the
+      # registry being free and it being the thing that fills the disk.
+      REGISTRY_STORAGE_DELETE_ENABLED: "true"
+
+  # The release image, pulled — never built here. The `build:` stanza in
+  # docker-compose.yml stays valid as an escape hatch (`--build` still works if
+  # the registry is ever unreachable), but the deploy path is pull-only: see the
+  # `upgrade` target in the Makefile.
+  #
+  # CI pushes every release as both :X.Y.Z and :latest, so an unset VERSION
+  # resolves to the newest release rather than to nothing. `make upgrade` sets
+  # it explicitly to the tag it selected, which is the deterministic path.
+  dzd:
+    image: 127.0.0.1:5000/dazyflow-dzd:${VERSION:-latest}
+
   # Documentation site (docs.dazyflow.app). Self-contained image: the build
   # generates the step catalog from the live drop manifests, Vite-builds the
   # docs SPA (React, reusing the app shell), then nginx serves it. Nothing is
@@ -43,6 +76,7 @@ services:
   # Rebuild with `docker compose ... up -d --build docs` when a drop manifest,
   # guide page, or the docs UI changes.
   docs:
+    image: 127.0.0.1:5000/dazyflow-docs:${VERSION:-latest}
     build:
       context: .
       dockerfile: Dockerfile.docs
@@ -59,3 +93,4 @@ services:
 volumes:
   caddy_data:
   caddy_config:
+  registry_data:

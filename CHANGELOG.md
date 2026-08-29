@@ -23,6 +23,48 @@ into the image.)
 
 ## [Unreleased]
 
+### Changed
+
+- **Production deploys pull prebuilt images instead of compiling on the box.**
+  `make upgrade` ran `docker compose up -d --build` on the production host,
+  which meant a Go build plus two Vite builds — the app and the docs site — on
+  an `s-1vcpu-2gb` droplet. That does not fit. The build starved the machine
+  (kswapd pegged at 47% CPU, TLS handshakes timing out), so the site was
+  effectively down for as long as it ran, and it could not finish inside the
+  ten-minute timeout of the "Run on your machine" step that triggered it — so
+  it was killed partway, every time, leaving the previous release running.
+
+  CI already built both images to prove the Dockerfiles still worked; on a tag
+  build it now also publishes them to a private registry running on the droplet
+  itself. The two directions are deliberately asymmetric: CI pushes over
+  `registry.dazyflow.app`, which Caddy fronts with TLS and basic auth, while
+  the host pulls over `127.0.0.1:5000` — loopback, which Docker exempts from
+  its HTTPS requirement, so the pull path needs no certificate and no
+  credential. Nothing is compiled on the production host any more; a deploy is
+  a pull and a restart.
+
+  Self-hosting is unaffected. With no `registry` service in the file set —
+  which is every deployment that does not use the production overlay —
+  `make upgrade` builds from source exactly as before.
+
+  Set `REGISTRY_HOST`, `REGISTRY_USER` and `REGISTRY_PASSWORD_HASH` in `.env`
+  to enable the push endpoint. Leaving them unset disables the route rather
+  than opening it: the site address falls back to a name that resolves nowhere
+  and the credential to a bcrypt hash of a random string, so a box that takes
+  the new Caddyfile before its `.env` keeps serving the app. `registry` is now
+  a reserved subdomain, so no org can claim it.
+
+### Fixed
+
+- **`make upgrade` could not report a failure.** Its recipe was a single
+  backslash-continued line joined with `;`, which make runs as one shell — so
+  make only ever saw the exit status of the last command, a trailing `if` that
+  returns 0 unconditionally. A failed build printed a successful upgrade, left
+  the tree checked out at the new tag, and left the box serving the previous
+  release. 0.25.0 "deployed" exactly this way onto images that were fifteen
+  hours old. The recipe now runs under `set -e`: the first failing step stops
+  it, and the deploy exits non-zero so the caller sees red.
+
 ## [0.25.0] - 2026-08-29
 
 ### Fixed

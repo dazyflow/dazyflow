@@ -38,6 +38,7 @@ const RESERVED = new Set([
   "status",
   "help",
   "support",
+  "registry",
 ]);
 
 // A conservative DNS label: 1-63 chars, lowercase alphanumerics and

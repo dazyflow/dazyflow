@@ -308,7 +308,7 @@ LATEST_TAG = git tag -l '[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -Ex '[0-
 latest: ## Print the newest release tag (deploy scripts: use `make -s latest`)
 	@$(LATEST_TAG)
 
-upgrade: ## Check out the latest release tag and rebuild the stack (PROD=1 on a production host)
+upgrade: ## Deploy the latest release tag, pulling its prebuilt images (PROD=1 on a production host)
 	# --force updates a tag that was moved upstream; --prune-tags drops one
 	# deleted upstream. Without them a stale local tag can win the selection.
 	git fetch --tags --force --prune-tags
@@ -330,16 +330,39 @@ upgrade: ## Check out the latest release tag and rebuild the stack (PROD=1 on a 
 		echo "  echo COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml >> .env   (once)"; \
 		exit 1; \
 	fi
-	@LATEST=$$($(LATEST_TAG)); \
+	# `set -e` is load-bearing, and its absence was a real outage. Everything
+	# below is ONE continued line, which make hands to a single shell — so make
+	# only ever saw the exit status of the LAST command, the trailing `if`, which
+	# returns 0 unconditionally. A failed build therefore reported a successful
+	# upgrade while the box kept serving the previous release with its tree
+	# checked out at the new tag. Not hypothetical: that is exactly how 0.25.0
+	# "deployed" onto images that were still 15 hours old.
+	@set -e; \
+	LATEST=$$($(LATEST_TAG)); \
 	if [ -z "$$LATEST" ]; then \
 		echo "No release tags yet — nothing to upgrade to."; exit 1; \
 	fi; \
 	echo "Upgrading to $$LATEST"; \
 	git checkout "$$LATEST"; \
-	VERSION="$$LATEST" \
-	COMMIT="$$(git rev-parse --short HEAD)" \
-	BUILD_DATE="$$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-	$(COMPOSE) up -d --build; \
+	export VERSION="$$LATEST"; \
+	export COMMIT="$$(git rev-parse --short HEAD)"; \
+	export BUILD_DATE="$$(date -u +%Y-%m-%dT%H:%M:%SZ)"; \
+	if $(COMPOSE) config --services 2>/dev/null | grep -qx registry; then \
+		echo "Pulling $$LATEST — nothing is compiled on this host."; \
+		$(COMPOSE) up -d registry; \
+		n=0; until $(COMPOSE) pull dzd docs; do \
+			n=$$((n+1)); \
+			if [ $$n -ge 5 ]; then \
+				echo "registry did not answer after $$n attempts — is it running, and did CI push $$LATEST?"; \
+				exit 1; \
+			fi; \
+			echo "registry not ready yet — retrying ($$n/5)"; sleep 2; \
+		done; \
+		$(COMPOSE) up -d --no-build; \
+	else \
+		echo "No registry service in this file set — building from source instead."; \
+		$(COMPOSE) up -d --build; \
+	fi; \
 	if $(COMPOSE) config --services 2>/dev/null | grep -qx caddy; then \
 		echo "Deployed $$LATEST; staying on the tag so the tree matches the running image."; \
 	else \
