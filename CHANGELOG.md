@@ -23,6 +23,27 @@ into the image.)
 
 ## [Unreleased]
 
+### Fixed
+
+- **Step icons could render unstyled, and the Inspector's did.** Every icon
+  modifier is a COMPOUND rule — `.dz-node .icon.brand-logo`,
+  `.quick-palette-row .icon.branded` — so `.icon` is a required partner, not
+  decoration. `DropIcon` built its class list by concatenating a prop, and the
+  Inspector passes its own box class, so that element carried `brand-logo` and
+  `branded` with no `.icon` beside them: modifier classes matching nothing.
+
+  `icon` is now written literally in each template, with the surface's own
+  class beside it.
+
+  The reason this shipped is worth recording. `check-css-classes` reads a
+  template literal by stripping its `${…}` interpolations and keeping the
+  static text, so a partner class hidden behind an interpolation is invisible
+  to it — and it reported the modifier as orphaned, correctly. The first fix
+  hoisted the concatenation into a variable, which moved the partner behind a
+  *different* interpolation and changed nothing. Only writing `icon` inside
+  each template satisfies both the browser and the guard, and there is now a
+  comment saying so, because the natural tidy-up is to fold it back out.
+
 ## [0.27.1] - 2026-08-30
 
 ### Added
