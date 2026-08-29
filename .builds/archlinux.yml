@@ -15,6 +15,9 @@ secrets:
   # or revoked secret shows up as a green build that quietly shipped nothing.
   # Check the task's last line on a release build, not just the build colour.
   - c61a6a1c-39f4-47c8-b727-00b465992ded
+  # File secret -> ~/.dazyflow-webhook, holding DAZYFLOW_WEBHOOK_KEY and
+  # DAZYFLOW_FLOW. Lets a published release ask Dazyflow to deploy itself.
+  - 218604bf-075c-44bd-b624-3c8a81825d81
 sources:
   - git@git.sr.ht:~klahr/dazyflow
 # Test databases. The bulk of the suite's integration tests skip unless these
@@ -235,6 +238,41 @@ tasks:
         podman push registry.dazyflow.app/dazyflow-$img:latest
       done
       echo "published dazyflow-dzd and dazyflow-docs at $VER"
+
+      # Ask Dazyflow to deploy what was just published. Reached only from the
+      # publish path above, so it inherits both its gates: a branch build or a
+      # missing registry credential never gets here, and never triggers a
+      # deploy. builds.sr.ht's own `triggers:` block cannot do this job — it
+      # POSTs with no way to set headers, and the trigger endpoint reads the
+      # key ONLY from Authorization (daemon/webhook.go), with no query-param
+      # fallback. It would also fire on every green build, not just releases.
+      WEBHOOK=""
+      for c in "$HOME/.dazyflow-webhook" ./.dazyflow-webhook; do
+        [ -e "$c" ] && { WEBHOOK="$c"; break; }
+      done
+      if [ -z "$WEBHOOK" ]; then
+        echo "no .dazyflow-webhook secret — images published, deploy NOT triggered"
+        exit 0
+      fi
+      . "$WEBHOOK"
+
+      # Explicit if/exit rather than relying on the runner's errexit: a release
+      # that publishes and then silently fails to deploy is the exact shape of
+      # failure this whole setup exists to stop being invisible.
+      #
+      # A 401 here means the key OR an unpublished flow — the endpoint answers
+      # both identically on purpose, so it never reveals which flows exist.
+      # Check the flow is published before assuming the key rotated.
+      if curl -fsS -X POST \
+           -H "Authorization: Bearer $DAZYFLOW_WEBHOOK_KEY" \
+           -H "Content-Type: application/json" \
+           -d "{\"version\":\"$VER\"}" \
+           "https://dazyflow.app/trigger/$DAZYFLOW_FLOW" >/dev/null; then
+        echo "deploy triggered for $VER"
+      else
+        echo "deploy trigger FAILED for $VER (published, but not deployed)"
+        exit 1
+      fi
 
 triggers:
   - action: email
