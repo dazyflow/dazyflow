@@ -11,8 +11,10 @@ secrets:
   - 6a3daa36-3866-48d4-8846-ecfa57a0d0dd
   # File secret -> ~/.registry-credentials, holding REGISTRY_USER and
   # REGISTRY_PASSWORD for registry.dazyflow.app (see the docker-image task).
-  # Add its UUID here once created in builds.sr.ht; without it, tag builds
-  # still pass, they just skip publishing.
+  # Without it, tag builds still pass — they just skip publishing, so a missing
+  # or revoked secret shows up as a green build that quietly shipped nothing.
+  # Check the task's last line on a release build, not just the build colour.
+  - c61a6a1c-39f4-47c8-b727-00b465992ded
 sources:
   - git@git.sr.ht:~klahr/dazyflow
 # Test databases. The bulk of the suite's integration tests skip unless these

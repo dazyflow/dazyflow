@@ -23,6 +23,21 @@ into the image.)
 
 ## [Unreleased]
 
+### Fixed
+
+- **The registry password hash has to be escaped in `.env`, and nothing said
+  so.** Compose interpolates `.env`, so a bcrypt hash written literally —
+  `$2a$14$xwcE...` — has each `$`-segment read as a variable reference and
+  replaced with a blank string. Caddy receives a six-character remnant and
+  answers every push with `401`, while `.env` still reads correctly to a human
+  and Compose's warning names a variable nobody wrote. Every `$` must be
+  doubled: `$$2a$$14$$xwcE...`.
+
+  `.env.example` and the infra README now say so, and both give the check that
+  distinguishes the two cases, since the file cannot be trusted on sight:
+  `docker compose ... exec caddy sh -c 'echo ${#REGISTRY_PASSWORD_HASH}'` —
+  60 is a hash, 6 is the remnant.
+
 ## [0.26.0] - 2026-08-29
 
 ### Changed
