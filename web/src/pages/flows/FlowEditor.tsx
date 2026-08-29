@@ -174,6 +174,13 @@ const edgeTypes = { reroute: RerouteEdge };
 // be equal and would defeat the cache).
 const EMPTY_PORTS: string[] = [];
 
+// Backoff for the live flow-watch when its SSE stream drops. The floor is a
+// whole second rather than something eager because a reconnect storm helps
+// nobody: the reason the stream ended is usually that the network or the tab
+// went away, and neither is fixed by asking again immediately.
+const WATCH_RETRY_MIN_MS = 1000;
+const WATCH_RETRY_MAX_MS = 30000;
+
 
 function EditorInner() {
   const { t } = useTranslation();
@@ -3107,52 +3114,119 @@ function EditorInner() {
   // Gated like the load effect (meReady, not `me`, to avoid identity churn);
   // the graph fetch + apply go through refs so this resubscribes only on a
   // real flow/auth change, not on every edit.
+  //
+  // The subscription RECONNECTS. It used to be one-shot: watchFlow resolves
+  // when the response body ends, nothing retried, and the effect's deps only
+  // cover flow/auth changes — so a dropped stream left the window permanently
+  // deaf while the canvas went on looking live. A laptop sleeping, a network
+  // change, or a phone backgrounding the tab was enough, and the 25s server
+  // ping only defends against idle proxy timeouts, not those.
+  //
+  // Silence is the failure mode here, which is why every path that ends the
+  // stream schedules a retry: a canvas that has quietly stopped updating is
+  // indistinguishable from a flow nobody is editing.
   useEffect(() => {
     if (!token || !meReady || !id || !activeTenant || !activeWorkspace) return;
     const ctrl = new AbortController();
     const watchedID = id;
-    api
-      .watchFlow(
-        token,
-        activeTenant,
-        activeWorkspace,
-        id,
-        (ev) => {
-          // Our own save echoing back — consume the marker and ignore.
-          if (ownCommitsRef.current.has(ev.commit)) {
-            ownCommitsRef.current.delete(ev.commit);
+    let retryMS = WATCH_RETRY_MIN_MS;
+    // Set only while we are waiting to reconnect, so it doubles as the
+    // "disconnected" flag the visibility/online handlers test.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    // Pull HEAD onto the canvas, under the same guards a live frame obeys:
+    // never over unsaved local work, a failed-load fallback, or a history
+    // preview — all of which intentionally differ from server HEAD.
+    const resync = () => {
+      if (ctrl.signal.aborted) return;
+      if (dirtyRef.current || loadFailedRef.current || previewRefRef.current) return;
+      api
+        .loadGraph(token, activeTenant, activeWorkspace, watchedID)
+        .then((g) => {
+          // Bail if the flow switched, this watch was torn down, or the user
+          // started editing while the fetch was in flight.
+          if (
+            ctrl.signal.aborted ||
+            loadedIDRef.current !== watchedID ||
+            dirtyRef.current ||
+            previewRefRef.current
+          ) {
             return;
           }
-          // Don't overwrite unsaved local edits, a failed-load fallback, or a
-          // history preview — all intentionally differ from server HEAD.
-          if (dirtyRef.current || loadFailedRef.current || previewRefRef.current) {
-            return;
-          }
-          api
-            .loadGraph(token, activeTenant, activeWorkspace, watchedID)
-            .then((g) => {
-              // Bail if the flow switched, this watch was torn down, or the
-              // user started editing while the fetch was in flight.
-              if (
-                ctrl.signal.aborted ||
-                loadedIDRef.current !== watchedID ||
-                dirtyRef.current ||
-                previewRefRef.current
-              ) {
-                return;
-              }
-              applyGraphAnimatedRef.current(g);
-            })
-            .catch(() => {
-              /* transient fetch error — the next save re-syncs */
-            });
-        },
-        ctrl.signal,
-      )
-      .catch(() => {
-        /* aborted on teardown, or the stream dropped — expected */
-      });
-    return () => ctrl.abort();
+          applyGraphAnimatedRef.current(g);
+        })
+        .catch(() => {
+          /* transient fetch error — the next save or reconnect re-syncs */
+        });
+    };
+
+    const connect = (catchUp: boolean) => {
+      if (ctrl.signal.aborted) return;
+      // A reconnect has to re-read HEAD. The frame carries no graph, so edits
+      // that landed while the stream was down were not merely delayed — they
+      // were never delivered to anyone, and nothing will resend them.
+      if (catchUp) resync();
+      api
+        .watchFlow(
+          token,
+          activeTenant,
+          activeWorkspace,
+          watchedID,
+          (ev) => {
+            // A frame proves the stream is healthy, so a drop after a long
+            // healthy spell retries promptly instead of inheriting the
+            // backoff from whatever went wrong hours ago.
+            retryMS = WATCH_RETRY_MIN_MS;
+            // Our own save echoing back — consume the marker and ignore.
+            if (ownCommitsRef.current.has(ev.commit)) {
+              ownCommitsRef.current.delete(ev.commit);
+              return;
+            }
+            resync();
+          },
+          ctrl.signal,
+        )
+        .catch(() => {
+          /* teardown, or the stream dropped — the retry below handles it */
+        })
+        .then(() => {
+          // Resolving (the server closed the stream) and rejecting (the
+          // network went away) both mean this window has stopped receiving.
+          // Only teardown is a real stop, and that aborts the signal.
+          if (ctrl.signal.aborted) return;
+          timer = setTimeout(() => {
+            timer = undefined;
+            connect(true);
+          }, retryMS);
+          retryMS = Math.min(retryMS * 2, WATCH_RETRY_MAX_MS);
+        });
+    };
+
+    // A tab coming back to the foreground, or a machine regaining its
+    // network, is the moment to try again rather than sit out the backoff —
+    // this is the case that made the bug: a phone's backgrounded tab has its
+    // connection dropped, and the canvas went on looking live indefinitely.
+    const kick = () => {
+      if (ctrl.signal.aborted || timer === undefined) return; // connected already
+      clearTimeout(timer);
+      timer = undefined;
+      retryMS = WATCH_RETRY_MIN_MS;
+      connect(true);
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") kick();
+    };
+    window.addEventListener("online", kick);
+    document.addEventListener("visibilitychange", onVisible);
+
+    connect(false); // mount already loaded the graph; no catch-up needed yet
+
+    return () => {
+      ctrl.abort();
+      if (timer !== undefined) clearTimeout(timer);
+      window.removeEventListener("online", kick);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [token, meReady, id, activeTenant, activeWorkspace]);
 
 
