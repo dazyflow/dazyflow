@@ -167,8 +167,17 @@ tasks:
   # it does NOT run the unit tests, which meant the whole vitest suite (error
   # explainers, port typing, the Swedish catalog vocabulary and its drift
   # guards) was unrun in CI and could rot unnoticed. `npm test` is `vitest run`.
+  #
+  # `make docs-content` first: the docs SPA content tree (web/src/docs/content/)
+  # is generated — guide pages copied from docs/guide/, the step catalog emitted
+  # by cmd/docsgen — and git-ignored, so on a fresh clone content.ts globs an
+  # empty directory. The docs task below regenerates it anyway, but it runs
+  # AFTER this one, which left the docs-search tests failing here with "Nothing
+  # matches" — a missing-content failure that reads as a search bug.
   - web: |
-      cd dazyflow/web
+      cd dazyflow
+      make docs-content
+      cd web
       npm ci
       npm test
       npm run build
