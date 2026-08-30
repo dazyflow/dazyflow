@@ -275,6 +275,7 @@
     "upgrade": "Upgrade to Pro",
     "manageBilling": "Manage billing",
     "proPitch": "Pro removes the monthly run cap and unlocks scheduled & polling triggers.",
+    "proPitchRunsOnly": "Pro removes the monthly run cap.",
     "pollingGated": "Schedules and polling triggers are paused on the Free plan — upgrade to enable them. Manual runs still work.",
     "skippedRuns_one": "{{count}} scheduled run was skipped this month — over your run cap. Upgrade to resume.",
     "skippedRuns_other": "{{count}} scheduled runs were skipped this month — over your run cap. Upgrade to resume."

@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode"
@@ -140,7 +141,7 @@ func (w *WebhookListener) handleForm(rw http.ResponseWriter, r *http.Request) {
 
 		view.Values = declaredFormValues(fields, posted)
 		values := collectFormValues(fields, posted)
-		seed := buildFormSeed(values)
+		seed := buildFormSeed(fields, values)
 		seeds := map[string]core.Result{}
 		for _, n := range g.Nodes {
 			if n.Module == webhookInputModuleID && !triggerNodeDisabled(n) {
@@ -402,16 +403,62 @@ func declaredFormValues(declared []string, posted url.Values) map[string]string 
 	return out
 }
 
+// formSeedHeaders is the column order a form submission carries downstream:
+// the owner's declared fields first, in the order the form drew them, then
+// any extra posted keys (utm_source and friends) sorted so two runs of the
+// same payload agree.
+//
+// The extras must be listed, not dropped: a row-writing step writes exactly
+// the columns its headers name, so a header list of only the declared fields
+// would throw away the very values collectFormValues went out of its way to
+// keep.
+//
+// Order matters because a row value carries its own column order (see
+// core.Ref.Headers) and a writer only falls back to sorting the row keys when
+// none is carried. Without this the collection a form fills comes out
+// alphabetical — "What you like about us" ahead of "Your name" — even though
+// the editor already offers the declared order as the columns, via the
+// webhook_input row source in rowsource.go. Same order, both sides.
+func formSeedHeaders(declared []string, values map[string]any) []string {
+	out := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, f := range declared {
+		if _, ok := values[f]; !ok {
+			continue // declared but past the field cap
+		}
+		if _, dup := seen[f]; dup {
+			continue // owner typed the same name twice
+		}
+		seen[f] = struct{}{}
+		out = append(out, f)
+	}
+	extra := make([]string, 0, len(values))
+	for k := range values {
+		if _, ok := seen[k]; !ok {
+			extra = append(extra, k)
+		}
+	}
+	sort.Strings(extra)
+	return append(out, extra...)
+}
+
 // buildFormSeed mirrors buildWebhookSeed's output shape (body + headers
 // ports) but takes an already-parsed field map, so webhook_input
 // downstream sees the same {key: value} object it would from a JSON
 // webhook POST — i.e. ${trigger.body.email} works identically whether
 // the data arrived via the hosted form or a real webhook.
-func buildFormSeed(values map[string]any) core.Result {
+//
+// declared is the form's field list, carried onto the body value as its
+// column order; see formSeedHeaders.
+func buildFormSeed(declared []string, values map[string]any) core.Result {
 	return core.Result{
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
-			"body":    {MIME: "application/json", Inline: values},
+			"body": {
+				MIME:    "application/json",
+				Inline:  values,
+				Headers: formSeedHeaders(declared, values),
+			},
 			"headers": {MIME: "application/json", Inline: map[string]any{}},
 		},
 	}

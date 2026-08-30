@@ -2,7 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useState } from "react";
-import { Activity, AlertCircle, CreditCard, Layers, Sparkles } from "lucide-react";
+import {
+  Activity,
+  AlertCircle,
+  CreditCard,
+  Layers,
+  Sparkles,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../components/ui/Button";
 import { PlanComparison } from "../components/org/PlanComparison";
@@ -135,16 +141,22 @@ export function Usage() {
       planTone = "warn";
       planSub = (
         <span className="badge warn">
-          {t("usage.cancelsOn", { date: formatDate(billing.current_period_end) })}
+          {t("usage.cancelsOn", {
+            date: formatDate(billing.current_period_end),
+          })}
         </span>
       );
     } else if (billing.current_period_end) {
-      planSub = t("usage.renewsOn", { date: formatDate(billing.current_period_end) });
+      planSub = t("usage.renewsOn", {
+        date: formatDate(billing.current_period_end),
+      });
     } else {
       planSub = billing.subscription_status || undefined;
     }
   } else if (capped) {
-    planSub = t("usage.runsLeft", { n: Math.max(0, capped - billing!.runs_this_month) });
+    planSub = t("usage.runsLeft", {
+      n: Math.max(0, capped - billing!.runs_this_month),
+    });
   }
 
   return (
@@ -155,18 +167,28 @@ export function Usage() {
             <CreditCard size={ICON.xl} />
             {billingEnabled ? t("usage.title") : t("common.usage")}
           </h1>
-          <div className="sub">{billingEnabled ? t("usage.subtitle") : t("usage.subtitlePlain")}</div>
+          <div className="sub">
+            {billingEnabled ? t("usage.subtitle") : t("usage.subtitlePlain")}
+          </div>
         </div>
         {billing && (billing.can_upgrade || billing.can_manage) && (
           <div className="dash-title-actions">
             {billing.can_upgrade && (
-              <Button variant="primary" disabled={redirecting} onClick={() => void goToStripe("checkout")}>
+              <Button
+                variant="primary"
+                disabled={redirecting}
+                onClick={() => void goToStripe("checkout")}
+              >
                 <Sparkles size={ICON.md} />
                 {t("usage.upgrade")}
               </Button>
             )}
             {billing.can_manage && (
-              <Button variant="ghost" disabled={redirecting} onClick={() => void goToStripe("portal")}>
+              <Button
+                variant="ghost"
+                disabled={redirecting}
+                onClick={() => void goToStripe("portal")}
+              >
                 {t("usage.manageBilling")}
               </Button>
             )}
@@ -176,7 +198,7 @@ export function Usage() {
 
       {error && (
         <ErrorNotice style={{ marginBottom: "var(--space-4)" }}>
-{error}
+          {error}
         </ErrorNotice>
       )}
 
@@ -186,7 +208,11 @@ export function Usage() {
             <StatCard
               icon={<CreditCard size={ICON.lg} />}
               label={t("usage.planLabel")}
-              value={billing.plan === "pro" ? t("usage.planValuePro") : t("usage.planValueFree")}
+              value={
+                billing.plan === "pro"
+                  ? t("usage.planValuePro")
+                  : t("usage.planValueFree")
+              }
               sub={planSub}
               tone={planTone}
             />
@@ -202,7 +228,9 @@ export function Usage() {
                     limit: capped,
                   })
                 : current
-                  ? t("usage.currentMonth", { month: periodLabel(current.period) })
+                  ? t("usage.currentMonth", {
+                      month: periodLabel(current.period),
+                    })
                   : undefined
             }
             tone={runsTone}
@@ -223,8 +251,13 @@ export function Usage() {
       {!loading &&
         !error &&
         billing &&
-        (skippedThisMonth > 0 || !billing.polling_allowed || billing.can_upgrade) && (
-          <div className="card dash-panel" style={{ marginBottom: "var(--space-4)" }}>
+        (skippedThisMonth > 0 ||
+          !billing.polling_allowed ||
+          billing.can_upgrade) && (
+          <div
+            className="card dash-panel"
+            style={{ marginBottom: "var(--space-4)" }}
+          >
             {skippedThisMonth > 0 && (
               <p className="dash-empty" style={{ color: "var(--warning)" }}>
                 <AlertCircle size={ICON.md} />
@@ -240,7 +273,17 @@ export function Usage() {
             {billing.can_upgrade && (
               <p className="dash-empty">
                 <Sparkles size={ICON.md} />
-                {t("usage.proPitch")}
+                {/* Only claim Pro "unlocks" schedules where this deployment
+                    actually gates them. polling_allowed is resolved by the
+                    same entitlement path the trigger gate uses, and it is
+                    true on a self-host with no gate configured — where the
+                    fuller pitch would contradict the comparison table right
+                    below it, which reads its Yes/No from that same field. */}
+                {t(
+                  billing.polling_allowed
+                    ? "usage.proPitchRunsOnly"
+                    : "usage.proPitch",
+                )}
               </p>
             )}
           </div>
@@ -260,15 +303,21 @@ export function Usage() {
                 <tr>
                   <th>{t("usage.month")}</th>
                   <th style={{ textAlign: "right" }}>{t("usage.runs")}</th>
-                  <th style={{ textAlign: "right" }}>{t("usage.nodeExecutions")}</th>
+                  <th style={{ textAlign: "right" }}>
+                    {t("usage.nodeExecutions")}
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {usage.map((u) => (
                   <tr key={u.period}>
                     <td>{periodLabel(u.period)}</td>
-                    <td style={{ textAlign: "right" }}>{fmt.format(u.graph_runs)}</td>
-                    <td style={{ textAlign: "right" }}>{fmt.format(u.node_executions)}</td>
+                    <td style={{ textAlign: "right" }}>
+                      {fmt.format(u.graph_runs)}
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      {fmt.format(u.node_executions)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -291,5 +340,3 @@ export function Usage() {
     </div>
   );
 }
-
-

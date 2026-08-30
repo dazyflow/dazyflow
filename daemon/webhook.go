@@ -316,6 +316,13 @@ func CollectFormValuesForTest(declared []string, posted url.Values) map[string]a
 	return collectFormValues(declared, posted)
 }
 
+// BuildFormSeedForTest exposes the hosted form's seed builder so the
+// column order a submission carries downstream is unit-testable without
+// standing up an HTTP server + graph run round trip.
+func BuildFormSeedForTest(declared []string, values map[string]any) core.Result {
+	return buildFormSeed(declared, values)
+}
+
 // BuildWebhookSeedForTest exposes the Content-Type-driven body parser
 // to the external _test package so the per-encoding decoding (JSON,
 // form-urlencoded, text, raw) is unit-testable without a graph run.

@@ -275,6 +275,7 @@
     "upgrade": "Uppgradera till Pro",
     "manageBilling": "Hantera fakturering",
     "proPitch": "Pro tar bort månadstaket för körningar och låser upp schemalagda triggers och pollning.",
+    "proPitchRunsOnly": "Pro tar bort månadstaket för körningar.",
     "pollingGated": "Scheman och pollande triggers är pausade på Gratis-planen — uppgradera för att aktivera dem. Manuella körningar fungerar fortfarande.",
     "skippedRuns_one": "{{count}} schemalagd körning hoppades över den här månaden — över ditt körningstak. Uppgradera för att återuppta.",
     "skippedRuns_other": "{{count}} schemalagda körningar hoppades över den här månaden — över ditt körningstak. Uppgradera för att återuppta."

@@ -836,3 +836,98 @@ func TestForm_LongAnswerFieldsGetATextarea(t *testing.T) {
 		t.Errorf("Email should still get a typed single-line input")
 	}
 }
+
+// TestForm_SeedCarriesDeclaredColumnOrder — the columns a submission
+// carries downstream are the owner's fields in the order the form drew
+// them, not alphabetical.
+//
+// This is what makes a hosted form fill a readable collection. A row
+// writer takes its column order from the value's Headers and only falls
+// back to sorting the row keys when none is carried, so a seed with no
+// Headers produced "What you like about us | Your email | Your name" for
+// a form asking name, email, then the question — while the editor was
+// already offering the declared order as the columns. Same order, both
+// sides.
+func TestForm_SeedCarriesDeclaredColumnOrder(t *testing.T) {
+	declared := []string{"Your name", "Your email", "What you like about us"}
+	seed := daemon.BuildFormSeedForTest(declared, daemon.CollectFormValuesForTest(
+		declared,
+		url.Values{
+			"Your name":              {"Marina Alvarez"},
+			"Your email":             {"marina@example.com"},
+			"What you like about us": {"The Earl Grey."},
+		},
+	))
+	got := seed.Output["body"].Headers
+	if len(got) != len(declared) {
+		t.Fatalf("headers = %v, want %v", got, declared)
+	}
+	for i, want := range declared {
+		if got[i] != want {
+			t.Errorf("headers[%d] = %q, want %q (full: %v)", i, got[i], want, got)
+		}
+	}
+}
+
+// TestForm_SeedHeadersKeepExtraFields — a header list names exactly the
+// columns that get written, so the extras collectFormValues deliberately
+// keeps (utm_source and friends) have to appear in it or they are
+// collected and then silently thrown away one step later.
+//
+// Declared fields keep their order and stay in front; the extras follow
+// in sorted order so the same payload twice produces the same columns.
+func TestForm_SeedHeadersKeepExtraFields(t *testing.T) {
+	declared := []string{"name", "email"}
+	seed := daemon.BuildFormSeedForTest(declared, daemon.CollectFormValuesForTest(
+		declared,
+		url.Values{
+			"name":       {"Anna"},
+			"email":      {"anna@example.com"},
+			"utm_source": {"facebook"},
+			"campaign":   {"spring"},
+		},
+	))
+	got := seed.Output["body"].Headers
+	want := []string{"name", "email", "campaign", "utm_source"}
+	if len(got) != len(want) {
+		t.Fatalf("headers = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("headers = %v, want %v", got, want)
+		}
+	}
+	// Every collected value must be reachable by a column.
+	body, ok := seed.Output["body"].Inline.(map[string]any)
+	if !ok {
+		t.Fatalf("body inline = %T, want map[string]any", seed.Output["body"].Inline)
+	}
+	for k := range body {
+		found := false
+		for _, h := range got {
+			if h == k {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("value %q has no column in headers %v — it would be dropped", k, got)
+		}
+	}
+}
+
+// TestForm_SeedHeadersSkipDeclaredFieldsThatWereCapped — collectFormValues
+// stops at maxFormFields, so a declared name can be missing from the
+// values. A header naming a column with no value would have the writer
+// create an empty column, so headers list only what is actually there.
+func TestForm_SeedHeadersSkipDeclaredFieldsThatWereCapped(t *testing.T) {
+	seed := daemon.BuildFormSeedForTest(
+		[]string{"name", "ghost"},
+		map[string]any{"name": "Anna"}, // "ghost" never made it into the values
+	)
+	for _, h := range seed.Output["body"].Headers {
+		if h == "ghost" {
+			t.Errorf("headers = %v, want no %q (it has no value)", seed.Output["body"].Headers, "ghost")
+		}
+	}
+}

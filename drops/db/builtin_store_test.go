@@ -881,3 +881,66 @@ func TestBuiltinStore_TimestampColumnRespectsCallerAndOptOut(t *testing.T) {
 		}
 	})
 }
+
+// TestBuiltinStore_AppendCreatesColumnsInHeaderOrder — a collection's
+// columns are created in the order the incoming value declares, not
+// alphabetically.
+//
+// This is the store half of the hosted-form path. A form asking "Your
+// name, Your email, What you like about us" carries exactly that order on
+// its rows Ref (daemon.buildFormSeed), and the owner then reads the
+// collection in the Collections page. Sorting anywhere along the way puts
+// the long free-text answer first and the person's name last, which is
+// the wrong way round for every form ever written.
+//
+// The row maps are deliberately unordered (Go map iteration is random) so
+// the only thing that can produce a stable order is Headers being honored.
+func TestBuiltinStore_AppendCreatesColumnsInHeaderOrder(t *testing.T) {
+	root := t.TempDir()
+	declared := []string{"your_name", "your_email", "what_you_like_about_us"}
+
+	res, err := executeBuiltinStoreAppend(t.Context(), core.Job{
+		WorkspaceRoot: root,
+		Params:        map[string]any{"table": "submissions"},
+		Input: map[string]core.Ref{
+			"rows": {
+				Inline: map[string]any{
+					"your_name":              "Marina Alvarez",
+					"your_email":             "marina@example.com",
+					"what_you_like_about_us": "The Earl Grey.",
+				},
+				Headers: declared,
+			},
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("append execute: %v", err)
+	}
+	if res.Status != core.StatusOK {
+		t.Fatalf("append status=%q err=%+v", res.Status, res.Error)
+	}
+
+	// SELECT * so the column order is the table's own, as the Collections
+	// page sees it — not an order the query itself imposed.
+	queryRes, err := executeBuiltinStoreQuery(t.Context(), core.Job{
+		WorkspaceRoot: root,
+		Params:        map[string]any{"sql": "SELECT * FROM submissions"},
+	}, nil)
+	if err != nil {
+		t.Fatalf("query execute: %v", err)
+	}
+	cols, ok := queryRes.Output["columns"].Inline.([]string)
+	if !ok {
+		t.Fatalf("columns wrong type: %T", queryRes.Output["columns"].Inline)
+	}
+	// The store may append bookkeeping columns (saved_at); the declared
+	// ones must lead, in order.
+	if len(cols) < len(declared) {
+		t.Fatalf("columns = %v, want at least %v", cols, declared)
+	}
+	for i, want := range declared {
+		if cols[i] != want {
+			t.Fatalf("columns = %v, want %v first (in order)", cols, declared)
+		}
+	}
+}
