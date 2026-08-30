@@ -23,6 +23,106 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.27.7] - 2026-08-30
+
+### Added
+
+- **A guide page for teams, roles and approvals.** All three are primary UI —
+  Approvals is a top-level nav entry, roles gate everything an invited person
+  can do — and none of them were written down: no guide page, and not one of
+  the Glossary's thirty entries. A cold walkthrough had to guess, including at
+  the non-obvious and rather good fact that a **Viewer can approve**, so signing
+  things off never requires handing someone edit access or your secrets.
+  `docs/guide/teams-and-approvals` now covers inviting, the three roles, seats,
+  and wiring an approval; Approval, Invitation, Member, Organization, Role and
+  Seat join the Glossary.
+
+- **Approval cards show what is being approved.** The `Wait for approval` step
+  already stashed the value wired into its `Value` port on the awaiting result,
+  next to the `pending_url` and `prompt` the inbox was already reading — it just
+  never travelled the last hop. An approver saw `(no prompt — step ID:
+  await_approval_1)` and two buttons, which is a hard thing to say yes to, and
+  the opposite of the promise that Dazyflow shows you what it is about to do.
+  The card now renders the submission, the drafted reply, the refund. Big values
+  are held back with a pointer to the run rather than shipped down a list
+  endpoint that returns up to 200 rows.
+
+### Fixed
+
+- **A hosted form filled its collection alphabetically.** `buildFormSeed` built
+  the body value without `Headers`, so the declared field order was dropped at
+  the source even though it was sitting at the call site. A row value carries
+  its own column order and a writer only falls back to sorting the keys when
+  none is present — so a form asking *Your name, Your email, What you like about
+  us* produced a table led by the long free-text answer, while the editor had
+  been offering the right order as the columns all along. Extras a caller posted
+  (`utm_source` and friends) are listed after the declared fields rather than
+  dropped, since headers name exactly the columns that get written. The same
+  ordering now reaches approval cards.
+
+- **A 403's real message was replaced with advice to ask an admin.** The invite
+  gate answers with the one sentence that unblocks you — *"verify your email
+  before inviting others"* — and the client overwrote every refusal with a
+  generic *"You don't have permission to do that. Ask an admin if you think you
+  should."* Told to the owner of the organization, that names a person who does
+  not exist. A 403 carrying a clean, remedy-shaped message now shows it;
+  refusals phrased as the permission you lack (`organization:admin required`)
+  still get the headline, because those are written for whoever wired the API
+  call rather than the person reading the screen.
+
+- **The verification banner claimed an email had been sent, and its resend
+  failed silently.** Signup reports `verification_email_sent`, which is false
+  whenever the deployment's mailer is unconfigured or failing — so the first
+  thing a new owner read was a claim about a message that was never sent. The
+  banner now states only what it can stand behind, and reports honestly what
+  each resend actually did: the endpoint's three answers (sent, already
+  verified, and a 502) were collapsed into "it didn't throw, so say it worked",
+  which left the one route out of the invite gate looking like it succeeded
+  every time it was pressed.
+
+- **Inviting anyone was impossible when the deployment's mail was broken.**
+  The gate refused invitation *creation* on unverified accounts, and a
+  configured-but-failing mailer (wrong password, expired token, provider
+  blocking) leaves verification active while every send fails — so the owner was
+  told to confirm an address via an email that could never arrive. What the gate
+  protects is the operator's mailer, so that alone is now withheld: the
+  invitation is created and its link handed over to send by hand, which is what
+  the invite dialog has always told admins they can do. Creating an
+  organization still requires a verified address; that limit is about spinning
+  up tenants, not about mail.
+
+- **Every organization got one seat more than its plan allowed.** The owner
+  holds a seat without a membership row — ownership is implicit in the home
+  tenant — and the seat gate counted rows while the People page correctly added
+  the owner back. The two disagreed by exactly one, so a three-seat plan seated
+  four before anything refused.
+
+- **Outstanding invitations didn't hold a seat.** The gate compared against
+  people who had already joined, so at two of three seats every invitation
+  passed the check on its own and the refusal landed on whichever invitee
+  clicked second, as "ask an admin to upgrade". The admin saw nothing wrong.
+  Creating an invitation now counts the promises already made. Accepting one
+  deliberately does not: a stale invitation nobody opened must never keep a real
+  person out of a seat that is genuinely free.
+
+- **Two people accepting at once could both take the last seat.** Counting seats
+  and then inserting are two steps, and under `READ COMMITTED` both
+  transactions read the same free seat before either wrote — there is no row to
+  conflict on, because the anomaly is about a row that does not exist yet.
+  Seating is now one atomic step: a transaction and a per-tenant advisory lock,
+  released on rollback as well as commit, and taken on the tenant so unrelated
+  organizations still write in parallel. Updating someone already seated is
+  never refused — they occupy a seat already, so a role change must not fail
+  because the org is full.
+
+- **The upgrade pitch contradicted the plan table beside it.** "Pro removes the
+  monthly run cap and unlocks scheduled & polling triggers" was static copy
+  shown whenever an upgrade was possible, while the comparison table below reads
+  its Yes/No from the resolved entitlement. On any deployment that does not gate
+  polling — every self-host — the pitch claimed to unlock something the table
+  correctly showed as already available. It now matches what the reader's own
+  plan actually gates.
+
 ## [0.27.6] - 2026-08-30
 
 ### Fixed
