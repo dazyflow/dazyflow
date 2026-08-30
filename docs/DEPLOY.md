@@ -378,18 +378,47 @@ fallback, and the image then reports itself as unstamped — which also breaks t
 update check for every operator, since that check reads the canonical instance's
 reported version.
 
+### Where the images come from
+
+A host running the production overlay **pulls** its release images; it never
+compiles them. CI builds both (`dzd` and `docs`) and publishes them to GitHub
+Container Registry as `ghcr.io/<owner>/dazyflow-dzd` and `-docs`, tagged both
+`X.Y.Z` and `latest`.
+
+This is not a preference. An s-1vcpu-2gb droplet cannot build Go and Vite-build
+two frontends inside a deploy step's timeout, and the attempt starves the site
+while it fails. Set `GHCR_OWNER` in `.env` (lower-case — ghcr rejects an
+uppercase path segment); the overlay refuses to resolve without it rather than
+silently constructing a broken image name.
+
+A ghcr package is **private by default**, and an anonymous pull of one fails
+with a 401 that reads like "not found". Either make both packages public, or log
+the host in once with a token holding `read:packages`:
+
+```sh
+docker login ghcr.io -u YOUR_LOGIN --password-stdin
+```
+
+A self-host **without** the production overlay has no images published for it
+and still builds from source — that path is unchanged.
+
 To upgrade a deployment by hand, fetch, check out the newest release tag, and
-rebuild with the stamp exported:
+pull the images for it:
 
 ```sh
 git fetch --tags --force --prune-tags
 LATEST=$(make -s latest)          # newest bare X.Y.Z tag; see the note below
 git checkout --force "$LATEST"
-VERSION="$LATEST" \
-COMMIT="$(git rev-parse --short HEAD)" \
-BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+export VERSION="$LATEST"
+docker compose -f docker-compose.yml -f docker-compose.prod.yml pull dzd docs
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-build
 ```
+
+`VERSION` selects which published tag to pull, so it is doing different work
+here than in a build: `COMMIT` and `BUILD_DATE` were stamped into the image by
+CI at build time and are not needed on this host at all. Without the overlay —
+a self-host that builds — use `up -d --build` and export all three, as the
+stamping rules above describe.
 
 Select the tag with `make latest`, not `git tag --sort=-v:refname | head -1`:
 that sorts any non-version tag (a `nightly`) above every release, and version
@@ -405,8 +434,8 @@ curl -s https://your.host/api/v1 | jq .build
 ```
 
 `PROD=1 make upgrade` automates all of it — fetch, newest-release-tag selection,
-a stamped rebuild with the overlay merged — and leaves the checkout **on the tag**
-so the tree matches the running image:
+pulling that tag's images with the overlay merged — and leaves the checkout **on
+the tag** so the tree matches the running image:
 
 ```sh
 PROD=1 make upgrade

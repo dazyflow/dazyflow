@@ -36,28 +36,30 @@ services:
       - dzd
       - docs
 
-  # Private image registry. Releases are built in CI and pushed here; this box
-  # only ever pulls. Two doors into one blob store, and they are not symmetric
-  # (deploy/Caddyfile has the long version): CI pushes over
-  # https://registry.dazyflow.app with basic auth, while THIS host pulls over
-  # 127.0.0.1:5000, which Docker exempts from its HTTPS requirement — so the
-  # pull path needs no certificate and no credential.
+  # Release images come from GitHub Container Registry, built and pushed by
+  # .github/workflows/ci.yml. This box only ever pulls.
   #
-  # Published on loopback ONLY. The registry port is never exposed off the box;
-  # the sole route in from outside is Caddy, which is authenticated.
-  registry:
-    image: registry:2
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:5000:5000"
-    volumes:
-      - registry_data:/var/lib/registry
-    environment:
-      # Without this, `registry garbage-collect` cannot reclaim blobs from
-      # superseded tags. On a 50GB droplet that is the difference between the
-      # registry being free and it being the thing that fills the disk.
-      REGISTRY_STORAGE_DELETE_ENABLED: "true"
-
+  # This replaces the self-hosted `registry:2` service that used to run here.
+  # That existed because the images had nowhere else to live: CI pushed to
+  # https://registry.dazyflow.app (Caddy fronting it with TLS + basic auth) and
+  # the host pulled from 127.0.0.1:5000, where Docker waives its HTTPS
+  # requirement. ghcr is the same blob store without the two doors, the
+  # credential pair, or the `registry garbage-collect` chore that kept a 50GB
+  # droplet from filling up.
+  #
+  # GHCR_OWNER is the GitHub account or org that owns the packages, lower-case
+  # (ghcr rejects an uppercase path segment). Set it in .env.
+  #
+  # A ghcr package is PRIVATE by default, and an anonymous `docker pull` of one
+  # fails with a 401 that reads like "not found". Either make both packages
+  # public, or log the host in once with a token holding read:packages:
+  #
+  #   docker login ghcr.io -u YOUR_LOGIN --password-stdin   (paste the PAT)
+  #
+  # GHCR_OWNER is deliberately `:?` rather than defaulted: an empty value would
+  # resolve to ghcr.io//dazyflow-dzd and fail at pull time with a registry error
+  # that says nothing about the real cause.
+  #
   # The release image, pulled — never built here. The `build:` stanza in
   # docker-compose.yml stays valid as an escape hatch (`--build` still works if
   # the registry is ever unreachable), but the deploy path is pull-only: see the
@@ -67,7 +69,7 @@ services:
   # resolves to the newest release rather than to nothing. `make upgrade` sets
   # it explicitly to the tag it selected, which is the deterministic path.
   dzd:
-    image: 127.0.0.1:5000/dazyflow-dzd:${VERSION:-latest}
+    image: ghcr.io/${GHCR_OWNER:?set GHCR_OWNER in .env}/dazyflow-dzd:${VERSION:-latest}
 
   # Documentation site (docs.dazyflow.app). Self-contained image: the build
   # generates the step catalog from the live drop manifests, Vite-builds the
@@ -76,7 +78,7 @@ services:
   # Rebuild with `docker compose ... up -d --build docs` when a drop manifest,
   # guide page, or the docs UI changes.
   docs:
-    image: 127.0.0.1:5000/dazyflow-docs:${VERSION:-latest}
+    image: ghcr.io/${GHCR_OWNER:?set GHCR_OWNER in .env}/dazyflow-docs:${VERSION:-latest}
     build:
       context: .
       dockerfile: Dockerfile.docs
@@ -93,4 +95,3 @@ services:
 volumes:
   caddy_data:
   caddy_config:
-  registry_data:

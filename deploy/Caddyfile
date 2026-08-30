@@ -43,39 +43,6 @@ docs.dazyflow.app {
 	reverse_proxy docs:80
 }
 
-# Private image registry (registry.dazyflow.app). Production pulls its release
-# images from here instead of building them on the droplet — a 1-vCPU/2GB box
-# cannot compile Go and Vite-build two frontends inside a runner step's timeout,
-# and trying starved the whole site while it failed.
-#
-# Two doors into the same storage, deliberately asymmetric:
-#
-#   CI PUSH   — crosses the public internet, so it comes through here: TLS plus
-#               basic auth. On-demand TLS for exactly the reason the docs block
-#               above explains — a managed cert for a name covered by the
-#               *.dazyflow.app on-demand policy never gets issued.
-#   PROD PULL — never touches this block at all. The registry also publishes on
-#               127.0.0.1:5000 (see docker-compose.prod.yml), and the host's
-#               `docker compose pull` talks to that directly. Docker exempts
-#               loopback from its HTTPS requirement, so the pull path needs no
-#               certificate and no credential.
-#
-# Both env vars come from .env, which the caddy service already reads. Their
-# defaults DISABLE the route rather than opening it: the site address falls back
-# to registry.invalid (a name that resolves nowhere) and the credential to a
-# bcrypt hash of a random string nobody holds. So a box that takes this file
-# before its .env is updated keeps serving the app minus a registry endpoint,
-# instead of Caddy refusing the config and taking the whole site down.
-{$REGISTRY_HOST:registry.invalid} {
-	tls {
-		on_demand
-	}
-	basic_auth {
-		{$REGISTRY_USER:disabled} {$REGISTRY_PASSWORD_HASH:$2a$14$PUmcJQOU53lqkHYFCDp.X.cIYABR01Bo9xsb4UZYntZ4BkViwY0nq}
-	}
-	reverse_proxy registry:5000
-}
-
 # Per-org subdomains — one on-demand cert per claimed org host, authorized by
 # the `ask` endpoint above. Same dzd upstream; the sign-in handoff state is
 # in-process, so every *.apex host MUST reach the same dzd (one upstream here

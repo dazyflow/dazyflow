@@ -1,0 +1,392 @@
+# CI — the GitHub Actions port of .builds/archlinux.yml.
+#
+# Manually triggered only, for now: nothing runs on push or pull_request, so
+# this can be exercised against the new remote without racing the sourcehut
+# build that is still authoritative. Add the `push:`/`pull_request:` triggers
+# once a dispatch run is green end to end.
+#
+# Images publish to GitHub Container Registry instead of registry.dazyflow.app.
+# That removes the REGISTRY_USER / REGISTRY_PASSWORD secret pair entirely —
+# GITHUB_TOKEN authenticates against ghcr.io given `packages: write` below.
+name: CI
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Push images to ghcr.io (dispatch from a tag ref to stamp a version)"
+        type: boolean
+        default: false
+      deploy:
+        description: "Trigger the production deploy webhook after publishing"
+        type: boolean
+        default: false
+
+# Least privilege by default; the images job widens it to write packages.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # Explicitly NOT cancel-in-progress. Every run here is hand-dispatched, and
+  # one of them may be mid-push to ghcr or mid-deploy; cancelling that leaves
+  # half the images published. Revisit if push/PR triggers are added, where
+  # superseding a stale run is the behaviour you want.
+  cancel-in-progress: false
+
+env:
+  # Plain local test credentials, not secrets — they address the service
+  # containers below. The bulk of the integration suite skips unless these are
+  # set (Postgres-gated tests read DAZYFLOW_TEST_DB, the drops/db MySQL tests
+  # read DAZYFLOW_TEST_MYSQL, the live-DSN verify check reads DZ_TEST_PG_DSN),
+  # so CI runs what a developer with both databases gets — nothing silently
+  # skips.
+  DAZYFLOW_TEST_DB: postgres://dazyflow:dazyflow@localhost:5432/dazyflow_test
+  DAZYFLOW_TEST_MYSQL: dazyflow:dazyflow@tcp(127.0.0.1:3306)/dazyflow_test?parseTime=true
+  DZ_TEST_PG_DSN: postgres://dazyflow:dazyflow@localhost:5432/dazyflow_test?sslmode=disable
+
+jobs:
+  # ---------------------------------------------------------------- Go suite
+  test:
+    name: Go build, test, vet, gates
+    runs-on: ubuntu-latest
+    services:
+      # Service containers replace the hand-rolled initdb / mariadb-install-db
+      # tasks. Same users, databases and ports the manifest created by hand.
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: dazyflow
+          POSTGRES_PASSWORD: dazyflow
+          POSTGRES_DB: dazyflow_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dazyflow -d dazyflow_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      mysql:
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: dazyflow_test
+          MARIADB_USER: dazyflow
+          MARIADB_PASSWORD: dazyflow
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # check-changelog compares a released section against the commit that
+          # released it, and the docker-image version stamp reads
+          # `git describe --tags`. Neither works on a shallow clone.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Build
+        run: go build ./...
+
+      # The runner agent and runner.sh are Python and POSIX sh, so the Go suite
+      # cannot see what they DO — it only checks the embedded copies still match
+      # the source (TestEmbeddedRunnerFilesMatchTheSource). Everything that makes
+      # them trustworthy is in these unittest suites: a single-use token refused
+      # before anything spends it, the registration token never reaching a file,
+      # an allow-list surviving a reinstall, runner.env read rather than
+      # evaluated, a service actually wired to start at boot. Unrun, they rot.
+      # Before the race suite because it takes seconds, and this is the script
+      # every organisation pastes into a terminal.
+      - name: Runner agent tests
+        run: make runner-test
+
+      - name: Test (race)
+        # The race detector pushes the daemon package past Go's default
+        # 10-minute per-package ceiling. The limit is per package, so this is
+        # headroom for the slowest one, not a slow-suite allowance.
+        run: go test -race -timeout 30m ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: dzctl end-to-end
+        run: bash examples/csv-pipeline/run.sh
+
+      # The two catalogues the web guards read (the app list behind the
+      # integration description guard, the drop text behind the Swedish coverage
+      # guard) are generated from the live drop registry and committed. A stale
+      # one makes its guard pass vacuously — "every drop has a Swedish
+      # description" is only true of the drops the snapshot remembers.
+      - name: Catalogues up to date
+        run: make catalogs-check
+
+      # A released CHANGELOG section describes what is in its tag. Editing one is
+      # invisible in review — correct prose under a plausible heading — and it
+      # takes the next release down with it, since the entry that should have
+      # gone under [Unreleased] left it empty.
+      - name: Changelog untouched
+        run: make check-changelog
+
+  # ------------------------------------------------------------------ web app
+  web:
+    name: Web unit tests and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The docs SPA content tree (web/src/docs/content/) is generated, not
+      # committed — guide pages copied from docs/guide/ and the step catalog
+      # emitted by cmd/docsgen — so it needs Go here even though this job is
+      # otherwise pure Node. Without it content.ts globs an empty directory and
+      # the docs-search tests fail on a fresh checkout with "Nothing matches",
+      # which reads as a search bug rather than as missing content.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+        working-directory: web
+
+      - name: Generate docs content
+        run: make docs-content
+
+      # `npm run build` is `tsc -b && vite build`, so a type error fails there —
+      # but it does NOT run the unit tests, which left the whole vitest suite
+      # (error explainers, port typing, the Swedish catalog vocabulary and its
+      # drift guards) unrun in CI, free to rot unnoticed. `npm test` is
+      # `vitest run`.
+      - run: npm test
+        working-directory: web
+
+      - run: npm run build
+        working-directory: web
+
+  # --------------------------------------------------------------- docs site
+  docs:
+    name: Docs site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      # Builds docs.dazyflow.app so the published docs cannot drift from the
+      # code: `make docs-site` regenerates the step catalog from the live drop
+      # manifests (go run ./cmd/docsgen) and Vite-builds the docs SPA. A broken
+      # manifest, a bad docsgen change, a type error or a broken guide page fails
+      # here. Generated content and dist are git-ignored.
+      - name: Build docs site
+        run: make docs-site
+
+  # ------------------------------------------------------- supply chain gates
+  security:
+    name: Vulnerability scan and SBOM
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      # Two passes, because they have complementary blind spots and neither
+      # alone is enough:
+      #
+      #   1. SOURCE (`./...`) — widest coverage: every package in the module,
+      #      including ones no shipped binary links.
+      #   2. BINARY (-mode binary) — what actually ships. Source-mode
+      #      reachability walks the SSA call graph from our packages and misses a
+      #      vulnerable symbol invoked through an interface: GO-2026-5158 (otel
+      #      baggage parsing) read as "not called" in source mode even though
+      #      daemon/tracing.go registers propagation.Baggage{} and otel
+      #      dispatches Extract through its global propagator on every traced
+      #      request. The binary pass caught it. Also ~70 MiB vs ~4 GiB.
+      #
+      # Keep BOTH at symbol granularity (govulncheck's default). Do NOT "fix" a
+      # failure here by dropping to -scan package/module: golang.org/x/crypto
+      # GO-2026-5932 currently has NO fixed version, and at module granularity it
+      # is reported unconditionally — CI would go permanently red with no remedy.
+      # At symbol granularity it correctly reads as uncalled.
+      #
+      # NOTE: the sourcehut manifest added a 4 GiB swapfile here, because
+      # source-mode govulncheck peaks near 4 GiB on a COLD build cache while the
+      # same VM was still hosting the postgres and mariadb daemons the test task
+      # had left running. Neither is true on a hosted runner — databases are
+      # separate containers in a different job — so the swapfile is dropped. If
+      # this step ever reports `Killed` with no scan output, that is the OOM
+      # killer and the swapfile is the fix, not a vulnerability.
+      - name: govulncheck (source and binary)
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          GV="$(go env GOPATH)/bin/govulncheck"
+          "$GV" ./...
+          # Symbol scan of each shipped binary. docsgen is a build-time tool,
+          # not shipped, so it is deliberately out of scope.
+          mkdir -p /tmp/vulnbin
+          for c in dzd dzctl dz-mcp; do
+            go build -o "/tmp/vulnbin/$c" "./cmd/$c"
+            echo "--- govulncheck -mode binary $c"
+            "$GV" -mode binary "/tmp/vulnbin/$c"
+          done
+
+      # Software Bill of Materials (A.8.25 / A.8.29 supply chain). syft scans the
+      # Go module graph and emits SPDX + CycloneDX JSON. CI guarantees the SBOM
+      # always generates; releases attach both. Not committed — see .gitignore.
+      - name: Generate SBOM
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
+            | sh -s -- -b "$(go env GOPATH)/bin"
+          "$(go env GOPATH)/bin/syft" dir:. \
+            -o spdx-json=sbom.spdx.json \
+            -o cyclonedx-json=sbom.cdx.json
+
+      # The sourcehut build left these on the build page. Here they are a proper
+      # artifact, so a release can attach them without a rebuild.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: |
+            sbom.spdx.json
+            sbom.cdx.json
+          if-no-files-found: error
+
+  # --------------------------------------------------------- images + deploy
+  images:
+    name: Images
+    runs-on: ubuntu-latest
+    needs: [test, web, docs, security]
+    permissions:
+      contents: read
+      packages: write
+    env:
+      REGISTRY: ghcr.io
+      # Lower-cased owner: ghcr rejects an uppercase path segment, and a GitHub
+      # login may legitimately contain capitals.
+      OWNER: ${{ github.repository_owner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # `git describe --tags` for the version stamp
+
+      # Both images are built on every run, because that is the only thing
+      # exercising the Dockerfiles. Publishing is the part that is opt-in.
+      #
+      # This is also what stops production compiling its own releases. That
+      # droplet is s-1vcpu-2gb: a Go build plus two Vite builds on one core
+      # cannot finish inside a runner step's timeout, and the attempt starved the
+      # whole site (kswapd pegged, TLS handshakes timing out) before being
+      # killed.
+      - name: Resolve version
+        id: ver
+        run: |
+          TAG=$(git describe --exact-match --tags HEAD 2>/dev/null || true)
+          echo "tag=$TAG"                      >> "$GITHUB_OUTPUT"
+          echo "ver=${TAG:-ci}"                >> "$GITHUB_OUTPUT"
+          echo "owner=${OWNER,,}"              >> "$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)"  >> "$GITHUB_OUTPUT"
+          if [ -z "$TAG" ]; then
+            echo "::notice::HEAD is not a tag — images will be stamped from ./VERSION"
+          fi
+
+      - name: Build images
+        # VERSION is passed as $TAG, which is EMPTY off a tag — deliberately: the
+        # Dockerfile falls back to the committed ./VERSION when this arg is
+        # empty, and a non-empty placeholder would SHADOW that fallback, which is
+        # the bug that had every non-Makefile build reporting itself as "dev".
+        # COMMIT has no fallback at all (ARG COMMIT=unknown), so without passing
+        # it a running binary cannot be traced back to a commit — 0.26.2 shipped
+        # reporting commit=unknown.
+        run: |
+          docker build \
+            --build-arg VERSION="${{ steps.ver.outputs.tag }}" \
+            --build-arg COMMIT="${{ steps.ver.outputs.commit }}" \
+            --build-arg BUILD_DATE="${{ steps.ver.outputs.date }}" \
+            -t dazyflow-dzd:${{ steps.ver.outputs.ver }} .
+          # The docs site image (docs.dazyflow.app) — deploy/ references it but
+          # nothing else exercises Dockerfile.docs.
+          docker build -f Dockerfile.docs \
+            -t dazyflow-docs:${{ steps.ver.outputs.ver }} .
+
+      - name: Log in to ghcr.io
+        if: inputs.publish
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      # Every release is published twice: under its own version, which is what
+      # `make upgrade` pins, and as :latest, so a bare `docker compose pull` with
+      # no VERSION set still lands on the newest release rather than on nothing.
+      # See the image: lines in docker-compose.prod.yml.
+      #
+      # :latest only moves for a tagged build. Publishing an untagged run would
+      # otherwise point production's floating tag at an arbitrary commit.
+      - name: Push images
+        if: inputs.publish
+        run: |
+          VER='${{ steps.ver.outputs.ver }}'
+          BASE='${{ env.REGISTRY }}/${{ steps.ver.outputs.owner }}'
+          for img in dzd docs; do
+            docker tag "dazyflow-$img:$VER" "$BASE/dazyflow-$img:$VER"
+            docker push "$BASE/dazyflow-$img:$VER"
+            if [ -n '${{ steps.ver.outputs.tag }}' ]; then
+              docker tag "dazyflow-$img:$VER" "$BASE/dazyflow-$img:latest"
+              docker push "$BASE/dazyflow-$img:latest"
+            else
+              echo "::warning::untagged build — pushed :$VER but did not move :latest"
+            fi
+          done
+          echo "published dazyflow-dzd and dazyflow-docs at $VER"
+
+      # Ask Dazyflow to deploy what was just published. Reached only from the
+      # publish path, so it inherits that gate: a build-only run never triggers a
+      # deploy.
+      #
+      # Unlike the sourcehut version, a missing secret here FAILS rather than
+      # exiting 0. There the gate protected forks and contributors without the
+      # secret from a confusing red build; a manual dispatch that explicitly
+      # asked to deploy has no such excuse, and a silent skip is precisely the
+      # "green build that shipped nothing" this setup exists to prevent.
+      #
+      # A 401 means the key OR an unpublished flow — the endpoint answers both
+      # identically on purpose, so it never reveals which flows exist. Check the
+      # flow is published before assuming the key rotated.
+      - name: Trigger deploy
+        if: inputs.publish && inputs.deploy
+        env:
+          DAZYFLOW_WEBHOOK_KEY: ${{ secrets.DAZYFLOW_WEBHOOK_KEY }}
+          DAZYFLOW_FLOW: ${{ secrets.DAZYFLOW_FLOW }}
+        run: |
+          if [ -z "$DAZYFLOW_WEBHOOK_KEY" ] || [ -z "$DAZYFLOW_FLOW" ]; then
+            echo "::error::deploy requested but DAZYFLOW_WEBHOOK_KEY / DAZYFLOW_FLOW are not set"
+            exit 1
+          fi
+          curl -fsS -X POST \
+            -H "Authorization: Bearer $DAZYFLOW_WEBHOOK_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"version":"${{ steps.ver.outputs.ver }}"}' \
+            "https://dazyflow.app/trigger/$DAZYFLOW_FLOW" >/dev/null
+          echo "deploy triggered for ${{ steps.ver.outputs.ver }}"

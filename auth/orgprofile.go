@@ -104,11 +104,13 @@ var reservedSubdomains = map[string]bool{
 // subset of reservedSubdomains: only names we truly front.
 var servedInfraSubdomains = map[string]bool{
 	"docs": true,
-	// The private image registry the production deploy pulls from. CI pushes
-	// releases to it over HTTPS (Caddy terminates TLS and checks basic_auth);
-	// prod itself pulls over 127.0.0.1:5000, which needs no certificate. It is
-	// listed here only so the on-demand gate issues the cert CI's push needs.
-	"registry": true,
+	// NOTE: "registry" used to be here, for the registry.dazyflow.app site block
+	// that fronted a self-hosted registry:2 container CI pushed releases to.
+	// Release images come from ghcr now, that site block is gone from
+	// deploy/Caddyfile, and authorizing a cert for a host nothing serves just
+	// spends a Let's Encrypt issuance on a name that answers 404. It stays in
+	// reservedSubdomains above — no org should be able to claim it — which is
+	// exactly the "reserved but not served" case this map exists to distinguish.
 }
 
 // IsServedInfraSubdomain reports whether label is a reserved infrastructure

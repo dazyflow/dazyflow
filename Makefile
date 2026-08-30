@@ -339,10 +339,17 @@ latest: ## Print the newest release tag (deploy scripts: use `make -s latest`)
 #     at the new tag. Not hypothetical: that is exactly how 0.25.0 "deployed"
 #     onto images that were still 15 hours old.
 #
-# The registry branch
-#     A host running the production overlay pulls prebuilt images. Anything
-#     else — a self-host without the overlay — still builds from source, which
-#     is why the else branch stays.
+# The pull branch
+#     A host running the production overlay pulls prebuilt images from ghcr.
+#     Anything else — a self-host without the overlay — still builds from
+#     source, which is why the else branch stays.
+#
+#     Keyed on `caddy` because that service exists only in the production
+#     overlay. It used to key on `registry`, back when the images came from a
+#     registry:2 container running on this box; that service is gone, and a
+#     condition still naming it would silently take the ELSE branch and set a
+#     1-vCPU droplet compiling Go and two Vite builds — the exact failure the
+#     prebuilt-image path exists to prevent.
 upgrade: ## Deploy the latest release tag, pulling its prebuilt images (PROD=1 on a production host)
 	git fetch --tags --force --prune-tags
 	@if docker compose -f docker-compose.yml -f docker-compose.prod.yml ps \
@@ -364,20 +371,22 @@ upgrade: ## Deploy the latest release tag, pulling its prebuilt images (PROD=1 o
 	export VERSION="$$LATEST"; \
 	export COMMIT="$$(git rev-parse --short HEAD)"; \
 	export BUILD_DATE="$$(date -u +%Y-%m-%dT%H:%M:%SZ)"; \
-	if $(COMPOSE) config --services 2>/dev/null | grep -qx registry; then \
-		echo "Pulling $$LATEST — nothing is compiled on this host."; \
-		$(COMPOSE) up -d registry; \
+	if $(COMPOSE) config --services 2>/dev/null | grep -qx caddy; then \
+		echo "Pulling $$LATEST from ghcr — nothing is compiled on this host."; \
 		n=0; until $(COMPOSE) pull dzd docs; do \
 			n=$$((n+1)); \
 			if [ $$n -ge 5 ]; then \
-				echo "registry did not answer after $$n attempts — is it running, and did CI push $$LATEST?"; \
+				echo "ghcr did not answer after $$n attempts. Check, in order:"; \
+				echo "  * did CI publish $$LATEST? (Actions run with publish=true)"; \
+				echo "  * is GHCR_OWNER set in .env?"; \
+				echo "  * are the packages public, or is this host logged in to ghcr.io?"; \
 				exit 1; \
 			fi; \
-			echo "registry not ready yet — retrying ($$n/5)"; sleep 2; \
+			echo "ghcr not answering yet — retrying ($$n/5)"; sleep 2; \
 		done; \
 		$(COMPOSE) up -d --no-build; \
 	else \
-		echo "No registry service in this file set — building from source instead."; \
+		echo "Not the production overlay — building from source instead."; \
 		$(COMPOSE) up -d --build; \
 	fi; \
 	if $(COMPOSE) config --services 2>/dev/null | grep -qx caddy; then \
