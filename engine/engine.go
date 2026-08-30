@@ -392,7 +392,7 @@ func (e *Engine) buildAndExecute(
 	}
 	sctx := scopeCtx(ctx, graph)
 	injectConnectionDefaults(sctx, e.Secrets, manifest, &job)
-	secrets, err := resolveTemplatesCollecting(sctx, e.Secrets, e.Resources, prior, &job)
+	secrets, err := resolveTemplatesCollecting(sctx, e.Secrets, e.Resources, graph, prior, &job)
 	if err != nil {
 		recordErr(err)
 		// resolveTemplatesCollecting returns the partially-collected secret set

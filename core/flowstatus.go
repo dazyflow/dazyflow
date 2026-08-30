@@ -109,6 +109,24 @@ var EventTriggerModules = map[string]bool{
 	"homeassistant_state_changed":     true,
 }
 
+// IsTriggerModule reports whether a module is a graph ENTRY POINT — the
+// scheduler modules, the webhook, or an inbound provider event.
+//
+// Presence only, deliberately: this answers "is this the node a run STARTED
+// from", not "is it configured to fire". A run that is executing already
+// settled the second question, and ${trigger.…} needs the first.
+//
+// EventTriggerModules is kept in lockstep with the catalog by
+// TestEventTriggerModulesMatchCatalog, so a new *_on_* trigger drop is
+// covered here the moment that test tells you to list it.
+func IsTriggerModule(module string) bool {
+	switch module {
+	case "webhook_input", "cron_trigger", "poll_trigger", "google_form_trigger":
+		return true
+	}
+	return EventTriggerModules[module]
+}
+
 // classifyTriggers scans g once and reports the three ways a flow can fire on
 // its own: the SCHEDULER (graph-level cron, cron_trigger, or a
 // poll_trigger/google_form_trigger with a valid interval), a reachable

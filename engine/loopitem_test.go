@@ -225,7 +225,7 @@ func TestResolveParams_StructuredItemValue(t *testing.T) {
 		"address":  map[string]any{"city": "Malmö"},
 		"lines":    []any{map[string]any{"desc": "Klippning"}},
 	})
-	if _, err := resolveTemplatesCollecting(ctx, nil, nil, nil, &job); err != nil {
+	if _, err := resolveTemplatesCollecting(ctx, nil, nil, core.Graph{}, nil, &job); err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
 	if _, ok := job.Params["shipment"].(map[string]any); !ok {

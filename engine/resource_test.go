@@ -46,7 +46,7 @@ func TestResource_WholeStringYieldsStructured(t *testing.T) {
 	})
 	job := &core.Job{Params: map[string]any{"rows": "${resource.leads.rows}"}}
 
-	if _, err := resolveTemplatesCollecting(context.Background(), nil, res, nil, job); err != nil {
+	if _, err := resolveTemplatesCollecting(context.Background(), nil, res, core.Graph{}, nil, job); err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
 	got, ok := job.Params["rows"].([]any)
@@ -63,7 +63,7 @@ func TestResource_WholeNameYieldsWholeRoot(t *testing.T) {
 		"leads": map[string]any{"rows": []any{}, "headers": []any{"name"}},
 	})
 	job := &core.Job{Params: map[string]any{"r": "${resource.leads}"}}
-	if _, err := resolveTemplatesCollecting(context.Background(), nil, res, nil, job); err != nil {
+	if _, err := resolveTemplatesCollecting(context.Background(), nil, res, core.Graph{}, nil, job); err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
 	if _, ok := job.Params["r"].(map[string]any); !ok {
@@ -76,7 +76,7 @@ func TestResource_InlineIsStringified(t *testing.T) {
 		"leads": map[string]any{"headers": []any{"name", "email"}},
 	})
 	job := &core.Job{Params: map[string]any{"note": "cols=${resource.leads.headers}!"}}
-	if _, err := resolveTemplatesCollecting(context.Background(), nil, res, nil, job); err != nil {
+	if _, err := resolveTemplatesCollecting(context.Background(), nil, res, core.Graph{}, nil, job); err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
 	s, ok := job.Params["note"].(string)
@@ -93,7 +93,7 @@ func TestResource_FetchedOncePerPass(t *testing.T) {
 		"a": "${resource.leads.rows}",
 		"b": "${resource.leads.headers}",
 	}}
-	if _, err := resolveTemplatesCollecting(context.Background(), nil, res, nil, job); err != nil {
+	if _, err := resolveTemplatesCollecting(context.Background(), nil, res, core.Graph{}, nil, job); err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
 	if prov.calls["leads"] != 1 {
@@ -105,7 +105,7 @@ func TestResource_FetchErrorIsTaggedResource(t *testing.T) {
 	res, prov := newFakeResources(nil)
 	prov.err = errors.New("sheet unreachable")
 	job := &core.Job{Params: map[string]any{"rows": "${resource.leads.rows}"}}
-	_, err := resolveTemplatesCollecting(context.Background(), nil, res, nil, job)
+	_, err := resolveTemplatesCollecting(context.Background(), nil, res, core.Graph{}, nil, job)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -118,7 +118,7 @@ func TestResource_NoProviderLeavesRefUntouched(t *testing.T) {
 	// With no resource provider configured, a ${resource.…} string is an
 	// unknown scheme — left as-is, not an error.
 	job := &core.Job{Params: map[string]any{"rows": "${resource.leads.rows}"}}
-	if _, err := resolveTemplatesCollecting(context.Background(), nil, nil, nil, job); err != nil {
+	if _, err := resolveTemplatesCollecting(context.Background(), nil, nil, core.Graph{}, nil, job); err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
 	if job.Params["rows"] != "${resource.leads.rows}" {

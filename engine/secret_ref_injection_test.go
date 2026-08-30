@@ -46,7 +46,7 @@ func TestResolve_UpstreamDataIsNotASecretRef(t *testing.T) {
 	}
 	job := &core.Job{Params: map[string]any{"body": "${upstream.webhook.out}"}}
 
-	set, err := resolveTemplatesCollecting(context.Background(), injectionProviders(), nil, prior, job)
+	set, err := resolveTemplatesCollecting(context.Background(), injectionProviders(), nil, core.Graph{}, prior, job)
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestResolve_UpstreamDataCannotReachConnectionCredential(t *testing.T) {
 	}
 	job := &core.Job{Params: map[string]any{"text": "${upstream.webhook.out}"}}
 
-	if _, err := resolveTemplatesCollecting(context.Background(), injectionProviders(), nil, prior, job); err != nil {
+	if _, err := resolveTemplatesCollecting(context.Background(), injectionProviders(), nil, core.Graph{}, prior, job); err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
 	if got := job.Params["text"]; got == "sk_live_CONNECTION" {
@@ -79,7 +79,7 @@ func TestResolve_LoopItemDataIsNotASecretRef(t *testing.T) {
 	ctx := WithLoopItem(context.Background(), map[string]any{"field": "secret://API_KEY"})
 	job := &core.Job{Params: map[string]any{"body": "${item.field}"}}
 
-	if _, err := resolveTemplatesCollecting(ctx, injectionProviders(), nil, nil, job); err != nil {
+	if _, err := resolveTemplatesCollecting(ctx, injectionProviders(), nil, core.Graph{}, nil, job); err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
 	if got := job.Params["body"]; got != "secret://API_KEY" {
@@ -103,7 +103,7 @@ func TestResolve_NestedAndEnvUpstreamDataIsNotASecretRef(t *testing.T) {
 		Env: map[string]string{"TOKEN": "${upstream.n1.out}"},
 	}
 
-	if _, err := resolveTemplatesCollecting(context.Background(), injectionProviders(), nil, prior, job); err != nil {
+	if _, err := resolveTemplatesCollecting(context.Background(), injectionProviders(), nil, core.Graph{}, prior, job); err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
 	headers := job.Params["headers"].(map[string]any)
@@ -131,7 +131,7 @@ func TestResolve_AuthorWrittenRefsStillResolve(t *testing.T) {
 		Env: map[string]string{"E": "secret://API_KEY"},
 	}
 
-	set, err := resolveTemplatesCollecting(context.Background(), injectionProviders(), nil, nil, job)
+	set, err := resolveTemplatesCollecting(context.Background(), injectionProviders(), nil, core.Graph{}, nil, job)
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
@@ -162,7 +162,7 @@ func TestResolve_ComposedRefFromUpstreamIsNotResolved(t *testing.T) {
 	}
 	job := &core.Job{Params: map[string]any{"body": "secret://${upstream.n1.name}"}}
 
-	if _, err := resolveTemplatesCollecting(context.Background(), injectionProviders(), nil, prior, job); err != nil {
+	if _, err := resolveTemplatesCollecting(context.Background(), injectionProviders(), nil, core.Graph{}, prior, job); err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
 	if got := job.Params["body"]; got == "sk_live_TOPSECRET" {

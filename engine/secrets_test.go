@@ -328,7 +328,7 @@ func TestResolveSlice_NestedShapes_Cov(t *testing.T) {
 			42,                                    // non-string left alone
 		},
 	}}
-	if _, err := resolveTemplatesCollecting(context.Background(), providers, nil, nil, job); err != nil {
+	if _, err := resolveTemplatesCollecting(context.Background(), providers, nil, core.Graph{}, nil, job); err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
 	list := job.Params["list"].([]any)
@@ -355,7 +355,7 @@ func TestResolveSlice_WholeResourceElement_Cov(t *testing.T) {
 	job := &core.Job{Params: map[string]any{
 		"list": []any{"${resource.leads.rows}"},
 	}}
-	if _, err := resolveTemplatesCollecting(context.Background(), nil, res, nil, job); err != nil {
+	if _, err := resolveTemplatesCollecting(context.Background(), nil, res, core.Graph{}, nil, job); err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
 	rows, ok := job.Params["list"].([]any)[0].([]any)

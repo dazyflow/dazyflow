@@ -23,6 +23,34 @@ into the image.)
 
 ## [Unreleased]
 
+### Fixed
+
+- **`${trigger.…}` was offered everywhere and resolved nowhere.** The `{}`
+  reference menu lists `${trigger.body.<field>}`, a lint message suggests it,
+  the canvas draws it as a chip reading "Form → email", and two handler
+  comments state that it works. No substituter implemented it — the engine
+  resolved `item`, `upstream`, `resource` and the secret schemes, and nothing
+  else.
+
+  `SubstituteString` leaves an unknown scheme ALONE by design, so that JSON and
+  shell snippets survive resolution untouched. The result was silent: a flow
+  built by following the reference menu's own suggestion mailed out a literal
+  `${trigger.body.version}` where the version should have been. Nothing failed,
+  nothing logged.
+
+  There is now a `trigger` substituter, delegating to the upstream resolver so
+  the two schemes cannot drift apart on path syntax or stringification. WHICH
+  node it means is decided by the run rather than by a rule: the trigger that
+  fired is the one holding a result, so a flow carrying both a webhook and a
+  schedule resolves against whichever actually started this run. With no
+  trigger result — a manual Run — the placeholder is left as written, matching
+  every other scheme.
+
+  It survived this long because the tests naming the scheme covered the menu
+  OFFERING the token and the webhook seed's SHAPE. Neither ran a value through
+  it. The round trip is covered now, including that the `trigger` and
+  `upstream` spellings of one value agree.
+
 ## [0.27.3] - 2026-08-30
 
 ### Fixed

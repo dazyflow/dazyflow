@@ -184,7 +184,7 @@ func TestResolveTemplates_UpstreamInlineSubstitution(t *testing.T) {
 			"message": "Loaded ${upstream.reader.meta.count} rows from ${upstream.reader.meta.source}",
 		},
 	}
-	if err := resolveTemplates(t.Context(), nil, prior, job); err != nil {
+	if err := resolveTemplates(t.Context(), nil, core.Graph{}, prior, job); err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
 	got := job.Params["message"].(string)
@@ -212,7 +212,7 @@ func TestResolveTemplates_UpstreamInNestedParams(t *testing.T) {
 			},
 		},
 	}
-	if err := resolveTemplates(t.Context(), nil, prior, job); err != nil {
+	if err := resolveTemplates(t.Context(), nil, core.Graph{}, prior, job); err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
 	cfg := job.Params["config"].(map[string]any)
@@ -239,7 +239,7 @@ func TestResolveTemplates_UpstreamMixedWithSecrets(t *testing.T) {
 			"url": "https://hooks.example.com/${upstream.q.meta.id}?token=${secret.WEBHOOK_TOKEN}",
 		},
 	}
-	if err := resolveTemplates(t.Context(), providers, prior, job); err != nil {
+	if err := resolveTemplates(t.Context(), providers, core.Graph{}, prior, job); err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
 	want := "https://hooks.example.com/run-42?token=secret-xyz"
@@ -255,7 +255,7 @@ func TestResolveTemplates_UpstreamRefMissingBecomesError(t *testing.T) {
 	job := &core.Job{
 		Params: map[string]any{"x": "${upstream.typo.field}"},
 	}
-	err := resolveTemplates(t.Context(), nil, map[string]core.Result{}, job)
+	err := resolveTemplates(t.Context(), nil, core.Graph{}, map[string]core.Result{}, job)
 	if err == nil {
 		t.Fatal("expected an error for unknown upstream node")
 	}
@@ -272,7 +272,7 @@ func TestResolveTemplates_NoPriorMeansUnknownScheme(t *testing.T) {
 	job := &core.Job{
 		Params: map[string]any{"x": "${upstream.loader.meta.id}"},
 	}
-	if err := resolveTemplates(t.Context(), nil, nil, job); err != nil {
+	if err := resolveTemplates(t.Context(), nil, core.Graph{}, nil, job); err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
 	if got := job.Params["x"].(string); got != "${upstream.loader.meta.id}" {
@@ -296,7 +296,7 @@ func TestResolveTemplates_UpstreamInComplexJSON(t *testing.T) {
 			},
 		},
 	}
-	if err := resolveTemplates(t.Context(), nil, prior, job); err != nil {
+	if err := resolveTemplates(t.Context(), nil, core.Graph{}, prior, job); err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
 	body := job.Params["body"].(map[string]any)
@@ -318,7 +318,7 @@ func TestResolveTemplates_UpstreamObjectStringifiesAsJSON(t *testing.T) {
 	job := &core.Job{
 		Params: map[string]any{"x": "${upstream.q.meta}"},
 	}
-	if err := resolveTemplates(t.Context(), nil, prior, job); err != nil {
+	if err := resolveTemplates(t.Context(), nil, core.Graph{}, prior, job); err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
 	got := job.Params["x"].(string)

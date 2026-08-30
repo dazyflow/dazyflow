@@ -115,15 +115,15 @@ func paramFilled(p map[string]any, key string) bool {
 // resolveTemplates. Kept for code paths and tests that only care
 // about secret resolution; equivalent to passing prior=nil.
 func resolveSecrets(ctx context.Context, providers map[string]core.SecretProvider, job *core.Job) error {
-	return resolveTemplates(ctx, providers, nil, job)
+	return resolveTemplates(ctx, providers, core.Graph{}, nil, job)
 }
 
 // resolveTemplates is the collector-free wrapper kept for callers and
 // tests that don't need the resolved secret values back (only the side
 // effect of substituting them into the job). Equivalent to discarding
 // the secretSet that resolveTemplatesCollecting returns.
-func resolveTemplates(ctx context.Context, providers map[string]core.SecretProvider, prior map[string]core.Result, job *core.Job) error {
-	_, err := resolveTemplatesCollecting(ctx, providers, nil, prior, job)
+func resolveTemplates(ctx context.Context, providers map[string]core.SecretProvider, graph core.Graph, prior map[string]core.Result, job *core.Job) error {
+	_, err := resolveTemplatesCollecting(ctx, providers, nil, graph, prior, job)
 	return err
 }
 
@@ -150,7 +150,7 @@ func resolveTemplates(ctx context.Context, providers map[string]core.SecretProvi
 // into its output would otherwise leak the secret into storage). Only
 // values from the secret providers are collected — upstream-ref
 // substitutions are ordinary data flow, not secrets.
-func resolveTemplatesCollecting(ctx context.Context, providers map[string]core.SecretProvider, resources map[string]core.ResourceProvider, prior map[string]core.Result, job *core.Job) (*secretSet, error) {
+func resolveTemplatesCollecting(ctx context.Context, providers map[string]core.SecretProvider, resources map[string]core.ResourceProvider, graph core.Graph, prior map[string]core.Result, job *core.Job) (*secretSet, error) {
 	set := newSecretSet()
 	if job == nil {
 		return set, nil
@@ -170,6 +170,9 @@ func resolveTemplatesCollecting(ctx context.Context, providers map[string]core.S
 		// and never collides with the others. No-op when no item is on ctx.
 		itemSubstituter(ctx),
 		upstreamSubstituter(prior),
+		// trigger is upstream by another name — the node the run started
+		// from — so it sits beside it and shares its path resolver.
+		triggerSubstituter(graph, prior),
 		rr.substituter(),
 		recordingSecretSubstituter(providers, set),
 	)
