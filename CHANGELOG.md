@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.27.6] - 2026-08-30
+
 ### Fixed
 
 - **`${upstream.…}` and `${trigger.…}` only worked one hop from their source.**
