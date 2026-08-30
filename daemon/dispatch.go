@@ -256,7 +256,7 @@ const (
 )
 
 func (d *Dispatcher) analyzeDependent(ctx context.Context, graph core.Graph, graphRunID, depID string) (dependentDecision, string) {
-	var anyActive, anyBlocked bool
+	var anyActive, anyBlocked, anyNotRouted bool
 	var firstReason string
 	for _, edge := range graph.Edges {
 		if edge.To != depID {
@@ -279,6 +279,15 @@ func (d *Dispatcher) analyzeDependent(ctx context.Context, graph core.Graph, gra
 			anyActive = true
 		case edgeDormant:
 			// dormant: doesn't activate, doesn't block
+		case edgeNotRouted:
+			// A path the predecessor declined to take. Recorded like a block
+			// so no other live wire can run this step behind the router's
+			// back — but with its own reason, because nothing went wrong here.
+			if !anyNotRouted && !anyBlocked {
+				firstReason = fmt.Sprintf("predecessor %q did not route down %q",
+					edge.From, edge.FromPort)
+			}
+			anyNotRouted = true
 		case edgeBlocking:
 			if parked {
 				// Not "skip this branch" — "not yet". The decision ports
@@ -292,11 +301,14 @@ func (d *Dispatcher) analyzeDependent(ctx context.Context, graph core.Graph, gra
 			anyBlocked = true
 		}
 	}
-	if anyBlocked {
+	// A declined path skips the dependent even when another wire is live:
+	// routing is exclusive, and a live address/value wire must not be able to
+	// run the branch nobody chose.
+	if anyBlocked || anyNotRouted {
 		return depSkipped, firstReason
 	}
 	if !anyActive {
-		return depSkipped, "all incoming edges dormant (no output on any FromPort, or fallback edges from succeeded preds)"
+		return depSkipped, "all incoming edges dormant (fallback edges from succeeded preds)"
 	}
 	return depEnqueue, ""
 }
@@ -304,9 +316,10 @@ func (d *Dispatcher) analyzeDependent(ctx context.Context, graph core.Graph, gra
 type edgeOutcome int
 
 const (
-	edgeActive   edgeOutcome = iota // contributes to running this dependent
-	edgeDormant                     // does not contribute but does not block either
-	edgeBlocking                    // would prevent the dependent from running
+	edgeActive    edgeOutcome = iota // contributes to running this dependent
+	edgeDormant                      // does not contribute but does not block either
+	edgeNotRouted                    // pred succeeded but chose a different port: this path is not taken
+	edgeBlocking                     // would prevent the dependent from running
 )
 
 func classifyEdge(predRec core.JobRecord, edge core.Edge) edgeOutcome {
@@ -325,11 +338,19 @@ func classifyEdge(predRec core.JobRecord, edge core.Edge) edgeOutcome {
 		if edge.FromPort == core.PassPort {
 			return edgeActive
 		}
+		// The predecessor ran, chose which ports to emit on, and left this
+		// one empty. That is a ROUTING answer — "not down here" — so it must
+		// skip the dependent, not merely fail to activate it. Treating it as
+		// dormant is what let a router leak: `if` emits only `then`, but any
+		// OTHER live wire into the else-side step (an address, a value node,
+		// anything) was enough to enqueue it, so both branches ran. It is the
+		// same hole NoPassthrough closes for the pass pin (see the comment on
+		// core.Manifest.NoPassthrough), reached through a data port instead.
 		if predRec.Result == nil || predRec.Result.Output == nil {
-			return edgeDormant
+			return edgeNotRouted
 		}
 		if _, ok := predRec.Result.Output[edge.FromPort]; !ok {
-			return edgeDormant
+			return edgeNotRouted
 		}
 		return edgeActive
 	case core.JobStatusFailed:

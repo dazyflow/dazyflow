@@ -232,12 +232,16 @@ func TestKitchenSink_AllPoliciesTogether(t *testing.T) {
 		Edges: []core.Edge{
 			// flaky → merger; on_error=retry triggers the retry policy
 			{From: "flaky", FromPort: "out", To: "merger", ToPort: "items", OnError: core.OnErrorRetry},
-			// explode → handler (fallback rescues)
-			{From: "explode", FromPort: "out", To: "handler", ToPort: "in", OnError: core.OnErrorFallback},
+			// explode → handler (fallback rescues). Delay threads the value on
+			// the universal `pass` pin — it stopped declaring its own in/out
+			// ports — so these wires use PassPort. They named "in"/"out" here
+			// long after Delay dropped them, which core.Validate rejects and
+			// which dispatch used to tolerate as a silently dead wire.
+			{From: "explode", FromPort: "out", To: "handler", ToPort: core.PassPort, OnError: core.OnErrorFallback},
 			// explode → ignored (skip — runs anyway despite failure)
-			{From: "explode", FromPort: "out", To: "ignored", ToPort: "in", OnError: core.OnErrorSkip},
+			{From: "explode", FromPort: "out", To: "ignored", ToPort: core.PassPort, OnError: core.OnErrorSkip},
 			// handler → merger
-			{From: "handler", FromPort: "out", To: "merger", ToPort: "items"},
+			{From: "handler", FromPort: core.PassPort, To: "merger", ToPort: "items"},
 			// reader → writer (sandbox+quota active here)
 			{From: "reader", FromPort: "out", To: "writer", ToPort: "in"},
 		},

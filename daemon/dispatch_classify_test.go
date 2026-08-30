@@ -23,9 +23,19 @@ func succeededWith(ports ...string) core.JobRecord {
 	return core.JobRecord{Status: core.JobStatusSucceeded, Result: &core.Result{Output: out}}
 }
 
+// outcomeNames makes a failure say which outcome came back rather than an
+// opaque ordinal — the four are easy to transpose by eye.
+var outcomeNames = map[edgeOutcome]string{
+	edgeActive:    "active",
+	edgeDormant:   "dormant",
+	edgeNotRouted: "not-routed",
+	edgeBlocking:  "blocking",
+}
+
 // TestClassifyEdge exhaustively covers the pure edge-outcome decision that
 // drives skip/wait/enqueue: (predecessor status, edge OnError, FromPort,
-// whether the FromPort produced output) → active / dormant / blocking.
+// whether the FromPort produced output) → active / dormant / not-routed /
+// blocking.
 func TestClassifyEdge(t *testing.T) {
 	cases := []struct {
 		name string
@@ -36,10 +46,14 @@ func TestClassifyEdge(t *testing.T) {
 		// --- predecessor SUCCEEDED ---
 		{"succeeded, output present → active",
 			succeededWith("out"), core.Edge{FromPort: "out"}, edgeActive},
-		{"succeeded, FromPort had no output → dormant",
-			succeededWith("other"), core.Edge{FromPort: "out"}, edgeDormant},
-		{"succeeded, nil result → dormant",
-			core.JobRecord{Status: core.JobStatusSucceeded}, core.Edge{FromPort: "out"}, edgeDormant},
+		// The router case: `if` emits only `then`, so the `else` edge is a
+		// path the predecessor DECLINED. Not-routed rather than dormant, so
+		// it skips the else-side step even when another wire into it is live
+		// — see analyzeDependent's "not routed beats an active sibling".
+		{"succeeded, FromPort had no output → not routed",
+			succeededWith("other"), core.Edge{FromPort: "out"}, edgeNotRouted},
+		{"succeeded, nil result → not routed",
+			core.JobRecord{Status: core.JobStatusSucceeded}, core.Edge{FromPort: "out"}, edgeNotRouted},
 		{"succeeded, fallback edge → dormant (primary lived)",
 			succeededWith("out"), core.Edge{FromPort: "out", OnError: core.OnErrorFallback}, edgeDormant},
 		{"succeeded, pass control pin → active even with no data",
@@ -70,10 +84,18 @@ func TestClassifyEdge(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			if got := classifyEdge(c.pred, c.edge); got != c.want {
-				t.Errorf("classifyEdge = %d, want %d", got, c.want)
+				t.Errorf("classifyEdge = %s, want %s", outcomeNames[got], outcomeNames[c.want])
 			}
 		})
 	}
+}
+
+// decisionNames keeps aggregation failures readable, as outcomeNames does for
+// classifyEdge.
+var decisionNames = map[dependentDecision]string{
+	depWaiting: "waiting",
+	depEnqueue: "enqueue",
+	depSkipped: "skipped",
 }
 
 // TestAnalyzeDependent covers how analyzeDependent aggregates a dependent's
@@ -128,12 +150,48 @@ func TestAnalyzeDependent(t *testing.T) {
 			wantDecide: depEnqueue,
 		},
 		{
-			name:  "all dormant → skipped",
+			name:  "sole not-routed edge → skipped",
 			edges: []core.Edge{{From: "A", To: "D", FromPort: "out"}},
 			seed: func(s core.JobStore) {
 				seed(s, "A", core.JobStatusSucceeded) // succeeded but FromPort had no output
 			},
 			wantDecide: depSkipped,
+		},
+		{
+			name:  "all dormant → skipped",
+			edges: []core.Edge{{From: "A", To: "D", FromPort: "out", OnError: core.OnErrorFallback}},
+			seed: func(s core.JobStore) {
+				seed(s, "A", core.JobStatusSucceeded, "out") // primary lived → fallback dormant
+			},
+			wantDecide: depSkipped,
+		},
+		{
+			// The double-send bug: an If sends the payload down `then`, and
+			// the else-side step ALSO takes an address from a value node that
+			// hangs off to the side. The live address wire must not run the
+			// branch the If declined, or both branches send.
+			name: "not routed beats an active sibling → skipped",
+			edges: []core.Edge{
+				{From: "A", To: "D", FromPort: "else"}, // the If's untaken port
+				{From: "B", To: "D", FromPort: "out"},  // the address value node
+			},
+			seed: func(s core.JobStore) {
+				seed(s, "A", core.JobStatusSucceeded, "then") // routed the other way
+				seed(s, "B", core.JobStatusSucceeded, "out")  // active
+			},
+			wantDecide: depSkipped,
+		},
+		{
+			name: "taken branch still enqueues alongside a value wire",
+			edges: []core.Edge{
+				{From: "A", To: "D", FromPort: "then"},
+				{From: "B", To: "D", FromPort: "out"},
+			},
+			seed: func(s core.JobStore) {
+				seed(s, "A", core.JobStatusSucceeded, "then")
+				seed(s, "B", core.JobStatusSucceeded, "out")
+			},
+			wantDecide: depEnqueue,
 		},
 		{
 			name: "one blocking edge → skipped (even with an active sibling)",
@@ -156,7 +214,8 @@ func TestAnalyzeDependent(t *testing.T) {
 			d := NewDispatcher(store, NewMemoryBus(), &engine.Engine{}, log.New(log.Writer(), "", 0))
 			got, _ := d.analyzeDependent(context.Background(), mkGraph(c.edges...), runID, "D")
 			if got != c.wantDecide {
-				t.Errorf("analyzeDependent = %d, want %d", got, c.wantDecide)
+				t.Errorf("analyzeDependent = %s, want %s",
+					decisionNames[got], decisionNames[c.wantDecide])
 			}
 		})
 	}
