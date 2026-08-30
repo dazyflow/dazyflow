@@ -130,7 +130,7 @@ import type {
   Visibility,
 } from "../../types";
 import { formatDateTime } from "../../lib/datetime";
-import { EDITOR_NARROW, isNarrower } from "../../lib/breakpoints";
+import { MOBILE, isNarrower } from "../../lib/breakpoints";
 import { pickGraphSettings } from "../../lib/graphMeta";
 import { Inspector } from "../../components/editor/Inspector";
 import { FlowStatusChip } from "../../components/ui/FlowStatusChip";
@@ -479,21 +479,24 @@ function EditorInner() {
   // liveLogs holds per-node stdout/stderr lines streamed via SSE
   // progress events. Cleared on every new run. The Inspector renders
   // the buffer for the currently-selected node.
-  // On narrow viewports the inspector is a bottom sheet. Selecting a node
-  // rests it in a collapsed peek (just the head); the user taps the head
-  // or chevron to expand, and X's it out (or taps the canvas) to dismiss.
-  // This keeps a single tap on a drop from slamming the full sheet over
-  // the canvas — see inspectorExpanded below.
+  // On a phone the inspector is a FULLSCREEN sheet the user opens from the
+  // Inspect FAB, so a single tap on a step doesn't slam it over the canvas —
+  // see inspectorExpanded below. Everywhere else it is a side panel that
+  // opens on selection, which is pure CSS (`data-has-selection`).
   //
-  // isNarrow tracks EDITOR_NARROW, the same breakpoint the CSS switches the
-  // inspector at. It gates both the expand chevron and the close-X on the
-  // inspector head so the desktop layout (where the panel is always visible)
-  // stays clean.
-  const [isNarrow, setIsNarrow] = useState<boolean>(() =>
-    isNarrower(EDITOR_NARROW),
-  );
+  // isSheet tracks MOBILE, the width the CSS switches between those two at.
+  // It gates the FAB and the close-X's "clear the selection" behaviour, both
+  // of which are sheet semantics: with a side panel there is nothing to
+  // reveal and nothing to dismiss.
+  //
+  // This used to track EDITOR_NARROW (1100), which put every window narrower
+  // than that into sheet mode — where selecting a step did nothing visible
+  // and the FAB was the only way in. EDITOR_NARROW still marks where the
+  // canvas starts reserving room beside the panel; it is no longer where the
+  // inspector changes shape.
+  const [isSheet, setIsSheet] = useState<boolean>(() => isNarrower(MOBILE));
   useEffect(() => {
-    const onResize = () => setIsNarrow(isNarrower(EDITOR_NARROW));
+    const onResize = () => setIsSheet(isNarrower(MOBILE));
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
@@ -4484,7 +4487,7 @@ function EditorInner() {
             disabled title says what to do instead of leaving a dead icon
             unexplained. Still hidden while the overlay is open — it's the
             thing that opens it. */}
-        {isNarrow && !inspectorExpanded && (
+        {isSheet && !inspectorExpanded && (
           <Button
             variant="primary"
             size="icon"
@@ -4925,7 +4928,7 @@ function EditorInner() {
             token ? { token, tenant: activeTenant, workspace: activeWorkspace } : undefined
           }
           onClose={
-            isNarrow
+            isSheet
               ? () => {
                   // Closing the fullscreen overlay returns to a clean canvas:
                   // drop the selection so the Inspect FAB hides too. setNodes

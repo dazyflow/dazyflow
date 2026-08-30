@@ -2820,13 +2820,20 @@ function DurationSecondsField({
   );
 }
 
-// humanize turns a raw param key ("first_row_headers") into the title-cased
-// label the form shows when a field's schema has no explicit `title`. Exported
-// so the lint banner can name fields the same way the Inspector does.
+// humanize turns a raw param key ("first_row_headers") into the label the form
+// shows when a field's schema has no explicit `title`. Exported so the lint
+// banner can name fields the same way the Inspector does.
+//
+// SENTENCE case, not Title Case. Every param that DOES carry a title is written
+// in sentence case ("Unique by", "Time column"), and so is the generated step
+// reference, so title-casing the fallback made the ~200 untitled params across
+// the catalog the odd ones out — "Column Types" sitting under "Unique by" in
+// the same panel, "Timeout Ms", "Base Url", "Thread Id". The fallback should be
+// invisible; capitalising differently is what made it visible.
 export function humanize(key: string): string {
-  return key
-    .replace(/[_-]+/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+  const words = key.replace(/[_-]+/g, " ").trim();
+  if (!words) return "";
+  return words[0].toUpperCase() + words.slice(1);
 }
 
 function DictField({

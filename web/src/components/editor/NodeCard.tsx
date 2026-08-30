@@ -13,7 +13,8 @@ import { glyphFor, languageOf, type LangGlyph } from "../../lib/langBadge";
 import { ScriptEditor } from "../ui/ScriptEditor";
 import { scriptLangFor, type ScriptLang } from "../../lib/scriptHighlight";
 import { TokenText } from "./TokenText";
-import { dropSubtitle, enumOptionLabel, enumValueLabel, nodeStateText, portLabel } from "../../lib/dropText";
+import { dropSubtitle, enumOptionLabel, enumValueLabel, fieldTitle, nodeStateText, portLabel } from "../../lib/dropText";
+import { humanize } from "../fields/SchemaForm";
 import { isFieldVisible } from "../../lib/schemaFields";
 import { isRunnerStep, runnerTargetOf } from "../../lib/runnerStep";
 import type { Manifest, Port, JSONSchema, Ref } from "../../types";
@@ -230,7 +231,18 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
           const isPicker = !!(sch?.format && PICKER_FORMATS.has(sch.format));
           return isPicker || !inputPortIds.has(k);
         })
-        .map((k) => ({ key: k, label: schemaProps[k]?.title ?? k, schema: schemaProps[k] }))
+        // Same label the Inspector shows for the same param: the manifest's
+        // English through the reader's vocabulary, or the humanized key when a
+        // param carries no title. The card used to print the raw manifest
+        // string, so a Swedish reader saw "Collection" on the node and
+        // "Samling" in the panel beside it — one setting, two languages.
+        .map((k) => ({
+          key: k,
+          label: schemaProps[k]?.title
+            ? fieldTitle(schemaProps[k].title as string, i18n.language)
+            : humanize(k),
+          schema: schemaProps[k],
+        }))
         .filter(
           (f): f is { key: string; label: string; schema: JSONSchema } =>
             inlineEligible(f.schema),

@@ -80,7 +80,7 @@ func init() {
 				"properties":{
 					"table":        {"type":"string","format":"collection-name","title":"Collection","description":"Name of the collection to save into, e.g. leads or signups. Pick one you already have, or type a new name and it's created the first time rows arrive.","examples":["leads"]},
 					"unique_by":    {"type":"array","items":{"type":"string"},"format":"collection-columns","title":"Unique by","description":"Optional. Column(s) that identify a row, e.g. date. When set, re-saving a row with the same key updates it in place instead of adding a duplicate, so re-running the flow is idempotent. Leave empty to always append."},
-					"column_types": {"type":"object","additionalProperties":{"type":"string"},"description":"Optional: force a column's type (e.g. {\"age\":\"INTEGER\"}). Everything defaults to text, which is fine for most things."},
+					"column_types": {"type":"object","additionalProperties":{"type":"string"},"title":"Column types","description":"Optional: force a column's type (e.g. {\"age\":\"INTEGER\"}). Everything defaults to text, which is fine for most things."},
 					"timestamp_column": {"type":"string","title":"Time column","description":"Every saved row is stamped with the time it was saved, in a column called saved_at, so you can sort newest-first. Rename it here, or set it to empty to turn the stamp off. If your own rows already include a column of that name, yours is kept.","default":"saved_at"}
 				},
 				"required":["table"]

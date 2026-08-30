@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -79,6 +80,29 @@ func TestErrorEnvelope_Unified(t *testing.T) {
 		env := decodeEnvelope(t, rw.Body.Bytes())
 		if env.Error.Code != "drop_not_found" {
 			t.Errorf("code = %q, want the handler's drop_not_found (not rewritten)", env.Error.Code)
+		}
+	})
+
+	t.Run("a handler-produced HTML 404 keeps its page", func(t *testing.T) {
+		// The hosted form renders a real page for a 404, because a stranger
+		// the owner sent the link to is the one reading it. The middleware
+		// used to swallow that body and answer with the JSON envelope,
+		// because its discriminator was "not application/json".
+		h := jsonErrors(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+			rw.Header().Set("Content-Type", "text/html; charset=utf-8")
+			rw.WriteHeader(http.StatusNotFound)
+			_, _ = rw.Write([]byte("<!doctype html><h1>This form isn't available.</h1>"))
+		}))
+		rw := httptest.NewRecorder()
+		h.ServeHTTP(rw, httptest.NewRequest("GET", "/form/acme/ws1/nope", nil))
+		if rw.Code != http.StatusNotFound {
+			t.Fatalf("status = %d, want 404", rw.Code)
+		}
+		if ct := rw.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
+			t.Errorf("content-type = %q, want the handler's text/html", ct)
+		}
+		if body := rw.Body.String(); !strings.Contains(body, "<h1>") {
+			t.Errorf("body = %q, want the handler's HTML page (not the JSON envelope)", body)
 		}
 	})
 }

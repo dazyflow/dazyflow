@@ -5,7 +5,8 @@
 // resolves; this proves the cards actually ask it, which is the half that was
 // missing — every title, one-liner and heading rendered straight off the wire.
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 
 // language is read by the mocked useTranslation below, so a test can re-render
@@ -33,10 +34,14 @@ vi.mock("../auth", () => ({
 
 const listTemplates = vi.fn();
 const listProviders = vi.fn();
+const loadTemplateGraph = vi.fn();
+const saveGraph = vi.fn();
 vi.mock("../api", () => ({
   api: {
     listTemplates: () => listTemplates(),
     listProviders: (...a: unknown[]) => listProviders(...a),
+    loadTemplateGraph: (...a: unknown[]) => loadTemplateGraph(...a),
+    saveGraph: (...a: unknown[]) => saveGraph(...a),
   },
 }));
 
@@ -58,6 +63,8 @@ beforeEach(() => {
   language = "en";
   listTemplates.mockResolvedValue({ templates: [emailToSlack] });
   listProviders.mockResolvedValue({ providers: [] });
+  loadTemplateGraph.mockResolvedValue({ id: "email-to-slack", nodes: [], edges: [] });
+  saveGraph.mockResolvedValue({});
 });
 
 const renderGallery = () =>
@@ -107,5 +114,71 @@ describe("TemplateGallery", () => {
     });
     renderGallery();
     expect(await screen.findByText("templates.uncategorized")).toBeInTheDocument();
+  });
+});
+
+// The forked flow's OUTPUT language — what its hosted form says to visitors —
+// used to be left empty, which means English. A Swedish owner forking the
+// form template therefore published an English form ("Submit", "Thanks! Your
+// submission was received.") to Swedish customers, having never been shown a
+// language control. The fork is where the other per-owner details are stamped
+// (time zone, ntfy topic), so it is where this belongs too.
+describe("TemplateGallery forking stamps the flow's language", () => {
+  const forkedGraph = async () => {
+    const user = userEvent.setup();
+    renderGallery();
+    await user.click(await screen.findByText("templates.useTemplate"));
+    await waitFor(() => expect(saveGraph).toHaveBeenCalled());
+    return saveGraph.mock.calls[0][1] as { language?: string };
+  };
+
+  it("stamps the forker's language, without the region", async () => {
+    language = "sv-SE";
+    expect((await forkedGraph()).language).toBe("sv");
+  });
+
+  it("stamps English for an English reader", async () => {
+    language = "en-US";
+    expect((await forkedGraph()).language).toBe("en");
+  });
+
+  it("keeps a language the template chose for itself", async () => {
+    // A template written to produce Swedish output stays Swedish even when an
+    // English speaker forks it — the author picked it deliberately.
+    language = "en";
+    loadTemplateGraph.mockResolvedValue({
+      id: "email-to-slack",
+      nodes: [],
+      edges: [],
+      language: "sv",
+    });
+    expect((await forkedGraph()).language).toBe("sv");
+  });
+});
+
+// The card the user clicked and the flow they end up with should be the same
+// thing. Titles render through templateTitle(), so a Swedish reader picked
+// "Webbformulär → Samling" and landed on a flow called "Web form → Collection"
+// — the graph file's raw English name, which the fork copied straight through.
+describe("TemplateGallery names the fork after the card", () => {
+  const forkedGraph = async () => {
+    const user = userEvent.setup();
+    renderGallery();
+    await user.click(await screen.findByText("templates.useTemplate"));
+    await waitFor(() => expect(saveGraph).toHaveBeenCalled());
+    return saveGraph.mock.calls[0][1] as { name?: string };
+  };
+
+  it("uses the English title for an English reader", async () => {
+    language = "en";
+    expect((await forkedGraph()).name).toBe("New email → Slack message");
+  });
+
+  it("uses the translated title the card showed", async () => {
+    language = "sv";
+    const name = (await forkedGraph()).name;
+    // Whatever the Swedish vocabulary carries — the point is that it is the
+    // card's text, not the graph file's English.
+    expect(name).toBe(screen.getByRole("heading", { level: 3 }).textContent);
   });
 });

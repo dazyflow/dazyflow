@@ -533,7 +533,10 @@ export function Inspector({
           // bridges) tucked into a collapsed disclosure — present for
           // those who need it, invisible noise for everyone else.
           <>
-            <WebhookStatusLine webhook={currentParams as GraphTrigger} />
+            <WebhookStatusLine
+              webhook={currentParams as GraphTrigger}
+              triggerLive={triggerLive}
+            />
             <FormTab
               graph={webhookGraph}
               webhook={currentParams as GraphTrigger}

@@ -13,6 +13,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/internal/maillang"
@@ -44,28 +46,32 @@ func (w *WebhookListener) handleForm(rw http.ResponseWriter, r *http.Request) {
 
 	store, err := w.svc.Workspaces.Open(tenant, workspace)
 	if err != nil {
-		http.NotFound(rw, r)
+		renderFormUnavailable(rw, "")
 		return
 	}
 	// Hosted form submissions run the published revision, matching the
 	// webhook listener — an unpublished flow's form is not live.
 	g, err := store.LoadPublished(graphID)
 	if err != nil {
-		http.NotFound(rw, r)
+		// The common case by far: the owner copied the form link out of the
+		// editor and shared it before pressing Publish. They get told about
+		// that in the editor; whoever they sent it to gets this page.
+		renderFormUnavailable(rw, "")
 		return
 	}
 	if g.Disabled {
 		// Symmetric with the webhook: a paused flow's form is off.
 		// Use 404 (not 403) to match the rest of this handler's
 		// "don't reveal whether the graph exists" stance.
-		http.NotFound(rw, r)
+		renderFormUnavailable(rw, g.Language)
 		return
 	}
 	fields, title, ok := publicFormConfig(g)
 	if !ok {
 		// Either no webhook_input node or it hasn't opted into a public form.
-		// Don't reveal which — a plain 404 keeps non-public graphs invisible.
-		http.NotFound(rw, r)
+		// Don't reveal which — the same page as every other miss keeps
+		// non-public graphs invisible.
+		renderFormUnavailable(rw, g.Language)
 		return
 	}
 	if len(fields) == 0 {
@@ -430,17 +436,67 @@ type formView struct {
 	// http.Error page, which lost it and offered no way back.
 	Error  string
 	Values map[string]string
+	// Unavailable renders the "there is no form here" page: the notice alone,
+	// with no form beneath it to fill in. Set by renderFormUnavailable for
+	// every 404 this handler can produce.
+	Unavailable bool
 }
 
-// humanizeField turns a field key ("first_name") into a label
-// ("First name") for the form. Mirrors the frontend's humanize so the
-// hosted form reads like the rest of the product.
+// humanizeField turns a field name into the label the form shows.
+//
+// It deliberately does LESS than the frontend's humanize, because it is fed
+// something different. The frontend humanizes manifest param keys — machine
+// identifiers like "first_row_headers" that nobody typed. These names come out
+// of the owner's own "Form fields" box, are read by their customers, and so
+// are edited toward what they want shown rather than away from it:
+//
+//   - Underscores become spaces. "first_name" is a shape people paste in from
+//     somewhere else, and "_" never appears in a label anyone wrote by hand.
+//   - HYPHENS ARE LEFT ALONE. They are letters in ordinary words — "E-post",
+//     "e-mail", "follow-up", "self-employed" — and stripping them published
+//     "E post" on a Swedish company's contact form.
+//   - The first letter is capitalized, so "what you love about our tea" reads
+//     as a label without the owner having to think about it. Anything already
+//     capitalized is untouched.
 func humanizeField(s string) string {
-	s = strings.ReplaceAll(strings.ReplaceAll(s, "_", " "), "-", " ")
+	s = strings.ReplaceAll(s, "_", " ")
 	if s == "" {
 		return s
 	}
-	return strings.ToUpper(s[:1]) + s[1:]
+	// Decode the first RUNE. Slicing s[:1] took the first BYTE, which turned
+	// every label starting with a non-ASCII letter — "Ärende", "Önskemål",
+	// "Écrire" — into invalid UTF-8 on a page shown to the public.
+	r, size := utf8.DecodeRuneInString(s)
+	if r == utf8.RuneError {
+		// Not valid UTF-8 to begin with; hand it back rather than corrupt it
+		// further. html/template still escapes whatever this is.
+		return s
+	}
+	return string(unicode.ToUpper(r)) + s[size:]
+}
+
+// renderFormUnavailable answers a request for a form that isn't there to
+// answer — the workspace, the published revision, or the public-form opt-in is
+// missing, or the flow is paused. Every one of those renders the SAME page:
+// naming which would tell a stranger whether a given flow exists, and this
+// handler's whole stance is that it shouldn't.
+//
+// It is HTML rather than the API's JSON error envelope because this is the one
+// URL in the product an owner hands to their own customers. A link copied out
+// of the editor and shared before publishing used to show them
+// {"error":{"code":"not_found","message":"Not Found"}} on a bare white page.
+//
+// lang is the flow's, when we got far enough to load one; empty falls back to
+// English. We deliberately don't load the draft just to translate this page —
+// that would put a store read on an unauthenticated endpoint's miss path.
+func renderFormUnavailable(rw http.ResponseWriter, lang string) {
+	m := maillang.For(lang)
+	renderForm(rw, http.StatusNotFound, formView{
+		Title:       m.FormGoneTitle,
+		Lang:        maillang.Primary(lang),
+		M:           m,
+		Unavailable: true,
+	})
 }
 
 func renderForm(rw http.ResponseWriter, status int, v formView) {
@@ -502,12 +558,14 @@ button:hover{background:#5a49e6}
 .hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
 </style></head><body>
 <h1>{{.Title}}</h1>
-{{if .Submitted}}
+{{if .Unavailable}}
+<div class="err" role="alert">{{.M.FormGoneBody}}</div>
+{{else if .Submitted}}
 <div class="done"><strong>{{.M.FormThanksTitle}}</strong> {{.M.FormThanksBody}}</div>
 {{else}}
 {{if .Error}}<div class="err" role="alert"><strong>{{.M.FormErrorTitle}}</strong> {{.Error}}</div>{{end}}
 <form method="post">
-{{if .Honeypot}}<div class="hp" aria-hidden="true"><label for="{{.Honeypot}}">Leave this field empty</label><input id="{{.Honeypot}}" name="{{.Honeypot}}" type="text" tabindex="-1" autocomplete="off"></div>{{end}}
+{{if .Honeypot}}<div class="hp" aria-hidden="true"><label for="{{.Honeypot}}">{{.M.FormHoneypot}}</label><input id="{{.Honeypot}}" name="{{.Honeypot}}" type="text" tabindex="-1" autocomplete="off"></div>{{end}}
 {{range .Fields}}
 <label for="{{.}}">{{label .}}</label>
 {{if isArea .}}<textarea id="{{.}}" name="{{.}}">{{index $.Values .}}</textarea>{{else}}<input id="{{.}}" name="{{.}}" type="{{inputType .}}" value="{{index $.Values .}}">{{end}}
@@ -552,17 +610,68 @@ func isLongAnswerField(f string) bool {
 	return strings.Contains(s, "?") || len(strings.Fields(s)) >= 5
 }
 
-// formInputType picks an HTML input type from the field name so phones
-// surface the right keyboard. Best-effort and purely cosmetic.
+// The field-name hints behind the keyboard promise, kept in both languages the
+// product ships for the same reason longAnswerWords above is: owners name their
+// fields in their own language, and this is the page their customers fill in on
+// a phone.
+//
+// They are matched against a name with its separators removed, so "E-post",
+// "e_post" and "E post" all reduce to "epost" and one entry covers them.
+var (
+	emailWords = []string{"email", "epost", "mejl"}
+	phoneWords = []string{"phone", "telefon", "mobil", "tfn"}
+	urlWords   = []string{"website", "webbplats", "webbsida", "hemsida"}
+)
+
+// formInputType picks an HTML input type from the field name so phones surface
+// the right keyboard. Best-effort: getting it wrong costs a keyboard layout,
+// so the rule leans on recognising a word rather than on being exhaustive.
+//
+// The old rule compared the whole name against a handful of English words, so
+// only a field named exactly "email" was ever recognised. Every natural
+// phrasing missed — "Email address", "Your email", and every non-English name
+// the docs' "Email and Phone get the matching keyboard" promise implied.
 func formInputType(field string) string {
-	switch strings.ToLower(field) {
-	case "email":
-		return "email"
-	case "phone", "tel", "telephone":
-		return "tel"
-	case "url", "website":
-		return "url"
-	default:
+	s := normalizeFieldWord(field)
+	if s == "" {
 		return "text"
 	}
+	kinds := []string{}
+	if containsAnyHint(s, emailWords) {
+		kinds = append(kinds, "email")
+	}
+	if containsAnyHint(s, phoneWords) {
+		kinds = append(kinds, "tel")
+	}
+	if s == "url" || containsAnyHint(s, urlWords) {
+		kinds = append(kinds, "url")
+	}
+	// A name that reads as two kinds at once — "Email or phone", "Phone/web" —
+	// is a field for either, and type=email would make the browser REJECT the
+	// other one on submit. A plain text box accepts both.
+	if len(kinds) != 1 {
+		return "text"
+	}
+	return kinds[0]
+}
+
+// normalizeFieldWord lowercases a field name and drops the separators people
+// put between words, so one hint matches every way of writing the same name.
+func normalizeFieldWord(field string) string {
+	return strings.Map(func(r rune) rune {
+		switch r {
+		case ' ', '-', '_', '.', '/', '\t':
+			return -1
+		}
+		return unicode.ToLower(r)
+	}, field)
+}
+
+func containsAnyHint(s string, words []string) bool {
+	for _, w := range words {
+		if strings.Contains(s, w) {
+			return true
+		}
+	}
+	return false
 }

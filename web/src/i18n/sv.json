@@ -610,7 +610,7 @@
       "storedInGit": "Varje sparning behålls som en version du kan gå tillbaka till — tekniskt sett lagras de i ett git-repo.",
       "mirrorLink": "Spegla till din egen git",
       "language": "Flödets språk",
-      "languageDesc": "Språket det här flödet SKRIVER på — namn på veckodagar och månader från steget Datum och tid, och allt annat ett steg formulerar i ord. Det är vad en schemalagd körning skickar till sina läsare, så det följer inte den som råkar titta i redigeraren. Ditt eget gränssnittsspråk finns i kontoinställningarna.",
+      "languageDesc": "Språket det här flödet SKRIVER på — orden i dess publicerade formulär (”Skicka”, ”Tack!”), namn på veckodagar och månader från steget Datum och tid, och allt annat ett steg formulerar i ord. Det är vad dina läsare och besökare får, så det följer inte den som råkar titta i redigeraren. Ett nytt flöde börjar på språket du arbetade på; ditt eget gränssnittsspråk finns i kontoinställningarna.",
       "languageEnglish": "English",
       "languageSwedish": "Svenska"
     }
@@ -1871,10 +1871,16 @@
     "deleteConfirm": "Ta bort steg \"{{id}}\" och dess kopplingar?",
     "webhookDevSummary": "För utvecklare — starta flödet via HTTP-anrop",
     "webhookStatus": {
-      "off": "Tar inte emot något ännu — slå på formuläret nedan, eller skapa en hemlig nyckel under ”För utvecklare”.",
+      "off": "Tar inte emot än — slå på formuläret nedan, eller lägg till en hemlig nyckel under ”För utvecklare”.",
       "form": "Tar emot — alla med formulärlänken kan starta det här flödet.",
       "secret": "Tar emot — system som skickar den hemliga nyckeln kan starta det här flödet.",
-      "both": "Tar emot — via formulärlänken, och via den hemliga nyckeln för andra system."
+      "both": "Tar emot — via formulärlänken, och via den hemliga nyckeln för andra system.",
+      "stale": "Tar emot — men besökarna får fortfarande den senast publicerade versionen. Publicera för att göra dina ändringar live.",
+      "pending": {
+        "form": "Tar inte emot än — formulärlänken svarar ”inte tillgängligt” tills du publicerar flödet.",
+        "secret": "Tar inte emot än — den hemliga nyckeln avvisas tills du publicerar flödet.",
+        "both": "Tar inte emot än — både formulärlänken och den hemliga nyckeln börjar fungera när du publicerar flödet."
+      }
     },
     "aboutStep": "Vad det här steget gör"
   },

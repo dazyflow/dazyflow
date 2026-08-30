@@ -307,14 +307,47 @@ function CurlCaveat({
 // It restates what the lint warning says — but as a live status that
 // flips to green the moment the user fixes it, instead of a warning
 // they have to re-save to clear.
-export function WebhookStatusLine({ webhook }: { webhook?: GraphTrigger }) {
+//
+// It answers about the LIVE flow, not the draft on screen, because that is
+// the question being asked: the form link sits directly beneath this line
+// with a Copy button, and the owner is deciding whether to send it to someone.
+// A door configured in the draft is not a door anyone can walk through yet —
+// /form and /trigger both serve the published revision. This line used to
+// ignore publish state entirely and show a green "Receiving — anyone with the
+// form link can start this flow" above a link that answered visitors with a
+// 404, which is the worst possible moment to be wrong.
+export function WebhookStatusLine({
+  webhook,
+  triggerLive,
+}: {
+  webhook?: GraphTrigger;
+  triggerLive?: { published: boolean; dirty: boolean };
+}) {
   const { t } = useTranslation();
   const hasSecret = webhookKeys(webhook).length > 0;
   const hasForm = webhook?.public_form === true;
-  const key = hasForm && hasSecret ? "both" : hasForm ? "form" : hasSecret ? "secret" : "off";
-  const ok = hasForm || hasSecret;
+  const door = hasForm && hasSecret ? "both" : hasForm ? "form" : hasSecret ? "secret" : "off";
+
+  // Undefined publish state (still loading, or a surface that doesn't pass it)
+  // keeps the old door-only answer rather than inventing a warning.
+  const pending = triggerLive !== undefined && !triggerLive.published;
+  // Published, but the draft has moved on: the doors ARE open, they just lead
+  // to the last published version. Worth saying — the fields someone is
+  // filling in are not the ones on screen.
+  const stale = triggerLive !== undefined && triggerLive.published && triggerLive.dirty;
+
+  const key =
+    door === "off"
+      ? "off"
+      : pending
+        ? `pending.${door}`
+        : stale
+          ? "stale"
+          : door;
+  // Green is reserved for "a stranger can use this right now".
+  const ok = door !== "off" && !pending;
   return (
-    <div className={"webhook-status" + (ok ? " ok" : "")}>
+    <div className={"webhook-status" + (ok ? " ok" : "") + (stale ? " stale" : "")}>
       {ok ? <Check size={ICON.sm} aria-hidden="true" /> : <Info size={ICON.sm} aria-hidden="true" />}
       <span>{t(`inspector.webhookStatus.${key}`)}</span>
     </div>

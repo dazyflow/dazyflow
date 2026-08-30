@@ -176,6 +176,12 @@ type Messages struct {
 	FormErrorTitle  string // bolded lead on either error banner
 	FormErrorRetry  string // transient — their input is still in the fields
 	FormErrorClosed string // the form can't receive; not the visitor's fault
+	FormGoneTitle   string // there is no form at this URL to show
+	FormGoneBody    string
+	// FormHoneypot labels the hidden anti-bot input. Nobody sees it — it sits
+	// off-screen — but a screen reader reaching it reads this out, so it is the
+	// flow speaking to a visitor like every other string here.
+	FormHoneypot string
 }
 
 // English is the source language and the fallback for anything else.
@@ -290,6 +296,9 @@ var English = Messages{
 	FormErrorTitle:  "Something went wrong",
 	FormErrorRetry:  "Your details are still in the form below — please try again.",
 	FormErrorClosed: "This form can't accept submissions right now. Please try again later, or get in touch another way.",
+	FormHoneypot:    "Leave this field empty",
+	FormGoneTitle:   "This form isn't available.",
+	FormGoneBody:    "The link may be out of date, or the form may not be live yet. If someone sent you here, let them know.",
 }
 
 // Swedish. Written as Swedish rather than word-for-word from the English: the
@@ -408,6 +417,9 @@ var Swedish = Messages{
 	FormErrorTitle:  "Något gick fel",
 	FormErrorRetry:  "Dina uppgifter finns kvar i formuläret nedan — försök igen.",
 	FormErrorClosed: "Det här formuläret kan inte ta emot svar just nu. Försök igen senare, eller kontakta oss på annat sätt.",
+	FormHoneypot:    "Lämna det här fältet tomt",
+	FormGoneTitle:   "Formuläret är inte tillgängligt.",
+	FormGoneBody:    "Länken kan vara gammal, eller så är formuläret inte publicerat än. Hör gärna av dig till den som skickade dig hit.",
 }
 
 // For resolves a language code to its messages. Only the primary subtag is

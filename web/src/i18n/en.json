@@ -610,7 +610,7 @@
       "storedInGit": "Every save is kept as a version you can go back to — stored as a git repository behind the scenes.",
       "mirrorLink": "Mirror to your own git",
       "language": "Flow language",
-      "languageDesc": "The language this flow WRITES in — day and month names from the Date & time step, and anything else a step spells out. It's what a scheduled run sends to its readers, so it doesn't follow whoever is looking at the editor. Your own interface language lives in account settings.",
+      "languageDesc": "The language this flow WRITES in — the words on its hosted form (“Submit”, “Thanks!”), day and month names from the Date & time step, and anything else a step spells out. It's what your readers and visitors get, so it doesn't follow whoever is looking at the editor. A new flow starts in the language you were working in; your own interface language lives in account settings.",
       "languageEnglish": "English",
       "languageSwedish": "Svenska"
     }
@@ -1874,7 +1874,13 @@
       "off": "Not receiving yet — turn on the form below, or set a secret key under “For developers”.",
       "form": "Receiving — anyone with the form link can start this flow.",
       "secret": "Receiving — systems that send the secret key can start this flow.",
-      "both": "Receiving — via the form link, and via the secret key for other systems."
+      "both": "Receiving — via the form link, and via the secret key for other systems.",
+      "stale": "Receiving — but visitors still get the last published version. Publish to make your latest changes live.",
+      "pending": {
+        "form": "Not receiving yet — the form link returns “not available” until you publish this flow.",
+        "secret": "Not receiving yet — the secret key is rejected until you publish this flow.",
+        "both": "Not receiving yet — the form link and the secret key both start working once you publish this flow."
+      }
     },
     "aboutStep": "What this step does"
   },

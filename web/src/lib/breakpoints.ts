@@ -23,10 +23,18 @@
 // overlay and the docs nav becomes a drawer. Mirrors `@media (max-width: 768px)`.
 export const MOBILE = 768;
 
-// EDITOR_NARROW is where the flow editor stops fitting a persistent inspector
-// beside the canvas and moves it to a bottom sheet. Mirrors
-// `@media (max-width: 1100px)`. Distinct from MOBILE because the editor needs
+// EDITOR_NARROW is where the flow editor stops reserving canvas room beside
+// the inspector: above it the canvas narrows to make space, below it the panel
+// floats over the right edge instead, because narrowing a ~900px canvas by
+// another 320 leaves less than one step's width. Mirrors
+// `@media (min-width: 1101px)`. Distinct from MOBILE because the editor needs
 // far more horizontal room than a page of prose does.
+//
+// It is NOT where the inspector changes shape. That is MOBILE: a phone gets a
+// fullscreen sheet opened from the Inspect FAB, everything wider gets a side
+// panel that opens on selection. This constant used to do both jobs, which
+// left every window under 1100px in phone mode — clicking a step selected it
+// and nothing appeared.
 export const EDITOR_NARROW = 1100;
 
 // isNarrower reports whether the viewport is at or below a breakpoint. Returns

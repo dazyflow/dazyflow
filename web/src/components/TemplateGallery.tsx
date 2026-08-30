@@ -6,6 +6,7 @@ import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { api } from "../api";
 import { explainApiError } from "../lib/explainApiError";
+import { primaryLanguage } from "../lib/language";
 import { useAuth } from "../auth";
 import { iconFor, ICON } from "../icons";
 import {
@@ -136,6 +137,21 @@ export function TemplateGallery() {
         // owner intentionally left blank — the daemon stamps the
         // caller as owner on first save.
         owner: "",
+        // The flow's OUTPUT language: what its hosted form says to visitors
+        // ("Submit", "Thanks!"), and what steps that spell out words write.
+        // Empty means English, so a Swedish owner forking a template used to
+        // publish an English form to their Swedish customers without ever
+        // being shown a language control. Stamp the forker's own language, the
+        // same way the time zone below is stamped. A template that names a
+        // language deliberately keeps it, and the owner can change it in
+        // Settings → General.
+        language: tplGraph.language || primaryLanguage(i18n.language),
+        // Name it what the card the user just clicked was called. The gallery
+        // renders titles through templateTitle(), so a Swedish reader picked
+        // "Webbformulär → Samling" and then found "Web form → Collection" in
+        // their sidebar — the graph file's raw English name. The name is the
+        // owner's from here on; they can rename it.
+        name: templateTitle(tpl, i18n.language),
         // Per-fork personalisation of nodes that ship a placeholder default:
         //  - cron_trigger: stamp the forker's time zone. Templates are
         //    zone-neutral (a shared "0 9 * * *" means 9am wherever you are),

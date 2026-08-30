@@ -159,9 +159,16 @@ func requireOrgAdmin(rw http.ResponseWriter, p core.Principal) bool {
 // responses for an unmatched route (404) and a method mismatch (405) come
 // back as the same JSON ErrorEnvelope as every other error. It decides at
 // WriteHeader time — never buffers — so long-lived SSE streams are
-// untouched. The discriminator is Content-Type: the mux's defaults set
-// text/plain, while our own handlers always set application/json (so a
-// handler-produced 404/405 passes through unchanged).
+// untouched.
+//
+// The discriminator is Content-Type, and it names what gets REWRITTEN rather
+// than what gets left alone: text/plain (what http.Error and the mux's own
+// 404/405 set) and a writer that set nothing at all. Any other type is a
+// handler that deliberately chose its own representation and keeps it —
+// application/json because it already built an envelope, and text/html
+// because it rendered a page for a human. The public hosted form is the
+// second kind: it is the one URL an owner gives to their customers, and
+// before this it answered them with a raw JSON envelope on a blank page.
 func jsonErrors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		next.ServeHTTP(&jsonErrorWriter{ResponseWriter: rw}, r)
@@ -179,8 +186,9 @@ func (w *jsonErrorWriter) WriteHeader(status int) {
 		return
 	}
 	w.done = true
+	ct := w.Header().Get("Content-Type")
 	isMuxDefault := (status == http.StatusNotFound || status == http.StatusMethodNotAllowed) &&
-		!strings.HasPrefix(w.Header().Get("Content-Type"), "application/json")
+		(ct == "" || strings.HasPrefix(ct, "text/plain"))
 	if isMuxDefault {
 		w.swallow = true
 		w.Header().Set("Content-Type", "application/json")

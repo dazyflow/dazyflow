@@ -12,6 +12,7 @@ import { TemplateGallery } from "../../components/TemplateGallery";
 import { Callout } from "../../components/ui/Callout";
 import { Button } from "../../components/ui/Button";
 import { explainApiError } from "../../lib/explainApiError";
+import { primaryLanguage } from "../../lib/language";
 import type { Graph, Manifest } from "../../types";
 import { ErrorNotice } from "../../components/ui/ErrorNotice";
 import { ICON } from "../../icons";
@@ -177,6 +178,10 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
       edges: [],
       name: name.trim(),
       description: description.trim() || undefined,
+      // See the note in TemplateGallery: a flow's output language is what its
+      // hosted form says to visitors, and empty means English. Default it to
+      // the language the person building it is working in.
+      language: primaryLanguage(i18n.language),
     });
     navigate(`/flows/${encodeURIComponent(id)}`);
   };
@@ -196,6 +201,9 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
       edges: graph.edges ?? [],
       name: flowName,
       description: graph.description,
+      // The generator may have picked a language from the prompt; keep that
+      // over the UI's when it did.
+      language: graph.language || primaryLanguage(i18n.language),
     });
     // animateBuild signals the editor to play the build animation on first
     // load (drops appear and wire up in sequence) instead of snapping the

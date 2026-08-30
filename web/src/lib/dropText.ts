@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { SV_DESCRIPTIONS } from "../i18n/drops/descriptions.sv";
+import { primaryLanguage } from "./language";
 import { SV_INTEGRATION_PROSE } from "../i18n/drops/integrationProse.sv";
 import {
   SV_CONNECTION_TEXT,
@@ -538,7 +539,7 @@ const VOCABULARY: Record<string, Vocabulary> = {
 // lookup falls back to the catalog's English.
 function vocabularyFor(lang: string | undefined): Vocabulary | undefined {
   if (!lang) return undefined;
-  return VOCABULARY[lang.split("-")[0].toLowerCase()];
+  return VOCABULARY[primaryLanguage(lang)];
 }
 
 // dropLabel / dropSubtitle / dropDescription return the drop's text in `lang`,

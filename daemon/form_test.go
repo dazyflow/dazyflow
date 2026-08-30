@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/daemon"
@@ -57,6 +58,51 @@ func TestForm_GETRendersOptedInForm(t *testing.T) {
 	for _, want := range []string{"Contact us", `name="name"`, `name="email"`, `name="message"`, "<textarea"} {
 		if !strings.Contains(html, want) {
 			t.Errorf("rendered form missing %q", want)
+		}
+	}
+}
+
+// TestForm_UnpublishedRendersAPage covers the path a real owner hits first:
+// they copy the form link out of the editor and share it before pressing
+// Publish. The published revision doesn't exist yet, so this is a 404 — but
+// the person reading it is their customer, not an API client, and used to get
+// {"error":{"code":"not_found",...}} on a blank page.
+//
+// The page must NOT say why. "Not published yet" would tell a stranger that
+// this flow exists, which is the one thing every 404 in this handler is
+// careful not to reveal.
+func TestForm_UnpublishedRendersAPage(t *testing.T) {
+	_, wh, _, _, wsStore := startWebhookHarness(t)
+	// Saved as a DRAFT only — savePublished is deliberately not called.
+	g := core.Graph{
+		ID: "draft-only", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"public_form": true}}},
+	}
+	if _, err := wsStore.Save(g, "test"); err != nil {
+		t.Fatalf("save draft: %v", err)
+	}
+	ts := formServer(t, wh)
+
+	res, err := http.Get(ts.URL + "/form/acme/ws1/draft-only")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404 (draft has no published revision)", res.StatusCode)
+	}
+	if ct := res.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
+		t.Errorf("content-type = %q, want text/html — a visitor gets a page, not an API error", ct)
+	}
+	body, _ := io.ReadAll(res.Body)
+	html := string(body)
+	if !strings.Contains(html, "may not be live yet") {
+		t.Errorf("body missing the unavailable notice, got:\n%s", html)
+	}
+	// Nothing that names the flow or its state.
+	for _, leak := range []string{"draft-only", "publish", "Publish", "not_found"} {
+		if strings.Contains(html, leak) {
+			t.Errorf("page leaks %q — every miss must look identical to a stranger", leak)
 		}
 	}
 }
@@ -291,6 +337,113 @@ func TestForm_FieldNameAndTitleEscaped(t *testing.T) {
 	}
 }
 
+// TestForm_LabelsKeepWhatTheOwnerTyped — field names come out of the owner's
+// own "Form fields" box and are read by their customers, so the humanizer is
+// only allowed to make them read like labels, never to rewrite them.
+//
+// Both cases here shipped visible damage to a public page: hyphens were
+// replaced with spaces, so a Swedish contact form published "E post"; and the
+// first letter was upper-cased by slicing the first BYTE, which turned every
+// label starting with a non-ASCII letter into invalid UTF-8.
+func TestForm_LabelsKeepWhatTheOwnerTyped(t *testing.T) {
+	_, wh, _, _, wsStore := startWebhookHarness(t)
+	g := core.Graph{
+		ID: "labels", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{
+			"public_form": true,
+			"form_fields": []any{"E-post", "Ärende", "first_name", "what you love about our tea"},
+		}}},
+	}
+	savePublished(t, wsStore, g)
+	ts := formServer(t, wh)
+
+	res, err := http.Get(ts.URL + "/form/acme/ws1/labels")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
+	html := string(body)
+
+	if !utf8.ValidString(html) {
+		t.Error("form HTML is not valid UTF-8 — a label was sliced mid-rune")
+	}
+	for _, want := range []string{
+		">E-post<",                      // hyphen survives; it is a letter in this word
+		">Ärende<",                      // non-ASCII first letter, already capitalized
+		">First name<",                  // underscore is a machine convention, so it goes
+		">What you love about our tea<", // sentence gets a capital, nothing else
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("label %q missing from the form", want)
+		}
+	}
+	if strings.Contains(html, ">E post<") {
+		t.Error(`"E-post" rendered as "E post" — the hyphen was stripped again`)
+	}
+	// The name/id attributes carry the field name verbatim, so what the flow
+	// receives is unaffected by any of the above.
+	if !strings.Contains(html, `name="E-post"`) {
+		t.Error(`field name attribute should be the owner's text verbatim`)
+	}
+}
+
+// TestForm_InputTypeFollowsTheFieldName covers the docs' promise that "Email
+// and Phone get the matching keyboard on a phone".
+//
+// It used to compare the whole field name against a short English list, so it
+// only ever fired for a field named exactly "email". Every natural phrasing
+// missed — "Email address", "Your phone" — and so did every non-English name,
+// which is what a Swedish owner's "E-post" hit.
+func TestForm_InputTypeFollowsTheFieldName(t *testing.T) {
+	_, wh, _, _, wsStore := startWebhookHarness(t)
+	fields := []any{
+		"Email", "E-post", "Email address", "Mejladress",
+		"Phone", "Telefonnummer", "Mobil",
+		"Website", "Hemsida",
+		"Name", "Company",
+		"Email or phone",
+	}
+	g := core.Graph{
+		ID: "types", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{
+			"public_form": true, "form_fields": fields,
+		}}},
+	}
+	savePublished(t, wsStore, g)
+	ts := formServer(t, wh)
+
+	res, err := http.Get(ts.URL + "/form/acme/ws1/types")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
+	html := string(body)
+
+	for field, want := range map[string]string{
+		"Email":         "email",
+		"E-post":        "email",
+		"Email address": "email",
+		"Mejladress":    "email",
+		"Phone":         "tel",
+		"Telefonnummer": "tel",
+		"Mobil":         "tel",
+		"Website":       "url",
+		"Hemsida":       "url",
+		"Name":          "text",
+		"Company":       "text",
+		// Reads as two kinds at once. type=email would make the browser refuse
+		// a phone number on submit, so the box that accepts either wins.
+		"Email or phone": "text",
+	} {
+		want := `<input id="` + field + `" name="` + field + `" type="` + want + `"`
+		if !strings.Contains(html, want) {
+			t.Errorf("missing %s", want)
+		}
+	}
+}
+
 // TestForm_SpeaksTheFlowsLanguage — the hosted form is the flow speaking to a
 // stranger, so its own words follow core.Graph.Language (the rule
 // internal/maillang documents for an approval email), and <html lang> is set
@@ -327,13 +480,17 @@ func TestForm_SpeaksTheFlowsLanguage(t *testing.T) {
 	}
 
 	svHTML := get("kontakt")
-	for _, want := range []string{`<html lang="sv">`, ">Skicka<", "Kontakta oss"} {
+	// The honeypot's label is off-screen, so it is only ever READ OUT — which
+	// makes it the flow speaking to a visitor like every other string here.
+	for _, want := range []string{`<html lang="sv">`, ">Skicka<", "Kontakta oss", "Lämna det här fältet tomt"} {
 		if !strings.Contains(svHTML, want) {
 			t.Errorf("Swedish form missing %q", want)
 		}
 	}
-	if strings.Contains(svHTML, ">Submit<") {
-		t.Error("Swedish form still shows the English Submit button")
+	for _, unwanted := range []string{">Submit<", "Leave this field empty"} {
+		if strings.Contains(svHTML, unwanted) {
+			t.Errorf("Swedish form still shows the English %q", unwanted)
+		}
 	}
 
 	enHTML := get("contact-en")

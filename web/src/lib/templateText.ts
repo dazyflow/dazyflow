@@ -6,6 +6,7 @@ import {
   SV_TEMPLATE_PROSE,
 } from "../i18n/templates.sv";
 import { descriptionFingerprint, type DescriptionMap } from "./dropText";
+import { primaryLanguage } from "./language";
 import type { TemplateSummary } from "../types";
 
 // Localized template vocabulary — the gallery's counterpart to dropText.ts.
@@ -38,7 +39,7 @@ function resolve(
 // Swedish is the only translation, and a regional tag ("sv-SE", "sv-FI")
 // collapses to it — matching the i18n config's load: "languageOnly".
 function isSwedish(lang?: string): boolean {
-  return !!lang && lang.split("-")[0].toLowerCase() === "sv";
+  return primaryLanguage(lang) === "sv";
 }
 
 // templateTitle is the card's heading.

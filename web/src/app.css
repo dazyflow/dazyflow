@@ -3986,9 +3986,17 @@ button.warning:hover:not(:disabled) {
      extend the page's scroll width and add a horizontal scrollbar. */
   overflow: hidden;
 }
-/* Mobile / narrow tablet: the inspector opens on demand as a FULLSCREEN
-   overlay via the floating "Inspect" button; the canvas keeps full width. */
-@media (max-width: 1100px) {
+/* Phone: the inspector opens on demand as a FULLSCREEN overlay via the
+   floating "Inspect" button; the canvas keeps full width. Deliberately NOT
+   opened by selection — on a phone that would slam the whole screen over the
+   canvas on every tap.
+
+   This band used to run to 1100px, which meant a half-width desktop window
+   got the phone behaviour: clicking a step selected it and nothing appeared,
+   because the only thing that opens this overlay is the FAB. Above 768px the
+   user has a pointer and room for a side panel, so they get the panel rules
+   below instead. */
+@media (max-width: 768px) {
   /* Keep the banner stack clear of the inspect FAB. The FAB sits at top:64 /
      right:12 with a z-index ABOVE the banners (deliberately — it's the only
      way into the inspector on a phone), and it is on screen at every narrow
@@ -4018,10 +4026,11 @@ button.warning:hover:not(:disabled) {
     pointer-events: auto;
   }
 }
-/* Desktop: the inspector is an absolute panel pinned below the 52px toolbar on
-   the right edge. It slides in when a node is selected; the canvas reserves
-   room by narrowing React Flow, while the (full-width) toolbar is untouched. */
-@media (min-width: 1101px) {
+/* Pointer-sized viewports: the inspector is an absolute panel pinned below the
+   52px toolbar on the right edge, and it slides in WHEN A STEP IS SELECTED.
+   Selecting a step and seeing its settings is the core loop of the editor, so
+   it must not depend on finding a separate button. */
+@media (min-width: 769px) {
   .editor .inspector {
     position: absolute;
     top: 52px;
@@ -4037,17 +4046,24 @@ button.warning:hover:not(:disabled) {
     transform: translateX(0);
     pointer-events: auto;
   }
+  /* Keep the banner stack clear of the inspector panel, which is an absolute
+     overlay starting below the toolbar — so it paints over the docked strip's
+     right end. The strip's background may run under it; its text and buttons
+     may not (the publish nudge's own Publish button lives there). */
+  .editor[data-has-selection="true"] .editor-banner-stack {
+    padding-right: calc(var(--inspector-w) + 12px);
+  }
+}
+/* Wide enough to keep a usable canvas beside the panel: reserve room for it
+   instead of letting it float over the canvas. Below this the panel overlaps
+   the right edge — at 900px, narrowing React Flow to ~380px would leave less
+   canvas than a single step needs, so covering part of it is the better trade.
+   The (full-width) toolbar is untouched either way. */
+@media (min-width: 1101px) {
   /* React Flow sets an inline width:100%, so !important is needed to reserve
      room for the inspector panel rather than let the canvas slide under it. */
   .editor[data-has-selection="true"] .canvas > .react-flow {
     width: calc(100% - var(--inspector-w)) !important;
-  }
-  /* Keep the banner stack clear of the inspector panel, which is an absolute
-     overlay starting below the toolbar — so it paints over the docked strip's
-     right end. The strip's background may run under it; its text and buttons
-     may not. */
-  .editor[data-has-selection="true"] .editor-banner-stack {
-    padding-right: calc(var(--inspector-w) + 12px);
   }
 }
 .editor .inspector {
@@ -6576,6 +6592,13 @@ img[src$="/brands/smhi.svg"] {
 .webhook-status.ok {
   color: var(--success);
   border-color: color-mix(in srgb, var(--success) 35%, var(--border));
+}
+/* Published and reachable, but the draft has moved on: still a green tick
+   (a stranger CAN use the link right now), warned border because what they
+   get is not what's on screen. */
+.webhook-status.ok.stale {
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 40%, var(--border));
 }
 
 /* Webhook node's developer surface: collapsed by default in the inspector
