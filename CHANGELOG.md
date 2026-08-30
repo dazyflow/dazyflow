@@ -23,6 +23,32 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.27.3] - 2026-08-30
+
+### Fixed
+
+- **Both sides of a branch could run.** An If emits on `then` OR `else`, never
+  both — but dispatch classified the unemitted port as *dormant*: "does not
+  contribute, does not block". So any OTHER live wire into the untaken step was
+  enough to enqueue it, and both branches ran.
+
+  The shape is the one people actually build: an If that mails one thing on Yes
+  and another on No, with both send steps taking their recipient from a single
+  Email step off to the side. That address wire is live for both branches, so
+  it alone made the untaken side runnable — and someone got both emails.
+
+  A port the predecessor declined to emit on is now `edgeNotRouted` — a routing
+  ANSWER, "not down here", not an absence of one — and it skips the dependent
+  even when another wire is live, because routing is exclusive. Its skip reason
+  says which port declined rather than the generic "all incoming edges
+  dormant", so the run log names the router instead of describing a state.
+
+  This is the same hole `NoPassthrough` closes for the pass pin, reached
+  through a data port instead: a value that bypasses the routing decision and
+  fires the branch nobody chose. Worth knowing they are two faces of one
+  problem — an exclusive choice is only exclusive if every path out of the
+  router respects it.
+
 ## [0.27.2] - 2026-08-30
 
 ### Fixed
