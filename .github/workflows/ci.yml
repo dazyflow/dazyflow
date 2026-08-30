@@ -1,9 +1,13 @@
-# CI — the GitHub Actions port of .builds/archlinux.yml.
+# CI — ported from the builds.sr.ht manifest that used to live in
+# .builds/archlinux.yml, which this branch deletes. That file is still present
+# on master, and sourcehut still builds from it, until this branch merges.
 #
-# Manually triggered only, for now: nothing runs on push or pull_request, so
-# this can be exercised against the new remote without racing the sourcehut
-# build that is still authoritative. Add the `push:`/`pull_request:` triggers
-# once a dispatch run is green end to end.
+# Manually triggered only, for now: nothing runs on push or pull_request, so a
+# dispatch can be exercised against the new remote before anything depends on
+# it. Add the `push:`/`pull_request:` triggers BEFORE merging — with the
+# sourcehut manifest gone, they are the only thing that would run CI
+# automatically at all, and a merge without them lands a repository whose tests
+# only ever run when someone remembers to press a button.
 #
 # Images publish to GitHub Container Registry instead of registry.dazyflow.app.
 # That removes the REGISTRY_USER / REGISTRY_PASSWORD secret pair entirely —

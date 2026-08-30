@@ -17,7 +17,7 @@ import (
 
 // Real-DB tests for the four org-level Pg stores. Gated on
 // DAZYFLOW_TEST_DB so `go test ./auth/...` stays green without a
-// running Postgres, but CI (.build.yml) wires one up and these run.
+// running Postgres, but CI (.github/workflows/ci.yml) wires one up and these run.
 
 func orgsPool(t *testing.T) (*pgxpool.Pool, context.Context) {
 	t.Helper()

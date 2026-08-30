@@ -395,8 +395,8 @@ upgrade: ## Deploy the latest release tag, pulling its prebuilt images (PROD=1 o
 		git checkout master; \
 	fi
 
-## --- Gates (run locally; CI on builds.sr.ht is advisory, not blocking) ---
-# These mirror .build.yml so a push never lands red. gofmt is intentionally
+## --- Gates (run locally; CI is advisory, not blocking) ---
+# These mirror .github/workflows/ci.yml so a push never lands red. gofmt is intentionally
 # NOT a gate: CI doesn't enforce it and the tree carries pre-existing
 # gofmt-version drift, so a gofmt gate would fail on files unrelated to the
 # change. Run `make fmt` before committing instead.
@@ -407,7 +407,7 @@ check: ## Fast local gate before pushing: build, vet, tests
 	@echo "==> go test"; go test ./...
 	@echo "==> changelog"; ./scripts/check-changelog.sh
 
-ci: ## Full local mirror of CI (.build.yml): build, vet, race tests, web build
+ci: ## Full local mirror of CI (.github/workflows/ci.yml): build, vet, race tests, web build
 	@echo "==> go build"; go build ./...
 	@echo "==> go vet"; go vet ./...
 	@echo "==> go test -race"; go test -race -timeout $(GO_TEST_TIMEOUT) ./...

@@ -15,7 +15,7 @@ the "documented remediation SLA" gap called out in
 
 | Source | Mechanism | Cadence |
 | --- | --- | --- |
-| Dependency CVEs reachable from called code | `govulncheck ./...` (`.builds/archlinux.yml`, `vuln` task) | Every CI build; fails the build on any reachable vulnerability |
+| Dependency CVEs reachable from called code | `govulncheck ./...` (`.github/workflows/ci.yml`, `security` job) | Every CI build; fails the build on any reachable vulnerability |
 | Go toolchain / stdlib advisories | `govulncheck` (same task) tracks the Go version in `go.mod` | Every CI build |
 | Reports from users / researchers | Private disclosure (see **Reporting** below) | On receipt |
 
@@ -59,7 +59,7 @@ impact you observed; we acknowledge within the triage window above.
 ## Supply-chain hardening (related)
 
 - **SBOM**: a CycloneDX/SPDX SBOM is produced in CI (see the `sbom` task in
-  `.builds/archlinux.yml`) so downstream consumers can run their own CVE
+  `.github/workflows/ci.yml`) so downstream consumers can run their own CVE
   matching against the exact dependency set.
 - Dependencies are standard Go modules pinned in `go.mod` / `go.sum`; every
   bump that `govulncheck` forces triggers a re-review (COMPLIANCE.md §3).
