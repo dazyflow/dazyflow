@@ -296,6 +296,18 @@ func ServeFormForTest(w *WebhookListener, rw http.ResponseWriter, r *http.Reques
 	w.handleForm(rw, r)
 }
 
+// ParseFormBodyForTest exposes the hosted form's body decoder to the external
+// _test package, so the per-encoding behaviour (urlencoded, multipart, flat
+// JSON, and the 415 refusal for anything else) is unit-testable without
+// standing up a graph run.
+func ParseFormBodyForTest(r *http.Request) (url.Values, error) {
+	return parseFormBody(r)
+}
+
+// HoneypotFieldNameForTest exposes the hidden anti-bot field's name so tests
+// can assert it is rendered and that filling it drops the submission.
+func HoneypotFieldNameForTest() string { return honeypotName }
+
 // CollectFormValuesForTest exposes the field-collection helper to the
 // external _test package so the "extra fields aren't silently dropped"
 // guarantee is unit-testable without standing up an HTTP server +

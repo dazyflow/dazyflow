@@ -23,13 +23,19 @@ You immediately get a **Form link** you can share — in an email, a QR code, a
 chat message. Anyone who opens it gets a real form; each submission starts a run
 of your flow with what they typed.
 
-Three things to set:
+Open **Customize the form** — that's where both of the settings worth changing
+live:
 
-- **Form heading** — what the person filling it in sees at the top.
-- **Form fields** — the questions. Each field you add here becomes something your
-  flow can use, so a *Name* and *Email* field gives your later steps a name and
-  an email to work with.
-- **Customize the form** — the finishing touches, once the fields are right.
+- **Form fields** — the questions, comma-separated. Each field you add here
+  becomes something your flow can use, so a *Name* and *Email* field gives your
+  later steps a name and an email to work with. Leave it blank and you get
+  *name*, *email*, *message*.
+- **Form heading** — what the person filling it in sees at the top. Defaults to
+  the flow's name.
+
+A field whose name reads like a question rather than a column — *What you like
+about us*, *Your feedback* — is drawn as a multi-line box, so there's room to
+write a paragraph. *Email* and *Phone* get the matching keyboard on a phone.
 
 Because you declared the fields, the steps after the trigger know what's coming
 before the first submission ever arrives. That's why a *Save to spreadsheet* step
@@ -39,6 +45,12 @@ to learn them.
 > **Anyone with the link can submit.** There's no sign-in — that's the point of a
 > public form. Treat the link as public, and don't put a step behind it that you
 > wouldn't want a stranger triggering.
+
+Two things guard it for you, with nothing to configure. The form carries a
+hidden field a person never sees: an automated script that fills in every input
+it finds completes that one too, and the submission is dropped without starting
+a run. And submissions are rate-limited per caller, so nobody can hammer the
+form fast enough to fill your collection — or burn through your monthly runs.
 
 ### Put it on your own website
 
@@ -60,14 +72,24 @@ Other systems start the flow by sending a request to the flow's address with a
 Authorization: Bearer <a key>
 ```
 
-The panel shows a ready-made **curl** command that works exactly as printed, so
-you can check the whole path end to end before wiring up the real caller.
+The panel shows a ready-made **curl** command with your key already in it, so
+you can check the whole path end to end before wiring up the real caller. Two
+things have to be true before it is accepted, and the panel says so when they
+aren't: you need to have generated a key (before that the command carries a
+placeholder), and the flow has to be **published** — a key you just generated is
+part of your draft until you publish it, exactly like any other edit.
 
 What arrives, arrives on the trigger's output:
 
 - A **plain-text body** comes through as text.
 - A **JSON body** (sent with `Content-Type: application/json`) comes through as
   structured data, so later steps can pick out individual fields.
+
+If you'd rather post to the **form** address than the trigger one — because you
+built the form's HTML yourself and don't want to manage a key — it accepts an
+ordinary form submission (`application/x-www-form-urlencoded` or
+`multipart/form-data`) and a flat JSON object. Send it anything else and it
+answers `415` rather than accepting a submission it can't read.
 
 This is how you connect anything that can send an HTTP request — Zapier,
 Typeform, a shop platform, a shell script, your own backend.
@@ -119,4 +141,5 @@ out about a field name mismatch now, rather than at 02:00 next Tuesday.
 
 - [Make a flow run by itself](./triggers-and-schedules) — publishing, pausing and schedules.
 - [When a run fails](./when-a-flow-fails) — reading a failed delivery.
-- [Step catalog: webhook](../reference/steps/webhook) — the trigger's inputs and outputs in detail.
+- [Step catalog: triggers](../reference/steps/triggers) — the webhook trigger's settings and outputs in detail.
+- [Step catalog: webhook](../reference/steps/webhook) — the *outbound* step, for sending data to someone else's webhook.

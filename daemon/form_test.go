@@ -471,3 +471,211 @@ func TestForm_RefilledValuesAreEscaped(t *testing.T) {
 		t.Errorf("posted value was dropped rather than escaped: %s", html)
 	}
 }
+
+// TestForm_JSONBodyIsAcceptedAsFields — someone hand-rolling a form against
+// this URL naturally posts JSON. That used to answer 200, fire a run, and
+// append a row with every column blank: r.ParseForm() does not error on a
+// Content-Type it can't read, it just leaves PostForm empty. Now a flat JSON
+// object maps onto the fields exactly as a urlencoded body does.
+func TestForm_JSONBodyIsAcceptedAsFields(t *testing.T) {
+	_, wh, jobs, _, wsStore := startWebhookHarness(t)
+	g := core.Graph{
+		ID: "jsonform", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}, "public_form": true}}},
+	}
+	savePublished(t, wsStore, g)
+	ts := formServer(t, wh)
+
+	res, err := http.Post(ts.URL+"/form/acme/ws1/jsonform", "application/json",
+		strings.NewReader(`{"name":"Jane","email":"jane@example.com","message":"Hi","count":3,"ok":true}`))
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", res.StatusCode)
+	}
+	recs, err := jobs.ListByGraph(context.Background(), "jsonform")
+	if err != nil {
+		t.Fatalf("list by graph: %v", err)
+	}
+	if len(recs) == 0 {
+		t.Fatal("expected a run from the JSON submission")
+	}
+}
+
+// TestForm_ParseFormBodyDecodesEachEncoding pins the decoder itself: this is
+// where the blank-row bug lived, so assert the values actually arrive rather
+// than only that a run started.
+func TestForm_ParseFormBodyDecodesEachEncoding(t *testing.T) {
+	post := func(ct, body string) (url.Values, error) {
+		r := httptest.NewRequest("POST", "/form/acme/ws1/x", strings.NewReader(body))
+		if ct != "" {
+			r.Header.Set("Content-Type", ct)
+		}
+		return daemon.ParseFormBodyForTest(r)
+	}
+
+	t.Run("urlencoded", func(t *testing.T) {
+		got, err := post("application/x-www-form-urlencoded", "name=Jane&message=Hi")
+		if err != nil {
+			t.Fatalf("err: %v", err)
+		}
+		if got.Get("name") != "Jane" || got.Get("message") != "Hi" {
+			t.Errorf("got %v", got)
+		}
+	})
+
+	t.Run("flat json", func(t *testing.T) {
+		got, err := post("application/json",
+			`{"name":"Jane","count":3,"ok":true,"nothing":null,"nested":{"a":1}}`)
+		if err != nil {
+			t.Fatalf("err: %v", err)
+		}
+		// Scalars keep a readable literal — not 1e+00, not %!s(float64=3).
+		if got.Get("name") != "Jane" || got.Get("count") != "3" || got.Get("ok") != "true" {
+			t.Errorf("scalars wrong: %v", got)
+		}
+		if got.Get("nothing") != "" {
+			t.Errorf("null should become empty, got %q", got.Get("nothing"))
+		}
+		// A nested value is kept as JSON text rather than dropped — the column
+		// is TEXT anyway, and keeping it beats losing the submission.
+		if got.Get("nested") != `{"a":1}` {
+			t.Errorf("nested value not preserved: %q", got.Get("nested"))
+		}
+	})
+
+	t.Run("json case-insensitive content type", func(t *testing.T) {
+		got, err := post("Application/JSON; charset=utf-8", `{"name":"Jane"}`)
+		if err != nil {
+			t.Fatalf("err: %v", err)
+		}
+		if got.Get("name") != "Jane" {
+			t.Errorf("media types are case-insensitive (RFC 9110): %v", got)
+		}
+	})
+
+	t.Run("unsupported type is refused", func(t *testing.T) {
+		if _, err := post("application/xml", "<a/>"); err == nil {
+			t.Error("want an error for an encoding the form cannot read")
+		}
+	})
+
+	t.Run("json that is not an object is refused", func(t *testing.T) {
+		// An array has no field names to map onto form fields. Refusing beats
+		// silently storing a blank row.
+		if _, err := post("application/json", `["Jane"]`); err == nil {
+			t.Error("want an error for non-object JSON")
+		}
+	})
+}
+
+// TestForm_UnsupportedContentTypeIsRefused — an encoding the form cannot read
+// must be refused loudly. Answering 200 while storing an empty row is the
+// worst outcome: the caller is reassured and the owner silently collects junk.
+func TestForm_UnsupportedContentTypeIsRefused(t *testing.T) {
+	_, wh, jobs, _, wsStore := startWebhookHarness(t)
+	g := core.Graph{
+		ID: "xmlform", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}, "public_form": true}}},
+	}
+	savePublished(t, wsStore, g)
+	ts := formServer(t, wh)
+
+	res, err := http.Post(ts.URL+"/form/acme/ws1/xmlform", "application/xml",
+		strings.NewReader("<submission><name>Jane</name></submission>"))
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusUnsupportedMediaType {
+		t.Fatalf("status = %d, want 415", res.StatusCode)
+	}
+	body, _ := io.ReadAll(res.Body)
+	if !strings.Contains(string(body), "urlencoded") {
+		t.Errorf("415 should name the encodings that do work, got: %s", body)
+	}
+	recs, _ := jobs.ListByGraph(context.Background(), "xmlform")
+	if len(recs) != 0 {
+		t.Errorf("a refused submission must not start a run (got %d)", len(recs))
+	}
+}
+
+// TestForm_HoneypotDropsSubmission — a bot that fills every input it finds
+// completes the hidden field too. It gets the ordinary confirmation (telling
+// it otherwise just teaches it to skip the field) but starts no run.
+func TestForm_HoneypotDropsSubmission(t *testing.T) {
+	_, wh, jobs, _, wsStore := startWebhookHarness(t)
+	g := core.Graph{
+		ID: "hp", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}, "public_form": true}}},
+	}
+	savePublished(t, wsStore, g)
+	ts := formServer(t, wh)
+
+	// The trap must actually be on the rendered page, or it can never spring.
+	get, err := http.Get(ts.URL + "/form/acme/ws1/hp")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	page, _ := io.ReadAll(get.Body)
+	get.Body.Close()
+	if !strings.Contains(string(page), daemon.HoneypotFieldNameForTest()) {
+		t.Fatalf("honeypot field missing from the rendered form")
+	}
+
+	res, err := http.PostForm(ts.URL+"/form/acme/ws1/hp", url.Values{
+		"name":                            {"Bot"},
+		"message":                         {"buy pills"},
+		daemon.HoneypotFieldNameForTest(): {"http://spam.example"},
+	})
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200 (a bot must not learn it was caught)", res.StatusCode)
+	}
+	body, _ := io.ReadAll(res.Body)
+	if !strings.Contains(string(body), "Thanks") {
+		t.Errorf("expected the ordinary confirmation, got: %s", body)
+	}
+	recs, _ := jobs.ListByGraph(context.Background(), "hp")
+	if len(recs) != 0 {
+		t.Errorf("honeypot submission must not start a run (got %d)", len(recs))
+	}
+}
+
+// TestForm_LongAnswerFieldsGetATextarea — the old rule matched only the
+// literal word "message", so a field an owner actually named ("What you like
+// about us") rendered as a one-line box for an obvious paragraph.
+func TestForm_LongAnswerFieldsGetATextarea(t *testing.T) {
+	_, wh, _, _, wsStore := startWebhookHarness(t)
+	g := core.Graph{
+		ID: "areas", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{
+			"secrets":     []any{"s"},
+			"public_form": true,
+			"form_fields": []any{"Name", "Email", "What you like about us", "Your feedback"},
+		}}},
+	}
+	savePublished(t, wsStore, g)
+	ts := formServer(t, wh)
+
+	res, err := http.Get(ts.URL + "/form/acme/ws1/areas")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
+	html := string(body)
+	if strings.Count(html, "<textarea") != 2 {
+		t.Errorf("want 2 textareas (the two prose fields), got %d in: %s",
+			strings.Count(html, "<textarea"), html)
+	}
+	// Name and Email stay single-line, and Email keeps its typed input.
+	if !strings.Contains(html, `type="email"`) {
+		t.Errorf("Email should still get a typed single-line input")
+	}
+}

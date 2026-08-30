@@ -19,7 +19,14 @@ vi.mock("../auth", () => ({
     activeWorkspace: "",
   }),
 }));
-vi.mock("../api", () => ({ api: { listGraphs: vi.fn() } }));
+vi.mock("../api", () => ({
+  api: {
+    listGraphs: vi.fn(),
+    // The AI card checks whether a provider is connected before it
+    // promises "describe it in plain English".
+    listLLMProviders: vi.fn(() => Promise.resolve({ providers: [] })),
+  },
+}));
 
 const loadRecentFlow = vi.fn();
 vi.mock("../recentFlow", () => ({

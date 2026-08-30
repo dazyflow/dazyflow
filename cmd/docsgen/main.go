@@ -269,8 +269,8 @@ func banner() string {
 func tableLegend() string {
 	return "**Reading the tables below:** an **Input** is a value you connect from an earlier step; " +
 		"a **Setting** is a value you fill in on the step itself. Value types: " +
-		"*text*, *data* (structured info — a row or object), *yes/no*, *file*, *anything*, " +
-		"and *list of …* (many at once).\n\n"
+		"*text*, *item* (structured info — a row or object), *yes / no*, *file*, *anything*, " +
+		"and the plural forms — *items (a table)*, *texts*, *files* — for many at once.\n\n"
 }
 
 // groupName is the catalog heading a drop lives under: its Integration (an app
@@ -331,24 +331,37 @@ func dropTitle(m core.Manifest) string {
 }
 
 // humanKind renders a port's value kind in plain words (never a MIME type).
-// "data" is the umbrella for structured JSON (a row, an object, a number, a
+//
+// These are deliberately the SAME words the canvas puts on a pin — see
+// portTypeLabel in web/src/lib/ports.ts. The docs used to teach their own
+// vocabulary ("data", "list of data") while the product said "Item" and "Items
+// (a table)", so a reader who had just finished the concepts page had to
+// translate every type on sight. Keep the two in step: change one, change both.
+//
+// "Item" is the umbrella for structured JSON (a row, an object, a number, a
 // count) — deliberately vaguer than "record" so a scalar isn't mislabelled.
 func humanKind(p core.Port) string {
-	base := map[core.PortKind]string{
-		core.KindItem:   "data",
-		core.KindText:   "text",
-		core.KindBool:   "yes/no",
-		core.KindFile:   "file",
-		core.KindAny:    "anything",
-		core.KindNumber: "number",
-	}[p.Kind()]
-	if base == "" {
-		base = "anything"
+	many := p.Cardinality() == core.Many
+	switch p.Kind() {
+	case core.KindText:
+		if many {
+			return "texts"
+		}
+		return "text"
+	case core.KindBool:
+		return "yes / no"
+	case core.KindFile:
+		if many {
+			return "files"
+		}
+		return "file"
+	case core.KindItem, core.KindNumber:
+		if many {
+			return "items (a table)"
+		}
+		return "item"
 	}
-	if p.Cardinality() == core.Many {
-		return "list of " + base
-	}
-	return base
+	return "anything"
 }
 
 func portLabel(p core.Port) string {

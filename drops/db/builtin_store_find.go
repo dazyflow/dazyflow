@@ -46,7 +46,7 @@ func init() {
 				},
 				{
 					Title:  "Newest 20 leads",
-					Params: json.RawMessage(`{"table":"leads","sort_by":"submitted_at","sort_dir":"desc","limit":20}`),
+					Params: json.RawMessage(`{"table":"leads","sort_by":"saved_at","sort_dir":"desc","limit":20}`),
 				},
 			},
 			ExecutionModel: core.ExecutionBatch,

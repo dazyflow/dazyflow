@@ -143,6 +143,13 @@ type Props = {
   // the curl/embed recipes. The Triggers menu is gone — this config lives on
   // the node now.
   graphMeta?: { id: string; tenant: string; workspace: string; name?: string };
+  // triggerLive says whether THIS flow's triggers are actually accepting
+  // deliveries right now: published, with no unpublished edits sitting on top.
+  // The webhook developer panel needs it because a secret key is a draft
+  // change like any other — the panel used to print a ready-made curl and
+  // claim it "works exactly as shown" while the key it showed returned 401
+  // until the flow was published again.
+  triggerLive?: { published: boolean; dirty: boolean };
   // missingKeys lists the selected node's param/port keys still needing a
   // value (from the config check). The form marks those fields red so a jump
   // from the "N to configure" modal points straight at what to fill in.
@@ -183,6 +190,7 @@ export function Inspector({
   cancelling,
   onStopRun,
   graphMeta,
+  triggerLive,
   missingKeys,
   runCoordinate,
 }: Props) {
@@ -539,6 +547,7 @@ export function Inspector({
                 <WebhookTab
                   graph={webhookGraph}
                   webhook={currentParams as GraphTrigger}
+                  triggerLive={triggerLive}
                   onChange={(patch) =>
                     onParamsChange(selected.id, { ...currentParams, ...patch })
                   }
@@ -761,7 +770,15 @@ export function Inspector({
       {confirmDelete && onDelete && (
         <ConfirmModal
           title={t("inspector.deleteNode")}
-          message={t("inspector.deleteConfirm", { id: selected.id })}
+          message={t("inspector.deleteConfirm", {
+            // The name on the card, not the internal node id. A destructive
+            // confirmation is the worst possible moment to use an identifier
+            // the user has never seen: deleting the step labelled "Google
+            // Sheets" used to ask about a step called "append".
+            id:
+              d.label?.trim() ||
+              (d.manifest ? dropLabel(d.manifest, i18n.language) : d.moduleID),
+          })}
           confirmLabel={t("inspector.deleteNode")}
           danger
           onConfirm={() => {

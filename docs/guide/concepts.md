@@ -76,14 +76,17 @@ one:
 
 | Type | What it is |
 | --- | --- |
-| **text** | Plain words — a message, a name, an address. |
-| **data** | Structured info — a row from a spreadsheet, or an object with named fields (like `{name, email}`). |
-| **yes/no** | A true-or-false answer, used to make decisions. |
-| **file** | A document — a PDF, a spreadsheet, an image. |
-| **list of …** | *Many* values at once — e.g. a *list of data* is many rows. |
-| **anything** | The step accepts whatever you connect. |
+| **Text** | Plain words — a message, a name, an address. |
+| **Item** | Structured info — a row from a spreadsheet, or an object with named fields (like `{name, email}`). |
+| **Items (a table)** | *Many* items at once — many rows. **Texts** and **Files** are the same idea for the other types. |
+| **Yes / no** | A true-or-false answer, used to make decisions. |
+| **File** | A document — a PDF, a spreadsheet, an image. |
+| **Anything** | The step accepts whatever you connect. |
 
-When a step produces a **list** (many rows) and the next step handles **one at a
+These are the exact words you'll see on a step's pins when you hover one, and in
+the step catalog — so what you read here is what the product says back to you.
+
+When a step produces **Items** (many rows) and the next step handles **one at a
 time**, wrap it in a **For each** loop — see the Glossary.
 
 ## Triggers decide when a flow starts

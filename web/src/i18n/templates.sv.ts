@@ -33,6 +33,14 @@ export const SV_TEMPLATE_PROSE: DescriptionMap = {
     en: "1c3f9029",
     sv: "Klicka på Använd och tryck sedan på Kör — en formaterad sammanfattning dyker upp direkt. Snabbaste sättet att se ett flöde fungera hela vägen, utan att ansluta något.",
   },
+  "form-to-collection.title": {
+    en: "da46906d",
+    sv: "Webbformulär → Samling",
+  },
+  "form-to-collection.use_case": {
+    en: "62762128",
+    sv: "Lägg ett kontaktformulär på din sajt och behåll varje svar i Dazyflow — inget kalkylark, inget konto att ansluta, inget att ställa in.",
+  },
   "form-to-sheet.title": {
     en: "71f86c69",
     sv: "Webbformulär → Google Kalkylark",

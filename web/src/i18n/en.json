@@ -429,7 +429,8 @@
       },
       "ai": {
         "title": "Describe what you want",
-        "desc": "Say it in plain English and Dazyflow drafts the flow for you, ready to review."
+        "desc": "Say it in plain English and Dazyflow drafts the flow for you, ready to review.",
+        "needsProvider": "Needs an AI provider connected first."
       },
       "blank": {
         "title": "From blank",
@@ -529,7 +530,10 @@
       "generate": "Generate a key",
       "bearerSecretDesc": "Callers send <0>Authorization: Bearer …</0> with every request. Any listed key works — add a new one, switch your callers over, then revoke the old one without downtime.",
       "curlLabel": "Example request (curl)",
-      "curlDesc": "The command works exactly as shown. A plain-text body arrives on the step's Data output as text; a JSON body (Content-Type: application/json) arrives as structured data you can pick fields from.",
+      "curlDesc": "A plain-text body arrives on the step's Body output as text; a JSON body (Content-Type: application/json) arrives as structured data you can pick fields from.",
+      "curlNeedsKey": "Generate a key first — as printed, this command sends the placeholder and will be refused.",
+      "curlNeedsPublish": "Publish the flow before you run this — an unpublished draft refuses deliveries, key or no key.",
+      "curlNeedsRepublish": "This key is part of your draft. Publish your changes before you run this, or the request will be refused.",
       "cronExpression": "Cron expression",
       "cronNextLocal": "Next fires (your time, {{tz}}):",
       "scheduleTzNote": "Times are in your timezone ({{tz}}).",
@@ -626,8 +630,8 @@
     "notSignedIn": "Not signed in.",
     "forkFailed": "Couldn't create \"{{title}}\": {{error}}",
     "integrationsUsed": "apps used",
-    "adminBlocked": "Available after your administrator enables {{names}}.",
-    "adminBlockedTitle": "Your administrator hasn't enabled {{names}} yet — you can't use this template until they do.",
+    "adminBlocked": "Needs {{names}}, which isn't set up on this Dazyflow server yet.",
+    "adminBlockedTitle": "This template needs {{names}}, and that app hasn't been set up on this Dazyflow server. Whoever runs the server has to enable it first.",
     "uncategorized": "More",
     "filteredBy": "Showing: {{category}}",
     "filteredByTemplate": "Showing: {{title}}",
@@ -1727,7 +1731,11 @@
     },
     "dictDuplicate": "Two entries are both called {{key}} — only the last one is used.",
     "dictRemoveConfirm": "Remove {{key}}?",
-    "dictRemoveConfirmUnnamed": "Remove this entry?"
+    "dictRemoveConfirmUnnamed": "Remove this entry?",
+    "collectionName": {
+      "willCreate": "Starts a new collection called “{{name}}”.",
+      "willAppend": "Adds to your existing “{{name}}” collection."
+    }
   },
   "forEach": {
     "bodyHint": "Connect the Loop body output to the first step you want to run for each row. Every step after it runs once per row too.",

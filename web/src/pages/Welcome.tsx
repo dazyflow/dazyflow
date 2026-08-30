@@ -51,6 +51,30 @@ const OPTIONS = [
 export function Welcome() {
   const { t } = useTranslation();
   const { me, token, activeTenant, activeWorkspace } = useAuth();
+  // Whether "describe it in plain English" can actually do anything yet.
+  // That card is the most distinctive of the three and the one the marketing
+  // leads with, but it needs a connected AI provider — so on a fresh account
+  // it took the reader to a dead end with the requirement only revealed after
+  // they'd committed. undefined = still checking: say nothing rather than
+  // flash a warning that turns out to be wrong.
+  const [aiReady, setAiReady] = useState<boolean | undefined>(undefined);
+  useEffect(() => {
+    if (!token) return;
+    let live = true;
+    // Wrapped, not just .catch()'d: this is a cosmetic annotation on one card,
+    // and nothing about it is worth taking the whole first-run page down for.
+    // A failed or unavailable probe leaves the card exactly as it was.
+    try {
+      Promise.resolve(api.listLLMProviders(token))
+        .then((r) => live && setAiReady((r?.providers ?? []).length > 0))
+        .catch(() => live && setAiReady(true));
+    } catch {
+      setAiReady(true);
+    }
+    return () => {
+      live = false;
+    };
+  }, [token]);
   // Scoped to the signed-in account AND the active org — an unscoped read
   // offered another user's flow on a shared browser, and keying on the home
   // tenant surfaced the previous org's flow after a switch. Recomputed when
@@ -160,6 +184,11 @@ export function Welcome() {
               <span className="welcome-option-desc">
                 {t(`welcome.option.${key}.desc`)}
               </span>
+              {key === "ai" && aiReady === false && (
+                <span className="welcome-option-note">
+                  {t("welcome.option.ai.needsProvider")}
+                </span>
+              )}
             </Link>
           ))}
         </div>

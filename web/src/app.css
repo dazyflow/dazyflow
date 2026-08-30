@@ -1970,6 +1970,15 @@
   font-size: var(--text-sm);
   line-height: 1.5;
 }
+/* A prerequisite the card can't satisfy on its own — shown only when it is
+   actually unmet, so a working install never sees it. Warning-toned rather
+   than muted: it changes whether the card is worth pressing. */
+.welcome-option-note {
+  margin-top: var(--space-2);
+  color: var(--warning);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
 
 @media (max-width: 768px) {
   /* One per row. Three cards at phone width leaves each holding two words per
@@ -8216,6 +8225,25 @@ a.pa-card:hover {
   flex-direction: column;
   gap: var(--space-2);
 }
+/* What still has to be true before the curl above works: no key generated
+   yet, or the key is a draft edit that isn't published. Sits directly under
+   the command so it can't be read as unrelated advice. */
+.webhook-curl-caveat {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1h);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  color: var(--warning);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--warning) 35%, var(--border));
+  border-radius: var(--r-2);
+  background: color-mix(in srgb, var(--warning) 8%, var(--surface-2));
+}
+.webhook-curl-caveat svg {
+  flex-shrink: 0;
+  margin-top: var(--space-0);
+}
 /* Head row of a populated trigger tab: help text on the left, remove
    button pushed to the right. */
 .trigger-tab-head {
@@ -11893,6 +11921,16 @@ button:active,
 .field-error {
   margin: var(--space-1) 0 0;
   color: var(--danger);
+  font-size: var(--text-sm);
+}
+
+/* A neutral note under a field saying what the current value will DO — as
+   opposed to .field-error's "this is wrong". Used by the collection name box
+   to distinguish "adds to the collection you already have" from "starts a new
+   one", which is the difference a typo quietly destroys. */
+.field-hint {
+  margin: var(--space-1) 0 0;
+  color: var(--muted);
   font-size: var(--text-sm);
 }
 

@@ -14,6 +14,7 @@ import { DOCS_HOME, INVITE, SITE, SOURCE } from "./links";
 import { MOBILE, isNarrower, mediaQuery } from "../lib/breakpoints";
 import { ICON } from "../icons";
 import { savedCollapsePref, initialNavCollapsed } from "../lib/navCollapse";
+import { DocsSearch } from "./Search";
 
 // Mirrors AppShell's rail behaviour: a persisted desktop collapse choice; small
 // viewports default to the icons-only rail / slide-over drawer.
@@ -89,6 +90,7 @@ export function DocsShell({ children }: { children: ReactNode }) {
           <span className="docs-wordmark">Docs</span>
         </Link>
         <div className="spacer" />
+        <DocsSearch />
         <nav className="docs-topnav" aria-label="Elsewhere">
           <a className="docs-toplink" href={SITE}>
             Product

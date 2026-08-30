@@ -4895,6 +4895,14 @@ function EditorInner() {
           graphMeta={
             id ? { id, tenant: activeTenant, workspace: activeWorkspace, name } : undefined
           }
+          triggerLive={
+            // Left undefined while publishInfo is still loading, so the webhook
+            // developer panel says nothing rather than guessing wrong about
+            // whether the printed curl would actually be accepted.
+            publishInfo
+              ? { published: publishInfo.published, dirty: publishInfo.dirty }
+              : undefined
+          }
           currentRunID={currentRunID}
           onDelete={(nodeID) => {
             // Remove the node and any edge touching it, drop its stashed

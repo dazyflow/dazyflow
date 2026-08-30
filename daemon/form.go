@@ -4,11 +4,14 @@
 package daemon
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
+	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"git.sr.ht/~klahr/dazyflow/core"
@@ -78,30 +81,59 @@ func (w *WebhookListener) handleForm(rw http.ResponseWriter, r *http.Request) {
 	// The flow's language, resolved once: every page this handler can serve —
 	// the form, the confirmation, either error — must be in the same one.
 	view := formView{
-		Title:  title,
-		Fields: fields,
-		Lang:   maillang.Primary(g.Language),
-		M:      maillang.For(g.Language),
+		Title:    title,
+		Fields:   fields,
+		Honeypot: honeypotField(fields),
+		Lang:     maillang.Primary(g.Language),
+		M:        maillang.For(g.Language),
 	}
 
 	switch r.Method {
 	case http.MethodGet:
 		renderForm(rw, http.StatusOK, view)
 	case http.MethodPost:
-		// Cap the urlencoded body before ParseForm materializes it all into
-		// url.Values — the global 200 MiB limit is far too loose for a public,
-		// unauthenticated form (mirrors the 1 MiB webhook cap).
+		// Cap the body before we materialize it — the global 200 MiB limit is
+		// far too loose for a public, unauthenticated form (mirrors the 1 MiB
+		// webhook cap).
 		r.Body = http.MaxBytesReader(rw, r.Body, 1<<20)
-		if err := r.ParseForm(); err != nil {
-			// Unreadable or over the 1 MiB cap. Nothing to re-fill (the body
-			// never parsed), but the visitor still gets a page rather than
-			// Times New Roman on white.
+
+		posted, err := parseFormBody(r)
+		if err != nil {
+			// An encoding this endpoint can't read. Answering 200 here (which
+			// is what a bare ParseForm did for, say, a JSON body — it leaves
+			// PostForm empty without erroring) started a run and appended a
+			// row with every column blank, so the caller was told "Thanks!"
+			// while the owner silently collected junk. Refuse instead, and say
+			// which encodings work.
+			if errors.Is(err, errFormUnsupportedMedia) {
+				http.Error(rw,
+					"this form accepts application/x-www-form-urlencoded, multipart/form-data or a flat application/json object; "+
+						"to send other content types, use this flow's /trigger endpoint with its secret key",
+					http.StatusUnsupportedMediaType)
+				return
+			}
+			// Unreadable, malformed, or over the 1 MiB cap. Nothing to re-fill
+			// (the body never parsed), but the visitor still gets a page
+			// rather than Times New Roman on white.
 			view.Error = view.M.FormErrorRetry
 			renderForm(rw, http.StatusBadRequest, view)
 			return
 		}
-		view.Values = declaredFormValues(fields, r.PostForm)
-		values := collectFormValues(fields, r.PostForm)
+
+		// A filled honeypot means a bot walked the DOM and completed every
+		// input it found. Answer exactly as a success would — a bot that can
+		// tell it was refused just tries again without the field — but run
+		// nothing and store nothing.
+		if hp := honeypotField(fields); hp != "" && strings.TrimSpace(posted.Get(hp)) != "" {
+			w.logger.Printf("form %s/%s/%s: honeypot filled, submission dropped", tenant, workspace, graphID)
+			view.Submitted = true
+			renderForm(rw, http.StatusOK, view)
+			return
+		}
+		posted.Del(honeypotName)
+
+		view.Values = declaredFormValues(fields, posted)
+		values := collectFormValues(fields, posted)
 		seed := buildFormSeed(values)
 		seeds := map[string]core.Result{}
 		for _, n := range g.Nodes {
@@ -158,6 +190,110 @@ func ownerMustFix(err error) bool {
 		errors.Is(err, core.ErrOrgSuspended) ||
 		errors.Is(err, core.ErrGraphTooLarge) ||
 		strings.Contains(err.Error(), "invalid graph")
+}
+
+// errFormUnsupportedMedia marks a POST whose Content-Type this endpoint
+// cannot read, so the caller gets 415 rather than a blank-row "success".
+var errFormUnsupportedMedia = errors.New("unsupported media type")
+
+// honeypotName is the hidden field the rendered form carries. Bots that
+// fill every input they find give themselves away by completing it; real
+// visitors never see it. The name is deliberately plausible-but-namespaced:
+// plausible so a naive bot fills it, namespaced so it can't collide with a
+// field an owner actually declared.
+const honeypotName = "dz_confirm_url"
+
+// honeypotField returns the honeypot's name, or "" when an owner has
+// declared a field of the same name (in which case the field is theirs and
+// the trap is off — silently discarding a real answer would be far worse
+// than missing a bot).
+func honeypotField(declared []string) string {
+	for _, f := range declared {
+		if strings.EqualFold(strings.TrimSpace(f), honeypotName) {
+			return ""
+		}
+	}
+	return honeypotName
+}
+
+// parseFormBody reads a hosted-form POST into url.Values, accepting the
+// encodings a form submission can plausibly arrive in:
+//
+//   - application/x-www-form-urlencoded → the browser's own encoding
+//   - multipart/form-data               → same, for forms with a file input
+//   - application/json                  → a FLAT object of scalars, for
+//     anyone hand-rolling a form against this URL rather than embedding ours
+//   - no body / no Content-Type         → treated as urlencoded (empty)
+//
+// Anything else is errFormUnsupportedMedia. That refusal is the point: the
+// previous code called r.ParseForm() unconditionally, and ParseForm does not
+// report an error for a Content-Type it doesn't handle — it simply leaves
+// PostForm empty. A JSON caller therefore got 200, a real run, and a row with
+// every column blank.
+//
+// Nested JSON (an object or array under a key) is flattened to its compact
+// JSON text rather than rejected: the columns are TEXT anyway, and keeping
+// the value is more useful to the owner than refusing the whole submission.
+func parseFormBody(r *http.Request) (url.Values, error) {
+	mediaType := r.Header.Get("Content-Type")
+	if i := strings.IndexByte(mediaType, ';'); i >= 0 {
+		mediaType = mediaType[:i]
+	}
+	// Media types are case-insensitive (RFC 9110 §8.3.1) — "Application/JSON"
+	// must read the same as the lowercase form.
+	mediaType = strings.ToLower(strings.TrimSpace(mediaType))
+
+	switch mediaType {
+	case "", "application/x-www-form-urlencoded", "multipart/form-data":
+		if err := r.ParseForm(); err != nil {
+			return nil, err
+		}
+		return r.PostForm, nil
+
+	case "application/json":
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			return nil, err
+		}
+		if len(strings.TrimSpace(string(raw))) == 0 {
+			return url.Values{}, nil
+		}
+		var obj map[string]any
+		if err := json.Unmarshal(raw, &obj); err != nil {
+			// Valid JSON that isn't an object (an array, a bare string) has no
+			// field names to map onto form fields, and malformed JSON has
+			// nothing at all. Either way the caller needs to know.
+			return nil, err
+		}
+		out := make(url.Values, len(obj))
+		for k, v := range obj {
+			out.Set(k, jsonScalarToString(v))
+		}
+		return out, nil
+	}
+	return nil, errFormUnsupportedMedia
+}
+
+// jsonScalarToString renders one JSON value as the text a form field would
+// have carried. Numbers keep their literal form (json.Number-style, via
+// strconv) so an id like 10000000000000001 doesn't come out as 1e+16, and
+// composites keep their JSON text so nothing is silently dropped.
+func jsonScalarToString(v any) string {
+	switch t := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return t
+	case bool:
+		return strconv.FormatBool(t)
+	case float64:
+		return strconv.FormatFloat(t, 'f', -1, 64)
+	default:
+		if b, err := json.Marshal(t); err == nil {
+			return string(b)
+		}
+		return fmt.Sprint(t)
+	}
 }
 
 // maxFormFields caps the total field count on a single hosted-form
@@ -279,6 +415,9 @@ type formView struct {
 	Title     string
 	Fields    []string
 	Submitted bool
+	// Honeypot is the name of the hidden anti-bot field to render, or "" to
+	// render none (an owner declared a field of that name, so it's theirs).
+	Honeypot string
 	// Lang is the BCP-47 primary subtag for <html lang>, and M the copy in the
 	// same language. Both come from the flow's own Language: a form is the flow
 	// speaking to a visitor, exactly as an approval email is (see
@@ -343,7 +482,7 @@ func renderForm(rw http.ResponseWriter, status int, v formView) {
 var formTemplate = template.Must(template.New("form").Funcs(template.FuncMap{
 	"label":     humanizeField,
 	"inputType": formInputType,
-	"isArea":    func(f string) bool { return strings.Contains(strings.ToLower(f), "message") },
+	"isArea":    isLongAnswerField,
 }).Parse(`<!doctype html>
 <html lang="{{.Lang}}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -360,6 +499,7 @@ button{margin-top:20px;padding:11px 18px;border:0;border-radius:8px;background:#
 button:hover{background:#5a49e6}
 .done{padding:16px 18px;border-radius:8px;background:rgba(109,93,255,.1);border:1px solid rgba(109,93,255,.35)}
 .err{padding:14px 16px;border-radius:8px;background:rgba(201,68,68,.1);border:1px solid rgba(201,68,68,.4);margin-bottom:4px}
+.hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
 </style></head><body>
 <h1>{{.Title}}</h1>
 {{if .Submitted}}
@@ -367,6 +507,7 @@ button:hover{background:#5a49e6}
 {{else}}
 {{if .Error}}<div class="err" role="alert"><strong>{{.M.FormErrorTitle}}</strong> {{.Error}}</div>{{end}}
 <form method="post">
+{{if .Honeypot}}<div class="hp" aria-hidden="true"><label for="{{.Honeypot}}">Leave this field empty</label><input id="{{.Honeypot}}" name="{{.Honeypot}}" type="text" tabindex="-1" autocomplete="off"></div>{{end}}
 {{range .Fields}}
 <label for="{{.}}">{{label .}}</label>
 {{if isArea .}}<textarea id="{{.}}" name="{{.}}">{{index $.Values .}}</textarea>{{else}}<input id="{{.}}" name="{{.}}" type="{{inputType .}}" value="{{index $.Values .}}">{{end}}
@@ -375,6 +516,41 @@ button:hover{background:#5a49e6}
 </form>
 {{end}}
 </body></html>`))
+
+// longAnswerWords are the field-name hints that mean "this answer is prose",
+// and so deserves a textarea rather than a one-line input. Kept in both
+// English and Swedish because the hosted form is the one page in the product
+// a stranger sees, and owners name their fields in their own language.
+var longAnswerWords = []string{
+	"message", "comment", "feedback", "question", "enquiry", "inquiry",
+	"describe", "description", "details", "reason", "note", "notes",
+	"review", "testimonial", "story", "about", "why", "what you",
+	"meddelande", "kommentar", "fråga", "beskriv", "beskrivning",
+	"anteckning", "omdöme", "berätta", "varför",
+}
+
+// isLongAnswerField reports whether a declared field should render as a
+// textarea. The old rule matched only the literal word "message", so a field
+// an owner actually named — "What you like about us", "Your feedback",
+// "Tell us why" — got a single-line box for what is obviously a paragraph.
+//
+// Two signals, either of which is enough: a recognisable long-answer word, or
+// a label long enough that it is plainly a question rather than a column name
+// ("What did you think of your visit?" vs "Name").
+func isLongAnswerField(f string) bool {
+	s := strings.ToLower(strings.TrimSpace(f))
+	if s == "" {
+		return false
+	}
+	for _, w := range longAnswerWords {
+		if strings.Contains(s, w) {
+			return true
+		}
+	}
+	// A question mark is an unambiguous tell, and a field name of five or more
+	// words is a sentence, not a label.
+	return strings.Contains(s, "?") || len(strings.Fields(s)) >= 5
+}
 
 // formInputType picks an HTML input type from the field name so phones
 // surface the right keyboard. Best-effort and purely cosmetic.

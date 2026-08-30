@@ -43,7 +43,7 @@ import { ScriptEditor } from "../ui/ScriptEditor";
 import { scriptLangFor } from "../../lib/scriptHighlight";
 import { GeoPointField } from "./GeoPointField";
 import { TimezoneField } from "./TimezoneField";
-import { api } from "../../api";
+import { api, APIError } from "../../api";
 import { explainApiError } from "../../lib/explainApiError";
 import { detectTrackingParams, stripTrackingParams } from "../../lib/trackingParams";
 import { telFieldFlag, regionDisplayName } from "../../lib/phoneFlag";
@@ -617,6 +617,21 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
       if (schema.format === "collection") {
         return (
           <CollectionField
+            name={name}
+            schema={schema}
+            required={required}
+            value={value}
+            onChange={onChange}
+            references={references}
+          />
+        );
+      }
+      // format:"collection-name" is the writer's variant of the above: a
+      // combobox rather than a dropdown, because Save rows usually names a
+      // collection that doesn't exist yet.
+      if (schema.format === "collection-name") {
+        return (
+          <CollectionNameField
             name={name}
             schema={schema}
             required={required}
@@ -1695,6 +1710,12 @@ function ResourcePickerField({
   const { t } = useTranslation();
   const [opts, setOpts] = useState<{ id: string; name: string }[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  // The SERVER's own words, kept alongside the humanized message. A missing
+  // connection comes back as 502, which explainApiError flattens to "Dazyflow
+  // ran into a problem on our side" — so deciding "is this app simply not
+  // connected?" from the humanized string could never work, and the picker
+  // blamed the server for the user's unconnected account.
+  const [errRaw, setErrRaw] = useState<string>("");
   const [reloadKey, setReloadKey] = useState(0);
   const cur = typeof value === "string" ? value : "";
   const extraKey = JSON.stringify(extra ?? {});
@@ -1703,10 +1724,12 @@ function ResourcePickerField({
     if (missingDep || disabled) {
       setOpts(null);
       setErr(null);
+      setErrRaw("");
       return;
     }
     let live = true;
     setErr(null);
+    setErrRaw("");
     setOpts(null);
     api
       .listAccountResources(references.token, provider, kind, account || undefined, extra)
@@ -1719,7 +1742,11 @@ function ResourcePickerField({
         }
         setOpts(r.resources);
       })
-      .catch((e) => live && setErr(explainApiError(e, t)));
+      .catch((e) => {
+        if (!live) return;
+        setErr(explainApiError(e, t));
+        setErrRaw(e instanceof APIError ? e.message || "" : "");
+      });
     return () => {
       live = false;
     };
@@ -1763,9 +1790,15 @@ function ResourcePickerField({
   // may need reconnecting for more access and surface the provider's own
   // message instead of swallowing it.
   if (err) {
-    const notConnected = /\bnot connected\b|connect (a|the)\b|no .*token/i.test(
-      err,
-    );
+    // Test the SERVER's message, not the humanized one: a missing connection
+    // arrives as 502, which explainApiError turns into the generic "problem on
+    // our side" — so matching against `err` here always fell through to
+    // "couldn't load your list", telling the user to retry and contact support
+    // for something only they could fix, on the step's very first open.
+    const notConnected =
+      /\bnot connected\b|\bno connection\b|connect (a|the)\b|no .*token|missing .*(token|credential|account)|unauthor/i.test(
+        errRaw || err,
+      );
     return (
       <div className="resource-picker">
         <div className="resource-picker-hint">
@@ -1776,9 +1809,11 @@ function ResourcePickerField({
         {!notConnected && (
           // The raw provider error (e.g. "Request had insufficient
           // authentication scopes.") — the detail that tells the user whether
-          // to reconnect, enable an API, or just retry.
-          <div className="resource-picker-detail" title={err}>
-            {err}
+          // to reconnect, enable an API, or just retry. Prefer the server's own
+          // words; the humanized string is a fallback, and repeating it here
+          // under the hint above just said the same thing twice.
+          <div className="resource-picker-detail" title={errRaw || err}>
+            {errRaw || err}
           </div>
         )}
         <Button
@@ -2153,6 +2188,87 @@ function CollectionField({
           </option>
         ))}
       </select>
+    </FieldWrap>
+  );
+}
+
+// CollectionNameField is the WRITER's collection picker — Save rows, where the
+// collection usually doesn't exist yet. That rules out CollectionField's plain
+// <select>: you have to be able to name something new.
+//
+// So it's a combobox: a text input you can type anything into, backed by a
+// datalist of the collections this workspace already has. The suggestions are
+// the point — the field used to be bare free text hinting "Example: leads", so
+// a second flow with "testimonial" instead of "testimonials" silently started
+// a SECOND collection, and the owner found out when rows went missing.
+function CollectionNameField({
+  name,
+  schema,
+  required,
+  value,
+  onChange,
+  references,
+}: {
+  name: string;
+  schema: JSONSchema;
+  required: boolean;
+  value: unknown;
+  onChange: (v: unknown) => void;
+  references?: ReferenceCtx;
+}) {
+  const { t } = useTranslation();
+  const cur = typeof value === "string" ? value : "";
+  const [opts, setOpts] = useState<string[]>([]);
+  const listID = useId();
+  const token = references?.token;
+
+  useEffect(() => {
+    if (!token) return;
+    let live = true;
+    api
+      .listBoards(token)
+      .then((r) => live && setOpts(r.boards.map((b) => b.name)))
+      // Suggestions are a convenience, never a gate: if the list can't be
+      // fetched the field is still an ordinary text box.
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [token]);
+
+  // Typing a name that doesn't exist yet is the normal case for a writer, so
+  // it is not an error — but say which way it will go, because "adds to the
+  // one you already have" vs "starts a new one" is exactly the distinction a
+  // typo destroys.
+  const trimmed = cur.trim();
+  const isNew = trimmed !== "" && !trimmed.includes("${") && !opts.includes(trimmed);
+
+  return (
+    <FieldWrap name={name} schema={schema} required={required} value={value}>
+      <input
+        type="text"
+        value={cur}
+        list={opts.length > 0 ? listID : undefined}
+        autoComplete="off"
+        spellCheck={false}
+        onChange={(e) =>
+          onChange(e.target.value === "" && !required ? undefined : e.target.value)
+        }
+      />
+      {opts.length > 0 && (
+        <datalist id={listID}>
+          {opts.map((o) => (
+            <option key={o} value={o} />
+          ))}
+        </datalist>
+      )}
+      {trimmed !== "" && !trimmed.includes("${") && (
+        <div className="field-hint">
+          {isNew
+            ? t("schemaForm.collectionName.willCreate", { name: trimmed })
+            : t("schemaForm.collectionName.willAppend", { name: trimmed })}
+        </div>
+      )}
     </FieldWrap>
   );
 }

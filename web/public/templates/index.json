@@ -18,6 +18,24 @@
       "graph_file": "/templates/try-it-now.json"
     },
     {
+      "id": "form-to-collection",
+      "title": "Web form → Collection",
+      "use_case": "Put a contact form on your site and keep every response in Dazyflow — no spreadsheet, no account to connect, nothing to set up.",
+      "category": "Try it now",
+      "description": "A hosted contact form saves each submission into a Collection, Dazyflow's own built-in table. Share the link or paste the form onto your own site; browse the responses under Collections. Every row is stamped with the time it arrived.",
+      "icon": "database",
+      "tags": [
+        "form",
+        "collection",
+        "collect",
+        "starter",
+        "no-setup"
+      ],
+      "integrations": [],
+      "no_setup": true,
+      "graph_file": "/templates/form-to-collection.json"
+    },
+    {
       "id": "form-to-sheet",
       "title": "Web form → Google Sheet",
       "use_case": "Share a link to a contact form and have every response land as a new row in a Google Sheet — like Google Forms, straight into the sheet you pick.",

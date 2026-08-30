@@ -5,6 +5,7 @@ package db
 
 import (
 	"testing"
+	"time"
 
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/limits"
@@ -781,4 +782,102 @@ func TestOpenBuiltinStore_ReadMissingIsEmpty(t *testing.T) {
 	if db != nil || errRes != nil {
 		t.Fatalf("want (nil, nil), got (%v, %+v)", db, errRes)
 	}
+}
+
+// TestBuiltinStore_StampsSavedAt — a collection has to be able to answer
+// "when did this arrive". Without a time column the Find/Query steps offer a
+// "Sort by" with nothing to point at, so newest-first was impossible on the
+// form → save path this store exists for.
+func TestBuiltinStore_StampsSavedAt(t *testing.T) {
+	root := t.TempDir()
+	run := func(params map[string]any, row map[string]any) core.Result {
+		t.Helper()
+		res, err := executeBuiltinStoreAppend(t.Context(), core.Job{
+			WorkspaceRoot: root,
+			Params:        params,
+			Input:         map[string]core.Ref{"rows": {Inline: row}},
+		}, nil)
+		if err != nil {
+			t.Fatalf("append: %v", err)
+		}
+		if res.Status != core.StatusOK {
+			t.Fatalf("append status = %v (%v)", res.Status, res.Error)
+		}
+		return res
+	}
+
+	run(map[string]any{"table": "notes"}, map[string]any{"name": "Ada"})
+
+	db, errRes := openBuiltinStore(core.Job{WorkspaceRoot: root}, false)
+	if errRes != nil {
+		t.Fatalf("open: %+v", errRes)
+	}
+	defer db.Close()
+
+	var saved string
+	if err := db.QueryRow(`SELECT saved_at FROM notes`).Scan(&saved); err != nil {
+		t.Fatalf("saved_at column missing: %v", err)
+	}
+	if _, err := time.Parse(time.RFC3339, saved); err != nil {
+		t.Errorf("saved_at = %q, want RFC3339: %v", saved, err)
+	}
+}
+
+// TestBuiltinStore_TimestampColumnRespectsCallerAndOptOut — the owner's own
+// value wins over ours, and the stamp can be renamed or turned off.
+func TestBuiltinStore_TimestampColumnRespectsCallerAndOptOut(t *testing.T) {
+	t.Run("caller supplies the column", func(t *testing.T) {
+		root := t.TempDir()
+		if _, err := executeBuiltinStoreAppend(t.Context(), core.Job{
+			WorkspaceRoot: root,
+			Params:        map[string]any{"table": "t"},
+			Input: map[string]core.Ref{"rows": {Inline: map[string]any{
+				"name": "Ada", "saved_at": "1999-01-01T00:00:00Z",
+			}}},
+		}, nil); err != nil {
+			t.Fatalf("append: %v", err)
+		}
+		db, _ := openBuiltinStore(core.Job{WorkspaceRoot: root}, false)
+		defer db.Close()
+		var got string
+		if err := db.QueryRow(`SELECT saved_at FROM t`).Scan(&got); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		if got != "1999-01-01T00:00:00Z" {
+			t.Errorf("saved_at = %q, want the caller's own value kept", got)
+		}
+	})
+
+	t.Run("renamed", func(t *testing.T) {
+		root := t.TempDir()
+		if _, err := executeBuiltinStoreAppend(t.Context(), core.Job{
+			WorkspaceRoot: root,
+			Params:        map[string]any{"table": "t", "timestamp_column": "submitted_at"},
+			Input:         map[string]core.Ref{"rows": {Inline: map[string]any{"name": "Ada"}}},
+		}, nil); err != nil {
+			t.Fatalf("append: %v", err)
+		}
+		db, _ := openBuiltinStore(core.Job{WorkspaceRoot: root}, false)
+		defer db.Close()
+		var got string
+		if err := db.QueryRow(`SELECT submitted_at FROM t`).Scan(&got); err != nil {
+			t.Fatalf("renamed column missing: %v", err)
+		}
+	})
+
+	t.Run("turned off", func(t *testing.T) {
+		root := t.TempDir()
+		if _, err := executeBuiltinStoreAppend(t.Context(), core.Job{
+			WorkspaceRoot: root,
+			Params:        map[string]any{"table": "t", "timestamp_column": ""},
+			Input:         map[string]core.Ref{"rows": {Inline: map[string]any{"name": "Ada"}}},
+		}, nil); err != nil {
+			t.Fatalf("append: %v", err)
+		}
+		db, _ := openBuiltinStore(core.Job{WorkspaceRoot: root}, false)
+		defer db.Close()
+		if err := db.QueryRow(`SELECT saved_at FROM t`).Scan(new(string)); err == nil {
+			t.Error("timestamp_column:\"\" should add no time column")
+		}
+	})
 }

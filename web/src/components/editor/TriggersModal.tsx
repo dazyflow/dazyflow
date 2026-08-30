@@ -184,12 +184,14 @@ export function WebhookTab({
   onChange,
   onCreate,
   onRemove,
+  triggerLive,
 }: {
   graph: Graph;
   webhook?: GraphTrigger;
   onChange: (patch: Partial<GraphTrigger>) => void;
   onCreate?: () => void;
   onRemove?: () => void;
+  triggerLive?: { published: boolean; dirty: boolean };
 }) {
   const { t } = useTranslation();
   const { me } = useAuth();
@@ -241,6 +243,7 @@ export function WebhookTab({
         <summary>{t("settings.triggers.curlLabel")}</summary>
         <div className="webhook-recipes-body">
           <CodeBlock value={buildCurl(graph, webhookKeys(webhook)[0] ?? "", baseURL)} />
+          <CurlCaveat webhook={webhook} triggerLive={triggerLive} />
           <div className="desc">
             <Trans i18nKey="settings.triggers.curlDesc" components={[<code />]} />
           </div>
@@ -248,6 +251,54 @@ export function WebhookTab({
       </details>
     </div>
   );
+}
+
+// CurlCaveat says what still has to be true before the command above works.
+//
+// The panel used to print the curl under a flat "The command works exactly as
+// shown" — which was false twice over. With no key generated the snippet
+// carries the literal <bearer-secret> placeholder and 401s; and because a
+// secret key is a draft edit like any other, even a real key 401s until the
+// flow is published again. Both are invisible from here, and the reader has
+// no way to tell a wrong copy-paste from a flow that simply isn't live.
+//
+// Renders nothing once the command genuinely does work as printed.
+function CurlCaveat({
+  webhook,
+  triggerLive,
+}: {
+  webhook?: GraphTrigger;
+  triggerLive?: { published: boolean; dirty: boolean };
+}) {
+  const { t } = useTranslation();
+  const hasKey = webhookKeys(webhook).length > 0;
+  // Unknown publish state (still loading, or a surface that doesn't pass it)
+  // must not invent a warning — say nothing rather than something wrong.
+  const notLive = triggerLive && (!triggerLive.published || triggerLive.dirty);
+
+  if (!hasKey) {
+    return (
+      <div className="webhook-curl-caveat" role="note">
+        <Info size={ICON.sm} aria-hidden="true" />
+        <span>{t("settings.triggers.curlNeedsKey")}</span>
+      </div>
+    );
+  }
+  if (notLive) {
+    return (
+      <div className="webhook-curl-caveat" role="note">
+        <Info size={ICON.sm} aria-hidden="true" />
+        <span>
+          {t(
+            triggerLive?.published
+              ? "settings.triggers.curlNeedsRepublish"
+              : "settings.triggers.curlNeedsPublish",
+          )}
+        </span>
+      </div>
+    );
+  }
+  return null;
 }
 
 // WebhookStatusLine is the at-a-glance reachability answer the

@@ -429,7 +429,8 @@
       },
       "ai": {
         "title": "Beskriv vad du vill ha",
-        "desc": "Säg det på vanlig svenska så tar Dazyflow fram ett utkast åt dig, klart att granska."
+        "desc": "Säg det på vanlig svenska så tar Dazyflow fram ett utkast åt dig, klart att granska.",
+        "needsProvider": "Kräver att en AI-leverantör är ansluten först."
       },
       "blank": {
         "title": "Från tomt",
@@ -529,7 +530,10 @@
       "generate": "Skapa en nyckel",
       "bearerSecretDesc": "Anroparen skickar <0>Authorization: Bearer …</0> i varje anrop. Vilken som helst av nycklarna fungerar — lägg till en ny, ställ om dina anropare och återkalla sedan den gamla utan avbrott.",
       "curlLabel": "Exempelanrop (curl)",
-      "curlDesc": "Kommandot fungerar precis som det står. En body i klartext landar som text på stegets Data-utgång; en JSON-body (Content-Type: application/json) kommer in som strukturerad data du kan plocka fält ur.",
+      "curlDesc": "En body i klartext landar som text på stegets Body-utgång; en JSON-body (Content-Type: application/json) kommer in som strukturerad data du kan plocka fält ur.",
+      "curlNeedsKey": "Generera en nyckel först — som det står skickar kommandot platshållaren och nekas.",
+      "curlNeedsPublish": "Publicera flödet innan du kör det här — ett opublicerat utkast tar inte emot anrop, med eller utan nyckel.",
+      "curlNeedsRepublish": "Nyckeln ligger i ditt utkast. Publicera dina ändringar innan du kör det här, annars nekas anropet.",
       "cronExpression": "Cron-uttryck",
       "cronNextLocal": "Nästa körningar (din tid, {{tz}}):",
       "scheduleTzNote": "Tiderna gäller din tidszon ({{tz}}).",
@@ -627,8 +631,8 @@
     "forkFailed": "Kunde inte skapa \"{{title}}\": {{error}}",
     "integrationsUsed": "appar som används",
     "filteredByTemplate": "Visar: {{title}}",
-    "adminBlocked": "Tillgänglig när administratören har aktiverat {{names}}.",
-    "adminBlockedTitle": "Administratören har inte aktiverat {{names}} ännu — du kan inte använda mallen förrän det är gjort.",
+    "adminBlocked": "Kräver {{names}}, som inte är uppsatt på den här Dazyflow-servern än.",
+    "adminBlockedTitle": "Mallen kräver {{names}}, och appen är inte uppsatt på den här Dazyflow-servern. Den som driver servern behöver aktivera den först.",
     "uncategorized": "Mer",
     "filteredBy": "Visar: {{category}}",
     "showAll": "Visa alla mallar",
@@ -1727,7 +1731,11 @@
     },
     "dictDuplicate": "Två poster heter båda {{key}} — bara den sista används.",
     "dictRemoveConfirm": "Ta bort {{key}}?",
-    "dictRemoveConfirmUnnamed": "Ta bort den här posten?"
+    "dictRemoveConfirmUnnamed": "Ta bort den här posten?",
+    "collectionName": {
+      "willCreate": "Skapar en ny samling som heter ”{{name}}”.",
+      "willAppend": "Lägger till i din befintliga samling ”{{name}}”."
+    }
   },
   "forEach": {
     "bodyHint": "Koppla utgången Loopens innehåll till det första steget du vill köra för varje rad. Alla steg efter det körs också en gång per rad.",

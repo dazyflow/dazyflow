@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"git.sr.ht/~klahr/dazyflow/core"
 	"git.sr.ht/~klahr/dazyflow/drops/internal/limits"
@@ -48,7 +49,7 @@ func init() {
 			// disturbing the deliberate ranking below SQLite Insert rows for
 			// those generic verbs (see SearchBoost note there).
 			Tags:        []string{"collection", "collections", "store", "database", "save", "append", "no-setup", "results", "dashboard", "report"},
-			Description: "Save rows to a collection — no database to set up and no connection string to paste. Pick a collection name and the rows land there; the collection is created automatically the first time. Each workspace has its own private Collections, and the saved rows show up under Collections so you can browse them in-app. By default every run appends; set “Unique by” to a key column (like date) and a row with a matching key is updated in place instead of piling up a duplicate — so re-running the flow stays idempotent.",
+			Description: "Save rows to a collection — no database to set up and no connection string to paste. Pick a collection name and the rows land there; the collection is created automatically the first time. Each workspace has its own private Collections, and the saved rows show up under Collections so you can browse them in-app. Every row is stamped with the time it was saved (a saved_at column) so you can sort newest-first. By default every run appends; set “Unique by” to a key column (like date) and a row with a matching key is updated in place instead of piling up a duplicate — so re-running the flow stays idempotent.",
 			Summary:     "Append rows to a workspace-local collection with zero setup; auto-creates the collection, evolves columns on the fly, and surfaces the rows under Collections.",
 			Examples: []core.ParamsExample{
 				{
@@ -77,9 +78,10 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"table":        {"type":"string","title":"Collection","description":"Name of the collection to save into, e.g. leads or signups. Created automatically the first time.","examples":["leads"]},
+					"table":        {"type":"string","format":"collection-name","title":"Collection","description":"Name of the collection to save into, e.g. leads or signups. Pick one you already have, or type a new name and it's created the first time rows arrive.","examples":["leads"]},
 					"unique_by":    {"type":"array","items":{"type":"string"},"format":"collection-columns","title":"Unique by","description":"Optional. Column(s) that identify a row, e.g. date. When set, re-saving a row with the same key updates it in place instead of adding a duplicate, so re-running the flow is idempotent. Leave empty to always append."},
-					"column_types": {"type":"object","additionalProperties":{"type":"string"},"description":"Optional: force a column's type (e.g. {\"age\":\"INTEGER\"}). Everything defaults to text, which is fine for most things."}
+					"column_types": {"type":"object","additionalProperties":{"type":"string"},"description":"Optional: force a column's type (e.g. {\"age\":\"INTEGER\"}). Everything defaults to text, which is fine for most things."},
+					"timestamp_column": {"type":"string","title":"Time column","description":"Every saved row is stamped with the time it was saved, in a column called saved_at, so you can sort newest-first. Rename it here, or set it to empty to turn the stamp off. If your own rows already include a column of that name, yours is kept.","default":"saved_at"}
 				},
 				"required":["table"]
 			}`),
@@ -104,11 +106,11 @@ func init() {
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Latest 50 leads",
-					Params: json.RawMessage(`{"sql":"SELECT * FROM leads ORDER BY submitted_at DESC LIMIT 50"}`),
+					Params: json.RawMessage(`{"sql":"SELECT * FROM leads ORDER BY saved_at DESC LIMIT 50"}`),
 				},
 				{
 					Title:  "Filter by status with a placeholder",
-					Params: json.RawMessage(`{"sql":"SELECT email, submitted_at FROM leads WHERE status = ?","params":["new"],"limit":200}`),
+					Params: json.RawMessage(`{"sql":"SELECT email, saved_at FROM leads WHERE status = ?","params":["new"],"limit":200}`),
 					Notes:  "Values for ? placeholders go in params, in order.",
 				},
 			},
@@ -121,7 +123,7 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"sql":    {"type":"string","title":"SQL","description":"A SELECT to run against your Collections.","examples":["SELECT * FROM leads ORDER BY submitted_at DESC LIMIT 50"]},
+					"sql":    {"type":"string","title":"SQL","description":"A SELECT to run against your Collections.","examples":["SELECT * FROM leads ORDER BY saved_at DESC LIMIT 50"]},
 					"params": {"type":"array","items":{},"title":"Query values","description":"Values for any ? placeholders in the SQL, in order."},
 					"limit":  {"type":"integer","minimum":1,"title":"Row limit","description":"Optional cap on the number of rows returned."}
 				},
@@ -234,6 +236,30 @@ func executeBuiltinStoreAppend(ctx context.Context, job core.Job, _ chan<- core.
 		}
 	}
 
+	// Stamp when each row was saved. Without this a collection answers "what
+	// did people say" but never "when did this arrive" — and the Find/Query
+	// steps offer a "Sort by" that had no time column to point at, so the
+	// obvious "newest first" was impossible on the very path (form → save)
+	// this store exists for. The column is added to the END of the header
+	// list so it never disturbs the owner's own column order.
+	//
+	// Skipped when the incoming rows already carry a column of that name: the
+	// caller's own value wins over ours (a form that posts its own
+	// submitted_at, a re-import that carries original timestamps).
+	//
+	// Only when there is something to save: stamping an empty payload would
+	// add a saved_at column (and so CREATE the collection) for a run that
+	// saved no rows, turning a no-op into a schema change.
+	if tsCol, tsErr := timestampColumn(job, headers); tsErr != nil {
+		return params.Err(job, "bad_param", tsErr.Error()), nil
+	} else if tsCol != "" && len(rows) > 0 {
+		stamp := time.Now().UTC().Format(time.RFC3339)
+		for _, row := range rows {
+			row[tsCol] = stamp
+		}
+		headers = append(headers, tsCol)
+	}
+
 	uniqueBy, keyErr := parseUniqueBy(job, headers)
 	if keyErr != nil {
 		return *keyErr, nil
@@ -300,6 +326,41 @@ func executeBuiltinStoreAppend(ctx context.Context, job core.Job, _ chan<- core.
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{"inserted": {MIME: "application/json", Inline: inserted}},
 	}, nil
+}
+
+// defaultTimestampColumn is the column the Collections store stamps each
+// saved row with. Named for what it records — when the row was SAVED — rather
+// than when anything happened upstream, which only the caller can know.
+const defaultTimestampColumn = "saved_at"
+
+// timestampColumn resolves which column (if any) should carry the save time.
+// Defaults to saved_at; the "timestamp_column" param renames it (to match an
+// existing convention like submitted_at) or, set to "", turns it off for
+// owners who want the collection to hold exactly the columns they send.
+//
+// Returns "" when the incoming rows already declare that column, so a value
+// the caller supplied is never overwritten by ours.
+func timestampColumn(job core.Job, headers []string) (string, error) {
+	col := defaultTimestampColumn
+	if raw, ok := job.Params["timestamp_column"]; ok && raw != nil {
+		s, isStr := raw.(string)
+		if !isStr {
+			return "", fmt.Errorf("timestamp_column must be a column name, or \"\" to turn the timestamp off")
+		}
+		col = strings.TrimSpace(s)
+		if col == "" {
+			return "", nil
+		}
+	}
+	if err := validateIdent(col); err != nil {
+		return "", fmt.Errorf("timestamp column %q: %w", col, err)
+	}
+	for _, h := range headers {
+		if strings.EqualFold(h, col) {
+			return "", nil // the caller supplies it; don't clobber
+		}
+	}
+	return col, nil
 }
 
 // parseUniqueBy reads the optional "unique_by" key columns for an idempotent
