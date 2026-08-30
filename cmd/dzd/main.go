@@ -710,7 +710,7 @@ func main() {
 		defer bgWg.Done()
 		bufferedUsage.Run(ctx, 5*time.Second)
 	}()
-	startBackgroundJobs(ctx, backgroundDeps{
+	isLeader := startBackgroundJobs(ctx, backgroundDeps{
 		svc:           svc,
 		jobs:          jobs,
 		bus:           bus,
@@ -824,6 +824,7 @@ func main() {
 	if httpListen != "" {
 		buildGateway(ctx, &bgWg, gatewayDeps{
 			svc:              svc,
+			isLeader:         isLeader,
 			logTail:          logTail,
 			users:            users,
 			sessions:         sessions,
@@ -1146,11 +1147,25 @@ type backgroundDeps struct {
 // coming online runs a script for a dead run.
 const runnerSweepInterval = time.Minute
 
+// ticketNudgeInterval is how often the support-reminder sweep looks. Much
+// finer than the threshold it enforces (a day, by default) so that an operator
+// who sets a short threshold gets roughly what they asked for — the sweep is a
+// bounded query plus, at most, one mail per waiting ticket per period, so
+// looking often costs almost nothing. No startup pass: a daemon restart is not
+// evidence that anyone stopped reading, and firing a batch of reminders on
+// every deploy is how a restart loop becomes a mail storm.
+const ticketNudgeInterval = 15 * time.Minute
+
 // startBackgroundJobs launches the worker pool, the cron scheduler (with
 // Postgres leader election when a pool is present), the orphaned-run reaper,
 // and the retention sweeps. Every goroutine registers with bgWg and stops on
 // ctx cancel, so shutdown can drain them.
-func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitGroup) {
+// Returns the leader predicate, so a later caller that must also act on
+// exactly one node (the support-reminder sweep in buildGateway) can share this
+// election instead of taking a second advisory lock — each PgLeader holds a
+// session connection for its lifetime, and the pool reserve above is sized for
+// one. nil means single-node, where "am I the leader" is trivially yes.
+func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitGroup) func() bool {
 	// Spin up worker goroutines. Each is independent and competes for
 	// claims; the JobStore makes that contention safe.
 	for i := 0; i < d.workerCount; i++ {
@@ -1256,10 +1271,16 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 	sched.SetPollStateReader(pollstate.Read)
 	// Multi-node: gate firing on a Postgres advisory-lock leader so only one
 	// dzd fires each schedule. Single-node stays the default always-leader.
+	// Shared with the ticket-reminder sweep below, which must also run on
+	// exactly one node. Reusing this election rather than taking a second
+	// advisory lock keeps the connection reserve above honest — each PgLeader
+	// holds a session connection for as long as it runs.
+	var isLeader func() bool
 	if d.pgPool != nil {
 		leader := daemon.NewPgLeader(d.pgPool, daemon.SchedulerLockKey)
 		go leader.Run(ctx)
-		sched.SetLeader(leader.IsLeader)
+		isLeader = leader.IsLeader
+		sched.SetLeader(isLeader)
 		log.Print("scheduler: leader election via postgres advisory lock")
 	}
 	bgWg.Add(1)
@@ -1326,6 +1347,7 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 	}()
 
 	startRetentionSweeps(ctx, d.svc, d.jobs, d.runLogs, d.pgPool, bgWg)
+	return isLeader
 }
 
 // startRetentionSweeps prunes the jobs table, audit_events, and run_logs
@@ -1537,21 +1559,25 @@ type gatewayDeps struct {
 	approval         *daemon.ApprovalListener
 	metrics          *daemon.Metrics
 	pgPool           *pgxpool.Pool
-	httpListen       string
-	webDist          string
-	landingDir       string
-	webOrigin        string
-	wildcardDomain   string
-	slackSigning     string
-	githubWebhook    string
-	stripeSecretKey  string
-	stripePriceID    string
-	stripeWebhook    string
-	enableSignup     bool
-	enableMetrics    bool
-	trustProxy       bool
-	authRatePerMin   int
-	authRateBurst    int
+	// isLeader gates work that must happen on exactly one node — the
+	// support-reminder sweep. nil means single-node. Shared with the scheduler
+	// rather than elected again; see startBackgroundJobs.
+	isLeader        func() bool
+	httpListen      string
+	webDist         string
+	landingDir      string
+	webOrigin       string
+	wildcardDomain  string
+	slackSigning    string
+	githubWebhook   string
+	stripeSecretKey string
+	stripePriceID   string
+	stripeWebhook   string
+	enableSignup    bool
+	enableMetrics   bool
+	trustProxy      bool
+	authRatePerMin  int
+	authRateBurst   int
 }
 
 // buildGateway configures the HTTP gateway from d, binds its listener, and
@@ -1671,6 +1697,43 @@ func buildGateway(ctx context.Context, bgWg *sync.WaitGroup, d gatewayDeps) {
 			log.Printf("support inbox: %s (new-ticket notifications)", gw.SupportInbox)
 		} else {
 			log.Print("support inbox: unset (DAZYFLOW_SUPPORT_INBOX) — no new-ticket notifications")
+		}
+
+		// Reminders for a message nobody has opened. support_notify.go already
+		// mails on every reply; this is the later nudge for the one that was
+		// missed, so a thread cannot go quiet with each side assuming the other
+		// is dealing with it. Set the threshold to 0 to turn it off.
+		nudgeAfter := envDuration("DAZYFLOW_SUPPORT_NUDGE_AFTER", 24*time.Hour)
+		if nudgeAfter > 0 {
+			sweeper := &daemon.TicketNudgeSweeper{
+				Tickets: ticketStore,
+				After:   nudgeAfter,
+				Leader:  d.isLeader,
+				Notify:  gw.NotifyTicketWaiting,
+			}
+			bgWg.Add(1)
+			go func() {
+				defer bgWg.Done()
+				t := time.NewTicker(ticketNudgeInterval)
+				defer t.Stop()
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case <-t.C:
+						n, err := sweeper.Sweep(ctx)
+						if err != nil && ctx.Err() == nil {
+							log.Printf("support: reminder sweep: %v", err)
+						}
+						if n > 0 {
+							log.Printf("support: reminded %d ticket(s) nobody had opened", n)
+						}
+					}
+				}
+			}()
+			log.Printf("support reminders: after %s (DAZYFLOW_SUPPORT_NUDGE_AFTER)", nudgeAfter)
+		} else {
+			log.Print("support reminders: off (DAZYFLOW_SUPPORT_NUDGE_AFTER=0)")
 		}
 	}
 	// Opt-in (compliance) auditing of secret *reads*. Off by default because

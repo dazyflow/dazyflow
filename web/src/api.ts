@@ -2197,6 +2197,14 @@ export const api = {
     request<TicketView>(token, "POST", `/support/tickets/${encodeURIComponent(id)}/messages`, {
       message,
     }),
+  // markTicketRead records that a person actually opened the thread, which is
+  // what stops the reminder sweep mailing them about a message they have read.
+  // An explicit call rather than a side effect of the GET: the thread polls
+  // while it is open, and "we fetched it" is not "a person looked at it".
+  markMyTicketRead: (token: string, id: string) =>
+    request<TicketView>(token, "POST", `/me/support/tickets/${encodeURIComponent(id)}/read`),
+  markSupportTicketRead: (token: string, id: string) =>
+    request<TicketView>(token, "POST", `/support/tickets/${encodeURIComponent(id)}/read`),
   setSupportTicketStatus: (token: string, id: string, status: TicketStatus) =>
     request<TicketView>(token, "POST", `/support/tickets/${encodeURIComponent(id)}/status`, {
       status,

@@ -170,6 +170,110 @@ func (h *HTTPGateway) notifyUserReplied(t core.Ticket) {
 	})
 }
 
+// notifyWaitingOnUser reminds the customer that support answered and is waiting.
+//
+// Distinct from notifySupportReplied, which fires the moment support answers.
+// This one fires later and only when the reply was never opened — the case the
+// first mail did not reach, or reached and was forgotten. Same opt-out, because
+// it is the same kind of message: useful, not transactional.
+func (h *HTTPGateway) notifyWaitingOnUser(t core.Ticket) {
+	if !h.supportMailReady() || t.CreatedBy == "" {
+		return
+	}
+	h.goSupportMail(func(ctx context.Context) {
+		to, ok := h.supportOptInAddress(ctx, t.CreatedBy)
+		if !ok {
+			return
+		}
+		url := h.ticketURLFor(t, false)
+		// Goes to the customer, who has an account here, so it is written in
+		// THEIR language.
+		m := h.svc.mailMsgs(ctx, to)
+		c := emailtheme.Content{
+			Subject:   fmt.Sprintf(m.SupportWaitingSubject, t.Subject),
+			Preheader: m.SupportWaitingPreheader,
+			Eyebrow:   m.SupportEyebrow,
+			Heading:   m.SupportWaitingHeading,
+			Tone:      "info",
+			Intro:     []string{fmt.Sprintf(m.SupportWaitingIntro, t.Subject)},
+			Outro:     []string{m.SupportWaitingOutro},
+			LogoURL:   emailLogoURL(h.svc.PublicBaseURL),
+		}
+		if url != "" {
+			c.Button = &emailtheme.Button{Label: m.SupportButton, URL: url}
+		}
+		h.sendSupportMail(ctx, to, emailtheme.PlainText(c), c, t)
+	})
+}
+
+// notifyWaitingOnSupport reminds the support side that a customer is waiting and
+// nobody has opened the ticket since they wrote.
+//
+// English, like the other queue-side mail: it goes to the operator's own staff,
+// and a shared inbox from configuration carries no language preference.
+func (h *HTTPGateway) notifyWaitingOnSupport(t core.Ticket, waiting time.Duration) {
+	to := supportQueueRecipient(t, h.SupportInbox)
+	if !h.supportMailReady() || to == "" {
+		return
+	}
+	h.goSupportMail(func(ctx context.Context) {
+		url := h.ticketURLFor(t, true)
+		age := formatWaited(waiting)
+		c := emailtheme.Content{
+			Subject:   fmt.Sprintf("Unanswered for %s: %s", age, t.Subject),
+			Preheader: "A support ticket has been waiting with nobody on it.",
+			Eyebrow:   "Support queue",
+			Heading:   "A ticket is still waiting",
+			Tone:      "warning",
+			Intro: []string{
+				fmt.Sprintf("%s wrote on “%s” %s ago and nobody has opened it since.",
+					t.Tenant, t.Subject, age),
+			},
+			Facts: []emailtheme.Fact{
+				{Label: "Organization", Value: t.Tenant},
+				{Label: "Ticket", Value: t.Subject},
+				{Label: "Waiting", Value: age},
+			},
+			LogoURL: emailLogoURL(h.svc.PublicBaseURL),
+		}
+		if url != "" {
+			c.Button = &emailtheme.Button{Label: "Open in queue", URL: url}
+		}
+		text := fmt.Sprintf("%s wrote on the support ticket %q %s ago and nobody has opened it since.\n\nOpen it: %s\n",
+			t.Tenant, t.Subject, age, url)
+		h.sendSupportMail(ctx, to, text, c, t)
+	})
+}
+
+// NotifyTicketWaiting is the TicketNudgeSweeper's Notify hook: it turns "this
+// side is waiting" into the right mail for that side. Exported because the
+// sweeper is constructed in cmd/dzd, and kept as a one-line dispatch so the
+// sweep itself never learns which audience gets which template.
+func (h *HTTPGateway) NotifyTicketWaiting(t core.Ticket, side NudgeSide, waiting time.Duration) {
+	if side == NudgeUser {
+		h.notifyWaitingOnUser(t)
+		return
+	}
+	h.notifyWaitingOnSupport(t, waiting)
+}
+
+// formatWaited renders a waiting time the way a person would say it. Whole days
+// once there is at least one, whole hours below that — a reminder that says
+// "26h" when it means "over a day" reads like a machine talking to itself.
+func formatWaited(d time.Duration) string {
+	if days := int(d.Hours()) / 24; days >= 1 {
+		if days == 1 {
+			return "1 day"
+		}
+		return fmt.Sprintf("%d days", days)
+	}
+	hours := int(d.Hours())
+	if hours <= 1 {
+		return "1 hour"
+	}
+	return fmt.Sprintf("%d hours", hours)
+}
+
 // supportQueueRecipient picks who on the support side hears about activity on a
 // ticket: the agent who owns it, or the shared inbox when it's unclaimed.
 // Returns "" when neither exists, which the callers treat as "send nothing"

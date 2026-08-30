@@ -2273,6 +2273,20 @@
     "claim": "Claim",
     "release": "Release",
     "close": "Close ticket",
+    "readByCustomer": "Read by customer {{time}}",
+    "notReadYet": "Not read yet",
+    "note": {
+      "customerClosed": "The customer closed this ticket.",
+      "customerClosedYou": "You closed this ticket.",
+      "customerReopened": "The customer reopened this ticket.",
+      "customerReopenedYou": "You reopened this ticket.",
+      "markedOpen": "Ticket marked open.",
+      "markedAwaitingUser": "Ticket marked awaiting user.",
+      "markedAwaitingSupport": "Ticket marked awaiting support.",
+      "markedResolved": "Ticket marked resolved.",
+      "markedClosed": "Ticket marked closed.",
+      "grantRequested": "Support requested read-only access to this flow. An organization admin must approve it."
+    },
     "confirmCloseTitle": "Close this ticket?",
     "confirmCloseBody": "Support will stop working on it. Replying reopens it, so nothing is lost.",
     "stats": {

@@ -171,6 +171,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/me/support/tickets/{id}/bundle", h.requireAuth(h.getMyTicketBundle))
 	mux.HandleFunc("POST /api/v1/me/support/tickets/{id}/messages", h.requireAuth(h.postMyTicketMessage))
 	mux.HandleFunc("POST /api/v1/me/support/tickets/{id}/status", h.requireAuth(h.setMyTicketStatus))
+	mux.HandleFunc("POST /api/v1/me/support/tickets/{id}/read", h.requireAuth(h.markMyTicketRead))
 	mux.HandleFunc("GET /api/v1/support/tickets", h.requireAuth(h.listTicketQueue))
 	// /summary before /{id}: a literal segment outranks a wildcard in ServeMux's
 	// precedence rules, so the dashboard's counts can't be read as a ticket id.
@@ -179,6 +180,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/support/tickets/{id}/bundle", h.requireAuth(h.getSupportTicketBundle))
 	mux.HandleFunc("POST /api/v1/support/tickets/{id}/messages", h.requireAuth(h.postSupportTicketMessage))
 	mux.HandleFunc("POST /api/v1/support/tickets/{id}/status", h.requireAuth(h.setSupportTicketStatus))
+	mux.HandleFunc("POST /api/v1/support/tickets/{id}/read", h.requireAuth(h.markSupportTicketRead))
 	mux.HandleFunc("POST /api/v1/support/tickets/{id}/assign", h.requireAuth(h.assignSupportTicket))
 	// Self-service rectification (Art. 16): change own password / email.
 	mux.HandleFunc("POST /api/v1/me/password", h.requireAuth(h.changePasswordHandler))

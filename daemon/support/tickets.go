@@ -239,6 +239,14 @@ CREATE INDEX IF NOT EXISTS support_tickets_tenant_idx ON support_tickets (tenant
 CREATE INDEX IF NOT EXISTS support_tickets_queue_idx ON support_tickets (updated_at DESC);
 CREATE INDEX IF NOT EXISTS support_tickets_assignee_idx ON support_tickets (assigned_to, updated_at DESC);
 
+-- Read receipts and reminder clocks, added after the table shipped. The zero
+-- value is Go's zero time rather than NULL so the scan stays a plain
+-- time.Time and "never" is IsZero() on both sides of the wire.
+ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS user_read_at      TIMESTAMPTZ NOT NULL DEFAULT '0001-01-01 00:00:00+00';
+ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS support_read_at   TIMESTAMPTZ NOT NULL DEFAULT '0001-01-01 00:00:00+00';
+ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS user_nudged_at    TIMESTAMPTZ NOT NULL DEFAULT '0001-01-01 00:00:00+00';
+ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS support_nudged_at TIMESTAMPTZ NOT NULL DEFAULT '0001-01-01 00:00:00+00';
+
 CREATE TABLE IF NOT EXISTS support_ticket_messages (
     id          TEXT PRIMARY KEY,
     ticket_id   TEXT NOT NULL,
@@ -250,6 +258,38 @@ CREATE TABLE IF NOT EXISTS support_ticket_messages (
 );
 CREATE INDEX IF NOT EXISTS support_ticket_messages_thread_idx
     ON support_ticket_messages (ticket_id, created_at);
+
+-- Added after the messages table shipped.
+ALTER TABLE support_ticket_messages ADD COLUMN IF NOT EXISTS system_code TEXT NOT NULL DEFAULT '';
+
+-- Backfill the notes written before the column existed. Without this the web
+-- falls back to their English body forever, so every thread that predates the
+-- change keeps an English sentence wedged between translated messages — the
+-- exact bug, surviving in all the data that already exists.
+--
+-- Matching on English prose is the fragile thing the code column exists to
+-- avoid, and it is safe HERE for reasons that do not hold at runtime: this is
+-- a closed, frozen set of sentences this daemon wrote itself, matched exactly,
+-- once. A sentence that has since been reworded simply misses and keeps its
+-- fallback, which is the same behaviour as not backfilling at all.
+--
+-- Idempotent, and cheap to re-run: after the first pass the WHERE matches
+-- nothing. It stays in the schema rather than living in a one-shot script
+-- because a deployment that has not booted since the column landed still needs
+-- it, and there is no migration runner to remember that for us.
+UPDATE support_ticket_messages SET system_code = CASE body
+    WHEN 'The customer closed this ticket.'   THEN 'customer_closed'
+    WHEN 'The customer reopened this ticket.' THEN 'customer_reopened'
+    WHEN 'Ticket marked open.'                THEN 'marked_open'
+    WHEN 'Ticket marked awaiting_user.'       THEN 'marked_awaiting_user'
+    WHEN 'Ticket marked awaiting_support.'    THEN 'marked_awaiting_support'
+    WHEN 'Ticket marked resolved.'            THEN 'marked_resolved'
+    WHEN 'Ticket marked closed.'              THEN 'marked_closed'
+    WHEN 'Support requested read-only access to this flow. An organization admin must approve it.'
+                                              THEN 'grant_requested'
+    ELSE ''
+  END
+  WHERE author_kind = 'system' AND system_code = '';
 `
 
 // EnsurePgTicketSchema creates the ticket tables. Idempotent.
@@ -320,7 +360,8 @@ func NewPgTicketStore(ctx context.Context, pool *pgxpool.Pool) (*PgTicketStore, 
 var _ core.TicketStore = (*PgTicketStore)(nil)
 
 const ticketCols = `id, tenant, workspace, created_by, subject, status,
-	flow_id, run_id, bundle_id, assigned_to, created_at, updated_at`
+	flow_id, run_id, bundle_id, assigned_to, created_at, updated_at,
+	user_read_at, support_read_at, user_nudged_at, support_nudged_at`
 
 func scanTicket(r pgScanner) (core.Ticket, error) {
 	var (
@@ -328,7 +369,8 @@ func scanTicket(r pgScanner) (core.Ticket, error) {
 		status string
 	)
 	if err := r.Scan(&t.ID, &t.Tenant, &t.Workspace, &t.CreatedBy, &t.Subject, &status,
-		&t.FlowID, &t.RunID, &t.BundleID, &t.AssignedTo, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		&t.FlowID, &t.RunID, &t.BundleID, &t.AssignedTo, &t.CreatedAt, &t.UpdatedAt,
+		&t.UserReadAt, &t.SupportReadAt, &t.UserNudgedAt, &t.SupportNudgedAt); err != nil {
 		return core.Ticket{}, err
 	}
 	t.Status = core.TicketStatus(status)
@@ -341,9 +383,10 @@ func (s *PgTicketStore) Create(ctx context.Context, t core.Ticket) error {
 	}
 	ct, err := s.pool.Exec(ctx,
 		`INSERT INTO support_tickets (`+ticketCols+`)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (id) DO NOTHING`,
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) ON CONFLICT (id) DO NOTHING`,
 		t.ID, t.Tenant, t.Workspace, t.CreatedBy, t.Subject, string(t.Status),
-		t.FlowID, t.RunID, t.BundleID, t.AssignedTo, t.CreatedAt, t.UpdatedAt)
+		t.FlowID, t.RunID, t.BundleID, t.AssignedTo, t.CreatedAt, t.UpdatedAt,
+		t.UserReadAt, t.SupportReadAt, t.UserNudgedAt, t.SupportNudgedAt)
 	if err != nil {
 		return err
 	}
@@ -500,9 +543,11 @@ func (s *PgTicketStore) queryTickets(ctx context.Context, sql string, args ...an
 func (s *PgTicketStore) Update(ctx context.Context, t core.Ticket) error {
 	ct, err := s.pool.Exec(ctx,
 		`UPDATE support_tickets
-		 SET subject=$2, status=$3, flow_id=$4, run_id=$5, bundle_id=$6, assigned_to=$7, updated_at=$8
+		 SET subject=$2, status=$3, flow_id=$4, run_id=$5, bundle_id=$6, assigned_to=$7, updated_at=$8,
+		     user_read_at=$9, support_read_at=$10, user_nudged_at=$11, support_nudged_at=$12
 		 WHERE id=$1`,
-		t.ID, t.Subject, string(t.Status), t.FlowID, t.RunID, t.BundleID, t.AssignedTo, t.UpdatedAt)
+		t.ID, t.Subject, string(t.Status), t.FlowID, t.RunID, t.BundleID, t.AssignedTo, t.UpdatedAt,
+		t.UserReadAt, t.SupportReadAt, t.UserNudgedAt, t.SupportNudgedAt)
 	if err != nil {
 		return err
 	}
@@ -523,9 +568,9 @@ func (s *PgTicketStore) AppendMessage(ctx context.Context, m core.TicketMessage)
 		return err
 	}
 	ct, err := s.pool.Exec(ctx,
-		`INSERT INTO support_ticket_messages (id, ticket_id, author, author_kind, body, bundle_id, created_at)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (id) DO NOTHING`,
-		m.ID, m.TicketID, m.Author, string(m.AuthorKind), m.Body, m.BundleID, m.CreatedAt)
+		`INSERT INTO support_ticket_messages (id, ticket_id, author, author_kind, body, system_code, bundle_id, created_at)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (id) DO NOTHING`,
+		m.ID, m.TicketID, m.Author, string(m.AuthorKind), m.Body, string(m.SystemCode), m.BundleID, m.CreatedAt)
 	if err != nil {
 		return err
 	}
@@ -537,7 +582,7 @@ func (s *PgTicketStore) AppendMessage(ctx context.Context, m core.TicketMessage)
 
 func (s *PgTicketStore) ListMessages(ctx context.Context, ticketID string) ([]core.TicketMessage, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, ticket_id, author, author_kind, body, bundle_id, created_at
+		`SELECT id, ticket_id, author, author_kind, body, system_code, bundle_id, created_at
 		 FROM support_ticket_messages WHERE ticket_id=$1 ORDER BY created_at`, ticketID)
 	if err != nil {
 		return nil, err
@@ -548,11 +593,13 @@ func (s *PgTicketStore) ListMessages(ctx context.Context, ticketID string) ([]co
 		var (
 			m    core.TicketMessage
 			kind string
+			code string
 		)
-		if err := rows.Scan(&m.ID, &m.TicketID, &m.Author, &kind, &m.Body, &m.BundleID, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.TicketID, &m.Author, &kind, &m.Body, &code, &m.BundleID, &m.CreatedAt); err != nil {
 			return nil, err
 		}
 		m.AuthorKind = core.AuthorKind(kind)
+		m.SystemCode = core.SystemNote(code)
 		out = append(out, m)
 	}
 	return out, rows.Err()

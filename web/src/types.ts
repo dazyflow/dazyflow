@@ -1471,6 +1471,19 @@ export type Ticket = {
   assigned_to?: string;
   created_at: string;
   updated_at: string;
+  // When each side last OPENED the thread — the receipt the unread-reminder
+  // sweep runs on, and what backs the agent's "Read by customer" line.
+  //
+  // Per thread, not per message: it says when the ticket was last looked at,
+  // so a support message older than it has been seen. Absent means no receipt
+  // was ever recorded (a ticket predating read tracking, or one filed through
+  // the API), which is "we do not know" rather than "not read".
+  //
+  // support_read_at is stripped from the customer's view on purpose — see
+  // ticketForUser in daemon/ticket_routes.go — so it is only ever populated on
+  // the agent surface.
+  user_read_at?: string;
+  support_read_at?: string;
 };
 
 // TicketAuthorKind mirrors core.AuthorKind — who wrote a chat message.
@@ -1484,6 +1497,13 @@ export type TicketMessage = {
   author?: string;
   author_kind: TicketAuthorKind;
   body: string;
+  // system_code names which machine-generated note this is, for author_kind
+  // "system" only. `body` carries the daemon's English prose for API readers
+  // and email digests; this is what lets the translated UI say the same thing
+  // in the reader's language instead of dropping an English sentence into a
+  // Swedish thread. Absent on older rows and older daemons — render `body`
+  // when it is missing or unrecognised.
+  system_code?: string;
   bundle_id?: string;
   created_at: string;
 };

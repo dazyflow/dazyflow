@@ -109,8 +109,8 @@ func (h *HTTPGateway) requestGrant(rw http.ResponseWriter, r *http.Request, p co
 	// so the user sees "support asked to view this flow" in context (the grant
 	// prompt lives on the ticket, per docs/support-tickets-design.md).
 	if h.ticketsEnabled() && grant.TicketID != "" {
-		_ = h.appendTicketMessage(r.Context(), grant.TicketID, "", core.AuthorSystem,
-			"Support requested read-only access to this flow. An organization admin must approve it.", "", now)
+		_ = h.appendSystemNote(r.Context(), grant.TicketID, core.NoteGrantRequested,
+			"Support requested read-only access to this flow. An organization admin must approve it.", now)
 	}
 	writeJSON(rw, http.StatusCreated, grant)
 }

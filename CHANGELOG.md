@@ -23,6 +23,107 @@ into the image.)
 
 ## [Unreleased]
 
+### Fixed
+
+- **An agent can now see whether the customer read their reply.** "Read by
+  customer 14:32" sits under the newest support message in the queue view, or
+  "Not read yet" when the customer last opened the ticket before it arrived.
+  Answers the question that otherwise costs a follow-up ticket.
+
+  On the newest support message only. The receipt is per THREAD rather than per
+  message — it records when the ticket was last opened — so every older reply
+  has been read too, but tagging them all turns a signal into wallpaper, and the
+  last one is what decides what the agent does next.
+
+  A ticket with no receipt at all shows nothing rather than "Not read yet". No
+  receipt means the ticket predates read tracking or was filed through the API,
+  and stating the stronger claim there would be a confident guess. No badge
+  means no information, not bad news.
+
+  Agent side only, on purpose. The mirror — telling a customer support opened
+  their ticket and said nothing — is a stopwatch on the desk rather than an
+  answer to a question, so the customer's view keeps stripping that timestamp
+  and offers no indicator either. There is deliberately no "delivered" tick:
+  the message is in the database or the POST failed, so a delivered indicator
+  would be lit the instant a bubble appeared, which is how people learn to
+  ignore ticks generally.
+
+- **A support thread could go quiet with nobody told.** Mail went out on every
+  reply, which covers the case where someone is paying attention. It did nothing
+  for the case where nobody is: a mail missed, filtered, or opened and
+  forgotten, after which the customer assumes support is working on it and
+  support assumes the customer went away.
+
+  A ticket message left unread past `DAZYFLOW_SUPPORT_NUDGE_AFTER` (default
+  24h, `0` to disable) now earns its side a reminder — the customer who never
+  opened the answer, or the queue when nobody has looked at a question.
+
+  Read-aware, not just age-based. Opening a thread records a receipt, so
+  somebody who has read a message and not replied yet is never chased; that is a
+  staffing question, not a notification one. Age is the floor underneath it, so
+  a side that has never opened the ticket at all still gets told. Read receipts
+  are recorded by an explicit call rather than as a side effect of the GET: the
+  thread polls while open and other surfaces prefetch, and "we fetched it" is
+  not "a person looked at it".
+
+  Sent once per waiting period. A newer message from the other side starts a new
+  one; nothing else does. Terminal tickets are skipped, the sweep is
+  leader-gated so a multi-node install sends one reminder rather than one per
+  daemon, and there is no startup pass — a restart is not evidence that anyone
+  stopped reading, and firing a batch on every deploy is how a restart loop
+  becomes a mail storm.
+
+  The rule was wrong on its first draft in a way worth recording: it asked "is
+  there a message from the other side you have not read", which reminded support
+  about a question they had already answered. Answering is proof of reading, so
+  the thread's most recent message decides who is waiting — which also disposes
+  of the case that looked like it needed its own rule, replies crossing in
+  flight.
+
+- **System notes in a support thread were English in a Swedish UI.** "The
+  customer closed this ticket." sat between translated messages, and nothing
+  could fix it client-side: the daemon composes those notes as prose and stores
+  the sentence, so the only way to translate one was to match on its English
+  text.
+
+  Notes now carry a `system_code` alongside the prose. The web renders the
+  translation for a code it knows and falls back to `body` otherwise — which
+  covers rows written before the field existed, and a daemon newer than the UI.
+  The English stays the floor, never the ceiling, and an API reader or an email
+  digest still gets a readable sentence.
+
+  One code per sentence, no parameters: "marked resolved" and "marked closed"
+  are separate codes rather than one code plus a status argument. Interpolating
+  a status label into a sentence is where translations break — Swedish inflects
+  around the insertion point — and a flat code is greppable from both sides of
+  the stack.
+
+  The customer's own close and reopen also stop talking about them in the third
+  person: their thread now reads "You closed this ticket", the same complaint as
+  the email address above.
+
+  Two guards keep it fixed. On the Go side an AST walk fails the build if a
+  handler writes a system note through the generic append helper, which would
+  compile, store perfectly good English, and be untranslatable exactly as
+  before. On the web side the code list is read out of `core/ticket.go` rather
+  than restated, so a note added in Go fails the test until its copy is written.
+
+- **The support chat read your own email address back at you.** Every message
+  you sent was headed with your address rather than "You" — on your own screen,
+  above your own words, on every bubble.
+
+  `support.fromYou` was already in the code and already translated in both
+  locales; it just sat behind `m.author || t("support.fromYou")`, a fallback
+  for a missing author that the server never sends. So the label existed, was
+  correct, and had never once rendered.
+
+  It is now chosen by identity rather than by which side of the thread the
+  bubble sits on. Those come apart on the agent side, where every support reply
+  is on "your" side but only some are yours: labelling a colleague's message
+  "You" would misattribute their words. The customer's view is unchanged in the
+  one respect that matters there — a support reply still reads "Support", never
+  the individual agent.
+
 ## [0.27.4] - 2026-08-30
 
 ### Fixed

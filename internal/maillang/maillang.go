@@ -147,6 +147,14 @@ type Messages struct {
 	SupportResolvedHeading   string
 	SupportResolvedIntro     string // %s = ticket subject
 	SupportResolvedOutro     string
+	// The reminder: support answered and the customer never opened it. Sent
+	// once per waiting period by the nudge sweeper, not on every reply — that
+	// mail already exists.
+	SupportWaitingSubject   string // %s = ticket subject
+	SupportWaitingPreheader string
+	SupportWaitingHeading   string
+	SupportWaitingIntro     string // %s = ticket subject
+	SupportWaitingOutro     string
 
 	// ── Fact labels, shared by the notices above ──
 	FactFlow       string
@@ -261,6 +269,11 @@ var English = Messages{
 	SupportResolvedHeading:   "Your ticket was marked resolved",
 	SupportResolvedIntro:     "Support marked “%s” resolved.",
 	SupportResolvedOutro:     "If it isn't actually fixed, reply on the ticket and it reopens.",
+	SupportWaitingSubject:    "Still waiting for you: %s",
+	SupportWaitingPreheader:  "Support answered your ticket and is waiting on you.",
+	SupportWaitingHeading:    "Support is waiting for your reply",
+	SupportWaitingIntro:      "Support answered “%s” and hasn't heard back.",
+	SupportWaitingOutro:      "Open the ticket to read the reply. If you no longer need help, closing it tells support to stop.",
 
 	FactFlow:       "Flow",
 	FactRun:        "Run",
@@ -374,6 +387,11 @@ var Swedish = Messages{
 	SupportResolvedHeading:   "Ditt ärende har markerats som löst",
 	SupportResolvedIntro:     "Supporten har markerat ”%s” som löst.",
 	SupportResolvedOutro:     "Om det inte faktiskt är löst svarar du i ärendet, så öppnas det igen.",
+	SupportWaitingSubject:    "Väntar fortfarande på dig: %s",
+	SupportWaitingPreheader:  "Supporten har svarat på ditt ärende och väntar på dig.",
+	SupportWaitingHeading:    "Supporten väntar på ditt svar",
+	SupportWaitingIntro:      "Supporten har svarat på ”%s” och har inte hört något sedan dess.",
+	SupportWaitingOutro:      "Öppna ärendet för att läsa svaret. Om du inte behöver hjälp längre kan du stänga det, så vet supporten att den kan släppa det.",
 
 	FactFlow:       "Flöde",
 	FactRun:        "Körning",

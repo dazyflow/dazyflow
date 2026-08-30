@@ -2273,6 +2273,20 @@
     "claim": "Ta ärendet",
     "release": "Släpp ärendet",
     "close": "Stäng ärendet",
+    "readByCustomer": "Läst av kunden {{time}}",
+    "notReadYet": "Inte läst än",
+    "note": {
+      "customerClosed": "Kunden stängde ärendet.",
+      "customerClosedYou": "Du stängde ärendet.",
+      "customerReopened": "Kunden öppnade ärendet igen.",
+      "customerReopenedYou": "Du öppnade ärendet igen.",
+      "markedOpen": "Ärendet markerades som öppet.",
+      "markedAwaitingUser": "Ärendet markerades som väntar på användaren.",
+      "markedAwaitingSupport": "Ärendet markerades som väntar på supporten.",
+      "markedResolved": "Ärendet markerades som löst.",
+      "markedClosed": "Ärendet markerades som stängt.",
+      "grantRequested": "Supporten har begärt läsbehörighet till det här flödet. En administratör i organisationen måste godkänna det."
+    },
     "confirmCloseTitle": "Stäng det här ärendet?",
     "confirmCloseBody": "Supporten slutar arbeta med det. Om du svarar öppnas det igen, så inget går förlorat.",
     "stats": {

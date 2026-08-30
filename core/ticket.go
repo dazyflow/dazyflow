@@ -70,6 +70,18 @@ type Ticket struct {
 	AssignedTo string       `json:"assigned_to,omitempty"` // optional — support agent subject
 	CreatedAt  time.Time    `json:"created_at"`
 	UpdatedAt  time.Time    `json:"updated_at"`
+
+	// Read receipts, one per side of the thread: when that side last opened it.
+	// Zero means never. Written by the mark-read endpoints, read by the nudge
+	// sweeper to tell "hasn't answered yet" from "hasn't even looked".
+	UserReadAt    time.Time `json:"user_read_at,omitempty"`
+	SupportReadAt time.Time `json:"support_read_at,omitempty"`
+	// When each side was last emailed a reminder about a message it had not
+	// read. Compared against the message's own timestamp so a reminder is sent
+	// once per waiting period rather than on every sweep: a thread that mails
+	// repeatedly is one people filter.
+	UserNudgedAt    time.Time `json:"user_nudged_at,omitempty"`
+	SupportNudgedAt time.Time `json:"support_nudged_at,omitempty"`
 }
 
 // AuthorKind distinguishes who wrote a TicketMessage. "system" (empty Author) is
@@ -91,9 +103,44 @@ type TicketMessage struct {
 	Author     string     `json:"author,omitempty"` // subject; "" for system
 	AuthorKind AuthorKind `json:"author_kind"`
 	Body       string     `json:"body"`
+	// SystemCode names WHICH system note this is, for AuthorSystem messages
+	// only ("" on anything a person wrote).
+	//
+	// The daemon composes these notes in English and stores the prose in Body,
+	// which is right for an API reader, an email digest or a support agent
+	// grepping the table — and wrong for the web UI, which is translated and
+	// was rendering "The customer closed this ticket." in the middle of a
+	// Swedish thread. Prose cannot be translated after the fact without
+	// matching on English sentences, which is the fragile thing this field
+	// exists to avoid.
+	//
+	// One code per distinct sentence, no parameters: "marked resolved" and
+	// "marked closed" are separate codes rather than one code plus a status
+	// argument. Interpolating a status label into a sentence is where
+	// translations go wrong — Swedish inflects around it — and a flat code is
+	// also greppable from either side of the stack.
+	//
+	// Body stays populated, and a client that does not recognise a code (an
+	// older UI, a newer daemon, or any row written before this field existed)
+	// falls back to it. So the English is the floor, never the ceiling.
+	SystemCode SystemNote `json:"system_code,omitempty"`
 	BundleID   string     `json:"bundle_id,omitempty"`
 	CreatedAt  time.Time  `json:"created_at"`
 }
+
+// SystemNote identifies a machine-generated thread note. See
+// TicketMessage.SystemCode for why these are codes rather than prose.
+type SystemNote string
+
+const (
+	NoteCustomerClosed   SystemNote = "customer_closed"
+	NoteCustomerReopened SystemNote = "customer_reopened"
+	NoteGrantRequested   SystemNote = "grant_requested"
+)
+
+// MarkedNote is the note for "an agent moved this ticket to <status>". One
+// code per status, so the web has one whole sentence to translate per case.
+func MarkedNote(s TicketStatus) SystemNote { return SystemNote("marked_" + s) }
 
 // TicketListOpts scopes and bounds a ticket listing. The zero value ("any
 // status, any assignee, default limit") is the common case.

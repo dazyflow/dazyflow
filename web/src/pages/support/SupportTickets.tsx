@@ -654,6 +654,26 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
     void load();
   }, [load]);
 
+  // Tell the server this thread was opened, so the reminder sweep can tell
+  // "hasn't answered" from "hasn't even looked" — the difference between a
+  // useful nudge and mail to someone who is already up to date.
+  //
+  // Once per mount, deliberately, and NOT on every poll: the read time only
+  // has to be later than the newest message for the sweep to consider it seen,
+  // so re-stamping it every few seconds would be writes for nothing. A reply
+  // arriving while the thread sits open is covered by the next mount — and by
+  // the threshold, which is hours.
+  //
+  // Best-effort: failing to record a read costs at worst one extra reminder,
+  // which is not worth an error in front of someone trying to read a ticket.
+  useEffect(() => {
+    if (!token || !id) return;
+    const mark = mode === "agent" ? api.markSupportTicketRead : api.markMyTicketRead;
+    mark(token, id).catch(() => {
+      /* ignore — the reminder is a nudge, not a guarantee */
+    });
+  }, [token, id, mode]);
+
   // Poll while the thread is open so a reply from the other party appears
   // without a manual reload. Silent (no spinner) — load() only sets error on a
   // hard failure. Draft state is separate, so a poll never clobbers what the
@@ -666,6 +686,39 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
   }, [view?.messages.length]);
+
+  // "Did they see my answer?" — shown to the agent, on the newest support
+  // message only.
+  //
+  // Only the newest, because the receipt is per THREAD, not per message: it
+  // records when the customer last opened the ticket. Every support message
+  // older than it has been read too, but tagging them all turns a signal into
+  // wallpaper, and the one that decides what an agent does next is the last.
+  //
+  // Agent side only, deliberately. The mirror of this — telling the customer
+  // support has opened their ticket and not replied — is a stopwatch on the
+  // desk rather than an answer to a question, so the customer's view strips
+  // that timestamp entirely (ticketForUser in daemon/ticket_routes.go).
+  const receiptOn =
+    mode === "agent"
+      ? [...(view?.messages ?? [])]
+          .reverse()
+          .find((m) => m.author_kind === "support")?.id
+      : undefined;
+  // A ticket with NO receipt at all tells us nothing — it predates read
+  // tracking, or was filed through the API rather than the UI. Saying "not
+  // read yet" there would be a confident guess, so the indicator is absent
+  // instead: no badge means no information, not bad news.
+  const customerRead: Receipt | undefined = (() => {
+    if (!receiptOn || !view?.ticket.user_read_at) return undefined;
+    const msg = view.messages.find((m) => m.id === receiptOn);
+    if (!msg) return undefined;
+    const readAt = new Date(view.ticket.user_read_at);
+    if (Number.isNaN(readAt.getTime()) || readAt.getTime() === 0) return undefined;
+    return readAt >= new Date(msg.created_at)
+      ? { read: true, at: view.ticket.user_read_at }
+      : { read: false };
+  })();
 
   const send = async () => {
     if (!token || !draft.trim()) return;
@@ -834,7 +887,12 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
 
       <div className="ticket-thread">
         {view.messages.map((m) => (
-          <ChatBubble key={m.id} m={m} mode={mode} />
+          <ChatBubble
+            key={m.id}
+            m={m}
+            mode={mode}
+            receipt={m.id === receiptOn ? customerRead : undefined}
+          />
         ))}
         <div ref={endRef} />
       </div>
@@ -934,22 +992,87 @@ function BundleModal({ ticketId, mode, onClose }: { ticketId: string; mode: "use
 
 // ChatBubble renders one message. "mine" = the reader's own side (right); the
 // other party and system notes render on the left / centered.
-function ChatBubble({ m, mode }: { m: TicketMessage; mode: "user" | "agent" }) {
+// SYSTEM_NOTE maps the daemon's system_code to an i18n key. Mirrors the
+// SystemNote constants in core/ticket.go; the daemon composes the same notes in
+// English into `body`, which is what an API reader or an email digest gets and
+// what this falls back to for a code it does not know — an older row, or a
+// newer daemon than this build.
+//
+// Two of them have a "you" form. The customer's own close and reopen are the
+// only notes about something the reader did, and "The customer closed this
+// ticket" in your own thread is the third person talking about you — the same
+// complaint as an email address where your name should be.
+const SYSTEM_NOTE: Record<string, string> = {
+  customer_closed: "support.note.customerClosed",
+  customer_reopened: "support.note.customerReopened",
+  grant_requested: "support.note.grantRequested",
+  marked_open: "support.note.markedOpen",
+  marked_awaiting_user: "support.note.markedAwaitingUser",
+  marked_awaiting_support: "support.note.markedAwaitingSupport",
+  marked_resolved: "support.note.markedResolved",
+  marked_closed: "support.note.markedClosed",
+};
+const SYSTEM_NOTE_YOURS: Record<string, string> = {
+  customer_closed: "support.note.customerClosedYou",
+  customer_reopened: "support.note.customerReopenedYou",
+};
+
+// Receipt is what the agent is told about their newest reply: read, with when,
+// or not read yet. Absent means "we do not know" — see customerRead above.
+type Receipt = { read: true; at: string } | { read: false };
+
+function ChatBubble({
+  m,
+  mode,
+  receipt,
+}: {
+  m: TicketMessage;
+  mode: "user" | "agent";
+  receipt?: Receipt;
+}) {
   const { t } = useTranslation();
+  const { me } = useAuth();
   if (m.author_kind === "system") {
+    // The customer is the reader on the user surface, so their own actions are
+    // narrated in the second person there and the third person to an agent.
+    const key =
+      (mode === "user" ? SYSTEM_NOTE_YOURS[m.system_code ?? ""] : undefined) ??
+      SYSTEM_NOTE[m.system_code ?? ""];
     return (
-      <div className="ticket-system-note">{m.body}</div>
+      <div className="ticket-system-note">{key ? t(key) : m.body}</div>
     );
   }
+  // Which SIDE the bubble sits on is about the party, not the person: a
+  // colleague's reply belongs on the support side of an agent's screen.
   const mine = mode === "agent" ? m.author_kind === "support" : m.author_kind === "user";
+  // Who it is FROM is about the person. "support.fromYou" was already here and
+  // already meant this, but it only applied when the server sent no author —
+  // which it always does, so every one of your own messages was headed with
+  // your own email address back at you.
+  //
+  // Matched on identity rather than on `mine`, because the two are not the
+  // same thing on the agent side: every support reply is "mine" for
+  // alignment, and labelling a colleague's "You" would be a lie about who
+  // said it. The customer still never learns which agent replied — a support
+  // message that isn't yours falls through to the generic "Support", which is
+  // the same thing their view showed before.
   const who =
-    m.author_kind === "support"
-      ? t("support.fromSupport")
-      : m.author || t("support.fromYou");
+    m.author && me?.subject && m.author === me.subject
+      ? t("support.fromYou")
+      : m.author_kind === "support"
+        ? t("support.fromSupport")
+        : m.author || t("support.fromYou");
   return (
     <div className={"ticket-bubble" + (mine ? " mine" : "")}>
       <div className="ticket-bubble-meta">{who} · {formatDateTime(m.created_at)}</div>
       <div className="ticket-bubble-body">{m.body}</div>
+      {receipt && (
+        <div className="ticket-bubble-receipt">
+          {receipt.read
+            ? t("support.readByCustomer", { time: formatDateTime(receipt.at) })
+            : t("support.notReadYet")}
+        </div>
+      )}
     </div>
   );
 }

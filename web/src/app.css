@@ -11800,6 +11800,15 @@ button:active,
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+/* "Read by customer 14:32" under the agent's newest reply. Quieter than the
+   meta line above it: this answers a question the agent may not be asking, so
+   it should be findable without competing with the message itself. */
+.ticket-bubble-receipt {
+  margin-top: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--faint);
+  text-align: right;
+}
 .ticket-system-note {
   align-self: center;
   font-size: var(--text-xs);

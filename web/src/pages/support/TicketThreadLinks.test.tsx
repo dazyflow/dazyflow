@@ -26,6 +26,11 @@ vi.mock("../../api", () => ({
   api: {
     getSupportTicket: (...a: unknown[]) => getSupportTicket(...a),
     getMyTicket: (...a: unknown[]) => getMyTicket(...a),
+    // Fired when the thread mounts, so the reminder sweep can tell
+    // "hasn't answered" from "hasn't looked". Stubbed here because
+    // these tests are about other things and an unmocked call throws.
+    markMyTicketRead: () => Promise.resolve({}),
+    markSupportTicketRead: () => Promise.resolve({}),
   },
 }));
 

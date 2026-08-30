@@ -219,11 +219,11 @@ func (h *HTTPGateway) setMyTicketStatus(rw http.ResponseWriter, r *http.Request,
 	}
 	// Narrate only what actually happened. Handing a live ticket back to support
 	// isn't a "reopen" and needs no note — the reply beside it says everything.
-	note := "The customer closed this ticket."
+	note, code := "The customer closed this ticket.", core.NoteCustomerClosed
 	if status != core.TicketClosed {
-		note = ""
+		note, code = "", core.SystemNote("")
 		if t.Status.IsTerminal() {
-			note = "The customer reopened this ticket."
+			note, code = "The customer reopened this ticket.", core.NoteCustomerReopened
 		}
 	}
 	now := h.supportTime()
@@ -233,11 +233,56 @@ func (h *HTTPGateway) setMyTicketStatus(rw http.ResponseWriter, r *http.Request,
 		writeAPIError(rw, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
-	// appendTicketMessage skips an empty body, so the no-note case is a no-op.
-	_ = h.appendTicketMessage(r.Context(), t.ID, "", core.AuthorSystem, note, "", now)
+	// appendSystemNote skips an empty body, so the no-note case is a no-op.
+	_ = h.appendSystemNote(r.Context(), t.ID, code, note, now)
 	h.audit(r.Context(), core.Principal{Tenant: t.Tenant, Subject: p.Subject},
 		"support.ticket.status", t.FlowID, "ticket="+t.ID+" status="+string(status))
 	h.writeUserTicketView(rw, r, t)
+}
+
+// markMyTicketRead records that the customer has opened this thread.
+// POST /api/v1/me/support/tickets/{id}/read
+//
+// An explicit call rather than a side effect of GET. The thread polls while it
+// is open and other surfaces prefetch, so "we fetched it" is not "a person
+// looked at it" — and the read receipt is what decides whether they get a
+// reminder, so a false positive here means silence when someone is waiting.
+func (h *HTTPGateway) markMyTicketRead(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	t, ok := h.loadTicketForTenant(rw, r, p.Tenant)
+	if !ok {
+		return
+	}
+	h.markTicketRead(r.Context(), t, NudgeUser)
+	h.writeUserTicketView(rw, r, t)
+}
+
+// markSupportTicketRead is the agent-side counterpart.
+// POST /api/v1/support/tickets/{id}/read
+func (h *HTTPGateway) markSupportTicketRead(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	t, ok := h.loadTicketForAgent(rw, r, p)
+	if !ok {
+		return
+	}
+	h.markTicketRead(r.Context(), t, NudgeSupport)
+	h.writeTicketView(rw, r, t)
+}
+
+// markTicketRead stamps one side's read receipt. Deliberately does NOT touch
+// UpdatedAt: that field orders the queue by activity, and reading is not
+// activity — letting it bump would float every ticket an agent merely glanced
+// at to the top of the list, above ones actually waiting.
+//
+// Best-effort. Failing to record a read costs at worst one extra reminder,
+// which is a far better outcome than failing the request that renders the
+// thread the person is trying to read.
+func (h *HTTPGateway) markTicketRead(ctx context.Context, t core.Ticket, side NudgeSide) {
+	now := h.supportTime()
+	if side == NudgeUser {
+		t.UserReadAt = now
+	} else {
+		t.SupportReadAt = now
+	}
+	_ = h.Tickets.Update(ctx, t)
 }
 
 // ---- Support surface -------------------------------------------------------
@@ -423,8 +468,8 @@ func (h *HTTPGateway) setSupportTicketStatus(rw http.ResponseWriter, r *http.Req
 		return
 	}
 	// Leave a system note in the thread so the user sees the state change.
-	_ = h.appendTicketMessage(r.Context(), t.ID, "", core.AuthorSystem,
-		"Ticket marked "+string(status)+".", "", now)
+	_ = h.appendSystemNote(r.Context(), t.ID, core.MarkedNote(status),
+		"Ticket marked "+string(status)+".", now)
 	h.audit(r.Context(), core.Principal{Tenant: t.Tenant, Subject: p.Subject},
 		"support.ticket.status", t.FlowID, "ticket="+t.ID+" status="+string(status))
 	// Only the resolved edge is worth an email — "closed" is the customer's own
@@ -576,6 +621,12 @@ func decodeTicketStatusBody(rw http.ResponseWriter, r *http.Request) (core.Ticke
 // the result.
 func ticketForUser(t core.Ticket) core.Ticket {
 	t.AssignedTo = ""
+	// The support side's read receipt and reminder clock are its own business.
+	// "Support opened your ticket 3 days ago and said nothing" is a true and
+	// unhelpful thing to hand a customer, and the reminder timestamps say more
+	// about the desk's staffing than about the ticket.
+	t.SupportReadAt = time.Time{}
+	t.SupportNudgedAt = time.Time{}
 	return t
 }
 
@@ -646,6 +697,30 @@ func (h *HTTPGateway) appendTicketMessage(ctx context.Context, ticketID, author 
 		AuthorKind: kind,
 		Body:       scrubbed,
 		BundleID:   bundleID,
+		CreatedAt:  now,
+	})
+}
+
+// appendSystemNote records a machine-generated thread note: the English prose
+// in Body for API readers and email digests, and the code the web needs to say
+// the same thing in the reader's language. Kept separate from
+// appendTicketMessage because a code only ever belongs to a system note — a
+// person's message has an author instead.
+func (h *HTTPGateway) appendSystemNote(ctx context.Context, ticketID string, code core.SystemNote, body string, now time.Time) error {
+	scrubbed := clampTicketText(core.ScrubSecrets(body))
+	if strings.TrimSpace(scrubbed) == "" {
+		return nil
+	}
+	id, err := newID()
+	if err != nil {
+		return err
+	}
+	return h.Tickets.AppendMessage(ctx, core.TicketMessage{
+		ID:         id,
+		TicketID:   ticketID,
+		AuthorKind: core.AuthorSystem,
+		Body:       scrubbed,
+		SystemCode: code,
 		CreatedAt:  now,
 	})
 }

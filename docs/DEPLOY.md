@@ -531,6 +531,23 @@ provision a support agent under **Admin → Platform → Support agents** (a
 `platform:admin` is *not* automatically support staff; the two roles are
 deliberately separate). A grant takes effect on that person's next sign-in.
 
+**Unread reminders.** Support mail already goes out on every reply. On top of
+that, `DAZYFLOW_SUPPORT_NUDGE_AFTER` (default `24h`, `0` to disable) reminds
+whichever side has left a message unread that long — the customer who never
+opened the answer, or the queue when nobody has looked at a question. Three
+properties keep it from becoming noise:
+
+- It is **read-aware**. Opening the thread records a receipt, so someone who has
+  read the message and simply not replied yet is never chased. Someone who has
+  never opened the ticket at all is, because the age is the floor.
+- It fires **once per waiting period**, not once per sweep. A new message from
+  the other side starts a new period; nothing else does.
+- It never fires on a **resolved or closed** ticket, and a reply from either side
+  ends the wait.
+
+Multi-node installs need no extra configuration: the sweep runs on the scheduler
+leader only, so recipients get one reminder rather than one per daemon.
+
 ### Fail-closed config guard
 
 `dzd` **refuses to start** if it would run with a bundled insecure

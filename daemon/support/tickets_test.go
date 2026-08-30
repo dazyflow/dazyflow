@@ -101,6 +101,67 @@ func ticketStoreLifecycle(t *testing.T, s core.TicketStore) {
 		t.Errorf("messages out of order: %+v", msgs)
 	}
 
+	// A system note round-trips its code as well as its prose. The code is what
+	// lets the translated UI render the note in the reader's language; drop it
+	// anywhere between here and the SELECT and the UI silently falls back to
+	// the English body, which is the bug it was added to fix.
+	sysNote := core.TicketMessage{
+		ID: "m3", TicketID: "t1", AuthorKind: core.AuthorSystem,
+		Body: "The customer closed this ticket.", SystemCode: core.NoteCustomerClosed,
+		CreatedAt: now.Add(3 * time.Minute),
+	}
+	if err := s.AppendMessage(ctx, sysNote); err != nil {
+		t.Fatalf("append system note: %v", err)
+	}
+	msgs, _ = s.ListMessages(ctx, "t1")
+	if len(msgs) != 3 {
+		t.Fatalf("got %d messages, want 3", len(msgs))
+	}
+	if got := msgs[2]; got.SystemCode != core.NoteCustomerClosed || got.Body != sysNote.Body {
+		t.Errorf("system note round-trip = code %q body %q, want %q / %q",
+			got.SystemCode, got.Body, core.NoteCustomerClosed, sysNote.Body)
+	}
+	// A person's message carries no code — the column defaults to empty rather
+	// than picking up the previous row's value.
+	if msgs[0].SystemCode != "" {
+		t.Errorf("m1 (a person's message) has SystemCode %q, want empty", msgs[0].SystemCode)
+	}
+
+	// Read receipts and reminder clocks round-trip. They are what the nudge
+	// sweeper reads to tell "has not answered" from "has not even looked", so a
+	// column that silently returns zero would make it mail people who are up to
+	// date — the failure mode nobody reports, they just start ignoring it.
+	rt, err := s.Get(ctx, "t1")
+	if err != nil {
+		t.Fatalf("get t1: %v", err)
+	}
+	if !rt.UserReadAt.IsZero() || !rt.SupportNudgedAt.IsZero() {
+		t.Errorf("a fresh ticket should have zero read/nudge times: %+v", rt)
+	}
+	read := now.Add(7 * time.Minute)
+	rt.UserReadAt, rt.SupportReadAt = read, read.Add(time.Minute)
+	rt.UserNudgedAt, rt.SupportNudgedAt = read.Add(2*time.Minute), read.Add(3*time.Minute)
+	if err := s.Update(ctx, rt); err != nil {
+		t.Fatalf("update read times: %v", err)
+	}
+	back, err := s.Get(ctx, "t1")
+	if err != nil {
+		t.Fatalf("re-get t1: %v", err)
+	}
+	for _, c := range []struct {
+		name      string
+		got, want time.Time
+	}{
+		{"UserReadAt", back.UserReadAt, rt.UserReadAt},
+		{"SupportReadAt", back.SupportReadAt, rt.SupportReadAt},
+		{"UserNudgedAt", back.UserNudgedAt, rt.UserNudgedAt},
+		{"SupportNudgedAt", back.SupportNudgedAt, rt.SupportNudgedAt},
+	} {
+		if !c.got.Equal(c.want) {
+			t.Errorf("%s = %v, want %v", c.name, c.got, c.want)
+		}
+	}
+
 	// ---- Ownership filters + queue summary (the support dashboard) -----------
 	// State here: t1 = acme, resolved, assigned to agent@vendor.com;
 	//             t2 = globex, open, unassigned.
@@ -177,4 +238,85 @@ func TestPgTicketStore(t *testing.T) {
 		t.Fatalf("truncate: %v", err)
 	}
 	ticketStoreLifecycle(t, s)
+}
+
+// The backfill is the difference between "new notes are translated" and "this
+// bug is fixed". Without it every thread that predates the system_code column
+// keeps its English sentence wedged between translated messages forever, which
+// is indistinguishable from not having fixed anything for anyone who already
+// had tickets.
+func TestPgTicketStore_BackfillsPreExistingSystemNotes(t *testing.T) {
+	url := os.Getenv("DAZYFLOW_TEST_DB")
+	if url == "" {
+		t.Skip("set DAZYFLOW_TEST_DB to run Postgres support tests")
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, url)
+	if err != nil {
+		t.Fatalf("pgxpool.New: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	if _, err := NewPgTicketStore(ctx, pool); err != nil {
+		t.Fatalf("NewPgTicketStore: %v", err)
+	}
+	if _, err := pool.Exec(ctx, "TRUNCATE support_tickets, support_ticket_messages"); err != nil {
+		t.Fatalf("truncate: %v", err)
+	}
+
+	// Rows exactly as an older daemon wrote them: prose, no code.
+	legacy := []struct{ id, body, want string }{
+		{"L1", "The customer closed this ticket.", "customer_closed"},
+		{"L2", "The customer reopened this ticket.", "customer_reopened"},
+		{"L3", "Ticket marked resolved.", "marked_resolved"},
+		{"L4", "Ticket marked awaiting_user.", "marked_awaiting_user"},
+		{"L5", "Support requested read-only access to this flow. An organization admin must approve it.", "grant_requested"},
+		// A sentence this daemon never wrote (a reworded or hand-inserted note)
+		// must be left alone rather than guessed at — it keeps the fallback.
+		{"L6", "Something nobody ever emitted.", ""},
+	}
+	for _, l := range legacy {
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO support_ticket_messages (id, ticket_id, author, author_kind, body, system_code, bundle_id, created_at)
+			 VALUES ($1,'t1','','system',$2,'','',now())`, l.id, l.body); err != nil {
+			t.Fatalf("seed %s: %v", l.id, err)
+		}
+	}
+	// A person's message whose body happens to match must NOT be rewritten:
+	// the backfill is scoped to system notes, and someone quoting the note back
+	// is an ordinary thing to do in a support thread.
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO support_ticket_messages (id, ticket_id, author, author_kind, body, system_code, bundle_id, created_at)
+		 VALUES ('P1','t1','alice','user','The customer closed this ticket.','','',now())`); err != nil {
+		t.Fatalf("seed P1: %v", err)
+	}
+
+	// Re-applying the schema is what a daemon restart does.
+	if err := EnsurePgTicketSchema(ctx, pool); err != nil {
+		t.Fatalf("re-apply schema: %v", err)
+	}
+
+	codeOf := func(id string) string {
+		var code string
+		if err := pool.QueryRow(ctx,
+			`SELECT system_code FROM support_ticket_messages WHERE id=$1`, id).Scan(&code); err != nil {
+			t.Fatalf("read %s: %v", id, err)
+		}
+		return code
+	}
+	for _, l := range legacy {
+		if got := codeOf(l.id); got != l.want {
+			t.Errorf("%s (%q): system_code = %q, want %q", l.id, l.body, got, l.want)
+		}
+	}
+	if got := codeOf("P1"); got != "" {
+		t.Errorf("a person's message was rewritten: system_code = %q, want empty", got)
+	}
+
+	// Idempotent: a second boot must not disturb what the first one set.
+	if err := EnsurePgTicketSchema(ctx, pool); err != nil {
+		t.Fatalf("second apply: %v", err)
+	}
+	if got := codeOf("L1"); got != "customer_closed" {
+		t.Errorf("second apply changed L1 to %q", got)
+	}
 }
