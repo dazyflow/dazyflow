@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.27.5] - 2026-08-30
+
 ### Fixed
 
 - **An agent can now see whether the customer read their reply.** "Read by
