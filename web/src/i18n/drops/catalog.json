@@ -43,7 +43,7 @@
     ]
   },
   "builtin_store_append": {
-    "description": "Save rows to a collection — no database to set up and no connection string to paste. Pick a collection name and the rows land there; the collection is created automatically the first time. Each workspace has its own private Collections, and the saved rows show up under Collections so you can browse them in-app. By default every run appends; set “Unique by” to a key column (like date) and a row with a matching key is updated in place instead of piling up a duplicate — so re-running the flow stays idempotent.",
+    "description": "Save rows to a collection — no database to set up and no connection string to paste. Pick a collection name and the rows land there; the collection is created automatically the first time. Each workspace has its own private Collections, and the saved rows show up under Collections so you can browse them in-app. Every row is stamped with the time it was saved (a saved_at column) so you can sort newest-first. By default every run appends; set “Unique by” to a key column (like date) and a row with a matching key is updated in place instead of piling up a duplicate — so re-running the flow stays idempotent.",
     "ports": [
       "Pass-through",
       "Rows",
