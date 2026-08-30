@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.27.4] - 2026-08-30
+
 ### Fixed
 
 - **Tidy parked loose cards in the first column.** A card with no incoming
