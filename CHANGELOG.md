@@ -23,6 +23,32 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.27.9] - 2026-08-31
+
+### Fixed
+
+- **A Swedish reader met one English paragraph in the middle of a Swedish
+  card.** 0.27.8 announced that `Collections · Save rows` stamps a `saved_at`
+  column, and the step's own English description gained a sentence saying so —
+  but its Swedish translation was never rewritten to match, so the card fell
+  back to English for that one step. That fallback is deliberate and it is the
+  right call for the reader: every drop translation records a fingerprint of
+  the English it was made from, and when the English is reworded the
+  fingerprint stops matching, so what renders is accurate new English rather
+  than fluent-but-wrong Swedish. What it is not is visible — nothing anywhere
+  says a translation went stale, which is how ten of them once sat unnoticed.
+  The Swedish now describes the `saved_at` stamp too, and its fingerprint
+  matches the English again.
+
+- **The docs guards in the frontend suite had been searching an empty
+  directory in CI.** The docs site's content tree is generated — guide pages
+  copied from `docs/guide/`, the step catalogue emitted from the live drop
+  manifests — and git-ignored, but CI ran the frontend tests BEFORE the task
+  that produces it. So on a clean checkout the docs-search tests searched
+  nothing and failed with "Nothing matches", which reads as a bug in search
+  rather than as absent content, and three tests that need the rendered pages
+  quietly skipped. CI now generates the tree before running the suite.
+
 ## [0.27.8] - 2026-08-30
 
 ### Added
