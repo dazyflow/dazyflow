@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.27.8] - 2026-08-30
+
 ### Added
 
 - **Collections stamp every row with when it was saved.** `Collections · Save
