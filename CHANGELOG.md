@@ -25,6 +25,67 @@ into the image.)
 
 ### Fixed
 
+- **Tidy parked loose cards in the first column.** A card with no incoming
+  wires — a Text value, an Email address, anything feeding a step from the side
+  — landed at the far left however late the step it fed was, with its wire
+  dragged across the whole canvas.
+
+  Column assignment was longest-path-from-the-roots alone. Every node starts at
+  column 0 and only TARGETS are ever pushed right, so anything with no incoming
+  edge simply stayed where it started. It looked like a root; it was a card
+  belonging beside the fifth step.
+
+  Tidy now runs a second pass that slides each node right until it sits one
+  column left of its nearest consumer. Nearest, not furthest: a card feeding
+  both step 1 and step 5 belongs beside step 1, and taking the max would drag
+  it past a node it has to precede. A consumer is always at least one column
+  right of its producer, so the slide can only move a node right — the first
+  pass's left-to-right ordering survives untouched, and every edge still points
+  rightward.
+
+  Triggers are exempt. The entry point reads as where the flow begins, so it
+  anchors the left edge even when its only wire runs somewhere late.
+
+  The assignment moved to `lib/autoLayout` on its way out of a `setNodes`
+  callback, which is what made it testable: ten cases now cover the reported
+  shape, the nearest-consumer rule, trigger anchoring, and that a cycle
+  terminates rather than spinning.
+
+
+- **Half the pins on a card read English to a Swedish reader.** The Email step
+  showed Adress, `Local part`, `Domain`, `Display name`, Detaljer — two
+  languages alternating down one card. Google Calendar was worse in a quieter
+  way, labelling the same thing "Plats" in the Inspector and `Location` on its
+  own pin.
+
+  Every drop-vocabulary lookup falls back to the English it was handed, which
+  is right for the reader and invisible to the maintainer: a pin with no
+  `SV_PORTS` entry renders perfectly good English and nothing fails. Twenty-
+  eight labels had drifted through that gap, eleven of them plain omissions —
+  and six of those eleven were words the repo had ALREADY translated, sitting
+  in `SV_FIELD_TITLES` under the same English string.
+
+  All eleven are translated now: Attendees, Blocks, Display name, Domain, End,
+  Link to open, Local part, Location, Name in Drive, Reply in thread, Script.
+
+  The gap is closed rather than patched. `make drop-catalog` now emits each
+  drop's pin labels alongside its description, and a coverage guard fails on
+  any label that is neither translated nor listed as reading the same in
+  Swedish. That allowlist is seventeen entries — file formats, loanwords, the
+  bare A/B operands of a comparison — which is the number that made this guard
+  worth having: the note previously declining it estimated the allowlist would
+  run as long as the map itself, and it is a fourteenth of it.
+
+
+- **A Swedish warning ended in an English word.** "Obligatoriskt värde saknas:
+  Email" sat directly under a pin reading "E-post"; "Obligatorisk indata är
+  inte kopplad: Value" under one reading "Värde". The node card's two config
+  warnings interpolated the manifest's raw English `title` / `label` into a
+  translated sentence, so the app appeared to disagree with itself about what a
+  thing is called. Both now resolve the name through the same function that
+  names it everywhere else.
+
+
 - **`${trigger.…}` was offered everywhere and resolved nowhere.** The `{}`
   reference menu lists `${trigger.body.<field>}`, a lint message suggests it,
   the canvas draws it as a chip reading "Form → email", and two handler

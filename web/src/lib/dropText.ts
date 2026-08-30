@@ -204,7 +204,10 @@ const SV_SUBTITLES: Record<string, string> = {
 // "Body"). Same natural-key scheme as the labels above. Strings that read the
 // same in Swedish (JSON, PDF, URL, Text, the bare A/B operands) are absent
 // rather than mapped to themselves.
-const SV_PORTS: Record<string, string> = {
+// Exported for the coverage guard in dropTextCoverage.test.ts, which needs to
+// spot an entry no drop reaches any more — a question portLabel() cannot be
+// asked, since it is only ever handed labels that DO exist.
+export const SV_PORTS: Record<string, string> = {
   Address: "Adress",
   "After ID": "Efter ID",
   "Amount (display)": "Belopp (visning)",
@@ -213,8 +216,10 @@ const SV_PORTS: Record<string, string> = {
   Approved: "Godkänt",
   Approver: "Godkännare",
   Attachments: "Bilagor",
+  Attendees: "Deltagare",
   Attributes: "Attribut",
   Author: "Avsändare",
+  Blocks: "Block",
   Body: "Innehåll",
   "Branch ref": "Grenreferens",
   "Calendar ID": "Kalender-ID",
@@ -266,10 +271,13 @@ const SV_PORTS: Record<string, string> = {
   Description: "Beskrivning",
   Details: "Detaljer",
   Digest: "Sammandrag",
+  "Display name": "Visningsnamn",
   "Document number": "Dokumentnummer",
+  Domain: "Domän",
   "Downloaded file": "Nedladdad fil",
   "Duplicate count": "Antal dubbletter",
   Email: "E-post",
+  End: "Slut",
   "End of window": "Fönstrets slut",
   "Ended at": "Slutade",
   "Ends at": "Slutar",
@@ -317,7 +325,10 @@ const SV_PORTS: Record<string, string> = {
   Latitude: "Latitud",
   "Left rows": "Vänstra rader",
   Link: "Länk",
+  "Link to open": "Länk att öppna",
   List: "Lista",
+  "Local part": "Lokal del",
+  Location: "Plats",
   Longitude: "Longitud",
   "Loop body": "Loopens innehåll",
   "Match count": "Antal träffar",
@@ -329,6 +340,7 @@ const SV_PORTS: Record<string, string> = {
   "Message ID": "Meddelande-ID",
   "Messages": "Meddelanden",
   Name: "Namn",
+  "Name in Drive": "Namn i Drive",
   "National number": "Nationellt nummer",
   "New responses": "Nya svar",
   No: "Nej",
@@ -371,6 +383,7 @@ const SV_PORTS: Record<string, string> = {
   "Rendered text": "Renderad text",
   "Replied": "Besvarad",
   Reply: "Svar",
+  "Reply in thread": "Svara i tråden",
   Repository: "Repo",
   "Repository folder": "Repo-mapp",
   Response: "Svar",
@@ -388,6 +401,7 @@ const SV_PORTS: Record<string, string> = {
   Rows: "Rader",
   "Rows saved": "Sparade rader",
   "Saved file": "Sparad fil",
+  Script: "Skript",
   Search: "Sök",
   "Secret name": "Hemlighetens namn",
   Service: "Tjänst",

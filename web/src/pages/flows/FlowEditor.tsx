@@ -144,7 +144,7 @@ import { ConfigChecklistModal } from "../../components/editor/ConfigChecklistMod
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import { PublishCelebration } from "../../components/editor/PublishCelebration";
 import { QuickDropPalette } from "../../components/editor/QuickDropPalette";
-import { dropLabel, dropLabelIsDefault } from "../../lib/dropText";
+import { dropLabel, dropLabelIsDefault, fieldTitle, portLabel } from "../../lib/dropText";
 import { CanvasContextMenu, type ContextMenuItem } from "../../components/editor/CanvasContextMenu";
 import { PromptModal } from "../../components/ui/PromptModal";
 import { PublishLabelModal } from "../../components/editor/PublishLabelModal";
@@ -153,6 +153,7 @@ import { ContactSupportLink } from "../../components/ContactSupportLink";
 import { useResourceResolver } from "../useResourceResolver";
 import { Loading } from "../../components/ui/Loading";
 import { Notice } from "../../components/ui/Notice";
+import { layerNodes } from "../../lib/autoLayout";
 
 // Custom node-types registry. React Flow caches by reference, so this
 // is declared at module scope rather than inline in the component to
@@ -1523,10 +1524,10 @@ function EditorInner() {
 
   // autoLayout ("Tidy") arranges the whole graph into clean left-to-right
   // columns by dependency depth — the one-click cleanup pro node editors
-  // have. Layering is longest-path from the roots (no-input nodes) via
-  // bounded relaxation, so a stray cycle can't loop forever. Within a column
-  // nodes keep their current top-to-bottom order; columns are centered on a
-  // shared mid-line for a balanced look.
+  // have. Column assignment lives in lib/autoLayout (and is tested there);
+  // this callback owns only the geometry. Within a column nodes keep their
+  // current top-to-bottom order; columns are centered on a shared mid-line
+  // for a balanced look.
   const autoLayout = useCallback(() => {
     const HGAP = 80;
     const VGAP = 36;
@@ -1537,20 +1538,12 @@ function EditorInner() {
       const es = edges.filter(
         (e) => idSet.has(e.source) && idSet.has(e.target),
       );
-      const layer = new Map<string, number>(ids.map((id) => [id, 0]));
-      // |V| relaxation passes settle any DAG's longest paths; the cap also
-      // stops a cycle from diverging.
-      for (let pass = 0; pass < ids.length; pass++) {
-        let changed = false;
-        for (const e of es) {
-          const want = (layer.get(e.source) ?? 0) + 1;
-          if (want > (layer.get(e.target) ?? 0)) {
-            layer.set(e.target, want);
-            changed = true;
-          }
-        }
-        if (!changed) break;
-      }
+      const triggerIDs = new Set(
+        nds
+          .filter((n) => (n.data as DazyNodeData | undefined)?.manifest?.category === "trigger")
+          .map((n) => n.id),
+      );
+      const layer = layerNodes(ids, es, (id) => triggerIDs.has(id));
       const sizeOf = (n: FlowNode<DazyNodeData>) => ({
         w: n.measured?.width ?? n.width ?? 240,
         h: n.measured?.height ?? n.height ?? 120,
@@ -1974,13 +1967,18 @@ function EditorInner() {
       const missing = new Map<string, string>(); // dedup by key
       for (const key of man.params_schema?.required ?? []) {
         if (!hasValue(key) && !wired.has(key)) {
-          const name = man.params_schema?.properties?.[key]?.title ?? key;
+          // Localize the same way the surface that NAMES the thing does: the
+          // banner sits directly under a pin reading "Värde", and a Swedish
+          // sentence ending in the English "Value" reads as a bug in the app.
+          const title = man.params_schema?.properties?.[key]?.title;
+          const name = title ? fieldTitle(title, i18n.language) : key;
           missing.set(key, i18n.t("nodeCard.missingValue", { name }));
         }
       }
       for (const p of man.inputs ?? []) {
         if (!p.required || wired.has(p.port) || hasValue(p.port)) continue;
-        missing.set(p.port, i18n.t("nodeCard.unwiredRequired", { name: p.label ?? p.port }));
+        const name = p.label ? portLabel(p.label, i18n.language) : p.port;
+        missing.set(p.port, i18n.t("nodeCard.unwiredRequired", { name }));
       }
       // for_each is configured by wiring its `body` pin (the loop-body
       // feature), not by a required param — flag an unwired body so a loop
