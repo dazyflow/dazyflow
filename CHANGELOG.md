@@ -23,6 +23,20 @@ into the image.)
 
 ## [Unreleased]
 
+### Added
+
+- **Collections stamp every row with when it was saved.** `Collections · Save
+  rows` writes a `saved_at` column alongside the row's own columns, so "newest
+  first" is a sort you can ask for rather than a column you had to remember to
+  add yourself — `Collections · Find rows` takes it as its **Sort by**, and
+  `Collections · Query with SQL` can `ORDER BY saved_at DESC`. Rename it with
+  **Time column**, or clear that field to turn the stamp off; a row that
+  already carries a column of that name keeps its own value rather than being
+  overwritten. The behaviour landed in 0.27.6 and the step's own description
+  caught up in 0.27.7, but neither release said so and the translated step
+  catalogue still described the older behaviour — so this is the first place it
+  is actually written down.
+
 ## [0.27.7] - 2026-08-30
 
 ### Added
