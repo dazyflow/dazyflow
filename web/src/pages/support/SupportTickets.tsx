@@ -38,6 +38,7 @@ import { POLL } from "../../lib/timing";
 import { useEscapeToClose } from "../../components/ui/useEscapeToClose";
 import { Loading } from "../../components/ui/Loading";
 import { Notice } from "../../components/ui/Notice";
+import { ConfirmModal } from "../../components/ui/ConfirmModal";
 
 // An open ticket re-fetches itself so a reply from the other party shows up
 // without a manual reload. It polls on the `watched` tier (see lib/timing) —
@@ -629,6 +630,11 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [showBundle, setShowBundle] = useState(false);
+  // Closing is the requester saying "stop working on this", and it lands on
+  // support's side as well as their own — near enough to irreversible in the
+  // moment (it is undone by replying, not by an Undo) that a misclick on a
+  // button sitting between Release and the composer should not do it.
+  const [confirmClose, setConfirmClose] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
@@ -818,7 +824,7 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
           {/* The requester's own exit: "I don't need this any more". Replying
               reopens it, so there's no separate Reopen button. */}
           {mode === "user" && !closed && (
-            <Button onClick={() => void setMyStatus("closed")} disabled={busy}>
+            <Button onClick={() => setConfirmClose(true)} disabled={busy}>
               <X size={ICON.xs} />
               {t("support.close")}
             </Button>
@@ -858,6 +864,23 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
 
       {showBundle && (
         <BundleModal ticketId={id} mode={mode} onClose={() => setShowBundle(false)} />
+      )}
+
+      {/* Not `danger`: closing is the requester's own tidy-up and a reply
+          undoes it, so it should read as deliberate rather than alarming.
+          The body says so, which is the part that turns a confirm from an
+          obstacle into an answer to "wait, what happens if I do?". */}
+      {confirmClose && (
+        <ConfirmModal
+          title={t("support.confirmCloseTitle")}
+          message={t("support.confirmCloseBody")}
+          confirmLabel={t("support.close")}
+          onConfirm={() => {
+            setConfirmClose(false);
+            void setMyStatus("closed");
+          }}
+          onCancel={() => setConfirmClose(false)}
+        />
       )}
     </div>
   );

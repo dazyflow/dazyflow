@@ -2825,26 +2825,44 @@ button.warning:hover:not(:disabled) {
   font-size: var(--text-md);
 }
 
-/* Proactive "this flow needs a connection" banner on the canvas. Mirrors
-   the error/lint banner geometry (absolute, top-anchored) with an accent
-   border to read as actionable rather than alarming. */
-/* All editor overlay banners (error, lint, run-needs-setup, publish) live in
+/* Proactive "this flow needs a connection" banner. Mirrors the error/lint
+   banner geometry with an accent border to read as actionable rather than
+   alarming. */
+/* All editor banners (error, lint, run finished, needs-setup, publish) live in
    this one flex column instead of each pinning itself with a magic-number top
    offset. That way any banner can wrap to multiple lines and the rest still
-   stack cleanly beneath it — no more overlap when several are shown at once. */
+   stack cleanly beneath it — no more overlap when several are shown at once.
+ *
+ * DOCKED, not floating. These used to be an absolute overlay at top:60/left:12
+ * up to 700px wide — which is exactly where a flow's first nodes sit, so a
+ * warning, an error and a run result could bury the trigger and the step after
+ * it under an opaque block that stayed until dismissed. Being click-through
+ * did not help: you could see nothing to click.
+ *
+ * As a flex item between the toolbar and ReactFlow it takes its own height out
+ * of the canvas, so it can never cover a node. That costs some canvas height
+ * while a banner is up, and the view shifts when one appears — the trade is
+ * deliberate: a canvas that is a little shorter beats a canvas whose top-left
+ * corner is unreadable. React Flow keeps its viewport transform across the
+ * resize, so nodes do not jump relative to each other; only the frame changes.
+ *
+ * :empty is why the strip costs nothing when there is nothing to say — an
+ * empty flex column would still contribute its gap and border. */
 .editor-banner-stack {
-  position: absolute;
-  top: 60px;
-  left: 12px;
-  right: 12px;
-  max-width: 700px;
-  z-index: 10;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  /* Let canvas taps pass through the gaps / empty area; each banner
-     re-enables pointer-events for its own content. */
-  pointer-events: none;
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  /* Several banners at once must not eat the whole editor: past a few, the
+     strip scrolls instead of growing. */
+  max-height: 40vh;
+  overflow-y: auto;
+}
+.editor-banner-stack:empty {
+  display: none;
 }
 /* Continuous draft-vs-live readout under the toolbar. The whole point is
    that it is ALWAYS there when a flow is published — the failure mode this
@@ -2875,19 +2893,8 @@ button.warning:hover:not(:disabled) {
   padding: 0;
   height: auto;
   font-size: inherit;
-  /* Re-enable taps: .editor-banner-stack is pointer-events:none so canvas
-     gestures pass through the overlay, and this readout never opted its own
-     content back in — which left "Publish changes" looking like a link and
-     doing nothing when clicked. Same pattern as .editor-conn-banner-actions;
-     only the button opts in, so the bar's text still passes taps through to a
-     node sitting under it. */
-  pointer-events: auto;
 }
 .editor-conn-banner {
-  /* Let canvas taps pass through the banner's text/padding to the node
-     underneath (it overlays the top of the canvas, and on a phone a node
-     can sit right under it). Only the action buttons re-enable taps. */
-  pointer-events: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2904,7 +2911,6 @@ button.warning:hover:not(:disabled) {
   display: flex;
   gap: var(--space-2);
   flex-shrink: 0;
-  pointer-events: auto; /* re-enable: Set up / Dismiss stay tappable */
 }
 /* When the banner carries both a user-fixable line AND an admin-blocked
    line, stack them on top of each other so the second line is visibly
@@ -3976,13 +3982,15 @@ button.warning:hover:not(:disabled) {
 @media (max-width: 1100px) {
   /* Keep the banner stack clear of the inspect FAB. The FAB sits at top:64 /
      right:12 with a z-index ABOVE the banners (deliberately — it's the only
-     way into the inspector on a phone), and it is now on screen at every
-     narrow width rather than only with a selection. A banner's own actions sit
-     at its right edge — Publish on the publish nudge, Dismiss on the
-     connection banner — which is exactly what the FAB would cover. Mirrors the
-     desktop rule that keeps the stack clear of the inspector panel. */
+     way into the inspector on a phone), and it is on screen at every narrow
+     width. A banner's own actions sit at its right edge — Publish on the
+     publish nudge, Dismiss on the connection banner — which is exactly what
+     the FAB would cover. Padding rather than `right`: the strip is a docked
+     flex item, so it has no inset to shift; what it needs is for its CONTENT
+     to stop short of the floating button. Mirrors the desktop rule that keeps
+     the stack clear of the inspector panel. */
   .editor-banner-stack {
-    right: 60px;
+    padding-right: 60px;
   }
   .editor .inspector {
     position: absolute;
@@ -4025,9 +4033,12 @@ button.warning:hover:not(:disabled) {
   .editor[data-has-selection="true"] .canvas > .react-flow {
     width: calc(100% - var(--inspector-w)) !important;
   }
-  /* Keep the banner stack clear of the inspector panel. */
+  /* Keep the banner stack clear of the inspector panel, which is an absolute
+     overlay starting below the toolbar — so it paints over the docked strip's
+     right end. The strip's background may run under it; its text and buttons
+     may not. */
   .editor[data-has-selection="true"] .editor-banner-stack {
-    right: calc(var(--inspector-w) + 12px);
+    padding-right: calc(var(--inspector-w) + 12px);
   }
 }
 .editor .inspector {
@@ -8842,11 +8853,13 @@ a.pa-card:hover {
 /* Trigger-discoverability nudge: a compact, dismissible tip pinned just
    below the toolbar, centered over the canvas. Calm accent styling (not a
    warning) — it's teaching, not alerting. */
-/* It shares the strip under the toolbar with the banner stack, which is
-   pinned left and painted above it, so a banner wide enough to reach the
-   centre clips this hint's opening words. A banner is always the more
-   urgent, more transient message — stand the teaching tip down while one is
-   up, and it returns when the banner is dismissed. */
+/* It floats at top:62, which is where the docked banner strip now is — so
+   while any banner is up the hint would sit on top of it. A banner is always
+   the more urgent, more transient message, so the teaching tip stands down
+   while one is showing and returns when it is dismissed. (Hidden rather than
+   pushed below the strip: the strip's height varies with its contents, and a
+   tip that jitters down the canvas as banners come and go is worse than one
+   that waits its turn.) */
 .canvas:has(.editor-banner-stack:not(:empty)) .editor-trigger-hint {
   display: none;
 }
@@ -11960,8 +11973,6 @@ button:active,
   box-shadow: 0 2px 8px color-mix(in srgb, var(--success) 25%, transparent);
   color: var(--ink);
   font-size: var(--text-md);
-  /* The canvas overlay it sits in is pointer-events: none. */
-  pointer-events: auto;
 }
 
 /* ---- Runners (AdminRunners.tsx) ------------------------------------------ */

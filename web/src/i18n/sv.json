@@ -2273,6 +2273,8 @@
     "claim": "Ta ärendet",
     "release": "Släpp ärendet",
     "close": "Stäng ärendet",
+    "confirmCloseTitle": "Stäng det här ärendet?",
+    "confirmCloseBody": "Supporten slutar arbeta med det. Om du svarar öppnas det igen, så inget går förlorat.",
     "stats": {
       "unassigned": "Otilldelade",
       "mine": "Tilldelade mig",

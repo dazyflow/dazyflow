@@ -52,6 +52,68 @@ into the image.)
   terminates rather than spinning.
 
 
+- **Closing a support ticket asks first.** "Close ticket" sits in a row with
+  Claim and Release, directly above the composer, and fired on the first click
+  — the requester telling support to stop working, with no step in between.
+
+  It now opens the app's confirm dialog, which also carries the fact that makes
+  the decision easy and that nothing on the page reveals: replying reopens the
+  ticket. There is no Reopen button to infer that from, so a user who closed by
+  accident had no reason to think the thread was recoverable. Not styled as a
+  destructive confirm — it is the requester's own tidy-up, and reading as an
+  alarm would be its own kind of wrong.
+
+
+- **"Contact support" on the editor's failure banner left the product.** It
+  rendered the operator-configured mailto or URL and nothing else — so the user
+  retyped an error the app was displaying two lines above, and support opened a
+  mail with no flow, no run and no diagnostics. The surface that fixes all
+  three already existed: the run-detail failure banner files a ticket with a
+  redacted bundle attached. The editor just never reached it.
+
+  The same words now open that dialog when the deployment has tickets on,
+  carrying this flow and — only when the banner is about a failed RUN, since it
+  also reports save, permission and config errors — the run that failed. The
+  operator's contact stays as the fallback when tickets are off, and when
+  neither is configured nothing renders, so no dead affordance appears.
+
+  It arrives populated: subject from the flow, and the message box holding the
+  error the user is looking at, editable so their own account of what they were
+  doing goes in the same ticket. `ReportProblemModal` grew a `defaultMessage`
+  for that.
+
+  Seven tests cover the join rather than the parts — which is where this class
+  of bug lives, since every piece of it typechecks while pointing at the wrong
+  flow, a stale run, or nothing. One of them was written after the browser
+  showed the dialog opening with Send greyed out: the subject prefill needed
+  `name || id`, because a flow that was never renamed has only an id.
+
+
+- **Editor banners covered the flow instead of sitting beside it.** The error,
+  the lint warning and the "run finished" toast were an absolute overlay pinned
+  at `top: 60px; left: 12px`, up to 700px wide — which is exactly where a
+  flow's first nodes are. Several at once buried the trigger and the step after
+  it under an opaque block, and only one of the five (the connection hint, at
+  six seconds) ever went away on its own; the rest waited to be dismissed, for
+  an edit, or to be replaced.
+
+  Being click-through did not help, because the problem was never that you
+  couldn't reach the canvas — it was that you couldn't see it.
+
+  The stack is now a docked strip between the toolbar and the canvas, so it
+  takes its height out of the flow area and can never overlap a node. It
+  collapses to nothing when there is nothing to say (`:empty`), scrolls rather
+  than growing past 40vh when several banners land at once, and keeps clear of
+  the inspector panel and the mobile Inspect button — both of which float above
+  it — with padding instead of the insets an absolute box used.
+
+  The click-through machinery went with it: every banner had to opt its own
+  buttons back into `pointer-events`, and `check-overlay-taps.mjs` existed
+  solely to catch the ones that forgot. Its own instructions said to delete it
+  if the overlay ever stopped being `pointer-events: none`, so it is deleted —
+  it caught this change on the way past, which is a fair last act for a guard.
+
+
 - **Half the pins on a card read English to a Swedish reader.** The Email step
   showed Adress, `Local part`, `Domain`, `Display name`, Detaljer — two
   languages alternating down one card. Google Calendar was worse in a quieter
