@@ -300,7 +300,8 @@ export type Manifest = {
 // drive the inspector form for our built-in modules. Unknown features
 // fall through to a raw JSON textarea.
 export type JSONSchema = {
-  type?: "string" | "integer" | "number" | "boolean" | "object" | "array" | "null";
+  type?:
+    "string" | "integer" | "number" | "boolean" | "object" | "array" | "null";
   title?: string;
   description?: string;
   default?: unknown;
@@ -846,6 +847,14 @@ export type PendingApproval = {
   graph_id: string;
   node_id: string;
   prompt?: string;
+  // context is whatever the flow wired into the step's "Value" port — the
+  // thing being decided about. Shape is up to the flow; approvalContextView
+  // normalizes it for display. Absent when nothing was wired, or when the
+  // value was too big to send with a list row (context_too_large).
+  context?: unknown;
+  context_too_large?: boolean;
+  // Declared order of the context's fields, when it carries one.
+  context_order?: string[];
   url?: string;
   since: string;
   workspace: string;
@@ -1154,7 +1163,8 @@ export type WebAPIImportWarning = {
 // WebAPIOperationChange is what a refresh would do to one operation. "removed"
 // is the one that costs something: every flow referencing its step id stops
 // resolving.
-export type WebAPIOperationChange = "added" | "changed" | "removed" | "unchanged";
+export type WebAPIOperationChange =
+  "added" | "changed" | "removed" | "unchanged";
 
 export type WebAPIOperationDiff = {
   id: string;
@@ -1195,7 +1205,6 @@ export type WebAPISpecResponse = {
   overflow?: boolean;
   max: number;
 };
-
 
 // RunnerTarget is one machine as the flow editor sees it, from GET /runners:
 // what the Run on your machine step needs to be pointed somewhere, and nothing
@@ -1428,7 +1437,8 @@ export type FileEntry = {
 };
 
 // GrantStatus mirrors core.GrantStatus — the lifecycle of a support AccessGrant.
-export type GrantStatus = "requested" | "approved" | "denied" | "revoked" | "expired";
+export type GrantStatus =
+  "requested" | "approved" | "denied" | "revoked" | "expired";
 
 // AccessGrant is one consented, time-boxed, read-only support view of a flow.
 // Mirrors core.AccessGrant's JSON. The org-admin consent surface lists these.
@@ -1450,11 +1460,7 @@ export type AccessGrant = {
 
 // TicketStatus mirrors core.TicketStatus — the lifecycle of a support ticket.
 export type TicketStatus =
-  | "open"
-  | "awaiting_user"
-  | "awaiting_support"
-  | "resolved"
-  | "closed";
+  "open" | "awaiting_user" | "awaiting_support" | "resolved" | "closed";
 
 // Ticket mirrors core.Ticket's JSON: one support request scoped to the org that
 // filed it, optionally about a flow/run with a redacted diagnostic bundle attached.

@@ -181,17 +181,30 @@ func (h *HTTPGateway) verificationStatus(r *http.Request, p core.Principal) (ver
 	return verified, h.verificationActive() && !verified
 }
 
-// requireVerifiedInviter is the invite gate: on verification-active
-// deployments a session principal must have confirmed their email
-// before the daemon emails invitations on their behalf. Returns false
-// after writing the 403. API-key principals (no user record) pass —
-// they were minted by someone already inside the org.
-func (h *HTTPGateway) requireVerifiedInviter(rw http.ResponseWriter, r *http.Request, p core.Principal) bool {
+// inviterVerified reports whether the daemon should send mail on p's behalf:
+// on verification-active deployments a session principal must have confirmed
+// their own address first. API-key principals (no user record) pass — they
+// were minted by someone already inside the org — as do deployments where
+// verification can't run at all.
+//
+// This is the predicate behind both the hard gate below and createInvitation's
+// softer one, so the two can never drift apart on who counts as trusted.
+func (h *HTTPGateway) inviterVerified(r *http.Request, p core.Principal) bool {
 	if !h.verificationActive() || !strings.Contains(p.Subject, "@") {
 		return true
 	}
 	user, err := h.Users.GetByEmail(r.Context(), p.Subject)
-	if err != nil || user.EmailVerified() {
+	return err != nil || user.EmailVerified()
+}
+
+// requireVerifiedInviter is the hard gate — refuse the action outright.
+// Returns false after writing the 403.
+//
+// Used where the thing being created is itself the abusable resource (an extra
+// tenant), rather than a message we might simply decline to send. Inviting is
+// deliberately NOT in that group any more: see createInvitation.
+func (h *HTTPGateway) requireVerifiedInviter(rw http.ResponseWriter, r *http.Request, p core.Principal) bool {
+	if h.inviterVerified(r, p) {
 		return true
 	}
 	writeJSONError(rw, http.StatusForbidden,

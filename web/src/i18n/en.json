@@ -184,9 +184,11 @@
     "failedTitle": "Could not confirm",
     "failedHint": "The link may have expired. Sign in and use the banner's resend button to get a fresh one.",
     "badLink": "This link is missing its email or token.",
-    "banner": "Confirm your email address — we sent you a link when you signed up.",
+    "banner": "Confirm your email address. Until you do, we won't email invitations for you — you'll get a link to send yourself.",
     "bannerSent": "Verification email sent — check your inbox.",
+    "bannerFailed": "We couldn't send the email. Try again, or ask whoever runs this Dazyflow to check its email settings.",
     "bannerResend": "Resend email",
+    "bannerRetry": "Try again",
     "bannerDismiss": "Hide for now"
   },
   "forgotPassword": {
@@ -768,6 +770,9 @@
     "noPermNote": "You don't have permission to connect apps — ask an org admin to set these up."
   },
   "approvals": {
+    "contextHeading": "What you’re approving",
+    "contextMore": "+{{count}} more",
+    "contextTooLarge": "Too large to show here — open the run to see it.",
     "title": "Approvals",
     "waitingSuffix": "<0>{{count}}</0> waiting",
     "inboxZero": "Inbox zero — nothing waiting on your decision.",

@@ -62,11 +62,19 @@ export function explainApiError(
   if (context === "signin" && (status === 401 || status === 403)) {
     return t("apiError.signinInvalid");
   }
-  if (context === "totp" && (status === 401 || status === 400 || status === 403)) {
+  if (
+    context === "totp" &&
+    (status === 401 || status === 400 || status === 403)
+  ) {
     return t("apiError.totpInvalid");
   }
   if (context === "signup") {
-    if (status === 409 || lc.includes("already") || lc.includes("taken") || lc.includes("exists")) {
+    if (
+      status === 409 ||
+      lc.includes("already") ||
+      lc.includes("taken") ||
+      lc.includes("exists")
+    ) {
       return t("apiError.signupExists");
     }
     // The server's own password/email rule is short and actionable — keep it.
@@ -75,20 +83,36 @@ export function explainApiError(
   }
 
   // Structured code map — the stable, surface-independent discriminator.
-  if (code && CODE_MESSAGES[code]) return t(CODE_MESSAGES[code]);
+  if (code && CODE_MESSAGES[code]) {
+    // One exception, and only on a real 403: a refusal that names the remedy
+    // beats the generic headline. Scoped to the status so the code map stays
+    // surface-independent everywhere else — a permission_denied riding a 400
+    // still resolves by code.
+    if (
+      status === 403 &&
+      PERMISSION_CODES.has(code) &&
+      keepForbiddenMessage(msg, lc)
+    ) {
+      return msg;
+    }
+    return t(CODE_MESSAGES[code]);
+  }
 
   // A server-side failure carries no detail the user can act on.
   if (status >= 500) return t("apiError.server");
 
   // Status-based fallbacks for routes that don't (yet) set a structured code.
   if (status === 401) return t("apiError.sessionExpired");
-  if (status === 403) return t("apiError.forbidden");
+  if (status === 403) {
+    return keepForbiddenMessage(msg, lc) ? msg : t("apiError.forbidden");
+  }
   if (status === 404) return t("apiError.notFound");
   // An approval that 409s is not a collision the user needs to fix — the
   // decision was simply already made, most often by the other approve control
   // on the same screen or by someone else holding the link. "It conflicts with
   // something that already exists or is in use" reads like a fault; it isn't.
-  if (status === 409 && context === "approval") return t("apiError.approvalDecided");
+  if (status === 409 && context === "approval")
+    return t("apiError.approvalDecided");
   if (status === 409) return t("apiError.conflict");
   if (status === 429) return t("apiError.rateLimited");
   // Payload too large (an oversized upload, or a body that trips the global
@@ -135,9 +159,48 @@ function looksTechnical(lc: string): boolean {
   );
 }
 
+// PERMISSION_CODES are the refusal codes whose generic headline ("ask an
+// admin") is only right when the server had nothing better to say.
+const PERMISSION_CODES = new Set(["forbidden", "permission_denied"]);
+
+// keepForbiddenMessage reports whether a refusal carries the one sentence that
+// unblocks the reader, and so beats the generic headline.
+//
+// Why this is worth the extra test: the invite gate answers 403 with "verify
+// your email before inviting others — check your inbox or resend from the
+// banner", which is exactly the fix. Replacing it with "You don't have
+// permission to do that. Ask an admin if you think you should." tells the
+// ORGANIZATION OWNER to go find an admin — there isn't one above them — and
+// hides the only route out. A refusal that names a remedy should show it.
+//
+// The headline still wins for the other family of 403s, which name the
+// permission the caller lacks ("organization:admin required", "graph:edit
+// required"). Those are written for whoever wired the API call, not for the
+// person reading the screen.
+function keepForbiddenMessage(msg: string, lc: string): boolean {
+  return Boolean(msg) && !looksTechnical(lc) && !looksLikeScopeDemand(lc);
+}
+
+// looksLikeScopeDemand flags a refusal phrased as the permission the caller is
+// missing rather than as something they can do about it.
+//
+// Kept separate from looksTechnical rather than folded into it, because
+// "required" is a perfectly good word in a validation hint ("a name is
+// required") that other statuses DO surface verbatim — teaching looksTechnical
+// that word would silence those too.
+function looksLikeScopeDemand(lc: string): boolean {
+  return (
+    /\b[a-z_]+:[a-z_]+\b/.test(lc) || // scope token: organization:admin, graph:edit
+    lc.endsWith(" required") ||
+    lc.includes("_required") ||
+    lc.includes("principal has no tenant")
+  );
+}
+
 // CODE_MESSAGES maps a daemon ErrorEnvelope code to a friendly i18n key. Only
 // codes whose generic headline beats the raw message; anything not listed
-// falls through to the status/message logic above.
+// falls through to the status/message logic above. The PERMISSION_CODES are a
+// partial exception — see keepForbiddenMessage.
 const CODE_MESSAGES: Record<string, string> = {
   permission_denied: "apiError.forbidden",
   forbidden: "apiError.forbidden",

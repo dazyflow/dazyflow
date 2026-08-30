@@ -16,6 +16,7 @@ import { ICON } from "../../icons";
 import { POLL } from "../../lib/timing";
 import { Loading } from "../../components/ui/Loading";
 import { EmptyState } from "../../components/ui/EmptyState";
+import { approvalContextView } from "../../lib/approvalContext";
 
 // Approvals is the inbox for await_approval nodes parked across the
 // workspace. Polls on the `watched` tier so a freshly-pending node shows up
@@ -30,7 +31,9 @@ export function Approvals() {
   // Track in-flight approve/reject per row so users can't double-click.
   // The key is `${runID}/${nodeID}`. Once a decision posts the row
   // disappears on the next refresh.
-  const [acting, setActing] = useState<Record<string, "approve" | "reject">>({});
+  const [acting, setActing] = useState<Record<string, "approve" | "reject">>(
+    {},
+  );
   // Optional note attached to a decision, keyed by `${runID}/${nodeID}`.
   // Sent with both approve and reject (matching the editor's inline panel),
   // so an approver can leave a "why" without opening the flow.
@@ -103,7 +106,13 @@ export function Approvals() {
       // Both approve and reject carry the inline note (if any) — same
       // shape as the editor's await_approval panel.
       const comment = comments[key]?.trim() || undefined;
-      await api.approveNode(token, item.run_id, item.node_id, decision, comment);
+      await api.approveNode(
+        token,
+        item.run_id,
+        item.node_id,
+        decision,
+        comment,
+      );
       await refresh();
     } catch (e) {
       const err = e as APIError | Error;
@@ -140,15 +149,9 @@ export function Approvals() {
         </div>
       </div>
 
-      {error && (
-        <ErrorNotice>
-          {error}
-        </ErrorNotice>
-      )}
+      {error && <ErrorNotice>{error}</ErrorNotice>}
 
-      {!error && loading && items.length === 0 && (
-        <Loading />
-      )}
+      {!error && loading && items.length === 0 && <Loading />}
 
       {!error && !loading && items.length === 0 && (
         <EmptyState icon={Inbox}>{t("approvals.inboxZero")}</EmptyState>
@@ -158,13 +161,51 @@ export function Approvals() {
         {items.map((item) => {
           const key = `${item.run_id}/${item.node_id}`;
           const inflight = acting[key];
+          const ctx = approvalContextView(item.context, item.context_order);
           return (
             <div className="approval-card" key={key}>
               <div className="approval-head">
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <div className="approval-prompt">
-                    {item.prompt || t("approvals.noPrompt", { nodeId: item.node_id })}
-                  </div>
+                  {/* The prompt is the author's question. The context is the
+                      thing itself — the submission, the refund, the draft. An
+                      approver needs at least one of them; falling back to the
+                      step id (which is all this card used to show) asks
+                      someone to decide sight unseen. */}
+                  {(item.prompt || !ctx) && (
+                    <div className="approval-prompt">
+                      {item.prompt ||
+                        t("approvals.noPrompt", { nodeId: item.node_id })}
+                    </div>
+                  )}
+                  {ctx && (
+                    <div className="approval-context">
+                      <div className="approval-context-heading">
+                        {t("approvals.contextHeading")}
+                      </div>
+                      {ctx.kind === "text" ? (
+                        <div className="approval-context-text">{ctx.text}</div>
+                      ) : (
+                        <dl className="approval-context-fields">
+                          {ctx.fields.map((f) => (
+                            <div key={f.key}>
+                              <dt>{f.key}</dt>
+                              <dd>{f.value}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      )}
+                      {ctx.kind === "fields" && ctx.more > 0 && (
+                        <div className="approval-context-more">
+                          {t("approvals.contextMore", { count: ctx.more })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {!ctx && item.context_too_large && (
+                    <div className="approval-context-more">
+                      {t("approvals.contextTooLarge")}
+                    </div>
+                  )}
                   <div className="approval-meta">
                     {/* Links to the RUN, not the editor — same rule the runs
                         list follows: the target is the thing the card is
@@ -193,7 +234,9 @@ export function Approvals() {
                       <Pencil className="icon-inline" size={ICON.xs} />
                     </Link>
                     <span>·</span>
-                    <span title={absoluteTime(item.since)}>{formatDateTime(item.since)}</span>
+                    <span title={absoluteTime(item.since)}>
+                      {formatDateTime(item.since)}
+                    </span>
                     {/* The raw node_id was shown here in monospace — internal
                         plumbing that means nothing to an approver. Dropped; the
                         prompt (or its node-id fallback) already identifies the
@@ -206,7 +249,9 @@ export function Approvals() {
                     disabled={!!inflight}
                   >
                     <XCircle size={ICON.sm} />
-                    {inflight === "reject" ? t("approvals.rejecting") : t("approvals.reject")}
+                    {inflight === "reject"
+                      ? t("approvals.rejecting")
+                      : t("approvals.reject")}
                   </Button>
                   <Button
                     variant="primary"
@@ -214,7 +259,9 @@ export function Approvals() {
                     disabled={!!inflight}
                   >
                     <CheckCircle2 size={ICON.sm} />
-                    {inflight === "approve" ? t("approvals.approving") : t("common.approve")}
+                    {inflight === "approve"
+                      ? t("approvals.approving")
+                      : t("common.approve")}
                   </Button>
                 </div>
               </div>
@@ -235,4 +282,3 @@ export function Approvals() {
     </div>
   );
 }
-

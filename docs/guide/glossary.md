@@ -15,6 +15,14 @@ An outside service you connect to Dazyflow — Gmail, Klarna, Slack, Fortnox, an
 so on. You set one up once on the **Apps** page; then any flow can use it. See
 also [Connection](#connection).
 
+### Approval
+
+A pause where a flow waits for a person to say yes or no. You add one with the
+[Wait for approval](../reference/steps/flow-control) step and connect the thing
+being decided into its `Value` input, so whoever decides can see what they're
+deciding on. Anything waiting shows on the **Approvals** page. See
+[Teams & approvals](./teams-and-approvals).
+
 ### Branch
 
 A [step](#step) that sends your flow down one of two paths — "Yes" or "No" —
@@ -90,6 +98,13 @@ A value a [step](#step) needs to do its job. You can [connect](#wire--connect) a
 input from an earlier step's [output](#output), or type it in as a
 [setting](#setting).
 
+### Invitation
+
+A link that adds someone to your [organization](#organization) with a
+[role](#role) you choose. Made on **Admin → People**, valid for 14 days, and
+sendable by hand — it's shown with a **Copy link** button whether or not the
+server can email it. An outstanding invitation holds a [seat](#seat).
+
 ### JSON
 
 A common text format for structured [data](#data--data-record) — used when
@@ -101,6 +116,17 @@ you rarely have to write it by hand.
 **Many** values at once — e.g. all the rows from a spreadsheet, or every new
 email. The catalog writes this as "list of …". To act on each item, use a
 [For each](#for-each--loop) loop.
+
+### Member
+
+Someone who belongs to an [organization](#organization). Every member holds a
+[role](#role) that decides what they can do, and occupies a [seat](#seat).
+
+### Organization
+
+The account everything belongs to: your flows, your files, your people. Most
+people only ever have one — the one created with their account, whose creator is
+its **Owner**. An organization can hold several [workspaces](#workspace).
 
 ### Output
 
@@ -136,6 +162,13 @@ Trying a failed step again. Steps that are **safe to retry** are re-tried
 automatically by Dazyflow; steps that **run once** (like sending money) are not,
 so nothing happens twice by accident.
 
+### Role
+
+What a [member](#member) is allowed to do — **Viewer** (open, run and approve),
+**Editor** (also build, edit and manage secrets) or **Admin** (also invite people
+and manage the organization). Set when you invite them, changeable afterwards on
+**Admin → People**.
+
 ### Row
 
 One record of [data](#data--data-record) — like a single line in a spreadsheet.
@@ -145,6 +178,13 @@ A [list](#list) of rows is a table.
 
 One execution of a [flow](#flow). The **Runs** page lists them and shows what
 each step did, so you can check results or find a problem.
+
+### Seat
+
+One person's place in your plan's member allowance. Members hold one, and so do
+outstanding [invitations](#invitation) — a promise of a seat is still a seat, so
+you find out the org is full when you invite, not when they try to join. Check
+yours under **Plan and usage**.
 
 ### Secret
 

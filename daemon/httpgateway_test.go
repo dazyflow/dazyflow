@@ -1777,3 +1777,109 @@ func TestHTTPGateway_CORSAllowedOriginIsReflected(t *testing.T) {
 		t.Errorf("ACAC = %q, want %q", got, "true")
 	}
 }
+
+// TestHTTPGateway_PendingApprovalCarriesContext — the value a flow wired into
+// the step's Value port rides along to the inbox.
+//
+// Without it the card can only name the step that is waiting, so an approver
+// is asked to decide about something they were never shown. The step already
+// stashes the value on its awaiting output next to pending_url and prompt;
+// this is the last hop.
+func TestHTTPGateway_PendingApprovalCarriesContext(t *testing.T) {
+	h := newGatewayHarness(t)
+	_ = h.store.Enqueue(t.Context(), core.JobRecord{
+		ID: "run-ctx", Kind: core.JobKindGraph, GraphID: "g1",
+		Tenant: "t", Workspace: "ws", Status: core.JobStatusRunning,
+	})
+	submission := map[string]any{
+		"Your name":              "Marina Alvarez",
+		"What you like about us": "The Earl Grey.",
+	}
+	_ = h.store.Enqueue(t.Context(), core.JobRecord{
+		ID: NodeJobID("run-ctx", "approval"), Kind: core.JobKindNode,
+		GraphRunID: "run-ctx", GraphID: "g1",
+		NodeID: "approval", Tenant: "t", Workspace: "ws",
+		Status: core.JobStatusAwaiting,
+		Result: &core.Result{
+			Status: core.StatusAwaiting,
+			Output: map[string]core.Ref{
+				"pending_url": {MIME: "text/plain", Inline: "https://dzd/approve/run-ctx/approval?token=abc"},
+				"context":     {MIME: "application/json", Inline: submission},
+			},
+		},
+	})
+
+	rw := h.do(t, "GET", "/api/v1/approvals/pending", nil)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("code = %d body = %s", rw.Code, rw.Body.String())
+	}
+	var out struct {
+		Approvals []struct {
+			NodeID          string         `json:"node_id"`
+			Context         map[string]any `json:"context"`
+			ContextTooLarge bool           `json:"context_too_large"`
+		} `json:"approvals"`
+	}
+	if err := json.Unmarshal(rw.Body.Bytes(), &out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(out.Approvals) != 1 {
+		t.Fatalf("approvals = %d, want 1: %s", len(out.Approvals), rw.Body.String())
+	}
+	got := out.Approvals[0]
+	if got.ContextTooLarge {
+		t.Error("a two-field submission is not too large")
+	}
+	if got.Context["Your name"] != "Marina Alvarez" ||
+		got.Context["What you like about us"] != "The Earl Grey." {
+		t.Errorf("context = %#v, want the submission's fields", got.Context)
+	}
+}
+
+// TestHTTPGateway_PendingApprovalContextTooLarge — an oversized carried value
+// is flagged, not shipped. The inbox lists up to 200 rows and the value is
+// whatever the flow wired in; the card says to open the run instead of
+// silently looking like a step with nothing attached.
+func TestHTTPGateway_PendingApprovalContextTooLarge(t *testing.T) {
+	h := newGatewayHarness(t)
+	_ = h.store.Enqueue(t.Context(), core.JobRecord{
+		ID: "run-big", Kind: core.JobKindGraph, GraphID: "g1",
+		Tenant: "t", Workspace: "ws", Status: core.JobStatusRunning,
+	})
+	_ = h.store.Enqueue(t.Context(), core.JobRecord{
+		ID: NodeJobID("run-big", "approval"), Kind: core.JobKindNode,
+		GraphRunID: "run-big", GraphID: "g1",
+		NodeID: "approval", Tenant: "t", Workspace: "ws",
+		Status: core.JobStatusAwaiting,
+		Result: &core.Result{
+			Status: core.StatusAwaiting,
+			Output: map[string]core.Ref{
+				"pending_url": {MIME: "text/plain", Inline: "https://dzd/approve/run-big/approval?token=abc"},
+				"context":     {Inline: strings.Repeat("x", approvalContextCap+1)},
+			},
+		},
+	})
+
+	rw := h.do(t, "GET", "/api/v1/approvals/pending", nil)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("code = %d", rw.Code)
+	}
+	var out struct {
+		Approvals []struct {
+			Context         any  `json:"context"`
+			ContextTooLarge bool `json:"context_too_large"`
+		} `json:"approvals"`
+	}
+	if err := json.Unmarshal(rw.Body.Bytes(), &out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(out.Approvals) != 1 {
+		t.Fatalf("approvals = %d, want 1", len(out.Approvals))
+	}
+	if !out.Approvals[0].ContextTooLarge {
+		t.Error("an oversized value should be flagged")
+	}
+	if out.Approvals[0].Context != nil {
+		t.Error("an oversized value must not be sent with the list row")
+	}
+}

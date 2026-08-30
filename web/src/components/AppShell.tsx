@@ -50,6 +50,7 @@ import { MOBILE, isNarrower, mediaQuery } from "../lib/breakpoints";
 import type { FlowSummary } from "../types";
 import { POLL } from "../lib/timing";
 import { savedCollapsePref, initialNavCollapsed } from "../lib/navCollapse";
+import { resendOutcome } from "../lib/verifyResend";
 
 // orgGlyph renders an org's icon: an uploaded image (data: URL) as an
 // <img>, otherwise the generic Building2 mark. Shared by the tenant
@@ -77,8 +78,6 @@ const COLLAPSE_KEY = "dazyflow.sidebar.collapsed";
 // uses to stay visible after the user has used the approval inbox
 // at least once. See the everHadApproval state below.
 const APPROVAL_SEEN_KEY = "dazyflow.approvalsEverSeen";
-
-
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
@@ -122,7 +121,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   // would eat too much of a phone/tablet screen) and expanded on
   // desktops. The initial read runs synchronously so the first paint
   // matches — no flicker between the two widths.
-  const [navCollapsed, setNavCollapsed] = useState<boolean>(() => initialNavCollapsed(COLLAPSE_KEY));
+  const [navCollapsed, setNavCollapsed] = useState<boolean>(() =>
+    initialNavCollapsed(COLLAPSE_KEY),
+  );
   // Keep the rail in sync with the viewport: collapse when we cross into
   // a small screen, and restore the saved desktop preference when we
   // cross back out. matchMedia's change event fires only on crossing the
@@ -132,7 +133,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return;
     const mq = window.matchMedia(mediaQuery(MOBILE));
-    const apply = () => setNavCollapsed(mq.matches ? true : savedCollapsePref(COLLAPSE_KEY));
+    const apply = () =>
+      setNavCollapsed(mq.matches ? true : savedCollapsePref(COLLAPSE_KEY));
     mq.addEventListener("change", apply);
     return () => mq.removeEventListener("change", apply);
   }, []);
@@ -208,7 +210,13 @@ export function AppShell({ children }: { children: ReactNode }) {
       cancelled = true;
       window.clearInterval(t);
     };
-  }, [token, location.pathname, activeTenant, activeWorkspace, everHadApproval]);
+  }, [
+    token,
+    location.pathname,
+    activeTenant,
+    activeWorkspace,
+    everHadApproval,
+  ]);
   // Support unread count: agents count queue tickets awaiting support; users
   // count their own tickets awaiting them. Same `background` tier as the
   // approvals badge above — it used to poll at 60s against that one's 30s, a
@@ -272,8 +280,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const inEditor =
     /^\/(flows|pipelines)\/(?!new(?:$|\/))[^/]+/.test(location.pathname) ||
     /^\/support\/flows\//.test(location.pathname);
-  const showAdmin =
-    hasPerm("organization:admin") || hasPerm("graph:admin");
+  const showAdmin = hasPerm("organization:admin") || hasPerm("graph:admin");
 
   // ⌘K / Ctrl+K opens the global command bar — except in the flow editor,
   // which owns ⌘K for its step palette (per the agreed keybinding split).
@@ -365,370 +372,375 @@ export function AppShell({ children }: { children: ReactNode }) {
         setOpenSettings,
       }}
     >
-    <div className="app-shell" data-nav-collapsed={navCollapsed ? "true" : "false"}>
-      <header className="topbar">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="hamburger"
-          onClick={toggleNav}
-          aria-label={t("nav.toggleNav")}
-          aria-expanded={!navCollapsed}
-        >
-          {/* Custom 3-bar burger: the bottom bar is shorter (the icon
+      <div
+        className="app-shell"
+        data-nav-collapsed={navCollapsed ? "true" : "false"}
+      >
+        <header className="topbar">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="hamburger"
+            onClick={toggleNav}
+            aria-label={t("nav.toggleNav")}
+            aria-expanded={!navCollapsed}
+          >
+            {/* Custom 3-bar burger: the bottom bar is shorter (the icon
               variant we want), and the whole mark morphs into a cross
               when the drawer is open (aria-expanded="true"). */}
-          <span className="burger" aria-hidden="true">
-            <span className="burger-bar burger-top" />
-            <span className="burger-bar burger-mid" />
-            <span className="burger-bar burger-bot" />
-          </span>
-        </Button>
-        {/* The logo is the home affordance — clicking it lands on the
+            <span className="burger" aria-hidden="true">
+              <span className="burger-bar burger-top" />
+              <span className="burger-bar burger-mid" />
+              <span className="burger-bar burger-bot" />
+            </span>
+          </Button>
+          {/* The logo is the home affordance — clicking it lands on the
             start/welcome screen (where no flow is selected), matching
             the sibling `dazy` app's brand-click-goes-home behaviour. */}
-        <NavLink to="/welcome" className="brand" title={orgName || "Dazyflow"}>
-          {/* Mark: the open flow's icon in the editor, else the org logo
+          <NavLink
+            to="/welcome"
+            className="brand"
+            title={orgName || "Dazyflow"}
+          >
+            {/* Mark: the open flow's icon in the editor, else the org logo
               when set, else the Dazyflow favicon. */}
-          {showFlow && activeFlowIcon ? (
-            <FlowIcon icon={activeFlowIcon} size={22} />
-          ) : !showFlow && isImageIcon(orgIcon) ? (
-            <img
-              src={orgIcon}
-              alt=""
-              className="flow-icon-img"
-              width={24}
-              height={24}
-              draggable={false}
-            />
-          ) : (
-            <img
-              src="/logo.svg"
-              alt=""
-              className="brand-mark-img"
-              width={24}
-              height={24}
-              draggable={false}
-            />
-          )}
-          {/* Title: the open flow's name in the editor; otherwise the
+            {showFlow && activeFlowIcon ? (
+              <FlowIcon icon={activeFlowIcon} size={22} />
+            ) : !showFlow && isImageIcon(orgIcon) ? (
+              <img
+                src={orgIcon}
+                alt=""
+                className="flow-icon-img"
+                width={24}
+                height={24}
+                draggable={false}
+              />
+            ) : (
+              <img
+                src="/logo.svg"
+                alt=""
+                className="brand-mark-img"
+                width={24}
+                height={24}
+                draggable={false}
+              />
+            )}
+            {/* Title: the open flow's name in the editor; otherwise the
               org's name once set, falling back to the product wordmark. */}
-          <span className="brand-title">
-            {showFlow ? activeFlowName : orgName || "Dazyflow"}
-          </span>
-        </NavLink>
-        <div className="spacer" />
-        {me && (
-          <div className="user">
-            {/* Help (also on "?"): docs, support, keyboard shortcuts. Stays
+            <span className="brand-title">
+              {showFlow ? activeFlowName : orgName || "Dazyflow"}
+            </span>
+          </NavLink>
+          <div className="spacer" />
+          {me && (
+            <div className="user">
+              {/* Help (also on "?"): docs, support, keyboard shortcuts. Stays
                 visible on mobile now that it carries more than accelerators —
                 the docs and support links are exactly what a stuck user on a
                 phone needs. */}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setHelpOpen(true)}
-              aria-label={t("help.title")}
-              title={t("help.title")}
-            >
-              <HelpCircle size={ICON.lg} />
-            </Button>
-            {/* Org switcher: opens a modal listing the orgs you can act in,
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setHelpOpen(true)}
+                aria-label={t("help.title")}
+                title={t("help.title")}
+              >
+                <HelpCircle size={ICON.lg} />
+              </Button>
+              {/* Org switcher: opens a modal listing the orgs you can act in,
                 with an inline "Create organization" form. Always available so
                 even a single-tenant user can spin up a new org. */}
-            <Button
-              variant="ghost"
-              className="org-switcher-trigger"
-              onClick={() => setOrgModalOpen(true)}
-              title={t("nav.switchTenant")}
-            >
-              {orgGlyph(
-                me.memberships?.find((m) => m.tenant === (activeTenant || me.tenant))
-                  ?.icon,
-                14,
-              )}
-              <strong>
-                {tenantDisplayName(
-                  me,
-                  activeTenant || me.tenant,
-                  t("nav.personalWorkspace"),
+              <Button
+                variant="ghost"
+                className="org-switcher-trigger"
+                onClick={() => setOrgModalOpen(true)}
+                title={t("nav.switchTenant")}
+              >
+                {orgGlyph(
+                  me.memberships?.find(
+                    (m) => m.tenant === (activeTenant || me.tenant),
+                  )?.icon,
+                  14,
                 )}
-              </strong>
-              <ChevronDown size={ICON.xs} />
-            </Button>
-            {inEditor && openSettings && (
-              <FlowMenu onOpenSettings={openSettings} />
-            )}
-          </div>
-        )}
-        {me && orgModalOpen && (() => {
-          const active = activeTenant || me.tenant;
-          const homeTenant =
-            me.memberships?.find((m) => m.home)?.tenant ?? me.tenant;
-          const isPlatformAdmin = me.permissions.includes("platform:admin");
-          const isOrgAdmin = (tid: string) =>
-            me.memberships
-              ?.find((m) => m.tenant === tid)
-              ?.roles.some((r) => r.permissions.includes("organization:admin")) ??
-            false;
-          // Deletable when it isn't your home org AND you're either a platform
-          // admin (any org) or an org admin of the org you're currently in
-          // (the daemon requires p.Tenant == tenant for non-platform deletes).
-          const deletable = (tid: string) =>
-            tid !== homeTenant &&
-            (isPlatformAdmin || (tid === active && isOrgAdmin(tid)));
-          return (
-            <OrgSwitcherModal
-              orgs={tenants.map((tid) => ({
-                tenant: tid,
-                name: tenantDisplayName(me, tid, t("nav.personalWorkspace")),
-                glyph: orgGlyph(
-                  me.memberships?.find((m) => m.tenant === tid)?.icon,
-                  18,
-                ),
-                deletable: deletable(tid),
-              }))}
-              activeTenant={active}
-              showId={shouldShowTenantID(me, tenants.length)}
-              onPick={(tid) => {
-                setOrgModalOpen(false);
-                // Switching org deep-reloads the app so the active page can't
-                // keep showing the previous org's data. No-op if it's already
-                // the active org.
-                if (tid !== active) setActiveTenant(tid, { reload: true });
-              }}
-              onCreate={async (displayName) => {
-                if (!token) return;
-                const res = await api.createOrg(token, displayName);
-                // Switch into the new org with a deep reload: the cold boot
-                // rebuilds the tenant catalogue (so it appears) and refetches
-                // in the new scope, so no page keeps the previous org's data.
-                setOrgModalOpen(false);
-                setActiveTenant(res.tenant, { reload: true });
-              }}
-              onExport={async (tid) => {
-                if (!token) return;
-                const data = await api.exportOrg(token, tid);
-                downloadJson(data, `dazyflow-org-${tid}-export.json`);
-              }}
-              onDelete={async (tid, password) => {
-                if (!token) return;
-                await api.deleteOrg(token, tid, password);
-                // Leave the org if it was the active one, then refresh.
-                if (tid === active) setActiveTenant(homeTenant);
-                reloadTenants();
-                setOrgModalOpen(false);
-              }}
-              onClose={() => setOrgModalOpen(false)}
-            />
-          );
-        })()}
-      </header>
-      <div className="body">
-        <aside
-          className="sidebar"
-          data-collapsed={navCollapsed ? "true" : "false"}
-        >
-          <div className="group-label">{t("nav.workspaceGroup")}</div>
-          {/* Primary create CTA — the single entry point into the unified
+                <strong>
+                  {tenantDisplayName(
+                    me,
+                    activeTenant || me.tenant,
+                    t("nav.personalWorkspace"),
+                  )}
+                </strong>
+                <ChevronDown size={ICON.xs} />
+              </Button>
+              {inEditor && openSettings && (
+                <FlowMenu onOpenSettings={openSettings} />
+              )}
+            </div>
+          )}
+          {me &&
+            orgModalOpen &&
+            (() => {
+              const active = activeTenant || me.tenant;
+              const homeTenant =
+                me.memberships?.find((m) => m.home)?.tenant ?? me.tenant;
+              const isPlatformAdmin = me.permissions.includes("platform:admin");
+              const isOrgAdmin = (tid: string) =>
+                me.memberships
+                  ?.find((m) => m.tenant === tid)
+                  ?.roles.some((r) =>
+                    r.permissions.includes("organization:admin"),
+                  ) ?? false;
+              // Deletable when it isn't your home org AND you're either a platform
+              // admin (any org) or an org admin of the org you're currently in
+              // (the daemon requires p.Tenant == tenant for non-platform deletes).
+              const deletable = (tid: string) =>
+                tid !== homeTenant &&
+                (isPlatformAdmin || (tid === active && isOrgAdmin(tid)));
+              return (
+                <OrgSwitcherModal
+                  orgs={tenants.map((tid) => ({
+                    tenant: tid,
+                    name: tenantDisplayName(
+                      me,
+                      tid,
+                      t("nav.personalWorkspace"),
+                    ),
+                    glyph: orgGlyph(
+                      me.memberships?.find((m) => m.tenant === tid)?.icon,
+                      18,
+                    ),
+                    deletable: deletable(tid),
+                  }))}
+                  activeTenant={active}
+                  showId={shouldShowTenantID(me, tenants.length)}
+                  onPick={(tid) => {
+                    setOrgModalOpen(false);
+                    // Switching org deep-reloads the app so the active page can't
+                    // keep showing the previous org's data. No-op if it's already
+                    // the active org.
+                    if (tid !== active) setActiveTenant(tid, { reload: true });
+                  }}
+                  onCreate={async (displayName) => {
+                    if (!token) return;
+                    const res = await api.createOrg(token, displayName);
+                    // Switch into the new org with a deep reload: the cold boot
+                    // rebuilds the tenant catalogue (so it appears) and refetches
+                    // in the new scope, so no page keeps the previous org's data.
+                    setOrgModalOpen(false);
+                    setActiveTenant(res.tenant, { reload: true });
+                  }}
+                  onExport={async (tid) => {
+                    if (!token) return;
+                    const data = await api.exportOrg(token, tid);
+                    downloadJson(data, `dazyflow-org-${tid}-export.json`);
+                  }}
+                  onDelete={async (tid, password) => {
+                    if (!token) return;
+                    await api.deleteOrg(token, tid, password);
+                    // Leave the org if it was the active one, then refresh.
+                    if (tid === active) setActiveTenant(homeTenant);
+                    reloadTenants();
+                    setOrgModalOpen(false);
+                  }}
+                  onClose={() => setOrgModalOpen(false)}
+                />
+              );
+            })()}
+        </header>
+        <div className="body">
+          <aside
+            className="sidebar"
+            data-collapsed={navCollapsed ? "true" : "false"}
+          >
+            <div className="group-label">{t("nav.workspaceGroup")}</div>
+            {/* Primary create CTA — the single entry point into the unified
               "Create flow" surface (blank / AI / template). Replaces the
               old standalone Templates nav entry. Collapses to icon-only in
               the rail like the other entries. */}
-          <NavLink
-            to="/flows/new"
-            className="sidebar-new-flow"
-            title={t("flowList.newFlow")}
-          >
-            <Plus size={ICON.lg} />
-            <span className="nav-label">{t("flowList.newFlow")}</span>
-          </NavLink>
-          <NavLink to="/overview" title={t("nav.overview")}>
-            <Gauge size={ICON.lg} />
-            <span className="nav-label">{t("nav.overview")}</span>
-          </NavLink>
-          <NavLink
-            to="/flows"
-            title={t("common.flows")}
-          >
-            <Workflow size={ICON.lg} />
-            <span className="nav-label">{t("common.flows")}</span>
-          </NavLink>
-          {/* All flows in the workspace, nested under the Flows entry.
+            <NavLink
+              to="/flows/new"
+              className="sidebar-new-flow"
+              title={t("flowList.newFlow")}
+            >
+              <Plus size={ICON.lg} />
+              <span className="nav-label">{t("flowList.newFlow")}</span>
+            </NavLink>
+            <NavLink to="/overview" title={t("nav.overview")}>
+              <Gauge size={ICON.lg} />
+              <span className="nav-label">{t("nav.overview")}</span>
+            </NavLink>
+            <NavLink to="/flows" title={t("common.flows")}>
+              <Workflow size={ICON.lg} />
+              <span className="nav-label">{t("common.flows")}</span>
+            </NavLink>
+            {/* All flows in the workspace, nested under the Flows entry.
               Hidden in the collapsed icon-rail (no room for labels). */}
-          {!navCollapsed && flows.length > 0 && (
-            <div className="nav-flows">
-              {flows.map((f) => (
-                <NavLink
-                  key={f.id}
-                  to={`/flows/${encodeURIComponent(f.id)}`}
-                  className="nav-flow-item"
-                  title={f.name || f.id}
-                >
-                  <FlowIcon icon={f.icon} size={ICON.sm} className="nav-flow-icon" />
-                  <span className="nav-label nav-flow-name">{f.name || f.id}</span>
-                  {f.published === false && (
-                    <PencilLine
+            {!navCollapsed && flows.length > 0 && (
+              <div className="nav-flows">
+                {flows.map((f) => (
+                  <NavLink
+                    key={f.id}
+                    to={`/flows/${encodeURIComponent(f.id)}`}
+                    className="nav-flow-item"
+                    title={f.name || f.id}
+                  >
+                    <FlowIcon
+                      icon={f.icon}
                       size={ICON.sm}
-                      className="nav-flow-draft"
-                      aria-label={t("nav.draft")}
+                      className="nav-flow-icon"
                     />
-                  )}
-                </NavLink>
-              ))}
-            </div>
-          )}
-          <NavLink
-            to="/runs"
-            title={t("nav.runs")}
-          >
-            <Activity size={ICON.lg} />
-            <span className="nav-label">{t("nav.runs")}</span>
-          </NavLink>
-          {/* Results — the in-app view of data flows saved to the Built-in
+                    <span className="nav-label nav-flow-name">
+                      {f.name || f.id}
+                    </span>
+                    {f.published === false && (
+                      <PencilLine
+                        size={ICON.sm}
+                        className="nav-flow-draft"
+                        aria-label={t("nav.draft")}
+                      />
+                    )}
+                  </NavLink>
+                ))}
+              </div>
+            )}
+            <NavLink to="/runs" title={t("nav.runs")}>
+              <Activity size={ICON.lg} />
+              <span className="nav-label">{t("nav.runs")}</span>
+            </NavLink>
+            {/* Results — the in-app view of data flows saved to the Built-in
               store. A zero-config "see what my flow produced" surface. */}
-          <NavLink
-            to="/collections"
-            title={t("nav.results")}
-          >
-            <Table2 size={ICON.lg} />
-            <span className="nav-label">{t("nav.results")}</span>
-          </NavLink>
-          {/* Files is an authoring surface (workspace inputs/outputs), gated to
+            <NavLink to="/collections" title={t("nav.results")}>
+              <Table2 size={ICON.lg} />
+              <span className="nav-label">{t("nav.results")}</span>
+            </NavLink>
+            {/* Files is an authoring surface (workspace inputs/outputs), gated to
               editors/admins like Secrets — viewers (graph:run only) don't see
               it and can't browse/download. */}
-          {hasPerm("graph:edit") && (
-            <NavLink
-              to="/files"
-              title={t("nav.files")}
-            >
-              <FolderTree size={ICON.lg} />
-              <span className="nav-label">{t("nav.files")}</span>
-            </NavLink>
-          )}
-          {/* Approvals lives in the sidebar only when it's actually
+            {hasPerm("graph:edit") && (
+              <NavLink to="/files" title={t("nav.files")}>
+                <FolderTree size={ICON.lg} />
+                <span className="nav-label">{t("nav.files")}</span>
+              </NavLink>
+            )}
+            {/* Approvals lives in the sidebar only when it's actually
               useful: any pending approval right now, a sticky flag
               from a previous visit, or an admin who needs to know
               one might exist. Non-tech buyers whose flows don't use
               await_approval never see the link, removing a confusing
               "what's this?" entry from their default sidebar. */}
-          {(pendingCount > 0 || everHadApproval || hasPerm("organization:admin")) && (
-            <NavLink
-              to="/approvals"
-              title={t("nav.approvals")}
-            >
-              <Inbox size={ICON.lg} />
-              <span className="nav-label" style={{ flex: 1 }}>
-                {t("nav.approvals")}
-              </span>
-              {pendingCount > 0 && (
-                <span className="nav-badge">{pendingCount}</span>
-              )}
-            </NavLink>
-          )}
-          {/* Apps is the integration catalog (connect Slack/Gmail, see
+            {(pendingCount > 0 ||
+              everHadApproval ||
+              hasPerm("organization:admin")) && (
+              <NavLink to="/approvals" title={t("nav.approvals")}>
+                <Inbox size={ICON.lg} />
+                <span className="nav-label" style={{ flex: 1 }}>
+                  {t("nav.approvals")}
+                </span>
+                {pendingCount > 0 && (
+                  <span className="nav-badge">{pendingCount}</span>
+                )}
+              </NavLink>
+            )}
+            {/* Apps is the integration catalog (connect Slack/Gmail, see
               what's ready to use). Viewable by everyone. Org secret values
               live under Admin → Secrets. */}
-          <NavLink
-            to="/apps"
-            title={t("nav.apps")}
-          >
-            <Boxes size={ICON.lg} />
-            <span className="nav-label">{t("nav.apps")}</span>
-          </NavLink>
-          {/* Support tickets: only when the deployment wired the native
+            <NavLink to="/apps" title={t("nav.apps")}>
+              <Boxes size={ICON.lg} />
+              <span className="nav-label">{t("nav.apps")}</span>
+            </NavLink>
+            {/* Support tickets: only when the deployment wired the native
               ticket surface. A support agent instead gets the cross-tenant
               queue at the same entry point. */}
-          {supportOn && (
-            <NavLink
-              to={isAgent ? "/support/queue" : "/support"}
-              title={t("nav.support")}
-            >
-              <LifeBuoy size={ICON.lg} />
-              <span className="nav-label" style={{ flex: 1 }}>{t("nav.support")}</span>
-              {supportUnread > 0 && <span className="nav-badge">{supportUnread}</span>}
-            </NavLink>
-          )}
-          <div className="sidebar-spacer" />
-          {/* Classical collapse arrow. Duplicates the hamburger's
+            {supportOn && (
+              <NavLink
+                to={isAgent ? "/support/queue" : "/support"}
+                title={t("nav.support")}
+              >
+                <LifeBuoy size={ICON.lg} />
+                <span className="nav-label" style={{ flex: 1 }}>
+                  {t("nav.support")}
+                </span>
+                {supportUnread > 0 && (
+                  <span className="nav-badge">{supportUnread}</span>
+                )}
+              </NavLink>
+            )}
+            <div className="sidebar-spacer" />
+            {/* Classical collapse arrow. Duplicates the hamburger's
               collapse action so the affordance sits next to the panel it
               controls — the standard pattern in VS Code, Linear, etc.
               Hidden on mobile where the hamburger drives a slide-over. */}
-          <Button
-            className="sidebar-collapse-toggle"
-            onClick={toggleNav}
-            aria-label={
-              navCollapsed
-                ? t("nav.expandSidebar")
-                : t("nav.collapseSidebar")
-            }
-            title={
-              navCollapsed
-                ? t("nav.expandSidebar")
-                : t("nav.collapseSidebar")
-            }
-          >
-            {navCollapsed ? (
-              <ChevronRight size={ICON.md} />
-            ) : (
-              <ChevronLeft size={ICON.md} />
-            )}
-            <span className="nav-label">
-              {navCollapsed
-                ? t("nav.expandSidebar")
-                : t("nav.collapseSidebar")}
-            </span>
-          </Button>
-          {/* Account control pinned to the very bottom of the sidebar —
+            <Button
+              className="sidebar-collapse-toggle"
+              onClick={toggleNav}
+              aria-label={
+                navCollapsed ? t("nav.expandSidebar") : t("nav.collapseSidebar")
+              }
+              title={
+                navCollapsed ? t("nav.expandSidebar") : t("nav.collapseSidebar")
+              }
+            >
+              {navCollapsed ? (
+                <ChevronRight size={ICON.md} />
+              ) : (
+                <ChevronLeft size={ICON.md} />
+              )}
+              <span className="nav-label">
+                {navCollapsed
+                  ? t("nav.expandSidebar")
+                  : t("nav.collapseSidebar")}
+              </span>
+            </Button>
+            {/* Account control pinned to the very bottom of the sidebar —
               the entry point to per-user actions (Settings, Sign out).
               Mirrors the sibling `dazy` app's sidebar-footer account
               menu. Shows just the user icon in the collapsed rail. */}
-          {me && (
-            <AccountMenu
-              email={me.subject || t("nav.noSubject")}
-              onSignOut={signOut}
-              onConnectMcp={() => setConnectingMcp(true)}
-              collapsed={navCollapsed}
-              showAdmin={showAdmin}
-              version={serverVersion}
-            />
-          )}
-        </aside>
-        {/* Scrim behind the mobile drawer — tap to close. Inert on
+            {me && (
+              <AccountMenu
+                email={me.subject || t("nav.noSubject")}
+                onSignOut={signOut}
+                onConnectMcp={() => setConnectingMcp(true)}
+                collapsed={navCollapsed}
+                showAdmin={showAdmin}
+                version={serverVersion}
+              />
+            )}
+          </aside>
+          {/* Scrim behind the mobile drawer — tap to close. Inert on
             desktop (CSS hides it); only interactive on small screens
             while the drawer is open. */}
-        <Button
-          className="sidebar-scrim"
-          aria-label={t("nav.closeMenu")}
-          tabIndex={navCollapsed ? -1 : 0}
-          onClick={closeNav}
-        />
-        <main className={"main" + (inEditor ? " no-pad" : "")}>
-          {/* "Confirm your email" nag — only on verification-active
+          <Button
+            className="sidebar-scrim"
+            aria-label={t("nav.closeMenu")}
+            tabIndex={navCollapsed ? -1 : 0}
+            onClick={closeNav}
+          />
+          <main className={"main" + (inEditor ? " no-pad" : "")}>
+            {/* "Confirm your email" nag — only on verification-active
               deployments for unverified password accounts. Hidden in the
               editor so it never eats canvas height. */}
-          {me?.verification_pending && !inEditor && <VerifyEmailBanner />}
-          {/* Gentle cross-page fade: keying on the path remounts this wrapper on
+            {me?.verification_pending && !inEditor && <VerifyEmailBanner />}
+            {/* Gentle cross-page fade: keying on the path remounts this wrapper on
               navigation, re-triggering the .route-fade entry animation. Skipped
               in the editor — the canvas shouldn't fade/remount on every change. */}
-          {inEditor ? (
-            children
-          ) : (
-            <div key={location.pathname} className="route-fade">
-              {children}
-            </div>
-          )}
-        </main>
+            {inEditor ? (
+              children
+            ) : (
+              <div key={location.pathname} className="route-fade">
+                {children}
+              </div>
+            )}
+          </main>
+        </div>
+        <CommandPalette
+          open={cmdOpen}
+          onClose={() => setCmdOpen(false)}
+          flows={flows}
+        />
+        {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
+        {connectingMcp && (
+          <ConnectMcpClientModal onClose={() => setConnectingMcp(false)} />
+        )}
       </div>
-      <CommandPalette
-        open={cmdOpen}
-        onClose={() => setCmdOpen(false)}
-        flows={flows}
-      />
-      {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
-      {connectingMcp && (
-        <ConnectMcpClientModal onClose={() => setConnectingMcp(false)} />
-      )}
-    </div>
     </ActiveFlowContext.Provider>
   );
 }
@@ -836,7 +848,8 @@ function AccountMenu({
         <span className="nav-label account-email">{email}</span>
         <ChevronDown size={ICON.sm} className="nav-label" />
       </Button>
-      {open && pos &&
+      {open &&
+        pos &&
         createPortal(
           <div
             className="workspace-pop account-pop"
@@ -1034,10 +1047,21 @@ function FlowMenu({ onOpenSettings }: { onOpenSettings: () => void }) {
 // VerifyEmailBanner nags an unverified account to confirm its address,
 // with a resend button. Dismissal is per-render-tree only (state, not
 // storage) — the nag should come back next visit until verified.
+//
+// The banner only claims what it can actually stand behind. It used to open
+// with "we sent you a link when you signed up", which is not something this
+// component knows: signup reports `verification_email_sent`, and on a
+// deployment whose mailer is unconfigured or failing that comes back false.
+// So the first thing a new owner read was a claim about an email that was
+// never sent, and the resend button — their one way out — swallowed its own
+// 502 and left the same sentence on screen. Now the banner states the fact
+// (the address isn't confirmed), names what it costs them, and reports
+// honestly what each resend actually did.
 function VerifyEmailBanner() {
   const { t } = useTranslation();
   const { token, refreshMe } = useAuth();
   const [sent, setSent] = useState(false);
+  const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [hidden, setHidden] = useState(false);
 
@@ -1045,24 +1069,37 @@ function VerifyEmailBanner() {
   const resend = async () => {
     if (!token) return;
     setBusy(true);
+    setFailed(false);
+    // Trust the server's account of what happened rather than the absence of a
+    // throw — see resendOutcome for why those are different facts.
+    let res: { sent?: boolean; already_verified?: boolean } | null = null;
     try {
-      const r = await api.resendVerification(token);
-      if (r.already_verified) {
-        await refreshMe(); // banner disappears via whoami
-        return;
-      }
-      setSent(true);
+      res = await api.resendVerification(token);
     } catch {
-      // The button stays — the user can retry.
-    } finally {
-      setBusy(false);
+      res = null; // the mailer is down; the route answers 502
     }
+    switch (resendOutcome(res)) {
+      case "verified":
+        await refreshMe(); // banner disappears via whoami
+        break;
+      case "sent":
+        setSent(true);
+        break;
+      case "failed":
+        setFailed(true);
+        break;
+    }
+    setBusy(false);
   };
   return (
     <div className="card verify-banner">
       <MailWarning size={ICON.lg} className="verify-banner-icon" />
-      <div className="verify-banner-body">
-        {sent ? t("verifyEmail.bannerSent") : t("verifyEmail.banner")}
+      <div className="verify-banner-body" role={failed ? "alert" : undefined}>
+        {sent
+          ? t("verifyEmail.bannerSent")
+          : failed
+            ? t("verifyEmail.bannerFailed")
+            : t("verifyEmail.banner")}
       </div>
       {!sent && (
         <Button
@@ -1071,7 +1108,11 @@ function VerifyEmailBanner() {
           onClick={() => void resend()}
         >
           <Send size={ICON.sm} />
-          {busy ? t("common.sending") : t("verifyEmail.bannerResend")}
+          {busy
+            ? t("common.sending")
+            : t(
+                failed ? "verifyEmail.bannerRetry" : "verifyEmail.bannerResend",
+              )}
         </Button>
       )}
       <Button

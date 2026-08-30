@@ -12,6 +12,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -1741,13 +1742,55 @@ func (s *Service) ListGraphRuns(ctx context.Context, p core.Principal, opts core
 // module emitted). Built by ListPendingApprovals; the UI never sees the
 // raw node-record.
 type PendingApproval struct {
-	RunID     string    `json:"run_id"`
-	GraphID   string    `json:"graph_id"`
-	NodeID    string    `json:"node_id"`
-	Prompt    string    `json:"prompt,omitempty"`
-	URL       string    `json:"url,omitempty"`
-	Since     time.Time `json:"since"`
-	Workspace string    `json:"workspace"`
+	RunID   string `json:"run_id"`
+	GraphID string `json:"graph_id"`
+	NodeID  string `json:"node_id"`
+	Prompt  string `json:"prompt,omitempty"`
+	// Context is the value the flow wired into the step's "Value" port — the
+	// thing being decided about. Without it the inbox can only say which step
+	// is waiting, which asks someone to approve a decision sight unseen.
+	// Omitted when nothing was wired, or when the value is too big to ride
+	// along in a list (see ContextTooLarge).
+	Context any `json:"context,omitempty"`
+	// ContextTooLarge marks a carried value that exceeded the preview cap. The
+	// inbox says so and points at the run, rather than silently looking like a
+	// step with nothing attached.
+	ContextTooLarge bool `json:"context_too_large,omitempty"`
+	// ContextOrder is the value's own column order when it carries one (see
+	// core.Ref.Headers) — for a hosted form, the order its fields were
+	// declared in. JSON objects have no order the browser can rely on and Go
+	// serializes map keys sorted, so without this the card renders a
+	// submission alphabetically: "What you like about us" above "Your name".
+	ContextOrder []string  `json:"context_order,omitempty"`
+	URL          string    `json:"url,omitempty"`
+	Since        time.Time `json:"since"`
+	Workspace    string    `json:"workspace"`
+}
+
+// approvalContextCap bounds how much of a carried value rides along in the
+// pending list. The inbox returns up to 200 rows and the value is whatever the
+// flow wired in — a form submission, but equally a scraped page or a whole
+// spreadsheet. The card only has to answer "what am I deciding about"; the run
+// page holds the full value either way.
+const approvalContextCap = 4096
+
+// approvalContextPreview returns the carried value if it is small enough to
+// send with a list row, else (nil, true) meaning "there is one, but look at the
+// run for it".
+func approvalContextPreview(ref core.Ref) (any, bool) {
+	if ref.Inline == nil {
+		return nil, false
+	}
+	b, err := json.Marshal(ref.Inline)
+	if err != nil {
+		// Not representable over the wire (a channel, a cycle). Say something
+		// is attached rather than pretend nothing was wired.
+		return nil, true
+	}
+	if len(b) > approvalContextCap {
+		return nil, true
+	}
+	return ref.Inline, false
 }
 
 // ListPendingApprovals returns awaiting node-records that were
@@ -1798,14 +1841,30 @@ func (s *Service) ListPendingApprovals(ctx context.Context, p core.Principal, na
 		if rec.StartedAt != nil {
 			since = *rec.StartedAt
 		}
+		// The step stashes whatever was wired into its Value port on the same
+		// awaiting output we're already reading. Carrying it here is what lets
+		// the inbox show the submission, the refund, the draft reply — instead
+		// of a step id.
+		var approvalCtx any
+		var ctxTooLarge bool
+		var ctxOrder []string
+		if ctxRef, ok := rec.Result.Output["context"]; ok {
+			approvalCtx, ctxTooLarge = approvalContextPreview(ctxRef)
+			if approvalCtx != nil {
+				ctxOrder = ctxRef.Headers
+			}
+		}
 		out = append(out, PendingApproval{
-			RunID:     rec.GraphRunID,
-			GraphID:   rec.GraphID,
-			NodeID:    rec.NodeID,
-			Prompt:    prompt,
-			URL:       urlStr,
-			Since:     since,
-			Workspace: rec.Workspace,
+			RunID:           rec.GraphRunID,
+			GraphID:         rec.GraphID,
+			NodeID:          rec.NodeID,
+			Prompt:          prompt,
+			Context:         approvalCtx,
+			ContextTooLarge: ctxTooLarge,
+			ContextOrder:    ctxOrder,
+			URL:             urlStr,
+			Since:           since,
+			Workspace:       rec.Workspace,
 		})
 	}
 	return out, nil

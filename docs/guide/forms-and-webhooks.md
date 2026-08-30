@@ -141,5 +141,6 @@ out about a field name mismatch now, rather than at 02:00 next Tuesday.
 
 - [Make a flow run by itself](./triggers-and-schedules) — publishing, pausing and schedules.
 - [When a run fails](./when-a-flow-fails) — reading a failed delivery.
+- [Teams & approvals](./teams-and-approvals) — have a person check a submission before the flow acts on it.
 - [Step catalog: triggers](../reference/steps/triggers) — the webhook trigger's settings and outputs in detail.
 - [Step catalog: webhook](../reference/steps/webhook) — the *outbound* step, for sending data to someone else's webhook.

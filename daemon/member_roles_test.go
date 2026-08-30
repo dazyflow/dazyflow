@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -20,6 +21,9 @@ import (
 // fakeMembershipStore is a map-backed auth.MembershipStore for handler
 // tests (the only real implementation is Postgres-backed).
 type fakeMembershipStore struct {
+	// mu makes the fake safe to hammer from several goroutines, which the
+	// seat-race test does on purpose, and backs the atomic seat write below.
+	mu   sync.Mutex
 	rows map[string]auth.Membership // email|tenant
 }
 
@@ -32,17 +36,49 @@ func memKey(email, tenant string) string {
 }
 
 func (f *fakeMembershipStore) PutMembership(_ context.Context, m auth.Membership) error {
-	m.UserEmail = strings.ToLower(strings.TrimSpace(m.UserEmail))
-	f.rows[memKey(m.UserEmail, m.Tenant)] = m
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.put(m)
 	return nil
 }
 
+func (f *fakeMembershipStore) put(m auth.Membership) {
+	m.UserEmail = strings.ToLower(strings.TrimSpace(m.UserEmail))
+	f.rows[memKey(m.UserEmail, m.Tenant)] = m
+}
+
+// PutMembershipWithinLimit implements auth.SeatLimitedMembershipStore, so the
+// handler tests exercise the same atomic path production takes (where it is
+// backed by a transaction and a per-tenant advisory lock) rather than the
+// racy check-then-write fallback.
+func (f *fakeMembershipStore) PutMembershipWithinLimit(_ context.Context, m auth.Membership, maxRows int) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, already := f.rows[memKey(m.UserEmail, m.Tenant)]; !already {
+		rows := 0
+		for _, r := range f.rows {
+			if r.Tenant == m.Tenant {
+				rows++
+			}
+		}
+		if rows >= maxRows {
+			return false, nil
+		}
+	}
+	f.put(m)
+	return true, nil
+}
+
 func (f *fakeMembershipStore) DeleteMembership(_ context.Context, email, tenant string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	delete(f.rows, memKey(email, tenant))
 	return nil
 }
 
 func (f *fakeMembershipStore) GetMembership(_ context.Context, email, tenant string) (auth.Membership, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if m, ok := f.rows[memKey(email, tenant)]; ok {
 		return m, nil
 	}
@@ -50,6 +86,8 @@ func (f *fakeMembershipStore) GetMembership(_ context.Context, email, tenant str
 }
 
 func (f *fakeMembershipStore) ListByEmail(_ context.Context, email string) ([]auth.Membership, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	var out []auth.Membership
 	for _, m := range f.rows {
 		if m.UserEmail == strings.ToLower(email) {
@@ -60,6 +98,8 @@ func (f *fakeMembershipStore) ListByEmail(_ context.Context, email string) ([]au
 }
 
 func (f *fakeMembershipStore) ListByTenant(_ context.Context, tenant string) ([]auth.Membership, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	var out []auth.Membership
 	for _, m := range f.rows {
 		if m.Tenant == tenant {

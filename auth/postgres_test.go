@@ -6,7 +6,9 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -525,5 +527,244 @@ func TestPgOrgAuthStore_TenantRequired(t *testing.T) {
 	}
 	if err := store.PutOrgAuth(ctx, OrgAuthConfig{}); err == nil {
 		t.Error("empty tenant should be rejected")
+	}
+}
+
+// TestPgMembership_SeatLimitIsAtomicUnderConcurrency — the real SQL path:
+// several people accepting at the same instant cannot all take the last seat.
+//
+// This exercises the real transaction and per-tenant advisory lock. The
+// daemon-level test uses a mutex-backed fake, which proves the caller asks the
+// store to decide, but not that Postgres decides correctly.
+//
+// Honest about what it proves: it is a smoke test. The window a plain
+// count-then-insert leaves open is microseconds wide, so goroutines rarely
+// land inside it and this passes with the lock removed too. The test below —
+// SeatLimitNeedsTheLock — is the one that pins the hazard, by forcing the
+// interleave instead of hoping for it.
+//
+// Gated on DAZYFLOW_TEST_DB like the rest of the Postgres suite.
+func TestPgMembership_SeatLimitIsAtomicUnderConcurrency(t *testing.T) {
+	pool, ctx := covPool(t)
+	store, err := NewPgMembershipStore(ctx, pool)
+	if err != nil {
+		t.Fatalf("NewPgMembershipStore: %v", err)
+	}
+	const tenant = "seatrace"
+	const maxRows = 3
+	// Two seats already taken; one left for everyone below to fight over.
+	for _, e := range []string{"a@example.com", "b@example.com"} {
+		if err := store.PutMembership(ctx, Membership{
+			UserEmail: e, Tenant: tenant, Workspace: "main",
+		}); err != nil {
+			t.Fatalf("seed %s: %v", e, err)
+		}
+	}
+
+	const racers = 10
+	var wg sync.WaitGroup
+	seated := make([]bool, racers)
+	errs := make([]error, racers)
+	start := make(chan struct{})
+	for i := 0; i < racers; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-start
+			seated[i], errs[i] = store.PutMembershipWithinLimit(ctx, Membership{
+				UserEmail: fmt.Sprintf("racer%d@example.com", i),
+				Tenant:    tenant, Workspace: "main",
+			}, maxRows)
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+
+	got := 0
+	for i, ok := range seated {
+		if errs[i] != nil {
+			t.Fatalf("racer %d: %v", i, errs[i])
+		}
+		if ok {
+			got++
+		}
+	}
+	if got != 1 {
+		t.Errorf("%d racers seated, want exactly 1", got)
+	}
+	rows, err := store.ListByTenant(ctx, tenant)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(rows) != maxRows {
+		t.Errorf("rows = %d, want %d — the limit was exceeded", len(rows), maxRows)
+	}
+}
+
+// TestPgMembership_SeatLimitAllowsUpdatingAnExistingMember — a role change on
+// someone already seated is an update, not a new seat, so a full org can still
+// fix a role.
+func TestPgMembership_SeatLimitAllowsUpdatingAnExistingMember(t *testing.T) {
+	pool, ctx := covPool(t)
+	store, err := NewPgMembershipStore(ctx, pool)
+	if err != nil {
+		t.Fatalf("NewPgMembershipStore: %v", err)
+	}
+	const tenant = "seatfull"
+	if err := store.PutMembership(ctx, Membership{
+		UserEmail: "only@example.com", Tenant: tenant, Workspace: "main",
+		Roles: []core.Role{{Name: "viewer"}},
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	// Full at one row.
+	seated, err := store.PutMembershipWithinLimit(ctx, Membership{
+		UserEmail: "only@example.com", Tenant: tenant, Workspace: "ops",
+		Roles: []core.Role{{Name: "admin"}},
+	}, 1)
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if !seated {
+		t.Fatal("updating an existing member was refused as if it needed a new seat")
+	}
+	m, err := store.GetMembership(ctx, "only@example.com", tenant)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if m.Workspace != "ops" || len(m.Roles) == 0 || m.Roles[0].Name != "admin" {
+		t.Errorf("membership = %+v, want the update applied", m)
+	}
+	// A genuinely new person still doesn't fit.
+	if ok, err := store.PutMembershipWithinLimit(ctx, Membership{
+		UserEmail: "newcomer@example.com", Tenant: tenant, Workspace: "main",
+	}, 1); err != nil || ok {
+		t.Errorf("newcomer seated=%v err=%v, want refused", ok, err)
+	}
+}
+
+// TestPgMembership_SeatLimitNeedsTheLock is the executable rationale for the
+// advisory lock in PutMembershipWithinLimit: it forces the interleave that a
+// plain count-then-insert cannot survive, and shows the store's own method
+// surviving it.
+//
+// Under READ COMMITTED each statement sees a snapshot taken when it starts, so
+// two transactions that both count before either inserts BOTH see the free
+// seat. Nothing in Postgres stops them — there is no row to conflict on,
+// because the anomaly is about a row that does not exist yet.
+//
+// If the first half of this test ever stops failing to hold the limit, the
+// isolation story changed and the lock deserves a fresh look.
+func TestPgMembership_SeatLimitNeedsTheLock(t *testing.T) {
+	pool, ctx := covPool(t)
+	store, err := NewPgMembershipStore(ctx, pool)
+	if err != nil {
+		t.Fatalf("NewPgMembershipStore: %v", err)
+	}
+	const tenant = "seatlock"
+	const maxRows = 3
+	seed := func() {
+		if _, err := pool.Exec(ctx, `DELETE FROM memberships WHERE tenant=$1`, tenant); err != nil {
+			t.Fatalf("reset: %v", err)
+		}
+		for _, e := range []string{"a@example.com", "b@example.com"} {
+			if err := store.PutMembership(ctx, Membership{
+				UserEmail: e, Tenant: tenant, Workspace: "main",
+			}); err != nil {
+				t.Fatalf("seed: %v", err)
+			}
+		}
+	}
+	rowsNow := func() int {
+		var n int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM memberships WHERE tenant=$1`, tenant).Scan(&n); err != nil {
+			t.Fatalf("count: %v", err)
+		}
+		return n
+	}
+
+	// 1) Unlocked count-then-insert, interleaved on purpose: both read two
+	//    rows, both insert, and the org lands on four against a limit of three.
+	seed()
+	counted := make(chan struct{}, 2)
+	proceed := make(chan struct{})
+	var wg sync.WaitGroup
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			tx, err := pool.Begin(ctx)
+			if err != nil {
+				t.Errorf("begin: %v", err)
+				return
+			}
+			defer func() { _ = tx.Rollback(ctx) }()
+			var n int
+			if err := tx.QueryRow(ctx,
+				`SELECT count(*) FROM memberships WHERE tenant=$1`, tenant).Scan(&n); err != nil {
+				t.Errorf("count: %v", err)
+				return
+			}
+			counted <- struct{}{}
+			<-proceed // hold until BOTH have counted
+			if n >= maxRows {
+				return // neither reaches this: both saw a free seat
+			}
+			if _, err := tx.Exec(ctx, membershipUpsertSQL,
+				fmt.Sprintf("naive%d@example.com", i), tenant, "main", []byte("[]"), nil, time.Now().UTC()); err != nil {
+				t.Errorf("insert: %v", err)
+				return
+			}
+			if err := tx.Commit(ctx); err != nil {
+				t.Errorf("commit: %v", err)
+			}
+		}(i)
+	}
+	<-counted
+	<-counted
+	close(proceed)
+	wg.Wait()
+	if got := rowsNow(); got <= maxRows {
+		t.Skipf("unlocked interleave stayed within the limit (%d rows) — "+
+			"the isolation behaviour this lock guards against may have changed", got)
+	}
+
+	// 2) The store's own method, same interleave pressure: the lock makes the
+	//    second transaction wait, re-count, and find the seat gone.
+	seed()
+	var wg2 sync.WaitGroup
+	seated := make([]bool, 2)
+	errs := make([]error, 2)
+	start := make(chan struct{})
+	for i := 0; i < 2; i++ {
+		wg2.Add(1)
+		go func(i int) {
+			defer wg2.Done()
+			<-start
+			seated[i], errs[i] = store.PutMembershipWithinLimit(ctx, Membership{
+				UserEmail: fmt.Sprintf("guarded%d@example.com", i),
+				Tenant:    tenant, Workspace: "main",
+			}, maxRows)
+		}(i)
+	}
+	close(start)
+	wg2.Wait()
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("guarded %d: %v", i, err)
+		}
+	}
+	if n := 0; true {
+		for _, ok := range seated {
+			if ok {
+				n++
+			}
+		}
+		if n != 1 {
+			t.Errorf("guarded seats taken = %d, want 1", n)
+		}
+	}
+	if got := rowsNow(); got != maxRows {
+		t.Errorf("rows = %d, want %d — the lock did not hold the limit", got, maxRows)
 	}
 }

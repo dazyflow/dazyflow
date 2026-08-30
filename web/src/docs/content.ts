@@ -8,6 +8,7 @@
 // derives the page map + the sidebar nav.
 import {
   Workflow,
+  ShieldCheck,
   BookText,
   Blocks,
   Boxes,
@@ -76,10 +77,20 @@ const raw = import.meta.glob("./content/**/*.md", {
   eager: true,
 }) as Record<string, string>;
 
-export type DocPage = { path: string; title: string; body: string; icon?: string };
+export type DocPage = {
+  path: string;
+  title: string;
+  body: string;
+  icon?: string;
+};
 // A nav row shows either the group's brand mark (`brand`, e.g. /brands/gmail.svg)
 // or, when there's none, a generic lucide `icon`.
-export type NavItem = { text: string; link: string; icon: LucideIcon; brand?: string };
+export type NavItem = {
+  text: string;
+  link: string;
+  icon: LucideIcon;
+  brand?: string;
+};
 export type NavGroup = { text: string; items: NavItem[] };
 
 // Pull the front-matter `title` + `icon` (and strip the block) so the body
@@ -129,10 +140,19 @@ export function getPage(path: string): DocPage | undefined {
 
 function catalogGroups(): NavItem[] {
   return Object.values(PAGES)
-    .filter((p) => p.path.startsWith("/reference/steps/") && p.path !== "/reference/steps/")
+    .filter(
+      (p) =>
+        p.path.startsWith("/reference/steps/") &&
+        p.path !== "/reference/steps/",
+    )
     .map((p) => {
       const slug = p.path.replace(/\/$/, "").split("/").pop() || "";
-      return { text: p.title, link: p.path, icon: GROUP_ICONS[slug] ?? Plug, brand: p.icon };
+      return {
+        text: p.title,
+        link: p.path,
+        icon: GROUP_ICONS[slug] ?? Plug,
+        brand: p.icon,
+      };
     })
     .sort((a, b) => a.text.localeCompare(b.text));
 }
@@ -143,7 +163,11 @@ export const NAV: NavGroup[] = [
     text: "Guide",
     items: [
       { text: "How Dazyflow works", link: "/guide/concepts", icon: Workflow },
-      { text: "Build your first flow", link: "/guide/first-flow", icon: Rocket },
+      {
+        text: "Build your first flow",
+        link: "/guide/first-flow",
+        icon: Rocket,
+      },
       { text: "Connect an app", link: "/guide/connect-an-app", icon: KeyRound },
       {
         text: "Triggers & schedules",
@@ -154,6 +178,11 @@ export const NAV: NavGroup[] = [
         text: "Forms & webhooks",
         link: "/guide/forms-and-webhooks",
         icon: Webhook,
+      },
+      {
+        text: "Teams & approvals",
+        link: "/guide/teams-and-approvals",
+        icon: ShieldCheck,
       },
       {
         text: "When a run fails",

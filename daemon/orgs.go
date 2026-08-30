@@ -551,16 +551,140 @@ func (h *HTTPGateway) updateMemberRoles(rw http.ResponseWriter, r *http.Request,
 // default on deployments without billing, and Pro's default) means no
 // enforcement.
 func (h *HTTPGateway) seatQuotaExceeded(ctx context.Context, tenant string) (bool, int) {
-	eff := h.svc.effectiveLimits(ctx, tenant)
-	limit := eff.MaxMembers
+	limit := h.svc.effectiveLimits(ctx, tenant).MaxMembers
 	if limit <= 0 || h.Memberships == nil {
 		return false, limit
 	}
-	members, err := h.Memberships.ListByTenant(ctx, tenant)
-	if err != nil {
+	held, ok := h.seatHolders(ctx, tenant)
+	if !ok {
 		return false, limit // fail open
 	}
-	return len(members) >= limit, limit
+	return len(held) >= limit, limit
+}
+
+// invitationSeatExceeded reports whether tenant has room for one more
+// INVITATION: the people seated today plus the invitations already outstanding,
+// each of which is a promise of a seat.
+//
+// Counting only the seated let an admin hand out more promises than the plan
+// can honour. At 2 of 3 seats every invitation passed the check on its own,
+// because none of them had been accepted yet — and the refusal then landed on
+// whichever invitee happened to click second, as "ask an admin to upgrade".
+// The admin never saw a problem; the person they invited did.
+//
+// Pending invitations are deliberately NOT counted by seatQuotaExceeded at
+// accept time, which measures real occupancy: a stale invitation someone never
+// opened must not keep a real person out of a seat that is genuinely free.
+//
+// invitee is excluded from the count so re-inviting someone doesn't run them
+// against their own outstanding invitation (or their own membership).
+func (h *HTTPGateway) invitationSeatExceeded(ctx context.Context, tenant, invitee string) (bool, int) {
+	limit := h.svc.effectiveLimits(ctx, tenant).MaxMembers
+	if limit <= 0 || h.Memberships == nil {
+		return false, limit
+	}
+	held, ok := h.seatHolders(ctx, tenant)
+	if !ok {
+		return false, limit // fail open
+	}
+	if h.Invitations != nil {
+		// A store error here means we can't see the outstanding promises;
+		// fall back to counting the seated rather than refusing.
+		//
+		// Accepted, revoked and expired invitations are all skipped: only one
+		// that can still be walked through the door is holding a seat.
+		// Platform signup-invites never appear here — they carry the
+		// SignupInviteTenant sentinel, not a real tenant.
+		now := time.Now().UTC()
+		if invs, err := h.Invitations.ListByTenant(ctx, tenant); err == nil {
+			for _, inv := range invs {
+				if inv.IsPending(now) {
+					held[normalizeSeatEmail(inv.Email)] = struct{}{}
+				}
+			}
+		}
+	}
+	delete(held, normalizeSeatEmail(invitee))
+	return len(held) >= limit, limit
+}
+
+// seatMembership writes m, refusing when the tenant has no seat left for a new
+// person. Returns whether they were seated, and the plan limit for the message.
+//
+// Prefers a store that can decide and write atomically. The fallback — count,
+// then insert — has a window: two people accepting invitations in the same
+// moment both read the last free seat and both take it, leaving the org one
+// over its plan with nothing to signal it. Rare, and the whole point of a seat
+// limit is that it holds anyway.
+func (h *HTTPGateway) seatMembership(ctx context.Context, m auth.Membership) (bool, int, error) {
+	limit := h.svc.effectiveLimits(ctx, m.Tenant).MaxMembers
+	if limit <= 0 {
+		return true, limit, h.Memberships.PutMembership(ctx, m) // uncapped
+	}
+	if sl, ok := h.Memberships.(auth.SeatLimitedMembershipStore); ok {
+		// The store counts rows; the owner holds a seat without one, so hand
+		// it the row budget rather than the people budget.
+		rowLimit := limit
+		if h.ownerEmail(ctx, m.Tenant) != "" {
+			rowLimit--
+		}
+		if rowLimit < 0 {
+			rowLimit = 0
+		}
+		seated, err := sl.PutMembershipWithinLimit(ctx, m, rowLimit)
+		return seated, limit, err
+	}
+	if exceeded, _ := h.seatQuotaExceeded(ctx, m.Tenant); exceeded {
+		return false, limit, nil
+	}
+	return true, limit, h.Memberships.PutMembership(ctx, m)
+}
+
+// seatHolders is the set of email addresses occupying a seat in tenant: every
+// membership row plus the owner, who holds one without a row (ownership is
+// implicit in the home tenant). Returns ok=false on a store error so callers
+// can fail open — a DB hiccup must never lock an org out of growing.
+//
+// A set rather than a count, because the two sources can name the same person:
+// listMembers adds the owner on top of the rows for the People page, and this
+// has to agree with what that page shows or the limit means nothing.
+func (h *HTTPGateway) seatHolders(ctx context.Context, tenant string) (map[string]struct{}, bool) {
+	members, err := h.Memberships.ListByTenant(ctx, tenant)
+	if err != nil {
+		return nil, false
+	}
+	held := make(map[string]struct{}, len(members)+1)
+	for _, m := range members {
+		held[normalizeSeatEmail(m.UserEmail)] = struct{}{}
+	}
+	if owner := h.ownerEmail(ctx, tenant); owner != "" {
+		held[owner] = struct{}{}
+	}
+	return held, true
+}
+
+// ownerEmail returns the address of tenant's home owner, or "" when there
+// isn't one (an org an operator created) or the lookup fails.
+func (h *HTTPGateway) ownerEmail(ctx context.Context, tenant string) string {
+	if h.Users == nil {
+		return ""
+	}
+	users, err := h.Users.ListUsers(ctx)
+	if err != nil {
+		return ""
+	}
+	for _, u := range users {
+		if u.Tenant == tenant {
+			return normalizeSeatEmail(u.Email) // single home per tenant
+		}
+	}
+	return ""
+}
+
+// normalizeSeatEmail folds an address to the form seat counting compares on,
+// matching how memberships are keyed.
+func normalizeSeatEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
 }
 
 func (h *HTTPGateway) createInvitation(rw http.ResponseWriter, r *http.Request, p core.Principal) {
@@ -572,20 +696,21 @@ func (h *HTTPGateway) createInvitation(rw http.ResponseWriter, r *http.Request, 
 		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}
-	// Anti-abuse: on verification-active deployments an unverified
-	// signup can't use the operator's mailer to send invitations.
-	if !h.requireVerifiedInviter(rw, r, p) {
-		return
-	}
-	// Seat gate (free tier): refuse new invitations once the org is at its
-	// member cap. Early feedback for the admin; the hard enforcement is at
-	// accept time (acceptInvitation), which also counts pending invites that
-	// land together. Pro/comped/trial orgs are uncapped.
-	if exceeded, limit := h.seatQuotaExceeded(r.Context(), p.Tenant); exceeded {
-		writeJSONError(rw, http.StatusPaymentRequired,
-			fmt.Sprintf("your plan includes %d members — upgrade to add more", limit))
-		return
-	}
+	// Anti-abuse, narrowed to what it actually protects: an unverified signup
+	// must not be able to make the operator's mailer send to an address of
+	// their choosing. That is a reason to withhold the EMAIL, not a reason to
+	// refuse the invitation — the response has always carried accept_url for
+	// copy/paste, and the invite dialog tells admins exactly that ("SMTP
+	// delivery is optional, you can also copy and send the link yourself").
+	//
+	// Refusing outright put the whole team feature behind a verification that
+	// cannot always complete. A configured-but-broken mailer (wrong password,
+	// expired token, provider blocking) leaves verificationActive() true while
+	// every send fails, so the owner was told to confirm their address via an
+	// email that would never arrive, with no way forward. Creating the
+	// invitation and withholding only the send keeps the spam vector shut and
+	// still hands them a link that works.
+	mayEmailInvite := h.inviterVerified(r, p)
 	body, ok := decodeRequestJSON[struct {
 		Email     string      `json:"email"`
 		Roles     []core.Role `json:"roles"`
@@ -597,6 +722,18 @@ func (h *HTTPGateway) createInvitation(rw http.ResponseWriter, r *http.Request, 
 	email := strings.ToLower(strings.TrimSpace(body.Email))
 	if err := validSignupEmail(email); err != nil {
 		writeJSONError(rw, http.StatusBadRequest, err.Error())
+		return
+	}
+	// Seat gate (free tier): refuse once the org has no room for another
+	// person, counting the seated AND the invitations already outstanding —
+	// an invitation the plan can't honour is a refusal aimed at the invitee
+	// instead of the admin. Runs here rather than before the body is read
+	// because it needs to know who is being invited: re-inviting someone must
+	// not run them against their own outstanding invitation. The hard
+	// enforcement stays at accept time. Pro/comped/trial orgs are uncapped.
+	if exceeded, limit := h.invitationSeatExceeded(r.Context(), p.Tenant, email); exceeded {
+		writeJSONError(rw, http.StatusPaymentRequired,
+			fmt.Sprintf("your plan includes %d members — upgrade to add more", limit))
 		return
 	}
 	// Resolve catalog names to the server's role definitions, then cap
@@ -651,7 +788,7 @@ func (h *HTTPGateway) createInvitation(rw http.ResponseWriter, r *http.Request, 
 	// that's useless in an inbox). Best-effort: the response always
 	// carries the link for copy/paste, emailed or not.
 	emailSent := false
-	if acceptURL := h.inviteURL(token); h.svc.Mailer != nil && strings.HasPrefix(acceptURL, "http") {
+	if acceptURL := h.inviteURL(token); mayEmailInvite && h.svc.Mailer != nil && strings.HasPrefix(acceptURL, "http") {
 		// An org invitation may reach someone who already has an account, so
 		// their own preference wins; failing that, the inviter's.
 		lang := h.inviteLang(r.Context(), email, p.Subject)
@@ -861,11 +998,6 @@ func (h *HTTPGateway) acceptInvitation(rw http.ResponseWriter, r *http.Request, 
 	// new member once the org is at its cap, even if the invite was created
 	// while there was room (several invites can be issued, then accepted
 	// together). Pro/comped/trial orgs are uncapped.
-	if exceeded, limit := h.seatQuotaExceeded(r.Context(), inv.Tenant); exceeded {
-		writeJSONError(rw, http.StatusPaymentRequired,
-			fmt.Sprintf("this organization has reached its %d-member limit — ask an admin to upgrade", limit))
-		return
-	}
 	m := auth.Membership{
 		UserEmail: p.Subject,
 		Tenant:    inv.Tenant,
@@ -874,8 +1006,14 @@ func (h *HTTPGateway) acceptInvitation(rw http.ResponseWriter, r *http.Request, 
 		InvitedBy: inv.InvitedBy,
 		CreatedAt: now,
 	}
-	if err := h.Memberships.PutMembership(r.Context(), m); err != nil {
+	seated, limit, err := h.seatMembership(r.Context(), m)
+	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !seated {
+		writeJSONError(rw, http.StatusPaymentRequired,
+			fmt.Sprintf("this organization has reached its %d-member limit — ask an admin to upgrade", limit))
 		return
 	}
 	// Accepting an invite verifies the email. The invitation was created by

@@ -184,9 +184,11 @@
     "failedTitle": "Kunde inte bekräfta",
     "failedHint": "Länken kan ha gått ut. Logga in och använd knappen i bannern för att få en ny.",
     "badLink": "Länken saknar e-postadress eller token.",
-    "banner": "Bekräfta din e-postadress — vi skickade en länk när du registrerade dig.",
+    "banner": "Bekräfta din e-postadress. Tills du gör det mejlar vi inte inbjudningar åt dig — du får en länk att skicka själv.",
     "bannerSent": "Verifieringsmejl skickat — kolla din inkorg.",
+    "bannerFailed": "Vi kunde inte skicka mejlet. Försök igen, eller be den som driver den här Dazyflow-servern att kontrollera e-postinställningarna.",
     "bannerResend": "Skicka igen",
+    "bannerRetry": "Försök igen",
     "bannerDismiss": "Dölj tills vidare"
   },
   "forgotPassword": {
@@ -768,6 +770,9 @@
     "noPermNote": "Du har inte behörighet att ansluta appar — be en organisationsadministratör att konfigurera dem."
   },
   "approvals": {
+    "contextHeading": "Det här ska du godkänna",
+    "contextMore": "+{{count}} till",
+    "contextTooLarge": "För stort för att visas här — öppna körningen för att se det.",
     "title": "Godkännanden",
     "waitingSuffix": "<0>{{count}}</0> väntande",
     "inboxZero": "Tomt i inkorgen — inget väntar på ditt beslut.",

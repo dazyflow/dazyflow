@@ -4,6 +4,7 @@
 package daemon
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -202,20 +203,52 @@ func TestEmailVerification_InviteGate(t *testing.T) {
 		ServeForTest(h.gw, rec, req)
 		return rec
 	}
-	if rw := adminDoAs(); rw.Code != http.StatusForbidden ||
-		!strings.Contains(rw.Body.String(), "verify your email") {
+	// An unverified inviter gets the invitation, but NOT the email. Refusing
+	// outright used to strand an owner whose deployment could not deliver the
+	// verification mail in the first place: the only route out was an email
+	// that would never arrive. What the gate actually has to protect is the
+	// operator's mailer, so that — and only that — is withheld.
+	rw := adminDoAs()
+	if rw.Code != http.StatusCreated {
 		t.Fatalf("unverified inviter: %d %s", rw.Code, rw.Body.String())
 	}
+	var unverified struct {
+		AcceptURL string `json:"accept_url"`
+		EmailSent bool   `json:"email_sent"`
+	}
+	if err := json.Unmarshal(rw.Body.Bytes(), &unverified); err != nil {
+		t.Fatalf("decode invite: %v", err)
+	}
+	if unverified.EmailSent {
+		t.Error("unverified inviter must not send mail — that is the abuse the gate exists to stop")
+	}
+	if !strings.HasPrefix(unverified.AcceptURL, "http") {
+		t.Errorf("accept_url = %q, want an absolute link to copy/paste", unverified.AcceptURL)
+	}
+	// And nothing reached the wire addressed to the invitee.
+	if _, _, data, _ := srv.snapshot(); strings.Contains(data, "newcomer@example.com") {
+		t.Error("an invitation email was sent on an unverified inviter's behalf")
+	}
 
-	// Verify, then the same invite goes through.
+	// Verify, then the same invite is emailed.
 	if rw := h.do(t, "POST", "/api/v1/auth/verify-email", map[string]string{
 		"email": emailParam, "token": token,
 	}); rw.Code != http.StatusOK {
 		t.Fatalf("verify: %d", rw.Code)
 	}
 	u, _ = users.GetByEmail(t.Context(), "owner@example.com")
-	if rw := adminDoAs(); rw.Code != http.StatusCreated {
+	rw = adminDoAs()
+	if rw.Code != http.StatusCreated {
 		t.Fatalf("verified inviter: %d %s", rw.Code, rw.Body.String())
+	}
+	var verified struct {
+		EmailSent bool `json:"email_sent"`
+	}
+	if err := json.Unmarshal(rw.Body.Bytes(), &verified); err != nil {
+		t.Fatalf("decode invite: %v", err)
+	}
+	if !verified.EmailSent {
+		t.Error("a verified inviter's invitation should be emailed")
 	}
 	// API-key principals (harness adminDo, subject "root") bypass the gate.
 	if rw := h.adminDo(t, "POST", "/api/v1/admin/invitations",
