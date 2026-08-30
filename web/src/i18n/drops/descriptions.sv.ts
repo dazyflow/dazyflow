@@ -42,8 +42,8 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     sv: "Gör om rader till CSV-text — motsatsen till Läs CSV. Koppla in raderna från en databasfråga, en läsning från Sheets/Excel eller vilken omvandling som helst, och få tillbaka en enda CSV-sträng som du kan bifoga i ett mejl, skriva till en fil eller POSTa till ett API. Kolumnerna följer radernas egen kolumnordning; sätt 'columns' för att välja ut eller ändra ordning på ett urval. 'delimiter' byter avgränsare (\"\\t\"/\"tab\" för TSV, \";\" för europeiska CSV-filer) och 'header' slår rubrikraden av och på.",
   },
   builtin_store_append: {
-    en: "1e9b945f",
-    sv: "Spara rader i en samling — ingen databas att sätta upp och ingen anslutningssträng att klistra in. Välj ett namn på samlingen och raderna hamnar där; samlingen skapas automatiskt första gången. Varje arbetsyta har sina egna privata Samlingar, och de sparade raderna visas under Samlingar så att du kan bläddra i dem i appen. Som standard läggs rader till vid varje körning; sätt \"Unik enligt\" till en nyckelkolumn (t.ex. datum) så uppdateras en rad med samma nyckel på plats i stället för att bli en dubblett — så att en ny körning av flödet förblir idempotent.",
+    en: "878f559c",
+    sv: "Spara rader i en samling — ingen databas att sätta upp och ingen anslutningssträng att klistra in. Välj ett namn på samlingen och raderna hamnar där; samlingen skapas automatiskt första gången. Varje arbetsyta har sina egna privata Samlingar, och de sparade raderna visas under Samlingar så att du kan bläddra i dem i appen. Varje rad stämplas med tidpunkten då den sparades (kolumnen saved_at) så att du kan sortera med de nyaste först. Som standard läggs rader till vid varje körning; sätt \"Unik enligt\" till en nyckelkolumn (t.ex. datum) så uppdateras en rad med samma nyckel på plats i stället för att bli en dubblett — så att en ny körning av flödet förblir idempotent.",
   },
   builtin_store_find: {
     en: "405cf2a0",
