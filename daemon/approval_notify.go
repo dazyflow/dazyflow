@@ -71,17 +71,6 @@ func (s *Service) approvalRecipients(_ context.Context, graph core.Graph, nodeID
 	return nil
 }
 
-// approvalNodePrompt returns the author's question for a node, if any.
-func approvalNodePrompt(graph core.Graph, nodeID string) string {
-	for _, n := range graph.Nodes {
-		if n.ID == nodeID {
-			p, _ := n.Params["prompt"].(string)
-			return p
-		}
-	}
-	return ""
-}
-
 // buildApprovalsURL points at the Approvals inbox, org-scoped the same way
 // buildRunURL scopes a run link. This is the fallback destination when there is
 // no signed one-click link — NOT the run page, which shows an awaiting node but
@@ -111,7 +100,24 @@ func (s *Service) HandleNodeAwaiting(ctx context.Context, graph core.Graph, runI
 	// Ref.Inline is `any` — the module writes a string here, but a wrong type
 	// must degrade to "no mail", never to a panic on the worker goroutine.
 	url, _ := ref.Inline.(string)
-	s.NotifyApprovalRequested(ctx, graph, runID, nodeID, url)
+	// The prompt comes off the RESULT, not the graph node.
+	//
+	// The graph holds what the author typed, templates and all, so reading it
+	// here mailed people a literal "${upstream.webhook_input_1.body}" where the
+	// question should have been. The engine resolves templates into the job
+	// before the step runs, and await_approval already emits the resolved text
+	// on this port — which is why the Approvals inbox showed the right thing
+	// while the email did not. Two readers of one value; only one of them was
+	// reading the resolved copy.
+	//
+	// No fallback to the node's params when the port is absent: the step omits
+	// it only when the prompt is empty, so falling back could only ever
+	// resurrect an unresolved template.
+	var prompt string
+	if pRef, ok := result.Output["prompt"]; ok {
+		prompt, _ = pRef.Inline.(string)
+	}
+	s.NotifyApprovalRequested(ctx, graph, runID, nodeID, url, prompt)
 }
 
 // NotifyApprovalRequested mails the approvers when a run parks on an
@@ -122,7 +128,7 @@ func (s *Service) HandleNodeAwaiting(ctx context.Context, graph core.Graph, runI
 // approvalURL is the signed, single-purpose link — the same one the
 // pending_url port carries. Anyone holding it can decide, which is why the
 // recipient rule above is deliberately conservative.
-func (s *Service) NotifyApprovalRequested(ctx context.Context, graph core.Graph, runID, nodeID, approvalURL string) {
+func (s *Service) NotifyApprovalRequested(ctx context.Context, graph core.Graph, runID, nodeID, approvalURL, prompt string) {
 	if s.Mailer == nil {
 		return
 	}
@@ -131,7 +137,6 @@ func (s *Service) NotifyApprovalRequested(ctx context.Context, graph core.Graph,
 		return
 	}
 	name := flowDisplayName(graph, graph.ID)
-	prompt := approvalNodePrompt(graph, nodeID)
 	runURL := buildRunURL(s.PublicBaseURL, graph.Tenant, runID)
 
 	// approvalURL is the signed one-click link, and it only exists when the

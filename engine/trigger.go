@@ -5,6 +5,7 @@ package engine
 
 import (
 	"context"
+	"fmt"
 
 	"git.sr.ht/~klahr/dazyflow/core"
 )
@@ -29,18 +30,40 @@ import (
 // only one of them started any given run, so there is no ambiguity to resolve
 // with a rule and none to reject at lint time.
 //
-// Unresolvable cases return ok=false rather than an error, matching every other
-// substituter: the placeholder stays as written. That is the same silence this
-// function exists to end, so it is deliberately narrow — no trigger node in the
-// graph at all, or a manual run where none fired.
+// An unresolvable ${trigger.…} is an ERROR, not a shrug.
+//
+// This originally returned ok=false and left the placeholder as written, on the
+// grounds that every other substituter does. That reasoning was wrong, and the
+// difference is what "unknown" means. SubstituteString leaves an UNKNOWN SCHEME
+// alone so that arbitrary ${…} text in JSON and shell survives resolution —
+// nobody claimed it. `trigger` is a known scheme with an owner, so failing to
+// resolve it is a broken reference, exactly as it is for `upstream`, which has
+// always errored.
+//
+// The cost of the shrug was paid in the worst possible place: a flow with the
+// step one hop further down the chain mailed a customer a literal
+// "${trigger.body.version}", and nothing failed, logged, or warned. A run that
+// stops with "no trigger fired in this run" is strictly better than one that
+// quietly sends the template to a person.
+//
+// A manual Run of a webhook flow now fails here rather than sending nonsense.
+// That is the intended reading: the flow asks for data this run does not have.
+// "Send test event" seeds the trigger and is the way to exercise such a flow by
+// hand.
 func triggerSubstituter(graph core.Graph, prior map[string]core.Result) Substituter {
 	return func(_ context.Context, scheme, path string) (string, bool, error) {
-		if scheme != "trigger" || prior == nil {
+		if scheme != "trigger" {
 			return "", false, nil
+		}
+		if prior == nil {
+			return "", true, fmt.Errorf(
+				"trigger: ${trigger.%s} cannot be resolved here — this code path has no run results", path)
 		}
 		id := firedTriggerNode(graph, prior)
 		if id == "" {
-			return "", false, nil
+			return "", true, fmt.Errorf(
+				"trigger: no trigger fired in this run, so ${trigger.%s} has nothing to read "+
+					"(a manual Run has no trigger data — use Send test event)", path)
 		}
 		// Delegate to the upstream resolver so the two schemes can never
 		// disagree about path syntax: dots, [0] indexing and the stringify

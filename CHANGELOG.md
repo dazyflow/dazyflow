@@ -23,6 +23,53 @@ into the image.)
 
 ## [Unreleased]
 
+### Fixed
+
+- **`${upstream.…}` and `${trigger.…}` only worked one hop from their source.**
+  Template resolution reused the map of DIRECT predecessors that input assembly
+  runs on, and inherited a restriction that makes no sense for it. An input port
+  is fed by an edge or by nothing; a reference names a node in the run. In
+  `webhook → if → email`, the email step could not see the webhook at all:
+
+  - `${upstream.webhook_input_1.body}` failed the node outright.
+  - `${trigger.body.version}` was **left in the text and sent**, so a customer
+    received a literal `${trigger.body.version}` with nothing failing, logging
+    or warning.
+
+  Referenced results are now looked up in the run. Only the nodes a step's own
+  params actually name are fetched, so the common case — no cross-references —
+  costs nothing and a flow cannot become a scan of its own run by growing. They
+  go into the same map the inputs came from, which is safe because every reader
+  is a keyed lookup: `AssembleInput` walks edges and looks up `prior[edge.From]`,
+  so an entry for a node with no edge here is never consulted (the run inspector
+  already relies on this, passing every record in the run to that function).
+
+  An unresolvable `${trigger.…}` is now an error rather than a shrug. The
+  original reasoning — "an unknown scheme is not an error" — conflated two
+  things: `SubstituteString` leaves an unknown SCHEME alone so arbitrary `${…}`
+  text in JSON and shell survives, but `trigger` is a known scheme with an
+  owner, so failing to resolve it is a broken reference, exactly as it has
+  always been for `upstream`. A manual Run of a webhook flow now stops with "no
+  trigger fired in this run — use Send test event" instead of mailing the
+  template to a person.
+
+  The bug survived its own test suite because every test put the trigger
+  directly in the predecessor map. There is now an end-to-end case that submits
+  a graph and reads what the node produced — the unit tests around the new
+  helpers all pass with the worker's call to them deleted, which is the same
+  gap that produced the bug.
+
+
+- **The approval email carried the template instead of the question.** It read
+  `prompt` from the stored graph node — the text as authored, `${…}` and all —
+  while the engine resolves templates into the job before the step runs. The
+  `await_approval` step already emits the resolved question on its `prompt`
+  output, which is why the Approvals inbox showed it correctly and only the
+  email was wrong: one value, two readers, one of them reading the unresolved
+  copy. The email now takes it from the parked result, with no fallback to the
+  node's params — the port is omitted only when the prompt is empty, so a
+  fallback could do nothing but resurrect a template.
+
 ## [0.27.5] - 2026-08-30
 
 ### Fixed

@@ -4,6 +4,7 @@
 package engine
 
 import (
+	"strings"
 	"testing"
 
 	"git.sr.ht/~klahr/dazyflow/core"
@@ -84,16 +85,53 @@ func TestTrigger_PicksTheTriggerThatActuallyFired(t *testing.T) {
 	}
 }
 
-func TestTrigger_LeavesThePlaceholderWhenNoTriggerFired(t *testing.T) {
-	// A manual Run has no trigger result. Leaving the text alone matches every
-	// other substituter — an unknown scheme is not an error, because arbitrary
-	// ${…} text (JSON, shell) has to survive resolution untouched.
+func TestTrigger_FailsLoudlyWhenNoTriggerFired(t *testing.T) {
+	// This test used to assert the OPPOSITE — that the placeholder was left as
+	// written, because "an unknown scheme is not an error". That conflated two
+	// different things. SubstituteString leaves an unknown SCHEME alone so that
+	// arbitrary ${…} text in JSON and shell survives; `trigger` is a known
+	// scheme with an owner, so failing to resolve it is a broken reference.
+	//
+	// The shrug was paid for in production: a step one hop further down the
+	// chain mailed a customer a literal "${trigger.body.version}" and nothing
+	// failed, logged or warned. Stopping the run is strictly better than
+	// sending the template to a person.
 	job := &core.Job{Params: map[string]any{"v": "${trigger.body.version}"}}
-	if err := resolveTemplates(t.Context(), nil, webhookGraph(), map[string]core.Result{}, job); err != nil {
+	err := resolveTemplates(t.Context(), nil, webhookGraph(), map[string]core.Result{}, job)
+	if err == nil {
+		t.Fatalf("want an error, got v = %q", job.Params["v"])
+	}
+	// The message has to say what to do about it — this is what a person sees
+	// when they press Run on a webhook flow.
+	if !strings.Contains(err.Error(), "no trigger fired") {
+		t.Errorf("error should name the cause: %v", err)
+	}
+	if !strings.Contains(err.Error(), "Send test event") {
+		t.Errorf("error should point at the way to run this flow by hand: %v", err)
+	}
+}
+
+// The whole point of the scheme: it must work from ANY node in the run, not
+// only one wired straight into the trigger. The engine reads whatever results
+// it is handed; daemon/template_refs.go is what puts the trigger there for a
+// node further down the chain.
+func TestTrigger_ResolvesFromAnywhereInTheRun(t *testing.T) {
+	g := core.Graph{Nodes: []core.Node{
+		{ID: "webhook_input_1", Module: "webhook_input"},
+		{ID: "if_1", Module: "if"},
+		{ID: "email_send_1", Module: "email_send"},
+	}}
+	// The email step's own predecessor is the `if`; the trigger is two hops up.
+	prior := map[string]core.Result{
+		"if_1":            {Output: map[string]core.Ref{"then": {Inline: "yes"}}},
+		"webhook_input_1": {Output: map[string]core.Ref{"body": {Inline: map[string]any{"version": "0.27.5"}}}},
+	}
+	job := &core.Job{Params: map[string]any{"body": "Version ${trigger.body.version} shipped"}}
+	if err := resolveTemplates(t.Context(), nil, g, prior, job); err != nil {
 		t.Fatalf("resolveTemplates: %v", err)
 	}
-	if got := job.Params["v"]; got != "${trigger.body.version}" {
-		t.Errorf("v = %q, want the placeholder left as written", got)
+	if got := job.Params["body"]; got != "Version 0.27.5 shipped" {
+		t.Errorf("body = %q", got)
 	}
 }
 

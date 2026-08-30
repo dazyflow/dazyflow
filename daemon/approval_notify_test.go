@@ -113,7 +113,7 @@ func TestApprovalNotify_NoMailerIsInert(t *testing.T) {
 	svc := approvalFixture(t)
 	svc.Mailer = nil
 	g := approvalGraph(map[string]any{"approvers": "ops@acme.se"})
-	svc.NotifyApprovalRequested(context.Background(), g, "run-1", "gate", "https://app/approve/x")
+	svc.NotifyApprovalRequested(context.Background(), g, "run-1", "gate", "https://app/approve/x", "")
 	svc.NotifyApprovalDecided(context.Background(), g, "run-1", "gate",
 		ApprovalDecision{Decision: "approve", Approver: "admin@acme.se"})
 }
@@ -127,13 +127,81 @@ func TestHandleNodeAwaiting_IgnoresNonApprovalPauses(t *testing.T) {
 		core.Result{Output: map[string]core.Ref{"child_run": {Inline: "run-2"}}})
 }
 
-func TestApprovalNodePrompt(t *testing.T) {
-	g := approvalGraph(map[string]any{"prompt": "Refund 230 kr?"})
-	if got := approvalNodePrompt(g, "gate"); got != "Refund 230 kr?" {
-		t.Errorf("prompt = %q", got)
+// The prompt in the email must be the RESOLVED text the step ran with, not the
+// template the author typed. Reading it off the graph node mailed people a
+// literal "${upstream.webhook_input_1.body}" where the question belonged —
+// while the Approvals inbox, which reads the same value off the parked result,
+// showed it correctly. One value, two readers, and only one of them was
+// reading the resolved copy.
+func TestHandleNodeAwaiting_MailsTheResolvedPromptNotTheTemplate(t *testing.T) {
+	srv := newFakeSMTP(t)
+	mailer, _ := NewMailerFromURL("smtp://"+srv.addr+"?tls=none", "noreply@example.com")
+	svc := approvalFixture(t)
+	svc.Mailer = mailer
+	svc.PublicBaseURL = "https://app.example"
+
+	// The graph holds the unresolved template, exactly as it is stored.
+	g := approvalGraph(map[string]any{
+		"approvers": "ops@acme.se",
+		"prompt":    "${upstream.webhook_input_1.body}",
+	})
+	svc.HandleNodeAwaiting(context.Background(), g, "run-1", "gate", core.Result{
+		Output: map[string]core.Ref{
+			"pending_url": {Inline: "https://app.example/approve/x"},
+			// What the engine resolved it to before the step ran.
+			"prompt": {Inline: "Release 0.27.5 to production?"},
+		},
+	})
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if _, _, raw, _ := srv.snapshot(); raw != "" {
+			data := mailText(raw)
+			if !strings.Contains(data, "Release 0.27.5 to production?") {
+				t.Errorf("email is missing the resolved prompt:\n%s", data)
+			}
+			if strings.Contains(data, "upstream.webhook_input_1") {
+				t.Errorf("email carries the raw template:\n%s", data)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("no approval email sent")
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
-	if got := approvalNodePrompt(g, "missing"); got != "" {
-		t.Errorf("unknown node should have no prompt, got %q", got)
+}
+
+// A step with no prompt must not fall back to the node's params: the port is
+// omitted only when the prompt was empty, so a fallback could do nothing but
+// resurrect an unresolved template.
+func TestHandleNodeAwaiting_NoPromptDoesNotFallBackToTheGraph(t *testing.T) {
+	srv := newFakeSMTP(t)
+	mailer, _ := NewMailerFromURL("smtp://"+srv.addr+"?tls=none", "noreply@example.com")
+	svc := approvalFixture(t)
+	svc.Mailer = mailer
+	svc.PublicBaseURL = "https://app.example"
+
+	g := approvalGraph(map[string]any{
+		"approvers": "ops@acme.se",
+		"prompt":    "${upstream.webhook_input_1.body}",
+	})
+	svc.HandleNodeAwaiting(context.Background(), g, "run-1", "gate", core.Result{
+		Output: map[string]core.Ref{"pending_url": {Inline: "https://app.example/approve/x"}},
+	})
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if _, _, raw, _ := srv.snapshot(); raw != "" {
+			if data := mailText(raw); strings.Contains(data, "upstream.webhook_input_1") {
+				t.Errorf("fell back to the graph's raw params:\n%s", data)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("no approval email sent")
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
 
@@ -155,8 +223,11 @@ func TestNotifyApprovalRequested_SendsWithoutSignedLink(t *testing.T) {
 	svc.Mailer = mailer
 	svc.PublicBaseURL = "https://app.example"
 
+	// The prompt now arrives as an argument — the RESOLVED text the step ran
+	// with — rather than being re-read from the node. The graph keeps its copy
+	// so this stays a faithful fixture, but it is no longer what is mailed.
 	g := approvalGraph(map[string]any{"approvers": "ops@acme.se", "prompt": "Refund 230 kr?"})
-	svc.NotifyApprovalRequested(context.Background(), g, "run-1", "gate", "")
+	svc.NotifyApprovalRequested(context.Background(), g, "run-1", "gate", "", "Refund 230 kr?")
 
 	deadline := time.Now().Add(2 * time.Second)
 	for {
@@ -203,7 +274,7 @@ func TestNotifyApprovalRequested_UsesSignedLinkWhenPresent(t *testing.T) {
 
 	g := approvalGraph(map[string]any{"approvers": "ops@acme.se"})
 	svc.NotifyApprovalRequested(context.Background(), g, "run-1", "gate",
-		"https://app.example/approve/run-1/gate?token=abc")
+		"https://app.example/approve/run-1/gate?token=abc", "")
 
 	deadline := time.Now().Add(2 * time.Second)
 	for {
@@ -283,7 +354,7 @@ func TestNotifyApprovalRequested_FallbackIsNotTheRunPage(t *testing.T) {
 	svc.PublicBaseURL = "https://app.example"
 
 	svc.NotifyApprovalRequested(context.Background(),
-		approvalGraph(map[string]any{"approvers": "ops@acme.se"}), "run-1", "gate", "")
+		approvalGraph(map[string]any{"approvers": "ops@acme.se"}), "run-1", "gate", "", "")
 
 	deadline := time.Now().Add(2 * time.Second)
 	for {

@@ -292,6 +292,13 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 	}
 
 	prior, fetchErr := w.fetchPredecessors(jobCtx, graph, rec)
+	if fetchErr == nil {
+		// ${upstream.…} / ${trigger.…} may name a node this one has no edge
+		// from. Those are looked up in the run rather than among the direct
+		// predecessors — see template_refs.go. Additive and best-effort: input
+		// assembly is edge-driven and never sees these entries.
+		w.addTemplateResults(jobCtx, graph, rec, prior)
+	}
 	if fetchErr != nil {
 		if stopLease() {
 			w.cfg.Logger.Printf("[%s] %s: lease lost; abandoning (reclaimed elsewhere)", w.cfg.ID, rec.ID)
