@@ -15,6 +15,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/dazyflow/dazyflow/core"
@@ -643,6 +644,19 @@ func consumeRecoveryCode(hashes []string, plaintext string) ([]string, bool) {
 	return remaining, true
 }
 
+// recoveryCodeHashCost is DefaultCost rather than PasswordHashCost: a recovery
+// code is 8 random characters this package generates, not something a person
+// chose, so it does not need the extra stretching a guessable password does.
+// Under `go test` it drops with the password cost — generating a full set is
+// totpRecoveryCodeCount bcrypt ops, and consumeRecoveryCode compares every one
+// of them on each redemption by design.
+var recoveryCodeHashCost = func() int {
+	if testing.Testing() {
+		return testPasswordHashCost
+	}
+	return bcrypt.DefaultCost
+}()
+
 // generateRecoveryCodes mints totpRecoveryCodeCount codes formatted
 // xxxx-xxxx (lowercase, 8 chars + a dash) and their bcrypt hashes.
 // Returns plaintext + hashes; the plaintext is shown once, the hashes
@@ -660,7 +674,7 @@ func generateRecoveryCodes() ([]string, []string, error) {
 		// don't matter — people reading codes off paper fumble.
 		h, err := bcrypt.GenerateFromPassword(
 			[]byte(canonicaliseRecoveryCode(codes[i])),
-			bcrypt.DefaultCost,
+			recoveryCodeHashCost,
 		)
 		if err != nil {
 			return nil, nil, err

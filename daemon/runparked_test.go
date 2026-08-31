@@ -16,12 +16,13 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// waitForRunStatus polls the graph record until it reaches want, and returns
-// whatever it actually settled on so failures can report it.
+// waitForRunStatus polls a job record until it reaches want, and returns
+// whatever it actually settled on so failures can report it. jobID is a run id
+// or a node id (daemon.NodeJobID) — both are records in the same store.
 func waitForRunStatus(
 	t *testing.T,
 	jobs core.JobStore,
-	runID string,
+	jobID string,
 	want core.JobStatus,
 	timeout time.Duration,
 ) core.JobStatus {
@@ -29,7 +30,7 @@ func waitForRunStatus(
 	deadline := time.Now().Add(timeout)
 	var last core.JobStatus
 	for time.Now().Before(deadline) {
-		rec, err := jobs.Get(t.Context(), runID)
+		rec, err := jobs.Get(t.Context(), jobID)
 		if err == nil {
 			last = rec.Status
 			if last == want {
@@ -69,13 +70,14 @@ func TestRunStatus_ParksAndResumes(t *testing.T) {
 	if got := waitForRunStatus(t, h.jobs, runID, core.JobStatusAwaiting, 5*time.Second); got != core.JobStatusAwaiting {
 		t.Fatalf("run status while parked = %q, want awaiting", got)
 	}
+	// Poll each gate rather than reading it once: the run flips to awaiting as
+	// soon as the FIRST gate parks, so arriving here says nothing about the
+	// second. Reading immediately made this a race that only lost on a fast
+	// machine — the worker parked gate-b microseconds after the assertion.
 	for _, id := range []string{"gate-a", "gate-b"} {
-		rec, err := h.jobs.Get(t.Context(), daemon.NodeJobID(runID, id))
-		if err != nil {
-			t.Fatalf("Get %s: %v", id, err)
-		}
-		if rec.Status != core.JobStatusAwaiting {
-			t.Fatalf("%s status = %q, want awaiting", id, rec.Status)
+		got := waitForRunStatus(t, h.jobs, daemon.NodeJobID(runID, id), core.JobStatusAwaiting, 5*time.Second)
+		if got != core.JobStatusAwaiting {
+			t.Fatalf("%s status = %q, want awaiting", id, got)
 		}
 	}
 

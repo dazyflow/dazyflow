@@ -11,8 +11,13 @@ import (
 )
 
 // TestVerifyPassword_UpgradesLegacyCost covers the opportunistic re-hash: a
-// user whose hash was minted at the old DefaultCost still logs in, and comes
+// user whose hash was minted at an older, weaker cost still logs in, and comes
 // out of it stored at the current cost.
+//
+// Everything here is relative to activeHashCost rather than to the literal
+// PasswordHashCost, because the suite runs at testPasswordHashCost — see the
+// comment on activeHashCost. The property under test is "below the cost in
+// force gets upgraded to it", which holds at either setting.
 func TestVerifyPassword_UpgradesLegacyCost(t *testing.T) {
 	ctx := context.Background()
 	store, err := OpenJSONUserStore("")
@@ -20,12 +25,12 @@ func TestVerifyPassword_UpgradesLegacyCost(t *testing.T) {
 		t.Fatalf("OpenJSONUserStore: %v", err)
 	}
 	const pw = "correct-horse-battery-staple"
-	legacy, err := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.DefaultCost)
+	legacy, err := bcrypt.GenerateFromPassword([]byte(pw), activeHashCost-1)
 	if err != nil {
 		t.Fatalf("legacy hash: %v", err)
 	}
-	if got, _ := bcrypt.Cost(legacy); got >= PasswordHashCost {
-		t.Skipf("bcrypt.DefaultCost (%d) is no longer below PasswordHashCost (%d)", got, PasswordHashCost)
+	if got, _ := bcrypt.Cost(legacy); got >= activeHashCost {
+		t.Fatalf("legacy hash cost %d is not below activeHashCost %d", got, activeHashCost)
 	}
 	if err := store.PutUser(ctx, User{
 		Email: "legacy@acme.test", Subject: "legacy@acme.test",
@@ -47,8 +52,8 @@ func TestVerifyPassword_UpgradesLegacyCost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("bcrypt.Cost after login: %v", err)
 	}
-	if cost != PasswordHashCost {
-		t.Errorf("cost after login = %d, want %d", cost, PasswordHashCost)
+	if cost != activeHashCost {
+		t.Errorf("cost after login = %d, want %d", cost, activeHashCost)
 	}
 	// And the re-hashed credential still works on the next login.
 	if _, err := VerifyPassword(ctx, store, "legacy@acme.test", pw); err != nil {

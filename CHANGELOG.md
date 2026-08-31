@@ -41,6 +41,59 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
   states the Nordic/EU connector angle, which the page never mentioned. A
   screenshot of the canvas is still missing and marked TODO in the file.
 
+- **CI image builds are cached and no longer a serial tail.** The `images` job
+  gated on `needs: [test, web, docs, security]`, so a full from-scratch Go build
+  plus two Vite builds ran *after* everything else finished — and neither
+  Dockerfile's `--mount=type=cache` survived between runs, because a BuildKit
+  cache mount is local to the daemon and a hosted runner starts empty. `images`
+  now has no `needs` and builds in parallel through buildx with the GitHub
+  Actions cache backend (separate `dzd` / `docs` scopes so the two images stop
+  evicting each other, `mode=max` to keep the npm-ci and go-build stages).
+  Publishing moved to a new `publish` job that keeps the old gate — nothing
+  reaches ghcr.io until the suites are green — and rebuilds from that cache
+  before pushing. Stamping rules live only in `images` now and reach `publish`
+  through job outputs. Tag behaviour is unchanged: `:VERSION` always, `:latest`
+  only off a tag.
+
+- **The Go job is sharded and the end-to-end scripts have their own job.** One
+  `test` job ran gofmt, env and link checks, a build, the whole race suite, vet,
+  three end-to-end shell pipelines and four more gates in sequence. It is now
+  three jobs that run in parallel: `gates` (the checks that answer in seconds,
+  plus the single `go build` and `go vet`), `test` (a four-way matrix over the
+  race suite — daemon, drops, engine+tests, and the complement, which is
+  dominated by `auth` at ~350s of bcrypt), and `e2e` (the three run.sh
+  pipelines, which need only Postgres and a Go toolchain). The `rest` shard is
+  expressed as the complement of the named ones so a new top-level package is
+  covered automatically rather than silently going unrun; the four shards were
+  verified to partition `go list ./...` exactly. `fail-fast: false` keeps one
+  broken shard from hiding the others. `publish` now gates on all of them.
+
+- **bcrypt no longer runs at production cost under `go test`.** `auth` spent
+  347s and `daemon` 858s of every CI run on key derivation — 76% of the whole
+  race suite — because `PasswordHashCost = 12` is a quarter-second per hash by
+  design and the sign-in, signup, TOTP and password-reset suites mint and verify
+  thousands of them. New `activeHashCost` returns `bcrypt.MinCost + 1` when
+  `testing.Testing()` reports a test binary and `PasswordHashCost` otherwise;
+  recovery codes get the same treatment against their own `bcrypt.DefaultCost`.
+  Because `testing.Testing()` is fixed by the linker when `go test` builds the
+  binary, a released `dzd` cannot be talked down to the cheap cost at runtime —
+  verified by hashing from a normal build and reading the cost back. Measured:
+  **auth 347s → 19s, daemon 858s → 82s.**
+
+  `timingDummyHash` now mints at the same cost as a real hash instead of
+  `bcrypt.DefaultCost`. It exists to make an unknown-account compare cost what a
+  real one costs, and at cost 10 against real hashes at 12 it was only paying a
+  quarter of it.
+
+### Fixed
+
+- **A race in `TestRunStatus_ParksAndResumes`.** It waited for the RUN to report
+  `awaiting` — which happens the moment the FIRST of two gates parks — and then
+  read both NODE records immediately, so the second gate was still `running`
+  when it was asserted on. It now polls each gate. Latent for as long as it has
+  existed; the bcrypt change above made the suite fast enough to start losing
+  the race.
+
 ### Removed
 
 - **Seven Markdown files, ~2,600 lines.** `REVIEW.md` and

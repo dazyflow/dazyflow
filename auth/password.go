@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"testing"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -184,7 +185,10 @@ var ErrUnknownUser = errors.New("unknown user")
 // returns ~instantly while an existing one pays full bcrypt cost — a remotely
 // observable timing difference that reveals which emails have accounts, the
 // very enumeration this function's uniform error is meant to prevent.
-var timingDummyHash, _ = bcrypt.GenerateFromPassword([]byte("dazyflow-timing-equalizer"), bcrypt.DefaultCost)
+//
+// Minted at activeHashCost, not DefaultCost: the point is to spend what a
+// genuine compare spends, and genuine hashes are minted at activeHashCost.
+var timingDummyHash, _ = bcrypt.GenerateFromPassword([]byte("dazyflow-timing-equalizer"), activeHashCost)
 
 // VerifyPassword normalizes email and bcrypt-compares the password.
 // Returns the User on success; ErrInvalidCredential on any failure
@@ -212,7 +216,7 @@ func VerifyPassword(ctx context.Context, store UserStore, email, password string
 	// Failures are logged and swallowed: the credential is valid and the
 	// login must succeed regardless.
 	if err := UpgradePasswordCost(ctx, store, u, password); err != nil {
-		log.Printf("WARNING: could not re-hash password for %q at cost %d: %v", email, PasswordHashCost, err)
+		log.Printf("WARNING: could not re-hash password for %q at cost %d: %v", email, activeHashCost, err)
 	}
 	return u, nil
 }
@@ -226,17 +230,42 @@ func VerifyPassword(ctx context.Context, store UserStore, email, password string
 // then re-hashes them opportunistically on successful login.
 const PasswordHashCost = 12
 
+// testPasswordHashCost replaces it under `go test`. bcrypt at cost 12 is a
+// quarter-second per hash BY DESIGN, and the suites mint and verify thousands
+// of them: auth alone spent 347s of a CI run on key derivation, and daemon —
+// whose sign-in, signup, TOTP and password-reset tests all go through here —
+// spent 858s. Neither was testing bcrypt.
+//
+// MinCost+1 rather than MinCost, so one rung remains below it for
+// TestVerifyPassword_UpgradesLegacyCost to mint a "legacy" hash from.
+const testPasswordHashCost = bcrypt.MinCost + 1
+
+// activeHashCost is what new hashes are actually minted at, and what
+// NeedsPasswordRehash measures against so the upgrade path stays
+// self-consistent at either cost.
+//
+// testing.Testing() is fixed by the linker when `go test` builds a test binary,
+// so this cannot be flipped at runtime: a released dzd always hashes at
+// PasswordHashCost, whatever it is handed on the command line or in its
+// environment.
+var activeHashCost = func() int {
+	if testing.Testing() {
+		return testPasswordHashCost
+	}
+	return PasswordHashCost
+}()
+
 // HashPassword wraps bcrypt so callers don't have to import the package
 // (and keeps the cost choice in one place).
 func HashPassword(password string) ([]byte, error) {
 	if password == "" {
 		return nil, fmt.Errorf("password required")
 	}
-	return bcrypt.GenerateFromPassword([]byte(password), PasswordHashCost)
+	return bcrypt.GenerateFromPassword([]byte(password), activeHashCost)
 }
 
 // NeedsPasswordRehash reports whether hash was produced with a weaker cost
-// than PasswordHashCost. An unparseable hash returns false: it isn't
+// than the one in force. An unparseable hash returns false: it isn't
 // something we can improve by re-hashing, and it will fail verification
 // anyway.
 func NeedsPasswordRehash(hash []byte) bool {
@@ -244,7 +273,7 @@ func NeedsPasswordRehash(hash []byte) bool {
 	if err != nil {
 		return false
 	}
-	return cost < PasswordHashCost
+	return cost < activeHashCost
 }
 
 // UpgradePasswordCost re-hashes a verified password at the current cost and

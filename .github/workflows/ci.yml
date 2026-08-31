@@ -59,41 +59,22 @@ env:
 
 jobs:
   # ---------------------------------------------------------------- Go suite
-  test:
-    name: Go build, test, vet, gates
+  # ------------------------------------------------------------- static gates
+  #
+  # Everything that compiles or reads the tree once and answers in seconds,
+  # split out of the race suite so a gofmt slip or a dangling doc link comes
+  # back in about a minute instead of behind a quarter-hour of tests. `go build`
+  # and `go vet` live here rather than in each race shard: they compile the
+  # whole module, and doing that per shard would triple the work to say the same
+  # thing three times.
+  gates:
+    name: Build, vet, and the fast gates
     runs-on: ubuntu-latest
-    services:
-      # Service containers replace the hand-rolled initdb / mariadb-install-db
-      # tasks. Same users, databases and ports the manifest created by hand.
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: dazyflow
-          POSTGRES_PASSWORD: dazyflow
-          POSTGRES_DB: dazyflow_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U dazyflow -d dazyflow_test"
-          --health-interval 5s --health-timeout 5s --health-retries 20
-      mysql:
-        image: mariadb:11
-        env:
-          MARIADB_ROOT_PASSWORD: root
-          MARIADB_DATABASE: dazyflow_test
-          MARIADB_USER: dazyflow
-          MARIADB_PASSWORD: dazyflow
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd "healthcheck.sh --connect --innodb_initialized"
-          --health-interval 5s --health-timeout 5s --health-retries 20
     steps:
       - uses: actions/checkout@v4
         with:
           # check-changelog compares a released section against the commit that
-          # released it, and the docker-image version stamp reads
-          # `git describe --tags`. Neither works on a shallow clone.
+          # released it, which does not work on a shallow clone.
           fetch-depth: 0
 
       - uses: actions/setup-go@v5
@@ -124,6 +105,9 @@ jobs:
       - name: Build
         run: go build ./...
 
+      - name: Vet
+        run: go vet ./...
+
       # The runner agent and runner.sh are Python and POSIX sh, so the Go suite
       # cannot see what they DO — it only checks the embedded copies still match
       # the source (TestEmbeddedRunnerFilesMatchTheSource). Everything that makes
@@ -131,41 +115,8 @@ jobs:
       # before anything spends it, the registration token never reaching a file,
       # an allow-list surviving a reinstall, runner.env read rather than
       # evaluated, a service actually wired to start at boot. Unrun, they rot.
-      # Before the race suite because it takes seconds, and this is the script
-      # every organisation pastes into a terminal.
       - name: Runner agent tests
         run: make runner-test
-
-      - name: Test (race)
-        # The race detector pushes the daemon package past Go's default
-        # 10-minute per-package ceiling. The limit is per package, so this is
-        # headroom for the slowest one, not a slow-suite allowance.
-        run: go test -race -timeout 30m ./...
-
-      - name: Vet
-        run: go vet ./...
-
-      # All three pipeline demos, not just csv-pipeline. They are the only thing
-      # exercising dzd end-to-end through its own CLI and HTTP surfaces, and
-      # leaving two of them unrun is how they rotted: BOTH were broken and had
-      # been for some time, each failing at boot on a requirement that landed
-      # after it was written.
-      #
-      #   mcp-pipeline — no DAZYFLOW_POSTGRES_DSN at all (dzd has required
-      #     Postgres since), a 0.5s sleep where a Postgres-backed boot now needs
-      #     a poll, no DAZYFLOW_DEV=1 for the insecure-defaults guard, and a
-      #     sandbox path from before DATA_DIR grew its sandbox/ segment.
-      #   ap-invoice — the guard's TLS check on a loopback demo database, and
-      #     it never PUBLISHED its flows, so every webhook POST got the
-      #     deliberately-generic 401 that says nothing about why.
-      #
-      # ap-invoice starts its own Postgres via `docker run` on :55432, which
-      # does not collide with the service container on 5432 above.
-      - name: dzctl end-to-end
-        run: |
-          bash tests/e2e/csv-pipeline/run.sh
-          bash tests/e2e/mcp-pipeline/run.sh
-          bash tests/e2e/ap-invoice/run.sh
 
       # The two catalogues the web guards read (the app list behind the
       # integration description guard, the drop text behind the Swedish coverage
@@ -181,6 +132,136 @@ jobs:
       # gone under [Unreleased] left it empty.
       - name: Changelog untouched
         run: make check-changelog
+
+  # ---------------------------------------------------------------- Go suite
+  #
+  # Sharded because the race detector makes this the long pole and the shards
+  # are genuinely independent. The split follows measured cost, not tidiness:
+  #
+  #   daemon  — 3 packages, but the slowest single one in the module; Go's
+  #             per-package timeout comment below is about this shard.
+  #   drops   — 56 packages, the connector suites.
+  #   engine  — the engine and the tests/ trees that drive a whole stack.
+  #   rest    — everything else, dominated by `auth`: bcrypt at cost 12 makes
+  #             it minutes of pure KDF work on its own.
+  #
+  # `rest` is expressed as the complement so a new top-level package lands in a
+  # shard automatically instead of silently going unrun.
+  test:
+    name: Go race suite (${{ matrix.shard.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      # One shard failing must not cancel the others: which suites also break is
+      # most of the diagnosis, and cancelling hides it.
+      fail-fast: false
+      matrix:
+        shard:
+          - name: daemon
+            pkgs: ./daemon/...
+          - name: drops
+            pkgs: ./drops/...
+          - name: engine
+            pkgs: ./engine/... ./tests/...
+          - name: rest
+            pkgs: ""
+    services:
+      # Service containers replace the hand-rolled initdb / mariadb-install-db
+      # tasks. Same users, databases and ports the manifest created by hand.
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: dazyflow
+          POSTGRES_PASSWORD: dazyflow
+          POSTGRES_DB: dazyflow_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dazyflow -d dazyflow_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      mysql:
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: dazyflow_test
+          MARIADB_USER: dazyflow
+          MARIADB_PASSWORD: dazyflow
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Test (race)
+        # The race detector pushes the daemon package past Go's default
+        # 10-minute per-package ceiling. The limit is per package, so this is
+        # headroom for the slowest one, not a slow-suite allowance.
+        run: |
+          if [ -n '${{ matrix.shard.pkgs }}' ]; then
+            read -ra PKGS <<< '${{ matrix.shard.pkgs }}'
+          else
+            # The complement of the named shards above.
+            mapfile -t PKGS < <(go list ./... | grep -vE '/(daemon|drops|engine|tests)(/|$)')
+          fi
+          echo "shard covers ${#PKGS[@]} packages"
+          go test -race -timeout 30m "${PKGS[@]}"
+
+  # ---------------------------------------------------------------- end-to-end
+  #
+  # Its own job rather than a step after the race suite, which is where these
+  # sat while being the last thing to run in the longest job. They need Postgres
+  # and a Go toolchain and nothing else, so they parallelise for free.
+  #
+  # All three pipeline demos, not just csv-pipeline. They are the only thing
+  # exercising dzd end-to-end through its own CLI and HTTP surfaces, and leaving
+  # two of them unrun is how they rotted: BOTH were broken and had been for some
+  # time, each failing at boot on a requirement that landed after it was
+  # written.
+  #
+  #   mcp-pipeline — no DAZYFLOW_POSTGRES_DSN at all (dzd has required Postgres
+  #     since), a 0.5s sleep where a Postgres-backed boot now needs a poll, no
+  #     DAZYFLOW_DEV=1 for the insecure-defaults guard, and a sandbox path from
+  #     before DATA_DIR grew its sandbox/ segment.
+  #   ap-invoice — the guard's TLS check on a loopback demo database, and it
+  #     never PUBLISHED its flows, so every webhook POST got the
+  #     deliberately-generic 401 that says nothing about why.
+  #
+  # ap-invoice starts its own Postgres via `docker run` on :55432, which does
+  # not collide with the service container below.
+  e2e:
+    name: dzctl end-to-end
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: dazyflow
+          POSTGRES_PASSWORD: dazyflow
+          POSTGRES_DB: dazyflow_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dazyflow -d dazyflow_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: dzctl end-to-end
+        run: |
+          bash tests/e2e/csv-pipeline/run.sh
+          bash tests/e2e/mcp-pipeline/run.sh
+          bash tests/e2e/ap-invoice/run.sh
 
   # ------------------------------------------------------------------ web app
   web:
@@ -354,31 +435,42 @@ jobs:
           if-no-files-found: error
 
   # --------------------------------------------------------- images + deploy
+  #
+  # Deliberately NO `needs:`. Both images are built on every run because that is
+  # the only thing exercising the Dockerfiles, and gating that build on the test
+  # jobs made it a serial tail: wall time was max(test, web, docs, security) PLUS
+  # a from-scratch Go build and two Vite builds. Building in parallel puts it
+  # inside the max() instead. `concurrency.cancel-in-progress` above already
+  # kills the wasted work when a second commit supersedes this one.
+  #
+  # Publishing is what stays gated — see the `publish` job below, which is the
+  # only place a built image reaches ghcr.io.
   images:
     name: Images
     runs-on: ubuntu-latest
-    needs: [test, web, docs, security]
-    permissions:
-      contents: read
-      packages: write
     env:
-      REGISTRY: ghcr.io
-      # Lower-cased owner: ghcr rejects an uppercase path segment, and a GitHub
+      # Lower-cased below: ghcr rejects an uppercase path segment, and a GitHub
       # login may legitimately contain capitals.
       OWNER: ${{ github.repository_owner }}
+    outputs:
+      tag: ${{ steps.ver.outputs.tag }}
+      ver: ${{ steps.ver.outputs.ver }}
+      owner: ${{ steps.ver.outputs.owner }}
+      commit: ${{ steps.ver.outputs.commit }}
+      date: ${{ steps.ver.outputs.date }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # `git describe --tags` for the version stamp
 
-      # Both images are built on every run, because that is the only thing
-      # exercising the Dockerfiles. Publishing is the part that is opt-in.
-      #
       # This is also what stops production compiling its own releases. That
       # droplet is s-1vcpu-2gb: a Go build plus two Vite builds on one core
       # cannot finish inside a runner step's timeout, and the attempt starved the
       # whole site (kswapd pegged, TLS handshakes timing out) before being
       # killed.
+      #
+      # The outputs above hand these values to `publish` so the stamping rules
+      # below live in exactly one place.
       - name: Resolve version
         id: ver
         run: |
@@ -392,27 +484,80 @@ jobs:
             echo "::notice::HEAD is not a tag — images will be stamped from ./VERSION"
           fi
 
-      - name: Build images
-        # VERSION is passed as $TAG, which is EMPTY off a tag — deliberately: the
-        # Dockerfile falls back to the committed ./VERSION when this arg is
-        # empty, and a non-empty placeholder would SHADOW that fallback, which is
-        # the bug that had every non-Makefile build reporting itself as "dev".
-        # COMMIT has no fallback at all (ARG COMMIT=unknown), so without passing
-        # it a running binary cannot be traced back to a commit — 0.26.2 shipped
-        # reporting commit=unknown.
-        run: |
-          docker build \
-            --build-arg VERSION="${{ steps.ver.outputs.tag }}" \
-            --build-arg COMMIT="${{ steps.ver.outputs.commit }}" \
-            --build-arg BUILD_DATE="${{ steps.ver.outputs.date }}" \
-            -t dazyflow-dzd:${{ steps.ver.outputs.ver }} .
-          # The docs site image (docs.dazyflow.app) — deploy/ references it but
-          # nothing else exercises Dockerfile.docs.
-          docker build -f Dockerfile.docs \
-            -t dazyflow-docs:${{ steps.ver.outputs.ver }} .
+      # Both Dockerfiles already carry `--mount=type=cache` for the Go module and
+      # build caches, but a BuildKit cache mount is local to the daemon and a
+      # hosted runner starts with an empty one — so every run recompiled the
+      # world. buildx with the GitHub Actions cache backend is what makes those
+      # mounts, and the layer cache, survive between runs.
+      - uses: docker/setup-buildx-action@v3
+
+      # VERSION is passed as $TAG, which is EMPTY off a tag — deliberately: the
+      # Dockerfile falls back to the committed ./VERSION when this arg is empty,
+      # and a non-empty placeholder would SHADOW that fallback, which is the bug
+      # that had every non-Makefile build reporting itself as "dev". COMMIT has
+      # no fallback at all (ARG COMMIT=unknown), so without passing it a running
+      # binary cannot be traced back to a commit — 0.26.2 shipped reporting
+      # commit=unknown.
+      #
+      # Separate cache scopes: one shared scope would have the two images evict
+      # each other's layers on every run, which is worse than no cache at all.
+      # mode=max keeps the intermediate stages (npm ci, go build) — the whole
+      # point here, since the final stages are a few MB of static files.
+      - name: Build dzd image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: dazyflow-dzd:${{ steps.ver.outputs.ver }}
+          build-args: |
+            VERSION=${{ steps.ver.outputs.tag }}
+            COMMIT=${{ steps.ver.outputs.commit }}
+            BUILD_DATE=${{ steps.ver.outputs.date }}
+          cache-from: type=gha,scope=dzd
+          cache-to: type=gha,mode=max,scope=dzd
+
+      # The docs site image (docs.dazyflow.app) — deploy/ references it but
+      # nothing else exercises Dockerfile.docs.
+      - name: Build docs image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.docs
+          push: false
+          tags: dazyflow-docs:${{ steps.ver.outputs.ver }}
+          cache-from: type=gha,scope=docs
+          cache-to: type=gha,mode=max,scope=docs
+
+  # ------------------------------------------------------------------ publish
+  #
+  # The gate that `images` used to carry. Nothing reaches ghcr.io until the Go
+  # suite, the web suite, the docs site and the supply-chain scans are green.
+  #
+  # It rebuilds rather than receiving an image from `images`, because a buildx
+  # cache hit from the same workflow run costs seconds and an image artifact
+  # round-trip costs minutes. If the cache ever misses, this still produces a
+  # correct image — just slowly.
+  publish:
+    name: Publish images
+    runs-on: ubuntu-latest
+    if: inputs.publish
+    needs: [gates, test, e2e, web, docs, security, images]
+    permissions:
+      contents: read
+      packages: write
+    env:
+      REGISTRY: ghcr.io
+      VER: ${{ needs.images.outputs.ver }}
+      TAG: ${{ needs.images.outputs.tag }}
+    steps:
+      # A shallow clone is enough here, unlike in `images`: the version stamp
+      # arrives through needs.images.outputs, so nothing in this job runs
+      # `git describe`.
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
 
       - name: Log in to ghcr.io
-        if: inputs.publish
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -426,26 +571,44 @@ jobs:
       #
       # :latest only moves for a tagged build. Publishing an untagged run would
       # otherwise point production's floating tag at an arbitrary commit.
-      - name: Push images
-        if: inputs.publish
+      - name: Resolve tags
+        id: tags
         run: |
-          VER='${{ steps.ver.outputs.ver }}'
-          BASE='${{ env.REGISTRY }}/${{ steps.ver.outputs.owner }}'
+          BASE='${{ env.REGISTRY }}/${{ needs.images.outputs.owner }}'
           for img in dzd docs; do
-            docker tag "dazyflow-$img:$VER" "$BASE/dazyflow-$img:$VER"
-            docker push "$BASE/dazyflow-$img:$VER"
-            if [ -n '${{ steps.ver.outputs.tag }}' ]; then
-              docker tag "dazyflow-$img:$VER" "$BASE/dazyflow-$img:latest"
-              docker push "$BASE/dazyflow-$img:latest"
-            else
-              echo "::warning::untagged build — pushed :$VER but did not move :latest"
+            list="$BASE/dazyflow-$img:$VER"
+            if [ -n "$TAG" ]; then
+              list="$list,$BASE/dazyflow-$img:latest"
             fi
+            echo "$img=$list" >> "$GITHUB_OUTPUT"
           done
-          echo "published dazyflow-dzd and dazyflow-docs at $VER"
+          if [ -z "$TAG" ]; then
+            echo "::warning::untagged build — pushing :$VER but not moving :latest"
+          fi
 
-      # Ask Dazyflow to deploy what was just published. Reached only from the
-      # publish path, so it inherits that gate: a build-only run never triggers a
-      # deploy.
+      - name: Push dzd image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.tags.outputs.dzd }}
+          build-args: |
+            VERSION=${{ needs.images.outputs.tag }}
+            COMMIT=${{ needs.images.outputs.commit }}
+            BUILD_DATE=${{ needs.images.outputs.date }}
+          cache-from: type=gha,scope=dzd
+
+      - name: Push docs image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.docs
+          push: true
+          tags: ${{ steps.tags.outputs.docs }}
+          cache-from: type=gha,scope=docs
+
+      # Ask Dazyflow to deploy what was just published. It lives in this job, so
+      # it inherits the publish gate: a build-only run never triggers a deploy.
       #
       # Unlike the sourcehut version, a missing secret here FAILS rather than
       # exiting 0. There the gate protected forks and contributors without the
@@ -468,11 +631,11 @@ jobs:
       # as `"abc"` or as the whole line `DAZYFLOW_WEBHOOK_KEY=abc` is otherwise
       # indistinguishable from a rotated key. Neither check ever echoes a value.
       - name: Trigger deploy
-        if: inputs.publish && inputs.deploy
+        if: inputs.deploy
         env:
           DAZYFLOW_WEBHOOK_KEY: ${{ secrets.DAZYFLOW_WEBHOOK_KEY }}
           DAZYFLOW_FLOW: ${{ secrets.DAZYFLOW_FLOW }}
-          VER: ${{ steps.ver.outputs.ver }}
+          VER: ${{ needs.images.outputs.ver }}
         run: |
           if [ -z "$DAZYFLOW_WEBHOOK_KEY" ] || [ -z "$DAZYFLOW_FLOW" ]; then
             echo "::error::deploy requested but DAZYFLOW_WEBHOOK_KEY / DAZYFLOW_FLOW are not set"
