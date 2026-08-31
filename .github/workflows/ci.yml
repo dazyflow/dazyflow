@@ -81,14 +81,14 @@ jobs:
           --health-cmd "healthcheck.sh --connect --innodb_initialized"
           --health-interval 5s --health-timeout 5s --health-retries 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # check-changelog compares a released section against the commit that
           # released it, and the docker-image version stamp reads
           # `git describe --tags`. Neither works on a shallow clone.
           fetch-depth: 0
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
@@ -140,7 +140,7 @@ jobs:
     name: Web unit tests and build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The docs SPA content tree (web/src/docs/content/) is generated, not
       # committed — guide pages copied from docs/guide/ and the step catalog
@@ -148,12 +148,12 @@ jobs:
       # otherwise pure Node. Without it content.ts globs an empty directory and
       # the docs-search tests fail on a fresh checkout with "Nothing matches",
       # which reads as a search bug rather than as missing content.
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -181,14 +181,14 @@ jobs:
     name: Docs site
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -207,7 +207,7 @@ jobs:
     name: Vulnerability scan and SBOM
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # `stable` rather than go-version-file, unlike every other job. The
       # scan jobs' Go version determines which STDLIB govulncheck audits, and
@@ -217,7 +217,7 @@ jobs:
       # go.mod. `stable` keeps the scan on the newest release; the build jobs
       # and the images stay pinned. A real finding still fails the job — this
       # only stops us reporting patches that are already released.
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: stable
           cache-dependency-path: go.sum
@@ -275,7 +275,7 @@ jobs:
 
       # The sourcehut build left these on the build page. Here they are a proper
       # artifact, so a release can attach them without a rebuild.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sbom
           path: |
@@ -297,7 +297,7 @@ jobs:
       # login may legitimately contain capitals.
       OWNER: ${{ github.repository_owner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # `git describe --tags` for the version stamp
 
@@ -343,7 +343,7 @@ jobs:
 
       - name: Log in to ghcr.io
         if: inputs.publish
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
