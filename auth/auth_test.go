@@ -137,11 +137,11 @@ func TestBearerFromHeader(t *testing.T) {
 		want   string
 		err    bool
 	}{
-		"ok":            {"Bearer abc", "abc", false},
-		"trim":          {"Bearer  spaces  ", "spaces", false},
-		"wrong scheme":  {"Basic abc", "", true},
-		"empty":         {"", "", true},
-		"only scheme":   {"Bearer ", "", true},
+		"ok":           {"Bearer abc", "abc", false},
+		"trim":         {"Bearer  spaces  ", "spaces", false},
+		"wrong scheme": {"Basic abc", "", true},
+		"empty":        {"", "", true},
+		"only scheme":  {"Bearer ", "", true},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

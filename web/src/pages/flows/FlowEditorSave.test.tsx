@@ -19,7 +19,7 @@
 // that has quietly stopped guarding.
 
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, act } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { installLayoutStubs, makeStreamJob, manifests, twoStepGraph } from "./editorTestHarness";
 
@@ -80,7 +80,7 @@ vi.mock("../../api", () => {
     listProviders: () => Promise.resolve({ providers: [] }),
     getPublishedInfo: () => Promise.resolve({ published: false }),
     flowHistory: () => Promise.resolve({ revisions: [] }),
-    streamJob: (...a: never[]) => stream.streamJob(...a),
+    streamJob: (...a: Parameters<typeof stream.streamJob>) => stream.streamJob(...a),
     runGraph: () => Promise.resolve({ job_id: "run-1" }),
     getNodeRecord: () => Promise.resolve({ Result: { output: {} } }),
     retryRun: () => Promise.resolve({ job_id: "run-2" }),

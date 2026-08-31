@@ -62,9 +62,12 @@ func (s *Service) effectiveGraphTimeout(g core.Graph) time.Duration {
 // Terminal bus event, so a fast-completing run doesn't keep a timer
 // alive for nothing.
 //
-// Watchdogs do NOT survive an dzd restart — a deployment that needs
-// crash-safe enforcement should also wire a periodic sweep at
-// startup (out of scope for v1; flagged in the TODO).
+// Watchdogs do NOT survive a dzd restart — a deployment that needs
+// crash-safe enforcement should also wire a periodic sweep at startup.
+// Out of scope for v1, and deliberately not in TODO.md: nothing has asked
+// for it, and the orphaned-graph-run reaper (DAZYFLOW_REAP_INTERVAL)
+// already closes the runs a crash strands, just without honouring their
+// per-graph timeout.
 func (s *Service) startGraphTimeoutWatchdog(runID, tenant, workspace string, timeout time.Duration) {
 	if timeout <= 0 {
 		return

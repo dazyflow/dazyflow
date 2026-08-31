@@ -112,7 +112,17 @@ def post(url, payload, credential=None, timeout=60):
                 return res.status, None
             return res.status, json.loads(raw)
     except urllib.error.HTTPError as e:
-        raise HTTPError(e.code, e.read().decode("utf-8", "replace")) from e
+        # HTTPError IS the response object, so it holds the socket open until
+        # it is collected — .read() drains the body but does not close it, and
+        # the interpreter reports the leak as a ResourceWarning. Closing it
+        # here matters more on the agent than it would in a script: this runs
+        # as a long-lived poll loop, so a 401 that recurs every 5s would
+        # otherwise accumulate sockets until the GC happened to notice.
+        try:
+            body = e.read().decode("utf-8", "replace")
+        finally:
+            e.close()
+        raise HTTPError(e.code, body) from e
     except OSError as e:
         # Every transport failure has to arrive as HTTPError, because that is
         # what the callers catch. urllib.error.URLError is only part of the

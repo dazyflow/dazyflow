@@ -8,7 +8,7 @@ sidebar_label: Concepts
 This page explains the handful of ideas everything else builds on. You don't
 need to be technical — if you can follow a recipe, you can build a flow. Read it
 once and the rest of the docs will make sense. Any unfamiliar word is defined in
-the [Glossary](./glossary).
+the [Glossary](./glossary.md).
 
 ---
 
@@ -145,8 +145,8 @@ Four steps, wired output-to-input, running on their own. That's Dazyflow.
 
 ## Where next
 
-- **[Build your first flow](./first-flow)** — ten minutes, no accounts needed.
-- **[Connect an app](./connect-an-app)** — so a flow can reach Gmail, Slack, Fortnox.
-- **[Triggers & schedules](./triggers-and-schedules)** — make a flow run by itself.
-- **[Step catalog](../reference/steps/)** — everything you can add.
-- **[Glossary](./glossary)** — any word you didn't recognise above.
+- **[Build your first flow](./first-flow.md)** — ten minutes, no accounts needed.
+- **[Connect an app](./connect-an-app.md)** — so a flow can reach Gmail, Slack, Fortnox.
+- **[Triggers & schedules](./triggers-and-schedules.md)** — make a flow run by itself.
+- **[Step catalog](https://docs.dazyflow.app/reference/steps/)** — everything you can add.
+- **[Glossary](./glossary.md)** — any word you didn't recognise above.

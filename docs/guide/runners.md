@@ -16,9 +16,9 @@ This is how you use a tool, a library, or a system that no built-in step covers:
 write a script, and let a flow call it.
 
 > Two shorter routes exist, and it is worth checking them first. If the thing you
-> want already speaks **MCP**, add it in [Admin → MCP servers](./mcp-servers) and
+> want already speaks **MCP**, add it in [Admin → MCP servers](./mcp-servers.md) and
 > its tools become steps directly. If it is **your own service with a REST API on
-> a public address**, describe it in [Admin → Web APIs](./web-apis) and each
+> a public address**, describe it in [Admin → Web APIs](./web-apis.md) and each
 > endpoint becomes a step. Neither needs a machine to set up or a script to
 > write. A runner is for what has no such interface — your own code, a local
 > tool, or a service with no public address, which the other two cannot reach by

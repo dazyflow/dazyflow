@@ -15,6 +15,12 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
+    // Explicit, so that adding an @types package for the TEST config (see
+    // tsconfig.test.json, which needs @types/node for the guard tests that read
+    // files off disk) does not silently hand the browser bundle `process`,
+    // `__dirname` and `node:fs` as valid globals. Everything the app needs is
+    // either imported or declared in src/vite-env.d.ts.
+    "types": ["vite/client"],
     "useDefineForClassFields": true,
     "noEmit": true
   },

@@ -725,7 +725,7 @@ func connectionSlug(integration string) string {
 // describe_integration / list_drops (the `connection_fields` array).
 func configureConnection(c *DazydClient) Tool {
 	return Tool{
-		Name: "configure_connection",
+		Name:        "configure_connection",
 		Description: "Set up a connection-based integration (e.g. Email/SMTP, ntfy) by storing its connection-field values. The daemon verifies the values against the live service before saving when a verifier exists, so bad credentials surface here, not at run time. Use this when a flow fails with '<X> isn't connected'. For OAuth providers (Google, Slack, GitHub) use start_connection instead. Field keys come from the integration's connection_fields (see describe_integration).",
 		InputSchema: json.RawMessage(`{"type":"object","required":["integration","values"],"properties":{
 			"integration": {"type":"string","description":"Integration name or slug, e.g. 'Email' or 'ntfy'. Case-insensitive; spaces become dashes."},
@@ -1001,7 +1001,7 @@ func validateFlow(c *DazydClient, d Defaults) Tool {
 // repairs structural problems before returning.
 func generateFlowTool(c *DazydClient) Tool {
 	return Tool{
-		Name: "generate_flow",
+		Name:        "generate_flow",
 		Description: "Draft a flow from a plain-English description using the server-side AI generator (grounded on the live catalog, validated and repaired). Returns {graph, issues} — a DRAFT to refine (validate_graph / describe_drop / update_flow) or persist (create_flow). Requires an AI provider connected on the server; the graph is not saved or run.",
 		InputSchema: json.RawMessage(`{"type":"object","required":["description"],"properties":{
 			"description": {"type":"string","description":"What the flow should do, in plain English. e.g. 'every weekday at 9am email me yesterday's new signups'."},

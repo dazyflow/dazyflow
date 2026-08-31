@@ -6,7 +6,7 @@ sidebar_label: Glossary
 # Glossary
 
 Plain-language definitions of the words you'll meet in Dazyflow and in the [Step
-catalog](../reference/steps/). New here? Read [How Dazyflow works](./concepts)
+catalog](https://docs.dazyflow.app/reference/steps/). New here? Read [How Dazyflow works](./concepts.md)
 first — it ties these together.
 
 ### App
@@ -18,10 +18,10 @@ also [Connection](#connection).
 ### Approval
 
 A pause where a flow waits for a person to say yes or no. You add one with the
-[Wait for approval](../reference/steps/flow-control) step and connect the thing
+[Wait for approval](https://docs.dazyflow.app/reference/steps/flow-control) step and connect the thing
 being decided into its `Value` input, so whoever decides can see what they're
 deciding on. Anything waiting shows on the **Approvals** page. See
-[Teams & approvals](./teams-and-approvals).
+[Teams & approvals](./teams-and-approvals.md).
 
 ### Branch
 

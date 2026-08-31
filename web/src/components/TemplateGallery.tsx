@@ -36,7 +36,7 @@ import { Loading } from "./ui/Loading";
 // template is a JSON file + a one-line index entry; no daemon code change.
 
 // SHARED_NTFY_PLACEHOLDER is the topic an ntfy template would ship with.
-// It's a guessable, world-readable shared topic, so useTemplate swaps it
+// It's a guessable, world-readable shared topic, so applyTemplate swaps it
 // for an unguessable per-fork topic on fork (see the nodes map below).
 // Kept for forward-compat with any ntfy template re-added to the gallery.
 const SHARED_NTFY_PLACEHOLDER = "my-daily-hello";
@@ -112,7 +112,12 @@ export function TemplateGallery() {
     return new Set(providers.map((p) => p.name));
   }, [providers]);
 
-  const useTemplate = async (tpl: TemplateSummary) => {
+  // Named applyTemplate, not useTemplate: this is the "use this template"
+  // ACTION, and a `use` prefix on a plain async function inside a component
+  // means both React's lint rules and a reader take it for a hook. It is
+  // called from a callback and from an effect, which is a rules-of-hooks
+  // violation if it really were one.
+  const applyTemplate = async (tpl: TemplateSummary) => {
     if (!token) {
       setError(t("templates.notSignedIn"));
       return;
@@ -218,7 +223,7 @@ export function TemplateGallery() {
   const started = useRef(false);
   useEffect(() => {
     if (!autoStart || started.current || !templates) return;
-    // The workspace, not just the token, is what useTemplate needs. The
+    // The workspace, not just the token, is what applyTemplate needs. The
     // template index is a static fetch and resolves well before the identity
     // bootstrap, so gating on `token` alone fired this on a cold load with
     // activeTenant still "" — and the user's very first action reported
@@ -230,7 +235,7 @@ export function TemplateGallery() {
     const sp = new URLSearchParams(searchParams);
     sp.delete("start");
     setSearchParams(sp, { replace: true });
-    if (tpl) void useTemplate(tpl);
+    if (tpl) void applyTemplate(tpl);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoStart, templates, token, activeTenant, activeWorkspace]);
 
@@ -362,7 +367,7 @@ export function TemplateGallery() {
                   <Button
                     variant="primary"
                     className="template-cta"
-                    onClick={() => useTemplate(tpl)}
+                    onClick={() => applyTemplate(tpl)}
                     disabled={busy !== null || adminBlocked || !canEdit}
                     title={
                       adminBlocked

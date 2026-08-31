@@ -286,7 +286,7 @@ service on `10.0.0.x`, something only your office network can see — you do not
 have to fall back to writing a script per operation.
 
 Set **Reach it through a runner** on the catalog to one or more
-[runner](./runners) tags, and every operation in it is performed *from* that
+[runner](./runners.md) tags, and every operation in it is performed *from* that
 machine instead of from Dazyflow. Nothing else about the catalog changes: the
 same steps, the same fields, the same connection, the same outputs. Only where
 the call is made from.
@@ -316,5 +316,5 @@ Two things to know before you switch it on.
 | --- | --- |
 | Your own service with a REST API | **Web APIs** — this page |
 | One call to make, once, in one flow | **Web request** |
-| A tool that already speaks MCP | [MCP servers](./mcp-servers) |
-| Code, a local tool, something on your network | [Runners](./runners) |
+| A tool that already speaks MCP | [MCP servers](./mcp-servers.md) |
+| Code, a local tool, something on your network | [Runners](./runners.md) |

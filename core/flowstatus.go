@@ -160,8 +160,9 @@ func classifyTriggers(g Graph) (hasScheduler, hasWebhook, hasEvent bool) {
 			// consults the whole-flow switch, so such a flow really does still
 			// fire (the worker then records the disabled node as skipped).
 			// Mirroring that keeps the chip honest. Whether those paths SHOULD
-			// honour a disabled trigger node is a separate question — see the
-			// note in TODO.md.
+			// honour a disabled trigger node is a separate question — see
+			// docs/decisions/2026-08-20-web-fixes.md, which untangles the three
+			// separate `disabled` switches this sits on top of.
 			if EventTriggerModules[n.Module] {
 				hasEvent = true
 			}

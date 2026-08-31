@@ -1,0 +1,20 @@
+{
+  // Type-checks the test files, which tsconfig.json deliberately excludes so
+  // that `vite build` never compiles them into the bundle. That exclusion also
+  // meant `tsc -b`, `npm run typecheck` and CI's `npm run build` all skipped
+  // 123 test files — a type error in a test was invisible until someone opened
+  // it. `npm test` runs this first.
+  //
+  // Same compiler options as the app (strict, noUnusedLocals, …); the only
+  // differences are the empty `exclude` and the ambient test globals.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // vitest runs with `globals: true` (see vite.config.ts), so describe/it/
+    // expect/vi are ambient rather than imported in some files, and
+    // src/test/setup.ts extends `expect` with jest-dom's matchers.
+    "types": ["vite/client", "node", "vitest/globals", "@testing-library/jest-dom"],
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo"
+  },
+  "include": ["src", "vite.config.ts"],
+  "exclude": []
+}

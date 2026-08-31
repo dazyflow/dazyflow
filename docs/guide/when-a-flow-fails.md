@@ -47,7 +47,7 @@ ones you'll actually meet:
 
 Most failures are one of a handful of causes, and nearly all of them are setup
 rather than logic — an app not connected, a Slack channel the bot was never
-invited to, a key that expired. [Connect an app](./connect-an-app) covers the
+invited to, a key that expired. [Connect an app](./connect-an-app.md) covers the
 fixes for those.
 
 If a step won't retry by itself, the page says so directly: *"This step won't
@@ -76,7 +76,7 @@ The same side-effect warning applies, so read the count before you confirm.
 
 ## Some steps retry themselves, some never will
 
-Every step in the [catalog](../reference/steps/) carries a **Behaviour** line,
+Every step in the [catalog](https://docs.dazyflow.app/reference/steps/) carries a **Behaviour** line,
 and it tells you what happens on a hiccup:
 
 - **Safe to retry** — if it fails because the network coughed, Dazyflow quietly
@@ -121,6 +121,6 @@ mean, or copy identifiers by hand.
 
 ## Where next
 
-- [Connect an app](./connect-an-app) — the fix for most failures.
-- [Make a flow run by itself](./triggers-and-schedules) — pausing a flow while you investigate.
-- [Glossary](./glossary) — any word here you'd like pinned down.
+- [Connect an app](./connect-an-app.md) — the fix for most failures.
+- [Make a flow run by itself](./triggers-and-schedules.md) — pausing a flow while you investigate.
+- [Glossary](./glossary.md) — any word here you'd like pinned down.

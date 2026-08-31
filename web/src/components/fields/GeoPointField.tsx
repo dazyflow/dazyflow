@@ -203,7 +203,6 @@ export function GeoPointField({
     if (!runCoordinate) return;
     const p = parsePoint(runCoordinate);
     if (p) setMarker(p.lat, p.lon, true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runCoordinate]);
 
   async function search() {

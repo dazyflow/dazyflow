@@ -109,6 +109,6 @@ says so on its card, rather than letting you build a flow that can't run.
 
 ## Where next
 
-- [Make a flow run by itself](./triggers-and-schedules) — schedules and publishing.
-- [When a run fails](./when-a-flow-fails) — including the "not connected" failures.
-- [Step catalog](../reference/steps/) — every app and what its steps need.
+- [Make a flow run by itself](./triggers-and-schedules.md) — schedules and publishing.
+- [When a run fails](./when-a-flow-fails.md) — including the "not connected" failures.
+- [Step catalog](https://docs.dazyflow.app/reference/steps/) — every app and what its steps need.

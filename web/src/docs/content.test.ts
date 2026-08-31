@@ -139,3 +139,77 @@ describe.skipIf(!existsSync(BUNDLE))("rendered bundle", () => {
     expect(next?.link).toBe("/guide/when-a-flow-fails");
   });
 });
+
+// Every link in a guide page has to work in two places at once: in this SPA,
+// and on the repository host, where the README sends a reader straight into
+// docs/guide/. They are different resolvers, and a link that satisfies only one
+// of them fails silently in the other.
+//
+// This is not hypothetical. Every cross-link in the guide was once written
+// extensionless (`./glossary`, `../reference/steps/`) — correct in the SPA,
+// forty dead links on the repository host, including the ones the README's own
+// "docs/guide" pointer lands you on.
+//
+// The contract that satisfies both:
+//
+//   * a sibling guide page is `./slug.md` — a real file on disk, and the
+//     renderer strips the `.md` (resolveInternal in Markdown.tsx);
+//   * the step catalog is a full https://docs.dazyflow.app/reference/steps/…
+//     URL, because that tree has NO markdown source in the repo — cmd/docsgen
+//     generates it at build time — so no relative path can ever resolve there.
+//     stripDocsOrigin in Markdown.tsx keeps those navigating in-SPA.
+describe("guide links resolve on the repository host too", () => {
+  const LINK = /\[[^\]]*\]\(([^)\s]+)\)/g;
+
+  const linksIn = (slug: string): string[] => {
+    const out: string[] = [];
+    for (const m of readGuide(slug).matchAll(LINK)) out.push(m[1]);
+    return out;
+  };
+
+  it("points every relative link at a file that exists", () => {
+    const dead: string[] = [];
+    for (const slug of guideSlugs()) {
+      for (const href of linksIn(slug)) {
+        if (/^(https?:|mailto:|#)/.test(href)) continue;
+        const path = href.split("#")[0];
+        if (path === "") continue; // pure in-page anchor
+        if (!existsSync(join(GUIDE_SRC, path))) dead.push(`${slug}.md -> ${href}`);
+      }
+    }
+    expect(dead).toEqual([]);
+  });
+
+  it("never links the generated step catalog relatively", () => {
+    const relative: string[] = [];
+    for (const slug of guideSlugs()) {
+      for (const href of linksIn(slug)) {
+        if (/^https?:/.test(href)) continue;
+        if (href.includes("reference/steps")) relative.push(`${slug}.md -> ${href}`);
+      }
+    }
+    expect(relative).toEqual([]);
+  });
+
+  it("only links step-catalog pages that cmd/docsgen actually emits", () => {
+    const generated = join(__dirname, "content/reference/steps");
+    if (!existsSync(generated)) return; // no `make docs-content` in this checkout
+    const emitted = new Set(
+      readdirSync(generated)
+        .filter((f) => f.endsWith(".md"))
+        .map((f) => f.replace(/\.md$/, "")),
+    );
+    const missing: string[] = [];
+    for (const slug of guideSlugs()) {
+      for (const href of linksIn(slug)) {
+        const m = href.match(
+          /^https:\/\/docs\.dazyflow\.app\/reference\/steps\/([a-z0-9-]*)(?:[#?]|$)/,
+        );
+        if (!m) continue;
+        const page = m[1] === "" ? "index" : m[1];
+        if (!emitted.has(page)) missing.push(`${slug}.md -> ${href}`);
+      }
+    }
+    expect(missing).toEqual([]);
+  });
+});

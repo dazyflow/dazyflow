@@ -16,9 +16,9 @@ import (
 	"github.com/dazyflow/dazyflow/auth"
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/daemon"
+	_ "github.com/dazyflow/dazyflow/drops" // register sleep/merge/file_*
 	"github.com/dazyflow/dazyflow/engine"
 	"github.com/dazyflow/dazyflow/engine/jobstore"
-	_ "github.com/dazyflow/dazyflow/drops" // register sleep/merge/file_*
 	"github.com/dazyflow/dazyflow/workspace"
 )
 

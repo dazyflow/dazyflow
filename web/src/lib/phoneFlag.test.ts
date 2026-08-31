@@ -49,7 +49,9 @@ describe("regionDisplayName", () => {
   // it must not throw, because this renders inside a form field.
   it("falls back to the raw code when Intl.DisplayNames is unavailable", () => {
     const real = Intl.DisplayNames;
-    // @ts-expect-error — deliberately removing a platform API for this case.
+    // Deliberately removing a platform API for this case. The double cast is
+    // what makes the delete legal, so no @ts-expect-error is needed — one was
+    // here, and it was itself an error under `noUnusedTsExpectError`.
     delete (Intl as unknown as Record<string, unknown>).DisplayNames;
     try {
       expect(regionDisplayName("se")).toBe("SE");

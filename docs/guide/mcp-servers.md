@@ -200,7 +200,7 @@ org admin gets a URL.
 
 If the tool you want is only distributed as a command, run it on a machine of
 yours and put it behind a URL — or reach it with a
-[runner](./runners), which exists for exactly this.
+[runner](./runners.md), which exists for exactly this.
 
 **It will not reach inside your network.** The address is checked at connection
 time against the same rules as any outbound request: no loopback, no private

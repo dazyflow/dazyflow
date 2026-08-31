@@ -477,7 +477,14 @@ export function RenderTableColumns({
                   <span className="rtc-grip rtc-grip-off" aria-hidden="true">
                     <GripIcon />
                   </span>
-                  {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
+                  {/* autoFocus is right here and is NOT the usual page-load
+                      focus steal: this input only exists because the reader
+                      just clicked the column name to rename it, so focus is
+                      already their intent and landing anywhere else is the
+                      surprise. (This carried a jsx-a11y/no-autofocus disable
+                      for a plugin that was never configured — see
+                      eslint.config.js on why the ruleset is deliberately
+                      only the hooks rules.) */}
                   <input
                     className="rtc-edit-input"
                     autoFocus

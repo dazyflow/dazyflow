@@ -14,9 +14,9 @@ import (
 	"github.com/dazyflow/dazyflow/auth"
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/daemon"
+	_ "github.com/dazyflow/dazyflow/drops"
 	"github.com/dazyflow/dazyflow/engine"
 	"github.com/dazyflow/dazyflow/engine/jobstore"
-	_ "github.com/dazyflow/dazyflow/drops"
 )
 
 // approvalHarness builds a full stack (service + worker + approval

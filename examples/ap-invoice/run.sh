@@ -79,8 +79,16 @@ echo " ready"
 # generated per-run; secrets are seeded over the API in step 3b.
 echo "[3/7] starting dzd (workers=2, http=:18080, sandbox=$SANDBOX_BASE)"
 MASTER_KEY=$(head -c32 /dev/urandom | base64)
+# DAZYFLOW_DEV=1 downgrades the fail-closed config guard to warnings. This
+# demo already provisions the two things that guard is usually protecting — a
+# strong DB password and a real random master key, both generated above — so
+# the only check it actually trips is the TLS one: the ephemeral Postgres is a
+# throwaway loopback container with no certificate, and giving it one to run a
+# demo would be theatre. Without this the script dies at boot with
+# "DAZYFLOW_POSTGRES_DSN does not enforce TLS", which is what it did.
 DAZYFLOW_LISTEN=":50099" \
 DAZYFLOW_HTTP=":18080" \
+DAZYFLOW_DEV=1 \
 DAZYFLOW_DEV_KEY=1 \
 DAZYFLOW_DATA_DIR="$SANDBOX_BASE" \
 DAZYFLOW_MASTER_KEY="$MASTER_KEY" \
@@ -118,9 +126,31 @@ seed_secret SLACK_TOKEN      "Bearer slack-bot-token-def"
 seed_secret APPROVAL_API_KEY "Bearer approval-system-key-ghi"
 
 # --- 4. save the two pipeline graphs --------------------------------------
-echo "[4/7] saving graphs"
+echo "[4/7] saving and publishing graphs"
 DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 graph save pipeline-low.json > /dev/null
 DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 graph save pipeline-high.json > /dev/null
+
+# A webhook fires the PUBLISHED revision, never the draft (see
+# daemon/webhook.go: store.LoadPublished). Saving alone leaves both flows
+# unpublished, so every POST below came back 401 "unknown endpoint or invalid
+# secret" — the deliberately generic pre-auth error, which gives no hint that
+# publishing is the missing step. That is what this script was doing.
+#
+# Publishing is an HTTP-only operation: there is no publish RPC in
+# api/proto/control.proto and no `dzctl graph publish`, so this goes to the
+# same :18080 gateway the webhooks below use, with the dev token as bearer.
+# An empty body publishes HEAD. `flow_id` is the full tenant/workspace/id
+# triple (splitFlowID in daemon/me_routes.go), and it is ONE path segment:
+# the route is `{flow_id}`, which Go's mux matches against a single segment,
+# so the slashes must be percent-encoded. Same as the web client, which sends
+# encodeURIComponent(`${tenant}/${workspace}/${id}`).
+for flow in process-invoice-low process-invoice-high; do
+    code=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+        -H "Authorization: Bearer $TOKEN" \
+        "http://127.0.0.1:18080/api/v1/me/flows/dev%2Fmain%2F$flow/publish")
+    [ "$code" = "200" ] || { echo "ERROR: publishing $flow returned HTTP $code"; exit 1; }
+    echo "      published $flow"
+done
 
 # --- 5. fire the low-value invoice via webhook ----------------------------
 echo "[5/7] webhook → process-invoice-low (\$250 amount → auto-approve path)"

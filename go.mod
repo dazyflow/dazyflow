@@ -101,3 +101,13 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
+
+// The frontend's dependency tree contains Go sources (flatted ships a Go
+// port alongside its JS), so `./...` matched web/node_modules and the whole
+// toolchain — build, vet, test, gofmt — walked into a directory this project
+// does not own. Harmless today only because that one file happens to be
+// gofmt-clean; the next npm package that ships an unformatted .go file would
+// turn the format gate red with nothing to fix.
+ignore (
+	web/node_modules
+)

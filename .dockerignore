@@ -3,15 +3,14 @@
 .git
 **/node_modules
 web/dist
-# Docs build output — generated fresh inside Dockerfile.docs (gen + vitepress
-# stages), never copied from the host context.
-docs/.vitepress/dist
-docs/.vitepress/cache
+# The docs SPA's generated content tree and build output. Both are produced
+# inside Dockerfile.docs (the `gen` stage runs cmd/docsgen, the `build` stage
+# runs Vite), never copied from the host context.
+web/src/docs/content
+web/dist-docs
 .dazyflow-workspace
 .dazyflow-sandbox
-.dazyflow-users.json
 *.log
-OVERNIGHT.md
 
 # Secrets and credentials must never enter the build context: the Dockerfile
 # does `COPY . .`, which would otherwise bake them into an image layer.

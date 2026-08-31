@@ -120,7 +120,7 @@ Two things to remember beyond that line:
 
 - **Publish.** An unpublished draft doesn't receive. Test with **Run** or **Send
   test event**, then publish. See [Make a flow run by
-  itself](./triggers-and-schedules).
+  itself](./triggers-and-schedules.md).
 - **A paused trigger refuses deliveries** rather than accepting them and doing
   nothing. If callers are getting turned away, check whether the flow or that
   trigger step is paused.
@@ -139,8 +139,8 @@ out about a field name mismatch now, rather than at 02:00 next Tuesday.
 
 ## Where next
 
-- [Make a flow run by itself](./triggers-and-schedules) — publishing, pausing and schedules.
-- [When a run fails](./when-a-flow-fails) — reading a failed delivery.
-- [Teams & approvals](./teams-and-approvals) — have a person check a submission before the flow acts on it.
-- [Step catalog: triggers](../reference/steps/triggers) — the webhook trigger's settings and outputs in detail.
-- [Step catalog: webhook](../reference/steps/webhook) — the *outbound* step, for sending data to someone else's webhook.
+- [Make a flow run by itself](./triggers-and-schedules.md) — publishing, pausing and schedules.
+- [When a run fails](./when-a-flow-fails.md) — reading a failed delivery.
+- [Teams & approvals](./teams-and-approvals.md) — have a person check a submission before the flow acts on it.
+- [Step catalog: triggers](https://docs.dazyflow.app/reference/steps/triggers) — the webhook trigger's settings and outputs in detail.
+- [Step catalog: webhook](https://docs.dazyflow.app/reference/steps/webhook) — the *outbound* step, for sending data to someone else's webhook.

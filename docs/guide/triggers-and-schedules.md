@@ -114,6 +114,6 @@ also turns off its hosted form.
 
 ## Where next
 
-- [Forms & webhooks](./forms-and-webhooks) — the form link, embedding it, and calling a flow from code.
-- [When a run fails](./when-a-flow-fails) — what to do when an automatic run goes wrong at 03:00.
-- [Step catalog: triggers](../reference/steps/triggers) — every trigger step in detail.
+- [Forms & webhooks](./forms-and-webhooks.md) — the form link, embedding it, and calling a flow from code.
+- [When a run fails](./when-a-flow-fails.md) — what to do when an automatic run goes wrong at 03:00.
+- [Step catalog: triggers](https://docs.dazyflow.app/reference/steps/triggers) — every trigger step in detail.

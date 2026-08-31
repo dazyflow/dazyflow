@@ -23,7 +23,136 @@ into the image.)
 
 ## [Unreleased]
 
+### Fixed
+
+- **Two of the three shipped examples could not run, and CI only ran the
+  third.** `examples/mcp-pipeline/run.sh` and `examples/ap-invoice/run.sh` are
+  the only end-to-end exercise of `dzd` through its own CLI and HTTP surfaces,
+  and both had been failing at boot on requirements that landed after they were
+  written — invisible because the `dzctl end-to-end` CI step ran
+  `csv-pipeline` alone.
+
+  mcp-pipeline had four: no `DAZYFLOW_POSTGRES_DSN` at all (so it exited
+  immediately with "DAZYFLOW_POSTGRES_DSN is required" once Postgres became
+  mandatory), a `sleep 0.5` where a Postgres-backed boot now needs a poll,
+  no `DAZYFLOW_DEV=1` for the insecure-defaults guard, and a sandbox path from
+  before `DAZYFLOW_DATA_DIR` grew its `sandbox/` segment. ap-invoice had three:
+  the guard's TLS check firing on a throwaway loopback container, no publish
+  step (a webhook fires the **published** revision, and the pre-auth 401 is
+  deliberately generic, so "unpublished flow" and "wrong secret" are
+  indistinguishable from the outside), and a `flow_id` that must be the
+  percent-encoded `tenant/workspace/id` triple in one path segment.
+
+  Both now pass every assertion, and CI runs all three examples.
+
+- **`go build ./...` walked into `web/node_modules`.** `flatted` ships a Go
+  port beside its JavaScript, so build, vet, test and `gofmt -l .` all
+  descended into a directory this project does not own. Harmless only by luck —
+  that one file happens to be gofmt-clean — and the next npm package shipping
+  an unformatted `.go` file would have turned the new format gate red with
+  nothing to fix. `go.mod` now carries an `ignore` directive, and the `fmt` /
+  `fmt-check` targets operate on `git ls-files '*.go'` since gofmt does not read
+  `go.mod`.
+
+- **A leaked socket per HTTP error in the runner agent.** `urllib`'s
+  `HTTPError` *is* the response object; `post()` drained the body but never
+  closed it, so the interpreter reported a `ResourceWarning` on collection. On
+  a long-lived poll loop a recurring 401 accumulated sockets until the GC
+  happened to notice.
+
+- **Three code comments pointed at notes that did not exist**, in
+  `core/flowstatus.go`, `daemon/timeout.go` and `daemon/runlog_pg.go`. Two had
+  been dangling for some time; the third now points at
+  `docs/decisions/2026-08-20-web-fixes.md`, where the reasoning moved.
+
+- **Nine Go files were not gofmt-clean.** Struct-tag and map-literal
+  misalignment plus one out-of-order import. The Makefile had declined to gate
+  formatting on the grounds of "pre-existing gofmt-version drift"; there was no
+  version drift, and one `make fmt` fixed all nine.
+
+### Added
+
+- **CI runs on push and pull request.** The workflow was `workflow_dispatch:`
+  only, so every gate it defines — the race suite, both govulncheck passes,
+  catalogue freshness, the changelog guard, the web suite, three Vite builds —
+  fired only when someone remembered to press a button, and nothing else builds
+  this repository. Publishing and deploying stay dispatch-gated: on a push or
+  PR the `publish`/`deploy` inputs are unset, so images build (the only thing
+  exercising the Dockerfiles) and nothing is pushed. Superseded runs cancel on
+  push/PR but never on a dispatch, which may be mid-push to ghcr.
+
+- **Four new gates, each closing a way something rotted unseen.**
+  `make fmt-check` (formatting); `make env-check` via
+  `scripts/check-env-example.sh` (every `DAZYFLOW_*` knob the daemon reads must
+  appear in `.env.example`); `npm audit --audit-level=high --omit=dev` (the JS
+  half of the supply chain had no gate at all beside Go's two govulncheck
+  passes); and a link check in `web/src/docs/content.test.ts` for guide
+  cross-links.
+
+- **ESLint, limited to the React hooks rules.** Deliberately not the
+  recommended set: `tsc --strict` and the nine `check-*.mjs` guards already
+  cover what a general ruleset would flag, and a lint run people learn to
+  ignore is worse than none. The hooks rules catch what nothing else can — a
+  stale closure is well-typed and silent. It found a
+  `rules-of-hooks` violation (a plain async action named `useTemplate`, now
+  `applyTemplate`), a disable comment for a `jsx-a11y` plugin that was never
+  configured, and two disable directives that no longer suppressed anything.
+  `npm test` gates on errors; the dependency warnings are visible via
+  `npm run lint` and are not a gate, since 22 of them are the known false
+  positive for a `useState` setter returned from a custom hook.
+
+- **`CONTRIBUTING.md` and a pull-request template.** The rules the gates
+  enforce — SPDX headers, `[Unreleased]`, `make catalogs` after a drop,
+  `.env.example` for a new knob, `step` in copy and `drop` in code — existed
+  only in Makefile help text, `web/README.md` and CI comments, so a first
+  contributor found them by breaking a build.
+
+- **`docs/decisions/`.** `TODO.md` opened by saying completed work is not
+  archived there and then spent 440 of its 557 lines on exactly that, with the
+  fourteen open items scattered inside retrospectives titled "worked through" —
+  the first at line 140. The reasoning was worth keeping and the backlog was
+  unreadable, so the retrospectives moved to dated decision records and
+  `TODO.md` now leads with the open work.
+
 ### Changed
+
+- **`.env.example` documents fifteen knobs it had never mentioned**, including
+  `DAZYFLOW_TRUSTED_PROXIES`. That one matters most: without it
+  `X-Forwarded-For` is never honoured, so behind the reverse proxy the README
+  tells you to deploy, every request arrives wearing the proxy's address and
+  the whole internet shares one rate-limit bucket — and its sibling
+  `DAZYFLOW_TRUST_PROXY_HEADERS` is documented in three places, which is what
+  makes the omission mislead rather than merely omit. Also added: the three
+  `DAZYFLOW_EGRESS_*` knobs, the three missing `DAZYFLOW_FREE_*` caps (the
+  README calls out "the `DAZYFLOW_FREE_*` knobs" and only three of six were
+  listed), `DAZYFLOW_SHELL_ENV_ALLOW`, `DAZYFLOW_OIDC_ALLOWED_TENANTS`,
+  `DAZYFLOW_SUPPORT_INBOX`, `DAZYFLOW_SUPPORT_RETENTION`,
+  `DAZYFLOW_RUNNER_TASK_RETENTION`, `DAZYFLOW_MAX_ROWS`,
+  `DAZYFLOW_PROMOTE_INTERVAL` and `DAZYFLOW_FAILURE_EMAIL_WINDOW`.
+
+- **Guide cross-links now resolve on the repository host as well as in the
+  docs SPA.** All forty were extensionless SPA routes (`./glossary`,
+  `../reference/steps/`) — correct in the SPA, dead on GitHub, which is exactly
+  where the README's `docs/guide` pointer lands a reader. Sibling pages are now
+  `./slug.md` (the renderer already strips `.md`) and the generated step
+  catalog, which has no markdown source in the repo, is a full
+  `https://docs.dazyflow.app/...` URL that `stripDocsOrigin` keeps navigating
+  in-SPA.
+
+- **`make check` matches what CI enforces**, and says what it does not cover.
+  It previously skipped catalogue freshness, formatting and the config
+  catalogue, so the command the README named as the pre-push gate could pass on
+  a change CI would reject. `make ci` additionally runs the runner suite, the
+  npm audit and the docs content generation, and the README now mentions it.
+
+- **The web test files are type-checked.** `tsconfig.json` excludes
+  `*.test.ts(x)` so `vite build` never compiles them, which also meant `tsc -b`,
+  `npm run typecheck` and CI's build all skipped 123 test files. A
+  `tsconfig.test.json` covers them and found eleven real errors — a mock whose
+  signature had drifted from `api.whoami`, eight `never[]` spreads that could
+  not type-check against their target, an unused import and a stale
+  `@ts-expect-error`. The app config now pins `types` to `vite/client` so the
+  `@types/node` this needs cannot leak `process` into the browser bundle.
 
 - **A failed deploy trigger now says what to check.** The step ended in
   `curl -f`, whose entire report is `curl: (22) The requested URL returned

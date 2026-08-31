@@ -137,10 +137,10 @@ step — it isn't failing and it isn't burning anything; it's waiting.
 
 ## Where next
 
-- [Forms & webhooks](./forms-and-webhooks) — the intake side: a form anyone can
+- [Forms & webhooks](./forms-and-webhooks.md) — the intake side: a form anyone can
   fill in, feeding the flow you're approving.
-- [When a run fails](./when-a-flow-fails) — reading a run that stopped for a
+- [When a run fails](./when-a-flow-fails.md) — reading a run that stopped for a
   reason other than waiting on you.
-- [Step catalog: flow control](../reference/steps/flow-control) — the *Wait for
+- [Step catalog: flow control](https://docs.dazyflow.app/reference/steps/flow-control) — the *Wait for
   approval* step's inputs and outputs in detail.
-- [Glossary](./glossary) — approval, member, role, seat and the rest.
+- [Glossary](./glossary.md) — approval, member, role, seat and the rest.

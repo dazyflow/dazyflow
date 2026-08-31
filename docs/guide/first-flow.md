@@ -7,8 +7,8 @@ sidebar_label: First flow
 
 Ten minutes, no accounts, nothing to install. You'll watch a flow run, read what
 it did, change it, and then set it live. If a word here is new to you, [How
-Dazyflow works](./concepts) explains the ideas behind it and the
-[Glossary](./glossary) defines them one at a time.
+Dazyflow works](./concepts.md) explains the ideas behind it and the
+[Glossary](./glossary.md) defines them one at a time.
 
 ---
 
@@ -42,7 +42,7 @@ table, feeding a step that formats it into a tidy summary.
 Click **Run** in the toolbar.
 
 A moment later you get **"Done — the flow ran."** and the text the last step
-produced. That's a complete [run](./glossary#run): Dazyflow carried out every
+produced. That's a complete [run](./glossary.md#run): Dazyflow carried out every
 step in order and handed you the result.
 
 Click **See the full run** for the detail: every step, in the order it happened,
@@ -65,7 +65,7 @@ nothing to send, post, or delete.
 While you're in there, notice that some values can be **filled in** on the step
 and others **connected** from an earlier step. That distinction is the single
 most useful thing to understand about building flows, and [How Dazyflow
-works](./concepts) covers it properly.
+works](./concepts.md) covers it properly.
 
 ## 5. Save, then publish when you mean it
 
@@ -105,11 +105,11 @@ Now build something real. Three good second flows, all in the gallery:
 
 Anything that touches an outside service needs it connected first. If you press
 **Run** and Dazyflow says **"Set up this flow first"**, that's what it's telling
-you — see [Connect an app](./connect-an-app).
+you — see [Connect an app](./connect-an-app.md).
 
 ## Where next
 
-- [Connect an app](./connect-an-app) — sign in to Gmail, Slack, Fortnox and the rest, once.
-- [Make a flow run by itself](./triggers-and-schedules) — schedules, triggers and publishing.
-- [When a run fails](./when-a-flow-fails) — reading a failure and retrying it.
-- [Step catalog](../reference/steps/) — everything you can add to a flow.
+- [Connect an app](./connect-an-app.md) — sign in to Gmail, Slack, Fortnox and the rest, once.
+- [Make a flow run by itself](./triggers-and-schedules.md) — schedules, triggers and publishing.
+- [When a run fails](./when-a-flow-fails.md) — reading a failure and retrying it.
+- [Step catalog](https://docs.dazyflow.app/reference/steps/) — everything you can add to a flow.

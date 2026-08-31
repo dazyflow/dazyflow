@@ -1,141 +1,38 @@
+<!--
+SPDX-FileCopyrightText: 2026 Angels' Ware
+SPDX-License-Identifier: AGPL-3.0-or-later
+-->
+
 # Dazyflow TODO
 
-The single backlog: what's left, grouped by what unblocks it. Read it top to
-bottom — it's roughly in priority order.
+The single backlog: what's left, roughly in priority order. Every `- [ ]` in
+**Open** is work somebody could pick up today.
 
-Convention: a `- [ ]` says what a user experiences, then what to do about it.
-If an item is deferred or blocked, the reason is on the line — a backlog that
-doesn't say why something is stalled turns into a graveyard.
+Convention: an item says what a user experiences, then what to do about it. If
+it is blocked, the reason is on the line — a backlog that doesn't say why
+something is stalled turns into a graveyard.
 
-Completed work is not archived here. `git log` is the record, and keeping a
-second copy of it in this file made the open list hard to find. What does stay
-is **Corrections to the record** at the bottom: findings that were raised and
-then disproved, or deliberately declined. Those earn their place because
-without them the same suggestions arrive again every review.
+Three things deliberately live elsewhere, because keeping them here is what
+made the open list unfindable:
+
+- **Completed work** is in `git log`, and where the *reasoning* behind a fix is
+  worth keeping, in **[docs/decisions/](docs/decisions/)**. Each Open section
+  below links to its record.
+- **Things decided against** are in [Decided against](#decided-against). They
+  are not checkboxes: a `- [ ]` that will never be ticked is noise in a count.
+- **Findings that were raised and disproved** are in
+  [Corrections to the record](#corrections-to-the-record). Without them the
+  same suggestions arrive again every review.
 
 ---
 
 ## Open
 
-### Runners — the 2026-08-25 review, worked through
+### Runners
 
-`ccb6f6f..98ac656` landed tenant-owned runners; a review the same day found 15
-gaps plus a tail of smaller ones. **All of them are fixed** — the entry stays
-because several were resolved in a way a future reader should not have to
-re-derive, and three were deliberately left alone with a reason.
-
-The gaps clustered in three seams, and the fixes follow them.
-
-**Seam 1 — resolved secrets and the tenant boundary.**
-
-- **A queued task's script, stdin and env are now sealed at rest** under the
-  tenant's DEK (`EncryptedSecrets.SealPayload`, AAD-bound to the row AND the
-  field so a ciphertext cannot be relocated). They arrive at `Enqueue` with
-  every `${secret.…}` already expanded, which contradicted
-  `engine/secrets.go`'s stated contract. A deployment with no
-  `DAZYFLOW_MASTER_KEY` still stores cleartext and logs that it is doing so —
-  the same posture as every other stored secret there. Rows written before
-  sealing read back unchanged, told apart by a `sealed:v1:` marker.
-  **Deliberately NOT added to `core/lint.go`'s `persistenceModules`:** that
-  rule's message says a value "could land in plaintext on disk or in a
-  database", which sealing makes untrue, so the warning would be noise.
-- **`Complete` and `Extend` take the whole `Runner`, not its name.**
-  `tenant_runners` is keyed `(tenant, name)`, so the name alone was never an
-  identity. Both stores now match on tenant as well, via one `heldBy` predicate,
-  and the shared contract suite has a same-named-runner-in-another-org case —
-  the old test only tried a differently-named impostor.
-- **The four `/api/v1/runner/*` endpoints are throttled per IP.** `/register`
-  takes the tighter webhook allowance; the polled endpoints take a new runner
-  allowance sized so a whole office of agents behind one NAT fits (they poll
-  every 5s, and that poll is also the heartbeat).
-
-**Seam 2 — nothing outside the live `Dispatch` goroutine owned a task.**
-
-- **`RunnerTaskSweeper` now does**, on its own minute-long ticker with a
-  startup pass, closing what nobody is waiting for: a running task whose lease
-  lapsed, and a queued task past its own timeout plus the dispatch grace (or
-  `DefaultRunnerQueuedCeiling` when it carries no timeout). It closes each row
-  through the existing `FailAbandoned`/`CancelQueued`, so the wording and the
-  atomic re-check stay in one place, and it is safe on every daemon at once.
-  This is what stops a redeploy leaving a queued row *claimable* — a machine
-  switched on an hour later running a script for a run that died.
-- **An oversized result no longer strands the task.** The agent trims to 1 MiB
-  per stream and FAILS the step naming the limit, rather than handing on half a
-  document; the server answers 413 with a message that says what to do; and
-  `Complete` failures are no longer all collapsed into a terminal 409 — a
-  transient error is a 503 and the agent retries with backoff.
-- **A dropped packet no longer kills the agent.** `post()` catches `OSError`
-  (which covers the read-phase `TimeoutError` that is not a `URLError`) and
-  `ValueError` (a proxy's HTML error page), `execute()` is total, and
-  `subprocess.run` uses `errors="replace"` so binary output cannot escape.
-  `--once` also exits on an empty queue now, which is what it always claimed.
-
-**Seam 3 — the runner host's own guarantees.**
-
-Each was promised in a comment or in `docs/guide/runners.md` and not delivered.
-
-- **`--allow` turns the shell off.** Checking `parts[0]` and then running the
-  string with `shell=True` enforced nothing. With an allow-list the command is
-  `shlex.split` and executed directly, so metacharacters are argument text.
-  This is a **behaviour change** for anyone whose allowed command used a pipe:
-  the docs, the changelog and the refusal message all say to put it in a script
-  and allow that.
-- **The credential is created 0600** via `os.open`, not written and chmod'ed,
-  and its directory is 0700.
-- **`install` restarts**, so re-running it — the documented way to tighten the
-  allow-list — actually applies the new list instead of printing "Started."
-  over the old one.
-- **The unit sets `KillMode=mixed` and `TimeoutStopSec=660s`**, which is what
-  makes the "stops between tasks" promise in `runner.sh` and `dzrunner.py`
-  true; systemd's default SIGTERMs the whole cgroup.
-- **Setup moves files into place instead of writing over them**, so re-running
-  the installed copy no longer truncates the script `sh` is reading — which
-  used to happen *after* the single-use token was spent.
-- **The installer carries the agent's SHA-256** and refuses a mismatch before
-  anything is made executable, and `runnerBaseURL` now goes through
-  `effectiveBaseURL` so `X-Forwarded-Proto`/`-Host` are gated on
-  `TrustProxyHeaders` like everywhere else. The checksum is not a signature —
-  it comes down the same channel — but it closes the split channel, a tampered
-  mirror and a truncated download.
-
-**Standalone.**
-
-- **`InlineOnly` is enforced by the ENGINE, from the manifest**
-  (`refuseInlineOnlyFileRefs`), for every drop rather than inside
-  `RemoteTransport.Execute`. That fixed two things at once: `run_on_runner` — a
-  native drop — silently ran with empty stdin on a file input and reported
-  SUCCESS, and every remote transport refused file refs even for a co-located
-  gRPC module that never declared the flag.
-- **The step normalizes its `runner`/`label` params** the way registration
-  normalizes them, so `Linux` matches the `linux` the admin page shows.
-- **`manifestsSnapshot` is tenant-scoped**, so a support bundle stops accusing a
-  working flow of referencing an unknown module (and skipping every dependent
-  check on that node). The platform killswitch page uses a new
-  `NodeResolver.AllManifests`, which is the one legitimate instance-wide view —
-  a tenant runner's drops were invisible on the only surface that can switch
-  them off.
-- **A remote may not take a built-in's id.** `lookup` prefers Native but the
-  manifest map added Remote after it, so the palette described the remote while
-  every run executed the built-in. Refused at registration via
-  `RemoteCatalog.Reserved`, with `addKeeping` as the belt-and-braces half.
-- **`ListManifests` falls back to `GetManifest`** (invoked by name; deliberately
-  not re-declared in the `.proto`) when a server answers `Unimplemented`, so
-  runners built against the older contract keep registering — which is what the
-  proto's own comment about a runner's binary "not being the daemon's to
-  update" asks for.
-- **Progress is forwarded.** The handler decoded `Message` and dropped it; there
-  is now a `progress` column, and `Dispatch` emits each new line as it polls.
-- **Delete asks first** in `AdminRunners`, like every sibling admin page, and
-  the test that pinned its absence now pins the confirmation.
-- Cleanup done: `Env` is populated from `job.Env` rather than being decoration;
-  `RemoteTransport.Close` is a documented no-op and the per-drop `conn` field is
-  gone (the connection is the catalog's, shared per runner);
-  `RunnerCategories` includes `"external"`; `runner_tokens (expires_at)` and
-  `runner_tasks (finished_at)` are indexed for the sweeps that scan them; the
-  501 is no longer written twice; the dispatch poll loosens to 2s after 30s and
-  the "is anything online?" listing is throttled to 5s.
-
-**Left alone, on purpose.**
+Context: **[2026-08-25 — runners review](docs/decisions/2026-08-25-runners-review.md)**.
+Fifteen gaps closed across three seams; these three were left alone on purpose,
+and the reasons still hold.
 
 - [ ] **The lease is still written with the claiming daemon's wall clock**
       and compared against another's. Fixing it properly means computing
@@ -143,107 +40,23 @@ Each was promised in a comment or in `docs/guide/runners.md` and not delivered.
       contract suite is built against — so it is a store-API change, not a
       one-liner. Low harm meanwhile: `TaskLease` is two minutes and NTP skew is
       seconds. Do it with the clock injection, not around it.
+
 - [ ] **The registration token is still passed in argv**, so it is readable via
       `/proc/*/cmdline` during install. Moving it to an environment variable or
       a file would help a little (`/proc/*/environ` is owner-only) but the
       token is single-use and 30-minute-lived, and `runner.sh` spends it in the
       foreground within seconds. Worth doing when the installer next changes,
       not on its own.
+
 - [ ] **Two assertions the review called vacuous were not located.** The report
       named `engine/coverage_test.go` and `daemon/runners_test.go` without
       lines, and nothing in either is obviously unable to fail. The nearest
       candidate — `remote_multidrop_test.go` asserting no namespaced alias is
       filed — is a deliberate regression guard and stays.
 
-### Cold signup walkthrough — 2026-08-31, worked through
+### Signup and onboarding
 
-A non-technical persona ("Nora", runs a small café-supply business) was pointed
-at the marketing site with no prior knowledge and told to sign up and see how
-far she got. She reached a published contact form with a real submission in
-Collections, so the product works; ~30 things got in the way and **all but one
-are fixed.** The entry stays for the same reason the runners one does: three of
-the fixes are not the obvious ones, and two findings turned out to be wrong.
-
-The run was driven against `dzd` serving `web/dist` **and** `../dazyflow-web`
-from one origin (`DAZYFLOW_WEB_DIST` + `DAZYFLOW_LANDING_DIR`), the shape
-`docs/DEPLOY.md` describes, rather than the usual Vite-on-5173 dev split. Two
-of the worst bugs exist only in that shape and cannot appear in dev. **Run a
-cold path against the single-host shape before a release**; the dev split is
-not a substitute.
-
-**The funnel had no entrance.** All 28 links on `landing.html` were enumerated:
-seven CTAs, every one a `mailto:`, and nothing anywhere pointing at `/signup`
-or `/signin` — while self-serve signup was live and working. Nora only got in
-by guessing the URL. The `mailto:` gate is a deliberate pre-launch decision and
-is untouched; what was not a decision is that an already-onboarded customer had
-no way back into the product from the marketing site. Every page now carries a
-**Log in** link in the top bar and footer. That link is not part of the gate and
-should survive whatever happens to the CTAs.
-
-**Two deployment-shaped bugs, both hit before she did anything.**
-
-- **`DAZYFLOW_PUBLIC_BASE_URL` was never trusted as a CSRF origin.** Serving the
-  SPA ourselves makes our own public origin a browser origin doing
-  cookie-authenticated writes, and `AllowedOrigins` came from
-  `DAZYFLOW_WEB_ORIGIN` alone. The failure hid itself: sign-up and sign-in carry
-  no session cookie yet, so `verifyCookieOrigin` waves them through and the
-  daemon looks healthy right up to the first authenticated POST. Nora's first
-  click produced the raw server string, in red, in the UI. `buildGateway` now
-  appends `publicBaseURL` when `webDist` is set, and logs that it did. Both CSRF
-  refusals also carry the machine code `csrf_origin`, mapped to
-  `apiError.csrfOrigin` — a sentence that says it is a server setting and not
-  something the reader did.
-- **The auto-start deep link always lost a race.** `?start=try-it-now` is the
-  Welcome screen's headline CTA. The effect gated on `templates && token`, but
-  `useTemplate` also needs `activeTenant && activeWorkspace`; the template index
-  is a static fetch and resolves first, so a cold load reported **"Not signed
-  in."** to a signed-in user with their email in the sidebar. It also set
-  `started.current` and stripped the param *before* failing, so reloading could
-  not retry. Guard widened, and there is now a distinct
-  `templates.workspaceLoading` string for "signed in, workspace still opening".
-
-**Connecting an app is where "no technical setup" broke.** Clicking *Connect* on
-`/apps/gmail` did a top-level navigation to the authorize endpoint and left her
-on a white page reading `{"error":{"code":"not_found","message":"unknown OAuth
-provider \"google\""}}` — the application simply gone. `OAuthCard` treated
-"provider absent from the list" as "not connected yet", so the button was live.
-The template gallery had already solved this; `OAuthCard` now takes the same
-signal and says so instead. Related: the gallery's own copy told hosted users
-that *"whoever runs the server has to enable it first"*, which is correct
-self-host language and a dead end on the hosted product — reworded, and given
-the plural forms it never had (*"Needs Gmail, Slack, which isn't set up"*).
-
-**Jargon the 2026-08-22 sweep did not reach**, all fixed: the "Built-in" card
-(the biggest on the Apps page at 57 steps) opened with `split_rows`,
-`await_approval` and "file I/O"; app detail pages printed raw step ids under
-every step name; the Apps list was alphabetical, so a Swedish SMS gateway led
-the page ahead of Gmail and Google; the hosted-form templates shipped a step
-labelled *Webhook* with *Body* and *Headers* ports inside a template called
-*Web form → Collection*; Collections rendered `2026-08-31T07:21:54Z` in a cell.
-Auth screens gained Privacy and Terms links, stopped sending the logo to a
-hardcoded `dazyflow.app` (which left any self-hosted install), and say
-"© 2026 Dazyflow" rather than naming an operating company the visitor has never
-seen. The verify-email banner now says what the reader loses by ignoring it.
-
-Marketing-side fixes live in `../dazyflow-web`: the Log in links, a
-`scroll-padding-top` so in-page anchors stop landing under the sticky topbar
-(measured: the `#how` eyebrow sat at y=60 with the bar occupying through y=72,
-and nothing compensated anywhere), a uniform nav order across all eight pages,
-run-allowance and secret-store copy that a non-technical buyer can read, and a
-stats band that counts apps instead of logo files.
-
-**One more found while fixing those, and it is the one to remember.** The
-topbar budget was already blown on the Swedish pages before "Log in" existed,
-and it fails invisibly: the brand is a flex item, so when the nav wants more
-room than the bar has, the LOGO is squeezed to zero width and disappears. No
-wrapping, no scrollbar, no console warning — just a bar with no logo on it,
-which is easy to read as a design choice. Swedish binds because "Dokumentation"
-and "Begär en inbjudan" are much wider than "Docs" and "Request an invite":
-it needed 591px before the new link and 662px after, while the wordmark only
-gave way at 560. Fixed by bringing the compact nav type in at 700px instead of
-560px, which carries every link down to 631px, then dropping Docs / the
-language switch / Pricing at 630 / 420 / 360. **Measure the Swedish page, not
-the English one** — the widths are recorded beside the rules in `style.css`.
+Context: **[2026-08-31 — cold signup walkthrough](docs/decisions/2026-08-31-cold-signup-walkthrough.md)**.
 
 - [ ] **The hero screenshot still contradicts the hero copy.** `shots/branch.png`
       leads with a Schedule step reading `0 7 * * 1-5`, a Gmail step reading
@@ -257,34 +70,7 @@ the English one** — the widths are recorded beside the rules in `style.css`.
       plain language — the schedule editor hides cron behind *Custom* — so
       build the demo flow that way and re-shoot.
 
-### Vocabulary — renamed, with one convention to hold
-
-The product says **step** (sv: *steg*) everywhere a person can read it, as of
-2026-08-20. The docs already said it; the UI, the MCP tool descriptions, the
-operator docs, `.env.example` and the user-visible Go error strings now agree.
-Swedish moved with it, including gender agreement — *steg* is neuter where
-*dropp* was common, so 49 determiners and adjectives changed (`den här
-droppen` → `det här steget`).
-
-Deliberately still `drop`, and these are the CONVENTION to hold when adding
-code: the Go catalog and package paths, API routes and JSON field names, MCP
-tool NAMES (`list_drops`, `describe_drop`), error codes (`drop_not_found`),
-audit action names, CSS classes, frontend identifiers (`dropText.ts`,
-`DropAdjacency`), and ~900 code comments. Those are the contract every
-non-human consumer is grounded on; renaming them buys nothing a user can see.
-`describe_drop`'s description carries a note telling an assistant to say
-"step" to the user, so the split doesn't leak into a conversation.
-
-Also still `drop`: the VERB, in ~35 places — "drop rows", "drop a pin", "drop
-to upload", "would drop Caddy", and the `drop` param on Choose & rename
-columns. Renaming those was the most likely way to make this look careless.
-
-- [ ] **Hold the line in new copy.** No open work, but the next person writing
-      user-facing text needs the split above. CHANGELOG entries from 0.5.0 on
-      should say step; earlier entries stay as written (a changelog is a
-      record, not documentation).
-
-### Templates — thin, and now the front door
+### Templates — thin, and the front door
 
 The create page defaults to the template gallery (confirmed 2026-08-19), so the
 gallery is the first thing a new user sees. It currently holds **5 templates
@@ -302,94 +88,15 @@ pick Dazyflow over Zapier/Make/n8n, and nothing in the gallery shows them off.
       Schedule → List invoices (filter=fullypaid) → For each → dedupe on
       DocumentNumber) and a 46elks one ("Text me when X"). These are the demos
       that justify the go-to-market.
+
 - [ ] **A second no-setup template** — `try-it-now` is the only one that runs
       with nothing connected, and it is now the Welcome CTA's target. One more
       (a weather or HTTP-fetch → render, both need no account) would give the
       "Try it now" category something to be a category of.
+
 - [ ] **Notification breadth beyond Slack** — Discord, ntfy, Twilio and plain
       email all ship as drops and none appear in a template, even though
       "get notified when X" is the archetypal first automation.
-
-### Web
-
-One token-drift item open, plus the plain-language review below. The three
-items that used to lead this section are done (2026-08-20); what they turned
-out to be is recorded below, because in each case the entry's diagnosis was off
-and the next person shouldn't re-derive it.
-
-- **A switched-off trigger step now refuses deliveries.** The entry said
-  "node-level `disabled` doesn't stop it firing", which conflated two
-  switches. There were three: `graph.Disabled` (honoured everywhere),
-  `Params["disabled"]` (a per-trigger pause the schedules API writes,
-  honoured only by the scheduler), and `Node.Disabled` (the editor's step
-  toggle, honoured only at execution time). So a disabled webhook trigger
-  accepted the POST, started a run, and the worker skipped the very node
-  meant to receive it — a 202 for a run that did nothing. Rather than invent
-  a fourth mechanism, `triggerNodeDisabled` now treats either switch as
-  paused and the inbound endpoints call it. A flow whose webhook steps are
-  ALL paused gets a 403 `trigger_disabled`; partially-paused still fires
-  (the active steps have work); a flow with no webhook step at all still
-  fires, since posting to kick such a flow is a legitimate use. The entry's
-  warning about `MigrateWebhookPublish` was a false lead — its deliberate
-  permissiveness is about published-vs-HEAD, not about disabled.
-
-- **The CSS token drift included two live bugs**, not just tidying. The entry
-  said "they render correctly". `--text` was referenced 36 times with NO
-  fallback and defined nowhere, so every one of those `color:` declarations
-  was invalid at computed-value time and silently inherited — most visibly
-  `.plan-feat-up`, the "what differs" upgrade cue, which inherited `--muted`
-  from `.plan-feat` and so rendered identically to the rows it was supposed
-  to stand out from. `--r-md` rendered one card square. The entry's advice to
-  "point them at real tokens" was also wrong for four of them
-  (`--node-accent`, `--op-color`, `--enter-delay`, `--draw-delay`) which
-  components set inline at run time; defining those in CSS would override
-  per-node values. `web/scripts/check-css-tokens.mjs` now runs from
-  `npm test` and fails on either shape, with an allowlist for the runtime-set
-  four that it also keeps honest.
-
-- **The `configPath` i18n keys are literal now**, so no note is needed to
-  protect them. `t(`${prefix}.${os}`)` meant no static reference existed and
-  every unused-key audit flagged all six as dead — which nearly deleted them.
-
-- [ ] **Redundant fallbacks on tokens that DO exist** — noticed while fixing
-      the above, not part of it. `--warning` is defined, yet carries 13
-      different hardcoded fallbacks scattered through `app.css` (`#c98a2b`,
-      `#d08700`, `#d29922`, `#d97706`, `#d9822b`, `#d99e2b`, …). Each is dead
-      code that also documents a *different* intended amber, so they disagree
-      with each other and with the token. Harmless today — the token always
-      wins — but it is the same drift one step earlier, and the token guard
-      deliberately does NOT flag it (the token exists, so nothing is broken).
-      Sweep them out; check the others while you're there.
-
-### Plain language — what a non-technical reader actually meets
-
-From a read-through of every page a Viewer/Editor can reach (2026-08-22). The
-groundwork is done and should not be redone: *drop→step*, *graph→flow*,
-*node→step*, the category chips off their enum values, `explain.*` errors that
-name a cause and link the fix, and progressive disclosure that already hides
-cron behind "Custom", webhook setup behind "For developers", embed code behind
-"Put this form on my own website", and raw params JSON behind an explicit
-toggle. Admin is permission-gated, so a plain Editor never meets a daemon log.
-What follows is what leaks through that. Three of the four items found are
-done (2026-08-22): the (i) affordance is a real popover, the canvas no longer
-says *wire* / *pin* / *upstream*, and *daemon* / *metering* / *property bag*
-are gone from copy a business user reads. Two of that third item's six strings
-turned out not to be defects at all — see **Corrections to the record**.
-
-The same day, the vocabulary sweep was carried through every remaining
-user-facing surface: the 151 Go drop descriptions and their params help, the
-runtime error strings, and the Apps page, which had never had the
-drop→step / node→step / graph→flow rename at all. `wire` / `upstream` /
-`downstream` and the old product nouns now return zero across the catalogue,
-the manifests and both locales. Three uses of *drop* survive on purpose and
-must stay — "Drop a meeting onto a calendar", "drop generated files back into
-a folder", "someone drops a file into the workspace" are the verb.
-
-- [ ] **Two judgement calls, deliberately not decided here.** "Inspector" is
-      Figma/devtools vocabulary and *Step settings* would read plainer, but
-      renaming a panel mid-flight has its own cost. "Jump to it on the canvas"
-      (`editor.configModalLead_*`) is probably fine in a visual editor. Both
-      are listed so the next review does not re-raise them as findings.
 
 ### Connectors — Sweden first, then the Nordics
 
@@ -406,19 +113,63 @@ are now spent, so the next Nordic step costs more than the last few did.
 
 - [ ] **Signicat / BankID** — eID auth & signing. OAuth + session polling, so
       this is the one that pays the token tax. Highest Nordic value.
+
 - [ ] **Visma** — all-Nordics accounting; broadens beyond Fortnox/SE.
+
 - [ ] **Telegram** — cheap, popular, fits the European / self-hosted lean.
       Ranks above M365 and the CRMs despite being smaller.
+
 - [ ] **Microsoft 365** (Teams / Outlook / OneDrive) — the biggest single gap
       for business users, and the biggest build.
+
 - [ ] **PM trackers** (Jira / Linear / Asana / Trello / Airtable).
+
 - [ ] Also unranked and unclaimed: cloud storage (S3 / Dropbox / Box), CRM
       (HubSpot / Salesforce), support (Zendesk); and two small primitives —
       `uuid`/`random`, and an explicit `filter` (`route_rows` mostly covers it).
 
-### Deferred — decided, not forgotten
+### Web
 
-- [ ] **Do NOT put `Manifest.Summary` in the step tooltip** — raised in the
+Context: **[2026-08-20 — web fixes](docs/decisions/2026-08-20-web-fixes.md)**.
+
+- [ ] **Redundant fallbacks on tokens that DO exist** — noticed while fixing
+      the above, not part of it. `--warning` is defined, yet carries 13
+      different hardcoded fallbacks scattered through `app.css` (`#c98a2b`,
+      `#d08700`, `#d29922`, `#d97706`, `#d9822b`, `#d99e2b`, …). Each is dead
+      code that also documents a *different* intended amber, so they disagree
+      with each other and with the token. Harmless today — the token always
+      wins — but it is the same drift one step earlier, and the token guard
+      deliberately does NOT flag it (the token exists, so nothing is broken).
+      Sweep them out; check the others while you're there.
+
+### Copy and vocabulary
+
+Context: **[2026-08-20 — step vocabulary](docs/decisions/2026-08-20-step-vocabulary.md)**
+and **[2026-08-22 — plain language](docs/decisions/2026-08-22-plain-language.md)**.
+The first is required reading before writing anything user-facing: `step` in
+copy, `drop` in code, and the list of names that must not move.
+
+No open work here — both entries are standing guidance, not tasks, which is why
+neither is a checkbox.
+
+- **Hold the line in new copy.** The next person writing user-facing text needs
+  the split above. CHANGELOG entries from 0.5.0 on should say step; earlier
+  entries stay as written (a changelog is a record, not documentation).
+
+- **Two judgement calls, deliberately not decided here.** "Inspector" is
+      Figma/devtools vocabulary and *Step settings* would read plainer, but
+  renaming a panel mid-flight has its own cost. "Jump to it on the canvas"
+  (`editor.configModalLead_*`) is probably fine in a visual editor. Both are
+  listed so the next review does not re-raise them as findings.
+
+---
+
+## Decided against
+
+Considered, declined, and recorded so the next review doesn't re-raise them as
+findings. Not checkboxes — nothing here is waiting to be picked up.
+
+- **Do NOT put `Manifest.Summary` in the step tooltip** — raised in the
       2026-08-22 plain-language review as the cheap fix for 131-word hover
       text, and declined on inspection. Summary is the right length (median
       78 chars, never empty, required at registration) and the frontend does
@@ -434,7 +185,7 @@ are now spent, so the next Nordic step costs more than the last few did.
       Summary stays what its doc comment says it is — for the API and the
       flow generator.
 
-- [ ] **Breadcrumbs in the header** — deferred, but not for the reason this
+- **Breadcrumbs in the header** — deferred, but not for the reason this
       entry used to give. "The IA is flat" is only true of the customer-facing
       app, where every sidebar destination is one level deep and a trail would
       render a redundant `Home > Flows` above a title that already says Flows.

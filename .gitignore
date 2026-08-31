@@ -40,10 +40,8 @@ web/.vite/
 # Dazy personal API key used by the complete-dazyflow-tasks skill — never commit
 dazy-key
 hazy-key
-# Local Claude Code state stays out of git, but the shared skills under
-# .claude/skills/ are committed so the team gets them.
-/.claude/*
-!/.claude/skills/
+# Local Claude Code state stays out of git.
+/.claude/
 /.mcp.json
 /docker-compose.override.yml
 /bin

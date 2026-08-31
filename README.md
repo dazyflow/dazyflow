@@ -112,9 +112,14 @@ bundled Postgres (loopback-only) and runs the daemon on the host against it.
 ```sh
 make dev      # bundled Postgres, then dzd on http://localhost:8080
 make web      # (other terminal) Vite dev server on http://localhost:5173
-make check    # build, vet, tests — run before pushing
+make check    # gofmt, build, vet, Go tests, catalogues, changelog
+make ci       # the full CI mirror — adds the web and runner suites
 make help     # every target
 ```
+
+`make check` is the fast gate for a Go-only change. It does **not** run the web
+suite, the web build, or the runner agent tests, and CI gates all three — so a
+change touching `web/` or `runner/` wants `make ci` before it goes up.
 
 With no `.env`, `make dev` uses the bundled database and sets
 `DAZYFLOW_DEV=1`, enables signup, and mints a throwaway API key on every

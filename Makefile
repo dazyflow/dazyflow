@@ -58,7 +58,7 @@ LDFLAGS := -s -w \
 
 .DEFAULT_GOAL := help
 
-.PHONY: help up down restart logs ps build rebuild env pg pg-down dev web test vet fmt check ci \
+.PHONY: help up down restart logs ps build rebuild env pg pg-down dev web test vet fmt fmt-check env-check check ci \
 	runner-embed runner-test \
         integration-catalog drop-catalog catalogs catalogs-check check-changelog flowgen-eval \
         docs-content docs-site docs-dev bin version latest major minor patch _bump upgrade
@@ -192,7 +192,9 @@ flowgen-eval: ## Score the AI flow generator against every scenario in SCENARIOS
 	@echo "report: $${FLOWGEN_EVAL_OUT:-.flowgen-eval}/flowgen-eval.md"
 
 fmt: ## Format Go sources
-	gofmt -w .
+	# Same file set as fmt-check, so `make fmt` always satisfies the gate —
+	# and so this never rewrites a vendored .go file under web/node_modules.
+	gofmt -w $(GOFMT_PATHS)
 
 docs-content: ## Populate the docs SPA content (guide pages + generated step catalog)
 	rm -rf $(DOCS_CONTENT_OUT)
@@ -395,23 +397,54 @@ upgrade: ## Deploy the latest release tag, pulling its prebuilt images (PROD=1 o
 		git checkout master; \
 	fi
 
-## --- Gates (run locally; CI is advisory, not blocking) ---
-# These mirror .github/workflows/ci.yml so a push never lands red. gofmt is intentionally
-# NOT a gate: CI doesn't enforce it and the tree carries pre-existing
-# gofmt-version drift, so a gofmt gate would fail on files unrelated to the
-# change. Run `make fmt` before committing instead.
+## --- Gates (run locally; CI enforces the same ones) ---
+# These mirror .github/workflows/ci.yml so a push never lands red.
+#
+# fmt-check is first because it is the cheapest and the one most likely to be
+# the only thing wrong. It was previously left out on the grounds that the tree
+# carried gofmt-version drift; it did not — the nine offending files were
+# ordinary misalignment and one out-of-order import, fixed in one `make fmt`.
 
-check: ## Fast local gate before pushing: build, vet, tests
+# Directories gofmt must not walk. go.mod's `ignore` directive keeps build/vet/
+# test out of web/node_modules, but gofmt reads the filesystem and knows nothing
+# about go.mod — and node_modules does contain Go sources (flatted ships a Go
+# port beside its JS). Without this the gate can fail on a file the project
+# does not own and cannot fix.
+GOFMT_PATHS := $(shell git ls-files '*.go' 2>/dev/null)
+
+fmt-check: ## Fail if any Go source is not gofmt-clean (CI)
+	@out="$$(gofmt -l $(GOFMT_PATHS) 2>/dev/null)"; \
+	if [ -n "$$out" ]; then \
+		echo "not gofmt-clean (run 'make fmt'):"; echo "$$out"; exit 1; \
+	fi
+
+env-check: ## Fail if a DAZYFLOW_* knob the daemon reads is missing from .env.example (CI)
+	@./scripts/check-env-example.sh
+
+check: ## Fast local gate before pushing: fmt, build, vet, tests, catalogues, changelog
+	@echo "==> gofmt"; $(MAKE) --no-print-directory fmt-check
 	@echo "==> go build"; go build ./...
 	@echo "==> go vet"; go vet ./...
 	@echo "==> go test"; go test ./...
+	@echo "==> catalogues"; $(MAKE) --no-print-directory catalogs-check
+	@echo "==> env catalogue"; $(MAKE) --no-print-directory env-check
 	@echo "==> changelog"; ./scripts/check-changelog.sh
+	@echo
+	@echo "check passed. This does NOT cover the web suite, the web build, or"
+	@echo "the runner agent tests — CI gates all three. Run 'make ci' for the"
+	@echo "full mirror before a change that touches web/ or runner/."
 
-ci: ## Full local mirror of CI (.github/workflows/ci.yml): build, vet, race tests, web build
+ci: ## Full local mirror of CI (.github/workflows/ci.yml): fmt, build, vet, race tests, runner, web, docs
+	@echo "==> gofmt"; $(MAKE) --no-print-directory fmt-check
 	@echo "==> go build"; go build ./...
 	@echo "==> go vet"; go vet ./...
+	@echo "==> env catalogue"; $(MAKE) --no-print-directory env-check
+	@echo "==> runner agent"; $(MAKE) --no-print-directory runner-test
 	@echo "==> go test -race"; go test -race -timeout $(GO_TEST_TIMEOUT) ./...
 	@echo "==> catalogues"; $(MAKE) --no-print-directory catalogs-check
-	@echo "==> web test"; cd web && npm ci && npm test
+	@echo "==> web deps"; cd web && npm ci
+	@echo "==> npm audit"; cd web && npm audit --audit-level=high --omit=dev
+	@echo "==> docs content"; $(MAKE) --no-print-directory docs-content
+	@echo "==> web test"; cd web && npm test
 	@echo "==> web build"; cd web && npm run build
 	@echo "==> changelog"; ./scripts/check-changelog.sh

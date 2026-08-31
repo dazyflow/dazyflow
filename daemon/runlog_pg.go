@@ -13,7 +13,8 @@ import (
 
 // PgRunLogStore is the durable RunLogStore — one row per log entry,
 // BIGSERIAL seq for ordering/resume. Append-only at runtime; retention
-// is an operator sweep (see the TODO note), not a per-write concern.
+// is an operator sweep (DAZYFLOW_RUN_LOG_RETENTION, per-tenant override
+// via Service.RunLogRetentionDays), not a per-write concern.
 type PgRunLogStore struct {
 	pool *pgxpool.Pool
 }

@@ -15,6 +15,7 @@ import {
   NotebookPen,
   type LucideIcon,
 } from "lucide-react";
+import { DOCS } from "../lib/externalLinks";
 import { ICON } from "../icons";
 import { CodeBlock } from "./CodeBlock";
 
@@ -168,10 +169,25 @@ function remarkDropComments() {
   };
 }
 
+// A link written as a full https://docs.dazyflow.app/... URL is this site, and
+// must navigate in-SPA rather than reload the page in a new tab.
+//
+// The guide sources under /docs/guide are read in two places: here, and on the
+// repository host, where a reader follows the README into docs/guide/. A
+// relative `../reference/steps/` works here and 404s there, because that tree
+// has no markdown source in the repo — it is generated from the drop manifests
+// by cmd/docsgen at build time. Writing those few links absolutely is what
+// makes one href correct in both places; this function is the other half.
+export function stripDocsOrigin(href: string): string | null {
+  if (!href.startsWith(DOCS + "/")) return null;
+  return href.slice(DOCS.length);
+}
+
 // Resolve a Markdown link href to an in-app route. The generated catalog emits
-// relative `./slug.md#id` links and absolute `/guide/...` links; strip the .md
-// and resolve relatives against the current page's directory so react-router
-// can navigate them.
+// relative `./slug.md#id` links and absolute `/guide/...` links; the guide
+// pages additionally use `./slug.md` so the same link resolves on the
+// repository host. Strip the .md and resolve relatives against the current
+// page's directory so react-router can navigate them.
 function resolveInternal(href: string, base: string): string {
   const [rawPath, hash] = href.split("#");
   let p = rawPath.replace(/\.md$/, "");
@@ -275,7 +291,9 @@ export function Markdown({
         },
         a({ href = "", children, node, ...props }) {
           void node;
-          const external = /^https?:\/\//.test(href) || href.startsWith("mailto:");
+          const sameSite = stripDocsOrigin(href);
+          const external =
+            sameSite === null && (/^https?:\/\//.test(href) || href.startsWith("mailto:"));
           if (external) {
             return (
               <a href={href} target="_blank" rel="noreferrer" {...props}>
@@ -283,7 +301,7 @@ export function Markdown({
               </a>
             );
           }
-          const to = resolveInternal(href, base);
+          const to = resolveInternal(sameSite ?? href, base);
           return (
             <a
               href={to}

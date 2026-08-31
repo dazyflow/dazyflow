@@ -50,7 +50,6 @@ export function OtpInput({
   // failed verify) into the boxes without clobbering local edits.
   useEffect(() => {
     if (value !== boxesRef.current.join("")) setBoxes(toBoxes(value));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
   const focusBox = (i: number) => {

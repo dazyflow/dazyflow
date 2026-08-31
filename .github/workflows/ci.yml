@@ -1,10 +1,13 @@
 # CI — the only thing that runs the test suite. The .builds/archlinux.yml
 # manifest this was ported from is gone, so nothing else builds this repository.
 #
-# Manually triggered only, for now: nothing runs on push or pull_request, so a
-# dispatch can be exercised before anything depends on it. Add the
-# `push:`/`pull_request:` triggers before relying on this — without them the
-# tests only ever run when someone remembers to press a button.
+# Runs on every push to master and on every pull request, plus by hand. The
+# manual dispatch is what carries the publish/deploy inputs: on a `push` or
+# `pull_request` event `inputs.publish` and `inputs.deploy` are unset, which is
+# falsy, so an automatic run builds the images (the only thing exercising the
+# Dockerfiles) and pushes nothing. Publishing a release therefore stays an
+# explicit act, while the gates below stop depending on someone remembering to
+# press a button.
 #
 # Images publish to GitHub Container Registry instead of registry.dazyflow.app.
 # That removes the REGISTRY_USER / REGISTRY_PASSWORD secret pair entirely —
@@ -12,6 +15,12 @@
 name: CI
 
 on:
+  push:
+    branches: [master]
+    # Tags are deliberately absent. A release is published by dispatching this
+    # workflow from the tag ref with publish=true; adding `tags:` here would
+    # start a second, non-publishing run for every `make patch`.
+  pull_request:
   workflow_dispatch:
     inputs:
       publish:
@@ -29,11 +38,13 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  # Explicitly NOT cancel-in-progress. Every run here is hand-dispatched, and
-  # one of them may be mid-push to ghcr or mid-deploy; cancelling that leaves
-  # half the images published. Revisit if push/PR triggers are added, where
-  # superseding a stale run is the behaviour you want.
-  cancel-in-progress: false
+  # Cancel superseded runs on push and pull_request — a second commit to a
+  # branch makes the first run's verdict worthless, and the queue is shared.
+  #
+  # NEVER for workflow_dispatch: that is the path that pushes to ghcr and calls
+  # the deploy webhook, and cancelling mid-push leaves half the images
+  # published. A dispatch always runs to completion.
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 env:
   # Plain local test credentials, not secrets — they address the service
@@ -90,6 +101,20 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
+      # Cheapest gate, so it runs first. `gofmt -l` prints offending files and
+      # exits 0 either way, hence the explicit emptiness check.
+      - name: gofmt
+        run: make fmt-check
+
+      # .env.example is the configuration reference, not a sample: `make env`
+      # copies from it and the Dockerfile calls it "the full catalogue". It had
+      # drifted to fifteen missing knobs, several with a documented sibling —
+      # DAZYFLOW_TRUSTED_PROXIES absent while DAZYFLOW_TRUST_PROXY_HEADERS is in
+      # three places — which is the shape that misleads rather than merely
+      # omits.
+      - name: Config catalogue up to date
+        run: make env-check
+
       - name: Build
         run: go build ./...
 
@@ -114,8 +139,27 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      # All three examples, not just csv-pipeline. They are the only thing
+      # exercising dzd end-to-end through its own CLI and HTTP surfaces, and
+      # leaving two of them unrun is how they rotted: BOTH were broken and had
+      # been for some time, each failing at boot on a requirement that landed
+      # after it was written.
+      #
+      #   mcp-pipeline — no DAZYFLOW_POSTGRES_DSN at all (dzd has required
+      #     Postgres since), a 0.5s sleep where a Postgres-backed boot now needs
+      #     a poll, no DAZYFLOW_DEV=1 for the insecure-defaults guard, and a
+      #     sandbox path from before DATA_DIR grew its sandbox/ segment.
+      #   ap-invoice — the guard's TLS check on a loopback demo database, and
+      #     it never PUBLISHED its flows, so every webhook POST got the
+      #     deliberately-generic 401 that says nothing about why.
+      #
+      # ap-invoice starts its own Postgres via `docker run` on :55432, which
+      # does not collide with the service container on 5432 above.
       - name: dzctl end-to-end
-        run: bash examples/csv-pipeline/run.sh
+        run: |
+          bash examples/csv-pipeline/run.sh
+          bash examples/mcp-pipeline/run.sh
+          bash examples/ap-invoice/run.sh
 
       # The two catalogues the web guards read (the app list behind the
       # integration description guard, the drop text behind the Swedish coverage
@@ -157,6 +201,29 @@ jobs:
           cache-dependency-path: web/package-lock.json
 
       - run: npm ci
+        working-directory: web
+
+      # The JS half of the supply chain. govulncheck gates Go twice (source and
+      # binary) and gated npm zero times until this step.
+      #
+      # `--omit=dev` is deliberate and is the same judgement the govulncheck
+      # comment makes about symbol granularity: gate on what SHIPS. The devDeps
+      # currently carry a high and a critical (a vite dev-server path traversal,
+      # arbitrary read+exec via the vitest UI server) and neither is reachable by
+      # a user of the deployed app — the dev server and the vitest UI do not
+      # exist in the bundle. Auditing them here would leave this permanently red
+      # with no remedy short of two majors, which trains people to ignore it.
+      # Dependabot still opens PRs for them; that is the right channel.
+      #
+      # `--audit-level=high` rather than the default `low`: react-router 6.x is
+      # flagged for an open redirect that this app already blocks by hand
+      # (`return_to` validation in src/pages/auth/SignIn.tsx, mirroring
+      # daemon/google_signin.go safeReturnPath) and for an SSR-hydration issue
+      # that a client-only SPA cannot reach. The whole 6.x line is in range with
+      # no patched release, so gating at `moderate` would demand a router major
+      # for a vulnerability we do not have.
+      - name: npm audit (shipped dependencies)
+        run: npm audit --audit-level=high --omit=dev
         working-directory: web
 
       - name: Generate docs content

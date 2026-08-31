@@ -35,7 +35,7 @@ const switchOrg = vi.fn<(token: string | null, tenant: string) => Promise<unknow
 // Each whoami reflects the scope the session currently has: the first answers
 // with the home binding, and any call after a successful switch answers with
 // the org we switched into.
-const whoami = vi.fn(async () => whoAmI(switchedTo ?? HOME));
+const whoami = vi.fn(async (_token: string | null) => whoAmI(switchedTo ?? HOME));
 let switchedTo: string | null = null;
 
 vi.mock("./api", () => ({

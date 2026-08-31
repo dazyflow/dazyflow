@@ -23,8 +23,9 @@ dazyflow.app {
 	reverse_proxy dzd:8080
 }
 
-# Documentation site — the static VitePress build (docs.dazyflow.app), served
-# by the dedicated `docs` container (see Dockerfile.docs + docker-compose.prod.yml).
+# Documentation site — the static Vite/React docs SPA (docs.dazyflow.app),
+# served by nginx in the dedicated `docs` container (see Dockerfile.docs +
+# docker-compose.prod.yml).
 # Caddy terminates TLS here and reverse-proxies to that nginx container.
 #
 # TLS is ON-DEMAND, not a proactively-managed cert. `docs` is a subdomain of the

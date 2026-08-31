@@ -27,11 +27,11 @@ import (
 // any Google account whose email matches a member of the org may
 // sign in (less strict, useful for personal-Gmail-using small teams).
 type OrgAuthConfig struct {
-	Tenant             string    `json:"tenant"`
-	GoogleClientID     string    `json:"google_client_id"`
-	GoogleClientSecret string    `json:"google_client_secret"`
-	GoogleWorkspaceDomain string `json:"google_workspace_domain,omitempty"`
-	UpdatedAt          time.Time `json:"updated_at"`
+	Tenant                string    `json:"tenant"`
+	GoogleClientID        string    `json:"google_client_id"`
+	GoogleClientSecret    string    `json:"google_client_secret"`
+	GoogleWorkspaceDomain string    `json:"google_workspace_domain,omitempty"`
+	UpdatedAt             time.Time `json:"updated_at"`
 }
 
 // GoogleEnabled reports whether enough Google fields are populated
