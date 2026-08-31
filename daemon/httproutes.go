@@ -154,7 +154,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// gdpr_http.go.
 	mux.HandleFunc("GET /api/v1/me/export", h.requireAuth(h.exportHandler))
 	mux.HandleFunc("DELETE /api/v1/me/account", h.requireAuth(h.deleteMyAccountHandler))
-	// Support feature (see docs/support-tickets-design.md): a support agent
+	// Support feature: a support agent
 	// requests a scoped, read-only grant; an org admin approves/denies/revokes;
 	// the agent reads the redacted bundle. All gated + audited into the org's log.
 	mux.HandleFunc("POST /api/v1/support/grants", h.requireAuth(h.requestGrant))

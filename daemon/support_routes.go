@@ -14,11 +14,10 @@ import (
 	"github.com/dazyflow/dazyflow/daemon/support"
 )
 
-// support_routes.go wires the Support feature's HTTP surface (see
-// docs/support-tickets-design.md): a support agent requests a scoped,
-// time-boxed, read-only view of one flow; an org admin approves/denies/revokes;
-// the agent then reads the REDACTED bundle. Every action is audited into the
-// ORG's log.
+// support_routes.go wires the Support feature's HTTP surface: a support agent
+// requests a scoped, time-boxed, read-only view of one flow; an org admin
+// approves/denies/revokes; the agent then reads the REDACTED bundle. Every
+// action is audited into the ORG's log.
 //
 // Trust invariants enforced here:
 //   - Requesting/viewing requires core.PermSupportAgent (the weak, grant-gated
@@ -107,7 +106,7 @@ func (h *HTTPGateway) requestGrant(rw http.ResponseWriter, r *http.Request, p co
 		"support.grant.request", grant.FlowID, "grant="+grant.ID)
 	// When the request is anchored to a ticket, drop a system note in the thread
 	// so the user sees "support asked to view this flow" in context (the grant
-	// prompt lives on the ticket, per docs/support-tickets-design.md).
+	// prompt lives on the ticket).
 	if h.ticketsEnabled() && grant.TicketID != "" {
 		_ = h.appendSystemNote(r.Context(), grant.TicketID, core.NoteGrantRequested,
 			"Support requested read-only access to this flow. An organization admin must approve it.", now)

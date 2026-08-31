@@ -8,10 +8,9 @@ body:
   - type: markdown
     attributes:
       value: |
-        Check [TODO.md](https://github.com/dazyflow/dazyflow/blob/master/TODO.md) first — the connector backlog is
-        ranked there, with the reasoning, and
-        [Decided against](https://github.com/dazyflow/dazyflow/blob/master/TODO.md#decided-against) records what
-        was considered and declined.
+        Search [open and closed issues](https://github.com/dazyflow/dazyflow/issues?q=is%3Aissue)
+        first — the connector backlog lives there, including what was
+        considered and declined.
 
   - type: textarea
     id: job

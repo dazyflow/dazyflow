@@ -1,246 +1,156 @@
 # Changelog
 
-All notable changes to Dazyflow are documented in this file.
+Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-The repository, Go module, and daemon binary are named `dazyflow` / `dzd`.
-Versions here correspond to git tags `X.Y.Z` on
-[github.com/dazyflow/dazyflow](https://github.com/dazyflow/dazyflow). The running
-version is stamped into the binary at build time and surfaced on
-`GET /api/v1` (the `build` block) and in the web UI's account menu.
-
-Releasing: write what shipped under `[Unreleased]` as you go, then run
-`make patch` (or `minor` / `major`). That target promotes `[Unreleased]`
-under a new `[X.Y.Z] - YYYY-MM-DD` heading, leaves a fresh empty
-`[Unreleased]`, and commits the changelog together with `./VERSION`
-before tagging — so the tag lands on the commit that announces the
-version. An empty `[Unreleased]` aborts the release. (`VERSION` matters
-because the Docker build reads that file when it isn't handed a `VERSION`
-build arg, so it is what a production `docker compose up --build` stamps
-into the image.)
+Versions correspond to git tags `X.Y.Z`. The running version is stamped into the
+binary at build time and surfaced on `GET /api/v1` (the `build` block) and in the
+web UI's account menu. Write under `[Unreleased]`, never under a released
+heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Removed
+
+- **Seven Markdown files, ~2,600 lines.** `REVIEW.md` and
+  `tests/journey/WALKTHROUGH.md` (plus 2.9 MB of screenshots) were one-off
+  session artifacts; `TODO.md` was a backlog that belongs in issues;
+  `docs/support-tickets-design.md` and `docs/own-service-steps-design.md`
+  described features that shipped, so the code and its tests are the record now;
+  `docs/mcp-on-runners-design.md` and `engine/artifactstore/DESIGN.md` described
+  features that were never built. Comments in fifteen files that pointed at them
+  now stand on their own.
+
 ### Fixed
 
-- **`docs/decisions/` was announced but never created.** The commit that
-  restructured `TODO.md` deleted 249 lines of retrospective reasoning instead of
-  moving them, leaving eight links into a directory that did not exist — six in
-  `TODO.md`, two in `CONTRIBUTING.md`, one of those naming
-  `2026-08-20-step-vocabulary.md` as **required reading** before writing
-  user-facing text — plus a code comment in `core/flowstatus.go`, a line in the
-  pull-request template, and the `### Added` entry below claiming it had
-  shipped. All five records are restored verbatim from the pre-restructure file
-  and indexed by `docs/decisions/README.md`; the fresh-eyes review that made the
-  claim moved in beside them as `2026-08-31-fresh-eyes-review.md`, carrying a
-  correction, which is where a completed-work snapshot belonged rather than the
-  repository root.
+- **Nine dangling links into `docs/decisions/`, a directory that was never
+  created.** The commit that restructured `TODO.md` deleted 249 lines of
+  retrospective reasoning instead of moving them; a later entry in this section
+  claimed the records had been restored, and they had not. CI has been red on
+  `make links-check` since that check landed. The dangling pointers are gone
+  from `CONTRIBUTING.md`, the pull-request template, `core/flowstatus.go`,
+  `daemon/timeout.go`, `scripts/check-links.sh` and `.github/workflows/ci.yml`;
+  the vocabulary rule the one required-reading link carried (`step` in prose,
+  `drop` in code) is stated directly in `CONTRIBUTING.md`.
 
-- **Nothing checked Markdown links outside `docs/guide/`.** This is why the
-  above shipped unnoticed in the same commit that wrote it: the link guard added
-  alongside it (`web/src/docs/content.test.ts`) covers guide pages only.
-  `make links-check` (`scripts/check-links.sh`) now walks every relative link in
-  every tracked `.md` file, in `make check` and in CI. It reads
-  `--cached --others --exclude-standard`, not just the index — a brand-new
-  document is exactly the one whose links have never been checked — and blanks
-  fenced blocks and code spans first, so a file that legitimately *shows*
-  Markdown is not a false positive. Verified by reintroducing the original bug.
+- **Nothing checked Markdown links outside `docs/guide/`.** `make links-check`
+  (`scripts/check-links.sh`) now walks every relative link in every tracked
+  `.md` file, in `make check` and in CI. It reads `--cached --others
+  --exclude-standard`, not just the index — a brand-new document is exactly the
+  one whose links have never been checked — and blanks fenced blocks and code
+  spans first, so a file that legitimately *shows* Markdown is not a false
+  positive.
 
-- **`docs/DEPLOY.md` told operators `make docs-dev` runs VitePress.** It runs
-  the Vite dev server; VitePress is not in the tree. The third stale reference
-  to it, after `.dockerignore` and `deploy/Caddyfile` — and the one in the file
-  someone reads while standing up the docs site.
+- **`docs/DEPLOY.md` told operators `make docs-dev` runs VitePress.** It runs the
+  Vite dev server; VitePress is not in the tree. The third stale reference to it,
+  after `.dockerignore` and `deploy/Caddyfile`.
 
-- **`cmd/docsgen` escaped `{{` as `&#123;&#123;` for a renderer that is gone.**
-  A Vue interpolation guard from the VitePress era, applied to 24 strings of
-  Go-template prose (`{{.name}} pulls a field`). The docs SPA renders raw braces
-  identically — checked against the real `react-markdown` configuration before
-  removing — so the entities were noise in the generated source. The `<` escape
-  stays: `&lt;place>` is also correct in a renderer that passes HTML through,
-  and the generated catalog is plain Markdown that anything may read.
+- **`cmd/docsgen` escaped `{{` as `&#123;&#123;` for a renderer that is gone.** A
+  Vue interpolation guard from the VitePress era, applied to 24 strings of
+  Go-template prose. The `<` escape stays: `&lt;place>` is also correct in a
+  renderer that passes HTML through.
 
-- **Two of the three shipped examples could not run, and CI only ran the
-  third.** `examples/mcp-pipeline/run.sh` and `examples/ap-invoice/run.sh` are
-  the only end-to-end exercise of `dzd` through its own CLI and HTTP surfaces,
-  and both had been failing at boot on requirements that landed after they were
-  written — invisible because the `dzctl end-to-end` CI step ran
-  `csv-pipeline` alone.
+- **Two of the three shipped examples could not run, and CI only ran the third.**
+  `examples/mcp-pipeline/run.sh` and `examples/ap-invoice/run.sh` had been
+  failing at boot on requirements that landed after they were written — a missing
+  `DAZYFLOW_POSTGRES_DSN`, a `sleep` where a Postgres-backed boot needs a poll, a
+  missing `DAZYFLOW_DEV=1`, a stale sandbox path, a missing publish step, and a
+  `flow_id` that must be the percent-encoded `tenant/workspace/id` triple. Both
+  now pass every assertion, and CI runs all three examples.
 
-  mcp-pipeline had four: no `DAZYFLOW_POSTGRES_DSN` at all (so it exited
-  immediately with "DAZYFLOW_POSTGRES_DSN is required" once Postgres became
-  mandatory), a `sleep 0.5` where a Postgres-backed boot now needs a poll,
-  no `DAZYFLOW_DEV=1` for the insecure-defaults guard, and a sandbox path from
-  before `DAZYFLOW_DATA_DIR` grew its `sandbox/` segment. ap-invoice had three:
-  the guard's TLS check firing on a throwaway loopback container, no publish
-  step (a webhook fires the **published** revision, and the pre-auth 401 is
-  deliberately generic, so "unpublished flow" and "wrong secret" are
-  indistinguishable from the outside), and a `flow_id` that must be the
-  percent-encoded `tenant/workspace/id` triple in one path segment.
+- **`go build ./...` walked into `web/node_modules`.** `flatted` ships a Go port
+  beside its JavaScript, so build, vet, test and `gofmt -l .` descended into a
+  directory this project does not own. `go.mod` now carries an `ignore`
+  directive, and the `fmt` / `fmt-check` targets operate on `git ls-files
+  '*.go'` since gofmt does not read `go.mod`.
 
-  Both now pass every assertion, and CI runs all three examples.
-
-- **`go build ./...` walked into `web/node_modules`.** `flatted` ships a Go
-  port beside its JavaScript, so build, vet, test and `gofmt -l .` all
-  descended into a directory this project does not own. Harmless only by luck —
-  that one file happens to be gofmt-clean — and the next npm package shipping
-  an unformatted `.go` file would have turned the new format gate red with
-  nothing to fix. `go.mod` now carries an `ignore` directive, and the `fmt` /
-  `fmt-check` targets operate on `git ls-files '*.go'` since gofmt does not read
-  `go.mod`.
-
-- **A leaked socket per HTTP error in the runner agent.** `urllib`'s
-  `HTTPError` *is* the response object; `post()` drained the body but never
-  closed it, so the interpreter reported a `ResourceWarning` on collection. On
-  a long-lived poll loop a recurring 401 accumulated sockets until the GC
-  happened to notice.
-
-- **Three code comments pointed at notes that did not exist**, in
-  `core/flowstatus.go`, `daemon/timeout.go` and `daemon/runlog_pg.go`. Two had
-  been dangling for some time; the third now points at
-  `docs/decisions/2026-08-20-web-fixes.md`, where the reasoning moved.
+- **A leaked socket per HTTP error in the runner agent.** `urllib`'s `HTTPError`
+  *is* the response object; `post()` drained the body but never closed it, so a
+  recurring 401 on the poll loop accumulated sockets until GC noticed.
 
 - **Nine Go files were not gofmt-clean.** Struct-tag and map-literal
-  misalignment plus one out-of-order import. The Makefile had declined to gate
-  formatting on the grounds of "pre-existing gofmt-version drift"; there was no
-  version drift, and one `make fmt` fixed all nine.
+  misalignment plus one out-of-order import.
 
 ### Added
 
-- **Issue templates.** A bug report that asks for the version and how it's
-  being run, and a feature/connector request that asks for the job in the
-  reporter's own words plus how the service authenticates — the main cost driver,
-  so it's what ranks the connector backlog. `config.yml` routes vulnerabilities
-  to Private Vulnerability Reporting rather than a public issue. The gap was
-  named in the same review that added `CONTRIBUTING.md` and the PR template, and
-  only those two shipped.
+- **Issue templates.** A bug report that asks for the version and how it's being
+  run, and a feature/connector request that asks for the job in the reporter's
+  own words plus how the service authenticates — the main cost driver.
+  `config.yml` routes vulnerabilities to Private Vulnerability Reporting.
 
 - **An index for `docs/guide/`.** `README.md` sends readers to that directory,
   where a repository host shows an alphabetical file list — so "Connect an app"
   came before "Build your first flow" and the intended reading order existed
-  only in the SPA's `NAV`. The index carries that order, and is excluded from
-  `make docs-content` and from the guide-page guard, since it indexes `NAV`
-  rather than being a page in it.
+  only in the SPA's `NAV`. The index carries that order.
 
-- **Tests for `cmd/docsgen`.** It had none, and it renders the entire public
-  step catalog from the drop manifests, so a defect there is wrong documentation
-  for every step at once. Covers the text-mangling helpers — where one escape
-  too few breaks a page and one too many shows entities to a reader — plus an
-  end-to-end run over the real registry asserting the output is deterministic.
+- **Tests for `cmd/docsgen`.** It renders the entire public step catalog from the
+  drop manifests, so a defect there is wrong documentation for every step at
+  once. Covers the text-mangling helpers plus an end-to-end run over the real
+  registry asserting deterministic output.
 
 - **CI runs on push and pull request.** The workflow was `workflow_dispatch:`
-  only, so every gate it defines — the race suite, both govulncheck passes,
-  catalogue freshness, the changelog guard, the web suite, three Vite builds —
-  fired only when someone remembered to press a button, and nothing else builds
-  this repository. Publishing and deploying stay dispatch-gated: on a push or
-  PR the `publish`/`deploy` inputs are unset, so images build (the only thing
-  exercising the Dockerfiles) and nothing is pushed. Superseded runs cancel on
-  push/PR but never on a dispatch, which may be mid-push to ghcr.
+  only, so every gate it defines fired only when someone pressed a button.
+  Publishing and deploying stay dispatch-gated.
 
-- **Four new gates, each closing a way something rotted unseen.**
-  `make fmt-check` (formatting); `make env-check` via
-  `scripts/check-env-example.sh` (every `DAZYFLOW_*` knob the daemon reads must
-  appear in `.env.example`); `npm audit --audit-level=high --omit=dev` (the JS
-  half of the supply chain had no gate at all beside Go's two govulncheck
-  passes); and a link check in `web/src/docs/content.test.ts` for guide
-  cross-links.
+- **Four new gates.** `make fmt-check`; `make env-check` (every `DAZYFLOW_*` knob
+  the daemon reads must appear in `.env.example`); `npm audit
+  --audit-level=high --omit=dev`; and a guide cross-link check in
+  `web/src/docs/content.test.ts`.
 
-- **ESLint, limited to the React hooks rules.** Deliberately not the
-  recommended set: `tsc --strict` and the nine `check-*.mjs` guards already
-  cover what a general ruleset would flag, and a lint run people learn to
-  ignore is worse than none. The hooks rules catch what nothing else can — a
-  stale closure is well-typed and silent. It found a
-  `rules-of-hooks` violation (a plain async action named `useTemplate`, now
-  `applyTemplate`), a disable comment for a `jsx-a11y` plugin that was never
-  configured, and two disable directives that no longer suppressed anything.
-  `npm test` gates on errors; the dependency warnings are visible via
-  `npm run lint` and are not a gate, since 22 of them are the known false
-  positive for a `useState` setter returned from a custom hook.
+- **ESLint, limited to the React hooks rules.** Deliberately not the recommended
+  set: `tsc --strict` and the nine `check-*.mjs` guards already cover what a
+  general ruleset would flag. The hooks rules catch what nothing else can — a
+  stale closure is well-typed and silent. Found a `rules-of-hooks` violation (a
+  plain async action named `useTemplate`, now `applyTemplate`), a disable comment
+  for a plugin that was never configured, and two directives that suppressed
+  nothing.
 
-- **`CONTRIBUTING.md` and a pull-request template.** The rules the gates
-  enforce — SPDX headers, `[Unreleased]`, `make catalogs` after a drop,
-  `.env.example` for a new knob, `step` in copy and `drop` in code — existed
-  only in Makefile help text, `web/README.md` and CI comments, so a first
-  contributor found them by breaking a build.
-
-- **`docs/decisions/`.** `TODO.md` opened by saying completed work is not
-  archived there and then spent 440 of its 557 lines on exactly that, with the
-  fourteen open items scattered inside retrospectives titled "worked through" —
-  the first at line 140. The reasoning was worth keeping and the backlog was
-  unreadable, so the retrospectives moved to dated decision records and
-  `TODO.md` now leads with the open work. (This entry was written before the
-  directory existed — the records were deleted rather than moved, and were
-  restored later in the same cycle. See **Fixed**.)
+- **`CONTRIBUTING.md` and a pull-request template.** The rules the gates enforce
+  existed only in Makefile help text, `web/README.md` and CI comments.
 
 ### Changed
 
 - **`.env.example` documents fifteen knobs it had never mentioned**, including
-  `DAZYFLOW_TRUSTED_PROXIES`. That one matters most: without it
-  `X-Forwarded-For` is never honoured, so behind the reverse proxy the README
-  tells you to deploy, every request arrives wearing the proxy's address and
-  the whole internet shares one rate-limit bucket — and its sibling
-  `DAZYFLOW_TRUST_PROXY_HEADERS` is documented in three places, which is what
-  makes the omission mislead rather than merely omit. Also added: the three
-  `DAZYFLOW_EGRESS_*` knobs, the three missing `DAZYFLOW_FREE_*` caps (the
-  README calls out "the `DAZYFLOW_FREE_*` knobs" and only three of six were
-  listed), `DAZYFLOW_SHELL_ENV_ALLOW`, `DAZYFLOW_OIDC_ALLOWED_TENANTS`,
-  `DAZYFLOW_SUPPORT_INBOX`, `DAZYFLOW_SUPPORT_RETENTION`,
-  `DAZYFLOW_RUNNER_TASK_RETENTION`, `DAZYFLOW_MAX_ROWS`,
-  `DAZYFLOW_PROMOTE_INTERVAL` and `DAZYFLOW_FAILURE_EMAIL_WINDOW`.
+  `DAZYFLOW_TRUSTED_PROXIES`. Without that one `X-Forwarded-For` is never
+  honoured, so behind the reverse proxy the README tells you to deploy, every
+  request arrives wearing the proxy's address and the whole internet shares one
+  rate-limit bucket. Also added: the three `DAZYFLOW_EGRESS_*` knobs, the three
+  missing `DAZYFLOW_FREE_*` caps, `DAZYFLOW_SHELL_ENV_ALLOW`,
+  `DAZYFLOW_OIDC_ALLOWED_TENANTS`, `DAZYFLOW_SUPPORT_INBOX`,
+  `DAZYFLOW_SUPPORT_RETENTION`, `DAZYFLOW_RUNNER_TASK_RETENTION`,
+  `DAZYFLOW_MAX_ROWS`, `DAZYFLOW_PROMOTE_INTERVAL` and
+  `DAZYFLOW_FAILURE_EMAIL_WINDOW`.
 
-- **Guide cross-links now resolve on the repository host as well as in the
-  docs SPA.** All forty were extensionless SPA routes (`./glossary`,
-  `../reference/steps/`) — correct in the SPA, dead on GitHub, which is exactly
-  where the README's `docs/guide` pointer lands a reader. Sibling pages are now
-  `./slug.md` (the renderer already strips `.md`) and the generated step
-  catalog, which has no markdown source in the repo, is a full
-  `https://docs.dazyflow.app/...` URL that `stripDocsOrigin` keeps navigating
-  in-SPA.
+- **Guide cross-links now resolve on the repository host as well as in the docs
+  SPA.** All forty were extensionless SPA routes — correct in the SPA, dead on
+  GitHub, which is where the README's `docs/guide` pointer lands a reader.
+  Siblings are now `./slug.md`; the generated step catalog, which has no markdown
+  source in the repo, is a full `https://docs.dazyflow.app/...` URL.
 
-- **`make check` matches what CI enforces**, and says what it does not cover.
-  It previously skipped catalogue freshness, formatting and the config
-  catalogue, so the command the README named as the pre-push gate could pass on
-  a change CI would reject. `make ci` additionally runs the runner suite, the
-  npm audit and the docs content generation, and the README now mentions it.
+- **`make check` matches what CI enforces**, and says what it does not cover. It
+  previously skipped catalogue freshness, formatting and the config catalogue, so
+  the pre-push gate could pass on a change CI would reject.
 
 - **The web test files are type-checked.** `tsconfig.json` excludes
-  `*.test.ts(x)` so `vite build` never compiles them, which also meant `tsc -b`,
-  `npm run typecheck` and CI's build all skipped 123 test files. A
-  `tsconfig.test.json` covers them and found eleven real errors — a mock whose
-  signature had drifted from `api.whoami`, eight `never[]` spreads that could
-  not type-check against their target, an unused import and a stale
-  `@ts-expect-error`. The app config now pins `types` to `vite/client` so the
-  `@types/node` this needs cannot leak `process` into the browser bundle.
+  `*.test.ts(x)`, which also meant `tsc -b`, `npm run typecheck` and CI's build
+  all skipped 123 test files. A `tsconfig.test.json` covers them and found eleven
+  real errors — a mock whose signature had drifted from `api.whoami`, eight
+  `never[]` spreads, an unused import and a stale `@ts-expect-error`.
 
-- **A failed deploy trigger now says what to check.** The step ended in
-  `curl -f`, whose entire report is `curl: (22) The requested URL returned
-  error: 401` — the least informative thing that exchange can produce, since
-  the `/trigger` endpoint answers *every* pre-authentication failure with an
-  identical 401 on purpose so it never reveals which flows exist. Four
-  different causes (wrong key, wrong tenant/workspace/flow, an unpublished
-  flow, a webhook step with no secrets) arrive looking the same, and the one
-  clarifying detail the server does send — the response body — was discarded
-  by the flag.
-
-  The call keeps the body and the status now, prints them, and on a 401 lists
-  the four causes plus the two API calls that separate them. The distinction
-  worth spelling out is that `/trigger` authenticates against the **published**
-  revision while the editor shows the draft, so a key rotated and left
-  unpublished reads as correct in the UI and still 401s in CI. A 403 is past
-  auth and carries a machine-readable code (`flow_disabled`,
-  `trigger_disabled`), so it is reported verbatim as an app-side problem rather
-  than a CI one.
-
-  Both secrets are also shape-checked before a request is spent, because the
-  failure that prompted this was a paste artifact rather than a rotation: they
-  moved from a builds.sr.ht *file* secret, sourced with `.`, into GitHub
-  secrets, and the shell used to strip quoting that GitHub keeps verbatim. A
-  key arriving as `"abc"`, or as the whole line `DAZYFLOW_WEBHOOK_KEY=abc`, is
-  otherwise indistinguishable from a key that no longer matches. Surrounding
-  whitespace is trimmed rather than rejected, mirroring the server's own bearer
-  parser, so a value that works today keeps working; neither check ever echoes
-  a value.
+- **A failed deploy trigger now says what to check.** The step ended in `curl
+  -f`, whose entire report is `curl: (22) ... error: 401` — and `/trigger`
+  answers every pre-authentication failure with an identical 401 on purpose, so
+  four causes (wrong key, wrong tenant/workspace/flow, an unpublished flow, a
+  webhook step with no secrets) look the same. The call now keeps the body and
+  status, prints them, and on a 401 lists the four causes plus the two API calls
+  that separate them. Note that `/trigger` authenticates against the
+  **published** revision while the editor shows the draft, so a key rotated and
+  left unpublished reads as correct in the UI and still 401s. A 403 is past auth
+  and carries a machine-readable code, so it is reported verbatim. Both secrets
+  are shape-checked before a request is spent — a key arriving as `"abc"` or as
+  `DAZYFLOW_WEBHOOK_KEY=abc` is otherwise indistinguishable from one that no
+  longer matches; whitespace is trimmed rather than rejected, and neither check
+  echoes a value.
 
 ## [0.28.0] - 2026-08-31
 
@@ -2037,10 +1947,8 @@ into the image.)
   turned off without deleting it. An org cannot name its API after an app
   Dazyflow already has — connection fields are found by slug with first-match
   wins, so a collision would have made the real app's connection page show the
-  wrong fields at random. See
-  [docs/own-service-steps-design.md](docs/own-service-steps-design.md) for the
-  design, including what phases 2 (importing an OpenAPI spec) and 3 (reaching a
-  service inside your own network through a runner) would add.
+  wrong fields at random. Phases 2 (importing an OpenAPI spec) and 3 (reaching
+  a service inside your own network through a runner) followed.
 
 ### Changed
 

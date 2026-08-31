@@ -17,9 +17,8 @@ import { isGrantActive } from "../../lib/grants";
 import { Loading } from "../../components/ui/Loading";
 import { Notice } from "../../components/ui/Notice";
 
-// AdminSupport is the org-admin consent surface for the Support feature (see
-// docs/support-tickets-design.md). Support staff request a scoped, time-boxed,
-// read-only view of a single flow; this page is where an org admin sees those
+// AdminSupport is the org-admin consent surface for the Support feature.
+// Support staff request a scoped, time-boxed, read-only view of a single flow; this page is where an org admin sees those
 // requests and approves / denies / revokes them. Secrets and run data are ALWAYS
 // hidden from support regardless of any decision here — the grant only unlocks a
 // redacted view.

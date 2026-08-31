@@ -29,8 +29,7 @@ import (
 //
 // The way to give a TENANT a command-distributed MCP server is to run it on a
 // machine the org owns — a runner — where the same process grants no capability
-// `run_on_runner` does not already grant. Designed but not built: see
-// docs/mcp-on-runners-design.md.
+// `run_on_runner` does not already grant. Designed but not built.
 type StdioDescriptor struct {
 	// Name is the server identifier used in tool IDs (mcp:<name>:<tool>).
 	Name string

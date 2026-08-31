@@ -13,9 +13,9 @@
 //
 // A Descriptor is data, and where it CAME from is not this package's business:
 // an admin form filling one in by hand and an OpenAPI import parsing one out of
-// a spec produce the same object. That is the whole design — see
-// docs/own-service-steps-design.md. Only Arg.In has no counterpart in MCP's
-// flat argument object, and it exists because HTTP splits one call's arguments
+// a spec produce the same object. That is the whole design. Only Arg.In has no
+// counterpart in MCP's flat argument object, and it exists because HTTP splits
+// one call's arguments
 // across the path, the query, the headers and the body.
 package webapi
 

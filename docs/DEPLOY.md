@@ -5,26 +5,6 @@ only has two flags, both one-shot operator commands that exit after
 running (`--rotate-master-key`, `--import-users-from-json`). For the
 canonical list see `.env.example`.
 
-## Contents
-
-- [TLS / reverse-proxy contract](#tls--reverse-proxy-contract)
-- [Kubernetes — single pod (simplest start)](#kubernetes--single-pod-simplest-start)
-- [Scaling up — load balancer, TLS, multi-replica](#scaling-up--load-balancer-tls-multi-replica)
-- [Per-org subdomains (optional)](#per-org-subdomains-optional)
-- [Documentation site (docs.dazyflow.app)](#documentation-site-docsdazyflowapp)
-- [Version stamping & upgrades](#version-stamping--upgrades)
-- [Durability](#durability)
-- [First admin (bootstrap)](#first-admin-bootstrap)
-- [Managing tenants, tiers & entitlements](#managing-tenants-tiers--entitlements)
-- [Support tickets & consented flow access (optional)](#support-tickets--consented-flow-access-optional)
-- [Fail-closed config guard](#fail-closed-config-guard)
-- [Security knobs worth setting](#security-knobs-worth-setting)
-- [Observability](#observability)
-- [Graceful shutdown](#graceful-shutdown)
-- [Human approvals (await_approval)](#human-approvals-await_approval)
-- [Steps](#steps)
-- [Secrets](#secrets)
-
 ## TLS / reverse-proxy contract
 
 `dzd` does **not** terminate TLS. Run it behind a TLS-terminating reverse

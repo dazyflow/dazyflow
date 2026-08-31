@@ -8,9 +8,9 @@ import (
 	"time"
 )
 
-// ticket.go holds the Support ticket + chat model — Phase 2 of
-// docs/support-tickets-design.md. An org files a Ticket about a flow; a thread
-// of TicketMessages carries the conversation between the user and support. Both
+// ticket.go holds the Support ticket + chat model. An org files a Ticket about
+// a flow; a thread of TicketMessages carries the conversation between the user
+// and support. Both
 // are scoped to the filing org's tenant (that is the security boundary).
 //
 // Two trust properties live here, mirroring the rest of the Support feature:

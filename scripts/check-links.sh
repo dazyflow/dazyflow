@@ -6,13 +6,10 @@
 # in the index AND new unstaged ones, since a brand-new document is exactly the
 # one whose links have never been read by anybody.
 #
-# This exists because eight links to docs/decisions/ — a directory that was
-# never created — shipped in the same commit that wrote them, and one of them
-# was named as required reading in CONTRIBUTING.md. Nothing failed, because the
-# only link guard in the tree (web/src/docs/content.test.ts) checks docs/guide/
-# and nothing else. That guard stays: it also asserts the two-resolver rules
-# that only apply to guide pages (a sibling is ./slug.md, the generated step
-# catalog is an absolute docs.dazyflow.app URL). This one is the wide net.
+# web/src/docs/content.test.ts covers docs/guide/ alone, and keeps the
+# two-resolver rules that apply to guide pages (a sibling is ./slug.md, the
+# generated step catalog is an absolute docs.dazyflow.app URL). This is the
+# wide net.
 #
 # Out of scope on purpose: http(s) links (a network call is not a build gate)
 # and #anchors (the docs SPA derives heading ids at render time, and

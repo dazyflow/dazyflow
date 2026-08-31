@@ -34,15 +34,13 @@ or build it locally with `make docs-content`.
 
 ## Editing these pages
 
-They are plain CommonMark plus GitHub tables, rendered by `react-markdown`. Two
-rules, both enforced by `web/src/docs/content.test.ts`:
+Plain CommonMark plus GitHub tables, rendered by `react-markdown`. Two rules,
+both enforced by `web/src/docs/content.test.ts`:
 
 - **Link a sibling page as `./slug.md`.** The renderer strips the extension, so
-  one href works in the SPA and on the repository host. An extensionless
-  `./slug` resolves only in the SPA.
-- **Link the step reference as a full `https://docs.dazyflow.app/…` URL,** never
-  relatively — there is no local file to resolve to.
+  one href works in the SPA and on the repository host.
+- **Link the step reference as a full `https://docs.dazyflow.app/…` URL** — there
+  is no local file to resolve to.
 
-Adding or removing a page means adding or removing its row in `NAV`, its row in
-the table above, and nothing else. A page without a `NAV` row (or the reverse)
-fails the test. `make links-check` checks every relative link in the repository.
+Adding or removing a page means its row in `NAV` and its row in the table above.
+A page with one and not the other fails the test.

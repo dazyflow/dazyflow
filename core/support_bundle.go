@@ -10,8 +10,8 @@ import (
 	"time"
 )
 
-// support_bundle.go is the redaction boundary for the Support feature (see
-// docs/support-tickets-design.md). A SupportBundle is a diagnostic snapshot of
+// support_bundle.go is the redaction boundary for the Support feature. A
+// SupportBundle is a diagnostic snapshot of
 // ONE flow — its structure, config shape, and a run's outcome — that a support
 // agent can be shown WITHOUT ever seeing secrets or raw run data.
 //

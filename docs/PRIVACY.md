@@ -10,21 +10,6 @@ deployment specifics are in [DEPLOY.md](DEPLOY.md).
 **Last reviewed:** 2026-06-15 · **Scope:** the dazyflow product. Not legal
 advice.
 
-## Contents
-
-- [What this document is — and is not](#what-this-document-is--and-is-not)
-- [Roles](#roles)
-- [Personal data the product stores](#personal-data-the-product-stores)
-- [Personal data sent to third parties](#personal-data-sent-to-third-parties)
-- [Data-subject rights](#data-subject-rights)
-- [Retention (Art. 5(1)(e))](#retention-art-51e)
-- [Security of processing (Art. 32)](#security-of-processing-art-32)
-- [Cookies / ePrivacy](#cookies--eprivacy)
-- [Does the product phone home?](#does-the-product-phone-home)
-- [Other EU regimes (brief)](#other-eu-regimes-brief)
-- [Operator checklist](#operator-checklist)
-- [Known gaps](#known-gaps)
-
 ## What this document is — and is not
 
 GDPR compliance is a property of an **organisation's data-processing

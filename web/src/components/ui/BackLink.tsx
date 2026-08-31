@@ -30,8 +30,8 @@ import { ICON } from "../../icons";
  * This deliberately is NOT a breadcrumb trail. The app's IA is one level deep
  * almost everywhere, so a trail would render a redundant `Home > Flows` above
  * a title that already says Flows. Only the operator surfaces go deeper, and
- * one hop back is all any of them needs. See TODO.md ("Decided against") for
- * the full reasoning and the condition that would change it.
+ * one hop back is all any of them needs. Revisit only if a surface grows a
+ * third level.
  */
 export function BackLink({ to, label }: { to: string; label: string }) {
   return (

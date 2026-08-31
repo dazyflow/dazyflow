@@ -20,6 +20,5 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 - [ ] `make catalogs` re-run and committed, if a drop was added or reworded
 - [ ] New `DAZYFLOW_*` knobs documented in `.env.example`
 - [ ] User-facing copy says **step**, not **drop**
-      (see `docs/decisions/2026-08-20-step-vocabulary.md`)
 
 <!-- Security issue? Don't open a PR — see SECURITY.md for private reporting. -->

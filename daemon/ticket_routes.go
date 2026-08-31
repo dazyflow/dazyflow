@@ -16,8 +16,8 @@ import (
 	"github.com/dazyflow/dazyflow/daemon/support"
 )
 
-// ticket_routes.go wires the Support ticket + chat surface (Phase 2 of
-// docs/support-tickets-design.md). Two audiences share one TicketStore:
+// ticket_routes.go wires the Support ticket + chat surface. Two audiences
+// share one TicketStore:
 //
 //   - The END USER (own tenant, PermGraphRun) files a ticket about a flow and
 //     chats on it: POST/GET /api/v1/me/support/tickets[…]. On filing, a redacted

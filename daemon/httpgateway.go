@@ -147,7 +147,7 @@ type HTTPGateway struct {
 	// lowercased email → struct{}.
 	platformAdminGranted sync.Map
 
-	// Support feature (see docs/support-tickets-design.md). SupportAgents is the
+	// Support feature. SupportAgents is the
 	// runtime grant store deciding who gets core.SupportAgentRole at session
 	// issue; Grants persists AccessGrants (the consented, time-boxed views);
 	// Bundles persists redacted SupportBundleRecords. All nil-safe: nil leaves
