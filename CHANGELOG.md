@@ -10,6 +10,29 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Changed
+
+- **A pushed version tag is now the release, and the only thing that deploys.**
+  CI gained `push: tags: ["[0-9]+.[0-9]+.[0-9]+"]`; that run publishes to ghcr
+  and calls the deploy webhook. A push to master, a pull request and a manual
+  dispatch cannot reach production — dispatching with `publish=true` re-publishes
+  images and stops, so re-cutting an image is never one wrong checkbox away from
+  shipping it. The `deploy` input is gone rather than left as a control that no
+  longer controls anything. Pre-release tags do not match the pattern, so they
+  neither move `:latest` nor deploy, matching what `LATEST_TAG` already did.
+  Tag refs are also exempted from `cancel-in-progress`, alongside dispatches.
+
+### Fixed
+
+- **`tests/e2e/ap-invoice/run.sh` waited on a fixed `sleep 0.5` after firing each
+  webhook.** The trigger returns as soon as the run is ENQUEUED, so half a second
+  was a bet that the whole graph — HTTP fetch, branch, file_write — finished in
+  that time. It held locally and lost on CI, where it surfaced as
+  `ls: cannot access .../archive/: No such file or directory`. It now polls each
+  run to a terminal state. The diagnostics below it also gained `|| true`: under
+  `set -euo pipefail` the missing directory killed the script AT A DEBUG LINE,
+  before the assertions that would have named which invoice failed to archive.
+
 ## [0.28.1] - 2026-09-01
 
 ### Changed

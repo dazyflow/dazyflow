@@ -378,6 +378,30 @@ fallback, and the image then reports itself as unstamped — which also breaks t
 update check for every operator, since that check reads the canonical instance's
 reported version.
 
+### Cutting a release
+
+`make patch` (or `minor` / `major`) promotes `[Unreleased]`, writes `./VERSION`,
+commits and tags. It prints the push command:
+
+```sh
+git push origin master 0.29.0
+```
+
+**Pushing the tag is the release.** That run — and only that run — publishes the
+images to ghcr and calls the production deploy webhook. A push to `master`, a
+pull request, and a manual `workflow_dispatch` never deploy; dispatching with
+`publish=true` re-publishes images and stops there, so re-cutting an image
+cannot ship itself by accident. Pre-release tags (`1.0.0-rc1`) do not match the
+trigger, so they neither move `:latest` nor deploy.
+
+Pushing master and the tag together starts two CI runs: an ordinary one for the
+branch and the releasing one for the tag. Only the second one can reach
+production.
+
+If the deploy secrets (`DAZYFLOW_WEBHOOK_KEY`, `DAZYFLOW_FLOW`) are missing, the
+tag run **fails after publishing** rather than skipping quietly — the images are
+on ghcr, production is untouched, and the log says so.
+
 ### Where the images come from
 
 A host running the production overlay **pulls** its release images; it never

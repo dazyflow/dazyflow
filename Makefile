@@ -383,7 +383,7 @@ upgrade: ## Deploy the latest release tag, pulling its prebuilt images (PROD=1 o
 			n=$$((n+1)); \
 			if [ $$n -ge 5 ]; then \
 				echo "ghcr did not answer after $$n attempts. Check, in order:"; \
-				echo "  * did CI publish $$LATEST? (Actions run with publish=true)"; \
+				echo "  * did CI publish $$LATEST? (the CI run for the pushed tag $$LATEST)"; \
 				echo "  * is GHCR_OWNER set in .env?"; \
 				echo "  * are the packages public, or is this host logged in to ghcr.io?"; \
 				exit 1; \

@@ -152,19 +152,39 @@ for flow in process-invoice-low process-invoice-high; do
     echo "      published $flow"
 done
 
+# wait_for_job polls a run until it reaches a terminal state.
+#
+# This replaced `sleep 0.5`. The webhook returns as soon as the run is
+# ENQUEUED, not when it finishes, so half a second was a bet on the whole graph
+# — HTTP fetch, branch, file_write — completing that fast. It held on a warm
+# machine and lost on CI, where the failure surfaced as
+# "ls: cannot access .../archive/: No such file or directory" from the
+# diagnostic below rather than as a named assertion.
+wait_for_job() { # job-id label
+    for _ in $(seq 1 300); do   # 30s
+        if DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 job status "$1" 2>&1 \
+            | grep -qE 'status:[[:space:]]+(succeeded|failed)'; then
+            return 0
+        fi
+        sleep 0.1
+    done
+    echo "[!!]  timed out waiting for $2 ($1) to reach a terminal state"
+    return 1
+}
+
 # --- 5. fire the low-value invoice via webhook ----------------------------
 echo "[5/7] webhook → process-invoice-low (\$250 amount → auto-approve path)"
 LOW_JOB=$(curl -s -X POST -H "Authorization: Bearer webhook-secret" \
     http://127.0.0.1:18080/trigger/dev/main/process-invoice-low | grep -oE '[a-f0-9]{20,}')
 echo "      → job $LOW_JOB"
-sleep 0.5
+wait_for_job "$LOW_JOB" process-invoice-low || true
 
 # --- 6. fire the high-value invoice ---------------------------------------
 echo "[6/7] webhook → process-invoice-high (\$12,500 amount → CFO path)"
 HIGH_JOB=$(curl -s -X POST -H "Authorization: Bearer webhook-secret" \
     http://127.0.0.1:18080/trigger/dev/main/process-invoice-high | grep -oE '[a-f0-9]{20,}')
 echo "      → job $HIGH_JOB"
-sleep 0.5
+wait_for_job "$HIGH_JOB" process-invoice-high || true
 
 # --- 7. verify ------------------------------------------------------------
 echo "[7/7] verifying outcomes"
@@ -180,14 +200,17 @@ echo "--- high-invoice ($HIGH_JOB) node trail ---"
 DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 job list process-invoice-high 2>&1 | sed 's/^/    /'
 
 echo
+# `|| true` on each: these are diagnostics, and under `set -euo pipefail` a
+# missing file made the script die HERE, at a debug line, instead of reaching
+# the assertions below that would have named which invoice never archived.
 echo "--- archived invoices on disk ---"
-ls -1 "$SANDBOX_BASE/sandbox/dev/main/archive/" 2>&1 | sed 's/^/    /'
+ls -1 "$SANDBOX_BASE/sandbox/dev/main/archive/" 2>&1 | sed 's/^/    /' || true
 echo
 echo "--- archive/invoice-42.json contents ---"
-cat "$SANDBOX_BASE/sandbox/dev/main/archive/invoice-42.json" | sed 's/^/    /'
+sed 's/^/    /' "$SANDBOX_BASE/sandbox/dev/main/archive/invoice-42.json" || true
 echo
 echo "--- archive/invoice-big-99.json contents ---"
-cat "$SANDBOX_BASE/sandbox/dev/main/archive/invoice-big-99.json" | sed 's/^/    /'
+sed 's/^/    /' "$SANDBOX_BASE/sandbox/dev/main/archive/invoice-big-99.json" || true
 
 echo
 echo "--- audit: saved graph still references secrets symbolically ---"
