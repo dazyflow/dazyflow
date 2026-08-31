@@ -23,6 +23,75 @@ into the image.)
 
 ## [Unreleased]
 
+### Security
+
+- **There is now a documented way to report a vulnerability, and it no longer
+  dead-ends.** `docs/SECURITY-SLA.md` told researchers to report privately and
+  pointed at `SECURITY.md` for "the operational contact" — but `SECURITY.md` was
+  132 lines of master-key runbook with no reporting section and no contact
+  anywhere in it, so the documented path led nowhere and the only remaining
+  option was the public issue the same paragraph forbids. That mattered little
+  while the repository was private and matters a great deal as it goes public,
+  since GitHub surfaces `SECURITY.md` as the repository's security policy. It
+  now opens with a reporting section pointing at GitHub's Private Vulnerability
+  Reporting, says what to include, and states where the acknowledgement and fix
+  windows live — alongside a 7-day critical/high commitment that previously had
+  no inbox behind it.
+
+### Added
+
+- **Dependabot keeps Go modules, npm packages, GitHub Actions and Docker base
+  images current** (`.github/dependabot.yml`), closing the supply-chain gap
+  `docs/COMPLIANCE.md` §3 had listed as open — there was no bot to wire up on
+  builds.sr.ht. Version bumps are grouped into one pull request per ecosystem on
+  a monthly cadence, because the alternative is a weekly drip of
+  single-dependency PRs each costing a full CI run to review. Advisory-driven
+  security updates are a separate mechanism that ignores that schedule, so the
+  monthly cadence does not slow a CVE fix; it needs the repository setting
+  enabled, which the compliance gap now records as the remaining operator step.
+  Base images are worth covering on their own: a stale `node:22-alpine` carries
+  OS-level CVEs that `govulncheck`, which only sees Go code, cannot detect.
+
+### Changed
+
+- **CI moved to GitHub Actions, and release images now come from GitHub
+  Container Registry.** The `builds.sr.ht` manifest (`.builds/archlinux.yml`)
+  is gone, replaced by `.github/workflows/ci.yml`, which runs the same gates —
+  the Go suite under the race detector, the runner-agent unittests, `go vet`,
+  the dzctl end-to-end example, the catalogue and changelog checks, the
+  frontend vitest suite and build, the docs site build, and both govulncheck
+  passes with the SBOM. Postgres and MariaDB are service containers rather than
+  servers stood up by hand, so the database-gated tests still run rather than
+  silently skipping. The 4 GiB swapfile the old manifest needed for source-mode
+  govulncheck is dropped: it existed because the same VM was still hosting both
+  database daemons, which is not true of a hosted runner.
+
+  Images publish to `ghcr.io/OWNER/dazyflow-dzd` and `-docs` instead of the
+  self-hosted `registry:2` container that used to run beside the app behind
+  Caddy at `registry.dazyflow.app`. That removes a TLS front door, a basic-auth
+  credential pair, and the `registry garbage-collect` chore that kept a 50 GB
+  droplet from filling up; `GITHUB_TOKEN` authenticates the push. CI is
+  dispatch-only for now, with publishing and deploying as separate opt-in
+  inputs, so a build never ships anything unless it was asked to.
+
+- **Self-hosters on the production overlay: `REGISTRY_HOST`, `REGISTRY_USER`
+  and `REGISTRY_PASSWORD_HASH` are gone; set `GHCR_OWNER` instead.** It is the
+  GitHub account or organisation that owns the packages, lower-case, since ghcr
+  rejects an uppercase path segment. It is deliberately required rather than
+  defaulted — an empty value would resolve to `ghcr.io//dazyflow-dzd` and fail
+  at pull time with a registry error that says nothing about the real cause. A
+  ghcr package is private by default and an anonymous pull of one fails with a
+  401 that reads like "not found", so either make both packages public or run
+  `docker login ghcr.io` once on the host with a token holding `read:packages`.
+  Leaving the old `REGISTRY_*` variables set does nothing except mislead the
+  next person to read the file.
+
+  `make upgrade` keys its pull-vs-build decision on the `caddy` service now.
+  It used to key on `registry`, and that service no longer exists — a condition
+  still naming it would have taken the else branch and set a 1-vCPU droplet
+  compiling Go and two Vite builds, which is the exact failure the prebuilt
+  image path exists to prevent.
+
 ## [0.27.10] - 2026-08-31
 
 ### Fixed

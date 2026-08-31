@@ -1,0 +1,70 @@
+# Dependency version updates. This closes the "no automated dependency-update
+# bot is wired up yet" item in docs/COMPLIANCE.md §3 gap 4 (A.8.25 / A.8.29,
+# supply chain) — a gap that stayed open on builds.sr.ht because there was no
+# bot to wire up.
+#
+# Two separate mechanisms, and only one of them is configured by this file:
+#
+#   * VERSION updates (this file) — routine "a newer release exists" bumps.
+#     Deliberately monthly and grouped, one pull request per ecosystem. The
+#     alternative is a weekly drip of single-dependency PRs, each of which costs
+#     a full CI run (race suite, both govulncheck passes, three Vite builds) to
+#     review. Monthly and grouped keeps that spend proportionate.
+#
+#   * SECURITY updates — opened as soon as an advisory lands, NOT on the
+#     schedule below, and enabled by a repository setting rather than by this
+#     file (Settings → Code security → Dependabot security updates). They are
+#     what docs/SECURITY-SLA.md's remediation windows actually run against, so
+#     the monthly cadence here does not slow a CVE fix down. Turn that setting
+#     on; this file alone does not.
+#
+# govulncheck remains the gate that decides whether a vulnerability matters:
+# it fails the build only on a vulnerability reachable from called code, so a
+# Dependabot PR bumping something unreachable is hygiene, not an incident.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    groups:
+      go-modules:
+        applies-to: version-updates
+        patterns: ["*"]
+
+  # The frontend and the docs SPA share one package.json and one lockfile.
+  - package-ecosystem: npm
+    directory: "/web"
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    groups:
+      npm-packages:
+        applies-to: version-updates
+        patterns: ["*"]
+
+  # Keeps the pinned action versions in ci.yml current (actions/checkout,
+  # setup-go, setup-node, upload-artifact, docker/login-action). Worth having:
+  # a major-version bump of an action is the one dependency change that can
+  # break CI itself, and it is invisible to both govulncheck and the SBOM.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    groups:
+      github-actions:
+        applies-to: version-updates
+        patterns: ["*"]
+
+  # Base images in Dockerfile (golang, node:22-alpine) and Dockerfile.docs.
+  # Neither is covered by gomod or npm: a stale base image carries OS-level
+  # CVEs that govulncheck, which only sees Go code, cannot see at all.
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: monthly
+    groups:
+      base-images:
+        applies-to: version-updates
+        patterns: ["*"]

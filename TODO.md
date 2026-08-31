@@ -526,9 +526,11 @@ re-raised.
   Align/distribute render only at 2+ selected and the pause point at exactly 1,
   so no overflow menu was needed — only the pinning fix, since shipped.
 - **CI does run the Postgres/MariaDB-gated tests.** A review claimed findings
-  sat in code CI never exercises; `.builds/archlinux.yml` stands up both and
-  exports `DAZYFLOW_TEST_DB`. What CI genuinely never ran was the frontend
-  vitest suite — since fixed in `.builds/archlinux.yml`.
+  sat in code CI never exercises; CI stands up both and exports
+  `DAZYFLOW_TEST_DB`. What CI genuinely never ran was the frontend vitest
+  suite — since fixed. (Both were true of `.builds/archlinux.yml`, the
+  builds.sr.ht manifest CI ran from at the time; the gates now live in
+  `.github/workflows/ci.yml`.)
 
 Also from the 2026-08-20 sweep — raised, considered, and deliberately NOT
 changed. The reasoning is recorded so the next review doesn't re-raise them:

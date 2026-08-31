@@ -1,5 +1,36 @@
 # Security operations
 
+## Reporting a vulnerability
+
+**Do not open a public issue, pull request, or discussion for a suspected
+vulnerability.** Report it privately through GitHub's **Private Vulnerability
+Reporting**: the repository's **Security** tab → **Report a vulnerability**.
+That opens a channel visible only to the maintainers, and it is the same
+mechanism that later issues the advisory and requests a CVE, so a report filed
+there needs no re-filing once a fix lands.
+
+Please include:
+
+- the **version or commit** you observed it on. The running version is stamped
+  into the binary at build time and shown in the `build` block of `GET /api/v1`
+  and in the web UI's account menu, so you do not have to guess it;
+- a **reproduction** — the smallest flow, request, or configuration that shows
+  the behaviour;
+- the **impact you actually observed**, and the configuration it required.
+  Whether an issue is reachable in a supported configuration is what starts the
+  remediation clock, so this is the most useful thing you can tell us.
+
+Acknowledgement and fix windows are in
+[docs/SECURITY-SLA.md](docs/SECURITY-SLA.md): critical is acknowledged within
+24 hours and fixed within 7 days, high within 2 business days and 7 days,
+medium 5 business days and 30 days, low 10 business days and 90 days. The clock
+starts when the issue is confirmed reachable, not when it is received — that
+document explains how an unreachable advisory is recorded and tracked instead.
+
+Everything below this section is the **operator's** runbook: how to hold, rotate
+and recover the master key that protects every tenant's secrets. It is not a
+disclosure channel.
+
 ## The master key (`$DAZYFLOW_MASTER_KEY`)
 
 dzd's built-in secret store (`EncryptedSecrets`, `daemon/encrypted_secrets.go`)

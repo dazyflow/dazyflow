@@ -19,7 +19,7 @@ the "documented remediation SLA" gap called out in
 | Go toolchain / stdlib advisories | `govulncheck` (same task) tracks the Go version in `go.mod` | Every CI build |
 | Reports from users / researchers | Private disclosure (see **Reporting** below) | On receipt |
 
-Because the `vuln` task **fails the build** on a reachable vulnerability, a
+Because the `security` job **fails the build** on a reachable vulnerability, a
 fix (or a documented, justified suppression) must land before the affected
 change can ship — the SLA below governs how fast that fix is produced.
 
@@ -52,14 +52,18 @@ calling code changes.
 ## Reporting a vulnerability
 
 Report suspected vulnerabilities privately — **do not** open a public issue.
-See [SECURITY.md](../SECURITY.md) for the operational contact and the master-key
-/ incident guidance. Include affected version/commit, a reproduction, and the
+Use GitHub's Private Vulnerability Reporting (the repository's **Security** tab
+→ **Report a vulnerability**); [SECURITY.md § Reporting a
+vulnerability](../SECURITY.md#reporting-a-vulnerability) has the full
+instructions, and the rest of that file is the operator's master-key and
+incident runbook. Include affected version/commit, a reproduction, and the
 impact you observed; we acknowledge within the triage window above.
 
 ## Supply-chain hardening (related)
 
-- **SBOM**: a CycloneDX/SPDX SBOM is produced in CI (see the `sbom` task in
-  `.github/workflows/ci.yml`) so downstream consumers can run their own CVE
-  matching against the exact dependency set.
+- **SBOM**: a CycloneDX/SPDX SBOM is produced in CI (the `Generate SBOM` step
+  of the `security` job in `.github/workflows/ci.yml`, retained as the `sbom`
+  build artifact) so downstream consumers can run their own CVE matching
+  against the exact dependency set.
 - Dependencies are standard Go modules pinned in `go.mod` / `go.sum`; every
   bump that `govulncheck` forces triggers a re-review (COMPLIANCE.md §3).
