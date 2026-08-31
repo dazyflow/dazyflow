@@ -625,7 +625,6 @@ func TestSetHTTPBase_RoundTrip(t *testing.T) {
 }
 
 func TestExtractStripeError_Forms(t *testing.T) {
-	// message + code.
 	if got := extractStripeError([]byte(`{"error":{"message":"No such customer","code":"resource_missing"}}`)); got != "resource_missing: No such customer" {
 		t.Errorf("code+msg = %q", got)
 	}

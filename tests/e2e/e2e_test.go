@@ -6,13 +6,9 @@
 // against it. These tests are the only ones that would catch
 // integration-level regressions like silently incompatible interfaces.
 //
-// The subdirectories are the other half of that coverage and are not Go
-// tests: csv-pipeline, mcp-pipeline and ap-invoice each hold a run.sh that
-// boots a real dzd, drives it through dzctl and HTTP, and asserts on what
-// comes out. They live here rather than in a top-level examples/ because
-// that is what they are — CI runs all three, and the two that were left
-// unrun while they read as a demo gallery both rotted. Their READMEs still
-// double as worked examples of a realistic graph.
+// The subdirectories are not Go tests: csv-pipeline, mcp-pipeline and
+// ap-invoice each hold a run.sh that boots a real dzd and drives it through
+// dzctl and HTTP. CI runs all three.
 package e2e
 
 import (

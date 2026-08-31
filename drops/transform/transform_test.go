@@ -231,7 +231,6 @@ func TestCov_TemplateTextInputOr(t *testing.T) {
 	if s, ok := templateTextInputOr(core.Job{}, "fb"); !ok || s != "fb" {
 		t.Errorf("unwired: s=%q ok=%v", s, ok)
 	}
-	// String input.
 	j := core.Job{Input: map[string]core.Ref{"template": {Inline: "hi"}}}
 	if s, ok := templateTextInputOr(j, "fb"); !ok || s != "hi" {
 		t.Errorf("string: s=%q ok=%v", s, ok)
@@ -241,7 +240,6 @@ func TestCov_TemplateTextInputOr(t *testing.T) {
 	if s, ok := templateTextInputOr(j2, "fb"); !ok || s != "fb" {
 		t.Errorf("empty string: s=%q ok=%v", s, ok)
 	}
-	// []byte input.
 	j3 := core.Job{Input: map[string]core.Ref{"template": {Inline: []byte("bytes")}}}
 	if s, ok := templateTextInputOr(j3, "fb"); !ok || s != "bytes" {
 		t.Errorf("bytes: s=%q ok=%v", s, ok)
@@ -608,7 +606,6 @@ func TestCov_ParseDedupeBy(t *testing.T) {
 	if !reflect.DeepEqual(got3, []string{"c"}) {
 		t.Errorf("typed slice: %v", got3)
 	}
-	// []any of string.
 	got4, _ := parseDedupeBy(map[string]any{"by": []any{"d"}}, nil, nil)
 	if !reflect.DeepEqual(got4, []string{"d"}) {
 		t.Errorf("any slice: %v", got4)

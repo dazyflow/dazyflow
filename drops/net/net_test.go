@@ -96,7 +96,6 @@ func TestCov_DoEgressBlocked(t *testing.T) {
 // ===== http_request.go buildRequestBody ===============================
 
 func TestCov_BuildRequestBody(t *testing.T) {
-	// string input.
 	r, err := buildRequestBody(core.Job{Input: map[string]core.Ref{"request_body": {Inline: "hi"}}})
 	if err != nil || r == nil {
 		t.Fatalf("string: r=%v err=%v", r, err)
@@ -106,7 +105,6 @@ func TestCov_BuildRequestBody(t *testing.T) {
 		t.Errorf("string body = %q", b)
 	}
 
-	// []byte input.
 	r2, _ := buildRequestBody(core.Job{Input: map[string]core.Ref{"request_body": {Inline: []byte("bytes")}}})
 	b2, _ := io.ReadAll(r2)
 	if string(b2) != "bytes" {

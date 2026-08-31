@@ -311,7 +311,6 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 			}
 		}
 
-		// Workspace + Status.
 		got, _ = s.ListNodeRecords(ctx, core.ListNodeRecordsOpts{Tenant: "acme", Workspace: "ws-prod", Status: core.JobStatusQueued})
 		if len(got) != 2 {
 			t.Errorf("acme/ws-prod queued = %d, want 2", len(got))
