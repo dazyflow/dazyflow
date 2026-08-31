@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.28.2] - 2026-09-01
+
 ### Changed
 
 - **A pushed version tag is now the release, and the only thing that deploys.**
