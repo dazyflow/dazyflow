@@ -9,7 +9,7 @@
 set -euo pipefail
 
 cd "$(dirname "$0")"
-ROOT="$(cd ../.. && pwd)"
+ROOT="$(cd ../../.. && pwd)"
 
 # dzd runs on Postgres — there's no in-memory mode — so the demo needs a DB.
 # In CI the build manifest stands one up and exports DAZYFLOW_TEST_DB; locally,

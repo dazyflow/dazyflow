@@ -10,6 +10,16 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Changed
+
+- **`examples/` is now `tests/e2e/`.** The three pipelines were never a demo
+  gallery anyone browsed — they are the only thing driving dzd end-to-end
+  through its own CLI and HTTP surfaces, `engine/mcp` builds
+  `mcp-pipeline/server` as its test fixture, and CI runs all three run.sh
+  scripts. Sitting at the top level as `examples/` is what let two of them rot
+  unnoticed. Their READMEs still read as worked examples; nothing about what
+  they exercise changed.
+
 ### Removed
 
 - **Seven Markdown files, ~2,600 lines.** `REVIEW.md` and

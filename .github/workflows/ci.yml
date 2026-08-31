@@ -145,7 +145,7 @@ jobs:
       - name: Vet
         run: go vet ./...
 
-      # All three examples, not just csv-pipeline. They are the only thing
+      # All three pipeline demos, not just csv-pipeline. They are the only thing
       # exercising dzd end-to-end through its own CLI and HTTP surfaces, and
       # leaving two of them unrun is how they rotted: BOTH were broken and had
       # been for some time, each failing at boot on a requirement that landed
@@ -163,9 +163,9 @@ jobs:
       # does not collide with the service container on 5432 above.
       - name: dzctl end-to-end
         run: |
-          bash examples/csv-pipeline/run.sh
-          bash examples/mcp-pipeline/run.sh
-          bash examples/ap-invoice/run.sh
+          bash tests/e2e/csv-pipeline/run.sh
+          bash tests/e2e/mcp-pipeline/run.sh
+          bash tests/e2e/ap-invoice/run.sh
 
       # The two catalogues the web guards read (the app list behind the
       # integration description guard, the drop text behind the Swedish coverage

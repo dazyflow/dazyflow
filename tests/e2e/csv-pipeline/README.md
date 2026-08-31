@@ -63,7 +63,7 @@ control API, and asserts the output matches.
   graph on its own. The platform does have triggers (`drops/trigger/` — cron,
   poll, webhook); this demo just doesn't use one.
 - **Conditional routing.** The graph is a fixed chain. `branch` exists
-  (`drops/flow/branch.go`) and `examples/ap-invoice` demonstrates it.
+  (`drops/flow/branch.go`) and `tests/e2e/ap-invoice` demonstrates it.
 - **HTTP integration.** No `http_request`. The transformer is a stub
   that does string manipulation, not a real integration with anything.
 - **mTLS on the remote.** `DAZYFLOW_REMOTE_MODULES` dials insecure (the

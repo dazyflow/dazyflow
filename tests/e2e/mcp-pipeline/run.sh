@@ -7,7 +7,7 @@
 set -euo pipefail
 
 cd "$(dirname "$0")"
-ROOT="$(cd ../.. && pwd)"
+ROOT="$(cd ../../.. && pwd)"
 
 # DAZYFLOW_DATA_DIR. dzd puts the per-tenant sandbox at
 # $DATA_DIR/sandbox/<tenant>/<workspace>/ (cmd/dzd/main.go sandboxBase),
@@ -34,7 +34,7 @@ echo "[2/5] starting dzd with MCP server registered"
 # DSN at all, so it could not have run since that requirement landed; nothing
 # caught it because CI only ran the csv-pipeline example.
 #
-# Resolved exactly like examples/csv-pipeline/run.sh: CI exports
+# Resolved exactly like tests/e2e/csv-pipeline/run.sh: CI exports
 # DAZYFLOW_TEST_DB, `make pg` locally serves the same default DSN, and an
 # explicit DAZYFLOW_POSTGRES_DSN from the caller wins over both.
 : "${DAZYFLOW_POSTGRES_DSN:=${DAZYFLOW_TEST_DB:-postgres://dazyflow:dazyflow@localhost:5432/dazyflow_test?sslmode=disable}}"
@@ -43,7 +43,7 @@ export DAZYFLOW_POSTGRES_DSN
 # DAZYFLOW_DEV=1 downgrades the insecure-defaults guard (default DB password,
 # no TLS on the DSN, empty master key) to warnings, so the demo runs against
 # the throwaway test database without provisioning real secrets — the same
-# line, for the same reason, as examples/csv-pipeline/run.sh. DEV_KEY=1 mints
+# line, for the same reason, as tests/e2e/csv-pipeline/run.sh. DEV_KEY=1 mints
 # the dev token grepped out below.
 #
 # --mcp=name=command [args]; semicolon-separated across servers
@@ -57,7 +57,7 @@ DAZYFLOW_MCP_SERVERS="ap-demo=/tmp/mcp-server" \
 DZD_PID=$!
 
 # Wait for the port, then for the token — the same two-stage wait
-# examples/csv-pipeline/run.sh does, and for the same reason.
+# tests/e2e/csv-pipeline/run.sh does, and for the same reason.
 #
 # This used to be `sleep 0.5`, which was true when dzd had no database to
 # reach. It now connects to Postgres and runs migrations first, so half a

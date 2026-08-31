@@ -15,7 +15,7 @@
 set -euo pipefail
 
 cd "$(dirname "$0")"
-ROOT="$(cd ../.. && pwd)"
+ROOT="$(cd ../../.. && pwd)"
 
 SANDBOX_BASE=$(mktemp -d)
 DZD_LOG=/tmp/ap-dzd.log

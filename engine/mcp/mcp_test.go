@@ -461,7 +461,7 @@ func buildExampleServer(t *testing.T) string {
 		t.Skipf("cannot locate repo root: %v", err)
 	}
 	bin := filepath.Join(t.TempDir(), "ap-demo-server")
-	cmd := exec.Command("go", "build", "-o", bin, "./examples/mcp-pipeline/server")
+	cmd := exec.Command("go", "build", "-o", bin, "./tests/e2e/mcp-pipeline/server")
 	cmd.Dir = root
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Skipf("go build example server failed: %v\n%s", err, out)
