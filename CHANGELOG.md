@@ -23,6 +23,108 @@ into the image.)
 
 ## [Unreleased]
 
+### Fixed
+
+- **On a single-host deploy, every action failed the moment you signed in.**
+  When `dzd` serves the web bundle itself (`DAZYFLOW_WEB_DIST`, the shape
+  `docs/DEPLOY.md` describes), its own public origin is by definition a browser
+  origin performing cookie-authenticated writes — but the CSRF allow-list was
+  built from `DAZYFLOW_WEB_ORIGIN` alone, so that origin was not on it. The
+  failure hid itself well: sign-up and sign-in carry no session cookie yet and
+  pass the origin check untouched, so the daemon looked healthy right up to the
+  first authenticated POST, which answered 403 with the server's own diagnosis
+  rendered verbatim in the UI. `DAZYFLOW_PUBLIC_BASE_URL` is now trusted
+  automatically whenever we serve the bundle, and the daemon logs that it added
+  it. A separately-hosted UI still has to declare itself via
+  `DAZYFLOW_WEB_ORIGIN`; that is the case the allow-list is for.
+
+- **"See a flow run" reported "Not signed in." to people who were signed in.**
+  The Welcome screen's primary action deep-links to a template that copies
+  itself on arrival. That auto-start waited for the template list and the
+  session, but not for the workspace — and the template index is a static file
+  that resolves long before the identity bootstrap does. So on a cold load it
+  fired with no workspace yet and failed the one check that had no wording of
+  its own, telling a brand-new user they were not signed in while their email
+  sat in the sidebar. It also consumed the deep link before failing, so
+  reloading could not retry. The guard now waits for the workspace, the
+  deep link is only spent once the copy actually starts, and "signed in, but
+  the workspace is still opening" has its own sentence.
+
+- **Connect on an app the server has no credentials for threw you out of
+  Dazyflow.** The Apps page read "this provider is missing from the list"
+  as "you have not connected it yet", so it offered a live Connect button that
+  navigated the whole tab to an authorize endpoint which answered 404 as a raw
+  JSON body: the application simply gone, no way back. The template gallery
+  already knew the difference and said so in a sentence; the app page now uses
+  the same signal and explains instead of offering.
+
+- **`/signin` and `/signup` answered "page not found" to anyone with a
+  session.** Both routes live only in the signed-out tree, so with a session in
+  hand they fell through to the authenticated catch-all — including from the
+  sign-up form's own "Already have an account? Sign in" link, and from any
+  bookmark. They now redirect into the app. Deliberately a redirect and not a
+  sign-out: a successful sign-up sets the session while the URL is still
+  `/signup`, so tearing it down there would log people out the instant they
+  created an account.
+
+- **Collections showed timestamps as raw UTC instants.** A row saved by
+  `Collections · Save rows` rendered its `saved_at` as `2026-08-31T07:21:54Z`,
+  leaving the reader to do the timezone arithmetic. Instant-shaped values now
+  render in the viewer's local time, like every other timestamp in the product.
+  Only the display changes: the CSV export still carries the stored value, and
+  column headings still show the collection's own keys, because those are names
+  people match against their flow and their spreadsheet.
+
+- **The sign-in and sign-up screens sent their logo to `dazyflow.app`.** On a
+  self-hosted install the first clickable thing on the first screen left the
+  installation entirely. It now points at the deployment's own root, which the
+  daemon already auth-gates: the marketing landing where one is served, this
+  page where it is not. Those screens also gained Privacy and Terms links —
+  it is where someone types a password, and nothing there named the terms that
+  govern it.
+
+- **A template needing two apps said "which isn't set up".** The
+  admin-blocked notice and its tooltip had no plural form, in either language.
+
+### Changed
+
+- **The Apps page leads with the apps people recognise.** It was sorted purely
+  alphabetically, so a Swedish SMS gateway opened the page ahead of Gmail,
+  Slack and Google. Everyday apps come first now; everything else keeps its
+  alphabetical place behind them. Adding a connector does not require touching
+  that list.
+
+- **An app's steps read as descriptions, not identifiers.** Each step printed
+  its raw id (`gmail_get_attachments`, …) under its name, on a page written for
+  someone deciding whether an app does what they need. The ids moved into the
+  "Inputs, outputs and settings" disclosure that was already there, one click
+  away for whoever wants to grep for them.
+
+- **"Built-in" describes itself in words.** Its card is the largest on the Apps
+  page at 57 steps, and it opened with `split_rows`, `await_approval`, "file
+  I/O" and "the transform family". It now says what those things do.
+
+- **A hosted deployment no longer tells you to go and find the server
+  administrator.** Templates blocked on an unconfigured app said the app was
+  not set up "on this Dazyflow server" and that "whoever runs the server has to
+  enable it first" — correct for a self-host, and a dead end on the hosted
+  product where there is no such person for the customer to find.
+
+- **The hosted-form templates label their trigger "Form".** *Web form →
+  Collection* and its siblings put a step called *Webhook*, with ports named
+  *Body* and *Headers*, on the canvas — contradicting both the template's name
+  and its own inspector, which already offered "Host a form for me".
+
+- **The verify-email banner says what you lose by ignoring it.** It led with
+  invitations, which means nothing to someone who is not inviting anybody, and
+  never mentioned that unverified means we cannot reach you about a run that
+  needs approving or one that failed overnight.
+
+- **The signed-out screens say "Dazyflow".** They carried the operating
+  company's name in the footer, which appears nowhere on the site the visitor
+  has just come from. An unfamiliar name on the password screen reads as a
+  wrong turn.
+
 ## [0.27.9] - 2026-08-31
 
 ### Fixed
