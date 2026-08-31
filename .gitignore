@@ -6,6 +6,9 @@
 # Legacy pre-rename binary names (hazyflow → dazyflow); were tracked by mistake.
 /hzctl
 /hzd
+# Load-test binary. Was committed (25 MB) and purged from history along with
+# hzd/hzctl; unignored, it comes straight back on the next `go build`.
+/ha_loadtest
 /transformer
 /dz-drops
 /dz-drophost
