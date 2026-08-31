@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-08-31
+
 ### Security
 
 - **There is now a documented way to report a vulnerability, and it no longer
