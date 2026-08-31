@@ -6,8 +6,8 @@ package daemon
 // The flow-generator eval: can the product's own AI build the flows people
 // actually ask for, from the sentence they'd say out loud?
 //
-// /SCENARIOS.md is a corpus of thirty-five plain-language asks, each paired
-// with a hand-built graph under tests/usecases/ that is known to compose. That
+// tests/usecases/README.md is a corpus of thirty-five plain-language asks, each
+// paired with a hand-built graph beside it that is known to compose. That
 // pairing is an eval set for free: the ask is the input a real user types, the
 // graph is one known-good answer, and the gate is the same one the save path
 // applies. If the generator can't get there from the sentence, a non-technical
@@ -18,7 +18,7 @@ package daemon
 //   - TestFlowGenScenariosHarness runs everywhere, with no model: it checks the
 //     corpus parses, every ask has a reference graph, and the scorer agrees
 //     that a reference graph answers its own ask (and that a wrong graph
-//     doesn't). This keeps the harness honest as SCENARIOS.md changes.
+//     doesn't). This keeps the harness honest as the corpus changes.
 //
 //   - TestFlowGenScenarios calls the real generator and needs a key. Opt in with
 //     FLOWGEN_EVAL_KEY (or ANTHROPIC_API_KEY); it is skipped otherwise, since
@@ -50,8 +50,8 @@ import (
 )
 
 const (
-	scenariosDoc = "../SCENARIOS.md"
 	referenceDir = "../tests/usecases"
+	scenariosDoc = referenceDir + "/README.md"
 )
 
 // ask is one scenario as the buyer states it: the quoted heading and the

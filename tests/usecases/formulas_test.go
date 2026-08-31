@@ -15,7 +15,7 @@ import (
 )
 
 // The graph test proves a use case COMPOSES. This one proves the formulas
-// inside it actually do what /SCENARIOS.md claims: the CEL filters, the
+// inside it actually do what README.md claims: the CEL filters, the
 // grouping, the column mapping. These are the parts a non-technical user
 // cannot debug, and the parts that pass a structural check while quietly
 // producing the wrong rows — the null-vs-missing filter below was exactly
@@ -160,12 +160,12 @@ func TestNotYetSyncedFilter(t *testing.T) {
 		"filter": "!has(row.synced_at) || row.synced_at == ''",
 	}, map[string]core.Ref{"rows": joined["rows"]})
 	if got := rowsOf(t, out["rows"]); len(got) != 0 {
-		t.Fatalf("has() now works — simplify the note in /SCENARIOS.md: %v", got)
+		t.Fatalf("has() now works — simplify the note in README.md: %v", got)
 	}
 }
 
 // Use cases 4 and 7 build their log rows with map_rows, not a formula,
-// because expression cannot emit objects (see /SCENARIOS.md, Findings).
+// because expression cannot emit objects (see README.md, Findings).
 // map_rows also accepts a single object as one row, which is what makes the
 // "log this payment" shape work at all.
 func TestLogRowShaping(t *testing.T) {

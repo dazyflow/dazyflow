@@ -6,16 +6,16 @@ scenario names the building blocks it needs and, as the acceptance check, the
 outcome that proves it works. A scenario that fails, or needs a step that does
 not exist, is a gap to close.
 
-Its sibling [/SCENARIOS.md](../SCENARIOS.md) covers the *inbound* asks a buyer
-turns up with; this file covers internal jobs. Where they overlap, they link
-across.
+Its sibling [tests/usecases/README.md](../usecases/README.md) covers the
+*inbound* asks a buyer turns up with; this file covers internal jobs. Where they
+overlap, they link across.
 
 ## How these are tested
 
 Two layers, cheapest first.
 
-1. **Composition** — `tests/scenarios/scenarios_test.go`. Each scenario has a
-   graph under `tests/scenarios/NN-*.json`; every graph goes through
+1. **Composition** — `scenarios_test.go`, in this directory. Each scenario has a
+   graph alongside it as `NN-*.json`; every graph goes through
    `core.ValidateWithManifests` against the live native catalog, plus a check
    that each `for_each` step module exists. It proves the scenario composes:
    every module and port exists, the wiring is type-compatible, and required

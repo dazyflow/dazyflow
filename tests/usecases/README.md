@@ -10,13 +10,14 @@ loud rather than in Dazyflow vocabulary. Each one has an acceptance test ("it
 works when…") and a verdict backed by a real graph. Ten openers first, then the
 twenty-five they ask for next.
 
-This is the *inbound ask* list. Its sibling, [tests/scenarios.md](tests/scenarios.md),
-covers recurring internal jobs a small company already does by hand. The two
+This is the *inbound ask* list. Its sibling,
+[tests/scenarios/README.md](../scenarios/README.md), covers recurring internal
+jobs a small company already does by hand. The two
 overlap by design — where they do, this file links across instead of repeating.
 
 ## How the verdicts were reached
 
-Every scenario was built as an actual graph under `tests/usecases/` and put
+Every scenario was built as an actual graph in this directory and put
 through the same authoring gate the product applies when a flow is saved
 (`core.ValidateGraphFull`: unknown steps, missing ports, unsatisfied required
 inputs, MIME and cardinality mismatches, placeholder and security lint), plus a
@@ -239,7 +240,7 @@ then logs the event ids so a re-run can't double-remind.
 
 The phone number comes from the booking's own notes, because that is where a
 calendar keeps it; if the bookings live in a sheet with a phone column instead,
-[tests/scenarios.md §6](tests/scenarios.md) is the same flow off a sheet.
+[tests/scenarios §6](../scenarios/README.md) is the same flow off a sheet.
 
 ## 8. "Watch this page/feed and tell me when something new shows up"
 
@@ -255,7 +256,7 @@ whose `dedupe` setting does the "only new" work for free.
 step, which fires its `on_change` pin only when the page's visible words
 changed, leaving the alert dormant on a quiet check. Before, that meant four
 steps and a hand-rolled collection to diff against, as
-[tests/scenarios.md §9](tests/scenarios.md) still does for price watching.
+[tests/scenarios §9](../scenarios/README.md) still does for price watching.
 Ships as the `watch-a-page` template — the only one in the gallery besides the
 demo that needs no connected account at all.
 

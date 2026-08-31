@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package journey runs the scenarios in tests/scenarios.md as
+// Package journey runs the scenarios in tests/scenarios/README.md as
 // experience tests, from the perspective of a brand-new, non-technical
 // user. Instead of poking the engine internals, each test boots the
 // real stack (the same HTTP API the web UI calls, plus a worker that
@@ -555,7 +555,7 @@ func (n *newcomer) nodeRecord(runID, nodeID string) nodeView {
 
 const scenarioDir = "../scenarios"
 
-// scenarioFiles lists the NN-*.json graphs that back scenarios.md.
+// scenarioFiles lists the NN-*.json graphs that back tests/scenarios/README.md.
 func scenarioFiles(t *testing.T) []string {
 	t.Helper()
 	files, err := filepath.Glob(filepath.Join(scenarioDir, "*.json"))

@@ -186,7 +186,7 @@ catalogs-check: ## Fail if a generated catalogue is out of date (CI)
 vet: ## Run go vet
 	go vet ./...
 
-flowgen-eval: ## Score the AI flow generator against every scenario in SCENARIOS.md (needs FLOWGEN_EVAL_KEY; writes a report)
+flowgen-eval: ## Score the AI flow generator against every scenario in tests/usecases/README.md (needs FLOWGEN_EVAL_KEY; writes a report)
 	@test -n "$$FLOWGEN_EVAL_KEY" || { echo "set FLOWGEN_EVAL_KEY=<provider api key> (it calls a real model, which costs money)"; exit 1; }
 	FLOWGEN_EVAL_OUT=$${FLOWGEN_EVAL_OUT:-.flowgen-eval} \
 		go test ./daemon -run TestFlowGenScenarios -v -timeout 60m

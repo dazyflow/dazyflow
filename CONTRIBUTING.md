@@ -10,7 +10,7 @@ covers what CI expects from a change.
 
 ## Setup
 
-Go (version in [go.mod](go.mod)), Node (version in [.nvmrc](.nvmrc)), Python 3
+Go (version in [go.mod](go.mod)), Node (version in [web/.nvmrc](web/.nvmrc)), Python 3
 for the runner tests, Docker for Postgres. There is no in-memory mode — `dzd`
 requires Postgres.
 

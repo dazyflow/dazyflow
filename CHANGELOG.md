@@ -20,6 +20,17 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
   unnoticed. Their READMEs still read as worked examples; nothing about what
   they exercise changed.
 
+- **Root-level `SCENARIOS.md` and `tests/scenarios.md` now sit with the graphs
+  that back them**, as `tests/usecases/README.md` and
+  `tests/scenarios/README.md`. Each doc's verdicts are backed by the `NN-*.json`
+  graphs in the directory it now lives in, and the two were siblings filed in
+  different places. `daemon/flowgen_eval_test.go` derives the corpus path from
+  `referenceDir` rather than naming it twice.
+
+- **`.nvmrc` moved to `web/.nvmrc`.** Node exists in this repo only for the web
+  app; at the root it implied the whole repository was a Node project. CI reads
+  it via `node-version-file`, and `nvm` still resolves it from `web/`.
+
 ### Removed
 
 - **Seven Markdown files, ~2,600 lines.** `REVIEW.md` and

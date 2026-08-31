@@ -5,7 +5,7 @@ package journey
 
 // Running the scenario corpus, rather than validating it on paper.
 //
-// /SCENARIOS.md and tests/usecases/ prove each flow COMPOSES: the steps exist,
+// tests/usecases/ (its README and graphs) proves each flow COMPOSES: the steps exist,
 // the wiring type-checks, the formulas do what they claim on sample data. None
 // of that runs the engine. These tests take the graphs as saved and put them
 // through the real stack — save, publish, fire, wait — with every outside

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Package usecases validates the ten most-requested use cases in
-// /SCENARIOS.md against the real native catalog. Each NN-*.json is a graph
+// README.md against the real native catalog. Each NN-*.json is a graph
 // that implements one use case as a non-technical buyer would describe it;
 // the test puts every graph through the same authoring gate the product uses
 // when a flow is saved (core.ValidateGraphFull) plus a param-level check the
