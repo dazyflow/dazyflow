@@ -23,6 +23,37 @@ into the image.)
 
 ## [Unreleased]
 
+### Changed
+
+- **A failed deploy trigger now says what to check.** The step ended in
+  `curl -f`, whose entire report is `curl: (22) The requested URL returned
+  error: 401` — the least informative thing that exchange can produce, since
+  the `/trigger` endpoint answers *every* pre-authentication failure with an
+  identical 401 on purpose so it never reveals which flows exist. Four
+  different causes (wrong key, wrong tenant/workspace/flow, an unpublished
+  flow, a webhook step with no secrets) arrive looking the same, and the one
+  clarifying detail the server does send — the response body — was discarded
+  by the flag.
+
+  The call keeps the body and the status now, prints them, and on a 401 lists
+  the four causes plus the two API calls that separate them. The distinction
+  worth spelling out is that `/trigger` authenticates against the **published**
+  revision while the editor shows the draft, so a key rotated and left
+  unpublished reads as correct in the UI and still 401s in CI. A 403 is past
+  auth and carries a machine-readable code (`flow_disabled`,
+  `trigger_disabled`), so it is reported verbatim as an app-side problem rather
+  than a CI one.
+
+  Both secrets are also shape-checked before a request is spent, because the
+  failure that prompted this was a paste artifact rather than a rotation: they
+  moved from a builds.sr.ht *file* secret, sourced with `.`, into GitHub
+  secrets, and the shell used to strip quoting that GitHub keeps verbatim. A
+  key arriving as `"abc"`, or as the whole line `DAZYFLOW_WEBHOOK_KEY=abc`, is
+  otherwise indistinguishable from a key that no longer matches. Surrounding
+  whitespace is trimmed rather than rejected, mirroring the server's own bearer
+  parser, so a value that works today keeps working; neither check ever echoes
+  a value.
+
 ## [0.28.0] - 2026-08-31
 
 ### Security

@@ -380,22 +380,96 @@ jobs:
       # asked to deploy has no such excuse, and a silent skip is precisely the
       # "green build that shipped nothing" this setup exists to prevent.
       #
-      # A 401 means the key OR an unpublished flow — the endpoint answers both
-      # identically on purpose, so it never reveals which flows exist. Check the
-      # flow is published before assuming the key rotated.
+      # The call deliberately does NOT use curl -f. That flag discards the
+      # response body and reports "curl: (22) ... error: 401", which is the least
+      # informative thing the exchange can say: the endpoint answers every
+      # pre-authentication failure with an identical 401 on purpose (it must not
+      # reveal which flows exist), so the status alone leaves four causes open
+      # and the body plus the checklist below is all a reader gets. A 403, by
+      # contrast, carries a machine-readable code worth printing verbatim.
+      #
+      # Both secrets are also shape-checked before a request is spent, because
+      # the failure mode that actually happened is a paste artifact: these moved
+      # from a builds.sr.ht *file* secret, sourced with `.`, into GitHub secrets,
+      # and the shell used to strip the quotes that GitHub keeps. A key arriving
+      # as `"abc"` or as the whole line `DAZYFLOW_WEBHOOK_KEY=abc` is otherwise
+      # indistinguishable from a rotated key. Neither check ever echoes a value.
       - name: Trigger deploy
         if: inputs.publish && inputs.deploy
         env:
           DAZYFLOW_WEBHOOK_KEY: ${{ secrets.DAZYFLOW_WEBHOOK_KEY }}
           DAZYFLOW_FLOW: ${{ secrets.DAZYFLOW_FLOW }}
+          VER: ${{ steps.ver.outputs.ver }}
         run: |
           if [ -z "$DAZYFLOW_WEBHOOK_KEY" ] || [ -z "$DAZYFLOW_FLOW" ]; then
             echo "::error::deploy requested but DAZYFLOW_WEBHOOK_KEY / DAZYFLOW_FLOW are not set"
             exit 1
           fi
-          curl -fsS -X POST \
-            -H "Authorization: Bearer $DAZYFLOW_WEBHOOK_KEY" \
+
+          # Surrounding whitespace is stripped rather than rejected: the server's
+          # bearer parser trims the token (daemon/webhook.go stripBearer), so a
+          # value carrying a stray newline works today and must keep working.
+          # What is left after trimming has to be usable verbatim.
+          trim() { printf '%s' "$1" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'; }
+          KEY=$(trim "$DAZYFLOW_WEBHOOK_KEY")
+          FLOW=$(trim "$DAZYFLOW_FLOW")
+
+          # The endpoint wants exactly <tenant>/<workspace>/<flow-id>; anything
+          # else is a 400 whose body we would only see after the request. The
+          # segment count is safe to print, the value is not.
+          segs=$(printf '%s' "$FLOW" | awk -F/ '{print NF}')
+          case "$FLOW" in
+            /*|*/|*//*|DAZYFLOW_FLOW=*|*[\"\']*|*[[:space:]]*) segs=bad ;;
+          esac
+          if [ "$segs" != 3 ]; then
+            echo "::error::DAZYFLOW_FLOW must be exactly <tenant>/<workspace>/<flow-id> with no quotes, spaces or leading/trailing slash (got $segs segment(s))"
+            exit 1
+          fi
+
+          case "$KEY" in
+            DAZYFLOW_WEBHOOK_KEY=*|*[\"\']*|*[[:space:]]*)
+              echo "::error::DAZYFLOW_WEBHOOK_KEY is not a bare key — it is quoted, contains whitespace, or is a whole shell assignment. Store just the key value."
+              exit 1 ;;
+          esac
+
+          out="$RUNNER_TEMP/deploy-trigger.body"
+          code=$(curl -sS -o "$out" -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $KEY" \
             -H "Content-Type: application/json" \
-            -d '{"version":"${{ steps.ver.outputs.ver }}"}' \
-            "https://dazyflow.app/trigger/$DAZYFLOW_FLOW" >/dev/null
-          echo "deploy triggered for ${{ steps.ver.outputs.ver }}"
+            -d "{\"version\":\"$VER\"}" \
+            "https://dazyflow.app/trigger/$FLOW") || {
+            echo "::error::deploy trigger could not reach dazyflow.app for $VER — images published, NOT deployed"
+            exit 1
+          }
+          body=$(head -c 2000 "$out")
+
+          case "$code" in
+            2*)
+              # 202 + {"job_id": "..."} — the run id is worth keeping in the log.
+              echo "deploy triggered for $VER (HTTP $code) $body"
+              exit 0 ;;
+            401)
+              echo "::error::deploy trigger REFUSED for $VER (HTTP 401) — images published, NOT deployed"
+              echo "server said: $body"
+              echo "The endpoint answers every pre-auth failure identically, so check all four:"
+              echo "  1. DAZYFLOW_WEBHOOK_KEY no longer matches a key on the flow's webhook step."
+              echo "  2. DAZYFLOW_FLOW names a tenant/workspace/flow that does not exist."
+              echo "  3. The flow is not published. /trigger fires the PUBLISHED revision, never"
+              echo "     the draft — a key rotated in the editor and left unpublished still shows"
+              echo "     as correct in the UI and still 401s here."
+              echo "  4. The webhook step carries no secrets at all."
+              echo "The live key is the one on the published revision:"
+              echo "  GET /api/v1/me/flows/<flow-id>/published        -> published, published_commit, dirty"
+              echo "  GET /api/v1/me/flows/<flow-id>?ref=<commit>     -> .nodes[] webhook_input .params.secrets"
+              exit 1 ;;
+            403)
+              # Past auth: the body names the reason (flow_disabled /
+              # trigger_disabled), and both are fixed in the app, not in CI.
+              echo "::error::deploy trigger authenticated but was rejected for $VER (HTTP 403) — images published, NOT deployed"
+              echo "server said: $body"
+              exit 1 ;;
+            *)
+              echo "::error::deploy trigger failed for $VER (HTTP $code) — images published, NOT deployed"
+              echo "server said: $body"
+              exit 1 ;;
+          esac
