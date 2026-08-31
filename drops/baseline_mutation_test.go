@@ -89,12 +89,11 @@ func strLong(n int) string {
 // TestAllDrops_BaselineMutation corrupts one param at a time on an otherwise
 // valid job and asserts the safety + output-port contracts hold.
 func TestAllDrops_BaselineMutation(t *testing.T) {
-	ws := t.TempDir()
-	scratch := t.TempDir()
-
 	for _, d := range allDrops(t) {
 		d := d
 		t.Run(d.id, func(t *testing.T) {
+			t.Parallel()
+			ws, scratch := t.TempDir(), t.TempDir()
 			base := baselineParams(d.manifest)
 			if base == nil {
 				t.Skipf("drop %q ships no example params to build a baseline from", d.id)
@@ -115,10 +114,10 @@ func TestAllDrops_BaselineMutation(t *testing.T) {
 					params[key] = v
 
 					job := core.Job{
-						ID:            "mutate-job",
-						GraphID:       "mutate-graph",
-						NodeID:        "mutate-node",
-						Tenant:        "mutate-tenant",
+						ID:            "mutate-job-" + d.id,
+						GraphID:       "mutate-graph-" + d.id,
+						NodeID:        "mutate-node-" + d.id,
+						Tenant:        "mutate-tenant-" + d.id,
 						Params:        params,
 						WorkspaceRoot: ws,
 						ScratchRoot:   scratch,

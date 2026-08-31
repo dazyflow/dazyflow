@@ -62,10 +62,10 @@ func checkPorts(t *testing.T, side string, ports []core.Port) {
 // it's silently lost. (Most adversarial inputs make a drop error, which is
 // fine: this asserts only on the StatusOK runs, where the contract bites.)
 func TestAllDrops_EmittedOutputsAreDeclared(t *testing.T) {
-	ws := t.TempDir()
-	scratch := t.TempDir()
 	for _, d := range allDrops(t) {
 		t.Run(d.id, func(t *testing.T) {
+			t.Parallel()
+			ws, scratch := t.TempDir(), t.TempDir()
 			declared := map[string]bool{}
 			for _, p := range d.manifest.Outputs {
 				declared[p.Port] = true
@@ -82,7 +82,7 @@ func TestAllDrops_EmittedOutputsAreDeclared(t *testing.T) {
 			// always did — see baseline_mutation_test.go, which corrupts one
 			// param of a VALID example at a time and does reach those paths.
 			for _, v := range nastyValues() {
-				job := jobWithValue(v, ws, scratch)
+				job := jobWithValue(d.id, v, ws, scratch)
 				out := runDropSafely(t.Context(), d.transport, job, 1500*time.Millisecond)
 				if out.timedOut || out.panicVal != nil || out.err != nil {
 					continue

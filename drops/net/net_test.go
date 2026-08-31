@@ -395,9 +395,13 @@ func TestCov_WebhookSendIdempotencyKeySet(t *testing.T) {
 // ===== ratelimit.go SetEgressRateLimit / headerInt / gc / evict ======
 
 func TestCov_SetEgressRateLimitTunes(t *testing.T) {
-	// Save & restore the package global so other tests are unaffected.
-	saved := egressLimit
-	t.Cleanup(func() { egressLimit = saved })
+	// Restore the disabled pacing TestMain sets up. Re-assigning the pointer
+	// would NOT do it: SetEgressRateLimit mutates the limiter in place, so the
+	// saved pointer and the mutated one are the same object. Leaking the
+	// retune at the end of this test left pacing on at 600/min for everything
+	// declared after it, which is how TestSiteCheck_FiresOnTransitionsOnly
+	// came to spend 10s asleep on cooldowns.
+	t.Cleanup(func() { SetEgressRateLimit(0, 0, 0) })
 
 	SetEgressRateLimit(0, 0, 0) // disable; burst/conc fall back to defaults
 	if egressLimit.rate > 0 {

@@ -13,15 +13,18 @@ import (
 // registered drop is handed every nasty value across every common param and
 // input port. None may panic, hang, or break the Result contract.
 func TestAllDrops_SurviveAdversarialJobs(t *testing.T) {
-	workspace := t.TempDir()
-	scratch := t.TempDir()
 	values := nastyValues()
 
 	for _, d := range allDrops(t) {
 		d := d
 		t.Run(d.id, func(t *testing.T) {
+			// Parallel across drops: each spray is independent, and a few
+			// drops (delay above all) spend most of their run asleep against
+			// the watchdog budget rather than on CPU.
+			t.Parallel()
+			workspace, scratch := t.TempDir(), t.TempDir()
 			for i, v := range values {
-				job := jobWithValue(v, workspace, scratch)
+				job := jobWithValue(d.id, v, workspace, scratch)
 				out := runDropSafely(context.Background(), d.transport, job, 1500*time.Millisecond)
 				if out.panicVal != nil {
 					t.Fatalf("value #%d (%T): PANIC %v\n%s", i, v, out.panicVal, out.stack)
@@ -39,18 +42,17 @@ func TestAllDrops_SurviveAdversarialJobs(t *testing.T) {
 // context. A drop must notice and return promptly (a cancelled error, a fast
 // param error — anything but blocking until the watchdog).
 func TestAllDrops_RespectContextCancellation(t *testing.T) {
-	workspace := t.TempDir()
-	scratch := t.TempDir()
-
 	for _, d := range allDrops(t) {
 		d := d
 		t.Run(d.id, func(t *testing.T) {
+			t.Parallel()
+			workspace, scratch := t.TempDir(), t.TempDir()
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel() // pre-cancelled
 
 			// Use a non-trivial but well-typed job so the drop gets past
 			// param validation into any real work, where ctx matters.
-			job := jobWithValue("ctx-probe", workspace, scratch)
+			job := jobWithValue(d.id, "ctx-probe", workspace, scratch)
 			out := runDropSafely(ctx, d.transport, job, 1500*time.Millisecond)
 			if out.panicVal != nil {
 				t.Fatalf("PANIC on cancelled ctx: %v\n%s", out.panicVal, out.stack)

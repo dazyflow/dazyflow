@@ -221,7 +221,14 @@ var commonInputPorts = []string{
 // jobWithValue sprays v across every common param and input port, plus a
 // sandbox root, so a drop exercises its real code path rather than failing
 // on a missing workspace.
-func jobWithValue(v any, workspace, scratch string) core.Job {
+//
+// dropID seeds the tenant/graph/node identity. Every job used to carry the
+// same "fuzz-tenant"/"fuzz-graph"/"fuzz-node", which was harmless while the
+// subtests ran one at a time and is not once they run in parallel: a drop that
+// keys state by that identity (a watch marker, a dedupe cursor, a poll state)
+// would have two subtests writing the same key at once. Distinct identities
+// are also closer to what the engine actually hands a drop.
+func jobWithValue(dropID string, v any, workspace, scratch string) core.Job {
 	params := make(map[string]any, len(commonParamKeys))
 	for _, k := range commonParamKeys {
 		params[k] = v
@@ -231,10 +238,10 @@ func jobWithValue(v any, workspace, scratch string) core.Job {
 		input[p] = core.Ref{Inline: v}
 	}
 	return core.Job{
-		ID:            "fuzz-job",
-		GraphID:       "fuzz-graph",
-		NodeID:        "fuzz-node",
-		Tenant:        "fuzz-tenant",
+		ID:            "fuzz-job-" + dropID,
+		GraphID:       "fuzz-graph-" + dropID,
+		NodeID:        "fuzz-node-" + dropID,
+		Tenant:        "fuzz-tenant-" + dropID,
 		Params:        params,
 		Input:         input,
 		WorkspaceRoot: workspace,

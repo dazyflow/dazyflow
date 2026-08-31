@@ -94,6 +94,35 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
   existed; the bcrypt change above made the suite fast enough to start losing
   the race.
 
+- **Outbound pacing leaked between tests in `drops/net` and `drops/geo`.** A
+  stubbed 429/503 with no `Retry-After` parks its host on the limiter's
+  `fallbackCooldown` (5s), and because the limiter is process-wide the next test
+  to reach 127.0.0.1 waited it out. `TestSiteCheck_FiresOnTransitionsOnly` spent
+  10s asleep; `TestPhoton_ForwardSuccess` and `TestGeoHTTPFailure_StatusCodes`
+  5s each. Both packages now disable pacing in `TestMain` — the limiter's own
+  behaviour is still covered, because every test in `ratelimit_test.go` drives
+  an isolated `newTestLimiter` rather than the global.
+
+  `TestCov_SetEgressRateLimitTunes` was the other half of it. It saved and
+  restored `egressLimit`, but `SetEgressRateLimit` mutates the limiter in place,
+  so restoring the pointer restored nothing and its closing retune to 600/min
+  stayed in force for every test declared after it. It now re-disables pacing in
+  its cleanup. Measured: **drops/geo 11.1s → 1.1s, drops/net 15.8s → 4.8s**, and
+  the drops tree 151.7s → 124.7s.
+
+- **The five `TestAllDrops_*` contract sprays run their per-drop subtests in
+  parallel.** 163 drops each, run one at a time, and several spend their run
+  asleep against the 1500ms watchdog budget rather than on CPU — `delay` cost
+  1.5s in three separate tests. The precondition was isolation, so that came
+  first: the shared `ws`/`scratch` temp dirs are now per-subtest, and
+  `jobWithValue` seeds tenant/graph/node from the drop id instead of every job
+  carrying the same `fuzz-tenant`/`fuzz-graph`/`fuzz-node`. That identity was
+  harmless while the subtests were serial and would not have been once they
+  overlap — any drop keying state by it (a watch marker, a dedupe cursor, a poll
+  marker) would have had two subtests writing one key. Subtest counts are
+  unchanged at 163 per test, so no coverage moved. Measured: **the drops package
+  28.0s → 17.3s standalone**, stable over five race runs with no data races.
+
 ### Removed
 
 - **Seven Markdown files, ~2,600 lines.** `REVIEW.md` and
