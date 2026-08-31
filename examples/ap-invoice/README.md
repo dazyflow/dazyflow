@@ -65,13 +65,13 @@ The graph and policies are honest. What's missing for an actual production AP pr
 
 | Gap | Today | Real |
 |---|---|---|
-| Invoice ID source | Hardcoded in graph URL | Webhook body → graph input (TODO) |
+| Invoice ID source | Hardcoded in this demo's graph URL | Wire the `webhook_input` trigger's body into the step (`drops/trigger/webhook_input.go`) |
 | OCR step | Skipped (data ships fully-formed from mock) | Real OCR vendor with retry on transient failures |
 | ERP integration | Mock `/approvals/auto` | Actual NetSuite / SAP / Dynamics API |
 | Slack notification | Mock `/notifications/cfo` | Real Slack webhook with templated message |
-| Multi-step approval | One-shot | `await_approval` node that pauses until human input (TODO) |
+| Multi-step approval | One-shot | Chain `await_approval` steps (`drops/flow/await_approval.go`) |
 | Idempotency keys | None | Required to safely retry POSTs to payment systems |
-| Vendor portal pull | Manually triggered | Cron + IMAP/sFTP modules (TODO) |
+| Vendor portal pull | Manually triggered | A cron trigger exists (`drops/trigger/cron_trigger.go`); IMAP/sFTP ingestion does not |
 | Audit retention | Workspace Git history | Compliance-grade WORM storage with N-year retention |
 
 The point of the demo isn't that this is a finished AP product. It's
@@ -83,6 +83,6 @@ real corporate workflows.
 
 1. **Secrets are whole-string substitutions.** `Authorization: secret://KEY` resolves to whatever's stored under that secret name. So the stored value must contain `Bearer <token>` if the API expects Bearer auth — not just the token. Template-style substitution (`Bearer ${secret.KEY}`) is also supported for partial-string injection.
 
-2. **Webhook bodies are still ignored.** The graph has no access to `POST /trigger/... <body>`. Workflows that need the inbound data (e.g. "process the invoice whose ID is in the webhook payload") must hardcode IDs or fetch a "latest" endpoint. The fix is a `webhook_input` module the engine seeds with the body.
+2. **Webhook bodies used to be ignored** — the graph had no access to `POST /trigger/... <body>`, so a workflow needing the inbound data had to hardcode IDs or fetch a "latest" endpoint. That is fixed: the `webhook_input` trigger seeds the body into the graph. This demo predates it and still hardcodes its IDs.
 
 3. **Port collisions hit demos hard.** Default :8080 collided with something on the dev box, dzd silently lost the listener thread. Picked :18080 to dodge; production deployments need explicit health-check failures when a bind fails (current behavior: log + continue, which is wrong).

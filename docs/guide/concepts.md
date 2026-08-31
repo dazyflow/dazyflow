@@ -51,13 +51,9 @@ Steps pass their results down the line. The **output** of one step becomes the
 > *Send SMS* step's **To** input. Now the SMS goes to whoever placed the order —
 > automatically, every time, without you typing anything.
 
-Picture each step as an appliance with sockets: outputs on one side, inputs on
-the other. Wiring is plugging one into the next.
-
 ## Two ways to give a step a value: fill it in, or connect it
 
-A step needs values to work with. There are two ways to provide one, and this is
-the single most useful thing to understand:
+This is the single most useful thing to understand:
 
 1. **Fill it in (a Setting).** You type a fixed value on the step — e.g. always
    send from *orders@myshop.se*. Good for things that never change.
@@ -149,11 +145,8 @@ Four steps, wired output-to-input, running on their own. That's Dazyflow.
 
 ## Where next
 
-- Put it into practice: [Build your first flow](./first-flow) — ten minutes, no accounts needed.
-- [Connect an app](./connect-an-app) so a flow can reach Gmail, Slack, Fortnox and the rest.
-- [Make a flow run by itself](./triggers-and-schedules) — schedules, triggers and publishing.
-- [Forms & webhooks](./forms-and-webhooks) — let the outside world start a flow.
-- [Teams & approvals](./teams-and-approvals) — bring colleagues in, and pause a flow for a human yes.
-- [When a run fails](./when-a-flow-fails) — reading a failure and retrying it safely.
-- Browse everything you can add in the [Step catalog](../reference/steps/).
-- Look up any unfamiliar word in the [Glossary](./glossary).
+- **[Build your first flow](./first-flow)** — ten minutes, no accounts needed.
+- **[Connect an app](./connect-an-app)** — so a flow can reach Gmail, Slack, Fortnox.
+- **[Triggers & schedules](./triggers-and-schedules)** — make a flow run by itself.
+- **[Step catalog](../reference/steps/)** — everything you can add.
+- **[Glossary](./glossary)** — any word you didn't recognise above.

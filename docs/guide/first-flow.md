@@ -32,8 +32,7 @@ In the gallery, find **See a flow run (no setup)** under the **Try it now**
 category, and click **Use this template**.
 
 Every other template needs an account connected somewhere — a Google Sheet, a
-Slack channel. This one needs nothing at all: it carries its own sample table.
-That makes it the fastest honest answer to "what does this thing actually do?"
+Slack channel. This one carries its own sample table, so it needs nothing.
 
 You land in the **flow editor**, looking at two steps joined by a line: a sample
 table, feeding a step that formats it into a tidy summary.
@@ -46,10 +45,9 @@ A moment later you get **"Done — the flow ran."** and the text the last step
 produced. That's a complete [run](./glossary#run): Dazyflow carried out every
 step in order and handed you the result.
 
-Click **See the full run** to open the run in detail — every step, in the order
-they happened, with what each one produced. This page is where you'll spend your
-time whenever something doesn't behave, so it's worth a look now while
-everything is working.
+Click **See the full run** for the detail: every step, in the order it happened,
+with what each produced. This is the page you'll live on when something
+misbehaves — worth a look now, while everything works.
 
 > **Run** is for testing. It runs the flow once, immediately, using whatever is
 > on your canvas right now — including unsaved edits. It never waits for a
@@ -93,7 +91,7 @@ next page.
 
 ## What to build second
 
-Now build something real. Two good second flows, both in the gallery:
+Now build something real. Three good second flows, all in the gallery:
 
 - **Watch a page → ping my phone.** Checks a web page every hour and notifies you
   only when the words on it actually change. Needs no account — just an

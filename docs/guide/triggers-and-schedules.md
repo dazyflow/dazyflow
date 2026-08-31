@@ -63,7 +63,7 @@ Click **Publish**, and:
 > Its triggers will start running this version. Your draft stays editable — only
 > publishing again pushes new edits live.
 
-That's the whole model, and it's worth reading twice:
+That's the whole model:
 
 - **The published version is what runs.** Schedules, forms and app events all
   hit the version you last published.

@@ -1,5 +1,6 @@
 ---
-title: Runners — run scripts on your own machines sidebar_label: Runners
+title: Runners — run scripts on your own machines
+sidebar_label: Runners
 ---
 
 # Runners — run scripts on your own machines

@@ -5,6 +5,26 @@ only has two flags, both one-shot operator commands that exit after
 running (`--rotate-master-key`, `--import-users-from-json`). For the
 canonical list see `.env.example`.
 
+## Contents
+
+- [TLS / reverse-proxy contract](#tls--reverse-proxy-contract)
+- [Kubernetes — single pod (simplest start)](#kubernetes--single-pod-simplest-start)
+- [Scaling up — load balancer, TLS, multi-replica](#scaling-up--load-balancer-tls-multi-replica)
+- [Per-org subdomains (optional)](#per-org-subdomains-optional)
+- [Documentation site (docs.dazyflow.app)](#documentation-site-docsdazyflowapp)
+- [Version stamping & upgrades](#version-stamping--upgrades)
+- [Durability](#durability)
+- [First admin (bootstrap)](#first-admin-bootstrap)
+- [Managing tenants, tiers & entitlements](#managing-tenants-tiers--entitlements)
+- [Support tickets & consented flow access (optional)](#support-tickets--consented-flow-access-optional)
+- [Fail-closed config guard](#fail-closed-config-guard)
+- [Security knobs worth setting](#security-knobs-worth-setting)
+- [Observability](#observability)
+- [Graceful shutdown](#graceful-shutdown)
+- [Human approvals (await_approval)](#human-approvals-await_approval)
+- [Steps](#steps)
+- [Secrets](#secrets)
+
 ## TLS / reverse-proxy contract
 
 `dzd` does **not** terminate TLS. Run it behind a TLS-terminating reverse
@@ -479,127 +499,6 @@ sandboxes are git/filesystem-backed under `DAZYFLOW_DATA_DIR`.) Provide a
 stable `DAZYFLOW_MASTER_KEY` (32-byte base64); losing it makes every
 stored secret undecryptable.
 
-### First admin (bootstrap)
-
-A fresh instance has no users, and signup is invite-only by default
-(`DAZYFLOW_ENABLE_SIGNUP` off) — a chicken-and-egg, since there's no admin
-to send the first invite. Resolve it with the platform-admin allowlist:
-
-```sh
-DAZYFLOW_PLATFORM_ADMINS=you@example.com   # comma-separated for several
-```
-
-Emails in this allowlist may sign up via `POST /api/v1/auth/signup` (the
-web UI's sign-up form) **even while `DAZYFLOW_ENABLE_SIGNUP` is off** — so
-you don't have to open self-serve signup to the world just to create your
-own account. On sign-up (and every later sign-in) the listed email is
-granted `platform:admin`. The bypass is self-limiting: once the account
-exists, a second signup for that email is rejected as a duplicate, and
-signup stays closed for everyone else. From there you invite the rest of
-your team as the platform admin.
-
-(With Google SSO configured, the first sign-in by a listed email
-auto-provisions the account and elevates it the same way — no signup
-toggle involved at all.)
-
-### Managing tenants, tiers & entitlements
-
-Everything a multi-tenant operator needs is in the web UI under **Admin →
-Platform** (visible to `platform:admin` accounts) — no SQL required:
-
-- **Orgs** (`/admin/platform/orgs`) — every tenant on the instance; open one
-  to suspend/resume it or adjust its plan.
-- **Users** (`/admin/platform/users`) — every account across all orgs;
-  suspend/unsuspend, inspect roles, and **grant or revoke `platform:admin`**
-  (User detail → Platform role). This is the runtime counterpart to the
-  `DAZYFLOW_PLATFORM_ADMINS` env allowlist: it adds/removes the cross-tenant
-  super-admin role without a restart. A grant takes effect on the target's next
-  sign-in; a revoke drops their live sessions so it applies immediately. Admins
-  granted via the env allowlist show a non-revocable badge — to remove one,
-  edit `DAZYFLOW_PLATFORM_ADMINS` and restart (a UI revoke would be undone at
-  their next login).
-- **Tiers** (`/admin/platform/tiers`) — reusable bundles of limits (runs/month,
-  disk, concurrency, members, retention, max flows/nodes/timeout, polling). The
-  built-in **Free** and **Pro** tiers ship with every limit unset, so they
-  inherit the deployment-global defaults (the `DAZYFLOW_FREE_*` knobs) and a
-  self-host with those unset is effectively unlimited. Create custom tiers
-  (e.g. an Enterprise tier) here.
-- **Org detail → Plan & limits** — assign a tier to an org, pin its plan
-  (`free`/`pro`), grant a comp or trial, or override any single limit. The
-  effective value resolves *override → tier → global default*, where `0 =
-  unlimited/inherit`.
-- **Steps** (`/admin/platform/drops`) — enable/disable connectors globally or
-  per-tenant.
-
-Plans/tiers are **independent of Stripe**: a `platform:admin` can comp an org to
-Pro or assign a custom tier with no billing configured at all. Stripe only adds
-the self-serve Checkout/portal buttons (see *Billing / plan gates* in
-`.env.example`); leave it unset and the whole plan/billing surface stays hidden
-in the UI while you still manage entitlements from Admin → Platform.
-
-### Support tickets & consented flow access (optional)
-
-Off by default. Set `DAZYFLOW_SUPPORT_ENABLED=1` to turn on the in-app support
-surface: customers file tickets about a flow and chat with support in-app, support
-agents work a **cross-org queue** (assign/claim, filter by owner and status), and
-an agent can request read-only access to **one** flow that an org admin approves
-for a time-boxed window. Two properties hold no matter what:
-
-- Support only ever sees a **redacted** view — parameter values are replaced by
-  their shape, run payloads are dropped, `${secret.…}` references are kept as
-  references, and a secret-detector sweeps every remaining string. Filing a ticket
-  auto-attaches such a bundle, so most tickets are diagnosable with no live access
-  at all.
-- Access is **consented, scoped, time-boxed and audited**: an approved grant
-  covers one (agent, org, flow) triple for `4h` by default, the org can revoke it
-  at any time from **Admin → Support access**, and every support action is written
-  to the **org's own** audit log.
-
-Enabling the flag is not enough on its own — the surface stays inert until you
-provision a support agent under **Admin → Platform → Support agents** (a
-`platform:admin` is *not* automatically support staff; the two roles are
-deliberately separate). A grant takes effect on that person's next sign-in.
-
-**Unread reminders.** Support mail already goes out on every reply. On top of
-that, `DAZYFLOW_SUPPORT_NUDGE_AFTER` (default `24h`, `0` to disable) reminds
-whichever side has left a message unread that long — the customer who never
-opened the answer, or the queue when nobody has looked at a question. Three
-properties keep it from becoming noise:
-
-- It is **read-aware**. Opening the thread records a receipt, so someone who has
-  read the message and simply not replied yet is never chased. Someone who has
-  never opened the ticket at all is, because the age is the floor.
-- It fires **once per waiting period**, not once per sweep. A new message from
-  the other side starts a new period; nothing else does.
-- It never fires on a **resolved or closed** ticket, and a reply from either side
-  ends the wait.
-
-Multi-node installs need no extra configuration: the sweep runs on the scheduler
-leader only, so recipients get one reminder rather than one per daemon.
-
-### Fail-closed config guard
-
-`dzd` **refuses to start** if it would run with a bundled insecure
-default — a missing `DAZYFLOW_POSTGRES_DSN`, a DSN still using the shipped
-default DB password, a DSN that does not enforce TLS (`sslmode` is
-anything other than `require`/`verify-ca`/`verify-full`), or an empty
-`DAZYFLOW_MASTER_KEY`. The boot log prints a `FATAL` line naming each
-offending value. Fix them (set a strong `POSTGRES_PASSWORD`, a TLS
-`sslmode`, and a real master key) and restart.
-
-The TLS check has no loopback exemption: even when Postgres is a sibling
-container on the same host, the DSN must enforce TLS — the DB link carries
-personal data and the rows holding wrapped DEKs, and the guard can't tell
-on-host from remote. If you use the bundled `postgres` service, see
-[Postgres TLS for the bundled service](#postgres-tls-for-the-bundled-service)
-below; for a managed/remote DB the provider already terminates TLS and you
-just append `?sslmode=require` to the DSN.
-
-`DAZYFLOW_DEV=1` downgrades the guard from fatal to warnings so the
-bundled defaults boot for a local trial. **Never set it in production** —
-it exists only so `docker compose up -d` works for a throwaway smoke
-test.
-
 ### Postgres TLS for the bundled service
 
 The bundled `postgres:16-alpine` ships with **SSL off**, so the fail-closed
@@ -706,6 +605,127 @@ the DB and must be backed up alongside it:
   if your flows treat them as durable — `file_write` outputs are **not**
   derived; they're only on disk. That's why the whole `/data` volume is on
   the back-up list above.
+
+## First admin (bootstrap)
+
+A fresh instance has no users, and signup is invite-only by default
+(`DAZYFLOW_ENABLE_SIGNUP` off) — a chicken-and-egg, since there's no admin
+to send the first invite. Resolve it with the platform-admin allowlist:
+
+```sh
+DAZYFLOW_PLATFORM_ADMINS=you@example.com   # comma-separated for several
+```
+
+Emails in this allowlist may sign up via `POST /api/v1/auth/signup` (the
+web UI's sign-up form) **even while `DAZYFLOW_ENABLE_SIGNUP` is off** — so
+you don't have to open self-serve signup to the world just to create your
+own account. On sign-up (and every later sign-in) the listed email is
+granted `platform:admin`. The bypass is self-limiting: once the account
+exists, a second signup for that email is rejected as a duplicate, and
+signup stays closed for everyone else. From there you invite the rest of
+your team as the platform admin.
+
+(With Google SSO configured, the first sign-in by a listed email
+auto-provisions the account and elevates it the same way — no signup
+toggle involved at all.)
+
+## Managing tenants, tiers & entitlements
+
+Everything a multi-tenant operator needs is in the web UI under **Admin →
+Platform** (visible to `platform:admin` accounts) — no SQL required:
+
+- **Orgs** (`/admin/platform/orgs`) — every tenant on the instance; open one
+  to suspend/resume it or adjust its plan.
+- **Users** (`/admin/platform/users`) — every account across all orgs;
+  suspend/unsuspend, inspect roles, and **grant or revoke `platform:admin`**
+  (User detail → Platform role). This is the runtime counterpart to the
+  `DAZYFLOW_PLATFORM_ADMINS` env allowlist: it adds/removes the cross-tenant
+  super-admin role without a restart. A grant takes effect on the target's next
+  sign-in; a revoke drops their live sessions so it applies immediately. Admins
+  granted via the env allowlist show a non-revocable badge — to remove one,
+  edit `DAZYFLOW_PLATFORM_ADMINS` and restart (a UI revoke would be undone at
+  their next login).
+- **Tiers** (`/admin/platform/tiers`) — reusable bundles of limits (runs/month,
+  disk, concurrency, members, retention, max flows/nodes/timeout, polling). The
+  built-in **Free** and **Pro** tiers ship with every limit unset, so they
+  inherit the deployment-global defaults (the `DAZYFLOW_FREE_*` knobs) and a
+  self-host with those unset is effectively unlimited. Create custom tiers
+  (e.g. an Enterprise tier) here.
+- **Org detail → Plan & limits** — assign a tier to an org, pin its plan
+  (`free`/`pro`), grant a comp or trial, or override any single limit. The
+  effective value resolves *override → tier → global default*, where `0 =
+  unlimited/inherit`.
+- **Steps** (`/admin/platform/drops`) — enable/disable connectors globally or
+  per-tenant.
+
+Plans/tiers are **independent of Stripe**: a `platform:admin` can comp an org to
+Pro or assign a custom tier with no billing configured at all. Stripe only adds
+the self-serve Checkout/portal buttons (see *Billing / plan gates* in
+`.env.example`); leave it unset and the whole plan/billing surface stays hidden
+in the UI while you still manage entitlements from Admin → Platform.
+
+## Support tickets & consented flow access (optional)
+
+Off by default. Set `DAZYFLOW_SUPPORT_ENABLED=1` to turn on the in-app support
+surface: customers file tickets about a flow and chat with support in-app, support
+agents work a **cross-org queue** (assign/claim, filter by owner and status), and
+an agent can request read-only access to **one** flow that an org admin approves
+for a time-boxed window. Two properties hold no matter what:
+
+- Support only ever sees a **redacted** view — parameter values are replaced by
+  their shape, run payloads are dropped, `${secret.…}` references are kept as
+  references, and a secret-detector sweeps every remaining string. Filing a ticket
+  auto-attaches such a bundle, so most tickets are diagnosable with no live access
+  at all.
+- Access is **consented, scoped, time-boxed and audited**: an approved grant
+  covers one (agent, org, flow) triple for `4h` by default, the org can revoke it
+  at any time from **Admin → Support access**, and every support action is written
+  to the **org's own** audit log.
+
+Enabling the flag is not enough on its own — the surface stays inert until you
+provision a support agent under **Admin → Platform → Support agents** (a
+`platform:admin` is *not* automatically support staff; the two roles are
+deliberately separate). A grant takes effect on that person's next sign-in.
+
+**Unread reminders.** Support mail already goes out on every reply. On top of
+that, `DAZYFLOW_SUPPORT_NUDGE_AFTER` (default `24h`, `0` to disable) reminds
+whichever side has left a message unread that long — the customer who never
+opened the answer, or the queue when nobody has looked at a question. Three
+properties keep it from becoming noise:
+
+- It is **read-aware**. Opening the thread records a receipt, so someone who has
+  read the message and simply not replied yet is never chased. Someone who has
+  never opened the ticket at all is, because the age is the floor.
+- It fires **once per waiting period**, not once per sweep. A new message from
+  the other side starts a new period; nothing else does.
+- It never fires on a **resolved or closed** ticket, and a reply from either side
+  ends the wait.
+
+Multi-node installs need no extra configuration: the sweep runs on the scheduler
+leader only, so recipients get one reminder rather than one per daemon.
+
+## Fail-closed config guard
+
+`dzd` **refuses to start** if it would run with a bundled insecure
+default — a missing `DAZYFLOW_POSTGRES_DSN`, a DSN still using the shipped
+default DB password, a DSN that does not enforce TLS (`sslmode` is
+anything other than `require`/`verify-ca`/`verify-full`), or an empty
+`DAZYFLOW_MASTER_KEY`. The boot log prints a `FATAL` line naming each
+offending value. Fix them (set a strong `POSTGRES_PASSWORD`, a TLS
+`sslmode`, and a real master key) and restart.
+
+The TLS check has no loopback exemption: even when Postgres is a sibling
+container on the same host, the DSN must enforce TLS — the DB link carries
+personal data and the rows holding wrapped DEKs, and the guard can't tell
+on-host from remote. If you use the bundled `postgres` service, see
+[Postgres TLS for the bundled service](#postgres-tls-for-the-bundled-service)
+below; for a managed/remote DB the provider already terminates TLS and you
+just append `?sslmode=require` to the DSN.
+
+`DAZYFLOW_DEV=1` downgrades the guard from fatal to warnings so the
+bundled defaults boot for a local trial. **Never set it in production** —
+it exists only so `docker compose up -d` works for a throwaway smoke
+test.
 
 ## Security knobs worth setting
 

@@ -98,12 +98,13 @@ logic:
 
 ## What's not in this demo
 
-- **Per-tenant ACL on MCP servers.** Right now every workspace can
-  reach every registered server. Production needs tenant-scoped
-  registration (`acme can use mcp:slack but not mcp:fs`).
-- **HTTP+SSE transport.** Only stdio. The new "streamable HTTP" MCP
-  transport will be needed once SaaS-hosted MCP servers (Anthropic
-  Connectors, Cloudflare Workers MCP) become common.
+- **Per-tenant registration** — this demo registers one server
+  instance-wide at startup. The platform scopes servers and tools per tenant
+  (`engine/mcp/catalog.go`), and orgs register their own from
+  **Admin → MCP servers**; only instance-wide servers may be stdio, since a
+  tenant-supplied stdio server would be code execution as the daemon user.
+- **HTTP transport** — this demo is stdio. Streamable HTTP is implemented
+  (`engine/mcp/http.go`), and is what a tenant-registered server uses.
 - **Notifications + progress.** MCP supports server-initiated progress
   notifications; we drop them on the floor today. Worth wiring into
   Dazyflow's progress channel.

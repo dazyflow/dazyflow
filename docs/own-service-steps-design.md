@@ -19,6 +19,23 @@ catalog in `lookup` and `ManifestsForTenant`), `daemon/webapis.go` +
 on `daemon/mcpservers.go`), and `web/src/pages/admin/AdminWebAPIs.tsx` (a near
 sibling of `AdminMCPServers.tsx`).
 
+## Contents
+
+- [The gap this closes](#the-gap-this-closes)
+- [The core: one descriptor, two front ends](#the-core-one-descriptor-two-front-ends)
+- [What OpenAPI gives that MCP cannot](#what-openapi-gives-that-mcp-cannot)
+- [Connections: the ergonomic win, nearly free](#connections-the-ergonomic-win-nearly-free)
+- [The hard parts](#the-hard-parts)
+- [Reaching a service that isn't on the internet](#reaching-a-service-that-isnt-on-the-internet)
+- [Phasing](#phasing)
+- [Decisions taken (2026-08-27)](#decisions-taken-2026-08-27)
+- [Open questions](#open-questions)
+- [Deferred (deliberately not designed)](#deferred-deliberately-not-designed)
+- [Commit 1 as built (2026-08-27)](#commit-1-as-built-2026-08-27)
+- [Commit 2 as built (2026-08-27)](#commit-2-as-built-2026-08-27)
+- [Commit 3 as built (2026-08-28)](#commit-3-as-built-2026-08-28)
+- [Commit 4 as built (2026-08-28)](#commit-4-as-built-2026-08-28)
+
 ## The gap this closes
 
 A tenant with their own service — an internal orders API, a pricing service, the

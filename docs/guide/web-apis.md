@@ -1,5 +1,6 @@
 ---
-title: Web APIs — steps for your own service sidebar_label: Web APIs
+title: Web APIs — steps for your own service
+sidebar_label: Web APIs
 ---
 
 # Web APIs — steps for your own service

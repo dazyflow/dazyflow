@@ -16,6 +16,20 @@ check); `daemon/support_routes.go`, `daemon/ticket_routes.go`,
 `AdminSupport.tsx` / `AdminPlatformSupportAgents.tsx`. Off by default behind
 `DAZYFLOW_SUPPORT_ENABLED`.
 
+## Contents
+
+- [Goal](#goal)
+- [Prerequisite (build first): the redacted support bundle — **DONE**](#prerequisite-build-first-the-redacted-support-bundle--done)
+- [Data model](#data-model)
+- [Auth changes (grounded in existing `core/authz.go` + `core/rbac.go`)](#auth-changes-grounded-in-existing-coreauthzgo--corerbacgo)
+- [Flow / surfaces](#flow--surfaces)
+- [Hosted vs self-host](#hosted-vs-self-host)
+- [Phasing](#phasing)
+- [Tests — all written](#tests--all-written)
+- [Decisions taken (2026-07-03)](#decisions-taken-2026-07-03)
+- [Decisions resolved (nothing open)](#decisions-resolved-nothing-open)
+- [Deferred (deliberately not built)](#deferred-deliberately-not-built)
+
 ## Goal
 
 A Support surface where an org files a ticket about a flow, support staff

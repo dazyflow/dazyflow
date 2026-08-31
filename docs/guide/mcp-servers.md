@@ -1,5 +1,6 @@
 ---
-title: MCP servers — bring your own catalogue of steps sidebar_label: MCP servers
+title: MCP servers — bring your own catalogue of steps
+sidebar_label: MCP servers
 ---
 
 # MCP servers — bring your own catalogue of steps

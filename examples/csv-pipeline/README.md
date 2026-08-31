@@ -59,11 +59,11 @@ control API, and asserts the output matches.
 
 ## What the demo does *not* prove
 
-- **External triggering.** Submission still happens via `dzctl`. There's
-  no `webhook_trigger` or `schedule` module; nothing fires this graph
-  on its own.
-- **Conditional routing.** No `branch` module — the graph is a fixed
-  chain. Real workflows need "if amount > X route here else there".
+- **External triggering.** Submission happens via `dzctl`; nothing fires this
+  graph on its own. The platform does have triggers (`drops/trigger/` — cron,
+  poll, webhook); this demo just doesn't use one.
+- **Conditional routing.** The graph is a fixed chain. `branch` exists
+  (`drops/flow/branch.go`) and `examples/ap-invoice` demonstrates it.
 - **HTTP integration.** No `http_request`. The transformer is a stub
   that does string manipulation, not a real integration with anything.
 - **mTLS on the remote.** `DAZYFLOW_REMOTE_MODULES` dials insecure (the
