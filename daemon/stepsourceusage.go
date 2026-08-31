@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // Who is using a tenant-configured step source, for the admin about to delete

@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // EncryptedSecrets is the built-in per-tenant secret store. It's the

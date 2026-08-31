@@ -14,12 +14,12 @@
 export const SITE = "https://dazyflow.app";
 export const DOCS = "https://docs.dazyflow.app";
 
-export const SOURCE = "https://git.sr.ht/~klahr/dazyflow";
+export const SOURCE = "https://github.com/dazyflow/dazyflow";
 
 // Deep-linked to the licence file rather than to gnu.org: what governs the
 // project is the copy in the tree, and a reader following this is usually
 // checking the self-hosting terms against the version they have.
-export const LICENSE = "https://git.sr.ht/~klahr/dazyflow/tree/master/item/LICENSE";
+export const LICENSE = "https://github.com/dazyflow/dazyflow/blob/master/LICENSE";
 
 export const CONTACT = "mailto:hi@dazyflow.app";
 

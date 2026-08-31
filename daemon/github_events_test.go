@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	_ "git.sr.ht/~klahr/dazyflow/drops/github"
-	"git.sr.ht/~klahr/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/core"
+	_ "github.com/dazyflow/dazyflow/drops/github"
+	"github.com/dazyflow/dazyflow/engine"
 )
 
 // signGitHub produces the X-Hub-Signature-256 header value GitHub

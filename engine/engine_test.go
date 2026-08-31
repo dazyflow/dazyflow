@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // noopManifest describes a module with one optional input and one output,

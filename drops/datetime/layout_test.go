@@ -4,7 +4,7 @@
 package datetime
 
 import (
-	"git.sr.ht/~klahr/dazyflow/internal/datenames"
+	"github.com/dazyflow/dazyflow/internal/datenames"
 	"strings"
 	"testing"
 	"time"

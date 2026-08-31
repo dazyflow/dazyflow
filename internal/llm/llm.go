@@ -20,7 +20,7 @@ import (
 	"strings"
 	"sync"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // Tool is a provider-neutral forced tool: the model must call it, so its

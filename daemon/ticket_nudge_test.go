@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // The reminder rule, table-driven, because every one of these cases is a real

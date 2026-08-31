@@ -11,11 +11,11 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/auth"
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/internal/datenames"
-	"git.sr.ht/~klahr/dazyflow/internal/emailtheme"
-	"git.sr.ht/~klahr/dazyflow/internal/maillang"
+	"github.com/dazyflow/dazyflow/auth"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/internal/datenames"
+	"github.com/dazyflow/dazyflow/internal/emailtheme"
+	"github.com/dazyflow/dazyflow/internal/maillang"
 )
 
 // Platform signup-invites. On a deployment with self-serve signup

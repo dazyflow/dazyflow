@@ -29,9 +29,9 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/auth"
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/auth"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/engine"
 )
 
 // splitFlowID parses the {flow_id} path parameter back into

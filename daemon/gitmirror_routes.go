@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/workspace"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/workspace"
 )
 
 // The /api/v1/git/mirror endpoints configure and drive the workspace git

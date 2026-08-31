@@ -11,9 +11,9 @@ import (
 	"strconv"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/geoloc"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/geoloc"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 )
 
 // photonURL is Komoot's Photon geocoder. A var so tests can point it at a local

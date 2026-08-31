@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 func runPhone(t *testing.T, params map[string]any, input map[string]core.Ref) core.Result {

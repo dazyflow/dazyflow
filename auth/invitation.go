@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // Invitation is a pending offer for someone to join an org. It carries

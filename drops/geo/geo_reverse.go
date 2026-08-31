@@ -9,10 +9,10 @@ import (
 	"errors"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/geoloc"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
-	"git.sr.ht/~klahr/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/geoloc"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
+	"github.com/dazyflow/dazyflow/engine"
 )
 
 func init() {

@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"log"
 
-	"git.sr.ht/~klahr/dazyflow/auth"
+	"github.com/dazyflow/dazyflow/auth"
 )
 
 // orgAuthGoogleSecretName is the reserved storage name an org's Google

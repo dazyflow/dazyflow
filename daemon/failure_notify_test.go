@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	"github.com/dazyflow/dazyflow/core"
+	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
 // fakeWebhook captures everything a failure-notify POST sends so

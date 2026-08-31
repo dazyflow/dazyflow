@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/auth"
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/auth"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 func seedUser(t *testing.T, users auth.UserStore, email, password string) {

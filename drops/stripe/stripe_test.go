@@ -13,8 +13,8 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/engine"
 )
 
 // fakeStripe stands in for api.stripe.com: it checks auth + idempotency

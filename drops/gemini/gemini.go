@@ -39,9 +39,9 @@ import (
 	"sort"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/llmtask"
-	"git.sr.ht/~klahr/dazyflow/internal/llm"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/llmtask"
+	"github.com/dazyflow/dazyflow/internal/llm"
 )
 
 // geminiModels is shared by the task drops and the shared LLM registry.

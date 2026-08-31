@@ -14,10 +14,10 @@ import (
 	"strconv"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
-	"git.sr.ht/~klahr/dazyflow/internal/emailtmpl"
-	"git.sr.ht/~klahr/dazyflow/internal/smtputil"
+	"github.com/dazyflow/dazyflow/core"
+	hfnet "github.com/dazyflow/dazyflow/drops/net"
+	"github.com/dazyflow/dazyflow/internal/emailtmpl"
+	"github.com/dazyflow/dazyflow/internal/smtputil"
 )
 
 // Email templates are reusable HTML layout shells the email-sending drops wrap

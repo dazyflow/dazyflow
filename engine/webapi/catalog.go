@@ -7,7 +7,7 @@ import (
 	"sort"
 	"sync"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // opKey scopes an operation's step id to its owning tenant.

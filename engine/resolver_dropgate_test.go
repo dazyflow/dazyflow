@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // testDrop registers a no-op native drop with the given id into a fresh

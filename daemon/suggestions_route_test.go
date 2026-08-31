@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // TestSuggestionsRoute confirms GET /me/flows/suggestions resolves to the

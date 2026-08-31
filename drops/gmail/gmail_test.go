@@ -13,8 +13,8 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/mailmsg"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/mailmsg"
 )
 
 func withGmailEnv(t *testing.T, base string) {

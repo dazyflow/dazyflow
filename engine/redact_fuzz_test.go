@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // FuzzRedactResult_NoSecretSurvives is the data-leak guard: for an arbitrary

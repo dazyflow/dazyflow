@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"log"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // ResumeGraphRun continues a run paused at a breakpoint (#12).

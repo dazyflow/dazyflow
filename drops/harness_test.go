@@ -21,10 +21,10 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	_ "git.sr.ht/~klahr/dazyflow/drops" // side-effect: register every built-in drop
-	"git.sr.ht/~klahr/dazyflow/drops/net"
-	"git.sr.ht/~klahr/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/core"
+	_ "github.com/dazyflow/dazyflow/drops" // side-effect: register every built-in drop
+	"github.com/dazyflow/dazyflow/drops/net"
+	"github.com/dazyflow/dazyflow/engine"
 )
 
 func TestMain(m *testing.M) {

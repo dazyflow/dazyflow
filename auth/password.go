@@ -13,7 +13,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // User is a password-authenticated identity. PasswordHash is bcrypt.

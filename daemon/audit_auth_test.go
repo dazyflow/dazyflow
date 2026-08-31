@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // auditActions returns the set of recorded actions for a tenant, for

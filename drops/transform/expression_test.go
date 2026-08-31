@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 func runExpr(t *testing.T, expr string, in any) core.Result {

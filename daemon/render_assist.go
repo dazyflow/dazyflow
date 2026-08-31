@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/internal/llm"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/internal/llm"
 )
 
 // AI assist for the render_template step: turn a plain-English description

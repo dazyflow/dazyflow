@@ -13,8 +13,8 @@ import (
 	"sort"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/sandbox"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/sandbox"
 )
 
 // wsPath strips the legacy "workspace://" scheme the old native drop used;

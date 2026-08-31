@@ -6,7 +6,7 @@ package transform
 import (
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // runRoute mirrors the helper shape used by sibling tests in this

@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // Per-(tenant, external host) outbound pacing. On a HOSTED multi-tenant

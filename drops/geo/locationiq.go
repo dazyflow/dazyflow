@@ -9,8 +9,8 @@ import (
 	"os"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 )
 
 // locationiqURL is LocationIQ's geocoding base. LocationIQ mirrors the

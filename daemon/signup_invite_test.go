@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/auth"
+	"github.com/dazyflow/dazyflow/auth"
 )
 
 // signupInviteHarness: a signup-DISABLED deployment with users, sessions,

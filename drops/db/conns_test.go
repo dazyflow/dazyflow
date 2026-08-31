@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
 // TestMySQLSSRFDial_BlocksAtDial proves the MySQL egress guard runs at the

@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // memWatchStore wires the cache store the watch state rides on, per test.

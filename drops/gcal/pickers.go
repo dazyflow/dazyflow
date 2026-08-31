@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"net/url"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 )
 
 // ListCalendars lists the connected account's calendars as {id, name} options —

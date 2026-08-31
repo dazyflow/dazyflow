@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // This file wires the for_each "loop body" feature on the engine side. A

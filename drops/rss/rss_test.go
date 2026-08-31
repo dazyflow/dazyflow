@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/engine"
 )
 
 const rssSample = `<?xml version="1.0" encoding="UTF-8"?>

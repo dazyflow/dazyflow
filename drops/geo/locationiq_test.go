@@ -10,7 +10,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // LocationIQ mirrors the Nominatim API, so it reuses the same JSON samples

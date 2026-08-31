@@ -7,8 +7,8 @@ import (
 	"errors"
 	"net/http"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/internal/rendertext"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/internal/rendertext"
 )
 
 // renderTextPreview is POST /api/v1/tools/render-text/preview — the editor's

@@ -10,7 +10,7 @@ import (
 
 	"github.com/robfig/cron/v3"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // cronValidator uses the SAME parser the scheduler uses (5-field

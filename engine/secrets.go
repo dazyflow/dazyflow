@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // scopeCtx wraps ctx with the tenant (organization) and flow (graph) ID so

@@ -27,15 +27,15 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
-	controlpb "git.sr.ht/~klahr/dazyflow/api/gen/control"
-	nodepb "git.sr.ht/~klahr/dazyflow/api/gen/node"
-	"git.sr.ht/~klahr/dazyflow/auth"
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/daemon"
-	_ "git.sr.ht/~klahr/dazyflow/drops"
-	"git.sr.ht/~klahr/dazyflow/engine"
-	"git.sr.ht/~klahr/dazyflow/engine/jobstore"
-	"git.sr.ht/~klahr/dazyflow/workspace"
+	controlpb "github.com/dazyflow/dazyflow/api/gen/control"
+	nodepb "github.com/dazyflow/dazyflow/api/gen/node"
+	"github.com/dazyflow/dazyflow/auth"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/daemon"
+	_ "github.com/dazyflow/dazyflow/drops"
+	"github.com/dazyflow/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/engine/jobstore"
+	"github.com/dazyflow/dazyflow/workspace"
 )
 
 // covHarness bundles a live control-plane gRPC server (the daemon handlers)

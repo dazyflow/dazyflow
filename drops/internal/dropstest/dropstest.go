@@ -20,7 +20,7 @@ import (
 	"os"
 	"testing"
 
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
 // EgressTestMain runs a connector package's tests with private-network egress

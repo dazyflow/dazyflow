@@ -13,10 +13,10 @@ import (
 	"context"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/apibase"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/google"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/apibase"
+	"github.com/dazyflow/dazyflow/drops/internal/google"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 )
 
 // maxResponseBytes caps how much of a response (or a file being downloaded /

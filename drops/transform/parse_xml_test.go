@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 func runParseXML(t *testing.T, in any, params map[string]any) core.Result {

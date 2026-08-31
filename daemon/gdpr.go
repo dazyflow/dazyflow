@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/auth"
+	"github.com/dazyflow/dazyflow/auth"
 )
 
 // GDPR data-subject-rights plumbing: account erasure (Art. 17) and org

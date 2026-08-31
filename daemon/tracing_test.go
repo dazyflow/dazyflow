@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/daemon"
+	"github.com/dazyflow/dazyflow/daemon"
 	"go.opentelemetry.io/otel"
 )
 

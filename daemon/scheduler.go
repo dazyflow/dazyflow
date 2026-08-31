@@ -15,8 +15,8 @@ import (
 
 	"github.com/robfig/cron/v3"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/pollstate"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/pollstate"
 )
 
 // Scheduler reads graphs from the configured workspaces, finds those with

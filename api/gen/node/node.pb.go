@@ -919,7 +919,7 @@ const file_node_proto_rawDesc = "" +
 	"\apayload2\xac\x01\n" +
 	"\vNodeService\x12`\n" +
 	"\rListManifests\x12&.dazyflow.node.v1.ListManifestsRequest\x1a'.dazyflow.node.v1.ListManifestsResponse\x12;\n" +
-	"\aExecute\x12\x15.dazyflow.node.v1.Job\x1a\x17.dazyflow.node.v1.Event0\x01B/Z-git.sr.ht/~klahr/dazyflow/api/gen/node;nodepbb\x06proto3"
+	"\aExecute\x12\x15.dazyflow.node.v1.Job\x1a\x17.dazyflow.node.v1.Event0\x01B2Z0github.com/dazyflow/dazyflow/api/gen/node;nodepbb\x06proto3"
 
 var (
 	file_node_proto_rawDescOnce sync.Once

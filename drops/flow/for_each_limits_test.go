@@ -6,8 +6,8 @@ package flow
 import (
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/limits"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/limits"
 )
 
 // TestForEach_RejectsOversizedItemsList proves for_each refuses an items list

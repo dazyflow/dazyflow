@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/auth"
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/engine"
-	"git.sr.ht/~klahr/dazyflow/engine/jobstore"
-	"git.sr.ht/~klahr/dazyflow/workspace"
+	"github.com/dazyflow/dazyflow/auth"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/engine/jobstore"
+	"github.com/dazyflow/dazyflow/workspace"
 )
 
 // fireGraphSvc assembles a Service whose scheduler can be driven through the

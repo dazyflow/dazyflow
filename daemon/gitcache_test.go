@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/engine"
-	"git.sr.ht/~klahr/dazyflow/engine/jobstore"
-	"git.sr.ht/~klahr/dazyflow/workspace"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/engine/jobstore"
+	"github.com/dazyflow/dazyflow/workspace"
 )
 
 // TestDeleteGraph_RemovesGitCache verifies a flow's auto-assigned

@@ -27,11 +27,11 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/engine"
-	"git.sr.ht/~klahr/dazyflow/internal/llm"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/internal/llm"
 
-	_ "git.sr.ht/~klahr/dazyflow/drops" // register every built-in drop
+	_ "github.com/dazyflow/dazyflow/drops" // register every built-in drop
 )
 
 func allManifests() []core.Manifest {

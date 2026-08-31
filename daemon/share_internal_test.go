@@ -9,8 +9,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/auth"
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/auth"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // TestWorkspaceBrand_Cov covers workspaceBrand's branches: named org profile,

@@ -34,9 +34,9 @@ import (
 	"os"
 	"sort"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	_ "git.sr.ht/~klahr/dazyflow/drops"
-	"git.sr.ht/~klahr/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/core"
+	_ "github.com/dazyflow/dazyflow/drops"
+	"github.com/dazyflow/dazyflow/engine"
 )
 
 type entry struct {

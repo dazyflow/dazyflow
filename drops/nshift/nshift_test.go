@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // fakeNshift stands in for the Unifaun ExtAPI: it checks the Bearer key and

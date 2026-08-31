@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // idempotency middleware test harness: a gateway with just the store, and

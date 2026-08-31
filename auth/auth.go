@@ -12,7 +12,7 @@ import (
 	"errors"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // Authenticator turns a bearer credential into a Principal. Implementations

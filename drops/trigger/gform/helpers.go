@@ -21,9 +21,9 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/google"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/google"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 )
 
 // maxResponseBytes caps how much of an API response we buffer so a hostile

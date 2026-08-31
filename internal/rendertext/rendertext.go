@@ -24,7 +24,7 @@ import (
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types/ref"
 
-	"git.sr.ht/~klahr/dazyflow/internal/rowcel"
+	"github.com/dazyflow/dazyflow/internal/rowcel"
 )
 
 // Spec is the render_text configuration. A per-row CEL Template (seeing the

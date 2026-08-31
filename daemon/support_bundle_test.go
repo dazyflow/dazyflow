@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/daemon/support"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/daemon/support"
 )
 
 // The adapter projects graph + node records into a RunSnapshot, and the whole

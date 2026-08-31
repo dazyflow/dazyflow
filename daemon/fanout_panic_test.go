@@ -9,8 +9,8 @@ import (
 	"log"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/workspace"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/workspace"
 )
 
 // panicWorkspaces is a WorkspaceLookup that panics, standing in for any

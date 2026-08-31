@@ -18,8 +18,8 @@ import (
 	"fmt"
 	"sync"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 )
 
 // Lookup resolves a per-account access token. The daemon wires one (against its

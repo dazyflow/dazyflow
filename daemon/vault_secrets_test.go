@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // newTestSecrets builds an in-memory EncryptedSecrets for tests.

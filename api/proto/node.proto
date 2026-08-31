@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package dazyflow.node.v1;
 
-option go_package = "git.sr.ht/~klahr/dazyflow/api/gen/node;nodepb";
+option go_package = "github.com/dazyflow/dazyflow/api/gen/node;nodepb";
 
 // NodeService is the contract every RemoteTransport speaks. A remote module
 // implements this server-side; the engine talks to it as a client via

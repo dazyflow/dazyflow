@@ -10,8 +10,8 @@ import (
 	"errors"
 	"net/http"
 
-	"git.sr.ht/~klahr/dazyflow/auth"
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/auth"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // listAPIKeys, issueAPIKey, revokeAPIKey power the Admin UI's API

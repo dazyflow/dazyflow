@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // systemLogTail streams the daemon's own log output to a platform admin as

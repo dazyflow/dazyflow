@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // escapePathSeg URL-escapes one path segment so a shipment id containing

@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"regexp"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // template_refs.go makes ${upstream.…} and ${trigger.…} mean what they say:

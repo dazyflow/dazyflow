@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // Persisted OAuth provider credentials live in the same encrypted

@@ -8,7 +8,7 @@ import (
 	"errors"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // errUserStore lets each method fail on demand to drive ImportUsers'

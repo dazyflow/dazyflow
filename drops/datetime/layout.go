@@ -5,7 +5,7 @@ package datetime
 
 import (
 	"fmt"
-	"git.sr.ht/~klahr/dazyflow/internal/datenames"
+	"github.com/dazyflow/dazyflow/internal/datenames"
 	"strconv"
 	"strings"
 	"time"

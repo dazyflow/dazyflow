@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 func TestMigrateLegacyOrgAdminPerm(t *testing.T) {

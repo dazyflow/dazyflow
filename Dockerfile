@@ -82,9 +82,9 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     D="${BUILD_DATE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"; \
     echo "stamping version=$V commit=${COMMIT} date=$D"; \
     go build -trimpath -ldflags="-s -w \
-      -X git.sr.ht/~klahr/dazyflow/core/buildinfo.Version=${V} \
-      -X git.sr.ht/~klahr/dazyflow/core/buildinfo.Commit=${COMMIT} \
-      -X git.sr.ht/~klahr/dazyflow/core/buildinfo.Date=${D}" \
+      -X github.com/dazyflow/dazyflow/core/buildinfo.Version=${V} \
+      -X github.com/dazyflow/dazyflow/core/buildinfo.Commit=${COMMIT} \
+      -X github.com/dazyflow/dazyflow/core/buildinfo.Date=${D}" \
       -o /out/dzd ./cmd/dzd
 RUN mkdir -p /data/workspace /data/sandbox /data/state
 

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // queueAger is the optional JobStore capability for reporting queue

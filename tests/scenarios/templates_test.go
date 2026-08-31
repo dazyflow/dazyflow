@@ -15,8 +15,8 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/internal/rendertext"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/internal/rendertext"
 )
 
 // knownBrokenTemplates are shipped templates with a real defect that

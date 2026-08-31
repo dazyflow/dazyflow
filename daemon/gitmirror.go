@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	gitdrop "git.sr.ht/~klahr/dazyflow/drops/git"
-	"git.sr.ht/~klahr/dazyflow/workspace"
+	"github.com/dazyflow/dazyflow/core"
+	gitdrop "github.com/dazyflow/dazyflow/drops/git"
+	"github.com/dazyflow/dazyflow/workspace"
 )
 
 // The git mirror pushes a workspace's flow repository to a remote the

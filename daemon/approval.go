@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // approvalTokenTTL bounds how long a signed approval link stays valid.

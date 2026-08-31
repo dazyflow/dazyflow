@@ -6,8 +6,8 @@ package daemon
 import (
 	"log"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/workspace"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/workspace"
 )
 
 // MigrateWebhookPublish publishes every flow that was relying on the old

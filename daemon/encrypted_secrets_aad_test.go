@@ -10,7 +10,7 @@ import (
 	"crypto/rand"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // A ciphertext is bound to the (tenant, name) row it lives in via AES-GCM's

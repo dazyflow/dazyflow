@@ -10,7 +10,7 @@ import (
 	"os"
 	"sync"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // BuiltinProvider holds an in-memory map of name → value. Production

@@ -19,8 +19,8 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/core/buildinfo"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core/buildinfo"
 	yaml "go.yaml.in/yaml/v3"
 )
 

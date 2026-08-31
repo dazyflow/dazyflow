@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/mailmsg"
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/mailmsg"
+	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
 func TestBuildMessage(t *testing.T) {

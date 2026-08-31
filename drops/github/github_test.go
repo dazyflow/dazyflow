@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // withGHAuthErr points the token lookup at a failing resolver so the

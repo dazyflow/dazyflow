@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // ipRateLimiter is a tiny per-client-IP token-bucket limiter for the

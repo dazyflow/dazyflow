@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/daemon"
-	"git.sr.ht/~klahr/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/daemon"
+	"github.com/dazyflow/dazyflow/engine"
 
-	controlpb "git.sr.ht/~klahr/dazyflow/api/gen/control"
+	controlpb "github.com/dazyflow/dazyflow/api/gen/control"
 )
 
 // seedLoggedRun stores a graph-run record and swaps the harness onto a

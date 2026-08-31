@@ -4,7 +4,7 @@
 package io
 
 import (
-	"git.sr.ht/~klahr/dazyflow/drops/internal/sandbox"
+	"github.com/dazyflow/dazyflow/drops/internal/sandbox"
 )
 
 // Re-export the shared sandbox helpers under the same names the io

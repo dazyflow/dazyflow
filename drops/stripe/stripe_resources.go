@@ -11,7 +11,7 @@ import (
 	"net/url"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // ListPrices enumerates the account's active prices as picker options —

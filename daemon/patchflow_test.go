@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // TestPatchFlowMe_Cov covers patchFlowMe: invalid JSON (400), unknown flow

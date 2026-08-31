@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // API key wire format: "dzk_<key-id>_<secret-hex>".

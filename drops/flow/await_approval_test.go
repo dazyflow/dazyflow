@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 func TestAwaitApproval_ReturnsAwaitingSentinel(t *testing.T) {

@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/workspace"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/workspace"
 )
 
 // memGitMirrorStore is an in-memory GitMirrorStore for the pusher tests.

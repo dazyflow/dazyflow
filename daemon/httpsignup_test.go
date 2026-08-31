@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/auth"
+	"github.com/dazyflow/dazyflow/auth"
 )
 
 // newSignupHarness extends the default gateway harness with the

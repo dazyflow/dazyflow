@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // SessionTokenPrefix marks credentials as session tokens (vs API keys,

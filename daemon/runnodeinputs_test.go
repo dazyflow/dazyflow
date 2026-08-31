@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // The run viewer's "Inputs" section reads `inputs` off a node record, and a node

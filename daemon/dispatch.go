@@ -11,8 +11,8 @@ import (
 	"io"
 	"log"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/engine"
 )
 
 // subgraphOutputBinding mirrors the JSON shape the subgraph module

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // The one-value spray in harness_test.go puts the SAME nasty value into every

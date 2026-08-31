@@ -16,11 +16,11 @@ import (
 
 	"github.com/google/cel-go/cel"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/limits"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
-	"git.sr.ht/~klahr/dazyflow/engine"
-	"git.sr.ht/~klahr/dazyflow/internal/rowcel"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/limits"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
+	"github.com/dazyflow/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/internal/rowcel"
 )
 
 func init() {

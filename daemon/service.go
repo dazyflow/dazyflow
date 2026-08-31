@@ -23,10 +23,10 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/auth"
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/engine"
-	"git.sr.ht/~klahr/dazyflow/workspace"
+	"github.com/dazyflow/dazyflow/auth"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/workspace"
 )
 
 // WorkspaceLookup resolves a (tenant, workspace) pair to its backing Git

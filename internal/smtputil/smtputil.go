@@ -18,7 +18,7 @@ import (
 	"net/smtp"
 	"time"
 
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
 // SplitSender separates a configured sender into the two forms one send needs.

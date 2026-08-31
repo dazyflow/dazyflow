@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/daemon"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/daemon"
 )
 
 // A disabled node is recorded as skipped without executing, and the skip

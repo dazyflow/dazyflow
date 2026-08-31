@@ -13,11 +13,11 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	"git.sr.ht/~klahr/dazyflow/api/convert"
-	controlpb "git.sr.ht/~klahr/dazyflow/api/gen/control"
-	"git.sr.ht/~klahr/dazyflow/auth"
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/api/convert"
+	controlpb "github.com/dazyflow/dazyflow/api/gen/control"
+	"github.com/dazyflow/dazyflow/auth"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/engine"
 )
 
 // RegisterGRPC wires the Service's RPC handlers onto srv. The caller is

@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/pollstate"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/pollstate"
 )
 
 func TestEffectiveInterval_BackoffCurve(t *testing.T) {

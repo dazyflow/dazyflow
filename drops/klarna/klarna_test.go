@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // fakeKlarna stands in for the Klarna Order Management API: it checks the Basic

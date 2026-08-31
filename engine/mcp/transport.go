@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"sync"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/internal/schemaports"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/internal/schemaports"
 )
 
 // Transport is the per-tool core.Transport implementation. The same

@@ -10,8 +10,8 @@ import (
 	"runtime/debug"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/workspace"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/workspace"
 )
 
 // SystemPrincipal builds the synthetic principal that trigger- and

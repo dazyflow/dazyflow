@@ -6,7 +6,7 @@ package transform
 import (
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // TestFoldedHeaders_ReadFromRowsRef proves the folded-headers model: column

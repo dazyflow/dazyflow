@@ -9,8 +9,8 @@ import (
 	"sort"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/internal/schemaports"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/internal/schemaports"
 )
 
 // overlayPort is the catch-all input: a whole JSON object merged over the

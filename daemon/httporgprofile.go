@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/auth"
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/auth"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // getOrgProfile returns the per-org display name + last-edited time.

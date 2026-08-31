@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/mcp/server"
+	"github.com/dazyflow/dazyflow/mcp/server"
 )
 
 // runServer wires Server.Serve over an in-memory pipe pair so tests

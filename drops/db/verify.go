@@ -14,8 +14,8 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
-	"git.sr.ht/~klahr/dazyflow/engine"
+	hfnet "github.com/dazyflow/dazyflow/drops/net"
+	"github.com/dazyflow/dazyflow/engine"
 )
 
 // Connection verification for the SQL integrations. Registered here so the

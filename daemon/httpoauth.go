@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // HTTP surface for the OAuth flow. Two endpoints:

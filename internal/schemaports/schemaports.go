@@ -25,7 +25,7 @@ import (
 	"encoding/json"
 	"sort"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // DefaultMax caps how many arguments become ports.

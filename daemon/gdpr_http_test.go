@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/auth"
+	"github.com/dazyflow/dazyflow/auth"
 )
 
 // HTTP-handler branches of the GDPR erasure endpoints.

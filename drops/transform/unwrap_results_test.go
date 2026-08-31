@@ -6,7 +6,7 @@ package transform
 import (
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // wrap builds a for_each body-pin result wrapper for a single-node body:

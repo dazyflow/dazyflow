@@ -12,8 +12,8 @@ import (
 	"errors"
 	"fmt"
 
-	controlpb "git.sr.ht/~klahr/dazyflow/api/gen/control"
-	"git.sr.ht/~klahr/dazyflow/core"
+	controlpb "github.com/dazyflow/dazyflow/api/gen/control"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // GraphToPB converts a core.Graph into its protobuf wire form. Node

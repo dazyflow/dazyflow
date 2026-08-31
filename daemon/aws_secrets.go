@@ -17,8 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	"github.com/dazyflow/dazyflow/core"
+	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
 // AwsSecretsProvider is the AWS flavour of the BYO secret manager (see

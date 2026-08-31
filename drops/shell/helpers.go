@@ -4,7 +4,7 @@
 package shell
 
 import (
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 func emitProgress(ch chan<- core.Progress, job core.Job, pct float64, msg string) {

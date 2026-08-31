@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // These tests drive the /me/flows HTTP handlers' error / authz / validation

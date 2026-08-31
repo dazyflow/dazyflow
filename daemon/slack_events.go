@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // slackOnMentionModuleID identifies the trigger drop graph authors

@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/auth"
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/auth"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // HTTP surface for the GDPR data-subject rights: erasure (Art. 17) of an

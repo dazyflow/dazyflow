@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	"github.com/dazyflow/dazyflow/core"
+	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
 func init() { hfnet.SetAllowPrivateEgress(true) }

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // newTestLimiter builds an isolated limiter so tests don't fight the

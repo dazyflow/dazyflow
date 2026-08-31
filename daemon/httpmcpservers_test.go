@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/engine/mcp"
-	"git.sr.ht/~klahr/dazyflow/workspace"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/engine/mcp"
+	"github.com/dazyflow/dazyflow/workspace"
 )
 
 func mcpGateway(t *testing.T) (*HTTPGateway, *fakeMCPEndpoint, string) {

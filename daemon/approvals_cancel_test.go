@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // TestApproveAuthed_Cov covers approveAuthed's error legs through the real mux:

@@ -6,7 +6,7 @@ package flow
 import (
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 func TestMerge_CollectsVariadicInputs(t *testing.T) {

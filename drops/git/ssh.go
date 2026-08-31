@@ -17,8 +17,8 @@ import (
 	"github.com/skeema/knownhosts"
 	gossh "golang.org/x/crypto/ssh"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 )
 
 // GitCred is the material for one named, per-org git credential. It may carry

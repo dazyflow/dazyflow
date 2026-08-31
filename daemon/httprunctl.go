@@ -14,7 +14,7 @@ import (
 	"io"
 	"net/http"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // listPendingApprovals returns the await_approval inbox: every node

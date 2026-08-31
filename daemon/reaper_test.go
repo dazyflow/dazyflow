@@ -7,10 +7,10 @@ import (
 	"encoding/json"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/daemon"
-	"git.sr.ht/~klahr/dazyflow/engine"
-	"git.sr.ht/~klahr/dazyflow/engine/jobstore"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/daemon"
+	"github.com/dazyflow/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/engine/jobstore"
 )
 
 // reapGraph is the 2-node a→b graph the reaper tests run against.

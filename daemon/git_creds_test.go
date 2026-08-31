@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 	gossh "golang.org/x/crypto/ssh"
 )
 

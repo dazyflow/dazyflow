@@ -6,7 +6,7 @@ package encoding
 import (
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 func okOut(t *testing.T, res core.Result) string {

@@ -7,7 +7,7 @@ import (
 	"sort"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // runJoin is a thin shim — every test builds a job, calls executeJoinRows,

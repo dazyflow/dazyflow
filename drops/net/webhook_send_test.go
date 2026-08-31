@@ -11,7 +11,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 func TestWebhookSend_ObjectBodyJSONEncoded(t *testing.T) {

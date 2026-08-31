@@ -14,7 +14,7 @@ import (
 
 	gossh "golang.org/x/crypto/ssh"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // Git credentials are named, per-org auth bundles a git_checkout node selects

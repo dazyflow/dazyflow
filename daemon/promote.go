@@ -7,7 +7,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // Concurrency admission queue (promotion side).

@@ -52,9 +52,9 @@ export VERSION COMMIT BUILD_DATE
 # Linker flags for the native `make bin` build. -s -w strip the symbol
 # and DWARF tables; the -X flags inject the version vars into buildinfo.
 LDFLAGS := -s -w \
-  -X git.sr.ht/~klahr/dazyflow/core/buildinfo.Version=$(VERSION) \
-  -X git.sr.ht/~klahr/dazyflow/core/buildinfo.Commit=$(COMMIT) \
-  -X git.sr.ht/~klahr/dazyflow/core/buildinfo.Date=$(BUILD_DATE)
+  -X github.com/dazyflow/dazyflow/core/buildinfo.Version=$(VERSION) \
+  -X github.com/dazyflow/dazyflow/core/buildinfo.Commit=$(COMMIT) \
+  -X github.com/dazyflow/dazyflow/core/buildinfo.Date=$(BUILD_DATE)
 
 .DEFAULT_GOAL := help
 

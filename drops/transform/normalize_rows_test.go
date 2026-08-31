@@ -6,7 +6,7 @@ package transform
 import (
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // These pin the trigger-body coercions: a webhook/form JSON object body

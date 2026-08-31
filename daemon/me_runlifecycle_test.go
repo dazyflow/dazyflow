@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // TestResumeRunMe_ErrorLegs covers resumeRun's not-found and conflict legs via

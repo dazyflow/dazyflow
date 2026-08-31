@@ -7,7 +7,7 @@ import (
 	"context"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // scopeCaptureProvider records the tenant + flow it saw on the resolution

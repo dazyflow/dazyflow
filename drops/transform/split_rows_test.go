@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 func runSplit(t *testing.T, params map[string]any, rows []map[string]any, headers []string) (matched, unmatched []map[string]any, outHeaders []string) {

@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // StdioDescriptor names a subprocess to run as an MCP server. One

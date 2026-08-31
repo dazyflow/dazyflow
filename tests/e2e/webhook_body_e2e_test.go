@@ -12,13 +12,13 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/auth"
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/daemon"
-	"git.sr.ht/~klahr/dazyflow/engine"
-	"git.sr.ht/~klahr/dazyflow/engine/jobstore"
-	_ "git.sr.ht/~klahr/dazyflow/drops"
-	"git.sr.ht/~klahr/dazyflow/workspace"
+	"github.com/dazyflow/dazyflow/auth"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/daemon"
+	"github.com/dazyflow/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/engine/jobstore"
+	_ "github.com/dazyflow/dazyflow/drops"
+	"github.com/dazyflow/dazyflow/workspace"
 )
 
 // TestWebhookBody_E2E_JSONPropagation drives the full pipeline: an

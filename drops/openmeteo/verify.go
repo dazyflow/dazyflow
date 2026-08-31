@@ -10,8 +10,8 @@ import (
 	"net/url"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/drops/internal/geoloc"
-	"git.sr.ht/~klahr/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/drops/internal/geoloc"
+	"github.com/dazyflow/dazyflow/engine"
 )
 
 // Open-Meteo connection verification, registered so the Apps page can test a

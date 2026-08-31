@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/auth"
-	"git.sr.ht/~klahr/dazyflow/core"
-	_ "git.sr.ht/~klahr/dazyflow/drops/notify" // register the email_send manifest so its connection fields resolve
+	"github.com/dazyflow/dazyflow/auth"
+	"github.com/dazyflow/dazyflow/core"
+	_ "github.com/dazyflow/dazyflow/drops/notify" // register the email_send manifest so its connection fields resolve
 )
 
 // storeEmailConn writes the tenant's Email SMTP connection fields the way the

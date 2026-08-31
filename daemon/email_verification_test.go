@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/auth"
+	"github.com/dazyflow/dazyflow/auth"
 )
 
 // verificationHarness: gateway + in-memory users/sessions + fake SMTP +

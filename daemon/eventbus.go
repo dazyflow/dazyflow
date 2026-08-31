@@ -6,8 +6,8 @@ package daemon
 import (
 	"sync"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/engine"
 )
 
 // BusEvent is what flows from a worker to subscribers waiting on a job —

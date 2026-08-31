@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 func checkJob(url string, extra map[string]any) core.Job {

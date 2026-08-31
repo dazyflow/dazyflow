@@ -8,7 +8,7 @@ import (
 	"errors"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // fakeAuthenticator returns a fixed principal, simulating a valid

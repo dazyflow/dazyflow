@@ -17,8 +17,8 @@ import (
 	"strings"
 	"sync"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 )
 
 // Base is a concurrency-safe holder for a connector's API root. The zero

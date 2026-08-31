@@ -16,10 +16,10 @@ import (
 
 	"github.com/google/cel-go/cel"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/limits"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/rows"
-	"git.sr.ht/~klahr/dazyflow/internal/rowcel"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/limits"
+	"github.com/dazyflow/dazyflow/drops/internal/rows"
+	"github.com/dazyflow/dazyflow/internal/rowcel"
 )
 
 // capRows rejects an input list that exceeds the per-drop row ceiling, so a

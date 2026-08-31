@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // gcpTestKey mints an RSA service-account key file whose token_uri points at

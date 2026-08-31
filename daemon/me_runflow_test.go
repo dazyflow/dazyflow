@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // TestRunFlowMe_RunAndMissing_Cov4 covers runFlowMe + runGraph: the clean 404 for a missing

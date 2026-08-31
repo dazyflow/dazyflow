@@ -7,7 +7,7 @@ import (
 	"context"
 	"fmt"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // triggerSubstituter resolves ${trigger.port.path…} against the trigger node

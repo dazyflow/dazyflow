@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"strings"
 
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
 // Shared rules for a STEP SOURCE — an org-configured thing that contributes

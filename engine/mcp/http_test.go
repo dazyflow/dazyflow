@@ -13,8 +13,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/engine/mcp"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/engine/mcp"
 )
 
 // fakeHTTPServer is an MCP endpoint over streamable HTTP. It answers

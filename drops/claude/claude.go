@@ -17,9 +17,9 @@ import (
 	"fmt"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/llmtask"
-	"git.sr.ht/~klahr/dazyflow/internal/llm"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/llmtask"
+	"github.com/dazyflow/dazyflow/internal/llm"
 )
 
 // claudeModels is the model picker, shared by the task drops (llmtask) and

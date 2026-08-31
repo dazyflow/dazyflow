@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/engine/mcp"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/engine/mcp"
 )
 
 // portsOf registers a one-tool server and returns that tool's manifest inputs.

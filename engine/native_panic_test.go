@@ -7,7 +7,7 @@ import (
 	"context"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // TestNativeTransport_RecoversPanic proves a drop that panics is converted

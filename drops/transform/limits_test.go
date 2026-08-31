@@ -6,8 +6,8 @@ package transform
 import (
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/limits"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/limits"
 )
 
 // TestNormalizeRows_RejectsOversizedInput proves the shared row reader refuses

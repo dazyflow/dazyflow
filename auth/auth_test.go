@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // TestSession_StoredKeyIsHashedNotToken locks in that a session is stored

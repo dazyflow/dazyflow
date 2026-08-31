@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // This file powers the resource pickers — the dropdowns that let a user pick

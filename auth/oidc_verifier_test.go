@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // fakeIdP is a minimal OIDC issuer: a discovery document, a JWKS with

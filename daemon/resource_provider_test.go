@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 func newTestResourceProvider(t *testing.T) (*ResourceProvider, *int) {

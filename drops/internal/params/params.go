@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // String returns a required string param. Error messages follow the

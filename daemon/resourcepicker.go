@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // A ResourceLister enumerates the selectable items of a given KIND inside a

@@ -10,8 +10,8 @@ import (
 	"net/http"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/daemon/support"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/daemon/support"
 )
 
 // support_routes.go wires the Support feature's HTTP surface (see

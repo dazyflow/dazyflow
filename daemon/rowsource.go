@@ -7,7 +7,7 @@ import (
 	"context"
 	"net/http"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // A "row source" is a node that emits an array of record objects — the

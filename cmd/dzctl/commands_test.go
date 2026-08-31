@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	controlpb "git.sr.ht/~klahr/dazyflow/api/gen/control"
+	controlpb "github.com/dazyflow/dazyflow/api/gen/control"
 	"github.com/spf13/cobra"
 )
 

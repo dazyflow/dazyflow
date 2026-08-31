@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"regexp"
 
-	"git.sr.ht/~klahr/dazyflow/auth"
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/auth"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // Account preferences live under /me/preferences (authenticated; the

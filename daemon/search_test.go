@@ -6,7 +6,7 @@ package daemon
 import (
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // catalog returns a representative manifest set covering each category

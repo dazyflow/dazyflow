@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 func paramInt(params map[string]any, key string) (int, error) {

@@ -28,7 +28,7 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // Reader returns the stored marker for an exact tenant/name, or ("", nil)

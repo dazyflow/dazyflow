@@ -7,8 +7,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/internal/schemaports"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/internal/schemaports"
 )
 
 func names(ports []core.Port) []string {

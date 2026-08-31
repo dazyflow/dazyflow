@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // redactionMarker replaces a secret plaintext wherever it surfaces in a

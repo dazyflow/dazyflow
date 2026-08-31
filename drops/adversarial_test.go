@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/net"
-	"git.sr.ht/~klahr/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/net"
+	"github.com/dazyflow/dazyflow/engine"
 )
 
 // resultContains reports whether the secret string surfaces anywhere in the

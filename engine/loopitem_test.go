@@ -7,7 +7,7 @@ import (
 	"context"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 func TestTraverseItemPath_Cov(t *testing.T) {

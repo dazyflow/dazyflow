@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/auth"
-	"git.sr.ht/~klahr/dazyflow/internal/emailtheme"
-	"git.sr.ht/~klahr/dazyflow/internal/maillang"
+	"github.com/dazyflow/dazyflow/auth"
+	"github.com/dazyflow/dazyflow/internal/emailtheme"
+	"github.com/dazyflow/dazyflow/internal/maillang"
 )
 
 // Welcome email. Sent once, right after an account is created, on every

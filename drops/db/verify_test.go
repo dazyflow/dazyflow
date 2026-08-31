@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
 // TestVerifyPostgresRejectsGarbage is the heart of the feature: a value that

@@ -17,8 +17,8 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	"github.com/dazyflow/dazyflow/core"
+	hfnet "github.com/dazyflow/dazyflow/drops/net"
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"

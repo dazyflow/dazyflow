@@ -8,7 +8,7 @@ import (
 	"errors"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // The QueueSummary cache promises two things that only show up under precise

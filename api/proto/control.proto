@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package dazyflow.control.v1;
 
-option go_package = "git.sr.ht/~klahr/dazyflow/api/gen/control;controlpb";
+option go_package = "github.com/dazyflow/dazyflow/api/gen/control;controlpb";
 
 // The control plane is what dzctl (and any future web UI) speaks to dzd
 // for graph/job/module/workspace management. Authentication is per-RPC

@@ -20,8 +20,8 @@ import (
 	"os"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/engine/mcp"
-	"git.sr.ht/~klahr/dazyflow/engine/mcp/mcptest"
+	"github.com/dazyflow/dazyflow/engine/mcp"
+	"github.com/dazyflow/dazyflow/engine/mcp/mcptest"
 )
 
 func main() {

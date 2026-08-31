@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 The repository, Go module, and daemon binary are named `dazyflow` / `dzd`.
 Versions here correspond to git tags `X.Y.Z` on
-[git.sr.ht/~klahr/dazyflow](https://git.sr.ht/~klahr/dazyflow). The running
+[github.com/dazyflow/dazyflow](https://github.com/dazyflow/dazyflow). The running
 version is stamped into the binary at build time and surfaced on
 `GET /api/v1` (the `build` block) and in the web UI's account menu.
 

@@ -13,8 +13,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
-	"git.sr.ht/~klahr/dazyflow/engine/mcp"
+	hfnet "github.com/dazyflow/dazyflow/drops/net"
+	"github.com/dazyflow/dazyflow/engine/mcp"
 )
 
 // fakeMCPEndpoint is a minimal streamable-HTTP MCP server: enough to

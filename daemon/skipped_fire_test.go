@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/engine/jobstore"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/engine/jobstore"
 )
 
 // recordSkippedFire writes a terminal "skipped" graph run so a cap-blocked

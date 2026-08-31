@@ -10,7 +10,7 @@ import (
 	"net/url"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 func inputFieldsResp(t *testing.T, body []byte) (string, []string) {

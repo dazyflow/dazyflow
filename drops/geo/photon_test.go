@@ -10,7 +10,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // Photon speaks GeoJSON: a FeatureCollection of Point features whose

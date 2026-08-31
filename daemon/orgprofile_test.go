@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/auth"
+	"github.com/dazyflow/dazyflow/auth"
 )
 
 func TestOrgProfile_GetPut_Cov(t *testing.T) {

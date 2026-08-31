@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // maxUploadBytes caps a single upload request body. Quota provides the

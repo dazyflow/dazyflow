@@ -7,7 +7,7 @@ import (
 	"errors"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // TestStore_PublishAndLoadPublished covers the publish-gating primitives:

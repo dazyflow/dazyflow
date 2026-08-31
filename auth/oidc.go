@@ -8,7 +8,7 @@ import (
 	"errors"
 	"fmt"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // OIDCConfig configures the OIDC bearer-token authenticator.

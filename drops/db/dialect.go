@@ -10,9 +10,9 @@ import (
 	"fmt"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/limits"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/limits"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 )
 
 // errTooManyRows is the sentinel the conn query implementations return

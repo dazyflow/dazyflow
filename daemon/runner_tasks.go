@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/daemon/internal/pgstore"
+	"github.com/dazyflow/dazyflow/daemon/internal/pgstore"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

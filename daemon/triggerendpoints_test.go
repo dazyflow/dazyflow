@@ -6,7 +6,7 @@ package daemon
 import (
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // TestTriggerEndpoints_Cov covers triggerEndpoints across all node trigger

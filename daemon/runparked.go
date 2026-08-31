@@ -7,7 +7,7 @@ import (
 	"context"
 	"log"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // Run-level "waiting for approval" status.

@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // fakeElks stands in for the 46elks API, capturing the last request so tests

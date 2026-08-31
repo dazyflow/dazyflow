@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // fakeStore captures writes for inspection. Concurrency-safe so a

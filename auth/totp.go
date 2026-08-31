@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 	qrcode "github.com/skip2/go-qrcode"

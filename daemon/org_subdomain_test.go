@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/auth"
+	"github.com/dazyflow/dazyflow/auth"
 )
 
 // setup wires an org-admin-capable harness with a recording profile store and

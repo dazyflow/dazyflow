@@ -8,9 +8,9 @@ import (
 	"encoding/json"
 	"errors"
 
-	"git.sr.ht/~klahr/dazyflow/auth"
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/internal/emailtmpl"
+	"github.com/dazyflow/dazyflow/auth"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/internal/emailtmpl"
 )
 
 // EmailTemplateProvider resolves an email-template ID to its layout shell HTML

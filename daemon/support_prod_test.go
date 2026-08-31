@@ -15,9 +15,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"git.sr.ht/~klahr/dazyflow/auth"
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/daemon/support"
+	"github.com/dazyflow/dazyflow/auth"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/daemon/support"
 )
 
 // testPool opens the integration database, skipping when DAZYFLOW_TEST_DB is

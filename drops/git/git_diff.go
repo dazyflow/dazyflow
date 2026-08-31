@@ -13,10 +13,10 @@ import (
 
 	gogit "github.com/go-git/go-git/v5"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/sandbox"
-	"git.sr.ht/~klahr/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
+	"github.com/dazyflow/dazyflow/drops/internal/sandbox"
+	"github.com/dazyflow/dazyflow/engine"
 )
 
 func init() {

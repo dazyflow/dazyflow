@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/drops/internal/rows"
+	"github.com/dazyflow/dazyflow/drops/internal/rows"
 )
 
 // paramInt accepts JSON numbers (float64), Go ints, or int64, so a

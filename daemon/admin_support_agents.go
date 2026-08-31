@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // admin_support_agents.go is the platform-admin management surface for support

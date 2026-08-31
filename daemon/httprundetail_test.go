@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 func TestHTTPGateway_ListRunNodes_ReturnsAllNodesForRun(t *testing.T) {

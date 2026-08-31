@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // Registry holds the set of native modules available to the engine. It is

@@ -6,7 +6,7 @@ package daemon
 import (
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // A for_each "body" pin owns the entry node and everything downstream of it;

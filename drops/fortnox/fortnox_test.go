@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // fakeFortnox is a stand-in Fortnox API. Tests register handlers per path and

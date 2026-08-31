@@ -19,7 +19,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	nodepb "git.sr.ht/~klahr/dazyflow/api/gen/node"
+	nodepb "github.com/dazyflow/dazyflow/api/gen/node"
 )
 
 type server struct {

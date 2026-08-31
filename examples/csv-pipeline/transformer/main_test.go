@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	nodepb "git.sr.ht/~klahr/dazyflow/api/gen/node"
+	nodepb "github.com/dazyflow/dazyflow/api/gen/node"
 	"google.golang.org/grpc"
 )
 

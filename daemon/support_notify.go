@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/internal/emailtheme"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/internal/emailtheme"
 )
 
 // support_notify.go closes the "nobody is ever told" gap in the ticket surface:

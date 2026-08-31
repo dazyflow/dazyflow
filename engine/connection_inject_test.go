@@ -7,7 +7,7 @@ import (
 	"context"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // ntfyManifest is a minimal stand-in for the ntfy drop: an integration

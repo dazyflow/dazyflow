@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // Memory is an in-memory JobStore. Concurrency-safe; loses state on

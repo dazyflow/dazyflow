@@ -32,9 +32,9 @@ import (
 	"strings"
 	"unicode"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	_ "git.sr.ht/~klahr/dazyflow/drops" // side-effect: register every built-in drop
-	"git.sr.ht/~klahr/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/core"
+	_ "github.com/dazyflow/dazyflow/drops" // side-effect: register every built-in drop
+	"github.com/dazyflow/dazyflow/engine"
 )
 
 // Links to the hand-written guide pages the reference leans on. Absolute

@@ -14,7 +14,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 
-	"git.sr.ht/~klahr/dazyflow/daemon"
+	"github.com/dazyflow/dazyflow/daemon"
 )
 
 // daemonConn dials dzd. It is a package-level var rather than a plain func

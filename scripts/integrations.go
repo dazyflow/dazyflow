@@ -15,8 +15,8 @@ import (
 	"os"
 	"sort"
 
-	_ "git.sr.ht/~klahr/dazyflow/drops"
-	"git.sr.ht/~klahr/dazyflow/engine"
+	_ "github.com/dazyflow/dazyflow/drops"
+	"github.com/dazyflow/dazyflow/engine"
 )
 
 func main() {

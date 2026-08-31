@@ -9,9 +9,9 @@ import (
 	"log"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/internal/emailtheme"
-	"git.sr.ht/~klahr/dazyflow/internal/maillang"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/internal/emailtheme"
+	"github.com/dazyflow/dazyflow/internal/maillang"
 )
 
 // Approval mail: who gets told a flow is waiting on a person, and who gets

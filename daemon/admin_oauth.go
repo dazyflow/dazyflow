@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // Admin OAuth provider configuration — paste-client-credentials-in-

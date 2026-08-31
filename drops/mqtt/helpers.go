@@ -23,7 +23,7 @@ import (
 
 	mqttlib "github.com/eclipse/paho.mqtt.golang"
 
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
 // publishConfig is the resolved set of values one publish needs — the seam

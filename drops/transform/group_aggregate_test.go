@@ -9,7 +9,7 @@ import (
 	"sort"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // runGroup wraps executeGroupAggregate the way runJoin wraps

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 func TestCronTrigger_EmitsRFC3339Timestamp(t *testing.T) {

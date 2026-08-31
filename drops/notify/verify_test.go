@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
 // --- verifyNtfy ---

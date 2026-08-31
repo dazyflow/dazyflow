@@ -23,9 +23,9 @@ import (
 	"sort"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	_ "git.sr.ht/~klahr/dazyflow/drops" // register every native drop
-	"git.sr.ht/~klahr/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/core"
+	_ "github.com/dazyflow/dazyflow/drops" // register every native drop
+	"github.com/dazyflow/dazyflow/engine"
 )
 
 // catalog is the shipped drop catalog with the universal `pass` pin applied

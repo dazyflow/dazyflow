@@ -11,7 +11,7 @@ import (
 	"math"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // maxDurationSeconds is the largest second count that fits in an int64-ns

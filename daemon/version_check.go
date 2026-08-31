@@ -14,8 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/core/buildinfo"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core/buildinfo"
 )
 
 // Version self-check — the System section of the platform admin page asks

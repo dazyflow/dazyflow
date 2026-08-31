@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
-	"git.sr.ht/~klahr/dazyflow/engine"
+	hfnet "github.com/dazyflow/dazyflow/drops/net"
+	"github.com/dazyflow/dazyflow/engine"
 )
 
 // Home Assistant connection verification, registered so the Apps page can

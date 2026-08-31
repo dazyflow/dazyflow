@@ -15,8 +15,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/engine"
 )
 
 // WorkerConfig tunes a single worker goroutine. Production sets

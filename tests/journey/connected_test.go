@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // timeShortDaysAgo returns an ISO date (YYYY-MM-DD) n days before now,

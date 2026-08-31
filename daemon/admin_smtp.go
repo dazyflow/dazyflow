@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // smtpTest is POST /api/v1/admin/smtp-test {to?}. It sends one throwaway

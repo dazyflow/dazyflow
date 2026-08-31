@@ -8,7 +8,7 @@ import (
 	"sort"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 func TestApplyFieldMapping(t *testing.T) {

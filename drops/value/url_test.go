@@ -6,7 +6,7 @@ package value
 import (
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 func TestURL_EmitsAndParsesQuery(t *testing.T) {

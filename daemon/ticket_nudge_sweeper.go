@@ -7,7 +7,7 @@ import (
 	"context"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // TicketNudgeSweeper walks the open ticket queue and reminds whichever side has

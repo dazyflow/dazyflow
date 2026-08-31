@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // memoryWriteDedupe is a process-local, bounded, TTL'd implementation of

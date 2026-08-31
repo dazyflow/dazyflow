@@ -6,7 +6,7 @@ package flow
 import (
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // TestIf_RoutesByVerdict checks that each operator routes the A payload down

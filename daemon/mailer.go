@@ -18,8 +18,8 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/internal/emailtheme"
-	"git.sr.ht/~klahr/dazyflow/internal/smtputil"
+	"github.com/dazyflow/dazyflow/internal/emailtheme"
+	"github.com/dazyflow/dazyflow/internal/smtputil"
 )
 
 // Mailer sends the platform's own transactional email — invitation

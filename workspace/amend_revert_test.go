@@ -6,7 +6,7 @@ package workspace
 import (
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // TestStore_AmendRevertToParent reproduces the silent data-loss bug where an

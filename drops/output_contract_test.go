@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // The output-shape contract: a flow author wires DOWNSTREAM steps onto a

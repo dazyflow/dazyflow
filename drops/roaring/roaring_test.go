@@ -13,7 +13,7 @@ import (
 	"sync"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // fakeRoaring stands in for the Roaring API: it serves the /token exchange and

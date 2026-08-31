@@ -6,7 +6,7 @@ package daemon
 import (
 	"fmt"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // loopBodyOwners maps each loop-body node ID → the for_each node that owns it.

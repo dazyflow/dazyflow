@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // ResourceFetcher fetches the live content of one resource definition —

@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // SubGraphRunner is the hook the Worker uses to submit a child graph

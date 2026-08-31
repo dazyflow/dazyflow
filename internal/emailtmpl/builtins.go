@@ -6,7 +6,7 @@ package emailtmpl
 import (
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // BuiltinPrefix namespaces built-in template IDs. Org-created template names

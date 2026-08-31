@@ -2218,7 +2218,7 @@ const file_control_proto_rawDesc = "" +
 	"\tCancelJob\x12%.dazyflow.control.v1.CancelJobRequest\x1a&.dazyflow.control.v1.CancelJobResponse\x12^\n" +
 	"\rStreamJobLogs\x12).dazyflow.control.v1.StreamJobLogsRequest\x1a .dazyflow.control.v1.JobLogEntry0\x012i\n" +
 	"\vDropService\x12Z\n" +
-	"\tListDrops\x12%.dazyflow.control.v1.ListDropsRequest\x1a&.dazyflow.control.v1.ListDropsResponseB5Z3git.sr.ht/~klahr/dazyflow/api/gen/control;controlpbb\x06proto3"
+	"\tListDrops\x12%.dazyflow.control.v1.ListDropsRequest\x1a&.dazyflow.control.v1.ListDropsResponseB8Z6github.com/dazyflow/dazyflow/api/gen/control;controlpbb\x06proto3"
 
 var (
 	file_control_proto_rawDescOnce sync.Once

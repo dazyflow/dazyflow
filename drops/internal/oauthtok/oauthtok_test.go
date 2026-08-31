@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 func jobParams(p map[string]any) core.Job { return core.Job{Params: p} }

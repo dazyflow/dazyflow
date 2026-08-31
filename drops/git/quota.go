@@ -10,8 +10,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 )
 
 // Disk-quota enforcement for git_checkout.

@@ -11,9 +11,9 @@ import (
 	"strconv"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/geoloc"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/geoloc"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 )
 
 // nominatimURL is OpenStreetMap's geocoder. A var (not const) so tests can

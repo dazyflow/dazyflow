@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // nodeOutcome captures a RunNode call's result, plus whether it panicked or

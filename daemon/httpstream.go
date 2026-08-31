@@ -14,7 +14,7 @@ import (
 	"net/http"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 func (h *HTTPGateway) sampleNode(rw http.ResponseWriter, r *http.Request, p core.Principal) {

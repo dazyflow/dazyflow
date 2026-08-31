@@ -7,7 +7,7 @@ import (
 	"context"
 	"sync"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // ConnectionVerifier tests whether a candidate service connection actually

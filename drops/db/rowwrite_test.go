@@ -6,7 +6,7 @@ package db
 import (
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // TestParseConflictUpdateCols covers each branch of the upsert column parser.

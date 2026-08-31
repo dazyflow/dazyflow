@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/auth"
+	"github.com/dazyflow/dazyflow/auth"
 )
 
 // withGoogleEndpoints points the package-level token/userinfo endpoints at

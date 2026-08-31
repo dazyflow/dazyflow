@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/core/buildinfo"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core/buildinfo"
 )
 
 // resetReleaseCache clears the process-wide memo so a test fetches fresh.

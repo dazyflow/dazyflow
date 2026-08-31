@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/mcp/server"
+	"github.com/dazyflow/dazyflow/mcp/server"
 )
 
 // TestClient_Whoami covers the Whoami helper end-to-end against the

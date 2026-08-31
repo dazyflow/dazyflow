@@ -8,11 +8,11 @@ import (
 	"log"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/engine"
-	"git.sr.ht/~klahr/dazyflow/workspace"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/workspace"
 
-	_ "git.sr.ht/~klahr/dazyflow/drops" // register the real catalog
+	_ "github.com/dazyflow/dazyflow/drops" // register the real catalog
 )
 
 func quietLogger() *log.Logger { return log.New(io.Discard, "", 0) }

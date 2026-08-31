@@ -10,7 +10,7 @@ import (
 	"regexp"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // templateErrCode classifies a resolveTemplatesCollecting failure for the

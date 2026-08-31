@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // run is a small wrapper that exercises executeMapRows with the

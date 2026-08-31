@@ -14,10 +14,10 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/apibase"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/oauthtok"
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/apibase"
+	"github.com/dazyflow/dazyflow/drops/internal/oauthtok"
+	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
 // maxResponseBytes caps how much of an API response we buffer, so a

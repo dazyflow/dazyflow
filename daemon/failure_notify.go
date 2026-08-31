@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
-	"git.sr.ht/~klahr/dazyflow/internal/emailtheme"
+	"github.com/dazyflow/dazyflow/core"
+	hfnet "github.com/dazyflow/dazyflow/drops/net"
+	"github.com/dazyflow/dazyflow/internal/emailtheme"
 )
 
 // Failure-notification dispatcher. Listens on the bus for a single

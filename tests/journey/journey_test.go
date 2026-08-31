@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // TestJourney_EveryScenario_NewcomerCanSetItUp walks a fresh user

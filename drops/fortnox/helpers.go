@@ -24,11 +24,11 @@ import (
 	"fmt"
 	"net/http"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/apibase"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/oauthtok"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/apibase"
+	"github.com/dazyflow/dazyflow/drops/internal/oauthtok"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
+	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
 // maxResponseBytes caps how much of an API response we buffer, so a hostile or

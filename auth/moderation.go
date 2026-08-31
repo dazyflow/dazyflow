@@ -7,7 +7,7 @@ import (
 	"context"
 	"errors"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // ErrAccountSuspended is returned when a credential is valid but the

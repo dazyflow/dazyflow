@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // The flow editor's view of the fleet. Its whole reason for existing is the

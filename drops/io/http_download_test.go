@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 func downloadServer(t *testing.T, body []byte, status int) *httptest.Server {

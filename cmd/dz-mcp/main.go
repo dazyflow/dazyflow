@@ -38,7 +38,7 @@ import (
 	"syscall"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/mcp/server"
+	"github.com/dazyflow/dazyflow/mcp/server"
 )
 
 func main() {

@@ -13,9 +13,9 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 
-	"git.sr.ht/~klahr/dazyflow/api/convert"
-	controlpb "git.sr.ht/~klahr/dazyflow/api/gen/control"
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/api/convert"
+	controlpb "github.com/dazyflow/dazyflow/api/gen/control"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 func graphCmd() *cobra.Command {

@@ -6,7 +6,7 @@ package daemon
 import (
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // ticket_nudge.go decides who to remind about a message they have not read.

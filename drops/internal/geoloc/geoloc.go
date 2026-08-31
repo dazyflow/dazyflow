@@ -30,9 +30,9 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
+	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
 // Parse splits a "lat,lon" string (e.g. "59.33,18.07") into two range-checked

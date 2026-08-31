@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // createFlowViaAPI saves a flow through the gateway PUT route and returns

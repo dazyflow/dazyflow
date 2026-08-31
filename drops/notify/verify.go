@@ -16,9 +16,9 @@ import (
 	"strings"
 	"time"
 
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
-	"git.sr.ht/~klahr/dazyflow/engine"
-	"git.sr.ht/~klahr/dazyflow/internal/smtputil"
+	hfnet "github.com/dazyflow/dazyflow/drops/net"
+	"github.com/dazyflow/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/internal/smtputil"
 )
 
 // Connection verification for this package's integrations, registered so the

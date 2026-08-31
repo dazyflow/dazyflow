@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/daemon"
-	"git.sr.ht/~klahr/dazyflow/engine"
-	"git.sr.ht/~klahr/dazyflow/engine/mcp"
+	"github.com/dazyflow/dazyflow/daemon"
+	"github.com/dazyflow/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/engine/mcp"
 )
 
 func TestEnvStrCov(t *testing.T) {

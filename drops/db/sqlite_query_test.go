@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 	_ "modernc.org/sqlite"
 )
 

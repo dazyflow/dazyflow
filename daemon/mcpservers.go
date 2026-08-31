@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/daemon/internal/pgstore"
-	"git.sr.ht/~klahr/dazyflow/engine/mcp"
+	"github.com/dazyflow/dazyflow/daemon/internal/pgstore"
+	"github.com/dazyflow/dazyflow/engine/mcp"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

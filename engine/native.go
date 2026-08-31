@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"runtime/debug"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // NativeDrop is a module implemented as Go code, executed by direct function

@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // isTruthyQuery reports whether a query-param value means "on" — accepting

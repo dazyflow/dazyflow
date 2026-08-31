@@ -12,8 +12,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/daemon/support"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/daemon/support"
 )
 
 // ticket_routes.go wires the Support ticket + chat surface (Phase 2 of

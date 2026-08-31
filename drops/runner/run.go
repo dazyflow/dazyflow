@@ -23,9 +23,9 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
-	"git.sr.ht/~klahr/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
+	"github.com/dazyflow/dazyflow/engine"
 )
 
 // Dispatcher sends a script to a runner and waits for the result. The daemon

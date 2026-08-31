@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/mcp/server"
+	"github.com/dazyflow/dazyflow/mcp/server"
 )
 
 // fakeHzd stands in for the daemon's /api/v1 surface. Tests register

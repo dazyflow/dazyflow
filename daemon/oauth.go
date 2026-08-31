@@ -19,7 +19,7 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // OAuth 2.0 authorization-code flow. This is what makes the

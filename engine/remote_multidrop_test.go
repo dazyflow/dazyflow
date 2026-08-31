@@ -11,8 +11,8 @@ import (
 
 	"google.golang.org/grpc"
 
-	nodepb "git.sr.ht/~klahr/dazyflow/api/gen/node"
-	"git.sr.ht/~klahr/dazyflow/core"
+	nodepb "github.com/dazyflow/dazyflow/api/gen/node"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // One runner, many drops.

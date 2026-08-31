@@ -20,8 +20,8 @@ import (
 
 	gossh "golang.org/x/crypto/ssh"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	gitdrop "git.sr.ht/~klahr/dazyflow/drops/git"
+	"github.com/dazyflow/dazyflow/core"
+	gitdrop "github.com/dazyflow/dazyflow/drops/git"
 )
 
 // The tests in mirror_test.go push over the local file transport with a nil

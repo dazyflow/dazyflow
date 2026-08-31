@@ -8,7 +8,7 @@ import (
 	"errors"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/auth"
+	"github.com/dazyflow/dazyflow/auth"
 )
 
 func newOrgAuthSecretsFixture(t *testing.T) (*memOrgAuth, auth.OrgAuthStore) {

@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/engine/mcp"
-	"git.sr.ht/~klahr/dazyflow/engine/webapi"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/engine/mcp"
+	"github.com/dazyflow/dazyflow/engine/webapi"
 )
 
 // Resolver looks up the Transport responsible for executing a given module

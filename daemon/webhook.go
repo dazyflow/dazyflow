@@ -13,7 +13,7 @@ import (
 	"net/url"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 const webhookInputModuleID = "webhook_input"

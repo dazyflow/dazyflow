@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	nodepb "git.sr.ht/~klahr/dazyflow/api/gen/node"
-	"git.sr.ht/~klahr/dazyflow/core"
+	nodepb "github.com/dazyflow/dazyflow/api/gen/node"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // The three guard rails around tenant runners: the reserved namespace, what a

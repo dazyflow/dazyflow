@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/dropstest"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/dropstest"
 )
 
 func TestMain(m *testing.M) { dropstest.EgressTestMain(m) }

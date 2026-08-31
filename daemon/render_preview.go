@@ -7,8 +7,8 @@ import (
 	"errors"
 	"net/http"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/internal/htmltmpl"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/internal/htmltmpl"
 )
 
 // previewMaxBytes caps a preview render below a real send: a preview only

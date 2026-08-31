@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 func itemInput() core.Port { return core.Port{Port: "item", MIME: []string{"application/json"}} } // typed, One

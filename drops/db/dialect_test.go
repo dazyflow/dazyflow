@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // fakeConn is an in-memory conn stub for exercising the shared run* skeletons

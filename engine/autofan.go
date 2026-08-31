@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // maxAutoFanItems caps how many items a single node will be auto-run over

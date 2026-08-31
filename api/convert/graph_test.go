@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	controlpb "git.sr.ht/~klahr/dazyflow/api/gen/control"
-	"git.sr.ht/~klahr/dazyflow/core"
+	controlpb "github.com/dazyflow/dazyflow/api/gen/control"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // TestGraphPBRoundTrip pins the core.Graph <-> controlpb.Graph conversion

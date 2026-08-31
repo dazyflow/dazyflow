@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // Billing (T3 / Phase 3): tenant plans + the free-tier run gate.

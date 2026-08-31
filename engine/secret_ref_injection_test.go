@@ -7,7 +7,7 @@ import (
 	"context"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // The whole-string `scheme://NAME` reference is an AUTHOR-written credential

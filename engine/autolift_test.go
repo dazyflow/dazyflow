@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // TestAutoLiftToList covers the one→many rule: a single value feeding a MANY

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // dedupeManifest is a non-idempotent write that opts into engine dedupe.

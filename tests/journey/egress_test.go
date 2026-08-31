@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
 // TestMain opts the journey tests into private-network egress: they mock

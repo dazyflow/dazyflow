@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
-	"git.sr.ht/~klahr/dazyflow/engine/webapi"
+	hfnet "github.com/dazyflow/dazyflow/drops/net"
+	"github.com/dazyflow/dazyflow/engine/webapi"
 )
 
 func webAPIService(t *testing.T) *WebAPIs {

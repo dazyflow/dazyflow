@@ -9,7 +9,7 @@ import (
 	"errors"
 	"fmt"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // enqueueReadyDependents looks at every node downstream of completedNodeID

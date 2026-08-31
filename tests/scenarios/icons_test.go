@@ -10,7 +10,7 @@ import (
 	"sort"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/engine"
 )
 
 // iconRegistryBlock isolates the object literal assigned to iconRegistry, so a

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // The GDPR cascade in daemon/gdpr.go reaches these stores by type-asserting

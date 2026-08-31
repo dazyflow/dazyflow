@@ -33,10 +33,10 @@ import (
 	"strconv"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/geoloc"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/geoloc"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
+	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
 // The free Current Weather and 5-day/3-hour Forecast endpoints. They're vars,

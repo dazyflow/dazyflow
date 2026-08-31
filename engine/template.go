@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // placeholderPattern matches ${scheme.path}. The scheme is the run of

@@ -1,4 +1,4 @@
-module git.sr.ht/~klahr/dazyflow
+module github.com/dazyflow/dazyflow
 
 go 1.26.7
 

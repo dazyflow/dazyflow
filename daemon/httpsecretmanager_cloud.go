@@ -6,7 +6,7 @@ package daemon
 import (
 	"net/http"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // AWS / GCP variants of the BYO secret-manager config endpoints

@@ -15,7 +15,7 @@ import (
 
 	"go.opentelemetry.io/otel/trace"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // GraphProgress wraps a node-level Progress event with the graph context so

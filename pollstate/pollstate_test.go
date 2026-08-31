@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // memStore is an in-memory Reader/Writer pair for tests.

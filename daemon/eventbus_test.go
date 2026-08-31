@@ -7,8 +7,8 @@ import (
 	"sync"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/engine"
 )
 
 func TestMemoryBus_DeliversToSubscribers(t *testing.T) {

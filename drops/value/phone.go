@@ -12,9 +12,9 @@ import (
 
 	"github.com/nyaruka/phonenumbers"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
-	"git.sr.ht/~klahr/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
+	"github.com/dazyflow/dazyflow/engine"
 )
 
 // phone.go is a typed source field, the phone-number sibling of url.go: the

@@ -16,7 +16,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // Scheme marks a sandbox path that lives in the run's ephemeral scratch

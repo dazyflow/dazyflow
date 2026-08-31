@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
 // TestMain allows private egress for the whole daemon test package. Many tests

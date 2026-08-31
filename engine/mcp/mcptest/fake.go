@@ -12,7 +12,7 @@ import (
 	"encoding/json"
 	"io"
 
-	"git.sr.ht/~klahr/dazyflow/engine/mcp"
+	"github.com/dazyflow/dazyflow/engine/mcp"
 )
 
 // ToolHandler runs server-side when the client calls a tool. Return a

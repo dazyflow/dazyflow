@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/daemon"
-	"git.sr.ht/~klahr/dazyflow/workspace"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/daemon"
+	"github.com/dazyflow/dazyflow/workspace"
 )
 
 // TestPublicWorkspaceOverview_NextRun checks the TV-board wiring: a published,

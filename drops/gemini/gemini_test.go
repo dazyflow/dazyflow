@@ -12,9 +12,9 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/drops/internal/dropstest"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/llmtask"
-	"git.sr.ht/~klahr/dazyflow/internal/llm"
+	"github.com/dazyflow/dazyflow/drops/internal/dropstest"
+	"github.com/dazyflow/dazyflow/drops/internal/llmtask"
+	"github.com/dazyflow/dazyflow/internal/llm"
 )
 
 func TestMain(m *testing.M) { dropstest.EgressTestMain(m) }

@@ -30,16 +30,16 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/auth"
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/daemon"
-	_ "git.sr.ht/~klahr/dazyflow/drops" // register every native drop
-	"git.sr.ht/~klahr/dazyflow/drops/gmail"
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
-	rssdrop "git.sr.ht/~klahr/dazyflow/drops/rss"
-	"git.sr.ht/~klahr/dazyflow/engine"
-	"git.sr.ht/~klahr/dazyflow/engine/jobstore"
-	"git.sr.ht/~klahr/dazyflow/pollstate"
+	"github.com/dazyflow/dazyflow/auth"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/daemon"
+	_ "github.com/dazyflow/dazyflow/drops" // register every native drop
+	"github.com/dazyflow/dazyflow/drops/gmail"
+	hfnet "github.com/dazyflow/dazyflow/drops/net"
+	rssdrop "github.com/dazyflow/dazyflow/drops/rss"
+	"github.com/dazyflow/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/engine/jobstore"
+	"github.com/dazyflow/dazyflow/pollstate"
 )
 
 // stack is a self-contained Dazyflow install: the HTTP API the web UI

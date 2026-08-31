@@ -6,7 +6,7 @@ package workspace
 import (
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // TestStore_HistoryAndRestore covers the version-history panel's backing

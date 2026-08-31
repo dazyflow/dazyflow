@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/engine/webapi"
+	"github.com/dazyflow/dazyflow/engine/webapi"
 )
 
 // ordersSpec is the running example, written the way a framework actually emits

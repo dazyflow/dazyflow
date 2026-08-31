@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/daemon/support"
+	"github.com/dazyflow/dazyflow/daemon/support"
 )
 
 func TestSupportAgentManagement(t *testing.T) {

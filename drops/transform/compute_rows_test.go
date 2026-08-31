@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // runCompute is the compute_rows analog of map_rows' run helper —

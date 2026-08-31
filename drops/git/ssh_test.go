@@ -14,7 +14,7 @@ import (
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	gossh "golang.org/x/crypto/ssh"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 func TestSSHURLParts(t *testing.T) {

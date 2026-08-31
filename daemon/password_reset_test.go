@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/auth"
+	"github.com/dazyflow/dazyflow/auth"
 )
 
 var resetLinkRE = regexp.MustCompile(`https://app\.example/reset-password\?email=([^&\s]+)&token=([a-f0-9]{64})`)

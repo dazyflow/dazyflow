@@ -13,8 +13,8 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/daemon"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/daemon"
 )
 
 // formServer stands the /form handler up on an httptest server using

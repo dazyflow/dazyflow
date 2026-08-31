@@ -12,7 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // Egress allowlist for http_request. The SSRF guard (ssrfGuard) blocks

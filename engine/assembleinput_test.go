@@ -6,7 +6,7 @@ package engine
 import (
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 func TestAssembleInput_Cov(t *testing.T) {

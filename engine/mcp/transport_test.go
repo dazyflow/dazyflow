@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/engine/mcp"
-	"git.sr.ht/~klahr/dazyflow/engine/mcp/mcptest"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/engine/mcp"
+	"github.com/dazyflow/dazyflow/engine/mcp/mcptest"
 )
 
 // registerInProcess wires a FakeServer into a fresh Catalog using

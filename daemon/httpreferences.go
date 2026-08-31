@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"sort"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // referenceItem is one insertable ${…} token the reference picker offers,

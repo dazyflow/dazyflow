@@ -6,8 +6,8 @@ package daemon
 import (
 	"net/http"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/internal/celexpr"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/internal/celexpr"
 )
 
 // validateExpression is POST /api/v1/tools/expression/validate — the linter

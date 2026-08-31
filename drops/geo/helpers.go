@@ -42,10 +42,10 @@ import (
 	"strconv"
 	"strings"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/geoloc"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/geoloc"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
+	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
 // geoConnectionFields is the per-tenant geocoding connection shared by every
@@ -77,7 +77,7 @@ var geoConnectionFields = []core.ConnectionField{
 // userAgent identifies dazyflow to the geocoder — Nominatim's policy rejects
 // requests without a real User-Agent (HTTP 403), so this is mandatory, not
 // cosmetic. Photon doesn't require it but accepts it.
-const userAgent = "dazyflow (+https://git.sr.ht/~klahr/dazyflow)"
+const userAgent = "dazyflow (+https://github.com/dazyflow/dazyflow)"
 
 const maxResponseBytes = 2 << 20 // 2 MiB — a geocode hit is a few KiB.
 

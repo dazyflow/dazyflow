@@ -13,13 +13,13 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/auth"
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/daemon"
-	"git.sr.ht/~klahr/dazyflow/engine"
-	"git.sr.ht/~klahr/dazyflow/engine/jobstore"
-	_ "git.sr.ht/~klahr/dazyflow/drops" // register sleep/merge/file_*
-	"git.sr.ht/~klahr/dazyflow/workspace"
+	"github.com/dazyflow/dazyflow/auth"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/daemon"
+	"github.com/dazyflow/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/engine/jobstore"
+	_ "github.com/dazyflow/dazyflow/drops" // register sleep/merge/file_*
+	"github.com/dazyflow/dazyflow/workspace"
 )
 
 // e2eWaitCeiling is the single, generous ceiling for every "wait until a

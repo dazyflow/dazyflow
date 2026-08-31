@@ -16,14 +16,14 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/auth"
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/daemon"
-	"git.sr.ht/~klahr/dazyflow/engine"
-	"git.sr.ht/~klahr/dazyflow/engine/jobstore"
-	_ "git.sr.ht/~klahr/dazyflow/drops"
-	dzio "git.sr.ht/~klahr/dazyflow/drops/io"
-	"git.sr.ht/~klahr/dazyflow/workspace"
+	"github.com/dazyflow/dazyflow/auth"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/daemon"
+	"github.com/dazyflow/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/engine/jobstore"
+	_ "github.com/dazyflow/dazyflow/drops"
+	dzio "github.com/dazyflow/dazyflow/drops/io"
+	"github.com/dazyflow/dazyflow/workspace"
 )
 
 // fullStack wires every production-relevant piece together: auth + Git

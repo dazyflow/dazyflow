@@ -3,7 +3,7 @@
 
 // Package buildinfo holds the version metadata stamped into the binary
 // at build time. The three vars are set via the linker
-// (-ldflags "-X git.sr.ht/~klahr/dazyflow/core/buildinfo.Version=...")
+// (-ldflags "-X github.com/dazyflow/dazyflow/core/buildinfo.Version=...")
 // by `make build` and the Dockerfile; see the Makefile's build/_bump
 // targets and CHANGELOG.md for the release flow.
 //

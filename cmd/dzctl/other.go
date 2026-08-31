@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 
-	controlpb "git.sr.ht/~klahr/dazyflow/api/gen/control"
+	controlpb "github.com/dazyflow/dazyflow/api/gen/control"
 )
 
 func moduleCmd() *cobra.Command {

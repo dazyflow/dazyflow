@@ -8,9 +8,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"git.sr.ht/~klahr/dazyflow/core"
-	"git.sr.ht/~klahr/dazyflow/drops/internal/params"
-	"git.sr.ht/~klahr/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
+	"github.com/dazyflow/dazyflow/engine"
 )
 
 // Switch is the N-way value router — the multi-case sibling of Branch. Branch

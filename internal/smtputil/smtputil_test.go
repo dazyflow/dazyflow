@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	hfnet "git.sr.ht/~klahr/dazyflow/drops/net"
+	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
 // allowLoopbackEgress lets a test's Send/Verify reach the loopback scripted

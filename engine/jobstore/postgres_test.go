@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // Integration test against a real Postgres. Skipped unless DAZYFLOW_TEST_DB

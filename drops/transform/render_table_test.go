@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.sr.ht/~klahr/dazyflow/core"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 func runRenderTable(t *testing.T, params map[string]any, rows any, headers []string) core.Result {
