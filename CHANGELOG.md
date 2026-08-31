@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.28.1] - 2026-09-01
+
 ### Changed
 
 - **`examples/` is now `tests/e2e/`.** The three pipelines were never a demo
