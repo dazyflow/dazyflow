@@ -20,13 +20,13 @@ COPY web/ ./
 RUN npm run build
 
 # ---- 2. Go build ------------------------------------------------------
-# Pin the exact patch that go.mod's `go 1.26.3` line requires. With the
+# Pin the exact patch that go.mod's `go 1.26.7` line requires. With the
 # floating `golang:1.26-alpine` tag, a builder whose Go is older than
-# 1.26.3 would (under the default GOTOOLCHAIN=auto) try to DOWNLOAD the
-# 1.26.3 toolchain during `go mod download` — which fails in a
+# 1.26.7 would (under the default GOTOOLCHAIN=auto) try to DOWNLOAD the
+# 1.26.7 toolchain during `go mod download` — which fails in a
 # network-restricted prod build. GOTOOLCHAIN=local forbids that implicit
 # fetch so any future drift fails loud at build time instead.
-FROM golang:1.26.3-alpine AS build
+FROM golang:1.26.7-alpine AS build
 ENV GOTOOLCHAIN=local
 # Optional Go module proxy. The build fetches dependencies from here at
 # `go mod download`; when the build host can't reach the public

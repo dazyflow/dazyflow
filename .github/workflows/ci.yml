@@ -209,9 +209,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # `stable` rather than go-version-file, unlike every other job. The
+      # scan jobs' Go version determines which STDLIB govulncheck audits, and
+      # go.mod pins an exact patch (so GOTOOLCHAIN=local prod builds never
+      # implicitly fetch a toolchain — see Dockerfile). Pinning here too meant
+      # every stdlib CVE batch turned this job red until someone hand-bumped
+      # go.mod. `stable` keeps the scan on the newest release; the build jobs
+      # and the images stay pinned. A real finding still fails the job — this
+      # only stops us reporting patches that are already released.
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version: stable
           cache-dependency-path: go.sum
 
       # Two passes, because they have complementary blind spots and neither

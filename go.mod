@@ -1,6 +1,6 @@
 module git.sr.ht/~klahr/dazyflow
 
-go 1.26.3
+go 1.26.7
 
 require (
 	github.com/coreos/go-oidc/v3 v3.18.0
