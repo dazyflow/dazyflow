@@ -1,0 +1,21 @@
+# SPDX-FileCopyrightText: 2026 Angels' Ware
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+# blank_issues_enabled stays true: a report that fits neither template is still
+# worth having, and a forced template is a good way to lose one.
+blank_issues_enabled: true
+
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/dazyflow/dazyflow/security/advisories/new
+    about: >-
+      Report privately through GitHub's Private Vulnerability Reporting, never as
+      a public issue. See SECURITY.md.
+
+  - name: Documentation
+    url: https://docs.dazyflow.app
+    about: The guide and the generated step reference — check here before filing.
+
+  - name: Contributing
+    url: https://github.com/dazyflow/dazyflow/blob/master/CONTRIBUTING.md
+    about: Setup, the pre-push gate, and the rules CI enforces.

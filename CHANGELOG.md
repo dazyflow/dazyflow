@@ -25,6 +25,42 @@ into the image.)
 
 ### Fixed
 
+- **`docs/decisions/` was announced but never created.** The commit that
+  restructured `TODO.md` deleted 249 lines of retrospective reasoning instead of
+  moving them, leaving eight links into a directory that did not exist — six in
+  `TODO.md`, two in `CONTRIBUTING.md`, one of those naming
+  `2026-08-20-step-vocabulary.md` as **required reading** before writing
+  user-facing text — plus a code comment in `core/flowstatus.go`, a line in the
+  pull-request template, and the `### Added` entry below claiming it had
+  shipped. All five records are restored verbatim from the pre-restructure file
+  and indexed by `docs/decisions/README.md`; the fresh-eyes review that made the
+  claim moved in beside them as `2026-08-31-fresh-eyes-review.md`, carrying a
+  correction, which is where a completed-work snapshot belonged rather than the
+  repository root.
+
+- **Nothing checked Markdown links outside `docs/guide/`.** This is why the
+  above shipped unnoticed in the same commit that wrote it: the link guard added
+  alongside it (`web/src/docs/content.test.ts`) covers guide pages only.
+  `make links-check` (`scripts/check-links.sh`) now walks every relative link in
+  every tracked `.md` file, in `make check` and in CI. It reads
+  `--cached --others --exclude-standard`, not just the index — a brand-new
+  document is exactly the one whose links have never been checked — and blanks
+  fenced blocks and code spans first, so a file that legitimately *shows*
+  Markdown is not a false positive. Verified by reintroducing the original bug.
+
+- **`docs/DEPLOY.md` told operators `make docs-dev` runs VitePress.** It runs
+  the Vite dev server; VitePress is not in the tree. The third stale reference
+  to it, after `.dockerignore` and `deploy/Caddyfile` — and the one in the file
+  someone reads while standing up the docs site.
+
+- **`cmd/docsgen` escaped `{{` as `&#123;&#123;` for a renderer that is gone.**
+  A Vue interpolation guard from the VitePress era, applied to 24 strings of
+  Go-template prose (`{{.name}} pulls a field`). The docs SPA renders raw braces
+  identically — checked against the real `react-markdown` configuration before
+  removing — so the entities were noise in the generated source. The `<` escape
+  stays: `&lt;place>` is also correct in a renderer that passes HTML through,
+  and the generated catalog is plain Markdown that anything may read.
+
 - **Two of the three shipped examples could not run, and CI only ran the
   third.** `examples/mcp-pipeline/run.sh` and `examples/ap-invoice/run.sh` are
   the only end-to-end exercise of `dzd` through its own CLI and HTTP surfaces,
@@ -72,6 +108,27 @@ into the image.)
 
 ### Added
 
+- **Issue templates.** A bug report that asks for the version and how it's
+  being run, and a feature/connector request that asks for the job in the
+  reporter's own words plus how the service authenticates — the main cost driver,
+  so it's what ranks the connector backlog. `config.yml` routes vulnerabilities
+  to Private Vulnerability Reporting rather than a public issue. The gap was
+  named in the same review that added `CONTRIBUTING.md` and the PR template, and
+  only those two shipped.
+
+- **An index for `docs/guide/`.** `README.md` sends readers to that directory,
+  where a repository host shows an alphabetical file list — so "Connect an app"
+  came before "Build your first flow" and the intended reading order existed
+  only in the SPA's `NAV`. The index carries that order, and is excluded from
+  `make docs-content` and from the guide-page guard, since it indexes `NAV`
+  rather than being a page in it.
+
+- **Tests for `cmd/docsgen`.** It had none, and it renders the entire public
+  step catalog from the drop manifests, so a defect there is wrong documentation
+  for every step at once. Covers the text-mangling helpers — where one escape
+  too few breaks a page and one too many shows entities to a reader — plus an
+  end-to-end run over the real registry asserting the output is deterministic.
+
 - **CI runs on push and pull request.** The workflow was `workflow_dispatch:`
   only, so every gate it defines — the race suite, both govulncheck passes,
   catalogue freshness, the changelog guard, the web suite, three Vite builds —
@@ -112,7 +169,9 @@ into the image.)
   fourteen open items scattered inside retrospectives titled "worked through" —
   the first at line 140. The reasoning was worth keeping and the backlog was
   unreadable, so the retrospectives moved to dated decision records and
-  `TODO.md` now leads with the open work.
+  `TODO.md` now leads with the open work. (This entry was written before the
+  directory existed — the records were deleted rather than moved, and were
+  restored later in the same cycle. See **Fixed**.)
 
 ### Changed
 

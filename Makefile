@@ -61,6 +61,7 @@ LDFLAGS := -s -w \
 .PHONY: help up down restart logs ps build rebuild env pg pg-down dev web test vet fmt fmt-check env-check check ci \
 	runner-embed runner-test \
         integration-catalog drop-catalog catalogs catalogs-check check-changelog flowgen-eval \
+        links-check \
         docs-content docs-site docs-dev bin version latest major minor patch _bump upgrade
 
 help: ## List targets
@@ -199,7 +200,10 @@ fmt: ## Format Go sources
 docs-content: ## Populate the docs SPA content (guide pages + generated step catalog)
 	rm -rf $(DOCS_CONTENT_OUT)
 	mkdir -p $(DOCS_CONTENT_OUT)/guide
-	cp docs/guide/*.md $(DOCS_CONTENT_OUT)/guide/
+	# README.md is the repository-host index for docs/guide/ — the reading order
+	# GitHub cannot infer from an alphabetical file list. The SPA has that order in
+	# NAV, so shipping it as a page would put an untitled duplicate in the sidebar.
+	cp $(filter-out docs/guide/README.md,$(wildcard docs/guide/*.md)) $(DOCS_CONTENT_OUT)/guide/
 	go run ./cmd/docsgen -out $(DOCS_CONTENT_OUT)/reference/steps
 
 docs-site: docs-content ## Build the docs SPA (docs.dazyflow.app) into web/dist-docs
@@ -421,13 +425,17 @@ fmt-check: ## Fail if any Go source is not gofmt-clean (CI)
 env-check: ## Fail if a DAZYFLOW_* knob the daemon reads is missing from .env.example (CI)
 	@./scripts/check-env-example.sh
 
-check: ## Fast local gate before pushing: fmt, build, vet, tests, catalogues, changelog
+links-check: ## Fail if a relative Markdown link does not resolve on disk (CI)
+	@./scripts/check-links.sh
+
+check: ## Fast local gate before pushing: fmt, build, vet, tests, catalogues, doc links, changelog
 	@echo "==> gofmt"; $(MAKE) --no-print-directory fmt-check
 	@echo "==> go build"; go build ./...
 	@echo "==> go vet"; go vet ./...
 	@echo "==> go test"; go test ./...
 	@echo "==> catalogues"; $(MAKE) --no-print-directory catalogs-check
 	@echo "==> env catalogue"; $(MAKE) --no-print-directory env-check
+	@echo "==> doc links"; $(MAKE) --no-print-directory links-check
 	@echo "==> changelog"; ./scripts/check-changelog.sh
 	@echo
 	@echo "check passed. This does NOT cover the web suite, the web build, or"
@@ -439,6 +447,7 @@ ci: ## Full local mirror of CI (.github/workflows/ci.yml): fmt, build, vet, race
 	@echo "==> go build"; go build ./...
 	@echo "==> go vet"; go vet ./...
 	@echo "==> env catalogue"; $(MAKE) --no-print-directory env-check
+	@echo "==> doc links"; $(MAKE) --no-print-directory links-check
 	@echo "==> runner agent"; $(MAKE) --no-print-directory runner-test
 	@echo "==> go test -race"; go test -race -timeout $(GO_TEST_TIMEOUT) ./...
 	@echo "==> catalogues"; $(MAKE) --no-print-directory catalogs-check

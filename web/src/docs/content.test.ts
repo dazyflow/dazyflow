@@ -24,9 +24,14 @@ import { NAV, ORDER, getPage, neighbours } from "./content";
 const GUIDE_SRC = join(__dirname, "../../../docs/guide");
 const BUNDLE = join(__dirname, "content/guide");
 
+// README.md is not a guide page. It is the index GitHub renders for
+// docs/guide/, carrying the reading order that only exists in NAV otherwise —
+// so it is deliberately excluded here and from the `make docs-content` copy. A
+// page shipped into the SPA needs a NAV row; an index of NAV would want one
+// pointing at itself.
 const guideSlugs = () =>
   readdirSync(GUIDE_SRC)
-    .filter((f) => f.endsWith(".md"))
+    .filter((f) => f.endsWith(".md") && f !== "README.md")
     .map((f) => f.replace(/\.md$/, ""))
     .sort();
 

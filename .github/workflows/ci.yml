@@ -115,6 +115,15 @@ jobs:
       - name: Config catalogue up to date
         run: make env-check
 
+      # Eight links to docs/decisions/ — a directory that was never created —
+      # shipped in the same commit that wrote them, one of them named as
+      # required reading in CONTRIBUTING.md. The only link guard in the tree
+      # (web/src/docs/content.test.ts) checks docs/guide/ and nothing else, so
+      # nothing failed. This is the wide net over every tracked .md file; that
+      # guard keeps the two-resolver rules that apply to guide pages alone.
+      - name: Doc links resolve
+        run: make links-check
+
       - name: Build
         run: go build ./...
 

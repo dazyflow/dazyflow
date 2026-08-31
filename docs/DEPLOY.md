@@ -366,10 +366,10 @@ Kubernetes: build the same `Dockerfile.docs` image, push it, and run it as a
 Deployment + Service with a `docs.dazyflow.app` Ingress host (or serve the
 built `dist` from an object-storage/CDN bucket) instead of the Caddy block.
 
-For local iteration without a container, `make docs-dev` still runs VitePress
-with hot reload (and `make docs-site` builds `dist/` on the host); CI builds
-both the site (`make docs-site`) and the image (`Dockerfile.docs`) so the
-published docs can't drift from the code.
+For local iteration without a container, `make docs-dev` runs the docs SPA on
+the Vite dev server with hot reload (and `make docs-site` builds `dist/` on the
+host); CI builds both the site (`make docs-site`) and the image
+(`Dockerfile.docs`) so the published docs can't drift from the code.
 
 ## Version stamping & upgrades
 

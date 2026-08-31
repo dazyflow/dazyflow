@@ -621,32 +621,35 @@ func oneLine(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
-// mdSafe makes a prose string safe for VitePress, which compiles Markdown
-// through Vue: a literal "<place>" reads as an unclosed HTML tag and "{{x}}" as
-// a Vue interpolation, both of which break the build. We escape "<" and "{{"
-// — but only OUTSIDE inline code spans, where VitePress already treats the
-// content as raw text (escaping there would show the entities literally).
+// mdSafe escapes "<" in a prose string, outside inline code spans, so a literal
+// placeholder like "<place>" survives as text instead of being read as an HTML
+// tag. Escaping only outside code spans matters because a renderer already
+// treats span content as raw text, and "&lt;" there would show literally.
+//
+// This is deliberately renderer-independent. Today the only consumer is the
+// docs SPA (web/src/docs/Markdown.tsx: react-markdown, no rehype-raw), which
+// escapes raw HTML itself, so "<place>" would survive unescaped too. The escape
+// stays because "&lt;place>" is also correct in a renderer that DOES pass HTML
+// through, and the generated catalog is plain Markdown that anything may read.
+//
+// What was removed: this also escaped "{{" as "&#123;&#123;", because the docs
+// were built with VitePress and Vue read "{{x}}" as an interpolation. Nothing
+// compiles these pages through Vue any more, so the entities were noise in the
+// source — 24 of them, all in Go-template prose like "{{.name}} pulls a field"
+// — for output that renders identically either way. Verified against the real
+// renderer before removing.
 func mdSafe(s string) string {
 	var b strings.Builder
 	inCode := false
-	rs := []rune(s)
-	for i := 0; i < len(rs); i++ {
-		r := rs[i]
-		if r == '`' {
+	for _, r := range s {
+		switch {
+		case r == '`':
 			inCode = !inCode
 			b.WriteRune(r)
-			continue
-		}
-		if inCode {
+		case inCode:
 			b.WriteRune(r)
-			continue
-		}
-		switch {
 		case r == '<':
 			b.WriteString("&lt;")
-		case r == '{' && i+1 < len(rs) && rs[i+1] == '{':
-			b.WriteString("&#123;&#123;")
-			i++
 		default:
 			b.WriteRune(r)
 		}

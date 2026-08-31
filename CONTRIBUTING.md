@@ -30,7 +30,7 @@ make help     # every target
 ## Before you push
 
 ```sh
-make check    # gofmt, build, vet, Go tests, catalogues, config catalogue, changelog
+make check    # gofmt, build, vet, Go tests, catalogues, config catalogue, doc links, changelog
 make ci       # the full CI mirror — adds npm audit, the web suite and build, the runner tests
 ```
 
@@ -72,6 +72,12 @@ becomes true only of the drops the snapshot remembers.
 reference, not a sample: `make env` copies from it and operators are sent to it.
 `make env-check` fails on a knob the daemon reads and the file doesn't mention.
 
+**Every relative Markdown link has to resolve.** `make links-check` walks every
+tracked `.md` file. It exists because eight links to a `docs/decisions/`
+directory that had never been created shipped in the commit that wrote them —
+one of them named as required reading in this file. A dead link in
+`CONTRIBUTING.md` costs a first contributor more than a broken build does.
+
 **`make fmt` before committing.** `make fmt-check` gates it.
 
 ## Adding a step (drop)
@@ -100,6 +106,17 @@ That split is deliberate and holding it is cheaper than re-litigating it.
 Guide pages under `docs/guide/` are read both in the docs SPA and on GitHub, so
 link a sibling page as `./slug.md` and the generated step catalog as a full
 `https://docs.dazyflow.app/reference/steps/…` URL. A test enforces both.
+
+## Reporting a bug, or asking for a connector
+
+Open an issue — there is a template for each. A bug report wants the version
+from `GET /api/v1` and how you're running it; a feature or connector request
+wants the job in your own words rather than in Dazyflow vocabulary, and how the
+service authenticates, which is the main cost driver.
+
+Check [TODO.md](TODO.md) first. The connector backlog is ranked there with the
+reasoning, and two sections exist so the same suggestions don't arrive twice:
+**Decided against** and **Corrections to the record**.
 
 ## Reporting a security issue
 

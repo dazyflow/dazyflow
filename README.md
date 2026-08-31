@@ -112,7 +112,7 @@ bundled Postgres (loopback-only) and runs the daemon on the host against it.
 ```sh
 make dev      # bundled Postgres, then dzd on http://localhost:8080
 make web      # (other terminal) Vite dev server on http://localhost:5173
-make check    # gofmt, build, vet, Go tests, catalogues, changelog
+make check    # gofmt, build, vet, Go tests, catalogues, doc links, changelog
 make ci       # the full CI mirror — adds the web and runner suites
 make help     # every target
 ```

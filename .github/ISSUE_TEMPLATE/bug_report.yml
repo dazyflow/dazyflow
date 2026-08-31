@@ -1,0 +1,72 @@
+# SPDX-FileCopyrightText: 2026 Angels' Ware
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+name: Bug report
+description: Something behaves differently from how it is documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Not for security issues.** A vulnerability goes through GitHub's
+        Private Vulnerability Reporting, never a public issue — see
+        [SECURITY.md](https://github.com/dazyflow/dazyflow/blob/master/SECURITY.md).
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. …
+        2. …
+        3. …
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: |
+        `docker compose logs dzd`, or the browser console for a UI bug. **Redact
+        secrets first** — `dzd` redacts its own logs, but a pasted `.env` or a
+        connection payload is not covered by that.
+      render: text
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The `build` block on `GET /api/v1`, or the account menu in the web UI.
+      placeholder: "0.28.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: how
+    attributes:
+      label: How are you running it
+      options:
+        - Docker Compose (the bundled docker-compose.yml)
+        - Docker Compose (docker-compose.prod.yml, behind a reverse proxy)
+        - Kubernetes (deploy/k8s)
+        - From source (make dev)
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
+      description: |
+        A flow export, the step involved, whether a runner is in the path. If it
+        is intermittent, say how often.

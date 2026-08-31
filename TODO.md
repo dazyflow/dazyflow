@@ -142,6 +142,35 @@ Context: **[2026-08-20 — web fixes](docs/decisions/2026-08-20-web-fixes.md)**.
       deliberately does NOT flag it (the token exists, so nothing is broken).
       Sweep them out; check the others while you're there.
 
+### Frontend tooling and dependencies
+
+Context: **[2026-08-31 — fresh-eyes review](docs/decisions/2026-08-31-fresh-eyes-review.md)**
+(findings 3 and 18). Both were left open there with a reason, and both belong
+here rather than only in a review snapshot — this file is meant to be the single
+backlog, and a reader of it would not have known these existed.
+
+- [ ] **Three dependency majors: Vite 5 → 8, Vitest 2 → 4, React Router 6 → 7.**
+      None fixes anything this app has. The two `react-router-dom` advisories in
+      the 6.x range are not reachable — the open redirect needs user input
+      reaching `Link`/`navigate`, and the one place that happens
+      (`return_to` in `src/pages/auth/SignIn.tsx`) already rejects `//evil.com`
+      and `/\evil.com` by hand; the SSR advisory needs hydration this
+      client-only SPA does not do. The Vite/Vitest highs are dev-only and never
+      reach a user, which is why the CI gate is `--omit=dev`. So this is a
+      build-behaviour change to schedule deliberately, with the app running in
+      front of you — not review fallout. Take them one at a time.
+
+- [ ] **Five real `react-hooks/exhaustive-deps` warnings**, separated from the
+      40 false positives (22 are `setDirty`, a `useState` setter returned from
+      `useAutosave`; ~13 are `t` / `i18n.language`; 2 are refs). The real ones:
+      `FlowEditor.tsx:2020` (`disabledNodes`), `2284` (`continueOnError`,
+      `wiredPlaceByNode`), the `graph` and `paramsByID`/`selected` effects, and
+      the `waypoints`/`pts` render-identity churn in `RerouteEdge.tsx` (a perf
+      issue, not a correctness one). Visible via `npm run lint`, deliberately
+      not gated. Each wants its own change with the behaviour in front of you:
+      editing hook dependencies in a 5,291-line editor on a linter's say-so is
+      how you introduce the bug the rule warns about.
+
 ### Copy and vocabulary
 
 Context: **[2026-08-20 — step vocabulary](docs/decisions/2026-08-20-step-vocabulary.md)**
