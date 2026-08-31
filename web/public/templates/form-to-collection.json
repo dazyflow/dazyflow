@@ -8,6 +8,7 @@
     {
       "id": "form",
       "module": "webhook_input",
+      "label": "Form",
       "params": {
         "public_form": true,
         "form_fields": ["name", "email", "message"],

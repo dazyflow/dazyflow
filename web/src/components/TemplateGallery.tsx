@@ -113,8 +113,15 @@ export function TemplateGallery() {
   }, [providers]);
 
   const useTemplate = async (tpl: TemplateSummary) => {
-    if (!token || !activeTenant || !activeWorkspace) {
+    if (!token) {
       setError(t("templates.notSignedIn"));
+      return;
+    }
+    // Signed in, but the workspace hasn't arrived yet. Saying "not signed in"
+    // here told the user something untrue about a session they can see in the
+    // sidebar, and offered no next step.
+    if (!activeTenant || !activeWorkspace) {
+      setError(t("templates.workspaceLoading"));
       return;
     }
     setBusy(tpl.id);
@@ -210,7 +217,14 @@ export function TemplateGallery() {
   // doesn't know is ignored: the user just sees the normal gallery.
   const started = useRef(false);
   useEffect(() => {
-    if (!autoStart || started.current || !templates || !token) return;
+    if (!autoStart || started.current || !templates) return;
+    // The workspace, not just the token, is what useTemplate needs. The
+    // template index is a static fetch and resolves well before the identity
+    // bootstrap, so gating on `token` alone fired this on a cold load with
+    // activeTenant still "" — and the user's very first action reported
+    // "not signed in" while signed in. Waiting costs nothing: the effect
+    // re-runs when the bootstrap lands.
+    if (!token || !activeTenant || !activeWorkspace) return;
     const tpl = templates.find((x) => x.id === autoStart);
     started.current = true;
     const sp = new URLSearchParams(searchParams);
@@ -218,7 +232,7 @@ export function TemplateGallery() {
     setSearchParams(sp, { replace: true });
     if (tpl) void useTemplate(tpl);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoStart, templates, token]);
+  }, [autoStart, templates, token, activeTenant, activeWorkspace]);
 
   if (error && !templates) {
     return <ErrorNotice>{error}</ErrorNotice>;
@@ -340,6 +354,7 @@ export function TemplateGallery() {
                   {adminBlocked && (
                     <p className="template-admin-blocked-note">
                       {t("templates.adminBlocked", {
+                        count: missingIntegrationNames.length,
                         names: missingIntegrationNames.join(", "),
                       })}
                     </p>
@@ -352,6 +367,7 @@ export function TemplateGallery() {
                     title={
                       adminBlocked
                         ? t("templates.adminBlockedTitle", {
+                            count: missingIntegrationNames.length,
                             names: missingIntegrationNames.join(", "),
                           })
                         : !canEdit

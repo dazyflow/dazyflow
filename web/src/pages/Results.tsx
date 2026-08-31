@@ -10,6 +10,7 @@ import { Button } from "../components/ui/Button";
 import { ConfirmModal } from "../components/ui/ConfirmModal";
 import { explainApiError } from "../lib/explainApiError";
 import { sortRowsByColumn } from "../lib/compareCells";
+import { formatDateTime } from "../lib/datetime";
 import { downloadText } from "../lib/download";
 import { ErrorNotice } from "../components/ui/ErrorNotice";
 import { ICON } from "../icons";
@@ -119,7 +120,14 @@ export function Results() {
     const q = query.trim().toLowerCase();
     const found = q
       ? page.rows.filter((row) =>
-          page.columns.some((c) => formatCell(row[c]).toLowerCase().includes(q)),
+          page.columns.some(
+            (c) =>
+              formatCell(row[c]).toLowerCase().includes(q) ||
+              // Also match the rendered form, so searching for the local date
+              // a row visibly shows finds it even though the stored value is
+              // the UTC instant.
+              formatCellDisplay(row[c]).toLowerCase().includes(q),
+          ),
         )
       : page.rows;
     if (!sort) return found;
@@ -309,7 +317,12 @@ export function Results() {
                   <div className="run-table-scroll">
                     {/* data-headers: these column names come from the
                         collection, not from us, so they are not label-cased
-                        like every other table's headers here. */}
+                        like every other table's headers here. Nor are they
+                        prettified (saved_at -> "Saved at"): a header is a name
+                        someone matches against their own data, their flow's
+                        field and the CSV this page downloads, so it has to be
+                        the stored key. Only the VALUES are formatted for
+                        reading — see formatCellDisplay. */}
                     <table className="run-table data-headers">
                       <thead>
                         <tr>
@@ -350,7 +363,7 @@ export function Results() {
                           return (
                             <tr key={Number.isFinite(rowid) ? rowid : i}>
                               {page.columns.map((c) => (
-                                <td key={c}>{formatCell(row[c])}</td>
+                                <td key={c}>{formatCellDisplay(row[c])}</td>
                               ))}
                               <td style={{ width: 1, whiteSpace: "nowrap" }}>
                                 <button
@@ -423,6 +436,23 @@ function formatCell(v: unknown): string {
   if (typeof v === "object") return JSON.stringify(v);
   return String(v);
 }
+
+// An RFC3339 instant, which is what every timestamp a flow writes looks like
+// (the Collections "Save rows" step stamps saved_at this way). Anchored and
+// deliberately narrow: a free-text column that merely CONTAINS a date must
+// not be rewritten, only a cell that is one.
+const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:?\d{2})$/;
+
+// formatCellDisplay is formatCell for the on-screen table only. Timestamps
+// come out of the store as "2026-08-31T07:21:54Z" — correct, and unreadable
+// to the person the Collections page is for, who also has to do the UTC
+// arithmetic in their head. CSV keeps the raw value (see toCSV): a
+// spreadsheet wants the machine form.
+function formatCellDisplay(v: unknown): string {
+  const s = formatCell(v);
+  return ISO_INSTANT.test(s) ? formatDateTime(s) : s;
+}
+
 
 // toCSV builds RFC-4180-ish CSV: fields are quoted and embedded quotes
 // doubled. Good enough for the "open it in Excel/Sheets" path.

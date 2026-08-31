@@ -155,6 +155,108 @@ Each was promised in a comment or in `docs/guide/runners.md` and not delivered.
       candidate — `remote_multidrop_test.go` asserting no namespaced alias is
       filed — is a deliberate regression guard and stays.
 
+### Cold signup walkthrough — 2026-08-31, worked through
+
+A non-technical persona ("Nora", runs a small café-supply business) was pointed
+at the marketing site with no prior knowledge and told to sign up and see how
+far she got. She reached a published contact form with a real submission in
+Collections, so the product works; ~30 things got in the way and **all but one
+are fixed.** The entry stays for the same reason the runners one does: three of
+the fixes are not the obvious ones, and two findings turned out to be wrong.
+
+The run was driven against `dzd` serving `web/dist` **and** `../dazyflow-web`
+from one origin (`DAZYFLOW_WEB_DIST` + `DAZYFLOW_LANDING_DIR`), the shape
+`docs/DEPLOY.md` describes, rather than the usual Vite-on-5173 dev split. Two
+of the worst bugs exist only in that shape and cannot appear in dev. **Run a
+cold path against the single-host shape before a release**; the dev split is
+not a substitute.
+
+**The funnel had no entrance.** All 28 links on `landing.html` were enumerated:
+seven CTAs, every one a `mailto:`, and nothing anywhere pointing at `/signup`
+or `/signin` — while self-serve signup was live and working. Nora only got in
+by guessing the URL. The `mailto:` gate is a deliberate pre-launch decision and
+is untouched; what was not a decision is that an already-onboarded customer had
+no way back into the product from the marketing site. Every page now carries a
+**Log in** link in the top bar and footer. That link is not part of the gate and
+should survive whatever happens to the CTAs.
+
+**Two deployment-shaped bugs, both hit before she did anything.**
+
+- **`DAZYFLOW_PUBLIC_BASE_URL` was never trusted as a CSRF origin.** Serving the
+  SPA ourselves makes our own public origin a browser origin doing
+  cookie-authenticated writes, and `AllowedOrigins` came from
+  `DAZYFLOW_WEB_ORIGIN` alone. The failure hid itself: sign-up and sign-in carry
+  no session cookie yet, so `verifyCookieOrigin` waves them through and the
+  daemon looks healthy right up to the first authenticated POST. Nora's first
+  click produced the raw server string, in red, in the UI. `buildGateway` now
+  appends `publicBaseURL` when `webDist` is set, and logs that it did. Both CSRF
+  refusals also carry the machine code `csrf_origin`, mapped to
+  `apiError.csrfOrigin` — a sentence that says it is a server setting and not
+  something the reader did.
+- **The auto-start deep link always lost a race.** `?start=try-it-now` is the
+  Welcome screen's headline CTA. The effect gated on `templates && token`, but
+  `useTemplate` also needs `activeTenant && activeWorkspace`; the template index
+  is a static fetch and resolves first, so a cold load reported **"Not signed
+  in."** to a signed-in user with their email in the sidebar. It also set
+  `started.current` and stripped the param *before* failing, so reloading could
+  not retry. Guard widened, and there is now a distinct
+  `templates.workspaceLoading` string for "signed in, workspace still opening".
+
+**Connecting an app is where "no technical setup" broke.** Clicking *Connect* on
+`/apps/gmail` did a top-level navigation to the authorize endpoint and left her
+on a white page reading `{"error":{"code":"not_found","message":"unknown OAuth
+provider \"google\""}}` — the application simply gone. `OAuthCard` treated
+"provider absent from the list" as "not connected yet", so the button was live.
+The template gallery had already solved this; `OAuthCard` now takes the same
+signal and says so instead. Related: the gallery's own copy told hosted users
+that *"whoever runs the server has to enable it first"*, which is correct
+self-host language and a dead end on the hosted product — reworded, and given
+the plural forms it never had (*"Needs Gmail, Slack, which isn't set up"*).
+
+**Jargon the 2026-08-22 sweep did not reach**, all fixed: the "Built-in" card
+(the biggest on the Apps page at 57 steps) opened with `split_rows`,
+`await_approval` and "file I/O"; app detail pages printed raw step ids under
+every step name; the Apps list was alphabetical, so a Swedish SMS gateway led
+the page ahead of Gmail and Google; the hosted-form templates shipped a step
+labelled *Webhook* with *Body* and *Headers* ports inside a template called
+*Web form → Collection*; Collections rendered `2026-08-31T07:21:54Z` in a cell.
+Auth screens gained Privacy and Terms links, stopped sending the logo to a
+hardcoded `dazyflow.app` (which left any self-hosted install), and say
+"© 2026 Dazyflow" rather than naming an operating company the visitor has never
+seen. The verify-email banner now says what the reader loses by ignoring it.
+
+Marketing-side fixes live in `../dazyflow-web`: the Log in links, a
+`scroll-padding-top` so in-page anchors stop landing under the sticky topbar
+(measured: the `#how` eyebrow sat at y=60 with the bar occupying through y=72,
+and nothing compensated anywhere), a uniform nav order across all eight pages,
+run-allowance and secret-store copy that a non-technical buyer can read, and a
+stats band that counts apps instead of logo files.
+
+**One more found while fixing those, and it is the one to remember.** The
+topbar budget was already blown on the Swedish pages before "Log in" existed,
+and it fails invisibly: the brand is a flex item, so when the nav wants more
+room than the bar has, the LOGO is squeezed to zero width and disappears. No
+wrapping, no scrollbar, no console warning — just a bar with no logo on it,
+which is easy to read as a design choice. Swedish binds because "Dokumentation"
+and "Begär en inbjudan" are much wider than "Docs" and "Request an invite":
+it needed 591px before the new link and 662px after, while the wordmark only
+gave way at 560. Fixed by bringing the compact nav type in at 700px instead of
+560px, which carries every link down to 631px, then dropping Docs / the
+language switch / Pricing at 630 / 420 / 360. **Measure the Swedish page, not
+the English one** — the widths are recorded beside the rules in `style.css`.
+
+- [ ] **The hero screenshot still contradicts the hero copy.** `shots/branch.png`
+      leads with a Schedule step reading `0 7 * * 1-5`, a Gmail step reading
+      `is:unread newer_than:1d` and a router listing *Routing slot 1…8* —
+      cron and Gmail query syntax, directly above *"No code, no consultants"*
+      and a stat band claiming *"0 lines of code to write"*. **Not fixed:** this
+      is a capture job, not a code change. It needs a demo workspace, connected
+      accounts or the documented CSS hiding trick, and a re-shoot at a 1120x700
+      viewport with devicePixelRatio 2.4 (see `dazyflow-web/README.md`), and a
+      worse screenshot is a real risk. The product can already express both in
+      plain language — the schedule editor hides cron behind *Custom* — so
+      build the demo flow that way and re-shoot.
+
 ### Vocabulary — renamed, with one convention to hold
 
 The product says **step** (sv: *steg*) everywhere a person can read it, as of
@@ -357,6 +459,32 @@ are now spent, so the next Nordic step costs more than the last few did.
 ---
 
 ## Corrections to the record
+
+- **Collections column headers must stay the stored key.** The 2026-08-31
+  walkthrough flagged `name` / `email` / `message` / `saved_at` as snake_case
+  leaking into a page written for non-technical readers, and they were briefly
+  humanized to "Saved at". That was wrong, and `Results.test.tsx` already said
+  so: *"a header is a name someone has to match against their data, so
+  'Ordered' is not 'ordered' and `orderTotal` keeps its hump."* The columns are
+  the user's own field names, shared with their flow and with the CSV this same
+  page downloads; prettifying them breaks the match in all three places. Eight
+  tests caught it. What WAS a real defect on that page is the values, not the
+  headings: a cell holding `2026-08-31T07:21:54Z` is not a name anyone matches
+  against anything, and `formatCellDisplay` now renders instants in local time
+  while `toCSV` keeps the raw form. Do not re-raise the headings.
+
+- **A signed-in visitor asking for `/signin` wants the app, not a sign-out.**
+  The same walkthrough found that `/signin` and `/signup` exist only in the
+  signed-OUT route tree, so with a session in hand they hit the authenticated
+  catch-all and answered "page not found" — including from the sign-up form's
+  own "Already have an account? Sign in" link. The first fix routed them to a
+  component that called `signOut()`, on the reasoning that asking for the
+  sign-in page means you want to sign in. It logged people out **the instant
+  they created an account**: a successful sign-up sets the token while the URL
+  is still `/signup`, so the authenticated tree renders there and the effect
+  fires. Both routes are a plain `<Navigate to="/" replace />`, and
+  `authedAuthRoutes.test.tsx` exists to keep them one. Genuine sign-out belongs
+  to the account menu, which already has it.
 
 - **`settings.notifications.webhookDesc` naming `graph_id` is correct, not a
   vocabulary leak.** The 2026-08-22 review flagged it as the last survivor of

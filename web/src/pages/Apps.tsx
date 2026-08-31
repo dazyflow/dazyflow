@@ -107,15 +107,28 @@ export function Apps() {
     };
   }, [token]);
 
-  // Group drops by integration slug, alphabetically by display name. The
-  // standard-library bucket catches anything without an Integration field —
-  // matches the NodeCatalog grouping rules.
+  // Group drops by integration slug: the apps most people arrive looking for
+  // first, then everything else alphabetically. The standard-library bucket
+  // catches anything without an Integration field — matches the NodeCatalog
+  // grouping rules.
+  //
+  // Straight alphabetical put 46elks — a Swedish SMS gateway — at the top of
+  // the page, ahead of Gmail, Slack and Google, so the first thing a new
+  // visitor met was the one app they were least likely to recognise. Of every
+  // possible order, alphabetical is the one that guarantees that.
   const groups = useMemo(() => {
     const nameOf = (g: { slug: string; meta: { name: string } }) =>
       groupDisplayName(g.slug, g.meta.name, t);
-    return buildGroups(drops ?? []).sort((a, b) =>
-      nameOf(a).localeCompare(nameOf(b), undefined, { sensitivity: "base" }),
-    );
+    const rank = (slug: string) => {
+      const i = FEATURED_APPS.indexOf(slug);
+      return i === -1 ? FEATURED_APPS.length : i;
+    };
+    return buildGroups(drops ?? []).sort((a, b) => {
+      const d = rank(a.slug) - rank(b.slug);
+      return d !== 0
+        ? d
+        : nameOf(a).localeCompare(nameOf(b), undefined, { sensitivity: "base" });
+    });
   }, [drops, t]);
 
   // Connection state per app, computed once for the whole list rather than per
@@ -893,6 +906,17 @@ function IntegrationConnections({
             loading={providers === null && !providersOff && !providersErr}
             off={providersOff}
             errored={providersErr}
+            // The provider list loaded cleanly and this provider is not in
+            // it: the deployment has no client credentials for it, so the
+            // authorize endpoint would 404. The template gallery already
+            // gates on exactly this; without it here, Connect looked live
+            // and threw the visitor out of the app onto a raw JSON error.
+            unavailable={
+              providers !== null &&
+              !providersOff &&
+              !providersErr &&
+              !providers.some((p) => p.name === req.name)
+            }
             onRetry={() => refresh()}
             canWrite={canWrite}
             slug={slug}
@@ -1110,6 +1134,7 @@ function OAuthCard({
   loading,
   off,
   errored,
+  unavailable,
   onRetry,
   canWrite,
   slug,
@@ -1120,6 +1145,7 @@ function OAuthCard({
   loading: boolean;
   off: boolean;
   errored?: boolean;
+  unavailable?: boolean;
   onRetry?: () => void;
   canWrite: boolean;
   slug: string;
@@ -1214,6 +1240,15 @@ function OAuthCard({
         </div>
       ) : loading ? (
         <p className="connection-note">{t("common.loading")}</p>
+      ) : unavailable && !connected ? (
+        // Nothing to connect to. Offering the button anyway sent the visitor
+        // to an authorize endpoint that answers 404 as a raw JSON body, in a
+        // top-level navigation — the application simply vanished.
+        <p className="connection-note">
+          {t("integrations.connection.providerUnavailable", {
+            name: meta.name,
+          })}
+        </p>
       ) : canWrite ? (
         <div className="connection-card-footer">
           <Button variant={connected ? "ghost" : "primary"} onClick={() => connect()}>
@@ -1561,7 +1596,6 @@ function DropCard({ drop }: { drop: Manifest }) {
               </span>
             ) : null}
           </h3>
-          <code className="drop-card-id">{drop.id}</code>
         </div>
       </div>
       {drop.description && (
@@ -1570,11 +1604,20 @@ function DropCard({ drop }: { drop: Manifest }) {
       {/* Wiring lives behind one disclosure so the visible-by-default
           surface is "what this step is for"; one click expands to "what
           connects to it." Keeps non-technical scanners focused without
-          hiding the port names from someone planning a flow. */}
-      {hasWiringDetails(drop) && (
-        <details className="drop-card-wiring">
+          hiding the port names from someone planning a flow.
+          The step's own id (gmail_get_attachments, …) lives in here too. It
+          used to sit under the title on every card, so a page written for
+          someone deciding whether an app does what they need opened with a
+          column of snake_case identifiers. It is still one click away for the
+          integrator who wants to grep for it, and it means this disclosure is
+          never empty — every step has an id, ports or not. */}
+      <details className="drop-card-wiring">
           <summary>{t("integrations.wiringDetails")}</summary>
           <div className="drop-card-ports">
+            <div>
+              <div className="drop-card-port-head">{t("integrations.stepId")}</div>
+              <code className="drop-card-id">{drop.id}</code>
+            </div>
             {drop.inputs && drop.inputs.length > 0 && (
               <div>
                 <div className="drop-card-port-head">{t("integrations.inputs")}</div>
@@ -1613,25 +1656,9 @@ function DropCard({ drop }: { drop: Manifest }) {
               </div>
             )}
           </div>
-        </details>
-      )}
+      </details>
     </div>
   );
-}
-
-// hasWiringDetails reports whether a drop has ports worth revealing. A drop
-// with neither inputs nor outputs would render an empty disclosure — skip the
-// summary entirely in that case so the card stays clean.
-//
-// This used to count `params_schema` as a reason to open the disclosure too.
-// Dropping it costs no drop its details section: every drop in the catalogue
-// that declares a params schema also declares ports, so the condition is
-// unchanged in practice.
-function hasWiringDetails(d: Manifest): boolean {
-  return (
-    (d.inputs && d.inputs.length > 0) ||
-    (d.outputs && d.outputs.length > 0)
-  ) as boolean;
 }
 
 // uncuratedMeta is what an app looks like when integrationMeta has no entry for
@@ -1690,6 +1717,27 @@ function integrationSlugFor(m: Manifest): string {
 // declaration order) so the most-polished integrations appear at
 // the top; any uncurated slugs that still have drops get tacked on
 // alphabetically at the end.
+// FEATURED_APPS is the head of the Apps list: the apps a small business
+// recognises without being told what they are, roughly in the order they get
+// asked for. Everything not listed keeps its alphabetical place behind them.
+//
+// This is a reading order, not a ranking of the connectors — the Nordic ones
+// are the point of the product, but nobody's first visit starts by looking
+// for nShift. Adding a connector does NOT require touching this list.
+const FEATURED_APPS = [
+  "gmail",
+  "google-sheets",
+  "slack",
+  "excel",
+  "google-calendar",
+  "google-drive",
+  "notion",
+  "stripe",
+  "claude",
+  "collections",
+  "standard-library",
+];
+
 function buildGroups(all: Manifest[]) {
   const bySlug = new Map<string, Manifest[]>();
   for (const m of all) {

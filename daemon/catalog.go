@@ -393,7 +393,7 @@ var integrationSummaries = map[string]string{
 	"Git":              "Clone repositories and check out branches inside your workspace.",
 	"Webhook":          "Send a fire-and-forget notification to any URL.",
 	"Collections":      "Save rows to a built-in collection with no setup, then query them back — the storage behind the in-app Collections page.",
-	"standard-library": "Built-in flow primitives — routing, looping, waiting, file I/O, the transform family, and schedule and webhook triggers.",
+	"standard-library": "Everything that isn't a particular app: branching, looping, waiting for approval, files, tidying up lists, your own database, and starting a flow on a schedule or an incoming call.",
 }
 
 // collectCatalog walks the registry once, groups manifests by

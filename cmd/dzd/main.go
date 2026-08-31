@@ -851,6 +851,7 @@ func main() {
 			webDist:          webDist,
 			landingDir:       landingDir,
 			webOrigin:        webOrigin,
+			publicBaseURL:    publicBaseURL,
 			wildcardDomain:   wildcardDomain,
 			slackSigning:     slackSigningSecret,
 			githubWebhook:    githubWebhookSecret,
@@ -1567,6 +1568,7 @@ type gatewayDeps struct {
 	webDist         string
 	landingDir      string
 	webOrigin       string
+	publicBaseURL   string
 	wildcardDomain  string
 	slackSigning    string
 	githubWebhook   string
@@ -1794,6 +1796,28 @@ func buildGateway(ctx context.Context, bgWg *sync.WaitGroup, d gatewayDeps) {
 			if o != "" {
 				gw.AllowedOrigins = append(gw.AllowedOrigins, o)
 			}
+		}
+	}
+	// Serving the SPA ourselves makes our own public origin a browser origin
+	// that performs cookie-authenticated writes, so it has to be trusted for
+	// CSRF. Without this, the single-host deploy in docs/DEPLOY.md fails in a
+	// way that hides itself: sign-up and sign-in carry no session cookie yet
+	// and pass verifyCookieOrigin untouched, so the daemon looks healthy right
+	// up to the first authenticated POST, which 403s. Only when we serve the
+	// bundle — a separately-hosted UI must still declare itself via
+	// DAZYFLOW_WEB_ORIGIN, and we must not widen the allowlist for it.
+	if d.webDist != "" && d.publicBaseURL != "" {
+		own := strings.TrimRight(d.publicBaseURL, "/")
+		known := false
+		for _, o := range gw.AllowedOrigins {
+			if o == own {
+				known = true
+				break
+			}
+		}
+		if !known {
+			gw.AllowedOrigins = append(gw.AllowedOrigins, own)
+			log.Printf("serving the web bundle from this daemon: trusting own origin %s for CORS/CSRF", own)
 		}
 	}
 	gw.WildcardDomain = d.wildcardDomain

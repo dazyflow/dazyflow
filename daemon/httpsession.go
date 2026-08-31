@@ -53,15 +53,20 @@ func (h *HTTPGateway) verifyCookieOrigin(next http.Handler) http.Handler {
 			next.ServeHTTP(rw, r)
 			return
 		}
+		// Both refusals below carry the machine code "csrf_origin" rather
+		// than the status-derived default. The web client maps it onto a
+		// sentence a person can act on: the raw text is a correct diagnosis
+		// aimed at whoever configured the deployment, and it was being
+		// rendered verbatim, in red, to whoever happened to click first.
 		origin := r.Header.Get("Origin")
 		if origin == "" {
-			writeJSONError(rw, http.StatusForbidden,
+			writeAPIError(rw, http.StatusForbidden, "csrf_origin",
 				"cookie-authenticated state-changing requests require an Origin header (CSRF defense)")
 			return
 		}
 		if !h.originAllowed(origin) {
-			h.logger.Printf("CSRF reject: Origin=%q not in allowed=%v wildcard=%q (host=%q)", origin, h.AllowedOrigins, h.WildcardDomain, r.Host)
-			writeJSONError(rw, http.StatusForbidden,
+			h.logger.Printf("CSRF reject: Origin=%q not in allowed=%v wildcard=%q (host=%q) — if this daemon serves the web bundle, set DAZYFLOW_PUBLIC_BASE_URL to this origin or add it to DAZYFLOW_WEB_ORIGIN", origin, h.AllowedOrigins, h.WildcardDomain, r.Host)
+			writeAPIError(rw, http.StatusForbidden, "csrf_origin",
 				fmt.Sprintf("cookie-authenticated request from disallowed origin %q (CSRF defense)", origin))
 			return
 		}

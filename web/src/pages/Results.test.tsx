@@ -62,6 +62,43 @@ describe("Collections table headers", () => {
     expect(headers).toEqual(["Ordered", "customer_email", "orderTotal", ""]);
   });
 
+  // The values are the other half of that rule: the header must stay the
+  // stored key, but a cell holding an RFC3339 instant is not a name anyone
+  // matches against anything — it is a moment, and "2026-08-31T07:21:54Z"
+  // makes the reader do UTC arithmetic to find out which one. The Collections
+  // "Save rows" step stamps saved_at on every row, so this is the timestamp
+  // most users meet.
+  it("renders a timestamp cell in local time, not as a raw UTC instant", async () => {
+    listBoards.mockResolvedValue({ boards: [{ name: "submissions", rows: 1 }] });
+    getBoard.mockResolvedValue({
+      name: "submissions",
+      columns: ["message", "saved_at"],
+      rows: [
+        {
+          _dz_rowid: 1,
+          message: "does 2026-08-31T07:21:54Z stay put in prose?",
+          saved_at: "2026-08-31T07:21:54Z",
+        },
+      ],
+      total: 1,
+      truncated: false,
+    });
+    const { container } = render(<Results />);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "saved_at" })).toBeTruthy(),
+    );
+    const cells = [...container.querySelectorAll("tbody td")].map(
+      (td) => td.textContent,
+    );
+    // Local "YYYY-MM-DD HH:MM" — the exact clock depends on the runner's zone,
+    // so assert the shape and that the raw instant is gone.
+    expect(cells[1]).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+    expect(cells[1]).not.toContain("T");
+    // A free-text column that merely CONTAINS a date is left alone: only a
+    // cell that IS an instant is rewritten.
+    expect(cells[0]).toBe("does 2026-08-31T07:21:54Z stay put in prose?");
+  });
+
   it("marks the table as data-headed so the label casing doesn't apply", async () => {
     // The uppercasing lives in CSS, which jsdom doesn't apply — the class is
     // the only thing a test can hold onto, and losing it is how the bug

@@ -282,8 +282,8 @@ export const SV_INTEGRATION_PROSE: DescriptionMap = {
     sv: "Verktygen läses vid handskakningen över streamable HTTP (MCP-revision 2025-11-25) och blir steg med id:t mcp:<server>:<verktyg>; ett verktygs argument blir stegets pinnar. Varje server tillhör den organisation som registrerade den och kan bara nås av den organisationens flöden. En server som slutar svara behåller sina steg beskrivna — de visar en \"Kräver anslutning\"-banner och vägrar att köra — så flöden som använder dem behåller sina kopplingar.",
   },
   "standard-library.description": {
-    en: "23ca5ac2",
-    sv: "Inbyggda flödesprimitiver som inte hör till någon leverantör: dirigering (branch, split_rows, route_rows), väntan (await_approval, sleep), filhantering (läs, skriv), omvandlingsfamiljen (map / sort / dedupe / join / group / compute), databasdroppar (Postgres / MySQL / SQLite) och schematriggrar (cron, poll, webhook). Verktygslådan du tar till mellan tredjepartsanslutningarna.",
+    en: "086c5d7b",
+    sv: "Allt som inte är en särskild app: delarna du fogar ihop apparna med. Skicka ett flöde längs den ena vägen eller den andra, upprepa ett steg för varje rad, pausa för att någon ska godkänna, vänta en stund, läs och skriv filer, städa upp en lista (sortera den, ta bort dubbletter, gruppera den, räkna ihop), läs och skriv din egen databas, och starta ett flöde enligt schema eller när något hör av sig.",
   },
   "stripe.description": {
     en: "44844cdb",

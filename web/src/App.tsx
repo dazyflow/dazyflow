@@ -120,6 +120,18 @@ export function App() {
     <AppShell>
       <Routes>
         <Route path="/" element={<RootRedirect />} />
+        {/* /signin and /signup exist only in the signed-OUT tree above, so
+            asking for either while signed in used to render the authenticated
+            catch-all: a 404 telling the visitor the page does not exist. It
+            does; they are simply past it. The sign-up page's own "Sign in"
+            link lands here, and so does anyone following a bookmark or a
+            stale link from the marketing site.
+
+            A redirect, NOT a sign-out: a successful sign-up sets the token
+            while the URL is still /signup, so tearing the session down here
+            would log people out the instant they created an account. */}
+        <Route path="/signin" element={<Navigate to="/" replace />} />
+        <Route path="/signup" element={<Navigate to="/" replace />} />
         <Route path="/welcome" element={<Welcome />} />
         <Route path="/overview" element={<Dashboard />} />
         <Route path="/flows" element={<FlowList />} />

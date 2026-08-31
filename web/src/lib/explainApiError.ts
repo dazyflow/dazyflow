@@ -202,6 +202,12 @@ function looksLikeScopeDemand(lc: string): boolean {
 // falls through to the status/message logic above. The PERMISSION_CODES are a
 // partial exception — see keepForbiddenMessage.
 const CODE_MESSAGES: Record<string, string> = {
+  // The browser sent a state-changing request the daemon would not accept
+  // from this origin. Correct, and entirely about deployment configuration —
+  // the person reading it can do nothing except tell whoever runs the server.
+  // The raw text ("cookie-authenticated request from disallowed origin …
+  // (CSRF defense)") used to land in the UI verbatim.
+  csrf_origin: "apiError.csrfOrigin",
   permission_denied: "apiError.forbidden",
   forbidden: "apiError.forbidden",
   not_found: "apiError.notFound",

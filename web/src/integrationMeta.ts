@@ -447,6 +447,6 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   "standard-library": {
     name: "Standard library",
     description:
-      "Built-in flow primitives that don't belong to any vendor: routing (branch, split_rows, route_rows), waiting (await_approval, sleep), file I/O (read, write), the transform family (map / sort / dedupe / join / group / compute), database steps (Postgres / MySQL / SQLite), and schedule triggers (cron, poll, webhook). The toolkit you reach for between the third-party integrations.",
+      "Everything that isn't a particular app: the pieces you join the apps together with. Send a flow down one path or another, repeat a step for every row, pause for someone to approve, wait a while, read and write files, tidy up a list (sort it, drop duplicates, group it, do the sums), read and write your own database, and start a flow on a schedule or when something calls in.",
   },
 };
