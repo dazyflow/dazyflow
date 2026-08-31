@@ -1,51 +1,90 @@
 # Dazyflow
 
-A workflow automation engine. `dzd` is a single Go daemon that runs graph-based
-flows — connectors, transforms, AI steps, branching, schedules and webhooks —
-and serves the web UI for building and watching them.
+**Workflow automation you host yourself.** Build a flow by wiring steps on a
+canvas — a trigger, some connectors, a branch, an AI step — and `dzd` runs it on
+your own machine, on your own database, with your credentials never leaving it.
 
-Beyond getting it running: **[docs/guide](docs/guide)** for using Dazyflow,
-**[docs/DEPLOY.md](docs/DEPLOY.md)** for running it for real (TLS, backups,
-observability, Kubernetes), **[SECURITY.md](SECURITY.md)** for the master key,
-and **[CONTRIBUTING.md](CONTRIBUTING.md)** for the development gates.
+163 steps across 36 apps, hosted forms and webhooks, schedules, human approvals,
+and first-class Nordic/EU connectors (Fortnox, Klarna, Roaring, 46elks, nShift,
+SMHI) alongside the usual Google, Slack, Stripe and GitHub. English and Swedish
+UI. AGPL, no feature gates, no seat limits.
 
-## Quick start
+<!-- TODO(screenshot): a shot of the editor canvas belongs here, above the
+     fold — it is the single biggest thing missing from this page for anyone
+     deciding whether to try a visual flow builder. Save it to `docs/img/`
+     and link it as an image at the top of this section. -->
 
-You need Docker with the Compose plugin. Postgres is bundled; everything else is
-configured through `.env`.
+## Try it in 60 seconds
+
+You need Docker with the Compose plugin. Nothing else — Postgres is bundled.
 
 ```sh
-cp .env.example .env    # or: make env
+git clone https://github.com/dazyflow/dazyflow && cd dazyflow
+cp .env.example .env && echo 'DAZYFLOW_DEV=1' >> .env
+docker compose up -d
 ```
 
-`dzd` refuses to boot with insecure defaults, so two values are not optional:
+Open <http://localhost:8080> and sign in as **`test@example.com` / `test`**.
+Start from **Templates → "See a flow run (no setup)"** — it needs no connected
+account at all. `docker compose down` stops it; `down -v` also deletes the data.
+
+> `DAZYFLOW_DEV=1` is what makes this three commands instead of a config
+> session: it seeds that sign-in and downgrades the insecure-defaults guard to
+> warnings. It is for trying things out on your laptop. **Never set it on a
+> real deployment** — see [Running it for real](#running-it-for-real) for the
+> two minutes that takes.
+
+## What you can build with it
+
+Thirteen templates ship in the gallery, each a working flow you fork and fill in:
+
+| | |
+|---|---|
+| **Web form → Google Sheet** | A hosted form with a public link appends every submission to a sheet. |
+| **New email → Slack** | Checks Gmail every few minutes, posts a one-line summary. |
+| **AI reads the inbox and sorts it out** | Classifies each new email and routes it. |
+| **Stripe payment → thank-you, team ping, sales log** | One event fans out to three places. |
+| **Nothing goes out until someone approves** | The flow parks itself until a human clicks approve. |
+| **Watch a page → ping my phone** | Compares the visible words, not the markup, so it fires on real change. |
+| **Invoices emailed to you → filed in Drive** | Finds mail carrying a PDF, files the attachment. |
+
+[`tests/usecases/README.md`](tests/usecases/README.md) works through 35 more
+plain-language asks — "chase overdue invoices", "remind people about
+appointments" — each with a verdict and a real graph behind it.
+
+**Beyond the canvas:** `dzd` speaks [MCP](docs/guide/mcp-servers.md) in both
+directions — it registers MCP servers as steps, and `dz-mcp` exposes your flows
+as tools to Claude or any MCP client. Long-running or on-prem work goes to
+[self-hosted runners](docs/guide/runners.md). Everything the UI does is on a
+[documented HTTP API](docs/guide/web-apis.md), and `dzctl` drives it from a
+terminal.
+
+## Running it for real
+
+The dev shortcut above is not a deployment. For anything durable, drop
+`DAZYFLOW_DEV=1` and set two values in `.env` — `dzd` refuses to boot without
+them, by design:
 
 | Variable | What to set it to |
 |---|---|
 | `POSTGRES_PASSWORD` | A strong password. **Put the same value inside `DAZYFLOW_POSTGRES_DSN`** — it appears inline there, and the two must match. |
 | `DAZYFLOW_MASTER_KEY` | `openssl rand -base64 32`. Encrypts stored secrets. Keep a sealed backup — losing it makes every stored secret undecryptable. |
 
-A local-only trial needs nothing else: `DAZYFLOW_WEB_ORIGIN` defaults to
-`http://localhost:8080`, and `DAZYFLOW_PUBLIC_BASE_URL` can stay blank until you
-want OAuth sign-in or human-approval links.
+There is **no default login** without dev mode. To create the first real
+account, set `DAZYFLOW_ENABLE_SIGNUP=1` and put your email in
+`DAZYFLOW_PLATFORM_ADMINS` — that grants instance super-admin on first sign-in.
+Turn signup back off afterwards.
 
-There is **no default login.** To create the first account, also set
-`DAZYFLOW_ENABLE_SIGNUP=1` and put your email in `DAZYFLOW_PLATFORM_ADMINS` —
-that grants instance super-admin on first sign-in. Turn signup back off
-afterwards.
+`dzd` does not terminate TLS. Put it behind a reverse proxy (nginx, Caddy,
+Traefik, an ingress) and set:
 
 ```sh
-docker compose up -d                     # or: make up
-curl -fsS http://localhost:8080/readyz   # -> "ready"
+DAZYFLOW_TRUST_PROXY_HEADERS=1
+DAZYFLOW_WEB_ORIGIN=https://your.domain
+DAZYFLOW_PUBLIC_BASE_URL=https://your.domain
 ```
 
-That builds the image, starts Postgres, and serves the API and web UI on
-http://localhost:8080 (gRPC on `:50050`). Sign up, then stop with
-`docker compose down` (named volumes persist).
-
-If it won't start, the boot log names the value it rejected. For a throwaway
-trial, `DAZYFLOW_DEV=1` downgrades the guard to warnings and seeds a
-`test@example.com` / `test` admin — **never set it in production.**
+If it won't start, the boot log names the value it rejected.
 
 > **Changed `POSTGRES_PASSWORD` but it's still rejected?** That variable only
 > applies when the `pgdata` volume is first created. `docker compose down -v`
@@ -54,31 +93,20 @@ trial, `DAZYFLOW_DEV=1` downgrades the guard to warnings and seeds a
 Control-plane state — jobs, API keys, sessions, users, encrypted secrets —
 persists to Postgres; graphs and sandboxes to the `dzddata` volume. Back up both.
 
-## Going to production
-
-`dzd` does not terminate TLS. Put it behind a TLS-terminating reverse proxy
-(nginx, Caddy, Traefik, an ingress) and set in `.env`:
-
-```sh
-DAZYFLOW_TRUST_PROXY_HEADERS=1
-DAZYFLOW_WEB_ORIGIN=https://your.domain
-DAZYFLOW_PUBLIC_BASE_URL=https://your.domain
-```
-
-[docs/DEPLOY.md](docs/DEPLOY.md) has the rest: the reverse-proxy contract and an
-nginx example, backup and restore, per-org subdomains, secrets (built-in store
-plus OpenBao/Vault), security knobs, observability, and multi-node Kubernetes
-(`deploy/k8s/dazyflow.yaml`).
-
 **Self-hosting is unlimited.** Dazyflow is multi-tenant by design but self-hosts
 cleanly as a single team — one org, signup closed, invite the rest. Every quota
-knob defaults to off.
+knob defaults to off. Billing is optional and SaaS-only: leave Stripe unset and
+the whole plan/upgrade surface disappears.
 
-**Billing is optional and SaaS-only.** Leave Stripe unset and the UI hides the
-whole plan/upgrade/billing surface; the Usage page still shows run and step
-metering. You can comp an org to Pro or assign custom limit tiers from
-**Admin → Platform** with no billing configured. Only set the `DAZYFLOW_FREE_*` /
-`DAZYFLOW_STRIPE_*` knobs if you're running a paid SaaS.
+## Documentation
+
+| | |
+|---|---|
+| [docs/guide](docs/guide) | Using Dazyflow — concepts, first flow, triggers, forms, approvals, runners, MCP. |
+| [docs/DEPLOY.md](docs/DEPLOY.md) | Running it for real: TLS, backups, per-org subdomains, Vault, observability, Kubernetes. |
+| [SECURITY.md](SECURITY.md) | Reporting a vulnerability, the master key, the security knobs worth setting. |
+| [docs/PRIVACY.md](docs/PRIVACY.md) · [docs/COMPLIANCE.md](docs/COMPLIANCE.md) | GDPR data handling, and the ISO/IEC 27001 Annex A control mapping. |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | What the gates enforce before a change lands. |
 
 ## Development
 
@@ -97,8 +125,6 @@ With no `.env`, `make dev` uses the bundled database, sets `DAZYFLOW_DEV=1`,
 enables signup, and mints a throwaway API key on every boot
 (`DAZYFLOW_DEV_KEY=1`). To use your own database, run `make env`, set
 `DAZYFLOW_POSTGRES_DSN`, and `make dev` will source it.
-
-[CONTRIBUTING.md](CONTRIBUTING.md) covers what the gates enforce.
 
 ## License
 

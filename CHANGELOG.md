@@ -31,6 +31,16 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
   app; at the root it implied the whole repository was a Node project. CI reads
   it via `node-version-file`, and `nvm` still resolves it from `web/`.
 
+- **README rewritten to lead with trying it, not operating it.** The old page
+  opened with the fail-closed guard: five careful edits to a 598-line `.env`
+  before anything ran, with the `DAZYFLOW_DEV=1` shortcut buried six paragraphs
+  down as a warning. It now opens with a three-command trial on that shortcut
+  and the seeded `test@example.com` sign-in, then a "what you can build" section
+  naming the templates and linking the scenario corpus, and only then the
+  production setup — which is unchanged and still says the same things. Also
+  states the Nordic/EU connector angle, which the page never mentioned. A
+  screenshot of the canvas is still missing and marked TODO in the file.
+
 ### Removed
 
 - **Seven Markdown files, ~2,600 lines.** `REVIEW.md` and
