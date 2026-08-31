@@ -23,6 +23,8 @@ into the image.)
 
 ## [Unreleased]
 
+## [0.27.10] - 2026-08-31
+
 ### Fixed
 
 - **On a single-host deploy, every action failed the moment you signed in.**
