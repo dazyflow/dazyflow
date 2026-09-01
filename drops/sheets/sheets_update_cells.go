@@ -29,7 +29,7 @@ func init() {
 			Integration: "Google Sheets",
 			Category:    "network",
 			Icon:        "sheets",
-			BrandLogo:   "/brands/google-sheets.svg",
+			BrandLogo:   "/brands/sheets.svg",
 			Color:       "#0F9D58",
 			Provider:    "internal",
 			Tags:        []string{"sheets", "google", "update", "write", "mark", "status"},

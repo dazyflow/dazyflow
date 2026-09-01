@@ -17,10 +17,15 @@
 // That is why this test asserts on a graph with `triggers` ABSENT. A fixture
 // carrying a legacy trigger array would have passed against the broken code.
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { installLayoutStubs, makeStreamJob, twoStepGraph } from "./editorTestHarness";
+import {
+  installLayoutStubs,
+  makeStreamJob,
+  twoStepGraph,
+} from "./editorTestHarness";
 
 installLayoutStubs();
 
@@ -32,7 +37,9 @@ vi.mock("react-i18next", () => {
     Trans: ({ i18nKey }: { i18nKey: string }) => <>{i18nKey}</>,
   };
 });
-vi.mock("../../i18n", () => ({ default: { language: "en", t: (k: string) => k } }));
+vi.mock("../../i18n", () => ({
+  default: { language: "en", t: (k: string) => k },
+}));
 
 vi.mock("../../auth", () => {
   const auth = {
@@ -98,7 +105,8 @@ vi.mock("../../api", () => {
       listProviders: () => Promise.resolve({ providers: [] }),
       getPublishedInfo: () => Promise.resolve({ published: true }),
       flowHistory: () => Promise.resolve({ revisions: [] }),
-      streamJob: (...a: Parameters<typeof stream.streamJob>) => stream.streamJob(...a),
+      streamJob: (...a: Parameters<typeof stream.streamJob>) =>
+        stream.streamJob(...a),
       runGraph: () => Promise.resolve({ job_id: "run-1" }),
       testTriggerFlow: () => Promise.resolve({ job_id: "run-1" }),
       getNodeRecord: () => Promise.resolve({ Result: { output: {} } }),
@@ -145,9 +153,21 @@ function webhookGraph() {
         params: { secrets: ["s3cr3t"] },
         position: { x: 0, y: 0 },
       },
-      { id: "ntfy_1", module: "ntfy", params: { topic: "beans" }, position: { x: 320, y: 0 } },
+      {
+        id: "ntfy_1",
+        module: "ntfy",
+        params: { topic: "beans" },
+        position: { x: 320, y: 0 },
+      },
     ],
-    edges: [{ from: "webhook_input_1", from_port: "body", to: "ntfy_1", to_port: "in" }],
+    edges: [
+      {
+        from: "webhook_input_1",
+        from_port: "body",
+        to: "ntfy_1",
+        to_port: "in",
+      },
+    ],
   };
 }
 
@@ -184,5 +204,78 @@ describe("the test-event control", () => {
     // test-event button is absent — otherwise this passes while still loading.
     await waitFor(() => expect(screen.getByText("editor.run")).toBeTruthy());
     expect(screen.queryByText("editor.testEvent")).toBeNull();
+  });
+});
+
+// The payload the dialog opens with. It used to be regenerated on every open,
+// so a body someone had shaped to reproduce an edge case lasted exactly one
+// firing — testing the same case twice meant preparing it twice.
+describe("the test-event payload", () => {
+  const EDITED = '{"order":"4471","note":"the awkward one"}';
+
+  beforeEach(() => {
+    loadGraph.mockReset();
+    loadGraph.mockResolvedValue(webhookGraph());
+    localStorage.clear();
+  });
+  afterEach(() => localStorage.clear());
+
+  // openDialog clicks the test-event control and waits for the JSON box.
+  async function openDialog() {
+    await waitFor(() =>
+      expect(screen.getByText("editor.testEvent")).toBeTruthy(),
+    );
+    await userEvent.click(screen.getByText("editor.testEvent"));
+    return (await screen.findByRole("textbox", {
+      name: "",
+    })) as HTMLTextAreaElement;
+  }
+
+  it("comes back on the next open, after closing without firing", async () => {
+    const view = mount();
+    let box = await openDialog();
+    await userEvent.clear(box);
+    await userEvent.type(box, EDITED.replace(/[{[]/g, "$&$&"));
+    const typed = box.value;
+    await userEvent.click(screen.getByText("common.dismiss"));
+
+    // Reopening in the same session.
+    box = await openDialog();
+    expect(box.value).toBe(typed);
+
+    // And after leaving the editor entirely — this is the "next test round"
+    // the whole thing exists for.
+    view.unmount();
+    mount();
+    box = await openDialog();
+    expect(box.value).toBe(typed);
+  });
+
+  it("is kept per flow, not shared between them", async () => {
+    // Seeded directly, so this fails if the key isn't per-flow rather than
+    // passing because nothing was remembered in the first place.
+    localStorage.setItem("dazyflow.testEvent.coffee-reorder", EDITED);
+    loadGraph.mockResolvedValue({ ...webhookGraph(), id: "other-flow" });
+    mount("other-flow");
+
+    const box = await openDialog();
+    expect(box.value).not.toContain("the awkward one");
+    expect(box.value).toContain("Test event from Dazyflow");
+  });
+
+  it("goes back to a generated sample on reset, and forgets it", async () => {
+    localStorage.setItem("dazyflow.testEvent.coffee-reorder", EDITED);
+    mount();
+    let box = await openDialog();
+    expect(box.value).toBe(EDITED);
+
+    await userEvent.click(screen.getByText("editor.testRunReset"));
+    box = screen.getByRole("textbox", { name: "" }) as HTMLTextAreaElement;
+    expect(box.value).toContain("Test event from Dazyflow");
+    // Forgotten, not just replaced in the box — otherwise a saved payload
+    // outlives the shape it was written for, with no way back.
+    expect(
+      localStorage.getItem("dazyflow.testEvent.coffee-reorder"),
+    ).toBeNull();
   });
 });

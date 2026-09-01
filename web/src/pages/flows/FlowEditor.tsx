@@ -111,6 +111,11 @@ import { suggestNextDrops, topDropsByUsage } from "../../lib/suggest";
 import { explainApiError } from "../../lib/explainApiError";
 import { lintMessage } from "./editor/lintMessage";
 import { buildTestEventSample } from "./editor/testEventSample";
+import {
+  clearTestEvent,
+  loadTestEvent,
+  saveTestEvent,
+} from "./editor/testEventStore";
 import { stampScheduleTimezones } from "./editor/scheduleTimezone";
 import { ConnectionGate } from "./editor/ConnectionGate";
 import { TestEventDialog } from "./editor/TestEventDialog";
@@ -3443,7 +3448,10 @@ function EditorInner() {
   // configured form_fields (so a {phone, company} form gets a matching
   // sample, not the legacy {name, email, message} shape), then opens the
   // dialog so the user can edit it before firing.
-  const openTestEvent = () => {
+  // freshTestEventSample builds the generated payload for this flow: shaped to
+  // the configured form_fields (so a {phone, company} form gets a matching
+  // sample, not the legacy {name, email, message} shape).
+  const freshTestEventSample = () => {
     // Node params live in paramsByID, not n.data — the same trap that kept
     // the run-status chip reading "Manual only" over a configured webhook.
     // Fall back to the graph-level trigger for flows predating the move.
@@ -3451,11 +3459,40 @@ function EditorInner() {
       ? (paramsByID[webhookNode.id]?.form_fields as string[] | undefined)
       : undefined;
     const legacyFields = triggers.find((tr) => tr.type === "webhook")?.form_fields;
-    setTestEventJSON(
-      JSON.stringify(buildTestEventSample(nodeFields ?? legacyFields), null, 2),
+    return JSON.stringify(
+      buildTestEventSample(nodeFields ?? legacyFields),
+      null,
+      2,
     );
+  };
+
+  const openTestEvent = () => {
+    // The payload from last time wins over a fresh sample. Regenerating
+    // unconditionally meant a body you had shaped to reproduce something
+    // survived exactly one firing — testing the same edge case twice meant
+    // preparing it twice. "Reset to sample" in the dialog gets the generated
+    // shape back.
+    setTestEventJSON(loadTestEvent(id) ?? freshTestEventSample());
     setTestEventErr(null);
     setTestEventOpen(true);
+  };
+
+  // closeTestEvent is every way out of the dialog — the X, the backdrop,
+  // Escape, Dismiss — and each of them keeps the payload. Saving on the way
+  // out rather than on each keystroke means no work on the typing path, and
+  // it still holds an edit someone closed the dialog on without firing.
+  const closeTestEvent = () => {
+    saveTestEvent(id, testEventJSON);
+    setTestEventOpen(false);
+  };
+
+  // resetTestEvent throws the remembered payload away and regenerates. Needed
+  // because a saved body outlives the shape it was written for: change the
+  // form's fields and the dialog would otherwise keep offering the old one.
+  const resetTestEvent = () => {
+    clearTestEvent(id);
+    setTestEventJSON(freshTestEventSample());
+    setTestEventErr(null);
   };
 
   // submitTestEvent parses the edited JSON and fires it. A parse error
@@ -3469,6 +3506,8 @@ function EditorInner() {
       setTestEventErr((e as Error).message);
       return;
     }
+    // Fired payloads are the ones most worth keeping.
+    saveTestEvent(id, testEventJSON);
     setTestEventOpen(false);
     await run.fireTestEvent(parsed);
   };
@@ -4644,7 +4683,8 @@ function EditorInner() {
             canRun={hasPerm("graph:run")}
             onChange={setTestEventJSON}
             onSubmit={() => void submitTestEvent()}
-            onClose={() => setTestEventOpen(false)}
+            onReset={resetTestEvent}
+            onClose={closeTestEvent}
           />
         )}
         {/* Diff-vs-published modal: what the draft changes relative to the
