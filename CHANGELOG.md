@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.28.3] - 2026-09-01
+
 ### Fixed
 
 - **The Email (SMTP) step's mail arrived twice.** Its messages carried no
