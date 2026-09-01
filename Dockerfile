@@ -10,7 +10,7 @@
 # DAZYFLOW_WEB_DIST is set (we set it to /srv/web below).
 
 # ---- 1. web bundle ----------------------------------------------------
-FROM node:22-alpine AS web
+FROM node:26-alpine AS web
 WORKDIR /web
 # Install deps against the lockfile first so this layer caches unless
 # package.json / lock change.
@@ -26,7 +26,7 @@ RUN npm run build
 # 1.26.7 toolchain during `go mod download` — which fails in a
 # network-restricted prod build. GOTOOLCHAIN=local forbids that implicit
 # fetch so any future drift fails loud at build time instead.
-FROM golang:1.26.7-alpine AS build
+FROM golang:1.27.0-alpine AS build
 ENV GOTOOLCHAIN=local
 # Optional Go module proxy. The build fetches dependencies from here at
 # `go mod download`; when the build host can't reach the public
