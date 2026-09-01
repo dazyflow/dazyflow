@@ -106,9 +106,11 @@ are no daemon flags to set.
    pulls are authenticated without a manual `imagePullSecret`. Set the image
    in the Deployment (or via the `images:` stub in `kustomization.yaml`).
 4. **Apply** — `kubectl apply -k deploy/k8s/`.
-5. **Reach it** — `kubectl port-forward deploy/dazyflow 8080:8080`, then open
-   <http://localhost:8080>. `DAZYFLOW_WEB_ORIGIN` / `DAZYFLOW_PUBLIC_BASE_URL`
-   are preset to `http://localhost:8080` to match.
+5. **Reach it** — `kubectl port-forward deploy/dazyflow 8642:8080`, then open
+   <http://localhost:8642>. `DAZYFLOW_WEB_ORIGIN` / `DAZYFLOW_PUBLIC_BASE_URL`
+   are preset to `http://localhost:8642` to match. (The pod still listens on
+   8080; 8642 is just the local side of the forward, chosen to dodge the
+   crowd on 8080.)
 
 Why a PVC and not `emptyDir`: **flow graphs are stored as git repos on disk
 under `/data`, not in Postgres.** An `emptyDir` would lose every flow on a

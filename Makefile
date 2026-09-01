@@ -70,7 +70,7 @@ help: ## List targets
 
 ## --- Docker Compose stack ---
 
-up: ## Start the stack (Postgres + dzd) detached on http://localhost:8080
+up: ## Start the stack (Postgres + dzd) detached on http://localhost:8642
 	$(COMPOSE) up -d
 
 down: ## Stop the stack (named volumes persist)
@@ -96,7 +96,7 @@ env: ## Sync .env with .env.example (creates one if missing; appends new keys; n
 
 ## --- Local development (containers for Postgres only) ---
 
-pg: ## Start (and wait for) just the bundled Postgres on 127.0.0.1:5432 — `make dev` needs it
+pg: ## Start (and wait for) just the bundled Postgres on 127.0.0.1:5442 (DAZYFLOW_PG_PORT) — `make dev` needs it
 	$(COMPOSE) up -d --wait postgres
 
 pg-down: ## Stop the bundled dev Postgres (data persists in the pgdata volume)
@@ -105,24 +105,26 @@ pg-down: ## Stop the bundled dev Postgres (data persists in the pgdata volume)
 # .env is shared with the Compose stack, where the DSN host is the
 # `postgres` service name. That hostname only resolves inside the Compose
 # network, so for the native run we rewrite it to localhost (the bundled
-# Postgres publishes 127.0.0.1:5432 exactly for this). The containerized
-# dzd is stopped first — both want :8080. `make restart` brings it back.
+# Postgres publishes 127.0.0.1:5442 — DAZYFLOW_PG_PORT — exactly for this).
+# The containerized
+# dzd is stopped first — both want :8642. `make restart` brings it back.
 dev: pg ## Run dzd locally against the bundled Postgres (make pg). Sources .env when present (DSN host rewritten to localhost), else a minimal dev set.
 	@$(COMPOSE) stop dzd >/dev/null 2>&1 || true
 	@if [ -f .env ]; then \
 		set -a; . ./.env; set +a; \
-		DAZYFLOW_POSTGRES_DSN=$$(printf '%s' "$$DAZYFLOW_POSTGRES_DSN" | sed 's/@postgres:/@localhost:/') \
+		DAZYFLOW_POSTGRES_DSN=$$(printf '%s' "$$DAZYFLOW_POSTGRES_DSN" \
+			| sed "s/@postgres:5432/@localhost:$${DAZYFLOW_PG_PORT:-5442}/; s/@postgres:/@localhost:/") \
 		DAZYFLOW_DEV=1 \
-		DAZYFLOW_HTTP=:8080 go run ./cmd/dzd; \
+		DAZYFLOW_HTTP=:8642 go run ./cmd/dzd; \
 	else \
-		DAZYFLOW_HTTP=:8080 \
+		DAZYFLOW_HTTP=:8642 \
 		DAZYFLOW_DEV=1 \
 		DAZYFLOW_DEV_KEY=1 \
 		DAZYFLOW_ENABLE_SIGNUP=1 \
 		DAZYFLOW_WEB_ORIGIN=http://localhost:5173 \
 		DAZYFLOW_PUBLIC_BASE_URL=http://localhost:5173 \
 		DAZYFLOW_MASTER_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
-		DAZYFLOW_POSTGRES_DSN=postgres://dazyflow:dazyflow@localhost:5432/dazyflow?sslmode=disable \
+		DAZYFLOW_POSTGRES_DSN=postgres://dazyflow:dazyflow@localhost:$${DAZYFLOW_PG_PORT:-5442}/dazyflow?sslmode=disable \
 		go run ./cmd/dzd; \
 	fi
 

@@ -4,7 +4,7 @@
 #   docker compose up -d
 #
 # brings everything up and serves the API + web UI on
-# http://localhost:8080 (gRPC on :50050). Control-plane state (jobs, API
+# http://localhost:8642 (gRPC on :50050). Control-plane state (jobs, API
 # keys, sessions, users, encrypted secrets) persists to Postgres; graphs
 # + sandboxes persist to the dzddata volume, so `docker compose down` is
 # safe.
@@ -48,10 +48,18 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dazyflow}
       POSTGRES_DB:       ${POSTGRES_DB:-dazyflow}
     # Published on the host loopback only — lets `make dev` (dzd running on
-    # the host via `go run`) reach the bundled database at localhost:5432,
-    # and lets an operator run psql for backups. Not exposed off-host.
+    # the host via `go run`) reach the bundled database, and lets an operator
+    # run psql for backups. Not exposed off-host.
+    #
+    # Host side is 5442, not 5432, for the same reason the API sits on 8642:
+    # a developer machine very often already has a Postgres on 5432, and the
+    # collision aborts the whole stack with "Bind for 127.0.0.1:5432 failed:
+    # port is already allocated". The container still listens on 5432, and dzd
+    # reaches it as `postgres:5432` over the compose network either way — this
+    # is only where it lands on the host. `make dev` reads DAZYFLOW_PG_PORT and
+    # rewrites the DSN to match.
     ports:
-      - "127.0.0.1:5432:5432"
+      - "${DAZYFLOW_PG_BIND_ADDR:-127.0.0.1}:${DAZYFLOW_PG_PORT:-5442}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -99,7 +107,7 @@ services:
       # this. Keeps first-boot working with no .env at all.
       DAZYFLOW_POSTGRES_DSN: ${DAZYFLOW_POSTGRES_DSN:-postgres://${POSTGRES_USER:-dazyflow}:${POSTGRES_PASSWORD:-dazyflow}@postgres:5432/${POSTGRES_DB:-dazyflow}?sslmode=disable}
       # First-boot defaults. .env values override these.
-      DAZYFLOW_WEB_ORIGIN:           ${DAZYFLOW_WEB_ORIGIN:-http://localhost:8080}
+      DAZYFLOW_WEB_ORIGIN:           ${DAZYFLOW_WEB_ORIGIN:-http://localhost:8642}
       DAZYFLOW_SESSION_TTL:          ${DAZYFLOW_SESSION_TTL:-168h}
       DAZYFLOW_SESSION_MAX_AGE:      ${DAZYFLOW_SESSION_MAX_AGE:-720h}
       # Marketing landing: DAZYFLOW_LANDING_DIR in .env is the *host*
@@ -116,8 +124,15 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # Host side is 8642, not 8080: 8080 is the single most contended port on
+    # a developer machine (Syncthing, Tomcat, Jenkins, half the world's `serve
+    # -p 8080`), and a collision here fails the quick start with a bind error
+    # that has nothing to do with Dazyflow. The daemon still listens on 8080
+    # INSIDE the container — only the published port moved, so the healthcheck,
+    # Caddyfile and k8s manifests are unaffected. Change DAZYFLOW_PORT to move
+    # it again, and DAZYFLOW_WEB_ORIGIN with it.
     ports:
-      - "${DAZYFLOW_BIND_ADDR:-127.0.0.1}:${DAZYFLOW_PORT:-8080}:8080"
+      - "${DAZYFLOW_BIND_ADDR:-127.0.0.1}:${DAZYFLOW_PORT:-8642}:8080"
     volumes:
       - dzddata:/data
       # Marketing landing: DAZYFLOW_LANDING_DIR (.env) is the *host* path of

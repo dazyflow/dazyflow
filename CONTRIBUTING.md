@@ -15,7 +15,7 @@ for the runner tests, Docker for Postgres. There is no in-memory mode — `dzd`
 requires Postgres.
 
 ```sh
-make dev      # bundled Postgres, then dzd on http://localhost:8080
+make dev      # bundled Postgres, then dzd on http://localhost:8642
 make web      # (other terminal) Vite dev server on http://localhost:5173
 make help     # every target
 ```
@@ -34,7 +34,9 @@ Much of the Go suite is Postgres-gated and skips silently without a database, so
 a green run with these unset is a smaller claim than it looks:
 
 ```sh
-export DAZYFLOW_TEST_DB='postgres://dazyflow:dazyflow@localhost:5432/dazyflow_test'
+# 5442 is where the bundled Postgres lands on the host (DAZYFLOW_PG_PORT).
+# Point these at your own database instead if you run one.
+export DAZYFLOW_TEST_DB='postgres://dazyflow:dazyflow@localhost:5442/dazyflow_test'
 export DZ_TEST_PG_DSN="$DAZYFLOW_TEST_DB?sslmode=disable"
 ```
 

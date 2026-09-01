@@ -12,6 +12,41 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ### Fixed
 
+- **`npm ci` could not install the web dependencies at all, so CI was red and
+  the Docker build failed.** The npm-packages bump moved `typescript` to
+  `^7.0.2` while leaving `typescript-eslint` at `^8`, whose peer range is
+  `>=4.8.4 <6.1.0` — and no `typescript-eslint` release supports TypeScript 7
+  yet. npm refuses the graph outright:
+
+  ```
+  npm error ERESOLVE could not resolve
+  npm error While resolving: typescript-eslint@8.68.0
+  npm error Found: typescript@7.0.2
+  ```
+
+  Both the *Web unit tests and build* and *Docs site* CI jobs died on `npm ci`,
+  and `docker compose up -d` failed the same way at `RUN npm ci`. It was
+  invisible locally because an existing `web/node_modules` still held the older
+  TypeScript, so `tsc`, the tests and the build all ran against a tree npm
+  could no longer reproduce.
+
+  TypeScript is pinned to `^6.0.3` — the newest release that satisfies every
+  peer in the graph. Reinstalling then surfaced two genuine breakages from the
+  React 19 types that the stale tree had hidden: the dropped no-argument
+  `useRef` overload (`docs/CodeBlock.tsx`) and the removed global `JSX`
+  namespace (`ErrorBoundary.test.tsx`). Worth revisiting TypeScript 7 once
+  `typescript-eslint` ships support for it.
+
+- **A flaky editor autosave test failed only under parallel workers.** The save
+  assertions used testing-library's `waitFor`, which polls on real time, while
+  the tests run on fake timers with `shouldAdvanceTime` — so the 3s autosave
+  debounce needs ~3s of wall time to fire, three times `waitFor`'s 1s default.
+  It normally passed because the explicit `advanceTimersByTimeAsync(3000)` got
+  there first; when parallel workers contend for the CPU the initial render
+  lands after that advance, the debounce starts late, and the wait gave up
+  before the save. All eight sites now use `vi.waitFor`, which drives the fake
+  clock as it polls, so the result no longer depends on machine load.
+
 - **`docker compose up -d` could not work on a fresh clone.** The base
   `docker-compose.yml` started the bundled Postgres with `ssl=on` pointing at
   `/certs/server.crt`, and mounted `./certs`. But `certs/` is gitignored — it is
@@ -47,6 +82,44 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
   `DAZYFLOW_WEB_ORIGIN` in both directions.
 
 ### Changed
+
+- **The web UI is published on `localhost:8642` instead of `localhost:8080`.**
+  8080 is the most contended port on a developer machine — Syncthing, Tomcat,
+  Jenkins and every ad-hoc `serve -p 8080` want it — and when it is taken the
+  quick start dies at `docker compose up -d` with `failed to bind host port
+  127.0.0.1:8080/tcp: address already in use`, a message that says nothing
+  about what to change. 8642 is unassigned by IANA, absent from browsers'
+  blocked-port lists, and easy to remember (descending evens).
+
+  Only the **published** port moved. The daemon still listens on `:8080`
+  inside the container and on a host install (`DAZYFLOW_HTTP` is unchanged),
+  so the compose healthcheck, `deploy/Caddyfile`, the k8s `containerPort` and
+  any existing reverse-proxy config keep working untouched. `DAZYFLOW_PORT`
+  and `DAZYFLOW_WEB_ORIGIN` default to 8642 in step, `make dev` serves there,
+  the k8s port-forward example uses `8642:8080`, and `dz-mcp` defaults
+  `DAZYFLOW_URL` to it.
+
+  **Upgrading an existing install:** nothing breaks — an `.env` that already
+  pins `DAZYFLOW_PORT` still wins. If you relied on the old default, either
+  set `DAZYFLOW_PORT=8080` and `DAZYFLOW_WEB_ORIGIN=http://localhost:8080`
+  explicitly, or update the bookmark and any proxy pointing at the host port.
+
+- **The bundled Postgres is published on `127.0.0.1:5442` instead of
+  `127.0.0.1:5432`, and the port is now configurable.** It was hardcoded, so a
+  developer who already had a Postgres on the standard port could not start the
+  stack at all — `Bind for 127.0.0.1:5432 failed: port is already allocated`
+  aborts every service, not just the database. New `DAZYFLOW_PG_PORT` and
+  `DAZYFLOW_PG_BIND_ADDR` control it, and `make dev` rewrites its DSN to follow
+  whatever they say.
+
+  As with the HTTP port, only the **host** side moved: the container still
+  listens on 5432 and the daemon still reaches it as `postgres:5432` over the
+  compose network, so nothing inside the stack changes.
+
+  **Upgrading:** `psql`, `pg_dump` and any backup script pointing at
+  `localhost:5432` need either the new port or `DAZYFLOW_PG_PORT=5432` in
+  `.env` to keep the old one. CI's own Postgres service container is
+  unaffected.
 
 - **README:** "Running it for real" listed two required values; it is three —
   the DSN must also say `sslmode=require`, which needs a Postgres cert. That

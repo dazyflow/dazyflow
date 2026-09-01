@@ -1,9 +1,9 @@
 # Kubernetes manifest for a SINGLE-POD Dazyflow deployment — the simplest
 # possible start: one replica, no load balancer, no ingress. Reach the UI with
 #
-#   kubectl port-forward deploy/dazyflow 8080:8080
+#   kubectl port-forward deploy/dazyflow 8642:8080
 #
-# then open http://localhost:8080.
+# then open http://localhost:8642.
 #
 # Assumes an EXTERNAL/managed Postgres (e.g. DigitalOcean Managed Postgres)
 # referenced via the Secret below. Apply with:
@@ -93,8 +93,8 @@ spec:
             # X-Forwarded-Proto otherwise. The origins are the port-forward
             # URL; change all three (add TRUST_PROXY_HEADERS=1) once you front
             # it with a real hostname + TLS via ingress.yaml.
-            - { name: DAZYFLOW_WEB_ORIGIN,      value: "http://localhost:8080" }
-            - { name: DAZYFLOW_PUBLIC_BASE_URL, value: "http://localhost:8080" }
+            - { name: DAZYFLOW_WEB_ORIGIN,      value: "http://localhost:8642" }
+            - { name: DAZYFLOW_PUBLIC_BASE_URL, value: "http://localhost:8642" }
             # Drain in-flight work on SIGTERM; keep < terminationGracePeriodSeconds.
             - { name: DAZYFLOW_SHUTDOWN_GRACE,  value: "25s" }
           envFrom:

@@ -15,7 +15,7 @@
 //	    "dazyflow": {
 //	      "command": "/path/to/dz-mcp",
 //	      "env": {
-//	        "DAZYFLOW_URL":     "http://localhost:8080",
+//	        "DAZYFLOW_URL":     "http://localhost:8642",
 //	        "DAZYFLOW_API_KEY": "<bearer token>",
 //	        "DAZYFLOW_TENANT":    "dev",        // optional
 //	        "DAZYFLOW_WORKSPACE": "main"        // optional
@@ -42,7 +42,7 @@ import (
 )
 
 func main() {
-	url := flag.String("url", envDefault("DAZYFLOW_URL", "http://localhost:8080"),
+	url := flag.String("url", envDefault("DAZYFLOW_URL", "http://localhost:8642"),
 		"base URL of the dzd HTTP gateway (default $DAZYFLOW_URL)")
 	token := flag.String("token", os.Getenv("DAZYFLOW_API_KEY"),
 		"bearer token for the gateway (default $DAZYFLOW_API_KEY)")

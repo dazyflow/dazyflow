@@ -19,7 +19,7 @@
 // that has quietly stopped guarding.
 
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, act } from "@testing-library/react";
+import { render, screen, act } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { installLayoutStubs, makeStreamJob, manifests, twoStepGraph } from "./editorTestHarness";
 
@@ -138,6 +138,20 @@ async function letAutosaveFire() {
   });
 }
 
+// Wait for the debounced autosave to land.
+//
+// Deliberately vi.waitFor and not testing-library's waitFor: that one polls on
+// REAL time, and these tests run on fake timers with shouldAdvanceTime, so the
+// 3s debounce needs ~3s of WALL time to fire — three times waitFor's 1s
+// default. It only passed because letAutosaveFire's explicit advance normally
+// gets there first; when the initial render lands after that advance (which is
+// what happens when parallel workers compete for the CPU) the debounce starts
+// late, and the wait gave up before the save. vi.waitFor drives the fake clock
+// on every poll, so the outcome no longer depends on how busy the machine is.
+async function awaitAutosave() {
+  await vi.waitFor(() => expect(saveGraph).toHaveBeenCalled());
+}
+
 beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   stream.subs.length = 0;
@@ -182,7 +196,7 @@ describe("editor failure-policy round trip", () => {
     loadGraph.mockResolvedValue(graphWithPolicy("fallback", true));
     mount();
     await letAutosaveFire();
-    await waitFor(() => expect(saveGraph).toHaveBeenCalled());
+    await awaitAutosave();
     const saved = savedGraph();
     expect(saved?.edges[0].on_error).toBe("fallback");
     expect(saved?.nodes.find((n) => n.id === "ntfy_1")?.continue_on_error).toBe(true);
@@ -194,7 +208,7 @@ describe("editor failure-policy round trip", () => {
     loadGraph.mockResolvedValue(graphWithPolicy());
     mount();
     await letAutosaveFire();
-    await waitFor(() => expect(saveGraph).toHaveBeenCalled());
+    await awaitAutosave();
     const saved = savedGraph();
     expect(saved?.edges[0]).not.toHaveProperty("on_error");
     expect(saved?.nodes[0]).not.toHaveProperty("continue_on_error");
@@ -208,7 +222,7 @@ describe("editor autosave guards", () => {
     await letAutosaveFire();
     // Without a zone both the schedule and its fired_at would run in UTC, and a
     // forked flow never went through the editor's add/edit path that stamps it.
-    await waitFor(() => expect(saveGraph).toHaveBeenCalled());
+    await awaitAutosave();
     const saved = saveGraph.mock.calls[0].find(
       (a) => a && typeof a === "object" && "nodes" in a,
     ) as { nodes: { module: string; params?: { tz?: string } }[] } | undefined;
@@ -248,7 +262,7 @@ describe("editor autosave guards", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(4000);
     });
-    await waitFor(() => expect(saveGraph).toHaveBeenCalled());
+    await awaitAutosave();
     const saved = saveGraph.mock.calls[0].find(
       (a) => a && typeof a === "object" && "nodes" in a,
     ) as { nodes: { module: string; params?: { tz?: string } }[] } | undefined;
@@ -351,7 +365,7 @@ describe("editor step name round trip", () => {
     loadGraph.mockResolvedValue(graphNamed("Tell the barista"));
     mount();
     await letAutosaveFire();
-    await waitFor(() => expect(saveGraph).toHaveBeenCalled());
+    await awaitAutosave();
     expect(savedNodes()?.find((n) => n.id === "ntfy_1")?.label).toBe("Tell the barista");
   });
 
@@ -369,7 +383,7 @@ describe("editor step name round trip", () => {
     loadGraph.mockResolvedValue(graphNamed());
     mount();
     await letAutosaveFire();
-    await waitFor(() => expect(saveGraph).toHaveBeenCalled());
+    await awaitAutosave();
     for (const n of savedNodes() ?? []) {
       expect(n).not.toHaveProperty("label");
     }
@@ -381,7 +395,7 @@ describe("editor step name round trip", () => {
     loadGraph.mockResolvedValue(graphNamed("Send notification"));
     mount();
     await letAutosaveFire();
-    await waitFor(() => expect(saveGraph).toHaveBeenCalled());
+    await awaitAutosave();
     expect(savedNodes()?.find((n) => n.id === "ntfy_1")).not.toHaveProperty("label");
   });
 });
@@ -415,7 +429,7 @@ describe("editor graph-level round-trip", () => {
     loadGraph.mockResolvedValue({ ...graphWithUnzonedSchedule(), ...META });
     mount();
     await letAutosaveFire();
-    await waitFor(() => expect(saveGraph).toHaveBeenCalled());
+    await awaitAutosave();
     const saved = saveGraph.mock.calls[0].find(
       (a) => a && typeof a === "object" && "nodes" in a,
     ) as Record<string, unknown> | undefined;

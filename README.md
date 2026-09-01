@@ -24,15 +24,16 @@ cp .env.example .env && echo 'DAZYFLOW_DEV=1' >> .env
 docker compose up -d
 ```
 
-Open <http://localhost:8080> and sign in as **`test@example.com` / `test`**.
+Open <http://localhost:8642> and sign in as **`test@example.com` / `test`**.
 Start from **New flow → "From a template" → "See a flow run (no setup)"** — it
 needs no connected account at all. `docker compose down` stops it; `down -v`
 also deletes the data.
 
-> **Port 8080 already taken?** Set both `DAZYFLOW_PORT` and
+> **Port 8642 already taken?** Set both `DAZYFLOW_PORT` and
 > `DAZYFLOW_WEB_ORIGIN` in `.env` — they have to agree, or the browser's
 > sign-in is rejected as a cross-origin request and the form reports it as a
-> wrong password.
+> wrong password. (8642 rather than the usual 8080 precisely because 8080 is
+> so often already in use.)
 
 > `DAZYFLOW_DEV=1` is what makes this three commands instead of a config
 > session: it seeds that sign-in and downgrades the insecure-defaults guard to
@@ -144,7 +145,7 @@ There is no in-memory mode — `dzd` requires Postgres. `make dev` starts the
 bundled Postgres (loopback-only) and runs the daemon on the host against it.
 
 ```sh
-make dev      # bundled Postgres, then dzd on http://localhost:8080
+make dev      # bundled Postgres, then dzd on http://localhost:8642
 make web      # (other terminal) Vite dev server on http://localhost:5173
 make check    # the fast pre-push gate
 make ci       # the full CI mirror — adds the web and runner suites
