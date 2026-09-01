@@ -10,6 +10,14 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.28.4] - 2026-09-01
+
+### Fixed
+
+- **`daemon/mailer.go` was not gofmt-clean, so `fmt-check` failed CI on 0.28.3.**
+  Lifting `newMessageID` out to `internal/smtputil` left a blank line at the end
+  of the file. Formatting only; no behaviour change.
+
 ## [0.28.3] - 2026-09-01
 
 ### Fixed
