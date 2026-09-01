@@ -221,8 +221,18 @@ DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 graph load process-inv
 echo
 echo "--- assertions ---"
 errors=0
+# pipefail off around the condition: every assertion is `producer | grep -q`,
+# and grep -q exits on its first match while the producer is still writing —
+# the producer takes SIGPIPE (141) and pipefail would promote that to the
+# pipeline's status, failing an assertion that actually matched. The grep's own
+# status IS the assertion. A producer that genuinely fails still fails it: each
+# redirects 2>&1 into the stream grep reads, so there is nothing to match.
 assert() {
-    if eval "$2"; then
+    local rc=0
+    set +o pipefail
+    eval "$2" || rc=1
+    set -o pipefail
+    if [[ $rc -eq 0 ]]; then
         echo "  [ok] $1"
     else
         echo "  [!!] $1"

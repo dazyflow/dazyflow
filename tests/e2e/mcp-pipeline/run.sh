@@ -114,8 +114,21 @@ DZCTL_TOKEN=$TOKEN /tmp/mcp-dzctl --server=localhost:50099 job list mcp-lookup-a
 echo
 echo "--- assertions ---"
 errors=0
+# Assertions are `producer | grep -q PATTERN`, and `grep -q` exits the
+# instant it matches — leaving the producer writing into a closed pipe. dzctl's
+# `module list` is 13KB and the match lands halfway through it, so whether dzctl
+# has flushed the rest into the pipe buffer before grep goes away is a race: it
+# takes SIGPIPE (141), pipefail promotes that to the pipeline's status, and a
+# matching assertion reports [!!]. The grep's own status is the assertion, so
+# run the condition with pipefail off rather than making every caller work
+# around it. A producer that genuinely fails still fails the assertion — each
+# one redirects 2>&1 into the stream grep reads, so there is nothing to match.
 assert() {
-    if eval "$2"; then echo "  [ok] $1"; else echo "  [!!] $1"; errors=$((errors + 1)); fi
+    local rc=0
+    set +o pipefail
+    eval "$2" || rc=1
+    set -o pipefail
+    if [[ $rc -eq 0 ]]; then echo "  [ok] $1"; else echo "  [!!] $1"; errors=$((errors + 1)); fi
 }
 assert "dzd registered the MCP server" \
     "grep -q 'registered MCP server' $DZD_LOG"
