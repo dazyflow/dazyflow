@@ -3,20 +3,31 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Activity, CheckCircle2, XCircle, Pencil, Inbox } from "lucide-react";
+import {
+  Activity,
+  CheckCircle2,
+  XCircle,
+  Pencil,
+  Inbox,
+  History,
+  CircleSlash,
+} from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/Button";
 import { useAuth } from "../../auth";
 import { api, APIError } from "../../api";
 import { explainApiError } from "../../lib/explainApiError";
 import { absoluteTime, formatDateTime } from "../../lib/datetime";
-import type { PendingApproval } from "../../types";
+import type { DecidedApproval, PendingApproval } from "../../types";
 import { ErrorNotice } from "../../components/ui/ErrorNotice";
 import { ICON } from "../../icons";
 import { POLL } from "../../lib/timing";
 import { Loading } from "../../components/ui/Loading";
 import { EmptyState } from "../../components/ui/EmptyState";
-import { approvalContextView } from "../../lib/approvalContext";
+import {
+  approvalContextSummary,
+  approvalContextView,
+} from "../../lib/approvalContext";
 
 // Approvals is the inbox for await_approval nodes parked across the
 // workspace. Polls on the `watched` tier so a freshly-pending node shows up
@@ -42,6 +53,15 @@ export function Approvals() {
   // approver is deciding on, not a raw slug like "order-alert-3f2a".
   // Best-effort: anything we can't resolve falls back to the id.
   const [flowNames, setFlowNames] = useState<Record<string, string>>({});
+  // Settled decisions, newest first — the record of what this workspace has
+  // already decided, which the inbox alone can never show: a row leaves it the
+  // moment someone acts, so the page used to answer "did I already handle
+  // this?" and "what did we say last time?" with nothing at all.
+  const [history, setHistory] = useState<DecidedApproval[]>([]);
+  // A history that fails to load must not take the inbox down with it: the
+  // inbox is the part with a job to do. Tracked separately and rendered in
+  // place of the list.
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
   useEffect(() => {
     const tenant = activeTenant || me?.tenant || "";
@@ -81,9 +101,30 @@ export function Approvals() {
     }
   }, [token, activeTenant, activeWorkspace, t]);
 
+  // Not polled, unlike the inbox: a decided approval never changes again, so
+  // the only events that can alter this list are a decision made here (which
+  // calls this directly) and one made elsewhere — worth a reload, not a timer.
+  const refreshHistory = useCallback(async () => {
+    if (!token) return;
+    try {
+      const r = await api.listDecidedApprovals(token, {
+        workspace: activeWorkspace || undefined,
+        tenant: activeTenant || undefined,
+      });
+      setHistory(r.approvals ?? []);
+      setHistoryError(null);
+    } catch (e) {
+      setHistoryError(explainApiError(e, t));
+    }
+  }, [token, activeTenant, activeWorkspace, t]);
+
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    void refreshHistory();
+  }, [refreshHistory]);
 
   // An inbox can't gate on "is anything live" — a new approval arriving IS
   // the event — so this runs the whole time the page is open, which is why it
@@ -113,13 +154,15 @@ export function Approvals() {
         decision,
         comment,
       );
-      await refresh();
+      // The row doesn't vanish, it MOVES — reload both lists so the decision
+      // lands in the history in the same beat it leaves the inbox.
+      await Promise.all([refresh(), refreshHistory()]);
     } catch (e) {
       const err = e as APIError | Error;
       if (err instanceof APIError && err.status === 409) {
         // Someone else (or an earlier click) already resumed it; just
-        // refresh and move on.
-        await refresh();
+        // refresh and move on — their decision is now part of the history.
+        await Promise.all([refresh(), refreshHistory()]);
         return;
       }
       setError(explainApiError(e, t, "approval"));
@@ -279,6 +322,107 @@ export function Approvals() {
           );
         })}
       </div>
+
+      {/* Recent decisions. The inbox answers "what needs me now"; a row leaves
+          it the instant someone acts, which left the page unable to answer the
+          two questions people actually came back with — did this already get
+          handled, and what did we decide last time. Read-only by construction:
+          a settled approval is a record, and the run behind it is where the
+          full detail lives. */}
+      {(history.length > 0 || historyError) && (
+        <section className="approval-history">
+          <h2 className="approval-history-title">
+            <History className="icon-inline" size={ICON.sm} />
+            {t("approvals.historyTitle")}
+          </h2>
+          {historyError && <ErrorNotice>{historyError}</ErrorNotice>}
+          <div className="approval-history-list">
+            {history.map((d) => {
+              // Three outcomes, not two: a cancelled run ends its pending
+              // approvals without anyone deciding them.
+              const verdict = t(
+                d.decision === "approve"
+                  ? "approvals.historyApproved"
+                  : d.decision === "reject"
+                    ? "approvals.historyRejected"
+                    : "approvals.historyCancelled",
+              );
+              // One line, not the inbox's full context block: this is scanned.
+              // The prompt is the author's question and wins the headline; the
+              // value takes it when there was no prompt, so a row never falls
+              // all the way back to a step id while it has something to say.
+              const summary = approvalContextSummary(
+                approvalContextView(d.context, d.context_order),
+              );
+              const headline =
+                d.prompt ||
+                summary ||
+                t("approvals.noPrompt", { nodeId: d.node_id });
+              return (
+                <div
+                  className={`approval-history-row is-${d.decision}`}
+                  key={`${d.run_id}/${d.node_id}`}
+                >
+                  {/* The verdict is carried by colour and glyph, which a
+                      screen reader can't see — so it's also the icon's label,
+                      rather than a redundant word on the row. */}
+                  <span
+                    className="approval-history-mark"
+                    title={verdict}
+                    aria-label={verdict}
+                    role="img"
+                  >
+                    {d.decision === "approve" ? (
+                      <CheckCircle2 size={ICON.sm} />
+                    ) : d.decision === "reject" ? (
+                      <XCircle size={ICON.sm} />
+                    ) : (
+                      <CircleSlash size={ICON.sm} />
+                    )}
+                  </span>
+                  <div className="approval-history-body">
+                    <div className="approval-history-headline">{headline}</div>
+                    {d.prompt && summary && (
+                      <div className="approval-history-summary">{summary}</div>
+                    )}
+                    {/* A note is what an approver chose to say; a reason is
+                        what happened to the run. Never both. */}
+                    {(d.comment || d.reason) && (
+                      <div className="approval-history-comment">
+                        {d.comment || d.reason}
+                      </div>
+                    )}
+                    <div className="approval-meta">
+                      <Link to={`/runs/${encodeURIComponent(d.run_id)}`}>
+                        <Activity className="icon-inline" size={ICON.xs} />{" "}
+                        {flowNames[d.graph_id] || d.graph_id}
+                      </Link>
+                      <span>·</span>
+                      {/* Nobody approved a cancelled request, so naming an
+                          approver — or saying one wasn't recorded, as if one
+                          should have been — would both be wrong. The verdict
+                          already says what happened. */}
+                      {d.decision !== "cancelled" && (
+                        <>
+                          <span>
+                            {d.approver
+                              ? t("approvals.historyBy", { who: d.approver })
+                              : t("approvals.historyByUnknown")}
+                          </span>
+                          <span>·</span>
+                        </>
+                      )}
+                      <span title={absoluteTime(d.decided_at)}>
+                        {formatDateTime(d.decided_at)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

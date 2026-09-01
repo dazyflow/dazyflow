@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { describe, expect, it } from "vitest";
-import { approvalContextView } from "./approvalContext";
+import {
+  approvalContextSummary,
+  approvalContextView,
+} from "./approvalContext";
 
 describe("approvalContextView", () => {
   it("shows a form submission as named fields, in the order they were declared", () => {
@@ -135,5 +138,33 @@ describe("approvalContextView", () => {
     const view = approvalContextView([{ b: "2", a: "1" }], ["b", "a"]);
     if (view?.kind !== "fields") throw new Error("expected fields");
     expect(view.fields.map((f) => f.key)).toEqual(["b", "a"]);
+  });
+});
+
+// The one-line form the history rows use. The inbox card can afford a field
+// list; a settled decision is scanned, and gets a sentence.
+describe("approvalContextSummary", () => {
+  it("flattens named fields onto one line, in view order", () => {
+    const view = approvalContextView({ order: "4471", amount: "SEK 400" }, [
+      "order",
+      "amount",
+    ]);
+    expect(approvalContextSummary(view)).toBe("order: 4471 · amount: SEK 400");
+  });
+
+  it("passes text through", () => {
+    expect(approvalContextSummary(approvalContextView("Ship it"))).toBe("Ship it");
+  });
+
+  it("marks that fields were left out rather than dropping them silently", () => {
+    const wide: Record<string, string> = {};
+    for (let i = 0; i < 12; i++) wide[`f${i}`] = String(i);
+    const line = approvalContextSummary(approvalContextView(wide));
+    expect(line.endsWith(" …")).toBe(true);
+  });
+
+  it("is empty when there was no value, so the caller can fall back", () => {
+    expect(approvalContextSummary(null)).toBe("");
+    expect(approvalContextSummary(approvalContextView(undefined))).toBe("");
   });
 });

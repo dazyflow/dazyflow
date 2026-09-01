@@ -10,6 +10,51 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Added
+
+- **Recent decisions on the Approvals page.** Beneath the inbox, the settled
+  approvals: the question, the value that was decided on, who decided, which
+  way, when, and the comment they left — newest decision first, each row
+  linking to its run.
+
+  The inbox can only ever show what is outstanding; a card leaves it the instant
+  someone acts. So the page could not answer either of the two questions people
+  came back with — has this already been handled, and what did we decide the
+  last time one of these came round — and the record existed only as an audit
+  row and a resumed node's output.
+
+  A decided approval is a SUCCEEDED node-record, rejections included: the step
+  ran to completion and routed the value out its `rejected` port. Which port
+  carries the value is the decision, and `pending_url` — emitted at the pause
+  and carried across the resume — is what marks the record as an approval at
+  all. Both new store filters exist for that: `HasOutputPort` finds approvals
+  without a module column to filter on, and `NewestByFinished` orders by when
+  someone decided rather than when the flow got there. The second is not
+  cosmetic — an approval parked three weeks and approved this morning is the
+  newest decision and one of the oldest records, and under a `LIMIT`, ordering
+  by the wrong column doesn't reorder the page, it drops the row off it. A
+  partial index on the same predicate keeps both queries off the full history
+  of every succeeded step the workspace has ever run.
+
+  Cancellations are in the list too, as their own outcome. Cancel a run parked
+  at an approval and the request is called off without anyone deciding it —
+  previously it just left the inbox and appeared nowhere, which reads like
+  somebody handled it. This needed a fix underneath: cancelling **overwrote** a
+  node's result with a bare error, and for a parked step that result was the
+  only record of what the request had been for — the prompt, the value, the
+  approval link, all erased. Cancel now keeps what a step had already
+  published and stamps the error alongside it, so a cancelled approval can
+  still say what it was for (on the run page as much as in this list). Nothing
+  downstream can see the preserved ports: `classifyEdge` blocks every edge out
+  of a cancelled record whatever it holds. Runs cancelled before this change
+  carry no such record and stay absent rather than appearing half-rendered.
+
+  New endpoint: `GET /api/v1/approvals/decided` (same `?tenant=`/`?workspace=`
+  scoping as the pending list, plus `?limit=`, default 50). Decided and
+  cancelled are two indexed queries merged by outcome time — taking the newest
+  `limit` of each and keeping the newest `limit` of the union is exactly the
+  newest `limit` of the whole.
+
 ### Fixed
 
 - **A mail-server login that was never presented reported "OK".** The Email
@@ -20,10 +65,10 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
   Two separate holes, both from treating "no username" as "this server needs no
   login". Three tenant-facing paths had independently grown the same
   `if username != "" { PlainAuth(...) }` (the Email drop, the connect-time
-  verifier, the email-template test send), so a
-  connection carrying a password but no username — a password field filled in
-  while the username was left blank, the two being separate fields on the same
-  card — threw the password away and opened an unauthenticated session. Any
+  verifier, the email-template test send), so a connection carrying a password
+  but no username — a password field filled in while the username was left
+  blank, the two being separate fields on the same card — threw the password
+  away and opened an unauthenticated session. Any
   relay that accepts unauthenticated mail then delivered it, and the step
   reported OK. `smtputil.Auth` is now the one place that decides this: no login
   at all stays valid (an internal relay), half a login is an error naming the

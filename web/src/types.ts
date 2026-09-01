@@ -860,6 +860,32 @@ export type PendingApproval = {
   workspace: string;
 };
 
+// DecidedApproval is one settled approval — the history beneath the inbox.
+// Its `context` is the same carried value a PendingApproval shows, read back
+// from whichever decision port the result routed it out of, so a history row
+// shows what was decided and not just that something was.
+export type DecidedApproval = {
+  run_id: string;
+  graph_id: string;
+  node_id: string;
+  prompt?: string;
+  // "cancelled" means nobody decided — the run was called off while the
+  // request was still waiting. Not a decision, but it is how a pending
+  // approval ends, and omitting it left called-off requests looking like they
+  // were still waiting somewhere.
+  decision: "approve" | "reject" | "cancelled";
+  approver?: string;
+  comment?: string;
+  // Why the run was cancelled. Cancellations only; `comment` is the
+  // approver's own note and a cancellation has no approver.
+  reason?: string;
+  context?: unknown;
+  context_too_large?: boolean;
+  context_order?: string[];
+  decided_at: string;
+  workspace: string;
+};
+
 export type RunSummary = {
   id: string;
   graph_id: string;

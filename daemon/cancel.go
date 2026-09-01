@@ -62,7 +62,31 @@ func (s *Service) CancelGraphRun(ctx context.Context, p core.Principal, graphRun
 		reason = fmt.Sprintf("cancelled by %s", p.Subject)
 	}
 	cancelErr := &core.JobError{Code: "cancelled", Message: reason}
-	nodeResult := &core.Result{Status: core.StatusError, Error: cancelErr}
+	// cancelledResult stamps the cancel onto a node while KEEPING whatever that
+	// node had already published. It matters for a parked step: an
+	// await_approval node's result is the only record of what it was waiting on
+	// — the prompt, the value someone was being asked to decide about, the
+	// approval URL — and overwriting it with a bare error erased all of it, so
+	// a cancelled approval could no longer say what it had been for, on the run
+	// page or in the approvals history. Mirrors Approve, which also builds its
+	// terminal result on top of what the pause emitted.
+	//
+	// A node cancelled mid-execution has no result to carry, so for everything
+	// but a parked step this is exactly the error-only result it always was.
+	// Preserved output cannot leak downstream: classifyEdge blocks every edge
+	// out of a cancelled record regardless of which ports it holds, and the
+	// graph-record is terminal before any of them would be considered.
+	cancelledResult := func(prev *core.Result) *core.Result {
+		res := &core.Result{Status: core.StatusError, Error: cancelErr}
+		if prev == nil || len(prev.Output) == 0 {
+			return res
+		}
+		res.Output = make(map[string]core.Ref, len(prev.Output))
+		for port, ref := range prev.Output {
+			res.Output[port] = ref
+		}
+		return res
+	}
 
 	// Sweep non-terminal node-records first so the dispatcher's
 	// short-circuit (introduced for cancel) is in place before we flip
@@ -83,7 +107,7 @@ func (s *Service) CancelGraphRun(ctx context.Context, p core.Principal, graphRun
 		// Failed we'll get ErrConflict here, which is fine — that node
 		// already advanced and the graph-status guard will keep its
 		// dispatch attempt from doing damage.
-		if err := s.Jobs.Complete(ctx, nodeRecID, core.JobStatusCancelled, nodeResult); err == nil {
+		if err := s.Jobs.Complete(ctx, nodeRecID, core.JobStatusCancelled, cancelledResult(nrec.Result)); err == nil {
 			s.bus().Publish(graphRunID, BusEvent{NodeStatus: &NodeStatusEvent{
 				NodeID: n.ID,
 				Status: core.JobStatusCancelled,

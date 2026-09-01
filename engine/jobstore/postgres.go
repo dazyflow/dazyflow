@@ -590,13 +590,25 @@ func (s *Postgres) ListNodeRecords(ctx context.Context, opts core.ListNodeRecord
 		args = append(args, opts.GraphRunID)
 		q += fmt.Sprintf(" AND graph_run_id = $%d", len(args))
 	}
+	if opts.HasOutputPort != "" {
+		args = append(args, opts.HasOutputPort)
+		// jsonb_exists, not the `?` operator: `?` is a placeholder in most
+		// drivers and reads as one to every human skimming the query, and the
+		// function form is what the matching partial index in schema.sql is
+		// declared with.
+		q += fmt.Sprintf(" AND jsonb_exists(result->'output', $%d)", len(args))
+	}
 	args = append(args, limit)
 	// id DESC is a deterministic tiebreaker: enqueued_at ties are common (a
 	// scheduler/webhook fan-out submits many runs in the same instant), and
 	// without a unique secondary key LIMIT/OFFSET pagination can repeat or skip
 	// a row across page boundaries. id is random, not chronological, but it
 	// gives a stable total order, which is all pagination needs.
-	q += fmt.Sprintf(" ORDER BY enqueued_at DESC, id DESC LIMIT $%d", len(args))
+	order := "enqueued_at DESC, id DESC"
+	if opts.NewestByFinished {
+		order = "finished_at DESC NULLS LAST, id DESC"
+	}
+	q += fmt.Sprintf(" ORDER BY %s LIMIT $%d", order, len(args))
 	if opts.Offset > 0 {
 		args = append(args, opts.Offset)
 		q += fmt.Sprintf(" OFFSET $%d", len(args))

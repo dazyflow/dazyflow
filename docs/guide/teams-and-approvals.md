@@ -130,6 +130,20 @@ the decision.
 The flow resumes the moment someone decides. Until then the run sits at that
 step — it isn't failing and it isn't burning anything; it's waiting.
 
+Beneath the waiting cards, **Recent decisions** lists what the workspace has
+already settled: the question, the value, who decided, which way, when, and the
+comment they left. A card leaves the inbox the instant someone acts on it, so
+this is where you look to find out whether a request was already handled, or
+what was decided the last time a similar one came round. Each row links to its
+run, which holds the full detail. It's a record — nothing there can be decided
+again.
+
+Requests that were never decided show up here too. **Cancel a run** while it
+sits at an approval and the request is called off: it leaves the inbox, and
+appears in the list marked *Cancelled* with the reason, naming nobody — because
+nobody decided it. Without that it would simply vanish, which reads like
+somebody handled it.
+
 > A run parked at an approval keeps whatever it had already worked out. That's
 > why the approver can be a different person, hours later, on a phone.
 

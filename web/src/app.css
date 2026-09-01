@@ -7922,6 +7922,97 @@ a.pa-card:hover {
   }
 }
 
+/* Recent decisions — the settled half of the page, beneath the inbox.
+   Deliberately quieter than .approval-card: no surface, no shadow, tighter
+   rows. The inbox is work; this is the record of work, and it must not
+   compete for the eye of someone who came here to decide something. */
+.approval-history {
+  margin-top: var(--space-6);
+}
+.approval-history-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.approval-history-list {
+  display: flex;
+  flex-direction: column;
+}
+.approval-history-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border);
+}
+.approval-history-row:last-child {
+  border-bottom: none;
+}
+/* The verdict, carried by colour and glyph rather than a repeated word. */
+.approval-history-mark {
+  display: flex;
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+.approval-history-row.is-approve .approval-history-mark {
+  color: var(--success);
+}
+.approval-history-row.is-reject .approval-history-mark {
+  color: var(--danger);
+}
+/* Cancelled: nobody decided. Muted rather than red — a called-off request is
+   not a rejection, and colouring it like one would misreport what happened. */
+.approval-history-row.is-cancelled .approval-history-mark {
+  color: var(--muted);
+}
+.approval-history-row.is-cancelled .approval-history-headline {
+  color: var(--muted);
+}
+.approval-history-body {
+  min-width: 0;
+  flex: 1;
+}
+.approval-history-headline {
+  font-size: var(--text-sm);
+  color: var(--ink);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+/* The decided value, when the prompt already took the headline. One line:
+   the run page has the whole of it. */
+.approval-history-summary {
+  margin-top: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The approver's note, quoted — it's the one part of the row written by a
+   person rather than assembled from the record. */
+.approval-history-comment {
+  margin-top: var(--space-1);
+  padding-left: var(--space-2);
+  border-left: 2px solid var(--border);
+  font-size: var(--text-xs);
+  color: var(--ink);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.approval-history-row .approval-meta {
+  margin-top: var(--space-1);
+  font-size: var(--text-xs);
+}
+
 /* Settings modal */
 /* ── The dialog shell ────────────────────────────────────────────────────
    One backdrop + panel + head/body/foot, used by all 27 dialogs.

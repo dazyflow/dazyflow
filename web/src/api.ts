@@ -35,6 +35,7 @@ import type {
   JobRecord,
   JobStatus,
   PendingApproval,
+  DecidedApproval,
   RunLogEntry,
   RunSummary,
   RunView,
@@ -1512,6 +1513,23 @@ export const api = {
       token,
       "GET",
       "/approvals/pending" + (q ? "?" + q : ""),
+    );
+  },
+  // The history companion to listPendingApprovals: settled approvals, newest
+  // decision first. Not polled — a decided approval doesn't change again.
+  listDecidedApprovals: (
+    token: string,
+    opts: { workspace?: string; tenant?: string; limit?: number } = {},
+  ) => {
+    const qs = new URLSearchParams();
+    if (opts.workspace) qs.set("workspace", opts.workspace);
+    if (opts.tenant) qs.set("tenant", opts.tenant);
+    if (opts.limit) qs.set("limit", String(opts.limit));
+    const q = qs.toString();
+    return request<{ approvals: DecidedApproval[] }>(
+      token,
+      "GET",
+      "/approvals/decided" + (q ? "?" + q : ""),
     );
   },
   listAPIKeys: (token: string, tenant?: string) => {

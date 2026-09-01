@@ -790,7 +790,14 @@
     "noPrompt": "(no prompt — step ID: {{nodeId}})",
     "reject": "Reject",
     "rejecting": "Rejecting…",
-    "approving": "Approving…"
+    "approving": "Approving…",
+    "historyTitle": "Recent decisions",
+    "historyApproved": "Approved",
+    "historyRejected": "Rejected",
+    "historyCancelled": "Cancelled — the run was called off",
+    "historyBy": "by {{who}}",
+    "historyByUnknown": "approver not recorded",
+    "historyMore": "Showing the last {{count}} decisions."
   },
   "acceptInvite": {
     "title": "You've been invited",

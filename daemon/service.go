@@ -1816,7 +1816,12 @@ func (s *Service) ListPendingApprovals(ctx context.Context, p core.Principal, na
 		Tenant:    tenant,
 		Workspace: ws,
 		Status:    core.JobStatusAwaiting,
-		Limit:     200,
+		// Only await_approval nodes: a subgraph caller parks too, and it is
+		// the `pending_url` port that tells the two apart. The Go-side check
+		// below stays — it has to read the value anyway — but the query no
+		// longer spends its 200-row budget on rows it will discard.
+		HasOutputPort: approvalMarkerPort,
+		Limit:         200,
 	})
 	if err != nil {
 		return nil, err
@@ -1868,6 +1873,198 @@ func (s *Service) ListPendingApprovals(ctx context.Context, p core.Principal, na
 		})
 	}
 	return out, nil
+}
+
+// approvalMarkerPort is the output port that identifies an await_approval
+// node-record. The module emits it when it parks (the canonical URL an
+// approver opens) and Approve copies it onto the resumed Result, so it marks
+// the record for its whole life — which is what lets one filter find both the
+// inbox and the history. Kept as a constant because the store's partial index
+// in schema.sql hardcodes the same string.
+const approvalMarkerPort = "pending_url"
+
+// DecidedApproval is one settled approval: who decided, which way, when, and
+// the note they left. The history list beneath the inbox is built from these.
+//
+// It carries the same Context preview as PendingApproval, from the same value:
+// the pause stashes what the flow wired into the step's Value port, and the
+// decision routes it out `approved` or `rejected`. Reading it back means the
+// history row shows WHAT was decided — the refund, the submission — and not
+// just that someone once clicked approve on a step id.
+type DecidedApproval struct {
+	RunID   string `json:"run_id"`
+	GraphID string `json:"graph_id"`
+	NodeID  string `json:"node_id"`
+	Prompt  string `json:"prompt,omitempty"`
+	// Decision is "approve", "reject", or "cancelled" — the last meaning
+	// nobody decided: the run was cancelled out from under the request. It is
+	// not a decision, but it IS how a pending approval ends, and leaving it
+	// out of the history made requests look like they were still waiting
+	// somewhere when in fact they had been called off.
+	Decision string `json:"decision"`
+	// Approver is the authenticated subject the decision was attributed to.
+	// May be empty for a decision made through the unauthenticated HMAC email
+	// link before that path recorded one, and is always empty for a
+	// cancellation — see Reason.
+	Approver string `json:"approver,omitempty"`
+	Comment  string `json:"comment,omitempty"`
+	// Reason is the cancel message ("cancelled by ada@acme.se", or whatever
+	// the caller passed). Cancellations only. Kept apart from Comment because
+	// the two come from opposite places: a comment is what an approver chose
+	// to say, a reason is what happened to the run.
+	Reason          string   `json:"reason,omitempty"`
+	Context         any      `json:"context,omitempty"`
+	ContextTooLarge bool     `json:"context_too_large,omitempty"`
+	ContextOrder    []string `json:"context_order,omitempty"`
+	// DecidedAt is when the approval was settled — decided or cancelled.
+	DecidedAt time.Time `json:"decided_at"`
+	Workspace string    `json:"workspace"`
+}
+
+// decidedApprovalsCap bounds one page of history. The list is a "what happened
+// recently" companion to the inbox, not an audit export — the audit log
+// (action "approval") is the durable record, and the run page holds the full
+// detail of any single decision.
+const decidedApprovalsCap = 200
+
+// ListDecidedApprovals returns settled await_approval node-records, newest
+// first. Scope rules match ListPendingApprovals: the principal's tenant, their
+// workspace binding when they have one, else the caller's narrowWorkspace (the
+// admin switcher), and "" for tenant-wide.
+//
+// "Settled" is two record states, not one, which is why this runs two queries:
+//
+//   - SUCCEEDED — someone decided. A rejection lands here too: the step ran to
+//     completion and routed the value out its `rejected` port, so the verdict
+//     lives in which port the result carries, never in the status.
+//   - CANCELLED — nobody decided; the run was called off while the request sat
+//     waiting. ListNodeRecordsOpts filters one status at a time, and fetching
+//     both in one pass would mean a status-blind query over every terminal node
+//     of every run. Two indexed queries and a merge is cheaper than that and
+//     exact: taking the newest `limit` of each and keeping the newest `limit`
+//     of the union is the same set as the newest `limit` of the whole.
+//
+// Ordering is by finish time, not enqueue time, and that is load-bearing
+// rather than cosmetic: an approval that sat parked for three weeks and was
+// decided this morning is the most recent OUTCOME but one of the oldest
+// records. Under a LIMIT, ordering by the wrong column doesn't just shuffle
+// the page — it drops that row off it.
+//
+// Cancellations recorded before cancel preserved a parked node's output carry
+// no `pending_url` and cannot be recognised as approvals at all; they stay
+// absent rather than appearing half-rendered.
+func (s *Service) ListDecidedApprovals(ctx context.Context, p core.Principal, narrowTenant, narrowWorkspace string, limit int) ([]DecidedApproval, error) {
+	tenant := p.Tenant
+	if p.Has(core.PermPlatformAdmin) && narrowTenant != "" {
+		tenant = narrowTenant
+	}
+	ws := p.Workspace
+	if ws == "" {
+		ws = narrowWorkspace
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > decidedApprovalsCap {
+		limit = decidedApprovalsCap
+	}
+	out := make([]DecidedApproval, 0, limit)
+	for _, status := range []core.JobStatus{core.JobStatusSucceeded, core.JobStatusCancelled} {
+		recs, err := s.Jobs.ListNodeRecords(ctx, core.ListNodeRecordsOpts{
+			Tenant:           tenant,
+			Workspace:        ws,
+			Status:           status,
+			HasOutputPort:    approvalMarkerPort,
+			NewestByFinished: true,
+			Limit:            limit,
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, rec := range recs {
+			if row, ok := settledApproval(rec); ok {
+				out = append(out, row)
+			}
+		}
+	}
+	// Merge the two runs of already-sorted rows. Stable so a tie between a
+	// decision and a cancellation stamped in the same instant keeps a fixed
+	// order instead of shuffling between page loads.
+	sort.SliceStable(out, func(i, j int) bool { return out[i].DecidedAt.After(out[j].DecidedAt) })
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+// settledApproval turns one terminal await_approval node-record into a history
+// row, or reports false when the record can't be read as a settled approval.
+//
+// The outcome is read from the record's own shape rather than its status: the
+// decision ports are how Approve writes a verdict (and the same presence test
+// downstream edges fork on), and a cancel is a cancelled record that still
+// carries the ports the pause emitted.
+func settledApproval(rec core.JobRecord) (DecidedApproval, bool) {
+	if rec.Result == nil || rec.Result.Output == nil {
+		return DecidedApproval{}, false
+	}
+	out := rec.Result.Output
+	str := func(port string) string {
+		if ref, ok := out[port]; ok {
+			v, _ := ref.Inline.(string)
+			return v
+		}
+		return ""
+	}
+
+	var decision, reason string
+	var carried core.Ref
+	switch {
+	case rec.Status == core.JobStatusCancelled:
+		decision = "cancelled"
+		// The value is still on the internal `context` key: only a decision
+		// moves it to a port, and this request never got one.
+		carried = out["context"]
+		if rec.Result.Error != nil {
+			reason = rec.Result.Error.Message
+		}
+	default:
+		if ref, ok := out["approved"]; ok {
+			decision, carried = "approve", ref
+		} else if ref, ok := out["rejected"]; ok {
+			decision, carried = "reject", ref
+		} else {
+			// Carries the marker port but no decision port: a record written
+			// by an older build, or a resume that isn't an approval. Skip it
+			// rather than render an outcome we'd have to invent.
+			return DecidedApproval{}, false
+		}
+	}
+
+	approvalCtx, ctxTooLarge := approvalContextPreview(carried)
+	var ctxOrder []string
+	if approvalCtx != nil {
+		ctxOrder = carried.Headers
+	}
+	decidedAt := rec.EnqueuedAt
+	if rec.FinishedAt != nil {
+		decidedAt = *rec.FinishedAt
+	}
+	return DecidedApproval{
+		RunID:           rec.GraphRunID,
+		GraphID:         rec.GraphID,
+		NodeID:          rec.NodeID,
+		Prompt:          str("prompt"),
+		Decision:        decision,
+		Approver:        str("approver"),
+		Comment:         str("comment"),
+		Reason:          reason,
+		Context:         approvalCtx,
+		ContextTooLarge: ctxTooLarge,
+		ContextOrder:    ctxOrder,
+		DecidedAt:       decidedAt,
+		Workspace:       rec.Workspace,
+	}, true
 }
 
 // ListModules returns every manifest the engine's resolver knows about.

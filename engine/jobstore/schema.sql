@@ -56,3 +56,16 @@ CREATE INDEX IF NOT EXISTS jobs_graph_idx ON jobs (graph_id, enqueued_at DESC);
 -- retention + GDPR-erasure sweeps, and DeleteByTenant. Without it every one of
 -- those full-scans the jobs table.
 CREATE INDEX IF NOT EXISTS jobs_tenant_status_idx ON jobs (tenant, status);
+
+-- Approval index. The approvals page reads two slices of await_approval
+-- node-records — parked (the inbox) and decided (the history beneath it) —
+-- and both are needle-in-haystack queries: an approval is a rounding error
+-- against the succeeded steps of every run the workspace has ever executed.
+-- The partial predicate is the identifying mark of an approval node
+-- (`pending_url`, emitted at the pause and carried through the resume), so the
+-- index holds only approval rows, and finished_at DESC serves the history's
+-- ordering — newest DECISION first, which is not the same order as newest run.
+-- Matches core.ListNodeRecordsOpts.HasOutputPort + NewestByFinished.
+CREATE INDEX IF NOT EXISTS jobs_approval_idx
+    ON jobs (tenant, workspace, finished_at DESC)
+    WHERE kind = 'node' AND jsonb_exists(result->'output', 'pending_url');

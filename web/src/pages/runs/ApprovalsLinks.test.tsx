@@ -27,11 +27,13 @@ vi.mock("../../auth", () => {
 });
 
 const listPendingApprovals = vi.fn();
+const listDecidedApprovals = vi.fn();
 const listGraphs = vi.fn();
 vi.mock("../../api", () => ({
   APIError: class extends Error {},
   api: {
     listPendingApprovals: (...a: unknown[]) => listPendingApprovals(...a),
+    listDecidedApprovals: (...a: unknown[]) => listDecidedApprovals(...a),
     listGraphs: (...a: unknown[]) => listGraphs(...a),
     approveNode: vi.fn().mockResolvedValue({}),
   },
@@ -54,6 +56,9 @@ const FLOW_ID = "refunds";
 describe("Approvals card links", () => {
   beforeEach(() => {
     listGraphs.mockResolvedValue({ graphs: [{ id: FLOW_ID, name: "Refunds" }] });
+    // No history here: these cases count the links on the page, and a decided
+    // row carries one of its own.
+    listDecidedApprovals.mockResolvedValue({ approvals: [] });
     listPendingApprovals.mockResolvedValue({
       approvals: [
         {

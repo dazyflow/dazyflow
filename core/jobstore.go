@@ -228,6 +228,29 @@ type ListNodeRecordsOpts struct {
 	GraphRunID string
 	Limit      int
 	Offset     int
+
+	// HasOutputPort narrows to records whose Result carries this output
+	// port, letting a caller ask for a KIND of node without a module column
+	// to filter on. The approval views use it: an await_approval node is the
+	// one that emits `pending_url`, and that port survives the resume, so it
+	// identifies the node both while it is parked and after it is decided.
+	//
+	// The filter belongs in the store rather than in a Go loop over the
+	// results, because the two are not the same query. Filtering after a
+	// LIMIT asks for "the newest 100 nodes, of which show me the approvals"
+	// — on a workspace where approvals are a rounding error against ordinary
+	// succeeded steps, that reliably returns an empty page while history
+	// exists.
+	HasOutputPort string
+
+	// NewestByFinished orders by finish time instead of enqueue time (both
+	// DESC). An approval's enqueue time is when the flow reached the step;
+	// its finish time is when a person decided. A history list is ordered by
+	// the decision, so a request parked for three weeks and approved this
+	// morning belongs at the top — and with a LIMIT, ordering also decides
+	// which rows are returned at all, not just their order. Records with no
+	// finish time sort last.
+	NewestByFinished bool
 }
 
 // ListGraphRunsOpts scopes a ListGraphRuns call. Empty fields are

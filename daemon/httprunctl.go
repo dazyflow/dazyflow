@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/dazyflow/dazyflow/core"
 )
@@ -31,6 +32,38 @@ func (h *HTTPGateway) listPendingApprovals(rw http.ResponseWriter, r *http.Reque
 		p,
 		r.URL.Query().Get("tenant"),
 		r.URL.Query().Get("workspace"),
+	)
+	if err != nil {
+		writeJSONError(rw, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{"approvals": approvals})
+}
+
+// listDecidedApprovals returns the history that sits beneath the inbox:
+// await_approval nodes that have been settled, newest decision first.
+//
+// Same scope params as the pending list (?tenant=, ?workspace=), plus an
+// optional ?limit= (default 50, capped by the service). Separate endpoint
+// rather than a ?state= on the pending one: the two return different shapes —
+// a pending row is a thing to act on, a decided row is a record of an act —
+// and the inbox polls on a timer while this does not.
+func (h *HTTPGateway) listDecidedApprovals(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	limit := 0
+	if v := r.URL.Query().Get("limit"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n <= 0 {
+			writeJSONError(rw, http.StatusBadRequest, "limit must be a positive number")
+			return
+		}
+		limit = n
+	}
+	approvals, err := h.svc.ListDecidedApprovals(
+		r.Context(),
+		p,
+		r.URL.Query().Get("tenant"),
+		r.URL.Query().Get("workspace"),
+		limit,
 	)
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())

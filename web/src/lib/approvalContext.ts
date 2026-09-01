@@ -98,3 +98,19 @@ export function approvalContextView(
   }
   return null;
 }
+
+// approvalContextSummary flattens a context view onto one line, for the
+// history list beneath the inbox. A settled decision is scanned, not studied —
+// the row says what was decided in a sentence and links to the run for the
+// rest — so the field/text distinction the inbox card draws in layout collapses
+// here into "key: value · key: value". Returns "" when there was no value,
+// which the caller falls back on the prompt for.
+export function approvalContextSummary(view: ApprovalContextView): string {
+  if (!view) return "";
+  if (view.kind === "text") return view.text;
+  const line = view.fields.map((f) => `${f.key}: ${f.value}`).join(" · ");
+  // `more` is already counted in the view; saying "+2 more" on one line is
+  // noise, but silently dropping them would misrepresent the record — the
+  // ellipsis marks that there was more without spending words on it.
+  return view.more > 0 ? line + " …" : line;
+}

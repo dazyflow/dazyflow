@@ -387,13 +387,35 @@ func (m *Memory) ListNodeRecords(_ context.Context, opts core.ListNodeRecordsOpt
 		if opts.GraphRunID != "" && r.GraphRunID != opts.GraphRunID {
 			continue
 		}
+		if opts.HasOutputPort != "" {
+			if r.Result == nil {
+				continue
+			}
+			if _, ok := r.Result.Output[opts.HasOutputPort]; !ok {
+				continue
+			}
+		}
 		out = append(out, *r)
 	}
 	// Match the Postgres store's "enqueued_at DESC, id DESC": id breaks
 	// enqueued_at ties so pagination is a stable total order (plain sort.Slice
 	// isn't even stable), and a tie on a page boundary can't repeat or drop a
-	// row across LIMIT/OFFSET pages.
+	// row across LIMIT/OFFSET pages. NewestByFinished swaps the leading column
+	// for finished_at, nulls last, on the same tiebreaker.
 	sort.Slice(out, func(i, j int) bool {
+		if opts.NewestByFinished {
+			a, b := out[i].FinishedAt, out[j].FinishedAt
+			switch {
+			case a == nil && b == nil: // both unfinished — fall through to id
+			case a == nil:
+				return false
+			case b == nil:
+				return true
+			case !a.Equal(*b):
+				return a.After(*b)
+			}
+			return out[i].ID > out[j].ID
+		}
 		if out[i].EnqueuedAt.Equal(out[j].EnqueuedAt) {
 			return out[i].ID > out[j].ID
 		}

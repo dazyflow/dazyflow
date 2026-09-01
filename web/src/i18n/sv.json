@@ -790,7 +790,14 @@
     "noPrompt": "(ingen prompt — steg-ID: {{nodeId}})",
     "reject": "Avslå",
     "rejecting": "Avslår…",
-    "approving": "Godkänner…"
+    "approving": "Godkänner…",
+    "historyTitle": "Senaste besluten",
+    "historyApproved": "Godkänt",
+    "historyRejected": "Avslaget",
+    "historyCancelled": "Avbrutet — körningen stoppades",
+    "historyBy": "av {{who}}",
+    "historyByUnknown": "beslutsfattare saknas",
+    "historyMore": "Visar de {{count}} senaste besluten."
   },
   "acceptInvite": {
     "title": "Du har blivit inbjuden",
