@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.28.5] - 2026-09-01
+
 ### Fixed
 
 - **Re-running a webhook- or form-triggered run started it with no data.**
