@@ -82,13 +82,13 @@ jobs:
     name: Build, vet, and the fast gates
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # check-changelog compares a released section against the commit that
           # released it, which does not work on a shallow clone.
           fetch-depth: 0
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
@@ -202,9 +202,9 @@ jobs:
           --health-cmd "healthcheck.sh --connect --innodb_initialized"
           --health-interval 5s --health-timeout 5s --health-retries 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
@@ -261,9 +261,9 @@ jobs:
           --health-cmd "pg_isready -U dazyflow -d dazyflow_test"
           --health-interval 5s --health-timeout 5s --health-retries 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
@@ -279,7 +279,7 @@ jobs:
     name: Web unit tests and build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The docs SPA content tree (web/src/docs/content/) is generated, not
       # committed — guide pages copied from docs/guide/ and the step catalog
@@ -287,12 +287,12 @@ jobs:
       # otherwise pure Node. Without it content.ts globs an empty directory and
       # the docs-search tests fail on a fresh checkout with "Nothing matches",
       # which reads as a search bug rather than as missing content.
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: web/.nvmrc
           cache: npm
@@ -343,14 +343,14 @@ jobs:
     name: Docs site
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: web/.nvmrc
           cache: npm
@@ -369,7 +369,7 @@ jobs:
     name: Vulnerability scan and SBOM
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # `stable` rather than go-version-file, unlike every other job. The
       # scan jobs' Go version determines which STDLIB govulncheck audits, and
@@ -379,7 +379,7 @@ jobs:
       # go.mod. `stable` keeps the scan on the newest release; the build jobs
       # and the images stay pinned. A real finding still fails the job — this
       # only stops us reporting patches that are already released.
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: stable
           cache-dependency-path: go.sum
@@ -437,7 +437,7 @@ jobs:
 
       # The sourcehut build left these on the build page. Here they are a proper
       # artifact, so a release can attach them without a rebuild.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sbom
           path: |
@@ -470,7 +470,7 @@ jobs:
       commit: ${{ steps.ver.outputs.commit }}
       date: ${{ steps.ver.outputs.date }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # `git describe --tags` for the version stamp
 
@@ -500,7 +500,7 @@ jobs:
       # hosted runner starts with an empty one — so every run recompiled the
       # world. buildx with the GitHub Actions cache backend is what makes those
       # mounts, and the layer cache, survive between runs.
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       # VERSION is passed as $TAG, which is EMPTY off a tag — deliberately: the
       # Dockerfile falls back to the committed ./VERSION when this arg is empty,
@@ -515,7 +515,7 @@ jobs:
       # mode=max keeps the intermediate stages (npm ci, go build) — the whole
       # point here, since the final stages are a few MB of static files.
       - name: Build dzd image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: false
@@ -530,7 +530,7 @@ jobs:
       # The docs site image (docs.dazyflow.app) — deploy/ references it but
       # nothing else exercises Dockerfile.docs.
       - name: Build docs image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile.docs
@@ -566,12 +566,12 @@ jobs:
       # A shallow clone is enough here, unlike in `images`: the version stamp
       # arrives through needs.images.outputs, so nothing in this job runs
       # `git describe`.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       - name: Log in to ghcr.io
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -600,7 +600,7 @@ jobs:
           fi
 
       - name: Push dzd image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true
@@ -612,7 +612,7 @@ jobs:
           cache-from: type=gha,scope=dzd
 
       - name: Push docs image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile.docs
