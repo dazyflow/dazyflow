@@ -35,12 +35,7 @@ describe("explainApiError", () => {
     ).toBe("apiError.signinInvalid");
   });
 
-  // Regression: a self-hoster who changes DAZYFLOW_PORT without matching
-  // DAZYFLOW_WEB_ORIGIN gets a 403 csrf_origin on every sign-in attempt. The
-  // sign-in branch used to claim the credentials were wrong, which is the one
-  // thing they aren't — and it sends the reader hunting through passwords for
-  // a problem that lives in .env. Deployment-config codes win over the
-  // surface's own reading of the status.
+  // Regression: a csrf_origin 403 used to render as "wrong password".
   it("reports a sign-in csrf_origin as a server setting, not a bad password", () => {
     expect(
       explainApiError(

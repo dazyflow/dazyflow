@@ -57,13 +57,9 @@ export function explainApiError(
   // No HTTP response at all — the request never reached the server.
   if (status === 0) return t("apiError.network");
 
-  // Deployment-configuration refusals come FIRST, ahead of the auth-surface
-  // branches below. They ride the same 401/403 statuses but have nothing to do
-  // with what the user just typed, and repainting one as "wrong password"
-  // sends a self-hoster hunting through credentials for a problem that lives
-  // in .env. The common one: DAZYFLOW_WEB_ORIGIN not naming the address the
-  // browser actually loaded the UI from (a changed DAZYFLOW_PORT does it), so
-  // every sign-in 403s with csrf_origin no matter what is entered.
+  // Deployment-config refusals first: they ride the same 401/403 statuses but
+  // have nothing to do with what the user typed, so the auth-surface branches
+  // below must not repaint them as "wrong password".
   if (code && CONFIG_CODES.has(code)) {
     if (code === "csrf_origin" && context === "signin") {
       return t("apiError.csrfOriginSignin");
@@ -173,11 +169,8 @@ function looksTechnical(lc: string): boolean {
   );
 }
 
-// CONFIG_CODES are refusals caused by how the server is deployed, not by
-// anything the reader did or typed. They must resolve by code before any
-// surface-specific branch gets to reinterpret their status — see the top of
-// explainApiError. Add a code here only if it can NEVER mean "your input was
-// wrong", or a genuine credential error will start reading as a config bug.
+// CONFIG_CODES are refusals caused by how the server is deployed. Add a code
+// only if it can NEVER mean "your input was wrong".
 const CONFIG_CODES = new Set(["csrf_origin"]);
 
 // PERMISSION_CODES are the refusal codes whose generic headline ("ask an

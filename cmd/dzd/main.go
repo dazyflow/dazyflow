@@ -36,6 +36,7 @@ import (
 	// makes LoadLocation work on any base image at ~450KB of binary.
 	_ "time/tzdata"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -1058,6 +1059,11 @@ func openCoreStores(ctx context.Context, dsn string, maxConns, minConns int, ses
 		log.Fatalf("postgres connect: %v", err)
 	}
 	log.Printf("postgres pool: max_conns=%d min_conns=%d", poolCfg.MaxConns, poolCfg.MinConns)
+	// The pool is lazy, so without this the first connection failure surfaces
+	// inside whichever store constructor runs first, naming the wrong subsystem.
+	if err := pool.Ping(ctx); err != nil {
+		log.Fatalf("postgres: %v%s", err, postgresConnectHint(err))
+	}
 	if poolCfg.MaxConns < 10 {
 		log.Printf("WARNING: postgres pool max_conns=%d is low for production; set DAZYFLOW_PG_MAX_CONNS to 20+ once you have real concurrent load", poolCfg.MaxConns)
 	}
@@ -2679,4 +2685,29 @@ func (b runnerBridge) Dispatch(
 		Stderr:   res.Stderr,
 		Error:    res.Error,
 	}, nil
+}
+
+// postgresConnectHint explains the two connection failures whose cause is a
+// pgdata volume that outlived the configuration which created it.
+func postgresConnectHint(err error) string {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		return ""
+	}
+	switch pgErr.Code {
+	case "28P01": // invalid_password
+		return "\n" +
+			"  POSTGRES_PASSWORD only applies when the pgdata volume is FIRST created. After that\n" +
+			"  Postgres keeps the password it was initialised with, whatever .env now says — so a\n" +
+			"  fresh checkout can still be refused by an old database.\n" +
+			"  Compose names volumes after the project, which defaults to the DIRECTORY NAME, so a\n" +
+			"  new clone into a same-named directory adopts the previous install's volume.\n" +
+			"  `docker volume ls` shows it; `docker compose down -v` recreates it AND DELETES ITS DATA."
+	case "3D000": // invalid_catalog_name
+		return "\n" +
+			"  The database named in DAZYFLOW_POSTGRES_DSN does not exist. If a first boot failed\n" +
+			"  partway, the pgdata volume was left half-initialised and Postgres will not finish the\n" +
+			"  job on a retry: `docker compose down -v` recreates it (deletes data, safe on a first boot)."
+	}
+	return ""
 }

@@ -108,9 +108,8 @@ are no daemon flags to set.
 4. **Apply** — `kubectl apply -k deploy/k8s/`.
 5. **Reach it** — `kubectl port-forward deploy/dazyflow 8642:8080`, then open
    <http://localhost:8642>. `DAZYFLOW_WEB_ORIGIN` / `DAZYFLOW_PUBLIC_BASE_URL`
-   are preset to `http://localhost:8642` to match. (The pod still listens on
-   8080; 8642 is just the local side of the forward, chosen to dodge the
-   crowd on 8080.)
+   are preset to `http://localhost:8642` to match. The pod still listens on
+   8080; 8642 is only the local side of the forward.
 
 Why a PVC and not `emptyDir`: **flow graphs are stored as git repos on disk
 under `/data`, not in Postgres.** An `emptyDir` would lose every flow on a
@@ -550,13 +549,10 @@ remote DB's identity.)
        - ./certs:/certs:ro
    ```
 
-   It lives in the overlay rather than the base `docker-compose.yml` on
-   purpose: `ssl=on` makes Postgres refuse to start when the cert files
-   aren't there, and a fresh clone has no `certs/` (it's gitignored — these
-   are per-host key material). Keeping the base file cert-free is what lets
-   `cp .env.example .env && docker compose up -d` work on a clean checkout.
-   If you'd rather run TLS without the rest of the overlay (Caddy, the docs
-   site), put the same two keys in your own `docker-compose.override.yml`.
+   It lives in the overlay, not the base file: `ssl=on` refuses to start
+   without the cert files, and a fresh clone has no `certs/`. To run TLS
+   without the rest of the overlay, put the same two keys in your own
+   `docker-compose.override.yml`.
 
 3. Point the DSN at TLS — change `sslmode=disable` to `sslmode=require` in
    `DAZYFLOW_POSTGRES_DSN` (in `.env`), then recreate with the overlay

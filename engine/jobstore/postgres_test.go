@@ -20,23 +20,10 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// testDB is the DSN this package's Postgres tests run against: a database of
-// its own, derived from DAZYFLOW_TEST_DB. It returns "" when that is unset so
-// each caller's own t.Skip stays in charge of the gate.
-//
-// Why not use DAZYFLOW_TEST_DB directly. Five packages share that one database,
-// and the conformance suite TRUNCATEs `jobs` before every subtest — so does
-// daemon's pgstores suite, on the same table. `go test ./...` runs the two
-// packages' binaries concurrently, so daemon's TRUNCATE can land between an
-// enqueue here and the call that reads the row back, and the row is simply
-// gone. It surfaced as SetGraphRunParked reporting
-//
-//	park = false, <nil>; want true, nil
-//
-// which never reproduced with the package run on its own — the update had
-// matched zero rows because the row had been deleted underneath it. A database
-// per package costs one CREATE DATABASE and removes the whole class of it.
-// Safe here because OpenPostgres applies this package's schema itself.
+// testDB is the DSN for a database private to this package, derived from
+// DAZYFLOW_TEST_DB, or "" when that is unset so each caller's t.Skip still
+// gates. Needed because daemon's tests TRUNCATE the same `jobs` table in the
+// shared database, and go test runs the two packages concurrently.
 var testDBState struct {
 	once sync.Once
 	dsn  string
@@ -58,8 +45,7 @@ func testDB(t *testing.T) string {
 	return testDBState.dsn
 }
 
-// ownDatabase creates "<DAZYFLOW_TEST_DB's database>_jobstore" if it isn't
-// there yet and returns the DSN pointing at it.
+// ownDatabase creates "<base database>_jobstore" if absent and returns its DSN.
 func ownDatabase(base string) (string, error) {
 	u, err := url.Parse(base)
 	if err != nil {
@@ -70,8 +56,7 @@ func ownDatabase(base string) (string, error) {
 		return "", fmt.Errorf("DAZYFLOW_TEST_DB names no database: %q", base)
 	}
 	own := name + "_jobstore"
-	// The name is interpolated into DDL below, so keep it to what an identifier
-	// may hold rather than trusting the DSN.
+	// Interpolated into DDL below, so don't trust the DSN for it.
 	if strings.ContainsFunc(own, func(r rune) bool {
 		return !(r == '_' || r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z')
 	}) {
@@ -85,8 +70,7 @@ func ownDatabase(base string) (string, error) {
 		return "", fmt.Errorf("connect to %s: %w", name, err)
 	}
 	defer admin.Close()
-	// CREATE DATABASE has no IF NOT EXISTS, and on every run after the first the
-	// duplicate IS the success case.
+	// No IF NOT EXISTS for CREATE DATABASE; a duplicate is the success case.
 	if _, err := admin.Exec(ctx, `CREATE DATABASE "`+own+`"`); err != nil {
 		var pgErr *pgconn.PgError
 		if !errors.As(err, &pgErr) || pgErr.Code != "42P04" { // duplicate_database

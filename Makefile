@@ -102,17 +102,11 @@ pg: ## Start (and wait for) just the bundled Postgres on 127.0.0.1:5442 (DAZYFLO
 pg-down: ## Stop the bundled dev Postgres (data persists in the pgdata volume)
 	$(COMPOSE) stop postgres
 
-# The Postgres-gated Go tests and the MySQL-backed drops/db tests SKIP SILENTLY
-# when their DSN env vars are unset. CI sets all three, so a local `make check`
-# / `make ci` is a materially weaker gate than CI unless you set them too —
-# which is how a broken Postgres store, or a store test that only fails when
-# packages run in parallel, reaches CI looking green locally. This target
-# creates the database those tests want on the bundled Postgres and prints the
-# exports to paste.
+# The Postgres- and MySQL-gated tests skip SILENTLY without their DSN env
+# vars, so a local gate is weaker than CI, which sets all three.
 test-db: pg ## Create the gated-test database on the bundled Postgres and print the DSN exports
-	@# .env is sourced the way `dev` does it: Compose reads that file itself, but
-	@# make does not, so without this the DSN printed below would name the
-	@# default port while Postgres actually listened on the one .env asked for.
+	@# Compose reads .env itself but make does not, so source it or the DSN
+	@# below names the default port rather than the one in use.
 	@set -a; [ -f .env ] && . ./.env; set +a; \
 	$(COMPOSE) exec -T postgres psql -U $${POSTGRES_USER:-dazyflow} -d $${POSTGRES_DB:-dazyflow} \
 		-c 'CREATE DATABASE dazyflow_test' >/dev/null 2>&1 \

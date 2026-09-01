@@ -138,16 +138,9 @@ async function letAutosaveFire() {
   });
 }
 
-// Wait for the debounced autosave to land.
-//
-// Deliberately vi.waitFor and not testing-library's waitFor: that one polls on
-// REAL time, and these tests run on fake timers with shouldAdvanceTime, so the
-// 3s debounce needs ~3s of WALL time to fire — three times waitFor's 1s
-// default. It only passed because letAutosaveFire's explicit advance normally
-// gets there first; when the initial render lands after that advance (which is
-// what happens when parallel workers compete for the CPU) the debounce starts
-// late, and the wait gave up before the save. vi.waitFor drives the fake clock
-// on every poll, so the outcome no longer depends on how busy the machine is.
+// vi.waitFor, not testing-library's, because that one polls on real time while
+// these tests run fake timers — the 3s debounce outlives its 1s default under
+// parallel workers. vi.waitFor drives the fake clock as it polls.
 async function awaitAutosave() {
   await vi.waitFor(() => expect(saveGraph).toHaveBeenCalled());
 }

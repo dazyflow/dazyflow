@@ -6,7 +6,6 @@ import { render, screen } from "@testing-library/react";
 import type { JSX } from "react";
 import { ErrorBoundary } from "./ErrorBoundary";
 
-// React 19's types removed the global JSX namespace, so it's imported.
 function Boom(): JSX.Element {
   throw new Error("kaboom from a child");
 }

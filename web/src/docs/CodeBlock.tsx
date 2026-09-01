@@ -57,8 +57,7 @@ export function CodeBlock({ children }: { children?: ReactNode }) {
 
   const [copied, setCopied] = useState(false);
   // Held so an unmount mid-timeout doesn't set state on a dead component.
-  // The initial value is explicit: React 19's types dropped the no-argument
-  // useRef overload, so the union with undefined has to be spelled out.
+  // Explicit initial value: React 19's types dropped the no-arg useRef.
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
 

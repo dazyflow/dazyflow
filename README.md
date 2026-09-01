@@ -116,6 +116,16 @@ If it won't start, the boot log names the value it rejected.
 > applies when the `pgdata` volume is first created. `docker compose down -v`
 > resets it and **deletes all data**.
 >
+> **`password authentication failed` on a brand-new clone?** Same cause, from
+> the other direction — you changed nothing, an old database changed it for
+> you. Compose names its volumes after the project, which defaults to the
+> **directory name**, so a fresh clone into another directory called
+> `dazyflow` adopts the `dazyflow_pgdata` of whatever install made it, months
+> ago, along with the password *that* `.env` set. `docker volume ls` shows it.
+> Either `docker compose down -v` (**deletes that data**) or keep both by
+> giving the new checkout its own project: `COMPOSE_PROJECT_NAME=dazyflow-test`
+> in `.env`, or just clone into a differently-named directory.
+>
 > **`database "dazyflow" does not exist`?** Postgres died partway through its
 > very first start, leaving a `pgdata` volume it will not finish initialising on
 > a retry. Same fix — `docker compose down -v`, then bring it up again. Safe

@@ -12,6 +12,31 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ### Fixed
 
+- **A Postgres connection failure at boot named the wrong subsystem and none of
+  the fix.** `pgxpool.NewWithConfig` does not dial — the pool is lazy — so the
+  first connection error surfaced inside whichever store constructor happened to
+  run first, as a raw driver string:
+
+  ```
+  postgres key store: failed to connect to `user=dazyflow database=dazyflow`:
+  failed SASL auth: FATAL: password authentication failed for user "dazyflow"
+  ```
+
+  repeated every second forever, while `DAZYFLOW_DEV` cheerfully warned that the
+  DSN still used the default password — which it did, and which was correct. The
+  real cause is that `POSTGRES_PASSWORD` applies only when the `pgdata` volume is
+  first created, and Compose names volumes after the project, which defaults to
+  the **directory name**. So a fresh clone into another directory called
+  `dazyflow` adopts the previous install's volume and is refused by a password
+  set months earlier, in a `.env` that no longer exists.
+
+  `dzd` now dials once, up front, and translates the two failures this stack
+  actually produces — `28P01` (bad password) and `3D000` (missing database) —
+  into the volume-lifecycle explanation and the command that resolves it. The
+  README carries the same note.
+
+### Fixed
+
 - **`npm ci` could not install the web dependencies at all, so CI was red and
   the Docker build failed.** The npm-packages bump moved `typescript` to
   `^7.0.2` while leaving `typescript-eslint` at `^8`, whose peer range is
