@@ -35,6 +35,41 @@ describe("explainApiError", () => {
     ).toBe("apiError.signinInvalid");
   });
 
+  // Regression: a self-hoster who changes DAZYFLOW_PORT without matching
+  // DAZYFLOW_WEB_ORIGIN gets a 403 csrf_origin on every sign-in attempt. The
+  // sign-in branch used to claim the credentials were wrong, which is the one
+  // thing they aren't — and it sends the reader hunting through passwords for
+  // a problem that lives in .env. Deployment-config codes win over the
+  // surface's own reading of the status.
+  it("reports a sign-in csrf_origin as a server setting, not a bad password", () => {
+    expect(
+      explainApiError(
+        new APIError(
+          403,
+          'cookie-authenticated request from disallowed origin "http://localhost:8099" (CSRF defense)',
+          "csrf_origin",
+        ),
+        t,
+        "signin",
+      ),
+    ).toBe("apiError.csrfOriginSignin");
+  });
+
+  it("still maps csrf_origin outside sign-in to the generic origin message", () => {
+    expect(
+      explainApiError(
+        new APIError(403, "disallowed origin (CSRF defense)", "csrf_origin"),
+        t,
+      ),
+    ).toBe("apiError.csrfOrigin");
+  });
+
+  it("does not let a config code mask a genuine TOTP rejection", () => {
+    expect(
+      explainApiError(new APIError(401, "bad code", ""), t, "totp"),
+    ).toBe("apiError.totpInvalid");
+  });
+
   it("maps a bare 401 (no context) to session expired", () => {
     expect(explainApiError(new APIError(401, "unauthorized"), t)).toBe(
       "apiError.sessionExpired",

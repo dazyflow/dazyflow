@@ -20,31 +20,29 @@
 #      update DAZYFLOW_POSTGRES_DSN to match).
 #   2. Set DAZYFLOW_MASTER_KEY to a real key (openssl rand -base64 32)
 #      and keep a sealed backup.
-#   3. Set DAZYFLOW_PUBLIC_BASE_URL + DAZYFLOW_WEB_ORIGIN to your real
+#   3. Encrypt the dzd↔Postgres hop: generate ./certs, switch the DSN to
+#      sslmode=require, and merge docker-compose.prod.yml (which turns
+#      ssl=on for the bundled Postgres). dzd refuses to boot on a
+#      plaintext DSN. See docs/DEPLOY.md → "Postgres TLS for the bundled
+#      service".
+#   4. Set DAZYFLOW_PUBLIC_BASE_URL + DAZYFLOW_WEB_ORIGIN to your real
 #      https origin.
-#   4. Front the app with TLS (Caddy / nginx / Traefik) and set
+#   5. Front the app with TLS (Caddy / nginx / Traefik) and set
 #      DAZYFLOW_TRUST_PROXY_HEADERS=1.
 
 services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
-    # Serve TLS so dzd can connect with sslmode=require. dzd refuses to boot
-    # in production against a DSN that doesn't enforce TLS (the DB link carries
-    # personal data + wrapped DEKs). A self-signed cert is enough: `require`
-    # demands an encrypted channel but does not verify the cert, so no CA is
-    # needed for this same-host sibling. Generate ./certs once (see docs/DEPLOY.md):
-    #   openssl req -new -x509 -days 3650 -nodes -subj /CN=postgres \
-    #     -out certs/server.crt -keyout certs/server.key
-    #   chown 70:70 certs/server.key && chmod 600 certs/server.key
-    # (postgres:16-alpine runs as uid 70 and refuses a group/world-readable key.)
-    command:
-      - -c
-      - ssl=on
-      - -c
-      - ssl_cert_file=/certs/server.crt
-      - -c
-      - ssl_key_file=/certs/server.key
+    # No `command:` here — the image default starts Postgres with SSL OFF, which
+    # is what the default DSN below (sslmode=disable) expects. That keeps a
+    # fresh clone working with nothing but `cp .env.example .env`.
+    #
+    # A durable deployment DOES need the dzd↔Postgres hop encrypted (dzd
+    # refuses to boot against a DSN that doesn't enforce TLS), but that needs
+    # cert files which a clone cannot ship. So `ssl=on` plus the ./certs mount
+    # live in docker-compose.prod.yml, next to the generation steps in
+    # docs/DEPLOY.md → "Postgres TLS for the bundled service".
     environment:
       POSTGRES_USER:     ${POSTGRES_USER:-dazyflow}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dazyflow}
@@ -56,9 +54,6 @@ services:
       - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      # Read-only TLS material for `ssl=on` above. Key must be 0600 and owned
-      # by uid 70 on the host (postgres refuses a loosely-permissioned key).
-      - ./certs:/certs:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dazyflow} -d ${POSTGRES_DB:-dazyflow}"]
       interval: 5s

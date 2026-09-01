@@ -6,6 +6,7 @@
     "sessionExpired": "Your session has expired. Please sign in again.",
     "forbidden": "You don't have permission to do that. Ask an admin if you think you should.",
     "csrfOrigin": "This Dazyflow isn't set up to accept changes from the address you're using, so nothing was saved. It's a server setting, not something you did — whoever runs this Dazyflow needs to add this address to its allowed origins.",
+    "csrfOriginSignin": "This Dazyflow isn't set up to accept sign-ins from the address you're using, so it refused the attempt — your email and password weren't the problem. It's a server setting: whoever runs this Dazyflow needs to make DAZYFLOW_WEB_ORIGIN match the address in the browser's address bar, including the port.",
     "notFound": "We couldn't find that — it may have been moved or deleted.",
     "conflict": "That couldn't be completed because it conflicts with something that already exists or is in use.",
     "rateLimited": "You're going a bit fast — wait a moment, then try again.",

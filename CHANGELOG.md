@@ -10,6 +10,52 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`docker compose up -d` could not work on a fresh clone.** The base
+  `docker-compose.yml` started the bundled Postgres with `ssl=on` pointing at
+  `/certs/server.crt`, and mounted `./certs`. But `certs/` is gitignored — it is
+  per-host key material — so a clone has no cert to serve, Postgres exited with
+  `FATAL: could not load server certificate file`, and `dzd` never got past its
+  `depends_on: service_healthy` wait. The README's three-command quick start
+  failed at the third command for everyone: `dependency failed to start:
+  container dazyflow-postgres-1 is unhealthy`.
+
+  It worked on machines that happened to have a `docker-compose.override.yml`
+  turning `ssl=on` back off — also gitignored, so it existed only where someone
+  had already written one, which is exactly the population that could not
+  reproduce the bug.
+
+  `ssl=on` and the `./certs` mount moved to `docker-compose.prod.yml`, next to
+  the cert-generation steps in docs/DEPLOY.md. The base file now leaves the
+  image default (SSL off), which is what its own default DSN (`sslmode=disable`)
+  already expected, so a clean checkout boots on `cp .env.example .env &&
+  docker compose up -d` with nothing else. No override file needed; a durable
+  deployment merges the overlay and switches the DSN to `sslmode=require`.
+
+- **A failed sign-in blamed the password when the real cause was
+  `DAZYFLOW_WEB_ORIGIN`.** Change `DAZYFLOW_PORT` and the browser loads the UI
+  from an origin the daemon doesn't allow, so every sign-in POST is refused as
+  CSRF (`csrf_origin`) whatever is typed. `explainApiError` checked the sign-in
+  surface before the structured code map, so that 403 rendered as *"That email
+  or password isn't right"* — sending a self-hoster hunting through credentials
+  for a problem that lives in `.env`.
+
+  Deployment-configuration codes now resolve ahead of any surface-specific
+  reading of the status, and sign-in gets its own message naming the variable
+  and the port requirement. `.env.example` cross-references `DAZYFLOW_PORT` and
+  `DAZYFLOW_WEB_ORIGIN` in both directions.
+
+### Changed
+
+- **README:** "Running it for real" listed two required values; it is three —
+  the DSN must also say `sslmode=require`, which needs a Postgres cert. That
+  step, previously only in docs/DEPLOY.md, is now in the README with the
+  commands. Also: the quick start pointed at a **Templates** nav item that no
+  longer exists (it folded into **New flow → From a template**), and there is a
+  note for the `database "dazyflow" does not exist` state a half-initialised
+  `pgdata` volume leaves behind after a failed first boot.
+
 ## [0.28.5] - 2026-09-01
 
 ### Fixed

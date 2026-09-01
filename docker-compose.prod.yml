@@ -1,5 +1,6 @@
-# Production overlay. Run with explicit -f files so the dev
-# docker-compose.override.yml (which disables Postgres TLS) is NOT merged:
+# Production overlay. Adds Postgres TLS (ssl=on), Caddy and the docs site on
+# top of the base stack. Run with explicit -f files so any local
+# docker-compose.override.yml is NOT merged:
 #
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 #
@@ -11,6 +12,40 @@
 # Adds Caddy in front of dzd for automatic HTTPS on the apex domain
 # (HTTP-01 challenge — needs ports 80/443 reachable, which the DO firewall allows).
 services:
+  # Postgres TLS. The base compose leaves the image default (SSL off) so a
+  # fresh clone boots with no setup; a durable deployment must encrypt the
+  # dzd↔Postgres link, because it carries personal data + wrapped DEKs, and
+  # dzd refuses to boot against a DSN that doesn't enforce TLS.
+  #
+  # This is a different TLS hop from Caddy below: Caddy terminates
+  # browser↔dzd, this is dzd↔Postgres. Set sslmode=require in
+  # DAZYFLOW_POSTGRES_DSN to use it.
+  #
+  # A self-signed cert is enough — `require` demands an encrypted channel but
+  # does not verify the certificate, so no CA is needed for this same-host
+  # sibling. Generate ./certs ONCE on the host before the first prod boot
+  # (postgres:16-alpine runs as uid 70 and refuses a group/world-readable key):
+  #
+  #   mkdir -p certs
+  #   openssl req -new -x509 -days 3650 -nodes -subj /CN=postgres \
+  #       -out certs/server.crt -keyout certs/server.key
+  #   sudo chown 70:70 certs/server.crt certs/server.key
+  #   chmod 600 certs/server.key && chmod 644 certs/server.crt
+  #
+  # See docs/DEPLOY.md → "Postgres TLS for the bundled service".
+  postgres:
+    command:
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/certs/server.crt
+      - -c
+      - ssl_key_file=/certs/server.key
+    volumes:
+      # Read-only TLS material for `ssl=on` above. Key must be 0600 and owned
+      # by uid 70 on the host (postgres refuses a loosely-permissioned key).
+      - ./certs:/certs:ro
+
   caddy:
     image: caddy:2
     restart: unless-stopped

@@ -5,7 +5,7 @@ COMPOSE ?= docker compose
 
 # PROD=1 merges the production overlay (Caddy + docs) into every stack target
 # below. Without it compose runs docker-compose.yml alone and auto-merges
-# docker-compose.override.yml (the DEV override: Postgres TLS off) if present —
+# docker-compose.override.yml (a local dev override, if you keep one) —
 # on a prod host that isn't cosmetic, it drops the TLS terminator and the docs
 # site.
 #
@@ -19,7 +19,7 @@ COMPOSE ?= docker compose
 #   COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml
 #
 # which every compose call honours (make included, bare compose included) and
-# which also stops the dev override being merged. With that set, leave PROD
+# which also stops any local override being merged. With that set, leave PROD
 # unset; passing both is harmless (same two files, one via -f).
 #
 # `override` so this still applies when COMPOSE itself is passed on the command

@@ -469,7 +469,7 @@ PROD=1 make upgrade
 
 Something has to tell compose to merge the overlay, or it runs
 `docker-compose.yml` alone and auto-merges `docker-compose.override.yml` if
-present (the dev override, which turns Postgres TLS off) — recreating the stack
+present (a local dev override, if you keep one) — recreating the stack
 that way drops Caddy and the docs site.
 
 **On a permanent production host, set compose's own variable once in `.env`:**
@@ -479,7 +479,8 @@ COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml
 ```
 
 Every compose call then honours it — `make upgrade`, `make restart`, and a bare
-`docker compose up -d --build` alike — and the dev override is no longer merged.
+`docker compose up -d --build` alike — and any local override is no longer
+merged.
 Nothing to remember per command, so this is the recommended setup.
 
 `PROD=1` is the ad-hoc alternative: it merges the same two files for one make
@@ -530,13 +531,12 @@ remote DB's identity.)
    chmod 644 certs/server.crt
    ```
 
-2. Serve TLS from the `postgres` service (already wired in the shipped
-   `docker-compose.yml`): a `command:` enabling `ssl=on` with the cert/key
-   paths, and a read-only `./certs:/certs:ro` mount.
+2. Serve TLS from the `postgres` service. This is already wired in
+   **`docker-compose.prod.yml`** — a `command:` enabling `ssl=on` with the
+   cert/key paths, plus a read-only `./certs:/certs:ro` mount:
 
    ```yaml
    postgres:
-     image: postgres:16-alpine
      command:
        - -c
        - ssl=on
@@ -545,22 +545,34 @@ remote DB's identity.)
        - -c
        - ssl_key_file=/certs/server.key
      volumes:
-       - pgdata:/var/lib/postgresql/data
        - ./certs:/certs:ro
    ```
 
+   It lives in the overlay rather than the base `docker-compose.yml` on
+   purpose: `ssl=on` makes Postgres refuse to start when the cert files
+   aren't there, and a fresh clone has no `certs/` (it's gitignored — these
+   are per-host key material). Keeping the base file cert-free is what lets
+   `cp .env.example .env && docker compose up -d` work on a clean checkout.
+   If you'd rather run TLS without the rest of the overlay (Caddy, the docs
+   site), put the same two keys in your own `docker-compose.override.yml`.
+
 3. Point the DSN at TLS — change `sslmode=disable` to `sslmode=require` in
-   `DAZYFLOW_POSTGRES_DSN` (in `.env`), then recreate:
+   `DAZYFLOW_POSTGRES_DSN` (in `.env`), then recreate with the overlay
+   merged so `ssl=on` is actually in effect:
 
    ```sh
-   docker compose up -d
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
    docker compose logs -f dzd   # the FATAL TLS line should be gone
    docker compose ps            # dzd "Up (healthy)", not Restarting
    ```
 
-`ssl=on` only *offers* TLS; it still accepts plaintext clients, so this
-change is backward-compatible with a `DAZYFLOW_DEV=1` local stack that
-connects with `sslmode=disable`.
+   (`PROD=1 make restart` wraps the same `-f` pair — see "Version stamping &
+   upgrades" above. Set `COMPOSE_FILE` in `.env` to make every bare
+   `docker compose` call on this host merge the pair for you.)
+
+`ssl=on` only *offers* TLS; it still accepts plaintext clients, so a host
+with the overlay merged still serves a `DAZYFLOW_DEV=1` stack that connects
+with `sslmode=disable`.
 
 ### Migrating an existing JSON user file to Postgres
 

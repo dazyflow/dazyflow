@@ -25,8 +25,14 @@ docker compose up -d
 ```
 
 Open <http://localhost:8080> and sign in as **`test@example.com` / `test`**.
-Start from **Templates → "See a flow run (no setup)"** — it needs no connected
-account at all. `docker compose down` stops it; `down -v` also deletes the data.
+Start from **New flow → "From a template" → "See a flow run (no setup)"** — it
+needs no connected account at all. `docker compose down` stops it; `down -v`
+also deletes the data.
+
+> **Port 8080 already taken?** Set both `DAZYFLOW_PORT` and
+> `DAZYFLOW_WEB_ORIGIN` in `.env` — they have to agree, or the browser's
+> sign-in is rejected as a cross-origin request and the form reports it as a
+> wrong password.
 
 > `DAZYFLOW_DEV=1` is what makes this three commands instead of a config
 > session: it seeds that sign-in and downgrades the insecure-defaults guard to
@@ -62,13 +68,32 @@ terminal.
 ## Running it for real
 
 The dev shortcut above is not a deployment. For anything durable, drop
-`DAZYFLOW_DEV=1` and set two values in `.env` — `dzd` refuses to boot without
-them, by design:
+`DAZYFLOW_DEV=1` and satisfy three things in `.env` — `dzd` refuses to boot
+without them, by design:
 
 | Variable | What to set it to |
 |---|---|
 | `POSTGRES_PASSWORD` | A strong password. **Put the same value inside `DAZYFLOW_POSTGRES_DSN`** — it appears inline there, and the two must match. |
 | `DAZYFLOW_MASTER_KEY` | `openssl rand -base64 32`. Encrypts stored secrets. Keep a sealed backup — losing it makes every stored secret undecryptable. |
+| `sslmode=require` in `DAZYFLOW_POSTGRES_DSN` | The link to Postgres carries personal data and wrapped keys, so it may not run in cleartext. The shipped DSN says `sslmode=disable`, which is fine for the dev trial and rejected here. |
+
+That last one needs the bundled Postgres to actually serve TLS, which takes a
+one-time self-signed cert on the host plus the production overlay that turns
+`ssl=on`:
+
+```sh
+mkdir -p certs
+openssl req -new -x509 -days 3650 -nodes -subj /CN=postgres \
+    -out certs/server.crt -keyout certs/server.key
+sudo chown 70:70 certs/server.crt certs/server.key
+chmod 600 certs/server.key && chmod 644 certs/server.crt
+
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+A self-signed cert is enough — `require` encrypts the channel without verifying
+the certificate. Full walkthrough, including a managed or external database
+instead: [docs/DEPLOY.md](docs/DEPLOY.md).
 
 There is **no default login** without dev mode. To create the first real
 account, set `DAZYFLOW_ENABLE_SIGNUP=1` and put your email in
@@ -89,6 +114,11 @@ If it won't start, the boot log names the value it rejected.
 > **Changed `POSTGRES_PASSWORD` but it's still rejected?** That variable only
 > applies when the `pgdata` volume is first created. `docker compose down -v`
 > resets it and **deletes all data**.
+>
+> **`database "dazyflow" does not exist`?** Postgres died partway through its
+> very first start, leaving a `pgdata` volume it will not finish initialising on
+> a retry. Same fix — `docker compose down -v`, then bring it up again. Safe
+> whenever it happens on a first boot; there is nothing in there yet.
 
 Control-plane state — jobs, API keys, sessions, users, encrypted secrets —
 persists to Postgres; graphs and sandboxes to the `dzddata` volume. Back up both.

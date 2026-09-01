@@ -6,6 +6,7 @@
     "sessionExpired": "Din session har gått ut. Logga in igen.",
     "forbidden": "Du har inte behörighet att göra det. Fråga en administratör om du tror att du borde ha det.",
     "csrfOrigin": "Den här Dazyflow är inte inställd på att ta emot ändringar från adressen du använder, så inget sparades. Det är en serverinställning, inte något du gjort — den som driver den här Dazyflow behöver lägga till adressen bland de tillåtna.",
+    "csrfOriginSignin": "Den här Dazyflow är inte inställd på att ta emot inloggningar från adressen du använder, så försöket nekades — det var inte din e-postadress eller ditt lösenord som var fel. Det är en serverinställning: den som driver den här Dazyflow behöver få DAZYFLOW_WEB_ORIGIN att stämma med adressen i webbläsarens adressfält, inklusive porten.",
     "notFound": "Vi kunde inte hitta det — det kan ha flyttats eller tagits bort.",
     "conflict": "Det kunde inte slutföras eftersom det krockar med något som redan finns eller används.",
     "rateLimited": "Det går lite för snabbt — vänta en stund och försök igen.",
