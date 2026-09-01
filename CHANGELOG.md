@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.28.6] - 2026-09-01
+
 ### Fixed
 
 - **Stripe's app page said "Connect Stripe" twice.** Stripe is the one
