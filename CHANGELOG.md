@@ -10,6 +10,34 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A passing e2e assertion reported itself as failed, and it read like the MCP
+  integration was broken.** `tests/e2e/mcp-pipeline/run.sh` failed CI on
+  `[!!] tools appear as mcp:ap-demo:* modules` while every assertion around it
+  passed — including the three that only hold if that exact tool resolved, ran,
+  and routed. Nothing was wrong with MCP registration.
+
+  The assertion is `dzctl module list 2>&1 | grep -q 'mcp:ap-demo:lookup_user'`
+  under `set -euo pipefail`. `grep -q` exits the instant it matches, and the
+  match sits at byte 7074 of a 13.5KB listing, so dzctl is typically still
+  writing when the reader goes away: it takes `SIGPIPE`, and `pipefail` promotes
+  141 to the pipeline's status. `PIPESTATUS` was `141 0` — producer killed,
+  grep matched. Whether dzctl flushed the remaining ~6.4KB into the 64KB pipe
+  buffer before grep's exit is a race, which is why it reproduced 2 times in 10
+  locally and passed on every earlier run.
+
+  Fixed in the `assert` helper rather than at the one call site: it now clears
+  `pipefail` around the condition and restores it after, so the grep's exit
+  status — which *is* the assertion — decides the result. A producer that
+  genuinely fails still fails the assertion, because each one redirects `2>&1`
+  into the stream grep reads, leaving nothing to match; verified against both a
+  pattern that is absent from the catalog and a dzctl pointed at a dead port.
+  `tests/e2e/ap-invoice/run.sh` carried the same latent bug across all seven of
+  its `grep -q` assertions and got the same fix. The two-stage assertions
+  (`… | grep name | grep -q state`) were never exposed: the middle grep reads to
+  EOF, so the producer never sees a closed pipe.
+
 ## [0.28.6] - 2026-09-01
 
 ### Fixed
