@@ -260,4 +260,3 @@ func mailerMessage(fromHeader, fromAddr, to, subject, body string) []byte {
 	sb.WriteString(body)
 	return []byte(sb.String())
 }
-
