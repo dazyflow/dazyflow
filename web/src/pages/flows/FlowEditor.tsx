@@ -80,6 +80,7 @@ import {
   requiredSecrets,
   unavailableProviders,
   unavailableSecretRefs,
+  unavailableConnectionApps,
   slackChannels,
   nodeSetupNeeded,
   missingConnectionApps,
@@ -3316,6 +3317,12 @@ function EditorInner() {
     () => unavailableSecretRefs(enabledNodes, paramsByID, secrets),
     [enabledNodes, paramsByID, secrets],
   );
+  // Same, for the conn.<slug>.<key> shape: with the secret store off, Stripe /
+  // Claude / SMTP steps would otherwise warn about nothing at all.
+  const adminBlockedConnectionApps = useMemo(
+    () => unavailableConnectionApps(enabledNodes, manifestByID, paramsByID, secrets),
+    [enabledNodes, manifestByID, paramsByID, secrets],
+  );
   // slackTargets: channels this graph posts to. Drives a pre-run
   // reminder to invite the Slack app — orthogonal to needsSetup (Slack
   // can be connected yet the app still absent from the channel).
@@ -3336,7 +3343,9 @@ function EditorInner() {
     missingSecrets.length > 0 ||
     missingSetups.length > 0;
   const adminBlockedSetup =
-    adminBlockedProviders.length > 0 || adminBlockedSecretRefs.length > 0;
+    adminBlockedProviders.length > 0 ||
+    adminBlockedSecretRefs.length > 0 ||
+    adminBlockedConnectionApps.length > 0;
   const needsSetup = userFixableSetup || adminBlockedSetup;
   // setupTarget deep-links the banner's "Set up" button straight to the one
   // app that needs connecting when there's exactly one (each node's SetupNeed

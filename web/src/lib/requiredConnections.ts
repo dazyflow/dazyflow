@@ -232,6 +232,38 @@ export function missingConnectionApps(
   return [...out.values()];
 }
 
+// unavailableConnectionApps is the partner of missingConnectionApps for the
+// case where the encrypted secret store is off entirely (secrets === null,
+// which is what an empty DAZYFLOW_MASTER_KEY gives you — the quick start's
+// default). The regular check returns [] then, so an app whose credentials
+// live at conn.<slug>.<key> — Stripe, Claude, SMTP — produced no warning at
+// all: not on the pre-run banner, not on the node card. OAuth and
+// ${secret.NAME} already had this parallel; ConnectionFields did not.
+//
+// A field the user typed straight into the node params still counts as
+// satisfied: the store being off does not stop an inline value working.
+export function unavailableConnectionApps(
+  nodes: GraphNodeLike[],
+  manifestByID: Map<string, Manifest>,
+  paramsByID: Record<string, Record<string, unknown>>,
+  secrets: string[] | null,
+): SetupNeed[] {
+  if (secrets !== null) return [];
+  const out = new Map<string, SetupNeed>();
+  for (const n of nodes) {
+    const manifest = manifestByID.get(n.data.moduleID);
+    const required = (manifest?.connection_fields ?? []).filter((f) => f.required);
+    if (!manifest || required.length === 0) continue;
+    const params = paramsByID[n.id] ?? {};
+    const filled = (k: string) =>
+      typeof params[k] === "string" && (params[k] as string).trim() !== "";
+    if (required.every((f) => filled(f.key))) continue;
+    const need = setupFor(manifest);
+    out.set(need.slug, need);
+  }
+  return [...out.values()];
+}
+
 // unavailableProviders is the partner of requiredConnections for the
 // case where the OAuth feature is off entirely on this install
 // (providers === null). The regular check returns [] in that case —

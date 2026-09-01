@@ -1022,6 +1022,7 @@ export const SV_CONNECTION_TEXT: Record<string, string> = {
   "Server URL": "Server-URL",
   "Username": "Användarnamn",
   "Webhook URL": "Webhook-URL",
+  "Webhook signing secret": "Webhook-signeringshemlighet",
   "Your OpenWeather API key. The free plan works — no paid subscription needed.":
     "Din OpenWeather-API-nyckel. Den kostnadsfria planen fungerar — ingen betald prenumeration behövs.",
   "From the Roaring portal under Development → Access keys.":

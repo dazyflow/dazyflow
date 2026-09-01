@@ -7,6 +7,7 @@ import {
   requiredSecrets,
   unavailableProviders,
   unavailableSecretRefs,
+  unavailableConnectionApps,
   nodeSetupNeeded,
   missingConnectionApps,
   setupDestination,
@@ -415,5 +416,46 @@ describe("setupDestination", () => {
       labelKey: "connGate.connect",
     });
     expect(setupDestination([], [], false).to).toBe("/apps");
+  });
+});
+
+// With DAZYFLOW_MASTER_KEY empty — the quick start's default — the secret
+// store is off and listSecrets fails, so the editor holds secrets === null.
+// The conn.<slug>.<key> apps then warned about nothing at all: no pre-run
+// banner, no node badge. OAuth and ${secret.NAME} already had this parallel.
+describe("unavailableConnectionApps", () => {
+  const stripe = fieldsManifest("stripe_get_customer", "Stripe", [
+    { key: "api_key", label: "Secret API key", secret: true, required: true },
+  ]);
+
+  it("returns [] when the store is on (the regular check applies)", () => {
+    const nodes = [node("n1", "stripe_get_customer")];
+    expect(unavailableConnectionApps(nodes, manifestMap(stripe), {}, [])).toEqual([]);
+  });
+
+  it("names the app when the store is off and nothing is filled in", () => {
+    const nodes = [node("n1", "stripe_get_customer")];
+    const out = unavailableConnectionApps(nodes, manifestMap(stripe), {}, null);
+    expect(out.map((n) => n.slug)).toEqual(["stripe"]);
+  });
+
+  it("stays quiet when the required field is typed straight into the node", () => {
+    const nodes = [node("n1", "stripe_get_customer")];
+    const params = { n1: { api_key: "sk_test_123" } };
+    expect(unavailableConnectionApps(nodes, manifestMap(stripe), params, null)).toEqual([]);
+  });
+
+  it("dedupes several nodes of the same app", () => {
+    const nodes = [node("a", "stripe_get_customer"), node("b", "stripe_get_customer")];
+    const out = unavailableConnectionApps(nodes, manifestMap(stripe), {}, null);
+    expect(out).toHaveLength(1);
+  });
+
+  it("ignores apps whose fields are all optional", () => {
+    const ntfy = fieldsManifest("ntfy_publish", "ntfy", [
+      { key: "server", label: "Server", required: false },
+    ]);
+    const nodes = [node("n1", "ntfy_publish")];
+    expect(unavailableConnectionApps(nodes, manifestMap(ntfy), {}, null)).toEqual([]);
   });
 });

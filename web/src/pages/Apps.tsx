@@ -738,6 +738,9 @@ function IntegrationConnections({
   );
   const needsSecret = reqs.some((r) => r.kind === "secret") || connectionFields.length > 0;
   const needsOAuth = reqs.some((r) => r.kind === "oauth");
+  // With more than one card on the page, a title naming only the app repeats
+  // verbatim — so each secret card names the credential it holds instead.
+  const manyCards = (connectionFields.length > 0 ? 1 : 0) + reqs.length > 1;
 
   const [secrets, setSecrets] = useState<string[] | null>(null);
   const [secretsOff, setSecretsOff] = useState(false);
@@ -873,6 +876,7 @@ function IntegrationConnections({
         <ConnectionFieldsCard
           fields={connectionFields}
           name={name}
+          qualify={manyCards}
           slug={slug}
           secrets={secrets}
           loading={secrets === null && !secretsOff && !secretsErr}
@@ -890,6 +894,7 @@ function IntegrationConnections({
             key={`secret:${req.name}`}
             req={req}
             name={name}
+            qualify={manyCards}
             configured={secrets?.includes(req.name) ?? false}
             loading={secrets === null && !secretsOff && !secretsErr}
             off={secretsOff}
@@ -954,6 +959,7 @@ function ConnectionStatus({
 function SecretCard({
   req,
   name,
+  qualify,
   configured,
   loading,
   off,
@@ -964,6 +970,10 @@ function SecretCard({
 }: {
   req: ConnectionRequirement;
   name: string;
+  // qualify names the credential in the title as well as the app. Stripe ships
+  // two connections — the API key as connection_fields, the webhook signing
+  // secret as a requirement — and both cards read "Connect Stripe" without it.
+  qualify?: boolean;
   configured: boolean;
   loading: boolean;
   off: boolean;
@@ -972,7 +982,7 @@ function SecretCard({
   canWrite: boolean;
   onChanged: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { token } = useAuth();
   const [value, setValue] = useState("");
   const [editing, setEditing] = useState(false);
@@ -987,8 +997,12 @@ function SecretCard({
   // the whole note as the label and a generic placeholder.
   const note = req.note ?? req.name;
   const paren = note.match(/^(.*?)\s*\(([^)]*)\)\s*\.?$/);
-  const fieldLabel = (paren ? paren[1] : note.replace(/\.$/, "")).trim();
+  const fieldLabel = connectionText(
+    (paren ? paren[1] : note.replace(/\.$/, "")).trim(),
+    i18n.language,
+  );
   const placeholder = paren ? paren[2] : t("integrations.connection.valuePlaceholder");
+  const titleName = qualify ? `${name} — ${fieldLabel}` : name;
 
   const save = async () => {
     if (!token || !value) return;
@@ -1028,8 +1042,8 @@ function SecretCard({
         connected={configured}
         title={
           configured
-            ? t("integrations.connection.connectedTo", { name })
-            : t("integrations.connection.connectPrompt", { name })
+            ? t("integrations.connection.connectedTo", { name: titleName })
+            : t("integrations.connection.connectPrompt", { name: titleName })
         }
       />
       {off ? (
@@ -1275,6 +1289,7 @@ function OAuthCard({
 function ConnectionFieldsCard({
   fields,
   name,
+  qualify,
   slug,
   secrets,
   loading,
@@ -1287,6 +1302,9 @@ function ConnectionFieldsCard({
 }: {
   fields: ConnectionField[];
   name: string;
+  // See SecretCard.qualify. Names the credential alongside the app when the
+  // page carries more than one card, so two cards never read identically.
+  qualify?: boolean;
   slug: string;
   secrets: string[] | null;
   loading: boolean;
@@ -1374,14 +1392,22 @@ function ConnectionFieldsCard({
 
   const showForm = canWrite && (!connected || editing);
 
+  // One required field names the card ("Secret API key"); several (SMTP's
+  // host/user/pass) have no single name, so those keep the app name alone.
+  const identifying = fields.filter((f) => f.required);
+  const titleName =
+    qualify && identifying.length === 1 && identifying[0].label
+      ? `${name} — ${connectionText(identifying[0].label, i18n.language)}`
+      : name;
+
   return (
     <div className="connection-card">
       <ConnectionStatus
         connected={connected}
         title={
           connected
-            ? t("integrations.connection.connectedTo", { name })
-            : t("integrations.connection.connectPrompt", { name })
+            ? t("integrations.connection.connectedTo", { name: titleName })
+            : t("integrations.connection.connectPrompt", { name: titleName })
         }
       />
       {off ? (

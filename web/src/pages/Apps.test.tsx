@@ -34,7 +34,7 @@ vi.mock("../api", () => ({
   },
 }));
 
-import { Apps } from "./Apps";
+import { Apps, AppDetail } from "./Apps";
 
 // drop builds one manifest. Only the fields the index reads are set.
 function drop(id: string, integration: string, extra: Record<string, unknown> = {}) {
@@ -298,5 +298,83 @@ describe("Apps index", () => {
     expect(within(done).getByText("integrations.connectedTip")).toBeInTheDocument();
     const needy = screen.getByText("Needy").closest(".integration-card") as HTMLElement;
     expect(within(needy).getByText("integrations.needsSetupHead")).toBeInTheDocument();
+  });
+});
+
+// Stripe ships two connections: the API key as connection_fields, and the
+// webhook signing secret as a requirement on the trigger drops. Both cards
+// titled themselves off the app name alone, so /apps/stripe read
+// "Connect Stripe" twice with nothing to tell them apart.
+describe("AppDetail with two connections", () => {
+  const stripeDrops = [
+    drop("stripe_get_customer", "Stripe", {
+      connection_fields: [
+        { key: "api_key", label: "Secret API key", secret: true, required: true },
+      ],
+    }),
+    drop("stripe_on_payment", "Stripe", {
+      requires_connections: [
+        {
+          kind: "secret",
+          name: "STRIPE_WEBHOOK_SECRET",
+          note: "Webhook signing secret (whsec_…).",
+        },
+      ],
+    }),
+  ];
+
+  function renderStripe() {
+    window.history.pushState({}, "", "/apps/stripe");
+    return render(
+      <MemoryRouter initialEntries={["/apps/stripe"]}>
+        <AppDetail />
+      </MemoryRouter>,
+    );
+  }
+
+  it("gives each connection card a distinct title", async () => {
+    listDrops.mockResolvedValue({ drops: stripeDrops });
+    renderStripe();
+
+    const prompts = await waitFor(() => {
+      const found = screen
+        .queryAllByText(/integrations\.connection\.connect(Prompt|edTo)/)
+        .map((el) => el.textContent ?? "");
+      expect(found.length).toBe(2);
+      return found;
+    });
+
+    // Distinct, and neither is the bare app name — the complaint was that both
+    // read "Connect Stripe", so telling them apart meant guessing.
+    expect(new Set(prompts).size).toBe(2);
+    expect(prompts.some((p) => p.includes("Webhook signing secret"))).toBe(true);
+    expect(prompts.some((p) => p.includes("Secret API key"))).toBe(true);
+    for (const p of prompts) {
+      expect(p).toMatch(/Stripe/);
+      expect(p).not.toMatch(/"name":"Stripe"/);
+    }
+  });
+
+  it("leaves a single-connection app titled by the app alone", async () => {
+    listDrops.mockResolvedValue({
+      drops: [
+        drop("claude_ask", "Claude", {
+          requires_connections: [
+            { kind: "secret", name: "ANTHROPIC_API_KEY", note: "Anthropic API key (sk-ant-…)." },
+          ],
+        }),
+      ],
+    });
+    window.history.pushState({}, "", "/apps/claude");
+    render(
+      <MemoryRouter initialEntries={["/apps/claude"]}>
+        <AppDetail />
+      </MemoryRouter>,
+    );
+
+    const prompt = await screen.findByText(
+      /integrations\.connection\.connect(Prompt|edTo)/,
+    );
+    expect(prompt.textContent).not.toContain("Anthropic API key");
   });
 });

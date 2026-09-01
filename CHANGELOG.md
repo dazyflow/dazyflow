@@ -12,6 +12,33 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ### Fixed
 
+- **Stripe's app page said "Connect Stripe" twice.** Stripe is the one
+  integration that ships two credentials — the API key as `connection_fields`
+  on the action drops, and `STRIPE_WEBHOOK_SECRET` as a requirement on the
+  triggers — so `/apps/stripe` correctly renders two connection cards. Both
+  titled themselves `Connect {{name}}` off the *app* name, leaving nothing to
+  tell them apart. When a page carries more than one card, each now names the
+  credential it holds — "Connect Stripe — Secret API key" and "Connect Stripe —
+  Webhook signing secret". Single-connection apps keep the plain app name, and
+  so does a multi-field card (SMTP's host/user/pass has no single name).
+
+  Both names go through `connectionText`, so Swedish reads "Anslut Stripe —
+  Hemlig API-nyckel" / "… — Webhook-signeringshemlighet". That also fixes a
+  pre-existing gap: `SecretCard` rendered its field label untranslated even in
+  the card body, so a Swedish user saw one English label under a Swedish
+  heading.
+
+- **The flow editor stopped warning about unconnected apps when the secret
+  store is off.** With `DAZYFLOW_MASTER_KEY` empty — the quick start's default —
+  `/api/v1/secrets` is disabled, so the editor holds `secrets === null` and
+  every credential check reads "can't tell, don't block". OAuth and
+  `${secret.NAME}` each have an admin-blocked parallel that still warns in that
+  state; the `conn.<slug>.<key>` shape (Stripe, Claude, SMTP) had none, so
+  dropping one of those steps on the canvas produced no pre-run banner at all.
+  Added `unavailableConnectionApps` alongside the existing two. A field typed
+  straight into the node still counts as satisfied, and the per-node badge keeps
+  its deliberate "don't nag when we can't tell" silence.
+
 - **A Postgres connection failure at boot named the wrong subsystem and none of
   the fix.** `pgxpool.NewWithConfig` does not dial — the pool is lazy — so the
   first connection error surfaced inside whichever store constructor happened to
