@@ -33,12 +33,19 @@ touching `web/` or `runner/`** — CI gates all of it and `check` does not.
 Much of the Go suite is Postgres-gated and skips silently without a database, so
 a green run with these unset is a smaller claim than it looks:
 
+`make test-db` starts the bundled Postgres, creates the database these tests
+want, and prints the exports to paste:
+
 ```sh
+make test-db
 # 5442 is where the bundled Postgres lands on the host (DAZYFLOW_PG_PORT).
 # Point these at your own database instead if you run one.
 export DAZYFLOW_TEST_DB='postgres://dazyflow:dazyflow@localhost:5442/dazyflow_test'
 export DZ_TEST_PG_DSN="$DAZYFLOW_TEST_DB?sslmode=disable"
 ```
+
+`check` and `ci` both say out loud, at the end, when they skipped a gated suite
+— a green run with these unset covers about 146 fewer cases than CI does.
 
 The MySQL-backed `drops/db` tests read `DAZYFLOW_TEST_MYSQL` the same way.
 

@@ -6,19 +6,103 @@ package jobstore
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net/url"
 	"os"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/dazyflow/dazyflow/core"
 )
+
+// testDB is the DSN this package's Postgres tests run against: a database of
+// its own, derived from DAZYFLOW_TEST_DB. It returns "" when that is unset so
+// each caller's own t.Skip stays in charge of the gate.
+//
+// Why not use DAZYFLOW_TEST_DB directly. Five packages share that one database,
+// and the conformance suite TRUNCATEs `jobs` before every subtest — so does
+// daemon's pgstores suite, on the same table. `go test ./...` runs the two
+// packages' binaries concurrently, so daemon's TRUNCATE can land between an
+// enqueue here and the call that reads the row back, and the row is simply
+// gone. It surfaced as SetGraphRunParked reporting
+//
+//	park = false, <nil>; want true, nil
+//
+// which never reproduced with the package run on its own — the update had
+// matched zero rows because the row had been deleted underneath it. A database
+// per package costs one CREATE DATABASE and removes the whole class of it.
+// Safe here because OpenPostgres applies this package's schema itself.
+var testDBState struct {
+	once sync.Once
+	dsn  string
+	err  error
+}
+
+func testDB(t *testing.T) string {
+	t.Helper()
+	base := os.Getenv("DAZYFLOW_TEST_DB")
+	if base == "" {
+		return ""
+	}
+	testDBState.once.Do(func() {
+		testDBState.dsn, testDBState.err = ownDatabase(base)
+	})
+	if testDBState.err != nil {
+		t.Fatalf("provision this package's test database: %v", testDBState.err)
+	}
+	return testDBState.dsn
+}
+
+// ownDatabase creates "<DAZYFLOW_TEST_DB's database>_jobstore" if it isn't
+// there yet and returns the DSN pointing at it.
+func ownDatabase(base string) (string, error) {
+	u, err := url.Parse(base)
+	if err != nil {
+		return "", fmt.Errorf("parse DAZYFLOW_TEST_DB: %w", err)
+	}
+	name := strings.TrimPrefix(u.Path, "/")
+	if name == "" {
+		return "", fmt.Errorf("DAZYFLOW_TEST_DB names no database: %q", base)
+	}
+	own := name + "_jobstore"
+	// The name is interpolated into DDL below, so keep it to what an identifier
+	// may hold rather than trusting the DSN.
+	if strings.ContainsFunc(own, func(r rune) bool {
+		return !(r == '_' || r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z')
+	}) {
+		return "", fmt.Errorf("database name is not a plain identifier: %q", own)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	admin, err := pgxpool.New(ctx, base)
+	if err != nil {
+		return "", fmt.Errorf("connect to %s: %w", name, err)
+	}
+	defer admin.Close()
+	// CREATE DATABASE has no IF NOT EXISTS, and on every run after the first the
+	// duplicate IS the success case.
+	if _, err := admin.Exec(ctx, `CREATE DATABASE "`+own+`"`); err != nil {
+		var pgErr *pgconn.PgError
+		if !errors.As(err, &pgErr) || pgErr.Code != "42P04" { // duplicate_database
+			return "", fmt.Errorf("create %s: %w", own, err)
+		}
+	}
+	u.Path = "/" + own
+	return u.String(), nil
+}
 
 // Integration test against a real Postgres. Skipped unless DAZYFLOW_TEST_DB
 // is set, e.g.
 //
 //	DAZYFLOW_TEST_DB=postgres://localhost/dazyflow_test go test ./...
 func TestPostgres_RoundTrip(t *testing.T) {
-	url := os.Getenv("DAZYFLOW_TEST_DB")
+	url := testDB(t)
 	if url == "" {
 		t.Skip("set DAZYFLOW_TEST_DB to run Postgres integration tests")
 	}
@@ -62,7 +146,7 @@ func TestPostgres_RoundTrip(t *testing.T) {
 // TestPostgres_MaxConcurrentPerTenant exercises the per-tenant soft cap
 // against a real Postgres. Skipped unless DAZYFLOW_TEST_DB is set.
 func TestPostgres_MaxConcurrentPerTenant(t *testing.T) {
-	url := os.Getenv("DAZYFLOW_TEST_DB")
+	url := testDB(t)
 	if url == "" {
 		t.Skip("set DAZYFLOW_TEST_DB to run Postgres integration tests")
 	}
@@ -106,7 +190,7 @@ func TestPostgres_MaxConcurrentPerTenant(t *testing.T) {
 // against real Postgres. Each subtest truncates jobs first so they don't
 // interfere with each other.
 func TestPostgres_Conformance(t *testing.T) {
-	url := os.Getenv("DAZYFLOW_TEST_DB")
+	url := testDB(t)
 	if url == "" {
 		t.Skip("set DAZYFLOW_TEST_DB to run Postgres integration tests")
 	}
@@ -148,7 +232,7 @@ func TestPostgres_NewPostgresFromPool_NilPool(t *testing.T) {
 // TestPostgres_CompleteOwned_FencesNonOwner mirrors the memory test
 // against real Postgres. Skipped unless DAZYFLOW_TEST_DB is set.
 func TestPostgres_CompleteOwned_FencesNonOwner(t *testing.T) {
-	url := os.Getenv("DAZYFLOW_TEST_DB")
+	url := testDB(t)
 	if url == "" {
 		t.Skip("set DAZYFLOW_TEST_DB to run Postgres integration tests")
 	}
@@ -182,7 +266,7 @@ func TestPostgres_CompleteOwned_FencesNonOwner(t *testing.T) {
 // DAZYFLOW_TEST_DB is unset. Returns the store and a live context.
 func openPG(t *testing.T) (*Postgres, context.Context) {
 	t.Helper()
-	url := os.Getenv("DAZYFLOW_TEST_DB")
+	url := testDB(t)
 	if url == "" {
 		t.Skip("set DAZYFLOW_TEST_DB to run Postgres integration tests")
 	}

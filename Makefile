@@ -58,7 +58,7 @@ LDFLAGS := -s -w \
 
 .DEFAULT_GOAL := help
 
-.PHONY: help up down restart logs ps build rebuild env pg pg-down dev web test vet fmt fmt-check env-check check ci \
+.PHONY: help up down restart logs ps build rebuild env pg pg-down test-db dev web test vet fmt fmt-check env-check check ci \
 	runner-embed runner-test \
         integration-catalog drop-catalog catalogs catalogs-check check-changelog flowgen-eval \
         links-check \
@@ -101,6 +101,31 @@ pg: ## Start (and wait for) just the bundled Postgres on 127.0.0.1:5442 (DAZYFLO
 
 pg-down: ## Stop the bundled dev Postgres (data persists in the pgdata volume)
 	$(COMPOSE) stop postgres
+
+# The Postgres-gated Go tests and the MySQL-backed drops/db tests SKIP SILENTLY
+# when their DSN env vars are unset. CI sets all three, so a local `make check`
+# / `make ci` is a materially weaker gate than CI unless you set them too —
+# which is how a broken Postgres store, or a store test that only fails when
+# packages run in parallel, reaches CI looking green locally. This target
+# creates the database those tests want on the bundled Postgres and prints the
+# exports to paste.
+test-db: pg ## Create the gated-test database on the bundled Postgres and print the DSN exports
+	@# .env is sourced the way `dev` does it: Compose reads that file itself, but
+	@# make does not, so without this the DSN printed below would name the
+	@# default port while Postgres actually listened on the one .env asked for.
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	$(COMPOSE) exec -T postgres psql -U $${POSTGRES_USER:-dazyflow} -d $${POSTGRES_DB:-dazyflow} \
+		-c 'CREATE DATABASE dazyflow_test' >/dev/null 2>&1 \
+		&& echo "created database dazyflow_test" \
+		|| echo "database dazyflow_test is already there"; \
+	echo; \
+	echo "Export these, then re-run the gate — the Postgres-gated tests skip without them:"; \
+	echo; \
+	echo "  export DAZYFLOW_TEST_DB='postgres://$${POSTGRES_USER:-dazyflow}:$${POSTGRES_PASSWORD:-dazyflow}@localhost:$${DAZYFLOW_PG_PORT:-5442}/dazyflow_test'"; \
+	echo '  export DZ_TEST_PG_DSN="$$DAZYFLOW_TEST_DB?sslmode=disable"'; \
+	echo; \
+	echo "The drops/db MySQL tests need a MySQL of their own:"; \
+	echo "  export DAZYFLOW_TEST_MYSQL='user:pass@tcp(127.0.0.1:3306)/dazyflow_test?parseTime=true'"
 
 # .env is shared with the Compose stack, where the DSN host is the
 # `postgres` service name. That hostname only resolves inside the Compose
@@ -440,6 +465,14 @@ check: ## Fast local gate before pushing: fmt, build, vet, tests, catalogues, do
 	@echo "==> doc links"; $(MAKE) --no-print-directory links-check
 	@echo "==> changelog"; ./scripts/check-changelog.sh
 	@echo
+	@if [ -z "$$DAZYFLOW_TEST_DB" ]; then \
+		echo "NOTE: DAZYFLOW_TEST_DB is unset, so every Postgres-gated test SKIPPED —"; \
+		echo "      ~128 cases across auth, daemon, daemon/support, engine/jobstore."; \
+		echo "      CI runs them. Wire them up with 'make test-db'."; \
+	fi
+	@if [ -z "$$DAZYFLOW_TEST_MYSQL" ]; then \
+		echo "NOTE: DAZYFLOW_TEST_MYSQL is unset, so the drops/db MySQL tests SKIPPED (18 cases)."; \
+	fi
 	@echo "check passed. This does NOT cover the web suite, the web build, or"
 	@echo "the runner agent tests — CI gates all three. Run 'make ci' for the"
 	@echo "full mirror before a change that touches web/ or runner/."
@@ -459,3 +492,13 @@ ci: ## Full local mirror of CI (.github/workflows/ci.yml): fmt, build, vet, race
 	@echo "==> web test"; cd web && npm test
 	@echo "==> web build"; cd web && npm run build
 	@echo "==> changelog"; ./scripts/check-changelog.sh
+	@echo
+	@if [ -z "$$DAZYFLOW_TEST_DB" ]; then \
+		echo "NOTE: DAZYFLOW_TEST_DB is unset, so every Postgres-gated test SKIPPED —"; \
+		echo "      ~128 cases across auth, daemon, daemon/support, engine/jobstore."; \
+		echo "      CI runs them. Wire them up with 'make test-db'."; \
+	fi
+	@if [ -z "$$DAZYFLOW_TEST_MYSQL" ]; then \
+		echo "NOTE: DAZYFLOW_TEST_MYSQL is unset, so the drops/db MySQL tests SKIPPED (18 cases)."; \
+	fi
+

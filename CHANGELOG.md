@@ -37,6 +37,17 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
   namespace (`ErrorBoundary.test.tsx`). Worth revisiting TypeScript 7 once
   `typescript-eslint` ships support for it.
 
+- **`engine/jobstore`'s Postgres conformance suite failed at random.** It
+  `TRUNCATE`s `jobs` before each subtest, and `daemon`'s pgstores suite
+  truncates the same table in the same shared `DAZYFLOW_TEST_DB` — with
+  `go test ./...` running the two packages' binaries concurrently, daemon's
+  wipe could land between an enqueue here and the read that followed it. The
+  symptom was `park = false, <nil>; want true, nil` in `SetGraphRunParked`: an
+  update that matched zero rows because the row had been deleted underneath it.
+  It never reproduced with the package run on its own. The package now derives
+  a database of its own from `DAZYFLOW_TEST_DB`, which is safe because
+  `OpenPostgres` applies its schema itself.
+
 - **A flaky editor autosave test failed only under parallel workers.** The save
   assertions used testing-library's `waitFor`, which polls on real time, while
   the tests run on fake timers with `shouldAdvanceTime` — so the 3s autosave
@@ -103,6 +114,16 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
   pins `DAZYFLOW_PORT` still wins. If you relied on the old default, either
   set `DAZYFLOW_PORT=8080` and `DAZYFLOW_WEB_ORIGIN=http://localhost:8080`
   explicitly, or update the bookmark and any proxy pointing at the host port.
+
+- **`make check` and `make ci` now say when they skipped a gated test suite,
+  and `make test-db` wires one up.** The Postgres-gated Go tests (~128 cases
+  across `auth`, `daemon`, `daemon/support`, `engine/jobstore`) and the
+  MySQL-backed `drops/db` tests (18) skip *silently* without their DSN env
+  vars. CI sets all three and has both service containers, so `ci` — described
+  as "the full CI mirror" — was quietly a much weaker gate locally: a green run
+  covered about 146 fewer cases than CI. Both targets now print what they
+  skipped, and `make test-db` starts the bundled Postgres, creates
+  `dazyflow_test` and prints the exports to paste.
 
 - **The bundled Postgres is published on `127.0.0.1:5442` instead of
   `127.0.0.1:5432`, and the port is now configurable.** It was hardcoded, so a
