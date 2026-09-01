@@ -1323,6 +1323,17 @@ export const api = {
       "POST",
       `/me/runs/${encodeURIComponent(runID)}/retry`,
     ),
+  // replayRun re-runs a finished run from the start. Unlike runGraph (which
+  // just submits the flow), it re-sends the trigger data the original run
+  // received — a webhook/form-triggered flow otherwise fails on its first step
+  // with "nothing was sent to this flow". Returns the new run's id. 409 when
+  // the run carries no replayable delivery.
+  replayRun: (token: string, runID: string) =>
+    request<{ job_id: string }>(
+      token,
+      "POST",
+      `/me/runs/${encodeURIComponent(runID)}/replay`,
+    ),
   cancelRun: (token: string, runID: string, reason?: string) =>
     request<{ status: string }>(
       token,

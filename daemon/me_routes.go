@@ -1439,6 +1439,38 @@ func (h *HTTPGateway) resumeRunMe(rw http.ResponseWriter, r *http.Request, p cor
 	h.resumeRun(rw, r2, p)
 }
 
+// replayRunMe is POST /api/v1/me/runs/{run_id}/replay — re-run a finished run
+// from the start, re-sending the trigger data it originally received. Returns
+// the new run's id (same shape as a fresh submission). 409 when the run has no
+// replayable delivery, 404 when it doesn't exist or isn't a graph run.
+func (h *HTTPGateway) replayRunMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	runID := r.PathValue("run_id")
+	newRunID, err := h.svc.ReplayRun(r.Context(), p, runID)
+	if err != nil {
+		switch {
+		case errors.Is(err, core.ErrNotFound), errors.Is(err, core.ErrUnauthorized):
+			writeAPIError(rw, http.StatusNotFound, "run_not_found", "no run with that id")
+		case errors.Is(err, ErrReplayNoTriggerData):
+			writeAPIError(rw, http.StatusConflict, "replay_no_trigger_data", err.Error())
+		case errors.Is(err, ErrReplayTriggerChanged):
+			writeAPIError(rw, http.StatusConflict, "replay_trigger_changed", err.Error())
+		case errors.Is(err, ErrReplayTriggerOff):
+			writeAPIError(rw, http.StatusConflict, "replay_trigger_off", err.Error())
+		case errors.Is(err, core.ErrConflict):
+			writeAPIError(rw, http.StatusConflict, "run_not_replayable", err.Error())
+		case errors.Is(err, core.ErrPlanLimit):
+			writeAPIError(rw, http.StatusPaymentRequired, "plan_limit", err.Error())
+		case errors.Is(err, core.ErrOrgSuspended):
+			writeAPIError(rw, http.StatusForbidden, "org_suspended", err.Error())
+		default:
+			writeAPIError(rw, http.StatusBadRequest, "replay_failed", err.Error())
+		}
+		return
+	}
+	h.audit(r.Context(), p, "graph.run", newRunID, "replay-of="+runID)
+	writeJSON(rw, http.StatusAccepted, map[string]string{"job_id": newRunID})
+}
+
 // retryRunMe is POST /api/v1/me/runs/{run_id}/retry — resume a failed run
 // from where it failed, reusing the work that already succeeded. Returns
 // the new run's id (same shape as a fresh submission). 409 when the run is

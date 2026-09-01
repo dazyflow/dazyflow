@@ -127,6 +127,19 @@ func IsTriggerModule(module string) bool {
 	return EventTriggerModules[module]
 }
 
+// IsInboundEventTriggerModule reports whether a trigger module's data ARRIVES
+// with an external delivery — the webhook/hosted form and the provider-event
+// drops — as opposed to the scheduler modules, which fetch or derive their own
+// data every time they run (a cron tick, a poll's own HTTP call).
+//
+// The distinction is what makes a run replayable: an inbound delivery happened
+// once and cannot be re-derived, so re-running the flow has to feed the trigger
+// step the payload the original run received (see Service.ReplayRun). A
+// scheduler trigger needs no such help — it just runs again.
+func IsInboundEventTriggerModule(module string) bool {
+	return module == "webhook_input" || EventTriggerModules[module]
+}
+
 // classifyTriggers scans g once and reports the three ways a flow can fire on
 // its own: the SCHEDULER (graph-level cron, cron_trigger, or a
 // poll_trigger/google_form_trigger with a valid interval), a reachable

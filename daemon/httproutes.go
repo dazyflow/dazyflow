@@ -281,6 +281,8 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/me/runs/{run_id}/resume", h.requireAuth(h.resumeRunMe))
 	mux.HandleFunc("POST /api/v1/me/runs/{run_id}/retry",
 		h.requireAuth(h.idempotencyMiddleware("/me/runs/{run_id}/retry", h.retryRunMe)))
+	mux.HandleFunc("POST /api/v1/me/runs/{run_id}/replay",
+		h.requireAuth(h.idempotencyMiddleware("/me/runs/{run_id}/replay", h.replayRunMe)))
 
 	// /me/share — the per-workspace public overview (TV-dashboard) link.
 	// GET reads the current link, POST mints/rotates it, DELETE revokes it.

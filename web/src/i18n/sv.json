@@ -15,6 +15,9 @@
     "signupExists": "Ett konto med den e-postadressen finns redan. Prova att logga in i stället.",
     "signupBad": "Vi kunde inte skapa ditt konto med de uppgifterna. Kontrollera dem och försök igen.",
     "totpInvalid": "Koden stämmer inte eller har gått ut. Ange en ny kod från din autentiseringsapp.",
+    "replayNoTriggerData": "Den här körningen startades inte av en webhook eller ett formulärsvar, så det finns ingen inkommande data att skicka genom flödet igen. Tryck Kör på flödet, eller använd Testhändelse i redigeraren för att prova med egen data.",
+    "replayTriggerChanged": "Flödets utlösarsteg har ändrats sedan den här körningen, så datan den tog emot kan inte längre kopplas till det. Skicka en ny händelse till flödet, eller använd Testhändelse i redigeraren.",
+    "replayTriggerOff": "Flödets utlösarsteg är avstängt, så det finns ingenstans att skicka körningens data. Slå på steget igen och kör sedan om.",
     "approvalDecided": "Det var redan beslutat — flödet har gått vidare."
   },
   "flowStatus": {
@@ -1466,7 +1469,7 @@
     "confirmCancelTitle": "Stoppa körningen?",
     "confirmCancelBody": "Körningen stoppas där den är. Steg som redan körts förblir klara; resten körs inte. Du kan köra om den efteråt.",
     "confirmReplayTitle": "Kör om hela flödet?",
-    "confirmReplayBody": "En omkörning kör varje steg igen från början — inklusive sidoeffekter som att skicka e-post eller meddelanden, som då skickas på nytt. Använd Kör om från felet för att bara köra om det misslyckade steget.",
+    "confirmReplayBody": "En omkörning kör varje steg igen från början — inklusive sidoeffekter som att skicka e-post eller meddelanden, som då skickas på nytt. Om körningen startades av en webhook eller ett formulär skickas samma data till flödet igen. Använd Kör om från felet för att bara köra om det misslyckade steget.",
     "failed": "Misslyckades",
     "failedAt": "Misslyckades vid \"{{node}}\"",
     "failedAtAfter": "Misslyckades vid \"{{node}}\" efter {{count}} försök",
@@ -2357,7 +2360,7 @@
     "retrySelected": "Återuppta valda",
     "replay": "Kör om allt",
     "replaying": "Kör om allt…",
-    "replayTitle": "Kör om det här flödet från början",
+    "replayTitle": "Kör om det här flödet från början, med datan som körningen tog emot",
     "stop": "Stoppa",
     "stopping": "Stoppar…",
     "stopTitle": "Stoppa körningen innan den är klar"

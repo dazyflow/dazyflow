@@ -67,6 +67,13 @@ posted get posted again. Dazyflow asks you to confirm and says exactly that,
 because "just run it again" is the instinct that sends a customer two invoices.
 Use Replay when you want a genuinely fresh run, not to recover from a failure.
 
+If a webhook or a hosted form started the run, Replay sends the flow the same
+data again: the body that arrived with the original request is kept with the
+run, so a re-run starts from it rather than from nothing. (A run nobody sent
+anything to has no delivery to replay — Dazyflow says so instead of starting a
+run that would die on its first step. Press **Run** on the flow, or use **Test
+event** in the editor, to try it with data of your own.)
+
 **Stop** halts a run that's still going. Steps already done stay done; the rest
 don't run. You can retry it afterwards.
 

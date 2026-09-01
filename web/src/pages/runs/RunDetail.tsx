@@ -66,6 +66,11 @@ export function RunDetail() {
   const [run, setRun] = useState<JobRecord | null>(null);
   const [nodes, setNodes] = useState<JobRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // Kept apart from `error`: that one means "this page couldn't load" and
+  // renders the not-found card INSTEAD of the run. A replay/retry/cancel that
+  // is refused — a replay with no delivery to re-send is now an ordinary
+  // answer — must not blank out the run the reader is looking at.
+  const [actionError, setActionError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [replaying, setReplaying] = useState(false);
@@ -122,7 +127,10 @@ export function RunDetail() {
     return () => {
       cancelled = true;
     };
-  }, [token, run?.GraphID, activeTenant, activeWorkspace, me]);
+    // Depend on the two FIELDS this effect reads, not on `me` itself: an auth
+    // context that hands back a fresh object each render would otherwise
+    // re-fire the effect on its own setGraph, forever.
+  }, [token, run?.GraphID, activeTenant, activeWorkspace, me?.tenant, me?.workspace]);
 
   // nodeLabel resolves a timeline row's display name: the node's module
   // manifest label when known ("Send notification"), else the raw id.
@@ -230,26 +238,23 @@ export function RunDetail() {
   const toggle = (nid: string) =>
     setExpanded((prev) => ({ ...prev, [nid]: !prev[nid] }));
 
+  // replay re-runs every step of this run from scratch. It goes through the
+  // run's own replay endpoint rather than plainly submitting the flow, because
+  // a flow started by a webhook or a form begins at a step whose data came in
+  // with that request: submitting the flow again left that step with nothing
+  // and the whole re-run died on it ("nothing was sent to this flow"). The
+  // daemon re-sends the delivery this run originally received.
   const replay = async () => {
     if (!token || !run) return;
+    setActionError(null);
     setReplaying(true);
     try {
-      // Pass the active tenant/workspace explicitly rather than empty
-      // strings — the gateway builds the flow scope from these, and empty
-      // values left the call relying on a server-side fallback that isn't
-      // guaranteed. (The run record carries no tenant/workspace of its own;
-      // the active scope is the same one RunList's retry uses.)
-      const result = await api.runGraph(
-        token,
-        activeTenant || me?.tenant || "",
-        activeWorkspace || me?.workspace || "",
-        run.GraphID,
-      );
+      const result = await api.replayRun(token, run.ID);
       if (result?.job_id) {
         navigate(`/runs/${encodeURIComponent(result.job_id)}`);
       }
     } catch (e) {
-      setError(t("runDetail.replayFailed", { error: actionErrorMessage(e, t) }));
+      setActionError(t("runDetail.replayFailed", { error: actionErrorMessage(e, t) }));
     } finally {
       setReplaying(false);
     }
@@ -260,6 +265,7 @@ export function RunDetail() {
   // node and its downstream — cheaper and faster than a full replay.
   const retry = async () => {
     if (!token || !run) return;
+    setActionError(null);
     setRetrying(true);
     try {
       const result = await api.retryRun(token, run.ID);
@@ -267,7 +273,7 @@ export function RunDetail() {
         navigate(`/runs/${encodeURIComponent(result.job_id)}`);
       }
     } catch (e) {
-      setError(t("runDetail.retryFailed", { error: actionErrorMessage(e, t) }));
+      setActionError(t("runDetail.retryFailed", { error: actionErrorMessage(e, t) }));
     } finally {
       setRetrying(false);
     }
@@ -278,6 +284,7 @@ export function RunDetail() {
   // status. Surfaced via a confirm since it abandons in-progress work.
   const cancel = async () => {
     if (!token || !run) return;
+    setActionError(null);
     setCancelling(true);
     try {
       await api.cancelRun(token, run.ID);
@@ -285,7 +292,7 @@ export function RunDetail() {
       const fresh = await api.getJob(token, run.ID).catch(() => null);
       if (fresh) setRun(fresh);
     } catch (e) {
-      setError(t("runDetail.cancelFailed", { error: actionErrorMessage(e, t) }));
+      setActionError(t("runDetail.cancelFailed", { error: actionErrorMessage(e, t) }));
     } finally {
       setCancelling(false);
     }
@@ -418,6 +425,10 @@ export function RunDetail() {
           </Button>
         </div>
       </div>
+
+      {/* A refused or failed action (replay/retry/stop) — right under the
+          buttons that caused it, with the run itself still on screen. */}
+      {actionError && <ErrorNotice>{actionError}</ErrorNotice>}
 
       {/* Approve/reject, for every node this run is parked on. Placed here
           rather than inside a collapsed timeline row because the person most

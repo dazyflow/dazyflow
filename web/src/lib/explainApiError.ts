@@ -212,6 +212,11 @@ const CODE_MESSAGES: Record<string, string> = {
   forbidden: "apiError.forbidden",
   not_found: "apiError.notFound",
   conflict: "apiError.conflict",
+  // Replay refusals. A generic "conflicts with something in use" hides the
+  // only two things the reader can do about either one, and they differ.
+  replay_no_trigger_data: "apiError.replayNoTriggerData",
+  replay_trigger_changed: "apiError.replayTriggerChanged",
+  replay_trigger_off: "apiError.replayTriggerOff",
   rate_limited: "apiError.rateLimited",
   storage_full: "apiError.storageFull",
   unauthorized: "apiError.sessionExpired",

@@ -10,6 +10,36 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Re-running a webhook- or form-triggered run started it with no data.**
+  Replay on the run page submitted the FLOW again (the same call the editor's
+  Run button makes), and a flow that starts from an inbound delivery begins at a
+  step whose data arrived with that request — nothing re-derives it, so the
+  re-run died immediately on `no_trigger_data`: *"nothing was sent to this
+  flow"*. The delivery was never lost, though: the trigger path pre-completes
+  the trigger step with the request's body and headers, so the original run's
+  node record still holds the exact payload.
+
+  Replay now goes through the run's own endpoint, `POST
+  /api/v1/me/runs/{run_id}/replay`, which re-seeds every live inbound-event
+  trigger step (webhook, hosted form, and the provider events — Slack mention,
+  GitHub push, Stripe payment, Home Assistant state change) with what that step
+  received the first time, then runs every other step from scratch as before.
+  The flow definition used is the current one, so "I fixed the flow, put that
+  payload through it again" works.
+
+  Three cases are refused up front instead of burning a run that is certain to
+  do nothing useful, each with its own message: a run that never received a
+  delivery (it was started by hand — press Run, or use Test event in the
+  editor), a delivery whose trigger step has since been replaced, and a trigger
+  step that is now turned off (seeding bypasses the worker, so a paused step
+  must not be fed).
+
+  Also on the run page: a refused or failed Replay/Retry/Stop no longer
+  replaces the whole page with "Run not found" — the message appears under the
+  buttons with the run still on screen.
+
 ## [0.28.4] - 2026-09-01
 
 ### Fixed

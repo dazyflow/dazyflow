@@ -15,6 +15,9 @@
     "signupExists": "An account with that email already exists. Try signing in instead.",
     "signupBad": "We couldn't create your account with those details. Please check them and try again.",
     "totpInvalid": "That code isn't right or has expired. Enter a fresh code from your authenticator app.",
+    "replayNoTriggerData": "This run wasn't started by a webhook or a form submission, so there's no incoming data to send through the flow again. Press Run on the flow, or use Test event in the editor to try it with your own data.",
+    "replayTriggerChanged": "The flow's trigger step has changed since this run, so the data it received can't be matched to it any more. Send a new event to the flow, or use Test event in the editor.",
+    "replayTriggerOff": "The flow's trigger step is turned off, so there's nowhere to send this run's data. Turn the step back on, then replay.",
     "approvalDecided": "That was already decided — the flow has moved on."
   },
   "flowStatus": {
@@ -1466,7 +1469,7 @@
     "confirmCancelTitle": "Stop this run?",
     "confirmCancelBody": "The run stops where it is. Steps already done stay done; the rest won't run. You can retry it afterwards.",
     "confirmReplayTitle": "Replay the whole flow?",
-    "confirmReplayBody": "Replay runs every step again from the start — including side effects like sending emails or messages, which will be sent again. To re-run only the failed step, use Retry instead.",
+    "confirmReplayBody": "Replay runs every step again from the start — including side effects like sending emails or messages, which will be sent again. If a webhook or a form started this run, replay sends the flow the same data again. To re-run only the failed step, use Retry instead.",
     "failed": "Failed",
     "failedAt": "Failed at \"{{node}}\"",
     "failedAtAfter": "Failed at \"{{node}}\" after {{count}} attempts",
@@ -2357,7 +2360,7 @@
     "retrySelected": "Retry selected",
     "replay": "Replay",
     "replaying": "Replaying…",
-    "replayTitle": "Re-run this flow from the start",
+    "replayTitle": "Re-run this flow from the start, with the data this run received",
     "stop": "Stop",
     "stopping": "Stopping…",
     "stopTitle": "Stop this run before it finishes"
