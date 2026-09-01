@@ -191,8 +191,8 @@ func multipartMessage(fromHeader, fromAddr, to, subject, text, htmlBody string) 
 	fmt.Fprintf(&sb, "From: %s\r\n", strip.Replace(fromHeader))
 	fmt.Fprintf(&sb, "To: %s\r\n", strip.Replace(to))
 	fmt.Fprintf(&sb, "Subject: %s\r\n", mime.QEncoding.Encode("utf-8", subject))
-	fmt.Fprintf(&sb, "Date: %s\r\n", time.Now().UTC().Format(time.RFC1123Z))
-	fmt.Fprintf(&sb, "Message-ID: %s\r\n", newMessageID(fromAddr))
+	fmt.Fprintf(&sb, "Date: %s\r\n", smtputil.DateHeader(time.Now()))
+	fmt.Fprintf(&sb, "Message-ID: %s\r\n", smtputil.NewMessageID(fromAddr))
 	sb.WriteString("MIME-Version: 1.0\r\n")
 	fmt.Fprintf(&sb, "Content-Type: multipart/alternative; boundary=%q\r\n\r\n", boundary)
 
@@ -253,29 +253,11 @@ func mailerMessage(fromHeader, fromAddr, to, subject, body string) []byte {
 	// greylisting, a relay re-queue) can't be de-duplicated and lands as a
 	// duplicate copy. Relays that rewrite headers (e.g. Proton) supply
 	// their own; setting ours covers the plain Postfix/SES relays that don't.
-	fmt.Fprintf(&sb, "Date: %s\r\n", time.Now().UTC().Format(time.RFC1123Z))
-	fmt.Fprintf(&sb, "Message-ID: %s\r\n", newMessageID(fromAddr))
+	fmt.Fprintf(&sb, "Date: %s\r\n", smtputil.DateHeader(time.Now()))
+	fmt.Fprintf(&sb, "Message-ID: %s\r\n", smtputil.NewMessageID(fromAddr))
 	sb.WriteString("MIME-Version: 1.0\r\n")
 	sb.WriteString("Content-Type: text/plain; charset=UTF-8\r\n\r\n")
 	sb.WriteString(body)
 	return []byte(sb.String())
 }
 
-// newMessageID mints a unique RFC 5322 Message-ID of the form
-// <random-hex@sender-domain>. The domain comes from the sender so the ID
-// is well-formed on relays that validate it; the 128 random bits make
-// collisions across sends effectively impossible.
-func newMessageID(from string) string {
-	strip := strings.NewReplacer("\r", "", "\n", "", " ", "")
-	domain := "localhost"
-	if at := strings.LastIndex(from, "@"); at >= 0 && at+1 < len(from) {
-		domain = strip.Replace(from[at+1:])
-	}
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		// crypto/rand failure is near-impossible; fall back to a
-		// time-based token so the header stays present and unique-enough.
-		return fmt.Sprintf("<%d@%s>", time.Now().UnixNano(), domain)
-	}
-	return "<" + hex.EncodeToString(b[:]) + "@" + domain + ">"
-}

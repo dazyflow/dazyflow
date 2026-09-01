@@ -11,11 +11,14 @@ package smtputil
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/tls"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"net/mail"
 	"net/smtp"
+	"strings"
 	"time"
 
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
@@ -49,6 +52,51 @@ func SplitSender(from string) (header, envelope string) {
 		return from, parsed.Address
 	}
 	return parsed.String(), parsed.Address
+}
+
+// DateHeader is the value of a message's Date: header, in the RFC 5322 form
+// every MTA parses. Trivial, but it lives next to NewMessageID because the two
+// headers are only useful together — see NewMessageID for why they matter.
+func DateHeader(now time.Time) string {
+	return now.UTC().Format(time.RFC1123Z)
+}
+
+// NewMessageID mints a unique RFC 5322 Message-ID of the form
+// <random-hex@sender-domain>. The domain comes from the sender so the ID is
+// well-formed on relays that validate it; the 128 random bits make collisions
+// across sends effectively impossible.
+//
+// Date + Message-ID are required by RFC 5322 and are what every downstream MTA
+// uses to collapse a retried submission into a single delivery. Without a
+// stable Message-ID, a transient resend (timeout, greylisting, a relay
+// re-queue) can't be de-duplicated and lands as a duplicate copy — and a relay
+// that mints its own fresh ID per attempt makes the copies look like distinct
+// messages to every later hop. Relays that rewrite headers (e.g. Proton)
+// supply their own; setting ours covers the plain Postfix/SES relays that
+// don't.
+//
+// Shared by all three senders — the Email drop, the email-template test send,
+// and the operator's transactional Mailer — for the same reason SplitSender is:
+// a header this load-bearing must not be present on one path and missing on
+// another.
+func NewMessageID(from string) string {
+	// Callers pass the bare envelope address, but take the display-name form
+	// too: SplitSender is the one place that knows how to get the address out
+	// of "Reports <reports@example.com>", and a trailing ">" left in the
+	// domain is a malformed header on every relay that validates one.
+	_, addr := SplitSender(from)
+	strip := strings.NewReplacer("\r", "", "\n", "", " ", "", "<", "", ">", "")
+	domain := "localhost"
+	if at := strings.LastIndex(addr, "@"); at >= 0 && at+1 < len(addr) {
+		domain = strip.Replace(addr[at+1:])
+	}
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		// crypto/rand failure is near-impossible; fall back to a
+		// time-based token so the header stays present and unique-enough.
+		return fmt.Sprintf("<%d@%s>", time.Now().UnixNano(), domain)
+	}
+	return "<" + hex.EncodeToString(b[:]) + "@" + domain + ">"
 }
 
 // dial runs the shared front of the SMTP dance: dial addr (implicit-TLS or

@@ -15,7 +15,7 @@ import (
 )
 
 func TestBuildMessage(t *testing.T) {
-	msg := string(buildMessage("me@x.test", []string{"a@x.test", "b@x.test"}, nil, "Hello", "the body", "text/plain; charset=UTF-8", nil))
+	msg := string(buildMessage("me@x.test", "me@x.test", []string{"a@x.test", "b@x.test"}, nil, "Hello", "the body", "text/plain; charset=UTF-8", nil))
 
 	// Headers are CRLF-terminated and separated from the body by a blank line.
 	wantHeaders := []string{
@@ -43,7 +43,7 @@ func TestBuildMessage_CCHeaderButNoBCC(t *testing.T) {
 	// CC rides a visible header; BCC must never appear in any header (it's
 	// added to the SMTP envelope only, in executeEmail). buildMessage takes no
 	// bcc argument by design, so a Bcc header can't leak from here.
-	msg := string(buildMessage("me@x.test", []string{"a@x.test"}, []string{"c1@x.test", "c2@x.test"}, "Hi", "body", "text/plain; charset=UTF-8", nil))
+	msg := string(buildMessage("me@x.test", "me@x.test", []string{"a@x.test"}, []string{"c1@x.test", "c2@x.test"}, "Hi", "body", "text/plain; charset=UTF-8", nil))
 	if !strings.Contains(msg, "Cc: c1@x.test, c2@x.test\r\n") {
 		t.Errorf("missing Cc header:\n%s", msg)
 	}
@@ -55,7 +55,7 @@ func TestBuildMessage_CCHeaderButNoBCC(t *testing.T) {
 func TestBuildMessage_HonorsBodyContentType(t *testing.T) {
 	// The body's Content-Type is driven by the caller (text vs HTML), so an
 	// HTML send carries text/html on the (single) body part.
-	msg := string(buildMessage("me@x.test", []string{"a@x.test"}, nil, "Hi", "<b>hi</b>", `text/html; charset="utf-8"`, nil))
+	msg := string(buildMessage("me@x.test", "me@x.test", []string{"a@x.test"}, nil, "Hi", "<b>hi</b>", `text/html; charset="utf-8"`, nil))
 	if !strings.Contains(msg, `Content-Type: text/html; charset="utf-8"`) {
 		t.Errorf("body not sent as text/html:\n%s", msg)
 	}
@@ -63,7 +63,7 @@ func TestBuildMessage_HonorsBodyContentType(t *testing.T) {
 
 func TestBuildMessage_NoCCHeaderWhenEmpty(t *testing.T) {
 	// No CC recipients → no Cc header at all (not an empty one).
-	msg := string(buildMessage("me@x.test", []string{"a@x.test"}, nil, "Hi", "body", "text/plain; charset=UTF-8", nil))
+	msg := string(buildMessage("me@x.test", "me@x.test", []string{"a@x.test"}, nil, "Hi", "body", "text/plain; charset=UTF-8", nil))
 	if strings.Contains(msg, "Cc:") {
 		t.Errorf("unexpected Cc header:\n%s", msg)
 	}
@@ -72,7 +72,7 @@ func TestBuildMessage_NoCCHeaderWhenEmpty(t *testing.T) {
 func TestBuildMessage_EncodesNonASCIISubject(t *testing.T) {
 	// A non-ASCII subject must not ride as raw UTF-8 in the header — it
 	// has to be an RFC 2047 encoded-word, or clients mojibake it.
-	msg := string(buildMessage("me@x.test", []string{"a@x.test"}, nil, "Café ☕", "body", "text/plain; charset=UTF-8", nil))
+	msg := string(buildMessage("me@x.test", "me@x.test", []string{"a@x.test"}, nil, "Café ☕", "body", "text/plain; charset=UTF-8", nil))
 	if strings.Contains(msg, "Subject: Café ☕") {
 		t.Error("subject was emitted as raw UTF-8, want RFC 2047 encoded-word")
 	}
@@ -85,7 +85,7 @@ func TestBuildMessage_Attachments(t *testing.T) {
 	// With attachments the message switches to multipart/mixed: a text body
 	// part followed by one base64 part per attachment (same shape as gmail
 	// send). Without them it stays a bare text/plain message (tested above).
-	msg := string(buildMessage("me@x.test", []string{"a@x.test"}, nil, "Report", "see attached", "text/plain; charset=UTF-8", []mailmsg.Attachment{
+	msg := string(buildMessage("me@x.test", "me@x.test", []string{"a@x.test"}, nil, "Report", "see attached", "text/plain; charset=UTF-8", []mailmsg.Attachment{
 		{Filename: "report.pdf", MIME: "application/pdf", Data: []byte("%PDF-fake")},
 	}))
 	for _, want := range []string{
@@ -105,7 +105,7 @@ func TestBuildMessage_StripsHeaderCRLF(t *testing.T) {
 	// CR/LF in address values must not split headers (header injection):
 	// the smuggled text may survive inline in the From value, but it must
 	// never start a header line of its own.
-	msg := string(buildMessage("me@x.test\r\nBcc: evil@x.test", []string{"a@x.test"}, nil, "hi", "body", "text/plain; charset=UTF-8", nil))
+	msg := string(buildMessage("me@x.test\r\nBcc: evil@x.test", "me@x.test", []string{"a@x.test"}, nil, "hi", "body", "text/plain; charset=UTF-8", nil))
 	if strings.Contains(msg, "\r\nBcc:") {
 		t.Errorf("injected header line survived:\n%s", msg)
 	}
@@ -303,7 +303,7 @@ func TestExecuteEmail_SSRFBlocked(t *testing.T) {
 func TestBuildMessage_DisplayNameFromHeader(t *testing.T) {
 	// The header form is what buildMessage receives, so a display name reaches
 	// the recipient's client.
-	msg := string(buildMessage(`"Reports" <reports@x.test>`, []string{"a@x.test"}, nil, "Hi", "body", "text/plain; charset=UTF-8", nil))
+	msg := string(buildMessage(`"Reports" <reports@x.test>`, "reports@x.test", []string{"a@x.test"}, nil, "Hi", "body", "text/plain; charset=UTF-8", nil))
 	if !strings.Contains(msg, "From: \"Reports\" <reports@x.test>\r\n") {
 		t.Errorf("From header missing the display name:\n%s", msg)
 	}
@@ -416,5 +416,146 @@ func TestExecuteEmail_CRLFSenderRejected(t *testing.T) {
 	}
 	if strings.Contains(sent, "evil@x.test") || strings.Contains(cmds, "evil@x.test") {
 		t.Errorf("injected recipient reached the server:\ncmds:\n%s\ndata:\n%s", cmds, sent)
+	}
+}
+
+// TestBuildMessage_StampsDateAndMessageID is the regression guard for
+// duplicate delivery: a message submitted over raw SMTP with no Message-ID
+// gives every downstream relay nothing to collapse a re-queued attempt on, so
+// a transient resend lands in the inbox as a second copy. Gmail's API stamps
+// both headers itself; here they have to be ours.
+func TestBuildMessage_StampsDateAndMessageID(t *testing.T) {
+	msg := string(buildMessage(`"Reports" <reports@x.test>`, "reports@x.test",
+		[]string{"a@x.test"}, nil, "Hi", "body", "text/plain; charset=UTF-8", nil))
+
+	if n := strings.Count(msg, "Message-ID:"); n != 1 {
+		t.Errorf("Message-ID headers = %d, want 1\n---\n%s", n, msg)
+	}
+	if n := strings.Count(msg, "Date:"); n != 1 {
+		t.Errorf("Date headers = %d, want 1\n---\n%s", n, msg)
+	}
+	// The ID's domain comes from the BARE sender, not the display-name form —
+	// "<...@x.test>>" is malformed on relays that validate it.
+	if !strings.Contains(msg, "@x.test>\r\n") {
+		t.Errorf("Message-ID domain wrong\n---\n%s", msg)
+	}
+	// Both headers must land above the body, in the header block.
+	headerEnd := strings.Index(msg, "\r\n\r\n")
+	if headerEnd < 0 {
+		t.Fatal("no header/body separator")
+	}
+	if !strings.Contains(msg[:headerEnd], "Message-ID:") || !strings.Contains(msg[:headerEnd], "Date:") {
+		t.Errorf("Date/Message-ID leaked out of the header block\n---\n%s", msg)
+	}
+	// Two builds of the same message are two distinct submissions.
+	other := string(buildMessage(`"Reports" <reports@x.test>`, "reports@x.test",
+		[]string{"a@x.test"}, nil, "Hi", "body", "text/plain; charset=UTF-8", nil))
+	if idOf(msg) == idOf(other) {
+		t.Errorf("two sends share a Message-ID: %q", idOf(msg))
+	}
+}
+
+// idOf pulls the Message-ID header value out of a built message.
+func idOf(msg string) string {
+	for _, line := range strings.Split(msg, "\r\n") {
+		if v, ok := strings.CutPrefix(line, "Message-ID: "); ok {
+			return v
+		}
+	}
+	return ""
+}
+
+// TestBuildMessage_MessageIDSurvivesAttachments confirms the multipart branch
+// stamps the same headers — it builds its own header block.
+func TestBuildMessage_MessageIDSurvivesAttachments(t *testing.T) {
+	msg := string(buildMessage("me@x.test", "me@x.test", []string{"a@x.test"}, nil,
+		"Report", "see attached", "text/plain; charset=UTF-8", []mailmsg.Attachment{
+			{Filename: "r.txt", MIME: "text/plain", Data: []byte("hi")},
+		}))
+	if !strings.Contains(msg, "Message-ID:") || !strings.Contains(msg, "Date:") {
+		t.Errorf("multipart message missing Date/Message-ID\n---\n%s", msg)
+	}
+}
+
+func TestDedupeRecipients(t *testing.T) {
+	cases := []struct {
+		name        string
+		to, cc, bcc []string
+		want        []string
+	}{
+		{
+			name: "same address in To and CC is one envelope recipient",
+			to:   []string{"me@x.test"}, cc: []string{"me@x.test"},
+			want: []string{"me@x.test"},
+		},
+		{
+			name: "display-name form matches the bare address, To keeps the slot",
+			to:   []string{"me@x.test"}, cc: []string{"Me <me@x.test>"},
+			want: []string{"me@x.test"},
+		},
+		{
+			name: "case-insensitive",
+			to:   []string{"Me@X.test"}, bcc: []string{"me@x.test"},
+			want: []string{"Me@X.test"},
+		},
+		{
+			name: "distinct addresses all survive, in To/CC/BCC order",
+			to:   []string{"a@x.test"}, cc: []string{"b@x.test"}, bcc: []string{"c@x.test"},
+			want: []string{"a@x.test", "b@x.test", "c@x.test"},
+		},
+		{
+			name: "a repeat inside one field collapses too",
+			to:   []string{"a@x.test", "a@x.test", "b@x.test"},
+			want: []string{"a@x.test", "b@x.test"},
+		},
+		{
+			name: "unparseable entries fall back to their text and still dedupe",
+			to:   []string{"not an address"}, cc: []string{"NOT AN ADDRESS"},
+			want: []string{"not an address"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := dedupeRecipients(tc.to, tc.cc, tc.bcc)
+			if strings.Join(got, "|") != strings.Join(tc.want, "|") {
+				t.Errorf("dedupeRecipients = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestExecuteEmail_DedupesEnvelopeRecipients drives the whole send: an address
+// listed in both To and CC must reach RCPT TO once — a server that doesn't
+// collapse repeated RCPTs itself delivers a copy per mention — while the
+// headers still show both fields, since that is who was visibly addressed.
+func TestExecuteEmail_DedupesEnvelopeRecipients(t *testing.T) {
+	hfnet.SetAllowPrivateEgress(true)
+	defer hfnet.SetAllowPrivateEgress(false)
+
+	var sent, cmds string
+	host, port, _ := net.SplitHostPort(scriptedSMTPRecording(t, &sent, &cmds))
+
+	res, err := executeEmail(t.Context(), core.Job{
+		ID: "j",
+		Params: map[string]any{
+			"host": host, "port": port, "tls": "none",
+			"from": "me@x.test",
+			"to":   "you@x.test",
+			"cc":   "You <you@x.test>",
+			"body": "b", "format": "text",
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if res.Status != core.StatusOK {
+		t.Fatalf("res = %+v, want OK", res)
+	}
+	if n := strings.Count(cmds, "RCPT TO:"); n != 1 {
+		t.Errorf("RCPT TO count = %d, want 1, transcript:\n%s", n, cmds)
+	}
+	// The headers are unchanged: To and Cc both still name the recipient.
+	if !strings.Contains(sent, "To: you@x.test\n") || !strings.Contains(sent, "Cc: You <you@x.test>\n") {
+		t.Errorf("address headers changed shape:\n%s", sent)
 	}
 }

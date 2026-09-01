@@ -10,6 +10,40 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The Email (SMTP) step's mail arrived twice.** Its messages carried no
+  `Date` and no `Message-ID`. Both are required by RFC 5322, and the second is
+  what every downstream MTA uses to collapse a re-queued submission into one
+  delivery — so any transient resend along the way (a timeout on the `250`,
+  greylisting, a relay re-queue) landed as a second copy with nothing anywhere
+  able to recognise it as the same message. Relays that mint their own fresh ID
+  per attempt made the two copies look like two different mails to every later
+  hop and to the recipient's client.
+
+  The step itself only ever sent once — the node executes once per run (verified
+  end-to-end through the worker and dispatcher against a scripted SMTP server),
+  and `RetryNever` plus `DedupeWrites` already covered the retry and
+  expired-lease paths. The duplication happened downstream, and the missing
+  header is what let it through.
+
+  `daemon`'s own transactional Mailer already stamped both headers for exactly
+  this reason, and the email-template test send inherited them; the tenant-facing
+  drop was the one raw-SMTP path that never got the fix. `newMessageID` has moved
+  to `internal/smtputil` as `NewMessageID` (alongside `DateHeader`) so all three
+  senders share it, the way they already share `SplitSender` — and it now takes
+  the display-name form too, since a `>` left in the domain is a malformed header
+  on relays that validate one. The Gmail step still omits both headers on
+  purpose: Google's API stamps them server-side.
+
+- **An address in both To and CC was mailed twice.** The Email step concatenated
+  To, CC and BCC into the SMTP envelope without de-duplicating, so a server that
+  doesn't collapse repeated `RCPT TO` itself delivered a copy per mention.
+  Recipients are now de-duplicated on the parsed address (case-insensitively,
+  `Ada <a@x.test>` and `a@x.test` being one person), keeping the first mention
+  and its spelling. The address headers are untouched — they still show who was
+  visibly addressed in which field.
+
 ## [0.28.2] - 2026-09-01
 
 ### Changed

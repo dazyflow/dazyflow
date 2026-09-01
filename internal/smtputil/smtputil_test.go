@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"context"
 	"net"
+	"net/mail"
 	"net/smtp"
 	"strings"
 	"testing"
@@ -259,5 +260,49 @@ func TestSplitSender_MIMEEncodesNonASCIIName(t *testing.T) {
 	}
 	if envelope != "r@x.test" {
 		t.Errorf("envelope = %q, want r@x.test", envelope)
+	}
+}
+
+// TestNewMessageID_DomainFromSender pins the shape every relay validates:
+// <token@domain>, with the domain taken from the sender's address.
+func TestNewMessageID_DomainFromSender(t *testing.T) {
+	for _, from := range []string{"reports@example.com", "Reports <reports@example.com>"} {
+		id := NewMessageID(from)
+		if !strings.HasPrefix(id, "<") || !strings.HasSuffix(id, ">") {
+			t.Errorf("NewMessageID(%q) = %q, want it bracketed", from, id)
+		}
+		if !strings.HasSuffix(id, "@example.com>") {
+			t.Errorf("NewMessageID(%q) = %q, want the sender's domain", from, id)
+		}
+	}
+	// Two sends must never collide — that is the whole point of the header.
+	if a, b := NewMessageID("a@x.test"), NewMessageID("a@x.test"); a == b {
+		t.Errorf("two Message-IDs are identical: %q", a)
+	}
+	// A sender with no domain still yields a well-formed header.
+	if id := NewMessageID("relay-user"); !strings.HasSuffix(id, "@localhost>") {
+		t.Errorf("NewMessageID(hostless) = %q, want the localhost fallback", id)
+	}
+}
+
+// TestNewMessageID_StripsHeaderInjection guards the one way a sender reaches a
+// header unescaped: the Message-ID's domain. CR/LF/space are stripped, so a
+// hostile From can't smuggle a second header in behind it.
+func TestNewMessageID_StripsHeaderInjection(t *testing.T) {
+	id := NewMessageID("me@x.test\r\nBcc: evil@x.test")
+	if strings.ContainsAny(id, "\r\n ") {
+		t.Errorf("Message-ID carries CR/LF/space: %q", id)
+	}
+}
+
+// TestDateHeader_RFC5322 confirms the Date: value parses back as the form
+// every MTA expects.
+func TestDateHeader_RFC5322(t *testing.T) {
+	got := DateHeader(time.Date(2026, 9, 1, 12, 34, 56, 0, time.UTC))
+	if got != "Tue, 01 Sep 2026 12:34:56 +0000" {
+		t.Errorf("DateHeader = %q", got)
+	}
+	if _, err := mail.ParseDate(got); err != nil {
+		t.Errorf("DateHeader %q does not parse: %v", got, err)
 	}
 }

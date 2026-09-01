@@ -12,9 +12,11 @@ import (
 	"fmt"
 	"mime"
 	"net"
+	"net/mail"
 	"net/smtp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/mailmsg"
@@ -154,6 +156,36 @@ func splitRecipients(s string) []string {
 	return out
 }
 
+// dedupeRecipients flattens To/CC/BCC into the envelope recipient list, keeping
+// the first mention of each address and its original spelling. Comparison is on
+// the parsed address, lower-cased, so "Ada <a@x.test>" and "a@x.test" are one
+// recipient — an address that doesn't parse falls back to its trimmed,
+// lower-cased text. Deliberately case-insensitive on the local part too: the
+// RFC allows a server to treat "A@x" and "a@x" as different mailboxes, but no
+// real provider does, and mailing a person twice is the worse failure.
+func dedupeRecipients(lists ...[]string) []string {
+	total := 0
+	for _, l := range lists {
+		total += len(l)
+	}
+	out := make([]string, 0, total)
+	seen := make(map[string]bool, total)
+	for _, list := range lists {
+		for _, addr := range list {
+			key := strings.ToLower(strings.TrimSpace(addr))
+			if parsed, err := mail.ParseAddress(addr); err == nil {
+				key = strings.ToLower(parsed.Address)
+			}
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			out = append(out, addr)
+		}
+	}
+	return out
+}
+
 // smtpPort resolves the mail-server port. ConnectionFields inject it as a
 // string ("587"); older flows may carry it as a JSON number. Try the string
 // form first, fall back to the numeric form, then to 587 (STARTTLS default).
@@ -276,7 +308,7 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 	// The configured sender may carry a display name; the header takes that
 	// form, the SMTP envelope only the bare address (smtputil.SplitSender).
 	fromHeader, fromAddr := smtputil.SplitSender(from)
-	msg := buildMessage(fromHeader, to, cc, subject, body, bodyContentType, atts)
+	msg := buildMessage(fromHeader, fromAddr, to, cc, subject, body, bodyContentType, atts)
 
 	var auth smtp.Auth
 	if username != "" {
@@ -286,10 +318,11 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 	// Every recipient — To, CC and BCC — must be in the SMTP envelope (RCPT
 	// TO), since that, not the headers, decides who the server delivers to.
 	// BCC is here but absent from the headers, which is what keeps it blind.
-	rcpts := make([]string, 0, len(to)+len(cc)+len(bcc))
-	rcpts = append(rcpts, to...)
-	rcpts = append(rcpts, cc...)
-	rcpts = append(rcpts, bcc...)
+	// De-duplicated: the same address in two fields is one person, and a
+	// server that doesn't collapse repeated RCPTs itself delivers them a copy
+	// per mention. To wins the position, so the headers stay the source of
+	// truth for who is visibly addressed.
+	rcpts := dedupeRecipients(to, cc, bcc)
 
 	emitProgress(progress, job, 0.3, "dial "+addr)
 	if err := smtputil.Send(ctx, addr, host, tlsMode, auth, fromAddr, rcpts, msg); err != nil {
@@ -320,13 +353,14 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 }
 
 // buildMessage assembles the RFC 822 message. fromHeader is the header form of
-// the sender, so it may carry a display name ("Reports <r@example.com>"); the
-// bare-address envelope form goes to smtputil.Send separately. Address headers
-// are stripped of CR/LF to defeat header injection; the subject is MIME-word
-// encoded; multipart/mixed is used only when attachments exist (same shape as
-// gmail send's buildRFC822). BCC is deliberately NOT a header — blind copies
-// ride the SMTP envelope only (see executeEmail), so they stay hidden.
-func buildMessage(fromHeader string, to, cc []string, subject, body, bodyContentType string, atts []mailmsg.Attachment) []byte {
+// the sender, so it may carry a display name ("Reports <r@example.com>");
+// fromAddr is the bare address, which also goes to smtputil.Send as the
+// envelope and supplies the Message-ID's domain. Address headers are stripped
+// of CR/LF to defeat header injection; the subject is MIME-word encoded;
+// multipart/mixed is used only when attachments exist (same shape as gmail
+// send's buildRFC822). BCC is deliberately NOT a header — blind copies ride
+// the SMTP envelope only (see executeEmail), so they stay hidden.
+func buildMessage(fromHeader, fromAddr string, to, cc []string, subject, body, bodyContentType string, atts []mailmsg.Attachment) []byte {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "From: %s\r\n", mailmsg.StripCRLF(fromHeader))
 	fmt.Fprintf(&sb, "To: %s\r\n", mailmsg.StripCRLF(strings.Join(to, ", ")))
@@ -336,6 +370,16 @@ func buildMessage(fromHeader string, to, cc []string, subject, body, bodyContent
 	// RFC 2047 encoded-word — non-ASCII subjects must not ride as raw
 	// UTF-8 bytes in a header, or receiving clients mojibake them.
 	fmt.Fprintf(&sb, "Subject: %s\r\n", mime.QEncoding.Encode("utf-8", subject))
+	// Date + Message-ID: required by RFC 5322, and the pair every downstream
+	// MTA uses to collapse a retried submission into ONE delivery. Sending
+	// without them is what made this drop's mail arrive twice — a relay
+	// re-queue (timeout, greylisting) had nothing to de-duplicate on, and a
+	// relay that mints its own fresh ID per attempt made the copies look like
+	// two different messages. The Gmail drop can omit them because Google's
+	// API stamps both server-side; raw SMTP has no such backstop. Shared with
+	// the operator's Mailer via smtputil so the two can't drift again.
+	fmt.Fprintf(&sb, "Date: %s\r\n", smtputil.DateHeader(time.Now()))
+	fmt.Fprintf(&sb, "Message-ID: %s\r\n", smtputil.NewMessageID(fromAddr))
 	sb.WriteString("MIME-Version: 1.0\r\n")
 
 	if len(atts) == 0 {
