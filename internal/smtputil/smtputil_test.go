@@ -10,6 +10,7 @@ import (
 	"net/mail"
 	"net/smtp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -106,6 +107,59 @@ func scriptedSMTP(t *testing.T, sc smtpScript) string {
 	return ln.Addr().String()
 }
 
+// scriptedSMTPRecordingCmds is scriptedSMTP plus a transcript of every command
+// the client sent. The returned reader is safe to call after the exchange (the
+// server goroutine holds the same mutex while appending), which is how the
+// Verify tests assert on what a connection test does and does NOT send.
+func scriptedSMTPRecordingCmds(t *testing.T) (addr string, transcript func() string) {
+	t.Helper()
+	var mu sync.Mutex
+	var sb strings.Builder
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+		w := func(s string) { _, _ = conn.Write([]byte(s + "\r\n")) }
+		w("220 test ESMTP")
+		for {
+			line, err := r.ReadString('\n')
+			if err != nil {
+				return
+			}
+			line = strings.TrimRight(line, "\r\n")
+			mu.Lock()
+			sb.WriteString(line + "\n")
+			mu.Unlock()
+			switch {
+			case strings.HasPrefix(line, "EHLO"):
+				w("250-test")
+				w("250 SMTPUTF8")
+			case strings.HasPrefix(line, "MAIL"):
+				w("250 2.1.0 ok")
+			case strings.HasPrefix(line, "QUIT"):
+				w("221 2.0.0 bye")
+				return
+			default:
+				w("250 ok")
+			}
+		}
+	}()
+	return ln.Addr().String(), func() string {
+		mu.Lock()
+		defer mu.Unlock()
+		return sb.String()
+	}
+}
+
 func TestSend_PlainHappyPath(t *testing.T) {
 	allowLoopbackEgress(t)
 	addr := scriptedSMTP(t, smtpScript{})
@@ -171,7 +225,7 @@ func TestVerify_HappyPath(t *testing.T) {
 	addr := scriptedSMTP(t, smtpScript{})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := Verify(ctx, addr, "127.0.0.1", "starttls", nil); err != nil {
+	if err := Verify(ctx, addr, "127.0.0.1", "starttls", nil, "from@x.test"); err != nil {
 		t.Fatalf("Verify: %v", err)
 	}
 }
@@ -180,7 +234,7 @@ func TestVerify_NoDeadlineFallback(t *testing.T) {
 	allowLoopbackEgress(t)
 	// A context without a deadline exercises dial's 30s fallback branch.
 	addr := scriptedSMTP(t, smtpScript{})
-	if err := Verify(context.Background(), addr, "127.0.0.1", "none", nil); err != nil {
+	if err := Verify(context.Background(), addr, "127.0.0.1", "none", nil, "from@x.test"); err != nil {
 		t.Fatalf("Verify: %v", err)
 	}
 }
@@ -195,7 +249,7 @@ func TestSend_DialError(t *testing.T) {
 	if err := Send(ctx, addr, "127.0.0.1", "none", nil, "f@x", []string{"t@x"}, []byte("b")); err == nil {
 		t.Error("expected dial error to a closed port")
 	}
-	if err := Verify(ctx, addr, "127.0.0.1", "none", nil); err == nil {
+	if err := Verify(ctx, addr, "127.0.0.1", "none", nil, "from@x.test"); err == nil {
 		t.Error("expected Verify dial error to a closed port")
 	}
 }
@@ -304,5 +358,123 @@ func TestDateHeader_RFC5322(t *testing.T) {
 	}
 	if _, err := mail.ParseDate(got); err != nil {
 		t.Errorf("DateHeader %q does not parse: %v", got, err)
+	}
+}
+
+// TestAuth_Complete: both fields set yields a usable authenticator, and neither
+// set yields the legitimate "this relay takes mail without a login" nil.
+func TestAuth_Complete(t *testing.T) {
+	a, err := Auth("127.0.0.1", " user ", "pw")
+	if err != nil || a == nil {
+		t.Fatalf("Auth(user, pw) = %v, %v; want an authenticator", a, err)
+	}
+	a, err = Auth("127.0.0.1", "", "")
+	if err != nil || a != nil {
+		t.Fatalf("Auth(empty) = %v, %v; want nil, nil", a, err)
+	}
+	// A password that is only spaces is still a password — not trimmed away
+	// into "no login configured".
+	if _, err := Auth("127.0.0.1", "", "  "); err == nil {
+		t.Error("Auth(no user, blank-ish password) = nil error; want the incomplete-login error")
+	}
+}
+
+// TestAuth_PartialCredentialsRejected is the regression guard for the silent
+// pass this package used to allow: a stored password with no username became a
+// nil Auth, so the session went out unauthenticated and both Send and Verify
+// reported success on credentials that were never presented.
+func TestAuth_PartialCredentialsRejected(t *testing.T) {
+	if _, err := Auth("mail.x.test", "", "secret"); err == nil ||
+		!strings.Contains(err.Error(), "no username") {
+		t.Errorf("Auth(password only) = %v, want a missing-username error", err)
+	}
+	if _, err := Auth("mail.x.test", "me@x.test", ""); err == nil ||
+		!strings.Contains(err.Error(), "no password") {
+		t.Errorf("Auth(username only) = %v, want a missing-password error", err)
+	}
+}
+
+// TestVerify_MailFromRejected: the MAIL FROM probe is what gives a passing
+// verification meaning. A server that answers the handshake but refuses the
+// sender — how every big provider says "this session isn't authenticated" —
+// must fail the check, not pass it.
+func TestVerify_MailFromRejected(t *testing.T) {
+	allowLoopbackEgress(t)
+	addr := scriptedSMTP(t, smtpScript{rejectCmd: "MAIL"})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err := Verify(ctx, addr, "127.0.0.1", "none", nil, "from@x.test")
+	if err == nil || !strings.Contains(err.Error(), "mail from") {
+		t.Fatalf("Verify = %v, want a mail-from rejection", err)
+	}
+}
+
+// TestVerify_ProbesEnvelopeFormOfSender: a sender with a display name must be
+// offered as the bare address — "<Reports <r@x.test>>" is not a valid
+// reverse-path and would fail against a real server for the wrong reason.
+func TestVerify_ProbesEnvelopeFormOfSender(t *testing.T) {
+	allowLoopbackEgress(t)
+	addr, cmds := scriptedSMTPRecordingCmds(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := Verify(ctx, addr, "127.0.0.1", "none", nil, "Reports <r@x.test>"); err != nil {
+		t.Fatalf("Verify: %v", err)
+	}
+	got := cmds()
+	if !strings.Contains(got, "MAIL FROM:<r@x.test>") {
+		t.Errorf("transcript = %q, want the bare address in MAIL FROM", got)
+	}
+	// Nothing may be delivered by a connection test: the transaction is
+	// abandoned with RSET, never carried on to RCPT/DATA.
+	if !strings.Contains(got, "RSET") {
+		t.Errorf("transcript = %q, want an RSET", got)
+	}
+	if strings.Contains(got, "RCPT") || strings.Contains(got, "DATA") {
+		t.Errorf("transcript = %q, want no RCPT/DATA from a connection test", got)
+	}
+}
+
+// TestVerify_NoSenderSkipsProbe keeps the handshake-only behavior available for
+// a caller with no sender to offer.
+func TestVerify_NoSenderSkipsProbe(t *testing.T) {
+	allowLoopbackEgress(t)
+	addr, cmds := scriptedSMTPRecordingCmds(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := Verify(ctx, addr, "127.0.0.1", "none", nil, ""); err != nil {
+		t.Fatalf("Verify: %v", err)
+	}
+	if got := cmds(); strings.Contains(got, "MAIL") {
+		t.Errorf("transcript = %q, want no MAIL FROM without a sender", got)
+	}
+}
+
+// TestDial_StartTLSRequiredForLogin: STARTTLS asked for, not offered, and a
+// login in hand — the credentials must not go out in the clear, and the error
+// must say why rather than net/smtp's bare "unencrypted connection".
+func TestDial_StartTLSRequiredForLogin(t *testing.T) {
+	allowLoopbackEgress(t)
+	addr := scriptedSMTP(t, smtpScript{})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	// A non-loopback host NAME (the dial still goes to the loopback listener):
+	// loopback is exempt, mirroring net/smtp's own localhost exemption.
+	auth, _ := Auth("mail.x.test", "me@x.test", "pw")
+	err := Send(ctx, addr, "mail.x.test", "starttls", auth, "f@x.test", []string{"t@x.test"}, []byte("body"))
+	if err == nil || !strings.Contains(err.Error(), "doesn't offer STARTTLS") {
+		t.Fatalf("Send = %v, want the STARTTLS-required error", err)
+	}
+}
+
+// TestDial_NoStartTLSWithoutLoginStillSends: the same server with no login
+// configured keeps working — an unauthenticated internal relay on the default
+// "starttls" setting must not start failing.
+func TestDial_NoStartTLSWithoutLoginStillSends(t *testing.T) {
+	allowLoopbackEgress(t)
+	addr := scriptedSMTP(t, smtpScript{})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := Send(ctx, addr, "mail.x.test", "starttls", nil, "f@x.test", []string{"t@x.test"}, []byte("body")); err != nil {
+		t.Fatalf("Send: %v", err)
 	}
 }

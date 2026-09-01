@@ -95,6 +95,15 @@ func NewMailerFromURL(rawURL, from string) (*Mailer, error) {
 	if u.User != nil {
 		m.username = u.User.Username()
 		m.password, _ = u.User.Password()
+		// A password with no username can only be a typo in the URL
+		// ("smtp://:pw@relay"), and the old code silently dropped it and sent
+		// unauthenticated. Fail at parse time, where the operator can see it.
+		// The reverse — a username with no password — stays legal on purpose:
+		// this URL's username doubles as the sender for an unauthenticated
+		// relay (see the From fallback just below), which is documented.
+		if m.username == "" && m.password != "" {
+			return nil, fmt.Errorf("DAZYFLOW_SMTP_URL: a password is set but no username — write it as smtp://user:password@host")
+		}
 	}
 	if from == "" {
 		// The login is usually the sender address — same fallback the
@@ -119,6 +128,10 @@ func (m *Mailer) prepare(ctx context.Context) (context.Context, context.CancelFu
 	if _, ok := ctx.Deadline(); !ok {
 		ctx, cancel = context.WithTimeout(ctx, m.timeout)
 	}
+	// NewMailerFromURL already rejected the one ambiguous case (a password
+	// with no username), so a blank username here really does mean "this relay
+	// takes mail without a login" — unlike the tenant-facing paths, which go
+	// through smtputil.Auth to rule on that.
 	var auth smtp.Auth
 	if m.username != "" {
 		auth = smtp.PlainAuth("", m.username, m.password, m.host)

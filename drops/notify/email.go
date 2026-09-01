@@ -13,7 +13,6 @@ import (
 	"mime"
 	"net"
 	"net/mail"
-	"net/smtp"
 	"strconv"
 	"strings"
 	"time"
@@ -310,9 +309,12 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 	fromHeader, fromAddr := smtputil.SplitSender(from)
 	msg := buildMessage(fromHeader, fromAddr, to, cc, subject, body, bodyContentType, atts)
 
-	var auth smtp.Auth
-	if username != "" {
-		auth = smtp.PlainAuth("", username, password, host)
+	// A login is optional (an internal relay may take mail without one), but a
+	// half-configured login is a mistake, not a licence to send unauthenticated
+	// — smtputil.Auth is the single place that rules on that.
+	auth, aerr := smtputil.Auth(host, username, password)
+	if aerr != nil {
+		return params.Err(job, "not_connected", "mail server login is incomplete: "+aerr.Error()), nil
 	}
 
 	// Every recipient — To, CC and BCC — must be in the SMTP envelope (RCPT

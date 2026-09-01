@@ -4,6 +4,7 @@
 package notify
 
 import (
+	"bufio"
 	"context"
 	"net"
 	"net/http"
@@ -201,5 +202,85 @@ func TestVerifyEmail_AcceptsDisplayNameFrom(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "local/private address") {
 			t.Errorf("from %q: err = %v, want to reach the dial guard", from, err)
 		}
+	}
+}
+
+// authRequiredSMTP is a mail server that completes the handshake and then
+// refuses the sender the way a real provider refuses an unauthenticated
+// session (Microsoft 365's 5.7.57, Gmail's 530). It advertises AUTH but is
+// never asked for one — the point of the test is what happens when no login is
+// presented at all.
+func authRequiredSMTP(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+		w := func(s string) { _, _ = conn.Write([]byte(s + "\r\n")) }
+		w("220 test ESMTP")
+		for {
+			line, err := r.ReadString('\n')
+			if err != nil {
+				return
+			}
+			line = strings.TrimRight(line, "\r\n")
+			switch {
+			case strings.HasPrefix(line, "EHLO"):
+				w("250-test")
+				w("250-AUTH PLAIN LOGIN")
+				w("250 SMTPUTF8")
+			case strings.HasPrefix(line, "MAIL"):
+				w("530 5.7.0 Authentication required")
+			case strings.HasPrefix(line, "QUIT"):
+				w("221 bye")
+				return
+			default:
+				w("250 ok")
+			}
+		}
+	}()
+	return ln.Addr().String()
+}
+
+// TestVerifyEmail_AuthRequiredIsDetected is the regression test for the bug
+// this all came from: "Test connection" reported OK for a connection whose
+// credentials were never presented. With no login configured the handshake
+// alone succeeds, so the check has to go one command further — MAIL FROM — and
+// surface the server's refusal.
+func TestVerifyEmail_AuthRequiredIsDetected(t *testing.T) {
+	hfnet.SetAllowPrivateEgress(true)
+	defer hfnet.SetAllowPrivateEgress(false)
+
+	host, port, _ := net.SplitHostPort(authRequiredSMTP(t))
+	err := verifyEmail(context.Background(), map[string]string{
+		"host": host, "port": port, "tls": "none", "from": "me@x.test",
+	})
+	if err == nil || !strings.Contains(err.Error(), "Authentication required") {
+		t.Fatalf("verifyEmail = %v, want the server's auth-required refusal", err)
+	}
+}
+
+// TestVerifyEmail_IncompleteLogin: a stored password with no username used to
+// be silently discarded — no AUTH was attempted and the check passed. It must
+// now name the missing field instead.
+func TestVerifyEmail_IncompleteLogin(t *testing.T) {
+	hfnet.SetAllowPrivateEgress(true)
+	defer hfnet.SetAllowPrivateEgress(false)
+
+	host, port, _ := net.SplitHostPort(scriptedSMTP(t, nil))
+	err := verifyEmail(context.Background(), map[string]string{
+		"host": host, "port": port, "tls": "none", "from": "me@x.test",
+		"password": "secret",
+	})
+	if err == nil || !strings.Contains(err.Error(), "no username") {
+		t.Fatalf("verifyEmail = %v, want a missing-username error", err)
 	}
 }

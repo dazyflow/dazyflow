@@ -14,6 +14,7 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net"
 	"net/mail"
@@ -52,6 +53,51 @@ func SplitSender(from string) (header, envelope string) {
 		return from, parsed.Address
 	}
 	return parsed.String(), parsed.Address
+}
+
+// Auth builds the SMTP authenticator for a configured login, and is the ONE
+// place that decides when a send goes out unauthenticated. Both fields empty
+// means "this relay takes mail without a login" — a legitimate setup (an
+// internal sidecar relay), so it returns a nil Auth and no error.
+//
+// A PARTIALLY filled login is an error, not a nil Auth. It used to be silent:
+// every caller built its own `if username != "" { PlainAuth(...) }`, so a
+// connection carrying a password but no username threw the password away, sent
+// AUTH-less, and reported success — the server either accepted the mail
+// unauthenticated or, on the "Test connection" path, was never asked to rule on
+// the credentials at all. Someone whose credentials had just been rotated saw a
+// green OK for a login that was never presented. Failing loud here means the
+// only way to reach a nil Auth is to configure no login at all.
+//
+// The message names the missing field, since the fix is to fill it in — and
+// mentions clearing the other one, because a relay that wants no login is the
+// other valid resolution.
+func Auth(host, username, password string) (smtp.Auth, error) {
+	username = strings.TrimSpace(username)
+	// A password is deliberately NOT trimmed — leading/trailing spaces can be
+	// part of it. Only its emptiness matters here.
+	switch {
+	case username == "" && password == "":
+		return nil, nil
+	case username == "":
+		return nil, errors.New("a password is set but no username — enter the mail server username (usually your email address), or clear the password if the server takes mail without a login")
+	case password == "":
+		return nil, errors.New("a username is set but no password — enter the mail server password (or an app password), or clear the username if the server takes mail without a login")
+	}
+	return smtp.PlainAuth("", username, password, host), nil
+}
+
+// isLoopbackHost reports whether host names this machine. It mirrors the
+// exemption net/smtp's PlainAuth makes for localhost, so the STARTTLS
+// requirement in dial doesn't refuse a local relay (a mail bridge on
+// 127.0.0.1) that net/smtp would itself have allowed to authenticate in the
+// clear.
+func isLoopbackHost(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // DateHeader is the value of a message's Date: header, in the RFC 5322 form
@@ -101,7 +147,9 @@ func NewMessageID(from string) string {
 
 // dial runs the shared front of the SMTP dance: dial addr (implicit-TLS or
 // plain by mode), apply ctx's deadline (fallback 30s), open a client,
-// opportunistic STARTTLS, and optional AUTH. Both Send and Verify build on it
+// STARTTLS (opportunistic, but mandatory once a login is in play — see the
+// mode=="starttls" branch), and AUTH when auth is non-nil. Whether a nil auth
+// is legitimate is decided by Auth, not here. Both Send and Verify build on it
 // so the handshake can't drift between sending a message and testing a
 // connection. The caller owns Close()/Quit() of the returned client.
 //
@@ -145,12 +193,28 @@ func dial(ctx context.Context, addr, host, mode string, auth smtp.Auth, guard bo
 		return nil, fmt.Errorf("smtp client: %w", err)
 	}
 	if mode == "starttls" {
-		if ok, _ := c.Extension("STARTTLS"); ok {
+		ok, _ := c.Extension("STARTTLS")
+		switch {
+		case ok:
 			if err := c.StartTLS(&tls.Config{ServerName: host}); err != nil {
 				c.Close()
 				return nil, fmt.Errorf("starttls: %w", err)
 			}
+		case auth != nil && !isLoopbackHost(host):
+			// STARTTLS was asked for, the server doesn't offer it, and we hold a
+			// login: sending it now would put the password on the wire in the
+			// clear. net/smtp's PlainAuth refuses this too, but only with a bare
+			// "unencrypted connection" that reads like a client bug — say what
+			// actually happened and what the two real fixes are. Loopback is
+			// exempt for the same reason PlainAuth exempts it: a local mail
+			// bridge has no network to sniff.
+			c.Close()
+			return nil, fmt.Errorf("%s doesn't offer STARTTLS, so the login can't be sent encrypted — use port 465 with connection security \"implicit\", or \"none\" only for a trusted local relay", host)
 		}
+		// No STARTTLS and no login: the mail goes out in the clear, which is
+		// what an unauthenticated internal relay wants. Left as-is on purpose —
+		// making it an error would break relays that have always worked with
+		// the default "starttls" setting and no TLS on the wire.
 	}
 	if auth != nil {
 		if err := c.Auth(auth); err != nil {
@@ -161,16 +225,40 @@ func dial(ctx context.Context, addr, host, mode string, auth smtp.Auth, guard bo
 	return c, nil
 }
 
-// Verify confirms a mail server is reachable and (when auth is set) the login
-// is accepted, by running the dial/STARTTLS/AUTH handshake and then QUIT — no
-// message is sent. Drives the Email integration's "Test connection" button.
-// The target is tenant-supplied, so the SSRF dial guard is always applied.
-func Verify(ctx context.Context, addr, host, mode string, auth smtp.Auth) error {
+// Verify confirms a mail server is reachable, that (when auth is set) the login
+// is accepted, and that the server will take mail FROM the configured sender.
+// It runs the dial/STARTTLS/AUTH handshake, then MAIL FROM + RSET, then QUIT.
+// Drives the Email integration's "Test connection" button. The target is
+// tenant-supplied, so the SSRF dial guard is always applied.
+//
+// The MAIL FROM probe is what makes a pass mean something. The handshake alone
+// proves nothing about authorization when no login is configured — it QUITs
+// having only said EHLO, so a server that refuses every unauthenticated
+// submission still answered "ok" to everything we asked, and the button went
+// green. Every big provider (Microsoft 365's 5.7.57, Gmail, Exim) rejects at
+// MAIL FROM when the session isn't authenticated or the sender isn't one this
+// login may use, so this is the cheapest command that can actually say no.
+//
+// Nothing is delivered: RSET abandons the transaction before any recipient or
+// DATA, so no message and no recipient probe reaches anyone. An empty `from`
+// skips the probe and keeps the old handshake-only behavior, for a caller that
+// has no sender to offer.
+func Verify(ctx context.Context, addr, host, mode string, auth smtp.Auth, from string) error {
 	c, err := dial(ctx, addr, host, mode, auth, true)
 	if err != nil {
 		return err
 	}
 	defer c.Close()
+	// A display name is not a valid reverse-path — the envelope form only,
+	// exactly as Send uses it (see SplitSender).
+	if _, envelope := SplitSender(from); envelope != "" {
+		if err := c.Mail(envelope); err != nil {
+			return fmt.Errorf("mail from %s: %w", envelope, err)
+		}
+		if err := c.Reset(); err != nil {
+			return fmt.Errorf("reset: %w", err)
+		}
+	}
 	return c.Quit()
 }
 

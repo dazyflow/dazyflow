@@ -74,7 +74,7 @@ func TestVerifyBlocksLoopback(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := Verify(ctx, addr, "127.0.0.1", "none", nil); err == nil {
+	if err := Verify(ctx, addr, "127.0.0.1", "none", nil, "from@example.com"); err == nil {
 		t.Fatalf("Verify connected to loopback %s — SSRF dial guard missing", addr)
 	} else if !strings.Contains(err.Error(), "ssrf_blocked") {
 		t.Fatalf("Verify failed for the wrong reason: %v", err)

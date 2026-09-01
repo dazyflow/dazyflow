@@ -10,6 +10,48 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A mail-server login that was never presented reported "OK".** The Email
+  app's "Test connection" went green, and the Email step reported a successful
+  send, for a connection whose credentials the server had never been asked to
+  rule on.
+
+  Two separate holes, both from treating "no username" as "this server needs no
+  login". Three tenant-facing paths had independently grown the same
+  `if username != "" { PlainAuth(...) }` (the Email drop, the connect-time
+  verifier, the email-template test send), so a
+  connection carrying a password but no username — a password field filled in
+  while the username was left blank, the two being separate fields on the same
+  card — threw the password away and opened an unauthenticated session. Any
+  relay that accepts unauthenticated mail then delivered it, and the step
+  reported OK. `smtputil.Auth` is now the one place that decides this: no login
+  at all stays valid (an internal relay), half a login is an error naming the
+  field that is missing.
+
+  The second hole was in verification itself. `smtputil.Verify` ran
+  EHLO/STARTTLS/AUTH and quit, so with no login configured it asserted nothing
+  about authorization — a server that refuses every unauthenticated submission
+  had still answered "ok" to everything we asked it. Verify now offers the
+  configured sender in a `MAIL FROM` and abandons the transaction with `RSET`
+  (no recipient, no `DATA`, nothing delivered), which is the command every big
+  provider uses to say no — Microsoft 365's `5.7.57`, Gmail's and Exim's `530`.
+  A failing login, an unauthenticated session, and a From the server won't let
+  this login use now all fail the check with the server's own words.
+
+  Also: when connection security is `starttls`, the server doesn't offer
+  STARTTLS, and a login is configured, the dial now fails with what actually
+  happened and the two real fixes instead of net/smtp's bare "unencrypted
+  connection". Loopback stays exempt (a local mail bridge), and an
+  unauthenticated relay on the default `starttls` setting keeps working exactly
+  as before — only credentials are held back from a cleartext hop.
+
+  The operator's own Mailer takes its login from `DAZYFLOW_SMTP_URL`, where a
+  username with no password is documented (it doubles as the sender for an
+  unauthenticated relay), so that stays legal; the mirror-image typo
+  `smtp://:password@host` now fails at parse time instead of silently sending
+  unauthenticated.
+
 ## [0.28.7] - 2026-09-01
 
 ### Fixed

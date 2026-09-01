@@ -11,7 +11,6 @@ import (
 	"net"
 	"net/http"
 	"net/mail"
-	"net/smtp"
 	"strconv"
 	"strings"
 	"time"
@@ -31,11 +30,12 @@ func init() {
 }
 
 // verifyEmail dials the configured mail server and runs the SMTP handshake —
-// STARTTLS/implicit TLS as configured, plus AUTH when a username is set — then
-// QUITs without sending anything (smtputil.Verify). It surfaces the common
-// failures in plain language: a bad port/security value, an unreachable or
-// private host (the operator must opt into private egress), or rejected
-// credentials.
+// STARTTLS/implicit TLS as configured, plus AUTH when a login is set — then
+// offers the sender in a MAIL FROM the server can refuse, and QUITs without
+// sending anything (smtputil.Verify). It surfaces the common failures in plain
+// language: a bad port/security value, an unreachable or private host (the
+// operator must opt into private egress), an incomplete login, rejected
+// credentials, or a sender the server won't accept.
 func verifyEmail(ctx context.Context, conn map[string]string) error {
 	host := strings.TrimSpace(conn["host"])
 	if host == "" {
@@ -48,10 +48,11 @@ func verifyEmail(ctx context.Context, conn map[string]string) error {
 	// The From address may carry a display name ("Reports
 	// <reports@example.com>"), which the send splits into header and envelope
 	// forms. Anything that doesn't parse as an address at all would otherwise
-	// only surface much later, as a raw SMTP rejection mid-run — the handshake
-	// below never sends a MAIL FROM, so it can't catch it. Note this is
-	// stricter than the send itself, which passes an unparseable sender through
-	// verbatim and lets the mail server rule on it.
+	// only surface much later, as a raw SMTP rejection mid-run: the probe below
+	// offers the envelope form, and an address that yields no envelope form is
+	// never offered at all. Note this is stricter than the send itself, which
+	// passes an unparseable sender through verbatim and lets the mail server
+	// rule on it.
 	if _, err := mail.ParseAddress(sender); err != nil {
 		return errors.New(`that From address doesn't look right — use "reports@example.com", or "Reports <reports@example.com>" to include a name`)
 	}
@@ -87,12 +88,18 @@ func verifyEmail(ctx context.Context, conn map[string]string) error {
 		return errors.New("that looks like a local/private address — the operator must enable private-network access (DAZYFLOW_ALLOW_PRIVATE_EGRESS) to reach it")
 	}
 
-	var auth smtp.Auth
-	if u := strings.TrimSpace(conn["username"]); u != "" {
-		auth = smtp.PlainAuth("", u, conn["password"], host)
+	// A half-filled login (a password with no username, or the reverse) is
+	// rejected here rather than quietly becoming an unauthenticated session
+	// that this check would then pass — see smtputil.Auth.
+	auth, aerr := smtputil.Auth(host, conn["username"], conn["password"])
+	if aerr != nil {
+		return aerr
 	}
 
-	if err := smtputil.Verify(ctx, addr, host, mode, auth); err != nil {
+	// The sender goes to Verify so it can probe MAIL FROM: with no login
+	// configured, the handshake alone would pass against a server that refuses
+	// every unauthenticated submission.
+	if err := smtputil.Verify(ctx, addr, host, mode, auth, sender); err != nil {
 		return fmt.Errorf("couldn't connect to the mail server: %w", err)
 	}
 	return nil

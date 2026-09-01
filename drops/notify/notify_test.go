@@ -471,3 +471,35 @@ func TestNtfy_EgressBlocked(t *testing.T) {
 		t.Fatalf("res = %+v, want egress_blocked", res)
 	}
 }
+
+// TestExecuteEmail_IncompleteLogin: a connection carrying a password but no
+// username must fail the step, not send the mail unauthenticated and report
+// success. The scripted server here would happily accept the AUTH-less send,
+// which is exactly how the old behavior looked like a working email.
+func TestExecuteEmail_IncompleteLogin(t *testing.T) {
+	hfnet.SetAllowPrivateEgress(true)
+	defer hfnet.SetAllowPrivateEgress(false)
+
+	var sent string
+	host, port, _ := net.SplitHostPort(scriptedSMTP(t, &sent))
+	res, err := executeEmail(context.Background(), core.Job{
+		ID: "j",
+		Params: map[string]any{
+			"host": host, "port": port, "tls": "none",
+			"from": "me@x.test", "password": "secret",
+			"to": "you@x.test", "format": "text",
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if res.Status != core.StatusError || res.Error == nil || res.Error.Code != "not_connected" {
+		t.Fatalf("res = %+v, want a not_connected error", res)
+	}
+	if !strings.Contains(res.Error.Message, "no username") {
+		t.Errorf("message = %q, want it to name the missing username", res.Error.Message)
+	}
+	if sent != "" {
+		t.Errorf("mail was sent anyway: %q", sent)
+	}
+}

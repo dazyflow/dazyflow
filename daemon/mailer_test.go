@@ -285,3 +285,21 @@ func TestCreateInvitation_SendsEmail(t *testing.T) {
 		t.Errorf("path-only link should not be emailed: %s", rw.Body.String())
 	}
 }
+
+// TestNewMailerFromURL_PasswordWithoutUsername: "smtp://:pw@relay" used to
+// silently drop the password and send unauthenticated. It's a typo, and the
+// operator should hear about it at startup.
+func TestNewMailerFromURL_PasswordWithoutUsername(t *testing.T) {
+	if _, err := NewMailerFromURL("smtp://:pw@relay.x.test:587", "hi@x.test"); err == nil {
+		t.Fatal("NewMailerFromURL accepted a password with no username")
+	}
+	// The reverse stays legal: the username doubles as the sender for an
+	// unauthenticated relay.
+	m, err := NewMailerFromURL("smtp://hi@x.test@relay.x.test:25", "")
+	if err != nil {
+		t.Fatalf("username-only URL: %v", err)
+	}
+	if m.From != "hi@x.test" {
+		t.Errorf("From = %q, want the URL's username", m.From)
+	}
+}

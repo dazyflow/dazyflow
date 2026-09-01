@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"net/smtp"
 	"sort"
 	"strconv"
 	"strings"
@@ -384,9 +383,13 @@ func (h *HTTPGateway) sendTestEmail(rw http.ResponseWriter, r *http.Request, p c
 		return
 	}
 
-	var auth smtp.Auth
-	if u := strings.TrimSpace(conn["username"]); u != "" {
-		auth = smtp.PlainAuth("", u, conn["password"], host)
+	// Same rule as the drop and the connect-time check: no login at all is a
+	// valid relay setup, half a login is a mistake — never a silent
+	// unauthenticated send (smtputil.Auth).
+	auth, aerr := smtputil.Auth(host, conn["username"], conn["password"])
+	if aerr != nil {
+		writeJSONError(rw, http.StatusBadRequest, "mail server login is incomplete: "+aerr.Error())
+		return
 	}
 
 	const textAlt = "This is a test of your Dazyflow email template. " +
