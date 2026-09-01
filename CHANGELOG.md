@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.28.7] - 2026-09-01
+
 ### Fixed
 
 - **A passing e2e assertion reported itself as failed, and it read like the MCP
