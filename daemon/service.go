@@ -284,6 +284,14 @@ type Service struct {
 	// graphs. Zero = unlimited. Configured by `-max-graph-nodes`.
 	MaxGraphNodes int
 
+	// MaxGraphEdges rejects a graph with more wires than this. A node
+	// ceiling alone does not bound the work: readiness is re-evaluated per
+	// dependent per completion, so cost scales with edges, and a graph
+	// inside the node limit can carry hundreds of thousands of them.
+	// Operator-wide rather than per-tier (unlike MaxGraphNodes) — no plan
+	// distinguishes flows by wire count. Zero = unlimited.
+	MaxGraphEdges int
+
 	// subtreeBudget caps total descendant runs per root run-tree, bounding
 	// subgraph fan-out (see subgraph_budget.go). Lazily initialized via
 	// subtreeBudgetInst so a zero-value Service literal works.
@@ -815,9 +823,19 @@ func (s *Service) saveGraph(ctx context.Context, p core.Principal, g core.Graph,
 	if err := core.RequireWorkspace(p, g.Tenant, g.Workspace); err != nil {
 		return "", err
 	}
-	if err := core.Validate(g); err != nil {
-		return "", fmt.Errorf("invalid graph: %w", err)
+	// Ahead of everything else so the caller gets "that isn't a usable flow id"
+	// rather than a git error from the store, which enforces the same rule.
+	if err := core.ValidGraphID(g.ID); err != nil {
+		return "", err
 	}
+	// Drop obsolete edges (the folded-away `headers` wires) before validating,
+	// so a flow authored against an older model is brought up to the current
+	// one here rather than in each entry path — the HTTP save handler already
+	// did this, and every other caller of SaveGraph did not.
+	g = core.MigrateGraph(g)
+	// Counting nodes and wires is O(1) per element and validating is not, so
+	// the size ceilings come first: an oversized graph is refused without
+	// being walked at all.
 	// Resource-exhaustion guard at the persistence boundary, mirroring the
 	// run-path check in submitGraphWithSeed: refuse to STORE a graph whose
 	// node count exceeds the tenant's effective ceiling. Without this a tenant
@@ -826,6 +844,13 @@ func (s *Service) saveGraph(ctx context.Context, p core.Principal, g core.Graph,
 	if maxNodes := s.effectiveLimits(ctx, g.Tenant).MaxGraphNodes; maxNodes > 0 && len(g.Nodes) > maxNodes {
 		return "", fmt.Errorf("%w: graph has %d nodes, limit is %d",
 			core.ErrGraphTooLarge, len(g.Nodes), maxNodes)
+	}
+	if s.MaxGraphEdges > 0 && len(g.Edges) > s.MaxGraphEdges {
+		return "", fmt.Errorf("%w: graph has %d connections, limit is %d",
+			core.ErrGraphTooLarge, len(g.Edges), s.MaxGraphEdges)
+	}
+	if err := core.ValidateRuntime(g, s.manifestsSnapshot(g.Tenant)); err != nil {
+		return "", fmt.Errorf("invalid graph: %w", err)
 	}
 	store, err := s.Workspaces.Open(g.Tenant, g.Workspace)
 	if err != nil {
@@ -2086,6 +2111,12 @@ func (s *Service) ListDrops(ctx context.Context, p core.Principal) (map[string]c
 // structural check on that node — so the diagnostic that exists to explain a
 // failure leads with a fabricated one, and hides the real issue behind it.
 func (s *Service) manifestsSnapshot(tenant string) map[string]core.Manifest {
+	// A Service can legitimately have no engine (a store-only instance, a
+	// unit harness): no catalog then, and the callers degrade to the
+	// structural rules rather than failing.
+	if s.Engine == nil || s.Engine.Resolver == nil {
+		return nil
+	}
 	if mp, ok := s.Engine.Resolver.(interface {
 		ManifestsForTenant(string) map[string]core.Manifest
 	}); ok {

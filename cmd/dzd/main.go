@@ -165,6 +165,12 @@ func main() {
 	// real workflows. MAX_CONCURRENT_JOBS is 0 (unlimited) until
 	// per-tenant fairness becomes a real concern.
 	const maxGraphNodes = 1000
+	// Wires, not just steps: readiness is re-evaluated per dependent per
+	// completion, so a graph inside the node ceiling can still carry
+	// hundreds of thousands of connections and cost minutes of CPU per run.
+	// 5000 is ~5 wires per step at the node ceiling — far above any real
+	// flow, far below the pathological ones.
+	const maxGraphEdges = 5000
 	const maxConcurrentJobs = 0
 	slackSigningSecret := envStr("DAZYFLOW_SLACK_SIGNING_SECRET", "")
 	githubWebhookSecret := envStr("DAZYFLOW_GITHUB_WEBHOOK_SECRET", "")
@@ -254,7 +260,7 @@ func main() {
 		}()
 	}
 
-	applyNetworkPolicy(httpEgressAllow, devMode)
+	applyNetworkPolicy(httpEgressAllow, publicBaseURL, httpListen, devMode)
 
 	// Durable stores: keys / sessions / users / jobs all persist to one
 	// shared pgxpool and survive a restart. Declared as interfaces so a
@@ -625,6 +631,7 @@ func main() {
 		Entitlements:           entitlements,
 		MaxGraphTimeoutSeconds: int(maxGraphTimeout.Seconds()),
 		MaxGraphNodes:          maxGraphNodes,
+		MaxGraphEdges:          maxGraphEdges,
 		// EncryptedSecrets is the per-tenant store integration drops
 		// (Gmail OAuth, Claude drop's API key, etc.) read from. Nil
 		// leaves the store CRUD endpoints + secret-dependent drops
@@ -937,9 +944,10 @@ func main() {
 
 // applyNetworkPolicy installs the operator's outbound-network policy: the
 // http_request egress allowlist, the optional private-egress opt-in (which
-// turns the SSRF guard into opt-out), and the SSRF-guarded HTTP transport for
-// git-over-https clones. All three are process-global side effects.
-func applyNetworkPolicy(httpEgressAllow string, devMode bool) {
+// turns the SSRF guard into opt-out), our own origins (so a step calling our
+// own trigger URL is recognizable), and the SSRF-guarded HTTP transport for
+// git-over-https clones. All are process-global side effects.
+func applyNetworkPolicy(httpEgressAllow, publicBaseURL, httpListen string, devMode bool) {
 	if httpEgressAllow != "" {
 		if err := hfnet.SetEgressAllowlist(strings.Split(httpEgressAllow, ",")); err != nil {
 			log.Fatalf("DAZYFLOW_HTTP_EGRESS_ALLOW: %v", err)
@@ -961,6 +969,16 @@ func applyNetworkPolicy(httpEgressAllow string, devMode bool) {
 		hfnet.SetAllowPrivateEgress(true)
 		log.Print("WARNING: DAZYFLOW_ALLOW_PRIVATE_EGRESS=1 — flows may set allow_private_networks to reach private/loopback hosts (SSRF guard becomes opt-out)")
 	}
+	// Tell the HTTP drops which origins are US, so a step calling one of our
+	// own trigger URLs carries the trigger-chain depth (core.TriggerDepthHeader)
+	// and a flow that triggers itself is refused instead of running forever.
+	// Only self-directed requests get the header.
+	//
+	// The address we listen on counts as much as the public name: a flow
+	// reaching the daemon at http://localhost:8642 is triggering itself just
+	// as surely as one using the public URL, and where the operator has
+	// enabled private egress that call goes through.
+	hfnet.SetSelfOrigins(append(listenOrigins(httpListen), publicBaseURL)...)
 	// Route git-over-https clones (git_checkout / git_log) through an
 	// SSRF-guarded client (blocks private/loopback/link-local at dial, e.g.
 	// cloud metadata), so a clone URL can't be used to reach internal services.
@@ -2674,4 +2692,18 @@ func postgresConnectHint(err error) string {
 			"  job on a retry: `docker compose down -v` recreates it (deletes data, safe on a first boot)."
 	}
 	return ""
+}
+
+// listenOrigins turns a bind address (":8642", "0.0.0.0:8642") into the
+// origins a flow could reach this daemon on locally. Both schemes: the
+// gateway may be plain HTTP behind a proxy or terminating TLS itself, and
+// recognizing an origin we do not serve costs nothing — these are addresses
+// on our own machine either way.
+func listenOrigins(httpListen string) []string {
+	_, port, err := net.SplitHostPort(strings.TrimSpace(httpListen))
+	if err != nil || port == "" {
+		return nil
+	}
+	// SetSelfOrigins expands the other loopback spellings itself.
+	return []string{"http://localhost:" + port, "https://localhost:" + port}
 }

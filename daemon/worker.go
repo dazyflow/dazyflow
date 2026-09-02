@@ -121,6 +121,12 @@ type Worker struct {
 	engine     *engine.Engine
 	bus        Bus
 	dispatcher *Dispatcher
+	// graphs caches the parsed graph of the last few runs this worker
+	// touched — see fetchGraph.
+	graphs runGraphCache
+	// runState accumulates stored result bytes per run — the ceiling that
+	// stops one payload being amplified across a long chain of steps.
+	runState runStateMeter
 	// SubGraphRunner is optional. When nil and a module's manifest has
 	// SubmitsChildGraph=true, the worker still parks the node but logs
 	// a warning — the graph will hang because no one will submit the
@@ -319,6 +325,31 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 		return
 	}
 
+	// Deferral path: the module has nothing to do until a known time and
+	// asked for its slot back. Requeue with that horizon — Claim skips the
+	// record until it passes — and take other work. No result is written and
+	// no dependent advances: the node is still unfinished, it is simply not
+	// occupying a worker while it waits.
+	//
+	// This is what keeps a Wait step from being a stop button. The pool is
+	// serial and small, so a step that only sleeps used to hold one of the
+	// daemon's few slots for its whole duration, and enough of them in one
+	// flow stalled every tenant.
+	if runErr == nil {
+		if at, ok := core.ResumeAt(result); ok {
+			if rerr := w.store.Requeue(jobCtx, rec.ID, at); rerr != nil {
+				// Fenced or gone: the lease is already dropped, so leave the
+				// record for the expired-lease reclaim rather than writing
+				// over whoever owns it now.
+				w.cfg.Logger.Printf("[%s] defer %s: %v", w.cfg.ID, rec.ID, rerr)
+				return
+			}
+			w.cfg.Logger.Printf("[%s] %s deferred until %v; slot released",
+				w.cfg.ID, rec.ID, at.Format(time.RFC3339Nano))
+			return
+		}
+	}
+
 	// Pause path: the module asked to be parked until an external resume
 	// call. Write status=awaiting and drop the lease. The steps that need the
 	// DECISION wait for the resume call (Service.Approve, or — for subgraph
@@ -377,6 +408,30 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 	status := core.JobStatusSucceeded
 	if runErr != nil || result.Status == core.StatusError {
 		status = core.JobStatusFailed
+	}
+
+	// Per-run state ceiling. Every step stores its own copy of what it
+	// emitted, and the universal pass pin threads a payload through the whole
+	// chain, so one big value becomes payload × steps of stored run state —
+	// with the per-value ceiling alone, gigabytes at the node limit. Charge
+	// each result against the run's budget and fail the step that crosses it,
+	// so the run stops instead of filling the store.
+	if status == core.JobStatusSucceeded {
+		if total, ok := w.runState.charge(rec.GraphRunID, resultStateBytes(&result)); !ok {
+			status = core.JobStatusFailed
+			result = core.Result{
+				JobID:  rec.ID,
+				Status: core.StatusError,
+				Error: &core.JobError{
+					Code: "run_state_too_large",
+					Message: fmt.Sprintf(
+						"this run has stored about %d MiB of step results, over the %d MiB limit — "+
+							"pass a reference or a single field between steps instead of a large value, "+
+							"or raise DAZYFLOW_MAX_RUN_STATE_BYTES",
+						total>>20, core.MaxRunStateBytes()>>20),
+				},
+			}
+		}
 	}
 
 	// Record execution latency for any node that reached a terminal
@@ -570,6 +625,21 @@ func (w *Worker) runNode(ctx context.Context, graph core.Graph, rec core.JobReco
 		// check below, and run the node with NO deadline.
 		timeout = secondsToDuration(node.TimeoutSeconds)
 	}
+	// Trigger-chain depth reaches the step through the context: an HTTP step
+	// that calls one of our own trigger URLs stamps depth+1 on the request,
+	// so a flow triggering itself is refused at the endpoint instead of
+	// running forever.
+	ctx = core.WithTriggerDepth(ctx, w.runTriggerDepth(ctx, rec.GraphRunID))
+	// The anchor a deferring step measures its wait from. It survives a
+	// requeue, so a Wait that hands its slot back computes the same deadline
+	// on every re-execution — see core.WithNodeEnqueuedAt.
+	ctx = core.WithNodeEnqueuedAt(ctx, rec.EnqueuedAt)
+	// The author's own timeout, separate from the deadline below — a step that
+	// defers is not bound by a context deadline it returns before, so it has to
+	// be able to see what the author actually asked for.
+	if node, ok := graph.Node(rec.NodeID); ok {
+		ctx = core.WithNodeTimeout(ctx, secondsToDuration(node.TimeoutSeconds))
+	}
 	execCtx := ctx
 	var cancelDeadline context.CancelFunc
 	if timeout > 0 {
@@ -633,31 +703,69 @@ func (w *Worker) bodyRunner(body core.Graph, graphRunID string) engine.BodyRunne
 		// reclaiming the parent run's scratch removes every item subdir with it.
 		itemRunID := fmt.Sprintf("%s/i%d", graphRunID, seq.Add(1)-1)
 		ctx = engine.WithLoopRunID(ctx, itemRunID)
+		// A body step has no job record of its own and Engine.Run has no queue
+		// to requeue into, so clear the deferral anchor: a Wait in a loop body
+		// waits inline (bounded by the for_each node's own timeout) rather than
+		// deferring into a resume that would never come.
+		ctx = core.WithNodeEnqueuedAt(ctx, time.Time{})
 		return w.engine.Run(engine.WithLoopItem(ctx, item.Inline), g, nil)
 	}
 }
 
-// fetchGraph loads the graph payload from the graph-record.
+// fetchGraph loads the graph payload from the graph-record, reusing the
+// last few runs' parsed graphs. A run's payload is pinned at submit time, so
+// re-decoding it for every node was the single largest cost of running a
+// large flow: the whole graph JSON, once per step.
 func (w *Worker) fetchGraph(ctx context.Context, graphRunID string) (core.Graph, error) {
-	return loadGraphFromRun(ctx, w.store, graphRunID)
+	if run, ok := w.graphs.get(graphRunID); ok {
+		return run.graph, nil
+	}
+	g, rec, err := loadRunFromStore(ctx, w.store, graphRunID)
+	if err != nil {
+		return core.Graph{}, err
+	}
+	w.graphs.put(graphRunID, cachedRun{graph: g, triggerDepth: rec.TriggerDepth})
+	return g, nil
+}
+
+// runTriggerDepth is how deep the trigger chain that started this run was.
+// Steps that call one of our own trigger URLs stamp depth+1 on the request
+// so the endpoint can refuse a chain that has gone too far — see
+// core.TriggerDepthHeader.
+func (w *Worker) runTriggerDepth(ctx context.Context, graphRunID string) int {
+	if run, ok := w.graphs.get(graphRunID); ok {
+		return run.triggerDepth
+	}
+	rec, err := w.store.Get(ctx, graphRunID)
+	if err != nil {
+		return 0
+	}
+	return rec.TriggerDepth
 }
 
 // loadGraphFromRun reads a graph-run record from the store and unmarshals
 // its embedded graph payload. Shared by Worker and Dispatcher so the
 // "get record → check payload → unmarshal" sequence lives in one place.
 func loadGraphFromRun(ctx context.Context, store core.JobStore, graphRunID string) (core.Graph, error) {
+	g, _, err := loadRunFromStore(ctx, store, graphRunID)
+	return g, err
+}
+
+// loadRunFromStore is loadGraphFromRun plus the record itself, for callers
+// that also need the run's own metadata (its trigger-chain depth).
+func loadRunFromStore(ctx context.Context, store core.JobStore, graphRunID string) (core.Graph, core.JobRecord, error) {
 	graphRec, err := store.Get(ctx, graphRunID)
 	if err != nil {
-		return core.Graph{}, fmt.Errorf("get graph-record %s: %w", graphRunID, err)
+		return core.Graph{}, core.JobRecord{}, fmt.Errorf("get graph-record %s: %w", graphRunID, err)
 	}
 	if len(graphRec.GraphPayload) == 0 {
-		return core.Graph{}, fmt.Errorf("graph-record %s has no payload", graphRunID)
+		return core.Graph{}, graphRec, fmt.Errorf("graph-record %s has no payload", graphRunID)
 	}
 	var g core.Graph
 	if err := json.Unmarshal(graphRec.GraphPayload, &g); err != nil {
-		return core.Graph{}, fmt.Errorf("unmarshal graph %s: %w", graphRunID, err)
+		return core.Graph{}, graphRec, fmt.Errorf("unmarshal graph %s: %w", graphRunID, err)
 	}
-	return g, nil
+	return g, graphRec, nil
 }
 
 // fetchPredecessors collects the Result of every node that feeds into rec.NodeID,

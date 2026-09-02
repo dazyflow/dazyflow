@@ -51,7 +51,9 @@ func TestBreakpoint_PauseThenContinue(t *testing.T) {
 			{From: "a", FromPort: "pass", To: "b", ToPort: "pass"},
 		},
 	}
-	graphRunID, err := h.svc.SubmitGraph(t.Context(), h.principal, g)
+	// Manual: a breakpoint only pauses a run somebody started and is watching,
+	// which is what the editor's Run button submits.
+	graphRunID, err := h.svc.SubmitGraphOpts(t.Context(), h.principal, g, daemon.SubmitOpts{Manual: true})
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
@@ -78,6 +80,38 @@ func TestBreakpoint_PauseThenContinue(t *testing.T) {
 	// Resuming a run that's no longer paused is a conflict.
 	if err := h.svc.ResumeGraphRun(t.Context(), h.principal, graphRunID, false); err == nil {
 		t.Fatal("ResumeGraphRun on a finished run should error")
+	}
+}
+
+// A run nobody started by hand runs straight through its breakpoints. The
+// breakpoint lives in the saved graph, so a published flow carries it into
+// every fire of its trigger — and a paused run is deliberately never reaped
+// (the reaper reads its un-dispatched dependents as work still outstanding),
+// so honouring one on an unattended run left a non-terminal run behind for
+// good, holding a concurrency slot with it.
+func TestBreakpoint_UnattendedRunDoesNotPause(t *testing.T) {
+	t.Parallel()
+	h := newWorkerHarness(t, 1)
+
+	g := core.Graph{
+		ID: "bptrigger", Tenant: "t", Workspace: "ws",
+		Nodes: []core.Node{
+			{ID: "a", Module: "delay", Params: map[string]any{"ms": 5}, Breakpoint: true},
+			{ID: "b", Module: "delay", Params: map[string]any{"ms": 5}},
+		},
+		Edges: []core.Edge{
+			{From: "a", FromPort: "pass", To: "b", ToPort: "pass"},
+		},
+	}
+	// No Manual: this is the shape every trigger submits (scheduler, webhook,
+	// hosted form).
+	graphRunID, err := h.svc.SubmitGraph(t.Context(), h.principal, g)
+	if err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	terminal := waitForTerminalEvent(t, h.bus, h.jobs, graphRunID, 10*time.Second)
+	if terminal.Status != core.JobStatusSucceeded {
+		t.Fatalf("status = %q, want succeeded — an unattended run must not park on a breakpoint", terminal.Status)
 	}
 }
 

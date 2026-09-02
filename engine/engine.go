@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"maps"
 	"reflect"
+	"sort"
 	"sync"
 
 	"go.opentelemetry.io/otel/trace"
@@ -480,6 +481,18 @@ func (e *Engine) buildAndExecute(
 	if result.JobID == "" {
 		result.JobID = job.ID
 	}
+	// Byte ceiling on what a step emits, checked before the value reaches the
+	// job store or the next step. An uncapped value compounds — a step that
+	// references its predecessor twice doubles it — and the eventual failure
+	// is a runtime out-of-memory throw that no recover catches, so it takes
+	// the whole daemon down rather than this one node.
+	if oversize := oversizedOutput(result.Output); oversize != nil {
+		result = core.Result{
+			JobID:  result.JobID,
+			Status: core.StatusError,
+			Error:  &core.JobError{Code: "value_too_large", Message: oversize.Error()},
+		}
+	}
 	core.ApplyPassthrough(job.Input, &result)
 	// Scrub resolved secret values from the result before it leaves the
 	// engine (and lands in the job store / run-detail UI).
@@ -490,6 +503,26 @@ func (e *Engine) buildAndExecute(
 		recordSpanError(span, fmt.Errorf("%s: %s", result.Error.Code, result.Error.Message))
 	}
 	return result, execErr
+}
+
+// oversizedOutput returns the first output port whose value passes the
+// per-value ceiling, or nil when every port is within it.
+func oversizedOutput(out map[string]core.Ref) *ValueTooLargeError {
+	ports := make([]string, 0, len(out))
+	for port := range out {
+		ports = append(ports, port)
+	}
+	sort.Strings(ports) // stable message when several ports are oversized
+	for _, port := range ports {
+		if size, too := core.RefTooLarge(out[port]); too {
+			return &ValueTooLargeError{
+				What:  fmt.Sprintf("output %q", port),
+				Size:  size,
+				Limit: core.MaxValueBytes(),
+			}
+		}
+	}
+	return nil
 }
 
 // AssembleInput walks incoming edges and builds the Job.Input map by reading

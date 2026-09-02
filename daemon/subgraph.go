@@ -98,7 +98,25 @@ func (s *Service) SubmitChild(
 	// place. graph:admin lets this synthetic principal bypass the
 	// child's visibility regardless of ownership.
 	principal := SystemPrincipal("dazyflow-subgraph", parentRec.Tenant, parentRec.Workspace)
-	return s.submitGraphWithParent(ctx, principal, g, seeds, parentRec.ID)
+	return s.submitGraphWithParent(ctx, principal, g, seeds, parentRec.ID, s.runTriggerDepth(ctx, parentRec.GraphRunID))
+}
+
+// runTriggerDepth is the trigger-chain depth stamped on a graph run, 0 when
+// the record can't be read. A child must inherit it: the depth is what the
+// HTTP drop stamps on a call to one of our own trigger URLs, so a child that
+// started from zero would let `A → subgraph B → HTTP-trigger A` cycle forever
+// — each hop resetting the counter that is supposed to stop it, and each
+// webhook run being a fresh top-level tree the subgraph lineage walk and the
+// fan-out budget can't connect to the last one.
+func (s *Service) runTriggerDepth(ctx context.Context, graphRunID string) int {
+	if graphRunID == "" {
+		return 0
+	}
+	run, err := s.Jobs.Get(ctx, graphRunID)
+	if err != nil {
+		return 0
+	}
+	return run.TriggerDepth
 }
 
 // submitGraphWithParent mirrors SubmitGraphWithSeed but stamps the
@@ -111,21 +129,29 @@ func (s *Service) submitGraphWithParent(
 	g core.Graph,
 	seeds map[string]core.Result,
 	parentNodeRecID string,
+	triggerDepth int,
 ) (string, error) {
 	if err := core.AuthorizeGraphRun(p, g); err != nil {
 		return "", err
 	}
-	if err := core.Validate(g); err != nil {
-		return "", fmt.Errorf("invalid graph: %w", err)
-	}
-	if err := validateLoopBodies(g); err != nil {
-		return "", fmt.Errorf("invalid graph: %w", err)
-	}
+	// Counting nodes and wires is O(1) per element and validating is not, so
+	// the size ceilings come first: an oversized graph is refused without
+	// being walked at all.
 	// Resource-exhaustion guard, mirroring SubmitGraphWithSeed: a child graph
 	// is no less able to exhaust the daemon than a top-level one.
 	if maxNodes := s.effectiveLimits(ctx, g.Tenant).MaxGraphNodes; maxNodes > 0 && len(g.Nodes) > maxNodes {
 		return "", fmt.Errorf("%w: graph has %d nodes, limit is %d",
 			core.ErrGraphTooLarge, len(g.Nodes), maxNodes)
+	}
+	if s.MaxGraphEdges > 0 && len(g.Edges) > s.MaxGraphEdges {
+		return "", fmt.Errorf("%w: graph has %d connections, limit is %d",
+			core.ErrGraphTooLarge, len(g.Edges), s.MaxGraphEdges)
+	}
+	if err := core.ValidateRuntime(g, s.manifestsSnapshot(g.Tenant)); err != nil {
+		return "", fmt.Errorf("invalid graph: %w", err)
+	}
+	if err := validateLoopBodies(g); err != nil {
+		return "", fmt.Errorf("invalid graph: %w", err)
 	}
 	// Killswitch parity: orgSuspended is the authoritative halt for every run
 	// entry point. Unlike the billing quota (which children intentionally
@@ -160,6 +186,7 @@ func (s *Service) submitGraphWithParent(
 		GraphPayload:    payload,
 		Job:             core.Job{ID: graphRunID, GraphID: g.ID},
 		ParentNodeRecID: parentNodeRecID,
+		TriggerDepth:    triggerDepth,
 	}
 	if err := s.Jobs.Enqueue(ctx, graphRec); err != nil {
 		return "", fmt.Errorf("enqueue child graph: %w", err)

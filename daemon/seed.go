@@ -102,6 +102,10 @@ type SubmitOpts struct {
 	// Manual marks a run a person started from the app and is watching. See
 	// core.JobRecord.Manual for what it changes and why it is persisted.
 	Manual bool
+	// TriggerDepth is how deep the trigger chain that reached this
+	// submission already is — set by the trigger endpoints from the inbound
+	// core.TriggerDepthHeader. See core.JobRecord.TriggerDepth.
+	TriggerDepth int
 }
 
 // SubmitGraphOpts is the one implementation the other two delegate to.
@@ -115,18 +119,32 @@ func (s *Service) SubmitGraphOpts(
 	if err := core.AuthorizeGraphRun(p, g); err != nil {
 		return "", err
 	}
-	if err := core.Validate(g); err != nil {
-		return "", fmt.Errorf("invalid graph: %w", err)
-	}
-	if err := validateLoopBodies(g); err != nil {
-		return "", fmt.Errorf("invalid graph: %w", err)
-	}
+	// Same migration the save path applies: a run submitted straight from an
+	// older client's payload should not fail on a wire the model no longer has.
+	g = core.MigrateGraph(g)
+	// Counting nodes and wires is O(1) per element and validating is not, so
+	// the size ceilings come first: an oversized graph is refused without
+	// being walked at all.
 	// Resource-exhaustion guard: refuse a graph whose node count exceeds
 	// the tenant's effective ceiling (tier/override, falling back to the
 	// global MaxGraphNodes) before allocating any run state.
 	if maxNodes := s.effectiveLimits(ctx, g.Tenant).MaxGraphNodes; maxNodes > 0 && len(g.Nodes) > maxNodes {
 		return "", fmt.Errorf("%w: graph has %d nodes, limit is %d",
 			core.ErrGraphTooLarge, len(g.Nodes), maxNodes)
+	}
+	if s.MaxGraphEdges > 0 && len(g.Edges) > s.MaxGraphEdges {
+		return "", fmt.Errorf("%w: graph has %d connections, limit is %d",
+			core.ErrGraphTooLarge, len(g.Edges), s.MaxGraphEdges)
+	}
+	// The full wiring gate, not just the structural one: the run path cannot
+	// honour a wiring the data model can't represent (a second wire into a
+	// single-value input silently wins), so a graph that reaches a worker has
+	// to have passed the same port rules the editor shows.
+	if err := core.ValidateRuntime(g, s.manifestsSnapshot(g.Tenant)); err != nil {
+		return "", fmt.Errorf("invalid graph: %w", err)
+	}
+	if err := validateLoopBodies(g); err != nil {
+		return "", fmt.Errorf("invalid graph: %w", err)
 	}
 	// Plan gate (T3): free-tier tenants get FreeRunsPerMonth runs per
 	// calendar month; over the cap the submission is refused with
@@ -150,6 +168,15 @@ func (s *Service) SubmitGraphOpts(
 	// gate does (the parent was already admitted).
 	if s.orgSuspended(ctx, g.Tenant) {
 		return "", core.ErrOrgSuspended
+	}
+	// Trigger-chain breaker: this run was set off by another run's step
+	// calling one of our own trigger URLs. Each such run is top-level, so
+	// the subgraph depth cap and fan-out budget — which walk parent links
+	// within one run tree — cannot see the cycle; refuse past the cap
+	// instead, before any state is written.
+	if opts.TriggerDepth >= core.MaxTriggerChainDepth {
+		return "", fmt.Errorf("%w: %d runs deep (max %d) — a flow is triggering itself",
+			core.ErrTriggerLoop, opts.TriggerDepth, core.MaxTriggerChainDepth)
 	}
 	// Validate seed targets exist in the graph before any state writes.
 	for nodeID := range seeds {
@@ -205,6 +232,7 @@ func (s *Service) SubmitGraphOpts(
 		Status:       initialStatus,
 		GraphPayload: payload,
 		Manual:       opts.Manual,
+		TriggerDepth: opts.TriggerDepth,
 		Job:          core.Job{ID: graphRunID, GraphID: g.ID},
 	}
 	if err := s.Jobs.Enqueue(ctx, graphRec); err != nil {

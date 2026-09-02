@@ -386,7 +386,7 @@ func (s *Scheduler) rescan(ctx context.Context) error {
 			if pub, err := store.PublishedCommit(gid); err != nil || pub == "" {
 				continue
 			}
-			for triggerIdx, t := range g.Triggers {
+			for _, t := range g.Triggers {
 				var entry *scheduledGraph
 				switch t.Type {
 				case "cron":
@@ -415,11 +415,15 @@ func (s *Scheduler) rescan(ctx context.Context) error {
 					continue
 				}
 
-				// Key includes the trigger index so a graph with both a
-				// cron AND a poll trigger gets two scheduler entries (one
-				// per trigger) instead of clobbering one with the other.
-				k := fmt.Sprintf("%s/%s/%s#%d", tenant, workspace, gid, triggerIdx)
-				if existing, ok := s.tracked[k]; ok && !existing.scheduleAt.IsZero() && existing.specKey == entry.specKey {
+				// Keyed by the schedule itself, so a flow with two different
+				// schedules gets two entries while identical triggers collapse
+				// into one. Keying by array index instead gave every duplicate
+				// its own entry — and its own fire — so one saved flow could
+				// run itself as many times a minute as it had copies. An edited
+				// expression is a different key, hence a new entry anchored from
+				// now, which is what makes a tightened schedule take effect.
+				k := fmt.Sprintf("%s/%s/%s#%s", tenant, workspace, gid, entry.specKey)
+				if existing, ok := s.tracked[k]; ok && !existing.scheduleAt.IsZero() {
 					entry.scheduleAt = existing.scheduleAt
 				} else {
 					entry.scheduleAt = entry.nextFireFrom(now)

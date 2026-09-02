@@ -181,6 +181,11 @@ export type Port = {
   port: string;
   label?: string;
   variadic?: boolean;
+  // min / max bound a variadic input's wire count. An absent max means the
+  // server's DEFAULT_MAX_VARIADIC_FAN_IN, not "unbounded". A non-variadic
+  // input takes exactly one wire — see inputHasRoom.
+  min?: number;
+  max?: number;
   mime?: string[];
   required?: boolean;
   // list marks a port that carries a LIST of records (set centrally on
@@ -269,6 +274,11 @@ export type Manifest = {
   node_state?: { label: string; reset_hint?: string };
   awaits_approval?: boolean;
   submits_child_graph?: boolean;
+  // dynamic_ports means the drop's real ports are named by its own params
+  // (Reusable flow's input_map), so `inputs`/`outputs` are placeholders. Each
+  // such port still carries ONE value, which is why the canvas holds an
+  // undeclared pin on these drops to a single wire.
+  dynamic_ports?: boolean;
   // requires_connections lists the credentials a drop needs before it
   // can run — drives the per-integration "Connection" configure widget.
   requires_connections?: ConnectionRequirement[];
@@ -839,6 +849,9 @@ export type WorkspaceLimits = {
   tenant: string;
   quota?: { used_bytes?: number; limit_bytes: number };
   max_graph_nodes: number;
+  // 0 = unlimited. Caps wires, which drive dispatch cost independently of
+  // step count.
+  max_graph_edges?: number;
   max_graph_timeout_seconds: number;
 };
 

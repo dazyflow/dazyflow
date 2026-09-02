@@ -159,7 +159,7 @@ func TestWorker_DisabledSkipAdvancesRunDespiteCancelledCtx(t *testing.T) {
 			{ID: "off", Module: "delay", Params: map[string]any{"ms": 1}, Disabled: true},
 			{ID: "tail", Module: "delay", Params: map[string]any{"ms": 1}},
 		},
-		Edges: []core.Edge{{From: "off", FromPort: "out", To: "tail", ToPort: "in"}},
+		Edges: []core.Edge{{From: "off", FromPort: "pass", To: "tail", ToPort: "pass"}},
 	}, "off")
 
 	h.w.processNodeJob(cancelledCtx(), h.rec)
@@ -186,7 +186,7 @@ func TestWorker_FailNodeAdvancesRunDespiteCancelledCtx(t *testing.T) {
 			{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}},
 			{ID: "b", Module: "delay", Params: map[string]any{"ms": 1}},
 		},
-		Edges: []core.Edge{{From: "a", FromPort: "out", To: "b", ToPort: "in"}},
+		Edges: []core.Edge{{From: "a", FromPort: "pass", To: "b", ToPort: "pass"}},
 	}
 	h := newShutdownHarness(t, g, "a")
 

@@ -63,6 +63,7 @@ func (h *limitsAPI) workspaceLimits(rw http.ResponseWriter, r *http.Request, p c
 	out := map[string]any{
 		"tenant":                    p.Tenant,
 		"max_graph_nodes":           h.svc.MaxGraphNodes,          // 0 = unlimited
+		"max_graph_edges":           h.svc.MaxGraphEdges,          // 0 = unlimited
 		"max_graph_timeout_seconds": h.svc.MaxGraphTimeoutSeconds, // 0 = no ceiling
 	}
 	// Per-tenant disk quota, when a quota provider is wired.

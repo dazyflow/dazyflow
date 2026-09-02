@@ -56,6 +56,16 @@ func approvalParamApprovers(params map[string]any) []string {
 		}
 		seen[addr] = true
 		out = append(out, addr)
+		// One message per address, sent serially on the worker goroutine that
+		// parked the run — and through the OPERATOR'S mailer, not a connected
+		// account the author had to authorize. Nothing else bounded the list:
+		// 650,000 addresses fit inside the graph byte budget, notified twice
+		// (park, then decision). Cap it where it is read, so both notifiers and
+		// any later reader get the same list; core.ValidateGraphFull tells the
+		// author at save time.
+		if len(out) >= core.MaxApprovalRecipients {
+			break
+		}
 	}
 	return out
 }
@@ -136,7 +146,11 @@ func (s *Service) NotifyApprovalRequested(ctx context.Context, graph core.Graph,
 	if len(to) == 0 {
 		return
 	}
-	name := flowDisplayName(graph, graph.ID)
+	// The name is the mail SUBJECT, so it is bounded far tighter than a body:
+	// a header line past RFC 5321's 1000 octets makes the server drop the
+	// connection, and a flow whose approval mail never sends is a run its
+	// approvers are never told about and nobody can unblock.
+	name := core.ClipNotificationLabel(flowDisplayName(graph, graph.ID))
 	runURL := buildRunURL(s.PublicBaseURL, graph.Tenant, runID)
 
 	// approvalURL is the signed one-click link, and it only exists when the
@@ -159,7 +173,7 @@ func (s *Service) NotifyApprovalRequested(ctx context.Context, graph core.Graph,
 		link, linkLabel, shareWarning = approvalsURL, m.ApprovalOpenInbox, false
 	}
 
-	facts := []emailtheme.Fact{{Label: m.FactFlow, Value: name}, {Label: m.FactStep, Value: nodeID}}
+	facts := []emailtheme.Fact{{Label: m.FactFlow, Value: name}, {Label: m.FactStep, Value: core.ClipNotificationLabel(nodeID)}}
 	// The run's own URL used to appear only in the plain-text half of this
 	// message, so an HTML reader never got it. As a fact it reaches both,
 	// while the button stays the thing that actually decides the approval.
@@ -168,8 +182,12 @@ func (s *Service) NotifyApprovalRequested(ctx context.Context, graph core.Graph,
 	}
 	intro := []string{fmt.Sprintf(m.ApprovalIntro, name)}
 	if prompt != "" {
-		// The prompt is the flow author's own words — never translated.
-		intro = append(intro, prompt)
+		// The prompt is the flow author's own words — never translated. Bounded
+		// though: it is read off the run result, so the value ceiling (64 MiB)
+		// was its only limit, and it goes out once per recipient in two bodies.
+		// The full text is on the Approvals inbox and the run page, both of
+		// which this mail links to.
+		intro = append(intro, core.ClipNotificationText(prompt))
 	}
 	// The don't-forward warning is only true of the signed link, which is a
 	// bearer capability. The run page is access-controlled, so saying it there
@@ -211,7 +229,11 @@ func (s *Service) NotifyApprovalDecided(
 	if len(to) == 0 {
 		return
 	}
-	name := flowDisplayName(graph, graph.ID)
+	// The name is the mail SUBJECT, so it is bounded far tighter than a body:
+	// a header line past RFC 5321's 1000 octets makes the server drop the
+	// connection, and a flow whose approval mail never sends is a run its
+	// approvers are never told about and nobody can unblock.
+	name := core.ClipNotificationLabel(flowDisplayName(graph, graph.ID))
 	runURL := buildRunURL(s.PublicBaseURL, graph.Tenant, runID)
 	m := maillang.For(flowLang(graph))
 	approved := decision.Decision == "approve"

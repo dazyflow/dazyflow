@@ -199,7 +199,7 @@ func TestPerNode_FailedPredecessorAbortsDescendants(t *testing.T) {
 			{ID: "b", Module: "delay", Params: map[string]any{"ms": 5}},
 		},
 		Edges: []core.Edge{
-			{From: "a", FromPort: "out", To: "b", ToPort: "in"},
+			{From: "a", FromPort: "out", To: "b", ToPort: "pass"},
 		},
 	}
 	graphRunID, err := h.svc.SubmitGraph(t.Context(), h.principal, g)
@@ -539,5 +539,63 @@ func TestWorker_FailNodeWhenGraphUnloadable(t *testing.T) {
 	}
 	if nodeRec.Result == nil || nodeRec.Result.Error == nil || nodeRec.Result.Error.Code != "load_graph" {
 		t.Fatalf("node error = %+v, want code=load_graph", nodeRec.Result.Error)
+	}
+}
+
+// A worker is a serial claim → process loop and the pool is small
+// (DAZYFLOW_WORKER_COUNT defaults to 2), so a step that only WAITS used to hold
+// one of the daemon's few execution slots for its whole duration — two of them
+// in one flow stopped every tenant's runs. A long wait now defers
+// (core.StatusDeferred): the worker requeues the node at its horizon and takes
+// other work, so the slot is free while the flow waits.
+func TestDeferredNode_ReleasesTheWorkerSlot(t *testing.T) {
+	t.Parallel()
+	h := newWorkerHarness(t, 1)
+
+	waiter := core.Graph{
+		ID: "waiter", Tenant: "t", Workspace: "ws",
+		Nodes: []core.Node{{ID: "slow", Module: "delay", Params: map[string]any{"ms": 4000}}},
+	}
+	waitRun, err := h.svc.SubmitGraph(t.Context(), h.principal, waiter)
+	if err != nil {
+		t.Fatalf("submit the waiter: %v", err)
+	}
+
+	// The wait must be handed back rather than served: the node goes queued
+	// with a future horizon, not running.
+	deadline := time.Now().Add(3 * time.Second)
+	var rec core.JobRecord
+	for time.Now().Before(deadline) {
+		rec, _ = h.jobs.Get(t.Context(), daemon.NodeJobID(waitRun, "slow"))
+		if rec.Status == core.JobStatusQueued && rec.AvailableAt != nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if rec.Status != core.JobStatusQueued || rec.AvailableAt == nil {
+		t.Fatalf("waiting node status=%q availableAt=%v, want queued with a horizon",
+			rec.Status, rec.AvailableAt)
+	}
+
+	// With the only worker free, an unrelated flow runs while the first waits.
+	other := core.Graph{
+		ID: "bystander", Tenant: "t", Workspace: "ws",
+		Nodes: []core.Node{{ID: "a", Module: "text", Params: map[string]any{"text": "hi"}}},
+	}
+	otherRun, err := h.svc.SubmitGraph(t.Context(), h.principal, other)
+	if err != nil {
+		t.Fatalf("submit the bystander: %v", err)
+	}
+	start := time.Now()
+	if got := waitForTerminalEvent(t, h.bus, h.jobs, otherRun, 3*time.Second); got.Status != core.JobStatusSucceeded {
+		t.Fatalf("bystander status = %q", got.Status)
+	}
+	if waited := time.Since(start); waited > 2*time.Second {
+		t.Errorf("the bystander waited %v behind a waiting flow", waited)
+	}
+
+	// And the wait still finishes on its own once the horizon passes.
+	if got := waitForTerminalEvent(t, h.bus, h.jobs, waitRun, 15*time.Second); got.Status != core.JobStatusSucceeded {
+		t.Errorf("waiter status = %q, want succeeded", got.Status)
 	}
 }

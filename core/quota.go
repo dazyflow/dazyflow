@@ -48,10 +48,16 @@ type QuotaReporter interface {
 // errors.Is to surface a friendly "quota_exceeded" result.
 var ErrQuotaExceeded = errors.New("quota exceeded")
 
-// ErrGraphTooLarge is returned when a submitted graph's node count
-// exceeds the operator's configured ceiling — a resource-exhaustion
-// guard checked before any run state is allocated.
-var ErrGraphTooLarge = errors.New("graph exceeds node limit")
+// ErrGraphTooLarge is returned when a submitted graph exceeds one of the
+// operator's size ceilings — node count or connection count — a
+// resource-exhaustion guard checked before any run state is allocated.
+var ErrGraphTooLarge = errors.New("graph exceeds size limit")
+
+// ErrTriggerLoop is returned when a submission is refused because the
+// trigger chain that reached it is too deep — a flow triggering itself,
+// directly or through another flow. Callers match it with errors.Is to
+// answer 429 rather than a generic error.
+var ErrTriggerLoop = errors.New("trigger loop")
 
 // ErrPlanLimit is returned when a run submission is rejected by the
 // tenant's billing plan (free-tier monthly run cap). Callers match it

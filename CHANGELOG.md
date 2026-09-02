@@ -10,7 +10,290 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Security
+
+- **An Approval step could aim the deployment's own mail server at hundreds of
+  thousands of strangers.** The people an Approval step notifies are typed into
+  one field as a list, and nothing limited how long that list was — about
+  650,000 addresses fit in a flow. Each one gets its own message, sent one
+  after another, twice per approval: once when the run pauses and once when
+  someone decides. That mail goes out through the operator's own mail server
+  rather than an account the flow's author connected, so anyone who can save a
+  flow could send from the deployment's address to anywhere. Sending them also
+  happens on the worker that paused the run, so a long list held one of the two
+  default workers for hours while the rest of the flows waited. A step now
+  notifies at most 50 people, and one flow at most 200 across all of its
+  Approval steps — splitting the list across several steps buys nothing,
+  because they all pause in the same run. The editor says so when you save.
+
+- **The question an Approval step asks, and the error a failed run reports,
+  had no length limit in the messages carrying them.** Both are produced while
+  the flow runs rather than typed into the canvas, so the limit on how much a
+  flow may carry never applied to them — only the much larger limit on a single
+  value. Each is rendered into both halves of an email and sent once per
+  recipient, so a four-megabyte question pushed forty-four megabytes through
+  the mail server for five approvers; the failure text also travels to whatever
+  webhook a flow names. Both are now cut to a readable length in the message
+  itself. Nothing is lost: the email exists to carry the link, and the
+  Approvals inbox and the run page still show the whole thing.
+
+- **A long flow name stopped its own emails from being sent at all.** The
+  flow's name becomes the subject line of the approval and failure emails, and
+  nothing limited its length. A subject far past what the mail protocol allows
+  on one line makes the receiving server hang up, so the message was never
+  delivered — which meant a flow waiting on an approval sat there with nobody
+  told it was waiting and no way for anyone to release it, and failure alerts
+  went missing the same way. Neither failure was visible anywhere. The name and
+  the step name in these messages are now shortened to fit.
+
+- **A flow's comment boxes and its trigger list weren't weighed, so a
+  one-step flow could be a gigabyte.** The ceiling on how much a flow may
+  carry counts every free-form string in it — settings, labels, notes, the
+  names of steps and connections. It missed one field on each of the two
+  records a flow repeats: the internal id of a canvas comment box, and a
+  trigger's type. Nothing else bounds either (the engine ignores comment
+  boxes entirely, and the scheduler skips a trigger type it doesn't
+  recognize), and the caps beside them limit how *many* boxes and triggers a
+  flow has, not how big one is. A flow with a thousand comment boxes was
+  1.0 GiB and measured as ten bytes; it saved, published, and cost 280 MiB
+  of run history for a single one-step run — every time it fired. Both
+  fields are now weighed with the rest.
+
+- **A hosted form's field names had no length limit, so one link answered
+  an unauthenticated request with 60 MB.** The hosted form is the only page
+  in the product a stranger can open without a credential, and its field
+  count was capped after an earlier report. The length of a field *name*
+  was not, and the page prints each name four times — so fifty fields named
+  three hundred thousand characters each fit inside the flow size limit and
+  amplified fourfold on every visit, repeatable by anyone with the link. A
+  field name is now capped at 128 characters and the heading at 200; a
+  longer name isn't shown, and the editor says so when you save.
+
+- **A step supplied by a runner could raise its own connection limit.** How
+  many connections one input accepts defaults to 64, unless the step
+  declares its own maximum — and a step registered by a self-hosted runner
+  or an MCP host declares that over the wire, where it was taken as given.
+  One declaring a maximum of a million restored the unlimited fan-in the
+  default exists to prevent, for exactly the steps the canvas can't see.
+  A declared maximum is now honoured only up to 1024.
+
+- **A flow could still trigger itself forever — through the Webhook step, its
+  own failure webhook, or a second spelling of its own address.** The breaker
+  that stops a self-triggering flow is a depth header stamped on a call that
+  comes back to us, and it was written by one drop out of the several that can
+  post to a URL of the author's choosing. Built with the **Webhook** step —
+  whose entire purpose is POSTing to a URL — the same loop ran again from one
+  anonymous form submission. Pointed at its own form, a flow's *failure*
+  webhook was a loop with no step in it at all, at around a hundred and twenty
+  runs a second, because the daemon posts that one itself and the flood
+  throttle beside it covers only the email channels. And "is this us?" was a
+  string comparison against the configured public URL, so writing out the
+  default port, adding the DNS root dot, or using the address the daemon
+  answers on inside its container all read as a third party. The stamp now
+  lives in the HTTP client every outbound call shares — including the failure
+  webhook, and including each hop of a redirect — it is set rather than filled
+  in, so a step cannot hold the chain at zero from its own headers, and the
+  comparison normalizes the origin and covers every address the daemon is
+  reachable at.
+
+- **A flow could trigger itself forever through its own hosted form.** The
+  self-triggering webhook loop was closed with a trigger-chain depth header
+  that the `/trigger` endpoint refuses past — but the hosted form submitted at
+  depth 0 unconditionally, so a flow whose HTTP step posted to its own
+  `/form/` URL ran without limit, and that is the door that needs no secret at
+  all: one anonymous submission, runs climbing for as long as the daemon was
+  up. The form endpoint now carries the depth like every other trigger path.
+
+- **A Wait step held one of the daemon's execution slots for its whole
+  duration.** A worker claims and runs one node at a time, and the pool
+  defaults to two across every tenant, so two parallel Wait steps in a single
+  flow stopped everyone's runs for as long as their author typed — sixty
+  queued two-second waits left an unrelated one-step flow unfinished after
+  forty-five seconds. A wait now hands its slot back and asks to be picked up
+  again at its deadline, so the flow waits without occupying anything. A
+  timeout set on the step still applies: a wait that cannot fit inside it is
+  refused instead of running past it.
+
+- **The graph size ceiling did not weigh identifiers.** It measured settings,
+  labels, notes and frame titles, and skipped node IDs and module names as
+  already bounded by the node and connection ceilings — which bound how MANY
+  there are, not how long each one is. Nothing validates a node ID (only the
+  flow ID is checked), and a step outside the catalog has no port rules at
+  all, so the same oversized flow the ceiling exists to refuse came back with
+  its payload moved into the names: a hundred steps carrying 256 KiB IDs is
+  26 MB that measured as 500 bytes, held up only by the 200 MiB request cap
+  meant for file uploads. Every string a caller supplies is now charged.
+
+- **The trigger cap counted the trigger list, not the trigger steps.** A
+  schedule lives on the step now, and the scheduler gives each step its own
+  entry — it has to, since each keeps its own cursor — so pasting two hundred
+  identical Schedule steps produced two hundred entries and a hundred runs a
+  minute, bounded only by the step ceiling of a thousand. Trigger steps and
+  declared triggers now share the same cap of 32.
+
+- **A hosted form rendered as many fields as the flow declared.** A
+  submission was capped at fifty fields, but the page was not: a form
+  declaring a hundred thousand answered a single unauthenticated GET with
+  9 MB and over a second of CPU, from a flow well inside every other limit.
+  The page now shows at most the fifty a submission could carry, and the
+  editor says so while the form is being built.
+
+- **One saved flow could fire itself two thousand times a minute.** Nothing
+  capped how many triggers a flow declares, and the scheduler keyed each
+  entry by its position in the trigger array — so pasting the same
+  `* * * * *` schedule 2000 times produced 2000 scheduler entries and 2000
+  runs a minute, from a graph of 1.7 MB that validated clean. A flow now
+  declares at most 32 triggers, and identical schedules collapse into one
+  entry.
+
+- **The fan-in rule was skipped for exactly the steps it could not see.**
+  Port rules come from a module's manifest, and a module outside this
+  instance's catalog has none — that is deliberate, since a tenant's runner
+  and MCP steps are registered elsewhere. But fan-in needs no port list: the
+  engine assembles one value per port wherever the step runs, so 300 wires
+  into one input of a runner step were stored, run, and reduced to whichever
+  value happened to be read last, with nothing reported. Fan-in now applies
+  to such a step on both the server and the canvas. A port NAME we have no
+  description for is still accepted — that part is the step's own business.
+
+- **Nothing weighed a graph.** Every ceiling counted things — nodes, wires,
+  frames, waypoints per wire — so a flow inside all of them still reached
+  156 MB of step settings, labels and frame titles, and wrote 208 MB of run
+  records, bounded only by the request cap that exists for file uploads. A
+  graph's own payload is now capped at 16 MiB, and a connection's routing
+  knots are capped in total as well as per wire (the per-wire cap alone left
+  1.28M of them reachable, about 21 MB in every run record).
+
+- **A flow ID was a path and a git ref name, validated nowhere.** It becomes
+  `graphs/<id>.json` in the workspace repository and a component of the tag
+  that marks a published revision, and no gate checked it: `a/../../escape`
+  saved a flow outside `graphs/` that could then never be loaded, published
+  or deleted; `.` and `..` saved one under a nonsense name; an ID with a
+  space saved but could never be published, because a git ref may not contain
+  one; and a 300-character ID worked in memory and failed on disk. IDs are
+  now letters, digits, `-`, `_` and `.`, up to 128 characters, checked at the
+  save gate and again in the store every writer goes through.
+
+- **The value ceiling was blind to a list of step results, so the doubling
+  bomb still worked.** Both guards that enforce it — the per-value check and
+  the per-run state budget — measure with `core.ApproxValueSize`, which
+  charged a *struct* one word without walking its fields. Merge emits a list
+  of Refs (so does For each's `results`), so an 18 MB value measured as 16
+  bytes and sailed past a 1 MiB ceiling. Wiring each Merge into the next
+  doubled the payload per hop with no templates involved: 21 ordinary steps
+  stored a gigabyte, and the out-of-memory throw that follows is not a panic
+  — no recover catches it, so one tenant's flow ends every other tenant's
+  runs. A Ref is now charged for its strings and whatever it carries inline,
+  and a struct's exported fields are walked rather than assumed small.
+
+- **A subgraph hop reset the trigger-chain counter.** The cap that stops a
+  flow triggering itself lives on the run record, and a child run was created
+  without it — so `A → Reusable flow B → B calls A's trigger URL` cycled
+  forever, each hop setting the counter back to zero and each new webhook run
+  being a fresh top-level tree that neither the nesting cap nor the fan-out
+  budget could connect to the last one. A child now inherits its parent's
+  depth.
+
 ### Fixed
+
+- **A breakpoint left behind runs that never ended.** Breakpoints live in the
+  saved flow, and the dispatcher honoured them on every run — including the
+  ones a schedule or webhook starts with nobody watching. A paused run is
+  never reaped (its un-dispatched dependents read as work still outstanding)
+  and counts against the workspace's concurrency, so a published flow with a
+  breakpoint quietly accumulated runs no one would ever continue, and could
+  take every concurrency slot for good. A breakpoint now holds only a run you
+  started and are watching; stepping through a run is unaffected.
+
+- **Wiring rules that nothing enforced.** A Reusable flow step was exempt from
+  *every* port check, fan-in included, because its real ports come from its
+  own settings — so 200 wires could land on one of its inputs and 199 values
+  were silently dropped. Fan-in needs no port list, so it now applies there
+  too. A variadic input with no declared maximum was bounded only by the
+  5000-connection graph cap; it now takes 64 unless its port says otherwise.
+  The same wire drawn twice is refused wherever it lands, including on a
+  variadic pin, where duplicates used to accumulate freely. The canvas
+  applies all three while you drag, so a wire that won't save won't draw.
+
+- **Editor metadata was uncapped.** A connection's routing knots and a flow's
+  comment boxes ride in the graph JSON that every run record carries and the
+  worker re-parses on each dispatch pass, but neither was bounded by the node
+  or connection caps — a two-step flow could carry tens of thousands of each.
+  Both are now capped, and the size ceilings are checked before a graph is
+  walked, so an oversized one is refused without being validated first.
+
+- **One flow could take the whole daemon down.** Nothing capped the SIZE of a
+  value a step emits. A step whose text names its predecessor twice doubles
+  the payload, so a chain of about twenty such steps — a flow well inside
+  every existing limit — turned a kilobyte into gigabytes and killed the
+  process with a runtime out-of-memory throw. That is not a panic: no recover
+  catches it, so one tenant's flow ended every other tenant's runs too.
+
+  A single value is now bounded at both ends — when a template expands into
+  it and when a step emits it — and the step that crosses the ceiling fails
+  with `value_too_large` naming the placeholder that did it. The run as a
+  whole is bounded too: every step stores its own copy of what it emitted and
+  the pass pin threads a payload down the chain, so one large value became
+  payload × steps of stored run state; past that budget the run stops with
+  `run_state_too_large`. Both are configurable — `DAZYFLOW_MAX_VALUE_BYTES`
+  (64 MiB) and `DAZYFLOW_MAX_RUN_STATE_BYTES` (1 GiB). Row *count* was already
+  capped; this caps bytes.
+
+- **A flow could trigger itself forever.** A published webhook flow whose HTTP
+  step calls its own trigger URL ran until someone noticed: each iteration is
+  a fresh top-level run, so the subgraph nesting cap and the fan-out budget —
+  which follow parent links inside one run tree — never saw it. The same holds
+  for two flows firing each other.
+
+  A step calling one of *our own* URLs now carries how deep the trigger chain
+  already is, and the trigger endpoint refuses past eight, answering 429. The
+  header goes only to this instance's own public origin
+  (`DAZYFLOW_PUBLIC_BASE_URL`), so nothing about a run's topology reaches a
+  third party.
+
+### Fixed
+
+- **Connections the editor called invalid were still saved and run.** The
+  port-level rules — a single-value input takes one wire, a variadic one
+  respects its max, an edge names ports that exist and whose types meet, an
+  `on_error` is one of the four policies — ran in the editor and in the
+  in-process engine, but the daemon's save and run paths checked only the
+  structural ones. So a flow with two hundred wires into one input saved,
+  ran, and reported **success**: the engine keeps whichever wire it read last,
+  and the author is never told which value arrived. A typo'd `on_error`
+  silently degraded to abort, dropping the failure handling that was asked
+  for.
+
+  Both paths now apply the same wiring gate. Two authoring rules stay out of
+  it deliberately: an unconnected required input (a work-in-progress state the
+  step reports better itself at run time) and a module missing from the
+  catalog (a tenant's runner and MCP drops live outside the default palette).
+  A step whose ports come from its params — a Reusable flow's input/output map
+  — is exempt from the port rules, which also silences a false "port does not
+  exist" the editor had been showing on those.
+
+  On the canvas the second wire into a single-value input no longer sticks,
+  the same way a type-incompatible wire already didn't.
+
+- **A large flow cost minutes of CPU per run.** Readiness was re-derived by
+  scanning every edge in the graph and re-reading a record per edge — for
+  every dependent, after every step finished — while each step re-parsed the
+  whole graph payload. Four hundred steps that do nothing took 2m43s, and
+  against Postgres each of those re-reads is a query. A run's wiring is now
+  indexed once and each predecessor read once per pass, and a worker keeps
+  the parsed graph: the same flow takes 5s, and the dispatcher no longer
+  writes a log line per dependent per completion (a wide fan-in buried the log
+  in thousands of "waiting" lines; `DAZYFLOW_DEBUG_DISPATCH=1` brings them
+  back).
+
+  Connections are also capped now — 5000 per flow. The node ceiling never
+  bounded the work, because cost scales with wires: two steps can carry half a
+  million of them.
+
+- **"Wait 292 years" completed instantly.** `Wait` multiplied milliseconds
+  into nanoseconds without an overflow check, so past ~9.2e12 the duration
+  wrapped and the step reported success without waiting at all. Anything over
+  a year is now refused with a message pointing at the Schedule trigger.
 
 - **Tidy could not be reached when you needed it.** The editor's toolbar has a
   scrolling left half so the pinned actions — Run, Publish — never slide off

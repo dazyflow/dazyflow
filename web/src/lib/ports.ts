@@ -120,6 +120,47 @@ export function portsConnectable(
   return mimeCompatible(out.mime, inp.mime);
 }
 
+// DEFAULT_MAX_VARIADIC_FAN_IN mirrors core.DefaultMaxVariadicFanIn: the
+// ceiling on a variadic input whose port declares no max of its own. Every
+// wire is a value the run assembles and stores, so "unset" cannot mean
+// unlimited on either side.
+export const DEFAULT_MAX_VARIADIC_FAN_IN = 64;
+
+// MAX_VARIADIC_FAN_IN mirrors core.MaxVariadicFanIn: the ceiling no manifest
+// can raise. A declared max is the drop's own business, but a manifest is not
+// always ours — a runner's or an MCP host's arrives over the wire and is taken
+// as given, so an unclamped max put fan-in back where it was before the
+// default existed.
+export const MAX_VARIADIC_FAN_IN = 1024;
+
+// inputHasRoom reports whether an input port can take ANOTHER wire, given how
+// many it already has. A single-value input takes exactly one: the engine
+// assembles a node's input by walking its edges and keeping the last one it
+// reads, so a second wire silently wins over the first and the author is
+// never told which value arrived. A variadic input takes its declared max,
+// or DEFAULT_MAX_VARIADIC_FAN_IN.
+//
+// An undeclared pin is permissive, matching portsConnectable — with two
+// exceptions, both of which the server enforces, so without them the canvas
+// would draw wires the save refuses and the author would see a failed autosave
+// instead of a wire that won't stick. A dynamic-ports drop's pins are real
+// ports named by its own params and carry one value each. And a drop this
+// instance has no manifest for at all (catalogued=false — a runner or MCP step
+// registered elsewhere) gets the same treatment: the engine assembles one value
+// per port whether or not a manifest was available.
+export function inputHasRoom(
+  targetInputs: Port[] | undefined,
+  targetHandle: string | null | undefined,
+  existing: number,
+  dynamicPorts = false,
+  catalogued = true,
+): boolean {
+  const inp = targetInputs?.find((p) => p.port === (targetHandle ?? "in"));
+  if (!inp) return dynamicPorts || !catalogued ? existing < 1 : true;
+  if (!inp.variadic) return existing < 1;
+  return existing < Math.min(inp.max ?? DEFAULT_MAX_VARIADIC_FAN_IN, MAX_VARIADIC_FAN_IN);
+}
+
 // pickPort chooses which port on the spawned drop to auto-wire to. The
 // passthrough pin is untyped and sits first, so a naive "first compatible
 // port" would always land on it — but when you drag a Text output onto a

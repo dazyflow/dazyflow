@@ -178,7 +178,7 @@ func TestApplyNetworkPolicy_DevModeNoFatal(t *testing.T) {
 	// exercises the env-driven branches without touching the network.
 	t.Setenv("DAZYFLOW_ALLOW_PRIVATE_EGRESS", "0")
 	t.Setenv("DAZYFLOW_EGRESS_RATE_PER_MIN", "")
-	applyNetworkPolicy("", true)
+	applyNetworkPolicy("", "", ":8642", true)
 }
 
 // The dev remote spec has to name a tenant, because the catalog is keyed by
@@ -213,5 +213,24 @@ func TestParseRemoteEntry(t *testing.T) {
 					desc.Tenant, desc.ID, tc.tenant, tc.id)
 			}
 		})
+	}
+}
+
+// The address the gateway binds is one of the origins that reach us: a flow
+// posting to http://localhost:<port> is triggering this daemon, whatever the
+// public base URL says. Both loopback spellings count.
+func TestListenOrigins(t *testing.T) {
+	got := listenOrigins("0.0.0.0:8642")
+	want := []string{"http://localhost:8642", "https://localhost:8642"}
+	if len(got) != len(want) {
+		t.Fatalf("listenOrigins = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("listenOrigins[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+	if o := listenOrigins(""); o != nil {
+		t.Errorf("no listen address configured: got %v, want nil", o)
 	}
 }

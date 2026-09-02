@@ -415,6 +415,15 @@ type Manifest struct {
 	// terminates. Only subgraph sets it today.
 	SubmitsChildGraph bool `json:"submits_child_graph,omitempty" xml:"submits_child_graph,omitempty"`
 
+	// DynamicPorts signals that this module's real ports are named by its
+	// PARAMS, not by the manifest: subgraph's input_map/output_map decide
+	// which parent ports exist for a given step. Validation skips the
+	// port-existence, MIME and fan-in rules on such a node — the declared
+	// in/out pair is a placeholder for the editor, not the contract — so a
+	// legitimate reusable-flow step isn't reported as wired to a port that
+	// "doesn't exist".
+	DynamicPorts bool `json:"dynamic_ports,omitempty" xml:"dynamic_ports,omitempty"`
+
 	// NoPassthrough opts a drop OUT of the universal value-passthrough pin
 	// (WithPassthrough). The pin makes sense on linear processing drops that
 	// carry a single payload, but is wrong on two roles that set this:

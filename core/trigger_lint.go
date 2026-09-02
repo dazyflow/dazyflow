@@ -11,6 +11,27 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
+// MaxHostedFormFields caps how many fields one hosted form declares. The
+// page renders every one of them on every anonymous GET, so an uncapped list
+// is an amplifier on the only endpoint that needs no credential. It is also
+// the cap on a SUBMISSION (daemon.maxFormFields), which is what makes it the
+// honest number here: a field past it could never be filled in anyway.
+const MaxHostedFormFields = 50
+
+// MaxHostedFormFieldLen caps how long ONE declared field name may be. Capping
+// the count alone bounded the wrong half: a name has no natural length, the
+// page emits each one four times (for=, the label text, id= and name=), and
+// the only ceiling left was the 16 MiB graph budget the names are charged
+// against — so 50 names of 300 KB answered one unauthenticated GET with 60 MB
+// in 0.6s, four times what the graph stores, repeatable by anyone holding the
+// link. Generous for a real field name, which is a form label a person reads.
+const MaxHostedFormFieldLen = 128
+
+// MaxHostedFormTitleLen caps the hosted form's heading, which the same
+// anonymous GET renders. Same reasoning as the field names, one copy rather
+// than four.
+const MaxHostedFormTitleLen = 200
+
 // MaxPollIntervalSeconds caps a poll trigger's interval. Beyond this,
 // IntervalSeconds * time.Second would overflow time.Duration's int64
 // nanoseconds (~292 years) and make the scheduler fire every tick. The
@@ -161,6 +182,27 @@ func lintTriggers(g Graph) []LintIssue {
 			issues = append(issues, nodeTriggerIssue("trigger_webhook_no_secret", n.ID,
 				"This Webhook step can't receive anything yet, so the flow will never start on its own. Open the Webhook step and either turn on \"Host a form for me\" (anyone with the link can submit), or press Generate under \"For developers\" to create the secret key other systems must send when they call this flow."))
 		}
+		// The hosted page renders only the first MaxHostedFormFields, and a
+		// submission carries no more than that either — so say so here rather
+		// than letting the owner publish a form whose tail silently never
+		// appears and could never be filled in.
+		names := formFieldNames(n.Params)
+		if declared := len(names); declared > MaxHostedFormFields {
+			issues = append(issues, nodeTriggerIssue("trigger_form_too_many_fields", n.ID,
+				fmt.Sprintf("This Webhook step's hosted form declares %d fields, but a form shows and accepts at most %d — the rest are ignored. Remove the extras, or collect them in one field.",
+					declared, MaxHostedFormFields)))
+		}
+		// The page drops a name longer than the cap rather than rendering it,
+		// for the same reason the tail past MaxHostedFormFields never appears:
+		// it is an amplifier on the one endpoint that needs no credential. Say
+		// so here, so the owner isn't left with a field that silently never
+		// shows up. Reported once with a count — a generated list can be all of
+		// them, and one issue per field would drown the panel.
+		if over := countOver(names, MaxHostedFormFieldLen); over > 0 {
+			issues = append(issues, nodeTriggerIssue("trigger_form_field_name_too_long", n.ID,
+				fmt.Sprintf("This Webhook step's hosted form has %d field name(s) longer than %d characters, which the form won't show. Shorten them — a field name is the label someone reads above the box.",
+					over, MaxHostedFormFieldLen)))
+		}
 	}
 
 	// A flow shouldn't carry BOTH a Schedule node and a graph-level cron
@@ -181,6 +223,35 @@ func lintTriggers(g Graph) []LintIssue {
 			"This flow has both a Schedule step and a graph-level schedule, so it will run twice at each scheduled time. Keep the Schedule step and remove the graph-level schedule on the Triggers → Schedule tab."))
 	}
 	return issues
+}
+
+// countOver reports how many of names exceed max characters.
+func countOver(names []string, max int) int {
+	n := 0
+	for _, s := range names {
+		if len(s) > max {
+			n++
+		}
+	}
+	return n
+}
+
+// formFieldNames reads a webhook_input node's declared hosted-form fields,
+// tolerating the []any of strings JSON unmarshalling produces.
+func formFieldNames(params map[string]any) []string {
+	switch arr := params["form_fields"].(type) {
+	case []string:
+		return arr
+	case []any:
+		out := make([]string, 0, len(arr))
+		for _, it := range arr {
+			if s, ok := it.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+	return nil
 }
 
 // nodeTriggerIssue builds a trigger lint finding attributed to a specific

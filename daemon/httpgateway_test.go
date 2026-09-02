@@ -1555,7 +1555,7 @@ func TestHTTPGateway_SaveGraph_IncludesLintInResponse(t *testing.T) {
 			{ID: "save", Module: "file_write", Params: map[string]any{"path": "out.txt"}},
 		},
 		Edges: []core.Edge{
-			{From: "call", To: "save", FromPort: "body", ToPort: "data"},
+			{From: "call", To: "save", FromPort: "response_body", ToPort: "in"},
 		},
 	}
 	rw := h.do(t, "PUT", "/api/v1/me/flows/t%2Fws%2Fleaky", g)

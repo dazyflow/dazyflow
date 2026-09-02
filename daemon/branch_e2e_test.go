@@ -63,7 +63,9 @@ func TestBranch_RoutesThroughDispatch(t *testing.T) {
 			g := core.Graph{
 				ID: "branch-" + c.name, Tenant: "t", Workspace: "ws",
 				Nodes: []core.Node{
-					{ID: "source", Module: "delay", Params: map[string]any{"ms": 1}},
+					// Swapped for numeric_source below, which is what the
+					// `out` wires belong to.
+					{ID: "source", Module: "numeric_source"},
 					// The check is split out (Compare → Branch): Compare turns
 					// the numeric value into a boolean, Branch just routes.
 					{ID: "check", Module: "compare", Params: map[string]any{
@@ -80,15 +82,11 @@ func TestBranch_RoutesThroughDispatch(t *testing.T) {
 					// is the payload routed on branch.in.
 					{From: "check", FromPort: "result", To: "decide", ToPort: "condition"},
 					{From: "source", FromPort: "out", To: "decide", ToPort: "in"},
-					{From: "decide", FromPort: "then", To: "yes", ToPort: "in"},
-					{From: "decide", FromPort: "else", To: "no", ToPort: "in"},
+					{From: "decide", FromPort: "then", To: "yes", ToPort: "pass"},
+					{From: "decide", FromPort: "else", To: "no", ToPort: "pass"},
 				},
 			}
-			// Override the source's output by hand: sleep doesn't actually
-			// emit a numeric value. Use a custom registered module.
-			// (Simpler approach: just check the branch node itself.)
-
-			// Replace source with a numeric emitter for this test.
+			// The source is a per-case numeric emitter registered below.
 			reg := engine.NewRegistry()
 			_ = reg.Register(engine.NativeDrop{
 				Manifest: core.Manifest{
@@ -132,8 +130,6 @@ func TestBranch_RoutesThroughDispatch(t *testing.T) {
 				ID: "wl", PollInterval: 5 * time.Millisecond, MaxRetries: 1,
 			}, localJobs, localEng, localBus)
 			go func() { _ = localW.Run(localCtx) }()
-
-			g.Nodes[0].Module = "numeric_source"
 
 			runID, err := localSvc.SubmitGraph(t.Context(), p, g)
 			if err != nil {

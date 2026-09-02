@@ -170,6 +170,21 @@ func TestFireGraph_HappyPath(t *testing.T) {
 	}
 }
 
+// onlyEntry returns the scheduler's single tracked entry, failing if there is
+// any other number of them.
+func onlyEntry(t *testing.T, s *Scheduler) *scheduledGraph {
+	t.Helper()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.tracked) != 1 {
+		t.Fatalf("tracked = %d entries, want exactly 1", len(s.tracked))
+	}
+	for _, e := range s.tracked {
+		return e
+	}
+	return nil
+}
+
 // TestRescan_CronEditRecomputesScheduleAt is the regression test for the
 // cron-edit-takes-effect bug: editing a published flow's cron must recompute
 // the next fire on the next rescan, not keep the stale next-fire from the old
@@ -195,11 +210,9 @@ func TestRescan_CronEditRecomputesScheduleAt(t *testing.T) {
 	if err := sched.rescan(context.Background()); err != nil {
 		t.Fatalf("rescan 1: %v", err)
 	}
-	const key = "acme/ws1/edit#0"
-	before := sched.tracked[key]
-	if before == nil {
-		t.Fatalf("entry %q not enrolled", key)
-	}
+	// Entries are keyed by the schedule itself, so an edit replaces the entry
+	// rather than updating it in place — read the flow's only entry either way.
+	before := onlyEntry(t, sched)
 	if before.scheduleAt.Year() != 2027 {
 		t.Fatalf("yearly first fire = %v, want 2027", before.scheduleAt)
 	}
@@ -212,10 +225,7 @@ func TestRescan_CronEditRecomputesScheduleAt(t *testing.T) {
 	if err := sched.rescan(context.Background()); err != nil {
 		t.Fatalf("rescan 2: %v", err)
 	}
-	after := sched.tracked[key]
-	if after == nil {
-		t.Fatalf("entry %q dropped after edit", key)
-	}
+	after := onlyEntry(t, sched)
 	if !after.scheduleAt.Before(before.scheduleAt) {
 		t.Errorf("scheduleAt not recomputed after cron edit: before=%v after=%v", before.scheduleAt, after.scheduleAt)
 	}
@@ -369,5 +379,40 @@ func TestRun_StartupDoesNotCollapsePollStagger(t *testing.T) {
 	}
 	if a.scheduleAt.Equal(b.scheduleAt) {
 		t.Errorf("startup collapsed both poll flows onto %v; rescan's stagger was re-anchored away", a.scheduleAt)
+	}
+}
+
+// Identical schedules on one flow collapse into a single scheduler entry.
+// Entries used to be keyed by position in the trigger array, so every copy got
+// its own entry and its own fire: 2000 pasted "* * * * *" triggers were 2000
+// runs a minute from one saved flow.
+func TestRescan_IdenticalCronTriggersCollapse(t *testing.T) {
+	t.Parallel()
+	svc, wsStore, _ := fireGraphSvc(t)
+	g := core.Graph{
+		ID: "many", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{{ID: "a", Module: "delay", Params: map[string]any{"ms": 0}}},
+		Triggers: []core.GraphTrigger{
+			{Type: "cron", Cron: "* * * * *"},
+			{Type: "cron", Cron: "* * * * *"},
+			{Type: "cron", Cron: "* * * * *"},
+			{Type: "cron", Cron: "0 9 * * *"},            // a different schedule
+			{Type: "cron", Cron: "0 9 * * *", TZ: "UTC"}, // and a different zone
+		},
+	}
+	commit, err := wsStore.Save(g, "test")
+	if err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if err := wsStore.PromoteToEnvironment(g.ID, workspace.PublishedEnv, commit); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+
+	sched := NewScheduler(svc)
+	if err := sched.rescan(context.Background()); err != nil {
+		t.Fatalf("rescan: %v", err)
+	}
+	if got := sched.TrackedCount(); got != 3 {
+		t.Fatalf("tracked = %d, want 3 (one per distinct schedule)", got)
 	}
 }

@@ -29,10 +29,17 @@ type Substituter func(ctx context.Context, scheme, path string) (string, bool, e
 // SubstituteString replaces every ${scheme.path} occurrence in s using
 // substituter. Unknown schemes are left as-is so unrelated text (JSON
 // templates, shell snippets) survives unchanged.
+//
+// Expansion is capped at core.MaxValueBytes: a template may reference a
+// large upstream value several times, and each reference multiplies it, so
+// an uncapped expansion is how a flow compounds a kilobyte into an
+// out-of-memory throw. Passing the cap fails the node instead.
 func SubstituteString(ctx context.Context, s string, substituter Substituter) (string, error) {
 	if !strings.Contains(s, "${") {
 		return s, nil
 	}
+	limit := core.MaxValueBytes()
+	projected := len(s)
 	var firstErr error
 	out := placeholderPattern.ReplaceAllStringFunc(s, func(match string) string {
 		if firstErr != nil {
@@ -46,6 +53,11 @@ func SubstituteString(ctx context.Context, s string, substituter Substituter) (s
 			return match
 		}
 		if !ok {
+			return match
+		}
+		projected += len(v) - len(match)
+		if projected > limit {
+			firstErr = &ValueTooLargeError{What: fmt.Sprintf("${%s.%s}", scheme, path), Size: projected, Limit: limit}
 			return match
 		}
 		return v
@@ -70,4 +82,19 @@ func secretSubstituter(providers map[string]core.SecretProvider) Substituter {
 		}
 		return v, true, nil
 	}
+}
+
+// ValueTooLargeError reports a value that passed the core.MaxValueBytes
+// ceiling. Typed so the engine can tag the node failure "value_too_large"
+// (an author error with an obvious fix) rather than the secret catch-all.
+type ValueTooLargeError struct {
+	What  string // the placeholder or port that produced it
+	Size  int
+	Limit int
+}
+
+func (e *ValueTooLargeError) Error() string {
+	return fmt.Sprintf("%s produces %d bytes, over the %d-byte per-value limit — "+
+		"reference a single field instead of the whole value, or raise DAZYFLOW_MAX_VALUE_BYTES",
+		e.What, e.Size, e.Limit)
 }

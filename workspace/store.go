@@ -183,8 +183,11 @@ func (s *Store) SaveCoalescing(graph core.Graph, author string) (string, error) 
 }
 
 func (s *Store) save(graph core.Graph, author string, coalesce bool) (string, error) {
-	if graph.ID == "" {
-		return "", errors.New("graph.ID required")
+	// The ID becomes a path here and a git ref name at publish time, so it is
+	// checked at the store boundary: every writer (the API, dzctl, MCP, the
+	// flow generator, git sync) reaches the repository through this method.
+	if err := core.ValidGraphID(graph.ID); err != nil {
+		return "", err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()

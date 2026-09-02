@@ -30,6 +30,65 @@ func (o OnError) Valid() bool {
 	return false
 }
 
+// Ceilings on the editor-only metadata that rides in the graph JSON. The
+// node and connection caps don't see it, but every run record carries a copy
+// and the worker re-parses it on each dispatch pass — cost paid repeatedly
+// for bytes the engine never reads.
+//
+// MaxEdgeWaypoints bounds ONE wire and MaxGraphWaypoints the whole graph:
+// per-wire alone left 1.28M waypoints reachable at the connection ceiling
+// (5000 x 256), which is ~21 MiB of routing knots in every run record.
+const (
+	MaxEdgeWaypoints  = 256
+	MaxGraphWaypoints = 20000
+	MaxGraphFrames    = 1000
+)
+
+// MaxGraphTriggers bounds how many triggers one flow declares. Each one the
+// scheduler recognizes becomes its own entry, so without a ceiling a single
+// saved flow fires itself as often as its author cares to type: 2000 copies of
+// "* * * * *" is 2000 runs a minute. Generous for the real shape — a flow with
+// separate weekday and weekend schedules has two or three.
+//
+// It counts the Triggers array AND the trigger STEPS together, because both
+// produce scheduler entries. The schedule moved onto the step (cron_trigger,
+// poll_trigger), and the scheduler keys a step's entry by NODE ID — it has to,
+// since each step carries its own cursor, so identical schedules cannot
+// collapse into one the way array entries do. Capping only the array meant the
+// same flood came back by pasting the step instead of the trigger, bounded
+// only by the node ceiling: 200 copies of "* * * * *" measured 200 entries and
+// 111 runs in a clock minute.
+const MaxGraphTriggers = 32
+
+// MaxGraphBytes bounds the graph's own payload: step settings, labels, env,
+// frame titles and the flow's description. The other ceilings all COUNT things
+// (nodes, wires, frames, waypoints) and none of them weighs the graph, so a
+// flow inside every one of them could still be hundreds of MiB — and a copy
+// rides in every run record.
+//
+// Measured with ApproxValueSize, which stops walking a param past
+// maxValueDepth and reports the budget as spent: nothing real nests that
+// deeply, so such a graph is refused here rather than accepted unmeasured.
+const MaxGraphBytes = 16 << 20 // 16 MiB
+
+// DefaultMaxVariadicFanIn bounds a variadic input whose port declares no Max
+// of its own. Generous for the real shapes (parallel branches into Merge, a
+// handful of attachments) and far below what it takes to make fan-in a
+// resource-exhaustion lever.
+const DefaultMaxVariadicFanIn = 64
+
+// MaxVariadicFanIn is the ceiling no manifest can raise. DefaultMaxVariadicFanIn
+// applies only to a port that declares no Max of its own, so the drop DECLARING
+// the port chose its own limit — and a manifest is not always ours to trust: a
+// remote runner's arrives over gRPC and its max is taken verbatim
+// (engine.portFromPB), as does an MCP host's. A port declaring max=1000000 put
+// fan-in back where it was before the default existed, bounded only by the
+// 5000-connection cap, for exactly the steps outside the default palette.
+//
+// A drop with a real reason to take more than 64 wires can still say so; it
+// just cannot say "unbounded".
+const MaxVariadicFanIn = 1024
+
 type Node struct {
 	ID     string            `json:"id"`
 	Module string            `json:"module"`

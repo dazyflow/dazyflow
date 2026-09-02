@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -954,5 +955,145 @@ func TestForm_SeedHeadersSkipDeclaredFieldsThatWereCapped(t *testing.T) {
 		if h == "ghost" {
 			t.Errorf("headers = %v, want no %q (it has no value)", seed.Output["body"].Headers, "ghost")
 		}
+	}
+}
+
+// The hosted form is a trigger endpoint, so it carries the trigger-chain depth
+// like /trigger does. Submitting at depth 0 unconditionally let a flow whose
+// HTTP step posts to its own form URL run forever — and this is the door that
+// needs no secret at all, so the /trigger breaker never applied to it.
+func TestForm_RefusesDeepTriggerChain(t *testing.T) {
+	t.Parallel()
+	_, wh, jobs, _, wsStore := startWebhookHarness(t)
+	g := core.Graph{
+		ID: "form-loop", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{
+			"public_form": true, "form_fields": []string{"name"},
+		}}},
+	}
+	savePublished(t, wsStore, g)
+	ts := formServer(t, wh)
+
+	submit := func(depth string) int {
+		req, _ := http.NewRequest("POST", ts.URL+"/form/acme/ws1/form-loop",
+			strings.NewReader("name=x"))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		if depth != "" {
+			req.Header.Set(core.TriggerDepthHeader, depth)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("POST: %v", err)
+		}
+		defer resp.Body.Close()
+		return resp.StatusCode
+	}
+
+	if code := submit(""); code != http.StatusOK {
+		t.Errorf("ordinary submission: status=%d, want 200", code)
+	}
+	if code := submit("1"); code != http.StatusOK {
+		t.Errorf("shallow chain: status=%d, want 200", code)
+	}
+	// Refused, but still a page — a visitor never sees a bare status here.
+	if code := submit(strconv.Itoa(core.MaxTriggerChainDepth)); code == http.StatusOK {
+		t.Errorf("chain at the cap was accepted (status=%d)", code)
+	}
+
+	recs, _ := jobs.ListGraphRuns(context.Background(), core.ListGraphRunsOpts{GraphID: "form-loop", Limit: 10})
+	if len(recs) != 2 {
+		t.Errorf("runs started = %d, want 2 (the chain at the cap starts none)", len(recs))
+	}
+	depth := 0
+	for _, r := range recs {
+		if r.TriggerDepth > depth {
+			depth = r.TriggerDepth
+		}
+	}
+	if depth != 1 {
+		t.Errorf("max stored trigger depth = %d, want 1 — the form must persist it", depth)
+	}
+}
+
+// The page renders every declared field on every anonymous GET, so an uncapped
+// list is an amplifier on the only endpoint that needs no credential: 100,000
+// fields answered a bare GET with 9 MB. A submission was already capped at the
+// same number, so a field past it could never be filled in either.
+func TestForm_DeclaredFieldsAreCapped(t *testing.T) {
+	t.Parallel()
+	_, wh, _, _, wsStore := startWebhookHarness(t)
+	fields := make([]string, 0, 5000)
+	for i := range 5000 {
+		fields = append(fields, "f"+strconv.Itoa(i))
+	}
+	g := core.Graph{
+		ID: "form-wide", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{
+			"public_form": true, "form_fields": fields,
+		}}},
+	}
+	savePublished(t, wsStore, g)
+	ts := formServer(t, wh)
+
+	res, err := http.Get(ts.URL + "/form/acme/ws1/form-wide")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	defer res.Body.Close()
+	html, _ := io.ReadAll(res.Body)
+	rendered := strings.Count(string(html), `name="f`)
+	if rendered > core.MaxHostedFormFields {
+		t.Errorf("rendered %d of %d declared fields, cap is %d",
+			rendered, len(fields), core.MaxHostedFormFields)
+	}
+	// The ones it does render are the ones the owner listed first.
+	if !strings.Contains(string(html), `name="f0"`) {
+		t.Errorf("the first declared field was not rendered")
+	}
+}
+
+// Capping the field COUNT bounded the wrong half. A field name has no natural
+// length, and the page emits each one four times (for=, the label text, id=
+// and name=), so the amplifier rebuilds itself inside the count cap: 50
+// declared fields named 300 KB each is a ~14 MiB flow — inside the graph
+// budget — that answered one unauthenticated GET with 60 MB in 0.6s.
+//
+// An over-long name is dropped rather than truncated: a truncated name would
+// still render and still post, under a key the owner never typed, and two
+// names sharing a prefix would collide. The save-time lint says so.
+func TestForm_LongFieldNamesAreDropped(t *testing.T) {
+	t.Parallel()
+	_, wh, _, _, wsStore := startWebhookHarness(t)
+	long := strings.Repeat("n", core.MaxHostedFormFieldLen+1)
+	g := core.Graph{
+		ID: "form-longnames", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{
+			"public_form": true,
+			"form_fields": []string{"email", long, "message"},
+			"form_title":  strings.Repeat("T", core.MaxHostedFormTitleLen*4),
+		}}},
+	}
+	savePublished(t, wsStore, g)
+	ts := formServer(t, wh)
+
+	res, err := http.Get(ts.URL + "/form/acme/ws1/form-longnames")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
+	html := string(body)
+
+	if strings.Contains(html, long) {
+		t.Errorf("a %d-character field name was rendered", len(long))
+	}
+	// The fields that are a real length still render, in order.
+	for _, want := range []string{`name="email"`, `name="message"`} {
+		if !strings.Contains(html, want) {
+			t.Errorf("%s missing — dropping the long name took a good field with it", want)
+		}
+	}
+	if n := strings.Count(html, "TTTT"); n > 0 && len(html) > 8<<10 {
+		t.Errorf("the page is %d bytes — an uncapped title is the same amplifier", len(html))
 	}
 }

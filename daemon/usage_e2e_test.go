@@ -24,7 +24,7 @@ func TestUsageMetering_CountsRunAndNodeExecutions(t *testing.T) {
 			{ID: "dst", Module: "delay", Params: map[string]any{"ms": 1}},
 		},
 		Edges: []core.Edge{
-			{From: "src", FromPort: "out", To: "dst", ToPort: "in"},
+			{From: "src", FromPort: "out", To: "dst", ToPort: "pass"},
 		},
 	}
 	graphRunID, err := h.svc.SubmitGraph(t.Context(), h.principal, g)
@@ -62,7 +62,7 @@ func TestUsageMetering_SkippedNodesDoNotCount(t *testing.T) {
 			{ID: "dst", Module: "delay", Params: map[string]any{"ms": 1}, Disabled: true},
 		},
 		Edges: []core.Edge{
-			{From: "src", FromPort: "out", To: "dst", ToPort: "in"},
+			{From: "src", FromPort: "out", To: "dst", ToPort: "pass"},
 		},
 	}
 	graphRunID, err := h.svc.SubmitGraph(t.Context(), h.principal, g)

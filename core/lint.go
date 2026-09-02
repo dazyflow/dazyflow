@@ -162,6 +162,7 @@ func LintGraph(g Graph) []LintIssue {
 	issues = append(issues, lintScriptLanguage(g, nodesByID)...)
 	issues = append(issues, lintRegexPattern(g)...)
 	issues = append(issues, lintTriggers(g)...)
+	issues = append(issues, lintApprovalRecipients(g)...)
 	if len(issues) == 0 {
 		return nil
 	}
@@ -590,4 +591,94 @@ func orSelf(keyPath string) string {
 		return "a param value"
 	}
 	return keyPath
+}
+
+// MaxApprovalRecipients caps how many addresses one await_approval step
+// notifies. The approver list is a comma-separated param, so its only ceiling
+// was the graph byte budget it is charged against — about 650,000 addresses —
+// and the notifier sends ONE MESSAGE PER ADDRESS in a serial loop, twice per
+// approval (once when the run parks, once when someone decides).
+//
+// Two things made that worse than a long list. The mail goes out through the
+// OPERATOR'S transactional mailer, not a connected account the author had to
+// authorize, so any tenant could aim the deployment's own sending domain at
+// arbitrary addresses. And the loop runs synchronously on the worker goroutine
+// that parked the run (worker.go's OnNodeAwaiting hook), so at a realistic SMTP
+// round trip a single parked run held one of the two default worker slots for
+// hours.
+//
+// 50 is the same number the hosted form uses, and far above a real approval
+// list — the people who can say yes to one step.
+const MaxApprovalRecipients = 50
+
+// MaxGraphApprovalRecipients bounds the addresses one RUN can notify, summed
+// across every approval step in the flow. The per-step cap alone bounded the
+// wrong unit: the same flood came back split across STEPS instead of listed in
+// one, since parallel gates all park in the same run — 40 gates carrying a full
+// list each sent 2000 messages from a single run, and the node ceiling puts
+// 50,000 in reach. Nothing throttles approval mail the way FailureEmailWindow
+// throttles failure mail, because an approval that silently isn't sent is a run
+// nobody can unblock.
+//
+// Same shape as MaxGraphTriggers counting trigger steps and the Triggers array
+// against ONE budget: splitting the list across gates has to buy nothing.
+const MaxGraphApprovalRecipients = 200
+
+// lintApprovalRecipients tells the author at save time when a step names more
+// approvers than will be notified, rather than letting them publish a flow
+// whose tail silently never hears about it. The cap itself is applied where the
+// list is read (daemon.approvalParamApprovers), which is the choke point both
+// the request and the decision mail reach.
+func lintApprovalRecipients(g Graph) []LintIssue {
+	var issues []LintIssue
+	for _, n := range g.Nodes {
+		if n.Module != ApprovalModuleID {
+			continue
+		}
+		if declared := countApprovalAddresses(n.Params); declared > MaxApprovalRecipients {
+			issues = append(issues, nodeTriggerIssue("approval_too_many_recipients", n.ID,
+				fmt.Sprintf("This Approval step names %d people, but at most %d are emailed — the rest are never told. Email a group address instead, or narrow the list.",
+					declared, MaxApprovalRecipients)))
+		}
+	}
+	return issues
+}
+
+// ApprovalModuleID is the step that parks a run on a human decision, named
+// here because the recipient rules are read off the graph without a manifest —
+// how many people a step mails is not a port-level property.
+const ApprovalModuleID = "await_approval"
+
+// GraphApprovalRecipients sums the approval addresses a graph declares, per
+// step capped the way the notifier caps its own read, so the total reflects
+// what a run would actually send rather than what was typed.
+func GraphApprovalRecipients(g Graph) int {
+	total := 0
+	for _, n := range g.Nodes {
+		if n.Module != ApprovalModuleID || n.Disabled {
+			continue
+		}
+		total += min(countApprovalAddresses(n.Params), MaxApprovalRecipients)
+	}
+	return total
+}
+
+// countApprovalAddresses counts the addresses in an await_approval step's
+// approver param, splitting it the same way the notifier does.
+func countApprovalAddresses(params map[string]any) int {
+	raw, _ := params["approvers"].(string)
+	if strings.TrimSpace(raw) == "" {
+		return 0
+	}
+	seen := map[string]bool{}
+	for _, part := range strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == ';' || r == '\n'
+	}) {
+		addr := strings.ToLower(strings.TrimSpace(part))
+		if addr == "" || !strings.Contains(addr, "@") || seen[addr] {
+			continue
+		}
+		seen[addr] = true
+	}
+	return len(seen)
 }

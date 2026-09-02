@@ -23,8 +23,11 @@ func findAdj(items []daemon.DropAdjacency, from, to string) *daemon.DropAdjacenc
 
 // edge is a tiny helper for building valid graph edges (non-empty ports,
 // which core.Validate requires).
+// edge wires two steps on the universal pass pin — the one connection every
+// drop accepts, so a suggestion fixture doesn't have to name each drop's
+// real ports to be a valid graph.
 func edge(from, to string) core.Edge {
-	return core.Edge{From: from, FromPort: "out", To: to, ToPort: "in"}
+	return core.Edge{From: from, FromPort: core.PassPort, To: to, ToPort: core.PassPort}
 }
 
 func TestDropSuggestions_CountsAndRanking(t *testing.T) {
@@ -139,8 +142,8 @@ func TestDropSuggestions_KeysOnSourcePort(t *testing.T) {
 			{ID: "s", Module: "shell"},
 		},
 		Edges: []core.Edge{
-			{From: "r", FromPort: "matched", To: "n", ToPort: "in"},
-			{From: "r", FromPort: "unmatched", To: "s", ToPort: "in"},
+			{From: "r", FromPort: "rows_1", To: "n", ToPort: core.PassPort},
+			{From: "r", FromPort: "default", To: "s", ToPort: core.PassPort},
 		},
 	}); err != nil {
 		t.Fatalf("save router-flow: %v", err)
@@ -151,11 +154,11 @@ func TestDropSuggestions_KeysOnSourcePort(t *testing.T) {
 		t.Fatalf("suggestions: %v", err)
 	}
 	// The two pins must be distinct adjacency entries, not merged.
-	if findAdjPort(items, "route_rows", "matched", "ntfy") == nil {
-		t.Error("missing route_rows.matched → ntfy")
+	if findAdjPort(items, "route_rows", "rows_1", "ntfy") == nil {
+		t.Error("missing route_rows.rows_1 → ntfy")
 	}
-	if findAdjPort(items, "route_rows", "unmatched", "shell") == nil {
-		t.Error("missing route_rows.unmatched → shell")
+	if findAdjPort(items, "route_rows", "default", "shell") == nil {
+		t.Error("missing route_rows.default → shell")
 	}
 	// And the matched pin does NOT point at shell (no cross-contamination).
 	if findAdjPort(items, "route_rows", "matched", "shell") != nil {

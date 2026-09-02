@@ -310,8 +310,8 @@ func TestE2E_InvalidGraphRejected(t *testing.T) {
 			{ID: "b", Module: "delay", Params: map[string]any{"ms": 1}},
 		},
 		Edges: []core.Edge{
-			{From: "a", FromPort: "out", To: "b", ToPort: "in"},
-			{From: "b", FromPort: "out", To: "a", ToPort: "in"},
+			{From: "a", FromPort: "pass", To: "b", ToPort: "pass"},
+			{From: "b", FromPort: "pass", To: "a", ToPort: "pass"},
 		},
 	}
 	if _, err := svc.SaveGraph(ctx, alice, g); err == nil {

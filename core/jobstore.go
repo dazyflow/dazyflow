@@ -55,6 +55,14 @@ type JobRecord struct {
 	// no memory of who started it (see promote.go).
 	Manual bool
 
+	// TriggerDepth is how many runs deep the trigger chain that started
+	// this run already was — 0 for a run a person or the scheduler started,
+	// N for one a previous run's HTTP step set off through this instance's
+	// own trigger endpoint. See TriggerDepthHeader; the trigger endpoints
+	// refuse past MaxTriggerChainDepth, which is what stops a flow that
+	// calls its own trigger URL from running forever.
+	TriggerDepth int
+
 	// ParentNodeRecID links a child graph-record back to the parent
 	// node-record that submitted it (via the subgraph module). Empty
 	// for top-level graph submissions. The dispatcher uses it when the

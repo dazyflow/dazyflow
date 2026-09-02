@@ -405,13 +405,16 @@ func buildClient(timeout time.Duration, allowPrivate bool) *http.Client {
 	}
 	return &http.Client{
 		Timeout: timeout,
-		Transport: &http.Transport{
+		// Every outbound call a flow can make dials through here, which is
+		// why the trigger-chain stamp lives in the transport — see
+		// triggerDepthTransport.
+		Transport: &triggerDepthTransport{base: &http.Transport{
 			DialContext:           dialer.DialContext,
 			TLSHandshakeTimeout:   timeout,
 			ResponseHeaderTimeout: timeout,
 			MaxIdleConns:          10,
 			IdleConnTimeout:       30 * time.Second,
-		},
+		}},
 		// The operator egress allowlist is enforced on the initial URL by
 		// the caller, but the Go default redirect policy would happily
 		// follow a 30x to any other host — bypassing the allowlist. Re-run

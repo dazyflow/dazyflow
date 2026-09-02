@@ -9,6 +9,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -687,5 +689,69 @@ func TestWebhook_NoWebhookInputStillFiresWhenSecretMatches(t *testing.T) {
 	code, body := webhookPost(t, wh, "acme", "ws1", "wh-none", "s3cr3t")
 	if code == http.StatusForbidden && strings.Contains(body, "trigger_disabled") {
 		t.Fatalf("a flow with no webhook step was refused as trigger_disabled: %s", body)
+	}
+}
+
+// A delivery carrying the trigger-chain depth came from one of our own runs
+// (only self-directed requests get the header). Past the cap it is refused:
+// each iteration would be a fresh top-level run, so nothing else in the
+// system can see that a flow is triggering itself.
+func TestWebhook_RefusesDeepTriggerChain(t *testing.T) {
+	t.Parallel()
+	_, wh, jobs, _, wsStore := startWebhookHarness(t)
+	g := core.Graph{
+		ID: "wh-loop", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{
+			{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s3cr3t"}}},
+		},
+	}
+	savePublished(t, wsStore, g)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/trigger/", func(rw http.ResponseWriter, r *http.Request) {
+		callPrivateHandler(t, wh, rw, r)
+	})
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	fire := func(depth string) int {
+		req, _ := http.NewRequest("POST", ts.URL+"/trigger/acme/ws1/wh-loop",
+			bytes.NewReader([]byte(`{}`)))
+		req.Header.Set("Authorization", "Bearer s3cr3t")
+		if depth != "" {
+			req.Header.Set(core.TriggerDepthHeader, depth)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("POST: %v", err)
+		}
+		defer resp.Body.Close()
+		return resp.StatusCode
+	}
+
+	if code := fire(""); code != http.StatusAccepted {
+		t.Errorf("ordinary delivery: status=%d, want 202", code)
+	}
+	if code := fire("1"); code != http.StatusAccepted {
+		t.Errorf("shallow chain: status=%d, want 202", code)
+	}
+	if code := fire(strconv.Itoa(core.MaxTriggerChainDepth)); code != http.StatusTooManyRequests {
+		t.Errorf("chain at the cap: status=%d, want 429", code)
+	}
+	// A garbage header reads as "not from a run of ours", never as a refusal.
+	if code := fire("not-a-number"); code != http.StatusAccepted {
+		t.Errorf("unparseable depth: status=%d, want 202", code)
+	}
+
+	// The depth is persisted on the run so the steps it executes can carry
+	// it onward.
+	recs, _ := jobs.ListGraphRuns(context.Background(), core.ListGraphRunsOpts{GraphID: "wh-loop", Limit: 10})
+	var depths []int
+	for _, r := range recs {
+		depths = append(depths, r.TriggerDepth)
+	}
+	sort.Ints(depths)
+	if len(depths) != 3 || depths[len(depths)-1] != 1 {
+		t.Errorf("stored trigger depths = %v, want three runs with a max of 1", depths)
 	}
 }

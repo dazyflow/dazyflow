@@ -6,11 +6,13 @@ package daemon
 import (
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/dazyflow/dazyflow/core"
@@ -172,7 +174,18 @@ func (w *WebhookListener) handleTrigger(rw http.ResponseWriter, r *http.Request)
 	// authorization — graph:admin lets the principal fire private
 	// flows without owning them.
 	principal := SystemPrincipal("dazyflow-webhook", g.Tenant, g.Workspace)
-	runID, err := w.svc.SubmitGraphWithSeed(r.Context(), principal, g, seeds)
+	runID, err := w.svc.SubmitGraphOpts(r.Context(), principal, g, SubmitOpts{
+		Seeds: seeds,
+		// Carried by a step of the run that called us (see
+		// core.TriggerDepthHeader); 0 for a delivery from anywhere else.
+		TriggerDepth: inboundTriggerDepth(r),
+	})
+	if errors.Is(err, core.ErrTriggerLoop) {
+		w.logger.Printf("refused %s/%s/%s: %v", tenant, workspace, graphID, err)
+		http.Error(rw, `{"error":{"code":"trigger_loop","message":"this delivery came from a run this flow started — the chain is too deep, so a flow is triggering itself"}}`,
+			http.StatusTooManyRequests)
+		return
+	}
 	if err != nil {
 		w.logger.Printf("submit %s/%s/%s: %v", tenant, workspace, graphID, err)
 		http.Error(rw, fmt.Sprintf("submit: %v", err), http.StatusInternalServerError)
@@ -328,4 +341,16 @@ func BuildFormSeedForTest(declared []string, values map[string]any) core.Result 
 // form-urlencoded, text, raw) is unit-testable without a graph run.
 func BuildWebhookSeedForTest(rawBody []byte, r *http.Request) core.Result {
 	return buildWebhookSeed(rawBody, r)
+}
+
+// inboundTriggerDepth reads the trigger-chain depth a run's own HTTP step
+// stamped on this delivery. Absent, negative or unparseable reads as 0 —
+// the header is only ever set by this instance for requests to itself, so
+// anything else is an ordinary delivery.
+func inboundTriggerDepth(r *http.Request) int {
+	n, err := strconv.Atoi(r.Header.Get(core.TriggerDepthHeader))
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
 }

@@ -80,10 +80,22 @@ func (r *pauseRegistry) clear(runID string) {
 }
 
 // shouldPauseAfter reports whether a just-succeeded node should hold the run:
-// either it carries a breakpoint, or the run is in step mode.
-func shouldPauseAfter(graph core.Graph, runID, nodeID string) bool {
+// either the run is in step mode, or the node carries a breakpoint AND somebody
+// is watching this run.
+//
+// watched is what keeps a breakpoint a debugging aid. It lives in the saved
+// graph, so a published flow carries it into every run a trigger starts — and
+// nothing finalizes or reaps a paused run (the reaper reads its un-dispatched
+// dependents as outstanding work), so each unattended fire used to leave a
+// non-terminal run behind for good, taking a concurrency slot with it. Step
+// mode is unconditional: it is set per run through the Step API, which only a
+// watching person can call.
+func shouldPauseAfter(graph core.Graph, runID, nodeID string, watched bool) bool {
 	if breakpoints.isStepping(runID) {
 		return true
+	}
+	if !watched {
+		return false
 	}
 	if n, ok := graph.Node(nodeID); ok {
 		return n.Breakpoint

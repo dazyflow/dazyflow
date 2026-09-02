@@ -30,9 +30,9 @@ func TestDisabled_SkipsNodeAndPrunesDownstream(t *testing.T) {
 			{ID: "side", Module: "delay", Params: map[string]any{"ms": 1}},
 		},
 		Edges: []core.Edge{
-			{From: "src1", FromPort: "out", To: "mid", ToPort: "in"},
-			{From: "mid", FromPort: "out", To: "tail", ToPort: "in"},
-			{From: "src2", FromPort: "out", To: "side", ToPort: "in"},
+			{From: "src1", FromPort: "out", To: "mid", ToPort: "pass"},
+			{From: "mid", FromPort: "pass", To: "tail", ToPort: "pass"},
+			{From: "src2", FromPort: "out", To: "side", ToPort: "pass"},
 		},
 	}
 	graphRunID, err := h.svc.SubmitGraph(t.Context(), h.principal, g)
@@ -81,7 +81,7 @@ func TestPassEdge_SequencesWithoutValue(t *testing.T) {
 			{ID: "b", Module: "delay", Params: map[string]any{"ms": 1}},
 		},
 		Edges: []core.Edge{
-			{From: "src", FromPort: "out", To: "a", ToPort: "in"},
+			{From: "src", FromPort: "out", To: "a", ToPort: "pass"},
 			{From: "a", FromPort: "pass", To: "b", ToPort: "pass"},
 		},
 	}
@@ -112,7 +112,7 @@ func TestDisabled_RootSkips(t *testing.T) {
 			{ID: "after", Module: "delay", Params: map[string]any{"ms": 1}},
 		},
 		Edges: []core.Edge{
-			{From: "off", FromPort: "out", To: "after", ToPort: "in"},
+			{From: "off", FromPort: "out", To: "after", ToPort: "pass"},
 		},
 	}
 	graphRunID, err := h.svc.SubmitGraph(t.Context(), h.principal, g)

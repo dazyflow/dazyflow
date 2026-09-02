@@ -7,7 +7,9 @@ import (
 	"context"
 	"fmt"
 	stdnet "net"
+	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -227,4 +229,183 @@ func EgressAllowedFor(ctx context.Context, rawURL string) error {
 		}
 	}
 	return EgressAllowed(rawURL)
+}
+
+// selfOrigin is every origin that reaches this instance — the public one
+// (DAZYFLOW_PUBLIC_BASE_URL) and the address the gateway listens on — in the
+// canonical form originOf produces. Empty when unset.
+//
+// It exists so an outbound HTTP step can tell "I am calling my own daemon"
+// from "I am calling a third party". A call to ourselves gets the
+// trigger-chain depth header, which is what stops a flow whose HTTP step
+// hits its own trigger URL from running forever. A call to anyone else must
+// NOT carry it: it would leak our run topology to an unrelated service.
+var selfOrigin atomic.Value // map[string]struct{} of canonical origins
+
+// SetSelfOrigin records this instance's public base URL. Called once at
+// startup; safe to leave unset (no self-directed request is then
+// recognized, and the trigger endpoints still refuse a chain that arrives
+// with a depth header).
+func SetSelfOrigin(baseURL string) { SetSelfOrigins(baseURL) }
+
+// SetSelfOrigins records every base URL that reaches this instance: the
+// public one, and the address it listens on. One flow's author types the
+// public name and another types the address the daemon answers on inside
+// the container — both arrive here, so both have to be recognized as us or
+// the one that isn't gets no depth header and its loop never breaks.
+//
+// Loopback spellings are expanded against each other (localhost, 127.0.0.1,
+// [::1] on the same scheme and port), since they are the same machine by
+// definition. A second PUBLIC name for this instance is not something a URL
+// can be asked about — pass it here too.
+func SetSelfOrigins(baseURLs ...string) {
+	set := make(map[string]struct{}, len(baseURLs))
+	for _, raw := range baseURLs {
+		origin := canonicalOrigin(raw)
+		if origin == "" {
+			continue
+		}
+		set[origin] = struct{}{}
+		for _, alias := range loopbackAliases(origin) {
+			set[alias] = struct{}{}
+		}
+	}
+	selfOrigin.Store(set)
+}
+
+// IsSelfDirected reports whether rawURL points back at this instance.
+func IsSelfDirected(rawURL string) bool {
+	set, _ := selfOrigin.Load().(map[string]struct{})
+	if len(set) == 0 {
+		return false
+	}
+	u, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return false
+	}
+	return isSelfDirectedURL(u)
+}
+
+// isSelfDirectedURL is IsSelfDirected for a URL that is already parsed —
+// the shape the transport has, and it runs on every outbound request.
+func isSelfDirectedURL(u *url.URL) bool {
+	set, _ := selfOrigin.Load().(map[string]struct{})
+	if len(set) == 0 {
+		return false
+	}
+	origin := originOf(u)
+	if origin == "" {
+		return false
+	}
+	_, ok := set[origin]
+	return ok
+}
+
+// loopbackNames are the spellings of "this machine" that a flow author (or
+// a compose file) might type. Any of them names the daemon that dials it.
+var loopbackNames = []string{"localhost", "127.0.0.1", "[::1]"}
+
+// loopbackAliases returns the other spellings of a canonical loopback
+// origin, same scheme and port. Empty for a non-loopback host.
+func loopbackAliases(origin string) []string {
+	scheme, rest, ok := strings.Cut(origin, "://")
+	if !ok {
+		return nil
+	}
+	host, port := rest, ""
+	if i := strings.LastIndex(rest, ":"); i > strings.LastIndex(rest, "]") {
+		host, port = rest[:i], rest[i:]
+	}
+	if !isLoopbackHost(host) {
+		return nil
+	}
+	out := make([]string, 0, len(loopbackNames))
+	for _, name := range loopbackNames {
+		if alias := scheme + "://" + name + port; alias != origin {
+			out = append(out, alias)
+		}
+	}
+	return out
+}
+
+func isLoopbackHost(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	ip := stdnet.ParseIP(strings.Trim(host, "[]"))
+	return ip != nil && ip.IsLoopback()
+}
+
+// canonicalOrigin reduces a URL to a comparable scheme://host. Compared as
+// raw strings, every spelling of one origin that a URL parser treats as
+// equal was a way to reach our own trigger endpoints as "a third party" and
+// so without the depth header: the default port written out (or left off)
+// against a base URL that does the opposite, and the trailing root dot.
+// Returns "" when there is no host to compare.
+func canonicalOrigin(rawURL string) string {
+	u, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return ""
+	}
+	return originOf(u)
+}
+
+// originOf is canonicalOrigin for an already-parsed URL.
+func originOf(u *url.URL) string {
+	if u == nil || u.Host == "" {
+		return ""
+	}
+	scheme := strings.ToLower(u.Scheme)
+	// Hostname() drops the port and the brackets of an IPv6 literal; the
+	// trailing dot is the DNS root, which resolves the same.
+	host := strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
+	if host == "" {
+		return ""
+	}
+	port := u.Port()
+	if (scheme == "http" && port == "80") || (scheme == "https" && port == "443") {
+		port = ""
+	}
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]" // IPv6 literal, as it appears in a URL
+	}
+	if port != "" {
+		host += ":" + port
+	}
+	return scheme + "://" + host
+}
+
+// triggerDepthTransport carries core.TriggerDepthHeader on every request
+// that reaches THIS instance, and strips it from every request that does
+// not.
+//
+// It sits in the shared client rather than in the step that posts. The stamp
+// is what stops a flow from triggering itself, and a flow has several ways to
+// post to a URL of its author's choosing: the Webhook drop, an upload or
+// download with a method, a connection-configured sender, and the daemon's
+// own failure webhook each build their own request. Written into the drop
+// that posts, it was written into one of them — and the loop the HTTP step
+// could no longer run came straight back through the drop whose whole purpose
+// is POSTing to a URL. They all dial through buildClient.
+//
+// A RoundTripper also sees each redirect hop as its own request, so a 30x off
+// our origin cannot carry the header away with it.
+type triggerDepthTransport struct{ base http.RoundTripper }
+
+func (t *triggerDepthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	self := isSelfDirectedURL(req.URL)
+	if !self && req.Header.Get(core.TriggerDepthHeader) == "" {
+		return t.base.RoundTrip(req) // nothing to add or remove
+	}
+	// A RoundTripper must not modify the request it is handed.
+	r := req.Clone(req.Context())
+	if self {
+		// Set, not "fill in": on a call to ourselves the daemon's count is
+		// the authority, so a step that types the header into its own
+		// headers param cannot hold the chain at zero.
+		r.Header.Set(core.TriggerDepthHeader, strconv.Itoa(core.TriggerDepth(req.Context())+1))
+	} else {
+		r.Header.Del(core.TriggerDepthHeader)
+	}
+	return t.base.RoundTrip(r)
 }

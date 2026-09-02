@@ -141,7 +141,7 @@ func TestSkip_FailureDoesNotPropagateThroughSkipEdge(t *testing.T) {
 			{ID: "dst", Module: "delay", Params: map[string]any{"ms": 5}},
 		},
 		Edges: []core.Edge{
-			{From: "src", FromPort: "out", To: "dst", ToPort: "in", OnError: core.OnErrorSkip},
+			{From: "src", FromPort: "out", To: "dst", ToPort: "pass", OnError: core.OnErrorSkip},
 		},
 	}
 	graphRunID, err := h.svc.SubmitGraph(t.Context(), h.principal, g)
@@ -180,8 +180,8 @@ func TestSkip_AbortEdgeStillPropagatesEvenWithSkipSibling(t *testing.T) {
 			{ID: "aborted", Module: "delay", Params: map[string]any{"ms": 5}},
 		},
 		Edges: []core.Edge{
-			{From: "src", FromPort: "out", To: "skipped", ToPort: "in", OnError: core.OnErrorSkip},
-			{From: "src", FromPort: "out", To: "aborted", ToPort: "in", OnError: core.OnErrorAbort},
+			{From: "src", FromPort: "out", To: "skipped", ToPort: "pass", OnError: core.OnErrorSkip},
+			{From: "src", FromPort: "out", To: "aborted", ToPort: "pass", OnError: core.OnErrorAbort},
 		},
 	}
 	graphRunID, err := h.svc.SubmitGraph(t.Context(), h.principal, g)
@@ -283,7 +283,7 @@ func TestSkip_ChainOfSkips_AllRun(t *testing.T) {
 			{ID: "s2", Module: "delay", Params: map[string]any{"ms": 5}},
 		},
 		Edges: []core.Edge{
-			{From: "boom", FromPort: "out", To: "s1", ToPort: "in", OnError: core.OnErrorSkip},
+			{From: "boom", FromPort: "out", To: "s1", ToPort: "pass", OnError: core.OnErrorSkip},
 			{From: "s1", FromPort: "pass", To: "s2", ToPort: "pass"},
 		},
 	}

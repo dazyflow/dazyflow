@@ -4,6 +4,9 @@
 import { describe, it, expect } from "vitest";
 import type { Port } from "../types";
 import {
+  DEFAULT_MAX_VARIADIC_FAN_IN,
+  MAX_VARIADIC_FAN_IN,
+  inputHasRoom,
   mimeCompatible,
   pickPort,
   portsConnectable,
@@ -150,5 +153,57 @@ describe("connectionHint", () => {
   it("generic message for other kind clashes", () => {
     expect(connectionHint({ port: "ok", mime: ["application/x-bool"] }, { port: "body", mime: ["text/plain"] }))
       .toMatch(/don.t match/);
+  });
+});
+
+describe("inputHasRoom", () => {
+  const single: Port[] = [{ port: "in", mime: ["text/plain"] }];
+  const variadic: Port[] = [{ port: "items", variadic: true }];
+  const capped: Port[] = [{ port: "items", variadic: true, max: 2 }];
+
+  it("lets a single-value input take one wire and no more", () => {
+    expect(inputHasRoom(single, "in", 0)).toBe(true);
+    expect(inputHasRoom(single, "in", 1)).toBe(false);
+  });
+
+  it("caps a variadic input with no declared max at the default", () => {
+    expect(inputHasRoom(variadic, "items", DEFAULT_MAX_VARIADIC_FAN_IN - 1)).toBe(true);
+    expect(inputHasRoom(variadic, "items", DEFAULT_MAX_VARIADIC_FAN_IN)).toBe(false);
+  });
+
+  it("respects a variadic input's declared max", () => {
+    expect(inputHasRoom(capped, "items", 1)).toBe(true);
+    expect(inputHasRoom(capped, "items", 2)).toBe(false);
+  });
+
+  it("clamps a declared max at the absolute ceiling", () => {
+    // A runner's or MCP host's manifest arrives over the wire and its max is
+    // taken as given, so a drop cannot be allowed to raise its own ceiling.
+    const unbounded: Port[] = [{ port: "items", variadic: true, max: 1_000_000 }];
+    expect(inputHasRoom(unbounded, "items", MAX_VARIADIC_FAN_IN - 1)).toBe(true);
+    expect(inputHasRoom(unbounded, "items", MAX_VARIADIC_FAN_IN)).toBe(false);
+  });
+
+  it("stays permissive for an undeclared pin", () => {
+    expect(inputHasRoom(single, "mystery", 5)).toBe(true);
+    expect(inputHasRoom(undefined, "in", 5)).toBe(true);
+  });
+
+  // A Reusable flow's pins are real ports named by its own params, each
+  // carrying one value — the server refuses a second wire, so the canvas
+  // must not draw one.
+  it("holds an undeclared pin on a dynamic-ports drop to one wire", () => {
+    expect(inputHasRoom(undefined, "mystery", 0, true)).toBe(true);
+    expect(inputHasRoom(undefined, "mystery", 1, true)).toBe(false);
+    expect(inputHasRoom(single, "mystery", 1, true)).toBe(false);
+  });
+
+  // A step this instance has no manifest for — a runner or MCP drop registered
+  // elsewhere — gets the same treatment: the engine assembles one value per
+  // port whether or not a manifest was available, and the server now refuses
+  // the second wire, so the canvas must not draw it.
+  it("holds a pin on a drop with no manifest to one wire", () => {
+    expect(inputHasRoom(undefined, "in", 0, false, false)).toBe(true);
+    expect(inputHasRoom(undefined, "in", 1, false, false)).toBe(false);
   });
 });

@@ -34,7 +34,7 @@ func TestFallback_ActivatesOnFailure(t *testing.T) {
 			{ID: "handler", Module: "delay", Params: map[string]any{"ms": 5}},
 		},
 		Edges: []core.Edge{
-			{From: "primary", FromPort: "out", To: "handler", ToPort: "in", OnError: core.OnErrorFallback},
+			{From: "primary", FromPort: "out", To: "handler", ToPort: "pass", OnError: core.OnErrorFallback},
 		},
 	}
 	graphRunID, err := h.svc.SubmitGraph(t.Context(), h.principal, g)
@@ -68,7 +68,7 @@ func TestFallback_DormantOnSuccess(t *testing.T) {
 			{ID: "handler", Module: "delay", Params: map[string]any{"ms": 5}},
 		},
 		Edges: []core.Edge{
-			{From: "primary", FromPort: "out", To: "handler", ToPort: "in", OnError: core.OnErrorFallback},
+			{From: "primary", FromPort: "out", To: "handler", ToPort: "pass", OnError: core.OnErrorFallback},
 		},
 	}
 	graphRunID, err := h.svc.SubmitGraph(t.Context(), h.principal, g)
@@ -101,8 +101,8 @@ func TestFallback_AbsorbsSiblingAbortEdge(t *testing.T) {
 			{ID: "handler", Module: "delay", Params: map[string]any{"ms": 5}},
 		},
 		Edges: []core.Edge{
-			{From: "primary", FromPort: "out", To: "lost", ToPort: "in"},
-			{From: "primary", FromPort: "out", To: "handler", ToPort: "in", OnError: core.OnErrorFallback},
+			{From: "primary", FromPort: "out", To: "lost", ToPort: "pass"},
+			{From: "primary", FromPort: "out", To: "handler", ToPort: "pass", OnError: core.OnErrorFallback},
 		},
 	}
 	graphRunID, err := h.svc.SubmitGraph(t.Context(), h.principal, g)
@@ -142,9 +142,9 @@ func TestFallback_CascadesSkipToDownstream(t *testing.T) {
 			{ID: "handler", Module: "delay", Params: map[string]any{"ms": 5}},
 		},
 		Edges: []core.Edge{
-			{From: "primary", FromPort: "out", To: "lost", ToPort: "in"},
-			{From: "lost", FromPort: "out", To: "downstream", ToPort: "in"},
-			{From: "primary", FromPort: "out", To: "handler", ToPort: "in", OnError: core.OnErrorFallback},
+			{From: "primary", FromPort: "out", To: "lost", ToPort: "pass"},
+			{From: "lost", FromPort: "pass", To: "downstream", ToPort: "pass"},
+			{From: "primary", FromPort: "out", To: "handler", ToPort: "pass", OnError: core.OnErrorFallback},
 		},
 	}
 	graphRunID, err := h.svc.SubmitGraph(t.Context(), h.principal, g)
@@ -216,7 +216,7 @@ func TestFallback_NoFallbackPathStillAborts(t *testing.T) {
 			{ID: "next", Module: "delay", Params: map[string]any{"ms": 5}},
 		},
 		Edges: []core.Edge{
-			{From: "primary", FromPort: "out", To: "next", ToPort: "in"},
+			{From: "primary", FromPort: "out", To: "next", ToPort: "pass"},
 		},
 	}
 	graphRunID, err := h.svc.SubmitGraph(t.Context(), h.principal, g)

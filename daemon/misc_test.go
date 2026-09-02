@@ -14,7 +14,8 @@ import (
 
 // TestPauseRegistry_Cov exercises the in-memory breakpoint pause registry:
 // addPaused (with dedup), takePaused (returns + clears), setStepping/isStepping,
-// clear, and shouldPauseAfter's three legs.
+// clear, and shouldPauseAfter's legs — including that an unwatched (trigger-
+// started) run never pauses on a breakpoint.
 func TestPauseRegistry_Cov(t *testing.T) {
 	t.Parallel()
 	r := &pauseRegistry{paused: map[string][]string{}, stepping: map[string]bool{}}
@@ -45,22 +46,27 @@ func TestPauseRegistry_Cov(t *testing.T) {
 		t.Fatal("clear left state behind")
 	}
 
-	// shouldPauseAfter: step mode wins.
+	// shouldPauseAfter: step mode wins, watched or not.
 	breakpoints.setStepping("sp", true)
 	t.Cleanup(func() { breakpoints.clear("sp") })
 	g := core.Graph{Nodes: []core.Node{{ID: "n", Breakpoint: true}, {ID: "plain"}}}
-	if !shouldPauseAfter(g, "sp", "plain") {
+	if !shouldPauseAfter(g, "sp", "plain", false) {
 		t.Fatal("step mode should force a pause")
 	}
 	// No step mode: breakpoint node pauses, plain node does not, unknown node no.
-	if !shouldPauseAfter(g, "other", "n") {
+	if !shouldPauseAfter(g, "other", "n", true) {
 		t.Fatal("breakpoint node should pause")
 	}
-	if shouldPauseAfter(g, "other", "plain") {
+	if shouldPauseAfter(g, "other", "plain", true) {
 		t.Fatal("plain node should not pause")
 	}
-	if shouldPauseAfter(g, "other", "ghost") {
+	if shouldPauseAfter(g, "other", "ghost", true) {
 		t.Fatal("unknown node should not pause")
+	}
+	// An unattended run (a trigger's, not a person's) never parks: nothing
+	// would ever continue it, and nothing reaps a paused run.
+	if shouldPauseAfter(g, "other", "n", false) {
+		t.Fatal("a breakpoint should not pause a run nobody is watching")
 	}
 }
 

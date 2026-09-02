@@ -45,8 +45,8 @@ func TestWebhookBody_E2E_JSONPropagation(t *testing.T) {
 			{From: "inbound", FromPort: "body", To: "check", ToPort: "A"},
 			{From: "check", FromPort: "result", To: "decide", ToPort: "condition"},
 			{From: "inbound", FromPort: "body", To: "decide", ToPort: "in"},
-			{From: "decide", FromPort: "then", To: "page", ToPort: "in"},
-			{From: "decide", FromPort: "else", To: "queue", ToPort: "in"},
+			{From: "decide", FromPort: "then", To: "page", ToPort: "pass"},
+			{From: "decide", FromPort: "else", To: "queue", ToPort: "pass"},
 		},
 	}
 	savePublished(t, wsStore, g)

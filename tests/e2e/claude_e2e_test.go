@@ -117,8 +117,8 @@ func TestClaude_E2E_ClassifyAndRoute(t *testing.T) {
 			{From: "classify", FromPort: "text", To: "is_urgent", ToPort: "A"},
 			{From: "is_urgent", FromPort: "result", To: "route", ToPort: "condition"},
 			{From: "classify", FromPort: "text", To: "route", ToPort: "in"},
-			{From: "route", FromPort: "then", To: "page_oncall", ToPort: "in"},
-			{From: "route", FromPort: "else", To: "queue_review", ToPort: "in"},
+			{From: "route", FromPort: "then", To: "page_oncall", ToPort: "pass"},
+			{From: "route", FromPort: "else", To: "queue_review", ToPort: "pass"},
 		},
 	}
 

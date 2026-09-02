@@ -103,8 +103,8 @@ func TestAwaitApproval_E2E_ApproveResumesDownstream(t *testing.T) {
 		},
 		Edges: []core.Edge{
 			{From: "prep", FromPort: "pass", To: "ask", ToPort: "context"},
-			{From: "ask", FromPort: "approved", To: "execute", ToPort: "in"},
-			{From: "ask", FromPort: "rejected", To: "denied", ToPort: "in"},
+			{From: "ask", FromPort: "approved", To: "execute", ToPort: "pass"},
+			{From: "ask", FromPort: "rejected", To: "denied", ToPort: "pass"},
 		},
 	}
 
@@ -201,8 +201,8 @@ func TestAwaitApproval_E2E_RejectRoutesToRejectedBranch(t *testing.T) {
 			{ID: "denied", Module: "delay", Params: map[string]any{"ms": 1}},
 		},
 		Edges: []core.Edge{
-			{From: "ask", FromPort: "approved", To: "execute", ToPort: "in"},
-			{From: "ask", FromPort: "rejected", To: "denied", ToPort: "in"},
+			{From: "ask", FromPort: "approved", To: "execute", ToPort: "pass"},
+			{From: "ask", FromPort: "rejected", To: "denied", ToPort: "pass"},
 		},
 	}
 	runID, err := h.svc.SubmitGraph(t.Context(), p, g)

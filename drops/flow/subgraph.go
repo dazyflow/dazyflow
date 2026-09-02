@@ -62,6 +62,9 @@ func init() {
 			}`),
 			Idempotent:        true,
 			SubmitsChildGraph: true,
+			// input_map / output_map name this step's real ports, so the
+			// in/out pair above is a placeholder — see Manifest.DynamicPorts.
+			DynamicPorts: true,
 		},
 		Execute: executeSubgraph,
 	})

@@ -21,7 +21,7 @@ func reapGraph() core.Graph {
 			{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}},
 			{ID: "b", Module: "delay", Params: map[string]any{"ms": 1}},
 		},
-		Edges: []core.Edge{{From: "a", FromPort: "out", To: "b", ToPort: "in"}},
+		Edges: []core.Edge{{From: "a", FromPort: "pass", To: "b", ToPort: "pass"}},
 	}
 }
 

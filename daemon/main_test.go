@@ -28,8 +28,8 @@ import (
 //     token endpoints (google_exchange, google_signin), the failure-email window
 //     (failure_notify_manual), the Vault clock (vault_secrets)
 //   - anything flipping the egress guard set below (failure_notify, mcpservers,
-//     webapis) or registering a drop (httpconnectionverify), or the Google-form
-//     field fetcher (rowsource)
+//     webapis) or the self origin (failure_notify_loop), or registering a drop
+//     (httpconnectionverify), or the Google-form field fetcher (rowsource)
 //   - the Postgres-gated tests, which TRUNCATE shared tables and would erase
 //     each other's rows: billing, encrypted_secrets, eventbus_pg, gitmirror_pg,
 //     leader, pgstores, runlog, runner_stores, support_prod, usage

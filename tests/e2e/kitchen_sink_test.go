@@ -388,7 +388,7 @@ func TestKitchenSink_ConcurrentGraphsIsolated(t *testing.T) {
 					{ID: "b", Module: "delay", Params: map[string]any{"ms": 10}},
 				},
 				Edges: []core.Edge{
-					{From: "a", FromPort: "out", To: "b", ToPort: "in"},
+					{From: "a", FromPort: "pass", To: "b", ToPort: "pass"},
 				},
 			}
 			runID, err := h.svc.SubmitGraph(t.Context(), h.principal, g)
@@ -448,7 +448,7 @@ func TestKitchenSink_GraphRecordReflectsOutcome(t *testing.T) {
 						{ID: "fb", Module: "delay", Params: map[string]any{"ms": 1}},
 					},
 					Edges: []core.Edge{
-						{From: "x", FromPort: "out", To: "fb", ToPort: "in", OnError: core.OnErrorFallback},
+						{From: "x", FromPort: "out", To: "fb", ToPort: "pass", OnError: core.OnErrorFallback},
 					},
 				}
 			},

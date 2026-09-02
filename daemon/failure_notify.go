@@ -303,6 +303,14 @@ func (s *Service) fireFailureNotification(
 		s.logFailureNotifyError(graph, fmt.Errorf("webhook blocked: %w", err))
 		return
 	}
+	// The failure webhook is a tenant-supplied URL and this instance's own
+	// form and trigger endpoints are URLs like any other, so pointing a
+	// failing flow's webhook at its own form made every failure submit the
+	// next one — a loop with no step in it, at ~120 runs a second, and the
+	// throttle above covers the email channels only. Carry the failed run's
+	// place in the chain so the shared client stamps depth+1 on a call that
+	// comes back to us and the endpoint refuses past the cap.
+	ctx = core.WithTriggerDepth(ctx, s.runTriggerDepth(ctx, payload.RunID))
 	body, err := json.Marshal(payload)
 	if err != nil {
 		s.logFailureNotifyError(graph, fmt.Errorf("marshal: %w", err))
@@ -364,13 +372,17 @@ func (s *Service) fireFailureEmail(ctx context.Context, graph core.Graph, payloa
 	if name == "" {
 		name = graph.ID
 	}
+	// The name is the mail SUBJECT — bounded far tighter than a body, because a
+	// header line past RFC 5321's 1000 octets makes the server drop the
+	// connection and the notification is never delivered at all.
+	name = core.ClipNotificationLabel(name)
 	// Addressed to an account holder — the flow's owner — so it goes out in
 	// THEIR language, not the flow's: this is the platform telling a person
 	// their thing broke, not the flow speaking to its readers.
 	m := s.mailMsgs(ctx, to)
 	var facts []emailtheme.Fact
 	if payload.FailedNode != "" {
-		facts = append(facts, emailtheme.Fact{Label: m.FactStep, Value: payload.FailedNode})
+		facts = append(facts, emailtheme.Fact{Label: m.FactStep, Value: core.ClipNotificationLabel(payload.FailedNode)})
 	}
 	if payload.ErrorMessage != "" {
 		errVal := payload.ErrorMessage
@@ -422,7 +434,10 @@ func recToPayload(graph core.Graph, rec core.JobRecord, baseURL string) FailureP
 	}
 	if rec.Result != nil && rec.Result.Error != nil {
 		p.ErrorCode = rec.Result.Error.Code
-		p.ErrorMessage = rec.Result.Error.Message
+		// Bounded where the payload is built, so the ceiling covers the mail
+		// and the third-party webhook alike — a step's error message is as
+		// free-form as any other run output.
+		p.ErrorMessage = core.ClipNotificationText(rec.Result.Error.Message)
 	}
 	if rec.FinishedAt != nil {
 		p.FinishedAt = rec.FinishedAt.UTC().Format(time.RFC3339)
@@ -444,7 +459,7 @@ func terminalToPayload(graph core.Graph, runID string, t *TerminalEvent, baseURL
 	}
 	if t.Error != nil {
 		p.ErrorCode = t.Error.Code
-		p.ErrorMessage = t.Error.Message
+		p.ErrorMessage = core.ClipNotificationText(t.Error.Message)
 	}
 	p.RunURL = buildRunURL(baseURL, graph.Tenant, runID)
 	return p

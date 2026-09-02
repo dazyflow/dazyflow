@@ -21,6 +21,10 @@ func templateErrCode(err error) string {
 	if errors.As(err, &re) {
 		return "resource"
 	}
+	var vt *ValueTooLargeError
+	if errors.As(err, &vt) {
+		return "value_too_large"
+	}
 	return "secret"
 }
 

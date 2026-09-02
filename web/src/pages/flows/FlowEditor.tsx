@@ -90,7 +90,7 @@ import {
   setupDestination,
   type SetupNeed,
 } from "../../lib/requiredConnections";
-import { mimeCompatible, pickPort, portsConnectable, connectionHint, PASS_PORT } from "../../lib/ports";
+import { mimeCompatible, pickPort, portsConnectable, inputHasRoom, connectionHint, PASS_PORT } from "../../lib/ports";
 import {
   canRedo as historyCanRedo,
   canUndo as historyCanUndo,
@@ -1289,14 +1289,49 @@ function EditorInner() {
   const isValidConnection = useCallback(
     (c: Connection | FlowEdge): boolean => {
       const byId = new Map(nodes.map((n) => [n.id, n]));
-      return portsConnectable(
-        byId.get(c.source)?.data.manifest?.outputs,
-        c.sourceHandle,
-        byId.get(c.target)?.data.manifest?.inputs,
+      const targetManifest = byId.get(c.target)?.data.manifest;
+      const targetInputs = targetManifest?.inputs;
+      if (
+        !portsConnectable(
+          byId.get(c.source)?.data.manifest?.outputs,
+          c.sourceHandle,
+          targetInputs,
+          c.targetHandle,
+        )
+      ) {
+        return false;
+      }
+      // Second rule, same reason: a single-value input takes ONE wire. The
+      // engine keeps the last edge it reads when several feed one input, so
+      // a second wire silently replaces the first — and the server now
+      // refuses to save such a flow, which would surface as a failed
+      // autosave rather than a wire that won't stick.
+      // Third rule: the same wire twice carries the same value from the same
+      // port, so the server refuses it outright — including on a variadic pin,
+      // where it used to be the one place duplicates accumulated.
+      const selfID = "id" in c ? c.id : undefined;
+      const sameWire = (e: FlowEdge) =>
+        e.source === c.source &&
+        (e.sourceHandle ?? "out") === (c.sourceHandle ?? "out") &&
+        e.target === c.target &&
+        (e.targetHandle ?? "in") === (c.targetHandle ?? "in");
+      if (edges.some((e) => e.id !== selfID && sameWire(e))) return false;
+
+      const taken = edges.filter(
+        (e) =>
+          e.id !== selfID &&
+          e.target === c.target &&
+          (e.targetHandle ?? "in") === (c.targetHandle ?? "in"),
+      ).length;
+      return inputHasRoom(
+        targetInputs,
         c.targetHandle,
+        taken,
+        targetManifest?.dynamic_ports,
+        targetManifest !== undefined,
       );
     },
-    [nodes],
+    [nodes, edges],
   );
 
   // Drag-off-pin creation. Dragging a wire from a port and dropping it on

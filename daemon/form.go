@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -160,7 +161,16 @@ func (w *WebhookListener) handleForm(rw http.ResponseWriter, r *http.Request) {
 			return
 		}
 		principal := SystemPrincipal("dazyflow-form", g.Tenant, g.Workspace)
-		runID, err := w.svc.SubmitGraphWithSeed(r.Context(), principal, g, seeds)
+		// The form is a trigger endpoint like /trigger, so it carries the
+		// trigger-chain depth the same way. Submitting at depth 0 unconditionally
+		// meant a flow whose HTTP step posts to its own form URL ran forever: the
+		// counter seedRun refuses on never climbed, and this is the door that
+		// needs no secret — the /trigger breaker was reachable only by a caller
+		// who already had the flow's key.
+		runID, err := w.svc.SubmitGraphOpts(r.Context(), principal, g, SubmitOpts{
+			Seeds:        seeds,
+			TriggerDepth: inboundTriggerDepth(r),
+		})
 		if err != nil {
 			w.logger.Printf("form submit %s/%s/%s: %v", tenant, workspace, graphID, err)
 			// "Try again" is only honest for a transient failure. A refusal the
@@ -309,7 +319,11 @@ func jsonScalarToString(v any) string {
 // payload would let a spammy caller bloat the workspace's schema with
 // 1000s of TEXT columns. 50 is well above what Zapier / Make /
 // Typeform / Squarespace actually attach in practice (typically <20).
-const maxFormFields = 50
+//
+// It is also the ceiling on the DECLARED field list (publicFormConfig), so a
+// flow cannot render more inputs than a submission could ever carry; the
+// number lives in core so the save-time lint quotes the same one.
+const maxFormFields = core.MaxHostedFormFields
 
 // collectFormValues builds the {field: value} map seeded into the
 // flow's webhook_input.body port from a hosted-form POST. It accepts
@@ -367,7 +381,30 @@ func publicFormConfig(g core.Graph) (fields []string, title string, ok bool) {
 			continue
 		}
 		t, _ := n.Params["form_title"].(string)
-		return formStringSlice(n.Params["form_fields"]), t, true
+		if len(t) > core.MaxHostedFormTitleLen {
+			t = t[:core.MaxHostedFormTitleLen]
+		}
+		fields := formStringSlice(n.Params["form_fields"])
+		// Capping the COUNT bounded the wrong half: a name has no natural
+		// length, and each one comes back four times per render, so 50 names of
+		// 300 KB answered one anonymous GET with 60 MB. Drop an over-long name
+		// rather than truncating it — a truncated name would still render and
+		// still post, under a key the author never typed, and two names sharing
+		// a prefix would collide. The save-time lint names the offending step.
+		fields = slices.DeleteFunc(fields, func(f string) bool {
+			return len(f) > core.MaxHostedFormFieldLen
+		})
+		if len(fields) > maxFormFields {
+			// The page renders every declared field on every anonymous GET —
+			// a label, an input, an id and a for= each — so an uncapped list is
+			// an amplifier on the one endpoint that needs no credential:
+			// 100,000 fields answered a bare GET with 9 MB. A submission was
+			// already capped at maxFormFields, so anything past it could never
+			// be filled in either; cap the declaration at the same number
+			// rather than rendering fields nobody can submit.
+			fields = fields[:maxFormFields]
+		}
+		return fields, t, true
 	}
 	return nil, "", false
 }

@@ -36,6 +36,10 @@ type Dispatcher struct {
 	bus    Bus
 	engine *engine.Engine
 	logger *log.Logger
+	// topologies caches each run's wiring index (see graphTopology): the
+	// graph is pinned for the life of a run, so re-deriving it per node
+	// completion was pure overhead on a densely wired flow.
+	topologies topologyCache
 }
 
 // NewDispatcher returns a Dispatcher that uses store/bus/engine for I/O.
@@ -126,7 +130,8 @@ func (d *Dispatcher) AdvanceAfterCompletion(
 	// event and the user's intent is "no more downstream work." Skip
 	// dispatchReady and maybeCompleteGraph so a node that finished mid
 	// cancel doesn't enqueue dependents or double-publish completion.
-	if grec, err := d.store.Get(ctx, graphRunID); err == nil && core.IsTerminalStatus(grec.Status) {
+	grec, grecErr := d.store.Get(ctx, graphRunID)
+	if grecErr == nil && core.IsTerminalStatus(grec.Status) {
 		return
 	}
 	// Breakpoint / step gate (#12): if this node carries a breakpoint (or
@@ -135,7 +140,13 @@ func (d *Dispatcher) AdvanceAfterCompletion(
 	// inspectable); the run idles until Continue/Step re-drives it via
 	// Service.ResumeGraphRun. Only pause on success — a failed breakpoint
 	// node should still propagate failure normally.
-	if status == core.JobStatusSucceeded && shouldPauseAfter(graph, graphRunID, nodeID) {
+	//
+	// Only a run somebody started and is watching (JobRecord.Manual) pauses on
+	// a breakpoint; see shouldPauseAfter. An unreadable record reads as "not
+	// watched" — losing a pause is a worse-debugging-session, keeping one on a
+	// triggered run is a run that never ends.
+	watched := grecErr == nil && grec.Manual
+	if status == core.JobStatusSucceeded && shouldPauseAfter(graph, graphRunID, nodeID, watched) {
 		breakpoints.addPaused(graphRunID, nodeID)
 		d.bus.Publish(graphRunID, BusEvent{Paused: &PausedEvent{
 			NodeID:   nodeID,
@@ -184,21 +195,30 @@ func (d *Dispatcher) PublishNodeStatus(
 }
 
 func (d *Dispatcher) dispatchReady(ctx context.Context, graph core.Graph, graphRunID, completedNodeID string) {
+	d.dispatchReadyIndexed(ctx, graph, graphRunID, completedNodeID, d.indexFor(graphRunID, graph))
+}
+
+// dispatchReadyIndexed is dispatchReady over a prebuilt edge index. The
+// index is what keeps dispatch linear in edge count: without it each
+// dependent re-scanned every edge in the graph and re-read every
+// predecessor record, so a densely wired flow cost O(nodes² × edges) —
+// minutes of CPU for a few hundred no-op steps, and a store round trip per
+// edge per evaluation.
+func (d *Dispatcher) dispatchReadyIndexed(
+	ctx context.Context,
+	graph core.Graph,
+	graphRunID, completedNodeID string,
+	ix *dispatchIndex,
+) {
 	// Loop-body nodes run once per item under their for_each (see loopBodyOwners),
 	// never standalone — so the normal dispatcher must skip them, including the
 	// for_each's own "body" pin edge that feeds the body entry node.
-	bodyOwners := loopBodyOwners(graph)
-	dependents := map[string]struct{}{}
-	for _, edge := range graph.Edges {
-		if edge.From == completedNodeID {
-			dependents[edge.To] = struct{}{}
-		}
-	}
-	for nodeID := range dependents {
+	bodyOwners := ix.bodyOwners
+	for _, nodeID := range ix.outgoing[completedNodeID] {
 		if _, owned := bodyOwners[nodeID]; owned {
 			continue
 		}
-		switch decision, reason := d.analyzeDependent(ctx, graph, graphRunID, nodeID); decision {
+		switch decision, reason := d.analyzeDependentIndexed(ctx, graph, graphRunID, nodeID, ix); decision {
 		case depEnqueue:
 			newRec := core.JobRecord{
 				ID:         NodeJobID(graphRunID, nodeID),
@@ -214,16 +234,25 @@ func (d *Dispatcher) dispatchReady(ctx context.Context, graph core.Graph, graphR
 				d.logger.Printf("enqueue dependent %s: %v", nodeID, err)
 			}
 		case depSkipped:
-			d.recordSkipped(ctx, graph, graphRunID, nodeID, reason)
+			d.recordSkippedIndexed(ctx, graph, graphRunID, nodeID, reason, ix)
 		case depWaiting:
-			if reason != "" {
+			// One line per dependent per pass floods the log on a wide flow —
+			// a 200-wire fan-in wrote thousands of lines in a second, and it
+			// says nothing an operator acts on ("not ready yet" is the normal
+			// state of every step before its turn). Opt in for debugging.
+			if reason != "" && debugDispatch {
 				d.logger.Printf("%s waiting: %s", nodeID, reason)
 			}
 		}
 	}
 }
 
-func (d *Dispatcher) recordSkipped(ctx context.Context, graph core.Graph, graphRunID, nodeID, reason string) {
+func (d *Dispatcher) recordSkippedIndexed(
+	ctx context.Context,
+	graph core.Graph,
+	graphRunID, nodeID, reason string,
+	ix *dispatchIndex,
+) {
 	rec := core.JobRecord{
 		ID:         NodeJobID(graphRunID, nodeID),
 		Kind:       core.JobKindNode,
@@ -243,7 +272,10 @@ func (d *Dispatcher) recordSkipped(ctx context.Context, graph core.Graph, graphR
 	}
 	d.logger.Printf("skipped %s: %s", nodeID, reason)
 	d.PublishNodeStatus(graphRunID, nodeID, core.JobStatusSkipped, nil)
-	d.dispatchReady(ctx, graph, graphRunID, nodeID)
+	// The skip cascade reuses this pass's index; seed the record we just
+	// wrote so the dependents below see it instead of re-reading the store.
+	ix.put(rec)
+	d.dispatchReadyIndexed(ctx, graph, graphRunID, nodeID, ix)
 	d.maybeCompleteGraph(ctx, graph, graphRunID, nodeID, core.JobStatusSkipped, nil)
 }
 
@@ -256,13 +288,19 @@ const (
 )
 
 func (d *Dispatcher) analyzeDependent(ctx context.Context, graph core.Graph, graphRunID, depID string) (dependentDecision, string) {
+	return d.analyzeDependentIndexed(ctx, graph, graphRunID, depID, d.indexFor(graphRunID, graph))
+}
+
+func (d *Dispatcher) analyzeDependentIndexed(
+	ctx context.Context,
+	graph core.Graph,
+	graphRunID, depID string,
+	ix *dispatchIndex,
+) (dependentDecision, string) {
 	var anyActive, anyBlocked, anyNotRouted bool
 	var firstReason string
-	for _, edge := range graph.Edges {
-		if edge.To != depID {
-			continue
-		}
-		predRec, err := d.store.Get(ctx, NodeJobID(graphRunID, edge.From))
+	for _, edge := range ix.incoming[depID] {
+		predRec, err := ix.pred(ctx, d.store, graphRunID, edge.From)
 		if err != nil {
 			return depWaiting, fmt.Sprintf("predecessor %q not yet recorded", edge.From)
 		}
@@ -465,7 +503,9 @@ func (d *Dispatcher) maybeCompleteGraph(
 
 	// Loop-body nodes never run in the parent run (the for_each executes them
 	// once per item), so they hold no record here and must not gate completion.
-	bodyOwners := loopBodyOwners(graph)
+	// Read from the run's cached topology: this runs on every node
+	// transition, and re-deriving ownership each time walked the whole graph.
+	bodyOwners := d.topologies.get(graphRunID, graph).bodyOwners
 	nodeResults := make(map[string]core.Result, len(graph.Nodes))
 	for _, n := range graph.Nodes {
 		if _, owned := bodyOwners[n.ID]; owned {

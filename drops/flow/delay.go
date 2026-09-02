@@ -60,6 +60,18 @@ func init() {
 	})
 }
 
+// maxDelayMs bounds the wait a single step may ask for. Past this the
+// duration arithmetic overflows; well before it, the worker's node timeout
+// has ended the step anyway.
+const maxDelayMs = 365 * 24 * 60 * 60 * 1000
+
+// maxInlineDelay is the longest wait this step serves by sleeping on the
+// worker. Anything longer is deferred (core.StatusDeferred) so the slot goes
+// back to the pool. A second is short enough that holding a slot for it costs
+// nothing and long enough that the common sub-second pause — a hand-rolled
+// rate-limit gap between two API calls — never pays for a requeue.
+const maxInlineDelay = time.Second
+
 func executeDelay(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
 	ms, ok := resolveDelayMs(job)
 	if !ok {
@@ -68,8 +80,70 @@ func executeDelay(ctx context.Context, job core.Job, progress chan<- core.Progre
 	if ms < 0 {
 		return params.Err(job, "bad_param", "ms must be non-negative"), nil
 	}
+	// Above ~9.2e12 ms the nanosecond conversion overflows int64 and the
+	// timer fires at once — "wait a very long time" silently became "don't
+	// wait". Refuse anything past a year instead: a longer pause belongs to
+	// a Schedule trigger, not a step holding a worker slot.
+	if ms > maxDelayMs {
+		return params.Err(job, "bad_param", fmt.Sprintf(
+			"ms must be at most %d (one year); use a Schedule trigger for longer waits", maxDelayMs)), nil
+	}
 
 	total := time.Duration(ms) * time.Millisecond
+
+	// A wait is pure waiting, and a worker is a serial claim → process loop
+	// out of a small pool — so sleeping here holds one of the daemon's few
+	// execution slots for the whole duration, and enough Waits in one flow
+	// stall every tenant. Hand the slot back instead and ask to be re-claimed
+	// at the deadline.
+	//
+	// The deadline is anchored on when the step became due, not on when this
+	// attempt started: the anchor survives the requeue, so the re-execution
+	// after the horizon passes computes the same deadline, finds no time left
+	// and finishes. Anchoring on now would restart the wait every hop.
+	//
+	// Short waits stay inline either way — a sub-second pause is not worth a
+	// store write and a re-claim, and it cannot starve anything. So does any
+	// wait with no anchor: that means no job record is behind this step (a
+	// loop body, a unit harness) and nothing would ever resume a deferral.
+	anchor, deferrable := core.NodeEnqueuedAt(ctx)
+	deadline := time.Now().Add(total)
+	if deferrable {
+		deadline = anchor.Add(total)
+	}
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
+		// The horizon already passed — this is the re-execution after a
+		// deferral, or a zero wait.
+		params.EmitProgress(progress, job, 1.0, "done")
+		return core.Result{
+			JobID:  job.ID,
+			Status: core.StatusOK,
+			Output: passthrough(job.Input),
+		}, nil
+	}
+	// A timeout the author DECLARED still binds: deferring is not executing, so
+	// the worker's context deadline no longer bounds the wait, and a Wait that
+	// quietly outlived `timeout_seconds` would be a worse answer than the
+	// blocking version gave. A wait longer than its own budget cannot finish
+	// inside it whatever we do, so say so now rather than sleeping to find out.
+	if budget := core.NodeTimeout(ctx); budget > 0 && remaining > budget {
+		return core.Result{
+			JobID:  job.ID,
+			Status: core.StatusError,
+			Error: &core.JobError{
+				Code: "timeout",
+				Message: fmt.Sprintf("waiting %v exceeds this step's %v timeout — raise the step's timeout, or shorten the wait",
+					remaining.Round(time.Millisecond), budget),
+			},
+		}, nil
+	}
+	if deferrable && remaining > maxInlineDelay {
+		params.EmitProgress(progress, job, 0, fmt.Sprintf("waiting until %v", deadline.UTC().Format(time.RFC3339)))
+		return core.Deferred(job.ID, deadline), nil
+	}
+
+	total = remaining
 	timer := time.NewTimer(total)
 	defer timer.Stop()
 

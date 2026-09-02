@@ -935,3 +935,23 @@ func TestStore_PromoteToEnvironment_MovesTag(t *testing.T) {
 		t.Errorf("after re-promote, env points at %d-node graph, want 2", len(g2.Nodes))
 	}
 }
+
+// The store is the choke point every writer reaches the repository through —
+// the API, dzctl, MCP, the flow generator, git sync — so it is where a flow ID
+// that would escape graphs/ (or make an unpublishable git ref) is refused. The
+// escaping ID used to save a flow that could then never be loaded again.
+func TestStore_Save_RefusesUnusableID(t *testing.T) {
+	s, err := OpenFS("")
+	if err != nil {
+		t.Fatalf("OpenFS: %v", err)
+	}
+	for _, id := range []string{"a/../../escape", "..", "with space", strings.Repeat("n", 300), ""} {
+		g := core.Graph{ID: id, Nodes: []core.Node{{ID: "a", Module: "noop"}}}
+		if _, err := s.Save(g, "qa"); err == nil {
+			t.Errorf("Save(id=%q) = nil, want a rejected id", id)
+		}
+	}
+	if _, err := s.Save(core.Graph{ID: "fine-flow", Nodes: []core.Node{{ID: "a", Module: "noop"}}}, "qa"); err != nil {
+		t.Errorf("a usable id was refused: %v", err)
+	}
+}

@@ -6,6 +6,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -387,5 +388,33 @@ func TestNotifyApprovalRequested_FallbackIsNotTheRunPage(t *testing.T) {
 			t.Fatal("no email")
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// The approver list is a comma-separated param, so nothing but the graph byte
+// budget bounded it — about 650,000 addresses — and the notifier sends one
+// message per address, serially, on the worker goroutine that parked the run,
+// through the OPERATOR'S mailer rather than an account the author connected.
+// Capping where the list is READ covers both notifiers (the request mail and
+// the decision mail) and any later reader.
+func TestApprovalParamApprovers_IsCapped(t *testing.T) {
+	t.Parallel()
+	var list []string
+	for i := range core.MaxApprovalRecipients * 20 {
+		list = append(list, fmt.Sprintf("victim%d@example.com", i))
+	}
+	got := approvalParamApprovers(map[string]any{"approvers": strings.Join(list, ",")})
+	if len(got) != core.MaxApprovalRecipients {
+		t.Errorf("read %d approvers from a %d-address list, want it capped at %d",
+			len(got), len(list), core.MaxApprovalRecipients)
+	}
+	// The ones it keeps are the ones the author listed first.
+	if len(got) > 0 && got[0] != "victim0@example.com" {
+		t.Errorf("first approver = %q, want the first one listed", got[0])
+	}
+	// A real list is untouched.
+	real := approvalParamApprovers(map[string]any{"approvers": "ops@acme.se, cto@acme.se"})
+	if len(real) != 2 {
+		t.Errorf("an ordinary two-person list read as %d addresses", len(real))
 	}
 }

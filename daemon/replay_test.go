@@ -71,7 +71,7 @@ func TestReplayRun_ResendsWebhookBody(t *testing.T) {
 			{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s3cr3t"}}},
 			{ID: "after", Module: "delay", Params: map[string]any{"ms": 1}},
 		},
-		Edges: []core.Edge{{From: "in", FromPort: "body", To: "after", ToPort: "in"}},
+		Edges: []core.Edge{{From: "in", FromPort: "body", To: "after", ToPort: "pass"}},
 	}
 	savePublished(t, wsStore, g)
 

@@ -856,7 +856,7 @@ func saveFlow(c *DazydClient, d Defaults, name, description string) Tool {
 			"type":"object",
 			"required":["id","nodes"],
 			"properties":{
-				"id":              {"type":"string","description":"Flow ID — stable handle used by run / trigger URLs."},
+				"id":              {"type":"string","pattern":"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$","description":"Flow ID — stable handle used by run / trigger URLs. Letters, digits, '-', '_' and '.', starting with a letter or digit (e.g. 'chase-overdue-invoices'): it becomes a filename and a git tag, so anything else is refused."},
 				"tenant":          {"type":"string"},
 				"workspace":       {"type":"string"},
 				"name":            {"type":"string","description":"Human-friendly display name."},
@@ -894,7 +894,8 @@ func saveFlow(c *DazydClient, d Defaults, name, description string) Tool {
 				},
 				"triggers": {
 					"type":"array",
-					"description":"Optional cron/webhook triggers — see GraphTrigger.",
+					"description":"Optional cron/webhook triggers — see GraphTrigger. Identical schedules collapse into one, so listing a schedule twice fires once.",
+					"maxItems": 32,
 					"items": {"type":"object"}
 				}
 			}
