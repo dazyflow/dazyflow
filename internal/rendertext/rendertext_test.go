@@ -90,7 +90,7 @@ func TestRender_NullCellViaGuard(t *testing.T) {
 // drop and the editor's live preview cannot drift, and its one subtle rule is
 // the separator: absent means newline, but an explicit "" must stay empty —
 // that is what the HTML-table preset relies on to join cells with no gap.
-// daemon/render_text_preview.go re-implements the same rule against a typed
+// daemon/httprender_text_preview.go re-implements the same rule against a typed
 // JSON body (it has no params map to pass here), so this pins the drop half.
 func TestSpecFromParams(t *testing.T) {
 	// An empty params map yields the documented defaults.

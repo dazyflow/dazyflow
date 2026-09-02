@@ -11,10 +11,10 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// admin_support_agents.go is the platform-admin management surface for support
+// httpadmin_support_agents.go is the platform-admin management surface for support
 // agents. Support agents are cross-tenant
 // vendor/operator staff, so provisioning them is a platform:admin action — the
-// mirror of the platform-admin grant management next door in admin_platform.go.
+// mirror of the platform-admin grant management next door in httpadmin_platform.go.
 // A support agent need NOT have an account here (they may sign in via SSO and be
 // elevated on the fly); the store is keyed on email, so we grant by email.
 

@@ -53,7 +53,7 @@ const boardRowLimit = 1000
 const boardRowIDKey = "_dz_rowid"
 
 // Sentinel errors the HTTP layer maps to status codes. Mirrors the
-// not-configured / not-found / bad-input conventions in me_routes.go.
+// not-configured / not-found / bad-input conventions in httpme.go.
 var (
 	errBoardsUnavailable = errors.New("Collections requires a workspace sandbox")
 	errBoardNotFound     = errors.New("no such board")

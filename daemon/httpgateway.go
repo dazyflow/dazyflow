@@ -296,7 +296,7 @@ type HTTPGateway struct {
 
 	// Metrics, when set, accumulates HTTP RED (rate/errors/duration) and
 	// per-node execution-latency series for the /metrics endpoint. Nil
-	// leaves those series unreported (the gauges in metrics.go still
+	// leaves those series unreported (the gauges in httpmetrics.go still
 	// work). Shared with the workers so node latencies land here too.
 	Metrics *Metrics
 

@@ -140,7 +140,7 @@ DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 graph save pipeline-hi
 # api/proto/control.proto and no `dzctl graph publish`, so this goes to the
 # same :18080 gateway the webhooks below use, with the dev token as bearer.
 # An empty body publishes HEAD. `flow_id` is the full tenant/workspace/id
-# triple (splitFlowID in daemon/me_routes.go), and it is ONE path segment:
+# triple (splitFlowID in daemon/httpme.go), and it is ONE path segment:
 # the route is `{flow_id}`, which Go's mux matches against a single segment,
 # so the slashes must be percent-encoded. Same as the web client, which sends
 # encodeURIComponent(`${tenant}/${workspace}/${id}`).

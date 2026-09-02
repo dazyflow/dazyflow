@@ -373,7 +373,7 @@ func looksSecretKey(key string) bool {
 // email as the Subject and dump that victim's profile + cross-org
 // memberships. Require a session credential here so Subject is always the
 // authenticated human's own verified identity. (Mirrors the org-delete
-// step-up in gdpr_http.go.)
+// step-up in httpgdpr.go.)
 func (h *HTTPGateway) exportHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Users == nil {
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "user store not configured")

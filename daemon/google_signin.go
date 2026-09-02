@@ -744,7 +744,7 @@ func (h *HTTPGateway) resolveActiveOrg(r *http.Request, cfg auth.OrgAuthConfig, 
 	}
 	// Domain-authorized joiners get a minimal default role (editor — no org
 	// administration); an invitation carries its own scoped roles, which we
-	// honor exactly (mirrors acceptInvitation in orgs.go).
+	// honor exactly (mirrors acceptInvitation in httporgs.go).
 	workspace = "main"
 	roles = []core.Role{core.TeamRoleEditor()}
 	if hasInvite {

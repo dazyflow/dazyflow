@@ -37,7 +37,7 @@ type signupRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 	// SignupInvite is the optional platform signup-invite token (see
-	// signup_invite.go). When self-serve signup is disabled, a valid,
+	// httpsignup_invite.go). When self-serve signup is disabled, a valid,
 	// pending invite for this email is the third way through the gate
 	// — letting a platform owner onboard specific users one at a time
 	// without opening signup to the world.
@@ -62,7 +62,7 @@ func (h *HTTPGateway) signUp(rw http.ResponseWriter, r *http.Request) {
 	// operator enabled self-serve signup; this email is in the
 	// platform-admin allowlist (DAZYFLOW_PLATFORM_ADMINS); or the request
 	// carries a valid, pending platform signup-invite issued for this
-	// email (see signup_invite.go). The allowlist path is the bootstrap
+	// email (see httpsignup_invite.go). The allowlist path is the bootstrap
 	// hatch — it lets a fresh instance mint its first super-admin without
 	// flipping EnableSignup on and back off. All three are self-limiting:
 	// once the account exists the duplicate check below returns 409, so a
@@ -203,7 +203,7 @@ func (h *HTTPGateway) signUp(rw http.ResponseWriter, r *http.Request) {
 		// on every production request and a bare r.TLS check would drop the
 		// Secure flag exactly where it matters most — the freshly minted
 		// session a new user carries away from signup. Matches the sign-in,
-		// SSO and TOTP legs (httpgateway.go, totp.go).
+		// SSO and TOTP legs (httpgateway.go, httptotp.go).
 		Secure: h.requestIsHTTPS(r),
 	})
 	writeJSON(rw, http.StatusCreated, map[string]any{

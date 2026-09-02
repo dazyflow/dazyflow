@@ -151,7 +151,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// GDPR data-subject rights. Export (Art. 15/20) downloads a complete
 	// machine-readable copy; account deletion (Art. 17) erases the caller's
 	// own account (confirmation-guarded). Handlers in gdpr_export.go /
-	// gdpr_http.go.
+	// httpgdpr.go.
 	mux.HandleFunc("GET /api/v1/me/export", h.requireAuth(h.exportHandler))
 	mux.HandleFunc("DELETE /api/v1/me/account", h.requireAuth(h.deleteMyAccountHandler))
 	// Support feature: a support agent
@@ -188,7 +188,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 
 	// /me/flows and /me/runs — the new spec-aligned routes. flow_id is
 	// a percent-encoded composite of tenant/workspace/id; run_id is
-	// the existing jobID verbatim. Handlers in daemon/me_routes.go
+	// the existing jobID verbatim. Handlers in daemon/httpme.go
 	// translate to the legacy graph + job service methods. Mutating
 	// routes honor Idempotency-Key for replay-safe retries.
 	mux.HandleFunc("GET /api/v1/me/usage", h.requireAuth(h.usageMe))
@@ -301,10 +301,10 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/v1/me/connections/{provider}", h.requireAuth(h.disconnectConnectionMe))
 	mux.HandleFunc("POST /api/v1/validate/cron", h.requireAuth(h.validateCron))
 	// Live preview for the render_template step's editor — renders {template,
-	// data} through the same engine the drop uses. See render_preview.go.
+	// data} through the same engine the drop uses. See httprender_preview.go.
 	mux.HandleFunc("POST /api/v1/tools/render-template/preview", h.requireAuth(h.renderTemplatePreview))
 	// Live preview for the render_text step's editor — renders sample rows
-	// through the same engine the drop uses. See render_text_preview.go.
+	// through the same engine the drop uses. See httprender_text_preview.go.
 	mux.HandleFunc("POST /api/v1/tools/render-text/preview", h.requireAuth(h.renderTextPreview))
 	// The Expression drop's formula linter — compiles a CEL expression and
 	// returns any problem inline. See validateExpression.
@@ -344,7 +344,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// admins only (the answer is instance-wide, not per-org).
 	mux.HandleFunc("GET /api/v1/admin/version", h.requireAuth(h.adminVersion))
 	// Live tail of the daemon's own log stream as SSE — the System-section
-	// "System log" viewer. platform:admin only; see admin_systemlog.go.
+	// "System log" viewer. platform:admin only; see httpadmin_systemlog.go.
 	mux.HandleFunc("GET /api/v1/admin/system/log", h.requireAuth(h.systemLogTail))
 	// OAuth provider configuration: paste client_id + client_secret in
 	// the admin UI instead of DAZYFLOW_OAUTH_*_CLIENT_ID env vars + a
@@ -438,25 +438,25 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// to create its own account on a signup-disabled deployment. Distinct
 	// from org invitations above — the recipient gets their own tenant,
 	// not a membership. The token is consumed by the signUp gate, not an
-	// accept endpoint. See signup_invite.go.
+	// accept endpoint. See httpsignup_invite.go.
 	mux.HandleFunc("POST /api/v1/admin/signup-invites", h.requireAuth(h.createSignupInvite))
 	mux.HandleFunc("GET /api/v1/admin/signup-invites", h.requireAuth(h.listSignupInvites))
 	mux.HandleFunc("DELETE /api/v1/admin/signup-invites/{token}", h.requireAuth(h.revokeSignupInvite))
 	// Platform-admin SMTP smoke test — send one message through the
-	// transactional Mailer to confirm it actually delivers. See admin_smtp.go.
+	// transactional Mailer to confirm it actually delivers. See httpadmin_smtp.go.
 	mux.HandleFunc("POST /api/v1/admin/smtp-test", h.requireAuth(h.smtpTest))
 	mux.HandleFunc("GET /api/v1/admin/members", h.requireAuth(h.listMembers))
 	mux.HandleFunc("PATCH /api/v1/admin/members/{email}", h.requireAuth(h.updateMemberRoles))
 	mux.HandleFunc("DELETE /api/v1/admin/members/{email}", h.requireAuth(h.removeMember))
 	// GDPR erasure (Art. 17): erase a whole account (platform admin) or
 	// delete an entire org/tenant (platform admin, or org admin of that
-	// tenant). Both confirmation-guarded; see gdpr_http.go.
+	// tenant). Both confirmation-guarded; see httpgdpr.go.
 	mux.HandleFunc("DELETE /api/v1/admin/users/{email}", h.requireAuth(h.adminDeleteUserHandler))
 	mux.HandleFunc("GET /api/v1/admin/orgs/{tenant}/export", h.requireAuth(h.exportOrgHandler))
 	mux.HandleFunc("DELETE /api/v1/admin/orgs/{tenant}", h.requireAuth(h.adminDeleteOrgHandler))
 
 	// Platform-admin moderation surface (platform:admin only; see
-	// admin_platform.go). User/org suspend-ban-list, and the drop
+	// httpadmin_platform.go). User/org suspend-ban-list, and the drop
 	// killswitch. Delete reuses the GDPR erase routes above.
 	mux.HandleFunc("GET /api/v1/admin/platform/users", h.requireAuth(h.platformListUsers))
 	mux.HandleFunc("GET /api/v1/admin/platform/users/{email}", h.requireAuth(h.platformGetUser))

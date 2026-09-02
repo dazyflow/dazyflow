@@ -14,7 +14,7 @@ import (
 	"github.com/dazyflow/dazyflow/daemon/support"
 )
 
-// support_routes.go wires the Support feature's HTTP surface: a support agent
+// httpsupport.go wires the Support feature's HTTP surface: a support agent
 // requests a scoped, time-boxed, read-only view of one flow; an org admin
 // approves/denies/revokes; the agent then reads the REDACTED bundle. Every
 // action is audited into the ORG's log.

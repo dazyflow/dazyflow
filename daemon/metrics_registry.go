@@ -18,7 +18,7 @@ import (
 )
 
 // Metrics is a tiny in-process metrics registry for the cumulative
-// series the pull-on-scrape gauges in metrics.go can't express: HTTP
+// series the pull-on-scrape gauges in httpmetrics.go can't express: HTTP
 // request rate/errors/duration (RED) and per-node execution latency.
 // Hand-rolled to match the rest of /metrics (no client_golang
 // dependency). All observe paths are safe for concurrent callers — the

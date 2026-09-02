@@ -26,7 +26,7 @@ import (
 // pre-filled, and the recipient just sets a password. The resulting
 // account is an ordinary self-serve account — its OWN tenant and the
 // default signup roles — not a membership in the owner's org (that's
-// what the org-invite flow in orgs.go is for).
+// what the org-invite flow in httporgs.go is for).
 //
 // Storage piggybacks on the invitations store via the SignupInviteTenant
 // sentinel (see auth/invitation.go), so signup-invites inherit its TTL,
