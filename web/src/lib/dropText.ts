@@ -70,9 +70,6 @@ const SV_LABELS: Record<string, string> = {
   Interval: "Intervall",
   Location: "Plats",
   "Look up a place": "Slå upp en plats",
-  // Our own generic name for a mail account read over IMAP, so it translates —
-  // unlike Gmail, which is a product name and stays as it is.
-  Mailbox: "Brevlåda",
   "Make a table": "Gör en tabell",
   "Make text": "Gör text",
   Merge: "Slå samman",

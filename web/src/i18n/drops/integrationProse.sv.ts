@@ -167,7 +167,7 @@ export const SV_INTEGRATION_PROSE: DescriptionMap = {
   },
   "mailbox.description": {
     en: "933c438c",
-    sv: "Läs ett mejlkonto över IMAP: sök i en mapp efter de mejl du bryr dig om och lämna varje träff vidare till resten av flödet. Det här är den andra halvan av Email (SMTP), som bara kan skicka — SMTP har inget sätt att lista eller söka i en brevlåda, så allt som reagerar på inkommande mejl går genom den här. Fungerar med Fastmail, mailbox.org, Migadu, iCloud, en egen Dovecot-server, och Gmail med ett app-lösenord — ingen OAuth-app att registrera, ingen granskning att klara.",
+    sv: "Läs ett mejlkonto över IMAP: sök i en mapp efter de mejl du bryr dig om och lämna varje träff vidare till resten av flödet. Det här är den andra halvan av Email (SMTP), som bara kan skicka — SMTP har inget sätt att lista eller söka i ett mejlkonto, så allt som reagerar på inkommande mejl går genom den här. Fungerar med Fastmail, mailbox.org, Migadu, iCloud, en egen Dovecot-server, och Gmail med ett app-lösenord — ingen OAuth-app att registrera, ingen granskning att klara.",
   },
   "mailbox.technical_notes": {
     en: "5b2e1008",

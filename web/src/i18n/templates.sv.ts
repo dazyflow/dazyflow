@@ -111,7 +111,7 @@ export const SV_TEMPLATE_PROSE: DescriptionMap = {
   },
   "ai-email-triage-imap.use_case": {
     en: "7a7eded1",
-    sv: "Samma sortering, på en brevlåda som inte är Gmail: Fastmail, mailbox.org, Migadu, iCloud, eller en mejlserver du kör själv.",
+    sv: "Samma sortering, på ett mejlkonto som inte är Gmail: Fastmail, mailbox.org, Migadu, iCloud, eller en mejlserver du kör själv.",
   },
   "invoices-to-drive.title": {
     en: "c8c66e49",

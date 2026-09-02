@@ -10,6 +10,14 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The Mailbox app is called Mailbox in Swedish too.** Its step cards read
+  "Brevlåda" while the Apps page and every mention in the prose said Mailbox,
+  so one app appeared under two names. The name is now left as it is, like
+  Gmail, Slack and Fortnox; where the Swedish text needed the ordinary noun it
+  says "mejlkonto" instead.
+
 ## [0.29.0] - 2026-09-02
 
 ### Added
