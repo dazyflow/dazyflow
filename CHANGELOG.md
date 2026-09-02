@@ -127,6 +127,13 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ### Changed
 
+- **`golang.org/x/image` bumped to v0.45.0** for GO-2026-6222, a
+  `vp8l.Decode` vulnerability. It arrived as a transitive dependency of pdfcpu
+  (`drops/pdf` → pdfcpu → `x/image/webp`) and broke CI's `govulncheck -mode
+  binary` scan of `dzd`. Worth knowing that the SOURCE scan passed and only
+  the binary scan caught it: the two do different reachability analysis, so
+  `govulncheck ./...` alone is not the gate.
+
 - **`combine`, `file-search`, `scissors`, `file-code`, `calendar-x` and
   `calendar-clock` added to the web icon registry**, so the PDF, YAML and
   calendar steps draw their own glyphs rather than falling back to their
