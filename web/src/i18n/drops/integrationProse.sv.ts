@@ -25,6 +25,14 @@ export const SV_INTEGRATION_PROSE: DescriptionMap = {
     en: "9005d254",
     sv: "Autentiseras med ditt 46elks-API-användarnamn och lösenord (HTTP Basic), som anges en gång som 46elks-anslutningen på den här sidan (lagras krypterat som conn.46elks.*) och matas in vid körning — inga uppgifter på steget eller i flödet. Skickar en formulärkodad POST till 46elks ändpunkt /a1/sms. 'Från' är antingen E.164 (går att svara på) eller ett alfanumeriskt avsändar-ID (max 11 tecken, måste innehålla en bokstav, går inte att svara på). 46elks har ingen idempotensnyckel, så steget gör aldrig automatiska omförsök och motorn rensar dubbletter i återupptagna körningar — ett nytt utskick skulle faktureras dubbelt.",
   },
+  "calendar.description": {
+    en: "e15c6d8a",
+    sv: "Läs och skriv en kalender som inte är Googles — Fastmail, mailbox.org, iCloud, Nextcloud, eller en Radicale-server du kör själv. CalDAV är vad nästan alla kalendrar utom Googles pratar, så påminnelse- och bokningsflöden slutar vara Google-bara: lista morgondagens bokningar och sms:a alla, eller lägg ett introsamtal i kalendern direkt från ett formulärsvar.",
+  },
+  "calendar.technical_notes": {
+    en: "f05734c4",
+    sv: "Kontot — serveradress, användarnamn och lösenord (eller ett app-lösenord hos en leverantör med tvåfaktorsinloggning) — ställs in en gång här och matas in i varje Calendar-steg vid körning; lösenordet ligger i den krypterade hemlighetslagringen. Adressen kan vara en upptäcktsrot, ett principal, eller en enskild kalenders egen sökväg: klienten går från det din leverantör publicerade ner till kalendersamlingarna under, eftersom ingen användare kan förväntas veta vilket av dem de fått. Om kontot har flera kalendrar, ange den du vill använda — Testa anslutning listar dem om du inte gör det. Händelser kommer ut i samma form som Google Calendar-steget ger, så ett flöde flyttas mellan de två genom att byta steg. Tidsfönster tar samma relativa former (\"tomorrow\", \"+7d\", \"tomorrow+9h\"), tolkade i den tidszon du anger.",
+  },
   "chatgpt.description": {
     en: "c65b2822",
     sv: "Kör prompter genom ChatGPT, OpenAI:s AI-assistent. Använd den på samma sätt som Claude — sammanfatta text, klassificera indata, extrahera fält eller skriv utkast till svar — där du hellre använder en OpenAI-modell.",
@@ -256,6 +264,14 @@ export const SV_INTEGRATION_PROSE: DescriptionMap = {
   "postgres.technical_notes": {
     en: "211c32d2",
     sv: "Anslutningsregister med pgxpool per (organisation, DSN) och lat utrensning av inaktiva anslutningar. Skicka DSN:en via ${secret.postgres_dsn} från det krypterade hemlighetslagret i stället för att bädda in den i flödets JSON; steget secret_set kan rotera den utan att flödena ändras.",
+  },
+  "sftp.description": {
+    en: "59536459",
+    sv: "Flytta filer till och från en SFTP-server — en banks brevinkorg, en leverantörs flöde, en server du kör själv. Det är här en stor del av företagsintegration fortfarande faktiskt sker: en fil landar 03:00 och något måste hämta den. Välj det här framför Ladda upp till Drive när motparten ger dig en adress och ett konto i stället för en app att ansluta, eller när filerna inte ska passera någon annans moln.",
+  },
+  "sftp.technical_notes": {
+    en: "afa387c4",
+    sv: "Servern — adress, port, användarnamn och antingen ett lösenord eller en SSH-privatnyckel — ställs in en gång här och matas in i varje SFTP-steg vid körning; lösenordet och nyckeln ligger i den krypterade hemlighetslagringen. Verifiering av värdnyckeln har ingen standard och går inte att stänga av: klistra in serverns \"SHA256:…\"-fingeravtryck (eller en known_hosts-rad), och till dess misslyckas Testa anslutning med det fingeravtryck servern faktiskt erbjöd, så att du kan kontrollera det och kopiera in det. Att acceptera vilken nyckel som helst skulle göra en tyst man-in-the-middle möjlig, och uppgifterna är vad den skulle samla in. \"Bara nya sedan förra körningen\" i Lista filer följer den senaste ändringstiden plus namnen som delar den sekunden, så ett flöde som släpper tjugo filer inom en sekund inte tappar de sista. En server per anslutning — en andra (en bank och en leverantör, säg) stöds inte ännu.",
   },
   "slack.description": {
     en: "5ab3ab5c",

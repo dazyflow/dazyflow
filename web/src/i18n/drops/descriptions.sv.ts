@@ -53,6 +53,14 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     en: "406eddf9",
     sv: "Läs tillbaka rader ur en samling med en SELECT — praktiskt för att bygga en rapport av data du sparat tidigare. Använd ?-platshållare och parameterlistan för alla värden som kommer från användaren.",
   },
+  caldav_create_event: {
+    en: "7d42646e",
+    sv: "Skapa en händelse i en kalender över CalDAV. Varje fält som en bokning varierar med — när, vem, var, vad — kan kopplas in och inte bara skrivas, för poängen med att boka från ett flöde är att de kom från ett formulär eller en rad. Start och Slut tar samma relativa former som listningen (\"tomorrow+9h\"), så en tid kan beräknas i stället för att skrivas. Deltagare är kommaseparerade adresser; om de får en inbjudan avgörs av kalenderservern, inte av det här steget. Varje händelse som skapas här är tidsatt: ett rent datum som \"2026-06-16\" blir midnatt till 01:00 i stället för en heldagspost, så ange en tid på dygnet.",
+  },
+  caldav_list_events: {
+    en: "a489d20e",
+    sv: "Lista händelser från en kalender över CalDAV, som nästan alla kalendrar utom Googles pratar. Avgränsa med ett tidsfönster som följer schemat — \"tomorrow\" till \"tomorrow+1d\" för morgondagens bokningar, \"-7d\" till \"now\" för förra veckan — eller ange absoluta tidpunkter; båda ändarna kan också kopplas in. Varje händelse kommer ut med id, sammanfattning, beskrivning, plats, start/slut, status och deltagare, i starttidsordning, färdig att loopa över med För varje och sms:a eller mejla varje person.",
+  },
   chatgpt: {
     en: "76d1996e",
     sv: "Skicka en prompt och få ett svar tillbaka — sammanfatta text från ett tidigare steg, klassificera ett indata eller generera text. Koppla in texten som ska bearbetas i ingången Prompt, eller skriv en prompt direkt på steget.",
@@ -536,6 +544,18 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
   secret_set: {
     en: "0b7ba489",
     sv: "Spara ett värde i din organisations krypterade hemlighetslager under det angivna namnet. Kombinera det med mallsubstitution (${secret.namn}) för att läsa tillbaka värdet i senare flödeskörningar — det klassiska användningsfallet är att lagra en markör för pollande flöden som behöver minnas 'vad var det sista jag bearbetade' över omstarter.",
+  },
+  sftp_download_file: {
+    en: "1f85822f",
+    sv: "Hämta en fil från en SFTP-server och spara den, färdig att lämna till ett steg som läser den (Läs CSV, Läs Excel) eller lägger den någonstans (Ladda upp till Drive, Skriv fil). Koppla Filer från Lista filer in i en För varje och lägg det här steget i loopkroppen med Fil = radens path. Utgången Fil är en referens som nästa steg öppnar direkt.",
+  },
+  sftp_list_files: {
+    en: "dcd374e2",
+    sv: "Lista filerna i en mapp på en SFTP-server — en banks brevinkorg, en leverantörs flöde, en egen server. Begränsa med ett mönster som \"*.csv\" och varje fil kommer ut med namn, fullständig sökväg, storlek och ändringstid, äldst först, färdig att loopa över med För varje och lämna till Hämta fil. Slå på \"Bara nya sedan förra körningen\" för att göra det här till en säker källa att polla: ett publicerat flöde tar då varje fil en gång, i stället för att bearbeta hela mappen varje natt. Anslut servern en gång på integrationssidan SFTP.",
+  },
+  sftp_upload_file: {
+    en: "1a00dd26",
+    sv: "Lägg en fil på en SFTP-server. Koppla ett filproducerande steg till ingången Fil — Exportera blad som PDF, Skriv fil, Bygg CSV, eller en fil som flödet hämtat — och den landar i mappen du anger. Lämna namnet tomt för att behålla filens eget. Användbart för andra riktningen i en bank- eller leverantörsintegration: en utgående betalfil, en nattlig export, en rapport som någon hämtar.",
   },
   sheets_append_row: {
     en: "3769c2f6",

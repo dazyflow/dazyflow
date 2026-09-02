@@ -10,6 +10,62 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Added
+
+- **Move files over SFTP: the new SFTP app.** `sftp_list_files`,
+  `sftp_download_file` and `sftp_upload_file` reach a bank's drop box, a
+  supplier's feed, or a server you run yourself — an address and an account
+  rather than an app to register. This is where a lot of corporate
+  integration still actually happens, and until now Upload to Drive was the
+  only place a flow could put a file.
+
+  Host-key verification has no default and cannot be turned off. Paste the
+  server's `SHA256:…` fingerprint (or a known_hosts line); until you do, the
+  connection deliberately fails — quoting the fingerprint the server actually
+  offered, so the fix is a copy and paste rather than a hunt for
+  `ssh-keyscan`. Accepting any key would allow a silent man-in-the-middle,
+  and the server credentials are what it would collect.
+
+  'Only new since last run' on List files tracks the newest modified time
+  **plus the names sharing that second**. A bare timestamp loses files: SFTP
+  reports whole seconds, a feed drops a batch inside one, and a poll landing
+  mid-batch would record that second and skip every straggler — silently.
+
+  Known limit: one server per connection. Someone with a bank drop box *and*
+  a supplier feed needs two, which this shape doesn't give them yet.
+
+- **Calendars that aren't Google's: the new Calendar app.**
+  `caldav_list_events` and `caldav_create_event` speak CalDAV, which Fastmail,
+  mailbox.org, iCloud, Nextcloud and a Radicale box of your own all support.
+  The reminder and booking use cases (7, 21, 22, 32) were Google-only until
+  now; the events come out in the same shape `gcal_list_events` emits, so a
+  flow moves between the two by swapping the step.
+
+  The connection address can be a discovery root, a principal, or one
+  calendar's own path — providers publish all three and nobody can be expected
+  to know which they were handed, so the client walks from whatever it is given
+  down to the calendar collections underneath. An account with several
+  calendars is not silently narrowed to one: the error names them so the right
+  one can be copied into the field, and Test connection lists them.
+
+  Relative time windows work exactly as they do on the Google step —
+  `"tomorrow"` to `"tomorrow+1d"` for tomorrow's bookings, resolved in the
+  timezone you set.
+
+### Changed
+
+- **A guard on the write-dedupe flags** (`drops/writepolicy_test.go`).
+  `DedupeWrites` and `Idempotent` are hand-set bools that decide whether the
+  engine may replay a step or must replay its recorded result; get them wrong
+  on a step that writes outward and a lease reclaim sends a second email or
+  books a second slot, with every existing test still green. The 28 drops that
+  opt in are now pinned by name, and a manifest declaring both flags at once —
+  a contradiction — fails. `engine/writededupe_test.go` covered the mechanism;
+  nothing covered which drops asked for it.
+
+- **`folder-open` added to the web icon registry**, so List files draws its own
+  glyph rather than falling back to its category's.
+
 ### Fixed
 
 - **The Mailbox app is called Mailbox in Swedish too.** Its step cards read

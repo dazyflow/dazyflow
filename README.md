@@ -4,7 +4,7 @@
 canvas — a trigger, some connectors, a branch, an AI step — and `dzd` runs it on
 your own machine, on your own database, with your credentials never leaving it.
 
-167 steps across 37 apps, hosted forms and webhooks, schedules, human approvals,
+172 steps across 39 apps, hosted forms and webhooks, schedules, human approvals,
 and first-class Nordic/EU connectors (Fortnox, Klarna, Roaring, 46elks, nShift,
 SMHI) alongside the usual Google, Slack, Stripe and GitHub. English and Swedish
 UI. AGPL, no feature gates, no seat limits.

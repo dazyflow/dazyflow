@@ -12,6 +12,7 @@
 package drops
 
 import (
+	_ "github.com/dazyflow/dazyflow/drops/caldav"
 	_ "github.com/dazyflow/dazyflow/drops/claude"
 	_ "github.com/dazyflow/dazyflow/drops/datetime"
 	_ "github.com/dazyflow/dazyflow/drops/db"
@@ -44,6 +45,7 @@ import (
 	_ "github.com/dazyflow/dazyflow/drops/rss"
 	_ "github.com/dazyflow/dazyflow/drops/runner"
 	_ "github.com/dazyflow/dazyflow/drops/secrets"
+	_ "github.com/dazyflow/dazyflow/drops/sftp"
 	_ "github.com/dazyflow/dazyflow/drops/sheets"
 	_ "github.com/dazyflow/dazyflow/drops/shell"
 	_ "github.com/dazyflow/dazyflow/drops/slack"

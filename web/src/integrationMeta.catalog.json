@@ -1,5 +1,6 @@
 [
   "46elks",
+  "Calendar",
   "ChatGPT",
   "Claude",
   "Collections",
@@ -28,6 +29,7 @@
   "OpenWeather",
   "Postgres",
   "Roaring",
+  "SFTP",
   "SMHI",
   "SQLite",
   "Slack",

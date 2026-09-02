@@ -67,6 +67,30 @@
       "Rows"
     ]
   },
+  "caldav_create_event": {
+    "description": "Create an event on a calendar over CalDAV. Every field a booking varies by — when, who, where, what — takes a connection as well as a typed value, because the point of booking from a flow is that those came from a form or a row. Start and End accept the same relative forms as the listing (\"tomorrow+9h\"), so a slot can be computed rather than typed. Attendees are comma-separated addresses; whether they get an invitation email is up to the calendar server, not this step. Every event this makes is a timed one: a plain date like \"2026-06-16\" becomes midnight to 01:00 rather than an all-day entry, so give it a time of day.",
+    "ports": [
+      "Attendees",
+      "Description",
+      "End",
+      "Event",
+      "Event ID",
+      "Location",
+      "Pass-through",
+      "Start",
+      "Summary"
+    ]
+  },
+  "caldav_list_events": {
+    "description": "List events from a calendar over CalDAV, which nearly every calendar except Google's speaks. Bound it to a time window that moves with the schedule — \"tomorrow\" to \"tomorrow+1d\" for tomorrow's bookings, \"-7d\" to \"now\" for last week — or give absolute timestamps; both ends can also be connected in. Each event comes out with id, summary, description, location, start/end, status and attendees, in start-time order, ready to loop over with For each and text or email each person.",
+    "ports": [
+      "Count",
+      "End of window",
+      "Events",
+      "Pass-through",
+      "Start of window"
+    ]
+  },
   "chatgpt": {
     "description": "Send a prompt and get a response back — summarise text from an earlier step, classify an input, or generate text. Connect the text to work on into the Prompt input, or type a prompt on the step.",
     "ports": [
@@ -1158,6 +1182,33 @@
       "Pass-through",
       "Secret name",
       "Value"
+    ]
+  },
+  "sftp_download_file": {
+    "description": "Fetch one file from an SFTP server and save it, ready to hand to a step that reads it (Read CSV, Read Excel) or files it somewhere (Upload to Drive, Write file). Connect List files' Files into a For each and put this step in the loop body with File = the row's path. The File output is a reference the next step opens directly.",
+    "ports": [
+      "File",
+      "File name",
+      "Pass-through",
+      "Size"
+    ]
+  },
+  "sftp_list_files": {
+    "description": "List the files in a folder on an SFTP server — a bank's drop box, a supplier's feed, a server of your own. Narrow it with a pattern like \"*.csv\" and each file comes out with its name, full path, size and modified time, oldest first, ready to loop over with For each and hand to Download file. Turn on 'Only new since last run' to make this a safe poll source: a published flow then picks up each file once, instead of re-processing the whole folder every night. Connect the server once on the SFTP integration page.",
+    "ports": [
+      "Files",
+      "Folder",
+      "How many",
+      "Pass-through"
+    ]
+  },
+  "sftp_upload_file": {
+    "description": "Put a file onto an SFTP server. Connect a file-producing step into the File input — Export Sheet as PDF, Write file, Build CSV, or a file this flow downloaded — and it lands in the folder you name. Leave the name blank to keep the file's own. Useful for the other direction of a bank or supplier integration: an outgoing payment file, a nightly export, a report someone collects.",
+    "ports": [
+      "Details",
+      "File",
+      "Name",
+      "Pass-through"
     ]
   },
   "sheets_append_row": {

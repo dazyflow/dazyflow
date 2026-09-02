@@ -324,6 +324,20 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     technical_notes:
       "The mail account — server, port, security (implicit TLS on 993 / STARTTLS on 143 / none), username, password and default folder — is configured once here and injected into every Mailbox step at run time; the password is held in the encrypted secret store. Deliberately separate from the Email (SMTP) connection, since the two use different hosts. Reads use EXAMINE and BODY.PEEK, so a search never marks mail read. 'Only new since last run' tracks the folder's own UIDVALIDITY and UID rather than a timestamp, so a published poll acts on each email exactly once and recovers cleanly if the folder is ever recreated. Use 'Test connection' to confirm the server, login and folder name before saving. Note that Microsoft 365 has disabled password logins for IMAP: it needs OAuth, which this connection does not yet do.",
   },
+  calendar: {
+    name: "Calendar (CalDAV)",
+    description:
+      "Read and write a calendar that isn't Google's — Fastmail, mailbox.org, iCloud, Nextcloud, or a Radicale box you run yourself. CalDAV is what nearly every calendar except Google's speaks, so the reminder and booking flows stop being Google-only: list tomorrow's bookings and text everyone, or put an intro call on the calendar straight from a form submission.",
+    technical_notes:
+      "The account — server address, username and password (or an app password on a provider with two-factor sign-in) — is configured once here and injected into every Calendar step at run time; the password is held in the encrypted secret store. The address can be a discovery root, a principal, or one calendar's own path: the client walks from whatever your provider published to the calendar collections underneath, because no user can be expected to know which of those they were handed. If the account holds several calendars, name the one you want — Test connection lists them for you if you don't. Events come out in the same shape the Google Calendar step emits, so a flow moves between the two by swapping the step. Time windows accept the same relative forms (\"tomorrow\", \"+7d\", \"tomorrow+9h\"), resolved in the timezone you set.",
+  },
+  sftp: {
+    name: "SFTP",
+    description:
+      "Move files to and from an SFTP server — a bank's drop box, a supplier's feed, a server you run yourself. This is where a lot of corporate integration still actually happens: a file lands at 03:00 and something has to pick it up. Pick this over Upload to Drive when the other side hands you an address and an account rather than an app to connect, or when the files shouldn't pass through anyone else's cloud.",
+    technical_notes:
+      "The server — address, port, username, and either a password or an SSH private key — is configured once here and injected into every SFTP step at run time; the password and key are held in the encrypted secret store. Host-key verification has no default and cannot be turned off: paste the server's \"SHA256:…\" fingerprint (or a known_hosts line), and until you do, Test connection fails with the fingerprint the server actually offered so you can check it and copy it in. Accepting any key would make a silent man-in-the-middle possible, and the credentials are what it would collect. 'Only new since last run' on List files tracks the newest modified time plus the names sharing that second, so a feed that drops twenty files inside one second doesn't lose the stragglers. One server per connection — a second one (a bank and a supplier, say) isn't supported yet.",
+  },
   ntfy: {
     name: "ntfy",
     description:
