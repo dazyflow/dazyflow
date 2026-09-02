@@ -41,6 +41,7 @@ import (
 	_ "github.com/dazyflow/dazyflow/drops/ollama"
 	_ "github.com/dazyflow/dazyflow/drops/openai"
 	_ "github.com/dazyflow/dazyflow/drops/openmeteo"
+	_ "github.com/dazyflow/dazyflow/drops/pdf"
 	_ "github.com/dazyflow/dazyflow/drops/roaring"
 	_ "github.com/dazyflow/dazyflow/drops/rss"
 	_ "github.com/dazyflow/dazyflow/drops/runner"

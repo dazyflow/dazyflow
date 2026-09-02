@@ -12,6 +12,7 @@ package claude
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -54,6 +55,8 @@ func (provider) Call(ctx context.Context, apiKey string, req llmtask.Request) (l
 	var messages []any
 	if len(req.Messages) > 0 {
 		messages = req.Messages
+	} else if len(req.Files) > 0 {
+		messages = []any{map[string]any{"role": "user", "content": userContent(req)}}
 	} else {
 		messages = []any{map[string]any{"role": "user", "content": req.UserText}}
 	}
@@ -108,6 +111,7 @@ func init() {
 	})
 	llmtask.RegisterAll(llmtask.Config{
 		Provider:       provider{},
+		FileSupport:    llmtask.FilesDocuments,
 		Integration:    "Claude",
 		Icon:           "claude",
 		Color:          "#cc7755",
@@ -196,4 +200,59 @@ func claudeError(body []byte) string {
 		return e.Error.Type + ": " + e.Error.Message
 	}
 	return string(body)
+}
+
+// userContent builds the Anthropic content-block array for a request carrying
+// files. Documents and images are their own block types, and both go BEFORE
+// the text block: the API's guidance is that a question placed after the
+// document it asks about is answered more reliably.
+//
+// PDFs ride as `document` blocks, which the model reads natively — text layer
+// or scan, since it sees the rendered pages. Anything that is neither a PDF
+// nor an image has no block type to be, so it is sent as text when it plausibly
+// IS text and refused otherwise, rather than being dropped.
+func userContent(req llmtask.Request) []any {
+	blocks := make([]any, 0, len(req.Files)+1)
+	for _, f := range req.Files {
+		// base64.StdEncoding, unwrapped: the API rejects a data string
+		// carrying newlines.
+		data := base64.StdEncoding.EncodeToString(f.Data)
+		switch {
+		case f.IsPDF():
+			blocks = append(blocks, map[string]any{
+				"type": "document",
+				"source": map[string]any{
+					"type":       "base64",
+					"media_type": "application/pdf",
+					"data":       data,
+				},
+			})
+		case f.IsImage():
+			blocks = append(blocks, map[string]any{
+				"type": "image",
+				"source": map[string]any{
+					"type":       "base64",
+					"media_type": mediaType(f.MIME),
+					"data":       data,
+				},
+			})
+		default:
+			// A CSV or a text file has no block type of its own; inlining it
+			// as text is what the API's own plain-text document source does.
+			blocks = append(blocks, map[string]any{
+				"type": "text",
+				"text": fmt.Sprintf("--- %s ---\n%s", f.Name, string(f.Data)),
+			})
+		}
+	}
+	if strings.TrimSpace(req.UserText) != "" {
+		blocks = append(blocks, map[string]any{"type": "text", "text": req.UserText})
+	}
+	return blocks
+}
+
+// mediaType strips any parameters off a content type — "image/png; foo=bar"
+// is not a media_type the API accepts.
+func mediaType(mime string) string {
+	return strings.TrimSpace(strings.SplitN(mime, ";", 2)[0])
 }

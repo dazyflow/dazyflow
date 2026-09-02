@@ -15,6 +15,7 @@ import (
 
 	"github.com/dazyflow/dazyflow/drops/internal/llmtask"
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
+	"github.com/dazyflow/dazyflow/internal/llm"
 )
 
 func TestMain(m *testing.M) {
@@ -292,5 +293,86 @@ func TestOpenaiError_PlainBodyFallback(t *testing.T) {
 	_, jerr := provider{}.Call(context.Background(), "k", llmtask.Request{UserText: "x", BaseURL: srv.URL})
 	if jerr == nil || !strings.Contains(jerr.Message, "plain text failure") {
 		t.Fatalf("jerr = %+v", jerr)
+	}
+}
+
+// OpenAI wants two different shapes for what is conceptually one thing: an
+// image as an `image_url` part holding a data: URI, a PDF as a `file` part
+// holding the same encoding under `file_data` with a filename. Getting either
+// wrong fails at OpenAI with an error about our request, so the assertion is
+// on the body we send.
+func TestCall_FilesBecomeContentParts(t *testing.T) {
+	var got map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&got)
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"ok"}}]}`))
+	}))
+	defer srv.Close()
+
+	_, jerr := provider{}.Call(context.Background(), "k", llmtask.Request{
+		Model: "m", UserText: "totals?", BaseURL: srv.URL,
+		Files: []llm.File{
+			{Name: "shot.png", MIME: "image/png", Data: []byte("\x89PNG\r\n")},
+			{Name: "invoice.pdf", MIME: "application/pdf", Data: []byte("%PDF-1.4\n")},
+		},
+	})
+	if jerr != nil {
+		t.Fatalf("Call: %+v", jerr)
+	}
+
+	msgs, _ := got["messages"].([]any)
+	last, _ := msgs[len(msgs)-1].(map[string]any)
+	parts, ok := last["content"].([]any)
+	if !ok {
+		t.Fatalf("content is not a parts array: %#v", last["content"])
+	}
+	if len(parts) != 3 {
+		t.Fatalf("want image + file + text, got %d: %#v", len(parts), parts)
+	}
+
+	img, _ := parts[0].(map[string]any)
+	if img["type"] != "image_url" {
+		t.Errorf("image part type = %v, want image_url", img["type"])
+	}
+	url, _ := img["image_url"].(map[string]any)["url"].(string)
+	if !strings.HasPrefix(url, "data:image/png;base64,") {
+		t.Errorf("image url = %q, want a data: URI", url)
+	}
+
+	doc, _ := parts[1].(map[string]any)
+	if doc["type"] != "file" {
+		t.Errorf("pdf part type = %v, want file", doc["type"])
+	}
+	fileObj, _ := doc["file"].(map[string]any)
+	if fileObj["filename"] != "invoice.pdf" {
+		t.Errorf("filename = %v — inline file_data needs one", fileObj["filename"])
+	}
+	if fd, _ := fileObj["file_data"].(string); !strings.HasPrefix(fd, "data:application/pdf;base64,") {
+		t.Errorf("file_data = %q, want a data: URI", fd)
+	}
+
+	if txt, _ := parts[2].(map[string]any); txt["text"] != "totals?" {
+		t.Errorf("last part = %#v, want the question after the files", txt)
+	}
+}
+
+// No files means the plain-string content every existing flow sends.
+func TestCall_NoFilesKeepsPlainStringContent(t *testing.T) {
+	var got map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&got)
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"ok"}}]}`))
+	}))
+	defer srv.Close()
+
+	if _, jerr := (provider{}).Call(context.Background(), "k", llmtask.Request{
+		Model: "m", UserText: "hello", BaseURL: srv.URL,
+	}); jerr != nil {
+		t.Fatalf("Call: %+v", jerr)
+	}
+	msgs, _ := got["messages"].([]any)
+	last, _ := msgs[len(msgs)-1].(map[string]any)
+	if s, _ := last["content"].(string); s != "hello" {
+		t.Errorf("content = %#v, want the plain string form", last["content"])
 	}
 }

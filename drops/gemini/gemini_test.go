@@ -287,3 +287,45 @@ func TestRegisteredInSharedRegistry(t *testing.T) {
 		t.Error("no models exposed to the picker")
 	}
 }
+
+// Gemini takes every binary the same way — inline_data with a mime type —
+// whether it's a PDF or a picture, so there's no per-type branch to get wrong.
+// The ordering still matters: the file goes before the question.
+func TestCall_FilesBecomeInlineData(t *testing.T) {
+	var got map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&got)
+		_, _ = w.Write([]byte(`{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}`))
+	}))
+	defer srv.Close()
+
+	_, jerr := provider{}.Call(context.Background(), "k", llmtask.Request{
+		Model: "m", UserText: "totals?", BaseURL: srv.URL,
+		Files: []llm.File{{Name: "invoice.pdf", MIME: "application/pdf; x=1", Data: []byte("%PDF-1.4\n")}},
+	})
+	if jerr != nil {
+		t.Fatalf("Call: %+v", jerr)
+	}
+
+	contents, _ := got["contents"].([]any)
+	if len(contents) != 1 {
+		t.Fatalf("want 1 content turn, got %d", len(contents))
+	}
+	parts, ok := contents[0].(map[string]any)["parts"].([]any)
+	if !ok || len(parts) != 2 {
+		t.Fatalf("want inline_data + text, got %#v", contents[0])
+	}
+	inline, ok := parts[0].(map[string]any)["inline_data"].(map[string]any)
+	if !ok {
+		t.Fatalf("first part is not inline_data: %#v", parts[0])
+	}
+	if inline["mime_type"] != "application/pdf" {
+		t.Errorf("mime_type = %v, want the parameters stripped", inline["mime_type"])
+	}
+	if data, _ := inline["data"].(string); data == "" || strings.ContainsAny(data, "\r\n") {
+		t.Errorf("data = %q, want unwrapped base64", data)
+	}
+	if txt, _ := parts[1].(map[string]any); txt["text"] != "totals?" {
+		t.Errorf("second part = %#v, want the question after the file", txt)
+	}
+}

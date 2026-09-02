@@ -82,8 +82,8 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     sv: "Beskriv fälten du vill ha — som belopp, förfallodatum eller kundnamn — och AI:n läser texten och fyller i dem. Perfekt för att göra rader av fakturor, mejl och formulärsvar.",
   },
   claude_summarize: {
-    en: "37e982bf",
-    sv: "Mata in vilken text som helst — ett mejl, ett dokument, en rad med anteckningar — och få tillbaka en kort sammanfattning. Välj hur kort den ska vara och om du vill ha en mening, ett stycke eller punktlista.",
+    en: "f67a4a74",
+    sv: "Mata in vilken text som helst — ett mejl, ett dokument, en rad med anteckningar — och få tillbaka en kort sammanfattning. Välj hur kort den ska vara och om du vill ha en mening, ett stycke eller punktlista. Koppla en PDF eller en bild till Filer — en fakturerad bilaga, ett skannat kvitto, en skärmbild — och steget läser filen självt i stället för bara text om den.",
   },
   compare: {
     en: "e6392d92",
@@ -210,8 +210,8 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     sv: "Beskriv fälten du vill ha — som belopp, förfallodatum eller kundnamn — och AI:n läser texten och fyller i dem. Perfekt för att göra rader av fakturor, mejl och formulärsvar.",
   },
   gemini_summarize: {
-    en: "37e982bf",
-    sv: "Mata in vilken text som helst — ett mejl, ett dokument, en rad med anteckningar — och få tillbaka en kort sammanfattning. Välj hur kort den ska vara och om du vill ha en mening, ett stycke eller punktlista.",
+    en: "f67a4a74",
+    sv: "Mata in vilken text som helst — ett mejl, ett dokument, en rad med anteckningar — och få tillbaka en kort sammanfattning. Välj hur kort den ska vara och om du vill ha en mening, ett stycke eller punktlista. Koppla en PDF eller en bild till Filer — en fakturerad bilaga, ett skannat kvitto, en skärmbild — och steget läser filen självt i stället för bara text om den.",
   },
   geo_location: {
     en: "0ef9a8a7",
@@ -290,8 +290,8 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     sv: "Beskriv fälten du vill ha — som belopp, förfallodatum eller kundnamn — och AI:n läser texten och fyller i dem. Perfekt för att göra rader av fakturor, mejl och formulärsvar.",
   },
   gpt_summarize: {
-    en: "37e982bf",
-    sv: "Mata in vilken text som helst — ett mejl, ett dokument, en rad med anteckningar — och få tillbaka en kort sammanfattning. Välj hur kort den ska vara och om du vill ha en mening, ett stycke eller punktlista.",
+    en: "f67a4a74",
+    sv: "Mata in vilken text som helst — ett mejl, ett dokument, en rad med anteckningar — och få tillbaka en kort sammanfattning. Välj hur kort den ska vara och om du vill ha en mening, ett stycke eller punktlista. Koppla en PDF eller en bild till Filer — en fakturerad bilaga, ett skannat kvitto, en skärmbild — och steget läser filen självt i stället för bara text om den.",
   },
   group_aggregate: {
     en: "f712cd9b",
@@ -458,8 +458,8 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     sv: "Beskriv fälten du vill ha — som belopp, förfallodatum eller kundnamn — och AI:n läser texten och fyller i dem. Perfekt för att göra rader av fakturor, mejl och formulärsvar.",
   },
   ollama_summarize: {
-    en: "37e982bf",
-    sv: "Mata in vilken text som helst — ett mejl, ett dokument, en rad med anteckningar — och få tillbaka en kort sammanfattning. Välj hur kort den ska vara och om du vill ha en mening, ett stycke eller punktlista.",
+    en: "a2589ffe",
+    sv: "Mata in vilken text som helst — ett mejl, ett dokument, en rad med anteckningar — och få tillbaka en kort sammanfattning. Välj hur kort den ska vara och om du vill ha en mening, ett stycke eller punktlista. Koppla en bild till Filer och steget läser bilden. Lokala modeller kan i regel inte läsa PDF:er; använd ett Claude-, ChatGPT- eller Gemini-steg för dem.",
   },
   openmeteo_current: {
     en: "671a4553",
@@ -484,6 +484,18 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
   parse_xml: {
     en: "bbb18f23",
     sv: "Gör om XML-text till rader eller ett strukturerat värde. Mata in ett HTTP-svar, en nedladdad fil eller en RSS-/SOAP-nyttolast och den tolkas till formen med rader + rubriker som omvandlingsfamiljen, Sheets och databasstegen använder. Omvandlingen: ett elements attribut blir nycklar med @ först (id=\"7\" → \"@id\":\"7\"), underelement blir nycklar (upprepade underelement blir en lista) och textinnehållet är elementets värde (eller \"#text\" vid sidan av attribut/underelement). Dokumentets rotelement skalas bort, så 'path' är relativ till dess barn — peka den på det upprepade elementet för att få en rad per stycke (t.ex. \"channel.item\" för RSS). Namnrymder kortas till sitt lokala namn. Alla värden är text, som i CSV.",
+  },
+  pdf_info: {
+    en: "fdfce011",
+    sv: "Läs en PDF:s detaljer utan att öppna den: hur många sidor, titel och författare, när den gjordes, om den är lösenordsskyddad. Användbart som kontroll innan arbetet börjar — förgrena på sidantalet för att skicka en ensidare direkt vidare och ett femtiosidigt avtal till en människa, eller upptäck en krypterad fil innan ett senare steg går på den. Körs på den här maskinen; inget laddas upp någonstans.",
+  },
+  pdf_merge: {
+    en: "2bb32748",
+    sv: "Slå ihop flera PDF:er till en. Koppla filproducerande steg till ingången Filer — bilagorna från en månads fakturamejl, sidorna en skanner skickade en i taget — och de kombineras i den ordning de kommer. Den naturliga avslutningen på ett arkiveringsflöde: en fil till revisorn i stället för fyrtio. Körs på den här maskinen; inget laddas upp någonstans.",
+  },
+  pdf_split: {
+    en: "0d25a9bf",
+    sv: "Klipp upp en PDF i flera filer. Sätt \"Sidor per fil\" till 1 och en buntskanning blir ett dokument per sida, färdigt att loopa över med För varje och arkivera eller läsa var för sig. Sätt 2 för dubbelsidiga skanningar, eller högre för utdrag med fast längd. Varje del kommer ut som en fil nästa steg kan öppna. Körs på den här maskinen; inget laddas upp någonstans.",
   },
   phone: {
     en: "e83b5bbd",

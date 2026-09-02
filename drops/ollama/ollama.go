@@ -30,6 +30,7 @@ package ollama
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -83,7 +84,15 @@ func (provider) Call(ctx context.Context, apiKey string, req llmtask.Request) (l
 		if req.System != "" {
 			messages = append(messages, map[string]any{"role": "system", "content": req.System})
 		}
-		messages = append(messages, map[string]any{"role": "user", "content": req.UserText})
+		user := map[string]any{"role": "user", "content": req.UserText}
+		// Ollama's chat API takes images as bare base64 strings in an
+		// `images` array on the message — not content parts, and not a data:
+		// URI. Only images: llmtask refuses documents before we get here
+		// (FilesImagesOnly), so anything arriving is a picture.
+		if imgs := imageData(req.Files); len(imgs) > 0 {
+			user["images"] = imgs
+		}
+		messages = append(messages, user)
 	}
 
 	body := map[string]any{"model": model, "messages": messages, "max_tokens": maxTokens}
@@ -157,6 +166,7 @@ func init() {
 	})
 	llmtask.RegisterAll(llmtask.Config{
 		Provider:    provider{},
+		FileSupport: llmtask.FilesImagesOnly,
 		Integration: "Ollama",
 		// Ollama's own llama mark, traced from the logo they serve at
 		// ollama.com/public/ollama.png — see web/src/components/brand/OllamaIcon.tsx.
@@ -324,4 +334,18 @@ func listModels(ctx context.Context, apiKey, base string) ([]llm.ModelOption, er
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out, nil
+}
+
+// imageData renders the request's images as the bare base64 strings Ollama
+// wants. A non-image can't get this far — checkFileSupport refuses it with a
+// message naming the provider — so it is skipped rather than mangled.
+func imageData(files []llm.File) []any {
+	out := make([]any, 0, len(files))
+	for _, f := range files {
+		if !f.IsImage() {
+			continue
+		}
+		out = append(out, base64.StdEncoding.EncodeToString(f.Data))
+	}
+	return out
 }

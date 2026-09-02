@@ -5,6 +5,7 @@ package ollama
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/dazyflow/dazyflow/drops/internal/llmtask"
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
+	"github.com/dazyflow/dazyflow/internal/llm"
 )
 
 func TestMain(m *testing.M) {
@@ -258,5 +260,46 @@ func TestBaseOr(t *testing.T) {
 	}
 	if got := baseOr("  http://box.local:11434/  "); got != "http://box.local:11434" {
 		t.Errorf("trim = %q", got)
+	}
+}
+
+// Ollama takes images as bare base64 strings in an `images` array on the
+// message — not content parts, and not a data: URI. Getting that wrong means
+// a local model silently answering about nothing.
+func TestCall_ImagesRideOnTheMessage(t *testing.T) {
+	var got map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&got)
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"ok"}}]}`))
+	}))
+	defer srv.Close()
+
+	png := []byte("\x89PNG\r\nfake")
+	_, jerr := provider{}.Call(context.Background(), "k", llmtask.Request{
+		Model: "m", UserText: "what is this", BaseURL: srv.URL,
+		Files: []llm.File{{Name: "shot.png", MIME: "image/png", Data: png}},
+	})
+	if jerr != nil {
+		t.Fatalf("Call: %+v", jerr)
+	}
+
+	msgs, _ := got["messages"].([]any)
+	last, _ := msgs[len(msgs)-1].(map[string]any)
+	// The text stays a plain string; the image rides beside it.
+	if s, _ := last["content"].(string); s != "what is this" {
+		t.Errorf("content = %#v, want the prompt as a plain string", last["content"])
+	}
+	imgs, ok := last["images"].([]any)
+	if !ok || len(imgs) != 1 {
+		t.Fatalf("images = %#v, want one entry", last["images"])
+	}
+	data, _ := imgs[0].(string)
+	if strings.HasPrefix(data, "data:") {
+		t.Error("image carries a data: URI — Ollama wants bare base64")
+	}
+	if decoded, err := base64.StdEncoding.DecodeString(data); err != nil {
+		t.Errorf("not valid base64: %v", err)
+	} else if string(decoded) != string(png) {
+		t.Error("the image bytes didn't survive the round trip")
 	}
 }

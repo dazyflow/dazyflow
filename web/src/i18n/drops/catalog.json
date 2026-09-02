@@ -94,6 +94,7 @@
   "chatgpt": {
     "description": "Send a prompt and get a response back — summarise text from an earlier step, classify an input, or generate text. Connect the text to work on into the Prompt input, or type a prompt on the step.",
     "ports": [
+      "Files",
       "Pass-through",
       "Prompt",
       "Response"
@@ -102,6 +103,7 @@
   "claude": {
     "description": "Send a prompt and get a response back — summarise text from an earlier step, classify an input, or generate text. Connect the text to work on into the Prompt input, or type a prompt on the step.",
     "ports": [
+      "Files",
       "Pass-through",
       "Prompt",
       "Response"
@@ -112,6 +114,7 @@
     "ports": [
       "Category",
       "Confidence",
+      "Files",
       "Pass-through",
       "Text"
     ]
@@ -128,13 +131,15 @@
     "description": "Describe the fields you want — like amount, due date, or customer name — and AI reads the text and fills them in. Great for turning invoices, emails, and form replies into rows.",
     "ports": [
       "Fields",
+      "Files",
       "Pass-through",
       "Text"
     ]
   },
   "claude_summarize": {
-    "description": "Feed in any text — an email, a document, a row of notes — and get a concise summary back. Choose how short and whether you want a sentence, a paragraph, or bullet points.",
+    "description": "Feed in any text — an email, a document, a row of notes — and get a concise summary back. Choose how short and whether you want a sentence, a paragraph, or bullet points. Connect a PDF or an image into Files — an emailed invoice, a scanned receipt, a screenshot — and it reads the file itself rather than only text about it.",
     "ports": [
+      "Files",
       "Pass-through",
       "Summary",
       "Text"
@@ -392,6 +397,7 @@
   "gemini": {
     "description": "Send a prompt and get a response back — summarise text from an earlier step, classify an input, or generate text. Connect the text to work on into the Prompt input, or type a prompt on the step.",
     "ports": [
+      "Files",
       "Pass-through",
       "Prompt",
       "Response"
@@ -402,6 +408,7 @@
     "ports": [
       "Category",
       "Confidence",
+      "Files",
       "Pass-through",
       "Text"
     ]
@@ -418,13 +425,15 @@
     "description": "Describe the fields you want — like amount, due date, or customer name — and AI reads the text and fills them in. Great for turning invoices, emails, and form replies into rows.",
     "ports": [
       "Fields",
+      "Files",
       "Pass-through",
       "Text"
     ]
   },
   "gemini_summarize": {
-    "description": "Feed in any text — an email, a document, a row of notes — and get a concise summary back. Choose how short and whether you want a sentence, a paragraph, or bullet points.",
+    "description": "Feed in any text — an email, a document, a row of notes — and get a concise summary back. Choose how short and whether you want a sentence, a paragraph, or bullet points. Connect a PDF or an image into Files — an emailed invoice, a scanned receipt, a screenshot — and it reads the file itself rather than only text about it.",
     "ports": [
+      "Files",
       "Pass-through",
       "Summary",
       "Text"
@@ -596,6 +605,7 @@
     "ports": [
       "Category",
       "Confidence",
+      "Files",
       "Pass-through",
       "Text"
     ]
@@ -612,13 +622,15 @@
     "description": "Describe the fields you want — like amount, due date, or customer name — and AI reads the text and fills them in. Great for turning invoices, emails, and form replies into rows.",
     "ports": [
       "Fields",
+      "Files",
       "Pass-through",
       "Text"
     ]
   },
   "gpt_summarize": {
-    "description": "Feed in any text — an email, a document, a row of notes — and get a concise summary back. Choose how short and whether you want a sentence, a paragraph, or bullet points.",
+    "description": "Feed in any text — an email, a document, a row of notes — and get a concise summary back. Choose how short and whether you want a sentence, a paragraph, or bullet points. Connect a PDF or an image into Files — an emailed invoice, a scanned receipt, a screenshot — and it reads the file itself rather than only text about it.",
     "ports": [
+      "Files",
       "Pass-through",
       "Summary",
       "Text"
@@ -953,6 +965,7 @@
   "ollama": {
     "description": "Send a prompt and get a response back — summarise text from an earlier step, classify an input, or generate text. Connect the text to work on into the Prompt input, or type a prompt on the step.",
     "ports": [
+      "Files",
       "Pass-through",
       "Prompt",
       "Response"
@@ -963,6 +976,7 @@
     "ports": [
       "Category",
       "Confidence",
+      "Files",
       "Pass-through",
       "Text"
     ]
@@ -979,13 +993,15 @@
     "description": "Describe the fields you want — like amount, due date, or customer name — and AI reads the text and fills them in. Great for turning invoices, emails, and form replies into rows.",
     "ports": [
       "Fields",
+      "Files",
       "Pass-through",
       "Text"
     ]
   },
   "ollama_summarize": {
-    "description": "Feed in any text — an email, a document, a row of notes — and get a concise summary back. Choose how short and whether you want a sentence, a paragraph, or bullet points.",
+    "description": "Feed in any text — an email, a document, a row of notes — and get a concise summary back. Choose how short and whether you want a sentence, a paragraph, or bullet points. Connect an image into Files and it reads the picture. Local models generally can't read PDFs; for those use a Claude, ChatGPT or Gemini step.",
     "ports": [
+      "Files",
       "Pass-through",
       "Summary",
       "Text"
@@ -1043,6 +1059,35 @@
       "Rows",
       "Value",
       "XML"
+    ]
+  },
+  "pdf_info": {
+    "description": "Read a PDF's details without opening it: how many pages, its title and author, when it was made, whether it's password-protected. Useful as a check before doing work — branch on the page count to send a one-pager straight through and a fifty-page contract to a human, or spot an encrypted file before a later step fails on it. Runs on this machine; nothing is uploaded anywhere.",
+    "ports": [
+      "Details",
+      "File",
+      "Pages",
+      "Pass-through",
+      "Password-protected"
+    ]
+  },
+  "pdf_merge": {
+    "description": "Join several PDFs into one. Connect file-producing steps into the Files input — the attachments a month of invoice emails carried, the pages a scanner sent one at a time — and they're combined in the order they arrive. The natural end of a filing flow: one file for the accountant instead of forty. Runs on this machine; nothing is uploaded anywhere.",
+    "ports": [
+      "Files",
+      "PDF",
+      "Pages",
+      "Pass-through"
+    ]
+  },
+  "pdf_split": {
+    "description": "Cut one PDF into several files. Set 'Pages per file' to 1 and a batch scan becomes one document per page, ready to loop over with For each and file or read individually. Set it to 2 for double-sided scans, or higher for fixed-length statements. Each piece comes out as a file the next step can open. Runs on this machine; nothing is uploaded anywhere.",
+    "ports": [
+      "File",
+      "Files",
+      "First file",
+      "How many",
+      "Pass-through"
     ]
   },
   "phone": {

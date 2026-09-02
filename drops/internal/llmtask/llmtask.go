@@ -48,8 +48,27 @@ type (
 	ModelOption = llm.ModelOption
 )
 
+// FileSupportLevel is how much a provider can be handed alongside the prompt.
+// The zero value is FilesNone, so a provider that says nothing gets the safe
+// answer — a file wired to it is refused rather than dropped.
+type FileSupportLevel int
+
+const (
+	// FilesNone: the provider takes text only.
+	FilesNone FileSupportLevel = iota
+	// FilesImagesOnly: images go through, documents do not. Where the local
+	// runtimes sit — vision models are common, document readers are not.
+	FilesImagesOnly
+	// FilesDocuments: PDFs and images both, read natively by the model.
+	FilesDocuments
+)
+
 // Config is a provider's branding + model set, supplied to RegisterAll.
 type Config struct {
+	// FileSupport declares what the provider can carry on the Files input.
+	// See checkFileSupport, which turns this into the refusal a flow author
+	// reads.
+	FileSupport    FileSupportLevel
 	Provider       Provider
 	Integration    string // "Claude" / "ChatGPT" — drives grouping + conn.<slug>.api_key
 	Icon           string

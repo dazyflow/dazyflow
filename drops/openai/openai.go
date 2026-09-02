@@ -11,6 +11,7 @@ package openai
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -56,7 +57,11 @@ func (provider) Call(ctx context.Context, apiKey string, req llmtask.Request) (l
 		if req.System != "" {
 			messages = append(messages, map[string]any{"role": "system", "content": req.System})
 		}
-		messages = append(messages, map[string]any{"role": "user", "content": req.UserText})
+		if len(req.Files) > 0 {
+			messages = append(messages, map[string]any{"role": "user", "content": userContent(req)})
+		} else {
+			messages = append(messages, map[string]any{"role": "user", "content": req.UserText})
+		}
 	}
 
 	body := map[string]any{"model": model, "messages": messages, "max_tokens": maxTokens}
@@ -107,6 +112,7 @@ func init() {
 	})
 	llmtask.RegisterAll(llmtask.Config{
 		Provider:       provider{},
+		FileSupport:    llmtask.FilesDocuments,
 		Integration:    "ChatGPT",
 		Icon:           "openai",
 		Color:          "#10a37f",
@@ -156,4 +162,44 @@ func openaiError(body []byte) string {
 		return e.Error.Message
 	}
 	return string(body)
+}
+
+// userContent builds the Chat Completions content-part array for a request
+// carrying files. OpenAI takes an image as an `image_url` part holding a data:
+// URI and a document as a `file` part holding the same encoding under
+// `file_data` — two different shapes for what is conceptually one thing, which
+// is why this can't be shared with the other providers.
+func userContent(req llmtask.Request) []any {
+	parts := make([]any, 0, len(req.Files)+1)
+	for _, f := range req.Files {
+		dataURI := "data:" + mediaType(f.MIME) + ";base64," + base64.StdEncoding.EncodeToString(f.Data)
+		switch {
+		case f.IsImage():
+			parts = append(parts, map[string]any{
+				"type":      "image_url",
+				"image_url": map[string]any{"url": dataURI},
+			})
+		case f.IsPDF():
+			// filename is required alongside inline file_data — without it the
+			// API can't tell what it was handed.
+			parts = append(parts, map[string]any{
+				"type": "file",
+				"file": map[string]any{"filename": f.Name, "file_data": dataURI},
+			})
+		default:
+			parts = append(parts, map[string]any{
+				"type": "text",
+				"text": fmt.Sprintf("--- %s ---\n%s", f.Name, string(f.Data)),
+			})
+		}
+	}
+	if strings.TrimSpace(req.UserText) != "" {
+		parts = append(parts, map[string]any{"type": "text", "text": req.UserText})
+	}
+	return parts
+}
+
+// mediaType strips any parameters off a content type.
+func mediaType(mime string) string {
+	return strings.TrimSpace(strings.SplitN(mime, ";", 2)[0])
 }

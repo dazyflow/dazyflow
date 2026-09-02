@@ -5,7 +5,9 @@ package claude
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"github.com/dazyflow/dazyflow/internal/llm"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -284,5 +286,114 @@ func TestClaudeError_PlainBodyFallback(t *testing.T) {
 	_, jerr := provider{}.Call(context.Background(), "k", llmtask.Request{UserText: "x", BaseURL: srv.URL})
 	if jerr == nil || !strings.Contains(jerr.Message, "plain failure") {
 		t.Fatalf("jerr = %+v", jerr)
+	}
+}
+
+// A PDF must ride as an Anthropic `document` block, before the text — and the
+// base64 must not be line-wrapped, which the API rejects. Asserted on the
+// BODY WE SEND, because that is the half of this we control: a wrong block
+// type fails at Anthropic with an error about our request.
+func TestCall_PDFBecomesADocumentBlock(t *testing.T) {
+	var got map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&got)
+		_, _ = w.Write([]byte(`{"content":[{"type":"text","text":"ok"}]}`))
+	}))
+	defer srv.Close()
+
+	pdf := []byte("%PDF-1.4\nnot really a pdf but the bytes don't matter here\n")
+	_, jerr := provider{}.Call(context.Background(), "k", llmtask.Request{
+		Model: "m", UserText: "What is the total?", BaseURL: srv.URL,
+		Files: []llm.File{{Name: "invoice.pdf", MIME: "application/pdf", Data: pdf}},
+	})
+	if jerr != nil {
+		t.Fatalf("Call: %+v", jerr)
+	}
+
+	msgs, _ := got["messages"].([]any)
+	if len(msgs) != 1 {
+		t.Fatalf("want 1 message, got %d: %v", len(msgs), got["messages"])
+	}
+	content, ok := msgs[0].(map[string]any)["content"].([]any)
+	if !ok {
+		t.Fatalf("content is not a block array: %#v", msgs[0])
+	}
+	if len(content) != 2 {
+		t.Fatalf("want document + text blocks, got %d: %#v", len(content), content)
+	}
+
+	doc, _ := content[0].(map[string]any)
+	if doc["type"] != "document" {
+		t.Errorf("first block is %v, want a document block before the question", doc["type"])
+	}
+	src, _ := doc["source"].(map[string]any)
+	if src["type"] != "base64" || src["media_type"] != "application/pdf" {
+		t.Errorf("source = %#v", src)
+	}
+	data, _ := src["data"].(string)
+	if strings.ContainsAny(data, "\r\n") {
+		t.Error("base64 is line-wrapped — the API rejects that")
+	}
+	if decoded, err := base64.StdEncoding.DecodeString(data); err != nil {
+		t.Errorf("data isn't valid base64: %v", err)
+	} else if string(decoded) != string(pdf) {
+		t.Error("the PDF bytes didn't survive the round trip")
+	}
+
+	txt, _ := content[1].(map[string]any)
+	if txt["type"] != "text" || txt["text"] != "What is the total?" {
+		t.Errorf("second block = %#v, want the question", txt)
+	}
+}
+
+// An image is an `image` block, not a document, and its media_type must carry
+// no parameters.
+func TestCall_ImageBecomesAnImageBlock(t *testing.T) {
+	var got map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&got)
+		_, _ = w.Write([]byte(`{"content":[{"type":"text","text":"ok"}]}`))
+	}))
+	defer srv.Close()
+
+	_, jerr := provider{}.Call(context.Background(), "k", llmtask.Request{
+		Model: "m", UserText: "what is this", BaseURL: srv.URL,
+		Files: []llm.File{{Name: "shot.png", MIME: "image/png; charset=binary", Data: []byte("\x89PNG\r\n")}},
+	})
+	if jerr != nil {
+		t.Fatalf("Call: %+v", jerr)
+	}
+	msgs, _ := got["messages"].([]any)
+	content, _ := msgs[0].(map[string]any)["content"].([]any)
+	blk, _ := content[0].(map[string]any)
+	if blk["type"] != "image" {
+		t.Fatalf("block type = %v, want image", blk["type"])
+	}
+	src, _ := blk["source"].(map[string]any)
+	if src["media_type"] != "image/png" {
+		t.Errorf("media_type = %v, want the parameters stripped", src["media_type"])
+	}
+}
+
+// No files means the old plain-string content, unchanged. This is the
+// regression guard: every existing flow sends a string, and turning that into
+// a block array for no reason would be a wire change nobody asked for.
+func TestCall_NoFilesKeepsPlainStringContent(t *testing.T) {
+	var got map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&got)
+		_, _ = w.Write([]byte(`{"content":[{"type":"text","text":"ok"}]}`))
+	}))
+	defer srv.Close()
+
+	_, jerr := provider{}.Call(context.Background(), "k", llmtask.Request{
+		Model: "m", UserText: "hello", BaseURL: srv.URL,
+	})
+	if jerr != nil {
+		t.Fatalf("Call: %+v", jerr)
+	}
+	msgs, _ := got["messages"].([]any)
+	if content, _ := msgs[0].(map[string]any)["content"].(string); content != "hello" {
+		t.Errorf("content = %#v, want the plain string form", msgs[0].(map[string]any)["content"])
 	}
 }

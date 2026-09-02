@@ -44,7 +44,7 @@ func askDrop(cfg Config) engine.NativeDrop {
 			ConnectionFields: connFields(cfg),
 			ExecutionModel:   core.ExecutionBatch,
 			ProcessModel:     core.ProcessLongLived,
-			Inputs:           []core.Port{{Port: "prompt", Label: "Prompt"}},
+			Inputs:           inputsWithFiles(cfg, core.Port{Port: "prompt", Label: "Prompt"}),
 			// Port id stays "text" (existing wires reference it); the label is
 			// the role, "Response", matching the task drops' Summary/Reply.
 			Outputs:      []core.Port{{Port: "text", Label: "Response", MIME: []string{"text/plain"}}},
@@ -70,19 +70,33 @@ func askDrop(cfg Config) engine.NativeDrop {
 			if userText == "" && messages == nil {
 				userText = params.StringDefault(job.Params, "prompt", "")
 			}
-			if userText == "" && len(messages) == 0 {
-				return params.Err(job, "bad_input", "no prompt — provide the Prompt input, params.prompt, or params.messages"), nil
+			files, ferr := resolveFiles(job)
+			if ferr != nil {
+				return params.Err(job, ferr.Code, ferr.Message), nil
+			}
+			if ferr := checkFileSupport(cfg, files); ferr != nil {
+				return params.Err(job, ferr.Code, ferr.Message), nil
+			}
+			if userText == "" && len(messages) == 0 && len(files) == 0 {
+				return params.Err(job, "bad_input", "no prompt — provide the Prompt input, the Files input, params.prompt, or params.messages"), nil
+			}
+			// Raw multi-turn messages are already the provider's own shape, so
+			// files can't be folded in without rewriting someone else's
+			// content blocks. Refusing beats attaching a document the model
+			// never sees.
+			if len(messages) > 0 && len(files) > 0 {
+				return params.Err(job, "bad_input", "files can't be combined with a raw 'messages' conversation — put the file on a step that uses the Prompt input instead"), nil
 			}
 			system, _ := params.StringOpt(job.Params, "system")
 			var temp *float64
 			if t, ok := job.Params["temperature"].(float64); ok {
 				temp = &t
 			}
-			out, jerr := cfg.Provider.Call(ctx, apiKey, Request{
+			out, jerr := cfg.Provider.Call(ctx, apiKey, withFiles(Request{
 				Model: model(job, cfg), System: system, UserText: userText, Messages: messages,
 				MaxTokens: params.IntDefault(job.Params, "max_tokens", 1024), Temperature: temp,
 				TimeoutMS: timeoutMS(job), BaseURL: baseURL(job),
-			})
+			}, files))
 			if jerr != nil {
 				return params.Err(job, jerr.Code, jerr.Message), nil
 			}
@@ -109,7 +123,7 @@ func summarizeDrop(cfg Config) engine.NativeDrop {
 			Label:       cfg.Integration,
 			Subtitle:    "Summarize",
 			Summary:     "Turn long text into a short summary in the style you pick.",
-			Description: "Feed in any text — an email, a document, a row of notes — and get a concise summary back. Choose how short and whether you want a sentence, a paragraph, or bullet points.",
+			Description: "Feed in any text — an email, a document, a row of notes — and get a concise summary back. Choose how short and whether you want a sentence, a paragraph, or bullet points." + fileHint(cfg),
 			Integration: cfg.Integration, Category: "ai", Icon: cfg.Icon, Color: cfg.Color, BrandLogo: cfg.BrandLogo,
 			Provider: "internal", Tags: tags(cfg, "summary", "summarize", "text", "tldr"),
 			Examples: []core.ParamsExample{
@@ -117,7 +131,7 @@ func summarizeDrop(cfg Config) engine.NativeDrop {
 			},
 			ConnectionFields: connFields(cfg),
 			ExecutionModel:   core.ExecutionBatch, ProcessModel: core.ProcessLongLived,
-			Inputs:       []core.Port{{Port: "text", Label: "Text"}},
+			Inputs:       inputsWithFiles(cfg, core.Port{Port: "text", Label: "Text"}),
 			Outputs:      []core.Port{{Port: "summary", Label: "Summary", MIME: []string{"text/plain"}}},
 			ParamsSchema: schemaJSON(props, nil),
 			Idempotent:   true, RetryPolicy: core.RetryExponentialBackoff,
@@ -128,15 +142,22 @@ func summarizeDrop(cfg Config) engine.NativeDrop {
 				return params.Err(job, jerr.Code, jerr.Message), nil
 			}
 			text := resolveText(job)
-			if strings.TrimSpace(text) == "" {
-				return params.Err(job, "bad_input", "no text — connect the Text input or fill the text field"), nil
+			files, ferr := resolveFiles(job)
+			if ferr != nil {
+				return params.Err(job, ferr.Code, ferr.Message), nil
+			}
+			if ferr := checkFileSupport(cfg, files); ferr != nil {
+				return params.Err(job, ferr.Code, ferr.Message), nil
+			}
+			if !textOrFiles(text, files) {
+				return params.Err(job, "bad_input", "nothing to summarize — connect the Text or Files input, or fill the text field"), nil
 			}
 			temp := 0.3
-			out, jerr := cfg.Provider.Call(ctx, apiKey, Request{
+			out, jerr := cfg.Provider.Call(ctx, apiKey, withFiles(Request{
 				Model:    model(job, cfg),
 				System:   summarizeSystem(params.StringDefault(job.Params, "style", "paragraph"), params.IntDefault(job.Params, "max_words", 60), params.StringDefault(job.Params, "language", "")),
 				UserText: text, Temperature: &temp, TimeoutMS: timeoutMS(job), BaseURL: baseURL(job),
-			})
+			}, files))
 			if jerr != nil {
 				return params.Err(job, jerr.Code, jerr.Message), nil
 			}
@@ -194,10 +215,11 @@ func extractDrop(cfg Config) engine.NativeDrop {
 			Provider: "internal", Tags: tags(cfg, "extract", "parse", "structured", "fields", "json"),
 			Examples: []core.ParamsExample{
 				{Title: "Parse an invoice email", Params: json.RawMessage(`{"fields":[{"name":"amount","description":"Total due","type":"number"},{"name":"vendor","description":"Who sent it"}]}`), Notes: "Connect the email body into Text. Output 'data' is {amount, vendor}."},
+				{Title: "Read the invoice PDF itself", Params: json.RawMessage(`{"fields":[{"name":"amount","description":"Total due","type":"number"},{"name":"due_date","description":"Payment due date, YYYY-MM-DD"}]}`), Notes: "Connect Download attachments' First file into Files — the model reads the document, so a scan works as well as a text PDF."},
 			},
 			ConnectionFields: connFields(cfg),
 			ExecutionModel:   core.ExecutionBatch, ProcessModel: core.ProcessLongLived,
-			Inputs:       []core.Port{{Port: "text", Label: "Text"}},
+			Inputs:       inputsWithFiles(cfg, core.Port{Port: "text", Label: "Text"}),
 			Outputs:      []core.Port{{Port: "data", Label: "Fields", MIME: []string{"application/json"}}},
 			ParamsSchema: schemaJSON(props, []string{"fields"}),
 			Idempotent:   true, RetryPolicy: core.RetryExponentialBackoff,
@@ -208,8 +230,15 @@ func extractDrop(cfg Config) engine.NativeDrop {
 				return params.Err(job, jerr.Code, jerr.Message), nil
 			}
 			text := resolveText(job)
-			if strings.TrimSpace(text) == "" {
-				return params.Err(job, "bad_input", "no text — connect the Text input or fill the text field"), nil
+			files, ferr := resolveFiles(job)
+			if ferr != nil {
+				return params.Err(job, ferr.Code, ferr.Message), nil
+			}
+			if ferr := checkFileSupport(cfg, files); ferr != nil {
+				return params.Err(job, ferr.Code, ferr.Message), nil
+			}
+			if !textOrFiles(text, files) {
+				return params.Err(job, "bad_input", "nothing to read — connect the Text or Files input, or fill the text field"), nil
 			}
 			fields := paramObjList(job.Params, "fields")
 			tool := buildExtractTool(fields, params.StringDefault(job.Params, "on_missing", "null"))
@@ -217,11 +246,15 @@ func extractDrop(cfg Config) engine.NativeDrop {
 				return params.Err(job, "bad_param", "no fields to extract — add at least one field with a name"), nil
 			}
 			temp := 0.0
-			out, jerr := cfg.Provider.Call(ctx, apiKey, Request{
-				Model:    model(job, cfg),
-				System:   "Extract the requested fields from the user's text and return them via the tool. Do not invent values. If a value is genuinely not present, return null for that field.",
+			out, jerr := cfg.Provider.Call(ctx, apiKey, withFiles(Request{
+				Model: model(job, cfg),
+				// "text or attached files" rather than "text": with a PDF on
+				// the Files input the text may be empty, and a system prompt
+				// that only mentions text invites the model to say it was
+				// given nothing.
+				System:   "Extract the requested fields from the user's text and any attached files, and return them via the tool. Do not invent values. If a value is genuinely not present, return null for that field.",
 				UserText: text, Tool: tool, Temperature: &temp, TimeoutMS: timeoutMS(job), BaseURL: baseURL(job),
-			})
+			}, files))
 			if jerr != nil {
 				return params.Err(job, jerr.Code, jerr.Message), nil
 			}
@@ -305,7 +338,7 @@ func classifyDrop(cfg Config) engine.NativeDrop {
 			},
 			ConnectionFields: connFields(cfg),
 			ExecutionModel:   core.ExecutionBatch, ProcessModel: core.ProcessLongLived,
-			Inputs: []core.Port{{Port: "text", Label: "Text"}},
+			Inputs: inputsWithFiles(cfg, core.Port{Port: "text", Label: "Text"}),
 			Outputs: []core.Port{
 				{Port: "category", Label: "Category", MIME: []string{"text/plain"}},
 				{Port: "confidence", Label: "Confidence", MIME: []string{"application/json"}},
@@ -319,8 +352,15 @@ func classifyDrop(cfg Config) engine.NativeDrop {
 				return params.Err(job, jerr.Code, jerr.Message), nil
 			}
 			text := resolveText(job)
-			if strings.TrimSpace(text) == "" {
-				return params.Err(job, "bad_input", "no text — connect the Text input or fill the text field"), nil
+			files, ferr := resolveFiles(job)
+			if ferr != nil {
+				return params.Err(job, ferr.Code, ferr.Message), nil
+			}
+			if ferr := checkFileSupport(cfg, files); ferr != nil {
+				return params.Err(job, ferr.Code, ferr.Message), nil
+			}
+			if !textOrFiles(text, files) {
+				return params.Err(job, "bad_input", "nothing to classify — connect the Text or Files input, or fill the text field"), nil
 			}
 			names, descLines := categoryNames(paramObjList(job.Params, "categories"))
 			if len(names) < 2 {
@@ -339,15 +379,15 @@ func classifyDrop(cfg Config) engine.NativeDrop {
 				},
 				"required": []any{"category"},
 			}}
-			system := "Classify the user's text into exactly one of these categories, then return your choice via the tool:\n" + descLines
+			system := "Classify the user's text and any attached files into exactly one of these categories, then return your choice via the tool:\n" + descLines
 			if allowNone {
 				system += "\nIf none fit, answer \"none\"."
 			}
 			temp := 0.0
-			out, jerr := cfg.Provider.Call(ctx, apiKey, Request{
+			out, jerr := cfg.Provider.Call(ctx, apiKey, withFiles(Request{
 				Model: model(job, cfg), System: system, UserText: text, Tool: tool,
 				Temperature: &temp, TimeoutMS: timeoutMS(job), BaseURL: baseURL(job),
-			})
+			}, files))
 			if jerr != nil {
 				return params.Err(job, jerr.Code, jerr.Message), nil
 			}
@@ -467,4 +507,14 @@ func draftReplySystem(tone, guidance, language string) string {
 	}
 	b.WriteString("Output only the reply body — no subject line, no signature, no preamble.")
 	return b.String()
+}
+
+// inputsWithFiles appends the Files input to a task's ports when the provider
+// can actually carry one, so a step backed by a text-only provider doesn't
+// advertise a pin that always errors.
+func inputsWithFiles(cfg Config, ports ...core.Port) []core.Port {
+	if cfg.FileSupport == FilesNone {
+		return ports
+	}
+	return append(ports, fileInput())
 }

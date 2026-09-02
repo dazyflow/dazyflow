@@ -10,6 +10,60 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Added
+
+- **AI steps can read a file, not just text about one.** Ask, Summarize,
+  Extract fields and Classify gained a variadic **Files** input: connect a PDF
+  or an image — an emailed invoice, a scanned receipt, a screenshot — and the
+  model reads the document itself. Because it reads rendered pages rather than
+  a text layer, a **scan** works as well as a text PDF.
+
+  This closes the hole under our own headline use cases. Cases 6 and 36 saved
+  an invoice PDF and then ran Extract on the *email body* — which for a real
+  invoice says "please see attached". The AP demo's own README listed OCR as
+  faked. Nothing in the catalogue could read a PDF.
+
+  One shared implementation, four providers, four different wire formats:
+  Anthropic takes a `document` block, OpenAI a `file` part with a data: URI,
+  Gemini `inline_data`, and Ollama only images on the message. Each is asserted
+  against the body we actually send, because a wrong block type fails at the
+  vendor with an error about our request.
+
+  A provider that cannot carry a file **refuses** rather than dropping it.
+  Ollama gets images but not PDFs, and says so naming the file and what to use
+  instead. The alternative — a model answering confidently about a document it
+  never received, and a flow filing that answer as fact — is the expensive
+  failure this feature could have had.
+
+  The file's type is decided by sniffing its bytes, not its extension: a `.pdf`
+  that is really a PNG is sent as an image instead of being rejected by the
+  vendor as a malformed document.
+
+- **Work on PDF files themselves: the new PDF app.** `pdf_merge` joins several
+  into one (the natural end of a filing flow — one file for the accountant
+  instead of forty), `pdf_split` cuts one into a file per page or every N
+  pages, and `pdf_info` reads the page count, title, dates and whether it's
+  password-protected, so a flow can branch before doing work.
+
+  Local, in-process, pure Go via pdfcpu — no external binary and no browser
+  engine. It costs **+3.3 MB** on the daemon binary, 45.9 MB to 49.2 MB,
+  measured by building with and without the app rather than probed in
+  isolation (an isolated probe under-reported it tenfold, because taking the
+  address of a few API functions doesn't link what real use does). Every step
+  checks the `%PDF` header before parsing, because pdfcpu's own error for a
+  text file wired in is "xref table: no header version available", which reads
+  like a corrupt document rather than the truth.
+
+  Not text extraction, deliberately: pdfcpu doesn't do it and the pure-Go
+  alternatives fall over on a real invoice. Reading what a PDF *says* goes
+  through an AI step's Files input.
+
+### Changed
+
+- **`combine`, `file-search` and `scissors` added to the web icon registry**,
+  so the PDF steps draw their own glyphs rather than falling back to their
+  category's.
+
 ## [0.30.0] - 2026-09-02
 
 ### Added

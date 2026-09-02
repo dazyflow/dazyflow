@@ -41,6 +41,40 @@ type Request struct {
 	Tool        *Tool
 	BaseURL     string // tenant override; "" = provider default
 	TimeoutMS   int
+
+	// Files are documents and images sent alongside UserText — a PDF invoice,
+	// a scanned receipt, a screenshot. Each provider renders them into its own
+	// content-block shape, because there is no common wire format: Anthropic
+	// takes a `document` block, OpenAI a `file` part, Gemini `inline_data`,
+	// and Ollama only images. A provider that cannot carry a file at all says
+	// so rather than dropping it silently — a summary of a PDF the model never
+	// saw is the worst possible outcome here.
+	//
+	// Ignored when Messages is set: a caller supplying raw multi-turn messages
+	// is already speaking the provider's own shape.
+	Files []File
+}
+
+// File is one document or image to send with a request.
+type File struct {
+	// Name is the original filename, used to label the file for providers
+	// that show one to the model and to name it in error messages.
+	Name string
+	// MIME is the content type — "application/pdf", "image/png". Required:
+	// every provider needs it on the wire, and guessing from the extension is
+	// how a JPEG ends up labelled as a PDF.
+	MIME string
+	Data []byte
+}
+
+// IsImage reports whether the file is an image, which is the line every
+// provider draws: images are near-universally supported, documents are not.
+func (f File) IsImage() bool { return strings.HasPrefix(strings.ToLower(f.MIME), "image/") }
+
+// IsPDF reports whether the file is a PDF — the one document type the cloud
+// providers read natively, and the one this feature exists for.
+func (f File) IsPDF() bool {
+	return strings.EqualFold(strings.TrimSpace(strings.SplitN(f.MIME, ";", 2)[0]), "application/pdf")
 }
 
 // Result is the normalized provider response.

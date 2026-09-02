@@ -32,6 +32,7 @@ package gemini
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -173,6 +174,9 @@ func (provider) Call(ctx context.Context, apiKey string, req llmtask.Request) (l
 // drops: one user turn carrying req.UserText, and req.System handled by Call.
 func toContents(req llmtask.Request) (contents []any, system string) {
 	if len(req.Messages) == 0 {
+		if len(req.Files) > 0 {
+			return []any{map[string]any{"role": "user", "parts": userParts(req)}}, ""
+		}
 		return []any{textTurn("user", req.UserText)}, ""
 	}
 	var systems []string
@@ -239,6 +243,7 @@ func init() {
 	})
 	llmtask.RegisterAll(llmtask.Config{
 		Provider:    provider{},
+		FileSupport: llmtask.FilesDocuments,
 		Integration: "Gemini",
 		// Google's Gemini spark. Color is the gradient's starting blue — the
 		// static docs copy of the mark keeps the full gradient, the in-app
@@ -482,4 +487,29 @@ func nonText(id string) bool {
 		}
 	}
 	return false
+}
+
+// userParts builds the Gemini parts array for a request carrying files.
+// Gemini is the tidiest of the four: every binary rides as inline_data with
+// its mime type, whether it's a PDF or a picture, so there is no per-type
+// branch — only the same "file before the question" ordering the others use.
+func userParts(req llmtask.Request) []any {
+	parts := make([]any, 0, len(req.Files)+1)
+	for _, f := range req.Files {
+		parts = append(parts, map[string]any{
+			"inline_data": map[string]any{
+				"mime_type": mediaType(f.MIME),
+				"data":      base64.StdEncoding.EncodeToString(f.Data),
+			},
+		})
+	}
+	if strings.TrimSpace(req.UserText) != "" {
+		parts = append(parts, map[string]any{"text": req.UserText})
+	}
+	return parts
+}
+
+// mediaType strips any parameters off a content type.
+func mediaType(mime string) string {
+	return strings.TrimSpace(strings.SplitN(mime, ";", 2)[0])
 }

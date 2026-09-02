@@ -213,6 +213,14 @@ export const SV_INTEGRATION_PROSE: DescriptionMap = {
     en: "e6ce64aa",
     sv: "Autentiseras med din nShift-API-nyckel (Bearer), som anges en gång som nShift-anslutningen på den här sidan (lagras krypterat som conn.nshift.*) och matas in vid körning — inga uppgifter på steget eller i flödet. Anslutningen väljer även miljö: den står som standard på **integration**, nShifts sandlåda, så att ett halvfärdigt flöde inte kan boka en riktig, fakturerbar försändelse; byt till produktion när du är redo. Bygger på ExtAPI (POST /rs-extapi/v1/shipments med flera). Shipment-indata är nShifts eget shipment-objekt — avsändare, mottagare, kolli, tjänst — som vanligtvis byggs per order av ett tidigare steg. Bokning kostar pengar och nShift har ingen idempotensnyckel, så skapa-steget gör aldrig automatiska omförsök och motorn rensar dubbletter i återupptagna körningar; spårningsnumren kommer ut kommaseparerade på en egen port.",
   },
+  "pdf.description": {
+    en: "ab0adf28",
+    sv: "Arbeta med själva PDF-filerna — slå ihop flera till en, dela en i flera, läs hur många sidor den har. Lokala operationer på filer som redan finns i din arbetsyta: inget konto att ansluta, inga uppgifter, och inget lämnar maskinen. Den naturliga avslutningen på ett arkiveringsflöde är en fil till revisorn i stället för fyrtio, och det är det här.",
+  },
+  "pdf.technical_notes": {
+    en: "b2d40de6",
+    sv: "Bygger på pdfcpu, i processen och i ren Go — ingen extern binär, ingen webbläsarmotor, och omkring 3 MB på daemon-binären. Medvetet INTE textextraktion: pdfcpu gör inte det, och alternativen i ren Go klarar enkla dokument med textlager och faller på en verklig faktura med tabell och inbäddade typsnitt. För att läsa vad en PDF SÄGER, koppla den till ingången Filer på ett AI-steg i stället — modellen läser de renderade sidorna, så en skanning fungerar lika bra som en text-PDF. Varje steg här kontrollerar %PDF-huvudet innan byten lämnas till parsern, så en felkopplad fil rapporterar sig själv i stället för att dyka upp som ett fel om ett trasigt dokument. Delning är begränsad till 200 delar och varje steg till 32 MiB indata, så ett felkopplat steg kan inte fylla körningens skrivutrymme.",
+  },
   "roaring.description": {
     en: "88cc9b65",
     sv: "Slå upp ett företag på organisationsnummer och få tillbaka vilka de faktiskt är — registrerat namn, status, adress och skatteuppgifter. Vardagsnyttan är att berika en lead eller en order: ett formulär ger dig ett organisationsnummer, det här gör det till en riktig företagspost du kan lägga i CRM:et, eller kontrollera statusen på innan du ger kredit. Har du bara ett namn söker du först för att hitta organisationsnumret, och berikar sedan varje träff.",

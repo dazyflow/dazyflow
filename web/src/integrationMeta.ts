@@ -331,6 +331,13 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     technical_notes:
       "The account — server address, username and password (or an app password on a provider with two-factor sign-in) — is configured once here and injected into every Calendar step at run time; the password is held in the encrypted secret store. The address can be a discovery root, a principal, or one calendar's own path: the client walks from whatever your provider published to the calendar collections underneath, because no user can be expected to know which of those they were handed. If the account holds several calendars, name the one you want — Test connection lists them for you if you don't. Events come out in the same shape the Google Calendar step emits, so a flow moves between the two by swapping the step. Time windows accept the same relative forms (\"tomorrow\", \"+7d\", \"tomorrow+9h\"), resolved in the timezone you set.",
   },
+  pdf: {
+    name: "PDF",
+    description:
+      "Work on PDF files themselves — combine several into one, split one into several, read how many pages it has. Local operations on files already in your workspace: no account to connect, no credentials, and nothing leaves the machine. The natural end of a filing flow is one file for the accountant rather than forty, and that's this.",
+    technical_notes:
+      "Backed by pdfcpu, in-process and pure Go — no external binary, no browser engine, and about 3 MB on the daemon binary. Deliberately NOT text extraction: pdfcpu doesn't do it, and the pure-Go alternatives manage simple text-layer documents and fall over on a real invoice with a table and embedded fonts. To read what a PDF SAYS, connect it to an AI step's Files input instead — the model reads the rendered pages, so a scan works as well as a text PDF. Every step here checks the %PDF header before handing bytes to the parser, so the wrong file wired in reports itself rather than surfacing as a corrupt-document error. Splitting is capped at 200 pieces and each step at 32 MiB of input, so a mis-wired step can't fill the run's scratch area.",
+  },
   sftp: {
     name: "SFTP",
     description:
