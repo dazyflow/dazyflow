@@ -42,6 +42,30 @@
       "Rows"
     ]
   },
+  "build_json": {
+    "description": "Turn rows into JSON text — the inverse of Read JSON. Connect the rows from a DB query, a Sheets read or any transform and get a JSON string to POST to an API, write to a file, or attach to an email. Rows become an array of objects; set 'single object' when there's exactly one row and the API wants the object itself rather than a list of one. 'columns' picks or reorders the fields. Use this rather than building JSON in a template: an apostrophe or a quote in a customer's name breaks hand-written JSON and is escaped correctly here.",
+    "ports": [
+      "JSON",
+      "Pass-through",
+      "Rows"
+    ]
+  },
+  "build_xml": {
+    "description": "Turn rows into XML text — the inverse of Read XML. Each row becomes an element, each field a child element, wrapped in a root you name. Useful for the older systems that still want XML: an EDI or bookkeeping import, a feed another service polls, a file dropped on an SFTP server. Escaping is handled, so an ampersand in a company name doesn't produce a file nothing can read. For a specific schema or a SOAP envelope, build the document with Fill a template instead — this makes a straightforward row-per-element file, not an arbitrary shape.",
+    "ports": [
+      "Pass-through",
+      "Rows",
+      "XML"
+    ]
+  },
+  "build_yaml": {
+    "description": "Turn rows into YAML text — the inverse of Read YAML. Connect rows from a query or a transform and get YAML to write to a config file, commit to a repo, or hand to a tool that reads it. Rows become a list of mappings; set 'single mapping' when there's one row and the file should be that mapping itself. 'Separate documents' writes each row as its own \"---\" document, which is how a bundle of manifests is shaped. Quoting and indentation are handled properly, so a value containing a colon or a leading zero survives.",
+    "ports": [
+      "Pass-through",
+      "Rows",
+      "YAML"
+    ]
+  },
   "builtin_store_append": {
     "description": "Save rows to a collection — no database to set up and no connection string to paste. Pick a collection name and the rows land there; the collection is created automatically the first time. Each workspace has its own private Collections, and the saved rows show up under Collections so you can browse them in-app. Every row is stamped with the time it was saved (a saved_at column) so you can sort newest-first. By default every run appends; set “Unique by” to a key column (like date) and a row with a matching key is updated in place instead of piling up a duplicate — so re-running the flow stays idempotent.",
     "ports": [
@@ -1059,6 +1083,15 @@
       "Rows",
       "Value",
       "XML"
+    ]
+  },
+  "parse_yaml": {
+    "description": "Turn YAML text into rows, the same way Read JSON does. Feed it a config file, a Kubernetes manifest, a docker-compose file, an HTTP response — anything that speaks YAML — and it parses into the rows + headers shape Sheets, Excel, Postgres and the transform family consume. Use 'path' to reach a list nested inside the document (e.g. \"spec.containers\"), or to read a single field out — point it at one value and 'Rows' is empty while 'Value' carries it. A file holding several documents separated by \"---\" becomes one row per document, which is how a manifest bundle is usually shaped.",
+    "ports": [
+      "Pass-through",
+      "Rows",
+      "Value",
+      "YAML"
     ]
   },
   "pdf_info": {

@@ -180,6 +180,9 @@ const SV_SUBTITLES: Record<string, string> = {
   "Read sheet": "Läs blad",
   "Refund order": "Återbetala order",
   "Rows into CSV text": "Rader till CSV-text",
+  "Rows into JSON text": "Rader till JSON-text",
+  "Rows into XML text": "Rader till XML-text",
+  "Rows into YAML text": "Rader till YAML-text",
   "Save a file from a URL": "Spara en fil från en URL",
   "Save rows": "Spara rader",
   "Search customers": "Sök kunder",
@@ -203,6 +206,7 @@ const SV_SUBTITLES: Record<string, string> = {
   Write: "Skriv",
   "Write sheet": "Skriv blad",
   Diff: "Diff",
+  "YAML text into rows": "YAML-text till rader",
 };
 
 // Port labels — the names on a card's wiring pins ("Rows", "Pass-through",

@@ -37,6 +37,18 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     en: "5ed519dd",
     sv: "Dirigerar nyttolasten på porten 'in' till antingen Ja- eller Nej-utgången, utifrån Ja/Nej-värdet på ingången 'condition'. Skapa det värdet med ett Jämför-steg (koppla resultatet in i condition) — ett Ja-värde skickar nyttolasten ut på Ja-utgången; ett Nej-värde (eller ett saknat/tomt villkor) skickar den ut på Nej. Steg som är kopplade till den oanvända porten ligger vilande.",
   },
+  build_json: {
+    en: "1d00a111",
+    sv: "Gör rader till JSON-text — motsatsen till Läs JSON. Koppla in rader från en databasfråga, en Sheets-läsning eller vilken transformation som helst och få en JSON-sträng att POSTa till ett API, skriva till en fil eller bifoga ett mejl. Rader blir en array av objekt; slå på \"Ett enda objekt\" när det finns exakt en rad och API:et vill ha objektet självt i stället för en lista med ett. \"Kolumner\" väljer eller ordnar om fälten. Använd det här i stället för att bygga JSON i en mall: en apostrof eller ett citattecken i ett kundnamn förstör handskriven JSON och kodas korrekt här.",
+  },
+  build_xml: {
+    en: "ea5c1b97",
+    sv: "Gör rader till XML-text — motsatsen till Läs XML. Varje rad blir ett element, varje fält ett underelement, inramat i en rot du namnger. Användbart för de äldre system som fortfarande vill ha XML: en EDI- eller bokföringsimport, ett flöde en annan tjänst hämtar, en fil som läggs på en SFTP-server. Tecken kodas korrekt, så ett och-tecken i ett företagsnamn ger inte en fil som ingenting kan läsa. För ett specifikt schema eller ett SOAP-kuvert, bygg dokumentet med Fyll i en mall i stället — det här gör en rak fil med ett element per rad, inte en valfri form.",
+  },
+  build_yaml: {
+    en: "f3550431",
+    sv: "Gör rader till YAML-text — motsatsen till Läs YAML. Koppla in rader från en fråga eller en transformation och få YAML att skriva till en konfigurationsfil, committa till ett repo eller lämna till ett verktyg som läser den. Rader blir en lista av mappningar; slå på \"En enda mappning\" när det finns en rad och filen ska vara just den mappningen. \"Separata dokument\" skriver varje rad som sitt eget \"---\"-dokument, vilket är formen på en bunt manifest. Citering och indrag hanteras korrekt, så ett värde som innehåller ett kolon eller en inledande nolla överlever.",
+  },
   build_csv: {
     en: "c6fc0bb4",
     sv: "Gör om rader till CSV-text — motsatsen till Läs CSV. Koppla in raderna från en databasfråga, en läsning från Sheets/Excel eller vilken omvandling som helst, och få tillbaka en enda CSV-sträng som du kan bifoga i ett mejl, skriva till en fil eller POSTa till ett API. Kolumnerna följer radernas egen kolumnordning; sätt 'columns' för att välja ut eller ändra ordning på ett urval. 'delimiter' byter avgränsare (\"\\t\"/\"tab\" för TSV, \";\" för europeiska CSV-filer) och 'header' slår rubrikraden av och på.",
@@ -496,6 +508,10 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
   pdf_split: {
     en: "0d25a9bf",
     sv: "Klipp upp en PDF i flera filer. Sätt \"Sidor per fil\" till 1 och en buntskanning blir ett dokument per sida, färdigt att loopa över med För varje och arkivera eller läsa var för sig. Sätt 2 för dubbelsidiga skanningar, eller högre för utdrag med fast längd. Varje del kommer ut som en fil nästa steg kan öppna. Körs på den här maskinen; inget laddas upp någonstans.",
+  },
+  parse_yaml: {
+    en: "ee1dac06",
+    sv: "Gör YAML-text till rader, på samma sätt som Läs JSON gör. Ge den en konfigurationsfil, ett Kubernetes-manifest, en docker-compose-fil, ett HTTP-svar — allt som pratar YAML — och den tolkas till formen rader + rubriker som Sheets, Excel, Postgres och transformationsfamiljen använder. Använd \"path\" för att nå en lista inne i dokumentet (t.ex. \"spec.containers\"), eller för att läsa ut ett enskilt fält — peka på ett värde och \"Rader\" blir tom medan \"Värde\" bär det. En fil med flera dokument separerade med \"---\" blir en rad per dokument, vilket är hur en manifestbunt vanligtvis ser ut.",
   },
   phone: {
     en: "e83b5bbd",

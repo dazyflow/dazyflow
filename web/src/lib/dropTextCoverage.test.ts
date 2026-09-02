@@ -61,6 +61,7 @@ describe("Swedish port labels", () => {
   const SAME_IN_SWEDISH = new Set([
     "A", "B", "CSV", "Commits", "Data", "Diff", "E.164", "JSON", "Order",
     "PDF", "Plan", "Prompt", "Start", "Status", "Text", "URL", "XML",
+    "YAML",
   ]);
 
   // label -> the drops that show it, so a failure names somewhere to look.

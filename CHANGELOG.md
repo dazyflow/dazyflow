@@ -39,6 +39,34 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
   that is really a PNG is sent as an image instead of being rejected by the
   vendor as a malformed document.
 
+- **YAML, and a way out for JSON and XML.** `parse_yaml` reads YAML into the
+  same rows + headers shape Read JSON produces — config files, Kubernetes
+  manifests, docker-compose, an HTTP response — with the same `path`
+  semantics. `build_json`, `build_yaml` and `build_xml` serialise rows back
+  out, which nothing but CSV could do before: an API body, a config file to
+  commit, an XML import for an older system.
+
+  Reading YAML cost no new dependency — `go.yaml.in/yaml/v3` was already
+  direct — and reuses Read JSON's own `digPath` and `rowsFromValue`, because
+  the two formats describe the same value model.
+
+  Two places where YAML genuinely isn't JSON, both handled: a stream may hold
+  several `---` documents (one row each, which is how a manifest bundle is
+  shaped), and YAML permits non-string mapping keys, which decode to a shape
+  no row consumer here can read and are now rendered as text rather than
+  arriving empty. yaml.v3 refuses an alias bomb on its own, which matters
+  because this text can come from an `http_request` — asserted, so a library
+  change that removes that protection is caught here.
+
+  Write YAML encodes rows as YAML nodes rather than Go maps, because yaml.v3
+  sorts a map's keys: a generated config file that alphabetises itself, or
+  reorders every line between runs, is unusable in a repo. Write JSON turns
+  Go's HTML escaping **off** — `&` as `\u0026` is valid JSON but arrives
+  mangled to anything reading the raw body. Write XML **refuses** a column
+  name that isn't a legal element name rather than sanitising it: renaming it
+  silently would put the wrong tag in someone's import file, and the failure
+  would surface at the far end as a schema mismatch.
+
 - **Work on PDF files themselves: the new PDF app.** `pdf_merge` joins several
   into one (the natural end of a filing flow — one file for the accountant
   instead of forty), `pdf_split` cuts one into a file per page or every N
@@ -60,9 +88,9 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ### Changed
 
-- **`combine`, `file-search` and `scissors` added to the web icon registry**,
-  so the PDF steps draw their own glyphs rather than falling back to their
-  category's.
+- **`combine`, `file-search`, `scissors` and `file-code` added to the web icon
+  registry**, so the PDF and YAML steps draw their own glyphs rather than
+  falling back to their category's.
 
 ## [0.30.0] - 2026-09-02
 
