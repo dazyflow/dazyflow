@@ -13,14 +13,11 @@ import (
 	"strings"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/mailfiles"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/drops/internal/sandbox"
 	"github.com/dazyflow/dazyflow/engine"
 )
-
-// maxAttachmentBytes caps the total a single message may yield, so one mail
-// with a video in it can't fill the run's scratch area.
-const maxAttachmentBytes = 32 << 20 // 32 MiB
 
 func init() {
 	engine.Register(engine.NativeDrop{
@@ -116,7 +113,7 @@ func executeGmailGetAttachments(ctx context.Context, job core.Job, _ chan<- core
 		return params.Err(job, "gmail_error", "could not parse message: "+err.Error()), nil
 	}
 	payload, _ := raw["payload"].(map[string]any)
-	wanted := keepExtensions(params.StringDefault(job.Params, "only", ""))
+	wanted := mailfiles.KeepExtensions(params.StringDefault(job.Params, "only", ""))
 	parts := collectAttachments(payload, wanted)
 
 	folder := strings.TrimSpace(params.StringDefault(job.Params, "folder", ""))
@@ -125,7 +122,7 @@ func executeGmailGetAttachments(ctx context.Context, job core.Job, _ chan<- core
 	var total int64
 
 	for i, p := range parts {
-		dest := attachmentDest(folder, id, i, p.Filename)
+		dest := mailfiles.Dest(folder, id, i, p.Filename)
 		root, rel, serr := sandbox.OpenRoot(job, dest)
 		if serr != nil {
 			if sandbox.IsEscape(serr) {
@@ -140,9 +137,9 @@ func executeGmailGetAttachments(ctx context.Context, job core.Job, _ chan<- core
 			return params.Err(job, "gmail_error", fmt.Sprintf("%s: %v", p.Filename, derr)), nil
 		}
 		total += int64(len(data))
-		if total > maxAttachmentBytes {
+		if total > mailfiles.MaxBytes {
 			root.Close()
-			return params.Err(job, "too_large", fmt.Sprintf("the attachments on this email exceed the %d MiB limit", maxAttachmentBytes>>20)), nil
+			return params.Err(job, "too_large", fmt.Sprintf("the attachments on this email exceed the %d MiB limit", mailfiles.MaxBytes>>20)), nil
 		}
 		if folder != "" {
 			if merr := root.MkdirAll(path.Dir(rel), 0o755); merr != nil && !sandbox.IsEscape(merr) {
@@ -223,7 +220,7 @@ func collectAttachments(payload map[string]any, wanted map[string]bool) []attach
 		}
 		name := strings.TrimSpace(str(m["filename"]))
 		if body, ok := m["body"].(map[string]any); ok && name != "" {
-			if attID := str(body["attachmentId"]); attID != "" && keepFile(name, wanted) {
+			if attID := str(body["attachmentId"]); attID != "" && mailfiles.Keep(name, wanted) {
 				size := int64(0)
 				if f, ok := body["size"].(float64); ok {
 					size = int64(f)
@@ -247,62 +244,9 @@ func collectAttachments(payload map[string]any, wanted map[string]bool) []attach
 	return out
 }
 
-// keepExtensions parses the "only" setting into a lowercase extension set.
-// An empty setting means "keep everything".
-func keepExtensions(s string) map[string]bool {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return nil
-	}
-	out := map[string]bool{}
-	for _, part := range strings.Split(s, ",") {
-		ext := strings.ToLower(strings.TrimSpace(part))
-		ext = strings.TrimPrefix(ext, "*")
-		ext = strings.TrimPrefix(ext, ".")
-		if ext != "" {
-			out[ext] = true
-		}
-	}
-	return out
-}
-
 func keepFile(name string, wanted map[string]bool) bool {
 	if len(wanted) == 0 {
 		return true
 	}
 	return wanted[strings.ToLower(strings.TrimPrefix(path.Ext(name), "."))]
-}
-
-// attachmentDest names the saved file. The message id prefixes the name so two
-// emails whose invoice is called "invoice.pdf" don't overwrite each other, and
-// the index disambiguates within one message.
-func attachmentDest(folder, msgID string, idx int, filename string) string {
-	safe := sanitizeFilename(filename)
-	name := fmt.Sprintf("%s-%d-%s", sanitizeFilename(msgID), idx+1, safe)
-	if folder == "" {
-		return sandbox.Scheme + name
-	}
-	return path.Join(strings.TrimSuffix(folder, "/"), name)
-}
-
-// sanitizeFilename reduces a sender-controlled filename to something safe to
-// join onto a path: no separators, no traversal, no leading dot.
-func sanitizeFilename(name string) string {
-	name = strings.Map(func(r rune) rune {
-		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
-			return r
-		case r == '.' || r == '-' || r == '_':
-			return r
-		}
-		return '-'
-	}, path.Base(name))
-	name = strings.TrimLeft(name, ".-")
-	if name == "" {
-		return "attachment"
-	}
-	if len(name) > 120 {
-		name = name[:120]
-	}
-	return name
 }

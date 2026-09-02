@@ -317,6 +317,13 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     technical_notes:
       "The mail server — host, port, security (STARTTLS on 587 / implicit TLS on 465 / none), username, password and From address — is configured once here and injected into every Email step at run time; the password is held in the encrypted secret store. Use 'Test connection' to confirm the server and login before saving.",
   },
+  mailbox: {
+    name: "Mailbox (IMAP)",
+    description:
+      "Read a mail account over IMAP: search a folder for the mail you care about and hand each match to the rest of your flow. This is the other half of Email (SMTP), which can only send — SMTP has no way to list or search a mailbox, so anything that reacts to mail arriving comes through here. Works with Fastmail, mailbox.org, Migadu, iCloud, a Dovecot box of your own, and Gmail with an app password — no OAuth app to register, no verification to pass.",
+    technical_notes:
+      "The mail account — server, port, security (implicit TLS on 993 / STARTTLS on 143 / none), username, password and default folder — is configured once here and injected into every Mailbox step at run time; the password is held in the encrypted secret store. Deliberately separate from the Email (SMTP) connection, since the two use different hosts. Reads use EXAMINE and BODY.PEEK, so a search never marks mail read. 'Only new since last run' tracks the folder's own UIDVALIDITY and UID rather than a timestamp, so a published poll acts on each email exactly once and recovers cleanly if the folder is ever recreated. Use 'Test connection' to confirm the server, login and folder name before saving. Note that Microsoft 365 has disabled password logins for IMAP: it needs OAuth, which this connection does not yet do.",
+  },
   ntfy: {
     name: "ntfy",
     description:

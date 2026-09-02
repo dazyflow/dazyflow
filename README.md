@@ -4,7 +4,7 @@
 canvas — a trigger, some connectors, a branch, an AI step — and `dzd` runs it on
 your own machine, on your own database, with your credentials never leaving it.
 
-163 steps across 36 apps, hosted forms and webhooks, schedules, human approvals,
+167 steps across 37 apps, hosted forms and webhooks, schedules, human approvals,
 and first-class Nordic/EU connectors (Fortnox, Klarna, Roaring, 46elks, nShift,
 SMHI) alongside the usual Google, Slack, Stripe and GitHub. English and Swedish
 UI. AGPL, no feature gates, no seat limits.
@@ -55,7 +55,7 @@ Thirteen templates ship in the gallery, each a working flow you fork and fill in
 | **Watch a page → ping my phone** | Compares the visible words, not the markup, so it fires on real change. |
 | **Invoices emailed to you → filed in Drive** | Finds mail carrying a PDF, files the attachment. |
 
-[`tests/usecases/README.md`](tests/usecases/README.md) works through 35 more
+[`tests/usecases/README.md`](tests/usecases/README.md) works through 36 more
 plain-language asks — "chase overdue invoices", "remind people about
 appointments" — each with a verdict and a real graph behind it.
 

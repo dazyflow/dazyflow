@@ -31,6 +31,7 @@ import (
 	_ "github.com/dazyflow/dazyflow/drops/homeassistant"
 	_ "github.com/dazyflow/dazyflow/drops/io"
 	_ "github.com/dazyflow/dazyflow/drops/klarna"
+	_ "github.com/dazyflow/dazyflow/drops/mailbox"
 	_ "github.com/dazyflow/dazyflow/drops/mqtt"
 	_ "github.com/dazyflow/dazyflow/drops/net"
 	_ "github.com/dazyflow/dazyflow/drops/notify"

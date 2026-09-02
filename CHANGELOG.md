@@ -10,7 +10,74 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Added
+
+- **Read email over IMAP: the new Mailbox app.** `imap_search_messages` finds
+  mail in a folder of any account that speaks IMAP — Fastmail, mailbox.org,
+  Migadu, iCloud, your own Dovecot, or Gmail with an app password — and emits
+  the same record shape as Gmail's Search emails, so a For each over the
+  matches and `${item.id}` carry over unchanged. Configure the account once on
+  the Mailbox page (server, port, security, login, folder) and test it before
+  saving.
+
+  This exists because the read side of Gmail is gated on `gmail.readonly`, a
+  Google *restricted* scope: it grants freely on a Workspace-internal OAuth
+  app, but an external app needs a security assessment, and the practical
+  escape — Testing mode — expires refresh tokens after seven days. IMAP needs a
+  password and nothing else. Email (SMTP) still can only send; SMTP has no
+  command to list or search a mailbox at all.
+
+  'Only new since last run' tracks the folder's own UIDVALIDITY and UID rather
+  than a timestamp, so a published poll acts on each email exactly once, and a
+  folder that gets recreated re-baselines instead of replaying itself. Searches
+  use EXAMINE and BODY.PEEK, so they never mark mail read.
+
+- **Read one email over IMAP, and take its files.** `imap_get_message` returns
+  one message as Date / From / Subject / Body — the same four pins as Gmail's
+  Read email, and the body in full rather than the shortened form a search
+  carries. `imap_get_attachments` saves the files off a message, skipping
+  inline signature images, with the same `only` filter and
+  first/files/count outputs as its Gmail counterpart.
+
+  Both work from BODYSTRUCTURE: the server describes the MIME tree, and only
+  the parts actually wanted cross the wire — so reading the body of a mail with
+  a 20 MB PDF hanging off it costs a few hundred bytes, and an oversized set of
+  attachments is refused before anything is downloaded. Reads use BODY.PEEK
+  throughout, so neither step marks mail read. Content-transfer-encoding and
+  charset are both decoded, which is what turns a quoted-printable ISO-8859-1
+  Nordic invoice into words instead of `Fakturan =E4r betald`.
+
+- **`imap_mark_seen` closes off a handled email.** Put it at the end of a
+  triage or filing flow and the mail stops showing as unread, so a human sees a
+  tidy inbox and an "Unread only" search won't pick it up again. Genuinely
+  idempotent — read is read — so unlike the send steps it lets the engine retry
+  freely and needs no write-dedupe.
+
+  A STORE against a message that no longer exists is not an error in IMAP: the
+  server accepts the command and does nothing. So this step asks for the
+  updated flags back rather than using .SILENT, and reports a deleted email as
+  not found instead of claiming success.
+
+- **A second AI-triage template, for a mailbox that isn't Gmail**
+  (`ai-email-triage-imap`), plus use case 36. The template is the Gmail one
+  with a single node swapped — same edges, same downstream steps, because the
+  IMAP search emits the same record shape. Use case 36 runs the whole of case 6
+  against a plain IMAP mailbox: find the invoice mail, take the PDF, read the
+  body for AI to extract from, mark it done.
+
+  Not yet: threading or IDLE. Microsoft 365 needs OAuth for IMAP and so is out
+  of reach for now.
+
 ### Changed
+
+- **`mail-check` added to the web icon registry**, so the new Mark as read step
+  draws its own glyph rather than falling back to its category's.
+
+- **Attachment-saving rules moved into `drops/internal/mailfiles`**, shared by
+  `gmail_get_attachments` and the new `imap_get_attachments` instead of copied:
+  which parts to keep, the size cap, and the filename sanitiser — which is a
+  security boundary (the name comes from the sender), so a second hand-copied
+  version of it would be a second thing to get wrong.
 
 - **Shared helpers replace per-connector copies.** One `drops/cursor` package
   now backs the poll watermarks of Gmail, RSS, Google Forms and Home Assistant

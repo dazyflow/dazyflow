@@ -105,6 +105,14 @@ export const SV_TEMPLATE_PROSE: DescriptionMap = {
     en: "f0e8e7e8",
     sv: "Låt AI sortera varje ny e-post i dina egna kategorier: sms:a dig om de brådskande, skriva utkast till svar på de rutinmässiga och flagga allt som rör bokföring.",
   },
+  "ai-email-triage-imap.title": {
+    en: "8397e72d",
+    sv: "AI läser inkorgen och sorterar den (vilken mejlserver som helst)",
+  },
+  "ai-email-triage-imap.use_case": {
+    en: "7a7eded1",
+    sv: "Samma sortering, på en brevlåda som inte är Gmail: Fastmail, mailbox.org, Migadu, iCloud, eller en mejlserver du kör själv.",
+  },
   "invoices-to-drive.title": {
     en: "c8c66e49",
     sv: "Fakturor du får via e-post → sparade i Drive",

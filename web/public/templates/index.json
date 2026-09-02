@@ -193,6 +193,30 @@
       "graph_file": "/templates/ai-email-triage.json"
     },
     {
+      "id": "ai-email-triage-imap",
+      "title": "AI reads the inbox and sorts it out (any mail server)",
+      "use_case": "The same triage, on a mailbox that isn't Gmail: Fastmail, mailbox.org, Migadu, iCloud, or a mail server you run yourself.",
+      "category": "Email",
+      "description": "Checks a mailbox over IMAP every few minutes and classifies each new email into categories you write yourself. Urgent ones fire an SMS, routine questions come back as a drafted reply in Slack for a human to send, bookkeeping mail goes to its own channel. Connecting needs a password (or an app password) rather than a Google app review, so it works on a mailbox you host.",
+      "icon": "sparkles",
+      "tags": [
+        "ai",
+        "imap",
+        "mailbox",
+        "slack",
+        "triage",
+        "support",
+        "self-hosted"
+      ],
+      "integrations": [
+        "mailbox",
+        "slack",
+        "twilio",
+        "claude"
+      ],
+      "graph_file": "/templates/ai-email-triage-imap.json"
+    },
+    {
       "id": "invoices-to-drive",
       "title": "Invoices emailed to you → filed in Drive",
       "use_case": "File the PDF invoices people email you into a Drive folder and log the vendor, amount and due date in a sheet.",

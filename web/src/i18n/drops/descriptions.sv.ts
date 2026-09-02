@@ -329,6 +329,22 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     en: "ac690608",
     sv: "Testa det inkommande värdet och skicka det ut på Ja eller Nej i ett och samma steg. Välj testet i en lista på vanlig svenska — är lika med, innehåller, är större än, är någon av, ligger inom intervallet och mer. Värdet är både det som testas och nyttolasten som går vidare: den lämnar steget via Ja när testet stämmer, via Nej när det inte gör det. Koppla in Jämför med från ett tidigare steg, eller skriv ett fast värde. Det här är Jämför + Förgrening sammanslaget för det vanliga fallet med ett enda villkor; ta Jämför → Förgrening när du behöver dirigera en annan nyttolast än den du testar, eller kombinera villkor med Och/Eller/Inte.",
   },
+  imap_get_attachments: {
+    en: "5589fb62",
+    sv: "Ta filerna som är bifogade ett mejl och spara dem, färdiga att lämna till ett steg som lägger dem någonstans — Ladda upp till Drive, Skriv fil, eller ett eget mejl. Koppla Matchande mejl från Sök mejl in i en För varje och lägg det här steget i loopkroppen med Mejl = radens id. Använd \"Bara dessa typer\" för att bara ta PDF:erna och strunta i signaturbilderna. Utgången Första filen är den att koppla när varje mejl har ett enda dokument; listan Filer bär alla.",
+  },
+  imap_get_message: {
+    en: "761c7dd9",
+    sv: "Läs ett mejl som vänliga värden för Datum / Från / Ämne / Innehåll. Koppla Matchande mejl från Sök mejl direkt in i Mejl för att läsa den FÖRSTA träffen — eller, för att läsa varje träff, koppla Matchande mejl in i en För varje och lägg det här steget i loopkroppen med Mejl = radens id. Till skillnad från sökningen, som bär ett förkortat innehåll för varje träff, ger det här meddelandetexten i sin helhet.",
+  },
+  imap_mark_seen: {
+    en: "6a959c22",
+    sv: "Markera ett mejl som läst när flödet har tagit hand om det. Lägg det här sist i ett sorterings- eller arkiveringsflöde — efter Slack-inlägget, efter att bilagan är sparad — så att mejlet inte längre ligger oläst i inkorgen, och en sökning med \"Bara olästa\" inte plockar upp det igen. Koppla Matchande mejl från Sök mejl in i en För varje och lägg det här steget i loopkroppen med Mejl = radens id. Att göra det två gånger är harmlöst: läst är läst.",
+  },
+  imap_search_messages: {
+    en: "e564466a",
+    sv: "Hitta mejl i en mapp i vilket mejlkonto som helst som pratar IMAP, vilket nästan alla gör. Fyll i de delar du bryr dig om — vem det är från, ord i ämnesraden, bara olästa, de senaste dagarna — och varje träff kommer ut som ett riktigt mejl (datum, avsändare, ämne, innehåll), färdigt att logga till ett kalkylblad, loopa över med För varje, eller lämna till ett AI-steg. Slå på \"Bara nya sedan förra körningen\" för att göra det här till en säker källa att polla: ett publicerat flöde agerar då på varje mejl en gång, i stället för att bearbeta mappen om och om igen. Anslut mejlkontot en gång på integrationssidan Mailbox.",
+  },
   join_rows: {
     en: "e9b3181a",
     sv: "SQL JOIN mellan två radströmmar. Parametern `on` kopplar vänstra kolumner till högra ({\"id\": \"user_id\"}). `kind` väljer inner / left / right / outer / anti (anti = bara de vänstra raderna som saknar matchning på högersidan, med enbart sina egna kolumner — frågan \"vilka av de här har jag inte behandlat än?\"). När samma nyckel matchar flera högra rader blir utdatat en kartesisk produkt inom den gruppen (som i vanlig SQL). Högra kolumner som inte är nycklar och krockar med vänstra kolumnnamn får ett suffix (standard \"_right\", ändras med `right_suffix`). Den högra sidans nyckelkolumner tas bort ur utdatat eftersom de per definition är lika med den vänstras.",

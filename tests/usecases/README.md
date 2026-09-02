@@ -580,3 +580,25 @@ are a stored secret rather than a literal in the flow, callers without one are
 turned away by the endpoint, and every message is logged with the time so
 there's a record of what the other system asked for.
 
+
+### 36. "Do all that, but my mail isn't Gmail"
+
+Same ask as 6, from someone whose mail lives on Fastmail, mailbox.org, Migadu,
+or a mail server they run themselves. Until now the answer was no: reading mail
+meant Gmail, and Gmail's read scope is one Google gates behind an app review
+that a self-hoster cannot realistically pass.
+
+**It works when:** invoices arriving at any IMAP account are found, the attached
+PDF is filed in Drive, a row is logged with what AI read off the email, and the
+mail is marked read so the next poll leaves it alone.
+
+**Verdict: Supported** — needed a new app. `36-invoices-from-my-own-mail-server.json`
+runs the whole of case 6 against a plain IMAP mailbox: Search emails finds the
+invoice mail, Download attachments takes the PDF, Read email gives AI the full
+body to pull the vendor and amount from, and Mark as read closes it off. The
+match records are the same shape Gmail's search emits, so the graph is case 6
+with the four Gmail steps swapped for their Mailbox equivalents — no rewiring.
+
+Worth knowing what this does *not* cover: Microsoft 365 has disabled password
+logins for IMAP, so an M365 mailbox needs OAuth that the Mailbox connection
+doesn't do yet.

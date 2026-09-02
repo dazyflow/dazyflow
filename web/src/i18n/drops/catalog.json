@@ -699,6 +699,44 @@
       "Yes"
     ]
   },
+  "imap_get_attachments": {
+    "description": "Take the files attached to an email and save them, ready to hand to a step that files them somewhere — Upload to Drive, Write file, or an email of your own. Connect Search emails' Matching emails into a For each and put this step in the loop body with Email = the row's id. Use 'Only these types' to take just the PDFs and ignore signature images. The First file output is the one to connect when each email carries a single document; the Files list carries them all.",
+    "ports": [
+      "Email",
+      "Files",
+      "First file",
+      "How many",
+      "Pass-through"
+    ]
+  },
+  "imap_get_message": {
+    "description": "Read one email as friendly Date / From / Subject / Body values. Connect Search emails' Matching emails straight into Email to read the FIRST match — or, to read every match, connect Matching emails into a For each and put this step in the loop body with Email = the row's id. Unlike the search, which carries a shortened body for every match, this returns the message text in full.",
+    "ports": [
+      "Body",
+      "Date",
+      "Email",
+      "From",
+      "Pass-through",
+      "Subject"
+    ]
+  },
+  "imap_mark_seen": {
+    "description": "Mark an email as read once your flow has dealt with it. Put this at the end of a triage or filing flow — after the Slack post, after the attachment is filed — so the mail is no longer sitting in the inbox as unread, and an 'Unread only' search won't pick it up again. Connect Search emails' Matching emails into a For each and put this step in the loop body with Email = the row's id. Doing it twice is harmless: read is read.",
+    "ports": [
+      "Details",
+      "Email",
+      "Pass-through"
+    ]
+  },
+  "imap_search_messages": {
+    "description": "Find emails in a folder of any mail account that speaks IMAP, which is nearly all of them. Fill in the parts you care about — who it's from, words in the subject, unread only, the last few days — and each match comes out as a real email (date, sender, subject, body), ready to log to a sheet, loop over with For each, or hand to an AI step. Turn on 'Only new since last run' to make this a safe poll source: a published flow then acts on each email once, instead of re-processing the folder every few minutes. Connect the mail account once on the Mailbox integration page.",
+    "ports": [
+      "From",
+      "Matching emails",
+      "Pass-through",
+      "Subject"
+    ]
+  },
   "join_rows": {
     "description": "SQL JOIN between two row streams. Param `on` maps left columns to right columns ({\"id\": \"user_id\"}). `kind` picks inner / left / right / outer / anti (anti = only the left rows with no match on the right, carrying just their own columns — the \"which of these haven't I processed yet?\" question). When the same key matches multiple right rows the output cartesians within that group (standard SQL behavior). Non-key right columns that collide with left column names get suffixed (default \"_right\", overridable via `right_suffix`). The right side's key columns are dropped from the output since they equal the left's by construction.",
     "ports": [
