@@ -10,6 +10,31 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Tidy could not be reached when you needed it.** The editor's toolbar has a
+  scrolling left half so the pinned actions — Run, Publish — never slide off
+  the right edge. Tidy lived in that scrolling half, and the region collapses
+  to whatever width the pinned cluster leaves it: on a laptop with the
+  Inspector open there was often nothing left, so Tidy sat off-screen behind a
+  deliberately hidden scrollbar with no keyboard shortcut to fall back on. It
+  also hid itself entirely below two nodes, which made its absence read as
+  random rather than as a rule.
+
+  Tidy now sits in the canvas controls at the bottom-left, beside zoom and
+  fit-view. That cluster is pinned to the canvas and cannot scroll away, and a
+  whole-graph layout action belongs with the other viewport tools anyway. It
+  stays mounted at every size and is merely disabled below two nodes, so the
+  feature is visible before it is usable.
+
+- **The editor toolbar hid its overflow.** The same scrolling region strands
+  Add step, Add note, History and the saved indicator, and its scrollbar is
+  hidden on purpose — so the tools out of view were reachable only by guessing
+  that the bar swipes sideways. It now shows an arrow on whichever side still
+  has controls off-screen, and the edge fade follows the same measurement
+  instead of being painted on unconditionally, which had been dimming the last
+  24px of a bar that fit.
+
 ## [0.31.0] - 2026-09-02
 
 ### Added

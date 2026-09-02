@@ -20,6 +20,7 @@ import {
   Background,
   BackgroundVariant,
   Controls,
+  ControlButton,
   MiniMap,
   addEdge,
   applyEdgeChanges,
@@ -59,6 +60,8 @@ import {
   AlignVerticalDistributeCenter,
   StickyNote,
   LayoutGrid,
+  ChevronLeft,
+  ChevronRight,
   Group,
   AlertCircle,
   CircleDot,
@@ -573,6 +576,58 @@ function EditorInner() {
     refreshLock,
   } = run;
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+  // The toolbar's scrolling half holds the secondary tools and gets whatever
+  // width the pinned actions leave it — on a narrow window, or any width with
+  // the Inspector open, not enough for all of them. Track which side still
+  // has content off-screen so the edge fade and a nudge arrow appear per side:
+  // the scrollbar is hidden by design, and without a visible cue the tools out
+  // of view were reachable only by guessing that the bar swipes sideways.
+  const toolbarScrollRef = useRef<HTMLDivElement | null>(null);
+  const [toolbarOverflow, setToolbarOverflow] = useState({
+    left: false,
+    right: false,
+  });
+  const measureToolbarOverflow = useCallback(() => {
+    const el = toolbarScrollRef.current;
+    if (!el) return;
+    // A pixel of slack: fractional flex widths leave scrollWidth a hair above
+    // clientWidth on a region that actually fits, which would pin an arrow on
+    // screen forever with nothing to scroll to.
+    const SLACK = 1;
+    const left = el.scrollLeft > SLACK;
+    const right = el.scrollWidth - el.clientWidth - el.scrollLeft > SLACK;
+    setToolbarOverflow((prev) =>
+      prev.left === left && prev.right === right ? prev : { left, right },
+    );
+  }, []);
+  // Two observers rather than a measurement per render: reading scrollWidth
+  // flushes layout, and this component re-renders on every mousemove of a node
+  // drag. The resize side catches the region being squeezed by the pinned
+  // actions (and the label collapse that rides on the canvas width); the
+  // mutation side catches controls arriving and leaving with the selection —
+  // align, distribute, breakpoint — and the save indicator's text, none of
+  // which resize anything an observer is watching.
+  useEffect(() => {
+    const el = toolbarScrollRef.current;
+    if (!el) return;
+    measureToolbarOverflow();
+    el.addEventListener("scroll", measureToolbarOverflow, { passive: true });
+    const ro = new ResizeObserver(measureToolbarOverflow);
+    ro.observe(el);
+    const mo = new MutationObserver(measureToolbarOverflow);
+    mo.observe(el, { childList: true, characterData: true, subtree: true });
+    return () => {
+      el.removeEventListener("scroll", measureToolbarOverflow);
+      ro.disconnect();
+      mo.disconnect();
+    };
+  }, [measureToolbarOverflow]);
+  // Nudge by most of a screenful rather than all of it, so a sliver of the
+  // controls you were looking at stays on screen to orient by.
+  const nudgeToolbar = useCallback((dir: -1 | 1) => {
+    const el = toolbarScrollRef.current;
+    el?.scrollBy({ left: dir * el.clientWidth * 0.8, behavior: "smooth" });
+  }, []);
   // streamAbortRef holds the AbortController for the one SSE run-stream
   // that's currently active. subscribeToRun aborts the previous stream
   // before opening a new one, and a mount-cleanup effect aborts it on
@@ -3740,14 +3795,29 @@ function EditorInner() {
         onMouseMove={onCanvasMouseMove}
       >
         <div className="editor-toolbar">
-          {/* Everything up to the spacer lives in a SCROLLING region; the
-              primary actions after it are pinned. The whole bar used to be
-              the scroll container, with the scrollbar hidden for looks — so on
-              a narrow window (or any window with the inspector open) Run and
-              Publish slid off the right edge with nothing on screen to suggest
-              they were still there. Secondary tools may scroll; the action you
-              came to press may not. */}
-          <div className="toolbar-scroll">
+          {/* Secondary tools live in a SCROLLING region; the primary actions
+              after it are pinned, so Run and Publish never slide off the right
+              edge. The arrows on either side of it appear only when that side
+              has controls out of view — reserving their space rather than
+              overlaying the bar, so an arrow never covers the button next to
+              it. */}
+          {toolbarOverflow.left && (
+            <Button
+              variant="ghost"
+              className="toolbar-nudge"
+              onClick={() => nudgeToolbar(-1)}
+              title={t("editor.toolbarMoreLeft")}
+              aria-label={t("editor.toolbarMoreLeft")}
+            >
+              <ChevronLeft size={ICON.sm} aria-hidden="true" />
+            </Button>
+          )}
+          <div
+            className="toolbar-scroll"
+            ref={toolbarScrollRef}
+            data-fade-left={toolbarOverflow.left ? "true" : "false"}
+            data-fade-right={toolbarOverflow.right ? "true" : "false"}
+          >
           {/* Undo / redo. Always mounted rather than conditional on
               availability: a disabled button is how the feature — and its
               keyboard shortcut, via the tooltip — is discoverable at all. */}
@@ -3795,19 +3865,6 @@ function EditorInner() {
               <StickyNote size={ICON.sm} />
               <span className="toolbar-label">{t("editor.addFrame")}</span>
             </Button>
-            {/* One-click "Tidy" — re-columns the whole graph by dependency
-                depth. Hidden until there are 2+ nodes to arrange. */}
-            {nodes.length >= 2 && (
-              <Button
-                variant="ghost"
-                onClick={autoLayout}
-                title={t("editor.tidyTitle")}
-              aria-label={t("editor.tidy")}
-              >
-                <LayoutGrid size={ICON.sm} />
-                <span className="toolbar-label">{t("editor.tidy")}</span>
-              </Button>
-            )}
           </div>
 
           {/* Align & distribute — appears only while 2+ nodes are selected,
@@ -3945,6 +4002,17 @@ function EditorInner() {
             )}
           </div>
           </div>
+          {toolbarOverflow.right && (
+            <Button
+              variant="ghost"
+              className="toolbar-nudge"
+              onClick={() => nudgeToolbar(1)}
+              title={t("editor.toolbarMoreRight")}
+              aria-label={t("editor.toolbarMoreRight")}
+            >
+              <ChevronRight size={ICON.sm} aria-hidden="true" />
+            </Button>
+          )}
 
           {/* Run-status chip — shown only when it says something the adjacent
               control does not.
@@ -4783,7 +4851,22 @@ function EditorInner() {
               border: "1px solid var(--border)",
               borderRadius: "var(--r-2)",
             }}
-          />
+          >
+            {/* One-click "Tidy" — re-columns the whole graph by dependency
+                depth. A whole-graph layout action belongs with zoom and
+                fit-view, and this cluster is pinned to the canvas, so it is
+                reachable at any width without scrolling the toolbar.
+                Disabled, not hidden, below 2 nodes so it stays discoverable. */}
+            <ControlButton
+              className="dz-tidy-control"
+              onClick={autoLayout}
+              disabled={nodes.length < 2}
+              title={t("editor.tidyTitle")}
+              aria-label={t("editor.tidy")}
+            >
+              <LayoutGrid size={ICON.sm} aria-hidden="true" />
+            </ControlButton>
+          </Controls>
           {/* Minimap for navigating large graphs — the standard node-editor
               affordance once a flow grows past a screenful. Node swatches are
               tinted by run status so the map doubles as a health overview;

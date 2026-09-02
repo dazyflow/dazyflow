@@ -4739,6 +4739,24 @@ button.warning:hover:not(:disabled) {
   display: block;
   overflow: visible;
 }
+/* Tidy, in the pinned canvas Controls cluster. React Flow's own control
+   glyphs are solid paths, so its stylesheet forces `fill: currentColor` on
+   every svg inside a control button — which turns a stroked Lucide icon into
+   a filled blob. Undo that here and size the icon like the built-in ones.
+   The disabled look also needs redoing: React Flow dims via `fill-opacity`,
+   which does nothing to an outline. */
+.react-flow__controls .dz-tidy-control svg {
+  width: 14px;
+  max-width: 14px;
+  height: 14px;
+  max-height: 14px;
+  fill: none;
+}
+.react-flow__controls .dz-tidy-control:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 /* Minimap — themed to match the canvas Controls (surface + border) rather
    than React Flow's default white panel, which glared on the dark canvas. */
 .dz-minimap.react-flow__minimap {
@@ -8968,16 +8986,52 @@ a.pa-card:hover {
 .editor-toolbar .toolbar-scroll::-webkit-scrollbar {
   display: none;
 }
-/* A fade at the right edge of the scroll region: the scrollbar is hidden, so
-   this is the only cue that there is more to the left of the pinned actions.
-   Non-interactive, and it sits inside the scroll region's own stacking. */
-.editor-toolbar .toolbar-scroll {
+/* Content fades into whichever edge still has controls behind it, so a cut-off
+   button reads as cut off rather than as a button that ends oddly. Driven by
+   measured overflow (data-fade-*), not applied unconditionally: a permanent
+   fade dimmed the last 24px of a bar that fit, which is where the trailing
+   control sits. */
+.editor-toolbar .toolbar-scroll[data-fade-left="false"][data-fade-right="true"] {
   -webkit-mask-image: linear-gradient(
     to right,
     #000 calc(100% - 24px),
     transparent
   );
   mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+}
+.editor-toolbar .toolbar-scroll[data-fade-left="true"][data-fade-right="false"] {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 24px);
+  mask-image: linear-gradient(to right, transparent, #000 24px);
+}
+.editor-toolbar .toolbar-scroll[data-fade-left="true"][data-fade-right="true"] {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 24px,
+    #000 calc(100% - 24px),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 24px,
+    #000 calc(100% - 24px),
+    transparent
+  );
+}
+/* Nudge arrows: narrower than a real toolbar button — they are a scroll
+   affordance, not an action — and quiet enough not to compete with the tools
+   they reveal. */
+.editor-toolbar .toolbar-nudge {
+  width: 22px;
+  min-width: 22px;
+  padding: 0;
+  gap: 0;
+  justify-content: center;
+  color: var(--faint);
+}
+.editor-toolbar .toolbar-nudge:hover {
+  color: var(--ink);
 }
 .editor-toolbar .toolbar-scroll > * {
   flex-shrink: 0;
@@ -9407,7 +9461,10 @@ a.pa-card:hover {
   .editor-toolbar button.primary .toolbar-label {
     display: inline;
   }
-  .editor-toolbar button:not(.primary) {
+  /* The nudge arrows are excluded: they are icon-only at every width already,
+     and squaring them off to 36px would give a scroll affordance the footprint
+     of the tools it reveals. */
+  .editor-toolbar button:not(.primary, .toolbar-nudge) {
     width: 36px;
     padding: 0;
     gap: 0;

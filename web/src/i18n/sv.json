@@ -2039,6 +2039,8 @@
     "adminBlockedCta": "Visa konfigurationsstatus",
     "tidy": "Städa",
     "tidyTitle": "Ordna flödet automatiskt i tydliga kolumner",
+    "toolbarMoreLeft": "Visa verktygen till vänster",
+    "toolbarMoreRight": "Visa verktygen till höger",
     "undo": "Ångra",
     "undoTitle": "Ångra den senaste ändringen (Ctrl/Cmd+Z)",
     "redo": "Gör om",

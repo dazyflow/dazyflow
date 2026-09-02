@@ -2041,6 +2041,8 @@
     "adminBlockedCta": "View setup status",
     "tidy": "Tidy",
     "tidyTitle": "Auto-arrange the flow into clean columns",
+    "toolbarMoreLeft": "Show the tools to the left",
+    "toolbarMoreRight": "Show the tools to the right",
     "undo": "Undo",
     "undoTitle": "Undo the last change (Ctrl/Cmd+Z)",
     "redo": "Redo",
