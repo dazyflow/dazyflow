@@ -316,7 +316,7 @@ func TestFlowName_DoesNotBreakNotificationDelivery(t *testing.T) {
 		t.Errorf("FINDING: a flow NAME put %d bytes into the mail headers", smtp.wire())
 	}
 	if smtp.sent() == 0 {
-		t.Errorf("FINDING: no approval mail was delivered at all — an oversized "+
+		t.Errorf("FINDING: no approval mail was delivered at all — an oversized " +
 			"Subject means the run can never be unblocked by its approvers")
 	}
 }

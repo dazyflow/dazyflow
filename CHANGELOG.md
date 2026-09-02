@@ -10,6 +10,13 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Changed
+
+- **`golang.org/x/crypto` bumped to v0.56.0** for GO-2026-6355, a denial of
+  service on a deadlocked established SSH channel. `sftputil.Dial` calls
+  `ssh.NewClientConn`, so the SFTP drop reached the vulnerable symbol and CI's
+  `govulncheck` scan went red.
+
 ## [0.31.1] - 2026-09-02
 
 ### Security
