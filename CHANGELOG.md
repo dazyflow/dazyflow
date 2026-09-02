@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.31.2] - 2026-09-03
+
 ### Changed
 
 - **`golang.org/x/crypto` bumped to v0.56.0** for GO-2026-6355, a denial of
