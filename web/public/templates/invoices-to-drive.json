@@ -4,7 +4,12 @@
   "name": "Invoices emailed to you → filed in Drive",
   "description": "Every hour, finds new mail carrying a PDF invoice, files the PDF into a Google Drive folder, and adds a row to a spreadsheet with the vendor, amount and due date that AI read off the email. The manual version of this job is dragging attachments into a folder once a week.",
   "icon": "paperclip",
-  "triggers": [{ "type": "poll", "interval_seconds": 3600 }],
+  "triggers": [
+    {
+      "type": "poll",
+      "interval_seconds": 3600
+    }
+  ],
   "nodes": [
     {
       "id": "search",
@@ -15,19 +20,34 @@
         "only_new": true,
         "max_results": 20
       },
-      "position": { "x": 120, "y": 240 }
+      "position": {
+        "x": 120,
+        "y": 240
+      }
     },
     {
       "id": "each",
       "module": "for_each",
-      "params": { "concurrency": 1 },
-      "position": { "x": 460, "y": 240 }
+      "params": {
+        "concurrency": 1
+      },
+      "position": {
+        "x": 460,
+        "y": 240
+      }
     },
     {
       "id": "attachments",
       "module": "gmail_get_attachments",
-      "params": { "account": "default", "id": "${item.id}", "only": "pdf" },
-      "position": { "x": 800, "y": 240 }
+      "params": {
+        "account": "default",
+        "id": "${item.id}",
+        "only": "pdf"
+      },
+      "position": {
+        "x": 800,
+        "y": 240
+      }
     },
     {
       "id": "file_it",
@@ -37,32 +57,57 @@
         "folder_id": "REPLACE_WITH_YOUR_DRIVE_FOLDER_ID",
         "name": "${item.subject}.pdf"
       },
-      "position": { "x": 1140, "y": 140 }
+      "position": {
+        "x": 1140,
+        "y": 140
+      }
     },
     {
       "id": "extract",
       "module": "claude_extract",
       "params": {
         "fields": [
-          { "name": "vendor", "description": "the company that sent the invoice" },
-          { "name": "amount", "description": "total amount due" },
-          { "name": "due_date", "description": "payment due date, YYYY-MM-DD" }
+          {
+            "name": "vendor",
+            "description": "the company that sent the invoice"
+          },
+          {
+            "name": "amount",
+            "description": "total amount due"
+          },
+          {
+            "name": "due_date",
+            "description": "payment due date, YYYY-MM-DD"
+          }
         ],
-        "text": "From: ${item.from}\nSubject: ${item.subject}\n\n${item.body}"
+        "text": "From: ${item.from}\nSubject: ${item.subject}"
       },
-      "position": { "x": 1140, "y": 360 }
+      "position": {
+        "x": 1140,
+        "y": 360
+      }
     },
     {
       "id": "rows",
       "module": "parse_json",
       "params": {},
-      "position": { "x": 1480, "y": 360 }
+      "position": {
+        "x": 1480,
+        "y": 360
+      }
     },
     {
       "id": "stamp",
       "module": "compute_rows",
-      "params": { "compute": { "filed_on": "string(now)" } },
-      "position": { "x": 1820, "y": 360 }
+      "params": {
+        "compute": {
+          "filed_on": "string(now)"
+        }
+      },
+      "position": {
+        "x": 1820,
+        "y": 360
+      }
     },
     {
       "id": "log",
@@ -72,16 +117,61 @@
         "range": "Invoices",
         "account": "default"
       },
-      "position": { "x": 2160, "y": 360 }
+      "position": {
+        "x": 2160,
+        "y": 360
+      }
     }
   ],
   "edges": [
-    { "from": "search", "from_port": "messages", "to": "each", "to_port": "items", "on_error": "" },
-    { "from": "each", "from_port": "body", "to": "attachments", "to_port": "pass", "on_error": "" },
-    { "from": "attachments", "from_port": "first", "to": "file_it", "to_port": "in", "on_error": "" },
-    { "from": "attachments", "from_port": "count", "to": "extract", "to_port": "pass", "on_error": "" },
-    { "from": "extract", "from_port": "data", "to": "rows", "to_port": "in", "on_error": "" },
-    { "from": "rows", "from_port": "rows", "to": "stamp", "to_port": "rows", "on_error": "" },
-    { "from": "stamp", "from_port": "rows", "to": "log", "to_port": "rows", "on_error": "" }
+    {
+      "from": "search",
+      "from_port": "messages",
+      "to": "each",
+      "to_port": "items",
+      "on_error": ""
+    },
+    {
+      "from": "each",
+      "from_port": "body",
+      "to": "attachments",
+      "to_port": "pass",
+      "on_error": ""
+    },
+    {
+      "from": "attachments",
+      "from_port": "first",
+      "to": "file_it",
+      "to_port": "in",
+      "on_error": ""
+    },
+    {
+      "from": "attachments",
+      "from_port": "first",
+      "to": "extract",
+      "to_port": "file",
+      "on_error": ""
+    },
+    {
+      "from": "extract",
+      "from_port": "data",
+      "to": "rows",
+      "to_port": "in",
+      "on_error": ""
+    },
+    {
+      "from": "rows",
+      "from_port": "rows",
+      "to": "stamp",
+      "to_port": "rows",
+      "on_error": ""
+    },
+    {
+      "from": "stamp",
+      "from_port": "rows",
+      "to": "log",
+      "to_port": "rows",
+      "on_error": ""
+    }
   ]
 }

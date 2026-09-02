@@ -239,6 +239,49 @@
       "graph_file": "/templates/invoices-to-drive.json"
     },
     {
+      "id": "invoices-into-one-pdf",
+      "title": "A month of invoices → one PDF",
+      "use_case": "Send the accountant a single document instead of forty separate attachments.",
+      "category": "Documents",
+      "description": "Finds the invoice mail that arrived since the last run, takes the PDF off each one, and combines them into a single file with a divider page between documents — then emails it. The combining runs on your own machine, so the invoices never pass through anyone else's cloud.",
+      "icon": "combine",
+      "tags": [
+        "pdf",
+        "invoice",
+        "bookkeeping",
+        "imap",
+        "merge",
+        "scheduled"
+      ],
+      "integrations": [
+        "mailbox",
+        "pdf",
+        "email"
+      ],
+      "graph_file": "/templates/invoices-into-one-pdf.json"
+    },
+    {
+      "id": "sftp-feed-to-sheet",
+      "title": "A file lands on SFTP → into a sheet",
+      "use_case": "Pick up the CSV a bank or supplier drops on an SFTP server overnight and get its rows into a spreadsheet, each file handled exactly once.",
+      "category": "Documents",
+      "description": "Checks an SFTP folder every 15 minutes for new CSVs — a bank's drop box, a supplier's price list, a payroll export — downloads each one, reads it, and appends the rows to a sheet. 'Only new since last run' tracks the folder's own timestamps, so a feed that drops twenty files in the same second doesn't lose the stragglers and nothing is processed twice.",
+      "icon": "folder-open",
+      "tags": [
+        "sftp",
+        "csv",
+        "feed",
+        "bank",
+        "import",
+        "scheduled"
+      ],
+      "integrations": [
+        "sftp",
+        "google-sheets"
+      ],
+      "graph_file": "/templates/sftp-feed-to-sheet.json"
+    },
+    {
       "id": "approve-before-refund",
       "title": "Nothing goes out until someone approves",
       "use_case": "Take a refund request on a form, pause for a person to approve it, and only then let Stripe issue the refund.",

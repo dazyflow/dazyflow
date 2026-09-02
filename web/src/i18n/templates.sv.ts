@@ -113,6 +113,22 @@ export const SV_TEMPLATE_PROSE: DescriptionMap = {
     en: "7a7eded1",
     sv: "Samma sortering, på ett mejlkonto som inte är Gmail: Fastmail, mailbox.org, Migadu, iCloud, eller en mejlserver du kör själv.",
   },
+  "invoices-into-one-pdf.title": {
+    en: "eae9cab1",
+    sv: "En månads fakturor → en PDF",
+  },
+  "invoices-into-one-pdf.use_case": {
+    en: "cdc2cd82",
+    sv: "Skicka revisorn ett enda dokument i stället för fyrtio separata bilagor.",
+  },
+  "sftp-feed-to-sheet.title": {
+    en: "93ae9ec6",
+    sv: "En fil landar på SFTP → in i ett kalkylblad",
+  },
+  "sftp-feed-to-sheet.use_case": {
+    en: "182021ab",
+    sv: "Hämta CSV-filen som en bank eller leverantör lägger på en SFTP-server över natten och få in dess rader i ett kalkylblad, med varje fil hanterad exakt en gång.",
+  },
   "invoices-to-drive.title": {
     en: "c8c66e49",
     sv: "Fakturor du får via e-post → sparade i Drive",

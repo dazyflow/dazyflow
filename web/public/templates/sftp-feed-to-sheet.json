@@ -1,0 +1,102 @@
+{
+  "id": "sftp-feed-to-sheet",
+  "version": "1",
+  "name": "A file lands on SFTP → into a sheet",
+  "description": "Checks an SFTP folder every 15 minutes for new CSV files — a bank's drop box, a supplier's price list, a payroll export — downloads each one, reads it, and appends the rows to a Google Sheet. 'Only new since last run' means each file is picked up exactly once, even when a feed drops twenty of them in the same second.",
+  "icon": "folder-open",
+  "triggers": [
+    {
+      "type": "poll",
+      "interval_seconds": 900
+    }
+  ],
+  "nodes": [
+    {
+      "id": "list",
+      "module": "sftp_list_files",
+      "params": {
+        "pattern": "*.csv",
+        "only_new": true,
+        "limit": 20
+      },
+      "position": {
+        "x": 120,
+        "y": 240
+      }
+    },
+    {
+      "id": "each",
+      "module": "for_each",
+      "params": {
+        "concurrency": 1
+      },
+      "position": {
+        "x": 460,
+        "y": 240
+      }
+    },
+    {
+      "id": "fetch",
+      "module": "sftp_download_file",
+      "params": {
+        "path": "${item.path}"
+      },
+      "position": {
+        "x": 800,
+        "y": 240
+      }
+    },
+    {
+      "id": "read",
+      "module": "parse_csv",
+      "params": {},
+      "position": {
+        "x": 1140,
+        "y": 240
+      }
+    },
+    {
+      "id": "log",
+      "module": "sheets_append_row",
+      "params": {
+        "account": "default",
+        "spreadsheet_id": "REPLACE_WITH_YOUR_SPREADSHEET_ID",
+        "range": "Feed"
+      },
+      "position": {
+        "x": 1480,
+        "y": 240
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "list",
+      "from_port": "files",
+      "to": "each",
+      "to_port": "items",
+      "on_error": ""
+    },
+    {
+      "from": "each",
+      "from_port": "body",
+      "to": "fetch",
+      "to_port": "pass",
+      "on_error": ""
+    },
+    {
+      "from": "fetch",
+      "from_port": "file",
+      "to": "read",
+      "to_port": "in",
+      "on_error": ""
+    },
+    {
+      "from": "read",
+      "from_port": "rows",
+      "to": "log",
+      "to_port": "rows",
+      "on_error": ""
+    }
+  ]
+}

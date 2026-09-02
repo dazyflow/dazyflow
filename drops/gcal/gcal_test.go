@@ -697,3 +697,83 @@ func TestCreateEvent_RelativeAndAllDay(t *testing.T) {
 		t.Errorf("all-day start = %v, want an untouched plain date", got["start"])
 	}
 }
+
+// Cancelling is the other half of booking, and the case that decides whether
+// a cancellation flow is safe to re-run: an event already gone must not fail.
+func TestGcalDeleteEvent(t *testing.T) {
+	var gotMethod, gotPath string
+	status := 204
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		w.WriteHeader(status)
+	}))
+	defer srv.Close()
+	SetHTTPBase(srv.URL)
+	defer SetHTTPBase("")
+
+	job := core.Job{ID: "j", Params: map[string]any{
+		"token": "t", "calendar_id": "primary", "id": "evt-123",
+	}}
+
+	res, err := executeGcalDeleteEvent(context.Background(), job, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if res.Status != core.StatusOK {
+		t.Fatalf("status %s: %+v", res.Status, res.Error)
+	}
+	if gotMethod != "DELETE" {
+		t.Errorf("method = %q, want DELETE", gotMethod)
+	}
+	if !strings.Contains(gotPath, "/calendars/primary/events/evt-123") {
+		t.Errorf("path = %q", gotPath)
+	}
+	if meta, _ := res.Output["meta"].Inline.(map[string]any); meta["removed"] != true {
+		t.Errorf("meta.removed = %v, want true", meta["removed"])
+	}
+
+	// 410 Gone: the event isn't there. Not an error — a cancellation flow
+	// re-run must not fail on the second pass.
+	status = 410
+	res, err = executeGcalDeleteEvent(context.Background(), job, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if res.Status != core.StatusOK {
+		t.Fatalf("an already-gone event should not fail: %+v", res.Error)
+	}
+	if meta, _ := res.Output["meta"].Inline.(map[string]any); meta["removed"] != false {
+		t.Errorf("meta.removed = %v, want false so a flow can tell the two apart", meta["removed"])
+	}
+
+	// A real failure still fails.
+	status = 500
+	res, _ = executeGcalDeleteEvent(context.Background(), job, nil)
+	if res.Status == core.StatusOK {
+		t.Error("a 500 should fail the step")
+	}
+}
+
+// The obvious drag — List events' whole list into Event — takes the first.
+func TestGcalDeleteEvent_AcceptsAnEventList(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.WriteHeader(204)
+	}))
+	defer srv.Close()
+	SetHTTPBase(srv.URL)
+	defer SetHTTPBase("")
+
+	job := core.Job{ID: "j", Params: map[string]any{"token": "t", "calendar_id": "primary"},
+		Input: map[string]core.Ref{"id": {Inline: []any{
+			map[string]any{"id": "first-evt"},
+			map[string]any{"id": "second-evt"},
+		}}}}
+	if _, err := executeGcalDeleteEvent(context.Background(), job, nil); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if !strings.Contains(gotPath, "first-evt") {
+		t.Errorf("path = %q, want the FIRST event in the list", gotPath)
+	}
+}

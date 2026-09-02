@@ -169,7 +169,7 @@ func (b *memBackend) DeleteCalendarObject(ctx context.Context, p string) error {
 // put plants an event on the backend directly, for the listing tests.
 func (b *memBackend) put(t *testing.T, calendar, uid, summary string, start, end time.Time) {
 	t.Helper()
-	cal := buildCalendar(uid, summary, "", "", "", start, end)
+	cal := buildCalendar(uid, summary, "", "", "", start, end, false)
 	p := path.Join(homeSet, calendar, uid+".ics")
 	if _, err := b.PutCalendarObject(context.Background(), p, cal, nil); err != nil {
 		t.Fatal(err)

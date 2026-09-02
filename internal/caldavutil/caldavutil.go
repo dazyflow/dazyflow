@@ -18,9 +18,11 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"path"
 	"strings"
 	"time"
 
+	"github.com/emersion/go-ical"
 	"github.com/emersion/go-webdav"
 	"github.com/emersion/go-webdav/caldav"
 
@@ -178,3 +180,62 @@ func Verify(ctx context.Context, cfg Config) error {
 	_, err = ResolveCalendar(ctx, c, cfg)
 	return err
 }
+
+// FindEventPath locates the collection path an event with this UID lives at,
+// or "" when the calendar has no such event.
+//
+// Two attempts, cheapest first. An event this integration created sits at a
+// path built from its own UID, so a direct GET finds it in one request. An
+// event created by anything else — a person in their calendar app, which is
+// the realistic case for cancelling a booking — sits wherever that client put
+// it, so the fallback asks the server to find it by UID. Guessing only the
+// first would make the steps work on our own events and quietly fail on
+// everyone else's.
+func FindEventPath(ctx context.Context, c *caldav.Client, dir, uid string) (string, error) {
+	if uid == "" {
+		return "", errors.New("no event id given")
+	}
+	direct := path.Join(dir, uid+".ics")
+	if obj, err := c.GetCalendarObject(ctx, direct); err == nil && obj != nil {
+		return obj.Path, nil
+	}
+
+	// UID prop-filter: the server searches its own index rather than us
+	// walking the collection.
+	objects, err := c.QueryCalendar(ctx, dir, &caldav.CalendarQuery{
+		CompRequest: caldav.CalendarCompRequest{
+			Name:  "VCALENDAR",
+			Comps: []caldav.CalendarCompRequest{{Name: "VEVENT", Props: []string{"UID"}}},
+		},
+		CompFilter: caldav.CompFilter{
+			Name: "VCALENDAR",
+			Comps: []caldav.CompFilter{{
+				Name:  "VEVENT",
+				Props: []caldav.PropFilter{{Name: "UID", TextMatch: &caldav.TextMatch{Text: uid}}},
+			}},
+		},
+	})
+	if err != nil {
+		return "", fmt.Errorf("couldn't look the event up: %w", err)
+	}
+	// A UID is unique within a calendar by the RFC, but a server that
+	// implements the filter loosely can answer with near-misses — so the
+	// match is confirmed against the returned data rather than trusted.
+	for _, obj := range objects {
+		if obj.Data == nil {
+			continue
+		}
+		for _, ev := range obj.Data.Events() {
+			if got, err := ev.Props.Text(ical.PropUID); err == nil && got == uid {
+				return obj.Path, nil
+			}
+		}
+	}
+	return "", nil
+}
+
+// EventPath is where this integration writes an event: the UID plus ".ics"
+// under the calendar collection. Exported so create, update and delete agree
+// — an update that guessed a different path would leave a second copy behind
+// instead of replacing the first.
+func EventPath(dir, uid string) string { return path.Join(dir, uid+".ics") }

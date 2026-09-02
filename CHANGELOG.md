@@ -39,6 +39,45 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
   that is really a PNG is sent as an image instead of being rejected by the
   vendor as a malformed document.
 
+- **The invoice flows now read the invoice.** Use cases 6 and 36 and the
+  `invoices-to-drive` template wire the attached PDF into the AI step's Files
+  input. They used to hand it the EMAIL BODY, which on a real invoice mail
+  says "please see attached" — so the vendor and amount they logged were
+  whatever a model could infer from a sender and a subject line. Case 6's
+  README verdict said "read off the email" and now says what it does. This is
+  the payoff of the Files input, which until now nothing used.
+
+- **Two templates for apps that had none.** `sftp-feed-to-sheet` picks up the
+  CSV a bank or supplier drops overnight and appends its rows to a sheet, each
+  file handled exactly once. `invoices-into-one-pdf` combines a period's
+  invoice attachments into a single document and emails it to the accountant.
+  Templates are how anyone finds a step, and 30 of 40 apps still have none —
+  these are the two whose steps shipped most recently with no way to discover
+  them.
+
+- **Calendars can be amended and cancelled, not only created.**
+  `caldav_update_event` moves or renames an event, `caldav_delete_event` and
+  `gcal_delete_event` remove one. Cancelling was the missing half of every
+  booking flow — use case 22's withdrawn time-off request had nowhere to go.
+
+  Update is read-modify-write, not replace: a blank field means "leave it
+  alone". A step that wrote only the fields an author filled in would silently
+  drop the guest list, the description and the recurrence rule off any event it
+  touched. Moving the start without a new end keeps the event's LENGTH, because
+  "push it back an hour" must not quietly shorten a two-hour meeting. SEQUENCE
+  is bumped so attendees' clients pick the change up.
+
+  Deleting something already gone is not an error — the calendar is in the
+  state the flow asked for, and failing would break the second run of a
+  cancellation flow. `meta.removed` says which of the two happened.
+
+- **All-day events on `caldav_create_event`.** The behaviour difference from
+  the Google step that I documented rather than fixed last time: a plain date
+  produced a midnight-to-01:00 timed event. There's now an explicit
+  "All-day event" switch writing a date-valued `DTSTART`, which is what
+  iCalendar means by all-day. Explicit rather than inferred from the input's
+  shape, because "tomorrow" is a date and almost never means all day.
+
 - **YAML, and a way out for JSON and XML.** `parse_yaml` reads YAML into the
   same rows + headers shape Read JSON produces — config files, Kubernetes
   manifests, docker-compose, an HTTP response — with the same `path`
@@ -88,9 +127,10 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ### Changed
 
-- **`combine`, `file-search`, `scissors` and `file-code` added to the web icon
-  registry**, so the PDF and YAML steps draw their own glyphs rather than
-  falling back to their category's.
+- **`combine`, `file-search`, `scissors`, `file-code`, `calendar-x` and
+  `calendar-clock` added to the web icon registry**, so the PDF, YAML and
+  calendar steps draw their own glyphs rather than falling back to their
+  category's.
 
 ## [0.30.0] - 2026-09-02
 

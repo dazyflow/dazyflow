@@ -1,28 +1,145 @@
 {
-  "id": "uc-file-invoice-attachments",
-  "version": "1",
-  "tenant": "dev",
-  "workspace": "default",
-  "name": "Invoices arriving by email → filed in Drive and logged",
-  "nodes": [
-    {"id": "poll", "module": "poll_trigger", "params": {"interval_seconds": 3600}},
-    {"id": "search", "module": "gmail_search_messages", "params": {"account": "default", "query": "has:attachment filename:pdf (invoice OR faktura)", "only_new": true, "max_results": 20}},
-    {"id": "each", "module": "for_each", "params": {"concurrency": 1}},
-    {"id": "attachments", "module": "gmail_get_attachments", "params": {"account": "default", "id": "${item.id}", "only": "pdf"}},
-    {"id": "file_it", "module": "drive_upload", "params": {"account": "default", "folder_id": "1FoLdErIdFrOmYoUrDrIvE", "name": "${item.subject}.pdf"}},
-    {"id": "extract", "module": "claude_extract", "params": {"fields": [{"name": "vendor", "description": "the company that sent the invoice"}, {"name": "amount", "description": "total amount due"}, {"name": "due_date", "description": "payment due date, YYYY-MM-DD"}], "text": "From: ${item.from}\nSubject: ${item.subject}\n\n${item.body}"}},
-    {"id": "rows", "module": "parse_json", "params": {}},
-    {"id": "with_link", "module": "compute_rows", "params": {"compute": {"filed_on": "string(now)"}}},
-    {"id": "log", "module": "sheets_append_row", "params": {"spreadsheet_id": "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789", "range": "Invoices", "account": "default"}}
-  ],
-  "edges": [
-    {"from": "poll", "from_port": "pass", "to": "search", "to_port": "pass"},
-    {"from": "search", "from_port": "messages", "to": "each", "to_port": "items"},
-    {"from": "each", "from_port": "body", "to": "attachments", "to_port": "pass"},
-    {"from": "attachments", "from_port": "first", "to": "file_it", "to_port": "in"},
-    {"from": "attachments", "from_port": "count", "to": "extract", "to_port": "pass"},
-    {"from": "extract", "from_port": "data", "to": "rows", "to_port": "in"},
-    {"from": "rows", "from_port": "rows", "to": "with_link", "to_port": "rows"},
-    {"from": "with_link", "from_port": "rows", "to": "log", "to_port": "rows"}
-  ]
+ "id": "uc-file-invoice-attachments",
+ "version": "1",
+ "tenant": "dev",
+ "workspace": "default",
+ "name": "Invoices arriving by email → filed in Drive and logged",
+ "nodes": [
+  {
+   "id": "poll",
+   "module": "poll_trigger",
+   "params": {
+    "interval_seconds": 3600
+   }
+  },
+  {
+   "id": "search",
+   "module": "gmail_search_messages",
+   "params": {
+    "account": "default",
+    "query": "has:attachment filename:pdf (invoice OR faktura)",
+    "only_new": true,
+    "max_results": 20
+   }
+  },
+  {
+   "id": "each",
+   "module": "for_each",
+   "params": {
+    "concurrency": 1
+   }
+  },
+  {
+   "id": "attachments",
+   "module": "gmail_get_attachments",
+   "params": {
+    "account": "default",
+    "id": "${item.id}",
+    "only": "pdf"
+   }
+  },
+  {
+   "id": "file_it",
+   "module": "drive_upload",
+   "params": {
+    "account": "default",
+    "folder_id": "1FoLdErIdFrOmYoUrDrIvE",
+    "name": "${item.subject}.pdf"
+   }
+  },
+  {
+   "id": "extract",
+   "module": "claude_extract",
+   "params": {
+    "fields": [
+     {
+      "name": "vendor",
+      "description": "the company that sent the invoice"
+     },
+     {
+      "name": "amount",
+      "description": "total amount due"
+     },
+     {
+      "name": "due_date",
+      "description": "payment due date, YYYY-MM-DD"
+     }
+    ],
+    "text": "From: ${item.from}\nSubject: ${item.subject}"
+   }
+  },
+  {
+   "id": "rows",
+   "module": "parse_json",
+   "params": {}
+  },
+  {
+   "id": "with_link",
+   "module": "compute_rows",
+   "params": {
+    "compute": {
+     "filed_on": "string(now)"
+    }
+   }
+  },
+  {
+   "id": "log",
+   "module": "sheets_append_row",
+   "params": {
+    "spreadsheet_id": "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789",
+    "range": "Invoices",
+    "account": "default"
+   }
+  }
+ ],
+ "edges": [
+  {
+   "from": "poll",
+   "from_port": "pass",
+   "to": "search",
+   "to_port": "pass"
+  },
+  {
+   "from": "search",
+   "from_port": "messages",
+   "to": "each",
+   "to_port": "items"
+  },
+  {
+   "from": "each",
+   "from_port": "body",
+   "to": "attachments",
+   "to_port": "pass"
+  },
+  {
+   "from": "attachments",
+   "from_port": "first",
+   "to": "file_it",
+   "to_port": "in"
+  },
+  {
+   "from": "attachments",
+   "from_port": "first",
+   "to": "extract",
+   "to_port": "file"
+  },
+  {
+   "from": "extract",
+   "from_port": "data",
+   "to": "rows",
+   "to_port": "in"
+  },
+  {
+   "from": "rows",
+   "from_port": "rows",
+   "to": "with_link",
+   "to_port": "rows"
+  },
+  {
+   "from": "with_link",
+   "from_port": "rows",
+   "to": "log",
+   "to_port": "rows"
+  }
+ ]
 }

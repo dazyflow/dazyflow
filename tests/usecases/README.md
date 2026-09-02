@@ -217,11 +217,18 @@ named Drive folder, and a row with sender/date/link is appended to a sheet.
 **Verdict: Supported** (was a gap; closed by the new
 `gmail_get_attachments` step). `tests/usecases/06-file-invoice-attachments.json`
 finds the invoice mail, saves the attached PDF, uploads it to a named Drive
-folder, and appends a row with the vendor, amount and due date that AI read off
-the email. The step's `first` output is a file ref that wires straight into
-Upload to Drive; `files` carries them all. Ships as the `invoices-to-drive`
-template. Previously impossible: Dazyflow could send attachments but not read
-them.
+folder, and appends a row with the vendor, amount and due date that AI read
+**off the PDF itself**. The step's `first` output is a file ref that wires
+straight into Upload to Drive *and* into the AI step's Files input; `files`
+carries them all. Ships as the `invoices-to-drive` template. Previously
+impossible: Dazyflow could send attachments but not read them.
+
+Worth knowing what changed here, because it was wrong for a while: this flow
+used to hand the AI step the EMAIL BODY, which on a real invoice mail says
+"please see attached". The numbers it logged were whatever the model could
+infer from a sender and a subject line. Now the document goes in, and because
+the model reads rendered pages rather than a text layer, a scanned invoice
+works as well as a generated one.
 
 ## 7. "Text my customers the day before their appointment"
 
@@ -594,10 +601,11 @@ mail is marked read so the next poll leaves it alone.
 
 **Verdict: Supported** — needed a new app. `36-invoices-from-my-own-mail-server.json`
 runs the whole of case 6 against a plain IMAP mailbox: Search emails finds the
-invoice mail, Download attachments takes the PDF, Read email gives AI the full
-body to pull the vendor and amount from, and Mark as read closes it off. The
-match records are the same shape Gmail's search emits, so the graph is case 6
-with the four Gmail steps swapped for their Mailbox equivalents — no rewiring.
+invoice mail, Download attachments takes the PDF, the AI step reads **the PDF**
+(with the email body alongside it as context) to pull the vendor and amount,
+and Mark as read closes it off. The match records are the same shape Gmail's
+search emits, so the graph is case 6 with the four Gmail steps swapped for
+their Mailbox equivalents — no rewiring.
 
 Worth knowing what this does *not* cover: Microsoft 365 has disabled password
 logins for IMAP, so an M365 mailbox needs OAuth that the Mailbox connection

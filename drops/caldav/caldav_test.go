@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/emersion/go-ical"
+
 	"github.com/dazyflow/dazyflow/core"
 	_ "github.com/dazyflow/dazyflow/drops/datetime" // registers the date drop the wiring test drives
 	"github.com/dazyflow/dazyflow/drops/internal/dropstest"
@@ -521,4 +523,172 @@ func TestCalDAV_AcceptsWhatTheDateStepEmits(t *testing.T) {
 			t.Fatalf("the Date step's output was rejected as a window bound: %+v", res.Error)
 		}
 	})
+}
+
+// All-day events are a date-VALUED DTSTART, not a timed event with a
+// convenient duration. This is the parity gap with gcal_create_event, which
+// gets there by passing a plain date through untouched.
+func TestCalDAVCreate_AllDayEvent(t *testing.T) {
+	b := newBackend("Work")
+	url := startCalDAV(t, b)
+
+	run(t, executeCalDAVCreate, job(t, url, map[string]any{
+		"summary": "Midsummer", "start": "2026-06-19", "all_day": true,
+	}))
+
+	// Read the raw iCalendar back: the assertion that matters is the VALUE
+	// type on DTSTART, which is the whole difference from a midnight event.
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if len(b.objects) != 1 {
+		t.Fatalf("want 1 object, got %d", len(b.objects))
+	}
+	for _, obj := range b.objects {
+		ev := obj.Data.Events()[0]
+		prop := ev.Props.Get(ical.PropDateTimeStart)
+		if prop == nil {
+			t.Fatal("no DTSTART")
+		}
+		if got := prop.Params.Get(ical.ParamValue); got != "DATE" {
+			t.Errorf("DTSTART VALUE = %q, want DATE — otherwise it's a midnight timed event", got)
+		}
+		if strings.Contains(prop.Value, "T") {
+			t.Errorf("DTSTART = %q, want a bare date", prop.Value)
+		}
+		// DTEND is the day AFTER the last day, which is how a span is
+		// represented; a one-day event ending on its own start day renders as
+		// zero-length in most clients.
+		endProp := ev.Props.Get(ical.PropDateTimeEnd)
+		if endProp == nil || endProp.Value != "20260620" {
+			t.Errorf("DTEND = %#v, want 20260620 (the day after)", endProp)
+		}
+	}
+}
+
+// A timed event must NOT become date-valued — the regression guard for the
+// flag leaking into the default path.
+func TestCalDAVCreate_TimedEventStaysTimed(t *testing.T) {
+	b := newBackend("Work")
+	url := startCalDAV(t, b)
+	run(t, executeCalDAVCreate, job(t, url, map[string]any{
+		"summary": "Call", "start": "2026-06-19T09:00:00Z",
+	}))
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for _, obj := range b.objects {
+		prop := obj.Data.Events()[0].Props.Get(ical.PropDateTimeStart)
+		if got := prop.Params.Get(ical.ParamValue); got == "DATE" {
+			t.Error("a timed event came out date-valued")
+		}
+	}
+}
+
+func TestCalDAVUpdate_PartialChangeKeepsEverythingElse(t *testing.T) {
+	b := newBackend("Work")
+	url := startCalDAV(t, b)
+	run(t, executeCalDAVCreate, job(t, url, map[string]any{
+		"summary": "Intro call", "start": "2026-06-16T09:00:00Z", "end": "2026-06-16T10:00:00Z",
+		"description": "About the project", "location": "Room 2",
+		"attendees": "ada@example.test, bob@example.test",
+	}))
+	before := events(t, run(t, executeCalDAVList, job(t, url, nil)))
+	id, _ := before[0]["id"].(string)
+
+	// Move only the room.
+	run(t, executeCalDAVUpdate, job(t, url, map[string]any{"id": id, "location": "Room 4"}))
+
+	after := events(t, run(t, executeCalDAVList, job(t, url, nil)))
+	if len(after) != 1 {
+		t.Fatalf("want 1 event after the update, got %d", len(after))
+	}
+	rec := after[0]
+	if rec["location"] != "Room 4" {
+		t.Errorf("location = %v, want the change applied", rec["location"])
+	}
+	// Everything not mentioned must survive. A step that replaced the event
+	// with only the supplied fields would silently drop the guest list and
+	// the description — data loss nobody notices until someone doesn't turn up.
+	if rec["summary"] != "Intro call" {
+		t.Errorf("summary was lost: %v", rec["summary"])
+	}
+	if rec["description"] != "About the project" {
+		t.Errorf("description was lost: %v", rec["description"])
+	}
+	guests, _ := rec["attendees"].([]string)
+	if len(guests) != 2 {
+		t.Errorf("attendees were lost: %v", guests)
+	}
+	if got, _ := rec["start"].(string); !strings.HasPrefix(got, "2026-06-16T09:00:00") {
+		t.Errorf("start moved when it shouldn't have: %v", got)
+	}
+}
+
+// "Push it back an hour" is the common reschedule, and it must keep the
+// event's LENGTH — re-deriving the end from a default hour would silently
+// shorten a two-hour meeting.
+func TestCalDAVUpdate_MovingStartKeepsDuration(t *testing.T) {
+	b := newBackend("Work")
+	url := startCalDAV(t, b)
+	run(t, executeCalDAVCreate, job(t, url, map[string]any{
+		"summary": "Long meeting",
+		"start":   "2026-06-16T09:00:00Z", "end": "2026-06-16T11:00:00Z",
+	}))
+	id, _ := events(t, run(t, executeCalDAVList, job(t, url, nil)))[0]["id"].(string)
+
+	run(t, executeCalDAVUpdate, job(t, url, map[string]any{"id": id, "start": "2026-06-16T10:00:00Z"}))
+
+	rec := events(t, run(t, executeCalDAVList, job(t, url, nil)))[0]
+	if got, _ := rec["start"].(string); !strings.HasPrefix(got, "2026-06-16T10:00:00") {
+		t.Errorf("start = %v", got)
+	}
+	if got, _ := rec["end"].(string); !strings.HasPrefix(got, "2026-06-16T12:00:00") {
+		t.Errorf("end = %v, want the original two-hour length preserved", got)
+	}
+}
+
+func TestCalDAVUpdate_MissingEventIsNamed(t *testing.T) {
+	b := newBackend("Work")
+	url := startCalDAV(t, b)
+
+	res, err := executeCalDAVUpdate(context.Background(), job(t, url, map[string]any{"id": "no-such-event", "summary": "x"}), nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if res.Status == core.StatusOK {
+		t.Fatal("updating a missing event should fail the step")
+	}
+	if res.Error.Code != "not_found" {
+		t.Errorf("code = %q: %v", res.Error.Code, res.Error.Message)
+	}
+}
+
+func TestCalDAVDelete_RemovesTheEvent(t *testing.T) {
+	b := newBackend("Work")
+	url := startCalDAV(t, b)
+	run(t, executeCalDAVCreate, job(t, url, map[string]any{"summary": "Cancelled thing", "start": "2026-06-16T09:00:00Z"}))
+	id, _ := events(t, run(t, executeCalDAVList, job(t, url, nil)))[0]["id"].(string)
+
+	res := run(t, executeCalDAVDelete, job(t, url, map[string]any{"id": id}))
+	meta, _ := res.Output["meta"].Inline.(map[string]any)
+	if meta["removed"] != true {
+		t.Errorf("meta.removed = %v, want true", meta["removed"])
+	}
+	if left := events(t, run(t, executeCalDAVList, job(t, url, nil))); len(left) != 0 {
+		t.Fatalf("the event is still there: %+v", left)
+	}
+}
+
+// Deleting something already gone is not an error: the calendar is in the
+// state the flow asked for, and failing would break the second run of a
+// cancellation flow.
+func TestCalDAVDelete_AlreadyGoneIsNotAnError(t *testing.T) {
+	b := newBackend("Work")
+	url := startCalDAV(t, b)
+
+	res := run(t, executeCalDAVDelete, job(t, url, map[string]any{"id": "never-existed"}))
+	meta, _ := res.Output["meta"].Inline.(map[string]any)
+	if meta["removed"] != false {
+		t.Errorf("meta.removed = %v, want false so a flow can tell the two apart", meta["removed"])
+	}
 }

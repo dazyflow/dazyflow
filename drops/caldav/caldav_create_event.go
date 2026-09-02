@@ -9,7 +9,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"path"
 	"strings"
 	"time"
 
@@ -29,7 +28,7 @@ func init() {
 			Label:       "Calendar",
 			Subtitle:    "Create event",
 			Summary:     "Put an event on any calendar that isn't Google's — a booking, an intro call, a reminder.",
-			Description: "Create an event on a calendar over CalDAV. Every field a booking varies by — when, who, where, what — takes a connection as well as a typed value, because the point of booking from a flow is that those came from a form or a row. Start and End accept the same relative forms as the listing (\"tomorrow+9h\"), so a slot can be computed rather than typed. Attendees are comma-separated addresses; whether they get an invitation email is up to the calendar server, not this step. Every event this makes is a timed one: a plain date like \"2026-06-16\" becomes midnight to 01:00 rather than an all-day entry, so give it a time of day.",
+			Description: "Create an event on a calendar over CalDAV. Every field a booking varies by — when, who, where, what — takes a connection as well as a typed value, because the point of booking from a flow is that those came from a form or a row. Start and End accept the same relative forms as the listing (\"tomorrow+9h\"), so a slot can be computed rather than typed. Attendees are comma-separated addresses; whether they get an invitation email is up to the calendar server, not this step. Turn on \"All-day event\" for a holiday or a deadline; otherwise a plain date like \"2026-06-16\" makes a timed event starting at midnight.",
 			Integration: integration,
 			Category:    "network",
 			Icon:        "calendar-plus",
@@ -71,6 +70,7 @@ func init() {
 					"description":{"type":"string","title":"Description","format":"multiline","description":"Longer notes on the event. Overridden by the 'Description' input."},
 					"location":{"type":"string","title":"Location","description":"Where it is — a room, an address, a call link. Overridden by the 'Location' input."},
 					"attendees":{"type":"string","title":"Attendees","description":"Comma-separated email addresses to invite. Whether they receive an invitation is up to the calendar server. Overridden by the 'Attendees' input."},
+					"all_day":{"type":"boolean","title":"All-day event","default":false,"description":"Make it an all-day entry rather than a timed one — a holiday, a deadline, a delivery date. The time of day in Start and End is ignored; End is the day AFTER the last day, which is how calendars represent a span."},
 					"tz":{"type":"string","format":"timezone","title":"Timezone","description":"IANA timezone relative times are resolved in, e.g. \"Europe/Stockholm\". Empty = UTC."},
 					"timeout_ms":{"type":"integer","default":30000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				},
@@ -124,18 +124,25 @@ func executeCalDAVCreate(ctx context.Context, job core.Job, _ chan<- core.Progre
 	if err != nil {
 		return params.Err(job, "bad_param", err.Error()), nil
 	}
+	allDay := params.BoolDefault(job.Params, "all_day", false)
 	if !hasEnd {
-		// An hour is the convention every calendar UI uses for a new event,
-		// and a zero-length event renders as a point most clients hide.
-		end = start.Add(time.Hour)
+		if allDay {
+			// One day, expressed the way iCalendar wants it: DTEND is the day
+			// AFTER the last day of the span.
+			end = start.AddDate(0, 0, 1)
+		} else {
+			// An hour is the convention every calendar UI uses for a new
+			// event, and a zero-length event renders as a point most clients
+			// hide.
+			end = start.Add(time.Hour)
+		}
 	}
-	// Note this step only makes TIMED events. gcal_create_event deliberately
-	// passes an absolute value through untouched so that a plain date still
-	// means an all-day event; here every value is resolved to an instant, so
-	// a plain date means midnight. An all-day event in iCalendar is a
-	// date-VALUED DTSTART (DTSTART;VALUE=DATE:20260616), which SetDateTime
-	// cannot produce — supporting it means a distinct all-day mode on this
-	// step, not a different parse. Until then the description says so.
+	// An all-day event is not a timed one with a convenient duration: it is a
+	// date-VALUED DTSTART (DTSTART;VALUE=DATE:20260616). The Google step gets
+	// there by passing a plain date through untouched, which this step can't
+	// do because CalDAV needs a real time.Time — hence the explicit switch
+	// rather than an inference from the input's shape. Inferring would also
+	// be wrong: "tomorrow" is a date and almost never means all day.
 	if !end.After(start) {
 		return params.Err(job, "bad_param", fmt.Sprintf("the event ends before it starts (%s to %s)", start.Format(time.RFC3339), end.Format(time.RFC3339))), nil
 	}
@@ -157,7 +164,7 @@ func executeCalDAVCreate(ctx context.Context, job core.Job, _ chan<- core.Progre
 	if err != nil {
 		return params.Err(job, "internal", err.Error()), nil
 	}
-	cal := buildCalendar(uid, summary, description, where, guests, start, end)
+	cal := buildCalendar(uid, summary, description, where, guests, start, end, allDay)
 
 	timeout := time.Duration(params.TimeoutMS(job, 30000)) * time.Millisecond
 	ctx, cancel := context.WithTimeout(ctx, timeout)
@@ -176,7 +183,7 @@ func executeCalDAVCreate(ctx context.Context, job core.Job, _ chan<- core.Progre
 	// as the filename — which is what makes the engine's write-dedupe work:
 	// a replayed run with the same recorded result cannot land a second copy
 	// under a different name.
-	objPath := path.Join(dir, uid+".ics")
+	objPath := caldavutil.EventPath(dir, uid)
 	if _, err := client.PutCalendarObject(ctx, objPath, cal); err != nil {
 		return params.Err(job, "caldav_error", fmt.Sprintf("couldn't add the event: %v", err)), nil
 	}
@@ -193,15 +200,22 @@ func executeCalDAVCreate(ctx context.Context, job core.Job, _ chan<- core.Progre
 }
 
 // buildCalendar assembles the VCALENDAR one event goes out in.
-func buildCalendar(uid, summary, description, where, guests string, start, end time.Time) *ical.Calendar {
+func buildCalendar(uid, summary, description, where, guests string, start, end time.Time, allDay bool) *ical.Calendar {
 	event := ical.NewEvent()
 	event.Props.SetText(ical.PropUID, uid)
 	// DTSTAMP is when the event was created, and is required by RFC 5545 —
 	// some servers reject an event without it rather than filling it in.
 	event.Props.SetDateTime(ical.PropDateTimeStamp, time.Now().UTC())
 	event.Props.SetText(ical.PropSummary, summary)
-	event.Props.SetDateTime(ical.PropDateTimeStart, start)
-	event.Props.SetDateTime(ical.PropDateTimeEnd, end)
+	if allDay {
+		// SetDate writes VALUE=DATE, which is the whole difference between an
+		// all-day entry and a midnight-to-midnight timed one.
+		event.Props.SetDate(ical.PropDateTimeStart, start)
+		event.Props.SetDate(ical.PropDateTimeEnd, end)
+	} else {
+		event.Props.SetDateTime(ical.PropDateTimeStart, start)
+		event.Props.SetDateTime(ical.PropDateTimeEnd, end)
+	}
 	if description != "" {
 		event.Props.SetText(ical.PropDescription, description)
 	}

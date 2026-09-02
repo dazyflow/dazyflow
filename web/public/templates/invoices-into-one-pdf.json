@@ -1,0 +1,106 @@
+{
+  "id": "invoices-into-one-pdf",
+  "version": "1",
+  "name": "A month of invoices → one PDF",
+  "description": "Finds the invoice mail that arrived since the last run, takes the PDF off each one, and combines them into a single document for the accountant — one file instead of forty separate attachments. Runs on a schedule; point it at a month and it emails the result. The combining happens on your own machine, so the invoices never pass through anyone else's cloud.",
+  "icon": "combine",
+  "triggers": [
+    {
+      "type": "poll",
+      "interval_seconds": 86400
+    }
+  ],
+  "nodes": [
+    {
+      "id": "search",
+      "module": "imap_search_messages",
+      "params": {
+        "subject": "invoice",
+        "only_new": true,
+        "limit": 50
+      },
+      "position": {
+        "x": 120,
+        "y": 240
+      }
+    },
+    {
+      "id": "each",
+      "module": "for_each",
+      "params": {
+        "concurrency": 1
+      },
+      "position": {
+        "x": 460,
+        "y": 240
+      }
+    },
+    {
+      "id": "take",
+      "module": "imap_get_attachments",
+      "params": {
+        "id": "${item.id}",
+        "only": "pdf"
+      },
+      "position": {
+        "x": 800,
+        "y": 240
+      }
+    },
+    {
+      "id": "combine",
+      "module": "pdf_merge",
+      "params": {
+        "name": "invoices.pdf",
+        "divider": true
+      },
+      "position": {
+        "x": 1140,
+        "y": 240
+      }
+    },
+    {
+      "id": "send",
+      "module": "email_send",
+      "params": {
+        "to": "REPLACE_WITH_YOUR_ACCOUNTANTS_EMAIL",
+        "subject": "Invoices for the period",
+        "body": "Every invoice that arrived this period, in one file."
+      },
+      "position": {
+        "x": 1480,
+        "y": 240
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "search",
+      "from_port": "messages",
+      "to": "each",
+      "to_port": "items",
+      "on_error": ""
+    },
+    {
+      "from": "each",
+      "from_port": "body",
+      "to": "take",
+      "to_port": "pass",
+      "on_error": ""
+    },
+    {
+      "from": "take",
+      "from_port": "first",
+      "to": "combine",
+      "to_port": "files",
+      "on_error": ""
+    },
+    {
+      "from": "combine",
+      "from_port": "pdf",
+      "to": "send",
+      "to_port": "attachments",
+      "on_error": ""
+    }
+  ]
+}

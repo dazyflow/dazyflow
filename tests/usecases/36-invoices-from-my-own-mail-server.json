@@ -148,6 +148,12 @@
    "from_port": "pass",
    "to": "mark_done",
    "to_port": "pass"
+  },
+  {
+   "from": "attachments",
+   "from_port": "first",
+   "to": "extract",
+   "to_port": "file"
   }
  ]
 }

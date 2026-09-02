@@ -111,6 +111,7 @@ const SV_SUBTITLES: Record<string, string> = {
   "CSV text into rows": "CSV-text till rader",
   "Call a URL or API": "Anropa en URL eller ett API",
   "Call service": "Anropa tjänst",
+  "Cancel event": "Avboka händelse",
   "Cancel subscription": "Avsluta prenumeration",
   "Capture order": "Debitera order",
   // Git's subtitle, not a payment page — the version-control sense.
@@ -157,6 +158,7 @@ const SV_SUBTITLES: Record<string, string> = {
   Log: "Logg",
   "Map coordinate → place": "Kartkoordinat → plats",
   "Mark as read": "Markera som läst",
+  "Move or amend event": "Flytta eller ändra händelse",
   "New items from a feed": "Nya inlägg från ett flöde",
   "New responses": "Nya svar",
   "On mention": "När du omnämns",

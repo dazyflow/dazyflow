@@ -66,8 +66,16 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     sv: "Läs tillbaka rader ur en samling med en SELECT — praktiskt för att bygga en rapport av data du sparat tidigare. Använd ?-platshållare och parameterlistan för alla värden som kommer från användaren.",
   },
   caldav_create_event: {
-    en: "7d42646e",
-    sv: "Skapa en händelse i en kalender över CalDAV. Varje fält som en bokning varierar med — när, vem, var, vad — kan kopplas in och inte bara skrivas, för poängen med att boka från ett flöde är att de kom från ett formulär eller en rad. Start och Slut tar samma relativa former som listningen (\"tomorrow+9h\"), så en tid kan beräknas i stället för att skrivas. Deltagare är kommaseparerade adresser; om de får en inbjudan avgörs av kalenderservern, inte av det här steget. Varje händelse som skapas här är tidsatt: ett rent datum som \"2026-06-16\" blir midnatt till 01:00 i stället för en heldagspost, så ange en tid på dygnet.",
+    en: "3d3e169a",
+    sv: "Skapa en händelse i en kalender över CalDAV. Varje fält som en bokning varierar med — när, vem, var, vad — kan kopplas in och inte bara skrivas, för poängen med att boka från ett flöde är att de kom från ett formulär eller en rad. Start och Slut tar samma relativa former som listningen (\"tomorrow+9h\"), så en tid kan beräknas i stället för att skrivas. Deltagare är kommaseparerade adresser; om de får en inbjudan avgörs av kalenderservern, inte av det här steget. Slå på \"Heldagshändelse\" för en helgdag eller en deadline; annars ger ett rent datum som \"2026-06-16\" en tidsatt händelse som börjar vid midnatt.",
+  },
+  caldav_delete_event: {
+    en: "0f53c0b7",
+    sv: "Ta bort en händelse från kalendern. Den andra halvan av Skapa händelse: när en bokning avbokas eller en ledighetsansökan dras tillbaka måste posten också bort från kalendern. Koppla Händelser från Lista händelser in i en För varje och lägg det här steget i loopkroppen med Händelse = radens id, eller använd id:t ett tidigare Skapa händelse gav. En händelse som redan är borta är inget fel — kalendern är i det läge du bad om i vilket fall.",
+  },
+  caldav_update_event: {
+    en: "1106de89",
+    sv: "Ändra en händelse som redan ligger i kalendern. Fyll bara i det som ska ändras: en ny Start och Slut flyttar den, en ny Sammanfattning byter namn, en ny Plats byter rum. Allt du lämnar tomt lämnas exakt som det är, så det här är säkert att använda för en delvis ändring — steget läser händelsen först och skriver tillbaka den ändrad, i stället för att ersätta den med bara de fält du angav. Koppla Händelser från Lista händelser in i en För varje och lägg det här steget i loopkroppen med Händelse = radens id.",
   },
   caldav_list_events: {
     en: "a489d20e",
@@ -200,6 +208,10 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
   gcal_create_event: {
     en: "6f8cf69f",
     sv: "Skapa en händelse i en Google-kalender. Ange en rubrik samt start- och sluttid. Använd RFC3339-tidsstämplar (2026-06-16T15:00:00Z) för en händelse med klockslag, eller enkla datum (2026-06-16) för en heldagshändelse. Deltagare är en valfri kommaseparerad lista med e-postadresser.",
+  },
+  gcal_delete_event: {
+    en: "2b3c723a",
+    sv: "Ta bort en händelse från en Google-kalender. Den andra halvan av Skapa händelse: när en bokning avbokas eller en ledighetsansökan dras tillbaka måste posten också bort från kalendern. Koppla Händelser från Lista händelser in i en För varje och lägg det här steget i loopkroppen med Händelse = radens id, eller använd id:t ett tidigare Skapa händelse gav. En händelse som redan är borta är inget fel — kalendern är i det läge du bad om i vilket fall.",
   },
   gcal_list_events: {
     en: "e7fcf80d",
