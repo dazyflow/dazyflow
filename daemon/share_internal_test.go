@@ -16,6 +16,7 @@ import (
 // TestWorkspaceBrand_Cov covers workspaceBrand's branches: named org profile,
 // personal-tenant fallback, and a named (non-personal) tenant fallback.
 func TestWorkspaceBrand_Cov(t *testing.T) {
+	t.Parallel()
 	svc := &Service{}
 
 	// No OrgProfiles store: personal tenant drops its label; named tenant kept.
@@ -50,6 +51,7 @@ func TestWorkspaceBrand_Cov(t *testing.T) {
 
 // TestShareError_Cov covers shareError's three status mappings.
 func TestShareError_Cov(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 
 	rw := httptest.NewRecorder()

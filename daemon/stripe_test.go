@@ -16,6 +16,7 @@ import (
 )
 
 func TestStripeClient_CreateCheckoutSession(t *testing.T) {
+	t.Parallel()
 	var gotPath, gotAuth string
 	var gotForm map[string][]string
 	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
@@ -55,6 +56,7 @@ func TestStripeClient_CreateCheckoutSession(t *testing.T) {
 }
 
 func TestStripeClient_ErrorSurfacesMessage(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, _ *http.Request) {
 		rw.WriteHeader(400)
 		fmt.Fprint(rw, `{"error":{"message":"No such price: price_pro"}}`)
@@ -70,6 +72,7 @@ func TestStripeClient_ErrorSurfacesMessage(t *testing.T) {
 }
 
 func TestStripeClient_CreatePortalSession(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		_ = r.ParseForm()
 		if r.URL.Path != "/v1/billing_portal/sessions" || r.PostForm.Get("customer") != "cus_9" {
@@ -99,6 +102,7 @@ func signStripe(t *testing.T, secret string, ts time.Time, body []byte) string {
 }
 
 func TestVerifyStripeSignature(t *testing.T) {
+	t.Parallel()
 	secret := "whsec_test"
 	body := []byte(`{"type":"checkout.session.completed"}`)
 	now := time.Date(2026, 6, 10, 12, 0, 0, 0, time.UTC)

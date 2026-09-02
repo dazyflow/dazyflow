@@ -31,6 +31,7 @@ func doTextPreview(t *testing.T, h *gatewayHarness, body any) (int, textPreviewR
 // TestRenderTextPreview_TableFromRows: a per-row template + prefix/suffix
 // renders a table over sample rows — the HTML-table preset's shape.
 func TestRenderTextPreview_TableFromRows(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	code, pr := doTextPreview(t, h, map[string]any{
 		"template":  `'<tr><td>' + string(row["rank"]) + '</td><td>' + row["model"] + '</td></tr>'`,
@@ -57,6 +58,7 @@ func TestRenderTextPreview_TableFromRows(t *testing.T) {
 // TestRenderTextPreview_SeparatorDefaultsToNewline: when separator is omitted
 // the lines join with a newline (matching the drop's default).
 func TestRenderTextPreview_SeparatorDefaultsToNewline(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	code, pr := doTextPreview(t, h, map[string]any{
 		"template": `'• ' + row["name"]`,
@@ -73,6 +75,7 @@ func TestRenderTextPreview_SeparatorDefaultsToNewline(t *testing.T) {
 // TestRenderTextPreview_BadCELIsInline: a malformed CEL template comes back as
 // a 200 with a labelled error, not an HTTP error.
 func TestRenderTextPreview_BadCELIsInline(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	code, pr := doTextPreview(t, h, map[string]any{
 		"template": `row["name" +`, // unbalanced
@@ -92,6 +95,7 @@ func TestRenderTextPreview_BadCELIsInline(t *testing.T) {
 // TestRenderTextPreview_EmptyRowsUsesEmptyParam: zero rows yields the `empty`
 // fallback verbatim, not the prefix/suffix.
 func TestRenderTextPreview_EmptyRowsUsesEmptyParam(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	code, pr := doTextPreview(t, h, map[string]any{
 		"template": `'• ' + row["name"]`,
@@ -110,6 +114,7 @@ func TestRenderTextPreview_EmptyRowsUsesEmptyParam(t *testing.T) {
 // TestRenderTextPreview_NoRendererIsEmpty: before a preset is applied (no
 // template, no column) the preview is a clean empty string, not an error.
 func TestRenderTextPreview_NoRendererIsEmpty(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	code, pr := doTextPreview(t, h, map[string]any{
 		"rows": []map[string]any{{"name": "x"}},
@@ -121,6 +126,7 @@ func TestRenderTextPreview_NoRendererIsEmpty(t *testing.T) {
 
 // TestRenderTextPreview_RequiresAuth: the endpoint is authenticated.
 func TestRenderTextPreview_RequiresAuth(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	b, _ := json.Marshal(map[string]any{"template": "x"})
 	req := httptest.NewRequest("POST", "/api/v1/tools/render-text/preview", bytes.NewBuffer(b))

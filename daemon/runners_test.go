@@ -41,6 +41,7 @@ func register(t *testing.T, rs *Runners, tenant, name string, labels ...string) 
 // The organisation comes from the token, never from the request. An agent says
 // who it is; it does not get to say whose work queue it joins.
 func TestRegister_TenantComesFromTheToken(t *testing.T) {
+	t.Parallel()
 	rs := testRunners(t)
 	r, _ := register(t, rs, "acme", "box")
 	if r.Tenant != "acme" {
@@ -54,6 +55,7 @@ func TestRegister_TenantComesFromTheToken(t *testing.T) {
 // Testing this through Runners.Register cannot fail — that method never sets
 // Tenant, so an "honour the caller's tenant" mutation is a no-op. Checked.
 func TestRedeemToken_OverridesAnyCallerSuppliedTenant(t *testing.T) {
+	t.Parallel()
 	store := NewMemRunnerStore()
 	_, hash, err := newRunnerSecret(runnerTokenPrefix)
 	if err != nil {
@@ -76,6 +78,7 @@ func TestRedeemToken_OverridesAnyCallerSuppliedTenant(t *testing.T) {
 // A registration token is pasted into a terminal, so it is the secret most
 // likely to survive in a scrollback or a chat message. Using it burns it.
 func TestRegister_TokenIsSingleUse(t *testing.T) {
+	t.Parallel()
 	rs := testRunners(t)
 	tok, err := rs.MintToken(t.Context(), "acme", "admin@acme", "")
 	if err != nil {
@@ -91,6 +94,7 @@ func TestRegister_TokenIsSingleUse(t *testing.T) {
 }
 
 func TestRegister_TokenExpires(t *testing.T) {
+	t.Parallel()
 	rs := testRunners(t)
 	now := time.Now()
 	rs.Now = func() time.Time { return now }
@@ -118,6 +122,7 @@ func TestRegister_TokenExpires(t *testing.T) {
 }
 
 func TestRegister_UnknownTokenIsRefused(t *testing.T) {
+	t.Parallel()
 	rs := testRunners(t)
 	_, _, err := rs.Register(t.Context(), "dzrt_madeitup", "box", nil, "")
 	if !errors.Is(err, ErrBadRunnerToken) {
@@ -128,6 +133,7 @@ func TestRegister_UnknownTokenIsRefused(t *testing.T) {
 // The token and the credential are different secrets with different lifetimes,
 // and confusing them is a plausible mistake. A token must not authenticate.
 func TestAuthenticate_RejectsARegistrationToken(t *testing.T) {
+	t.Parallel()
 	rs := testRunners(t)
 	tok, err := rs.MintToken(t.Context(), "acme", "admin@acme", "")
 	if err != nil {
@@ -141,6 +147,7 @@ func TestAuthenticate_RejectsARegistrationToken(t *testing.T) {
 // ---- credentials ------------------------------------------------------
 
 func TestAuthenticate_IdentifiesTheRunnerAndRecordsTheCheckIn(t *testing.T) {
+	t.Parallel()
 	rs := testRunners(t)
 	now := time.Now()
 	rs.Now = func() time.Time { return now }
@@ -167,6 +174,7 @@ func TestAuthenticate_IdentifiesTheRunnerAndRecordsTheCheckIn(t *testing.T) {
 // cleanup alone does NOT break this, which was checked — that loop keeps the
 // index from growing without bound, it is not the revocation.
 func TestDelete_RevokesTheCredential(t *testing.T) {
+	t.Parallel()
 	rs := testRunners(t)
 	_, cred := register(t, rs, "acme", "box")
 	if err := rs.Delete(t.Context(), "acme", "box"); err != nil {
@@ -181,6 +189,7 @@ func TestDelete_RevokesTheCredential(t *testing.T) {
 // for that name. The new credential must work and the old one must not, or a
 // decommissioned host keeps a way in.
 func TestRegister_ReplacingARunnerRetiresTheOldCredential(t *testing.T) {
+	t.Parallel()
 	rs := testRunners(t)
 	_, first := register(t, rs, "acme", "box")
 
@@ -206,6 +215,7 @@ func TestRegister_ReplacingARunnerRetiresTheOldCredential(t *testing.T) {
 // machine's credential (kicking it offline) and redirects its work to whoever
 // redeemed the token.
 func TestRegister_OpenTokenCannotOverwriteAnExistingRunner(t *testing.T) {
+	t.Parallel()
 	rs := testRunners(t)
 	_, victimCred := register(t, rs, "acme", "prod-box")
 
@@ -232,6 +242,7 @@ func TestRegister_OpenTokenCannotOverwriteAnExistingRunner(t *testing.T) {
 // refused — so a token minted to replace one machine cannot be redirected onto
 // another.
 func TestRegister_PinnedTokenRejectsAnotherName(t *testing.T) {
+	t.Parallel()
 	rs := testRunners(t)
 	tok, err := rs.MintToken(t.Context(), "acme", "admin@acme", "build-01")
 	if err != nil {
@@ -249,6 +260,7 @@ func TestRegister_PinnedTokenRejectsAnotherName(t *testing.T) {
 // Labels route work, so they have to compare like with like however the agent
 // was invoked.
 func TestRegister_NormalizesLabels(t *testing.T) {
+	t.Parallel()
 	rs := testRunners(t)
 	r, _ := register(t, rs, "acme", "box", "Linux", " x64 ", "linux", "")
 	want := []string{"linux", "x64"}
@@ -258,6 +270,7 @@ func TestRegister_NormalizesLabels(t *testing.T) {
 }
 
 func TestRegister_RejectsBadNames(t *testing.T) {
+	t.Parallel()
 	rs := testRunners(t)
 	for _, name := range []string{"", "Has Spaces", "UPPER", "path/like", "dots.out", strings.Repeat("x", 65)} {
 		tok, err := rs.MintToken(t.Context(), "acme", "admin@acme", "")
@@ -275,6 +288,7 @@ func TestRegister_RejectsBadNames(t *testing.T) {
 // a long script is not polling, and must not flicker to offline for doing
 // exactly what it was asked.
 func TestRunner_OnlineFollowsTheLastCheckIn(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	r := Runner{LastSeen: now}
 	if !r.Online(now) {
@@ -294,6 +308,7 @@ func TestRunner_OnlineFollowsTheLastCheckIn(t *testing.T) {
 // ---- the task queue ---------------------------------------------------
 
 func TestClaim_ByName(t *testing.T) {
+	t.Parallel()
 	q := NewMemRunnerTaskStore()
 	r := Runner{Tenant: "acme", Name: "box"}
 	mustEnqueue(t, q, RunnerTask{ID: "t1", Tenant: "acme", Tags: []string{"box"}, Script: "x", State: TaskQueued})
@@ -309,6 +324,7 @@ func TestClaim_ByName(t *testing.T) {
 
 // A label lets a pool of interchangeable machines share a queue.
 func TestClaim_ByLabel(t *testing.T) {
+	t.Parallel()
 	q := NewMemRunnerTaskStore()
 	mustEnqueue(t, q, RunnerTask{ID: "t1", Tenant: "acme", Tags: []string{"linux"}, Script: "x", State: TaskQueued})
 
@@ -325,6 +341,7 @@ func TestClaim_ByLabel(t *testing.T) {
 // The whole isolation story: a script is about to run on someone's machine, so
 // a task must never be claimable by another organisation's runner.
 func TestClaim_NeverCrossesTenants(t *testing.T) {
+	t.Parallel()
 	q := NewMemRunnerTaskStore()
 	mustEnqueue(t, q, RunnerTask{ID: "t1", Tenant: "acme", Tags: []string{"box"}, Script: "x", State: TaskQueued})
 
@@ -337,6 +354,7 @@ func TestClaim_NeverCrossesTenants(t *testing.T) {
 // A task with neither a name nor a label has no target. Letting anything take
 // it would run someone's script on an arbitrary machine.
 func TestClaim_RefusesAnUntargetedTask(t *testing.T) {
+	t.Parallel()
 	q := NewMemRunnerTaskStore()
 	mustEnqueue(t, q, RunnerTask{ID: "t1", Tenant: "acme", Script: "x", State: TaskQueued})
 	r := Runner{Tenant: "acme", Name: "box", Labels: []string{"linux"}}
@@ -348,6 +366,7 @@ func TestClaim_RefusesAnUntargetedTask(t *testing.T) {
 // A claim is exclusive while the lease holds, so two agents polling at once do
 // not both run the same script.
 func TestClaim_IsExclusiveWhileLeased(t *testing.T) {
+	t.Parallel()
 	q := NewMemRunnerTaskStore()
 	mustEnqueue(t, q, RunnerTask{ID: "t1", Tenant: "acme", Tags: []string{"linux"}, Script: "x", State: TaskQueued})
 	a := Runner{Tenant: "acme", Name: "a", Labels: []string{"linux"}}
@@ -373,6 +392,7 @@ func TestClaim_IsExclusiveWhileLeased(t *testing.T) {
 // A lapsed claim has to become visibly failed, or the step waiting on it waits
 // forever for a machine that is gone.
 func TestFailAbandoned_CondemnsALapsedClaim(t *testing.T) {
+	t.Parallel()
 	q := NewMemRunnerTaskStore()
 	mustEnqueue(t, q, RunnerTask{ID: "t1", Tenant: "acme", Tags: []string{"box"}, Script: "x", State: TaskQueued})
 	now := time.Now()
@@ -407,6 +427,7 @@ func TestFailAbandoned_CondemnsALapsedClaim(t *testing.T) {
 // between a caller noticing the lapse and acting on it, and reporting a failure
 // that did not happen would be worse than the hang.
 func TestFailAbandoned_LosesToAResultThatArrives(t *testing.T) {
+	t.Parallel()
 	q := NewMemRunnerTaskStore()
 	mustEnqueue(t, q, RunnerTask{ID: "t1", Tenant: "acme", Tags: []string{"box"}, Script: "x", State: TaskQueued})
 	now := time.Now()
@@ -430,6 +451,7 @@ func TestFailAbandoned_LosesToAResultThatArrives(t *testing.T) {
 // Once condemned, a late result is refused: the step has already failed, and
 // resurrecting it would report success for a run that already errored.
 func TestComplete_RefusesAResultAfterWeGaveUp(t *testing.T) {
+	t.Parallel()
 	q := NewMemRunnerTaskStore()
 	mustEnqueue(t, q, RunnerTask{ID: "t1", Tenant: "acme", Tags: []string{"box"}, Script: "x", State: TaskQueued})
 	now := time.Now()
@@ -448,6 +470,7 @@ func TestComplete_RefusesAResultAfterWeGaveUp(t *testing.T) {
 // A task that was never claimed has no lease, and "no lease" must not read as
 // "expired lease" — that would condemn every task the moment it was queued.
 func TestAbandoned_NeedsAnActualLapsedLease(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	if abandoned(RunnerTask{State: TaskQueued}, now) {
 		t.Error("a queued task reads as abandoned")
@@ -467,6 +490,7 @@ func TestAbandoned_NeedsAnActualLapsedLease(t *testing.T) {
 }
 
 func TestExtend_KeepsALongTaskHeld(t *testing.T) {
+	t.Parallel()
 	q := NewMemRunnerTaskStore()
 	mustEnqueue(t, q, RunnerTask{ID: "t1", Tenant: "acme", Tags: []string{"box"}, Script: "x", State: TaskQueued})
 	r := Runner{Tenant: "acme", Name: "box"}
@@ -490,6 +514,7 @@ func TestExtend_KeepsALongTaskHeld(t *testing.T) {
 // A non-zero exit is a FAILED task. The step should fail the way any other
 // step fails, not succeed with an error buried in its output.
 func TestComplete_NonZeroExitFailsTheTask(t *testing.T) {
+	t.Parallel()
 	q := NewMemRunnerTaskStore()
 	mustEnqueue(t, q, RunnerTask{ID: "t1", Tenant: "acme", Tags: []string{"box"}, Script: "x", State: TaskQueued})
 	r := Runner{Tenant: "acme", Name: "box"}
@@ -509,6 +534,7 @@ func TestComplete_NonZeroExitFailsTheTask(t *testing.T) {
 }
 
 func TestComplete_RefusesATaskYouDoNotHold(t *testing.T) {
+	t.Parallel()
 	q := NewMemRunnerTaskStore()
 	mustEnqueue(t, q, RunnerTask{ID: "t1", Tenant: "acme", Tags: []string{"box"}, Script: "x", State: TaskQueued})
 	r := Runner{Tenant: "acme", Name: "box"}
@@ -561,6 +587,7 @@ func fakeAgent(t *testing.T, q RunnerTaskStore, r Runner, run func(RunnerTask) R
 }
 
 func TestDispatch_RoundTrip(t *testing.T) {
+	t.Parallel()
 	q := NewMemRunnerTaskStore()
 	rs := testRunners(t)
 	register(t, rs, "acme", "box")
@@ -634,6 +661,7 @@ func registerStale(t *testing.T, rs *Runners, tenant, name string, labels ...str
 // that hangs is the worst outcome — the run looks alive and the author has no
 // idea their machine is down.
 func TestDispatch_FailsWhenTheRunnerIsOffline(t *testing.T) {
+	t.Parallel()
 	q := NewMemRunnerTaskStore()
 	rs := testRunners(t)
 	registerStale(t, rs, "acme", "box")
@@ -658,6 +686,7 @@ func TestDispatch_FailsWhenTheRunnerIsOffline(t *testing.T) {
 // The label form has to say the same thing, because "nothing labelled build has
 // checked in" is a different diagnosis from "no runner is labelled build".
 func TestDispatch_FailsWhenNoLabelledRunnerIsOnline(t *testing.T) {
+	t.Parallel()
 	q := NewMemRunnerTaskStore()
 	rs := testRunners(t)
 	registerStale(t, rs, "acme", "box", "build")
@@ -681,6 +710,7 @@ func TestDispatch_FailsWhenNoLabelledRunnerIsOnline(t *testing.T) {
 // heartbeat keeps it online, and that is the signal that must hold the step
 // open. Failing here would break every queue deeper than one task.
 func TestDispatch_WaitsForABusyRunnerThatIsStillOnline(t *testing.T) {
+	t.Parallel()
 	q := NewMemRunnerTaskStore()
 	rs := testRunners(t)
 	register(t, rs, "acme", "box") // fresh check-in: online, just not claiming
@@ -706,6 +736,7 @@ func TestDispatch_WaitsForABusyRunnerThatIsStillOnline(t *testing.T) {
 // — naming the machine — rather than hang, and the script must NOT be handed to
 // anyone else.
 func TestDispatch_FailsWhenTheRunnerVanishesMidTask(t *testing.T) {
+	t.Parallel()
 	q := NewMemRunnerTaskStore()
 	rs := testRunners(t)
 	register(t, rs, "acme", "box")
@@ -740,6 +771,7 @@ func TestDispatch_FailsWhenTheRunnerVanishesMidTask(t *testing.T) {
 // The end-to-end version of the same danger: after the step gives up because
 // the machine was off, switching that machine on must not run the script.
 func TestDispatch_GivingUpClosesTheTaskForGood(t *testing.T) {
+	t.Parallel()
 	q := NewMemRunnerTaskStore()
 	rs := testRunners(t)
 	registerStale(t, rs, "acme", "box")
@@ -778,6 +810,7 @@ func (s *cancelRacingStore) CancelQueued(context.Context, string, string, Runner
 // there after all. The step must keep waiting for its answer, not fail beside a
 // script that is about to run anyway.
 func TestDispatch_KeepsWaitingIfTheTaskIsClaimedAsItGivesUp(t *testing.T) {
+	t.Parallel()
 	q := &cancelRacingStore{RunnerTaskStore: NewMemRunnerTaskStore()}
 	rs := testRunners(t)
 	registerStale(t, rs, "acme", "box") // offline, so the give-up path engages
@@ -841,6 +874,7 @@ func TestDispatch_KeepsWaitingIfTheTaskIsClaimedAsItGivesUp(t *testing.T) {
 // just the script. Without it a run whose context has no deadline stays alive
 // forever.
 func TestDispatch_StopsAtTheCeiling(t *testing.T) {
+	t.Parallel()
 	q := NewMemRunnerTaskStore()
 	rs := testRunners(t)
 	register(t, rs, "acme", "box") // online, so the offline path is not what fires
@@ -866,6 +900,7 @@ func TestDispatch_StopsAtTheCeiling(t *testing.T) {
 // that names it. Enqueueing into a queue nothing reads would leave the run
 // looking alive while nothing could ever happen.
 func TestDispatch_RefusesAnUnknownRunner(t *testing.T) {
+	t.Parallel()
 	d := &RunnerDispatcher{
 		Tasks:        NewMemRunnerTaskStore(),
 		Runners:      testRunners(t),
@@ -883,6 +918,7 @@ func TestDispatch_RefusesAnUnknownRunner(t *testing.T) {
 }
 
 func TestDispatch_RefusesAnUnknownLabel(t *testing.T) {
+	t.Parallel()
 	rs := testRunners(t)
 	register(t, rs, "acme", "box", "linux")
 	d := &RunnerDispatcher{Tasks: NewMemRunnerTaskStore(), Runners: rs, PollInterval: 5 * time.Millisecond}
@@ -897,6 +933,7 @@ func TestDispatch_RefusesAnUnknownLabel(t *testing.T) {
 // A cancelled run must stop waiting. Without this the step would block until
 // its own timeout even though the flow is already over.
 func TestDispatch_StopsWhenTheRunIsCancelled(t *testing.T) {
+	t.Parallel()
 	rs := testRunners(t)
 	register(t, rs, "acme", "box")
 	d := &RunnerDispatcher{Tasks: NewMemRunnerTaskStore(), Runners: rs, PollInterval: 5 * time.Millisecond}
@@ -915,6 +952,7 @@ func TestDispatch_StopsWhenTheRunIsCancelled(t *testing.T) {
 }
 
 func TestDispatch_RefusesNoTarget(t *testing.T) {
+	t.Parallel()
 	d := &RunnerDispatcher{Tasks: NewMemRunnerTaskStore(), Runners: testRunners(t)}
 	if _, err := d.Dispatch(t.Context(), DispatchRequest{Tenant: "acme", Script: "x"}, nil); err == nil {
 		t.Fatal("dispatched with no runner and no label")

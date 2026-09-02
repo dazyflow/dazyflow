@@ -23,6 +23,7 @@ import (
 // support resolves it. Also checks the trust boundaries (non-support can't reach
 // the queue; another org's ticket 404s).
 func TestTicketFlow_EndToEnd(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	now := time.Unix(1_700_000_000, 0).UTC()
 	h.gw.Tickets = support.NewMemTicketStore()
@@ -254,6 +255,7 @@ func TestTicketFlow_EndToEnd(t *testing.T) {
 
 // When the store isn't wired, the surface reports 501 (disabled), not 500.
 func TestTicketFlow_Disabled(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t) // no Tickets store
 	req := httptest.NewRequest("GET", "/api/v1/me/support/tickets", nil)
 	req.Header.Set("Authorization", "Bearer "+h.token)

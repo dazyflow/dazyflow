@@ -22,6 +22,7 @@ import (
 // "else"; the worker should run exactly one of them based on the
 // condition outcome.
 func TestBranch_RoutesThroughDispatch(t *testing.T) {
+	t.Parallel()
 	ks := auth.NewMemKeyStore()
 	role := core.Role{Name: "editor", Permissions: []core.Permission{
 		core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,

@@ -51,6 +51,7 @@ func migrateHarness(t *testing.T) (*Service, *workspace.Store) {
 // firing through the old HEAD fallback. It must come out published, running
 // the exact revision it was already running.
 func TestMigrateWebhookPublish_PublishesLiveWebhookFlow(t *testing.T) {
+	t.Parallel()
 	svc, store := migrateHarness(t)
 	commit, err := store.Save(webhookGraph("wh"), "test")
 	if err != nil {
@@ -72,6 +73,7 @@ func TestMigrateWebhookPublish_PublishesLiveWebhookFlow(t *testing.T) {
 // live (the scheduler always required publish), so publishing it here would
 // START it — turning an upgrade into a surprise run.
 func TestMigrateWebhookPublish_LeavesSchedulerDraftAlone(t *testing.T) {
+	t.Parallel()
 	svc, store := migrateHarness(t)
 	if _, err := store.Save(cronGraph("cron"), "test"); err != nil {
 		t.Fatalf("save: %v", err)
@@ -93,6 +95,7 @@ func TestMigrateWebhookPublish_LeavesSchedulerDraftAlone(t *testing.T) {
 // endpoints ever start honouring node-level disable, this fails and the
 // migration gets revisited with it.
 func TestMigrateWebhookPublish_NodeLevelDisableDoesNotExclude(t *testing.T) {
+	t.Parallel()
 	svc, store := migrateHarness(t)
 	g := webhookGraph("off")
 	g.Nodes[0].Disabled = true
@@ -111,6 +114,7 @@ func TestMigrateWebhookPublish_NodeLevelDisableDoesNotExclude(t *testing.T) {
 // The whole-flow switch is a different matter: a paused flow is rejected by
 // every endpoint, so it was NOT firing and must stay unpublished.
 func TestMigrateWebhookPublish_SkipsPausedFlow(t *testing.T) {
+	t.Parallel()
 	svc, store := migrateHarness(t)
 	g := webhookGraph("paused")
 	g.Disabled = true
@@ -129,6 +133,7 @@ func TestMigrateWebhookPublish_SkipsPausedFlow(t *testing.T) {
 // must not re-publish an already-published flow at a newer HEAD, or an
 // upgrade would silently promote someone's in-progress draft.
 func TestMigrateWebhookPublish_IdempotentAndDoesNotAdvancePublished(t *testing.T) {
+	t.Parallel()
 	svc, store := migrateHarness(t)
 	v1, err := store.Save(webhookGraph("wh"), "test")
 	if err != nil {
@@ -153,6 +158,7 @@ func TestMigrateWebhookPublish_IdempotentAndDoesNotAdvancePublished(t *testing.T
 // core.EventTriggerModules is a hand-maintained list, so it rots the moment
 // someone adds a new *_on_* trigger drop. Fail here and point at the fix.
 func TestEventTriggerModulesMatchCatalog(t *testing.T) {
+	t.Parallel()
 	// The trigger modules that fire some other way and are handled explicitly
 	// by classifyTriggers.
 	notEvents := map[string]bool{

@@ -24,6 +24,7 @@ import (
 // downstream "failonce" fails the first time and succeeds the second — so a
 // successful resume that doesn't re-run the upstream proves both halves.
 func TestResumeFailedRun_ReusesUpstreamAndRerunsFrontier(t *testing.T) {
+	t.Parallel()
 	var upstreamRuns atomic.Int32
 	var downstreamRuns atomic.Int32
 
@@ -163,6 +164,7 @@ func TestResumeFailedRun_ReusesUpstreamAndRerunsFrontier(t *testing.T) {
 // TestResumeFailedRun_RejectsRunningRun confirms only terminal-but-incomplete
 // runs (failed/cancelled) can be retried — a still-running run is a conflict.
 func TestResumeFailedRun_RejectsRunningRun(t *testing.T) {
+	t.Parallel()
 	ks := auth.NewMemKeyStore()
 	jobs := jobstore.NewMemory()
 	ws, _ := workspace.OpenFS("")

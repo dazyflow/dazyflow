@@ -38,6 +38,7 @@ func ticketNoteHarness(t *testing.T) (*gatewayHarness, time.Time) {
 }
 
 func TestSystemNote_CarriesACodeForTheUIToTranslate(t *testing.T) {
+	t.Parallel()
 	h, now := ticketNoteHarness(t)
 	ctx := context.Background()
 	tk := core.Ticket{
@@ -72,6 +73,7 @@ func TestSystemNote_CarriesACodeForTheUIToTranslate(t *testing.T) {
 }
 
 func TestMarkedNote_IsOneCodePerStatus(t *testing.T) {
+	t.Parallel()
 	// One whole sentence per status rather than a code plus an interpolated
 	// status label: Swedish inflects around the insertion point, and a flat
 	// code is greppable from either side of the stack.
@@ -87,6 +89,7 @@ func TestMarkedNote_IsOneCodePerStatus(t *testing.T) {
 }
 
 func TestSystemNote_EmptyBodyStillWritesNothing(t *testing.T) {
+	t.Parallel()
 	// The reopen path passes an empty note for "handed back to support", which
 	// needs no narration. A code must not resurrect the skipped row.
 	h, now := ticketNoteHarness(t)
@@ -113,6 +116,7 @@ func TestSystemNote_EmptyBodyStillWritesNothing(t *testing.T) {
 // pass review, store a perfectly good English sentence — and be untranslatable
 // in exactly the way this whole change exists to end, silently.
 func TestSystemNote_NoHandlerBypassesTheHelper(t *testing.T) {
+	t.Parallel()
 	fset := token.NewFileSet()
 	files, err := filepath.Glob("*.go")
 	if err != nil {

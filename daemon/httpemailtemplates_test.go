@@ -62,6 +62,7 @@ func listTemplates(t *testing.T, h *gatewayHarness) templateListResp {
 }
 
 func TestEmailTemplates_CRUDRoundTrip(t *testing.T) {
+	t.Parallel()
 	h, _ := newEmailAdminHarness(t)
 	const html = `<div>{{.Body}}</div>`
 	if rw := h.do(t, "PUT", "/api/v1/email-templates/welcome",
@@ -101,6 +102,7 @@ func TestEmailTemplates_CRUDRoundTrip(t *testing.T) {
 }
 
 func TestEmailTemplates_BuiltinsAlwaysListedAndReadOnly(t *testing.T) {
+	t.Parallel()
 	h, _ := newEmailAdminHarness(t)
 	resp := listTemplates(t, h)
 	builtins := emailtmpl.BuiltinTemplates()
@@ -124,6 +126,7 @@ func TestEmailTemplates_BuiltinsAlwaysListedAndReadOnly(t *testing.T) {
 }
 
 func TestEmailTemplates_RejectsBadInput(t *testing.T) {
+	t.Parallel()
 	h, _ := newEmailAdminHarness(t)
 	// Empty HTML.
 	if rw := h.do(t, "PUT", "/api/v1/email-templates/x",
@@ -161,6 +164,7 @@ func doAsToken(t *testing.T, h *gatewayHarness, token, method, path string, body
 }
 
 func TestEmailTemplates_WriteRequiresAdmin(t *testing.T) {
+	t.Parallel()
 	h, editorTok := newEmailAdminHarness(t)
 	// A non-admin editor (secret:write but not organization:admin) can LIST,
 	// but cannot create or delete.
@@ -182,6 +186,7 @@ func TestEmailTemplates_WriteRequiresAdmin(t *testing.T) {
 }
 
 func TestEmailTemplates_DeleteBuiltinRejected(t *testing.T) {
+	t.Parallel()
 	h, _ := newEmailAdminHarness(t)
 	rw := h.do(t, "DELETE", "/api/v1/email-templates/builtin:plain", nil)
 	if rw.Code != http.StatusConflict {
@@ -190,6 +195,7 @@ func TestEmailTemplates_DeleteBuiltinRejected(t *testing.T) {
 }
 
 func TestEmailTemplates_HiddenFromSecretsListing(t *testing.T) {
+	t.Parallel()
 	h, _ := newEmailAdminHarness(t)
 	h.do(t, "PUT", "/api/v1/email-templates/welcome",
 		json.RawMessage(putTemplateBody("Welcome", "<div>{{.Body}}</div>")))
@@ -206,6 +212,7 @@ func TestEmailTemplates_HiddenFromSecretsListing(t *testing.T) {
 }
 
 func TestEmailTemplates_Preview(t *testing.T) {
+	t.Parallel()
 	h := newSecretsHarness(t)
 	body, _ := json.Marshal(map[string]any{"html": `<section>{{.Body}}</section>`})
 	rw := h.do(t, "POST", "/api/v1/email-templates/preview", json.RawMessage(body))
@@ -222,6 +229,7 @@ func TestEmailTemplates_Preview(t *testing.T) {
 }
 
 func TestEmailTemplates_PreviewByID(t *testing.T) {
+	t.Parallel()
 	h, _ := newEmailAdminHarness(t)
 	h.do(t, "PUT", "/api/v1/email-templates/welcome",
 		json.RawMessage(putTemplateBody("Welcome", `<main>{{.Body}}</main>`)))
@@ -266,6 +274,7 @@ func TestEmailTemplates_PreviewByID(t *testing.T) {
 // list / put / delete / preview / send-test endpoints.
 
 func TestEmailTemplates_NotConfigured(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t) // no EncryptedSecrets
 	cases := []struct {
 		method, path string
@@ -285,6 +294,7 @@ func TestEmailTemplates_NotConfigured(t *testing.T) {
 }
 
 func TestEmailTemplates_ListForbiddenWithoutReadPerm(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.EncryptedSecrets = testEncryptedSecrets(t)
 	// Default editor token lacks secret:read.

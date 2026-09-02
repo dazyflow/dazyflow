@@ -14,6 +14,7 @@ import (
 // TestResumeRunMe_ErrorLegs covers resumeRun's not-found and conflict legs via
 // the /me/runs/{id}/resume route.
 func TestResumeRunMe_ErrorLegs(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 
 	// Unknown run -> 404.
@@ -39,6 +40,7 @@ func TestResumeRunMe_ErrorLegs(t *testing.T) {
 // TestRetryRunMe_Cov covers retryRunMe: the not-found leg, the conflict leg
 // (a still-running run isn't retryable), and the happy path on a failed run.
 func TestRetryRunMe_Cov(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 
 	// Unknown run -> 404.

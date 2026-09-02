@@ -51,6 +51,7 @@ func waitForRunStatus(
 // un-parking: deciding one of them must not flip the run back to Running while
 // the other approver is still being waited on.
 func TestRunStatus_ParksAndResumes(t *testing.T) {
+	t.Parallel()
 	h := newWorkerHarness(t, 1)
 
 	// Two independent gates, so the run has two approvals open at once.
@@ -119,6 +120,7 @@ func TestRunStatus_ParksAndResumes(t *testing.T) {
 // would send someone looking for a decision to make that doesn't exist, so
 // only a pause that emitted a pending_url counts.
 func TestRunStatus_SubgraphPauseStaysRunning(t *testing.T) {
+	t.Parallel()
 	ks := auth.NewMemKeyStore()
 	role := core.Role{Name: "editor", Permissions: []core.Permission{
 		core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,

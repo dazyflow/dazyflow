@@ -28,6 +28,7 @@ import (
 // appears on the page WITH its owning org, and the resolver then refuses it.
 
 func TestPlatformKillswitch_ListsATenantsMCPTool(t *testing.T) {
+	t.Parallel()
 	h, _, _, _, _, _ := platformHarness(t)
 
 	srv := (&fakeMCPEndpoint{toolNames: []string{"create_issue"}}).start(t)
@@ -71,6 +72,7 @@ func TestPlatformKillswitch_ListsATenantsMCPTool(t *testing.T) {
 // TestPlatformKillswitch_DisablesATenantsMCPTool drives the whole path: the
 // admin disables the id, and the resolver refuses it for that org afterwards.
 func TestPlatformKillswitch_DisablesATenantsMCPTool(t *testing.T) {
+	t.Parallel()
 	h, _, _, _, _, ds := platformHarness(t)
 
 	srv := (&fakeMCPEndpoint{toolNames: []string{"create_issue"}}).start(t)

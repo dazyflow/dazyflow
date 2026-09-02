@@ -16,6 +16,7 @@ import (
 )
 
 func TestMetrics_JobGauges(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.EnableMetrics = true
 
@@ -41,6 +42,7 @@ func TestMetrics_JobGauges(t *testing.T) {
 }
 
 func TestMetrics_SessionCacheGauges(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.EnableMetrics = true
 
@@ -66,6 +68,7 @@ func TestMetrics_SessionCacheGauges(t *testing.T) {
 }
 
 func TestMetrics_HTTPRedSeries(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.EnableMetrics = true
 	h.gw.Metrics = NewMetrics()
@@ -88,6 +91,7 @@ func TestMetrics_HTTPRedSeries(t *testing.T) {
 }
 
 func TestMetrics_DisabledByDefault(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t) // EnableMetrics defaults false
 	rw := h.do(t, "GET", "/metrics", nil)
 	if rw.Code != http.StatusNotFound {
@@ -96,6 +100,7 @@ func TestMetrics_DisabledByDefault(t *testing.T) {
 }
 
 func TestMetrics_EnabledEmitsUpAndQuotaGauges(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.EnableMetrics = true
 
@@ -134,6 +139,7 @@ func TestMetrics_EnabledEmitsUpAndQuotaGauges(t *testing.T) {
 }
 
 func TestMetrics_EnabledWithoutQuotaStillServesUp(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.EnableMetrics = true // no quota provider wired on the harness engine
 	rw := h.do(t, "GET", "/metrics", nil)

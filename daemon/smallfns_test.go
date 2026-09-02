@@ -15,6 +15,7 @@ import (
 // TestIsUploadSandboxEscape_Cov covers every leg of the sandbox-escape
 // classifier.
 func TestIsUploadSandboxEscape_Cov(t *testing.T) {
+	t.Parallel()
 	if core.IsSandboxEscape(nil) {
 		t.Error("nil error should not be an escape")
 	}
@@ -34,6 +35,7 @@ func TestIsUploadSandboxEscape_Cov(t *testing.T) {
 // TestStatusRecorder_Cov covers statusRecorder.Write (implicit 200), Flush,
 // Unwrap, and statusCode defaulting.
 func TestStatusRecorder_Cov(t *testing.T) {
+	t.Parallel()
 	inner := httptest.NewRecorder()
 	s := &statusRecorder{ResponseWriter: inner}
 

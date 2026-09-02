@@ -80,6 +80,7 @@ func renewalCookie(rw *httptest.ResponseRecorder) *http.Cookie {
 // a fresh Set-Cookie carries the new expiry, so an active user never hits
 // the boundary.
 func TestSessionRenewal_SlidesInSecondHalf(t *testing.T) {
+	t.Parallel()
 	h, store := sessionHarness(t)
 	now := time.Now()
 	// Deep in the second half of the 7d window, well within the 30d cap.
@@ -107,6 +108,7 @@ func TestSessionRenewal_SlidesInSecondHalf(t *testing.T) {
 // TestSessionRenewal_NoWriteInFirstHalf: a freshly issued session (first
 // half of its window) must not be rewritten or re-cookied on every request.
 func TestSessionRenewal_NoWriteInFirstHalf(t *testing.T) {
+	t.Parallel()
 	h, store := sessionHarness(t)
 	now := time.Now()
 	// Issued moments ago: nearly the full 7d remains → first half.
@@ -130,6 +132,7 @@ func TestSessionRenewal_NoWriteInFirstHalf(t *testing.T) {
 // renewal threshold but near the absolute cap is clamped to CreatedAt+MaxAge,
 // never beyond — a leaked token can't be kept alive forever by use.
 func TestSessionRenewal_CappedAtMaxAge(t *testing.T) {
+	t.Parallel()
 	h, store := sessionHarness(t)
 	now := time.Now()
 	// Created ~30d ago so the cap sits just 2h out; current expiry is in
@@ -156,6 +159,7 @@ func TestSessionRenewal_CappedAtMaxAge(t *testing.T) {
 // bearer header (not a cookie) authenticates but gets no Set-Cookie — only
 // browser cookie sessions need their Expires refreshed.
 func TestSessionRenewal_BearerNotCookied(t *testing.T) {
+	t.Parallel()
 	h, store := sessionHarness(t)
 	now := time.Now()
 	token := issueSessionAt(t, store, now.Add(-6*24*time.Hour), now.Add(time.Hour))

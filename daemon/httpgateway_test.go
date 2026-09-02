@@ -139,6 +139,7 @@ func (h *gatewayHarness) do(t *testing.T, method, path string, body any) *httpte
 // draft (HEAD) attaches a per-commit label that surfaces in the history
 // listing, and an empty label clears it.
 func TestHTTPGateway_LabelRevision(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	const fid = "t%2Fws%2Flabelme"
 	if rw := h.do(t, "PUT", "/api/v1/me/flows/"+fid, core.Graph{
@@ -198,6 +199,7 @@ func TestHTTPGateway_LabelRevision(t *testing.T) {
 }
 
 func TestHTTPGateway_HealthzNoAuth(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	req := httptest.NewRequest("GET", "/healthz", nil)
 	rw := httptest.NewRecorder()
@@ -208,6 +210,7 @@ func TestHTTPGateway_HealthzNoAuth(t *testing.T) {
 }
 
 func TestHTTPGateway_ReadyzNoCheckIsReady(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	req := httptest.NewRequest("GET", "/readyz", nil)
 	rw := httptest.NewRecorder()
@@ -218,6 +221,7 @@ func TestHTTPGateway_ReadyzNoCheckIsReady(t *testing.T) {
 }
 
 func TestHTTPGateway_ReadyzFailingCheck503(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.ReadyCheck = func(context.Context) error { return errReadyTest }
 	req := httptest.NewRequest("GET", "/readyz", nil)
@@ -231,6 +235,7 @@ func TestHTTPGateway_ReadyzFailingCheck503(t *testing.T) {
 var errReadyTest = errors.New("dep down")
 
 func TestHTTPGateway_RequestIsHTTPS(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	mk := func(xfp string) *http.Request {
 		r := httptest.NewRequest("GET", "/x", nil)
@@ -258,6 +263,7 @@ func TestHTTPGateway_RequestIsHTTPS(t *testing.T) {
 }
 
 func TestHTTPGateway_RejectsMissingBearer(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	req := httptest.NewRequest("GET", "/api/v1/modules", nil)
 	rw := httptest.NewRecorder()
@@ -268,6 +274,7 @@ func TestHTTPGateway_RejectsMissingBearer(t *testing.T) {
 }
 
 func TestHTTPGateway_RejectsBadBearer(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	req := httptest.NewRequest("GET", "/api/v1/modules", nil)
 	req.Header.Set("Authorization", "Bearer not-a-real-token")
@@ -279,6 +286,7 @@ func TestHTTPGateway_RejectsBadBearer(t *testing.T) {
 }
 
 func TestHTTPGateway_ListModules(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// Require modules package to be linked so engine.Default has entries.
 	// The flow modules are imported transitively by the daemon's other
@@ -301,6 +309,7 @@ func TestHTTPGateway_ListModules(t *testing.T) {
 }
 
 func TestHTTPGateway_SaveAndLoadGraph(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	g := core.Graph{
 		ID: "my-graph", Tenant: "t", Workspace: "ws",
@@ -333,6 +342,7 @@ func TestHTTPGateway_SaveAndLoadGraph(t *testing.T) {
 }
 
 func TestHTTPGateway_ListFlows_UsesPrincipalScope(t *testing.T) {
+	t.Parallel()
 	// The /me/flows route falls back to the caller's tenant +
 	// workspace from the session when ?tenant=&workspace= aren't
 	// supplied. Distinct from the legacy /api/v1/graphs which
@@ -345,6 +355,7 @@ func TestHTTPGateway_ListFlows_UsesPrincipalScope(t *testing.T) {
 }
 
 func TestHTTPGateway_JobSnapshotNotFound(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "GET", "/api/v1/me/runs/does-not-exist", nil)
 	if rw.Code != http.StatusNotFound {
@@ -353,6 +364,7 @@ func TestHTTPGateway_JobSnapshotNotFound(t *testing.T) {
 }
 
 func TestHTTPGateway_NodeSnapshotMissingParentGraphIs404(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "GET", "/api/v1/me/runs/no-such-run/nodes/some-node", nil)
 	if rw.Code != http.StatusNotFound {
@@ -361,6 +373,7 @@ func TestHTTPGateway_NodeSnapshotMissingParentGraphIs404(t *testing.T) {
 }
 
 func TestHTTPGateway_NodeSnapshotReturnsRecord(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// Seed both records directly so we exercise the endpoint without
 	// having to drive a worker through a graph here.
@@ -413,6 +426,7 @@ func TestHTTPGateway_NodeSnapshotReturnsRecord(t *testing.T) {
 }
 
 func TestHTTPGateway_ListRunsReturnsNewestFirst(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// First save the graph so the tenant-scope check passes.
 	if _, err := h.ws.Save(core.Graph{
@@ -458,6 +472,7 @@ func TestHTTPGateway_ListRunsReturnsNewestFirst(t *testing.T) {
 }
 
 func TestHTTPGateway_ListRunsUnknownGraphIs404(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "GET", "/api/v1/me/flows/t%2Fws%2Fno-such/runs", nil)
 	if rw.Code != http.StatusNotFound {
@@ -466,6 +481,7 @@ func TestHTTPGateway_ListRunsUnknownGraphIs404(t *testing.T) {
 }
 
 func TestHTTPGateway_ListRunsStatusFilter(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	if _, err := h.ws.Save(core.Graph{
 		ID: "g1", Tenant: "t", Workspace: "ws",
@@ -502,6 +518,7 @@ func TestHTTPGateway_ListRunsStatusFilter(t *testing.T) {
 }
 
 func TestHTTPGateway_ListRunsOffsetLimit(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	if _, err := h.ws.Save(core.Graph{ID: "g1", Tenant: "t", Workspace: "ws"}, "test"); err != nil {
 		t.Fatalf("save: %v", err)
@@ -530,6 +547,7 @@ func TestHTTPGateway_ListRunsOffsetLimit(t *testing.T) {
 }
 
 func TestHTTPGateway_ListAllRunsAcrossGraphs(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	for i, e := range []struct {
 		id      string
@@ -572,6 +590,7 @@ func TestHTTPGateway_ListAllRunsAcrossGraphs(t *testing.T) {
 }
 
 func TestHTTPGateway_ListPendingApprovals(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// Parent graph-record so any tenant-scope check downstream passes.
 	_ = h.store.Enqueue(t.Context(), core.JobRecord{
@@ -642,6 +661,7 @@ func TestHTTPGateway_ListPendingApprovals(t *testing.T) {
 }
 
 func TestHTTPGateway_ApproveAuthedResumesAwaitingNode(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// Need a parent graph-record + the awaiting node-record + a
 	// payload so AdvanceAfterCompletion can load the graph and not
@@ -698,6 +718,7 @@ func TestHTTPGateway_ApproveAuthedResumesAwaitingNode(t *testing.T) {
 // principal, never a client-supplied ?approver=. Otherwise a valid caller
 // could forge who approved in the audit trail and the node record.
 func TestHTTPGateway_ApproveAuthedIgnoresSpoofedApprover(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// The approver is no longer a graph output; attribution lives in the
 	// audit trail, so wire a log to observe it.
@@ -745,6 +766,7 @@ func TestHTTPGateway_ApproveAuthedIgnoresSpoofedApprover(t *testing.T) {
 }
 
 func TestHTTPGateway_ApproveAuthedRejectsCrossTenant(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// Belongs to a different tenant — the bearer principal can't see it.
 	_ = h.store.Enqueue(t.Context(), core.JobRecord{
@@ -760,6 +782,7 @@ func TestHTTPGateway_ApproveAuthedRejectsCrossTenant(t *testing.T) {
 }
 
 func TestHTTPGateway_ListAllRunsAcceptsWorkspaceNarrow(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// One run in our workspace, one in a sibling workspace within the
 	// same tenant. An admin without a workspace binding should be
@@ -815,6 +838,7 @@ func TestHTTPGateway_ListAllRunsAcceptsWorkspaceNarrow(t *testing.T) {
 }
 
 func TestHTTPGateway_ListAllRuns_ScopedPrincipalIgnoresWorkspaceQuery(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// Two workspaces with runs.
 	_ = h.store.Enqueue(t.Context(), core.JobRecord{
@@ -844,6 +868,7 @@ func TestHTTPGateway_ListAllRuns_ScopedPrincipalIgnoresWorkspaceQuery(t *testing
 }
 
 func TestHTTPGateway_ListPendingApprovalsAcceptsWorkspaceNarrow(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// Pending approval in ws and ws2.
 	for _, e := range []struct {
@@ -902,6 +927,7 @@ func TestHTTPGateway_ListPendingApprovalsAcceptsWorkspaceNarrow(t *testing.T) {
 }
 
 func TestHTTPGateway_ListAllRunsScopedToTenant(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// Run in OUR tenant + workspace
 	_ = h.store.Enqueue(t.Context(), core.JobRecord{
@@ -924,6 +950,7 @@ func TestHTTPGateway_ListAllRunsScopedToTenant(t *testing.T) {
 }
 
 func TestHTTPGateway_NodeSnapshotUnknownNodeIs404(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// Parent graph exists; node doesn't.
 	_ = h.store.Enqueue(t.Context(), core.JobRecord{
@@ -941,6 +968,7 @@ func TestHTTPGateway_NodeSnapshotUnknownNodeIs404(t *testing.T) {
 }
 
 func TestHTTPGateway_CORSHeadersOnPreflight(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	req := httptest.NewRequest("OPTIONS", "/api/v1/modules", nil)
 	rw := httptest.NewRecorder()
@@ -959,6 +987,7 @@ func TestHTTPGateway_CORSHeadersOnPreflight(t *testing.T) {
 // --- API key admin endpoints ------------------------------------------
 
 func TestHTTPGateway_AdminListAPIKeys_RequiresTenantAdmin(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// Editor token (no organization:admin) should be denied.
 	rw := h.do(t, "GET", "/api/v1/admin/api-keys", nil)
@@ -985,6 +1014,7 @@ func TestHTTPGateway_AdminListAPIKeys_RequiresTenantAdmin(t *testing.T) {
 }
 
 func TestHTTPGateway_AdminIssueAPIKey_ReturnsSecretOnce(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.adminDo(t, "POST", "/api/v1/admin/api-keys", map[string]any{
 		"subject": "bot-1",
@@ -1009,6 +1039,7 @@ func TestHTTPGateway_AdminIssueAPIKey_ReturnsSecretOnce(t *testing.T) {
 }
 
 func TestHTTPGateway_AdminIssueAPIKey_RejectsMissingFields(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// Missing subject
 	rw := h.adminDo(t, "POST", "/api/v1/admin/api-keys", map[string]any{
@@ -1027,6 +1058,7 @@ func TestHTTPGateway_AdminIssueAPIKey_RejectsMissingFields(t *testing.T) {
 }
 
 func TestHTTPGateway_AdminRevokeAPIKey(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// First create a fresh key we'll then revoke.
 	rw := h.adminDo(t, "POST", "/api/v1/admin/api-keys", map[string]any{
@@ -1056,6 +1088,7 @@ func TestHTTPGateway_AdminRevokeAPIKey(t *testing.T) {
 }
 
 func TestHTTPGateway_AdminListUsersGroupsBySubject(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// Two keys for charlie (editor + runner) and one for bob. Distinct
 	// from the harness's bootstrap subjects ("alice", "root") so the
@@ -1118,6 +1151,7 @@ func TestHTTPGateway_AdminListUsersGroupsBySubject(t *testing.T) {
 }
 
 func TestHTTPGateway_AdminListUsers_CountsRevokedSeparately(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.adminDo(t, "POST", "/api/v1/admin/api-keys", map[string]any{
 		"id":      "kill-me",
@@ -1149,6 +1183,7 @@ func TestHTTPGateway_AdminListUsers_CountsRevokedSeparately(t *testing.T) {
 }
 
 func TestHTTPGateway_AdminListUsers_RequiresTenantAdmin(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "GET", "/api/v1/admin/users", nil)
 	if rw.Code != http.StatusForbidden {
@@ -1159,6 +1194,7 @@ func TestHTTPGateway_AdminListUsers_RequiresTenantAdmin(t *testing.T) {
 // --- Platform admin ---------------------------------------------------
 
 func TestHTTPGateway_PlatformAdminListsAcrossTenants(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// Issue keys in two different tenants. The bootstrap key is in
 	// tenant "t" already; add one in "other-tenant".
@@ -1211,6 +1247,7 @@ func TestHTTPGateway_PlatformAdminListsAcrossTenants(t *testing.T) {
 }
 
 func TestHTTPGateway_PlatformAdminCanIssueInAnyTenant(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	platform := core.Role{Name: "platform", Permissions: []core.Permission{core.PermPlatformAdmin}}
 	_, platformTok, _ := auth.IssueAPIKey(h.ks, t.Context(), "k-platform-issue", "", "", "op", []core.Role{platform}, nil)
@@ -1243,6 +1280,7 @@ func TestHTTPGateway_PlatformAdminCanIssueInAnyTenant(t *testing.T) {
 // that would escalate from per-tenant admin to cross-tenant super-admin. A
 // platform admin issuing the same role is fine.
 func TestHTTPGateway_TenantAdminCantGrantPlatformAdmin(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 
 	issue := func(tok string) *httptest.ResponseRecorder {
@@ -1281,6 +1319,7 @@ func TestHTTPGateway_TenantAdminCantGrantPlatformAdmin(t *testing.T) {
 }
 
 func TestHTTPGateway_TenantAdminCantSpecifyForeignTenant(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// h.adminDo uses a tenant-admin key bound to tenant "t". Try to
 	// list keys in tenant "elsewhere" — should be refused, not a leak.
@@ -1301,6 +1340,7 @@ func TestHTTPGateway_TenantAdminCantSpecifyForeignTenant(t *testing.T) {
 }
 
 func TestHTTPGateway_AdminEndpoints501WhenUnconfigured(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.svc.AdminKeys = nil // simulate an dzd built without admin tooling
 	rw := h.adminDo(t, "GET", "/api/v1/admin/api-keys", nil)
@@ -1318,6 +1358,7 @@ func TestHTTPGateway_AdminEndpoints501WhenUnconfigured(t *testing.T) {
 // run carries the subset, not the full graph.
 
 func TestHTTPGateway_SampleNode_Accepts(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// Three-node chain a → b → c. Sampling b should run a + b only;
 	// c stays untouched.
@@ -1377,6 +1418,7 @@ func TestHTTPGateway_SampleNode_Accepts(t *testing.T) {
 }
 
 func TestHTTPGateway_SampleNode_UnknownNodeIs404(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	if _, err := h.ws.Save(core.Graph{
 		ID: "g", Tenant: "t", Workspace: "ws",
@@ -1391,6 +1433,7 @@ func TestHTTPGateway_SampleNode_UnknownNodeIs404(t *testing.T) {
 }
 
 func TestHTTPGateway_SampleNode_UnknownGraphIs404(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// No save — graph doesn't exist.
 	rw := h.do(t, "POST", "/api/v1/me/flows/t%2Fws%2Fmissing/nodes/x/sample", nil)
@@ -1400,6 +1443,7 @@ func TestHTTPGateway_SampleNode_UnknownGraphIs404(t *testing.T) {
 }
 
 func TestHTTPGateway_SampleNode_RequiresAuth(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	req := httptest.NewRequest("POST", "/api/v1/me/flows/t%2Fws%2Fg/nodes/x/sample", nil)
 	// no Authorization header
@@ -1417,6 +1461,7 @@ func TestHTTPGateway_SampleNode_RequiresAuth(t *testing.T) {
 // agree with the scheduler's parser — these tests pin the contract.
 
 func TestHTTPGateway_ValidateCron_ValidExpression(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "POST", "/api/v1/validate/cron", map[string]any{"expr": "0 9 * * 1-5"})
 	if rw.Code != http.StatusOK {
@@ -1439,6 +1484,7 @@ func TestHTTPGateway_ValidateCron_ValidExpression(t *testing.T) {
 }
 
 func TestHTTPGateway_ValidateCron_InvalidExpression(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// 7 fields where 5 are allowed.
 	rw := h.do(t, "POST", "/api/v1/validate/cron", map[string]any{"expr": "totally not a cron"})
@@ -1461,6 +1507,7 @@ func TestHTTPGateway_ValidateCron_InvalidExpression(t *testing.T) {
 }
 
 func TestHTTPGateway_ValidateCron_EmptyExpression(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "POST", "/api/v1/validate/cron", map[string]any{"expr": "   "})
 	if rw.Code != http.StatusOK {
@@ -1477,6 +1524,7 @@ func TestHTTPGateway_ValidateCron_EmptyExpression(t *testing.T) {
 }
 
 func TestHTTPGateway_ValidateCron_RequiresAuth(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	req := httptest.NewRequest("POST", "/api/v1/validate/cron", bytes.NewBufferString(`{"expr":"0 9 * * *"}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -1489,6 +1537,7 @@ func TestHTTPGateway_ValidateCron_RequiresAuth(t *testing.T) {
 }
 
 func TestHTTPGateway_SaveGraph_IncludesLintInResponse(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// Save a graph that should trigger the secret_to_persistence
 	// lint: an http_request reading from a tenant secret, feeding
@@ -1541,6 +1590,7 @@ func TestHTTPGateway_SaveGraph_IncludesLintInResponse(t *testing.T) {
 // /DELETE requests. Bearer-auth requests (no cookie) are unaffected.
 
 func TestHTTPGateway_CSRF_BearerAuthUnaffectedByOrigin(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// Bearer-auth POST with arbitrary or no Origin — should pass
 	// (the new middleware only kicks in for cookie-auth).
@@ -1553,6 +1603,7 @@ func TestHTTPGateway_CSRF_BearerAuthUnaffectedByOrigin(t *testing.T) {
 }
 
 func TestHTTPGateway_CSRF_CookieAuthRequiresOrigin(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.AllowedOrigins = []string{"https://app.example.com"}
 	// Build a request that LOOKS like a CSRF attack: a session cookie
@@ -1568,6 +1619,7 @@ func TestHTTPGateway_CSRF_CookieAuthRequiresOrigin(t *testing.T) {
 }
 
 func TestHTTPGateway_CSRF_AllowedOriginPasses(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.AllowedOrigins = []string{"https://app.example.com"}
 	g := core.Graph{ID: "g-allowed", Tenant: "t", Workspace: "ws"}
@@ -1585,6 +1637,7 @@ func TestHTTPGateway_CSRF_AllowedOriginPasses(t *testing.T) {
 }
 
 func TestHTTPGateway_CSRF_DisallowedOriginRejected(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.AllowedOrigins = []string{"https://app.example.com"}
 	req := httptest.NewRequest("PUT", "/api/v1/me/flows/t%2Fws%2Fg-evil", bytes.NewBufferString(`{}`))
@@ -1599,6 +1652,7 @@ func TestHTTPGateway_CSRF_DisallowedOriginRejected(t *testing.T) {
 }
 
 func TestHTTPGateway_CSRF_GetMethodNotAffected(t *testing.T) {
+	t.Parallel()
 	// GET is allowed-through regardless of cookie/Origin — the
 	// middleware only guards state-changing methods. Reading data
 	// from a malicious origin still loses to CORS (which the
@@ -1617,6 +1671,7 @@ func TestHTTPGateway_CSRF_GetMethodNotAffected(t *testing.T) {
 }
 
 func TestHTTPGateway_SaveGraph_NoLintReturnsEmpty(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	g := core.Graph{
 		ID: "clean", Tenant: "t", Workspace: "ws",
@@ -1636,6 +1691,7 @@ func TestHTTPGateway_SaveGraph_NoLintReturnsEmpty(t *testing.T) {
 }
 
 func TestHTTPGateway_ValidateCron_AgreesWithSchedulerParser(t *testing.T) {
+	t.Parallel()
 	// The validate endpoint MUST use the same parser config the
 	// scheduler does — otherwise users get a green "valid" hint on
 	// an expression the scheduler then refuses at rescan time.
@@ -1658,6 +1714,7 @@ func TestHTTPGateway_ValidateCron_AgreesWithSchedulerParser(t *testing.T) {
 }
 
 func TestParseRunListTime(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name string
 		in   string
@@ -1687,6 +1744,7 @@ func TestParseRunListTime(t *testing.T) {
 // on ListGraphRunsOpts, and that a malformed value leaves that bound unset
 // rather than erroring the request.
 func TestParseRunListOpts_DateRange(t *testing.T) {
+	t.Parallel()
 	req := httptest.NewRequest("GET",
 		"/api/v1/me/runs?since=2026-06-01&until=2026-06-27T00:00:00Z&junk=x", nil)
 	opts, err := parseRunListOpts(req)
@@ -1725,6 +1783,7 @@ func TestParseRunListOpts_DateRange(t *testing.T) {
 // so. Announcing Vary only on the matching branch let a shared cache replay one
 // origin's Access-Control-Allow-Origin to a different origin.
 func TestHTTPGateway_CORSAlwaysVariesOnOrigin(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.AllowedOrigins = []string{"https://app.example.com"}
 
@@ -1744,6 +1803,7 @@ func TestHTTPGateway_CORSAlwaysVariesOnOrigin(t *testing.T) {
 // A disallowed origin in credentialed mode gets no ACAO at all — never the
 // comma-joined AllowedOrigins list, which is not a valid header value.
 func TestHTTPGateway_CORSDisallowedOriginGetsNoACAO(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.AllowedOrigins = []string{"https://app.example.com", "https://other.example.com"}
 
@@ -1762,6 +1822,7 @@ func TestHTTPGateway_CORSDisallowedOriginGetsNoACAO(t *testing.T) {
 
 // The allowed origin is reflected exactly, with credentials enabled.
 func TestHTTPGateway_CORSAllowedOriginIsReflected(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.AllowedOrigins = []string{"https://app.example.com"}
 
@@ -1786,6 +1847,7 @@ func TestHTTPGateway_CORSAllowedOriginIsReflected(t *testing.T) {
 // stashes the value on its awaiting output next to pending_url and prompt;
 // this is the last hop.
 func TestHTTPGateway_PendingApprovalCarriesContext(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	_ = h.store.Enqueue(t.Context(), core.JobRecord{
 		ID: "run-ctx", Kind: core.JobKindGraph, GraphID: "g1",
@@ -1841,6 +1903,7 @@ func TestHTTPGateway_PendingApprovalCarriesContext(t *testing.T) {
 // whatever the flow wired in; the card says to open the run instead of
 // silently looking like a step with nothing attached.
 func TestHTTPGateway_PendingApprovalContextTooLarge(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	_ = h.store.Enqueue(t.Context(), core.JobRecord{
 		ID: "run-big", Kind: core.JobKindGraph, GraphID: "g1",

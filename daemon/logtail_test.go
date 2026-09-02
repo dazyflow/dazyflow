@@ -11,6 +11,7 @@ import (
 // Lines split across multiple writes (and multiple lines in one write) must
 // reassemble into whole lines in order.
 func TestLogTailLineSplitting(t *testing.T) {
+	t.Parallel()
 	lt := NewLogTail(10)
 	lt.Write([]byte("alpha\nbra"))
 	lt.Write([]byte("vo\ncharlie\n"))
@@ -23,6 +24,7 @@ func TestLogTailLineSplitting(t *testing.T) {
 
 // The ring keeps only the most recent `size` lines, oldest-first.
 func TestLogTailRingEviction(t *testing.T) {
+	t.Parallel()
 	lt := NewLogTail(3)
 	for i := 0; i < 6; i++ {
 		fmt.Fprintf(lt, "line%d\n", i)
@@ -41,6 +43,7 @@ func TestLogTailRingEviction(t *testing.T) {
 // A subscriber receives lines written after it subscribed; cancel closes the
 // channel and unregisters it.
 func TestLogTailSubscribe(t *testing.T) {
+	t.Parallel()
 	lt := NewLogTail(10)
 	ch, cancel := lt.Subscribe()
 

@@ -52,6 +52,7 @@ func (h *githubHarness) post(t *testing.T, path, event string, body []byte) *htt
 }
 
 func TestGitHubEvents_PingAcked(t *testing.T) {
+	t.Parallel()
 	h := newGitHubHarness(t)
 	body := []byte(`{"zen":"Practicality beats purity."}`)
 	rw := h.post(t, "/api/v1/events/github/t", "ping", body)
@@ -61,6 +62,7 @@ func TestGitHubEvents_PingAcked(t *testing.T) {
 }
 
 func TestGitHubEvents_BadSignatureRejected(t *testing.T) {
+	t.Parallel()
 	h := newGitHubHarness(t)
 	body := []byte(`{}`)
 	req := httptest.NewRequest("POST", "/api/v1/events/github/t", bytes.NewReader(body))
@@ -74,6 +76,7 @@ func TestGitHubEvents_BadSignatureRejected(t *testing.T) {
 }
 
 func TestGitHubEvents_MissingSignatureRejected(t *testing.T) {
+	t.Parallel()
 	h := newGitHubHarness(t)
 	req := httptest.NewRequest("POST", "/api/v1/events/github/t", bytes.NewReader([]byte(`{}`)))
 	req.Header.Set("X-GitHub-Event", "push")
@@ -85,6 +88,7 @@ func TestGitHubEvents_MissingSignatureRejected(t *testing.T) {
 }
 
 func TestGitHubEvents_NotConfiguredReturns501(t *testing.T) {
+	t.Parallel()
 	gh := newGatewayHarness(t)
 	// gw.GitHubEvents intentionally nil.
 	body := []byte(`{}`)
@@ -98,6 +102,7 @@ func TestGitHubEvents_NotConfiguredReturns501(t *testing.T) {
 }
 
 func TestGitHubEvents_PushDispatchesToSubscribedGraphs(t *testing.T) {
+	t.Parallel()
 	h := newGitHubHarness(t)
 	g := core.Graph{
 		ID: "deploy-graph", Tenant: "t", Workspace: "ws",
@@ -150,6 +155,7 @@ func TestGitHubEvents_PushDispatchesToSubscribedGraphs(t *testing.T) {
 }
 
 func TestGitHubEvents_PullRequestOpenedDispatches(t *testing.T) {
+	t.Parallel()
 	h := newGitHubHarness(t)
 	g := core.Graph{
 		ID: "triage-graph", Tenant: "t", Workspace: "ws",
@@ -206,6 +212,7 @@ func TestGitHubEvents_PullRequestOpenedDispatches(t *testing.T) {
 }
 
 func TestGitHubEvents_PullRequestNonOpenedAckedNotDispatched(t *testing.T) {
+	t.Parallel()
 	h := newGitHubHarness(t)
 	event := map[string]any{
 		"action":       "closed",
@@ -219,6 +226,7 @@ func TestGitHubEvents_PullRequestNonOpenedAckedNotDispatched(t *testing.T) {
 }
 
 func TestGitHubEvents_UnknownEventAcked(t *testing.T) {
+	t.Parallel()
 	h := newGitHubHarness(t)
 	body := []byte(`{"surprise": true}`)
 	rw := h.post(t, "/api/v1/events/github/t", "release", body)
@@ -228,6 +236,7 @@ func TestGitHubEvents_UnknownEventAcked(t *testing.T) {
 }
 
 func TestGitHubOnPush_StandaloneRunErrors(t *testing.T) {
+	t.Parallel()
 	trans, ok := engine.Default.Get("github_on_push")
 	if !ok {
 		t.Fatal("github_on_push not registered")
@@ -239,6 +248,7 @@ func TestGitHubOnPush_StandaloneRunErrors(t *testing.T) {
 }
 
 func TestGitHubOnNewPR_StandaloneRunErrors(t *testing.T) {
+	t.Parallel()
 	trans, ok := engine.Default.Get("github_on_new_pr")
 	if !ok {
 		t.Fatal("github_on_new_pr not registered")
@@ -253,6 +263,7 @@ func TestGitHubOnNewPR_StandaloneRunErrors(t *testing.T) {
 // wrong algorithm prefix (sha1=) must be rejected; the handler requires
 // the sha256= scheme GitHub actually uses.
 func TestGitHubEvents_WrongSigPrefixRejected(t *testing.T) {
+	t.Parallel()
 	h := newGitHubHarness(t)
 	body := []byte(`{"ref":"refs/heads/main"}`)
 	mac := hmac.New(sha256.New, []byte(h.secret))
@@ -271,6 +282,7 @@ func TestGitHubEvents_WrongSigPrefixRejected(t *testing.T) {
 // hex; an uppercased hex of an otherwise-correct HMAC must not validate
 // (the compare is byte-for-byte, not case-folded).
 func TestGitHubEvents_UppercaseHexSigRejected(t *testing.T) {
+	t.Parallel()
 	h := newGitHubHarness(t)
 	body := []byte(`{"ref":"refs/heads/main"}`)
 	mac := hmac.New(sha256.New, []byte(h.secret))
@@ -290,6 +302,7 @@ func TestGitHubEvents_UppercaseHexSigRejected(t *testing.T) {
 // (only ref) is structurally valid; the handler must parse it without
 // erroring (200), not 4xx/5xx on missing commits/repository/pusher.
 func TestGitHubEvents_SparsePushAcked(t *testing.T) {
+	t.Parallel()
 	h := newGitHubHarness(t)
 	rw := h.post(t, "/api/v1/events/github/t", "push", []byte(`{"ref":"refs/heads/main"}`))
 	if rw.Code != http.StatusOK {

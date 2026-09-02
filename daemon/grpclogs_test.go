@@ -45,6 +45,7 @@ func publishProgress(h *harness, runID, nodeID, msg string) {
 }
 
 func TestGRPC_StreamJobLogs_Replay(t *testing.T) {
+	t.Parallel()
 	h := newHarnessOpts(t, false)
 	defer h.stop()
 	seedLoggedRun(t, h, "run-logs-1", "acme")
@@ -92,6 +93,7 @@ func TestGRPC_StreamJobLogs_Replay(t *testing.T) {
 }
 
 func TestGRPC_StreamJobLogs_Follow(t *testing.T) {
+	t.Parallel()
 	h := newHarnessOpts(t, false)
 	defer h.stop()
 	seedLoggedRun(t, h, "run-logs-2", "acme")
@@ -157,6 +159,7 @@ func TestGRPC_StreamJobLogs_Follow(t *testing.T) {
 }
 
 func TestGRPC_StreamJobLogs_AuthzAndGaps(t *testing.T) {
+	t.Parallel()
 	h := newHarnessOpts(t, false)
 	defer h.stop()
 	js := controlpb.NewJobServiceClient(h.conn)

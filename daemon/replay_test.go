@@ -63,6 +63,7 @@ func fireWebhook(t *testing.T, wh *daemon.WebhookListener, flowID, secret, body 
 // step ("nothing was sent to this flow"). The replay must hand the new run the
 // body the original delivery carried.
 func TestReplayRun_ResendsWebhookBody(t *testing.T) {
+	t.Parallel()
 	svc, wh, jobs, bus, wsStore := startWebhookHarness(t)
 	g := core.Graph{
 		ID: "wh-replay", Tenant: "acme", Workspace: "ws1",
@@ -121,6 +122,7 @@ func TestReplayRun_ResendsWebhookBody(t *testing.T) {
 // the gateway turns into an actionable message rather than starting a run that
 // is certain to die on its first step.
 func TestReplayRun_RefusesRunWithNoDelivery(t *testing.T) {
+	t.Parallel()
 	svc, _, jobs, bus, wsStore := startWebhookHarness(t)
 	g := core.Graph{
 		ID: "wh-manual", Tenant: "acme", Workspace: "ws1",
@@ -150,6 +152,7 @@ func TestReplayRun_RefusesRunWithNoDelivery(t *testing.T) {
 // TestReplayRun_NoTriggerFlowJustRunsAgain: a flow with no inbound trigger has
 // no delivery to reuse, and must NOT be refused — replay is a plain re-run.
 func TestReplayRun_NoTriggerFlowJustRunsAgain(t *testing.T) {
+	t.Parallel()
 	svc, _, jobs, bus, wsStore := startWebhookHarness(t)
 	g := core.Graph{
 		ID: "plain", Tenant: "acme", Workspace: "ws1",
@@ -178,6 +181,7 @@ func TestReplayRun_NoTriggerFlowJustRunsAgain(t *testing.T) {
 // and NOT seeding it leaves the delivery nowhere to go. Refuse, the way the
 // /trigger endpoint refuses a delivery to a paused step.
 func TestReplayRun_RefusesWhenTriggerStepIsOff(t *testing.T) {
+	t.Parallel()
 	svc, wh, jobs, bus, wsStore := startWebhookHarness(t)
 	g := core.Graph{
 		ID: "wh-off", Tenant: "acme", Workspace: "ws1",

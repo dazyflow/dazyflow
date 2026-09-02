@@ -77,6 +77,7 @@ func waitForLine(t *testing.T, ch <-chan string, want string) {
 // stays open after the snapshot, forwards progress / node / terminal frames
 // published on the bus, and returns when the terminal frame lands.
 func TestJobEvents_LiveStream_Cov(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		ServeForTest(h.gw, rw, r)
@@ -122,6 +123,7 @@ func TestJobEvents_LiveStream_Cov(t *testing.T) {
 // stream (": watching"), forwards a flow_updated frame published on the flow's
 // bus key, and disconnects cleanly on context cancel.
 func TestWatchFlowMe_LiveStream_Cov(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		ServeForTest(h.gw, rw, r)
@@ -147,6 +149,7 @@ func TestWatchFlowMe_LiveStream_Cov(t *testing.T) {
 // TestWatchFlowMe_NotFound_Cov covers the early scope/readability guard:
 // watching an unknown flow is a clean 404 before any stream opens.
 func TestWatchFlowMe_NotFound_Cov(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "GET", "/api/v1/me/flows/t%2Fws%2Fghost/watch", nil)
 	if rw.Code != http.StatusNotFound {

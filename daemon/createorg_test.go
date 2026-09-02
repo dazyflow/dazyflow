@@ -72,6 +72,7 @@ func (r *recordingOrgProfiles) DeleteOrgProfile(_ context.Context, tenant string
 // tenant, an admin membership in it, and a seeded profile with the chosen
 // name. Empty names are rejected.
 func TestCreateOrg(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	mem := newFakeMembershipStore()
 	prof := newRecordingOrgProfiles()
@@ -120,6 +121,7 @@ func TestCreateOrg(t *testing.T) {
 // TestExportOrg covers the export-first step: an org admin downloads the
 // org's profile, members, and every flow's full graph.
 func TestExportOrg(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// A flow in the org's workspace (harness store is tenant "t" / ws "ws").
 	if _, err := h.ws.Save(core.Graph{
@@ -161,6 +163,7 @@ func TestExportOrg(t *testing.T) {
 // principal must re-enter the correct password to delete an org — missing or
 // wrong password is rejected before any data is touched.
 func TestDeleteOrg_RequiresPassword(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	users, _ := auth.OpenJSONUserStore("")
 	hash, err := auth.HashPassword("correct horse battery")
@@ -220,6 +223,7 @@ func TestDeleteOrg_RequiresPassword(t *testing.T) {
 // interactive session. The org-admin key passes authorization but is
 // rejected with session_required before any data is touched.
 func TestDeleteOrg_BlocksApiKey(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.Users, _ = auth.OpenJSONUserStore("")
 	h.gw.Memberships = newFakeMembershipStore()
@@ -249,6 +253,7 @@ func hasRole(roles []core.Role, name string) bool {
 // current tenant — otherwise switching into another org drops the home org
 // from the switcher (it isn't a membership row).
 func TestCollectMemberships_HomeSurvivesSwitch(t *testing.T) {
+	t.Parallel()
 	users, err := auth.OpenJSONUserStore("")
 	if err != nil {
 		t.Fatalf("open users: %v", err)

@@ -18,6 +18,7 @@ import (
 // It's org-admin only, and coverage is derived from the same scope groups the
 // connect path uses (scopeSubsetForIntegration).
 func TestOAuthListAccounts_CoverageAndGate(t *testing.T) {
+	t.Parallel()
 	h := newGoogleOAuthHarness(t)
 	es := h.gw.EncryptedSecrets
 

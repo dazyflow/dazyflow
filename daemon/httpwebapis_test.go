@@ -69,6 +69,7 @@ func decodeRow(t *testing.T, body []byte) webAPIRow {
 // The wire shape the page posts must survive the round trip: an operation
 // described in JSON becomes a step, and comes back described the same way.
 func TestHTTP_SaveAndListWebAPI(t *testing.T) {
+	t.Parallel()
 	h, svc := webAPIHarness(t)
 
 	rw := h.adminDo(t, "POST", "/api/v1/admin/web-apis", saveBody())
@@ -110,6 +111,7 @@ func TestHTTP_SaveAndListWebAPI(t *testing.T) {
 // A PUT takes the name from the path, so a mismatched body cannot re-key the
 // catalog behind the caller's back.
 func TestHTTP_PutIgnoresTheBodysName(t *testing.T) {
+	t.Parallel()
 	h, _ := webAPIHarness(t)
 	if rw := h.adminDo(t, "POST", "/api/v1/admin/web-apis", saveBody()); rw.Code != http.StatusOK {
 		t.Fatalf("POST = %d: %s", rw.Code, rw.Body)
@@ -136,6 +138,7 @@ func TestHTTP_PutIgnoresTheBodysName(t *testing.T) {
 
 // A PUT that omits enabled must not disable a working catalog.
 func TestHTTP_PutWithoutEnabledKeepsItOn(t *testing.T) {
+	t.Parallel()
 	h, svc := webAPIHarness(t)
 	if rw := h.adminDo(t, "POST", "/api/v1/admin/web-apis", saveBody()); rw.Code != http.StatusOK {
 		t.Fatalf("POST = %d: %s", rw.Code, rw.Body)
@@ -149,6 +152,7 @@ func TestHTTP_PutWithoutEnabledKeepsItOn(t *testing.T) {
 }
 
 func TestHTTP_DeleteWebAPI(t *testing.T) {
+	t.Parallel()
 	h, svc := webAPIHarness(t)
 	if rw := h.adminDo(t, "POST", "/api/v1/admin/web-apis", saveBody()); rw.Code != http.StatusOK {
 		t.Fatalf("POST = %d: %s", rw.Code, rw.Body)
@@ -169,6 +173,7 @@ func TestHTTP_DeleteWebAPI(t *testing.T) {
 // A rejected descriptor comes back as a 400 carrying the engine's own message,
 // because that message is written to be shown next to the field.
 func TestHTTP_SaveRejectionIsA400WithTheReason(t *testing.T) {
+	t.Parallel()
 	h, _ := webAPIHarness(t)
 	body := saveBody()
 	body["operations"] = []map[string]any{{
@@ -184,6 +189,7 @@ func TestHTTP_SaveRejectionIsA400WithTheReason(t *testing.T) {
 }
 
 func TestHTTP_MalformedBodyIsA400(t *testing.T) {
+	t.Parallel()
 	h, _ := webAPIHarness(t)
 	rw := h.adminDo(t, "POST", "/api/v1/admin/web-apis", "not an object")
 	if rw.Code != http.StatusBadRequest {
@@ -194,6 +200,7 @@ func TestHTTP_MalformedBodyIsA400(t *testing.T) {
 // With the feature unwired the endpoints answer 501 rather than panicking on a
 // nil service — the same shape as MCP servers and runners.
 func TestHTTP_WebAPIsUnconfiguredIs501(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	for _, tc := range []struct{ method, path string }{
 		{"GET", "/api/v1/admin/web-apis"},
@@ -211,6 +218,7 @@ func TestHTTP_WebAPIsUnconfiguredIs501(t *testing.T) {
 // A non-admin session must not administer step sources: the same gate the MCP
 // and runner routes use.
 func TestHTTP_WebAPIsNeedAdmin(t *testing.T) {
+	t.Parallel()
 	h, _ := webAPIHarness(t)
 	for _, tc := range []struct{ method, path string }{
 		{"GET", "/api/v1/admin/web-apis"},
@@ -228,6 +236,7 @@ func TestHTTP_WebAPIsNeedAdmin(t *testing.T) {
 // structural claim, so it is checked structurally: whatever the row serializes
 // to, none of its keys is a secret-bearing one.
 func TestHTTP_RowCarriesNoCredentialField(t *testing.T) {
+	t.Parallel()
 	h, _ := webAPIHarness(t)
 	body := saveBody()
 	body["auth_kind"] = "header"
@@ -254,6 +263,7 @@ func TestHTTP_RowCarriesNoCredentialField(t *testing.T) {
 // TestWebAPIsEndpoints_Usage: the lookup behind the delete warning, scoped to a
 // catalog that exists and answered for the caller's own org.
 func TestWebAPIsEndpoints_Usage(t *testing.T) {
+	t.Parallel()
 	h, _ := webAPIHarness(t)
 	ws, err := workspace.OpenFS(t.TempDir())
 	if err != nil {
@@ -311,6 +321,7 @@ func webAPIUsageReq(t *testing.T, h *gatewayHarness, p core.Principal, name stri
 // uploaded mark. That is a JSON-layer property, so it is tested at the JSON
 // layer: a PUT that says nothing about the icon keeps it.
 func TestHTTP_PutWithoutLogoKeepsTheUploadedOne(t *testing.T) {
+	t.Parallel()
 	h, svc := webAPIHarness(t)
 	svc.ResolveLogo = func(context.Context, string) string { return "" }
 	chosen := pngLogo()
@@ -343,6 +354,7 @@ func TestHTTP_PutWithoutLogoKeepsTheUploadedOne(t *testing.T) {
 // A refused icon is the admin's mistake, so it is a 400 with the reason — not a
 // 500, and not a silent fallback to the glyph.
 func TestHTTP_BadLogoIsA400WithTheReason(t *testing.T) {
+	t.Parallel()
 	h, _ := webAPIHarness(t)
 	body := saveBody()
 	body["logo"] = "https://example.com/logo.png"
@@ -358,6 +370,7 @@ func TestHTTP_BadLogoIsA400WithTheReason(t *testing.T) {
 // "auto" is what a row stored before the column existed means, so the row must
 // report it rather than an empty string the form cannot open on.
 func TestHTTP_RowReportsTheLogoSource(t *testing.T) {
+	t.Parallel()
 	h, svc := webAPIHarness(t)
 	svc.ResolveLogo = func(context.Context, string) string { return "" }
 	rw := h.adminDo(t, "POST", "/api/v1/admin/web-apis", saveBody())
@@ -373,6 +386,7 @@ func TestHTTP_RowReportsTheLogoSource(t *testing.T) {
 // read it: the integration group's summary. An org's own app has no curated
 // entry to fall back on, so this is the only description it can ever have.
 func TestHTTP_DescriptionBecomesTheIntegrationSummary(t *testing.T) {
+	t.Parallel()
 	h, svc := webAPIHarness(t)
 	svc.ResolveLogo = func(context.Context, string) string { return "" }
 	blurb := "Our order system. Look up an order, place one, or cancel one."
@@ -408,6 +422,7 @@ func TestHTTP_DescriptionBecomesTheIntegrationSummary(t *testing.T) {
 // A curated blurb still wins: it is translated and edited without a release,
 // which is what a first-party integration wants and an org's cannot have.
 func TestHTTP_CuratedSummaryOutranksAManifestBlurb(t *testing.T) {
+	t.Parallel()
 	h, _ := webAPIHarness(t)
 	rw := h.adminDo(t, "GET", "/api/v1/catalog/integrations", nil)
 	var list struct {
@@ -429,6 +444,7 @@ func TestHTTP_CuratedSummaryOutranksAManifestBlurb(t *testing.T) {
 // The blurb round-trips so the form can edit it, and a save that omits it keeps
 // what is stored.
 func TestHTTP_PutWithoutDescriptionKeepsIt(t *testing.T) {
+	t.Parallel()
 	h, svc := webAPIHarness(t)
 	svc.ResolveLogo = func(context.Context, string) string { return "" }
 	blurb := "Our order system."
@@ -487,6 +503,7 @@ func decodeSpecResponse(t *testing.T, body []byte) webAPISpecResponse {
 // the ordinary save carries them — which is what makes "import operations,
 // never register a spec" true in the wiring rather than only in the docs.
 func TestHTTP_ParseSpecStoresNothing(t *testing.T) {
+	t.Parallel()
 	h, svc := webAPIHarness(t)
 
 	rw := h.adminDo(t, "POST", "/api/v1/admin/web-apis/spec",
@@ -514,6 +531,7 @@ func TestHTTP_ParseSpecStoresNothing(t *testing.T) {
 }
 
 func TestHTTP_ParseSpecRefusesBothOrNeitherSource(t *testing.T) {
+	t.Parallel()
 	h, _ := webAPIHarness(t)
 	for _, body := range []map[string]any{
 		{},
@@ -529,6 +547,7 @@ func TestHTTP_ParseSpecRefusesBothOrNeitherSource(t *testing.T) {
 // The parser's refusals are written for the admin who pasted the document, so
 // they must reach them rather than being flattened into a generic 400.
 func TestHTTP_ParseSpecForwardsTheParsersMessage(t *testing.T) {
+	t.Parallel()
 	h, _ := webAPIHarness(t)
 	rw := h.adminDo(t, "POST", "/api/v1/admin/web-apis/spec",
 		map[string]any{"spec": `{"swagger":"2.0","info":{},"paths":{}}`})
@@ -543,6 +562,7 @@ func TestHTTP_ParseSpecForwardsTheParsersMessage(t *testing.T) {
 // A refresh diffs against what is stored, so the page can require confirmation
 // before an operation a live flow references stops resolving.
 func TestHTTP_ParseSpecDiffsAgainstAStoredCatalog(t *testing.T) {
+	t.Parallel()
 	h, _ := webAPIHarness(t)
 	// Imported first, then refreshed against the SAME document — the real
 	// sequence. Saving a hand-written fixture instead would diff a hand-built
@@ -597,6 +617,7 @@ func importCatalog(t *testing.T, h *gatewayHarness, spec string) webAPIRow {
 // A spec that dropped an operation must report the removal AND name the step id,
 // which is what an admin searches their flows for before confirming.
 func TestHTTP_ParseSpecReportsRemovalsWithTheirStepIDs(t *testing.T) {
+	t.Parallel()
 	h, _ := webAPIHarness(t)
 	importCatalog(t, h, specForImport)
 
@@ -628,6 +649,7 @@ paths:
 // an imported operation and a hand-built one are the same object, so nothing
 // downstream needed a second path.
 func TestHTTP_ImportedOperationsBecomeStepsThroughTheOrdinarySave(t *testing.T) {
+	t.Parallel()
 	h, _ := webAPIHarness(t)
 
 	rw := h.adminDo(t, "POST", "/api/v1/admin/web-apis/spec",

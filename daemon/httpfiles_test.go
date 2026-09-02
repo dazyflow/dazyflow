@@ -46,6 +46,7 @@ func fileReq(t *testing.T, h *gatewayHarness, token, method, target, body string
 }
 
 func TestFiles_ListAndDownload(t *testing.T) {
+	t.Parallel()
 	h, root := newUploadHarness(t)
 	seedFile(t, root, "t", "ws", "report.txt", "hello")
 	seedFile(t, root, "t", "ws", "src/main.go", "package main")
@@ -92,6 +93,7 @@ func TestFiles_ListAndDownload(t *testing.T) {
 }
 
 func TestFiles_ListHidesScratch(t *testing.T) {
+	t.Parallel()
 	h, root := newUploadHarness(t)
 	seedFile(t, root, "t", "ws", "keep.txt", "x")
 	seedFile(t, root, "t", "ws", scratchDirName+"/run-1/tmp.bin", "y")
@@ -112,6 +114,7 @@ func TestFiles_ListHidesScratch(t *testing.T) {
 }
 
 func TestFiles_MkdirRenameDelete(t *testing.T) {
+	t.Parallel()
 	h, root := newUploadHarness(t)
 	seedFile(t, root, "t", "ws", "draft.txt", "v1")
 
@@ -146,6 +149,7 @@ func TestFiles_MkdirRenameDelete(t *testing.T) {
 // TestFiles_RenameRefusesOverwrite locks in the data-loss guard: a move/rename
 // onto an existing path must be rejected, not silently clobber the target.
 func TestFiles_RenameRefusesOverwrite(t *testing.T) {
+	t.Parallel()
 	h, root := newUploadHarness(t)
 	seedFile(t, root, "t", "ws", "a.txt", "source")
 	seedFile(t, root, "t", "ws", "docs/a.txt", "PRECIOUS")
@@ -165,6 +169,7 @@ func TestFiles_RenameRefusesOverwrite(t *testing.T) {
 }
 
 func TestFiles_DeleteRootAndScratchRefused(t *testing.T) {
+	t.Parallel()
 	h, _ := newUploadHarness(t)
 	if rw := fileReq(t, h, h.token, "DELETE", "/api/v1/workspaces/t/ws/files", ""); rw.Code != http.StatusBadRequest {
 		t.Errorf("delete root status=%d, want 400", rw.Code)
@@ -175,6 +180,7 @@ func TestFiles_DeleteRootAndScratchRefused(t *testing.T) {
 }
 
 func TestFiles_TraversalRejected(t *testing.T) {
+	t.Parallel()
 	h, _ := newUploadHarness(t)
 	for _, target := range []string{
 		"/api/v1/workspaces/t/ws/files/list?path=../../etc",
@@ -197,6 +203,7 @@ func TestFiles_TraversalRejected(t *testing.T) {
 // forbidden across the board; the UI hides Files from them and the server
 // enforces it (mutations doubly so). See httpfiles.go's endpoint table.
 func TestFiles_RequireEdit(t *testing.T) {
+	t.Parallel()
 	h, root := newUploadHarness(t)
 	seedFile(t, root, "t", "ws", "a.txt", "x")
 	role := core.Role{Name: "runner", Permissions: []core.Permission{core.PermGraphRun}}
@@ -222,6 +229,7 @@ func TestFiles_RequireEdit(t *testing.T) {
 }
 
 func TestFiles_Usage(t *testing.T) {
+	t.Parallel()
 	h, _ := newUploadHarness(t)
 	rw := fileReq(t, h, h.token, "GET", "/api/v1/workspaces/t/ws/files/usage", "")
 	if rw.Code != http.StatusOK {
@@ -245,6 +253,7 @@ func TestFiles_Usage(t *testing.T) {
 // overwrite tests.
 
 func TestRenameFile_DecodeError(t *testing.T) {
+	t.Parallel()
 	h, _ := newUploadHarness(t)
 	rw := fileReq(t, h, h.token, "POST", "/api/v1/workspaces/t/ws/files/rename", "{not json")
 	if rw.Code != http.StatusBadRequest {
@@ -253,6 +262,7 @@ func TestRenameFile_DecodeError(t *testing.T) {
 }
 
 func TestRenameFile_BadFrom(t *testing.T) {
+	t.Parallel()
 	h, _ := newUploadHarness(t)
 	rw := fileReq(t, h, h.token, "POST", "/api/v1/workspaces/t/ws/files/rename",
 		`{"from":"../escape","to":"ok.txt"}`)
@@ -262,6 +272,7 @@ func TestRenameFile_BadFrom(t *testing.T) {
 }
 
 func TestRenameFile_BadTo(t *testing.T) {
+	t.Parallel()
 	h, root := newUploadHarness(t)
 	seedFile(t, root, "t", "ws", "a.txt", "x")
 	rw := fileReq(t, h, h.token, "POST", "/api/v1/workspaces/t/ws/files/rename",
@@ -272,6 +283,7 @@ func TestRenameFile_BadTo(t *testing.T) {
 }
 
 func TestRenameFile_RootRefused(t *testing.T) {
+	t.Parallel()
 	h, _ := newUploadHarness(t)
 	// Empty from/to clean to "." (workspace root) — refused.
 	rw := fileReq(t, h, h.token, "POST", "/api/v1/workspaces/t/ws/files/rename",
@@ -282,6 +294,7 @@ func TestRenameFile_RootRefused(t *testing.T) {
 }
 
 func TestRenameFile_ScratchRefused(t *testing.T) {
+	t.Parallel()
 	h, _ := newUploadHarness(t)
 	rw := fileReq(t, h, h.token, "POST", "/api/v1/workspaces/t/ws/files/rename",
 		`{"from":"`+scratchDirName+`/a.txt","to":"b.txt"}`)
@@ -291,6 +304,7 @@ func TestRenameFile_ScratchRefused(t *testing.T) {
 }
 
 func TestRenameFile_SameSourceDest(t *testing.T) {
+	t.Parallel()
 	h, root := newUploadHarness(t)
 	seedFile(t, root, "t", "ws", "a.txt", "x")
 	rw := fileReq(t, h, h.token, "POST", "/api/v1/workspaces/t/ws/files/rename",
@@ -301,6 +315,7 @@ func TestRenameFile_SameSourceDest(t *testing.T) {
 }
 
 func TestRenameFile_IntoNewFolder(t *testing.T) {
+	t.Parallel()
 	h, root := newUploadHarness(t)
 	seedFile(t, root, "t", "ws", "report.txt", "x")
 	rw := fileReq(t, h, h.token, "POST", "/api/v1/workspaces/t/ws/files/rename",

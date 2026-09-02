@@ -62,6 +62,7 @@ func authorizeScopes(t *testing.T, h *gatewayHarness, query string) (map[string]
 }
 
 func TestScopeSubsetForIntegration(t *testing.T) {
+	t.Parallel()
 	cases := map[string][]string{
 		"Gmail":         {"https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.readonly"},
 		"Google Sheets": {"https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.readonly"},
@@ -82,6 +83,7 @@ func TestScopeSubsetForIntegration(t *testing.T) {
 }
 
 func TestAuthorize_IncrementalScopesPerIntegration(t *testing.T) {
+	t.Parallel()
 	h := newGoogleOAuthHarness(t)
 
 	// Connecting for Sheets requests ONLY the sheets scopes — no gmail/forms.
@@ -105,6 +107,7 @@ func TestAuthorize_IncrementalScopesPerIntegration(t *testing.T) {
 }
 
 func TestAuthorize_NoIntegrationRequestsFullSet(t *testing.T) {
+	t.Parallel()
 	h := newGoogleOAuthHarness(t)
 	// Omitting integration falls back to the provider's full scope list.
 	scopes, _ := authorizeScopes(t, h, "return_to=/apps")

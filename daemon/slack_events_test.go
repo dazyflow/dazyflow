@@ -72,6 +72,7 @@ func (h *slackHarness) post(t *testing.T, path string, body []byte, ts int64) *h
 }
 
 func TestSlackEvents_URLVerificationEchoesChallenge(t *testing.T) {
+	t.Parallel()
 	h := newSlackHarness(t)
 	body := []byte(`{"type":"url_verification","challenge":"hello-world-token","token":"deprecated"}`)
 	rw := h.post(t, "/api/v1/events/slack/t", body, 0)
@@ -84,6 +85,7 @@ func TestSlackEvents_URLVerificationEchoesChallenge(t *testing.T) {
 }
 
 func TestSlackEvents_BadSignatureRejected(t *testing.T) {
+	t.Parallel()
 	h := newSlackHarness(t)
 	body := []byte(`{"type":"url_verification","challenge":"x"}`)
 	ts := h.frozen.Unix()
@@ -98,6 +100,7 @@ func TestSlackEvents_BadSignatureRejected(t *testing.T) {
 }
 
 func TestSlackEvents_MissingHeadersRejected(t *testing.T) {
+	t.Parallel()
 	h := newSlackHarness(t)
 	body := []byte(`{"type":"url_verification","challenge":"x"}`)
 	req := httptest.NewRequest("POST", "/api/v1/events/slack/t", bytes.NewReader(body))
@@ -110,6 +113,7 @@ func TestSlackEvents_MissingHeadersRejected(t *testing.T) {
 }
 
 func TestSlackEvents_StaleTimestampRejected(t *testing.T) {
+	t.Parallel()
 	h := newSlackHarness(t)
 	body := []byte(`{"type":"url_verification","challenge":"x"}`)
 	// 10 minutes old — outside Slack's 5-minute replay window.
@@ -121,6 +125,7 @@ func TestSlackEvents_StaleTimestampRejected(t *testing.T) {
 }
 
 func TestSlackEvents_FutureTimestampRejected(t *testing.T) {
+	t.Parallel()
 	h := newSlackHarness(t)
 	body := []byte(`{"type":"url_verification","challenge":"x"}`)
 	future := h.frozen.Add(10 * time.Minute).Unix()
@@ -131,6 +136,7 @@ func TestSlackEvents_FutureTimestampRejected(t *testing.T) {
 }
 
 func TestSlackEvents_NotConfiguredReturns501(t *testing.T) {
+	t.Parallel()
 	gh := newGatewayHarness(t)
 	// gw.SlackEvents left nil.
 	body := []byte(`{"type":"url_verification","challenge":"x"}`)
@@ -148,6 +154,7 @@ func TestSlackEvents_NotConfiguredReturns501(t *testing.T) {
 // for the (background) fanout to land; we then assert a graph-record
 // landed in the jobstore.
 func TestSlackEvents_AppMentionFiresSubscribedGraphs(t *testing.T) {
+	t.Parallel()
 	h := newSlackHarness(t)
 	// Save a graph with a slack_on_mention node.
 	g := core.Graph{
@@ -212,6 +219,7 @@ func TestSlackEvents_AppMentionFiresSubscribedGraphs(t *testing.T) {
 }
 
 func TestSlackEvents_ChannelFilterSkipsMismatchedGraphs(t *testing.T) {
+	t.Parallel()
 	h := newSlackHarness(t)
 	// Two graphs, both subscribed to slack_on_mention. Graph A
 	// filters on channel C111, graph B filters on C222. An event
@@ -272,6 +280,7 @@ func TestSlackEvents_ChannelFilterSkipsMismatchedGraphs(t *testing.T) {
 }
 
 func TestSlackEvents_EmptyChannelFilterMatchesAll(t *testing.T) {
+	t.Parallel()
 	// Backward compat: graphs without channel_filter param must
 	// still fire for any channel. Pre-filter authoring depended
 	// on this behavior.
@@ -303,6 +312,7 @@ func TestSlackEvents_EmptyChannelFilterMatchesAll(t *testing.T) {
 }
 
 func TestSlackEvents_NonAppMentionEventIsAcked(t *testing.T) {
+	t.Parallel()
 	h := newSlackHarness(t)
 	// reaction_added isn't subscribed — handler should 200 and not
 	// fire anything.
@@ -318,6 +328,7 @@ func TestSlackEvents_NonAppMentionEventIsAcked(t *testing.T) {
 }
 
 func TestSlackEvents_UnknownEnvelopeTypeIsAcked(t *testing.T) {
+	t.Parallel()
 	h := newSlackHarness(t)
 	body := []byte(`{"type":"surprise_party","field":"value"}`)
 	rw := h.post(t, "/api/v1/events/slack/t", body, 0)
@@ -327,6 +338,7 @@ func TestSlackEvents_UnknownEnvelopeTypeIsAcked(t *testing.T) {
 }
 
 func TestSlackOnMention_StandaloneRunErrors(t *testing.T) {
+	t.Parallel()
 	// The drop's Execute is called when the user runs the graph
 	// manually (no Slack event seeded the node). Should be a clear
 	// "no event" error, not a silent success — same shape as
@@ -351,6 +363,7 @@ func TestSlackOnMention_StandaloneRunErrors(t *testing.T) {
 // X-Slack-Request-Timestamp must be rejected (401), not parsed into a
 // zero/garbage time that could slip past the replay window.
 func TestSlackEvents_NonIntegerTimestampRejected(t *testing.T) {
+	t.Parallel()
 	h := newSlackHarness(t)
 	body := []byte(`{"type":"url_verification","challenge":"x"}`)
 	req := httptest.NewRequest("POST", "/api/v1/events/slack/t", bytes.NewReader(body))
@@ -368,6 +381,7 @@ func TestSlackEvents_NonIntegerTimestampRejected(t *testing.T) {
 // X-Slack-Retry-Num; the handler must still ack a valid retry (200),
 // not choke on the extra header.
 func TestSlackEvents_RetryHeaderTolerated(t *testing.T) {
+	t.Parallel()
 	h := newSlackHarness(t)
 	body := []byte(`{"type":"url_verification","challenge":"abc"}`)
 	ts := h.frozen.Unix()

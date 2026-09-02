@@ -145,6 +145,7 @@ func teamAdminDo(t *testing.T, h *gatewayHarness, method, path string, body any)
 }
 
 func TestUpdateMemberRoles(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	store := newFakeMembershipStore()
 	h.gw.Memberships = store
@@ -196,6 +197,7 @@ func TestUpdateMemberRoles(t *testing.T) {
 }
 
 func TestUpdateMemberRoles_Guards(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	store := newFakeMembershipStore()
 	h.gw.Memberships = store
@@ -249,6 +251,7 @@ func TestUpdateMemberRoles_Guards(t *testing.T) {
 // Changing or removing a membership sweeps the member's live sessions,
 // so a demotion takes effect immediately instead of at session expiry.
 func TestUpdateMemberRoles_SweepsSessions(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	store := newFakeMembershipStore()
 	h.gw.Memberships = store

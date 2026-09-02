@@ -68,6 +68,7 @@ func describeDrop(id string) string { return describeDropForModel(manifestMap(),
 // templates. The template_placeholder LINT (REPLACE_WITH_…) is intentional on
 // templates and is not checked here — that's a fill-me marker, not a wiring bug.
 func TestShippedTemplatesValidate(t *testing.T) {
+	t.Parallel()
 	dir := "../web/public/templates"
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -103,6 +104,7 @@ func TestShippedTemplatesValidate(t *testing.T) {
 // touches — the real grounding I read to drive the loop by hand.
 // FLOWGEN_DUMP=1 go test ./daemon -run TestAgenticDescribe -v
 func TestAgenticDescribe(t *testing.T) {
+	t.Parallel()
 	if os.Getenv("FLOWGEN_DUMP") == "" {
 		t.Skip("set FLOWGEN_DUMP=1 to dump describe_drop output")
 	}
@@ -147,6 +149,7 @@ func miswiredForEach() map[string]any {
 // must accept the corrected second answer. On the OLD loop (LintGraph only)
 // this draft was returned as-is after a single call — so this pins the fix.
 func TestFlowGen_StructuralGateRepairs(t *testing.T) {
+	t.Parallel()
 	good := map[string]any{"name": "ok", "nodes": []any{node("a", "text", map[string]any{"text": "hello"})}}
 	sp := &scriptedProvider{graphs: []map[string]any{miswiredForEach(), good}}
 	llm.Register(llm.ProviderInfo{Name: "fakeflowstruct", Integration: "FakeFlowStruct", DefaultModel: "m", Provider: sp})
@@ -174,6 +177,7 @@ func TestFlowGen_StructuralGateRepairs(t *testing.T) {
 // the old behaviour where the broken draft sailed through and only blew up at
 // run time.
 func TestFlowGen_StructuralGateSurfaces(t *testing.T) {
+	t.Parallel()
 	sp := &scriptedProvider{graphs: []map[string]any{miswiredForEach()}} // always mis-wired
 	llm.Register(llm.ProviderInfo{Name: "fakeflowstruckstuck", Integration: "FakeFlowStuckStruct", DefaultModel: "m", Provider: sp})
 
@@ -219,6 +223,7 @@ func goodEmailFlow() map[string]any {
 // turn that must NOT count as an emit attempt), then emits a clean flow. Proves
 // the agentic dispatch works and exploring is free of the repair budget.
 func TestFlowGen_AgentExploresThenEmits(t *testing.T) {
+	t.Parallel()
 	sp := &scriptedProvider{graphs: []map[string]any{
 		{"action": "describe_drop", "drop_id": "gmail_search_messages"},
 		{"action": "search_drops", "query": "google sheet"},
@@ -247,6 +252,7 @@ func TestFlowGen_AgentExploresThenEmits(t *testing.T) {
 // (gets the structural errors back), then emits a corrected flow. The validate
 // turn isn't an emit, so it doesn't burn the repair budget.
 func TestFlowGen_AgentValidatesBeforeEmit(t *testing.T) {
+	t.Parallel()
 	sp := &scriptedProvider{graphs: []map[string]any{
 		{"action": "validate", "flow": miswiredForEach()},
 		{"action": "emit", "flow": goodEmailFlow()},
@@ -270,6 +276,7 @@ func TestFlowGen_AgentValidatesBeforeEmit(t *testing.T) {
 // TestRefineDesc: conversational refine seeds the prompt with the current flow
 // only when a base is supplied; otherwise the description passes through.
 func TestRefineDesc(t *testing.T) {
+	t.Parallel()
 	if got := refineDesc(nil, "do x"); got != "do x" {
 		t.Errorf("nil base should pass through, got %q", got)
 	}
@@ -288,6 +295,7 @@ func TestRefineDesc(t *testing.T) {
 // carries worked examples and required-input markers, and the system prompt
 // teaches the compose-only patterns (for_each/unwrap_results) and the markers.
 func TestFlowGen_GroundingEnriched(t *testing.T) {
+	t.Parallel()
 	cat := compactCatalog(allManifests())
 	if !strings.Contains(cat, "| e.g. ") {
 		t.Error("catalog is missing worked examples (| e.g. …)")
@@ -310,6 +318,7 @@ func TestFlowGen_GroundingEnriched(t *testing.T) {
 // connected apps and existing secret names, so it stops inventing flows for
 // unconnected apps and made-up ${secret.NAME}s.
 func TestFlowGen_WorkspaceGrounding(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	es := newMemSecrets(t)
 	h.gw.EncryptedSecrets = es
@@ -339,6 +348,7 @@ func TestFlowGen_WorkspaceGrounding(t *testing.T) {
 // ---- manual eval (skipped unless FLOWGEN_DUMP=1) -------------------------
 
 func TestFlowGenEval(t *testing.T) {
+	t.Parallel()
 	if os.Getenv("FLOWGEN_DUMP") == "" {
 		t.Skip("set FLOWGEN_DUMP=1 to dump the catalog + score scenarios")
 	}

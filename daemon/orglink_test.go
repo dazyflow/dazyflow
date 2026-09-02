@@ -6,6 +6,7 @@ package daemon
 import "testing"
 
 func TestWithOrg(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name   string
 		url    string

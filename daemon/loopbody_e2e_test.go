@@ -177,6 +177,7 @@ func newLoopE2EHarness(t *testing.T, rec *recorder) *loopHarness {
 // (e.g. sheets_export_pdf) work inside a loop. The fixture writes a per-row
 // file into job.ScratchRoot and fails the row if scratch is absent.
 func TestLoopBody_BodyNodesGetParentScratch(t *testing.T) {
+	t.Parallel()
 	rec := &recorder{}
 	reg := engine.NewRegistry()
 
@@ -290,6 +291,7 @@ func TestLoopBody_BodyNodesGetParentScratch(t *testing.T) {
 // End-to-end: a wired for_each body runs the body node once per row, with
 // ${item.…} resolved per row, and the graph completes with results.
 func TestLoopBody_RunsBodyPerItem(t *testing.T) {
+	t.Parallel()
 	rec := &recorder{}
 	h := newLoopE2EHarness(t, rec)
 
@@ -349,6 +351,7 @@ func TestLoopBody_RunsBodyPerItem(t *testing.T) {
 // run, the loop succeeds, and the failure surfaces (keyed by index) on the
 // errors port.
 func TestLoopBody_PerItemErrorIsolation(t *testing.T) {
+	t.Parallel()
 	rec := &recorder{}
 	h := newLoopE2EHarness(t, rec)
 
@@ -408,6 +411,7 @@ func TestLoopBody_PerItemErrorIsolation(t *testing.T) {
 
 // fail_fast ON: a failing row fails the loop, which propagates to the graph.
 func TestLoopBody_FailFastFailsGraph(t *testing.T) {
+	t.Parallel()
 	rec := &recorder{}
 	h := newLoopE2EHarness(t, rec)
 

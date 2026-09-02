@@ -78,6 +78,7 @@ func findPlan(plans []planOption, id string) (planOption, bool) {
 }
 
 func TestPlansMe_FreeTenant(t *testing.T) {
+	t.Parallel()
 	svc := &Service{
 		Entitlements:           builtinTierStore(),
 		FreeRunsPerMonth:       100,
@@ -122,6 +123,7 @@ func TestPlansMe_FreeTenant(t *testing.T) {
 // A Stripe-pro org keeps the default "free" tier id but is really on pro —
 // the pro card, not free, must read as current.
 func TestPlansMe_StripeProMarksProCurrent(t *testing.T) {
+	t.Parallel()
 	svc := &Service{
 		Entitlements:           builtinTierStore(),
 		Plans:                  fakePlans{p: TenantPlan{Tenant: "org_pro", Plan: PlanPro, StripeCustomerID: "cus_1"}},

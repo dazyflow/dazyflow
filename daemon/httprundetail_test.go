@@ -13,6 +13,7 @@ import (
 )
 
 func TestHTTPGateway_ListRunNodes_ReturnsAllNodesForRun(t *testing.T) {
+	t.Parallel()
 	// Seed a run-record + three node-records under it, plus one
 	// node-record under a DIFFERENT run. The endpoint must return
 	// only the three from the requested run.
@@ -91,6 +92,7 @@ func TestHTTPGateway_ListRunNodes_ReturnsAllNodesForRun(t *testing.T) {
 }
 
 func TestNewNodeRunView_RetrySignal(t *testing.T) {
+	t.Parallel()
 	future := time.Now().Add(30 * time.Second)
 	at := &future
 	// A node between attempts: queued, attempt>0, with a future horizon.
@@ -122,6 +124,7 @@ func TestNewNodeRunView_RetrySignal(t *testing.T) {
 }
 
 func TestHTTPGateway_ListRunNodes_UnknownRunIs404(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "GET", "/api/v1/me/runs/never-existed/nodes", nil)
 	if rw.Code != http.StatusNotFound {
@@ -130,6 +133,7 @@ func TestHTTPGateway_ListRunNodes_UnknownRunIs404(t *testing.T) {
 }
 
 func TestHTTPGateway_ListRunNodes_EmptyListForRunWithNoNodes(t *testing.T) {
+	t.Parallel()
 	// A graph that ran but recorded zero node records (degenerate
 	// case) should return an empty array, not nil — keeps the UI
 	// code simple.

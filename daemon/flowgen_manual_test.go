@@ -94,6 +94,7 @@ func renderTurn(req llm.Request) string {
 // FLOWGEN_MANUAL_ONLY (default: all of them), stopping at the first turn that
 // has no reply yet. Re-run after writing the reply to continue.
 func TestFlowGenManual(t *testing.T) {
+	t.Parallel()
 	dir := os.Getenv("FLOWGEN_MANUAL_DIR")
 	if dir == "" {
 		t.Skip("set FLOWGEN_MANUAL_DIR to drive the generator by hand (no API key needed)")

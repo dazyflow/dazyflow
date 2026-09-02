@@ -24,6 +24,7 @@ func gateGraph(id string) core.Graph {
 // core.ErrPlanLimit and writes no run state; the runs under the cap all
 // went through. Counters come from the REAL metering path, not a fixture.
 func TestPlanGate_FreeTenantCappedAtLimit(t *testing.T) {
+	t.Parallel()
 	h := newSkipHarness(t)
 	h.svc.Plans = daemon.NewMemPlanStore()
 	h.svc.FreeRunsPerMonth = 2
@@ -52,6 +53,7 @@ func TestPlanGate_FreeTenantCappedAtLimit(t *testing.T) {
 
 // A pro tenant sails past the free cap.
 func TestPlanGate_ProTenantUnlimited(t *testing.T) {
+	t.Parallel()
 	h := newSkipHarness(t)
 	plans := daemon.NewMemPlanStore()
 	_ = plans.SetPlan(t.Context(), daemon.TenantPlan{Tenant: "t", Plan: daemon.PlanPro})
@@ -70,6 +72,7 @@ func TestPlanGate_ProTenantUnlimited(t *testing.T) {
 // FreeRunsPerMonth unset (the self-hosted default) = no enforcement,
 // even with a plan store wired and the tenant on free.
 func TestPlanGate_DisabledByDefault(t *testing.T) {
+	t.Parallel()
 	h := newSkipHarness(t)
 	h.svc.Plans = daemon.NewMemPlanStore()
 	// FreeRunsPerMonth left at zero.

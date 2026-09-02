@@ -29,6 +29,7 @@ func newOrgAuthSecretsFixture(t *testing.T) (*memOrgAuth, auth.OrgAuthStore) {
 // decorator: whatever an admin saves, the org_auth row must not carry the
 // client secret, because a database dump is the exposure being closed.
 func TestEncryptedOrgAuthStore_SecretNeverHitsTheRow(t *testing.T) {
+	t.Parallel()
 	inner, store := newOrgAuthSecretsFixture(t)
 	ctx := context.Background()
 
@@ -69,6 +70,7 @@ func TestEncryptedOrgAuthStore_SecretNeverHitsTheRow(t *testing.T) {
 // a row written before encryption existed is moved across on first read and
 // the column is blanked, with no operator step.
 func TestEncryptedOrgAuthStore_MigratesLegacyPlaintext(t *testing.T) {
+	t.Parallel()
 	inner, store := newOrgAuthSecretsFixture(t)
 	ctx := context.Background()
 
@@ -99,6 +101,7 @@ func TestEncryptedOrgAuthStore_MigratesLegacyPlaintext(t *testing.T) {
 // deleting the org both remove the ciphertext — a leftover would outlive the
 // org it belonged to, which matters on the GDPR erasure path.
 func TestEncryptedOrgAuthStore_ClearAndDelete(t *testing.T) {
+	t.Parallel()
 	inner, store := newOrgAuthSecretsFixture(t)
 	ctx := context.Background()
 
@@ -143,6 +146,7 @@ func TestEncryptedOrgAuthStore_ClearAndDelete(t *testing.T) {
 // deliberate escape hatch: an install with no master key has nowhere to put
 // the ciphertext, so wrapping is a no-op rather than a hard failure.
 func TestEncryptedOrgAuthStore_NoSecretStoreIsPassThrough(t *testing.T) {
+	t.Parallel()
 	inner := newMemOrgAuth()
 	if got := NewEncryptedOrgAuthStore(inner, nil); got != auth.OrgAuthStore(inner) {
 		t.Fatal("nil EncryptedSecrets should return the inner store unchanged")

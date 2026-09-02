@@ -54,6 +54,7 @@ func nudgeFixture(t *testing.T, msgs ...core.TicketMessage) (*TicketNudgeSweeper
 }
 
 func TestNudgeSweep_RemindsTheSideThatIsWaiting(t *testing.T) {
+	t.Parallel()
 	s, sent, _ := nudgeFixture(t, fromUser(30))
 	n, err := s.Sweep(context.Background())
 	if err != nil {
@@ -68,6 +69,7 @@ func TestNudgeSweep_RemindsTheSideThatIsWaiting(t *testing.T) {
 }
 
 func TestNudgeSweep_IsSilentOnASecondPass(t *testing.T) {
+	t.Parallel()
 	// The failure that makes people filter the mailbox: nothing changed, so
 	// nothing more should be sent — the first pass has to have recorded itself.
 	s, sent, _ := nudgeFixture(t, fromUser(30))
@@ -84,6 +86,7 @@ func TestNudgeSweep_IsSilentOnASecondPass(t *testing.T) {
 }
 
 func TestNudgeSweep_RecordsTheReminderOnTheTicket(t *testing.T) {
+	t.Parallel()
 	s, _, store := nudgeFixture(t, fromUser(30))
 	if _, err := s.Sweep(context.Background()); err != nil {
 		t.Fatalf("sweep: %v", err)
@@ -106,6 +109,7 @@ func TestNudgeSweep_RecordsTheReminderOnTheTicket(t *testing.T) {
 }
 
 func TestNudgeSweep_DoesNothingWhenNotTheLeader(t *testing.T) {
+	t.Parallel()
 	// Every node running this means every recipient gets one copy per node.
 	s, sent, _ := nudgeFixture(t, fromUser(30))
 	s.Leader = func() bool { return false }
@@ -119,6 +123,7 @@ func TestNudgeSweep_DoesNothingWhenNotTheLeader(t *testing.T) {
 }
 
 func TestNudgeSweep_LeaderNilMeansSingleNode(t *testing.T) {
+	t.Parallel()
 	s, sent, _ := nudgeFixture(t, fromUser(30))
 	s.Leader = nil
 	if _, err := s.Sweep(context.Background()); err != nil {
@@ -130,6 +135,7 @@ func TestNudgeSweep_LeaderNilMeansSingleNode(t *testing.T) {
 }
 
 func TestNudgeSweep_SkipsFinishedTickets(t *testing.T) {
+	t.Parallel()
 	s, sent, store := nudgeFixture(t, fromUser(30))
 	ctx := context.Background()
 	tk, _ := store.Get(ctx, "tk1")
@@ -146,6 +152,7 @@ func TestNudgeSweep_SkipsFinishedTickets(t *testing.T) {
 }
 
 func TestNudgeSweep_OffWhenUnconfigured(t *testing.T) {
+	t.Parallel()
 	// A deployment that has not set a threshold must not start mailing on its
 	// own; zero means off, not "immediately".
 	s, sent, _ := nudgeFixture(t, fromUser(30))
@@ -159,6 +166,7 @@ func TestNudgeSweep_OffWhenUnconfigured(t *testing.T) {
 }
 
 func TestFormatWaited(t *testing.T) {
+	t.Parallel()
 	// "26h" reads like a machine talking to itself; the reminder says how long
 	// a person would say it has been.
 	for _, c := range []struct {

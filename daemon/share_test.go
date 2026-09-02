@@ -158,6 +158,7 @@ func (h *shareHarness) enqueueRun(t *testing.T, ctx context.Context, id, graphID
 }
 
 func TestCreateWorkspaceShare_RequiresEdit(t *testing.T) {
+	t.Parallel()
 	h := newShareHarness(t)
 	ctx := context.Background()
 	// A run-only viewer can't mint a public link.
@@ -175,6 +176,7 @@ func TestCreateWorkspaceShare_RequiresEdit(t *testing.T) {
 }
 
 func TestCreateWorkspaceShare_RotateInvalidatesOld(t *testing.T) {
+	t.Parallel()
 	h := newShareHarness(t)
 	ctx := context.Background()
 	first, err := h.svc.CreateWorkspaceShare(ctx, h.editor, "t", "ws")
@@ -198,6 +200,7 @@ func TestCreateWorkspaceShare_RotateInvalidatesOld(t *testing.T) {
 }
 
 func TestPublicWorkspaceOverview_SanitizedAndScoped(t *testing.T) {
+	t.Parallel()
 	h := newShareHarness(t)
 	ctx := context.Background()
 
@@ -283,6 +286,7 @@ func TestPublicWorkspaceOverview_SanitizedAndScoped(t *testing.T) {
 // since recovered drops off, and an unpublished (needs_publish) draft is kept
 // off the board entirely — no tile, and out of every counter.
 func TestPublicWorkspaceOverview_NeedsAttentionByFlow(t *testing.T) {
+	t.Parallel()
 	h := newShareHarness(t)
 	ctx := context.Background()
 
@@ -350,6 +354,7 @@ func TestPublicWorkspaceOverview_NeedsAttentionByFlow(t *testing.T) {
 // last run failing before it was paused must not register as "needs attention"
 // nor drag down the success rate.
 func TestPublicWorkspaceOverview_DisabledFlowExcluded(t *testing.T) {
+	t.Parallel()
 	h := newShareHarness(t)
 	ctx := context.Background()
 
@@ -401,6 +406,7 @@ func TestPublicWorkspaceOverview_DisabledFlowExcluded(t *testing.T) {
 // not "needs_publish") must still be kept off the board and out of the
 // counters, so its test-run failures don't read as "needs attention".
 func TestPublicWorkspaceOverview_UnpublishedExcluded(t *testing.T) {
+	t.Parallel()
 	h := newShareHarness(t)
 	ctx := context.Background()
 
@@ -443,6 +449,7 @@ func TestPublicWorkspaceOverview_UnpublishedExcluded(t *testing.T) {
 // rounding: 2 of 3 finished = 66.67%, which must round to 67 (matching the
 // Dashboard's Math.round), not truncate to 66.
 func TestPublicWorkspaceOverview_SuccessRateRounds(t *testing.T) {
+	t.Parallel()
 	h := newShareHarness(t)
 	ctx := context.Background()
 
@@ -470,6 +477,7 @@ func TestPublicWorkspaceOverview_SuccessRateRounds(t *testing.T) {
 }
 
 func TestPublicWorkspaceOverview_UnknownToken(t *testing.T) {
+	t.Parallel()
 	h := newShareHarness(t)
 	if _, err := h.svc.PublicWorkspaceOverview(context.Background(), "nope", time.Now()); err == nil {
 		t.Fatal("expected error for unknown token")
@@ -477,6 +485,7 @@ func TestPublicWorkspaceOverview_UnknownToken(t *testing.T) {
 }
 
 func TestDeleteWorkspaceShare(t *testing.T) {
+	t.Parallel()
 	h := newShareHarness(t)
 	ctx := context.Background()
 	sh, err := h.svc.CreateWorkspaceShare(ctx, h.editor, "t", "ws")

@@ -14,6 +14,7 @@ import (
 // stays CLAIMABLE — a machine switched on later runs a script for a run that
 // died, which is the same harm as running it twice.
 func TestSweep_ClosesAQueuedTaskNobodyIsWaitingFor(t *testing.T) {
+	t.Parallel()
 	q := NewMemRunnerTaskStore()
 	created := time.Now().Add(-10 * time.Minute)
 	mustEnqueue(t, q, RunnerTask{
@@ -50,6 +51,7 @@ func TestSweep_ClosesAQueuedTaskNobodyIsWaitingFor(t *testing.T) {
 // A task still inside its own deadline is somebody's live work. Closing it
 // would fail a step that is about to succeed.
 func TestSweep_LeavesATaskSomeoneIsStillWaitingFor(t *testing.T) {
+	t.Parallel()
 	q := NewMemRunnerTaskStore()
 	mustEnqueue(t, q, RunnerTask{
 		ID: "live", Tenant: "acme", Tags: []string{"box"}, Script: "x",
@@ -68,6 +70,7 @@ func TestSweep_LeavesATaskSomeoneIsStillWaitingFor(t *testing.T) {
 // A running task whose lease lapsed is an agent that vanished. The dispatcher
 // only notices while it is still waiting; after a restart nobody is.
 func TestSweep_CondemnsARunningTaskWhoseAgentVanished(t *testing.T) {
+	t.Parallel()
 	q := NewMemRunnerTaskStore()
 	now := time.Now()
 	mustEnqueue(t, q, RunnerTask{ID: "held", Tenant: "acme", Tags: []string{"box"}, Script: "x", State: TaskQueued})
@@ -96,6 +99,7 @@ func TestSweep_CondemnsARunningTaskWhoseAgentVanished(t *testing.T) {
 // A task carrying no timeout of its own falls back to the ceiling rather than
 // being closed the moment the sweep first sees it.
 func TestSweep_UntimedTaskUsesTheCeiling(t *testing.T) {
+	t.Parallel()
 	q := NewMemRunnerTaskStore()
 	created := time.Now().Add(-30 * time.Minute)
 	mustEnqueue(t, q, RunnerTask{
@@ -114,6 +118,7 @@ func TestSweep_UntimedTaskUsesTheCeiling(t *testing.T) {
 // Terminal rows are Prune's business, not the sweeper's. Touching one would
 // overwrite the agent's real answer with a guess.
 func TestSweep_IgnoresFinishedTasks(t *testing.T) {
+	t.Parallel()
 	q := NewMemRunnerTaskStore()
 	old := time.Now().Add(-24 * time.Hour)
 	mustEnqueue(t, q, RunnerTask{

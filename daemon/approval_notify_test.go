@@ -18,6 +18,7 @@ import (
 )
 
 func TestApprovalParamApprovers(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name string
 		in   any
@@ -68,6 +69,7 @@ func approvalGraph(nodeParams map[string]any) core.Graph {
 }
 
 func TestApprovalRecipients_ExplicitList(t *testing.T) {
+	t.Parallel()
 	svc := approvalFixture(t)
 	g := approvalGraph(map[string]any{"approvers": "manager@acme.se, external@vendor.com"})
 	got := svc.approvalRecipients(context.Background(), g, "gate")
@@ -81,6 +83,7 @@ func TestApprovalRecipients_ExplicitList(t *testing.T) {
 // Upgrading a deployment full of existing approval steps must not turn them
 // into a mailshot.
 func TestApprovalRecipients_BlankMeansNobody(t *testing.T) {
+	t.Parallel()
 	svc := approvalFixture(t)
 	for _, params := range []map[string]any{
 		nil,
@@ -100,6 +103,7 @@ func TestApprovalRecipients_BlankMeansNobody(t *testing.T) {
 // A node id that isn't in the graph resolves to nobody rather than panicking
 // or falling through to some wider set.
 func TestApprovalRecipients_UnknownNode(t *testing.T) {
+	t.Parallel()
 	svc := approvalFixture(t)
 	g := approvalGraph(map[string]any{"approvers": "manager@acme.se"})
 	if got := svc.approvalRecipients(context.Background(), g, "nope"); len(got) != 0 {
@@ -110,6 +114,7 @@ func TestApprovalRecipients_UnknownNode(t *testing.T) {
 // Both notify paths must be inert with no mailer — a deployment without SMTP
 // still has to be able to park and resume approvals.
 func TestApprovalNotify_NoMailerIsInert(t *testing.T) {
+	t.Parallel()
 	svc := approvalFixture(t)
 	svc.Mailer = nil
 	g := approvalGraph(map[string]any{"approvers": "ops@acme.se"})
@@ -121,6 +126,7 @@ func TestApprovalNotify_NoMailerIsInert(t *testing.T) {
 // A subgraph node parks as awaiting too, but carries no approval link. The
 // hook has to ignore it rather than mail an empty URL.
 func TestHandleNodeAwaiting_IgnoresNonApprovalPauses(t *testing.T) {
+	t.Parallel()
 	svc := approvalFixture(t)
 	svc.Mailer = nil // the assertion is that we return before touching it
 	svc.HandleNodeAwaiting(context.Background(), approvalGraph(nil), "run-1", "gate",
@@ -134,6 +140,7 @@ func TestHandleNodeAwaiting_IgnoresNonApprovalPauses(t *testing.T) {
 // showed it correctly. One value, two readers, and only one of them was
 // reading the resolved copy.
 func TestHandleNodeAwaiting_MailsTheResolvedPromptNotTheTemplate(t *testing.T) {
+	t.Parallel()
 	srv := newFakeSMTP(t)
 	mailer, _ := NewMailerFromURL("smtp://"+srv.addr+"?tls=none", "noreply@example.com")
 	svc := approvalFixture(t)
@@ -176,6 +183,7 @@ func TestHandleNodeAwaiting_MailsTheResolvedPromptNotTheTemplate(t *testing.T) {
 // omitted only when the prompt was empty, so a fallback could do nothing but
 // resurrect an unresolved template.
 func TestHandleNodeAwaiting_NoPromptDoesNotFallBackToTheGraph(t *testing.T) {
+	t.Parallel()
 	srv := newFakeSMTP(t)
 	mailer, _ := NewMailerFromURL("smtp://"+srv.addr+"?tls=none", "noreply@example.com")
 	svc := approvalFixture(t)
@@ -217,6 +225,7 @@ func mailText(raw string) string {
 // is nil and the step emits an empty pending_url — sent no "please approve"
 // mail at all, silently, while still sending the decision mail afterwards.
 func TestNotifyApprovalRequested_SendsWithoutSignedLink(t *testing.T) {
+	t.Parallel()
 	srv := newFakeSMTP(t)
 	mailer, _ := NewMailerFromURL("smtp://"+srv.addr+"?tls=none", "noreply@example.com")
 	svc := approvalFixture(t)
@@ -266,6 +275,7 @@ func TestNotifyApprovalRequested_SendsWithoutSignedLink(t *testing.T) {
 // With a signer configured the one-click link is the CTA, and the warning
 // that it is a bearer capability comes back.
 func TestNotifyApprovalRequested_UsesSignedLinkWhenPresent(t *testing.T) {
+	t.Parallel()
 	srv := newFakeSMTP(t)
 	mailer, _ := NewMailerFromURL("smtp://"+srv.addr+"?tls=none", "noreply@example.com")
 	svc := approvalFixture(t)
@@ -302,6 +312,7 @@ func TestNotifyApprovalRequested_UsesSignedLinkWhenPresent(t *testing.T) {
 // conditional Complete guard explains — so this drives the real path and
 // counts what reaches the wire.
 func TestApprove_SendsExactlyOneDecisionEmail(t *testing.T) {
+	t.Parallel()
 	srv := newFakeSMTP(t)
 	mailer, _ := NewMailerFromURL("smtp://"+srv.addr+"?tls=none", "noreply@example.com")
 
@@ -347,6 +358,7 @@ func TestApprove_SendsExactlyOneDecisionEmail(t *testing.T) {
 // decide. It previously pointed at the run page, which renders an awaiting
 // node and offers only "Stop run" — so the email led to a dead end.
 func TestNotifyApprovalRequested_FallbackIsNotTheRunPage(t *testing.T) {
+	t.Parallel()
 	srv := newFakeSMTP(t)
 	mailer, _ := NewMailerFromURL("smtp://"+srv.addr+"?tls=none", "noreply@example.com")
 	svc := approvalFixture(t)

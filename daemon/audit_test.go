@@ -15,6 +15,7 @@ import (
 )
 
 func TestMemAuditLog_ScopesAndOrders(t *testing.T) {
+	t.Parallel()
 	a := NewMemAuditLog()
 	ctx := context.Background()
 	base := time.Unix(1000, 0)
@@ -50,6 +51,7 @@ func (m *MemAuditLog) mustList(t *testing.T, q core.AuditQuery) []core.AuditEven
 }
 
 func TestAudit_EndpointDisabledWhenNil(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t) // Audit defaults nil
 	rw := h.adminDo(t, "GET", "/api/v1/admin/audit", nil)
 	if rw.Code != http.StatusNotImplemented {
@@ -58,6 +60,7 @@ func TestAudit_EndpointDisabledWhenNil(t *testing.T) {
 }
 
 func TestAudit_EndpointRequiresAdmin(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.Audit = NewMemAuditLog()
 
@@ -72,6 +75,7 @@ func TestAudit_EndpointRequiresAdmin(t *testing.T) {
 }
 
 func TestAudit_GraphSaveEmitsEvent(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.Audit = NewMemAuditLog()
 

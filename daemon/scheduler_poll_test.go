@@ -111,6 +111,7 @@ func (h *pollHarness) waitForGraphRuns(t *testing.T, graphID string, want int, d
 }
 
 func TestScheduler_FiresGraphWithPollTrigger(t *testing.T) {
+	t.Parallel()
 	h := newPollHarness(t)
 	graph := core.Graph{
 		ID: "poll-1", Tenant: "acme", Workspace: "ws1",
@@ -133,6 +134,7 @@ func TestScheduler_FiresGraphWithPollTrigger(t *testing.T) {
 }
 
 func TestScheduler_TracksGoogleFormTrigger(t *testing.T) {
+	t.Parallel()
 	// google_form_trigger uses the same node-interval mechanism as
 	// poll_trigger: a node carrying interval_seconds is tracked and fired
 	// on that interval (the node does the Forms fetch in-band). Assert
@@ -163,6 +165,7 @@ func TestScheduler_TracksGoogleFormTrigger(t *testing.T) {
 }
 
 func TestScheduler_PollTriggerFiresRepeatedlyOnInterval(t *testing.T) {
+	t.Parallel()
 	// Confirm the interval-anchored schedule advances correctly —
 	// after one fire, the next should be `interval` seconds later.
 	h := newPollHarness(t)
@@ -186,6 +189,7 @@ func TestScheduler_PollTriggerFiresRepeatedlyOnInterval(t *testing.T) {
 }
 
 func TestScheduler_PollAndCronCoexistOnSameGraph(t *testing.T) {
+	t.Parallel()
 	// The node-ID-keyed tracked entries mean a graph with both a Schedule
 	// (cron_trigger) node AND a Poll (poll_trigger) node gets two scheduler
 	// entries — one per node — rather than one clobbering the other.
@@ -205,6 +209,7 @@ func TestScheduler_PollAndCronCoexistOnSameGraph(t *testing.T) {
 }
 
 func TestScheduler_BadPollIntervalIsIgnored(t *testing.T) {
+	t.Parallel()
 	// A negative interval is operator error — the scheduler logs and skips it
 	// rather than panicking or scheduling at time.Now+0 (which would tight-loop
 	// the worker). (A zero/absent interval is the separate "manual-only" state.)
@@ -228,6 +233,7 @@ func TestScheduler_BadPollIntervalIsIgnored(t *testing.T) {
 // a runaway-run loop from one fat-fingered config value. The scheduler
 // must reject an out-of-range interval the way it rejects <= 0.
 func TestScheduler_HugePollIntervalIsIgnored(t *testing.T) {
+	t.Parallel()
 	h := newPollHarness(t)
 	graph := core.Graph{
 		ID: "huge-poll", Tenant: "acme", Workspace: "ws1",

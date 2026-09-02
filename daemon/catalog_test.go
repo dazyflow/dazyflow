@@ -29,6 +29,7 @@ func decodeJSON(t *testing.T, rw *httptest.ResponseRecorder, into any) {
 }
 
 func TestServiceDescriptor_PublicNoAuth(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// No Authorization header — GET /api/v1 is the public discovery entry.
 	req := httptest.NewRequest("GET", "/api/v1", nil)
@@ -56,6 +57,7 @@ func TestServiceDescriptor_PublicNoAuth(t *testing.T) {
 }
 
 func TestOpenAPISpec_PublicJSON(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	req := httptest.NewRequest("GET", "/api/v1/openapi.json", nil)
 	rw := httptest.NewRecorder()
@@ -72,6 +74,7 @@ func TestOpenAPISpec_PublicJSON(t *testing.T) {
 }
 
 func TestCatalogSummary(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "GET", "/api/v1/catalog", nil)
 	if rw.Code != http.StatusOK {
@@ -96,6 +99,7 @@ func TestCatalogSummary(t *testing.T) {
 }
 
 func TestListIntegrations_AndFilter(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "GET", "/api/v1/catalog/integrations", nil)
 	if rw.Code != http.StatusOK {
@@ -124,6 +128,7 @@ func TestListIntegrations_AndFilter(t *testing.T) {
 // carries a non-empty summary, and the ?q= filter — which searches
 // label+summary — matches a word that appears only in that summary.
 func TestListIntegrations_SummaryWired(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "GET", "/api/v1/catalog/integrations", nil)
 	if rw.Code != http.StatusOK {
@@ -166,6 +171,7 @@ func TestListIntegrations_SummaryWired(t *testing.T) {
 }
 
 func TestGetIntegration_FoundAndNotFound(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "GET", "/api/v1/catalog/integrations", nil)
 	var list struct {
@@ -198,6 +204,7 @@ func TestGetIntegration_FoundAndNotFound(t *testing.T) {
 }
 
 func TestListDrops_AndGetDrop(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "GET", "/api/v1/catalog/drops", nil)
 	if rw.Code != http.StatusOK {
@@ -233,6 +240,7 @@ func TestListDrops_AndGetDrop(t *testing.T) {
 // with include_disabled — so the palette can show it greyed-out rather than
 // having it silently vanish.
 func TestListDrops_DisabledVisibility(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 
 	drops := func(path string) []core.Manifest {
@@ -286,6 +294,7 @@ func TestListDrops_DisabledVisibility(t *testing.T) {
 // data is fixed, so we assert the response stays well-formed and the filter
 // can only narrow — not the exact membership.
 func TestListDrops_Filters(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	unfiltered := func() int {
 		rw := h.do(t, "GET", "/api/v1/catalog/drops", nil)
@@ -313,6 +322,7 @@ func TestListDrops_Filters(t *testing.T) {
 // to mint a key with more permission than the caller holds — a 403, not a
 // silently-broken key. The editor role lacks platform:admin.
 func TestMyAPIKeys_PermissionOverflow(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	body := SelfIssueAPIKeyParams{
 		Roles: []core.Role{{Name: "escalate", Permissions: []core.Permission{core.PermPlatformAdmin}}},
@@ -328,6 +338,7 @@ func TestMyAPIKeys_PermissionOverflow(t *testing.T) {
 // gets the claude-mcp default CAPPED to what they hold — a run-only key,
 // not a 403. An assistant can never exceed its user.
 func TestMyAPIKeys_DefaultCappedToViewer(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 
 	// Mint a viewer token (graph:run only) in the same keystore.
@@ -361,6 +372,7 @@ func TestMyAPIKeys_DefaultCappedToViewer(t *testing.T) {
 }
 
 func TestTriggerKinds(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "GET", "/api/v1/catalog/trigger-kinds", nil)
 	if rw.Code != http.StatusOK {
@@ -384,6 +396,7 @@ func TestTriggerKinds(t *testing.T) {
 // TestMyAPIKeys_Lifecycle exercises the self-service key trio: list, issue
 // (capped to a subset of the caller's own perms), then revoke.
 func TestMyAPIKeys_Lifecycle(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 
 	// The harness's editor token already owns one key ("k1"), so the
@@ -431,6 +444,7 @@ func TestMyAPIKeys_Lifecycle(t *testing.T) {
 }
 
 func TestListMyAPIKeys_NotConfigured(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.svc.AdminKeys = nil
 	rw := h.do(t, "GET", "/api/v1/me/api-keys", nil)
@@ -440,6 +454,7 @@ func TestListMyAPIKeys_NotConfigured(t *testing.T) {
 }
 
 func TestRevokeMyAPIKey_NotConfigured(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.svc.AdminKeys = nil
 	rw := h.do(t, "DELETE", "/api/v1/me/api-keys/abc", nil)
@@ -449,6 +464,7 @@ func TestRevokeMyAPIKey_NotConfigured(t *testing.T) {
 }
 
 func TestRevokeMyAPIKey_OtherUsersKeyIs404(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// Issue a key owned by a different subject ("bob"); the harness caller
 	// "alice" must get 404 (not 403) to avoid leaking key existence.
@@ -466,6 +482,7 @@ func TestRevokeMyAPIKey_OtherUsersKeyIs404(t *testing.T) {
 // TestListIntegrationsHandler_Cov covers listIntegrationsHandler across the
 // unfiltered, query-filtered, and category-filtered branches.
 func TestListIntegrationsHandler_Cov(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 
 	// Unfiltered -> 200 with items.
@@ -501,6 +518,7 @@ func TestListIntegrationsHandler_Cov(t *testing.T) {
 
 // TestRequireSecretStore_Cov covers requireSecretStore's three legs.
 func TestRequireSecretStore_Cov(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 
 	// No store -> 501, returns false.

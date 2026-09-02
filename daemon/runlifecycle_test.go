@@ -13,6 +13,7 @@ import (
 // cancel_test.go / resume_test.go / retry_test.go.
 
 func TestCancelRunMe_NotFound(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "POST", "/api/v1/me/runs/ghostrun/cancel", nil)
 	if rw.Code != http.StatusNotFound {
@@ -21,6 +22,7 @@ func TestCancelRunMe_NotFound(t *testing.T) {
 }
 
 func TestCancelRunMe_MalformedBody(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	req := newRawReq(t, h, "POST", "/api/v1/me/runs/ghostrun/cancel", "{not json")
 	req.ContentLength = int64(len("{not json"))
@@ -31,6 +33,7 @@ func TestCancelRunMe_MalformedBody(t *testing.T) {
 }
 
 func TestResumeRunMe_NotFound(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "POST", "/api/v1/me/runs/ghostrun/resume", nil)
 	if rw.Code != http.StatusNotFound {
@@ -39,6 +42,7 @@ func TestResumeRunMe_NotFound(t *testing.T) {
 }
 
 func TestResumeRunMe_MalformedBody(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	req := newRawReq(t, h, "POST", "/api/v1/me/runs/ghostrun/resume", "{not json")
 	req.ContentLength = int64(len("{not json"))
@@ -49,6 +53,7 @@ func TestResumeRunMe_MalformedBody(t *testing.T) {
 }
 
 func TestRetryRunMe_NotFound(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "POST", "/api/v1/me/runs/ghostrun/retry", nil)
 	if rw.Code != http.StatusNotFound {

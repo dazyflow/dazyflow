@@ -32,6 +32,7 @@ func chainGraph(emailParams map[string]any) core.Graph {
 }
 
 func TestTemplateRefs(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name        string
 		params      map[string]any
@@ -121,6 +122,7 @@ func chainWorker(t *testing.T) *Worker {
 }
 
 func TestAddTemplateResults_ReachesTheTriggerTwoHopsUp(t *testing.T) {
+	t.Parallel()
 	w := chainWorker(t)
 	seedRun(t, w, "run-1")
 	g := chainGraph(map[string]any{"body": "Version ${trigger.body.version} shipped"})
@@ -135,6 +137,7 @@ func TestAddTemplateResults_ReachesTheTriggerTwoHopsUp(t *testing.T) {
 }
 
 func TestAddTemplateResults_ReachesANamedUpstreamNode(t *testing.T) {
+	t.Parallel()
 	w := chainWorker(t)
 	seedRun(t, w, "run-1")
 	g := chainGraph(map[string]any{"body": "${upstream.webhook_input_1.body}"})
@@ -149,6 +152,7 @@ func TestAddTemplateResults_ReachesANamedUpstreamNode(t *testing.T) {
 }
 
 func TestAddTemplateResults_FetchesNothingWhenNothingIsReferenced(t *testing.T) {
+	t.Parallel()
 	// The common case. A flow must not turn into a scan of its own run just by
 	// having nodes in it.
 	w := chainWorker(t)
@@ -165,6 +169,7 @@ func TestAddTemplateResults_FetchesNothingWhenNothingIsReferenced(t *testing.T) 
 }
 
 func TestAddTemplateResults_NeverOverwritesARealPredecessor(t *testing.T) {
+	t.Parallel()
 	// The direct predecessor's result is already loaded and is the authority.
 	w := chainWorker(t)
 	seedRun(t, w, "run-1")
@@ -181,6 +186,7 @@ func TestAddTemplateResults_NeverOverwritesARealPredecessor(t *testing.T) {
 }
 
 func TestAddTemplateResults_LeavesAMissingNodeAbsent(t *testing.T) {
+	t.Parallel()
 	// So the substituter reports it. Inventing an empty result here would put
 	// the silence back in a new place.
 	w := chainWorker(t)

@@ -39,6 +39,7 @@ func refTokens(t *testing.T, body []byte) map[string]map[string]bool {
 }
 
 func TestReferences_UpstreamAncestorsTriggerAndSecrets(t *testing.T) {
+	t.Parallel()
 	h := newSecretsHarness(t) // editor + secret perms, store wired
 
 	// Diamond: trigger → read → append; `other` is unconnected.
@@ -107,6 +108,7 @@ func TestReferences_UpstreamAncestorsTriggerAndSecrets(t *testing.T) {
 // id + threadId) also offers ready-made FIRST-ROW field tokens, so a user
 // can pick "first match → id" instead of hand-typing the [0].id syntax.
 func TestReferences_FirstRowFieldTokens(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	g := core.Graph{
 		ID: "fr", Tenant: "t", Workspace: "ws",
@@ -136,6 +138,7 @@ func TestReferences_FirstRowFieldTokens(t *testing.T) {
 }
 
 func TestReferences_NoNodeListsAllNodes(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	g := core.Graph{
 		ID: "f2", Tenant: "t", Workspace: "ws",
@@ -163,6 +166,7 @@ func TestReferences_NoNodeListsAllNodes(t *testing.T) {
 // naming it differently here to the way it is named on the canvas is how you
 // end up hunting for a step that is right in front of you.
 func TestReferences_UpstreamCarriesTheAuthorsStepName(t *testing.T) {
+	t.Parallel()
 	h := newSecretsHarness(t)
 	g := core.Graph{
 		ID: "named", Tenant: "t", Workspace: "ws",

@@ -13,6 +13,7 @@ import (
 // handlers read it. Hammer both sides concurrently so the race detector catches
 // any regression that drops the mutex guarding the providers map.
 func TestOAuthRegistry_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
 	r := NewOAuthRegistry("https://app.example.com", nil)
 	prov := OAuthProvider{
 		Name:         "acme",

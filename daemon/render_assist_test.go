@@ -29,6 +29,7 @@ func doAssist(t *testing.T, h *gatewayHarness, body any) (int, assistResp) {
 // connected LLM, the endpoint asks the user to connect one (200 +
 // need_connect), rather than erroring out — the UI turns this into a link.
 func TestRenderAssist_NoProviderNeedsConnect(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t) // harness has no EncryptedSecrets configured
 	code, ar := doAssist(t, h, map[string]any{
 		"description": "a welcome email", "fields": []string{"name"},
@@ -43,6 +44,7 @@ func TestRenderAssist_NoProviderNeedsConnect(t *testing.T) {
 
 // TestRenderAssist_EmptyDescription is a 400 (nothing to generate from).
 func TestRenderAssist_EmptyDescription(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	code, _ := doAssist(t, h, map[string]any{"description": "   "})
 	if code != http.StatusBadRequest {
@@ -53,6 +55,7 @@ func TestRenderAssist_EmptyDescription(t *testing.T) {
 // TestStripCodeFences covers the helper that removes the ```html … ```
 // wrapper models often add despite instructions.
 func TestStripCodeFences(t *testing.T) {
+	t.Parallel()
 	cases := []struct{ in, want string }{
 		{"<h1>Hi</h1>", "<h1>Hi</h1>"},
 		{"```html\n<h1>Hi</h1>\n```", "<h1>Hi</h1>"},
@@ -67,6 +70,7 @@ func TestStripCodeFences(t *testing.T) {
 }
 
 func TestRenderAssist_DecodeError(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	req := newRawReq(t, h, "POST", "/api/v1/tools/render-template/assist", "{not json")
 	rw := serveRaw(h, req)

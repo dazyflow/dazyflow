@@ -56,6 +56,7 @@ func getPrefs(t *testing.T, h *gatewayHarness, token string) preferencesResponse
 // A fresh account has never touched its preferences, so the
 // flow-failure email defaults to ON (the opt-out model).
 func TestPreferences_DefaultsOn(t *testing.T) {
+	t.Parallel()
 	h, u, pw := newPrefsHarness(t)
 	token := sessionTokenFor(t, h, u.Email, pw)
 	if got := getPrefs(t, h, token); !got.EmailOnFlowFailure {
@@ -66,6 +67,7 @@ func TestPreferences_DefaultsOn(t *testing.T) {
 // PUT persists an explicit choice; a subsequent GET reflects it, and the
 // stored user carries the non-nil (explicit) pointer.
 func TestPreferences_PutRoundTrips(t *testing.T) {
+	t.Parallel()
 	h, u, pw := newPrefsHarness(t)
 	token := sessionTokenFor(t, h, u.Email, pw)
 
@@ -105,6 +107,7 @@ func TestPreferences_PutRoundTrips(t *testing.T) {
 // Theme + language round-trip, and PUT is partial: setting the theme
 // alone must not disturb the (default-on) notification preference.
 func TestPreferences_ThemeAndLanguageRoundTrip(t *testing.T) {
+	t.Parallel()
 	h, u, pw := newPrefsHarness(t)
 	token := sessionTokenFor(t, h, u.Email, pw)
 
@@ -152,6 +155,7 @@ func TestPreferences_ThemeAndLanguageRoundTrip(t *testing.T) {
 // Invalid theme / language values are rejected before anything is
 // written.
 func TestPreferences_RejectsInvalidValues(t *testing.T) {
+	t.Parallel()
 	h, u, pw := newPrefsHarness(t)
 	token := sessionTokenFor(t, h, u.Email, pw)
 
@@ -175,6 +179,7 @@ func TestPreferences_RejectsInvalidValues(t *testing.T) {
 // defaults rather than erroring (mirrors totpStatus); PUT 400s because
 // there's no account to write to.
 func TestPreferences_APIKeyPrincipalGetsDefaults(t *testing.T) {
+	t.Parallel()
 	h, _, _ := newPrefsHarness(t)
 	// h.do() authenticates with the harness's editor API key — a
 	// principal with no user-store record.
@@ -198,6 +203,7 @@ func TestPreferences_APIKeyPrincipalGetsDefaults(t *testing.T) {
 }
 
 func TestGetPreferences_NotConfigured(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t) // Users nil
 	rw := h.do(t, "GET", "/api/v1/me/preferences", nil)
 	if rw.Code != http.StatusNotImplemented {
@@ -206,6 +212,7 @@ func TestGetPreferences_NotConfigured(t *testing.T) {
 }
 
 func TestGetPreferences_UnknownUserDefaults(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	users, _ := auth.OpenJSONUserStore("")
 	h.gw.Users = users
@@ -217,6 +224,7 @@ func TestGetPreferences_UnknownUserDefaults(t *testing.T) {
 }
 
 func TestPutPreferences_NotConfigured(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "PUT", "/api/v1/me/preferences", map[string]any{"theme": "dark"})
 	if rw.Code != http.StatusNotImplemented {
@@ -225,6 +233,7 @@ func TestPutPreferences_NotConfigured(t *testing.T) {
 }
 
 func TestPutPreferences_NoUser(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	users, _ := auth.OpenJSONUserStore("")
 	h.gw.Users = users

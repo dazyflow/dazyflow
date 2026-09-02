@@ -21,6 +21,7 @@ import (
 // independent implementation (Python hashlib/hmac) over the same inputs,
 // so an encoding mistake in the Go signer can't self-confirm.
 func TestSignSigV4_GoldenVector(t *testing.T) {
+	t.Parallel()
 	cfg := AwsSecretsConfig{
 		Region:          "us-east-1",
 		AccessKeyID:     "AKIDEXAMPLE",
@@ -90,6 +91,7 @@ func awsTestProvider(t *testing.T, srv *httptest.Server, configured bool) *AwsSe
 }
 
 func TestAwsSecretsProvider_Get(t *testing.T) {
+	t.Parallel()
 	srv := fakeSecretsManager(t, map[string]string{
 		"db":     `{"username":"app","password":"hunter2"}`,
 		"apikey": "sk_plain",
@@ -121,6 +123,7 @@ func TestAwsSecretsProvider_Get(t *testing.T) {
 }
 
 func TestAwsSecretsProvider_TenantScoping(t *testing.T) {
+	t.Parallel()
 	srv := fakeSecretsManager(t, map[string]string{"apikey": "v"})
 	defer srv.Close()
 	p := awsTestProvider(t, srv, true)
@@ -139,6 +142,7 @@ func TestAwsSecretsProvider_TenantScoping(t *testing.T) {
 }
 
 func TestAwsSecretsProvider_Caches(t *testing.T) {
+	t.Parallel()
 	calls := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, _ *http.Request) {
 		calls++
@@ -158,6 +162,7 @@ func TestAwsSecretsProvider_Caches(t *testing.T) {
 }
 
 func TestVerifyAwsConfig(t *testing.T) {
+	t.Parallel()
 	srv := fakeSecretsManager(t, map[string]string{}) // probe → ResourceNotFound
 	defer srv.Close()
 	cfg := AwsSecretsConfig{Region: "us-east-1", AccessKeyID: "a", SecretAccessKey: "s", Endpoint: srv.URL}
@@ -185,6 +190,7 @@ func TestVerifyAwsConfig(t *testing.T) {
 }
 
 func TestAwsConfig_StorageRoundTrip(t *testing.T) {
+	t.Parallel()
 	es, err := NewEncryptedSecrets(make([]byte, 32), NewMemSecretsStore())
 	if err != nil {
 		t.Fatalf("NewEncryptedSecrets: %v", err)

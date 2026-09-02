@@ -16,6 +16,7 @@ import (
 // an open editor can reflect the change. The Commit lets a client suppress
 // the echo of its own save; the Author names who wrote it.
 func TestSaveGraph_PublishesFlowUpdated(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	ctx := t.Context()
 	p, err := h.svc.Authenticate(ctx, h.token)
@@ -62,6 +63,7 @@ func TestSaveGraph_PublishesFlowUpdated(t *testing.T) {
 // event so a client can tell an editor autosave burst from an explicit
 // checkpoint.
 func TestSaveGraphCoalescing_FlagsAutosave(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	ctx := t.Context()
 	p, err := h.svc.Authenticate(ctx, h.token)

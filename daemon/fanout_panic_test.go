@@ -26,6 +26,7 @@ func (panicWorkspaces) List(string) ([]string, error)                 { panic("b
 // there must be recovered rather than crashing the whole multi-tenant daemon.
 // If the recover were missing, this test would panic and fail.
 func TestFanoutSeed_RecoversFromPanic(t *testing.T) {
+	t.Parallel()
 	svc := &Service{Workspaces: panicWorkspaces{}}
 	logger := log.New(io.Discard, "", 0)
 	fanoutSeed(context.Background(), svc, logger, "subj", "acme", "label",

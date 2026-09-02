@@ -42,6 +42,7 @@ func fireGraphSvc(t *testing.T) (*Service, *workspace.Store, core.JobStore) {
 // leg of fireGraph: with the free-polling gate on and a free tenant, the fire
 // returns early before opening the workspace, so no run is submitted.
 func TestFireGraph_TriggerQuotaSkip(t *testing.T) {
+	t.Parallel()
 	svc, _, jobs := fireGraphSvc(t)
 	svc.FreePollingDisabled = true
 	plans := NewMemPlanStore()
@@ -62,6 +63,7 @@ func TestFireGraph_TriggerQuotaSkip(t *testing.T) {
 // so SubmitGraph returns ErrPlanLimit — AddSkippedRun is counted, the Runs-list
 // marker is written, and no real run is submitted.
 func TestFireGraph_RunCapSkip(t *testing.T) {
+	t.Parallel()
 	svc, ws, jobs := fireGraphSvc(t)
 	// Free tenant with a 1-run/month cap, already consumed.
 	plans := NewMemPlanStore()
@@ -109,6 +111,7 @@ func TestFireGraph_RunCapSkip(t *testing.T) {
 // TestFireGraph_NotPublishedSkip covers the belt-and-braces not-published gate
 // inside fireGraph: a saved-but-unpublished flow never fires.
 func TestFireGraph_NotPublishedSkip(t *testing.T) {
+	t.Parallel()
 	svc, ws, jobs := fireGraphSvc(t)
 	// Save to HEAD but do NOT promote/publish.
 	_, _ = ws.Save(core.Graph{
@@ -129,6 +132,7 @@ func TestFireGraph_NotPublishedSkip(t *testing.T) {
 // TestFireGraph_OpenWorkspaceError covers fireGraph's open-workspace failure
 // leg: an entry for a tenant/workspace with no store does nothing (logged).
 func TestFireGraph_OpenWorkspaceError(t *testing.T) {
+	t.Parallel()
 	svc, _, jobs := fireGraphSvc(t)
 	sched := NewScheduler(svc)
 	e := &scheduledGraph{graphID: "g", tenant: "ghost", workspace: "nope"}
@@ -142,6 +146,7 @@ func TestFireGraph_OpenWorkspaceError(t *testing.T) {
 // TestFireGraph_HappyPath fires a published graph directly and confirms a run
 // is submitted.
 func TestFireGraph_HappyPath(t *testing.T) {
+	t.Parallel()
 	svc, ws, jobs := fireGraphSvc(t)
 	g := core.Graph{
 		ID: "live", Tenant: "acme", Workspace: "ws1",
@@ -172,6 +177,7 @@ func TestFireGraph_HappyPath(t *testing.T) {
 // still existed, so tightening a yearly schedule to every-minute idled until
 // the old yearly fire elapsed.
 func TestRescan_CronEditRecomputesScheduleAt(t *testing.T) {
+	t.Parallel()
 	svc, ws, _ := fireGraphSvc(t)
 	now := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
 
@@ -223,6 +229,7 @@ func TestRescan_CronEditRecomputesScheduleAt(t *testing.T) {
 // advanced, so on takeover a stale (past) value would fire a tick the old
 // leader already handled. reanchor must push it to the next fire after now.
 func TestReanchor_AdvancesStaleScheduleAt(t *testing.T) {
+	t.Parallel()
 	svc, _, _ := fireGraphSvc(t)
 	sched := NewScheduler(svc)
 	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
@@ -271,6 +278,7 @@ func publishPollFlow(t *testing.T, ws *workspace.Store, id string, seconds int) 
 // break up, arriving right as a node has gone down. Cron entries carry no
 // interval and must keep their exact wall-clock anchor.
 func TestReanchor_PreservesPollStagger(t *testing.T) {
+	t.Parallel()
 	svc, _, _ := fireGraphSvc(t)
 	sched := NewScheduler(svc)
 	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
@@ -319,6 +327,7 @@ func TestReanchor_PreservesPollStagger(t *testing.T) {
 // Drives the real Run loop with an always-true leader (what single-node gets)
 // and asserts the stagger set up by the initial rescan survives.
 func TestRun_StartupDoesNotCollapsePollStagger(t *testing.T) {
+	t.Parallel()
 	svc, ws, _ := fireGraphSvc(t)
 	// Two flows on the same cadence, long enough that nothing is ever due
 	// during the test — we're asserting on scheduling, not firing.

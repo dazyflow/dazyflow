@@ -58,6 +58,7 @@ func webAPIFlowgenService(t *testing.T, tenant string) *Service {
 }
 
 func TestSearchDrops_IncludesTheOrgsOwnWebAPISteps(t *testing.T) {
+	t.Parallel()
 	svc := webAPIFlowgenService(t, "acme")
 	ctx := context.Background()
 
@@ -100,6 +101,7 @@ func TestSearchDrops_IncludesTheOrgsOwnWebAPISteps(t *testing.T) {
 // are absent from it cannot be filled in — the generator would be left guessing
 // param names, which is exactly what the grounding exists to prevent.
 func TestCompactCatalog_DescribesAWebAPIOperationsArguments(t *testing.T) {
+	t.Parallel()
 	svc := webAPIFlowgenService(t, "acme")
 	mans, err := svc.SearchDrops(context.Background(), adminPrincipal("acme"), DropSearch{})
 	if err != nil {
@@ -129,6 +131,7 @@ func TestCompactCatalog_DescribesAWebAPIOperationsArguments(t *testing.T) {
 // step: the production gate must accept it. An unknown-module error here would
 // mean the AI can see a step it is not allowed to use.
 func TestGenerateFlow_ComposesAgainstAWebAPIStep(t *testing.T) {
+	t.Parallel()
 	svc := webAPIFlowgenService(t, "acme")
 	mans, err := svc.SearchDrops(context.Background(), adminPrincipal("acme"), DropSearch{})
 	if err != nil {
@@ -175,6 +178,7 @@ func TestGenerateFlow_ComposesAgainstAWebAPIStep(t *testing.T) {
 // connection code mentions web APIs, and this is the only thing that would
 // notice if that stopped being true.
 func TestConnectionFields_FoundForADescribedAPI(t *testing.T) {
+	t.Parallel()
 	cat := webapi.NewCatalog()
 	err := cat.Register(webapi.Descriptor{
 		Tenant:      "t",

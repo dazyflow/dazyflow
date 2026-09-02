@@ -18,6 +18,7 @@ func resolveCtx(tenant, flow string) context.Context {
 // flow → organization, the nearest scope winning, and that a name present only
 // at the organization scope resolves identically regardless of the flow.
 func TestSecretScope_CascadePrecedence(t *testing.T) {
+	t.Parallel()
 	es, err := NewEncryptedSecrets(randomKey(t), NewMemSecretsStore())
 	if err != nil {
 		t.Fatal(err)
@@ -60,6 +61,7 @@ func TestSecretScope_CascadePrecedence(t *testing.T) {
 // secret via the cascade — it's keyed by the running flow's ID, so flowB never
 // sees flowA's value. This is the blast-radius guard.
 func TestSecretScope_FlowIsolation(t *testing.T) {
+	t.Parallel()
 	es, err := NewEncryptedSecrets(randomKey(t), NewMemSecretsStore())
 	if err != nil {
 		t.Fatal(err)
@@ -83,6 +85,7 @@ func TestSecretScope_FlowIsolation(t *testing.T) {
 // ${secret.} cascade resolve it ahead of the org's authoritative connection —
 // silently redirecting the integration. Get must skip the flow tier for these.
 func TestSecretScope_ConnIsOrgAuthoritative(t *testing.T) {
+	t.Parallel()
 	es, err := NewEncryptedSecrets(randomKey(t), NewMemSecretsStore())
 	if err != nil {
 		t.Fatal(err)
@@ -123,6 +126,7 @@ func TestSecretScope_ConnIsOrgAuthoritative(t *testing.T) {
 // nest a flow secret) and conn./oauth. are refused at flow scope (shadow
 // attempts), while ordinary names and tenant-scope conn. (the Connect flow) pass.
 func TestCheckReservedSecretWrite(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name    string
 		scope   SecretScope
@@ -150,6 +154,7 @@ func TestCheckReservedSecretWrite(t *testing.T) {
 // TestSecretScope_ListScoped proves each scope lists only its own names (flow
 // prefix stripped) and the organization scope hides every reserved namespace.
 func TestSecretScope_ListScoped(t *testing.T) {
+	t.Parallel()
 	es, err := NewEncryptedSecrets(randomKey(t), NewMemSecretsStore())
 	if err != nil {
 		t.Fatal(err)

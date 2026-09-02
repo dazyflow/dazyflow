@@ -38,6 +38,7 @@ func waitForPaused(t *testing.T, bus *daemon.MemoryBus, graphRunID string, timeo
 // (shouldPauseAfter, addPaused) and Service.ResumeGraphRun → resumeFrom: a
 // node carrying a breakpoint holds the run until Continue re-drives it.
 func TestBreakpoint_PauseThenContinue(t *testing.T) {
+	t.Parallel()
 	h := newWorkerHarness(t, 1)
 
 	g := core.Graph{
@@ -83,6 +84,7 @@ func TestBreakpoint_PauseThenContinue(t *testing.T) {
 // TestResumeGraphRun_NotFound covers the early-return guards of
 // ResumeGraphRun: an unknown run id surfaces an error.
 func TestResumeGraphRun_NotFound(t *testing.T) {
+	t.Parallel()
 	h := newWorkerHarness(t, 0)
 	if err := h.svc.ResumeGraphRun(context.Background(), h.principal, "ghost", false); err == nil {
 		t.Fatal("ResumeGraphRun(ghost) = nil, want error")

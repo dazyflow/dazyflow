@@ -41,6 +41,7 @@ func mcpList(t *testing.T, h *HTTPGateway, p core.Principal) *httptest.ResponseR
 // TestMCPServersEndpoints_UnconfiguredDeployment: no store wired means the
 // feature is absent, not broken.
 func TestMCPServersEndpoints_UnconfiguredDeployment(t *testing.T) {
+	t.Parallel()
 	h := &HTTPGateway{}
 	if rw := mcpList(t, h, adminPrincipal("acme")); rw.Code != 501 {
 		t.Errorf("code %d, want 501 when MCP servers are not configured", rw.Code)
@@ -50,6 +51,7 @@ func TestMCPServersEndpoints_UnconfiguredDeployment(t *testing.T) {
 // TestMCPServersEndpoints_RequiresStepSourceAdmin: adding a server is not
 // something an editor may do — it points the daemon at a new endpoint.
 func TestMCPServersEndpoints_RequiresStepSourceAdmin(t *testing.T) {
+	t.Parallel()
 	h, _, url := mcpGateway(t)
 	rw := mcpPost(t, h, editorPrincipal("acme"), `{"name":"vendor","url":"`+url+`"}`)
 	if rw.Code != 403 {
@@ -61,6 +63,7 @@ func TestMCPServersEndpoints_RequiresStepSourceAdmin(t *testing.T) {
 }
 
 func TestMCPServersEndpoints_SaveThenList(t *testing.T) {
+	t.Parallel()
 	h, _, url := mcpGateway(t)
 	audit := NewMemAuditLog()
 	h.Audit = audit
@@ -105,6 +108,7 @@ func TestMCPServersEndpoints_SaveThenList(t *testing.T) {
 // note reaches the admin page, and does so as a live fact rather than a stored
 // one — nothing persists a paragraph a third party can change at will.
 func TestMCPServersEndpoints_ReportsWhatTheServerSaidAboutItself(t *testing.T) {
+	t.Parallel()
 	svc, _ := newTestMCPServers(t)
 	fake := &fakeMCPEndpoint{
 		toolNames:    []string{"search"},
@@ -139,6 +143,7 @@ func TestMCPServersEndpoints_ReportsWhatTheServerSaidAboutItself(t *testing.T) {
 // TestMCPServersEndpoints_ListIsTenantScoped: the page shows the caller's org
 // and nobody else's.
 func TestMCPServersEndpoints_ListIsTenantScoped(t *testing.T) {
+	t.Parallel()
 	h, _, url := mcpGateway(t)
 	if rw := mcpPost(t, h, adminPrincipal("acme"), `{"name":"vendor","url":"`+url+`"}`); rw.Code != 200 {
 		t.Fatalf("seed: code %d body %s", rw.Code, rw.Body)
@@ -155,6 +160,7 @@ func TestMCPServersEndpoints_ListIsTenantScoped(t *testing.T) {
 // works for the org but is not the org's to edit, so it must not appear on a
 // page whose every control would edit or delete it.
 func TestMCPServersEndpoints_ListOmitsInstanceWideServers(t *testing.T) {
+	t.Parallel()
 	h, _, url := mcpGateway(t)
 	if err := h.MCPServers.Catalog.RegisterHTTP(mcp.HTTPDescriptor{Name: "operator", URL: url}); err != nil {
 		t.Fatalf("RegisterHTTP: %v", err)
@@ -170,6 +176,7 @@ func TestMCPServersEndpoints_ListOmitsInstanceWideServers(t *testing.T) {
 // TestMCPServersEndpoints_PutIgnoresABodyRename: the path names the server, so
 // a mismatched body cannot re-key it behind the caller's back.
 func TestMCPServersEndpoints_PutIgnoresABodyRename(t *testing.T) {
+	t.Parallel()
 	h, _, url := mcpGateway(t)
 	if rw := mcpPost(t, h, adminPrincipal("acme"), `{"name":"vendor","url":"`+url+`"}`); rw.Code != 200 {
 		t.Fatalf("seed: code %d body %s", rw.Code, rw.Body)
@@ -198,6 +205,7 @@ func TestMCPServersEndpoints_PutIgnoresABodyRename(t *testing.T) {
 // TestMCPServersEndpoints_PutOmittingEnabledKeepsItOn: Enabled is a pointer so
 // an edit that does not mention it cannot silently switch a working server off.
 func TestMCPServersEndpoints_PutOmittingEnabledKeepsItOn(t *testing.T) {
+	t.Parallel()
 	h, _, url := mcpGateway(t)
 	if rw := mcpPost(t, h, adminPrincipal("acme"), `{"name":"vendor","url":"`+url+`"}`); rw.Code != 200 {
 		t.Fatalf("seed: code %d body %s", rw.Code, rw.Body)
@@ -217,6 +225,7 @@ func TestMCPServersEndpoints_PutOmittingEnabledKeepsItOn(t *testing.T) {
 // TestMCPServersEndpoints_Usage covers the lookup behind the delete warning:
 // scoped to a server that exists, and answered for the caller's own org.
 func TestMCPServersEndpoints_Usage(t *testing.T) {
+	t.Parallel()
 	svc, _ := newTestMCPServers(t)
 	srv := (&fakeMCPEndpoint{toolNames: []string{"search"}}).start(t)
 	ws, err := workspace.OpenFS(t.TempDir())
@@ -268,6 +277,7 @@ func mcpUsage(t *testing.T, h *HTTPGateway, p core.Principal, name string) *http
 }
 
 func TestMCPServersEndpoints_DeleteUnknownIs404(t *testing.T) {
+	t.Parallel()
 	h, _, _ := mcpGateway(t)
 	rw := httptest.NewRecorder()
 	req := httptest.NewRequest("DELETE", "/api/v1/admin/mcp-servers/nope", nil)
@@ -279,6 +289,7 @@ func TestMCPServersEndpoints_DeleteUnknownIs404(t *testing.T) {
 }
 
 func TestMCPServersEndpoints_BadInputIs400(t *testing.T) {
+	t.Parallel()
 	h, _, _ := mcpGateway(t)
 	rw := mcpPost(t, h, adminPrincipal("acme"), `{"name":"Vendor Ltd","url":"https://x.test/mcp"}`)
 	if rw.Code != 400 {

@@ -27,6 +27,7 @@ func covSeedScheduledFlow(t *testing.T, h *gatewayHarness, id, nodeID string) {
 }
 
 func TestListSchedulesMe_MissingScope(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	role := core.Role{Name: "free", Permissions: []core.Permission{core.PermGraphRun}}
 	_, tok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-unbound2", "", "", "nobody", []core.Role{role}, nil)
@@ -43,6 +44,7 @@ func TestListSchedulesMe_MissingScope(t *testing.T) {
 }
 
 func TestListSchedulesMe_OK(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	covSeedScheduledFlow(t, h, "sched1", "trig")
 	rw := h.do(t, "GET", "/api/v1/me/schedules", nil)
@@ -55,6 +57,7 @@ func TestListSchedulesMe_OK(t *testing.T) {
 }
 
 func TestSetTriggerEnabled_BadFlowID(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "POST", "/api/v1/me/flows/badid/triggers/trig/disable", nil)
 	if rw.Code != http.StatusBadRequest {
@@ -63,6 +66,7 @@ func TestSetTriggerEnabled_BadFlowID(t *testing.T) {
 }
 
 func TestSetTriggerEnabled_NodeNotFound(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	covSeedScheduledFlow(t, h, "sched1", "trig")
 	rw := h.do(t, "POST", "/api/v1/me/flows/t%2Fws%2Fsched1/triggers/ghostnode/disable", nil)
@@ -72,6 +76,7 @@ func TestSetTriggerEnabled_NodeNotFound(t *testing.T) {
 }
 
 func TestSetTriggerEnabled_OK(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	covSeedScheduledFlow(t, h, "sched1", "trig")
 	if rw := h.do(t, "POST", "/api/v1/me/flows/t%2Fws%2Fsched1/triggers/trig/disable", nil); rw.Code != http.StatusOK {
@@ -87,6 +92,7 @@ func TestSetTriggerEnabled_OK(t *testing.T) {
 }
 
 func TestSetTriggerEnabled_Forbidden_NonAdmin(t *testing.T) {
+	t.Parallel()
 	h := newRunOnlyHarness(t)
 	covSeedScheduledFlow(t, h.gatewayHarness, "sched1", "trig")
 	rw := runOnlyDo(t, h, "POST", "/api/v1/me/flows/t%2Fws%2Fsched1/triggers/trig/disable", nil)

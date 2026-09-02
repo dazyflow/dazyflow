@@ -9,6 +9,7 @@ import "testing"
 // PgDropSwitchStore.Disabled against a hand-seeded cache, with no DB —
 // the cache map is what the resolver hot path actually reads.
 func TestDropSwitchDisabled(t *testing.T) {
+	t.Parallel()
 	s := &PgDropSwitchStore{cache: map[string]bool{
 		dropSwitchKey("globally_off", ""):       true, // global switch
 		dropSwitchKey("org_scoped", "org_acme"): true, // one tenant only

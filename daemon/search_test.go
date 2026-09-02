@@ -58,6 +58,7 @@ func catalog() map[string]core.Manifest {
 }
 
 func TestSearch_NoFiltersReturnsAllAlphabetical(t *testing.T) {
+	t.Parallel()
 	got := searchManifests(catalog(), DropSearch{})
 	if len(got) != 8 {
 		t.Fatalf("got %d, want 8", len(got))
@@ -72,6 +73,7 @@ func TestSearch_NoFiltersReturnsAllAlphabetical(t *testing.T) {
 }
 
 func TestSearch_FilterByCategory(t *testing.T) {
+	t.Parallel()
 	got := searchManifests(catalog(), DropSearch{Categories: []string{"flow_control"}})
 	if len(got) != 2 {
 		t.Fatalf("got %d, want 2", len(got))
@@ -84,6 +86,7 @@ func TestSearch_FilterByCategory(t *testing.T) {
 }
 
 func TestSearch_FilterByProvider(t *testing.T) {
+	t.Parallel()
 	got := searchManifests(catalog(), DropSearch{Providers: []string{"mcp:slack"}})
 	if len(got) != 1 || got[0].ID != "mcp:slack:post_message" {
 		t.Errorf("got %+v", got)
@@ -91,6 +94,7 @@ func TestSearch_FilterByProvider(t *testing.T) {
 }
 
 func TestSearch_FilterByMultipleProvidersOR(t *testing.T) {
+	t.Parallel()
 	got := searchManifests(catalog(), DropSearch{
 		Providers: []string{"anthropic", "mcp:slack"},
 	})
@@ -100,6 +104,7 @@ func TestSearch_FilterByMultipleProvidersOR(t *testing.T) {
 }
 
 func TestSearch_FilterByTagAnySemantics(t *testing.T) {
+	t.Parallel()
 	got := searchManifests(catalog(), DropSearch{Tags: []string{"filesystem"}})
 	if len(got) != 2 {
 		t.Fatalf("got %d, want 2 (file_read + file_write)", len(got))
@@ -107,6 +112,7 @@ func TestSearch_FilterByTagAnySemantics(t *testing.T) {
 }
 
 func TestSearch_FiltersANDAcrossFields(t *testing.T) {
+	t.Parallel()
 	got := searchManifests(catalog(), DropSearch{
 		Categories: []string{"ai"},
 		Providers:  []string{"anthropic"},
@@ -117,6 +123,7 @@ func TestSearch_FiltersANDAcrossFields(t *testing.T) {
 }
 
 func TestSearch_QueryExactID(t *testing.T) {
+	t.Parallel()
 	got := searchManifests(catalog(), DropSearch{Query: "sleep"})
 	if len(got) < 1 || got[0].ID != "sleep" {
 		t.Errorf("expected sleep first, got %+v", got)
@@ -124,6 +131,7 @@ func TestSearch_QueryExactID(t *testing.T) {
 }
 
 func TestSearch_QueryPartialMatchOnDescription(t *testing.T) {
+	t.Parallel()
 	got := searchManifests(catalog(), DropSearch{Query: "sandbox"})
 	if len(got) != 2 {
 		t.Fatalf("got %d, want 2 (file_read + file_write match 'sandbox'); got %v",
@@ -132,6 +140,7 @@ func TestSearch_QueryPartialMatchOnDescription(t *testing.T) {
 }
 
 func TestSearch_QueryMatchesTags(t *testing.T) {
+	t.Parallel()
 	got := searchManifests(catalog(), DropSearch{Query: "llm"})
 	if len(got) != 1 || got[0].ID != "claude" {
 		t.Errorf("got %v, want [claude]", idsOf(got))
@@ -139,6 +148,7 @@ func TestSearch_QueryMatchesTags(t *testing.T) {
 }
 
 func TestSearch_QueryRelevanceRanking(t *testing.T) {
+	t.Parallel()
 	// "file" matches several manifests; the prefix-on-ID matches should
 	// rank above body-of-description matches.
 	got := searchManifests(catalog(), DropSearch{Query: "file"})
@@ -152,6 +162,7 @@ func TestSearch_QueryRelevanceRanking(t *testing.T) {
 }
 
 func TestSearch_NoMatchReturnsEmpty(t *testing.T) {
+	t.Parallel()
 	got := searchManifests(catalog(), DropSearch{Query: "qwertyzz-nothing-matches"})
 	if len(got) != 0 {
 		t.Errorf("got %d matches for nonsense query", len(got))
@@ -159,6 +170,7 @@ func TestSearch_NoMatchReturnsEmpty(t *testing.T) {
 }
 
 func TestSearch_CombinedQueryAndFilter(t *testing.T) {
+	t.Parallel()
 	got := searchManifests(catalog(), DropSearch{
 		Query:      "file",
 		Categories: []string{"external"},
@@ -169,6 +181,7 @@ func TestSearch_CombinedQueryAndFilter(t *testing.T) {
 }
 
 func TestSearch_QueryCaseInsensitive(t *testing.T) {
+	t.Parallel()
 	got := searchManifests(catalog(), DropSearch{Query: "HTTP"})
 	if len(got) != 1 || got[0].ID != "http_request" {
 		t.Errorf("got %v, want [http_request]", idsOf(got))
@@ -176,6 +189,7 @@ func TestSearch_QueryCaseInsensitive(t *testing.T) {
 }
 
 func TestSearch_FiltersCaseInsensitive(t *testing.T) {
+	t.Parallel()
 	got := searchManifests(catalog(), DropSearch{Providers: []string{"INTERNAL"}})
 	// 5 internal modules in catalog: sleep, branch, file_read, file_write, http_request
 	if len(got) != 5 {
@@ -184,6 +198,7 @@ func TestSearch_FiltersCaseInsensitive(t *testing.T) {
 }
 
 func TestSearch_MatchScore_ExactBeatsPartial(t *testing.T) {
+	t.Parallel()
 	// Direct test of the scoring function — exact ID match should rank
 	// way higher than a description hit.
 	m := core.Manifest{ID: "claude", Description: "claude is a chatbot"}
@@ -194,6 +209,7 @@ func TestSearch_MatchScore_ExactBeatsPartial(t *testing.T) {
 }
 
 func TestSearch_SearchBoostBreaksTie(t *testing.T) {
+	t.Parallel()
 	// Two drops that match "save" identically by tag; the boosted one
 	// must rank first regardless of the alphabetical tie-break (which
 	// would otherwise put "a_store" ahead of "z_sqlite").

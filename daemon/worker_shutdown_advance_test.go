@@ -152,6 +152,7 @@ func cancelledCtx() context.Context {
 
 // A disabled node skipped during shutdown still cascades and finalizes the run.
 func TestWorker_DisabledSkipAdvancesRunDespiteCancelledCtx(t *testing.T) {
+	t.Parallel()
 	h := newShutdownHarness(t, core.Graph{
 		ID: "disabled-shutdown", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
@@ -178,6 +179,7 @@ func TestWorker_DisabledSkipAdvancesRunDespiteCancelledCtx(t *testing.T) {
 
 // A node failed during shutdown still propagates and finalizes the run.
 func TestWorker_FailNodeAdvancesRunDespiteCancelledCtx(t *testing.T) {
+	t.Parallel()
 	g := core.Graph{
 		ID: "fail-shutdown", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{

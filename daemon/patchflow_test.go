@@ -14,6 +14,7 @@ import (
 // TestPatchFlowMe_Cov covers patchFlowMe: invalid JSON (400), unknown flow
 // (404), and a successful merge-patch (200) that renames a flow.
 func TestPatchFlowMe_Cov(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 
 	fid := url.PathEscape("t/ws/patchme")

@@ -44,6 +44,7 @@ func countingHandler(calls *int32) func(http.ResponseWriter, *http.Request, core
 }
 
 func TestIdempotency_ReplaysCachedResponse(t *testing.T) {
+	t.Parallel()
 	h := newIdemGateway()
 	var calls int32
 	handler := countingHandler(&calls)
@@ -69,6 +70,7 @@ func TestIdempotency_ReplaysCachedResponse(t *testing.T) {
 }
 
 func TestIdempotency_DistinctKeysAndRoutesDoNotCollide(t *testing.T) {
+	t.Parallel()
 	h := newIdemGateway()
 	var calls int32
 	handler := countingHandler(&calls)
@@ -83,6 +85,7 @@ func TestIdempotency_DistinctKeysAndRoutesDoNotCollide(t *testing.T) {
 }
 
 func TestIdempotency_NonSuccessIsNotCached(t *testing.T) {
+	t.Parallel()
 	h := newIdemGateway()
 	var calls int32
 	handler := func(rw http.ResponseWriter, _ *http.Request, _ core.Principal) {
@@ -97,6 +100,7 @@ func TestIdempotency_NonSuccessIsNotCached(t *testing.T) {
 }
 
 func TestIdempotency_NonMutatingMethodBypasses(t *testing.T) {
+	t.Parallel()
 	h := newIdemGateway()
 	var calls int32
 	handler := countingHandler(&calls)
@@ -108,6 +112,7 @@ func TestIdempotency_NonMutatingMethodBypasses(t *testing.T) {
 }
 
 func TestIdempotency_KeyTooLong(t *testing.T) {
+	t.Parallel()
 	h := newIdemGateway()
 	var calls int32
 	long := make([]byte, idempotencyKeyMax+1)
@@ -129,6 +134,7 @@ func TestIdempotency_KeyTooLong(t *testing.T) {
 // executes; the rest get 409 (in-flight). After it completes, a later
 // retry replays the cached result.
 func TestIdempotency_ConcurrentSameKey_FiresOnce(t *testing.T) {
+	t.Parallel()
 	h := newIdemGateway()
 	var calls int32
 	started := make(chan struct{})

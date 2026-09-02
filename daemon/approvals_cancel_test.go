@@ -15,6 +15,7 @@ import (
 // 404 for an unknown run, 400 for an invalid decision, and 409 when the node
 // isn't awaiting approval.
 func TestApproveAuthed_Cov(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 
 	// Unknown run -> 404.
@@ -48,6 +49,7 @@ func TestApproveAuthed_Cov(t *testing.T) {
 // TestCancelRunMe_Cov covers cancelRun's error and success legs via
 // /me/runs/{id}/cancel: 404 unknown, then a successful cancel of a running run.
 func TestCancelRunMe_Cov(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 
 	// Unknown run -> 404.

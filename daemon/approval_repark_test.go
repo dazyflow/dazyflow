@@ -163,6 +163,7 @@ func (h *reparkHarness) waitForNotifySettled(t *testing.T, want int32) int32 {
 // changing its worker id — the late worker still "owns" it — and the park
 // must still be refused, with no second notification.
 func TestPark_SecondParkIsFencedAndDoesNotNotify(t *testing.T) {
+	t.Parallel()
 	h := newReparkHarness(t)
 	runID := h.submit(t)
 	recID := daemon.NodeJobID(runID, "gate")
@@ -219,6 +220,7 @@ func TestPark_SecondParkIsFencedAndDoesNotNotify(t *testing.T) {
 // must not have cost the ONLY notification. A node that parks normally still
 // announces itself exactly once.
 func TestPark_FirstParkNotifiesOnce(t *testing.T) {
+	t.Parallel()
 	h := newReparkHarness(t)
 	runID := h.submit(t)
 

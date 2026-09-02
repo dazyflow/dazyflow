@@ -63,6 +63,7 @@ func waitForEmail(t *testing.T, srv *fakeSMTP, timeout time.Duration) (string, [
 // account-level failure email even when the graph has no per-flow
 // FailureNotify config at all.
 func TestFailureNotify_OwnerEmailDefaultOn(t *testing.T) {
+	t.Parallel()
 	owner := auth.User{Email: "owner@example.com", Subject: "owner@example.com", Tenant: "t", Workspace: "ws"}
 	svc, srv := ownerEmailHarness(t, owner)
 
@@ -87,6 +88,7 @@ func TestFailureNotify_OwnerEmailDefaultOn(t *testing.T) {
 // An owner who explicitly turned the failure email off gets nothing,
 // and with no other channel configured no mail is sent at all.
 func TestFailureNotify_OwnerEmailOptedOut(t *testing.T) {
+	t.Parallel()
 	owner := auth.User{
 		Email: "owner@example.com", Subject: "owner@example.com", Tenant: "t", Workspace: "ws",
 		Notify: auth.NotifyPrefs{EmailOnFlowFailure: boolPtr(false)},
@@ -108,6 +110,7 @@ func TestFailureNotify_OwnerEmailOptedOut(t *testing.T) {
 // When the owner's account email equals the per-flow FailureNotify.Email,
 // the owner is deduped — exactly one message, not two.
 func TestFailureNotify_OwnerEmailDedupedAgainstPerFlow(t *testing.T) {
+	t.Parallel()
 	owner := auth.User{Email: "owner@example.com", Subject: "owner@example.com", Tenant: "t", Workspace: "ws"}
 	svc, srv := ownerEmailHarness(t, owner)
 
@@ -136,6 +139,7 @@ func TestFailureNotify_OwnerEmailDedupedAgainstPerFlow(t *testing.T) {
 // FailureNotify) when a user store + mailer are present, so the
 // account-level email can fire off the bus.
 func TestFailureNotify_OwnerOnlySpawnsWatcher(t *testing.T) {
+	t.Parallel()
 	owner := auth.User{Email: "owner@example.com", Subject: "owner@example.com", Tenant: "t", Workspace: "ws"}
 	svc := newFailureNotifyHarness(t) // full Service with a real bus + jobs
 	srv := attachOwnerEmail(t, svc, owner)

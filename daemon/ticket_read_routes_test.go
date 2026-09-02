@@ -22,6 +22,7 @@ import (
 // wrong side means silence for someone who is waiting.
 
 func TestMarkTicketRead(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	now := time.Unix(1_700_000_000, 0).UTC()
 	h.gw.Tickets = support.NewMemTicketStore()

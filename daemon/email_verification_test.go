@@ -80,6 +80,7 @@ func signupAndExtractLink(t *testing.T, h *gatewayHarness, srv *fakeSMTP, email 
 }
 
 func TestEmailVerification_FullLifecycle(t *testing.T) {
+	t.Parallel()
 	h, users, srv := verificationHarness(t)
 	emailParam, token := signupAndExtractLink(t, h, srv, "new@example.com")
 
@@ -125,6 +126,7 @@ func TestEmailVerification_FullLifecycle(t *testing.T) {
 }
 
 func TestEmailVerification_ExpiredToken(t *testing.T) {
+	t.Parallel()
 	h, users, srv := verificationHarness(t)
 	emailParam, token := signupAndExtractLink(t, h, srv, "late@example.com")
 
@@ -142,6 +144,7 @@ func TestEmailVerification_ExpiredToken(t *testing.T) {
 }
 
 func TestEmailVerification_UnknownEmailSameShape(t *testing.T) {
+	t.Parallel()
 	// "No such account" answers exactly like "bad token" — no enumeration.
 	h, _, _ := verificationHarness(t)
 	rw := h.do(t, "POST", "/api/v1/auth/verify-email", map[string]string{
@@ -153,6 +156,7 @@ func TestEmailVerification_UnknownEmailSameShape(t *testing.T) {
 }
 
 func TestEmailVerification_InactiveWithoutMailer(t *testing.T) {
+	t.Parallel()
 	// No mailer: signup works exactly as before, nothing pending, no gate.
 	h := newGatewayHarness(t)
 	users, _ := auth.OpenJSONUserStore("")
@@ -177,6 +181,7 @@ func TestEmailVerification_InactiveWithoutMailer(t *testing.T) {
 }
 
 func TestEmailVerification_InviteGate(t *testing.T) {
+	t.Parallel()
 	h, users, srv := verificationHarness(t)
 	inv, err := auth.OpenJSONInvitationStore("")
 	if err != nil {
@@ -258,6 +263,7 @@ func TestEmailVerification_InviteGate(t *testing.T) {
 }
 
 func TestEmailVerification_Resend(t *testing.T) {
+	t.Parallel()
 	h, users, srv := verificationHarness(t)
 	_, oldToken := signupAndExtractLink(t, h, srv, "again@example.com")
 	u, _ := users.GetByEmail(t.Context(), "again@example.com")
@@ -319,6 +325,7 @@ func TestEmailVerification_Resend(t *testing.T) {
 // the auth IP rate limiter (defense against token-churn / email spam): with a
 // 1-request burst, the second resend in the window returns 429.
 func TestEmailVerification_ResendRateLimited(t *testing.T) {
+	t.Parallel()
 	h, users, srv := verificationHarness(t)
 	signupAndExtractLink(t, h, srv, "rl@example.com")
 	u, _ := users.GetByEmail(t.Context(), "rl@example.com")

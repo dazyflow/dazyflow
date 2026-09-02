@@ -34,6 +34,7 @@ func newAdminOAuthHarness(t *testing.T) *gatewayHarness {
 // ---- Persistence layer ----------------------------------------------
 
 func TestProviderStore_RoundTrip(t *testing.T) {
+	t.Parallel()
 	es := newMemSecrets(t)
 	ctx := t.Context()
 	if c, err := loadProviderCreds(ctx, es, "google"); err != nil || c != nil {
@@ -56,6 +57,7 @@ func TestProviderStore_RoundTrip(t *testing.T) {
 }
 
 func TestProviderStore_ListConfigured(t *testing.T) {
+	t.Parallel()
 	es := newMemSecrets(t)
 	ctx := t.Context()
 	_ = saveProviderCreds(ctx, es, "google", providerCreds{ClientID: "g", ClientSecret: "gs"})
@@ -72,6 +74,7 @@ func TestProviderStore_ListConfigured(t *testing.T) {
 }
 
 func TestProviderStore_Delete(t *testing.T) {
+	t.Parallel()
 	es := newMemSecrets(t)
 	ctx := t.Context()
 	_ = saveProviderCreds(ctx, es, "google", providerCreds{ClientID: "g", ClientSecret: "gs"})
@@ -87,6 +90,7 @@ func TestProviderStore_Delete(t *testing.T) {
 // ---- Hydrate ---------------------------------------------------------
 
 func TestHydrate_PersistedOverridesEnv(t *testing.T) {
+	t.Parallel()
 	// Simulate: env wired one client_id; admin pasted a different
 	// one via the UI. After Hydrate, the registry holds the
 	// admin-pasted value.
@@ -113,6 +117,7 @@ func TestHydrate_PersistedOverridesEnv(t *testing.T) {
 }
 
 func TestHydrate_UnknownProviderSkipped(t *testing.T) {
+	t.Parallel()
 	// A persisted entry for a provider we no longer recognise must
 	// be skipped with an error, not break the whole hydrate pass.
 	es := newMemSecrets(t)
@@ -137,6 +142,7 @@ func TestHydrate_UnknownProviderSkipped(t *testing.T) {
 // org) must be rejected — otherwise any customer could break or hijack
 // the shared OAuth apps for all the other orgs on the instance.
 func TestAdminOAuth_ProviderConfigRequiresPlatformAdmin(t *testing.T) {
+	t.Parallel()
 	h := newAdminOAuthHarness(t)
 
 	// Editor (no admin at all) — rejected.
@@ -162,6 +168,7 @@ func TestAdminOAuth_ProviderConfigRequiresPlatformAdmin(t *testing.T) {
 }
 
 func TestAdminOAuth_ListReturnsAllDefaults(t *testing.T) {
+	t.Parallel()
 	h := newAdminOAuthHarness(t)
 	rw := h.platformDo(t, "GET", "/api/v1/admin/oauth-providers", nil)
 	if rw.Code != 200 {
@@ -190,6 +197,7 @@ func TestAdminOAuth_ListReturnsAllDefaults(t *testing.T) {
 }
 
 func TestAdminOAuth_UpsertRegistersLiveAndPersists(t *testing.T) {
+	t.Parallel()
 	h := newAdminOAuthHarness(t)
 	rw := h.platformDo(t, "PUT", "/api/v1/admin/oauth-providers/google", map[string]any{
 		"client_id":     "555.apps.googleusercontent.com",
@@ -213,6 +221,7 @@ func TestAdminOAuth_UpsertRegistersLiveAndPersists(t *testing.T) {
 }
 
 func TestAdminOAuth_UpsertRejectsEmptyCreds(t *testing.T) {
+	t.Parallel()
 	h := newAdminOAuthHarness(t)
 	rw := h.platformDo(t, "PUT", "/api/v1/admin/oauth-providers/google", map[string]any{
 		"client_id":     "abc",
@@ -224,6 +233,7 @@ func TestAdminOAuth_UpsertRejectsEmptyCreds(t *testing.T) {
 }
 
 func TestAdminOAuth_UpsertUnknownProvider(t *testing.T) {
+	t.Parallel()
 	h := newAdminOAuthHarness(t)
 	rw := h.platformDo(t, "PUT", "/api/v1/admin/oauth-providers/discord", map[string]any{
 		"client_id":     "abc",
@@ -235,6 +245,7 @@ func TestAdminOAuth_UpsertUnknownProvider(t *testing.T) {
 }
 
 func TestAdminOAuth_DeleteUnregistersAndClearsStore(t *testing.T) {
+	t.Parallel()
 	h := newAdminOAuthHarness(t)
 	// Set first.
 	_ = h.platformDo(t, "PUT", "/api/v1/admin/oauth-providers/google", map[string]any{
@@ -255,6 +266,7 @@ func TestAdminOAuth_DeleteUnregistersAndClearsStore(t *testing.T) {
 // ---- scope_mismatch on user-facing listing -------------------------
 
 func TestStaleAccounts_MissingScopeFlagged(t *testing.T) {
+	t.Parallel()
 	// Token was granted only gmail.send, but the (explicit) required set
 	// also needs drive.readonly. The account should be flagged stale.
 	// Required scopes are passed in rather than read from the default so
@@ -284,6 +296,7 @@ func TestStaleAccounts_MissingScopeFlagged(t *testing.T) {
 }
 
 func TestStaleAccounts_FullScopeNotFlagged(t *testing.T) {
+	t.Parallel()
 	es := newMemSecrets(t)
 	r := NewOAuthRegistry("https://example.test", es)
 	r.Register(providerDefault("google").toProvider("c", "s"))
@@ -300,6 +313,7 @@ func TestStaleAccounts_FullScopeNotFlagged(t *testing.T) {
 }
 
 func TestSplitScopes_HandlesSpacesAndCommas(t *testing.T) {
+	t.Parallel()
 	got := splitScopes("chat:write, channels:read  channels:history")
 	for _, want := range []string{"chat:write", "channels:read", "channels:history"} {
 		if _, ok := got[want]; !ok {

@@ -202,6 +202,7 @@ func enabledMirror() GitMirror {
 // TestMirrorPusher_PublishTriggersPush is the default configuration: a
 // publish mirrors.
 func TestMirrorPusher_PublishTriggersPush(t *testing.T) {
+	t.Parallel()
 	cp := newCountingPusher(t, enabledMirror())
 	cp.Notify("acme", "main", PushOnPublish)
 	// Wait for the recorded ATTEMPT, not the call count: the counter is
@@ -226,6 +227,7 @@ func TestMirrorPusher_PublishTriggersPush(t *testing.T) {
 // TestMirrorPusher_SaveSkippedOnPublishOnly is the noise guard: a workspace
 // mirroring on publish must not push on every autosave.
 func TestMirrorPusher_SaveSkippedOnPublishOnly(t *testing.T) {
+	t.Parallel()
 	cp := newCountingPusher(t, enabledMirror())
 	cp.Notify("acme", "main", PushOnSave)
 	staysAt(t, 0, cp.count)
@@ -237,6 +239,7 @@ func TestMirrorPusher_SaveSkippedOnPublishOnly(t *testing.T) {
 // TestMirrorPusher_SaveTriggersPushWhenOptedIn is the continuous-backup
 // setting.
 func TestMirrorPusher_SaveTriggersPushWhenOptedIn(t *testing.T) {
+	t.Parallel()
 	row := enabledMirror()
 	row.PushOn = PushOnSave
 	cp := newCountingPusher(t, row)
@@ -249,6 +252,7 @@ func TestMirrorPusher_SaveTriggersPushWhenOptedIn(t *testing.T) {
 // "mirror on publish", so a publish must never be the one thing that's
 // missing.
 func TestMirrorPusher_PublishMirrorsWhenConfiguredForSave(t *testing.T) {
+	t.Parallel()
 	row := enabledMirror()
 	row.PushOn = PushOnSave
 	cp := newCountingPusher(t, row)
@@ -259,6 +263,7 @@ func TestMirrorPusher_PublishMirrorsWhenConfiguredForSave(t *testing.T) {
 // TestMirrorPusher_DisabledDoesNothing — a switched-off mirror keeps its
 // config but pushes nothing.
 func TestMirrorPusher_DisabledDoesNothing(t *testing.T) {
+	t.Parallel()
 	row := enabledMirror()
 	row.Enabled = false
 	cp := newCountingPusher(t, row)
@@ -270,6 +275,7 @@ func TestMirrorPusher_DisabledDoesNothing(t *testing.T) {
 // save in every workspace without a mirror comes through Notify, so this
 // path must be cheap and quiet, not an error.
 func TestMirrorPusher_UnconfiguredWorkspaceIsSilent(t *testing.T) {
+	t.Parallel()
 	cp := newCountingPusher(t, GitMirror{})
 	cp.Notify("acme", "main", PushOnPublish)
 	staysAt(t, 0, cp.count)
@@ -282,6 +288,7 @@ func TestMirrorPusher_UnconfiguredWorkspaceIsSilent(t *testing.T) {
 // autosaves while someone types, and each save reaches Notify. A burst must
 // become one push, not one per keystroke pause.
 func TestMirrorPusher_CoalescesBurst(t *testing.T) {
+	t.Parallel()
 	row := enabledMirror()
 	row.PushOn = PushOnSave
 	cp := newCountingPusher(t, row)
@@ -296,6 +303,7 @@ func TestMirrorPusher_CoalescesBurst(t *testing.T) {
 // silently: a save that lands while a push is in flight is not in that
 // push's snapshot, so the pusher must run again afterwards.
 func TestMirrorPusher_ChangeDuringPushRePushes(t *testing.T) {
+	t.Parallel()
 	row := enabledMirror()
 	row.PushOn = PushOnSave
 	cp := newCountingPusher(t, row)
@@ -324,6 +332,7 @@ func TestMirrorPusher_ChangeDuringPushRePushes(t *testing.T) {
 // behind. A mirror that silently stops working is the failure mode this
 // whole status column exists to prevent.
 func TestMirrorPusher_FailureIsRecorded(t *testing.T) {
+	t.Parallel()
 	cp := newCountingPusher(t, enabledMirror())
 	cp.mu.Lock()
 	cp.err = errors.New("permission denied (publickey)")
@@ -350,6 +359,7 @@ func TestMirrorPusher_FailureIsRecorded(t *testing.T) {
 // configure a mirror, leave it off, and press Push now to check the key
 // works before enabling it.
 func TestMirrorPusher_PushNowIgnoresEnabledAndTrigger(t *testing.T) {
+	t.Parallel()
 	row := enabledMirror()
 	row.Enabled = false
 	cp := newCountingPusher(t, row)
@@ -369,6 +379,7 @@ func TestMirrorPusher_PushNowIgnoresEnabledAndTrigger(t *testing.T) {
 // TestMirrorPusher_PushNowUnconfigured reports the absence rather than
 // pretending to succeed, so the handler can 404 it.
 func TestMirrorPusher_PushNowUnconfigured(t *testing.T) {
+	t.Parallel()
 	cp := newCountingPusher(t, GitMirror{})
 	if _, err := cp.PushNow(context.Background(), "acme", "main", false); !errors.Is(err, core.ErrNotFound) {
 		t.Errorf("PushNow with no mirror = %v, want core.ErrNotFound", err)
@@ -379,6 +390,7 @@ func TestMirrorPusher_PushNowUnconfigured(t *testing.T) {
 // save, including on deployments where mirroring is off, so a nil pusher and
 // a pusher with no stores must both be harmless.
 func TestMirrorPusher_NilSafety(t *testing.T) {
+	t.Parallel()
 	var nilPusher *MirrorPusher
 	nilPusher.Notify("acme", "main", PushOnSave) // must not panic
 	nilPusher.Stop()
@@ -393,6 +405,7 @@ func TestMirrorPusher_NilSafety(t *testing.T) {
 // database) must fail before the transport, with the message the form would
 // have given. Reaching go-git would produce a confusing auth error instead.
 func TestMirrorPusher_StoredBadRemoteFailsClosed(t *testing.T) {
+	t.Parallel()
 	row := enabledMirror()
 	row.RemoteURL = "https://github.com/acme/flows.git"
 	store := newMemGitMirrorStore()
@@ -423,6 +436,7 @@ func TestMirrorPusher_StoredBadRemoteFailsClosed(t *testing.T) {
 // be opened (a renamed or removed store) must record the failure rather than
 // panic inside a background goroutine, where nothing would catch it.
 func TestMirrorPusher_MissingWorkspaceIsRecorded(t *testing.T) {
+	t.Parallel()
 	store := newMemGitMirrorStore()
 	if err := store.Upsert(context.Background(), enabledMirror()); err != nil {
 		t.Fatalf("seed: %v", err)
@@ -446,6 +460,7 @@ func TestMirrorPusher_MissingWorkspaceIsRecorded(t *testing.T) {
 // after the stores it needs are closing. The debounce window is exactly where
 // a queued push can outlive the process.
 func TestMirrorPusher_StopCancelsPendingPush(t *testing.T) {
+	t.Parallel()
 	row := enabledMirror()
 	row.PushOn = PushOnSave
 	cp := newCountingPusher(t, row)
@@ -466,6 +481,7 @@ func TestMirrorPusher_StopCancelsPendingPush(t *testing.T) {
 // --- Validation -------------------------------------------------------
 
 func TestValidateMirrorRemote(t *testing.T) {
+	t.Parallel()
 	ok := []string{
 		"git@github.com:acme/flows.git",
 		"git@gitlab.example.com:team/sub/flows.git",
@@ -509,6 +525,7 @@ func TestValidateMirrorRemote(t *testing.T) {
 }
 
 func TestValidateMirrorPushOn(t *testing.T) {
+	t.Parallel()
 	for in, want := range map[string]string{
 		"":            PushOnPublish,
 		"publish":     PushOnPublish,

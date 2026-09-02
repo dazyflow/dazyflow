@@ -17,6 +17,7 @@ import (
 // (opt-in via ?format=xml or an XML Accept header) that mirrors the JSON one:
 // same drops, same field names, ports and examples intact.
 func TestListDrops_XML(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 
 	// Baseline JSON listing.
@@ -79,6 +80,7 @@ func TestListDrops_XML(t *testing.T) {
 // TestListDrops_XMLAcceptHeader confirms the Accept header alone selects XML,
 // and that the default (no header, no query) stays JSON.
 func TestListDrops_XMLAcceptHeader(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 
 	req := httptest.NewRequest("GET", "/api/v1/drops", nil)

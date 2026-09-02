@@ -305,6 +305,7 @@ func scoreCandidate(a ask, refs []core.Graph, cand core.Graph, issues []core.Lin
 // in the document has a graph, and the scorer says a reference graph answers
 // its own ask.
 func TestFlowGenScenariosHarness(t *testing.T) {
+	t.Parallel()
 	manifests := manifestMap()
 	asks := loadAsks(t, scenariosDoc)
 	refs := loadReferences(t, referenceDir)
@@ -381,6 +382,7 @@ func TestFlowGenScenariosHarness(t *testing.T) {
 // --- the live eval --------------------------------------------------------
 
 func TestFlowGenScenarios(t *testing.T) {
+	t.Parallel()
 	key := os.Getenv("FLOWGEN_EVAL_KEY")
 	if key == "" {
 		key = os.Getenv("ANTHROPIC_API_KEY")
@@ -576,6 +578,7 @@ func flowAsToolCall(g core.Graph) map[string]any {
 // the scoring is proven on GENERATED graphs, not just on the references
 // scoring themselves.
 func TestFlowGenScenariosScripted(t *testing.T) {
+	t.Parallel()
 	manifests := manifestMap()
 	mans := make([]core.Manifest, 0, len(manifests))
 	for _, m := range manifests {
@@ -664,6 +667,7 @@ func TestFlowGenScenariosScripted(t *testing.T) {
 // guidance used to say "wire for_each.body into the per-item step's input",
 // which is the documented footgun, and never mentioned ${item.…} at all.
 func TestFlowGenPromptTeachesLoopBodies(t *testing.T) {
+	t.Parallel()
 	prompt := flowGenSystemPrompt("(catalog omitted)")
 
 	for _, must := range []string{

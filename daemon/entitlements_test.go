@@ -22,6 +22,7 @@ var testDefaults = LimitDefaults{
 }
 
 func TestResolveEffective_DefaultsWhenEmpty(t *testing.T) {
+	t.Parallel()
 	eff := ResolveEffective(nil, nil, testDefaults, PlanFree, time.Unix(0, 0))
 	if eff.RunsPerMonth != 100 || eff.MaxGraphNodes != 50 || eff.MaxTimeoutSeconds != 300 {
 		t.Fatalf("expected global defaults, got %+v", eff)
@@ -35,6 +36,7 @@ func TestResolveEffective_DefaultsWhenEmpty(t *testing.T) {
 }
 
 func TestResolveEffective_ProCapsHonoredElseUnlimited(t *testing.T) {
+	t.Parallel()
 	now := time.Unix(0, 0)
 
 	// Pro with no explicit caps: the free-only dims do NOT inherit the FREE
@@ -76,6 +78,7 @@ func TestResolveEffective_ProCapsHonoredElseUnlimited(t *testing.T) {
 }
 
 func TestResolveEffective_TierThenOverride(t *testing.T) {
+	t.Parallel()
 	tier := &Tier{
 		ID: "pro", Plan: PlanPro, RunsPerMonth: 10000,
 		MaxGraphNodes: 500, PollingAllowed: ptrBool(true),
@@ -100,6 +103,7 @@ func TestResolveEffective_TierThenOverride(t *testing.T) {
 }
 
 func TestResolveEffective_PlanResolution(t *testing.T) {
+	t.Parallel()
 	now := time.Unix(1_000_000, 0)
 	future := now.Add(time.Hour)
 	past := now.Add(-time.Hour)
@@ -134,6 +138,7 @@ func TestResolveEffective_PlanResolution(t *testing.T) {
 // with PollingAllowed unset (nil) must INHERIT the deployment-global default,
 // not force it false. A non-nil tier value still wins.
 func TestResolveEffective_TierPollingInherits(t *testing.T) {
+	t.Parallel()
 	allowDefaults := testDefaults
 	allowDefaults.PollingAllowed = true // deployment allows free polling
 
@@ -153,6 +158,7 @@ func TestResolveEffective_TierPollingInherits(t *testing.T) {
 }
 
 func TestResolveEffective_AllOverrideKinds(t *testing.T) {
+	t.Parallel()
 	ent := &TenantEntitlement{
 		RunsPerMonth:      ptrInt(7),
 		DiskQuotaBytes:    ptrI64(1 << 30),
@@ -178,6 +184,7 @@ func TestResolveEffective_AllOverrideKinds(t *testing.T) {
 // dimensions (retention, concurrency, seats) resolve override → tier → default
 // like the original numeric limits, and that 0 means inherit.
 func TestResolveEffective_NewDimsPrecedence(t *testing.T) {
+	t.Parallel()
 	def := testDefaults
 	def.RetentionDays = 7
 	def.MaxConcurrency = 2

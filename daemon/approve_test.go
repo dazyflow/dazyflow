@@ -13,6 +13,7 @@ import (
 // service Approve call.
 
 func TestApproveAuthed_UnknownRun(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "POST", "/api/v1/approvals/ghostrun/nodeA", nil)
 	if rw.Code != http.StatusNotFound && rw.Code != http.StatusForbidden {
@@ -21,6 +22,7 @@ func TestApproveAuthed_UnknownRun(t *testing.T) {
 }
 
 func TestApproveAuthed_UnknownRunWithDecision(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "POST", "/api/v1/approvals/ghostrun/nodeA?decision=reject", nil)
 	if rw.Code != http.StatusNotFound && rw.Code != http.StatusForbidden {

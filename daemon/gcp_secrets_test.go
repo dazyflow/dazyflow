@@ -129,6 +129,7 @@ func newGcpHarness(t *testing.T, secrets map[string]string, tokenCalls *int) *gc
 }
 
 func TestGcpSecretsProvider_GetAndAuth(t *testing.T) {
+	t.Parallel()
 	tokenCalls := 0
 	h := newGcpHarness(t, map[string]string{
 		"db":     `{"username":"app","password":"hunter2"}`,
@@ -152,6 +153,7 @@ func TestGcpSecretsProvider_GetAndAuth(t *testing.T) {
 }
 
 func TestGcpSecretsProvider_TenantScoping(t *testing.T) {
+	t.Parallel()
 	h := newGcpHarness(t, map[string]string{"apikey": "v"}, nil)
 
 	if _, err := h.provider.Get(context.Background(), "apikey"); err == nil ||
@@ -166,6 +168,7 @@ func TestGcpSecretsProvider_TenantScoping(t *testing.T) {
 }
 
 func TestVerifyGcpConfig(t *testing.T) {
+	t.Parallel()
 	h := newGcpHarness(t, map[string]string{}, nil) // probe → 404 = reachable
 	if err := VerifyGcpConfig(t.Context(), h.cfg, 5*time.Second); err != nil {
 		t.Errorf("verify valid-but-empty project: %v", err)
@@ -193,6 +196,7 @@ func TestVerifyGcpConfig(t *testing.T) {
 }
 
 func TestGcpConfig_StorageRoundTrip(t *testing.T) {
+	t.Parallel()
 	es, err := NewEncryptedSecrets(make([]byte, 32), NewMemSecretsStore())
 	if err != nil {
 		t.Fatalf("NewEncryptedSecrets: %v", err)
@@ -222,6 +226,7 @@ func TestGcpConfig_StorageRoundTrip(t *testing.T) {
 // failure branches (non-PEM and an unparseable DER block) that the PKCS#8
 // happy path in the existing harness doesn't reach.
 func TestParseGcpPrivateKey_Variants(t *testing.T) {
+	t.Parallel()
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("genkey: %v", err)
@@ -250,6 +255,7 @@ func TestParseGcpPrivateKey_Variants(t *testing.T) {
 // TestGcpConfig_EndpointAndKeyDefaults covers endpointURL's default branch and
 // key()'s token_uri default.
 func TestGcpConfig_EndpointAndKeyDefaults(t *testing.T) {
+	t.Parallel()
 	// Default endpoint when none configured.
 	if got := (GcpSecretsConfig{}).endpointURL(); got != "https://secretmanager.googleapis.com" {
 		t.Errorf("default endpoint = %q", got)
@@ -284,6 +290,7 @@ func TestGcpConfig_EndpointAndKeyDefaults(t *testing.T) {
 // TestGcpAPIClient_TokenError covers token()'s key-parse failure path:
 // accessSecret bubbles a bad key up before any network call.
 func TestGcpAPIClient_TokenError(t *testing.T) {
+	t.Parallel()
 	c := newGcpAPIClient(0) // also covers the timeout<=0 default branch
 	cfg := GcpSecretsConfig{ProjectID: "p", ServiceAccountKey: `{"client_email":"e"}`}
 	if _, err := c.accessSecret(context.Background(), cfg, "x"); err == nil {
@@ -294,6 +301,7 @@ func TestGcpAPIClient_TokenError(t *testing.T) {
 // TestNewGcpSecretsProviderForStore_Wired covers the production constructor's
 // loadConfig closure for a tenant with no stored GCP config.
 func TestNewGcpSecretsProviderForStore_Wired(t *testing.T) {
+	t.Parallel()
 	es := newTestSecrets(t)
 	p := NewGcpSecretsProviderForStore(es, 2*time.Second)
 	if p.Scheme() != "gcp" {

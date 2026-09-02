@@ -16,6 +16,7 @@ import (
 // before the (tiny) body is ever read — the early-allocation guard. It fires
 // pre-routing/pre-auth, so any POST path exercises it.
 func TestLimitRequestBody_RejectsOversizedContentLength(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	req := httptest.NewRequest("POST", "/api/v1/flows", bytes.NewBufferString("{}"))
 	req.Header.Set("Authorization", "Bearer "+h.token)
@@ -30,6 +31,7 @@ func TestLimitRequestBody_RejectsOversizedContentLength(t *testing.T) {
 
 // A normal-sized POST is unaffected by the guard (reaches routing/auth).
 func TestLimitRequestBody_AllowsNormalBody(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "POST", "/api/v1/flows", map[string]any{"id": "x"})
 	if rw.Code == http.StatusRequestEntityTooLarge {
@@ -38,6 +40,7 @@ func TestLimitRequestBody_AllowsNormalBody(t *testing.T) {
 }
 
 func TestWorkspaceLimits_AdminOnly(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	if rw := h.do(t, "GET", "/api/v1/admin/limits", nil); rw.Code != http.StatusForbidden {
 		t.Fatalf("editor status = %d, want 403", rw.Code)
@@ -48,6 +51,7 @@ func TestWorkspaceLimits_AdminOnly(t *testing.T) {
 }
 
 func TestWorkspaceLimits_ReportsValues(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.svc.MaxGraphNodes = 50
 	q, _ := NewFSQuota(t.TempDir(), map[string]int64{"t": 1000})

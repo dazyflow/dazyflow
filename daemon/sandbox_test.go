@@ -21,6 +21,7 @@ import (
 )
 
 func TestFSSandbox_PerWorkspaceIsolation(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	sb, err := daemon.NewFSSandbox(base)
 	if err != nil {
@@ -48,6 +49,7 @@ func TestFSSandbox_PerWorkspaceIsolation(t *testing.T) {
 }
 
 func TestFSSandbox_RejectsUnsafeIdentifiers(t *testing.T) {
+	t.Parallel()
 	sb, _ := daemon.NewFSSandbox(t.TempDir())
 	bad := []struct{ tenant, workspace string }{
 		{"..", "ws"},
@@ -71,6 +73,7 @@ func TestFSSandbox_RejectsUnsafeIdentifiers(t *testing.T) {
 // TestSandbox_E2E_FileReadWrite drives the whole stack: dzd-style service +
 // worker + FSSandbox + file_read + file_write. Proves the wiring works.
 func TestSandbox_E2E_FileReadWrite(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	sb, err := daemon.NewFSSandbox(base)
 	if err != nil {
@@ -140,6 +143,7 @@ func TestSandbox_E2E_FileReadWrite(t *testing.T) {
 }
 
 func TestSandbox_E2E_CrossTenantIsolation(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	sb, _ := daemon.NewFSSandbox(base)
 

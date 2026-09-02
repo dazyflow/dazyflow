@@ -10,6 +10,7 @@ import (
 )
 
 func TestHostIsSubdomainOf(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		host, domain string
 		want         bool
@@ -31,6 +32,7 @@ func TestHostIsSubdomainOf(t *testing.T) {
 }
 
 func TestOriginAllowed(t *testing.T) {
+	t.Parallel()
 	h := &HTTPGateway{
 		AllowedOrigins: []string{"https://dazyflow.app"},
 		WildcardDomain: "dazyflow.app",
@@ -69,6 +71,7 @@ func TestOriginAllowed(t *testing.T) {
 }
 
 func TestIsValidWildcardDomain(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		domain string
 		want   bool
@@ -91,6 +94,7 @@ func TestIsValidWildcardDomain(t *testing.T) {
 }
 
 func TestSafeReturnPath(t *testing.T) {
+	t.Parallel()
 	good := []string{"/", "/flows", "/invite/abc?x=1"}
 	bad := []string{"", "//evil.com", "/\\evil.com", "https://evil.com", "evil"}
 	for _, p := range good {
@@ -106,6 +110,7 @@ func TestSafeReturnPath(t *testing.T) {
 }
 
 func TestSignInStartHost(t *testing.T) {
+	t.Parallel()
 	h := &HTTPGateway{WildcardDomain: "dazyflow.app"}
 	mk := func(host string) string {
 		r := httptest.NewRequest("GET", "/api/v1/auth/google/start", nil)
@@ -132,6 +137,7 @@ func TestSignInStartHost(t *testing.T) {
 }
 
 func TestHandoffStoreSingleUse(t *testing.T) {
+	t.Parallel()
 	exp := time.Now().Add(time.Hour)
 	code, err := mintHandoff("sess-token-123", exp)
 	if err != nil {

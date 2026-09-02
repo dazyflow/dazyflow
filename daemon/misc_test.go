@@ -16,6 +16,7 @@ import (
 // addPaused (with dedup), takePaused (returns + clears), setStepping/isStepping,
 // clear, and shouldPauseAfter's three legs.
 func TestPauseRegistry_Cov(t *testing.T) {
+	t.Parallel()
 	r := &pauseRegistry{paused: map[string][]string{}, stepping: map[string]bool{}}
 
 	r.addPaused("run", "a")
@@ -66,6 +67,7 @@ func TestPauseRegistry_Cov(t *testing.T) {
 // TestAutoFSWorkspaces_MemoryEnumeration covers AutoFSWorkspaces.List and All
 // in memory mode (empty base): stores opened this process are enumerated.
 func TestAutoFSWorkspaces_MemoryEnumeration(t *testing.T) {
+	t.Parallel()
 	a := NewAutoFSWorkspaces("") // memory mode
 
 	// Open two workspaces for one tenant and one for another.
@@ -108,6 +110,7 @@ func TestAutoFSWorkspaces_MemoryEnumeration(t *testing.T) {
 // TestAutoFSWorkspaces_DiskEnumeration covers List/All/RemoveTenant in
 // filesystem mode (non-empty base): the on-disk ReadDir branches.
 func TestAutoFSWorkspaces_DiskEnumeration(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := NewAutoFSWorkspaces(dir)
 
@@ -161,6 +164,7 @@ func keys[V any](m map[string]V) []string {
 // TestBufferedUsage_Cov covers BufferedUsage's passthrough AddSkippedRun, the
 // flush-on-shutdown Run loop, and Flush re-queue-on-success.
 func TestBufferedUsage_Cov(t *testing.T) {
+	t.Parallel()
 	inner := NewMemUsageStore()
 	b := NewBufferedUsage(inner)
 	now := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
@@ -200,6 +204,7 @@ func TestBufferedUsage_Cov(t *testing.T) {
 // TestSchedulerSetters_Cov covers SetLeader and SetPollStateReader (nil-guarded
 // installs).
 func TestSchedulerSetters_Cov(t *testing.T) {
+	t.Parallel()
 	s := NewScheduler(&Service{})
 
 	// Nil leader is ignored (default stays).
@@ -229,6 +234,7 @@ func TestSchedulerSetters_Cov(t *testing.T) {
 // TestProviderSchemes_Cov covers the trivial Scheme() identity methods on the
 // resource + builtin secret providers.
 func TestProviderSchemes_Cov(t *testing.T) {
+	t.Parallel()
 	if (&ResourceProvider{}).Scheme() != "resource" {
 		t.Fatal("ResourceProvider.Scheme")
 	}
@@ -238,6 +244,7 @@ func TestProviderSchemes_Cov(t *testing.T) {
 }
 
 func TestSecretProviderSchemesAndConstructors(t *testing.T) {
+	t.Parallel()
 	es, err := NewEncryptedSecrets(make([]byte, 32), NewMemSecretsStore())
 	if err != nil {
 		t.Fatalf("NewEncryptedSecrets: %v", err)
@@ -261,6 +268,7 @@ func TestSecretProviderSchemesAndConstructors(t *testing.T) {
 }
 
 func TestTruncateForError(t *testing.T) {
+	t.Parallel()
 	short := []byte("hello")
 	if got := truncateForError(short); got != "hello" {
 		t.Errorf("short = %q", got)
@@ -275,6 +283,7 @@ func TestTruncateForError(t *testing.T) {
 }
 
 func TestRunViewHelpers(t *testing.T) {
+	t.Parallel()
 	if durationMS(nil, nil) != 0 {
 		t.Error("durationMS(nil,nil) != 0")
 	}

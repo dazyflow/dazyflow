@@ -22,6 +22,7 @@ func newSubdomainHarness(t *testing.T) (*gatewayHarness, *recordingOrgProfiles) 
 }
 
 func TestOrgSubdomain_SetAndResolve(t *testing.T) {
+	t.Parallel()
 	h, _ := newSubdomainHarness(t)
 
 	// Claim a subdomain as the org admin (tenant "t").
@@ -57,6 +58,7 @@ func TestOrgSubdomain_SetAndResolve(t *testing.T) {
 }
 
 func TestOrgSubdomain_PreservesNameAndIcon(t *testing.T) {
+	t.Parallel()
 	h, prof := newSubdomainHarness(t)
 	_ = prof.PutOrgProfile(t.Context(), auth.OrgProfile{Tenant: "t", DisplayName: "Acme", Icon: "rocket"})
 
@@ -73,6 +75,7 @@ func TestOrgSubdomain_PreservesNameAndIcon(t *testing.T) {
 }
 
 func TestOrgSubdomain_RejectsInvalidAndReserved(t *testing.T) {
+	t.Parallel()
 	h, _ := newSubdomainHarness(t)
 	for _, bad := range []string{"WWW", "api", "has space", "under_score", "-x"} {
 		rw := h.adminDo(t, "PUT", "/api/v1/admin/org/subdomain", map[string]any{"subdomain": bad})
@@ -83,6 +86,7 @@ func TestOrgSubdomain_RejectsInvalidAndReserved(t *testing.T) {
 }
 
 func TestOrgSubdomain_TakenIsConflict(t *testing.T) {
+	t.Parallel()
 	h, prof := newSubdomainHarness(t)
 	// Another org already holds "taken".
 	_ = prof.PutOrgProfile(t.Context(), auth.OrgProfile{Tenant: "other", Subdomain: "taken"})
@@ -94,6 +98,7 @@ func TestOrgSubdomain_TakenIsConflict(t *testing.T) {
 }
 
 func TestOrgSubdomain_Availability(t *testing.T) {
+	t.Parallel()
 	h, prof := newSubdomainHarness(t)
 	_ = prof.PutOrgProfile(t.Context(), auth.OrgProfile{Tenant: "t", Subdomain: "mine"})
 	_ = prof.PutOrgProfile(t.Context(), auth.OrgProfile{Tenant: "other", Subdomain: "theirs"})
@@ -123,6 +128,7 @@ func TestOrgSubdomain_Availability(t *testing.T) {
 }
 
 func TestOrgSubdomain_TLSAllow(t *testing.T) {
+	t.Parallel()
 	h, prof := newSubdomainHarness(t)
 	_ = prof.PutOrgProfile(t.Context(), auth.OrgProfile{Tenant: "t", Subdomain: "klahr"})
 
@@ -150,6 +156,7 @@ func TestOrgSubdomain_TLSAllow(t *testing.T) {
 }
 
 func TestOrgSubdomain_DisabledWithoutWildcard(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.Profiles = newRecordingOrgProfiles()
 	// WildcardDomain left empty → feature off.

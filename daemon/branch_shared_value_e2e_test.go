@@ -32,6 +32,7 @@ import (
 // travelling past a step that itself has a live wire into it, or the leak
 // simply moves one node downstream.
 func TestBranch_ValueWireCannotRunTheUntakenSide(t *testing.T) {
+	t.Parallel()
 	var sentYes, sentNo, followUp atomic.Int32
 
 	reg := engine.NewRegistry()

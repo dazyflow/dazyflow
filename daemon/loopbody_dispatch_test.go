@@ -129,6 +129,7 @@ func newLoopHarness(t *testing.T) *loopHarness {
 // A graph with a for_each "body" pin must complete, the loop body must never
 // run standalone, and a normal node fed from loop.results must still run.
 func TestLoopBody_NotDispatchedStandalone(t *testing.T) {
+	t.Parallel()
 	h := newLoopHarness(t)
 
 	g := core.Graph{

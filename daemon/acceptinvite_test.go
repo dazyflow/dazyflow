@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -15,15 +16,14 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-var emailKeyCounter int
+var emailKeyCounter atomic.Int64
 
 // emailTokenDo runs an authed request under an API key whose Subject is an
 // email (acceptInvitation requires an @-bearing identity).
 func emailTokenDo(t *testing.T, h *gatewayHarness, email, method, path string) *httptest.ResponseRecorder {
 	t.Helper()
 	role := core.Role{Name: "ed", Permissions: []core.Permission{core.PermGraphRun}}
-	emailKeyCounter++
-	_, tok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-email-"+strconv.Itoa(emailKeyCounter), "t", "ws", email, []core.Role{role}, nil)
+	_, tok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-email-"+strconv.FormatInt(emailKeyCounter.Add(1), 10), "t", "ws", email, []core.Role{role}, nil)
 	if err != nil {
 		t.Fatalf("issue key: %v", err)
 	}
@@ -37,6 +37,7 @@ func emailTokenDo(t *testing.T, h *gatewayHarness, email, method, path string) *
 // TestAcceptInvitation_Cov covers acceptInvitation: no-store (501), unknown
 // token (404), wrong-email (403), expired (410), and the happy path (200).
 func TestAcceptInvitation_Cov(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 
 	// No invitation/membership stores -> 501.
@@ -86,6 +87,7 @@ func TestAcceptInvitation_Cov(t *testing.T) {
 // admin who vouched for the address, so the new member skips the redundant
 // verification nag.
 func TestAcceptInvitation_VerifiesEmail(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	invites, _ := auth.OpenJSONInvitationStore("")
 	h.gw.Invitations = invites
@@ -125,6 +127,7 @@ func TestAcceptInvitation_VerifiesEmail(t *testing.T) {
 // TestPlatformVerifyUser covers the admin support hatch: a platform admin can
 // mark an account verified directly, and it's idempotent.
 func TestPlatformVerifyUser(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	users, err := auth.OpenJSONUserStore("")
 	if err != nil {

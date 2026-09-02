@@ -73,6 +73,7 @@ func workerName(i int) string {
 }
 
 func TestPerNode_LinearChain_ProgressesThroughDependencies(t *testing.T) {
+	t.Parallel()
 	h := newWorkerHarness(t, 1)
 
 	g := core.Graph{
@@ -111,6 +112,7 @@ func TestPerNode_LinearChain_ProgressesThroughDependencies(t *testing.T) {
 // in Failed with code=timeout — distinct enough from a generic
 // runtime error that dashboards can group on it.
 func TestPerNode_TimeoutFailsTheNode(t *testing.T) {
+	t.Parallel()
 	h := newWorkerHarness(t, 1)
 
 	g := core.Graph{
@@ -141,6 +143,7 @@ func TestPerNode_TimeoutFailsTheNode(t *testing.T) {
 }
 
 func TestPerNode_DiamondSpreadsAcrossWorkers(t *testing.T) {
+	t.Parallel()
 	h := newWorkerHarness(t, 3)
 
 	// a feeds b and c (which can run in parallel), both feed merge d.
@@ -186,6 +189,7 @@ func TestPerNode_DiamondSpreadsAcrossWorkers(t *testing.T) {
 }
 
 func TestPerNode_FailedPredecessorAbortsDescendants(t *testing.T) {
+	t.Parallel()
 	h := newWorkerHarness(t, 1)
 
 	g := core.Graph{
@@ -217,6 +221,7 @@ func TestPerNode_FailedPredecessorAbortsDescendants(t *testing.T) {
 }
 
 func TestPerNode_NodesExecuteInDependencyOrder(t *testing.T) {
+	t.Parallel()
 	// One worker so any out-of-order execution would be visible. Verify
 	// that a child node is only ever picked up after its parent finished.
 	h := newWorkerHarness(t, 1)
@@ -249,6 +254,7 @@ func TestPerNode_NodesExecuteInDependencyOrder(t *testing.T) {
 }
 
 func TestPerNode_LeaseExpiryAllowsReclaim(t *testing.T) {
+	t.Parallel()
 	// Manually enqueue a node-record, simulate a dead worker holding the
 	// claim, then start a real worker that should reclaim and finish it.
 	jobs := jobstore.NewMemory()
@@ -315,6 +321,7 @@ func TestPerNode_LeaseExpiryAllowsReclaim(t *testing.T) {
 }
 
 func TestPerNode_IdempotentDispatch_NoDoubleEnqueue(t *testing.T) {
+	t.Parallel()
 	// Many workers; a merge node with multiple predecessors. When the
 	// predecessors finish nearly simultaneously, multiple workers race
 	// to dispatch the same downstream node. The deterministic ID +
@@ -350,6 +357,7 @@ func TestPerNode_IdempotentDispatch_NoDoubleEnqueue(t *testing.T) {
 }
 
 func TestPerNode_EmptyGraphCompletesImmediately(t *testing.T) {
+	t.Parallel()
 	h := newWorkerHarness(t, 1)
 	g := core.Graph{ID: "empty", Tenant: "t", Workspace: "ws"}
 	graphRunID, err := h.svc.SubmitGraph(t.Context(), h.principal, g)
@@ -368,6 +376,7 @@ func TestPerNode_EmptyGraphCompletesImmediately(t *testing.T) {
 }
 
 func TestPerNode_TerminalOnlyPublishedOnce(t *testing.T) {
+	t.Parallel()
 	// 4 workers, 3 root nodes that finish around the same time. Every
 	// completing worker calls maybeCompleteGraph; only the one that wins
 	// the Complete race should publish a terminal event.
@@ -486,6 +495,7 @@ var _ = sync.OnceFunc
 // branch: a node job whose graph-run record carries a corrupt payload can't be
 // loaded, so the node is failed and the run marked failed without a graph walk.
 func TestWorker_FailNodeWhenGraphUnloadable(t *testing.T) {
+	t.Parallel()
 	jobs := jobstore.NewMemory()
 	bus := daemon.NewMemoryBus()
 	eng := &engine.Engine{Resolver: &engine.NodeResolver{Native: engine.Default}}

@@ -10,6 +10,7 @@ import (
 )
 
 func TestGoogleStateRoundTrip(t *testing.T) {
+	t.Parallel()
 	s, err := mintGoogleState("acme", "/dash", "acme.example.com", "bind-nonce", true)
 	if err != nil {
 		t.Fatalf("mintGoogleState: %v", err)
@@ -36,6 +37,7 @@ func TestGoogleStateRoundTrip(t *testing.T) {
 }
 
 func TestClassifyGoogleError(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		err  error
 		want string
@@ -55,6 +57,7 @@ func TestClassifyGoogleError(t *testing.T) {
 }
 
 func TestAppendQuery(t *testing.T) {
+	t.Parallel()
 	if got := appendQuery("/dash", "x", "a b"); got != "/dash?x=a+b" {
 		t.Errorf("appendQuery no-query = %q", got)
 	}
@@ -64,6 +67,7 @@ func TestAppendQuery(t *testing.T) {
 }
 
 func TestSafeReturnPathCov(t *testing.T) {
+	t.Parallel()
 	good := []string{"/", "/dash", "/a/b?c=d"}
 	bad := []string{"", "//evil.com", "/\\evil.com", "https://evil.com", "dash"}
 	for _, p := range good {
@@ -79,6 +83,7 @@ func TestSafeReturnPathCov(t *testing.T) {
 }
 
 func TestBareHostAndSameHost(t *testing.T) {
+	t.Parallel()
 	if got := bareHost("example.com:8080"); got != "example.com" {
 		t.Errorf("bareHost with port = %q", got)
 	}
@@ -94,6 +99,7 @@ func TestBareHostAndSameHost(t *testing.T) {
 }
 
 func TestEmailDomainHelpers(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		email      string
 		wantDomain string
@@ -115,6 +121,7 @@ func TestEmailDomainHelpers(t *testing.T) {
 }
 
 func TestGoogleRedirectURI(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.svc.PublicBaseURL = "https://app.example.com/"
 	if got := h.gw.authAPI().googleRedirectURI(); got != "https://app.example.com/api/v1/auth/google/callback" {
@@ -123,6 +130,7 @@ func TestGoogleRedirectURI(t *testing.T) {
 }
 
 func TestSignInRedirectURL(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	r := httptest.NewRequest("GET", "https://apex.example.com/api/v1/auth/google/callback", nil)
 
@@ -142,6 +150,7 @@ func TestSignInRedirectURL(t *testing.T) {
 }
 
 func TestRedactionHelpers(t *testing.T) {
+	t.Parallel()
 	in := map[string]any{
 		"name":        "ok",
 		"api_token":   "shh",
@@ -177,6 +186,7 @@ func TestRedactionHelpers(t *testing.T) {
 }
 
 func TestLooksSecretKey(t *testing.T) {
+	t.Parallel()
 	secret := []string{"SECRET", "api_token", "PASSWORD", "passwd", "apikey", "access_key",
 		"private_key", "client_secret", "credential", "X-Auth", "bearer_tok", "webhook",
 		"cookie", "session_id", "DSN", "connection_string", "signature"}
@@ -193,6 +203,7 @@ func TestLooksSecretKey(t *testing.T) {
 }
 
 func TestRedactEnv(t *testing.T) {
+	t.Parallel()
 	if got := redactEnv(nil); got != nil {
 		t.Errorf("redactEnv(nil) = %v, want nil", got)
 	}
@@ -203,6 +214,7 @@ func TestRedactEnv(t *testing.T) {
 }
 
 func TestCatalogStringHelpers(t *testing.T) {
+	t.Parallel()
 	if got := toString("hi"); got != "hi" {
 		t.Errorf("toString string = %q", got)
 	}

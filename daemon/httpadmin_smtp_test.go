@@ -13,6 +13,7 @@ import (
 // is instance-wide infrastructure. Gating runs before the mailer check,
 // so this holds even on a harness with no mailer configured.
 func TestSMTPTest_RequiresPlatformAdmin(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	if rw := h.do(t, "POST", "/api/v1/admin/smtp-test", nil); rw.Code != 403 {
 		t.Errorf("editor should be 403; got %d body=%s", rw.Code, rw.Body.String())
@@ -25,6 +26,7 @@ func TestSMTPTest_RequiresPlatformAdmin(t *testing.T) {
 // With no mailer wired, a platform admin gets a clear 501 rather than a
 // 500 — "not configured" is a normal state the UI surfaces as guidance.
 func TestSMTPTest_NotConfigured(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.platformDo(t, "POST", "/api/v1/admin/smtp-test", nil)
 	if rw.Code != 501 {
@@ -34,6 +36,7 @@ func TestSMTPTest_NotConfigured(t *testing.T) {
 
 // A bad recipient is rejected as client input (400), before any dial.
 func TestSMTPTest_InvalidRecipient(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	srv := newFakeSMTP(t)
 	m, err := NewMailerFromURL("smtp://"+srv.addr+"?tls=none", "noreply@example.com")
@@ -50,6 +53,7 @@ func TestSMTPTest_InvalidRecipient(t *testing.T) {
 // Happy path: the message actually reaches the (fake) SMTP server with
 // the requested recipient and the configured From.
 func TestSMTPTest_Sends(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	srv := newFakeSMTP(t)
 	m, err := NewMailerFromURL("smtp://"+srv.addr+"?tls=none", "noreply@example.com")

@@ -61,6 +61,7 @@ func createSignupInvite(t *testing.T, h *gatewayHarness, email string) string {
 // signup is disabled, but a valid invite token lets exactly that email
 // through, and the token can't be reused or bent to another address.
 func TestSignupInvite_GateOpensForInvitedEmail(t *testing.T) {
+	t.Parallel()
 	h := signupInviteHarness(t)
 
 	// Baseline: signup is closed without an invite.
@@ -124,6 +125,7 @@ func TestSignupInvite_GateOpensForInvitedEmail(t *testing.T) {
 // TestSignupInvite_RevokedTokenStaysClosed: a revoked invite no longer
 // opens the gate.
 func TestSignupInvite_RevokedTokenStaysClosed(t *testing.T) {
+	t.Parallel()
 	h := signupInviteHarness(t)
 	token := createSignupInvite(t, h, "later@example.com")
 
@@ -141,6 +143,7 @@ func TestSignupInvite_RevokedTokenStaysClosed(t *testing.T) {
 // TestSignupInvite_NotAnOrgInvite: a signup-invite token must not be
 // usable through the org-invite surfaces (they share a store).
 func TestSignupInvite_NotAnOrgInvite(t *testing.T) {
+	t.Parallel()
 	h := signupInviteHarness(t)
 	token := createSignupInvite(t, h, "solo@example.com")
 
@@ -153,6 +156,7 @@ func TestSignupInvite_NotAnOrgInvite(t *testing.T) {
 // TestSignupInvite_ExpiredStaysClosed: an expired signup-invite no longer
 // opens the gate (IsPending is false past expiry).
 func TestSignupInvite_ExpiredStaysClosed(t *testing.T) {
+	t.Parallel()
 	h := signupInviteHarness(t)
 	now := time.Now().UTC()
 	if err := h.gw.Invitations.PutInvitation(t.Context(), auth.Invitation{
@@ -175,6 +179,7 @@ func TestSignupInvite_ExpiredStaysClosed(t *testing.T) {
 // TestSignupInvite_RequiresPlatformAdmin: a mere org admin can't mint
 // platform signup-invites.
 func TestSignupInvite_RequiresPlatformAdmin(t *testing.T) {
+	t.Parallel()
 	h := signupInviteHarness(t)
 	if rw := h.adminDo(t, "POST", "/api/v1/admin/signup-invites", map[string]string{
 		"email": "x@example.com",
@@ -186,6 +191,7 @@ func TestSignupInvite_RequiresPlatformAdmin(t *testing.T) {
 // TestSignupInvite_RejectsExistingAccount: inviting an email that already
 // has an account is a 409, not a dangling invite.
 func TestSignupInvite_RejectsExistingAccount(t *testing.T) {
+	t.Parallel()
 	h := signupInviteHarness(t)
 	// Mint an account first via an invite.
 	token := createSignupInvite(t, h, "taken@example.com")
@@ -203,6 +209,7 @@ func TestSignupInvite_RejectsExistingAccount(t *testing.T) {
 }
 
 func TestListSignupInvites_NotConfigured(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t) // no Invitations
 	rw := h.platformDo(t, "GET", "/api/v1/admin/signup-invites", nil)
 	if rw.Code != http.StatusNotImplemented {
@@ -211,6 +218,7 @@ func TestListSignupInvites_NotConfigured(t *testing.T) {
 }
 
 func TestListSignupInvites_Forbidden(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	inv, _ := auth.OpenJSONInvitationStore("")
 	h.gw.Invitations = inv
@@ -222,6 +230,7 @@ func TestListSignupInvites_Forbidden(t *testing.T) {
 }
 
 func TestRevokeSignupInvite_NotConfigured(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.platformDo(t, "DELETE", "/api/v1/admin/signup-invites/sometoken", nil)
 	if rw.Code != http.StatusNotImplemented {
@@ -230,6 +239,7 @@ func TestRevokeSignupInvite_NotConfigured(t *testing.T) {
 }
 
 func TestRevokeSignupInvite_Forbidden(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	inv, _ := auth.OpenJSONInvitationStore("")
 	h.gw.Invitations = inv
@@ -240,6 +250,7 @@ func TestRevokeSignupInvite_Forbidden(t *testing.T) {
 }
 
 func TestRevokeSignupInvite_NotFound(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	inv, _ := auth.OpenJSONInvitationStore("")
 	h.gw.Invitations = inv

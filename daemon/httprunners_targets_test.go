@@ -51,6 +51,7 @@ func listTargets(t *testing.T, h *HTTPGateway, p core.Principal) *httptest.Respo
 }
 
 func TestListRunnerTargets_AnEditorCanSeeTheMachinesItMayTarget(t *testing.T) {
+	t.Parallel()
 	h := targetsGateway(t)
 	rw := listTargets(t, h, editorPrincipal("acme"))
 	if rw.Code != 200 {
@@ -81,6 +82,7 @@ func TestListRunnerTargets_AnEditorCanSeeTheMachinesItMayTarget(t *testing.T) {
 // The narrower shape is the point of the separate endpoint: an editor is told
 // where work can go, not who administers the fleet.
 func TestListRunnerTargets_SaysNothingAboutAdministeringTheFleet(t *testing.T) {
+	t.Parallel()
 	h := targetsGateway(t)
 	rw := listTargets(t, h, editorPrincipal("acme"))
 	for _, leaked := range []string{"created_by", "created_at", "version", "last_seen"} {
@@ -91,6 +93,7 @@ func TestListRunnerTargets_SaysNothingAboutAdministeringTheFleet(t *testing.T) {
 }
 
 func TestListRunnerTargets_RefusesSomeoneWhoCannotEditFlows(t *testing.T) {
+	t.Parallel()
 	h := targetsGateway(t)
 	viewer := core.Principal{
 		Subject: "viewer-1", Tenant: "acme",
@@ -104,6 +107,7 @@ func TestListRunnerTargets_RefusesSomeoneWhoCannotEditFlows(t *testing.T) {
 // One org's machines must never appear in another's picker: names are unique
 // only per organisation, so the tenant is the whole boundary.
 func TestListRunnerTargets_IsScopedToTheCallersOrg(t *testing.T) {
+	t.Parallel()
 	h := targetsGateway(t)
 	rw := listTargets(t, h, editorPrincipal("other-co"))
 	if rw.Code != 200 {
@@ -117,6 +121,7 @@ func TestListRunnerTargets_IsScopedToTheCallersOrg(t *testing.T) {
 // A deployment without Postgres has no runners at all, and the picker degrades
 // to a text box on the strength of this answer.
 func TestListRunnerTargets_SaysRunnersAreNotConfigured(t *testing.T) {
+	t.Parallel()
 	h := &HTTPGateway{}
 	rw := listTargets(t, h, editorPrincipal("acme"))
 	if rw.Code != 501 {
@@ -127,6 +132,7 @@ func TestListRunnerTargets_SaysRunnersAreNotConfigured(t *testing.T) {
 // The list is derived from check-ins rather than reported, so a machine that
 // stopped polling has to fall out of "online" on its own.
 func TestListRunnerTargets_AStaleMachineReadsAsOffline(t *testing.T) {
+	t.Parallel()
 	store := NewMemRunnerStore()
 	long := time.Now().Add(-2 * RunnerOnlineWindow)
 	rs := &Runners{Store: store, Now: func() time.Time { return long }}
@@ -161,6 +167,7 @@ func setLabels(t *testing.T, h *HTTPGateway, p core.Principal, name, body string
 }
 
 func TestSetRunnerLabels_RetagsAMachineWithoutVisitingIt(t *testing.T) {
+	t.Parallel()
 	h := targetsGateway(t)
 	audit := NewMemAuditLog()
 	h.Audit = audit
@@ -203,6 +210,7 @@ func TestSetRunnerLabels_RetagsAMachineWithoutVisitingIt(t *testing.T) {
 // Retagging reroutes every step aimed at the label, so it belongs with
 // registration rather than with editing a flow.
 func TestSetRunnerLabels_NeedsRunnerAdminRatherThanGraphEdit(t *testing.T) {
+	t.Parallel()
 	h := targetsGateway(t)
 	if rw := setLabels(t, h, editorPrincipal("acme"), "invoices-box", `{"labels":["build"]}`); rw.Code != 403 {
 		t.Errorf("code %d, want 403 for someone who can only edit flows", rw.Code)
@@ -210,6 +218,7 @@ func TestSetRunnerLabels_NeedsRunnerAdminRatherThanGraphEdit(t *testing.T) {
 }
 
 func TestSetRunnerLabels_RefusesALabelTheInstallCommandCouldNotExpress(t *testing.T) {
+	t.Parallel()
 	h := targetsGateway(t)
 	rw := setLabels(t, h, adminPrincipal("acme"), "invoices-box", `{"labels":["a,b"]}`)
 	if rw.Code != 400 {
@@ -222,6 +231,7 @@ func TestSetRunnerLabels_RefusesALabelTheInstallCommandCouldNotExpress(t *testin
 }
 
 func TestSetRunnerLabels_CannotReachAnotherOrgsMachine(t *testing.T) {
+	t.Parallel()
 	h := targetsGateway(t)
 	// Same name, different organisation: names are unique only per org, so the
 	// tenant is what stops one org retagging another's fleet.
@@ -231,6 +241,7 @@ func TestSetRunnerLabels_CannotReachAnotherOrgsMachine(t *testing.T) {
 }
 
 func TestSetRunnerLabels_ClearingThemIsAllowed(t *testing.T) {
+	t.Parallel()
 	h := targetsGateway(t)
 	rw := setLabels(t, h, adminPrincipal("acme"), "invoices-box", `{"labels":[]}`)
 	if rw.Code != 200 {
@@ -254,6 +265,7 @@ func TestSetRunnerLabels_ClearingThemIsAllowed(t *testing.T) {
 // grace and then fails, and for those thirty seconds a bare "waiting for a
 // machine tagged build" reads like progress. These pin the difference.
 func TestWaitingMessage_SaysHowManyOfTheMatchingMachinesAreOn(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	req := DispatchRequest{Tenant: "acme", Tags: []string{"build"}}
 	matches := []Runner{
@@ -268,6 +280,7 @@ func TestWaitingMessage_SaysHowManyOfTheMatchingMachinesAreOn(t *testing.T) {
 }
 
 func TestWaitingMessage_SaysWhenNothingIsThereToTakeIt(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	req := DispatchRequest{Tenant: "acme", Tags: []string{"build", "gpu"}}
 	stale := now.Add(-2 * RunnerOnlineWindow)
@@ -294,6 +307,7 @@ func TestWaitingMessage_SaysWhenNothingIsThereToTakeIt(t *testing.T) {
 // A deployment with no runner registry reaches this too, and must not promise
 // anything about who is there.
 func TestWaitingMessage_PromisesNothingWhenTheFleetIsUnknown(t *testing.T) {
+	t.Parallel()
 	got := waitingMessage(DispatchRequest{Tags: []string{"build"}}, nil, time.Now())
 	if got != "waiting for a machine tagged build" {
 		t.Errorf("message = %q, want the plain form", got)

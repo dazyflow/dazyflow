@@ -171,6 +171,7 @@ func newSweepHarness(t *testing.T) (*gatewayHarness, string) {
 // authenticated admin/CRUD routes no Fuzz target covers — degrades safely,
 // and auto-includes any route added later.
 func TestAllRoutes_MalformedBodyNo5xx(t *testing.T) {
+	t.Parallel()
 	routes := enumerateRoutes(t)
 	h, tok := newSweepHarness(t)
 

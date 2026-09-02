@@ -17,6 +17,7 @@ import (
 // pipeline (records → snapshot → BuildSupportBundle) must not leak a run's
 // output payload or an error's Details.
 func TestRunSnapshotFromRecords_FeedsRedactedBundle(t *testing.T) {
+	t.Parallel()
 	enqueued := time.Unix(1_700_000_000, 0)
 	started := enqueued.Add(time.Second)
 	finished := started.Add(2 * time.Second)
@@ -81,6 +82,7 @@ func TestRunSnapshotFromRecords_FeedsRedactedBundle(t *testing.T) {
 }
 
 func TestRunSnapshotFromRecords_NoResult(t *testing.T) {
+	t.Parallel()
 	// A node still running / with no Result must not panic and carries no output.
 	rs := support.RunSnapshotFromRecords(
 		core.JobRecord{ID: "run-1", EnqueuedAt: time.Unix(1_700_000_000, 0)},

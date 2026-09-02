@@ -19,6 +19,7 @@ const cov3FlowID = "t%2Fws%2Ff1"
 // --- readFlowID branches (shared by every /me/flows/{id} handler) -----
 
 func TestMeFlows_BadFlowID(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// A flow_id without two slashes is invalid -> 400 invalid_flow_id.
 	rw := h.do(t, "GET", "/api/v1/me/flows/justanid/published", nil)
@@ -31,6 +32,7 @@ func TestMeFlows_BadFlowID(t *testing.T) {
 }
 
 func TestMeFlows_ForbiddenScope(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// Principal is bound to t/ws; acting on another tenant -> 403 forbidden_scope.
 	rw := h.do(t, "GET", "/api/v1/me/flows/other%2Fws%2Ff1/published", nil)
@@ -50,6 +52,7 @@ func TestMeFlows_ForbiddenScope(t *testing.T) {
 // --- publishedFlowMe / publishFlowMe / unpublishFlowMe ----------------
 
 func TestPublishedFlowMe_NotFound(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "GET", "/api/v1/me/flows/t%2Fws%2Fghost/published", nil)
 	if rw.Code != http.StatusNotFound {
@@ -61,6 +64,7 @@ func TestPublishedFlowMe_NotFound(t *testing.T) {
 }
 
 func TestPublishedFlowMe_OK(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	covSeedFlow(t, h, "f1")
 	rw := h.do(t, "GET", "/api/v1/me/flows/"+cov3FlowID+"/published", nil)
@@ -70,6 +74,7 @@ func TestPublishedFlowMe_OK(t *testing.T) {
 }
 
 func TestPublishFlowMe_MissingFlowErrors(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// A missing flow surfaces as a resolve error mapped to 403 (the publish
 	// service can't find HEAD to promote).
@@ -80,6 +85,7 @@ func TestPublishFlowMe_MissingFlowErrors(t *testing.T) {
 }
 
 func TestPublishFlowMe_OK_WithLabel(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	covSeedFlow(t, h, "f1")
 	rw := h.do(t, "POST", "/api/v1/me/flows/"+cov3FlowID+"/publish", map[string]any{"label": "v2"})
@@ -96,6 +102,7 @@ func TestPublishFlowMe_OK_WithLabel(t *testing.T) {
 // the ref the client asked for — a successful publish of the WRONG commit,
 // with only a server-side log line recording that anything went wrong.
 func TestPublishFlowMe_MalformedBodyIsRejected(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	covSeedFlow(t, h, "f1")
 	req := newRawReq(t, h, "POST", "/api/v1/me/flows/"+cov3FlowID+"/publish", "{not json")
@@ -108,6 +115,7 @@ func TestPublishFlowMe_MalformedBodyIsRejected(t *testing.T) {
 // An absent body still means "publish HEAD, no label" — the optional-body
 // contract is unchanged.
 func TestPublishFlowMe_EmptyBodyPublishesHead(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	covSeedFlow(t, h, "f1")
 	req := newRawReq(t, h, "POST", "/api/v1/me/flows/"+cov3FlowID+"/publish", "")
@@ -118,6 +126,7 @@ func TestPublishFlowMe_EmptyBodyPublishesHead(t *testing.T) {
 }
 
 func TestPublishFlowMe_Forbidden_NonAdmin(t *testing.T) {
+	t.Parallel()
 	h := newRunOnlyHarness(t)
 	covSeedFlow(t, h.gatewayHarness, "f1")
 	rw := runOnlyDo(t, h, "POST", "/api/v1/me/flows/"+cov3FlowID+"/publish", nil)
@@ -127,6 +136,7 @@ func TestPublishFlowMe_Forbidden_NonAdmin(t *testing.T) {
 }
 
 func TestUnpublishFlowMe_MissingFlowErrors(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "POST", "/api/v1/me/flows/t%2Fws%2Fghost/unpublish", nil)
 	if rw.Code != http.StatusForbidden && rw.Code != http.StatusNotFound {
@@ -135,6 +145,7 @@ func TestUnpublishFlowMe_MissingFlowErrors(t *testing.T) {
 }
 
 func TestUnpublishFlowMe_OK(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	covSeedFlow(t, h, "f1")
 	if rw := h.do(t, "POST", "/api/v1/me/flows/"+cov3FlowID+"/publish", nil); rw.Code != http.StatusOK {
@@ -150,6 +161,7 @@ func TestUnpublishFlowMe_OK(t *testing.T) {
 }
 
 func TestUnpublishFlowMe_Forbidden_NonAdmin(t *testing.T) {
+	t.Parallel()
 	h := newRunOnlyHarness(t)
 	covSeedFlow(t, h.gatewayHarness, "f1")
 	rw := runOnlyDo(t, h, "POST", "/api/v1/me/flows/"+cov3FlowID+"/unpublish", nil)
@@ -161,6 +173,7 @@ func TestUnpublishFlowMe_Forbidden_NonAdmin(t *testing.T) {
 // --- restoreFlowMe ----------------------------------------------------
 
 func TestRestoreFlowMe_MissingRef(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	covSeedFlow(t, h, "f1")
 	rw := h.do(t, "POST", "/api/v1/me/flows/"+cov3FlowID+"/restore", map[string]any{"ref": "  "})
@@ -173,6 +186,7 @@ func TestRestoreFlowMe_MissingRef(t *testing.T) {
 }
 
 func TestRestoreFlowMe_UnknownRef(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	covSeedFlow(t, h, "f1")
 	rw := h.do(t, "POST", "/api/v1/me/flows/"+cov3FlowID+"/restore", map[string]any{"ref": "deadbeef"})
@@ -185,6 +199,7 @@ func TestRestoreFlowMe_UnknownRef(t *testing.T) {
 }
 
 func TestRestoreFlowMe_OK(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	covSeedFlow(t, h, "f1")
 	// Save a second revision, then restore to the first.
@@ -204,6 +219,7 @@ func TestRestoreFlowMe_OK(t *testing.T) {
 // --- labelRevisionMe --------------------------------------------------
 
 func TestLabelRevisionMe_MissingFlowErrors(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "POST", "/api/v1/me/flows/t%2Fws%2Fghost/label", map[string]any{"label": "x"})
 	if rw.Code != http.StatusForbidden && rw.Code != http.StatusNotFound {
@@ -212,6 +228,7 @@ func TestLabelRevisionMe_MissingFlowErrors(t *testing.T) {
 }
 
 func TestLabelRevisionMe_Forbidden_NonAdmin(t *testing.T) {
+	t.Parallel()
 	h := newRunOnlyHarness(t)
 	covSeedFlow(t, h.gatewayHarness, "f1")
 	rw := runOnlyDo(t, h, "POST", "/api/v1/me/flows/"+cov3FlowID+"/label", map[string]any{"label": "x"})
@@ -223,6 +240,7 @@ func TestLabelRevisionMe_Forbidden_NonAdmin(t *testing.T) {
 // --- enable / disable -------------------------------------------------
 
 func TestEnableDisableFlowMe_OK(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	covSeedFlow(t, h, "f1")
 	if rw := h.do(t, "POST", "/api/v1/me/flows/"+cov3FlowID+"/disable", nil); rw.Code != http.StatusOK {
@@ -238,6 +256,7 @@ func TestEnableDisableFlowMe_OK(t *testing.T) {
 }
 
 func TestSetFlowEnabled_Forbidden_NonAdmin(t *testing.T) {
+	t.Parallel()
 	h := newRunOnlyHarness(t)
 	covSeedFlow(t, h.gatewayHarness, "f1")
 	rw := runOnlyDo(t, h, "POST", "/api/v1/me/flows/"+cov3FlowID+"/disable", nil)
@@ -249,6 +268,7 @@ func TestSetFlowEnabled_Forbidden_NonAdmin(t *testing.T) {
 // --- validateFlowMe ---------------------------------------------------
 
 func TestValidateFlowMe_NotFound(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "POST", "/api/v1/me/flows/t%2Fws%2Fghost/validate", nil)
 	if rw.Code != http.StatusNotFound {
@@ -257,6 +277,7 @@ func TestValidateFlowMe_NotFound(t *testing.T) {
 }
 
 func TestValidateFlowMe_OK(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	covSeedFlow(t, h, "f1")
 	rw := h.do(t, "POST", "/api/v1/me/flows/"+cov3FlowID+"/validate", nil)
@@ -271,6 +292,7 @@ func TestValidateFlowMe_OK(t *testing.T) {
 // --- historyFlowMe ----------------------------------------------------
 
 func TestHistoryFlowMe_NotFound(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "GET", "/api/v1/me/flows/t%2Fws%2Fghost/history", nil)
 	if rw.Code != http.StatusNotFound {
@@ -281,6 +303,7 @@ func TestHistoryFlowMe_NotFound(t *testing.T) {
 // --- duplicateFlowMe --------------------------------------------------
 
 func TestDuplicateFlowMe_OK(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	covSeedFlow(t, h, "f1")
 	rw := h.do(t, "POST", "/api/v1/me/flows/"+cov3FlowID+"/duplicate", map[string]any{"name": "My copy"})
@@ -301,6 +324,7 @@ func TestDuplicateFlowMe_OK(t *testing.T) {
 }
 
 func TestDuplicateFlowMe_MissingSource(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "POST", "/api/v1/me/flows/t%2Fws%2Fghost/duplicate", nil)
 	if rw.Code != http.StatusNotFound {

@@ -18,6 +18,7 @@ import (
 // git_checkout cache (gitcache/<flow>) is removed when the flow is deleted,
 // while unrelated workspace files are left untouched.
 func TestDeleteGraph_RemovesGitCache(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	sb, err := NewFSSandbox(base)
 	if err != nil {
@@ -104,6 +105,7 @@ func seedCache(t *testing.T, root, flow, node string) string {
 // reclaimed anything. Saving the flow must now reclaim the orphan while
 // leaving every live step's clone — and unrelated flows — untouched.
 func TestSaveGraph_PrunesOrphanedGitCache(t *testing.T) {
+	t.Parallel()
 	svc, p, _, root := newGitCacheService(t)
 
 	keep := seedCache(t, root, "flow1", "co")
@@ -132,6 +134,7 @@ func TestSaveGraph_PrunesOrphanedGitCache(t *testing.T) {
 // longer a git_checkout (or was never one) never has its folder reclaimed
 // out from under it while the step still exists.
 func TestSaveGraph_PrunesKeepsNonCheckoutNodes(t *testing.T) {
+	t.Parallel()
 	svc, p, _, root := newGitCacheService(t)
 	dir := seedCache(t, root, "flow1", "step")
 
@@ -148,6 +151,7 @@ func TestSaveGraph_PrunesKeepsNonCheckoutNodes(t *testing.T) {
 // TestPruneGitCache_NoCacheDir: the common case (a flow that never ran a
 // checkout) is a no-op, not an error.
 func TestPruneGitCache_NoCacheDir(t *testing.T) {
+	t.Parallel()
 	svc, _, _, _ := newGitCacheService(t)
 	svc.pruneGitCache("acme", "main", core.Graph{ID: "nope"})
 }

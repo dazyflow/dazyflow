@@ -32,6 +32,7 @@ func storeOrgTemplate(t *testing.T, p *EmailTemplateProvider, tenant, name, html
 }
 
 func TestProvider_BuiltinResolves(t *testing.T) {
+	t.Parallel()
 	p := newTemplateProvider(t)
 	html, _, ok, err := p.TemplateHTML(t.Context(), "t", "builtin:plain")
 	if err != nil || !ok {
@@ -43,6 +44,7 @@ func TestProvider_BuiltinResolves(t *testing.T) {
 }
 
 func TestProvider_OrgResolvesByTenant(t *testing.T) {
+	t.Parallel()
 	p := newTemplateProvider(t)
 	storeOrgTemplate(t, p, "t", "welcome", "<div>{{.Body}}</div>")
 
@@ -65,6 +67,7 @@ func TestProvider_OrgResolvesByTenant(t *testing.T) {
 }
 
 func TestProvider_UnknownMisses(t *testing.T) {
+	t.Parallel()
 	p := newTemplateProvider(t)
 	_, _, ok, err := p.TemplateHTML(t.Context(), "t", "nope")
 	if err != nil {

@@ -20,6 +20,7 @@ import (
 // leak, and a missing grant / missing role are rejected. Complements the
 // store/handler unit tests (which don't exercise the graph-load path).
 func TestSupportView_EndToEnd(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	now := time.Unix(1_700_000_000, 0).UTC()
 	h.gw.Grants = support.NewMemGrantStore()

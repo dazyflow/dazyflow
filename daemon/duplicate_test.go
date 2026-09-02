@@ -28,6 +28,7 @@ func dupTestService(t *testing.T) (*Service, core.Principal) {
 // copy gets a fresh ID, starts disabled, is owned by the duplicator, carries
 // the source's nodes + metadata, and leaves the source untouched.
 func TestDuplicateGraph_CopiesAsDisabledDraft(t *testing.T) {
+	t.Parallel()
 	svc, p := dupTestService(t)
 	ws := svc.Workspaces.(MapWorkspaces)["acme/main"]
 
@@ -91,6 +92,7 @@ func TestDuplicateGraph_CopiesAsDisabledDraft(t *testing.T) {
 // TestDuplicateGraph_UniqueIDs verifies a second copy of the same source
 // doesn't collide with the first.
 func TestDuplicateGraph_UniqueIDs(t *testing.T) {
+	t.Parallel()
 	svc, p := dupTestService(t)
 	ws := svc.Workspaces.(MapWorkspaces)["acme/main"]
 	if _, err := ws.Save(core.Graph{ID: "flow1", Tenant: "acme", Workspace: "main", Name: "F"}, "bob"); err != nil {
@@ -115,6 +117,7 @@ func TestDuplicateGraph_UniqueIDs(t *testing.T) {
 
 // TestDuplicateGraph_CustomName honors a caller-supplied name.
 func TestDuplicateGraph_CustomName(t *testing.T) {
+	t.Parallel()
 	svc, p := dupTestService(t)
 	ws := svc.Workspaces.(MapWorkspaces)["acme/main"]
 	if _, err := ws.Save(core.Graph{ID: "flow1", Tenant: "acme", Workspace: "main", Name: "F"}, "bob"); err != nil {
@@ -132,6 +135,7 @@ func TestDuplicateGraph_CustomName(t *testing.T) {
 // TestDuplicateGraph_MissingSource returns ErrNotFound (which the handler maps
 // to a 404) rather than creating an empty flow.
 func TestDuplicateGraph_MissingSource(t *testing.T) {
+	t.Parallel()
 	svc, p := dupTestService(t)
 	_, _, _, err := svc.DuplicateGraph(t.Context(), p, "acme", "main", "nope", "")
 	if err == nil {

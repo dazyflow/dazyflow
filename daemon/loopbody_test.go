@@ -12,6 +12,7 @@ import (
 // A for_each "body" pin owns the entry node and everything downstream of it;
 // the items source, the loop node, and nodes fed from results are NOT owned.
 func TestLoopBodyOwners(t *testing.T) {
+	t.Parallel()
 	g := core.Graph{
 		Nodes: []core.Node{
 			{ID: "read", Module: "sheets_read_range"},
@@ -41,6 +42,7 @@ func TestLoopBodyOwners(t *testing.T) {
 // A loop inside another loop's body is rejected at submit time (the body
 // runs in-process with no per-item fan-out, so a nested loop would misbehave).
 func TestValidateLoopBodies_RejectsNested(t *testing.T) {
+	t.Parallel()
 	g := core.Graph{
 		Nodes: []core.Node{
 			{ID: "rows", Module: "rows"},
@@ -62,6 +64,7 @@ func TestValidateLoopBodies_RejectsNested(t *testing.T) {
 // A single (non-nested) loop body passes validation, and so does a plain
 // graph with no loops.
 func TestValidateLoopBodies_AllowsSingleAndNone(t *testing.T) {
+	t.Parallel()
 	single := core.Graph{
 		Nodes: []core.Node{
 			{ID: "rows", Module: "rows"},
@@ -87,6 +90,7 @@ func TestValidateLoopBodies_AllowsSingleAndNone(t *testing.T) {
 // No body pin → no owners (an unwired for_each, and ordinary graphs, are
 // unaffected — the dispatcher excludes nothing).
 func TestLoopBodyOwners_NoBodyPin(t *testing.T) {
+	t.Parallel()
 	g := core.Graph{
 		Nodes: []core.Node{
 			{ID: "read", Module: "sheets_read_range"},

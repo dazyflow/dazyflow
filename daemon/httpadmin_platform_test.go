@@ -283,6 +283,7 @@ func platformHarness(t *testing.T) (*gatewayHarness, *covProfiles, *covBlocklist
 // ---- user moderation ------------------------------------------------
 
 func TestPlatformUsers_ListGetModerate(t *testing.T) {
+	t.Parallel()
 	h, prof, bl, mem, _, _ := platformHarness(t)
 	ctx := context.Background()
 	_ = h.gw.Users.PutUser(ctx, auth.User{Email: "alice@example.com", Subject: "alice@example.com", Tenant: "acme"})
@@ -388,6 +389,7 @@ func (m *memPlatformAdmins) List(_ context.Context) ([]PlatformAdminGrant, error
 }
 
 func TestPlatformAdminGrantRevoke(t *testing.T) {
+	t.Parallel()
 	h, _, _, _, _, _ := platformHarness(t)
 	ctx := context.Background()
 	grants := newMemPlatformAdmins()
@@ -441,6 +443,7 @@ func TestPlatformAdminGrantRevoke(t *testing.T) {
 // With no grant store wired, the runtime grant/revoke endpoints return 501
 // (the env allowlist still works).
 func TestPlatformAdminGrant_NoStore(t *testing.T) {
+	t.Parallel()
 	h, _, _, _, _, _ := platformHarness(t)
 	_ = h.gw.Users.PutUser(context.Background(), auth.User{Email: "dave@example.com", Subject: "dave@example.com"})
 	if rw := h.platformDo(t, "POST", "/api/v1/admin/platform/users/dave@example.com/platform-admin", nil); rw.Code != http.StatusNotImplemented {
@@ -449,6 +452,7 @@ func TestPlatformAdminGrant_NoStore(t *testing.T) {
 }
 
 func TestPlatformUsers_ModerationGuards(t *testing.T) {
+	t.Parallel()
 	h, _, _, _, _, _ := platformHarness(t)
 	ctx := context.Background()
 	h.gw.PlatformAdmins = []string{"op@example.com"}
@@ -471,6 +475,7 @@ func TestPlatformUsers_ModerationGuards(t *testing.T) {
 // ---- org moderation -------------------------------------------------
 
 func TestPlatformOrgs_ListGetSuspendBan(t *testing.T) {
+	t.Parallel()
 	h, prof, bl, mem, _, _ := platformHarness(t)
 	ctx := context.Background()
 	_ = prof.PutOrgProfile(ctx, auth.OrgProfile{Tenant: "acme", DisplayName: "Acme"})
@@ -527,6 +532,7 @@ func TestPlatformOrgs_ListGetSuspendBan(t *testing.T) {
 // ---- drops (killswitch) --------------------------------------------
 
 func TestPlatformDrops_ListDisableEnable(t *testing.T) {
+	t.Parallel()
 	h, _, _, _, _, ds := platformHarness(t)
 
 	// Pick a real drop id from the catalog.
@@ -578,6 +584,7 @@ func TestPlatformDrops_ListDisableEnable(t *testing.T) {
 // ---- tiers & entitlements ------------------------------------------
 
 func TestPlatformTiers_CRUD(t *testing.T) {
+	t.Parallel()
 	h, _, _, _, ent, _ := platformHarness(t)
 
 	rw := h.platformDo(t, "GET", "/api/v1/admin/platform/tiers", nil)
@@ -620,6 +627,7 @@ func TestPlatformTiers_CRUD(t *testing.T) {
 }
 
 func TestPlatformEntitlement_GetPut(t *testing.T) {
+	t.Parallel()
 	h, _, _, _, ent, _ := platformHarness(t)
 
 	rw := h.platformDo(t, "GET", "/api/v1/admin/platform/orgs/acme/entitlement", nil)
@@ -648,6 +656,7 @@ func TestPlatformEntitlement_GetPut(t *testing.T) {
 // ---- cross-tenant invite -------------------------------------------
 
 func TestPlatformInviteMember(t *testing.T) {
+	t.Parallel()
 	h, _, _, _, _, _ := platformHarness(t)
 
 	// Default roles + workspace.

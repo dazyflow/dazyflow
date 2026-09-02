@@ -50,6 +50,7 @@ var live = []llm.ModelOption{
 }
 
 func TestWithModelEnum_ReplacesTheOfferedList(t *testing.T) {
+	t.Parallel()
 	in := schemaWith(map[string]any{
 		"type": "string", "default": "gemini-flash-latest",
 		"enum":      []any{"gemini-2.5-pro"},
@@ -76,6 +77,7 @@ func TestWithModelEnum_ReplacesTheOfferedList(t *testing.T) {
 }
 
 func TestWithModelEnum_KeepsAValidDefault(t *testing.T) {
+	t.Parallel()
 	in := schemaWith(map[string]any{"type": "string", "default": "gemini-3.7-flash"})
 	out, ok := withModelEnum(in, live)
 	if !ok {
@@ -87,6 +89,7 @@ func TestWithModelEnum_KeepsAValidDefault(t *testing.T) {
 }
 
 func TestWithModelEnum_RepairsADefaultNobodyCanCall(t *testing.T) {
+	t.Parallel()
 	// How the Ollama steps failed: llama3.1 is a guess at what is pulled, and
 	// it reached the model field of every step nobody had configured.
 	in := schemaWith(map[string]any{"type": "string", "default": "llama3.1"})
@@ -103,6 +106,7 @@ func TestWithModelEnum_RepairsADefaultNobodyCanCall(t *testing.T) {
 }
 
 func TestWithModelEnum_LeavesAnUnexpectedSchemaAlone(t *testing.T) {
+	t.Parallel()
 	// A drop that shares an integration name but has no model field must not
 	// grow one.
 	noModel, _ := json.Marshal(map[string]any{
@@ -118,6 +122,7 @@ func TestWithModelEnum_LeavesAnUnexpectedSchemaAlone(t *testing.T) {
 }
 
 func TestOverlayLiveModels_NoSecretStoreIsANoOp(t *testing.T) {
+	t.Parallel()
 	// Without a secret store there is no credential to ask with, so the
 	// compiled-in list stands. It must not panic reaching for one.
 	s := &Service{}
@@ -132,6 +137,7 @@ func TestOverlayLiveModels_NoSecretStoreIsANoOp(t *testing.T) {
 }
 
 func TestLiveModels_WithoutAListerOrStore(t *testing.T) {
+	t.Parallel()
 	s := &Service{}
 	if got := s.liveModels("acme", llm.ProviderInfo{Name: "x"}); got != nil {
 		t.Errorf("got %v, want nil when the provider has no lister", got)

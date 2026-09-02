@@ -25,6 +25,7 @@ import (
 // c's only predecessor is b, and its template names a — two hops up. Before
 // the fix that failed the node outright with "no result recorded for node a".
 func TestPerNode_UpstreamResolvesBeyondDirectPredecessors(t *testing.T) {
+	t.Parallel()
 	h := newWorkerHarness(t, 1)
 
 	g := core.Graph{

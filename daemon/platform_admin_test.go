@@ -24,6 +24,7 @@ func hasPlatformAdmin(roles []core.Role) bool {
 }
 
 func TestElevatePlatformAdmin(t *testing.T) {
+	t.Parallel()
 	gw := &HTTPGateway{PlatformAdmins: []string{"boss@example.com"}}
 
 	t.Run("listed email gets the role", func(t *testing.T) {
@@ -81,6 +82,7 @@ func TestElevatePlatformAdmin(t *testing.T) {
 // single platform_admin.granted audit event on first apply (per email, per
 // process), not one per session issue, and not for unlisted users.
 func TestElevatePlatformAdmin_AuditsOnFirstApply(t *testing.T) {
+	t.Parallel()
 	audit := NewMemAuditLog()
 	gw := &HTTPGateway{PlatformAdmins: []string{"boss@example.com"}, Audit: audit}
 
@@ -108,6 +110,7 @@ func TestElevatePlatformAdmin_AuditsOnFirstApply(t *testing.T) {
 // into the sign-in path end to end: a listed user's session reaches the
 // platform-admin-gated admin endpoint, an unlisted one is forbidden.
 func TestSignup_ElevatesPlatformAdmin(t *testing.T) {
+	t.Parallel()
 	h := newSignupHarness(t)
 	h.gw.PlatformAdmins = []string{"boss@example.com"}
 
@@ -151,6 +154,7 @@ func TestSignup_ElevatesPlatformAdmin(t *testing.T) {
 // gets the 501. And the bypass is self-limiting — a second attempt for
 // the same listed email is rejected as a duplicate, not silently reused.
 func TestSignup_AllowlistBypassesDisabledSignup(t *testing.T) {
+	t.Parallel()
 	h := newSignupHarness(t)
 	h.gw.EnableSignup = false // signup is closed for the world
 	h.gw.PlatformAdmins = []string{"boss@example.com"}
@@ -184,6 +188,7 @@ func TestSignup_AllowlistBypassesDisabledSignup(t *testing.T) {
 // account. The SignUp page keys off this flag to render instead of
 // bouncing to /signin, so the allowlist bypass in signUp is reachable.
 func TestPublicAuthConfig_AdminBootstrap(t *testing.T) {
+	t.Parallel()
 	h := newSignupHarness(t)
 	h.gw.EnableSignup = false // signup closed for the world
 	h.gw.PlatformAdmins = []string{"boss@example.com"}

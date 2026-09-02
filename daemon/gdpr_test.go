@@ -166,6 +166,7 @@ func (f *fakeOrgProfiles) DeleteOrgProfile(context.Context, string) error {
 // ---- tests ------------------------------------------------------------
 
 func TestEraseUserIdentity_NoResidual(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	const email = "alice@example.com"
 
@@ -307,6 +308,7 @@ func TestEraseUserIdentity_NoResidual(t *testing.T) {
 }
 
 func TestDeleteOrgData_NoResidual(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	const tenant = "acme"
 
@@ -412,6 +414,7 @@ func TestDeleteOrgData_NoResidual(t *testing.T) {
 // TestMergeErase_Cov covers mergeErase: counts sum, booleans OR, warnings
 // concatenate.
 func TestMergeErase_Cov(t *testing.T) {
+	t.Parallel()
 	a := EraseReport{
 		Sessions: 1, APIKeys: 2, Memberships: 3, Invitations: 4,
 		AuditEvents: 5, Jobs: 6, RunLogs: 7, BusEvents: 8,
@@ -439,6 +442,7 @@ func TestMergeErase_Cov(t *testing.T) {
 
 // TestEraseReport_Warnf covers EraseReport.warnf.
 func TestEraseReport_Warnf(t *testing.T) {
+	t.Parallel()
 	var r EraseReport
 	r.warnf("failed %s: %d", "thing", 42)
 	if len(r.Warnings) != 1 || r.Warnings[0] != "failed thing: 42" {
@@ -449,6 +453,7 @@ func TestEraseReport_Warnf(t *testing.T) {
 // TestTenantHasOtherMembers_Cov covers the helper's three legs: nil store,
 // sole occupant, and a shared org.
 func TestTenantHasOtherMembers_Cov(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 
 	// Nil Memberships store -> false (no others known).
@@ -479,6 +484,7 @@ func TestTenantHasOtherMembers_Cov(t *testing.T) {
 // encrypted_secrets — connector credentials and OAuth tokens belonging to a
 // deleted org — sitting in the database with its DEK, still decryptable.
 func TestDeleteOrgData_ErasesSecrets(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	const tenant = "acme"
 
@@ -535,6 +541,7 @@ func TestDeleteOrgData_ErasesSecrets(t *testing.T) {
 // under a key whose wrapped form is gone from the store — ciphertext that no
 // restart of this process, and no other process, could ever open.
 func TestSecretsDeleteByTenant_DropsDEK(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	const tenant = "acme"
 
@@ -580,6 +587,7 @@ func TestSecretsDeleteByTenant_DropsDEK(t *testing.T) {
 // TestSecretsDeleteByTenant_Idempotent — erasure reruns (a retried request, a
 // cascade re-invoked after a partial failure) must not error.
 func TestSecretsDeleteByTenant_Idempotent(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	es, err := NewEncryptedSecrets(make([]byte, 32), NewMemSecretsStore())
 	if err != nil {
@@ -608,6 +616,7 @@ func TestSecretsDeleteByTenant_Idempotent(t *testing.T) {
 // assertions are deliberately per-store rather than a single count, so a
 // regression names the store that broke.
 func TestDeleteOrgData_ErasesTenantIntegrations(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	const tenant, other = "acme", "keeper"
 
@@ -755,6 +764,7 @@ func TestDeleteOrgData_ErasesTenantIntegrations(t *testing.T) {
 // map it back afterwards. The operator has to be told while the pointer is
 // still readable.
 func TestDeleteOrgData_WarnsOnLiveSubscription(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	plans := &fakePlanStore{plans: map[string]TenantPlan{
 		"acme": {
@@ -805,6 +815,7 @@ func TestDeleteOrgData_WarnsOnLiveSubscription(t *testing.T) {
 // address behind as a live role holder — and as the granter on every role that
 // person had handed to someone else.
 func TestEraseUserIdentity_RevokesRolesAndScrubsGranters(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	const email = "alice@example.com"
 	const colleague = "bob@example.com"
@@ -902,6 +913,7 @@ func TestEraseUserIdentity_RevokesRolesAndScrubsGranters(t *testing.T) {
 // cannot rewrite. Erasing the account without saying so would leave an address
 // that silently re-elevates if the person ever signs up again.
 func TestEraseUserIdentity_WarnsOnEnvPlatformAdmin(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	const email = "alice@example.com"
 
@@ -936,6 +948,7 @@ func TestEraseUserIdentity_WarnsOnEnvPlatformAdmin(t *testing.T) {
 // Org deletion never covered this, because the org is not being deleted. This
 // is the most common erasure there is.
 func TestEraseUserIdentity_ScrubsAuthorshipInSharedOrg(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	const email = "alice@example.com"
 	const tenant = "acme" // a SHARED org that outlives her

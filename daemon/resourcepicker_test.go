@@ -14,6 +14,7 @@ import (
 )
 
 func TestListAccountResources(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	RegisterResourceLister("google", "spreadsheets", func(_ context.Context, account string, _ map[string]string) ([]core.AccountResource, error) {
 		return []core.AccountResource{{ID: "abc", Name: "Budget (" + account + ")"}}, nil

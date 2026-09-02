@@ -45,6 +45,7 @@ func getToken(t *testing.T, reg *OAuthRegistry) *StoredOAuthToken {
 // refreshed: the caller gets a fresh access token, the provider is hit
 // with grant_type=refresh_token, and the new token is persisted.
 func TestOAuth_GetToken_RefreshesExpired(t *testing.T) {
+	t.Parallel()
 	reg, fp := refreshHarness(t)
 	past := time.Now().UTC().Add(-time.Minute)
 	seedToken(t, reg, &StoredOAuthToken{
@@ -86,6 +87,7 @@ func TestOAuth_GetToken_RefreshesExpired(t *testing.T) {
 
 // A token comfortably within its lifetime is returned untouched.
 func TestOAuth_GetToken_ValidNotRefreshed(t *testing.T) {
+	t.Parallel()
 	reg, fp := refreshHarness(t)
 	future := time.Now().UTC().Add(time.Hour)
 	seedToken(t, reg, &StoredOAuthToken{
@@ -108,6 +110,7 @@ func TestOAuth_GetToken_ValidNotRefreshed(t *testing.T) {
 // Expired but with no refresh_token: nothing to refresh, so the stored
 // (expired) token comes back as-is and the provider isn't called.
 func TestOAuth_GetToken_ExpiredNoRefreshToken(t *testing.T) {
+	t.Parallel()
 	reg, fp := refreshHarness(t)
 	past := time.Now().UTC().Add(-time.Minute)
 	seedToken(t, reg, &StoredOAuthToken{
@@ -129,6 +132,7 @@ func TestOAuth_GetToken_ExpiredNoRefreshToken(t *testing.T) {
 // When the refresh call fails, GetOAuthToken falls back to the stored
 // token (best-effort) rather than hard-failing the lookup.
 func TestOAuth_GetToken_RefreshFailureFallsBackToStored(t *testing.T) {
+	t.Parallel()
 	reg, fp := refreshHarness(t)
 	past := time.Now().UTC().Add(-time.Minute)
 	seedToken(t, reg, &StoredOAuthToken{
@@ -152,6 +156,7 @@ func TestOAuth_GetToken_RefreshFailureFallsBackToStored(t *testing.T) {
 // "reconnect this account" instead of showing it as healthy while every run
 // comes back 401.
 func TestOAuth_DeadGrantIsRecordedForReconnect(t *testing.T) {
+	t.Parallel()
 	reg, fp := refreshHarness(t)
 	past := time.Now().UTC().Add(-time.Minute)
 	seedToken(t, reg, &StoredOAuthToken{
@@ -198,6 +203,7 @@ func TestOAuth_DeadGrantIsRecordedForReconnect(t *testing.T) {
 // A refresh that WORKS clears a previous flag too — the account healed
 // itself (a transient provider outage, say) and shouldn't keep nagging.
 func TestOAuth_SuccessfulRefreshClearsTheFlag(t *testing.T) {
+	t.Parallel()
 	reg, fp := refreshHarness(t)
 	past := time.Now().UTC().Add(-time.Minute)
 	seedToken(t, reg, &StoredOAuthToken{
@@ -227,6 +233,7 @@ func TestOAuth_SuccessfulRefreshClearsTheFlag(t *testing.T) {
 // their flow broke. Listing accounts refreshes any whose token has already
 // expired, which is the same work the next run would do.
 func TestOAuth_RefreshStaleAccounts_FindsDeadGrantWithoutARun(t *testing.T) {
+	t.Parallel()
 	reg, fp := refreshHarness(t)
 	past := time.Now().UTC().Add(-time.Minute)
 	seedToken(t, reg, &StoredOAuthToken{
@@ -246,6 +253,7 @@ func TestOAuth_RefreshStaleAccounts_FindsDeadGrantWithoutARun(t *testing.T) {
 // An account whose token is still valid costs nothing: no refresh call, and
 // nothing to report.
 func TestOAuth_RefreshStaleAccounts_LeavesHealthyTokensAlone(t *testing.T) {
+	t.Parallel()
 	reg, fp := refreshHarness(t)
 	future := time.Now().UTC().Add(time.Hour)
 	seedToken(t, reg, &StoredOAuthToken{

@@ -28,6 +28,7 @@ func createFlowViaAPI(t *testing.T, h *gatewayHarness, id string, nodes []core.N
 }
 
 func TestRunFlowMe_Cov(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	fid := createFlowViaAPI(t, h, "runme", []core.Node{{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}}})
 
@@ -50,6 +51,7 @@ func TestRunFlowMe_Cov(t *testing.T) {
 }
 
 func TestTestTriggerFlowMe_Cov(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 
 	// Flow WITHOUT a webhook node -> 400.
@@ -67,6 +69,7 @@ func TestTestTriggerFlowMe_Cov(t *testing.T) {
 }
 
 func TestJobEvents_TerminalSnapshot_Cov(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	fid := createFlowViaAPI(t, h, "ev", []core.Node{{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}}})
 	ctx := context.Background()

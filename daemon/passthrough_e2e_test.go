@@ -23,6 +23,7 @@ import (
 // itself doing anything. Here a source emits a value into sleep.pass; sleep
 // computes nothing useful, yet its result carries the threaded value.
 func TestPassthrough_ThreadsValueThroughNode(t *testing.T) {
+	t.Parallel()
 	ks := auth.NewMemKeyStore()
 	role := core.Role{Name: "editor", Permissions: []core.Permission{
 		core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,

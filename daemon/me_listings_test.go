@@ -25,6 +25,7 @@ func unboundToken(t *testing.T, h *gatewayHarness) string {
 }
 
 func TestListFlowsMe_MissingScope(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	tok := unboundToken(t, h)
 	saved := h.token
@@ -37,6 +38,7 @@ func TestListFlowsMe_MissingScope(t *testing.T) {
 }
 
 func TestListFlowsMe_OK(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	covSeedFlow(t, h, "f1")
 	rw := h.do(t, "GET", "/api/v1/me/flows", nil)
@@ -46,6 +48,7 @@ func TestListFlowsMe_OK(t *testing.T) {
 }
 
 func TestSuggestionsMe_MissingScope(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	tok := unboundToken(t, h)
 	saved := h.token
@@ -58,6 +61,7 @@ func TestSuggestionsMe_MissingScope(t *testing.T) {
 }
 
 func TestSuggestionsMe_OK(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	covSeedFlow(t, h, "f1")
 	rw := h.do(t, "GET", "/api/v1/me/flows/suggestions", nil)
@@ -75,6 +79,7 @@ func TestSuggestionsMe_OK(t *testing.T) {
 // keeps the boundary guard from being deleted as redundant, so a future handler
 // reaching a store directly can't silently inherit a cross-tenant read.
 func TestResolveTenantWorkspaceScope_ForbiddenScope(t *testing.T) {
+	t.Parallel()
 	paths := []string{
 		"/api/v1/me/flows",
 		"/api/v1/me/flows/suggestions",
@@ -101,6 +106,7 @@ func TestResolveTenantWorkspaceScope_ForbiddenScope(t *testing.T) {
 // purpose (see core.RequireTenant). Any non-403 proves the escape hatch
 // survived; the exact code depends on what the harness store holds.
 func TestResolveTenantWorkspaceScope_PlatformAdminCrossesTenant(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.platformDo(t, "GET", "/api/v1/me/flows?tenant=other&workspace=ws", nil)
 	if rw.Code == http.StatusForbidden {
@@ -109,6 +115,7 @@ func TestResolveTenantWorkspaceScope_PlatformAdminCrossesTenant(t *testing.T) {
 }
 
 func TestHistoryFlowMe_OKWithLimit(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	covSeedFlow(t, h, "f1")
 	rw := h.do(t, "GET", "/api/v1/me/flows/"+cov3FlowID+"/history?limit=5", nil)
@@ -118,6 +125,7 @@ func TestHistoryFlowMe_OKWithLimit(t *testing.T) {
 }
 
 func TestHistoryFlowMe_BadLimitFallsBack(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	covSeedFlow(t, h, "f1")
 	// Non-numeric limit is ignored (falls back to default), still 200.

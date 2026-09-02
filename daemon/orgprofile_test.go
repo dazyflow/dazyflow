@@ -14,6 +14,7 @@ import (
 )
 
 func TestOrgProfile_GetPut_Cov(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	prof := newCovProfiles()
 	h.gw.Profiles = prof
@@ -77,6 +78,7 @@ func TestOrgProfile_GetPut_Cov(t *testing.T) {
 }
 
 func TestOrgProfile_NotConfiguredAndAuthz_Cov(t *testing.T) {
+	t.Parallel()
 	// Nil store -> 501.
 	h := newGatewayHarness(t)
 	if rw := teamAdminDo(t, h, "GET", "/api/v1/admin/org/profile", nil); rw.Code != http.StatusNotImplemented {

@@ -22,6 +22,7 @@ import (
 // package directory — so the copy is forced, and a test is the honest way to
 // keep it true. `make runner-embed` refreshes it.
 func TestEmbeddedRunnerFilesMatchTheSource(t *testing.T) {
+	t.Parallel()
 	for _, pair := range []struct{ embedded, source string }{
 		{"embed/dzrunner.py", "../runner/dzrunner.py"},
 		{"embed/runner.sh", "../runner/runner.sh"},
@@ -51,6 +52,7 @@ func TestEmbeddedRunnerFilesMatchTheSource(t *testing.T) {
 // whatever "$URL/runner.sh" returns, so a wrong path there means the operator ends
 // up with no way to manage the runner they just installed.
 func TestScriptFetchesOnlyPathsThisDaemonServes(t *testing.T) {
+	t.Parallel()
 	b, err := runnerFiles.ReadFile("embed/runner.sh")
 	if err != nil {
 		t.Fatalf("read installer: %v", err)
@@ -84,6 +86,7 @@ func TestScriptFetchesOnlyPathsThisDaemonServes(t *testing.T) {
 // The whole point of serving the installer is that the operator does not have
 // to know or type the server address.
 func TestServeRunnerScript_FillsInTheServerAddress(t *testing.T) {
+	t.Parallel()
 	gw := &HTTPGateway{svc: &Service{PublicBaseURL: "https://flows.acme.test/"}}
 	rw := httptest.NewRecorder()
 	gw.runnerAPI().serveRunnerScript(rw, httptest.NewRequest(http.MethodGet, "/runner.sh", nil))
@@ -106,6 +109,7 @@ func TestServeRunnerScript_FillsInTheServerAddress(t *testing.T) {
 // A development server has no configured public URL, and the request host is
 // then the right answer — otherwise the local install one-liner cannot work.
 func TestServeRunnerScript_FallsBackToTheRequestHost(t *testing.T) {
+	t.Parallel()
 	gw := &HTTPGateway{svc: &Service{}}
 	req := httptest.NewRequest(http.MethodGet, "/runner.sh", nil)
 	req.Host = "localhost:8080"
@@ -120,6 +124,7 @@ func TestServeRunnerScript_FallsBackToTheRequestHost(t *testing.T) {
 // Behind a proxy the scheme has to come from the forwarded header, or the agent
 // is told to call back over plaintext to an HTTPS deployment.
 func TestServeRunnerScript_HonoursForwardedProto(t *testing.T) {
+	t.Parallel()
 	// TrustProxyHeaders on, which is what an operator behind a TLS-terminating
 	// proxy sets. The rest of the gateway gates the header on it and so does
 	// this — see the next test for why.
@@ -140,6 +145,7 @@ func TestServeRunnerScript_HonoursForwardedProto(t *testing.T) {
 // forwarded headers have to be gated the way requestIsHTTPS and
 // effectiveBaseURL gate them: without TrustProxyHeaders, anyone can set them.
 func TestServeRunnerScript_IgnoresForwardedHeadersWhenNotTrusted(t *testing.T) {
+	t.Parallel()
 	gw := &HTTPGateway{svc: &Service{}}
 	req := httptest.NewRequest(http.MethodGet, "/runner.sh", nil)
 	req.Host = "flows.acme.test"
@@ -161,6 +167,7 @@ func TestServeRunnerScript_IgnoresForwardedHeadersWhenNotTrusted(t *testing.T) {
 // checksum of the very bytes this build embeds. Without it the only thing
 // vouching for that file is the transport.
 func TestServeRunnerScript_CarriesTheAgentChecksum(t *testing.T) {
+	t.Parallel()
 	gw := &HTTPGateway{svc: &Service{PublicBaseURL: "https://example.com"}}
 	rw := httptest.NewRecorder()
 	gw.runnerAPI().serveRunnerScript(rw, httptest.NewRequest(http.MethodGet, "/runner.sh", nil))
@@ -186,6 +193,7 @@ func TestServeRunnerScript_CarriesTheAgentChecksum(t *testing.T) {
 // letting it write a unit file, so it has to arrive as text and as itself —
 // there is no address to substitute in it.
 func TestServeRunnerScript_CarriesTheVerbs(t *testing.T) {
+	t.Parallel()
 	gw := &HTTPGateway{svc: &Service{PublicBaseURL: "http://example.com"}}
 	rw := httptest.NewRecorder()
 	gw.runnerAPI().serveRunnerScript(rw, httptest.NewRequest(http.MethodGet, "/runner.sh", nil))
@@ -224,6 +232,7 @@ func TestServeRunnerScript_CarriesTheVerbs(t *testing.T) {
 }
 
 func TestServeRunnerAgent_IsReadableInABrowser(t *testing.T) {
+	t.Parallel()
 	gw := &HTTPGateway{svc: &Service{}}
 	rw := httptest.NewRecorder()
 	gw.runnerAPI().serveRunnerAgent(rw, httptest.NewRequest(http.MethodGet, "/dzrunner.py", nil))

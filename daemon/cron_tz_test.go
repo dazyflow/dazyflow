@@ -16,6 +16,7 @@ import (
 // time). This is the contract the scheduler and the validate-preview
 // both rely on so a user reasons only about their own clock.
 func TestParseCronInTZ(t *testing.T) {
+	t.Parallel()
 	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
 
 	// A fixed instant well clear of any DST boundary: 2026-06-01 00:00 UTC.
@@ -53,6 +54,7 @@ func TestParseCronInTZ(t *testing.T) {
 // (so the scheduler skips it and the validate endpoint reports it)
 // rather than silently firing in the wrong zone.
 func TestParseCronInTZ_BadZone(t *testing.T) {
+	t.Parallel()
 	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
 	if _, err := parseCronInTZ(parser, "0 9 * * *", "Not/AZone"); err == nil {
 		t.Fatal("expected error for bad timezone, got nil")

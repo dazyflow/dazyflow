@@ -17,6 +17,7 @@ import (
 // connections are org-shared and additionally require organization:admin
 // (matching the connect path). Unknown providers 404; deletes are idempotent.
 func TestDisconnectConnection(t *testing.T) {
+	t.Parallel()
 	h := newAdminOAuthHarness(t) // wires EncryptedSecrets + OAuth registry
 	es := h.gw.EncryptedSecrets
 	name := secretNameFor("google", "default")

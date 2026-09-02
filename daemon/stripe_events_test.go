@@ -56,6 +56,7 @@ func (h *stripeHarness) post(t *testing.T, path string, body []byte) *httptest.R
 }
 
 func TestStripeEvents_BadSignatureRejected(t *testing.T) {
+	t.Parallel()
 	h := newStripeHarness(t)
 	body := []byte(`{}`)
 	req := httptest.NewRequest("POST", "/api/v1/events/stripe/t", bytes.NewReader(body))
@@ -68,6 +69,7 @@ func TestStripeEvents_BadSignatureRejected(t *testing.T) {
 }
 
 func TestStripeEvents_MissingSignatureRejected(t *testing.T) {
+	t.Parallel()
 	h := newStripeHarness(t)
 	req := httptest.NewRequest("POST", "/api/v1/events/stripe/t", bytes.NewReader([]byte(`{}`)))
 	rw := httptest.NewRecorder()
@@ -81,6 +83,7 @@ func TestStripeEvents_MissingSignatureRejected(t *testing.T) {
 // whose timestamp is outside the 5-minute tolerance must not validate
 // (replay protection).
 func TestStripeEvents_StaleTimestampRejected(t *testing.T) {
+	t.Parallel()
 	h := newStripeHarness(t)
 	body := []byte(`{"type":"payment_intent.succeeded"}`)
 	req := httptest.NewRequest("POST", "/api/v1/events/stripe/t", bytes.NewReader(body))
@@ -96,6 +99,7 @@ func TestStripeEvents_StaleTimestampRejected(t *testing.T) {
 // STRIPE_WEBHOOK_SECRET gets the same 401 as a bad signature, so probing
 // tenant names leaks nothing.
 func TestStripeEvents_NoTenantSecretRejected(t *testing.T) {
+	t.Parallel()
 	h := newStripeHarness(t)
 	body := []byte(`{}`)
 	req := httptest.NewRequest("POST", "/api/v1/events/stripe/other-tenant", bytes.NewReader(body))
@@ -108,6 +112,7 @@ func TestStripeEvents_NoTenantSecretRejected(t *testing.T) {
 }
 
 func TestStripeEvents_NotConfiguredReturns501(t *testing.T) {
+	t.Parallel()
 	gh := newGatewayHarness(t)
 	// gw.StripeEvents intentionally nil.
 	req := httptest.NewRequest("POST", "/api/v1/events/stripe/t", bytes.NewReader([]byte(`{}`)))
@@ -119,6 +124,7 @@ func TestStripeEvents_NotConfiguredReturns501(t *testing.T) {
 }
 
 func TestStripeEvents_PaymentDispatchesToSubscribedGraphs(t *testing.T) {
+	t.Parallel()
 	h := newStripeHarness(t)
 	g := core.Graph{
 		ID: "payment-alert", Tenant: "t", Workspace: "ws",
@@ -184,6 +190,7 @@ func TestStripeEvents_PaymentDispatchesToSubscribedGraphs(t *testing.T) {
 }
 
 func TestStripeEvents_PaymentFailedDispatches(t *testing.T) {
+	t.Parallel()
 	h := newStripeHarness(t)
 	g := core.Graph{
 		ID: "decline-alert", Tenant: "t", Workspace: "ws",
@@ -241,6 +248,7 @@ func TestStripeEvents_PaymentFailedDispatches(t *testing.T) {
 }
 
 func TestStripeEvents_SubscriptionCanceledDispatches(t *testing.T) {
+	t.Parallel()
 	h := newStripeHarness(t)
 	g := core.Graph{
 		ID: "churn-alert", Tenant: "t", Workspace: "ws",
@@ -300,6 +308,7 @@ func TestStripeEvents_SubscriptionCanceledDispatches(t *testing.T) {
 }
 
 func TestStripeOnPaymentFailed_StandaloneRunErrors(t *testing.T) {
+	t.Parallel()
 	trans, ok := engine.Default.Get("stripe_on_payment_failed")
 	if !ok {
 		t.Fatal("stripe_on_payment_failed not registered")
@@ -311,6 +320,7 @@ func TestStripeOnPaymentFailed_StandaloneRunErrors(t *testing.T) {
 }
 
 func TestStripeOnSubscriptionCanceled_StandaloneRunErrors(t *testing.T) {
+	t.Parallel()
 	trans, ok := engine.Default.Get("stripe_on_subscription_canceled")
 	if !ok {
 		t.Fatal("stripe_on_subscription_canceled not registered")
@@ -322,6 +332,7 @@ func TestStripeOnSubscriptionCanceled_StandaloneRunErrors(t *testing.T) {
 }
 
 func TestStripeEvents_UnknownEventAcked(t *testing.T) {
+	t.Parallel()
 	h := newStripeHarness(t)
 	body := []byte(`{"id":"evt_2","type":"customer.created","data":{"object":{}}}`)
 	rw := h.post(t, "/api/v1/events/stripe/t", body)
@@ -331,6 +342,7 @@ func TestStripeEvents_UnknownEventAcked(t *testing.T) {
 }
 
 func TestStripeOnPayment_StandaloneRunErrors(t *testing.T) {
+	t.Parallel()
 	trans, ok := engine.Default.Get("stripe_on_payment")
 	if !ok {
 		t.Fatal("stripe_on_payment not registered")
@@ -342,6 +354,7 @@ func TestStripeOnPayment_StandaloneRunErrors(t *testing.T) {
 }
 
 func TestFormatStripeAmount(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		minor    int64
 		currency string

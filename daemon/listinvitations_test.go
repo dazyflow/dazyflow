@@ -17,6 +17,7 @@ import (
 // (403), cross-tenant refusal (403), and the happy path returning a pending
 // invitation.
 func TestListInvitations_Cov(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 
 	// No Invitations store -> 501 (admin token so the store guard is reached).

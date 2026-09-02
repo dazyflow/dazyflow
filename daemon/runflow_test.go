@@ -14,6 +14,7 @@ import (
 // --- runFlowMe --------------------------------------------------------
 
 func TestRunFlowMe_NotFound(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "POST", "/api/v1/me/flows/t%2Fws%2Fghost/run", nil)
 	if rw.Code != http.StatusNotFound {
@@ -22,6 +23,7 @@ func TestRunFlowMe_NotFound(t *testing.T) {
 }
 
 func TestRunFlowMe_OK(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	g := core.Graph{ID: "f1", Tenant: "t", Workspace: "ws", Nodes: []core.Node{
 		{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}},
@@ -38,6 +40,7 @@ func TestRunFlowMe_OK(t *testing.T) {
 // --- validateGraphLiteral --------------------------------------------
 
 func TestValidateGraphLiteral_BadJSON(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	req := newRawReq(t, h, "POST", "/api/v1/validate/graph", "{not json")
 	rw := serveRaw(h, req)
@@ -47,6 +50,7 @@ func TestValidateGraphLiteral_BadJSON(t *testing.T) {
 }
 
 func TestValidateGraphLiteral_OK(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "POST", "/api/v1/validate/graph", core.Graph{
 		ID: "x", Nodes: []core.Node{{ID: "a", Module: "noop"}},
@@ -59,6 +63,7 @@ func TestValidateGraphLiteral_OK(t *testing.T) {
 // --- removeMember -----------------------------------------------------
 
 func TestRemoveMember_NotConfigured(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t) // no Memberships
 	rw := h.adminDo(t, "DELETE", "/api/v1/admin/members/victim@example.com", nil)
 	if rw.Code != http.StatusNotImplemented {
@@ -67,6 +72,7 @@ func TestRemoveMember_NotConfigured(t *testing.T) {
 }
 
 func TestRemoveMember_Forbidden(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.Memberships = newFakeMembershipStore()
 	// Default editor token lacks organization:admin.
@@ -77,6 +83,7 @@ func TestRemoveMember_Forbidden(t *testing.T) {
 }
 
 func TestRemoveMember_CrossTenantForbidden(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.Memberships = newFakeMembershipStore()
 	rw := h.adminDo(t, "DELETE", "/api/v1/admin/members/victim@example.com?tenant=other", nil)
@@ -86,6 +93,7 @@ func TestRemoveMember_CrossTenantForbidden(t *testing.T) {
 }
 
 func TestRemoveMember_OwnerConflict(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	mem := newFakeMembershipStore()
 	users, _ := auth.OpenJSONUserStore("")
@@ -100,6 +108,7 @@ func TestRemoveMember_OwnerConflict(t *testing.T) {
 }
 
 func TestRemoveMember_OK(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	mem := newFakeMembershipStore()
 	_ = mem.PutMembership(t.Context(), auth.Membership{UserEmail: "guest@example.com", Tenant: "t", Workspace: "ws"})

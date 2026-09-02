@@ -92,6 +92,7 @@ func (h *gatewayHarness) anon(t *testing.T, method, path string) *httptest.Respo
 // link (authed), read it back, hit the snapshot anonymously, then revoke it
 // and confirm the public link goes dead.
 func TestHTTPGateway_ShareLifecycle(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.svc.Shares = newInlineShareStore()
 

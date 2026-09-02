@@ -130,6 +130,7 @@ func newSkipHarness(t *testing.T) *skipHarness {
 }
 
 func TestSkip_FailureDoesNotPropagateThroughSkipEdge(t *testing.T) {
+	t.Parallel()
 	h := newSkipHarness(t)
 
 	// boom (fails) →[skip]→ sleep (no other deps, runs with empty input)
@@ -163,6 +164,7 @@ func TestSkip_FailureDoesNotPropagateThroughSkipEdge(t *testing.T) {
 }
 
 func TestSkip_AbortEdgeStillPropagatesEvenWithSkipSibling(t *testing.T) {
+	t.Parallel()
 	h := newSkipHarness(t)
 
 	// boom (fails) has TWO outgoing edges:
@@ -199,6 +201,7 @@ func TestSkip_AbortEdgeStillPropagatesEvenWithSkipSibling(t *testing.T) {
 }
 
 func TestSkip_LeafFailureStillPropagates(t *testing.T) {
+	t.Parallel()
 	h := newSkipHarness(t)
 
 	// boom is a leaf — no outgoing edges. Default behaviour for leaves is
@@ -220,6 +223,7 @@ func TestSkip_LeafFailureStillPropagates(t *testing.T) {
 }
 
 func TestSkip_SurvivingPredecessorReachesNode(t *testing.T) {
+	t.Parallel()
 	h := newSkipHarness(t)
 
 	// Two predecessors of merge:
@@ -266,6 +270,7 @@ func TestSkip_SurvivingPredecessorReachesNode(t *testing.T) {
 }
 
 func TestSkip_ChainOfSkips_AllRun(t *testing.T) {
+	t.Parallel()
 	h := newSkipHarness(t)
 
 	// boom(skip)→sleep1(skip)→sleep2

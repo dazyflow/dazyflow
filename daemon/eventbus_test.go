@@ -12,6 +12,7 @@ import (
 )
 
 func TestMemoryBus_DeliversToSubscribers(t *testing.T) {
+	t.Parallel()
 	b := NewMemoryBus()
 	ch1, c1 := b.Subscribe("job-1")
 	ch2, c2 := b.Subscribe("job-1")
@@ -34,6 +35,7 @@ func TestMemoryBus_DeliversToSubscribers(t *testing.T) {
 }
 
 func TestMemoryBus_IsolatesJobs(t *testing.T) {
+	t.Parallel()
 	b := NewMemoryBus()
 	ch1, c1 := b.Subscribe("job-1")
 	ch2, c2 := b.Subscribe("job-2")
@@ -55,6 +57,7 @@ func TestMemoryBus_IsolatesJobs(t *testing.T) {
 }
 
 func TestMemoryBus_UnsubscribeCloses(t *testing.T) {
+	t.Parallel()
 	b := NewMemoryBus()
 	ch, cancel := b.Subscribe("job-1")
 	cancel()
@@ -71,6 +74,7 @@ func TestMemoryBus_UnsubscribeCloses(t *testing.T) {
 // held under the lock, close and send are mutually exclusive. Passing
 // means no panic (and `-race` finds any residual data race).
 func TestMemoryBus_PublishCancelRace(t *testing.T) {
+	t.Parallel()
 	b := NewMemoryBus()
 	const job = "job-1"
 	stop := make(chan struct{})
@@ -109,6 +113,7 @@ func TestMemoryBus_PublishCancelRace(t *testing.T) {
 // path. fanout/Subscribe touch only the mutex + subs map (no pool), so the
 // concurrency contract is testable without a database.
 func TestPgBus_FanoutCancelRace(t *testing.T) {
+	t.Parallel()
 	b := &PgBus{}
 	const job = "job-1"
 	stop := make(chan struct{})
@@ -144,6 +149,7 @@ func TestPgBus_FanoutCancelRace(t *testing.T) {
 }
 
 func TestMemoryBus_SlowSubscriberDoesNotBlockPublisher(t *testing.T) {
+	t.Parallel()
 	b := NewMemoryBus()
 	ch, cancel := b.Subscribe("job-1")
 	defer cancel()

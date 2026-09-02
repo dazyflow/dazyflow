@@ -15,6 +15,7 @@ import (
 // to another tenant: PutKey is an ON CONFLICT (id) upsert, so honoring
 // the collision would silently hijack/overwrite the foreign tenant's key.
 func TestIssueAPIKey_RejectsForeignTenantKeyID(t *testing.T) {
+	t.Parallel()
 	ks := auth.NewMemKeyStore()
 	svc := &Service{AdminKeys: ks}
 
@@ -56,6 +57,7 @@ func TestIssueAPIKey_RejectsForeignTenantKeyID(t *testing.T) {
 // service layer must scope the revoke to the caller's tenant — otherwise a
 // tenant admin could revoke another tenant's key (cross-tenant DoS).
 func TestRevokeAPIKey_TenantScoped(t *testing.T) {
+	t.Parallel()
 	ks := auth.NewMemKeyStore()
 	svc := &Service{AdminKeys: ks}
 
@@ -91,6 +93,7 @@ func TestRevokeAPIKey_TenantScoped(t *testing.T) {
 // session). The default-role path (no roles supplied) stays a trusted
 // server-side grant.
 func TestCreateInvitation_RejectsOverScopedRoles(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	inv, err := auth.OpenJSONInvitationStore("") // empty path = in-memory
 	if err != nil {

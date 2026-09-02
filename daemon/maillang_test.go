@@ -36,6 +36,7 @@ func awaitMail(t *testing.T, srv *fakeSMTP, want string) string {
 // that account chose — not the language of whoever triggered the send, and not
 // the instance's.
 func TestMailLang_PasswordResetFollowsTheAccount(t *testing.T) {
+	t.Parallel()
 	h, users, srv := verificationHarness(t)
 
 	if rw := h.do(t, "POST", "/api/v1/auth/signup", map[string]string{
@@ -69,6 +70,7 @@ func TestMailLang_PasswordResetFollowsTheAccount(t *testing.T) {
 
 // With no preference recorded — the common case at signup — English.
 func TestMailLang_DefaultsToEnglish(t *testing.T) {
+	t.Parallel()
 	h, _, srv := verificationHarness(t)
 	if rw := h.do(t, "POST", "/api/v1/auth/signup", map[string]string{
 		"email": "english@example.com", "password": "Passw0rd!2345",
@@ -79,6 +81,7 @@ func TestMailLang_DefaultsToEnglish(t *testing.T) {
 }
 
 func TestMailLangResolvers(t *testing.T) {
+	t.Parallel()
 	h, users, _ := verificationHarness(t)
 	ctx := t.Context()
 	if err := users.PutUser(ctx, auth.User{Email: "sv@example.com", UI: auth.UIPrefs{Language: "sv"}}); err != nil {

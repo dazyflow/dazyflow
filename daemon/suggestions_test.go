@@ -28,6 +28,7 @@ func edge(from, to string) core.Edge {
 }
 
 func TestDropSuggestions_CountsAndRanking(t *testing.T) {
+	t.Parallel()
 	h := newVisibilityHarness(t)
 	ctx := context.Background()
 
@@ -125,6 +126,7 @@ func findAdjPort(items []daemon.DropAdjacency, from, fromPort, to string) *daemo
 }
 
 func TestDropSuggestions_KeysOnSourcePort(t *testing.T) {
+	t.Parallel()
 	h := newVisibilityHarness(t)
 	ctx := context.Background()
 
@@ -162,6 +164,7 @@ func TestDropSuggestions_KeysOnSourcePort(t *testing.T) {
 }
 
 func TestDropSuggestions_EmptyWorkspace(t *testing.T) {
+	t.Parallel()
 	h := newVisibilityHarness(t)
 	items, err := h.svc.DropSuggestions(context.Background(), h.alice, "t", "ws")
 	if err != nil {
@@ -177,6 +180,7 @@ func TestDropSuggestions_EmptyWorkspace(t *testing.T) {
 // moves HEAD) must transparently surface in the next call rather than serving
 // a stale cached answer.
 func TestDropSuggestions_CacheInvalidatesOnSave(t *testing.T) {
+	t.Parallel()
 	h := newVisibilityHarness(t)
 	ctx := context.Background()
 

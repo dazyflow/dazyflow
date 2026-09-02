@@ -54,6 +54,7 @@ func rawDo(t *testing.T, h *gatewayHarness, method, path string, body []byte) *h
 }
 
 func TestSignup_HappyPath(t *testing.T) {
+	t.Parallel()
 	h := newSignupHarness(t)
 	rw := rawDo(t, h, "POST", "/api/v1/auth/signup", signupBody("new@example.com", "supersecret"))
 	if rw.Code != http.StatusCreated {
@@ -99,6 +100,7 @@ func TestSignup_HappyPath(t *testing.T) {
 }
 
 func TestSignup_SetsSessionCookie(t *testing.T) {
+	t.Parallel()
 	// The cookie is what the browser will rely on for subsequent
 	// same-origin requests — it must be HttpOnly, SameSite=Lax.
 	h := newSignupHarness(t)
@@ -150,6 +152,7 @@ func signupCookie(t *testing.T, h *gatewayHarness, req *http.Request) *http.Cook
 // account a session cookie that happily rides http://. The sign-in, SSO and
 // TOTP legs already use requestIsHTTPS; signup must match.
 func TestSignup_SecureCookieBehindTLSTerminatingProxy(t *testing.T) {
+	t.Parallel()
 	h := newSignupHarness(t)
 	h.gw.TrustProxyHeaders = true
 
@@ -167,6 +170,7 @@ func TestSignup_SecureCookieBehindTLSTerminatingProxy(t *testing.T) {
 // stay off, or the browser drops the cookie and signup silently fails to
 // sign anyone in.
 func TestSignup_NoSecureCookieOverPlainHTTP(t *testing.T) {
+	t.Parallel()
 	h := newSignupHarness(t)
 	h.gw.TrustProxyHeaders = false
 
@@ -182,6 +186,7 @@ func TestSignup_NoSecureCookieOverPlainHTTP(t *testing.T) {
 }
 
 func TestSignup_DuplicateEmailRejected(t *testing.T) {
+	t.Parallel()
 	h := newSignupHarness(t)
 	// First signup succeeds.
 	first := rawDo(t, h, "POST", "/api/v1/auth/signup", signupBody("dup@example.com", "supersecret"))
@@ -202,6 +207,7 @@ func TestSignup_DuplicateEmailRejected(t *testing.T) {
 }
 
 func TestSignup_TenantIDsAreUnique(t *testing.T) {
+	t.Parallel()
 	// Two distinct signups must get distinct tenant IDs. With 4 random
 	// bytes, collisions are vanishingly unlikely but we still sanity-
 	// check the assignment.
@@ -223,6 +229,7 @@ func TestSignup_TenantIDsAreUnique(t *testing.T) {
 }
 
 func TestSignup_RejectsBadEmail(t *testing.T) {
+	t.Parallel()
 	h := newSignupHarness(t)
 	for _, bad := range []string{
 		"",                      // empty
@@ -243,6 +250,7 @@ func TestSignup_RejectsBadEmail(t *testing.T) {
 }
 
 func TestSignup_RejectsShortPassword(t *testing.T) {
+	t.Parallel()
 	h := newSignupHarness(t)
 	rw := rawDo(t, h, "POST", "/api/v1/auth/signup", signupBody("short@example.com", "abc"))
 	if rw.Code != http.StatusBadRequest {
@@ -251,6 +259,7 @@ func TestSignup_RejectsShortPassword(t *testing.T) {
 }
 
 func TestSignup_RejectsLongPassword(t *testing.T) {
+	t.Parallel()
 	h := newSignupHarness(t)
 	huge := strings.Repeat("x", 300)
 	rw := rawDo(t, h, "POST", "/api/v1/auth/signup", signupBody("long@example.com", huge))
@@ -260,6 +269,7 @@ func TestSignup_RejectsLongPassword(t *testing.T) {
 }
 
 func TestSignup_EmailNormalized(t *testing.T) {
+	t.Parallel()
 	// "  USER@EXAMPLE.COM " should land as "user@example.com" — both
 	// for the stored user record AND the duplicate-detection path.
 	h := newSignupHarness(t)
@@ -277,6 +287,7 @@ func TestSignup_EmailNormalized(t *testing.T) {
 }
 
 func TestSignup_DisabledIs501(t *testing.T) {
+	t.Parallel()
 	// Default deployment: EnableSignup=false → endpoint returns 501.
 	h := newGatewayHarness(t)
 	h.gw.Users, _ = auth.OpenJSONUserStore("")
@@ -289,6 +300,7 @@ func TestSignup_DisabledIs501(t *testing.T) {
 }
 
 func TestSignup_NoUsersStoreIs501(t *testing.T) {
+	t.Parallel()
 	// Even with EnableSignup=true, missing Users/Sessions wiring
 	// must surface as 501 rather than panicking.
 	h := newGatewayHarness(t)
@@ -301,6 +313,7 @@ func TestSignup_NoUsersStoreIs501(t *testing.T) {
 }
 
 func TestSignup_GrantsEditorAndTenantOwnerRoles(t *testing.T) {
+	t.Parallel()
 	// New users need enough permissions to actually use the product
 	// — graph editing, secret writes (OAuth flows), tenant admin
 	// (issuing API keys later). Pin this so a future refactor of

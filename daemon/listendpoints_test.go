@@ -14,6 +14,7 @@ import (
 // TestListModules_Filters covers listModules with query filters (q, category,
 // provider, tag, include_disabled) exercising the param-collection branches.
 func TestListModules_Filters(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 
 	rw := h.do(t, "GET",
@@ -38,6 +39,7 @@ func TestListModules_Filters(t *testing.T) {
 // awaiting node with a pending_url (surfaced), and a subgraph-style awaiting
 // node (filtered out).
 func TestListPendingApprovals_Cov(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 
 	// Empty to start.

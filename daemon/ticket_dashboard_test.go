@@ -107,6 +107,7 @@ func decodeQueue(t *testing.T, rw *httptest.ResponseRecorder) []string {
 // ownership filters and the unbounded summary counts follow along; and a
 // non-provisioned assignee is refused.
 func TestSupportQueue_AssignmentAndFilters(t *testing.T) {
+	t.Parallel()
 	d := newTicketDashboardHarness(t)
 	d.gw.SupportAgents.Grant(t.Context(), "agent-b@vendor.com", "root")
 	agentA := d.agentToken(t, "agent-a@vendor.com")
@@ -248,6 +249,7 @@ func (d *ticketDashboardHarness) summary(t *testing.T, token string) summaryResp
 // ticket, the customer may close/reopen but not declare "resolved", and neither a
 // plain member nor a platform admin can work the cross-org queue.
 func TestSupportQueue_RoleSeparation(t *testing.T) {
+	t.Parallel()
 	d := newTicketDashboardHarness(t)
 	agent := d.agentToken(t, "agent-a@vendor.com")
 	id := d.fileTicket(t, "Flow stopped running")

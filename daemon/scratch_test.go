@@ -15,6 +15,7 @@ import (
 )
 
 func TestFSSandbox_ScratchLifecycle(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	sb, err := daemon.NewFSSandbox(base)
 	if err != nil {
@@ -72,6 +73,7 @@ func TestFSSandbox_ScratchLifecycle(t *testing.T) {
 }
 
 func TestFSSandbox_ScratchRejectsUnsafeRunID(t *testing.T) {
+	t.Parallel()
 	sb, _ := daemon.NewFSSandbox(t.TempDir())
 	sp := any(sb).(core.ScratchProvider)
 	// Each "/"-separated segment must be a safe identifier; traversal,
@@ -88,6 +90,7 @@ func TestFSSandbox_ScratchRejectsUnsafeRunID(t *testing.T) {
 // scratch path "<parentRunID>/iN" is accepted and nests under the parent
 // run's scratch, so reclaiming the parent removes every item subdir.
 func TestFSSandbox_ScratchNestedRunID(t *testing.T) {
+	t.Parallel()
 	sb, _ := daemon.NewFSSandbox(t.TempDir())
 	sp := any(sb).(core.ScratchProvider)
 	a, err := sp.ScratchRoot("acme", "ws", "run123/i0")
@@ -118,6 +121,7 @@ func TestFSSandbox_ScratchNestedRunID(t *testing.T) {
 // run's scratch directory is gone once the run reaches terminal — the
 // dispatcher's reclamation path.
 func TestScratch_ReclaimedOnGraphCompletion(t *testing.T) {
+	t.Parallel()
 	h := newQuotaHarness(t, nil) // no quota limits needed here
 	ctx := context.Background()
 

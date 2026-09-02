@@ -53,6 +53,7 @@ func putBody(value string) []byte {
 }
 
 func TestHTTPSecrets_PutAndList(t *testing.T) {
+	t.Parallel()
 	h := newSecretsHarness(t)
 	rw := h.do(t, "PUT", "/api/v1/secrets/slack_token", json.RawMessage(putBody("xoxb-12345")))
 	if rw.Code != http.StatusNoContent {
@@ -72,6 +73,7 @@ func TestHTTPSecrets_PutAndList(t *testing.T) {
 }
 
 func TestHTTPSecrets_ValueNotInListResponse(t *testing.T) {
+	t.Parallel()
 	// Critical UX/security contract: listing must never return the
 	// stored value, only names.
 	h := newSecretsHarness(t)
@@ -83,6 +85,7 @@ func TestHTTPSecrets_ValueNotInListResponse(t *testing.T) {
 }
 
 func TestHTTPSecrets_IncludeConn(t *testing.T) {
+	t.Parallel()
 	// The org listing hides the conn.<slug>.<key> namespace so the
 	// Credentials page stays clean, but ?include=conn opts it back in so
 	// the Apps page can tell which integrations are connected. Regression
@@ -122,6 +125,7 @@ func TestHTTPSecrets_IncludeConn(t *testing.T) {
 }
 
 func TestHTTPSecrets_NoGetByName(t *testing.T) {
+	t.Parallel()
 	// We intentionally don't expose GET /secrets/{name}. Probing it
 	// should 404 (no matching route).
 	h := newSecretsHarness(t)
@@ -133,6 +137,7 @@ func TestHTTPSecrets_NoGetByName(t *testing.T) {
 }
 
 func TestHTTPSecrets_Delete(t *testing.T) {
+	t.Parallel()
 	h := newSecretsHarness(t)
 	h.do(t, "PUT", "/api/v1/secrets/temp", json.RawMessage(putBody("v")))
 	rw := h.do(t, "DELETE", "/api/v1/secrets/temp", nil)
@@ -150,6 +155,7 @@ func TestHTTPSecrets_Delete(t *testing.T) {
 }
 
 func TestHTTPSecrets_DeleteIdempotent(t *testing.T) {
+	t.Parallel()
 	h := newSecretsHarness(t)
 	rw := h.do(t, "DELETE", "/api/v1/secrets/never_existed", nil)
 	if rw.Code != http.StatusNoContent {
@@ -158,6 +164,7 @@ func TestHTTPSecrets_DeleteIdempotent(t *testing.T) {
 }
 
 func TestHTTPSecrets_PutEmptyValueRejected(t *testing.T) {
+	t.Parallel()
 	h := newSecretsHarness(t)
 	rw := h.do(t, "PUT", "/api/v1/secrets/k", json.RawMessage(putBody("")))
 	if rw.Code != http.StatusBadRequest {
@@ -166,6 +173,7 @@ func TestHTTPSecrets_PutEmptyValueRejected(t *testing.T) {
 }
 
 func TestHTTPSecrets_BadName(t *testing.T) {
+	t.Parallel()
 	h := newSecretsHarness(t)
 	// Path traversal characters must be rejected.
 	// Note: ".." is intentionally not in this list — secret names
@@ -192,6 +200,7 @@ func TestHTTPSecrets_BadName(t *testing.T) {
 }
 
 func TestHTTPSecrets_OversizeValueRejected(t *testing.T) {
+	t.Parallel()
 	h := newSecretsHarness(t)
 	huge := strings.Repeat("x", maxSecretValueBytes+1024)
 	rw := h.do(t, "PUT", "/api/v1/secrets/k", json.RawMessage(putBody(huge)))
@@ -201,6 +210,7 @@ func TestHTTPSecrets_OversizeValueRejected(t *testing.T) {
 }
 
 func TestHTTPSecrets_RequiresWritePermission(t *testing.T) {
+	t.Parallel()
 	// Runner-only role (graph:run, no secret:write) → PUT 403.
 	h := newSecretsHarness(t)
 	role := core.Role{Name: "runner", Permissions: []core.Permission{core.PermGraphRun}}
@@ -217,6 +227,7 @@ func TestHTTPSecrets_RequiresWritePermission(t *testing.T) {
 }
 
 func TestHTTPSecrets_RequiresReadPermissionForList(t *testing.T) {
+	t.Parallel()
 	// Same as above but for GET.
 	h := newSecretsHarness(t)
 	role := core.Role{Name: "runner", Permissions: []core.Permission{core.PermGraphRun}}
@@ -232,6 +243,7 @@ func TestHTTPSecrets_RequiresReadPermissionForList(t *testing.T) {
 }
 
 func TestHTTPSecrets_NotConfiguredIs501(t *testing.T) {
+	t.Parallel()
 	// Without EncryptedSecrets wired up, all three endpoints must
 	// 501 rather than panicking or silently no-oping.
 	h := newGatewayHarness(t) // no EncryptedSecrets
@@ -260,6 +272,7 @@ func TestHTTPSecrets_NotConfiguredIs501(t *testing.T) {
 // params at execution time. This is the contract that makes the
 // store usable by graphs.
 func TestEncryptedSecrets_ResolvedInJobParams(t *testing.T) {
+	t.Parallel()
 	h := newSecretsHarness(t)
 
 	// PUT a value through the API.
@@ -283,6 +296,7 @@ func TestEncryptedSecrets_ResolvedInJobParams(t *testing.T) {
 // secretScopeFromRequest + authorizeFlowSecretScope branches.
 
 func TestSecrets_UnknownScope(t *testing.T) {
+	t.Parallel()
 	h := newSecretsHarness(t)
 	rw := h.do(t, "GET", "/api/v1/secrets?scope=galaxy", nil)
 	if rw.Code != http.StatusBadRequest {
@@ -291,6 +305,7 @@ func TestSecrets_UnknownScope(t *testing.T) {
 }
 
 func TestSecrets_FlowScopeMissingFlow(t *testing.T) {
+	t.Parallel()
 	h := newSecretsHarness(t)
 	rw := h.do(t, "GET", "/api/v1/secrets?scope=flow", nil)
 	if rw.Code != http.StatusBadRequest {
@@ -299,6 +314,7 @@ func TestSecrets_FlowScopeMissingFlow(t *testing.T) {
 }
 
 func TestSecrets_FlowScopeNonexistentFlowForbidden(t *testing.T) {
+	t.Parallel()
 	h := newSecretsHarness(t)
 	// No such flow -> authorizeFlowSecretScope reports forbidden (probe-proof).
 	rw := h.do(t, "PUT", "/api/v1/secrets/MY_KEY?scope=flow&flow=ghost",
@@ -309,6 +325,7 @@ func TestSecrets_FlowScopeNonexistentFlowForbidden(t *testing.T) {
 }
 
 func TestResources_UnknownScope(t *testing.T) {
+	t.Parallel()
 	h := newSecretsHarness(t)
 	rw := h.do(t, "GET", "/api/v1/resources?scope=galaxy", nil)
 	if rw.Code != http.StatusBadRequest {
@@ -317,6 +334,7 @@ func TestResources_UnknownScope(t *testing.T) {
 }
 
 func TestResources_DeleteNotConfigured(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t) // no EncryptedSecrets
 	rw := h.do(t, "DELETE", "/api/v1/resources/leads", nil)
 	if rw.Code != http.StatusNotImplemented {
@@ -325,6 +343,7 @@ func TestResources_DeleteNotConfigured(t *testing.T) {
 }
 
 func TestResources_DeleteBadName(t *testing.T) {
+	t.Parallel()
 	h := newSecretsHarness(t)
 	rw := h.do(t, "DELETE", "/api/v1/resources/a.b", nil)
 	if rw.Code != http.StatusBadRequest {

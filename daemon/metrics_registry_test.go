@@ -9,6 +9,7 @@ import (
 )
 
 func TestHistogram_BucketsCumulativeAndSum(t *testing.T) {
+	t.Parallel()
 	h := newHistogram([]float64{0.1, 1, 10})
 	for _, v := range []float64{0.05, 0.5, 5, 50} {
 		h.observe(v)
@@ -33,6 +34,7 @@ func TestHistogram_BucketsCumulativeAndSum(t *testing.T) {
 }
 
 func TestMetrics_RenderHTTPAndNode(t *testing.T) {
+	t.Parallel()
 	m := NewMetrics()
 	m.ObserveHTTP("GET", 200, 0.02)
 	m.ObserveHTTP("GET", 200, 0.03)
@@ -61,6 +63,7 @@ func TestMetrics_RenderHTTPAndNode(t *testing.T) {
 }
 
 func TestMetrics_NilSafe(t *testing.T) {
+	t.Parallel()
 	var m *Metrics
 	// All paths must no-op on a nil registry rather than panic.
 	m.ObserveHTTP("GET", 200, 0.1)

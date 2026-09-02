@@ -37,6 +37,7 @@ func newLeaseTestWorker(renewErr error) *Worker {
 }
 
 func TestRenewLease_FencesOnLostOwnership(t *testing.T) {
+	t.Parallel()
 	for _, lossErr := range []error{core.ErrConflict, core.ErrNotFound} {
 		w := newLeaseTestWorker(lossErr)
 		var lost atomic.Bool
@@ -55,6 +56,7 @@ func TestRenewLease_FencesOnLostOwnership(t *testing.T) {
 }
 
 func TestRenewLease_TransientErrorDoesNotFence(t *testing.T) {
+	t.Parallel()
 	w := newLeaseTestWorker(errors.New("db unreachable"))
 	var lost atomic.Bool
 	// Short window: several renew ticks all return a transient error, then

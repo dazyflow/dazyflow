@@ -28,6 +28,7 @@ func auditActions(t *testing.T, log *MemAuditLog, tenant string) map[string]core
 // sign-in, an explicit password sign-in, and sign-out each land in the
 // tenant's audit trail with the actor and source IP recorded.
 func TestAuditAuth_LifecycleEvents(t *testing.T) {
+	t.Parallel()
 	h := newSignupHarness(t)
 	log := NewMemAuditLog()
 	h.gw.Audit = log
@@ -86,6 +87,7 @@ func TestAuditAuth_LifecycleEvents(t *testing.T) {
 // we don't resolve the tenant, since that would reveal whether the email
 // maps to an account.
 func TestAuditAuth_FailedSigninNoTenant(t *testing.T) {
+	t.Parallel()
 	h := newSignupHarness(t)
 	log := NewMemAuditLog()
 	h.gw.Audit = log

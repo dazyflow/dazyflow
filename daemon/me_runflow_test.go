@@ -14,6 +14,7 @@ import (
 // TestRunFlowMe_RunAndMissing_Cov4 covers runFlowMe + runGraph: the clean 404 for a missing
 // flow and the happy-path 202 submit for an existing one.
 func TestRunFlowMe_RunAndMissing_Cov4(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 
 	// Unknown flow -> 404 flow_not_found.

@@ -42,6 +42,7 @@ func testSSHKeyPEM(t *testing.T) string {
 }
 
 func TestGitCredential_RoundTrip(t *testing.T) {
+	t.Parallel()
 	es := testEncryptedSecrets(t)
 	ctx := core.WithTenant(t.Context(), "acme")
 	keyPEM := testSSHKeyPEM(t)
@@ -118,6 +119,7 @@ func TestGitCredential_RoundTrip(t *testing.T) {
 }
 
 func TestGitCredential_Validation(t *testing.T) {
+	t.Parallel()
 	es := testEncryptedSecrets(t)
 	ctx := core.WithTenant(t.Context(), "acme")
 
@@ -143,6 +145,7 @@ func TestGitCredential_Validation(t *testing.T) {
 // permission, decode, and validation errors.
 
 func TestGitCreds_NotConfigured(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t) // no EncryptedSecrets
 	if rw := h.do(t, "GET", "/api/v1/git/credentials", nil); rw.Code != http.StatusNotImplemented {
 		t.Fatalf("list w/o store = %d, want 501", rw.Code)
@@ -156,6 +159,7 @@ func TestGitCreds_NotConfigured(t *testing.T) {
 }
 
 func TestGitCreds_ForbiddenWithoutSecretPerm(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.EncryptedSecrets = testEncryptedSecrets(t)
 	// Default editor token lacks secret:read/write.
@@ -171,6 +175,7 @@ func TestGitCreds_ForbiddenWithoutSecretPerm(t *testing.T) {
 }
 
 func TestGitCreds_PutDecodeError(t *testing.T) {
+	t.Parallel()
 	h := newSecretsHarness(t)
 	h.gw.EncryptedSecrets = testEncryptedSecrets(t)
 	req := newRawReq(t, h, "PUT", "/api/v1/git/credentials/acct", "{not json")
@@ -181,6 +186,7 @@ func TestGitCreds_PutDecodeError(t *testing.T) {
 }
 
 func TestGitCreds_PutInvalidCredential(t *testing.T) {
+	t.Parallel()
 	h := newSecretsHarness(t)
 	h.gw.EncryptedSecrets = testEncryptedSecrets(t)
 	// Empty bundle (no key, no token) is invalid.
@@ -191,6 +197,7 @@ func TestGitCreds_PutInvalidCredential(t *testing.T) {
 }
 
 func TestGitCreds_PutThenListThenDelete(t *testing.T) {
+	t.Parallel()
 	h := newSecretsHarness(t)
 	es := testEncryptedSecrets(t)
 	h.gw.EncryptedSecrets = es

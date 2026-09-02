@@ -17,6 +17,7 @@ import (
 // graph with a mix of queued + awaiting node-records is cancelled in
 // one call and every non-terminal record ends up marked Cancelled.
 func TestCancelGraphRun_FlipsRecords(t *testing.T) {
+	t.Parallel()
 	h := newVisibilityHarness(t)
 	ctx := context.Background()
 
@@ -97,6 +98,7 @@ func TestCancelGraphRun_FlipsRecords(t *testing.T) {
 // be cancelled — the user gets ErrConflict rather than a silent
 // re-cancel that would re-publish a Terminal event.
 func TestCancelGraphRun_AlreadyTerminal(t *testing.T) {
+	t.Parallel()
 	h := newVisibilityHarness(t)
 	ctx := context.Background()
 
@@ -128,6 +130,7 @@ func TestCancelGraphRun_AlreadyTerminal(t *testing.T) {
 // TestCancelGraphRun_RequiresGraphRun confirms the principal needs
 // graph:run on the underlying graph — viewers can't cancel.
 func TestCancelGraphRun_RequiresGraphRun(t *testing.T) {
+	t.Parallel()
 	h := newVisibilityHarness(t)
 	ctx := context.Background()
 

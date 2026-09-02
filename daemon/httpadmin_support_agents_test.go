@@ -11,6 +11,7 @@ import (
 )
 
 func TestSupportAgentManagement(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.SupportAgents = support.NewMemAgentStore()
 
@@ -55,6 +56,7 @@ func TestSupportAgentManagement(t *testing.T) {
 }
 
 func TestSupportAgentManagement_Disabled(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t) // no SupportAgents wired
 	rw := h.platformDo(t, "GET", "/api/v1/admin/platform/support-agents", nil)
 	if rw.Code != 501 {

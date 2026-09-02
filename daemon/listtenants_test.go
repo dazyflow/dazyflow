@@ -13,6 +13,7 @@ import (
 // the platform-admin happy path (which rolls distinct tenants out of the issued
 // API keys — the harness has at least tenant "t").
 func TestListTenants_Cov(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 
 	// Default editor token isn't a platform admin -> 403.

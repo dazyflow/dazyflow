@@ -49,6 +49,7 @@ func deleteFlowSessionHarness(t *testing.T, password string) (*gatewayHarness, s
 }
 
 func TestDeleteFlowMe_SessionNotConfigured(t *testing.T) {
+	t.Parallel()
 	h, tok := deleteFlowSessionHarness(t, "correct-pw")
 	h.gw.Users = nil // no password store => the session gate can't be evaluated
 	covSeedFlow(t, h, "f1")
@@ -59,6 +60,7 @@ func TestDeleteFlowMe_SessionNotConfigured(t *testing.T) {
 }
 
 func TestDeleteFlowMe_SessionBadPassword(t *testing.T) {
+	t.Parallel()
 	h, tok := deleteFlowSessionHarness(t, "correct-pw")
 	covSeedFlow(t, h, "f1")
 	rw := sessionDo(t, h, tok, "DELETE", "/api/v1/me/flows/"+cov3FlowID, map[string]any{"password": "wrong"})
@@ -71,6 +73,7 @@ func TestDeleteFlowMe_SessionBadPassword(t *testing.T) {
 }
 
 func TestDeleteFlowMe_SessionOK(t *testing.T) {
+	t.Parallel()
 	h, tok := deleteFlowSessionHarness(t, "correct-pw")
 	covSeedFlow(t, h, "f1")
 	rw := sessionDo(t, h, tok, "DELETE", "/api/v1/me/flows/"+cov3FlowID, map[string]any{"password": "correct-pw"})
@@ -88,6 +91,7 @@ func TestDeleteFlowMe_SessionOK(t *testing.T) {
 // case that used to be impossible (it answered 401 for every key), which is
 // why the MCP delete_flow tool could never succeed.
 func TestDeleteFlowMe_APIKeyWithAdminScope(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t) // harness token is an editor key: graph:admin included
 	covSeedFlow(t, h, "f1")
 	rw := h.do(t, "DELETE", "/api/v1/me/flows/"+cov3FlowID, nil)
@@ -102,6 +106,7 @@ func TestDeleteFlowMe_APIKeyWithAdminScope(t *testing.T) {
 // A key with the narrow `claude-mcp` scope set (graph:run + graph:edit, no
 // graph:admin) may author and run flows but must not destroy one's history.
 func TestDeleteFlowMe_APIKeyWithoutAdminScope(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	role := core.Role{Name: "claude-mcp", Permissions: []core.Permission{
 		core.PermGraphRun, core.PermGraphEdit,
@@ -130,6 +135,7 @@ func TestDeleteFlowMe_APIKeyWithoutAdminScope(t *testing.T) {
 // A key can't smuggle itself past the scope check by supplying a password in
 // the body — the credential kind picks the gate, not the body.
 func TestDeleteFlowMe_APIKeyCannotUsePasswordGate(t *testing.T) {
+	t.Parallel()
 	h, _ := deleteFlowSessionHarness(t, "correct-pw")
 	role := core.Role{Name: "claude-mcp", Permissions: []core.Permission{
 		core.PermGraphRun, core.PermGraphEdit,

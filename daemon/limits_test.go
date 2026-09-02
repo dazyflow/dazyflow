@@ -12,6 +12,7 @@ import (
 )
 
 func TestSubmitGraph_RejectsTooManyNodes(t *testing.T) {
+	t.Parallel()
 	h := newVisibilityHarness(t)
 	h.svc.MaxGraphNodes = 2
 	ctx := context.Background()

@@ -22,6 +22,7 @@ import (
 )
 
 func TestFSQuota_LimitsPerTenant(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	q, err := daemon.NewFSQuota(base, map[string]int64{
 		"acme":   1024,
@@ -42,6 +43,7 @@ func TestFSQuota_LimitsPerTenant(t *testing.T) {
 }
 
 func TestFSQuota_UsageCountsRecursively(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	// Seed two workspaces under the same tenant.
 	for _, p := range []string{"acme/ws1/a.txt", "acme/ws1/sub/b.txt", "acme/ws2/c.txt"} {
@@ -63,6 +65,7 @@ func TestFSQuota_UsageCountsRecursively(t *testing.T) {
 }
 
 func TestFSQuota_UnknownTenantReturnsZero(t *testing.T) {
+	t.Parallel()
 	q, _ := daemon.NewFSQuota(t.TempDir(), nil)
 	got, err := q.Used("nobody")
 	if err != nil {
@@ -74,6 +77,7 @@ func TestFSQuota_UnknownTenantReturnsZero(t *testing.T) {
 }
 
 func TestFSQuota_CacheRespectsTTL(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	_ = os.MkdirAll(filepath.Join(base, "t"), 0o755)
 	if err := os.WriteFile(filepath.Join(base, "t", "a"), make([]byte, 50), 0o644); err != nil {
@@ -154,6 +158,7 @@ func newQuotaHarness(t *testing.T, limits map[string]int64) *quotaHarness {
 }
 
 func TestQuota_E2E_AllowsThenRefuses(t *testing.T) {
+	t.Parallel()
 	// Tenant limit is 100 bytes. Seed 40 bytes already on disk. First
 	// graph copies (40 + 40 = 80) — under limit. Second graph copies
 	// again (would push to 120) — over limit, must fail with
@@ -203,6 +208,7 @@ func TestQuota_E2E_AllowsThenRefuses(t *testing.T) {
 }
 
 func TestQuota_E2E_UnlimitedTenant(t *testing.T) {
+	t.Parallel()
 	// Tenant has no limit configured → engine sets QuotaLimit=0, module
 	// skips the check. Any size write succeeds (subject to actual disk
 	// space, which we assume is plentiful in CI).
@@ -236,6 +242,7 @@ func TestQuota_E2E_UnlimitedTenant(t *testing.T) {
 // --- Reservation (concurrent-write race close) ---
 
 func TestFSQuota_ReserveHoldsInflightUntilRelease(t *testing.T) {
+	t.Parallel()
 	q, _ := daemon.NewFSQuota(t.TempDir(), map[string]int64{"acme": 1000})
 	q.SetCacheTTL(0)
 
@@ -257,6 +264,7 @@ func TestFSQuota_ReserveHoldsInflightUntilRelease(t *testing.T) {
 }
 
 func TestFSQuota_ReserveConcurrentCannotBustLimit(t *testing.T) {
+	t.Parallel()
 	q, _ := daemon.NewFSQuota(t.TempDir(), map[string]int64{"acme": 1000})
 	q.SetCacheTTL(0)
 
@@ -292,6 +300,7 @@ func TestFSQuota_ReserveConcurrentCannotBustLimit(t *testing.T) {
 }
 
 func TestFSQuota_ReserveCountsCommittedFiles(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(base, "acme"), 0o755); err != nil {
 		t.Fatal(err)
@@ -316,6 +325,7 @@ func TestFSQuota_ReserveCountsCommittedFiles(t *testing.T) {
 }
 
 func TestFSQuota_ReserveUnlimitedTenant(t *testing.T) {
+	t.Parallel()
 	q, _ := daemon.NewFSQuota(t.TempDir(), nil) // no limits → unlimited
 	rel, err := q.Reserve("anyone", 1<<40)
 	if err != nil {

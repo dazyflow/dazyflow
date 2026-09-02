@@ -173,6 +173,7 @@ func startTLSServer(t *testing.T, tlsCfg *tls.Config) (string, string, func()) {
 }
 
 func TestMTLS_HappyPath(t *testing.T) {
+	t.Parallel()
 	certs := makeTestCerts(t)
 	serverCfg, err := daemon.ServerConfigFromPEM(certs.serverCertPEM, certs.serverKeyPEM, certs.caPEM)
 	if err != nil {
@@ -206,6 +207,7 @@ func TestMTLS_HappyPath(t *testing.T) {
 }
 
 func TestMTLS_ClientWithoutCertRejected(t *testing.T) {
+	t.Parallel()
 	certs := makeTestCerts(t)
 	serverCfg, _ := daemon.ServerConfigFromPEM(certs.serverCertPEM, certs.serverKeyPEM, certs.caPEM)
 	addr, _, stop := startTLSServer(t, serverCfg)
@@ -236,6 +238,7 @@ func TestMTLS_ClientWithoutCertRejected(t *testing.T) {
 }
 
 func TestMTLS_WrongCARejected(t *testing.T) {
+	t.Parallel()
 	serverCerts := makeTestCerts(t)
 	// A whole second PKI tree the server doesn't trust.
 	otherCerts := makeTestCerts(t)
@@ -263,6 +266,7 @@ func TestMTLS_WrongCARejected(t *testing.T) {
 }
 
 func TestMTLS_InsecureClientCannotTalkToTLSServer(t *testing.T) {
+	t.Parallel()
 	certs := makeTestCerts(t)
 	serverCfg, _ := daemon.ServerConfigFromPEM(certs.serverCertPEM, certs.serverKeyPEM, certs.caPEM)
 	addr, _, stop := startTLSServer(t, serverCfg)
@@ -288,6 +292,7 @@ func TestMTLS_InsecureClientCannotTalkToTLSServer(t *testing.T) {
 }
 
 func TestMTLS_FileLoaderRoundTrip(t *testing.T) {
+	t.Parallel()
 	// Verify TLSFiles can read PEM files from disk and produce a usable
 	// pair of configs.
 	certs := makeTestCerts(t)
@@ -319,6 +324,7 @@ func TestMTLS_FileLoaderRoundTrip(t *testing.T) {
 }
 
 func TestMTLS_LoaderRejectsBadInput(t *testing.T) {
+	t.Parallel()
 	// Empty files struct
 	_, err := daemon.TLSFiles{}.LoadServerConfig()
 	if err == nil {

@@ -106,6 +106,7 @@ var tenantColumnRe = regexp.MustCompile(`(?m)^\s*tenant\s+`)
 // in tenantTableDisposition. Do not add the entry alone to make the test pass —
 // the entry is the claim, deleteOrgData is what makes it true.
 func TestEveryTenantTableHasAnErasureDisposition(t *testing.T) {
+	t.Parallel()
 	// Scan the packages that own schema. Relative to daemon/, which is this
 	// test's working directory.
 	roots := []string{".", "../auth", "../engine", "../core"}
@@ -266,6 +267,7 @@ var identityColumnRe = regexp.MustCompile(
 // (pseudonymisedOnErase), keeps it under a stated basis (retainedLawfully), or
 // leaves a residue you are tracking (knownResidual, with a note).
 func TestEveryIdentityColumnHasADisposition(t *testing.T) {
+	t.Parallel()
 	found := map[string]string{} // "table.column" → file
 	for _, root := range []string{".", "../auth", "../engine", "../core"} {
 		err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {

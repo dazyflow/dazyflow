@@ -138,6 +138,7 @@ func qpDecode(s string) string {
 }
 
 func TestNewMailerFromURL(t *testing.T) {
+	t.Parallel()
 	// Not configured is a normal state.
 	if m, err := NewMailerFromURL("", ""); m != nil || err != nil {
 		t.Errorf("empty url = %v/%v, want nil/nil", m, err)
@@ -183,6 +184,7 @@ func TestNewMailerFromURL(t *testing.T) {
 }
 
 func TestMailer_Send(t *testing.T) {
+	t.Parallel()
 	srv := newFakeSMTP(t)
 	m, err := NewMailerFromURL("smtp://bot@example.com:pw@"+srv.addr+"?tls=none", "")
 	if err != nil {
@@ -215,6 +217,7 @@ func TestMailer_Send(t *testing.T) {
 }
 
 func TestFireFailureEmail(t *testing.T) {
+	t.Parallel()
 	srv := newFakeSMTP(t)
 	mailer, _ := NewMailerFromURL("smtp://"+srv.addr+"?tls=none", "noreply@example.com")
 	svc := &Service{Mailer: mailer}
@@ -251,6 +254,7 @@ func TestFireFailureEmail(t *testing.T) {
 // Creating an invitation emails the accept link when the mailer is
 // configured and the URL is absolute; the response says so.
 func TestCreateInvitation_SendsEmail(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	inv, err := auth.OpenJSONInvitationStore("")
 	if err != nil {
@@ -290,6 +294,7 @@ func TestCreateInvitation_SendsEmail(t *testing.T) {
 // silently drop the password and send unauthenticated. It's a typo, and the
 // operator should hear about it at startup.
 func TestNewMailerFromURL_PasswordWithoutUsername(t *testing.T) {
+	t.Parallel()
 	if _, err := NewMailerFromURL("smtp://:pw@relay.x.test:587", "hi@x.test"); err == nil {
 		t.Fatal("NewMailerFromURL accepted a password with no username")
 	}

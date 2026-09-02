@@ -37,6 +37,7 @@ const maxGatewayHandlers = 2
 // TestLayering_GatewayHandlerRatchet keeps route handlers migrating off the
 // gateway's god object rather than accumulating on it.
 func TestLayering_GatewayHandlerRatchet(t *testing.T) {
+	t.Parallel()
 	byRecv, _ := handlersByReceiver(t)
 	got := byRecv["HTTPGateway"]
 	if got > maxGatewayHandlers {
@@ -58,6 +59,7 @@ func TestLayering_GatewayHandlerRatchet(t *testing.T) {
 // touches. A domain type takes the stores and helpers it needs (auditor,
 // urlBuilder, adminCheck, a store, a config value) as its own fields.
 func TestLayering_DomainHandlersStayNarrow(t *testing.T) {
+	t.Parallel()
 	_, files := handlersByReceiver(t)
 	fset := token.NewFileSet()
 	var bad []string
@@ -103,6 +105,7 @@ func TestLayering_DomainHandlersStayNarrow(t *testing.T) {
 // Such a file must not mention HTTPGateway in CODE. Comments may (and do)
 // reference it, which is why this walks the AST rather than the text.
 func TestLayering_CoreDoesNotDependOnTheGateway(t *testing.T) {
+	t.Parallel()
 	ents, err := os.ReadDir(".")
 	if err != nil {
 		t.Fatalf("read package dir: %v", err)
@@ -157,6 +160,7 @@ func TestLayering_CoreDoesNotDependOnTheGateway(t *testing.T) {
 // the first request through it overflows the stack. That happened once during
 // this refactor; this is the cheap check that it does not happen again.
 func TestLayering_NoSelfRecursiveForwarder(t *testing.T) {
+	t.Parallel()
 	ents, err := os.ReadDir(".")
 	if err != nil {
 		t.Fatalf("read package dir: %v", err)

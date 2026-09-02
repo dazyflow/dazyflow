@@ -96,6 +96,7 @@ func sessionTokenFor(t *testing.T, h *gatewayHarness, email, password string) st
 }
 
 func TestTOTP_EnrolThenTwoLegSignin(t *testing.T) {
+	t.Parallel()
 	h, u, pw := newTOTPHarness(t)
 	token := sessionTokenFor(t, h, u.Email, pw)
 
@@ -171,6 +172,7 @@ func TestTOTP_EnrolThenTwoLegSignin(t *testing.T) {
 }
 
 func TestTOTP_VerifyRejectsBadCode(t *testing.T) {
+	t.Parallel()
 	h, u, pw := newTOTPHarness(t)
 	token := sessionTokenFor(t, h, u.Email, pw)
 
@@ -200,6 +202,7 @@ func TestTOTP_VerifyRejectsBadCode(t *testing.T) {
 }
 
 func TestTOTP_DisableRequiresPassword(t *testing.T) {
+	t.Parallel()
 	h, u, pw := newTOTPHarness(t)
 	token := sessionTokenFor(t, h, u.Email, pw)
 	rw := bearerDo(t, h, token, "POST", "/api/v1/me/totp/setup", nil)
@@ -234,6 +237,7 @@ func TestTOTP_DisableRequiresPassword(t *testing.T) {
 }
 
 func TestTOTP_EndpointsAreOffWithoutKey(t *testing.T) {
+	t.Parallel()
 	// A gateway with users but no TOTP key: the mutating endpoints 503.
 	h := newGatewayHarness(t)
 	h.gw.Users, _ = auth.OpenJSONUserStore("")
@@ -258,6 +262,7 @@ func TestTOTP_EndpointsAreOffWithoutKey(t *testing.T) {
 // totp_test.go doesn't reach.
 
 func TestTOTPConfirm_CodeRequired(t *testing.T) {
+	t.Parallel()
 	h, u, pw := newTOTPHarness(t)
 	token := sessionTokenFor(t, h, u.Email, pw)
 	rw := bearerDo(t, h, token, "POST", "/api/v1/me/totp/confirm", map[string]string{"code": ""})
@@ -267,6 +272,7 @@ func TestTOTPConfirm_CodeRequired(t *testing.T) {
 }
 
 func TestTOTPConfirm_NoPendingEnrolment(t *testing.T) {
+	t.Parallel()
 	h, u, pw := newTOTPHarness(t)
 	token := sessionTokenFor(t, h, u.Email, pw)
 	// No /setup first -> confirm has no pending secret -> 400 no_pending_enrolment.
@@ -277,6 +283,7 @@ func TestTOTPConfirm_NoPendingEnrolment(t *testing.T) {
 }
 
 func TestTOTPConfirm_DecodeError(t *testing.T) {
+	t.Parallel()
 	h, u, pw := newTOTPHarness(t)
 	token := sessionTokenFor(t, h, u.Email, pw)
 	req := newRawReq(t, h, "POST", "/api/v1/me/totp/confirm", "{bad")
@@ -288,6 +295,7 @@ func TestTOTPConfirm_DecodeError(t *testing.T) {
 }
 
 func TestTOTPDisable_PasswordRequired(t *testing.T) {
+	t.Parallel()
 	h, u, pw := newTOTPHarness(t)
 	token := sessionTokenFor(t, h, u.Email, pw)
 	rw := bearerDo(t, h, token, "POST", "/api/v1/me/totp/disable", map[string]string{"password": ""})
@@ -297,6 +305,7 @@ func TestTOTPDisable_PasswordRequired(t *testing.T) {
 }
 
 func TestTOTPDisable_BadPassword(t *testing.T) {
+	t.Parallel()
 	h, u, pw := newTOTPHarness(t)
 	token := sessionTokenFor(t, h, u.Email, pw)
 	rw := bearerDo(t, h, token, "POST", "/api/v1/me/totp/disable", map[string]string{"password": "wrong"})
@@ -306,6 +315,7 @@ func TestTOTPDisable_BadPassword(t *testing.T) {
 }
 
 func TestTOTPRegenerate_NotEnrolled(t *testing.T) {
+	t.Parallel()
 	h, u, pw := newTOTPHarness(t)
 	token := sessionTokenFor(t, h, u.Email, pw)
 	// Never enrolled -> regenerate returns 400 totp_not_enrolled.
@@ -316,6 +326,7 @@ func TestTOTPRegenerate_NotEnrolled(t *testing.T) {
 }
 
 func TestTOTPVerify_MissingChallenge(t *testing.T) {
+	t.Parallel()
 	h, _, _ := newTOTPHarness(t)
 	// No challenge token -> rejected (400/401).
 	rw := bearerDo(t, h, "", "POST", "/api/v1/auth/totp", map[string]string{"code": "123456"})

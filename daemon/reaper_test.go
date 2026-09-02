@@ -61,6 +61,7 @@ func seedGraphRun(t *testing.T, jobs core.JobStore, runID string, g core.Graph, 
 // "running" (worker died before the completion check) must be finalized by the
 // reaper.
 func TestReaper_RecoversOrphanedRun(t *testing.T) {
+	t.Parallel()
 	jobs := jobstore.NewMemory()
 	bus := daemon.NewMemoryBus()
 	eng := &engine.Engine{Resolver: &engine.NodeResolver{Native: engine.Default}}
@@ -91,6 +92,7 @@ func TestReaper_RecoversOrphanedRun(t *testing.T) {
 // A run with a still-running node must be left untouched — the reaper only
 // finalizes runs that are genuinely complete.
 func TestReaper_LeavesHealthyRunRunning(t *testing.T) {
+	t.Parallel()
 	jobs := jobstore.NewMemory()
 	bus := daemon.NewMemoryBus()
 	eng := &engine.Engine{Resolver: &engine.NodeResolver{Native: engine.Default}}
@@ -121,6 +123,7 @@ func TestReaper_LeavesHealthyRunRunning(t *testing.T) {
 // A run with a terminal failed node (failure propagates by default) must be
 // finalized as failed, not succeeded.
 func TestReaper_RecoversFailedRun(t *testing.T) {
+	t.Parallel()
 	jobs := jobstore.NewMemory()
 	bus := daemon.NewMemoryBus()
 	eng := &engine.Engine{Resolver: &engine.NodeResolver{Native: engine.Default}}

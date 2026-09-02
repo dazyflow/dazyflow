@@ -15,6 +15,7 @@ import (
 // cascades: everything downstream of it is skipped too, while independent
 // branches still run and the graph completes successfully.
 func TestDisabled_SkipsNodeAndPrunesDownstream(t *testing.T) {
+	t.Parallel()
 	h := newSkipHarness(t)
 
 	// src1 → mid(DISABLED) → tail   (mid + tail must be skipped)
@@ -67,6 +68,7 @@ func TestDisabled_SkipsNodeAndPrunesDownstream(t *testing.T) {
 // pass-in (the pass pin is a control pin, not data). Regression: this used
 // to read as "all incoming edges dormant" and silently skip downstream.
 func TestPassEdge_SequencesWithoutValue(t *testing.T) {
+	t.Parallel()
 	h := newSkipHarness(t)
 
 	// src feeds a's data input; a.pass → b.pass with nothing wired into
@@ -100,6 +102,7 @@ func TestPassEdge_SequencesWithoutValue(t *testing.T) {
 // A disabled ROOT (no incoming edges) is skipped at pickup and the graph
 // still completes.
 func TestDisabled_RootSkips(t *testing.T) {
+	t.Parallel()
 	h := newSkipHarness(t)
 
 	g := core.Graph{
@@ -133,6 +136,7 @@ func TestDisabled_RootSkips(t *testing.T) {
 // Disabling a node inside a loop body prunes it (and its exclusive
 // downstream) from the per-item run; the loop itself still succeeds.
 func TestDisabled_LoopBodyNodePruned(t *testing.T) {
+	t.Parallel()
 	rec := &recorder{}
 	h := newLoopE2EHarness(t, rec)
 

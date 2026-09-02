@@ -10,6 +10,7 @@ import "testing"
 // which charge() refuses — turning an exponential N^depth blow-up into a clean
 // error instead of a job-store flood.
 func TestSubtreeBudget_CapsFanOut(t *testing.T) {
+	t.Parallel()
 	b := newSubtreeBudget()
 	for i := 0; i < maxSubgraphRunsPerRoot; i++ {
 		if !b.charge("root-A") {
@@ -24,6 +25,7 @@ func TestSubtreeBudget_CapsFanOut(t *testing.T) {
 // TestSubtreeBudget_PerRootIsolation: distinct trigger trees get independent
 // allowances (each top-level trigger is its own root).
 func TestSubtreeBudget_PerRootIsolation(t *testing.T) {
+	t.Parallel()
 	b := newSubtreeBudget()
 	for i := 0; i < maxSubgraphRunsPerRoot; i++ {
 		b.charge("root-A")
@@ -36,6 +38,7 @@ func TestSubtreeBudget_PerRootIsolation(t *testing.T) {
 // TestSubtreeBudget_TopLevelNeverCharged: a top-level run (no subgraph parent,
 // root == "") is never charged, so ordinary runs are unaffected.
 func TestSubtreeBudget_TopLevelNeverCharged(t *testing.T) {
+	t.Parallel()
 	b := newSubtreeBudget()
 	for i := 0; i < maxSubgraphRunsPerRoot*4; i++ {
 		if !b.charge("") {
@@ -47,6 +50,7 @@ func TestSubtreeBudget_TopLevelNeverCharged(t *testing.T) {
 // TestSubtreeBudget_EvictionBounded: the tracking map never exceeds its cap
 // even under a churn of distinct roots far larger than the bound.
 func TestSubtreeBudget_EvictionBounded(t *testing.T) {
+	t.Parallel()
 	b := newSubtreeBudget()
 	for i := 0; i < maxSubtreeRootsTracked+5000; i++ {
 		b.charge(string(rune(i%256)) + "-" + itoa(i))

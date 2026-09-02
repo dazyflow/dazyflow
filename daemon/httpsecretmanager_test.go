@@ -64,6 +64,7 @@ func smBody(addr, token string) json.RawMessage {
 }
 
 func TestSecretManager_SetGetDelete(t *testing.T) {
+	t.Parallel()
 	h := newSecretManagerHarness(t)
 	srv := fakeVaultServer(t, "good-token")
 
@@ -109,6 +110,7 @@ func TestSecretManager_SetGetDelete(t *testing.T) {
 
 // A config that fails the connection test is rejected (502) and not persisted.
 func TestSecretManager_RejectsUnreachable(t *testing.T) {
+	t.Parallel()
 	h := newSecretManagerHarness(t)
 	srv := fakeVaultServer(t, "good-token")
 
@@ -126,6 +128,7 @@ func TestSecretManager_RejectsUnreachable(t *testing.T) {
 
 // An invalid config (bad auth method) is a 400 before any network call.
 func TestSecretManager_ValidatesBody(t *testing.T) {
+	t.Parallel()
 	h := newSecretManagerHarness(t)
 	bad, _ := json.Marshal(map[string]any{"address": "https://v", "mount": "secret", "auth": map[string]any{"method": "psychic"}})
 	if rw := h.do(t, "PUT", "/api/v1/secret-manager", json.RawMessage(bad)); rw.Code != http.StatusBadRequest {
@@ -137,6 +140,7 @@ func TestSecretManager_ValidatesBody(t *testing.T) {
 // without the required secret permission.
 
 func TestSecretManager_ForbiddenWithoutPerm(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.EncryptedSecrets = testEncryptedSecrets(t)
 	// Default editor token lacks secret:read/write.
@@ -167,6 +171,7 @@ func TestSecretManager_ForbiddenWithoutPerm(t *testing.T) {
 // — those are organization:admin. The PUT is rejected at the gate, before the
 // tenant-supplied address is ever dialed.
 func TestSecretManagerConfig_RequiresOrgAdmin(t *testing.T) {
+	t.Parallel()
 	h := newSecretsHarness(t) // editor token: secret:read/write, NOT organization:admin
 	write := []struct{ method, path string }{
 		{"PUT", "/api/v1/secret-manager"},
@@ -190,6 +195,7 @@ func TestSecretManagerConfig_RequiresOrgAdmin(t *testing.T) {
 }
 
 func TestSecretManagerCloud_NotConfigured(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t) // no EncryptedSecrets
 	for _, path := range []string{
 		"/api/v1/secret-manager/aws",

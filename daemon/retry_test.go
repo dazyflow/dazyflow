@@ -116,6 +116,7 @@ func flakyNode(failCount *atomic.Int32) engine.NativeDrop {
 }
 
 func TestRetry_NodeSucceedsAfterFailures(t *testing.T) {
+	t.Parallel()
 	failCount := atomic.Int32{}
 	failCount.Store(2) // fail twice, succeed third time
 
@@ -146,6 +147,7 @@ func TestRetry_NodeSucceedsAfterFailures(t *testing.T) {
 }
 
 func TestRetry_ExhaustedFailsGraph(t *testing.T) {
+	t.Parallel()
 	failCount := atomic.Int32{}
 	failCount.Store(10) // always fail
 
@@ -181,6 +183,7 @@ func TestRetry_ExhaustedFailsGraph(t *testing.T) {
 // by DefaultNodeTimeout, fails with a structured "timeout", and frees the
 // worker — rather than pinning the slot indefinitely.
 func TestWorker_DefaultNodeTimeoutBoundsUnboundedNode(t *testing.T) {
+	t.Parallel()
 	blocker := engine.NativeDrop{
 		Manifest: core.Manifest{
 			ID: "blocker", Version: "1.0", Summary: "blocks until ctx cancelled.",
@@ -219,6 +222,7 @@ func TestWorker_DefaultNodeTimeoutBoundsUnboundedNode(t *testing.T) {
 }
 
 func TestRetry_HonorsBackoffDelay(t *testing.T) {
+	t.Parallel()
 	failCount := atomic.Int32{}
 	failCount.Store(1) // fail once, succeed second time
 
@@ -271,6 +275,7 @@ func retryAfterNode(failCount *atomic.Int32, retryAfter time.Duration) engine.Na
 }
 
 func TestRetry_HonorsServerRetryAfterOverBackoff(t *testing.T) {
+	t.Parallel()
 	failCount := atomic.Int32{}
 	failCount.Store(1) // fail once (with Retry-After), then succeed
 
@@ -301,6 +306,7 @@ func TestRetry_HonorsServerRetryAfterOverBackoff(t *testing.T) {
 }
 
 func TestRetry_NoRetryEdgeMeansNoRetry(t *testing.T) {
+	t.Parallel()
 	// Even with a retryable manifest, no edge requesting retry means a
 	// failure is terminal. We compose a graph where node "n" feeds "sink"
 	// via on_error=abort (or default).
@@ -380,6 +386,7 @@ func TestRetry_NoRetryEdgeMeansNoRetry(t *testing.T) {
 }
 
 func TestValidate_NonIdempotentRetryRejected(t *testing.T) {
+	t.Parallel()
 	// Module is NOT idempotent but the edge requests retry → validation
 	// error per spec.
 	src := core.Manifest{
@@ -414,6 +421,7 @@ func TestValidate_NonIdempotentRetryRejected(t *testing.T) {
 }
 
 func TestValidate_IdempotentRetryAllowed(t *testing.T) {
+	t.Parallel()
 	src := core.Manifest{
 		ID: "writer", Version: "1.0",
 		Outputs:    []core.Port{{Port: "out"}},
@@ -441,6 +449,7 @@ func TestValidate_IdempotentRetryAllowed(t *testing.T) {
 }
 
 func TestRequeue_PreservesAttemptAndClearsResult(t *testing.T) {
+	t.Parallel()
 	// Direct JobStore test (not through the worker) to nail down the
 	// Requeue contract.
 	store := jobstore.NewMemory()
@@ -504,6 +513,7 @@ func TestRequeue_PreservesAttemptAndClearsResult(t *testing.T) {
 // higher MaxRetries in its manifest gets more attempts than the
 // worker-global cap would allow.
 func TestRetry_ManifestRaisesCapAboveWorkerDefault(t *testing.T) {
+	t.Parallel()
 	failCount := atomic.Int32{}
 	failCount.Store(4) // fail 4 times, succeed on the 5th attempt
 	node := flakyNode(&failCount)
@@ -536,6 +546,7 @@ func TestRetry_ManifestRaisesCapAboveWorkerDefault(t *testing.T) {
 // MaxRetries=1 gets a single attempt even when the worker default is
 // higher — the "this is one-shot / costly" case.
 func TestRetry_ManifestLowersCapBelowWorkerDefault(t *testing.T) {
+	t.Parallel()
 	failCount := atomic.Int32{}
 	failCount.Store(10) // always fail
 	node := flakyNode(&failCount)

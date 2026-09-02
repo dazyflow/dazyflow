@@ -11,6 +11,7 @@ import (
 )
 
 func TestEffectiveGraphTimeout_Clamp(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name       string
 		max, graph int

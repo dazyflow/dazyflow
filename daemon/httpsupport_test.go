@@ -40,6 +40,7 @@ func adminPrincipal(tenant string) core.Principal {
 // Full lifecycle: agent requests → admin lists + approves → ActiveGrant opens →
 // revoke closes it.
 func TestSupport_GrantLifecycle(t *testing.T) {
+	t.Parallel()
 	h, now := supportGateway()
 	ctx := context.Background()
 
@@ -101,6 +102,7 @@ func TestSupport_GrantLifecycle(t *testing.T) {
 }
 
 func TestSupport_RequestRequiresAgentRole(t *testing.T) {
+	t.Parallel()
 	h, _ := supportGateway()
 	rw := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "/api/v1/support/grants",
@@ -113,6 +115,7 @@ func TestSupport_RequestRequiresAgentRole(t *testing.T) {
 }
 
 func TestSupport_DecideAuthz(t *testing.T) {
+	t.Parallel()
 	h, _ := supportGateway()
 	ctx := context.Background()
 	// Seed a requested grant for acme.
@@ -143,6 +146,7 @@ func TestSupport_DecideAuthz(t *testing.T) {
 }
 
 func TestSupport_DisabledReturns501(t *testing.T) {
+	t.Parallel()
 	h := &HTTPGateway{} // no stores wired
 	rw := httptest.NewRecorder()
 	h.supportAPI().requestGrant(rw, httptest.NewRequest("POST", "/api/v1/support/grants", strings.NewReader(`{}`)), agentPrincipal("a"))
@@ -154,6 +158,7 @@ func TestSupport_DisabledReturns501(t *testing.T) {
 // Session elevation stamps SupportAgentRole for a granted email (mirrors the
 // platform-admin elevation).
 func TestElevateSupportAgent(t *testing.T) {
+	t.Parallel()
 	agents := support.NewMemAgentStore()
 	_ = agents.Grant(context.Background(), "agent@vendor.com", "op")
 	h := &HTTPGateway{SupportAgents: agents}

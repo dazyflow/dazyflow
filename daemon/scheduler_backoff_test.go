@@ -13,6 +13,7 @@ import (
 )
 
 func TestEffectiveInterval_BackoffCurve(t *testing.T) {
+	t.Parallel()
 	base := 300 * time.Second
 	cases := []struct {
 		streak int
@@ -36,6 +37,7 @@ func TestEffectiveInterval_BackoffCurve(t *testing.T) {
 }
 
 func TestEffectiveInterval_NonPollReturnsBase(t *testing.T) {
+	t.Parallel()
 	e := &scheduledGraph{scheduleFn: nil, interval: 0, emptyStreak: 5}
 	if got := e.effectiveInterval(); got != 0 {
 		t.Fatalf("non-poll entry: got %v, want 0", got)
@@ -43,6 +45,7 @@ func TestEffectiveInterval_NonPollReturnsBase(t *testing.T) {
 }
 
 func TestEffectiveInterval_CeilingClamp(t *testing.T) {
+	t.Parallel()
 	// A near-ceiling base widened 8× must clamp to the poll ceiling.
 	base := time.Duration(core.MaxPollIntervalSeconds/2) * time.Second
 	e := &scheduledGraph{interval: base, emptyStreak: 9}
@@ -53,6 +56,7 @@ func TestEffectiveInterval_CeilingClamp(t *testing.T) {
 }
 
 func TestPollJitter_DeterministicAndBounded(t *testing.T) {
+	t.Parallel()
 	interval := 300 * time.Second
 	a1 := pollJitter("t/ws/g@n", interval)
 	a2 := pollJitter("t/ws/g@n", interval)
@@ -70,6 +74,7 @@ func TestPollJitter_DeterministicAndBounded(t *testing.T) {
 }
 
 func TestPollJitter_CappedByMax(t *testing.T) {
+	t.Parallel()
 	// A daily poll: interval/4 = 6h, but the absolute cap is maxPollJitter.
 	day := 24 * time.Hour
 	for _, key := range []string{"a", "b", "c", "d", "e"} {
@@ -80,6 +85,7 @@ func TestPollJitter_CappedByMax(t *testing.T) {
 }
 
 func TestRefreshEmptyStreak(t *testing.T) {
+	t.Parallel()
 	t0 := time.Date(2026, 6, 25, 12, 0, 0, 0, time.UTC)
 	at := func(d time.Duration) string { return t0.Add(d).Format(time.RFC3339) }
 
@@ -111,6 +117,7 @@ func TestRefreshEmptyStreak(t *testing.T) {
 }
 
 func TestRefreshEmptyStreak_NoReaderNoop(t *testing.T) {
+	t.Parallel()
 	s := &Scheduler{} // pollState nil
 	e := &scheduledGraph{tenant: "t", graphID: "g", interval: time.Minute, emptyStreak: 2}
 	s.foldPollOutcomeLocked(e, s.readPollMarker(context.Background(), e))
@@ -128,6 +135,7 @@ func TestRefreshEmptyStreak_NoReaderNoop(t *testing.T) {
 // still free. If fireDue ever takes the lock before reading again, TrackedCount
 // blocks, the signal never arrives, and this deadlocks into a timeout.
 func TestScheduler_PollMarkerReadDoesNotHoldLock(t *testing.T) {
+	t.Parallel()
 	// An empty workspace map makes fireGraph fail its Open and return quietly,
 	// so the test exercises fireDue's locking without needing a real flow.
 	s := NewScheduler(&Service{Workspaces: MapWorkspaces{}})

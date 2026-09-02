@@ -23,6 +23,7 @@ func usageBody(t *testing.T, rw *httptest.ResponseRecorder) []UsageCounters {
 }
 
 func TestUsageMe(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	store := NewMemUsageStore()
 	h.svc.Usage = store
@@ -50,6 +51,7 @@ func TestUsageMe(t *testing.T) {
 }
 
 func TestUsageMe_EmptyTenantSynthesizesCurrentMonth(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.svc.Usage = NewMemUsageStore()
 
@@ -65,6 +67,7 @@ func TestUsageMe_EmptyTenantSynthesizesCurrentMonth(t *testing.T) {
 }
 
 func TestUsageMe_CrossTenantForbidden(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.svc.Usage = NewMemUsageStore()
 
@@ -75,6 +78,7 @@ func TestUsageMe_CrossTenantForbidden(t *testing.T) {
 }
 
 func TestUsageMe_NotConfigured(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 
 	rw := h.do(t, "GET", "/api/v1/me/usage", nil)
@@ -84,6 +88,7 @@ func TestUsageMe_NotConfigured(t *testing.T) {
 }
 
 func TestUsageMe_RequiresAuth(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.svc.Usage = NewMemUsageStore()
 

@@ -60,6 +60,7 @@ var acmeRunner = core.Principal{
 // the decision off the status would report every history row as approved. The
 // decision port is the only thing that carries it.
 func TestListDecidedApprovals_ReportsBothVerdicts(t *testing.T) {
+	t.Parallel()
 	svc, store := historySvc(t)
 	now := time.Now()
 	_ = store.Enqueue(t.Context(), decidedRec("a", "run-1", "gate-a", "approve", now.Add(-time.Minute), "ada@acme.se", "looks fine", "SEK 400"))
@@ -88,6 +89,7 @@ func TestListDecidedApprovals_ReportsBothVerdicts(t *testing.T) {
 // morning is the newest DECISION and the oldest RECORD; ordering by enqueue
 // time buries it — and under a limit, drops it off the page entirely.
 func TestListDecidedApprovals_OrdersByDecisionNotEnqueue(t *testing.T) {
+	t.Parallel()
 	svc, store := historySvc(t)
 	now := time.Now()
 
@@ -122,6 +124,7 @@ func TestListDecidedApprovals_OrdersByDecisionNotEnqueue(t *testing.T) {
 // every succeeded step of every run, nor the approvals still sitting in the
 // inbox.
 func TestListDecidedApprovals_ExcludesNonApprovals(t *testing.T) {
+	t.Parallel()
 	svc, store := historySvc(t)
 	now := time.Now()
 	fin := now.Add(-time.Minute)
@@ -167,6 +170,7 @@ func TestListDecidedApprovals_ExcludesNonApprovals(t *testing.T) {
 // TestListDecidedApprovals_ScopedToTenantAndWorkspace: history is a record of
 // who decided what, so a leak across tenants is a disclosure, not a glitch.
 func TestListDecidedApprovals_ScopedToTenantAndWorkspace(t *testing.T) {
+	t.Parallel()
 	svc, store := historySvc(t)
 	now := time.Now()
 
@@ -209,6 +213,7 @@ func TestListDecidedApprovals_ScopedToTenantAndWorkspace(t *testing.T) {
 // in different files — a rename of the `approved` port or the `approver` key
 // would leave both halves compiling and the page silently empty.
 func TestApprove_ThenAppearsInHistory(t *testing.T) {
+	t.Parallel()
 	store := jobstore.NewMemory()
 	graph := core.Graph{
 		ID: "refunds", Name: "Refunds", Tenant: "acme", Workspace: "default",
@@ -286,6 +291,7 @@ func TestApprove_ThenAppearsInHistory(t *testing.T) {
 // TestHTTPGateway_DecidedApprovals covers the endpoint the history section
 // calls: the decided list, its scoping, and the one input it takes.
 func TestHTTPGateway_DecidedApprovals(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	now := time.Now()
 	fin := now.Add(-time.Minute)
@@ -417,6 +423,7 @@ func parkedApprovalRun(t *testing.T, store core.JobStore, runID string) {
 // reads those on a cancelled node (classifyEdge blocks every edge out of one),
 // but the run page and the approvals history do.
 func TestCancelRun_KeepsWhatAParkedStepPublished(t *testing.T) {
+	t.Parallel()
 	svc, store := historySvc(t)
 	parkedApprovalRun(t, store, "run-x")
 
@@ -446,6 +453,7 @@ func TestCancelRun_KeepsWhatAParkedStepPublished(t *testing.T) {
 // published something has anything to carry. Everything else keeps the
 // error-only result it always had.
 func TestCancelRun_LeavesAPlainNodeResultAlone(t *testing.T) {
+	t.Parallel()
 	svc, store := historySvc(t)
 	graph := core.Graph{
 		ID: "g", Tenant: "acme", Workspace: "default",
@@ -479,6 +487,7 @@ func TestCancelRun_LeavesAPlainNodeResultAlone(t *testing.T) {
 // under is settled — nobody decided it, and it is not waiting anywhere either.
 // Left out of the history it simply vanished.
 func TestListDecidedApprovals_IncludesCancelled(t *testing.T) {
+	t.Parallel()
 	svc, store := historySvc(t)
 	parkedApprovalRun(t, store, "run-x")
 
@@ -529,6 +538,7 @@ func TestListDecidedApprovals_IncludesCancelled(t *testing.T) {
 // only thing keeping the page in one honest order — and under a limit it also
 // decides which rows appear at all.
 func TestListDecidedApprovals_MergesBothOutcomesInOrder(t *testing.T) {
+	t.Parallel()
 	svc, store := historySvc(t)
 	now := time.Now()
 

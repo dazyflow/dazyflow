@@ -14,6 +14,7 @@ import (
 // arrive with every ${secret.…} already expanded.
 
 func TestSealPayload_RoundTripsUnderTheTenantsKey(t *testing.T) {
+	t.Parallel()
 	es, err := NewEncryptedSecrets(randomKey(t), NewMemSecretsStore())
 	if err != nil {
 		t.Fatalf("NewEncryptedSecrets: %v", err)
@@ -43,6 +44,7 @@ func TestSealPayload_RoundTripsUnderTheTenantsKey(t *testing.T) {
 // was sealed under this tenant's DEK — so someone with database write access
 // could relocate a sealed script into a row they are allowed to read back.
 func TestOpenPayload_RefusesARelocatedCiphertext(t *testing.T) {
+	t.Parallel()
 	es, err := NewEncryptedSecrets(randomKey(t), NewMemSecretsStore())
 	if err != nil {
 		t.Fatalf("NewEncryptedSecrets: %v", err)
@@ -68,6 +70,7 @@ func TestOpenPayload_RefusesARelocatedCiphertext(t *testing.T) {
 }
 
 func TestOpenPayload_RefusesShortAndTamperedInput(t *testing.T) {
+	t.Parallel()
 	es, err := NewEncryptedSecrets(randomKey(t), NewMemSecretsStore())
 	if err != nil {
 		t.Fatalf("NewEncryptedSecrets: %v", err)

@@ -31,6 +31,7 @@ func decodeEnvelope(t *testing.T, body []byte) ErrorEnvelope {
 // jsonErrors middleware rewriting a mux-default 404/405. No legacy
 // {"error":"<string>"} shape survives.
 func TestErrorEnvelope_Unified(t *testing.T) {
+	t.Parallel()
 	t.Run("writeAPIError carries the explicit code", func(t *testing.T) {
 		rw := httptest.NewRecorder()
 		writeAPIError(rw, http.StatusNotFound, "flow_not_found", "no such flow")
@@ -110,6 +111,7 @@ func TestErrorEnvelope_Unified(t *testing.T) {
 // TestCodeForStatus pins the status→code mapping the whole legacy-path
 // envelope relies on, so the web client's code-based branching stays stable.
 func TestCodeForStatus(t *testing.T) {
+	t.Parallel()
 	cases := map[int]string{
 		http.StatusBadRequest:            "bad_request",
 		http.StatusUnauthorized:          "unauthorized",

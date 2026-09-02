@@ -180,10 +180,12 @@ func mcpServerStoreContract(t *testing.T, store MCPServerStore) {
 }
 
 func TestMemMCPServerStore_Contract(t *testing.T) {
+	t.Parallel()
 	mcpServerStoreContract(t, NewMemMCPServerStore())
 }
 
 func TestPgMCPServerStore_Contract(t *testing.T) {
+	t.Parallel()
 	pool := pgRunnerPool(t)
 	ctx := context.Background()
 	store, err := NewPgMCPServerStore(ctx, pool)
@@ -200,6 +202,7 @@ func TestPgMCPServerStore_Contract(t *testing.T) {
 // reference mcp:<server>:<tool> by id, so forgetting a server on restart does
 // not degrade those flows, it breaks them.
 func TestPgMCPServerStore_SurvivesARestart(t *testing.T) {
+	t.Parallel()
 	pool := pgRunnerPool(t)
 	ctx := context.Background()
 	if _, err := pool.Exec(ctx, "TRUNCATE tenant_mcp_servers"); err != nil {

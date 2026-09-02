@@ -70,6 +70,7 @@ func newSubgraphHarness(t *testing.T) *subgraphHarness {
 // projectChildOutputs: a parent subgraph node seeds a child node's input and
 // projects a child node's output back up to the parent's port.
 func TestSubgraph_EndToEnd_OutputProjection(t *testing.T) {
+	t.Parallel()
 	h := newSubgraphHarness(t)
 
 	// Child graph: a seeded start node feeding a downstream echo node. The
@@ -131,6 +132,7 @@ func TestSubgraph_EndToEnd_OutputProjection(t *testing.T) {
 // leg: a child node fails, the parent subgraph node is failed with
 // child_failed, and the parent graph fails.
 func TestSubgraph_ChildFailurePropagates(t *testing.T) {
+	t.Parallel()
 	h := newSubgraphHarness(t)
 
 	// Child graph whose only node references a nonexistent module -> fails.
@@ -170,6 +172,7 @@ func TestSubgraph_ChildFailurePropagates(t *testing.T) {
 // node recurses until the depth cap, then the deepest submit is refused — so
 // the top-level run fails rather than spawning children forever.
 func TestSubgraph_DepthCapStopsRecursion(t *testing.T) {
+	t.Parallel()
 	h := newSubgraphHarness(t)
 
 	// A graph whose only node is a subgraph node pointing at ITSELF.
@@ -197,6 +200,7 @@ func TestSubgraph_DepthCapStopsRecursion(t *testing.T) {
 // path (and worker.maybeSubmitChild's submit-failure handling): the referenced
 // child graph does not exist, so the parent node fails with subgraph_submit.
 func TestSubgraph_MissingChildGraphFailsParent(t *testing.T) {
+	t.Parallel()
 	h := newSubgraphHarness(t)
 	// Save *some* graph so the workspace has a HEAD to load from; the child
 	// we reference ("ghost") is absent.

@@ -31,6 +31,7 @@ func fromSystem(h int) core.TicketMessage {
 }
 
 func TestTicketNudge(t *testing.T) {
+	t.Parallel()
 	open := core.Ticket{Status: core.TicketAwaitingSupport}
 	cases := []struct {
 		name string
@@ -150,6 +151,7 @@ func TestTicketNudge(t *testing.T) {
 }
 
 func TestTicketNudge_ExactBoundaryDoesNotFireEarly(t *testing.T) {
+	t.Parallel()
 	// Off-by-one at the threshold is the classic way a "daily" reminder becomes
 	// two reminders: fire at >= and a sweep at 23:59:59.9 plus clock jitter can
 	// double up.

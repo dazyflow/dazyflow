@@ -39,6 +39,7 @@ func saveGraph(t *testing.T, store *workspace.Store, g core.Graph) {
 // delete warning rests on: every flow in the org that names the server's
 // steps, and nothing else.
 func TestFlowsUsingMCPServer_FindsReferencesAcrossWorkspaces(t *testing.T) {
+	t.Parallel()
 	svc, ws1, ws2 := usageService(t)
 
 	saveGraph(t, ws1, core.Graph{
@@ -100,6 +101,7 @@ func TestFlowsUsingMCPServer_FindsReferencesAcrossWorkspaces(t *testing.T) {
 // TestFlowsUsingMCPServer_NothingUsesIt is the case the old warning could not
 // express, and the reason this lookup exists.
 func TestFlowsUsingMCPServer_NothingUsesIt(t *testing.T) {
+	t.Parallel()
 	svc, ws1, _ := usageService(t)
 	saveGraph(t, ws1, core.Graph{
 		ID: "unrelated", Tenant: "acme", Workspace: "ws1",
@@ -118,6 +120,7 @@ func TestFlowsUsingMCPServer_NothingUsesIt(t *testing.T) {
 // TestFlowsUsingMCPServer_CountsWhatItMayNotName: a caller who cannot view a
 // private flow still needs the blast radius. Counted, never titled.
 func TestFlowsUsingMCPServer_CountsWhatItMayNotName(t *testing.T) {
+	t.Parallel()
 	svc, ws1, _ := usageService(t)
 	saveGraph(t, ws1, core.Graph{
 		ID: "secret", Name: "Payroll", Tenant: "acme", Workspace: "ws1",
@@ -149,6 +152,7 @@ func TestFlowsUsingMCPServer_CountsWhatItMayNotName(t *testing.T) {
 // TestFlowsUsingMCPServer_RefusesAnotherOrg: the scan is tenant-scoped, and
 // the tenant comes from the principal's own authorization.
 func TestFlowsUsingMCPServer_RefusesAnotherOrg(t *testing.T) {
+	t.Parallel()
 	svc, _, _ := usageService(t)
 	if _, err := svc.FlowsUsingMCPServer(context.Background(), adminPrincipal("acme"), "globex", "mcp-test"); err == nil {
 		t.Fatal("an admin read another org's flow usage")
@@ -159,6 +163,7 @@ func TestFlowsUsingMCPServer_RefusesAnotherOrg(t *testing.T) {
 // web API catalog's steps carry api:<name>:<operation>, and deleting one has
 // the same consequence a disabled MCP server does.
 func TestFlowsUsingWebAPI(t *testing.T) {
+	t.Parallel()
 	svc, ws1, _ := usageService(t)
 
 	saveGraph(t, ws1, core.Graph{

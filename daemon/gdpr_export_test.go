@@ -17,6 +17,7 @@ import (
 
 // TestOAuthErrorCode_Cov covers every arm of the status->code mapping.
 func TestOAuthErrorCode_Cov(t *testing.T) {
+	t.Parallel()
 	cases := map[int]string{
 		http.StatusNotImplemented:     "oauth_not_configured",
 		http.StatusServiceUnavailable: "provider_not_configured",
@@ -36,6 +37,7 @@ func TestOAuthErrorCode_Cov(t *testing.T) {
 // params/env, nested secret keys, and the FailureNotify webhook — verifying the
 // original graph is never mutated in place.
 func TestRedactGraphSecrets_Cov(t *testing.T) {
+	t.Parallel()
 	orig := core.Graph{
 		ID: "g",
 		Triggers: []core.GraphTrigger{
@@ -94,6 +96,7 @@ func TestRedactGraphSecrets_Cov(t *testing.T) {
 }
 
 func TestChildErrMessage_Cov(t *testing.T) {
+	t.Parallel()
 	if got := childErrMessage(nil); got != "no error message" {
 		t.Errorf("nil = %q", got)
 	}
@@ -104,6 +107,7 @@ func TestChildErrMessage_Cov(t *testing.T) {
 }
 
 func TestExportHandler_Cov(t *testing.T) {
+	t.Parallel()
 	user := auth.User{Subject: "ex@example.com", Email: "ex@example.com", Tenant: "home", Workspace: "main"}
 	h, mem, _, tok := orgsSessionHarness(t, user)
 	ctx := context.Background()
@@ -148,6 +152,7 @@ func TestExportHandler_Cov(t *testing.T) {
 // added after the first export shipped: support correspondence, the subject's
 // own audit trail, and platform roles held.
 func TestAssembleExport_IncludesSupportAuditAndRoles(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	const email = "alice@example.com"
 	const tenant = "acme"
@@ -251,6 +256,7 @@ func TestAssembleExport_IncludesSupportAuditAndRoles(t *testing.T) {
 // TestAssembleExport_ExcludesOtherPeoplesData is the Art. 15(4) boundary: an
 // access request is for the requester's data, not their colleagues'.
 func TestAssembleExport_ExcludesOtherPeoplesData(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	const email = "alice@example.com"
 	const tenant = "acme"
@@ -293,6 +299,7 @@ func TestAssembleExport_ExcludesOtherPeoplesData(t *testing.T) {
 // its own, so an export on a daemon without a workspace store panicked the
 // request instead of returning what it could.
 func TestAssembleExport_SurvivesUnconfiguredStores(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	const email = "alice@example.com"
 

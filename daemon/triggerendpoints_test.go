@@ -13,6 +13,7 @@ import (
 // kinds (webhook + bearer, hosted form, cron node, poll node) and a legacy
 // graph-level cron trigger.
 func TestTriggerEndpoints_Cov(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 
 	g := core.Graph{

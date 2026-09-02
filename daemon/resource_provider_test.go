@@ -43,6 +43,7 @@ func putDef(t *testing.T, es *EncryptedSecrets, tenant, flow string, scope Secre
 }
 
 func TestResourceProvider_ResolvesViaFetcher(t *testing.T) {
+	t.Parallel()
 	rp, calls := newTestResourceProvider(t)
 	putDef(t, rp.Secrets, "acme", "f1", ScopeFlow, core.ResourceDef{
 		Name: "leads", Type: "google_sheet", Config: map[string]any{"spreadsheet_id": "S1"},
@@ -62,6 +63,7 @@ func TestResourceProvider_ResolvesViaFetcher(t *testing.T) {
 }
 
 func TestResourceProvider_FlowOverridesOrg(t *testing.T) {
+	t.Parallel()
 	rp, _ := newTestResourceProvider(t)
 	putDef(t, rp.Secrets, "acme", "", ScopeTenant, core.ResourceDef{
 		Name: "leads", Type: "google_sheet", Config: map[string]any{"spreadsheet_id": "ORG"},
@@ -83,6 +85,7 @@ func TestResourceProvider_FlowOverridesOrg(t *testing.T) {
 }
 
 func TestResourceProvider_UnknownTypeAndMissing(t *testing.T) {
+	t.Parallel()
 	rp, _ := newTestResourceProvider(t)
 	putDef(t, rp.Secrets, "acme", "", ScopeTenant, core.ResourceDef{
 		Name: "weird", Type: "airtable", Config: map[string]any{},

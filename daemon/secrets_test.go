@@ -16,6 +16,7 @@ import (
 )
 
 func TestBuiltinProvider_FromFile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "secrets.json")
 	contents, _ := json.Marshal(map[string]string{
@@ -39,6 +40,7 @@ func TestBuiltinProvider_FromFile(t *testing.T) {
 }
 
 func TestBuiltinProvider_BadFile(t *testing.T) {
+	t.Parallel()
 	if _, err := daemon.NewBuiltinProviderFromFile("/nonexistent/path/here"); err == nil {
 		t.Error("expected error for missing file")
 	}
@@ -51,6 +53,7 @@ func TestBuiltinProvider_BadFile(t *testing.T) {
 }
 
 func TestBuiltinProvider_Set(t *testing.T) {
+	t.Parallel()
 	p := daemon.NewBuiltinProvider()
 	p.Set("k", "v")
 	v, err := p.Get(t.Context(), "k")
@@ -67,6 +70,7 @@ func TestBuiltinProvider_Set(t *testing.T) {
 // known to the operator.
 
 func TestBuiltinProvider_Namespaced_UnprefixedRejected(t *testing.T) {
+	t.Parallel()
 	p := daemon.NewBuiltinProvider()
 	p.Namespaced = true
 	p.Set("UNPREFIXED", "x")
@@ -77,6 +81,7 @@ func TestBuiltinProvider_Namespaced_UnprefixedRejected(t *testing.T) {
 }
 
 func TestBuiltinProvider_Namespaced_NoTenantRejected(t *testing.T) {
+	t.Parallel()
 	p := daemon.NewBuiltinProvider()
 	p.Namespaced = true
 	p.Set("acme.token", "x")
@@ -87,6 +92,7 @@ func TestBuiltinProvider_Namespaced_NoTenantRejected(t *testing.T) {
 }
 
 func TestBuiltinProvider_Namespaced_OK(t *testing.T) {
+	t.Parallel()
 	p := daemon.NewBuiltinProvider()
 	p.Namespaced = true
 	p.Set("acme.api_key", "sk_acme")
@@ -101,6 +107,7 @@ func TestBuiltinProvider_Namespaced_OK(t *testing.T) {
 }
 
 func TestBuiltinProvider_Namespaced_CrossTenantRejected(t *testing.T) {
+	t.Parallel()
 	p := daemon.NewBuiltinProvider()
 	p.Namespaced = true
 	p.Set("acme.api_key", "sk_acme")

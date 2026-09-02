@@ -62,6 +62,7 @@ func uploadDo(t *testing.T, h *gatewayHarness, token, tenant, workspace, filenam
 }
 
 func TestUpload_OK(t *testing.T) {
+	t.Parallel()
 	h, root := newUploadHarness(t)
 	rw := uploadDo(t, h, h.token, "t", "ws", "sales.xlsx", "", []byte("hello world"))
 	if rw.Code != http.StatusOK {
@@ -87,6 +88,7 @@ func TestUpload_OK(t *testing.T) {
 }
 
 func TestUpload_CustomDestinationCreatesDirs(t *testing.T) {
+	t.Parallel()
 	h, root := newUploadHarness(t)
 	rw := uploadDo(t, h, h.token, "t", "ws", "ignored.csv", "imports/2026/q1/sales.xlsx", []byte("data"))
 	if rw.Code != http.StatusOK {
@@ -102,6 +104,7 @@ func TestUpload_CustomDestinationCreatesDirs(t *testing.T) {
 }
 
 func TestUpload_StripsBrowserPathFromFilename(t *testing.T) {
+	t.Parallel()
 	// Some browsers (legacy IE, some uploads) send "C:\\…\\sales.xlsx";
 	// only the leaf should land on disk.
 	h, root := newUploadHarness(t)
@@ -115,6 +118,7 @@ func TestUpload_StripsBrowserPathFromFilename(t *testing.T) {
 }
 
 func TestUpload_PathTraversalRejected(t *testing.T) {
+	t.Parallel()
 	h, _ := newUploadHarness(t)
 	for _, attempt := range []string{"../escape.xlsx", "/etc/passwd", "../../leak"} {
 		t.Run(attempt, func(t *testing.T) {
@@ -127,6 +131,7 @@ func TestUpload_PathTraversalRejected(t *testing.T) {
 }
 
 func TestUpload_CrossTenantRejected(t *testing.T) {
+	t.Parallel()
 	h, _ := newUploadHarness(t)
 	// Token is scoped to tenant "t"; try writing to tenant "other".
 	rw := uploadDo(t, h, h.token, "other", "ws", "x.bin", "", []byte("x"))
@@ -136,6 +141,7 @@ func TestUpload_CrossTenantRejected(t *testing.T) {
 }
 
 func TestUpload_RequiresEditPermission(t *testing.T) {
+	t.Parallel()
 	// Issue a runner-only key (graph:run, no graph:edit).
 	h, _ := newUploadHarness(t)
 	role := core.Role{Name: "runner", Permissions: []core.Permission{core.PermGraphRun}}
@@ -150,6 +156,7 @@ func TestUpload_RequiresEditPermission(t *testing.T) {
 }
 
 func TestUpload_MissingFilePart(t *testing.T) {
+	t.Parallel()
 	h, _ := newUploadHarness(t)
 	var body bytes.Buffer
 	mw := multipart.NewWriter(&body)
@@ -166,6 +173,7 @@ func TestUpload_MissingFilePart(t *testing.T) {
 }
 
 func TestUpload_NoSandboxConfigured(t *testing.T) {
+	t.Parallel()
 	// Skip the upload harness; Engine.Sandbox is nil → 503.
 	h := newGatewayHarness(t)
 	rw := uploadDo(t, h, h.token, "t", "ws", "x.bin", "", []byte("x"))
@@ -188,6 +196,7 @@ func TestUpload_NoSandboxConfigured(t *testing.T) {
 // server with a deliberately tiny ReadTimeout and a body streamed slower than
 // it, so the request only completes if the deadline was extended.
 func TestUpload_OutlivesServerReadTimeout(t *testing.T) {
+	t.Parallel()
 	h, root := newUploadHarness(t)
 
 	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {

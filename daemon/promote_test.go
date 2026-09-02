@@ -29,6 +29,7 @@ func countGraphRuns(t *testing.T, s *Service, tenant string, status core.JobStat
 // cap: a free tenant over max_concurrency starts runs PENDING (queued), and the
 // promotion sweep starts the next one only after a running slot frees.
 func TestConcurrencyAdmissionAndPromotion(t *testing.T) {
+	t.Parallel()
 	jobs := jobstore.NewMemory()
 	svc := &Service{
 		Jobs:               jobs,
@@ -96,6 +97,7 @@ func TestConcurrencyAdmissionAndPromotion(t *testing.T) {
 
 // TestConcurrencyUncappedAdmitsAll verifies pro/unlimited tenants never queue.
 func TestConcurrencyUncappedAdmitsAll(t *testing.T) {
+	t.Parallel()
 	jobs := jobstore.NewMemory()
 	svc := &Service{
 		Jobs:               jobs,
@@ -135,6 +137,7 @@ func promoteSvc() *Service {
 // TestStartPendingRun_NoPayload covers the no-usable-payload leg: the run is
 // finalized failed.
 func TestStartPendingRun_NoPayload(t *testing.T) {
+	t.Parallel()
 	s := promoteSvc()
 	run := core.JobRecord{ID: "r1", Kind: core.JobKindGraph, Status: core.JobStatusRunning}
 	_ = s.Jobs.Enqueue(context.Background(), run)
@@ -152,6 +155,7 @@ func TestStartPendingRun_NoPayload(t *testing.T) {
 // TestStartPendingRun_EmptyGraph covers the zero-node short-circuit: succeeds
 // immediately.
 func TestStartPendingRun_EmptyGraph(t *testing.T) {
+	t.Parallel()
 	s := promoteSvc()
 	payload, _ := json.Marshal(core.Graph{ID: "g", Tenant: "t", Workspace: "ws"})
 	run := core.JobRecord{ID: "r2", Kind: core.JobKindGraph, Status: core.JobStatusRunning, GraphPayload: payload}
@@ -167,6 +171,7 @@ func TestStartPendingRun_EmptyGraph(t *testing.T) {
 // TestStartPendingRun_DispatchesRoots covers the normal leg: a runnable root is
 // enqueued and the watchdog/notifier are armed (run stays running).
 func TestStartPendingRun_DispatchesRoots(t *testing.T) {
+	t.Parallel()
 	s := promoteSvc()
 	g := core.Graph{
 		ID: "g", Tenant: "t", Workspace: "ws",

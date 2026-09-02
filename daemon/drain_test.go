@@ -20,6 +20,7 @@ import (
 // mid-run. The worker derives the node's exec context via WithoutCancel, so the
 // claim loop stops taking new work while the in-flight node finishes.
 func TestWorker_DrainsInFlightNodeOnShutdown(t *testing.T) {
+	t.Parallel()
 	jobs := jobstore.NewMemory()
 	bus := daemon.NewMemoryBus()
 	eng := &engine.Engine{Resolver: &engine.NodeResolver{Native: engine.Default}}

@@ -27,6 +27,7 @@ func seedUser(t *testing.T, users auth.UserStore, email, password string) {
 }
 
 func TestChangePassword(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	users, _ := auth.OpenJSONUserStore("")
 	seedUser(t, users, "alice@example.com", "oldpassword")
@@ -56,6 +57,7 @@ func TestChangePassword(t *testing.T) {
 }
 
 func TestChangePassword_WrongCurrent(t *testing.T) {
+	t.Parallel()
 	users, _ := auth.OpenJSONUserStore("")
 	seedUser(t, users, "alice@example.com", "oldpassword")
 	h := &HTTPGateway{svc: &Service{}, Users: users, Sessions: auth.NewMemSessionStore()}
@@ -74,6 +76,7 @@ func TestChangePassword_WrongCurrent(t *testing.T) {
 }
 
 func TestChangeEmail_Rekey(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	const oldEmail, newEmail = "alice@example.com", "alice@new.com"
 
@@ -130,6 +133,7 @@ func TestChangeEmail_Rekey(t *testing.T) {
 }
 
 func TestChangeEmail_TargetTaken(t *testing.T) {
+	t.Parallel()
 	users, _ := auth.OpenJSONUserStore("")
 	seedUser(t, users, "alice@example.com", "pw12345678")
 	seedUser(t, users, "taken@example.com", "other")

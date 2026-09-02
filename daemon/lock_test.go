@@ -17,6 +17,7 @@ import (
 // is checked independently so a regression in the helper's status loop
 // is caught.
 func TestSaveGraph_LockedByActiveRun(t *testing.T) {
+	t.Parallel()
 	for _, status := range []core.JobStatus{
 		core.JobStatusQueued,
 		core.JobStatusRunning,
@@ -68,6 +69,7 @@ func TestSaveGraph_LockedByActiveRun(t *testing.T) {
 // once the active run reaches a terminal state — otherwise the flow
 // would be wedged read-only forever.
 func TestSaveGraph_UnlockedAfterTerminal(t *testing.T) {
+	t.Parallel()
 	h := newVisibilityHarness(t)
 	ctx := context.Background()
 
@@ -108,6 +110,7 @@ func TestSaveGraph_UnlockedAfterTerminal(t *testing.T) {
 // new graph ID can't be "locked" because there's no prior to load. The
 // helper should never short-circuit a create.
 func TestSaveGraph_CreateIgnoresLock(t *testing.T) {
+	t.Parallel()
 	h := newVisibilityHarness(t)
 	ctx := context.Background()
 

@@ -14,6 +14,7 @@ import (
 // and two node executions for the graph's tenant — wired through the real
 // SubmitGraph + worker paths, not the store in isolation.
 func TestUsageMetering_CountsRunAndNodeExecutions(t *testing.T) {
+	t.Parallel()
 	h := newSkipHarness(t)
 
 	g := core.Graph{
@@ -51,6 +52,7 @@ func TestUsageMetering_CountsRunAndNodeExecutions(t *testing.T) {
 // (and its downstream cascade) is recorded skipped by the dispatcher
 // without a worker attempt — only the source's real execution counts.
 func TestUsageMetering_SkippedNodesDoNotCount(t *testing.T) {
+	t.Parallel()
 	h := newSkipHarness(t)
 
 	g := core.Graph{

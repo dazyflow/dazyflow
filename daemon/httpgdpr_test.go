@@ -13,6 +13,7 @@ import (
 // HTTP-handler branches of the GDPR erasure endpoints.
 
 func TestDeleteMyAccount_NotConfigured(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t) // gw.Users is nil
 	rw := h.do(t, "DELETE", "/api/v1/me/account", nil)
 	if rw.Code != http.StatusNotImplemented {
@@ -21,6 +22,7 @@ func TestDeleteMyAccount_NotConfigured(t *testing.T) {
 }
 
 func TestDeleteMyAccount_ConfirmationRequired(t *testing.T) {
+	t.Parallel()
 	user := auth.User{Subject: "del@example.com", Email: "del@example.com", Tenant: "home", Workspace: "main"}
 	h, _, _, tok := orgsSessionHarness(t, user)
 	// No ?confirm= -> 400 confirmation_required.
@@ -31,6 +33,7 @@ func TestDeleteMyAccount_ConfirmationRequired(t *testing.T) {
 }
 
 func TestDeleteMyAccount_WrongConfirm(t *testing.T) {
+	t.Parallel()
 	user := auth.User{Subject: "del@example.com", Email: "del@example.com", Tenant: "home", Workspace: "main"}
 	h, _, _, tok := orgsSessionHarness(t, user)
 	rw := sessionDo(t, h, tok, "DELETE", "/api/v1/me/account?confirm=other@example.com", nil)
@@ -40,6 +43,7 @@ func TestDeleteMyAccount_WrongConfirm(t *testing.T) {
 }
 
 func TestDeleteMyAccount_OK(t *testing.T) {
+	t.Parallel()
 	user := auth.User{Subject: "del@example.com", Email: "del@example.com", Tenant: "shared", Workspace: "main"}
 	h, _, _, tok := orgsSessionHarness(t, user)
 	// Confirm matching the email; shared (non-personal) tenant so no org cascade.
@@ -50,6 +54,7 @@ func TestDeleteMyAccount_OK(t *testing.T) {
 }
 
 func TestAdminDeleteUser_NotPlatformAdmin(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// Tenant-admin token, not platform admin -> 403.
 	rw := h.adminDo(t, "DELETE", "/api/v1/admin/users/victim@example.com?confirm=victim@example.com", nil)
@@ -59,6 +64,7 @@ func TestAdminDeleteUser_NotPlatformAdmin(t *testing.T) {
 }
 
 func TestAdminDeleteUser_NotConfigured(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t) // Users nil
 	rw := h.platformDo(t, "DELETE", "/api/v1/admin/users/victim@example.com?confirm=victim@example.com", nil)
 	if rw.Code != http.StatusNotImplemented {
@@ -67,6 +73,7 @@ func TestAdminDeleteUser_NotConfigured(t *testing.T) {
 }
 
 func TestAdminDeleteUser_ConfirmationRequired(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	users, _ := auth.OpenJSONUserStore("")
 	_ = users.PutUser(t.Context(), auth.User{Email: "victim@example.com", Subject: "victim@example.com", Tenant: "shared"})
@@ -78,6 +85,7 @@ func TestAdminDeleteUser_ConfirmationRequired(t *testing.T) {
 }
 
 func TestAdminDeleteUser_UnknownUser(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	users, _ := auth.OpenJSONUserStore("")
 	h.gw.Users = users
@@ -88,6 +96,7 @@ func TestAdminDeleteUser_UnknownUser(t *testing.T) {
 }
 
 func TestAdminDeleteOrg_BadRequest(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// Empty tenant path segment isn't routable; use a real tenant that the
 	// caller can't manage to exercise the forbidden branch instead.
@@ -98,6 +107,7 @@ func TestAdminDeleteOrg_BadRequest(t *testing.T) {
 }
 
 func TestAdminDeleteOrg_SessionRequired(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// Org-admin API key can manage own tenant "t" but org deletion needs a
 	// session credential -> 403 session_required.
@@ -111,6 +121,7 @@ func TestAdminDeleteOrg_SessionRequired(t *testing.T) {
 // non-platform-admin (403), no user store (501), missing confirm (400),
 // unknown user (404), and the happy path on an existing personal-tenant user.
 func TestAdminDeleteUserHandler_Cov(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 
 	// Non-platform-admin (default editor token) -> 403.

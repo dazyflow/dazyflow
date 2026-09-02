@@ -22,6 +22,7 @@ func (flushRecorder) Flush() {}
 // not-enabled guard, and the backfill happy path (drained with an already-
 // cancelled context so the live loop exits immediately after backfill).
 func TestSystemLogTail_Cov(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 
 	// Non-platform-admin -> 403.

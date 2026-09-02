@@ -16,6 +16,7 @@ import (
 )
 
 func TestMonitorGRPCHealth_NilReadyIsServing(t *testing.T) {
+	t.Parallel()
 	hs := health.NewServer()
 	// Returns immediately after marking SERVING (liveness only).
 	daemon.MonitorGRPCHealth(context.Background(), hs, nil, time.Second)
@@ -29,6 +30,7 @@ func TestMonitorGRPCHealth_NilReadyIsServing(t *testing.T) {
 }
 
 func TestMonitorGRPCHealth_TracksReadiness(t *testing.T) {
+	t.Parallel()
 	hs := health.NewServer()
 	var down atomic.Bool
 	ready := func(context.Context) error {

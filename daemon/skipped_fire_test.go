@@ -14,6 +14,7 @@ import (
 // recordSkippedFire writes a terminal "skipped" graph run so a cap-blocked
 // scheduled fire shows up in the Runs list.
 func TestRecordSkippedFire(t *testing.T) {
+	t.Parallel()
 	jobs := jobstore.NewMemory()
 	svc := &Service{Jobs: jobs}
 
@@ -39,6 +40,7 @@ func TestRecordSkippedFire(t *testing.T) {
 // frequent cron at the cap doesn't flood the list; the precise count lives
 // in the usage counter instead.
 func TestSchedulerSkipMarkerCoalesces(t *testing.T) {
+	t.Parallel()
 	sched := NewScheduler(&Service{})
 	now := time.Date(2026, 6, 10, 12, 0, 0, 0, time.UTC)
 	sched.SetClock(func() time.Time { return now })

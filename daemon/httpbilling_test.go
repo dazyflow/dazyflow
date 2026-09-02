@@ -80,6 +80,7 @@ func billingHarnessWithStripeForms(t *testing.T) (*gatewayHarness, *MemPlanStore
 // mid-checkout is enough), and an unpinned return would show the wrong org's
 // usage immediately after an upgrade.
 func TestBillingReturnURLsPinTheOrg(t *testing.T) {
+	t.Parallel()
 	h, plans, _, forms := billingHarnessWithStripeForms(t)
 
 	rw := h.do(t, "POST", "/api/v1/me/billing/checkout", nil)
@@ -107,6 +108,7 @@ func TestBillingReturnURLsPinTheOrg(t *testing.T) {
 // A base URL configured with a trailing slash must not yield "//usage" in the
 // redirect Stripe bounces the user through.
 func TestBillingReturnURLsTrimTrailingSlash(t *testing.T) {
+	t.Parallel()
 	h, _, _, forms := billingHarnessWithStripeForms(t)
 	h.svc.PublicBaseURL = "https://app.example/"
 
@@ -120,6 +122,7 @@ func TestBillingReturnURLsTrimTrailingSlash(t *testing.T) {
 }
 
 func TestBillingMe(t *testing.T) {
+	t.Parallel()
 	h, plans, _ := billingHarness(t)
 	h.svc.FreeRunsPerMonth = 100
 	_ = h.svc.Usage.AddRun(t.Context(), "t", time.Now())
@@ -149,6 +152,7 @@ func TestBillingMe(t *testing.T) {
 // false (and can_upgrade/can_manage false), so the web client hides the whole
 // plan/billing surface and shows usage only.
 func TestBillingMeNoStripe(t *testing.T) {
+	t.Parallel()
 	h, _, _ := billingHarness(t)
 	h.gw.Billing = nil // no Stripe configured
 
@@ -169,6 +173,7 @@ func TestBillingMeNoStripe(t *testing.T) {
 // otherwise a comped tenant is told to "Upgrade to Pro". Regression for the
 // divergence between this endpoint and /me/plans.
 func TestBillingMeCompedEntitlement(t *testing.T) {
+	t.Parallel()
 	h, _, _ := billingHarness(t)
 	ents := builtinTierStore()
 	ents.ents["t"] = TenantEntitlement{Tenant: "t", Comped: true}
@@ -188,6 +193,7 @@ func TestBillingMeCompedEntitlement(t *testing.T) {
 }
 
 func TestBillingCheckout(t *testing.T) {
+	t.Parallel()
 	h, _, _ := billingHarness(t)
 	rw := h.do(t, "POST", "/api/v1/me/billing/checkout", nil)
 	if rw.Code != http.StatusOK {
@@ -199,6 +205,7 @@ func TestBillingCheckout(t *testing.T) {
 }
 
 func TestBillingCheckout_AlreadySubscribedRejected(t *testing.T) {
+	t.Parallel()
 	// A live subscription must not be able to mint a second Checkout
 	// session (which would double-bill on a fresh customer).
 	h, plans, _ := billingHarness(t)
@@ -227,6 +234,7 @@ func TestBillingCheckout_AlreadySubscribedRejected(t *testing.T) {
 }
 
 func TestBillingCheckout_NotConfigured(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "POST", "/api/v1/me/billing/checkout", nil)
 	if rw.Code != http.StatusNotImplemented {
@@ -235,6 +243,7 @@ func TestBillingCheckout_NotConfigured(t *testing.T) {
 }
 
 func TestBillingPortal_RequiresExistingCustomer(t *testing.T) {
+	t.Parallel()
 	h, plans, _ := billingHarness(t)
 
 	rw := h.do(t, "POST", "/api/v1/me/billing/portal", nil)
@@ -260,6 +269,7 @@ func postStripeEvent(t *testing.T, h *gatewayHarness, payload string) *httptest.
 }
 
 func TestStripeWebhook_CheckoutCompletedUpgrades(t *testing.T) {
+	t.Parallel()
 	h, plans, _ := billingHarness(t)
 
 	rw := postStripeEvent(t, h, `{
@@ -279,6 +289,7 @@ func TestStripeWebhook_CheckoutCompletedUpgrades(t *testing.T) {
 }
 
 func TestStripeWebhook_SubscriptionDeletedDowngrades(t *testing.T) {
+	t.Parallel()
 	h, plans, _ := billingHarness(t)
 	_ = plans.SetPlan(t.Context(), TenantPlan{Tenant: "t", Plan: PlanPro, StripeCustomerID: "cus_9"})
 
@@ -299,6 +310,7 @@ func TestStripeWebhook_SubscriptionDeletedDowngrades(t *testing.T) {
 }
 
 func TestStripeWebhook_PastDueStaysPro(t *testing.T) {
+	t.Parallel()
 	// Stripe is still retrying the charge — don't cut access on the
 	// first payment hiccup.
 	h, plans, _ := billingHarness(t)
@@ -318,6 +330,7 @@ func TestStripeWebhook_PastDueStaysPro(t *testing.T) {
 }
 
 func TestStripeWebhook_PeriodEndFromLineItems(t *testing.T) {
+	t.Parallel()
 	// Stripe API 2025-03-31+ (incl. recent default versions) drops the
 	// top-level current_period_end and carries it per line item instead;
 	// the latest across items becomes the renewal boundary.
@@ -345,6 +358,7 @@ func TestStripeWebhook_PeriodEndFromLineItems(t *testing.T) {
 }
 
 func TestStripeWebhook_BadSignatureRejected(t *testing.T) {
+	t.Parallel()
 	h, plans, _ := billingHarness(t)
 
 	body := `{"type":"checkout.session.completed","data":{"object":{"client_reference_id":"t"}}}`
@@ -362,6 +376,7 @@ func TestStripeWebhook_BadSignatureRejected(t *testing.T) {
 }
 
 func TestStripeWebhook_NotConfigured(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	req := httptest.NewRequest("POST", "/api/v1/events/stripe", strings.NewReader("{}"))
 	rw := httptest.NewRecorder()
@@ -372,6 +387,7 @@ func TestStripeWebhook_NotConfigured(t *testing.T) {
 }
 
 func TestStripeWebhook_UnknownEventAcked(t *testing.T) {
+	t.Parallel()
 	h, _, _ := billingHarness(t)
 	rw := postStripeEvent(t, h, `{"type":"invoice.finalized","data":{"object":{}}}`)
 	if rw.Code != http.StatusOK {
@@ -382,6 +398,7 @@ func TestStripeWebhook_UnknownEventAcked(t *testing.T) {
 // The full loop: a capped free tenant upgrades via webhook and the next
 // run goes through.
 func TestPlanGate_WebhookUpgradeLiftsCap(t *testing.T) {
+	t.Parallel()
 	h, _, _ := billingHarness(t)
 	h.svc.FreeRunsPerMonth = 1
 	_ = h.svc.Usage.AddRun(t.Context(), "t", time.Now()) // already at cap
@@ -401,6 +418,7 @@ func TestPlanGate_WebhookUpgradeLiftsCap(t *testing.T) {
 // A replayed delivery (same event id) acks without re-applying: the
 // downgrade in the replay must not undo a later upgrade.
 func TestStripeWebhook_ReplayedEventIgnored(t *testing.T) {
+	t.Parallel()
 	h, plans, _ := billingHarness(t)
 
 	ev := `{

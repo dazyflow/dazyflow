@@ -21,6 +21,7 @@ import (
 )
 
 func TestHMACApprovalSigner_DeterministicAndVerifies(t *testing.T) {
+	t.Parallel()
 	s := &HMACApprovalSigner{BaseURL: "https://dzd", Secret: []byte("topsecret")}
 	url1 := s.SignApprovalURL("run-1", "node-A")
 	if !strings.Contains(url1, "/approve/run-1/node-A?exp=") ||
@@ -64,6 +65,7 @@ func TestHMACApprovalSigner_DeterministicAndVerifies(t *testing.T) {
 // The existing TestHMACApprovalSigner_DeterministicAndVerifies only covers
 // computeToken for a FIXED exp, so it never exercised this.
 func TestHMACApprovalSigner_SignIsStableAcrossResigns(t *testing.T) {
+	t.Parallel()
 	base := time.Date(2026, 7, 26, 14, 5, 0, 0, time.UTC)
 	now := base
 	s := &HMACApprovalSigner{
@@ -140,6 +142,7 @@ func parseApprovalURL(t *testing.T, raw string) (int64, string) {
 }
 
 func TestHMACApprovalSigner_DifferentSecretsProduceDifferentTokens(t *testing.T) {
+	t.Parallel()
 	s1 := &HMACApprovalSigner{BaseURL: "https://dzd", Secret: []byte("aaa")}
 	s2 := &HMACApprovalSigner{BaseURL: "https://dzd", Secret: []byte("bbb")}
 	exp := time.Now().Add(time.Hour).Unix()
@@ -149,6 +152,7 @@ func TestHMACApprovalSigner_DifferentSecretsProduceDifferentTokens(t *testing.T)
 }
 
 func TestApprove_RequiresAwaitingRecord(t *testing.T) {
+	t.Parallel()
 	store := jobstore.NewMemory()
 	bus := NewMemoryBus()
 	svc := &Service{Jobs: store, Bus: bus, Engine: &engine.Engine{
@@ -172,6 +176,7 @@ func TestApprove_RequiresAwaitingRecord(t *testing.T) {
 }
 
 func TestApprove_RejectsBadDecision(t *testing.T) {
+	t.Parallel()
 	svc := &Service{Jobs: jobstore.NewMemory(), Bus: NewMemoryBus()}
 	err := svc.Approve(t.Context(), "r", "n", ApprovalDecision{Decision: "maybe"})
 	if err == nil || !strings.Contains(err.Error(), "approve or reject") {
@@ -199,6 +204,7 @@ func (conflictOnCompleteStore) Complete(context.Context, string, core.JobStatus,
 // nor "not found". The sequential duplicate matched and returned 409, so the
 // endpoint reported two different statuses for the same user-visible event.
 func TestApprovalListener_ClassifiesErrorsBySentinel(t *testing.T) {
+	t.Parallel()
 	// awaiting builds a service whose run-1/node-A record is parked awaiting,
 	// with the graph payload Approve needs to advance the run.
 	awaiting := func(t *testing.T, wrap func(core.JobStore) core.JobStore) *Service {
@@ -272,6 +278,7 @@ func TestApprovalListener_ClassifiesErrorsBySentinel(t *testing.T) {
 }
 
 func TestApprovalListener_RejectsBadToken(t *testing.T) {
+	t.Parallel()
 	signer := &HMACApprovalSigner{BaseURL: "https://x", Secret: []byte("k")}
 	svc := &Service{Jobs: jobstore.NewMemory(), Bus: NewMemoryBus()}
 	a := NewApprovalListener(svc, signer)
@@ -285,6 +292,7 @@ func TestApprovalListener_RejectsBadToken(t *testing.T) {
 }
 
 func TestApprovalListener_RejectsMissingPath(t *testing.T) {
+	t.Parallel()
 	signer := &HMACApprovalSigner{BaseURL: "https://x", Secret: []byte("k")}
 	svc := &Service{Jobs: jobstore.NewMemory(), Bus: NewMemoryBus()}
 	a := NewApprovalListener(svc, signer)
@@ -298,6 +306,7 @@ func TestApprovalListener_RejectsMissingPath(t *testing.T) {
 }
 
 func TestApprovalListener_RejectsNonPost(t *testing.T) {
+	t.Parallel()
 	signer := &HMACApprovalSigner{BaseURL: "https://x", Secret: []byte("k")}
 	svc := &Service{Jobs: jobstore.NewMemory(), Bus: NewMemoryBus()}
 	a := NewApprovalListener(svc, signer)
@@ -313,6 +322,7 @@ func TestApprovalListener_RejectsNonPost(t *testing.T) {
 // TestApprovalListener_ValidTokenResumes exercises the now-wired HMAC
 // path end to end: a valid signed token resumes an awaiting node.
 func TestApprovalListener_ValidTokenResumes(t *testing.T) {
+	t.Parallel()
 	store := jobstore.NewMemory()
 	bus := NewMemoryBus()
 	svc := &Service{Jobs: store, Bus: bus, Engine: &engine.Engine{
@@ -367,6 +377,7 @@ func TestApprovalListener_ValidTokenResumes(t *testing.T) {
 // trail at all — only a stdout line — which made the one approval route that
 // carries no proven identity also the one route with no record of who used it.
 func TestApprovalListener_AuditsTheDecision(t *testing.T) {
+	t.Parallel()
 	store := jobstore.NewMemory()
 	graph := core.Graph{ID: "g", Nodes: []core.Node{{ID: "node-A", Module: "noop"}}}
 	payload, _ := json.Marshal(graph)
@@ -421,6 +432,7 @@ func TestApprovalListener_AuditsTheDecision(t *testing.T) {
 
 // No ?approver= at all: still audited, still marked as unverified.
 func TestApprovalListener_AuditsAnonymousDecision(t *testing.T) {
+	t.Parallel()
 	store := jobstore.NewMemory()
 	graph := core.Graph{ID: "g", Nodes: []core.Node{{ID: "node-A", Module: "noop"}}}
 	payload, _ := json.Marshal(graph)

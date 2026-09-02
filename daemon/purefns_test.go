@@ -13,6 +13,7 @@ import (
 // TestPollNextFires_Cov covers pollNextFires: an interval series projected n
 // steps from a base time.
 func TestPollNextFires_Cov(t *testing.T) {
+	t.Parallel()
 	from := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	fires := pollNextFires(from, 30*time.Minute, 3)
 	if len(fires) != 3 {
@@ -29,6 +30,7 @@ func TestPollNextFires_Cov(t *testing.T) {
 
 // TestValidateBoardName_Cov covers validateBoardName's legs.
 func TestValidateBoardName_Cov(t *testing.T) {
+	t.Parallel()
 	if err := validateBoardName("good"); err != nil {
 		t.Fatalf("valid name rejected: %v", err)
 	}
@@ -50,6 +52,7 @@ func TestValidateBoardName_Cov(t *testing.T) {
 // TestQueryInt_Cov covers queryInt: present+valid, absent (default), and
 // present-but-unparseable (default).
 func TestQueryInt_Cov(t *testing.T) {
+	t.Parallel()
 	r := httptest.NewRequest("GET", "/x?limit=42&bad=nope", nil)
 	if got := queryInt(r, "limit", 10); got != 42 {
 		t.Fatalf("limit = %d, want 42", got)

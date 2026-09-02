@@ -35,6 +35,7 @@ func newAADTestSecrets(t *testing.T) (*EncryptedSecrets, *MemSecretsStore) {
 }
 
 func TestEncryptedSecrets_CiphertextIsBoundToItsName(t *testing.T) {
+	t.Parallel()
 	es, store := newAADTestSecrets(t)
 	ctx := context.Background()
 
@@ -62,6 +63,7 @@ func TestEncryptedSecrets_CiphertextIsBoundToItsName(t *testing.T) {
 }
 
 func TestEncryptedSecrets_CiphertextIsBoundToItsTenant(t *testing.T) {
+	t.Parallel()
 	es, store := newAADTestSecrets(t)
 	ctx := context.Background()
 
@@ -88,6 +90,7 @@ func TestEncryptedSecrets_CiphertextIsBoundToItsTenant(t *testing.T) {
 // A wrapped DEK is bound to its tenant too, so it can't be swapped between
 // tenant rows.
 func TestEncryptedSecrets_WrappedDEKIsBoundToItsTenant(t *testing.T) {
+	t.Parallel()
 	es, store := newAADTestSecrets(t)
 	ctx := context.Background()
 
@@ -118,6 +121,7 @@ func TestEncryptedSecrets_WrappedDEKIsBoundToItsTenant(t *testing.T) {
 // Ciphertext written before binding existed (nil AAD) must keep decrypting —
 // otherwise the upgrade would strand every secret already on disk.
 func TestEncryptedSecrets_LegacyUnboundCiphertextStillReads(t *testing.T) {
+	t.Parallel()
 	es, store := newAADTestSecrets(t)
 	ctx := context.Background()
 
@@ -166,6 +170,7 @@ func TestEncryptedSecrets_LegacyUnboundCiphertextStillReads(t *testing.T) {
 
 // A KEK rotation upgrades a legacy unbound DEK to the bound form.
 func TestEncryptedSecrets_RewrapUpgradesLegacyDEKBinding(t *testing.T) {
+	t.Parallel()
 	es, store := newAADTestSecrets(t)
 	ctx := context.Background()
 
@@ -224,6 +229,7 @@ func TestEncryptedSecrets_RewrapUpgradesLegacyDEKBinding(t *testing.T) {
 
 // The binding must not disturb ordinary use, including the flow→org cascade.
 func TestEncryptedSecrets_BindingPreservesNormalResolution(t *testing.T) {
+	t.Parallel()
 	es, _ := newAADTestSecrets(t)
 	ctx := core.WithTenant(context.Background(), "acme")
 

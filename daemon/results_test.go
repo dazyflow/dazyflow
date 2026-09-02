@@ -62,6 +62,7 @@ func newBoardService(t *testing.T) (*Service, *FSSandbox) {
 var boardPrincipal = core.Principal{Subject: "u", Tenant: "acme", Workspace: "main"}
 
 func TestListBoards(t *testing.T) {
+	t.Parallel()
 	svc, sb := newBoardService(t)
 	seedBoardStore(t, sb, "acme", "main")
 
@@ -78,6 +79,7 @@ func TestListBoards(t *testing.T) {
 }
 
 func TestListBoards_EmptyStoreIsNotAnError(t *testing.T) {
+	t.Parallel()
 	svc, _ := newBoardService(t)
 	// No store file was ever written.
 	boards, err := svc.ListBoards(t.Context(), boardPrincipal, "acme", "main")
@@ -90,6 +92,7 @@ func TestListBoards_EmptyStoreIsNotAnError(t *testing.T) {
 }
 
 func TestBoardRows(t *testing.T) {
+	t.Parallel()
 	svc, sb := newBoardService(t)
 	seedBoardStore(t, sb, "acme", "main")
 
@@ -112,6 +115,7 @@ func TestBoardRows(t *testing.T) {
 }
 
 func TestBoardRows_Paging(t *testing.T) {
+	t.Parallel()
 	svc, sb := newBoardService(t)
 	seedBoardStore(t, sb, "acme", "main")
 
@@ -128,6 +132,7 @@ func TestBoardRows_Paging(t *testing.T) {
 }
 
 func TestBoardRows_UnknownBoardIs404(t *testing.T) {
+	t.Parallel()
 	svc, sb := newBoardService(t)
 	seedBoardStore(t, sb, "acme", "main")
 
@@ -142,6 +147,7 @@ func TestBoardRows_UnknownBoardIs404(t *testing.T) {
 // invalid name or — since it isn't in sqlite_master — as an unknown board;
 // what must NOT happen is the leads table getting dropped.
 func TestBoardRows_RejectsCraftedName(t *testing.T) {
+	t.Parallel()
 	svc, sb := newBoardService(t)
 	seedBoardStore(t, sb, "acme", "main")
 
@@ -164,6 +170,7 @@ func TestBoardRows_RejectsCraftedName(t *testing.T) {
 }
 
 func TestClearBoard(t *testing.T) {
+	t.Parallel()
 	svc, sb := newBoardService(t)
 	seedBoardStore(t, sb, "acme", "main")
 
@@ -180,6 +187,7 @@ func TestClearBoard(t *testing.T) {
 }
 
 func TestClearBoard_EmptyStoreIsNoOp(t *testing.T) {
+	t.Parallel()
 	svc, _ := newBoardService(t)
 	if err := svc.ClearBoard(t.Context(), boardPrincipal, "acme", "main", "leads"); err != nil {
 		t.Fatalf("clearing a board in an empty store should be a no-op, got %v", err)
@@ -187,6 +195,7 @@ func TestClearBoard_EmptyStoreIsNoOp(t *testing.T) {
 }
 
 func TestBoards_NoSandboxIsUnavailable(t *testing.T) {
+	t.Parallel()
 	svc := &Service{Jobs: jobstore.NewMemory(), Engine: &engine.Engine{}}
 	_, err := svc.ListBoards(t.Context(), boardPrincipal, "acme", "main")
 	if !errors.Is(err, errBoardsUnavailable) {
@@ -199,6 +208,7 @@ func TestBoards_NoSandboxIsUnavailable(t *testing.T) {
 // reports errBoardsUnavailable -> 501.
 
 func TestListBoardsMe_NotConfigured(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "GET", "/api/v1/me/boards", nil)
 	if rw.Code != http.StatusNotImplemented {
@@ -210,6 +220,7 @@ func TestListBoardsMe_NotConfigured(t *testing.T) {
 }
 
 func TestGetBoardMe_NotConfigured(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "GET", "/api/v1/me/boards/leads", nil)
 	if rw.Code != http.StatusNotImplemented {
@@ -218,6 +229,7 @@ func TestGetBoardMe_NotConfigured(t *testing.T) {
 }
 
 func TestListBoardsMe_ForbiddenScope(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// Cross-tenant ?tenant= -> 403 forbidden_scope.
 	rw := h.do(t, "GET", "/api/v1/me/boards?tenant=other", nil)
@@ -232,6 +244,7 @@ func TestListBoardsMe_ForbiddenScope(t *testing.T) {
 }
 
 func TestListBoardsMe_MissingScope(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	// A token with no tenant/workspace binding and no query params -> 400.
 	role := core.Role{Name: "free", Permissions: []core.Permission{core.PermGraphRun}}
@@ -249,6 +262,7 @@ func TestListBoardsMe_MissingScope(t *testing.T) {
 }
 
 func TestClearBoardMe_ForbiddenWithoutEditPerm(t *testing.T) {
+	t.Parallel()
 	h := newRunOnlyHarness(t)
 	// Run-only token lacks graph:edit; clear is 403.
 	rw := runOnlyDo(t, h, "DELETE", "/api/v1/me/boards/leads", nil)
@@ -258,6 +272,7 @@ func TestClearBoardMe_ForbiddenWithoutEditPerm(t *testing.T) {
 }
 
 func TestDeleteBoardRow(t *testing.T) {
+	t.Parallel()
 	svc, sb := newBoardService(t)
 	seedBoardStore(t, sb, "acme", "main")
 
@@ -303,6 +318,7 @@ func TestDeleteBoardRow(t *testing.T) {
 }
 
 func TestDeleteBoardRow_UnknownBoardIs404(t *testing.T) {
+	t.Parallel()
 	svc, sb := newBoardService(t)
 	seedBoardStore(t, sb, "acme", "main")
 	if err := svc.DeleteBoardRow(t.Context(), boardPrincipal, "acme", "main", "nope", 1); !errors.Is(err, errBoardNotFound) {
@@ -311,6 +327,7 @@ func TestDeleteBoardRow_UnknownBoardIs404(t *testing.T) {
 }
 
 func TestDeleteBoardRowMe_ForbiddenWithoutEditPerm(t *testing.T) {
+	t.Parallel()
 	h := newRunOnlyHarness(t)
 	// Run-only token lacks graph:edit; deleting a row is 403 (same bar as clear).
 	rw := runOnlyDo(t, h, "DELETE", "/api/v1/me/boards/leads/rows/1", nil)

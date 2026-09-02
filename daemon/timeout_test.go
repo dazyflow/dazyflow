@@ -18,6 +18,7 @@ import (
 // engine is wired in the harness) — the only thing that should move
 // the graph-record to terminal is the watchdog.
 func TestGraphTimeout_AutoCancels(t *testing.T) {
+	t.Parallel()
 	h := newVisibilityHarness(t)
 	ctx := context.Background()
 
@@ -62,6 +63,7 @@ func TestGraphTimeout_AutoCancels(t *testing.T) {
 // timeout OR a daemon default, no watchdog fires — a long-running flow
 // shouldn't get killed just for being slow when no timeout was asked for.
 func TestGraphTimeout_NoTimeoutLeftAlone(t *testing.T) {
+	t.Parallel()
 	h := newVisibilityHarness(t)
 	ctx := context.Background()
 
@@ -91,6 +93,7 @@ func TestGraphTimeout_NoTimeoutLeftAlone(t *testing.T) {
 // (DAZYFLOW_MAX_GRAPH_TIMEOUT) becomes the de-facto cap when a graph
 // declares no TimeoutSeconds of its own.
 func TestGraphTimeout_CeilingApplies(t *testing.T) {
+	t.Parallel()
 	h := newVisibilityHarness(t)
 	h.svc.MaxGraphTimeoutSeconds = 1
 	ctx := context.Background()

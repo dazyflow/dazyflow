@@ -22,6 +22,7 @@ import (
 // --- createOrg validation branches ------------------------------------
 
 func TestCreateOrg_NotConfigured(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t) // no Memberships/Profiles
 	rw := h.do(t, "POST", "/api/v1/me/orgs", map[string]any{"display_name": "X"})
 	if rw.Code != http.StatusNotImplemented {
@@ -30,6 +31,7 @@ func TestCreateOrg_NotConfigured(t *testing.T) {
 }
 
 func TestCreateOrg_DecodeError(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.Memberships = newFakeMembershipStore()
 	h.gw.Profiles = newRecordingOrgProfiles()
@@ -41,6 +43,7 @@ func TestCreateOrg_DecodeError(t *testing.T) {
 }
 
 func TestCreateOrg_NameTooLong(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.Memberships = newFakeMembershipStore()
 	h.gw.Profiles = newRecordingOrgProfiles()
@@ -53,6 +56,7 @@ func TestCreateOrg_NameTooLong(t *testing.T) {
 // --- getOrgAuthConfig / deleteOrgAuthConfig ---------------------------
 
 func TestGetOrgAuthConfig_NotConfigured(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t) // no OrgAuth
 	rw := h.adminDo(t, "GET", "/api/v1/admin/org/auth-config", nil)
 	if rw.Code != http.StatusNotImplemented {
@@ -61,6 +65,7 @@ func TestGetOrgAuthConfig_NotConfigured(t *testing.T) {
 }
 
 func TestGetOrgAuthConfig_Forbidden(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.OrgAuth = newMemOrgAuth()
 	// Default editor token lacks organization:admin.
@@ -71,6 +76,7 @@ func TestGetOrgAuthConfig_Forbidden(t *testing.T) {
 }
 
 func TestGetOrgAuthConfig_CrossTenantForbidden(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.OrgAuth = newMemOrgAuth()
 	rw := h.adminDo(t, "GET", "/api/v1/admin/org/auth-config?tenant=other", nil)
@@ -80,6 +86,7 @@ func TestGetOrgAuthConfig_CrossTenantForbidden(t *testing.T) {
 }
 
 func TestGetOrgAuthConfig_UnknownReturnsDefault(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.OrgAuth = newMemOrgAuth()
 	rw := h.adminDo(t, "GET", "/api/v1/admin/org/auth-config", nil)
@@ -92,6 +99,7 @@ func TestGetOrgAuthConfig_UnknownReturnsDefault(t *testing.T) {
 }
 
 func TestGetOrgAuthConfig_OK(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.OrgAuth = newMemOrgAuth()
 	_ = h.gw.OrgAuth.PutOrgAuth(context.Background(), auth.OrgAuthConfig{
@@ -107,6 +115,7 @@ func TestGetOrgAuthConfig_OK(t *testing.T) {
 }
 
 func TestDeleteOrgAuthConfig_NotConfigured(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.adminDo(t, "DELETE", "/api/v1/admin/org/auth-config", nil)
 	if rw.Code != http.StatusNotImplemented {
@@ -115,6 +124,7 @@ func TestDeleteOrgAuthConfig_NotConfigured(t *testing.T) {
 }
 
 func TestDeleteOrgAuthConfig_Forbidden(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.OrgAuth = newMemOrgAuth()
 	rw := h.do(t, "DELETE", "/api/v1/admin/org/auth-config", nil)
@@ -124,6 +134,7 @@ func TestDeleteOrgAuthConfig_Forbidden(t *testing.T) {
 }
 
 func TestDeleteOrgAuthConfig_OK(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.OrgAuth = newMemOrgAuth()
 	_ = h.gw.OrgAuth.PutOrgAuth(context.Background(), auth.OrgAuthConfig{Tenant: "t", GoogleClientID: "cid"})
@@ -136,6 +147,7 @@ func TestDeleteOrgAuthConfig_OK(t *testing.T) {
 // TestCallerIsOrgOwner_Cov covers callerIsOrgOwner: the nil-store guard, a
 // matching home owner, and a non-owner.
 func TestCallerIsOrgOwner_Cov(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 
 	// No Users store -> never an owner.
@@ -163,6 +175,7 @@ func TestCallerIsOrgOwner_Cov(t *testing.T) {
 // TestPeerAdminBlocked_Cov covers peerAdminBlocked's legs: non-admin target,
 // self-action, and a non-owner admin blocked from touching a peer admin.
 func TestPeerAdminBlocked_Cov(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	users, _ := auth.OpenJSONUserStore("")
 	h.gw.Users = users
@@ -197,6 +210,7 @@ func TestPeerAdminBlocked_Cov(t *testing.T) {
 // TestSeatQuotaExceeded_Cov covers seatQuotaExceeded: no-cap default, and an
 // at-capacity org under a free-tier seat limit.
 func TestSeatQuotaExceeded_Cov(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 
 	// No cap (FreeMaxMembers 0) -> never exceeded.
@@ -263,6 +277,7 @@ func orgsSessionHarness(t *testing.T, user auth.User) (*gatewayHarness, *fakeMem
 }
 
 func TestSwitchOrg_Cov(t *testing.T) {
+	t.Parallel()
 	user := auth.User{Subject: "alice@example.com", Email: "alice@example.com", Tenant: "home", Workspace: "main", Roles: []core.Role{core.TeamRoleEditor()}}
 	h, mem, _, tok := orgsSessionHarness(t, user)
 	ctx := context.Background()
@@ -296,6 +311,7 @@ func TestSwitchOrg_Cov(t *testing.T) {
 }
 
 func TestSwitchOrg_APIKeyRejected(t *testing.T) {
+	t.Parallel()
 	// An API-key principal has no User record -> can't switch.
 	h := newGatewayHarness(t)
 	users, _ := auth.OpenJSONUserStore("")
@@ -308,6 +324,7 @@ func TestSwitchOrg_APIKeyRejected(t *testing.T) {
 }
 
 func TestListMembers_Cov(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	mem := newFakeMembershipStore()
 	users, _ := auth.OpenJSONUserStore("")
@@ -345,6 +362,7 @@ func TestListMembers_Cov(t *testing.T) {
 }
 
 func TestInvitationFlow_Cov(t *testing.T) {
+	t.Parallel()
 	user := auth.User{Subject: "invitee@example.com", Email: "invitee@example.com", Tenant: "home", Workspace: "main"}
 	h, mem, _, tok := orgsSessionHarness(t, user)
 	invites, _ := auth.OpenJSONInvitationStore("")
@@ -403,6 +421,7 @@ func TestInvitationFlow_Cov(t *testing.T) {
 }
 
 func TestRevokeInvitation_Cov(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	invites, _ := auth.OpenJSONInvitationStore("")
 	h.gw.Invitations = invites
@@ -449,6 +468,7 @@ func TestRevokeInvitation_Cov(t *testing.T) {
 // cap, so the next invitation must be refused. Counting rows alone reads 2,
 // sees 2 >= 3 is false, and lets a fourth person in.
 func TestSeatQuota_CountsTheOwner(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	invites, err := auth.OpenJSONInvitationStore("")
 	if err != nil {
@@ -506,6 +526,7 @@ func TestSeatQuota_CountsTheOwner(t *testing.T) {
 // created by an operator, say) falls back to counting rows alone rather than
 // erroring, so seats still cap and nobody is locked out.
 func TestSeatQuota_NoOwnerRowStillCounts(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	invites, _ := auth.OpenJSONInvitationStore("")
 	h.gw.Invitations = invites
@@ -574,6 +595,7 @@ func seatHarness(t *testing.T, limit int) (*gatewayHarness, *fakeMembershipStore
 // that already had two people, and the refusal surfaced on whichever invitee
 // clicked second — as "ask an admin to upgrade". The admin saw nothing wrong.
 func TestSeatQuota_PendingInvitationsHoldASeat(t *testing.T) {
+	t.Parallel()
 	h, mem, _ := seatHarness(t, 3)
 
 	// Owner + one member = 2 of 3 seats used.
@@ -601,6 +623,7 @@ func TestSeatQuota_PendingInvitationsHoldASeat(t *testing.T) {
 // TestSeatQuota_ReInviteDoesNotCountTwice — re-sending an invitation to someone
 // who already has one outstanding must not run them against their own seat.
 func TestSeatQuota_ReInviteDoesNotCountTwice(t *testing.T) {
+	t.Parallel()
 	h, mem, _ := seatHarness(t, 3)
 	_ = mem.PutMembership(t.Context(), auth.Membership{
 		UserEmail: "first@example.com", Tenant: "t", Workspace: "main",
@@ -618,6 +641,7 @@ func TestSeatQuota_ReInviteDoesNotCountTwice(t *testing.T) {
 // invitations stop holding a seat. Only one that can still be walked through
 // the door counts.
 func TestSeatQuota_SpentInvitationsFreeTheirSeat(t *testing.T) {
+	t.Parallel()
 	h, mem, invites := seatHarness(t, 3)
 	_ = mem.PutMembership(t.Context(), auth.Membership{
 		UserEmail: "first@example.com", Tenant: "t", Workspace: "main",
@@ -652,6 +676,7 @@ func TestSeatQuota_SpentInvitationsFreeTheirSeat(t *testing.T) {
 // person out of a seat that is genuinely free — the invitee would be refused
 // on behalf of someone who never showed up.
 func TestSeatQuota_AcceptIgnoresOtherPendingInvitations(t *testing.T) {
+	t.Parallel()
 	user := auth.User{Subject: "joiner@example.com", Email: "joiner@example.com",
 		Tenant: "home", Workspace: "main"}
 	h, mem, _, tok := orgsSessionHarness(t, user)
@@ -697,6 +722,7 @@ func TestSeatQuota_AcceptIgnoresOtherPendingInvitations(t *testing.T) {
 //
 // Run with -race to also catch the fake being touched unsafely.
 func TestSeatMembership_ConcurrentAcceptsCannotOverfill(t *testing.T) {
+	t.Parallel()
 	// Repeated, because the bug this guards is a timing window: one round can
 	// happen to serialize itself and pass even when the window is wide open.
 	// A handful of rounds makes the old check-then-write fail reliably instead
@@ -756,6 +782,7 @@ func TestSeatMembership_ConcurrentAcceptsCannotOverfill(t *testing.T) {
 // someone already seated must go through even when the org is full. They
 // occupy a seat already; refusing would make a full org unable to fix a role.
 func TestSeatMembership_UpdatingAnExistingMemberIsNeverRefused(t *testing.T) {
+	t.Parallel()
 	h, mem, _ := seatHarness(t, 2) // owner + 1 row = full
 	_ = mem.PutMembership(t.Context(), auth.Membership{
 		UserEmail: "only@example.com", Tenant: "t", Workspace: "main",

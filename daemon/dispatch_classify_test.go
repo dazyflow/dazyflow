@@ -37,6 +37,7 @@ var outcomeNames = map[edgeOutcome]string{
 // whether the FromPort produced output) → active / dormant / not-routed /
 // blocking.
 func TestClassifyEdge(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name string
 		pred core.JobRecord
@@ -102,6 +103,7 @@ var decisionNames = map[dependentDecision]string{
 // incoming edges into the waiting / skipped / enqueue decision, including the
 // "predecessor not recorded" and "predecessor still running" waiting paths.
 func TestAnalyzeDependent(t *testing.T) {
+	t.Parallel()
 	const runID = "run1"
 	// Build a graph: preds A, B feed dependent D over the given edges.
 	mkGraph := func(edges ...core.Edge) core.Graph {
@@ -226,6 +228,7 @@ func TestAnalyzeDependent(t *testing.T) {
 // Slack post and the email not to count. The on_error policies live on edges,
 // so a terminal step has nowhere to hang one — hence the per-node flag.
 func TestFailurePropagates_ContinueOnError(t *testing.T) {
+	t.Parallel()
 	d := &Dispatcher{}
 	graph := core.Graph{
 		Nodes: []core.Node{
@@ -264,6 +267,7 @@ func TestFailurePropagates_ContinueOnError(t *testing.T) {
 // live at once, while the ports that only arrive with the decision keep the
 // branch waiting rather than skipping it.
 func TestClassifyEdge_AwaitingPublishesWhatItHas(t *testing.T) {
+	t.Parallel()
 	parked := core.JobRecord{
 		Status: core.JobStatusAwaiting,
 		Result: &core.Result{Output: map[string]core.Ref{

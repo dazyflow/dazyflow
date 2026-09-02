@@ -73,6 +73,7 @@ type nodesListResponse struct {
 }
 
 func TestRunNodes_InputsRebuiltFromUpstreamOutputs(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	seedInputsRun(t, h, "run-in", rowsResult())
 
@@ -100,6 +101,7 @@ func TestRunNodes_InputsRebuiltFromUpstreamOutputs(t *testing.T) {
 }
 
 func TestRunNode_InputsRebuiltForOneNode(t *testing.T) {
+	t.Parallel()
 	// The single-node endpoint has to read the predecessors itself.
 	h := newGatewayHarness(t)
 	seedInputsRun(t, h, "run-one", rowsResult())
@@ -120,6 +122,7 @@ func TestRunNode_InputsRebuiltForOneNode(t *testing.T) {
 }
 
 func TestRunNode_NoInputsWhenUpstreamProducedNothing(t *testing.T) {
+	t.Parallel()
 	// A predecessor with no output (failed, skipped, or pruned by retention)
 	// leaves the section absent rather than inventing an empty port.
 	h := newGatewayHarness(t)
@@ -135,6 +138,7 @@ func TestRunNode_NoInputsWhenUpstreamProducedNothing(t *testing.T) {
 }
 
 func TestRunNodes_SourceNodeHasNoInputs(t *testing.T) {
+	t.Parallel()
 	// A node with no inbound edges consumed nothing; the section must not
 	// appear on it just because the run has inputs elsewhere.
 	h := newGatewayHarness(t)
@@ -150,6 +154,7 @@ func TestRunNodes_SourceNodeHasNoInputs(t *testing.T) {
 }
 
 func TestRunNode_InputsSurviveAMissingGraphPayload(t *testing.T) {
+	t.Parallel()
 	// An old run whose payload is gone must still return its node, without the
 	// inputs — best-effort, not a 500.
 	h := newGatewayHarness(t)

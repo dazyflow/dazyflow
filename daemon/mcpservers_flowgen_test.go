@@ -52,6 +52,7 @@ func mcpFlowgenService(t *testing.T, tenant string) *Service {
 }
 
 func TestSearchDrops_IncludesTheOrgsOwnMCPTools(t *testing.T) {
+	t.Parallel()
 	svc := mcpFlowgenService(t, "acme")
 	ctx := context.Background()
 
@@ -92,6 +93,7 @@ func TestSearchDrops_IncludesTheOrgsOwnMCPTools(t *testing.T) {
 // production gate accepts it — an unknown-module error here would mean the AI
 // can see a step it is not allowed to use.
 func TestGenerateFlow_ComposesAgainstAnOrgsMCPTool(t *testing.T) {
+	t.Parallel()
 	svc := mcpFlowgenService(t, "acme")
 	mans, err := svc.SearchDrops(context.Background(), adminPrincipal("acme"), DropSearch{})
 	if err != nil {
@@ -135,6 +137,7 @@ func TestGenerateFlow_ComposesAgainstAnOrgsMCPTool(t *testing.T) {
 // filled in — the generator would be left guessing param names, which is
 // exactly the failure the grounding exists to prevent.
 func TestCompactCatalog_DescribesAnMCPToolsArguments(t *testing.T) {
+	t.Parallel()
 	svc := mcpFlowgenService(t, "acme")
 	mans, err := svc.SearchDrops(context.Background(), adminPrincipal("acme"), DropSearch{})
 	if err != nil {
@@ -166,6 +169,7 @@ func TestCompactCatalog_DescribesAnMCPToolsArguments(t *testing.T) {
 // argument must be REJECTED by the same gate the save path uses, so the repair
 // loop gets a chance to fix it rather than the flow failing at run time.
 func TestMCPTool_RequiredArgumentIsEnforced(t *testing.T) {
+	t.Parallel()
 	svc := mcpFlowgenService(t, "acme")
 	mans, err := svc.SearchDrops(context.Background(), adminPrincipal("acme"), DropSearch{})
 	if err != nil {
@@ -198,6 +202,7 @@ func TestMCPTool_RequiredArgumentIsEnforced(t *testing.T) {
 // of flow generation — while the EDITOR still gets it (include_disabled), or a
 // flow already using it would render with no ports.
 func TestSearchDrops_HidesAnUnreachableServersTools(t *testing.T) {
+	t.Parallel()
 	srv := (&fakeMCPEndpoint{toolNames: []string{"create_issue"}}).start(t)
 	cat := mcp.NewCatalog()
 	t.Cleanup(func() { _ = cat.Close() })

@@ -16,6 +16,7 @@ import (
 // alongside the SPA: GET / is gated on the session, marketing
 // pages/assets serve publicly, and the SPA owns everything else.
 func TestLandingAuthGate(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 
 	webDir := t.TempDir()

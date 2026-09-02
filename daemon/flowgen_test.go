@@ -38,6 +38,7 @@ func node(id, module string, params map[string]any) map[string]any {
 // REPLACE_WITH_ placeholder (a LintError); the loop must feed the error back
 // and accept the corrected second answer.
 func TestGenerateFlow_RepairsInvalidDraft(t *testing.T) {
+	t.Parallel()
 	sp := &scriptedProvider{graphs: []map[string]any{
 		{"name": "t", "nodes": []any{node("a", "text", map[string]any{"text": "REPLACE_WITH_BODY"})}},
 		{"name": "t", "nodes": []any{node("a", "text", map[string]any{"text": "hello"})}},
@@ -67,6 +68,7 @@ func TestGenerateFlow_RepairsInvalidDraft(t *testing.T) {
 // fixes the error, we stop after the cap and return the best graph + the
 // issues (the UI shows them) — we don't loop forever or error out.
 func TestGenerateFlow_ExhaustsRepairsReturnsBestEffort(t *testing.T) {
+	t.Parallel()
 	bad := map[string]any{"name": "t", "nodes": []any{node("a", "text", map[string]any{"text": "REPLACE_WITH_X"})}}
 	sp := &scriptedProvider{graphs: []map[string]any{bad}} // always returns the bad one
 	llm.Register(llm.ProviderInfo{Name: "fakeflowstuck", Integration: "FakeFlowStuck", DefaultModel: "m", Provider: sp})
@@ -87,6 +89,7 @@ func TestGenerateFlow_ExhaustsRepairsReturnsBestEffort(t *testing.T) {
 // TestGenerateFlow_UnparseableErrors: if the model never returns usable JSON,
 // generateFlow errors (rather than returning an empty graph).
 func TestGenerateFlow_UnparseableErrors(t *testing.T) {
+	t.Parallel()
 	sp := &scriptedProvider{graphs: []map[string]any{{"not": "a graph"}}}
 	llm.Register(llm.ProviderInfo{Name: "fakeflowjunk", Integration: "FakeFlowJunk", DefaultModel: "m", Provider: sp})
 	h := newGatewayHarness(t)
@@ -98,6 +101,7 @@ func TestGenerateFlow_UnparseableErrors(t *testing.T) {
 // TestGenerateFlow_CronTrigger: a valid cron schedule is kept and stamped
 // with the caller's timezone.
 func TestGenerateFlow_CronTrigger(t *testing.T) {
+	t.Parallel()
 	sp := &scriptedProvider{graphs: []map[string]any{{
 		"name":    "daily",
 		"nodes":   []any{node("a", "text", map[string]any{"text": "hi"})},
@@ -124,6 +128,7 @@ func TestGenerateFlow_CronTrigger(t *testing.T) {
 // TestGenerateFlow_BadCronStripped: an unparseable schedule is dropped (so the
 // draft still saves) and surfaced as a warning rather than shipped broken.
 func TestGenerateFlow_BadCronStripped(t *testing.T) {
+	t.Parallel()
 	sp := &scriptedProvider{graphs: []map[string]any{{
 		"name":    "x",
 		"nodes":   []any{node("a", "text", map[string]any{"text": "hi"})},
@@ -156,6 +161,7 @@ func TestGenerateFlow_BadCronStripped(t *testing.T) {
 // TestGenerateFlow_ProgressPhases: the streaming callback fires the expected
 // phases in order (understanding → drafting → validating).
 func TestGenerateFlow_ProgressPhases(t *testing.T) {
+	t.Parallel()
 	sp := &scriptedProvider{graphs: []map[string]any{{
 		"name": "x", "nodes": []any{node("a", "text", map[string]any{"text": "hi"})},
 	}}}
@@ -181,6 +187,7 @@ func TestGenerateFlow_ProgressPhases(t *testing.T) {
 }
 
 func TestCompactCatalog(t *testing.T) {
+	t.Parallel()
 	mans := []core.Manifest{
 		{
 			ID: "http_request", Category: "network", Summary: "Make an HTTP request.",
@@ -200,6 +207,7 @@ func TestCompactCatalog(t *testing.T) {
 // TestFlowGenerate_NeedsProvider: the endpoint asks to connect a provider
 // when none is connected (no secret store in the harness).
 func TestFlowGenerate_NeedsProvider(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	rw := h.do(t, "POST", "/api/v1/tools/flow/generate", map[string]any{"description": "email me daily"})
 	if rw.Code != http.StatusOK {
@@ -215,6 +223,7 @@ func TestFlowGenerate_NeedsProvider(t *testing.T) {
 }
 
 func TestFlowGenerate_EmptyDescription(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	if rw := h.do(t, "POST", "/api/v1/tools/flow/generate", map[string]any{"description": "  "}); rw.Code != http.StatusBadRequest {
 		t.Fatalf("empty description: want 400, got %d", rw.Code)
@@ -224,6 +233,7 @@ func TestFlowGenerate_EmptyDescription(t *testing.T) {
 // TestPickProvider_Cov covers pickProvider: no connected providers, the
 // default-to-first choice, and an explicit want that matches a connected one.
 func TestPickProvider_Cov(t *testing.T) {
+	t.Parallel()
 	h := newSecretsHarness(t)
 	ctx := core.WithTenant(context.Background(), "t")
 
@@ -263,6 +273,7 @@ func TestPickProvider_Cov(t *testing.T) {
 }
 
 func TestGeneratedFromGraph_Cov(t *testing.T) {
+	t.Parallel()
 	g := core.Graph{
 		Name:  "My Flow",
 		Nodes: []core.Node{{ID: "a", Module: "noop", Params: map[string]any{"x": 1}}, {ID: "b", Module: "noop"}},
@@ -290,6 +301,7 @@ func TestGeneratedFromGraph_Cov(t *testing.T) {
 }
 
 func TestStampGraph_Cov(t *testing.T) {
+	t.Parallel()
 	g := core.Graph{Nodes: []core.Node{{Module: "noop"}, {ID: "named", Module: "noop"}}}
 	stampGraph(&g, "tenantX", "wsX")
 	if g.Tenant != "tenantX" || g.Workspace != "wsX" {

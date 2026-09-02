@@ -56,6 +56,7 @@ func setVersion(v string) func() {
 }
 
 func TestParseSemver(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		in   string
 		want semver
@@ -83,6 +84,7 @@ func TestParseSemver(t *testing.T) {
 }
 
 func TestSemverLess(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		a, b semver
 		want bool
@@ -102,6 +104,7 @@ func TestSemverLess(t *testing.T) {
 }
 
 func TestFetchLatestVersion(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name    string
 		body    string
@@ -138,6 +141,7 @@ func TestFetchLatestVersion(t *testing.T) {
 // stamped build behind the canonical version flags an update; equal or a
 // "-dirty" working build at the same version does not.
 func TestUpdateAvailableDecision(t *testing.T) {
+	t.Parallel()
 	latest, _ := parseSemver("0.2.0")
 	cases := []struct {
 		current string
@@ -161,6 +165,7 @@ func TestUpdateAvailableDecision(t *testing.T) {
 }
 
 func TestLatestRelease(t *testing.T) {
+	t.Parallel()
 	t.Run("disabled when URL empty", func(t *testing.T) {
 		resetReleaseCache()
 		if _, _, err := latestRelease(context.Background(), ""); err == nil {
@@ -199,6 +204,7 @@ func TestLatestRelease(t *testing.T) {
 // TestFetchLatestVersion_Unreachable covers the dial-error branch: a closed
 // server's port refuses connections, so the GET fails before any response.
 func TestFetchLatestVersion_Unreachable(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	url := srv.URL
 	srv.Close()
@@ -211,6 +217,7 @@ func TestFetchLatestVersion_Unreachable(t *testing.T) {
 // gate, the disabled and unreachable degradations, and the three comparison
 // outcomes (update-available, up-to-date, dev-build-not-comparable).
 func TestAdminVersion(t *testing.T) {
+	t.Parallel()
 	adminP := core.Principal{Roles: []core.Role{{Name: "p", Permissions: []core.Permission{core.PermPlatformAdmin}}}}
 	userP := core.Principal{Roles: []core.Role{{Name: "e", Permissions: []core.Permission{core.PermGraphRun}}}}
 
@@ -298,6 +305,7 @@ func TestAdminVersion(t *testing.T) {
 // every operator's update check then degrades to "couldn't check" — including
 // on the canonical instance the check reads its answer from.
 func TestRepoVersionFileIsARelease(t *testing.T) {
+	t.Parallel()
 	raw, err := os.ReadFile(filepath.Join("..", "VERSION"))
 	if err != nil {
 		t.Fatalf("read ./VERSION: %v", err)

@@ -52,6 +52,7 @@ func requestResetAndExtract(t *testing.T, h *gatewayHarness, srv *fakeSMTP, emai
 // TestPasswordReset_HappyPath: request → reset → old password dead, new
 // password works, and all prior sessions are revoked.
 func TestPasswordReset_HappyPath(t *testing.T) {
+	t.Parallel()
 	h, _, srv := verificationHarness(t)
 
 	// Create the account and keep its auto-issued session token.
@@ -110,6 +111,7 @@ func TestPasswordReset_HappyPath(t *testing.T) {
 // TestPasswordReset_NonEnumerating: forgot-password returns 200 for an
 // address with no account, and never emails anything.
 func TestPasswordReset_NonEnumerating(t *testing.T) {
+	t.Parallel()
 	h, _, srv := verificationHarness(t)
 	rw := h.do(t, "POST", "/api/v1/auth/forgot-password", map[string]string{
 		"email": "ghost@example.com",
@@ -127,6 +129,7 @@ func TestPasswordReset_NonEnumerating(t *testing.T) {
 // TestPasswordReset_BadInputs: wrong email, garbage token, and a
 // too-short new password are all rejected uniformly.
 func TestPasswordReset_BadInputs(t *testing.T) {
+	t.Parallel()
 	h, _, srv := verificationHarness(t)
 	if rw := h.do(t, "POST", "/api/v1/auth/signup", map[string]string{
 		"email": "bad@example.com", "password": "OldPassw0rd!23",
@@ -165,6 +168,7 @@ func TestPasswordReset_BadInputs(t *testing.T) {
 // a mailer WITHOUT a public base URL so email verification is inactive —
 // the welcome is then the only message, easy to assert.
 func TestWelcomeEmail_SentOnSignup(t *testing.T) {
+	t.Parallel()
 	h, _, srv := verificationHarness(t)
 	h.svc.PublicBaseURL = "" // disables verification; welcome only needs the mailer
 
@@ -189,6 +193,7 @@ func TestWelcomeEmail_SentOnSignup(t *testing.T) {
 // TestPasswordReset_ExpiredToken: a token whose expiry has passed is
 // rejected even though the hash matches.
 func TestPasswordReset_ExpiredToken(t *testing.T) {
+	t.Parallel()
 	h, users, _ := verificationHarness(t)
 	token := "abc123def456" // plaintext the "email" would carry
 	hash := sha256.Sum256([]byte(token))
@@ -210,6 +215,7 @@ func TestPasswordReset_ExpiredToken(t *testing.T) {
 // TestPasswordReset_SSOAccountNoEmail: an account with no password (e.g.
 // SSO-only) gets no reset email — reset is for password accounts.
 func TestPasswordReset_SSOAccountNoEmail(t *testing.T) {
+	t.Parallel()
 	h, users, srv := verificationHarness(t)
 	if err := users.PutUser(t.Context(), auth.User{
 		Email: "sso@example.com", Subject: "sso@example.com", Tenant: "t",
@@ -230,6 +236,7 @@ func TestPasswordReset_SSOAccountNoEmail(t *testing.T) {
 
 // TestPasswordReset_MalformedBody: garbage JSON is a clean 400, not a panic.
 func TestPasswordReset_MalformedBody(t *testing.T) {
+	t.Parallel()
 	h, _, _ := verificationHarness(t)
 	for _, path := range []string{"/api/v1/auth/forgot-password", "/api/v1/auth/reset-password"} {
 		req := httptest.NewRequest("POST", path, bytes.NewBufferString("{not json"))

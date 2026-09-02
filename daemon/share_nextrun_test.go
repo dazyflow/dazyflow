@@ -16,6 +16,7 @@ import (
 var nextRunNow = time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
 
 func TestNextScheduledFire_CronNode(t *testing.T) {
+	t.Parallel()
 	g := core.Graph{Nodes: []core.Node{
 		{ID: "c", Module: "cron_trigger", Params: map[string]any{"cron": "*/5 * * * *"}},
 	}}
@@ -31,6 +32,7 @@ func TestNextScheduledFire_CronNode(t *testing.T) {
 }
 
 func TestNextScheduledFire_CronWithTZ(t *testing.T) {
+	t.Parallel()
 	// 09:00 daily in a +01:00 zone is 08:00 UTC. From 12:00 UTC the next is
 	// the following day 08:00 UTC.
 	g := core.Graph{Nodes: []core.Node{
@@ -46,6 +48,7 @@ func TestNextScheduledFire_CronWithTZ(t *testing.T) {
 }
 
 func TestNextScheduledFire_PollNode(t *testing.T) {
+	t.Parallel()
 	g := core.Graph{Nodes: []core.Node{
 		{ID: "p", Module: "poll_trigger", Params: map[string]any{"interval_seconds": 60}},
 	}}
@@ -56,6 +59,7 @@ func TestNextScheduledFire_PollNode(t *testing.T) {
 }
 
 func TestNextScheduledFire_GraphLevelCron(t *testing.T) {
+	t.Parallel()
 	g := core.Graph{Triggers: []core.GraphTrigger{{Type: "cron", Cron: "*/5 * * * *"}}}
 	got := nextScheduledFire(g, nextRunNow)
 	if got == nil || !got.Equal(time.Date(2026, 1, 15, 12, 5, 0, 0, time.UTC)) {
@@ -64,6 +68,7 @@ func TestNextScheduledFire_GraphLevelCron(t *testing.T) {
 }
 
 func TestNextScheduledFire_EarliestWins(t *testing.T) {
+	t.Parallel()
 	// A daily cron (far) plus a 60s poll (soon): the poll's sooner fire wins.
 	g := core.Graph{Nodes: []core.Node{
 		{ID: "c", Module: "cron_trigger", Params: map[string]any{"cron": "0 0 * * *"}},
@@ -76,6 +81,7 @@ func TestNextScheduledFire_EarliestWins(t *testing.T) {
 }
 
 func TestNextScheduledFire_FlowDisabled(t *testing.T) {
+	t.Parallel()
 	g := core.Graph{
 		Disabled: true,
 		Nodes:    []core.Node{{ID: "c", Module: "cron_trigger", Params: map[string]any{"cron": "*/5 * * * *"}}},
@@ -86,6 +92,7 @@ func TestNextScheduledFire_FlowDisabled(t *testing.T) {
 }
 
 func TestNextScheduledFire_TriggerDisabled(t *testing.T) {
+	t.Parallel()
 	g := core.Graph{Nodes: []core.Node{
 		{ID: "c", Module: "cron_trigger", Params: map[string]any{"cron": "*/5 * * * *", "disabled": true}},
 	}}
@@ -95,6 +102,7 @@ func TestNextScheduledFire_TriggerDisabled(t *testing.T) {
 }
 
 func TestNextScheduledFire_ManualAndWebhookAndBadInput(t *testing.T) {
+	t.Parallel()
 	// No triggers → manual → nil.
 	if got := nextScheduledFire(core.Graph{Nodes: []core.Node{{ID: "n", Module: "noop"}}}, nextRunNow); got != nil {
 		t.Errorf("manual flow next = %v, want nil", got)

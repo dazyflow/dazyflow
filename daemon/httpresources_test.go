@@ -30,6 +30,7 @@ func saveFlowGraph(t *testing.T, h *gatewayHarness, id string) {
 }
 
 func TestResources_FlowCRUDRoundTrip(t *testing.T) {
+	t.Parallel()
 	h := newSecretsHarness(t)
 	saveFlowGraph(t, h, "f1")
 	cfg := map[string]any{"spreadsheet_id": "S1", "range": "Leads", "account": "default"}
@@ -71,6 +72,7 @@ func TestResources_FlowCRUDRoundTrip(t *testing.T) {
 }
 
 func TestResources_HiddenFromSecretsListing(t *testing.T) {
+	t.Parallel()
 	h := newSecretsHarness(t)
 	saveFlowGraph(t, h, "f1")
 	h.do(t, "PUT", "/api/v1/resources/leads?scope=flow&flow=f1",
@@ -91,6 +93,7 @@ func TestResources_HiddenFromSecretsListing(t *testing.T) {
 }
 
 func TestResources_RejectsBadInput(t *testing.T) {
+	t.Parallel()
 	h := newSecretsHarness(t)
 	saveFlowGraph(t, h, "f1")
 	// Empty type.
@@ -108,6 +111,7 @@ func TestResources_RejectsBadInput(t *testing.T) {
 }
 
 func TestReferences_IncludesResources(t *testing.T) {
+	t.Parallel()
 	h := newSecretsHarness(t)
 	// A flow with one node so the references endpoint loads a real graph.
 	g := core.Graph{

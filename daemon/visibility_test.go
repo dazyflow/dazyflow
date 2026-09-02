@@ -60,6 +60,7 @@ func newVisibilityHarness(t *testing.T) *visibilityHarness {
 }
 
 func TestVisibility_PrivateFlowHiddenFromOtherUsers(t *testing.T) {
+	t.Parallel()
 	h := newVisibilityHarness(t)
 	ctx := context.Background()
 
@@ -103,6 +104,7 @@ func TestVisibility_PrivateFlowHiddenFromOtherUsers(t *testing.T) {
 }
 
 func TestVisibility_TenantAdminBypassesPrivate(t *testing.T) {
+	t.Parallel()
 	h := newVisibilityHarness(t)
 	ctx := context.Background()
 	if _, err := h.svc.SaveGraph(ctx, h.alice, core.Graph{
@@ -129,6 +131,7 @@ func TestVisibility_TenantAdminBypassesPrivate(t *testing.T) {
 }
 
 func TestVisibility_OrgFlowVisibleToAll(t *testing.T) {
+	t.Parallel()
 	h := newVisibilityHarness(t)
 	ctx := context.Background()
 	if _, err := h.svc.SaveGraph(ctx, h.alice, core.Graph{
@@ -143,6 +146,7 @@ func TestVisibility_OrgFlowVisibleToAll(t *testing.T) {
 }
 
 func TestVisibility_OwnerStampedOnCreate(t *testing.T) {
+	t.Parallel()
 	h := newVisibilityHarness(t)
 	ctx := context.Background()
 	// Alice creates without specifying owner — daemon stamps it.
@@ -158,6 +162,7 @@ func TestVisibility_OwnerStampedOnCreate(t *testing.T) {
 }
 
 func TestVisibility_NonOwnerCantEditPrivate(t *testing.T) {
+	t.Parallel()
 	h := newVisibilityHarness(t)
 	ctx := context.Background()
 	if _, err := h.svc.SaveGraph(ctx, h.alice, core.Graph{
@@ -179,6 +184,7 @@ func TestVisibility_NonOwnerCantEditPrivate(t *testing.T) {
 }
 
 func TestVisibility_NonOwnerCantEditOrg(t *testing.T) {
+	t.Parallel()
 	h := newVisibilityHarness(t)
 	ctx := context.Background()
 	// Alice creates an org-visible flow.
@@ -201,6 +207,7 @@ func TestVisibility_NonOwnerCantEditOrg(t *testing.T) {
 }
 
 func TestVisibility_AdminCanEditOthersFlows(t *testing.T) {
+	t.Parallel()
 	h := newVisibilityHarness(t)
 	ctx := context.Background()
 	if _, err := h.svc.SaveGraph(ctx, h.alice, core.Graph{
@@ -228,6 +235,7 @@ func TestVisibility_AdminCanEditOthersFlows(t *testing.T) {
 }
 
 func TestVisibility_NonAdminCantTransferOwner(t *testing.T) {
+	t.Parallel()
 	h := newVisibilityHarness(t)
 	ctx := context.Background()
 	if _, err := h.svc.SaveGraph(ctx, h.alice, core.Graph{

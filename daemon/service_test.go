@@ -15,6 +15,7 @@ import (
 )
 
 func TestGraphResultFromRecord_Cov(t *testing.T) {
+	t.Parallel()
 	// Succeeded -> OK.
 	if r := graphResultFromRecord(core.JobRecord{GraphID: "g", Status: core.JobStatusSucceeded}); r.Status != core.StatusOK {
 		t.Errorf("succeeded -> %v", r.Status)
@@ -39,6 +40,7 @@ func TestGraphResultFromRecord_Cov(t *testing.T) {
 }
 
 func TestServiceRunLog_Cov(t *testing.T) {
+	t.Parallel()
 	jobs := jobstore.NewMemory()
 	rlog := NewMemRunLogStore()
 	svc := &Service{
@@ -107,6 +109,7 @@ func covSeedFlow(t *testing.T, h *gatewayHarness, id string) {
 }
 
 func TestService_SetFlowEnabled(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	ctx := context.Background()
 	covSeedFlow(t, h, "f1")
@@ -141,6 +144,7 @@ func TestService_SetFlowEnabled(t *testing.T) {
 }
 
 func TestService_PublishUnpublishFlow(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	ctx := context.Background()
 	covSeedFlow(t, h, "pub")
@@ -192,6 +196,7 @@ func TestService_PublishUnpublishFlow(t *testing.T) {
 // state where the toolbar prompts to publish and the diff it links to says
 // the draft matches the live version.
 func TestService_PublishedInfo_DirtyIgnoresCosmetics(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	ctx := context.Background()
 	covSeedFlow(t, h, "cosm")
@@ -232,6 +237,7 @@ func TestService_PublishedInfo_DirtyIgnoresCosmetics(t *testing.T) {
 }
 
 func TestService_RestoreAndPromoteFlow(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	ctx := context.Background()
 	covSeedFlow(t, h, "r1")
@@ -266,6 +272,7 @@ func TestService_RestoreAndPromoteFlow(t *testing.T) {
 }
 
 func TestService_ListJobsForGraphAndLimits(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	ctx := context.Background()
 	covSeedFlow(t, h, "j1")

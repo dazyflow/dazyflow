@@ -33,6 +33,7 @@ func publishGraph(t *testing.T, store *workspace.Store, g core.Graph) {
 }
 
 func TestScheduler_FiresGraphWithCronTrigger(t *testing.T) {
+	t.Parallel()
 	// Build a Service + worker, save a graph with a cron trigger that
 	// fires every minute, then advance a synthetic clock past the
 	// schedule and observe the worker run the graph.
@@ -121,6 +122,7 @@ func TestScheduler_FiresGraphWithCronTrigger(t *testing.T) {
 }
 
 func TestScheduler_UnpublishedFlowIsNotEnrolled(t *testing.T) {
+	t.Parallel()
 	// Require-published: a saved-but-never-published flow with a configured
 	// cron trigger must NOT be enrolled by the scheduler, so it never fires on
 	// its own until the author publishes it. (The editor shows "needs publish"
@@ -153,6 +155,7 @@ func TestScheduler_UnpublishedFlowIsNotEnrolled(t *testing.T) {
 }
 
 func TestScheduler_IgnoresGraphWithoutTrigger(t *testing.T) {
+	t.Parallel()
 	ks := auth.NewMemKeyStore()
 	wsStore, _ := workspace.OpenFS("")
 	svc := &daemon.Service{
@@ -180,6 +183,7 @@ func TestScheduler_IgnoresGraphWithoutTrigger(t *testing.T) {
 }
 
 func TestScheduler_RejectsBadCron(t *testing.T) {
+	t.Parallel()
 	ks := auth.NewMemKeyStore()
 	wsStore, _ := workspace.OpenFS("")
 	svc := &daemon.Service{
@@ -210,6 +214,7 @@ func TestScheduler_RejectsBadCron(t *testing.T) {
 // TestScheduler_TracksCronTriggerNode verifies Phase 2: a schedule set on
 // a cron_trigger NODE (not on g.Triggers) is picked up by the scheduler.
 func TestScheduler_TracksCronTriggerNode(t *testing.T) {
+	t.Parallel()
 	ks := auth.NewMemKeyStore()
 	wsStore, _ := workspace.OpenFS("")
 	svc := &daemon.Service{
@@ -240,6 +245,7 @@ func TestScheduler_TracksCronTriggerNode(t *testing.T) {
 // even though the flow itself is enabled. This is the per-trigger pause
 // the Schedules page toggles, finer-grained than the whole-flow Disabled.
 func TestScheduler_SkipsDisabledTriggerNode(t *testing.T) {
+	t.Parallel()
 	ks := auth.NewMemKeyStore()
 	wsStore, _ := workspace.OpenFS("")
 	svc := &daemon.Service{
@@ -270,6 +276,7 @@ func TestScheduler_SkipsDisabledTriggerNode(t *testing.T) {
 // TestScheduler_IgnoresCronTriggerNodeWithoutSchedule confirms a blank
 // schedule on the node means "run only on demand" — not tracked, not fired.
 func TestScheduler_IgnoresCronTriggerNodeWithoutSchedule(t *testing.T) {
+	t.Parallel()
 	ks := auth.NewMemKeyStore()
 	wsStore, _ := workspace.OpenFS("")
 	svc := &daemon.Service{
@@ -302,6 +309,7 @@ func TestScheduler_IgnoresCronTriggerNodeWithoutSchedule(t *testing.T) {
 // graph would fire on every tick forever. A never-fires schedule must be
 // dormant, not perpetually due.
 func TestScheduler_ImpossibleCronDateDoesNotFire(t *testing.T) {
+	t.Parallel()
 	ks := auth.NewMemKeyStore()
 	role := core.Role{Name: "s", Permissions: []core.Permission{core.PermGraphRun, core.PermGraphAdmin}}
 	_, _, _ = auth.IssueAPIKey(ks, t.Context(), "k", "acme", "ws1", "u", []core.Role{role}, nil)

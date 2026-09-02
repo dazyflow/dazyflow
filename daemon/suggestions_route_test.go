@@ -16,6 +16,7 @@ import (
 // suggestions handler (the literal segment must outrank the {flow_id}
 // wildcard) and returns the mined adjacency for the caller's workspace.
 func TestSuggestionsRoute(t *testing.T) {
+	t.Parallel()
 	h := newGatewayHarness(t)
 	p := core.Principal{
 		Subject: "alice", Tenant: "t", Workspace: "ws",

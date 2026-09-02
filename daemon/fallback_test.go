@@ -22,6 +22,7 @@ import (
 // the same module set.
 
 func TestFallback_ActivatesOnFailure(t *testing.T) {
+	t.Parallel()
 	h := newSkipHarness(t)
 
 	// boom fails; "handler" sleep is its fallback. Handler must run and
@@ -55,6 +56,7 @@ func TestFallback_ActivatesOnFailure(t *testing.T) {
 }
 
 func TestFallback_DormantOnSuccess(t *testing.T) {
+	t.Parallel()
 	h := newSkipHarness(t)
 
 	// source succeeds; the fallback "handler" should NOT run, but should
@@ -84,6 +86,7 @@ func TestFallback_DormantOnSuccess(t *testing.T) {
 }
 
 func TestFallback_AbsorbsSiblingAbortEdge(t *testing.T) {
+	t.Parallel()
 	h := newSkipHarness(t)
 
 	// boom fails. It has TWO outgoing edges:
@@ -124,6 +127,7 @@ func TestFallback_AbsorbsSiblingAbortEdge(t *testing.T) {
 }
 
 func TestFallback_CascadesSkipToDownstream(t *testing.T) {
+	t.Parallel()
 	h := newSkipHarness(t)
 
 	// boom fails; "handler" is its fallback. "downstream" depends on
@@ -161,6 +165,7 @@ func TestFallback_CascadesSkipToDownstream(t *testing.T) {
 }
 
 func TestFallback_MixedInputs(t *testing.T) {
+	t.Parallel()
 	h := newSkipHarness(t)
 
 	// "merge" has two preds:
@@ -198,6 +203,7 @@ func TestFallback_MixedInputs(t *testing.T) {
 }
 
 func TestFallback_NoFallbackPathStillAborts(t *testing.T) {
+	t.Parallel()
 	h := newSkipHarness(t)
 
 	// Same as the abort case from skip-tests, but using a default edge.
@@ -231,6 +237,7 @@ func TestFallback_NoFallbackPathStillAborts(t *testing.T) {
 // port. We can validate this indirectly through the merge example above
 // (only one ref collected), but a focused engine-level test is cheap.
 func TestEngine_FallbackEdgeDoesNotProvideInput(t *testing.T) {
+	t.Parallel()
 	// Compose a graph and a tiny harness directly so we can assert on
 	// the captured Job.Input.
 	captured := make(map[string]map[string]core.Ref)

@@ -18,6 +18,7 @@ import (
 // ("needs publish") is an effectively test-mode draft and is kept off the board
 // entirely, so it never appears as a tile.
 func TestPublicWorkspaceOverview_NextRun(t *testing.T) {
+	t.Parallel()
 	h := newShareHarness(t)
 	ctx := context.Background()
 
