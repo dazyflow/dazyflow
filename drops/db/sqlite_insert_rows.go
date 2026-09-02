@@ -131,7 +131,7 @@ func executeSQLiteInsertRows(ctx context.Context, job core.Job, _ chan<- core.Pr
 	if dir := filepath.Dir(path); dir != "" && dir != "." {
 		if err := root.MkdirAll(dir, 0o755); err != nil {
 			root.Close()
-			if isSandboxEscape(err) {
+			if core.IsSandboxEscape(err) {
 				return params.Err(job, "sandbox_escape", fmt.Sprintf("path %q escapes workspace", path)), nil
 			}
 			return params.Err(job, "io", fmt.Sprintf("mkdir: %v", err)), nil
@@ -143,7 +143,7 @@ func executeSQLiteInsertRows(ctx context.Context, job core.Job, _ chan<- core.Pr
 	probe, probeErr := root.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o644)
 	root.Close()
 	if probeErr != nil {
-		if isSandboxEscape(probeErr) {
+		if core.IsSandboxEscape(probeErr) {
 			return params.Err(job, "sandbox_escape", fmt.Sprintf("path %q escapes workspace", path)), nil
 		}
 		return params.Err(job, "io", fmt.Sprintf("open %q: %v", path, probeErr)), nil

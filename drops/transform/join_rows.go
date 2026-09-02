@@ -11,6 +11,7 @@ import (
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/limits"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/engine"
 )
 
@@ -103,16 +104,16 @@ func init() {
 func executeJoinRows(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	on, kind, rightSuffix, err := parseJoinParams(job.Params)
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 
 	leftRows, leftHeaders, err := loadSide(job, "left")
 	if err != nil {
-		return errResult(job, "bad_input", err.Error()), nil
+		return params.Err(job, "bad_input", err.Error()), nil
 	}
 	rightRows, rightHeaders, err := loadSide(job, "right")
 	if err != nil {
-		return errResult(job, "bad_input", err.Error()), nil
+		return params.Err(job, "bad_input", err.Error()), nil
 	}
 
 	// Validate the join key columns exist on each side. We allow
@@ -132,10 +133,10 @@ func executeJoinRows(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 	}
 
 	if err := requireColumns("left", leftHeaders, leftRows, leftKeys); err != nil {
-		return errResult(job, "bad_input", err.Error()), nil
+		return params.Err(job, "bad_input", err.Error()), nil
 	}
 	if err := requireColumns("right", rightHeaders, rightRows, rightKeysInLeftOrder); err != nil {
-		return errResult(job, "bad_input", err.Error()), nil
+		return params.Err(job, "bad_input", err.Error()), nil
 	}
 
 	// Resolve output headers: every left header verbatim, then each
@@ -249,7 +250,7 @@ func executeJoinRows(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 // exceed the row ceiling — a many-to-many key can multiply bounded inputs into
 // an unbounded result.
 func joinTooLarge(job core.Job, max int) core.Result {
-	return errResult(job, "too_large",
+	return params.Err(job, "too_large",
 		fmt.Sprintf("join output exceeds the %d-row limit (a many-to-many key multiplies the inputs); raise DAZYFLOW_MAX_ROWS or join on a more selective key", max))
 }
 

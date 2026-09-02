@@ -4,7 +4,6 @@
 package io
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -134,7 +133,7 @@ func executeHTTPDownload(ctx context.Context, job core.Job, _ chan<- core.Progre
 	}
 	defer root.Close()
 
-	bodyReader, err := downloadRequestBody(job)
+	bodyReader, err := params.RequestBody(job)
 	if err != nil {
 		return params.Err(job, "bad_param", err.Error()), nil
 	}
@@ -158,7 +157,7 @@ func executeHTTPDownload(ctx context.Context, job core.Job, _ chan<- core.Progre
 	}
 	defer resp.Body.Close()
 
-	if !downloadStatusOK(resp.StatusCode, params.IntSlice(job.Params, "expect_status")) {
+	if !params.StatusAccepted(resp.StatusCode, params.IntSlice(job.Params, "expect_status")) {
 		return params.Err(job, "unexpected_status", fmt.Sprintf("got %d", resp.StatusCode)), nil
 	}
 
@@ -298,34 +297,6 @@ func downloadURL(job core.Job) string {
 	return strings.TrimSpace(params.StringDefault(job.Params, "url", ""))
 }
 
-// downloadRequestBody builds the optional request body for POST: the
-// 'request_body' input port wins (so a body can be piped from an upstream
-// node — a string, raw bytes, or a structured value JSON-marshalled), else
-// params.body. Returns nil when neither is set (a bodyless GET/POST). Mirrors
-// http_request's buildRequestBody so the two HTTP drops behave identically.
-func downloadRequestBody(job core.Job) (io.Reader, error) {
-	if input, ok := job.Input["request_body"]; ok {
-		switch v := input.Inline.(type) {
-		case string:
-			return strings.NewReader(v), nil
-		case []byte:
-			return bytes.NewReader(v), nil
-		case nil:
-			// fall through to params
-		default:
-			b, err := json.Marshal(v)
-			if err != nil {
-				return nil, fmt.Errorf("marshal request_body: %w", err)
-			}
-			return bytes.NewReader(b), nil
-		}
-	}
-	if s, ok := job.Params["body"].(string); ok && s != "" {
-		return strings.NewReader(s), nil
-	}
-	return nil, nil
-}
-
 // requireHTTPScheme rejects anything that isn't an http:// or https://
 // URL (file://, ftp://, scheme-less, unparseable) with a clear message
 // rather than letting the transport fail later with an opaque
@@ -357,16 +328,4 @@ func downloadHeaders(p map[string]any) (map[string]string, error) {
 		out[k] = s
 	}
 	return out, nil
-}
-
-func downloadStatusOK(got int, expect []int) bool {
-	if len(expect) == 0 {
-		return got >= 200 && got < 300
-	}
-	for _, e := range expect {
-		if got == e {
-			return true
-		}
-	}
-	return false
 }

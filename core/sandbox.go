@@ -3,6 +3,12 @@
 
 package core
 
+import (
+	"errors"
+	"os"
+	"strings"
+)
+
 // SandboxProvider maps a (tenant, workspace) pair to an absolute
 // filesystem directory the workspace's modules are confined to. Production
 // implementations live under daemon (FSSandbox); the interface is in core
@@ -37,4 +43,22 @@ type ScratchProvider interface {
 	// under it. Idempotent — reclaiming a run that never created scratch
 	// (or was already reclaimed) returns nil.
 	RemoveScratch(tenant, workspace, runID string) error
+}
+
+// IsSandboxEscape reports whether err came from a path that tried to leave
+// its sandbox root (os.Root rejections and the messages the sandbox wraps them in).
+func IsSandboxEscape(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, os.ErrInvalid) {
+		return true
+	}
+	msg := err.Error()
+	for _, marker := range []string{"path escapes", "outside root", "invalid argument"} {
+		if strings.Contains(msg, marker) {
+			return true
+		}
+	}
+	return false
 }

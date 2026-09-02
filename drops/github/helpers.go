@@ -75,15 +75,6 @@ type gitHubErrorEnvelope struct {
 	} `json:"errors"`
 }
 
-// githubDo runs one authenticated GitHub REST call and returns the
-// status code and raw body. Headers match the v3 API contract
-// (Bearer token, vnd.github+json, pinned API version). The caller
-// decides 2xx vs error so it can run extractGitHubError on the body.
-func githubDo(ctx context.Context, method, url, token string, body []byte, timeoutMS int) (int, []byte, error) {
-	status, raw, _, err := githubDoIdemH(ctx, method, url, token, body, timeoutMS, "")
-	return status, raw, err
-}
-
 // githubDoIdem is githubDo with an explicit Idempotency-Key. The engine
 // auto-retries terminal/leaf nodes (and OnErrorRetry edges) with a stable
 // key per node per run, so a side-effecting POST — create issue, add

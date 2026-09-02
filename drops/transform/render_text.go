@@ -9,6 +9,7 @@ import (
 	"errors"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/engine"
 	"github.com/dazyflow/dazyflow/internal/rendertext"
 )
@@ -105,11 +106,11 @@ func init() {
 func executeRenderText(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	rowsRef, ok := job.Input["rows"]
 	if !ok {
-		return errResult(job, "missing_input", "input port 'rows' is required"), nil
+		return params.Err(job, "missing_input", "input port 'rows' is required"), nil
 	}
 	rows, err := normalizeRows(rowsRef.Inline)
 	if err != nil {
-		return errResult(job, "bad_input", err.Error()), nil
+		return params.Err(job, "bad_input", err.Error()), nil
 	}
 
 	text, err := rendertext.Render(ctx, rendertext.SpecFromParams(job.Params), rows, 0)
@@ -120,11 +121,11 @@ func executeRenderText(ctx context.Context, job core.Job, _ chan<- core.Progress
 		case errors.Is(err, rendertext.ErrNoRenderer), errors.As(err, &pe):
 			// No renderer configured, or the CEL template doesn't compile —
 			// both are author mistakes in the step's params.
-			return errResult(job, "bad_param", err.Error()), nil
+			return params.Err(job, "bad_param", err.Error()), nil
 		case errors.As(err, &ee):
-			return errResult(job, "eval", err.Error()), nil
+			return params.Err(job, "eval", err.Error()), nil
 		default:
-			return errResult(job, "internal", err.Error()), nil
+			return params.Err(job, "internal", err.Error()), nil
 		}
 	}
 	return renderTextResult(job, text), nil

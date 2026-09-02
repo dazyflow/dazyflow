@@ -85,7 +85,7 @@ export type DocPage = {
 };
 // A nav row shows either the group's brand mark (`brand`, e.g. /brands/gmail.svg)
 // or, when there's none, a generic lucide `icon`.
-export type NavItem = {
+type NavItem = {
   text: string;
   link: string;
   icon: LucideIcon;

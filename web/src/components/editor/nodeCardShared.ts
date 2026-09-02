@@ -22,7 +22,7 @@ const FULL_TOKEN = /^\$\{([a-zA-Z]+)\.([^}]+)\}$/;
 // menu describes it ("Gmail · Matching emails → first → id", "Each row →
 // Email") — null when the value isn't a single token or can't be parsed,
 // in which case the caller shows the raw text.
-export function friendlyTokenText(raw: string, labels?: TokenLabels): string | null {
+function friendlyTokenText(raw: string, labels?: TokenLabels): string | null {
   const m = FULL_TOKEN.exec(raw.trim());
   if (!m) return null;
   const scheme = m[1];

@@ -304,13 +304,7 @@ func (h *HTTPGateway) putGitCredMe(rw http.ResponseWriter, r *http.Request, p co
 	if !ok {
 		return
 	}
-	in := gitCredInput{
-		PrivateKey: body.PrivateKey,
-		Passphrase: body.Passphrase,
-		KnownHosts: body.KnownHosts,
-		Token:      body.Token,
-		Username:   body.Username,
-	}
+	in := gitCredInput(body)
 	if err := putGitCredential(r.Context(), h.EncryptedSecrets, p.Tenant, account, in); err != nil {
 		writeAPIError(rw, http.StatusBadRequest, "invalid_credential", err.Error())
 		return

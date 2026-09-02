@@ -3,38 +3,17 @@
 
 // Coverage guards on the Swedish drop vocabulary.
 //
-// catalog.test.ts covers i18n/*.json, where a missing key is loud: i18next
-// renders the key name. The drop translations are the opposite — every lookup
-// in dropText.ts falls back to the English it was handed, so a missing or
-// STALE translation renders perfectly good English and nothing anywhere says
-// so. That fail-safe is right for the reader and invisible to the maintainer,
-// which is how ten drops (six untranslated, four gone stale) sat unnoticed.
+// Unlike i18n/*.json, where a missing key renders loudly as the key name, every
+// lookup in dropText.ts falls back to the English it was handed, so a MISSING
+// translation (drop added, never translated) or a STALE one (English reworded,
+// fingerprint no longer matches) renders perfectly good English and nothing
+// says so. Both are checked here, for descriptions and for SV_PORTS, since a
+// pin label is the one drop string a reader meets without opening anything.
+// The allowlist below holds the labels that genuinely read the same in
+// Swedish; each new one has to be argued for once.
 //
-// Two distinct failures, both silent, both checked here:
-//
-//   MISSING — a drop was added and its description never translated.
-//   STALE   — the English was reworded after the translation was made, so the
-//             recorded fingerprint no longer matches and the reader silently
-//             drops back to English.
-//
-// Also guarded: SV_PORTS, since a pin label is the one drop string a reader
-// meets without opening anything. The original note here declined it, on the
-// grounds that an "intentionally the same" allowlist would run as long as the
-// map itself and a test that noisy gets silenced rather than fixed. The
-// estimate was wrong by an order of magnitude: of 248 distinct labels, 220 were
-// already translated and 28 absent — and eleven of those 28 were plain gaps,
-// six of them words the repo had ALREADY translated in SV_FIELD_TITLES. So a
-// Google Calendar node showed "Plats" in the Inspector and "Location" on its
-// own pin, and the Email drop shipped Adress / Local part / Domain / Display
-// name / Detaljer — Swedish and English alternating down one card.
-//
-// The allowlist below is the honest residue: seventeen labels that really do
-// read the same in Swedish. Small enough to read, and each new one has to be
-// argued for once instead of never.
-//
-// Still NOT guarded: SV_LABELS / SV_SUBTITLES / the dropFields maps. Same
-// reasoning as before, and this time nobody has counted — if one of those is
-// also mostly-covered, the way to find out is to count it, not to assume.
+// Not guarded: SV_LABELS / SV_SUBTITLES / the dropFields maps. If one of those
+// is also mostly covered, the way to find out is to count it.
 import { describe, expect, it } from "vitest";
 import catalog from "../i18n/drops/catalog.json";
 import { descriptionFingerprint, portLabel, SV_PORTS } from "./dropText";

@@ -11,7 +11,7 @@
 //
 // (An earlier design gave every runner its own namespaced step ids,
 // `runner/<runner>/<step>`. This file used to parse those. Nothing does now.)
-export const RUNNER_STEP = "run_on_runner";
+const RUNNER_STEP = "run_on_runner";
 
 // isRunnerStep reports whether a module id is the run-on-a-machine step.
 export function isRunnerStep(moduleID: string | undefined): boolean {

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/engine"
 )
 
@@ -108,7 +109,7 @@ func executeRenderTable(_ context.Context, job core.Job, _ chan<- core.Progress)
 	if raw, present := job.Params["columns"]; present {
 		chosen, err := parseTableColumns(raw)
 		if err != nil {
-			return errResult(job, "bad_param", err.Error()), nil
+			return params.Err(job, "bad_param", err.Error()), nil
 		}
 		if len(chosen) > 0 {
 			cols = chosen
@@ -121,7 +122,7 @@ func executeRenderTable(_ context.Context, job core.Job, _ chan<- core.Progress)
 	if raw, present := job.Params["column_labels"]; present && raw != nil {
 		labels, err := normalizeStringMap(raw, "column_labels")
 		if err != nil {
-			return errResult(job, "bad_param", err.Error()), nil
+			return params.Err(job, "bad_param", err.Error()), nil
 		}
 		for i := range cols {
 			if cols[i].named {

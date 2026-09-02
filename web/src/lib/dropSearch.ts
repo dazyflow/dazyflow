@@ -6,33 +6,18 @@ import type { Manifest } from "../types";
 // ---------------------------------------------------------------------------
 // Swedish → catalog vocabulary.
 //
-// The drop catalog is authored in English on the Go side — label, subtitle,
-// integration and tags all come straight off core.Manifest — so a Swedish
-// query ("e-post", "schema", "kalkylblad") scored zero against every drop
-// even though Email, Schedule and Google Sheets were sitting right there.
-// Sweden-first, that is the search behaving as if the market doesn't exist.
+// The drop catalog is authored in English (label, subtitle, integration and
+// tags come off core.Manifest), so instead of translating every manifest the
+// QUERY is translated: each token expands through this table into English
+// terms that occur in the catalog. An alias hit scores a shade below a literal
+// hit (ALIAS_WEIGHT), so aliases can add results but never reorder English
+// ones. The table applies in every locale, since Swedish users often run the
+// English UI and none of these words collide with English catalog text.
 //
-// Rather than translate 145 manifests (a backend change plus a translation
-// treadmill on every new drop), the catalog stays English and the QUERY gets
-// translated: each token is expanded through this table into the English
-// terms that actually occur in the catalog. An alias hit scores a shade below
-// a literal hit (ALIAS_WEIGHT), so English ranking is untouched — the aliases
-// can only add results, never reorder the ones already found.
-//
-// The table applies in every locale, not just sv: Swedish users routinely run
-// the English UI, and none of these words collide with English catalog text.
-//
-// A brand name in the values expands to EVERY drop of that brand (its label is
-// an exact hit), so a brand only belongs in an alias whose Swedish word covers
-// that brand's whole range — "frakt" → nshift (all three drops ship parcels),
-// but not "faktura" → fortnox, which would rank Create customer as high as
-// Create invoice. Prefer the specific English term; let the brand come along
-// through its own drops.
-//
-// Values must be terms that really occur in some manifest's label, subtitle,
-// integration or tags — a value matching nothing in the catalog is dead
-// weight. Keys are written in natural Swedish (åäö included); lookup folds
-// both sides, so "väder" and "vader" behave the same.
+// A brand name in the values expands to EVERY drop of that brand, so a brand
+// belongs only in an alias whose Swedish word covers the brand's whole range
+// ("frakt" → nshift, but not "faktura" → fortnox). Values must occur in some
+// manifest's text. Keys are natural Swedish; lookup folds both sides.
 const SV_ALIASES: Record<string, string[]> = {
   // --- messaging -----------------------------------------------------------
   "e-post": ["email", "gmail", "smtp"],

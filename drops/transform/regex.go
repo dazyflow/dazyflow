@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/engine"
 )
 
@@ -181,7 +182,7 @@ func executeRegex(_ context.Context, job core.Job, _ chan<- core.Progress) (core
 
 	table, err := replacementTable(job.Params)
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	// In replace mode the table doubles as the pattern: with no expression
 	// typed, the words to look for ARE its keys, so the everyday
@@ -194,17 +195,17 @@ func executeRegex(_ context.Context, job core.Job, _ chan<- core.Progress) (core
 		pattern = patternFromKeys(table)
 	}
 	if pattern == "" {
-		return errResult(job, "bad_param",
+		return params.Err(job, "bad_param",
 			"param 'pattern' is required (a regular expression) — or, in replace mode, a 'replacements' table to build one from"), nil
 	}
 	re, err := regexp.Compile(pattern)
 	if err != nil {
-		return errResult(job, "bad_param", "invalid regex: "+err.Error()), nil
+		return params.Err(job, "bad_param", "invalid regex: "+err.Error()), nil
 	}
 
 	text, ok := regexText(job.Input["in"])
 	if !ok {
-		return errResult(job, "bad_input", "input port 'in' must be text"), nil
+		return params.Err(job, "bad_input", "input port 'in' must be text"), nil
 	}
 	// The wired input wins; the typed param is the fallback — the same shape
 	// as the AI steps' Text, and what lets this step read ${item.…} inside a
@@ -238,7 +239,7 @@ func executeRegex(_ context.Context, job core.Job, _ chan<- core.Progress) (core
 			Output: map[string]core.Ref{"out": {MIME: core.MIMEBool, Inline: re.MatchString(text)}},
 		}, nil
 	default:
-		return errResult(job, "bad_param", fmt.Sprintf("unknown mode %q (use extract, replace, split, or match)", mode)), nil
+		return params.Err(job, "bad_param", fmt.Sprintf("unknown mode %q (use extract, replace, split, or match)", mode)), nil
 	}
 }
 
@@ -248,7 +249,7 @@ func executeRegex(_ context.Context, job core.Job, _ chan<- core.Progress) (core
 func regexExtract(job core.Job, re *regexp.Regexp, text string) (core.Result, error) {
 	matches := re.FindAllStringSubmatch(text, -1)
 	if err := capRows(len(matches)); err != nil {
-		return errResult(job, "too_large", err.Error()), nil
+		return params.Err(job, "too_large", err.Error()), nil
 	}
 
 	names := re.SubexpNames()

@@ -47,30 +47,16 @@ const slackSignatureMaxSkew = 5 * time.Minute
 // app_mention events to every graph in the tenant that uses the
 // slack_on_mention trigger.
 //
-// Routing layout:
-//
 //	POST /api/v1/events/slack/{tenant}
 //	X-Slack-Signature: v0=<hmac-sha256-hex>
 //	X-Slack-Request-Timestamp: <unix-seconds>
-//	(body — JSON envelope)
 //
-// Auth: Slack's HMAC signature is the only auth. No bearer token —
-// Slack POSTs as a stranger. The handler MUST refuse any request
-// whose signature doesn't match, whose timestamp is older than ~5
-// minutes (replay window), or whose URL tenant has no subscribed
-// graphs.
-//
-// Two request shapes handled:
-//
-//   - type=url_verification — Slack's first-subscription challenge.
-//     The handler echoes back the `challenge` string as plain text;
-//     this proves the daemon controls the endpoint.
-//   - type=event_callback — a wrapped event. We extract event.team_id
-//     into the seed and SubmitGraphWithSeed against every graph in
-//     the tenant with a slack_on_mention node. Multiple graphs in
-//     the tenant each get their own run for the same event — a fan-
-//     out the user can intentionally use (e.g. one graph routes
-//     mentions to a ticketing system, another to a #notify channel).
+// Slack's HMAC signature is the only auth, so the handler refuses any request
+// whose signature does not match, whose timestamp is older than ~5 minutes, or
+// whose URL tenant has no subscribed graphs. type=url_verification echoes the
+// `challenge` as plain text; type=event_callback seeds event.team_id and
+// SubmitGraphWithSeed against every subscribed graph in the tenant, each
+// getting its own run (a fan-out the user can use deliberately).
 type SlackEventsHandler struct {
 	svc           *Service
 	signingSecret string

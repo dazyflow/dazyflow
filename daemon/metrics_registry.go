@@ -6,8 +6,10 @@ package daemon
 import (
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"net/http"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -116,7 +118,7 @@ func (m *Metrics) render(w io.Writer) {
 	if len(m.httpDur) > 0 {
 		fmt.Fprint(w, "# HELP dazyflow_http_request_duration_seconds HTTP request latency by method.\n")
 		fmt.Fprint(w, "# TYPE dazyflow_http_request_duration_seconds histogram\n")
-		for _, method := range sortedKeys(m.httpDur) {
+		for _, method := range slices.Sorted(maps.Keys(m.httpDur)) {
 			m.httpDur[method].render(w, "dazyflow_http_request_duration_seconds",
 				"method="+promLabel(method))
 		}
@@ -125,20 +127,11 @@ func (m *Metrics) render(w io.Writer) {
 	if len(m.nodeDur) > 0 {
 		fmt.Fprint(w, "# HELP dazyflow_node_duration_seconds Per-node execution latency by terminal status.\n")
 		fmt.Fprint(w, "# TYPE dazyflow_node_duration_seconds histogram\n")
-		for _, status := range sortedKeys(m.nodeDur) {
+		for _, status := range slices.Sorted(maps.Keys(m.nodeDur)) {
 			m.nodeDur[status].render(w, "dazyflow_node_duration_seconds",
 				"status="+promLabel(status))
 		}
 	}
-}
-
-func sortedKeys(m map[string]*histogram) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }
 
 // histogram is a fixed-bucket cumulative histogram. Bucket counts and

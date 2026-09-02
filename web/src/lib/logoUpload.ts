@@ -39,13 +39,9 @@ export function dataURIBytes(uri: string): number {
   return Math.max(0, Math.floor((payload.length * 3) / 4) - padding);
 }
 
-// LogoError is the vocabulary fileToLogo rejects with. Codes rather than
-// sentences: the page owns the wording, and every one of these needs a different
-// suggestion attached to it.
-export type LogoError = "unsupportedType" | "svgTooBig" | "tooBig" | "unreadable";
-
 // fileToLogo reads a picked file and returns the data: URI to save, shrinking it
-// if it does not fit. It throws an Error whose message is a LogoError code.
+// if it does not fit. It throws an Error whose message is one of the codes
+// "unsupportedType", "svgTooBig", "tooBig" or "unreadable"; the page owns the wording.
 export async function fileToLogo(file: File): Promise<string> {
   if (!LOGO_TYPES.has(file.type)) {
     throw new Error("unsupportedType");

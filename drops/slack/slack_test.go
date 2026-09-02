@@ -26,19 +26,6 @@ func withSlackAuthErr(t *testing.T) {
 	t.Cleanup(func() { SetTokenLookup(nil) })
 }
 
-// TestCovCurrentHTTPBase: the package default is returned when nothing is
-// overridden, and SetHTTPBase swaps it.
-func TestCovCurrentHTTPBase(t *testing.T) {
-	if got := currentHTTPBase(); got != "https://slack.com/api" {
-		t.Fatalf("default base = %q", got)
-	}
-	SetHTTPBase("http://example.test")
-	t.Cleanup(func() { SetHTTPBase("https://slack.com/api") })
-	if got := currentHTTPBase(); got != "http://example.test" {
-		t.Fatalf("after Set base = %q", got)
-	}
-}
-
 // TestCovDecodeSlackJSON covers the parse-failure path plus a well-formed
 // envelope where the raw map carries extra fields.
 func TestCovDecodeSlackJSON(t *testing.T) {

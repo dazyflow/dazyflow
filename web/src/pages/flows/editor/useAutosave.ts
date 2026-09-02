@@ -37,7 +37,7 @@ const AUTOSAVE_DEBOUNCE_MS = 1500;
 //   flips the "unpublished changes" pill; both belong to other clusters, so
 //   they arrive through `onSaved` rather than being reached into from here.
 
-export interface SaveResult {
+interface SaveResult {
   commit?: string;
   lint?: LintIssue[];
 }

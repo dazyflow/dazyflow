@@ -280,15 +280,15 @@ func TestValidSecretName_Boundaries(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			err := validSecretName(c.input)
+			err := core.ValidSecretName(c.input)
 			if c.wantErr == "" {
 				if err != nil {
-					t.Fatalf("validSecretName(%q) = %v, want nil", c.input, err)
+					t.Fatalf("core.ValidSecretName(%q) = %v, want nil", c.input, err)
 				}
 				return
 			}
 			if err == nil || !strings.Contains(err.Error(), c.wantErr) {
-				t.Fatalf("validSecretName(%q) = %v, want substring %q", c.input, err, c.wantErr)
+				t.Fatalf("core.ValidSecretName(%q) = %v, want substring %q", c.input, err, c.wantErr)
 			}
 		})
 	}

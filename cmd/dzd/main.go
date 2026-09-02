@@ -48,6 +48,7 @@ import (
 	"github.com/dazyflow/dazyflow/daemon"
 	"github.com/dazyflow/dazyflow/daemon/support"
 	_ "github.com/dazyflow/dazyflow/drops"
+	"github.com/dazyflow/dazyflow/drops/cursor"
 	"github.com/dazyflow/dazyflow/drops/drive"
 	"github.com/dazyflow/dazyflow/drops/fortnox"
 	"github.com/dazyflow/dazyflow/drops/gcal"
@@ -58,7 +59,6 @@ import (
 	"github.com/dazyflow/dazyflow/drops/io"
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 	"github.com/dazyflow/dazyflow/drops/notion"
-	rssdrop "github.com/dazyflow/dazyflow/drops/rss"
 	runnerdrop "github.com/dazyflow/dazyflow/drops/runner"
 	secretsdrop "github.com/dazyflow/dazyflow/drops/secrets"
 	"github.com/dazyflow/dazyflow/drops/sheets"
@@ -2283,40 +2283,10 @@ func setupEncryptedSecrets(ctx context.Context, masterKeyB64 string, secrets map
 	secretsdrop.SetSecretWriter(func(ctx context.Context, tenant, name, value string) error {
 		return es.Put(ctx, tenant, name, value)
 	})
-	// google_form_trigger's poll cursor — a read/write pair on the same
-	// store, keyed by the reserved "cursor." prefix (hidden from the
-	// Credentials UI). GetExact reads by exact name with no flow cascade;
-	// ErrSecretNotFound (first fire) surfaces as the empty string.
-	gform.SetCursorStore(
-		func(ctx context.Context, tenant, name string) (string, error) {
-			v, err := es.GetExact(ctx, tenant, name)
-			if errors.Is(err, daemon.ErrSecretNotFound) {
-				return "", nil
-			}
-			return v, err
-		},
-		func(ctx context.Context, tenant, name, value string) error {
-			return es.Put(ctx, tenant, name, value)
-		},
-	)
-	// homeassistant_state_changed's poll watermark — same read/write pair on
-	// the same store, keyed by the reserved "cursor." prefix.
-	homeassistant.SetCursorStore(
-		func(ctx context.Context, tenant, name string) (string, error) {
-			v, err := es.GetExact(ctx, tenant, name)
-			if errors.Is(err, daemon.ErrSecretNotFound) {
-				return "", nil
-			}
-			return v, err
-		},
-		func(ctx context.Context, tenant, name, value string) error {
-			return es.Put(ctx, tenant, name, value)
-		},
-	)
-	// Reusable read/write pair on the same store for the two poll-scaling
-	// markers below (reserved "pollstate." / "httpcache." prefixes, hidden
-	// from the Credentials UI). ErrSecretNotFound surfaces as the empty
-	// string so a never-written marker reads as "no signal yet".
+	// One read/write pair on the same store backs every per-node marker the
+	// drops keep (reserved "cursor." / "pollstate." / "httpcache." prefixes,
+	// hidden from the Credentials UI). ErrSecretNotFound reads as the empty
+	// string so a never-written marker means "no signal yet".
 	exactRead := func(ctx context.Context, tenant, name string) (string, error) {
 		v, err := es.GetExact(ctx, tenant, name)
 		if errors.Is(err, daemon.ErrSecretNotFound) {
@@ -2327,14 +2297,8 @@ func setupEncryptedSecrets(ctx context.Context, masterKeyB64 string, secrets map
 	exactWrite := func(ctx context.Context, tenant, name, value string) error {
 		return es.Put(ctx, tenant, name, value)
 	}
-	// gmail_search_messages' opt-in "only new since last run" watermark —
-	// same read/write pair on the same store, keyed by the reserved "cursor."
-	// prefix. Lets a polling Gmail flow act on each match without re-processing
-	// the backlog every poll.
-	gmail.SetCursorStore(exactRead, exactWrite)
-	// rss's dedupe watermark — the per-(flow,node) window of item ids it has
-	// already emitted, so a polling feed reader fires once per new item.
-	rssdrop.SetCursorStore(exactRead, exactWrite)
+	// Poll watermarks and dedupe windows (gmail, rss, google forms, home assistant).
+	cursor.SetStore(exactRead, exactWrite)
 	// Adaptive poll backoff: fetcher nodes write a per-flow "found data?"
 	// marker the scheduler reads to widen/tighten the poll cadence.
 	pollstate.SetStore(exactRead, exactWrite)

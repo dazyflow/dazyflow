@@ -90,7 +90,7 @@ func (h *HTTPGateway) emailTemplateGate(rw http.ResponseWriter, p core.Principal
 // can never collide with a "builtin:" ID. Kept explicit in case the secret
 // rule ever loosens.
 func validEmailTemplateName(name string) error {
-	if err := validSecretName(name); err != nil {
+	if err := core.ValidSecretName(name); err != nil {
 		return err
 	}
 	if strings.Contains(name, ":") {

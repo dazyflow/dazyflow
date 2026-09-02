@@ -1,36 +1,22 @@
-# CI — the only thing that runs the test suite. The .builds/archlinux.yml
-# manifest this was ported from is gone, so nothing else builds this repository.
+# CI: the only thing that builds and tests this repository.
 #
-# Runs on every push to master, every pull request, every pushed version tag,
-# and by hand. What each one does:
+#   master / PR   gates + build both images. Pushes nothing, deploys nothing.
+#   version tag   the release: gates, publish to ghcr, call the deploy webhook.
+#                 THE ONLY PATH THAT REACHES PRODUCTION.
+#   dispatch      with publish=true, re-publishes images and stops. It cannot
+#                 deploy, so re-cutting an image is never one checkbox from shipping.
 #
-#   master / PR   — gates + build both images (the only thing exercising the
-#                   Dockerfiles). Pushes nothing, deploys nothing.
-#   version tag   — the release. Gates, then publishes to ghcr and calls the
-#                   deploy webhook. THE ONLY PATH THAT REACHES PRODUCTION.
-#   dispatch      — with publish=true, re-publishes images and stops. Deliberately
-#                   cannot deploy, so re-cutting an image is never one wrong
-#                   checkbox away from shipping it.
-#
-# Images publish to GitHub Container Registry instead of registry.dazyflow.app.
-# That removes the REGISTRY_USER / REGISTRY_PASSWORD secret pair entirely —
 # GITHUB_TOKEN authenticates against ghcr.io given `packages: write` below.
 name: CI
 
 on:
   push:
     branches: [master]
-    # A pushed version tag IS the release: it publishes the images and calls the
-    # deploy webhook, with no button to remember. `make patch` prints
-    # `git push origin master <tag>`, which starts two runs — an ordinary one for
-    # the branch and the releasing one for the tag. That is the cost of the tag
-    # being the trigger, and it is worth it.
-    #
-    # The pattern is GitHub filter syntax, where `+` means one-or-more of the
-    # preceding character and a pattern must match the WHOLE ref. So 0.28.0
-    # matches and 1.0.0-rc1 does not: a pre-release must not move `:latest` or
-    # deploy itself. That mirrors LATEST_TAG in the Makefile, which filters
-    # pre-releases out of the upgrade path for the same reason.
+    # A pushed version tag IS the release. `make patch` prints
+    # `git push origin master <tag>`, which starts a branch run and the releasing
+    # tag run. The pattern must match the whole ref, so 1.0.0-rc1 does not match:
+    # a pre-release must not move `:latest` or deploy (LATEST_TAG in the Makefile
+    # filters the same way).
     tags: ["[0-9]+.[0-9]+.[0-9]+"]
   pull_request:
   workflow_dispatch:
@@ -69,15 +55,11 @@ env:
   DZ_TEST_PG_DSN: postgres://dazyflow:dazyflow@localhost:5432/dazyflow_test?sslmode=disable
 
 jobs:
-  # ---------------------------------------------------------------- Go suite
   # ------------------------------------------------------------- static gates
   #
-  # Everything that compiles or reads the tree once and answers in seconds,
-  # split out of the race suite so a gofmt slip or a dangling doc link comes
-  # back in about a minute instead of behind a quarter-hour of tests. `go build`
-  # and `go vet` live here rather than in each race shard: they compile the
-  # whole module, and doing that per shard would triple the work to say the same
-  # thing three times.
+  # Everything that answers in seconds, split out of the race suite so a gofmt
+  # slip or a dangling doc link comes back in a minute. `go build` and `go vet`
+  # compile the whole module, so they run once here rather than per shard.
   gates:
     name: Build, vet, and the fast gates
     runs-on: ubuntu-latest
@@ -146,18 +128,11 @@ jobs:
 
   # ---------------------------------------------------------------- Go suite
   #
-  # Sharded because the race detector makes this the long pole and the shards
-  # are genuinely independent. The split follows measured cost, not tidiness:
-  #
-  #   daemon  — 3 packages, but the slowest single one in the module; Go's
-  #             per-package timeout comment below is about this shard.
-  #   drops   — 56 packages, the connector suites.
-  #   engine  — the engine and the tests/ trees that drive a whole stack.
-  #   rest    — everything else, dominated by `auth`: bcrypt at cost 12 makes
-  #             it minutes of pure KDF work on its own.
-  #
-  # `rest` is expressed as the complement so a new top-level package lands in a
-  # shard automatically instead of silently going unrun.
+  # Sharded because the race detector makes this the long pole. The split
+  # follows measured cost: daemon (the slowest single package), drops (56
+  # connector packages), engine (plus the tests/ trees that drive a whole
+  # stack), and rest (dominated by auth's bcrypt work). `rest` is the
+  # complement so a new top-level package is never silently unrun.
   test:
     name: Go race suite (${{ matrix.shard.name }})
     runs-on: ubuntu-latest
@@ -225,26 +200,11 @@ jobs:
 
   # ---------------------------------------------------------------- end-to-end
   #
-  # Its own job rather than a step after the race suite, which is where these
-  # sat while being the last thing to run in the longest job. They need Postgres
-  # and a Go toolchain and nothing else, so they parallelise for free.
-  #
-  # All three pipeline demos, not just csv-pipeline. They are the only thing
-  # exercising dzd end-to-end through its own CLI and HTTP surfaces, and leaving
-  # two of them unrun is how they rotted: BOTH were broken and had been for some
-  # time, each failing at boot on a requirement that landed after it was
-  # written.
-  #
-  #   mcp-pipeline — no DAZYFLOW_POSTGRES_DSN at all (dzd has required Postgres
-  #     since), a 0.5s sleep where a Postgres-backed boot now needs a poll, no
-  #     DAZYFLOW_DEV=1 for the insecure-defaults guard, and a sandbox path from
-  #     before DATA_DIR grew its sandbox/ segment.
-  #   ap-invoice — the guard's TLS check on a loopback demo database, and it
-  #     never PUBLISHED its flows, so every webhook POST got the
-  #     deliberately-generic 401 that says nothing about why.
-  #
-  # ap-invoice starts its own Postgres via `docker run` on :55432, which does
-  # not collide with the service container below.
+  # Its own job: these need only Postgres and a Go toolchain, so they run in
+  # parallel with the race suite. All three pipeline demos run, since they are
+  # the only thing exercising dzd end-to-end through its CLI and HTTP surfaces
+  # and unrun demos rot. ap-invoice starts its own Postgres on :55432, which
+  # does not collide with the service container below.
   e2e:
     name: dzctl end-to-end
     runs-on: ubuntu-latest
@@ -301,25 +261,13 @@ jobs:
       - run: npm ci
         working-directory: web
 
-      # The JS half of the supply chain. govulncheck gates Go twice (source and
-      # binary) and gated npm zero times until this step.
-      #
-      # `--omit=dev` is deliberate and is the same judgement the govulncheck
-      # comment makes about symbol granularity: gate on what SHIPS. The devDeps
-      # currently carry a high and a critical (a vite dev-server path traversal,
-      # arbitrary read+exec via the vitest UI server) and neither is reachable by
-      # a user of the deployed app — the dev server and the vitest UI do not
-      # exist in the bundle. Auditing them here would leave this permanently red
-      # with no remedy short of two majors, which trains people to ignore it.
-      # Dependabot still opens PRs for them; that is the right channel.
-      #
-      # `--audit-level=high` rather than the default `low`: react-router 6.x is
-      # flagged for an open redirect that this app already blocks by hand
-      # (`return_to` validation in src/pages/auth/SignIn.tsx, mirroring
-      # daemon/google_signin.go safeReturnPath) and for an SSR-hydration issue
-      # that a client-only SPA cannot reach. The whole 6.x line is in range with
-      # no patched release, so gating at `moderate` would demand a router major
-      # for a vulnerability we do not have.
+      # The JS half of the supply chain: gate on what SHIPS. `--omit=dev`
+      # because the dev server and vitest UI do not exist in the bundle, and
+      # auditing them keeps this permanently red with no remedy (Dependabot
+      # still opens PRs for them). `--audit-level=high` because react-router 6.x
+      # is flagged for an open redirect this app blocks by hand (`return_to`
+      # validation in SignIn.tsx, mirroring daemon/google_signin.go) and an SSR
+      # issue a client-only SPA cannot reach.
       - name: npm audit (shipped dependencies)
         run: npm audit --audit-level=high --omit=dev
         working-directory: web
@@ -371,45 +319,22 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # `stable` rather than go-version-file, unlike every other job. The
-      # scan jobs' Go version determines which STDLIB govulncheck audits, and
-      # go.mod pins an exact patch (so GOTOOLCHAIN=local prod builds never
-      # implicitly fetch a toolchain — see Dockerfile). Pinning here too meant
-      # every stdlib CVE batch turned this job red until someone hand-bumped
-      # go.mod. `stable` keeps the scan on the newest release; the build jobs
-      # and the images stay pinned. A real finding still fails the job — this
-      # only stops us reporting patches that are already released.
+      # `stable` rather than go-version-file: the scan's Go version decides which
+      # STDLIB govulncheck audits, and pinning made every stdlib CVE batch turn
+      # this red until go.mod was hand-bumped. Build jobs and images stay pinned.
       - uses: actions/setup-go@v7
         with:
           go-version: stable
           cache-dependency-path: go.sum
 
-      # Two passes, because they have complementary blind spots and neither
-      # alone is enough:
-      #
-      #   1. SOURCE (`./...`) — widest coverage: every package in the module,
-      #      including ones no shipped binary links.
-      #   2. BINARY (-mode binary) — what actually ships. Source-mode
-      #      reachability walks the SSA call graph from our packages and misses a
-      #      vulnerable symbol invoked through an interface: GO-2026-5158 (otel
-      #      baggage parsing) read as "not called" in source mode even though
-      #      daemon/tracing.go registers propagation.Baggage{} and otel
-      #      dispatches Extract through its global propagator on every traced
-      #      request. The binary pass caught it. Also ~70 MiB vs ~4 GiB.
-      #
-      # Keep BOTH at symbol granularity (govulncheck's default). Do NOT "fix" a
-      # failure here by dropping to -scan package/module: golang.org/x/crypto
-      # GO-2026-5932 currently has NO fixed version, and at module granularity it
-      # is reported unconditionally — CI would go permanently red with no remedy.
-      # At symbol granularity it correctly reads as uncalled.
-      #
-      # NOTE: the sourcehut manifest added a 4 GiB swapfile here, because
-      # source-mode govulncheck peaks near 4 GiB on a COLD build cache while the
-      # same VM was still hosting the postgres and mariadb daemons the test task
-      # had left running. Neither is true on a hosted runner — databases are
-      # separate containers in a different job — so the swapfile is dropped. If
-      # this step ever reports `Killed` with no scan output, that is the OOM
-      # killer and the swapfile is the fix, not a vulnerability.
+      # Two passes with complementary blind spots: SOURCE (`./...`) covers every
+      # package in the module; BINARY (-mode binary) covers what ships and catches
+      # vulnerable symbols reached through interfaces that the SSA walk misses
+      # (otel baggage parsing via the global propagator was one). Keep BOTH at
+      # symbol granularity: at module granularity an advisory with no fixed
+      # version is reported unconditionally and CI goes permanently red.
+      # If this step ever reports `Killed` with no output, that is the OOM
+      # killer (source mode peaks near 4 GiB on a cold cache), not a finding.
       - name: govulncheck (source and binary)
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
@@ -447,15 +372,10 @@ jobs:
 
   # --------------------------------------------------------- images + deploy
   #
-  # Deliberately NO `needs:`. Both images are built on every run because that is
-  # the only thing exercising the Dockerfiles, and gating that build on the test
-  # jobs made it a serial tail: wall time was max(test, web, docs, security) PLUS
-  # a from-scratch Go build and two Vite builds. Building in parallel puts it
-  # inside the max() instead. `concurrency.cancel-in-progress` above already
-  # kills the wasted work when a second commit supersedes this one.
-  #
-  # Publishing is what stays gated — see the `publish` job below, which is the
-  # only place a built image reaches ghcr.io.
+  # Deliberately NO `needs:`: building both images on every run is the only
+  # thing exercising the Dockerfiles, and doing it in parallel keeps it inside
+  # max(test, web, docs, security) instead of after it. Publishing stays gated
+  # in the `publish` job, the only place a built image reaches ghcr.io.
   images:
     name: Images
     runs-on: ubuntu-latest
@@ -474,14 +394,9 @@ jobs:
         with:
           fetch-depth: 0 # `git describe --tags` for the version stamp
 
-      # This is also what stops production compiling its own releases. That
-      # droplet is s-1vcpu-2gb: a Go build plus two Vite builds on one core
-      # cannot finish inside a runner step's timeout, and the attempt starved the
-      # whole site (kswapd pegged, TLS handshakes timing out) before being
-      # killed.
-      #
-      # The outputs above hand these values to `publish` so the stamping rules
-      # below live in exactly one place.
+      # Building here is also what stops the 1-vCPU production droplet compiling
+      # its own releases. The outputs hand these values to `publish` so the
+      # stamping rules live in one place.
       - name: Resolve version
         id: ver
         run: |
@@ -502,18 +417,13 @@ jobs:
       # mounts, and the layer cache, survive between runs.
       - uses: docker/setup-buildx-action@v4
 
-      # VERSION is passed as $TAG, which is EMPTY off a tag — deliberately: the
-      # Dockerfile falls back to the committed ./VERSION when this arg is empty,
-      # and a non-empty placeholder would SHADOW that fallback, which is the bug
-      # that had every non-Makefile build reporting itself as "dev". COMMIT has
-      # no fallback at all (ARG COMMIT=unknown), so without passing it a running
-      # binary cannot be traced back to a commit — 0.26.2 shipped reporting
-      # commit=unknown.
+      # VERSION is $TAG, which is EMPTY off a tag: the Dockerfile falls back to
+      # the committed ./VERSION when the arg is empty, and a placeholder would
+      # shadow that fallback. COMMIT has no fallback (ARG COMMIT=unknown), so it
+      # must be passed for a binary to be traceable.
       #
-      # Separate cache scopes: one shared scope would have the two images evict
-      # each other's layers on every run, which is worse than no cache at all.
-      # mode=max keeps the intermediate stages (npm ci, go build) — the whole
-      # point here, since the final stages are a few MB of static files.
+      # Separate cache scopes so the two images do not evict each other's
+      # layers; mode=max keeps the intermediate stages (npm ci, go build).
       - name: Build dzd image
         uses: docker/build-push-action@v7
         with:
@@ -541,13 +451,9 @@ jobs:
 
   # ------------------------------------------------------------------ publish
   #
-  # The gate that `images` used to carry. Nothing reaches ghcr.io until the Go
-  # suite, the web suite, the docs site and the supply-chain scans are green.
-  #
-  # It rebuilds rather than receiving an image from `images`, because a buildx
-  # cache hit from the same workflow run costs seconds and an image artifact
-  # round-trip costs minutes. If the cache ever misses, this still produces a
-  # correct image — just slowly.
+  # Nothing reaches ghcr.io until the Go suite, the web suite, the docs site and
+  # the supply-chain scans are green. It rebuilds rather than receiving an image
+  # artifact: a buildx cache hit from the same run costs seconds.
   publish:
     name: Publish images
     runs-on: ubuntu-latest
@@ -622,36 +528,17 @@ jobs:
 
       # Ask Dazyflow to deploy what was just published.
       #
-      # A PUSHED VERSION TAG IS THE ONLY THING THAT DEPLOYS. Not a push to
-      # master, not a pull request, and not a manual dispatch — including a
-      # dispatch from the tag ref, which publishes and stops. That leaves one
-      # gesture that reaches production (`git push origin <tag>`) and one that
-      # rebuilds an image without reaching it, rather than a checkbox whose
-      # state you have to remember at the moment you are shipping.
+      # A PUSHED VERSION TAG IS THE ONLY THING THAT DEPLOYS. Not master, not a
+      # PR, not a dispatch (even from the tag ref). A missing secret FAILS rather
+      # than skipping: a silent skip is the "green build that shipped nothing"
+      # this setup exists to prevent.
       #
-      # github.ref is the tag ref on a tag push, so this also implies the ref
-      # carries the version the deploy body names.
-      #
-      # Unlike the sourcehut version, a missing secret here FAILS rather than
-      # exiting 0. There the gate protected forks and contributors without the
-      # secret from a confusing red build; a manual dispatch that explicitly
-      # asked to deploy has no such excuse, and a silent skip is precisely the
-      # "green build that shipped nothing" this setup exists to prevent.
-      #
-      # The call deliberately does NOT use curl -f. That flag discards the
-      # response body and reports "curl: (22) ... error: 401", which is the least
-      # informative thing the exchange can say: the endpoint answers every
-      # pre-authentication failure with an identical 401 on purpose (it must not
-      # reveal which flows exist), so the status alone leaves four causes open
-      # and the body plus the checklist below is all a reader gets. A 403, by
-      # contrast, carries a machine-readable code worth printing verbatim.
-      #
-      # Both secrets are also shape-checked before a request is spent, because
-      # the failure mode that actually happened is a paste artifact: these moved
-      # from a builds.sr.ht *file* secret, sourced with `.`, into GitHub secrets,
-      # and the shell used to strip the quotes that GitHub keeps. A key arriving
-      # as `"abc"` or as the whole line `DAZYFLOW_WEBHOOK_KEY=abc` is otherwise
-      # indistinguishable from a rotated key. Neither check ever echoes a value.
+      # No `curl -f`: it discards the body, and the endpoint answers every
+      # pre-authentication failure with an identical 401 on purpose, so the body
+      # plus the checklist below is all a reader gets. Both secrets are
+      # shape-checked first because a paste artifact (quotes kept, or a whole
+      # KEY=value line) is otherwise indistinguishable from a rotated key.
+      # Neither check echoes a value.
       - name: Trigger deploy
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
         env:

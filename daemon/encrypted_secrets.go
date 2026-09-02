@@ -18,49 +18,20 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// EncryptedSecrets is the built-in per-tenant secret store. It's the
-// daemon's "we hold your tokens, you don't need any infrastructure"
-// answer to the secrets problem — what an SMB customer expects from
-// a Zapier-shaped product.
+// EncryptedSecrets is the built-in per-tenant secret store: envelope
+// encryption with a 32-byte AES-256 KEK held in daemon memory (loaded from
+// config, never written to disk by us) wrapping one AES-256 DEK per tenant,
+// generated on the tenant's first write and stored KEK-wrapped. Every secret
+// is AES-256-GCM with its own 12-byte nonce, so tampering surfaces as a
+// decryption error rather than silent corruption.
 //
-// Crypto: envelope encryption with two key tiers.
-//
-//	KEK (Key Encryption Key)  — 32-byte AES-256, held in daemon
-//	                            memory, loaded from config at boot.
-//	                            Never written to disk by us.
-//	DEK (Data Encryption Key) — 32-byte AES-256, one per tenant.
-//	                            Generated on first secret write per
-//	                            tenant, then KEK-wrapped and stored.
-//	                            On reads, fetched + unwrapped + cached
-//	                            in process memory.
-//
-// Each secret has its own 12-byte nonce (NIST-recommended for GCM).
-// AES-256-GCM is authenticated, so tampering with ciphertext on the
-// way back from the store surfaces as a decryption error rather
-// than silent corruption.
-//
-// Why this design over BYO cloud (Vault/AWS/GCP):
-//
-//   - SMB customers don't have those backends. The point is they
-//     don't have to.
-//   - One process boundary for secrets simplifies the operational
-//     surface (one master key to manage, one DB to back up).
-//   - Cloud BYO providers slot in later as different
-//     `core.SecretProvider` implementations — same scheme registry,
-//     different backend.
-//
-// What this DELIBERATELY isn't:
-//
-//   - HSM-backed: the KEK lives in process memory. An attacker with
-//     memory dump access wins. HSM-backed KEK is a future option.
-//   - Key-rotating in place: rotating the KEK re-wraps every tenant DEK
-//     under the new key. RewrapDEKs does this (dzd's
-//     --rotate-master-key); the DEK plaintexts — and so every stored
-//     ciphertext — are untouched, so no secret is re-entered.
-//   - Audit-logged by default: secret reads aren't logged unless
-//     DAZYFLOW_AUDIT_SECRET_READS is set (high-volume — resolution runs on
-//     every node execution). When on, Get emits a "secret.read" audit event
-//     (name + actor, never the value). See EnableReadAudit.
+// It exists so a customer without Vault/AWS/GCP needs no infrastructure; those
+// slot in as other core.SecretProvider implementations under the same scheme
+// registry. Deliberate limits: the KEK is in process memory (no HSM); KEK
+// rotation re-wraps every DEK via RewrapDEKs (dzd --rotate-master-key) without
+// touching stored ciphertext; secret reads are audited only when
+// DAZYFLOW_AUDIT_SECRET_READS is set, because resolution runs on every node
+// execution (see EnableReadAudit).
 type EncryptedSecrets struct {
 	mu    sync.Mutex
 	kek   cipher.AEAD
@@ -235,18 +206,10 @@ func dekAAD(tenant string) []byte {
 }
 
 // openBound decrypts data that SHOULD carry the AAD binding above, falling back
-// to an unbound open for ciphertext written before binding existed.
-//
-// The fallback is what makes this change deployable against a live store: every
-// secret and wrapped DEK already on disk was sealed with nil AAD, and without
-// it an upgrade would render all of them undecryptable.
-//
-// Residual risk, stated plainly: a legacy (unbound) ciphertext is still
-// relocatable, because we must accept it. Values upgrade to the bound form as
-// they are rewritten — every Put re-seals, so an OAuth refresh or a re-saved
-// connection upgrades itself, and RewrapDEKs upgrades every DEK it touches. A
-// deployment that wants the guarantee everywhere today can re-save its secrets;
-// a future release can drop the fallback once no legacy ciphertext remains.
+// to an unbound open for ciphertext sealed with nil AAD before binding existed.
+// A legacy ciphertext therefore stays relocatable; every Put re-seals in the
+// bound form and RewrapDEKs upgrades every DEK it touches, so the fallback can
+// be dropped once no legacy ciphertext remains.
 func openBound(aead cipher.AEAD, nonce, ct, aad []byte) ([]byte, error) {
 	if pt, err := aead.Open(nil, nonce, ct, aad); err == nil {
 		return pt, nil

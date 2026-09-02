@@ -2,36 +2,23 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Package geo hosts the OpenStreetMap connector: pick a location on a map and
-// emit its coordinate (a design-time value source), turn a place name into a
-// coordinate (forward geocode), and turn a coordinate back into a place name
-// (reverse geocode).
+// emit its coordinate (geo_location, a pure value source parsed at run time
+// with no network), turn a place name into a coordinate, and turn a coordinate
+// back into a place name. The geocoding drops go through a pluggable backend
+// chosen per tenant via the OpenStreetMap connection (`backend`, `base_url`,
+// `api_key`), with DAZYFLOW_GEOCODER as the deployment default and Nominatim
+// as the final fallback (see geocoderFor):
 //
-// The map-picker drop (geo_location) is a pure value source — its coordinate
-// is chosen in the editor via a Leaflet/OpenStreetMap widget (format
-// "geo-point") and parsed at run time, no network. The Location Place override
-// and geo_reverse drops geocode at run time through a pluggable backend.
+//   - nominatim: OpenStreetMap's reference API, no key. The public instance is
+//     limited to ~1 req/s and forbids bulk use; self-host for real load
+//     (base_url or DAZYFLOW_NOMINATIM_URL).
+//   - photon: Komoot's GeoJSON API, no key, good typo tolerance. Public
+//     instance is fair-use; self-host via base_url or DAZYFLOW_PHOTON_URL.
+//   - locationiq: hosted Nominatim-compatible API, REQUIRES an api_key.
 //
-// # Geocoding backends
-//
-// The backend is chosen per tenant via the OpenStreetMap connection (the
-// `backend`, `base_url`, and `api_key` ConnectionFields, set under Apps), with
-// DAZYFLOW_GEOCODER as the deployment-wide default and Nominatim as the final
-// fallback. See geocoderFor. Supported backends:
-//
-//   - nominatim — OpenStreetMap's Nominatim API (the reference, default, no
-//     key). The public instance (https://nominatim.openstreetmap.org) is
-//     rate-limited to ~1 req/s and forbids bulk use; point base_url (or
-//     DAZYFLOW_NOMINATIM_URL) at a self-hosted instance for real load.
-//   - photon — Komoot's Photon (also OpenStreetMap data, GeoJSON API, no key).
-//     Its public instance (https://photon.komoot.io) is fair-use; self-host via
-//     base_url or DAZYFLOW_PHOTON_URL. Good for autocomplete/typo tolerance.
-//   - locationiq — LocationIQ's Nominatim-compatible API (OpenStreetMap data,
-//     hosted, REQUIRES an api_key). A no-infrastructure paid option.
-//
-// Every backend normalizes to geoPlace, so the drops are backend-agnostic.
-// Output coordinates are the "lat,lon" string the OpenWeather/SMHI drops'
-// Coordinate input accepts, so a geocode/picker wires straight into a weather
-// lookup. All dials go through the shared SSRF-guarded client.
+// Every backend normalizes to geoPlace. Output coordinates are the "lat,lon"
+// string the weather drops accept, so a geocode wires straight into a lookup.
+// All dials go through the shared SSRF-guarded client.
 package geo
 
 import (

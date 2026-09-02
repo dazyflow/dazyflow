@@ -3,36 +3,16 @@
 
 import type { Graph } from "../types";
 
-// Undo/redo for the flow editor.
-//
-// WHY SNAPSHOTS, NOT COMMANDS
-//
-// The obvious design for a graph editor is a command stack: every action
-// registers a do/undo pair. It rots. The editor's document state has grown to
-// nodes, edges, comment frames, per-node params, breakpoints, disabled steps,
-// triggers, visibility, owner, name, icon, description and timeout — and the
-// next feature adds another. A command stack needs a new inverse for each one,
-// and a missing inverse is a silent corruption: undo appears to work and
-// quietly drops a field.
-//
-// Snapshots of the whole document can't rot that way, because the editor
-// ALREADY maintains a complete serializer (buildGraph) and deserializer
-// (hydrateGraph) — saving and loading depend on them, so they cannot fall
-// behind without the flow itself failing to persist. History piggybacks on a
-// completeness property the codebase already enforces. Anything buildGraph
-// learns to serialize is undoable for free.
-//
-// The graphs are small (600 B – 5 KB in practice), so whole-document snapshots
-// cost far less memory than the bookkeeping a command stack would need.
-//
-// WHY NOT THE SERVER'S VERSION SNAPSHOTS
-//
-// They exist and they're whole-graph too, but they're the wrong cadence by
-// design: SaveCoalescing AMENDS the previous commit inside a 90-second window
-// (workspace/store.go), so an editing burst becomes ONE commit and the
-// intermediate states are destroyed rather than stored. They're also a network
-// round-trip, and restoring writes a new commit — so undo would append to the
-// very history the coalescing exists to keep readable.
+// Undo/redo for the flow editor, as whole-document snapshots rather than a
+// command stack. A command stack needs an inverse for every field the document
+// grows (nodes, edges, frames, params, breakpoints, triggers, visibility, name,
+// icon, description, timeout, …) and a missing inverse is silent corruption.
+// Snapshots reuse the serializer/deserializer saving already depends on
+// (buildGraph / hydrateGraph), so anything saveable is undoable for free, and
+// graphs are small (600 B to 5 KB). The server's version snapshots are the
+// wrong cadence: SaveCoalescing amends the previous commit inside a 90-second
+// window, destroying the intermediate states, and restoring would write a new
+// commit into the very history the coalescing keeps readable.
 
 /** A document snapshot: the editable graph, with server-lifecycle fields excluded. */
 export type HistoryDoc = Graph;
@@ -57,7 +37,7 @@ export type DeltaKind =
   /** Anything else: add, delete, connect, disconnect, toggle, reorder. */
   | { kind: "structure" };
 
-export interface HistoryEntry {
+interface HistoryEntry {
   doc: HistoryDoc;
   /** What produced this entry, for coalescing the NEXT one against it. */
   delta: DeltaKind;

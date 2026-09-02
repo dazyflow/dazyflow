@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
@@ -209,7 +210,7 @@ func TestHTTPDownload_MkdirsSuccess(t *testing.T) {
 // TestDownloadRequestBody_MarshalError covers downloadRequestBody's
 // json.Marshal failure on an unmarshalable structured input.
 func TestDownloadRequestBody_MarshalError(t *testing.T) {
-	_, err := downloadRequestBody(core.Job{
+	_, err := params.RequestBody(core.Job{
 		Input: map[string]core.Ref{"request_body": {Inline: func() {}}},
 	})
 	if err == nil {
@@ -602,7 +603,7 @@ func TestStreamToFile_Success(t *testing.T) {
 func TestDownloadRequestBody_Variants(t *testing.T) {
 	read := func(t *testing.T, job core.Job) string {
 		t.Helper()
-		r, err := downloadRequestBody(job)
+		r, err := params.RequestBody(job)
 		if err != nil {
 			t.Fatalf("err: %v", err)
 		}

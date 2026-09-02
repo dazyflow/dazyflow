@@ -24,7 +24,6 @@
 //   stubbed with non-zero sizes or the canvas renders nothing and every node
 //   assertion fails for the wrong reason.
 
-import type { ReactElement } from "react";
 import { vi } from "vitest";
 
 // ---------------------------------------------------------------------------
@@ -34,7 +33,7 @@ export type StreamFrame = [kind: string, data: unknown];
 
 // A captured streamJob subscription: the callback the editor handed us, plus
 // the run it was opened for and whether it has since been aborted.
-export interface Subscription {
+interface Subscription {
   runID: string;
   emit: (kind: string, data: unknown) => void;
   aborted: () => boolean;
@@ -188,10 +187,3 @@ export const manifests = [
   },
 ];
 
-// renderAt is a thin wrapper so every test mounts the editor on the same route
-// shape (/flows/:id), which is where useParams gets the flow id from.
-export function editorRoute(id = "coffee-reorder"): string {
-  return `/flows/${id}`;
-}
-
-export type { ReactElement };

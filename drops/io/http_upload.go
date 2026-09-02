@@ -203,7 +203,7 @@ func executeHTTPUpload(ctx context.Context, job core.Job, _ chan<- core.Progress
 	}
 	defer resp.Body.Close()
 
-	if !downloadStatusOK(resp.StatusCode, params.IntSlice(job.Params, "expect_status")) {
+	if !params.StatusAccepted(resp.StatusCode, params.IntSlice(job.Params, "expect_status")) {
 		return params.Err(job, "unexpected_status", fmt.Sprintf("got %d", resp.StatusCode)), nil
 	}
 

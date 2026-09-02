@@ -366,3 +366,10 @@ func TestResolveSlice_WholeResourceElement_Cov(t *testing.T) {
 		t.Errorf("rows = %+v", rows)
 	}
 }
+
+// resolveSecrets is the secret-only convenience wrapper around
+// resolveTemplates. Kept for code paths and tests that only care
+// about secret resolution; equivalent to passing prior=nil.
+func resolveSecrets(ctx context.Context, providers map[string]core.SecretProvider, job *core.Job) error {
+	return resolveTemplates(ctx, providers, core.Graph{}, nil, job)
+}

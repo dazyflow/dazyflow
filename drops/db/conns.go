@@ -178,20 +178,6 @@ func (r *pgPoolRegistry) sweepLocked(now time.Time) {
 	}
 }
 
-// closeAll shuts every pool down. Intended for tests; daemon shutdown
-// doesn't bother because process exit closes everything anyway.
-// Nil-tolerant so tests that inject zero-value entries don't panic.
-func (r *pgPoolRegistry) closeAll() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for k, e := range r.pools {
-		if e.pool != nil {
-			e.pool.Close()
-		}
-		delete(r.pools, k)
-	}
-}
-
 // --- *sql.DB registry (used by MySQL drops) -------------------------
 //
 // database/sql's *sql.DB is itself a connection pool, so the natural

@@ -4,10 +4,7 @@
 package db
 
 import (
-	"errors"
 	"fmt"
-	"os"
-	"strings"
 
 	"github.com/dazyflow/dazyflow/drops/internal/rows"
 )
@@ -98,38 +95,12 @@ func parseColumnTypes(params map[string]any) (map[string]string, error) {
 	return m, nil
 }
 
-// isSandboxEscape mirrors the io package's check — kept local so this
-// package doesn't import a sibling integration.
-func isSandboxEscape(err error) bool {
-	if err == nil {
-		return false
-	}
-	if errors.Is(err, os.ErrInvalid) {
-		return true
-	}
-	msg := err.Error()
-	for _, marker := range []string{"path escapes", "outside root", "invalid argument"} {
-		if strings.Contains(msg, marker) {
-			return true
-		}
-	}
-	return false
-}
-
 // normalizeRows / coerceRowMap / normalizeHeaders / deriveHeaders are
 // thin aliases over the shared drops/internal/rows package. The db
 // drops only accept list shapes (a bare object is rejected) and do not
 // pre-cap the input here, so they pass the zero-value Options.
 func normalizeRows(inline any) ([]map[string]any, error) {
 	return rows.Normalize(inline, rows.Options{})
-}
-
-func coerceRowMap(item any) (map[string]any, error) {
-	return rows.CoerceRowMap(item)
-}
-
-func normalizeHeaders(inline any) ([]string, error) {
-	return rows.NormalizeHeaders(inline)
 }
 
 func deriveHeaders(r []map[string]any) []string {

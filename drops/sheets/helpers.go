@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -21,6 +20,7 @@ import (
 	"github.com/dazyflow/dazyflow/drops/internal/apibase"
 	"github.com/dazyflow/dazyflow/drops/internal/google"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
+	"github.com/dazyflow/dazyflow/drops/internal/rows"
 )
 
 // maxResponseBytes caps how much of an API response we buffer, so a
@@ -101,7 +101,7 @@ func flattenValues(raw [][]any, useHeaders bool) ([]string, []map[string]any) {
 	var data [][]any
 	if useHeaders {
 		for _, v := range raw[0] {
-			headers = append(headers, cell(v))
+			headers = append(headers, rows.Cell(v))
 		}
 		data = raw[1:]
 	} else {
@@ -129,31 +129,6 @@ func flattenValues(raw [][]any, useHeaders bool) ([]string, []map[string]any) {
 		rows = append(rows, rec)
 	}
 	return headers, rows
-}
-
-func cell(v any) string {
-	if v == nil {
-		return ""
-	}
-	if s, ok := v.(string); ok {
-		return s
-	}
-	return fmt.Sprintf("%v", v)
-}
-
-func deriveHeaders(rows []map[string]any) []string {
-	seen := map[string]struct{}{}
-	for _, r := range rows {
-		for k := range r {
-			seen[k] = struct{}{}
-		}
-	}
-	out := make([]string, 0, len(seen))
-	for k := range seen {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }
 
 // normalizeRows coerces the rows input into a slice of objects. Mirrors
@@ -392,7 +367,7 @@ func ListSheetColumns(ctx context.Context, job core.Job) ([]core.AccountResource
 	seen := map[string]struct{}{}
 	out := make([]core.AccountResource, 0, len(parsed.Values[0]))
 	for _, h := range parsed.Values[0] {
-		name := strings.TrimSpace(cell(h))
+		name := strings.TrimSpace(rows.Cell(h))
 		if name == "" {
 			continue
 		}
@@ -487,20 +462,6 @@ func ListSheetTabs(ctx context.Context, job core.Job) ([]core.AccountResource, e
 		out = append(out, core.AccountResource{ID: s.Properties.Title, Name: s.Properties.Title})
 	}
 	return out, nil
-}
-
-func normalizeHeaders(inline any) []string {
-	switch v := inline.(type) {
-	case []string:
-		return v
-	case []any:
-		out := make([]string, 0, len(v))
-		for _, h := range v {
-			out = append(out, cell(h))
-		}
-		return out
-	}
-	return nil
 }
 
 // RowNumberColumn is the column sheets_read_range adds when asked for row

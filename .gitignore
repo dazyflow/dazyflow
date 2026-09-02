@@ -7,14 +7,13 @@
 /dz-drophost
 /ha_loadtest
 /bin
-# Legacy pre-rename binaries (hazyflow → dazyflow); were tracked by mistake.
+# Pre-rename binaries
 /hzctl
 /hzd
 
 # Runtime data
 /.dazyflow/
-# Legacy runtime data dir (pre-rename). Held nested git repos recorded as
-# gitlinks with no .gitmodules, which broke CI checkout's submodule init.
+# Pre-rename runtime data dir
 /.hazyflow/
 *.xlsx
 /.env

@@ -12,6 +12,7 @@ import (
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
+	rowsutil "github.com/dazyflow/dazyflow/drops/internal/rows"
 	"github.com/dazyflow/dazyflow/engine"
 )
 
@@ -154,7 +155,7 @@ func executeSheetsAppend(ctx context.Context, job core.Job, _ chan<- core.Progre
 	}
 
 	if headers == nil {
-		headers = deriveHeaders(rows)
+		headers = rowsutil.DeriveHeaders(rows)
 	}
 
 	values := make([][]any, 0, len(rows))

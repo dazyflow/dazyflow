@@ -259,7 +259,7 @@ func executeShell(ctx context.Context, job core.Job, progress chan<- core.Progre
 	cmd.WaitDelay = 5 * time.Second
 	combined := &boundedBuffer{limit: maxBytes}
 
-	emitProgress(progress, job, 0.1, "exec "+cmdName)
+	params.EmitProgress(progress, job, 0.1, "exec "+cmdName)
 	started := time.Now()
 
 	// Spawn the command attached to a PTY so build tools that switch to
@@ -320,7 +320,7 @@ func executeShell(ctx context.Context, job core.Job, progress chan<- core.Progre
 	if runErr != nil && !success {
 		meta["error"] = runErr.Error()
 	}
-	emitProgress(progress, job, 1.0, fmt.Sprintf("exit %d", exitCode))
+	params.EmitProgress(progress, job, 1.0, fmt.Sprintf("exit %d", exitCode))
 
 	return core.Result{
 		JobID:  job.ID,
@@ -343,23 +343,14 @@ const maxLogLineBytes = 64 * 1024
 // pumpStream forwards src to dst (the captured stdout) and to the progress
 // channel, one line at a time.
 //
-// Deliberately NOT built on bufio.Scanner. A Scanner stops permanently the
-// first time a token exceeds its max size — so a single over-long line
-// (minified JS in a build log, a base64 blob, a long stack trace) used to
-// silently swallow the ENTIRE remainder of the command's output while the
-// exit code still reported success, giving no hint anything was lost.
-//
-// bufio.Reader.ReadSlice reports that case as a non-terminal
-// bufio.ErrBufferFull instead: the over-long line is emitted as
-// maxLogLineBytes-sized chunks and reading continues, so output is lossless
-// however a command chooses to format it.
-//
-// Line endings: the command runs on a pty, so complete lines arrive CRLF-
-// terminated. Those are normalized to a single "\n" in the captured output
-// (and stripped entirely from the progress message), matching what the
-// Scanner's ScanLines split used to do. A chunk flushed mid-line is written
-// through verbatim — no newline is synthesized, since the line continues in
-// the next chunk.
+// It uses bufio.Reader.ReadSlice rather than bufio.Scanner: a Scanner stops
+// permanently on a token over its max size, silently dropping the rest of the
+// output while the exit code reports success. ReadSlice reports that as a
+// non-terminal ErrBufferFull, so an over-long line is emitted in
+// maxLogLineBytes chunks and reading continues. The command runs on a pty, so
+// complete lines arrive CRLF-terminated; those become "\n" in the captured
+// output and are stripped from the progress message. A chunk flushed mid-line
+// is written through verbatim.
 func pumpStream(src io.Reader, dst *boundedBuffer, progress chan<- core.Progress, job core.Job, stream string) {
 	r := bufio.NewReaderSize(src, maxLogLineBytes)
 	for {

@@ -16,7 +16,6 @@ package llm
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 	"sync"
 
@@ -125,15 +124,6 @@ func Registered() []ProviderInfo {
 	for _, n := range order {
 		out = append(out, providers[n])
 	}
-	return out
-}
-
-// RegisteredNames returns provider ids, sorted, for stable test/debug output.
-func RegisteredNames() []string {
-	mu.RLock()
-	defer mu.RUnlock()
-	out := append([]string(nil), order...)
-	sort.Strings(out)
 	return out
 }
 

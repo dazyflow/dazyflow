@@ -35,22 +35,9 @@ export function formatBytes(n: number): string {
 }
 
 // formatDuration renders the gap between two RFC3339 instants as a short
-// human string: "840 ms", "4.6 s", "3.5 min".
-//
-// "min", not "m": m is the symbol for METRE. A three-and-a-half minute run
-// used to render as "3.5m". Familiar from developer tooling ("3m29s"), and
-// ambiguous the moment it is read as a unit rather than as jargon.
-//
-// This is the one that had actually drifted. The runs list and the run-detail
-// page each carried their own copy, and they rounded differently — so ONE run
-// read "1.25s" on its detail page and "1.3s" in the list it was linked from,
-// and a 3m29s run read "3.5m" on one and "3m" on the other. Neither was wrong
-// on its own terms; they simply disagreed about the same number.
-//
-// The surviving behaviour takes one decimal for seconds (the list's — two
-// decimals is developer precision, not something a person reads off a table)
-// and one decimal for minutes (the detail page's — rounding 3m29s to "3m"
-// throws away the half-minute, and "3.5m" is no harder to read).
+// human string: "840 ms", "4.6 s", "3.5 min". One decimal for seconds and
+// minutes, and "min" rather than "m" (the symbol for metre). Shared by the runs
+// list and the run page so the same run reads the same on both.
 export function formatDuration(startedISO: string, finishedISO: string): string {
   const start = Date.parse(startedISO);
   const end = Date.parse(finishedISO);

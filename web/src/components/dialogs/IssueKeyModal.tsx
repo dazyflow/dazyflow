@@ -23,7 +23,7 @@ type Template = {
   permissions: Permission[];
 };
 
-export const ROLE_TEMPLATES: Template[] = [
+const ROLE_TEMPLATES: Template[] = [
   {
     id: "viewer",
     nameKey: "issueKey.templateViewer",
@@ -51,7 +51,7 @@ export const ROLE_TEMPLATES: Template[] = [
   },
 ];
 
-export const ALL_PERMISSIONS: Permission[] = [
+const ALL_PERMISSIONS: Permission[] = [
   "graph:run",
   "graph:edit",
   "graph:admin",

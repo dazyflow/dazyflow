@@ -287,7 +287,8 @@ func TestIdempotencyKeyFor_PreservesNumericPrecision(t *testing.T) {
 // aren't valid JSON still hash deterministically rather than panicking.
 func TestIdempotencyKeyFor_InvalidJSONIsStable(t *testing.T) {
 	const bad = `{"flow":`
-	if idempotencyKeyFor("t", json.RawMessage(bad)) != idempotencyKeyFor("t", json.RawMessage(bad)) {
+	first, second := idempotencyKeyFor("t", json.RawMessage(bad)), idempotencyKeyFor("t", json.RawMessage(bad))
+	if first != second {
 		t.Error("invalid JSON should still hash deterministically")
 	}
 	if idempotencyKeyFor("t", nil) != idempotencyKeyFor("t", json.RawMessage("")) {

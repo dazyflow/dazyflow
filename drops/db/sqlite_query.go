@@ -105,7 +105,7 @@ func executeSQLiteQuery(ctx context.Context, job core.Job, _ chan<- core.Progres
 	probe, probeErr := root.Open(path)
 	root.Close()
 	if probeErr != nil {
-		if isSandboxEscape(probeErr) {
+		if core.IsSandboxEscape(probeErr) {
 			return params.Err(job, "sandbox_escape", fmt.Sprintf("path %q escapes workspace", path)), nil
 		}
 		return params.Err(job, "io", fmt.Sprintf("open %q: %v", path, probeErr)), nil

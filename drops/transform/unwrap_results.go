@@ -7,10 +7,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/engine"
 )
 
@@ -103,17 +105,17 @@ func init() {
 func executeUnwrapResults(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	resultsRef, ok := job.Input["results"]
 	if !ok {
-		return errResult(job, "missing_input", "input port 'results' is required"), nil
+		return params.Err(job, "missing_input", "input port 'results' is required"), nil
 	}
 	wrappers, err := normalizeResultList(resultsRef.Inline)
 	if err != nil {
-		return errResult(job, "bad_input", err.Error()), nil
+		return params.Err(job, "bad_input", err.Error()), nil
 	}
 	// normalizeResultList doesn't cap (unlike normalizeRows), so bound the
 	// input here — and the output is amplified (each wrapper's chosen port
 	// can expand into many rows), so it's re-checked as it grows below.
 	if err := capRows(len(wrappers)); err != nil {
-		return errResult(job, "too_many_rows", err.Error()), nil
+		return params.Err(job, "too_many_rows", err.Error()), nil
 	}
 
 	node := paramStringOr(job.Params, "node", "")
@@ -127,7 +129,7 @@ func executeUnwrapResults(_ context.Context, job core.Job, _ chan<- core.Progres
 	for i, w := range wrappers {
 		payload, ok := asAnyMap(w)
 		if !ok {
-			return errResult(job, "bad_input",
+			return params.Err(job, "bad_input",
 				fmt.Sprintf("result %d is not a for_each result wrapper (got %T)", i, w)), nil
 		}
 
@@ -146,27 +148,27 @@ func executeUnwrapResults(_ context.Context, job core.Job, _ chan<- core.Progres
 		// then one of its output ports.
 		nodes, ok := asAnyMap(payload["nodes"])
 		if !ok {
-			return errResult(job, "bad_input",
+			return params.Err(job, "bad_input",
 				fmt.Sprintf("result %d has no nodes map — is the for_each `body` output connected?", i)), nil
 		}
 		nodeEntry, err := selectNode(nodes, node)
 		if err != nil {
-			return errResult(job, "bad_param", fmt.Sprintf("result %d: %v", i, err)), nil
+			return params.Err(job, "bad_param", fmt.Sprintf("result %d: %v", i, err)), nil
 		}
 		nodeMap, ok := asAnyMap(nodeEntry)
 		if !ok {
-			return errResult(job, "bad_input",
+			return params.Err(job, "bad_input",
 				fmt.Sprintf("result %d: body step is not a result map (got %T)", i, nodeEntry)), nil
 		}
 		outputs, ok := asAnyMap(nodeMap["output"])
 		if !ok {
-			return errResult(job, "bad_input",
+			return params.Err(job, "bad_input",
 				fmt.Sprintf("result %d: body step has no output map", i)), nil
 		}
 
 		chosen, err := selectPort(outputs, port)
 		if err != nil {
-			return errResult(job, "bad_param", fmt.Sprintf("result %d: %v", i, err)), nil
+			return params.Err(job, "bad_param", fmt.Sprintf("result %d: %v", i, err)), nil
 		}
 
 		value := refInline(chosen)
@@ -174,7 +176,7 @@ func executeUnwrapResults(_ context.Context, job core.Job, _ chan<- core.Progres
 		// The flatten can amplify N wrappers into many more rows; cap the
 		// running total so a loop body returning big lists can't OOM us.
 		if err := capRows(len(out)); err != nil {
-			return errResult(job, "too_many_rows", err.Error()), nil
+			return params.Err(job, "too_many_rows", err.Error()), nil
 		}
 	}
 
@@ -194,7 +196,7 @@ func selectNode(nodes map[string]any, node string) (any, error) {
 	if node != "" {
 		v, ok := nodes[node]
 		if !ok {
-			return nil, fmt.Errorf("body step %q not found (available: %s)", node, strings.Join(sortedKeys(nodes), ", "))
+			return nil, fmt.Errorf("body step %q not found (available: %s)", node, strings.Join(slices.Sorted(maps.Keys(nodes)), ", "))
 		}
 		return v, nil
 	}
@@ -206,7 +208,7 @@ func selectNode(nodes map[string]any, node string) (any, error) {
 			return v, nil
 		}
 	}
-	return nil, fmt.Errorf("the for_each body has %d steps (%s); set 'node' to pick one", len(nodes), strings.Join(sortedKeys(nodes), ", "))
+	return nil, fmt.Errorf("the for_each body has %d steps (%s); set 'node' to pick one", len(nodes), strings.Join(slices.Sorted(maps.Keys(nodes)), ", "))
 }
 
 // selectPort returns the chosen output port's Ref. When port is named it
@@ -216,7 +218,7 @@ func selectPort(outputs map[string]any, port string) (any, error) {
 	if port != "" {
 		v, ok := outputs[port]
 		if !ok {
-			return nil, fmt.Errorf("output port %q not found (available: %s)", port, strings.Join(sortedKeys(outputs), ", "))
+			return nil, fmt.Errorf("output port %q not found (available: %s)", port, strings.Join(slices.Sorted(maps.Keys(outputs)), ", "))
 		}
 		return v, nil
 	}
@@ -228,7 +230,7 @@ func selectPort(outputs map[string]any, port string) (any, error) {
 			return v, nil
 		}
 	}
-	return nil, fmt.Errorf("step has %d output ports (%s); set 'port' to pick one", len(outputs), strings.Join(sortedKeys(outputs), ", "))
+	return nil, fmt.Errorf("step has %d output ports (%s); set 'port' to pick one", len(outputs), strings.Join(slices.Sorted(maps.Keys(outputs)), ", "))
 }
 
 // normalizeResultList coerces the for_each results input into a list of
@@ -335,13 +337,4 @@ func errorRow(index int, errPayload any) map[string]any {
 		row["_error_message"] = fmt.Sprintf("%v", errPayload)
 	}
 	return row
-}
-
-func sortedKeys(m map[string]any) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }

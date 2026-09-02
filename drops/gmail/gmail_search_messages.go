@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/cursor"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/engine"
 )
@@ -198,7 +199,7 @@ func emitOnlyNew(ctx context.Context, job core.Job, msgs []any, dates []string, 
 	// newest internalDate we've already emitted. The store hides the
 	// "cursor." prefix from the Credentials UI.
 	cursorName := fmt.Sprintf("cursor.gmail_search.%s.%s", job.GraphID, job.NodeID)
-	last := readCursor(ctx, job.Tenant, cursorName)
+	last := cursor.Read(ctx, job.Tenant, cursorName)
 	first := last == ""
 
 	fresh := make([]any, 0, len(msgs))
@@ -219,7 +220,7 @@ func emitOnlyNew(ctx context.Context, job core.Job, msgs []any, dates []string, 
 	}
 
 	if newCursor != "" && newCursor != last {
-		_ = writeCursor(ctx, job.Tenant, cursorName, newCursor)
+		_ = cursor.Write(ctx, job.Tenant, cursorName, newCursor)
 	}
 
 	// Nothing new (or first-run baseline) → emit no ports, skipping downstream.

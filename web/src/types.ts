@@ -3,7 +3,7 @@
 
 // Mirror of the Go core types we touch from the UI.
 
-export type Position = { x: number; y: number };
+type Position = { x: number; y: number };
 
 export type Node = {
   id: string;
@@ -130,7 +130,7 @@ export type DropAdjacency = {
 
 // Frame is an editor-only comment box grouping nodes visually. The engine
 // ignores it; it round-trips so the editor can redraw the same boxes.
-export type Frame = {
+type Frame = {
   id: string;
   title?: string;
   color?: string;
@@ -171,7 +171,7 @@ export type Graph = {
 // FailureNotify mirrors core.FailureNotify in Go — the daemon's
 // failure-notify dispatcher POSTs a payload to the webhook URL
 // when a run of this graph terminates with status=failed.
-export type FailureNotify = {
+type FailureNotify = {
   webhook?: string;
   // Failure summary by email — needs the operator mailer (DAZYFLOW_SMTP_URL).
   email?: string;
@@ -505,7 +505,7 @@ export type WhoAmI = {
   memberships?: OrgMembership[];
 };
 
-export type OrgMembership = {
+type OrgMembership = {
   tenant: string;
   // display_name is the org's human-facing name (set on /admin/workspace,
   // defaulted from the email domain on signup). Empty when no profile
@@ -650,7 +650,7 @@ export type PublicOverview = {
   flows: PublicFlowState[];
 };
 
-export type PublicFlowState = {
+type PublicFlowState = {
   name: string;
   icon?: string;
   run_status?: "live" | "manual" | "paused" | "needs_publish";
@@ -704,7 +704,7 @@ export type Revision = {
   label?: string;
 };
 
-export type JobError = {
+type JobError = {
   code: string;
   message: string;
   // Optional technical context (type signatures, library errors, etc.)
@@ -714,7 +714,7 @@ export type JobError = {
   details?: string;
 };
 
-export type JobResult = {
+type JobResult = {
   job_id?: string;
   status?: string;
   output?: Record<string, Ref>;
@@ -1003,7 +1003,7 @@ export type MCPServer = {
 // StepSourceUse is one flow that references a step source's steps, from
 // GET /admin/{mcp-servers,web-apis}/{name}/usage. It exists to answer one
 // question, asked at one moment: what breaks if this source is deleted.
-export type StepSourceUse = {
+type StepSourceUse = {
   workspace: string;
   flow_id: string;
   name?: string;
@@ -1179,7 +1179,7 @@ export type WebAPISpecRequest = {
 
 // WebAPIImportWarning is one thing the parser declined to do. Every warning
 // corresponds to something NOT imported.
-export type WebAPIImportWarning = {
+type WebAPIImportWarning = {
   // where is the operation it concerns ("get /orders"), or absent for a warning
   // about the document itself.
   where?: string;
@@ -1189,10 +1189,10 @@ export type WebAPIImportWarning = {
 // WebAPIOperationChange is what a refresh would do to one operation. "removed"
 // is the one that costs something: every flow referencing its step id stops
 // resolving.
-export type WebAPIOperationChange =
+type WebAPIOperationChange =
   "added" | "changed" | "removed" | "unchanged";
 
-export type WebAPIOperationDiff = {
+type WebAPIOperationDiff = {
   id: string;
   change: WebAPIOperationChange;
   title?: string;
@@ -1333,7 +1333,7 @@ export type OAuthProviderStatus = {
 // GET /api/v1/oauth/google/accounts: the account name plus, per service
 // (Gmail / Google Sheets / Google Forms), whether its current OAuth grant
 // covers that service. Drives the /admin/google permission matrix.
-export type GoogleAccount = {
+type GoogleAccount = {
   account: string;
   coverage: Record<string, boolean>;
   scopes: string[];
@@ -1519,7 +1519,7 @@ export type Ticket = {
 };
 
 // TicketAuthorKind mirrors core.AuthorKind — who wrote a chat message.
-export type TicketAuthorKind = "user" | "support" | "system";
+type TicketAuthorKind = "user" | "support" | "system";
 
 // TicketMessage is one entry in a ticket's chat thread. Bodies are
 // secret-scrubbed server-side before they are ever stored or returned.
@@ -1558,7 +1558,7 @@ export type TicketView = {
 // ticket ever filed, while open/unassigned/by_assignee cover only non-terminal
 // tickets, so a pile of resolved tickets can't drown the "needs a first
 // responder" signal.
-export type TicketQueueSummary = {
+type TicketQueueSummary = {
   by_status: Partial<Record<TicketStatus, number>>;
   total: number;
   open: number;
@@ -1590,7 +1590,7 @@ export type SupportAgentGrant = {
 // GET /support/flows/{tenant}/{workspace}/{flow_id}. Mirrors core.SupportBundle:
 // structure (nodes/edges/triggers) is verbatim; params carry no secret values,
 // and the optional run keeps statuses + output SHAPE but never payloads.
-export type RedactMode = "" | "structure_only" | "structure_plus_values";
+type RedactMode = "" | "structure_only" | "structure_plus_values";
 
 export type SupportBundle = {
   mode: RedactMode;
@@ -1606,7 +1606,7 @@ export type SupportBundle = {
   issues?: LintIssue[];
 };
 
-export type BundleFlow = {
+type BundleFlow = {
   id: string;
   tenant: string;
   workspace: string;
@@ -1620,7 +1620,7 @@ export type BundleFlow = {
   notifies_on_failure?: boolean;
 };
 
-export type BundleNode = {
+type BundleNode = {
   id: string;
   module: string;
   disabled?: boolean;
@@ -1631,7 +1631,7 @@ export type BundleNode = {
   env?: Record<string, unknown>;
 };
 
-export type BundleTrigger = {
+type BundleTrigger = {
   type: string;
   cron?: string;
   tz?: string;
@@ -1642,7 +1642,7 @@ export type BundleTrigger = {
   has_secret?: boolean;
 };
 
-export type BundleRun = {
+type BundleRun = {
   run_id: string;
   status: JobStatus;
   error?: JobError;
@@ -1652,7 +1652,7 @@ export type BundleRun = {
   nodes?: BundleNodeRun[];
 };
 
-export type BundleNodeRun = {
+type BundleNodeRun = {
   node_id: string;
   status: JobStatus;
   error?: JobError;
@@ -1664,7 +1664,7 @@ export type BundleNodeRun = {
 
 // BundleRef is a run output port with its payload dropped — MIME, a shape hint,
 // and (in structure_plus_values mode) column names survive; the value never does.
-export type BundleRef = {
+type BundleRef = {
   mime?: string;
   has_value?: boolean;
   shape?: string;

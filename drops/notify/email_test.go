@@ -11,6 +11,7 @@ import (
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/mailmsg"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
@@ -266,16 +267,16 @@ func TestEmailTextInputOr(t *testing.T) {
 		"empty": {Inline: ""},
 		"bytes": {Inline: []byte("raw")},
 	}}
-	if v, ok := emailTextInputOr(job, "wired", "fallback"); !ok || v != "from-wire" {
+	if v, ok := params.TextInputOr(job, "wired", "fallback"); !ok || v != "from-wire" {
 		t.Errorf("wired: got %q/%v, want from-wire/true", v, ok)
 	}
-	if v, ok := emailTextInputOr(job, "empty", "fallback"); !ok || v != "fallback" {
+	if v, ok := params.TextInputOr(job, "empty", "fallback"); !ok || v != "fallback" {
 		t.Errorf("empty falls back: got %q/%v, want fallback/true", v, ok)
 	}
-	if v, ok := emailTextInputOr(job, "bytes", "fallback"); !ok || v != "raw" {
+	if v, ok := params.TextInputOr(job, "bytes", "fallback"); !ok || v != "raw" {
 		t.Errorf("bytes: got %q/%v, want raw/true", v, ok)
 	}
-	if v, ok := emailTextInputOr(job, "absent", "fallback"); !ok || v != "fallback" {
+	if v, ok := params.TextInputOr(job, "absent", "fallback"); !ok || v != "fallback" {
 		t.Errorf("absent: got %q/%v, want fallback/true", v, ok)
 	}
 }

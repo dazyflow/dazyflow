@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/engine"
 )
 
@@ -66,19 +67,19 @@ func init() {
 func executeParseCSV(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	ref, ok := job.Input["in"]
 	if !ok {
-		return errResult(job, "missing_input", "input port 'in' is required"), nil
+		return params.Err(job, "missing_input", "input port 'in' is required"), nil
 	}
 	text, ok := ref.Inline.(string)
 	if !ok {
-		return errResult(job, "bad_input", fmt.Sprintf("expected CSV text, got %T — use parse_json for structured data", ref.Inline)), nil
+		return params.Err(job, "bad_input", fmt.Sprintf("expected CSV text, got %T — use parse_json for structured data", ref.Inline)), nil
 	}
 	if strings.TrimSpace(text) == "" {
-		return errResult(job, "bad_input", "input 'in' is empty"), nil
+		return params.Err(job, "bad_input", "input 'in' is empty"), nil
 	}
 
 	comma, err := csvDelimiter(job.Params)
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	hasHeader := paramBoolDefault(job.Params, "header", true)
 
@@ -89,7 +90,7 @@ func executeParseCSV(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 
 	records, err := r.ReadAll()
 	if err != nil {
-		return errResult(job, "bad_input", "input is not valid CSV: "+err.Error()), nil
+		return params.Err(job, "bad_input", "input is not valid CSV: "+err.Error()), nil
 	}
 	if len(records) == 0 {
 		return resultRows(job, []map[string]any{}, nil), nil
@@ -115,7 +116,7 @@ func executeParseCSV(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 	}
 
 	if err := capRows(len(dataRows)); err != nil {
-		return errResult(job, "too_large", err.Error()), nil
+		return params.Err(job, "too_large", err.Error()), nil
 	}
 
 	out := make([]map[string]any, 0, len(dataRows))

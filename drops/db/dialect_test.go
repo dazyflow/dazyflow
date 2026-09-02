@@ -219,3 +219,15 @@ func TestQueryGuard(t *testing.T) {
 		}
 	})
 }
+
+// runQuery is the shared body of every query drop once the connection is
+// in hand: parse params, run the SELECT through the conn, emit the
+// result. The caller supplies the connection (each backend opens it
+// differently — sqlite via sandbox probe, pg/mysql via the registries).
+func runQuery(ctx context.Context, job core.Job, c conn) (core.Result, error) {
+	qp, errRes := parseQueryParams(job)
+	if errRes != nil {
+		return *errRes, nil
+	}
+	return runQueryParsed(ctx, job, c, qp)
+}

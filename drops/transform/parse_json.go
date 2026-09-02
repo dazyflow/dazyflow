@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/engine"
 )
 
@@ -75,12 +76,12 @@ func init() {
 func executeParseJSON(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	ref, ok := job.Input["in"]
 	if !ok {
-		return errResult(job, "missing_input", "input port 'in' is required"), nil
+		return params.Err(job, "missing_input", "input port 'in' is required"), nil
 	}
 
 	value, err := parseJSONInput(ref.Inline, job.Params)
 	if err != nil {
-		return errResult(job, "bad_input", err.Error()), nil
+		return params.Err(job, "bad_input", err.Error()), nil
 	}
 
 	pathRaw, _ := job.Params["path"].(string)
@@ -88,7 +89,7 @@ func executeParseJSON(_ context.Context, job core.Job, _ chan<- core.Progress) (
 	if dug {
 		value, err = digPath(value, pathRaw)
 		if err != nil {
-			return errResult(job, "bad_param", err.Error()), nil
+			return params.Err(job, "bad_param", err.Error()), nil
 		}
 	}
 
@@ -108,7 +109,7 @@ func executeParseJSON(_ context.Context, job core.Job, _ chan<- core.Progress) (
 		// steps later. Asking for a scalar is a choice; being given one is a
 		// surprise.
 		if !dug {
-			return errResult(job, "not_tabular", err.Error()), nil
+			return params.Err(job, "not_tabular", err.Error()), nil
 		}
 		rows = []map[string]any{}
 	}

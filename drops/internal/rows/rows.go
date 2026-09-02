@@ -192,3 +192,14 @@ func DeriveHeaders(rows []map[string]any) []string {
 	sort.Strings(headers)
 	return headers
 }
+
+// Cell renders a scalar cell value as text; nil becomes the empty string.
+func Cell(v any) string {
+	if v == nil {
+		return ""
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return fmt.Sprintf("%v", v)
+}

@@ -45,36 +45,21 @@ COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod \
     go mod download
 COPY . .
-# Version stamping. The Makefile (build/up/restart/rebuild/upgrade) and CI
-# pass real values computed from git via --build-arg; they flow into the
-# linker -X flags below and surface at runtime on GET /api/v1 and in the
-# startup log (see core/buildinfo).
-#
-# The defaults are EMPTY, not "dev", so the build step below can tell "the
-# caller said nothing" from "the caller said dev" and fall back to the
-# committed ./VERSION file. That fallback is what keeps a bare `docker
-# build` / bare `docker compose up --build` — including the documented
-# production deploy, which invokes compose directly and exports nothing —
-# from shipping an image that reports itself as "dev". `.git` is
-# .dockerignore'd (a lean context), so the file is the only in-context
-# record of the release; the Makefile's release targets keep it in step
-# with the tag.
+# Version stamping. The Makefile and CI pass real values from git via
+# --build-arg; they flow into the linker -X flags and surface on GET /api/v1
+# (see core/buildinfo). The defaults are EMPTY, not "dev", so the build step can
+# fall back to the committed ./VERSION file when the caller said nothing. That
+# keeps a bare `docker compose up --build` (the documented production deploy)
+# from shipping an image that reports itself as "dev"; `.git` is
+# .dockerignore'd, so the file is the only in-context record of the release.
 ARG VERSION=
 ARG COMMIT=unknown
 ARG BUILD_DATE=
-# Static, stripped binary. CGO is off (pure-Go pgx + go-git, no sqlite
-# in the daemon path), so the binary has no libc dependency and would run
-# on a scratch/distroless base as-is. The runtime stage below is Alpine
-# anyway — a shell and apk are worth the few MB for exec-into-the-container
-# debugging — but nothing in the build depends on that choice.
-#
-# The two cache mounts are the difference between a 2-3 minute build and
-# a few seconds: /root/.cache/go-build persists the COMPILED-package
-# cache (the ~660-package graph: go-git, pgx, gRPC, otel, protobuf)
-# across builds, so only changed packages recompile. Without it every
-# `docker build` recompiles the whole graph cold. (/go/pkg/mod is shared
-# with the download step above.) Cache mounts are local to the builder —
-# add registry cache-to/cache-from for ephemeral CI runners.
+# Static, stripped binary. CGO is off (pure-Go pgx + go-git), so it has no libc
+# dependency; the Alpine runtime below is a debugging convenience, not a need.
+# The cache mounts persist the compiled-package cache across builds so only
+# changed packages recompile (2-3 minutes cold vs seconds warm). They are local
+# to the builder; add registry cache-to/cache-from for ephemeral CI runners.
 ENV CGO_ENABLED=0 GOOS=linux
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
@@ -89,22 +74,13 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 RUN mkdir -p /data/workspace /data/sandbox /data/state
 
 # ---- 3. runtime -------------------------------------------------------
-# dzd is a self-contained Go binary — every drop (connectors included) is
-# native Go now, so the runtime image needs no Node. Just the binary, CA roots
-# for outbound HTTPS to vendor APIs, and the web assets.
+# Just the binary, CA roots for outbound HTTPS, and the web assets.
 #
-# Pinned by tag AND digest, for the same reason the build stages are pinned:
-# `alpine:latest` floats, so two builds a month apart silently ship different
-# base layers — and this is the stage that actually reaches production, where
-# an unreviewed base bump is hardest to notice and most expensive to debug.
-# The digest is what's enforced; the tag beside it is there so a human reading
-# this line knows which release they're looking at.
-#
-# To bump: pick the new release, then resolve its digest with
+# Pinned by tag AND digest: `alpine:latest` floats, and this is the stage that
+# reaches production. The digest is what is enforced; the tag is for the
+# reader. To bump, resolve the new digest with
 #   docker pull alpine:<tag> && docker inspect alpine:<tag> --format '{{index .RepoDigests 0}}'
-# and update both halves together. A tag/digest pair that disagrees still
-# builds — Docker resolves the digest and ignores the tag — so they only stay
-# in sync if you change them as a unit.
+# and update both halves together (a mismatched pair still builds).
 FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS final
 RUN apk add --no-cache ca-certificates && adduser -D -u 1000 dazyflow
 WORKDIR /srv

@@ -11,6 +11,7 @@ import (
 	"github.com/google/cel-go/cel"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/engine"
 )
 
@@ -115,7 +116,7 @@ type routeSpec struct {
 func executeRouteRows(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	specs, defaultSlot, err := parseRouteParams(job.Params)
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 
 	rows, headers, errRes, ok := loadRowsAndHeaders(job)
@@ -129,18 +130,18 @@ func executeRouteRows(ctx context.Context, job core.Job, _ chan<- core.Progress)
 	// downstream consumers expecting deterministic slot sizes.
 	env, err := newRowCELEnv()
 	if err != nil {
-		return errResult(job, "internal", fmt.Sprintf("cel env: %v", err)), nil
+		return params.Err(job, "internal", fmt.Sprintf("cel env: %v", err)), nil
 	}
 	progs := make([]cel.Program, len(specs))
 	for i, s := range specs {
 		ast, issues := env.Compile(s.filter)
 		if issues != nil && issues.Err() != nil {
-			return errResult(job, "bad_param",
+			return params.Err(job, "bad_param",
 				fmt.Sprintf("routes[%d] (slot %q): compile filter: %v", i, s.slot, issues.Err())), nil
 		}
 		prog, err := celProgram(env, ast)
 		if err != nil {
-			return errResult(job, "internal",
+			return params.Err(job, "internal",
 				fmt.Sprintf("routes[%d] (slot %q): build program: %v", i, s.slot, err)), nil
 		}
 		progs[i] = prog
@@ -163,7 +164,7 @@ func executeRouteRows(ctx context.Context, job core.Job, _ chan<- core.Progress)
 		for j, spec := range specs {
 			pass, err := evalFilter(ctx, progs[j], row)
 			if err != nil {
-				return errResult(job, "eval",
+				return params.Err(job, "eval",
 					fmt.Sprintf("row %d, routes[%d] (slot %q): %v", i, j, spec.slot, err)), nil
 			}
 			if pass {

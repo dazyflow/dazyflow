@@ -37,6 +37,7 @@ import (
 	"strings"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/chatcompletion"
 	"github.com/dazyflow/dazyflow/drops/internal/llmtask"
 	"github.com/dazyflow/dazyflow/internal/llm"
 )
@@ -118,9 +119,9 @@ func (provider) Call(ctx context.Context, apiKey string, req llmtask.Request) (l
 
 	var parsed map[string]any
 	_ = json.Unmarshal(respBody, &parsed)
-	res := llmtask.Result{Raw: parsed, Text: extractText(parsed)}
+	res := llmtask.Result{Raw: parsed, Text: chatcompletion.Text(parsed)}
 	if req.Tool != nil {
-		res.Tool = extractToolArgs(parsed)
+		res.Tool = chatcompletion.ToolArgs(parsed)
 		if res.Tool == nil {
 			// The forced call was ignored — try the prose.
 			res.Tool = jsonFromText(res.Text)
@@ -213,65 +214,6 @@ func modelCount(body []byte) int {
 		return -1
 	}
 	return len(tags.Models)
-}
-
-// message returns choices[0].message, or nil.
-func message(parsed map[string]any) map[string]any {
-	choices, ok := parsed["choices"].([]any)
-	if !ok || len(choices) == 0 {
-		return nil
-	}
-	c, ok := choices[0].(map[string]any)
-	if !ok {
-		return nil
-	}
-	m, _ := c["message"].(map[string]any)
-	return m
-}
-
-// extractText reads the assistant message content.
-func extractText(parsed map[string]any) string {
-	m := message(parsed)
-	if m == nil {
-		return ""
-	}
-	if s, ok := m["content"].(string); ok {
-		return s
-	}
-	return ""
-}
-
-// extractToolArgs decodes the first tool_call's function.arguments into a map,
-// or nil if the model didn't call the tool. Ollama returns arguments as a JSON
-// OBJECT where OpenAI returns a JSON string, and older builds return the
-// string — both shapes are accepted rather than betting on one.
-func extractToolArgs(parsed map[string]any) map[string]any {
-	m := message(parsed)
-	if m == nil {
-		return nil
-	}
-	calls, ok := m["tool_calls"].([]any)
-	if !ok || len(calls) == 0 {
-		return nil
-	}
-	call, ok := calls[0].(map[string]any)
-	if !ok {
-		return nil
-	}
-	fn, ok := call["function"].(map[string]any)
-	if !ok {
-		return nil
-	}
-	switch args := fn["arguments"].(type) {
-	case map[string]any:
-		return args
-	case string:
-		var out map[string]any
-		if err := json.Unmarshal([]byte(args), &out); err == nil {
-			return out
-		}
-	}
-	return nil
 }
 
 // jsonFromText salvages a JSON object from an ordinary reply — the fallback

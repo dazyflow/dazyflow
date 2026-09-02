@@ -236,15 +236,6 @@ func synthesizeManifest(server, label string, tool Tool, brandLogo string) core.
 // nested object, an array, a name that cannot be a port.
 const toolOverlayPort = "input"
 
-// maxToolPorts caps how many arguments become ports.
-//
-// A node is a box on a canvas. A tool declaring forty arguments would produce
-// one nobody can read, and the arguments past the first handful are nearly
-// always the optional long tail — still settable as params, just not worth a
-// pin each. Required arguments are taken first, so the cap never hides one
-// that must be supplied.
-const maxToolPorts = 12
-
 // toolInputPorts turns a tool's argument schema into ports.
 //
 // The rules — which arguments earn a pin, in what order, how many — live in

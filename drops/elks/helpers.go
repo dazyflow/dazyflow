@@ -34,9 +34,6 @@ const maxResponseBytes = 4 << 20 // 4 MiB — SMS responses are small
 
 var httpBase = apibase.New("https://api.46elks.com/a1")
 
-// SetHTTPBase swaps the 46elks API root (tests point it at httptest).
-func SetHTTPBase(base string) { httpBase.Set(base) }
-
 func baseURL(job core.Job) string { return httpBase.For(job) }
 
 // resolveCreds reads the api_username + api_password values. These are the

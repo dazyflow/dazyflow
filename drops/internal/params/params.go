@@ -14,8 +14,10 @@
 package params
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/dazyflow/dazyflow/core"
@@ -317,4 +319,43 @@ func HTTPFailure(job core.Job, vendor, vendorLabel string, status int, body []by
 		return &r
 	}
 	return nil
+}
+
+// RequestBody returns the HTTP body for an outbound request: the
+// "request_body" input port first (a string, raw bytes, or a structured value
+// JSON-marshalled), else the "body" param. nil means no body.
+func RequestBody(job core.Job) (io.Reader, error) {
+	if input, ok := job.Input["request_body"]; ok {
+		switch v := input.Inline.(type) {
+		case string:
+			return strings.NewReader(v), nil
+		case []byte:
+			return bytes.NewReader(v), nil
+		case nil:
+		default:
+			b, err := json.Marshal(v)
+			if err != nil {
+				return nil, fmt.Errorf("marshal request_body: %w", err)
+			}
+			return bytes.NewReader(b), nil
+		}
+	}
+	if s, ok := job.Params["body"].(string); ok && s != "" {
+		return strings.NewReader(s), nil
+	}
+	return nil, nil
+}
+
+// StatusAccepted reports whether got is one of expect, or any 2xx when
+// expect is empty.
+func StatusAccepted(got int, expect []int) bool {
+	if len(expect) == 0 {
+		return got >= 200 && got < 300
+	}
+	for _, e := range expect {
+		if got == e {
+			return true
+		}
+	}
+	return false
 }

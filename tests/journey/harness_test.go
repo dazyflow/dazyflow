@@ -34,9 +34,8 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/daemon"
 	_ "github.com/dazyflow/dazyflow/drops" // register every native drop
-	"github.com/dazyflow/dazyflow/drops/gmail"
+	"github.com/dazyflow/dazyflow/drops/cursor"
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
-	rssdrop "github.com/dazyflow/dazyflow/drops/rss"
 	"github.com/dazyflow/dazyflow/engine"
 	"github.com/dazyflow/dazyflow/engine/jobstore"
 	"github.com/dazyflow/dazyflow/pollstate"
@@ -152,13 +151,11 @@ func wireNodeState(t *testing.T) {
 		kv[tenant+"/"+name] = value
 		return nil
 	}
-	gmail.SetCursorStore(read, write)
-	rssdrop.SetCursorStore(read, write)
+	cursor.SetStore(read, write)
 	hfnet.SetHTTPCacheStore(read, write)
 	pollstate.SetStore(read, write)
 	t.Cleanup(func() {
-		gmail.SetCursorStore(nil, nil)
-		rssdrop.SetCursorStore(nil, nil)
+		cursor.SetStore(nil, nil)
 		hfnet.SetHTTPCacheStore(nil, nil)
 		pollstate.SetStore(nil, nil)
 	})

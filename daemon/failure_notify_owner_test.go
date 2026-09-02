@@ -121,12 +121,12 @@ func TestFailureNotify_OwnerEmailDedupedAgainstPerFlow(t *testing.T) {
 	}, false)
 
 	// Give a possible second send time to (wrongly) arrive.
-	data, to := waitForEmail(t, srv, 1*time.Second)
+	data, _ := waitForEmail(t, srv, 1*time.Second)
 	if data == "" {
 		t.Fatal("expected one failure email")
 	}
 	time.Sleep(150 * time.Millisecond)
-	_, _, _, to = srv.snapshot()
+	_, _, _, to := srv.snapshot()
 	if len(to) != 1 {
 		t.Errorf("got %d recipients %v, want exactly 1 (owner deduped against per-flow address)", len(to), to)
 	}

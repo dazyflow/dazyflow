@@ -14,6 +14,7 @@ import (
 	"github.com/google/cel-go/common/types/ref"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/engine"
 )
 
@@ -97,17 +98,17 @@ func executeComputeRows(ctx context.Context, job core.Job, _ chan<- core.Progres
 
 	env, err := newRowCELEnv()
 	if err != nil {
-		return errResult(job, "internal", fmt.Sprintf("cel env: %v", err)), nil
+		return params.Err(job, "internal", fmt.Sprintf("cel env: %v", err)), nil
 	}
 
 	filterProg, err := compileOptionalFilter(env, job.Params)
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 
 	steps, err := compileComputeSteps(env, job.Params)
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 
 	// Output headers = input headers + any compute keys that aren't
@@ -130,7 +131,7 @@ func executeComputeRows(ctx context.Context, job core.Job, _ chan<- core.Progres
 		if filterProg != nil {
 			pass, err := evalFilter(ctx, filterProg, row)
 			if err != nil {
-				return errResult(job, "eval", fmt.Sprintf("filter row %d: %v", i, err)), nil
+				return params.Err(job, "eval", fmt.Sprintf("filter row %d: %v", i, err)), nil
 			}
 			if !pass {
 				continue
@@ -148,7 +149,7 @@ func executeComputeRows(ctx context.Context, job core.Job, _ chan<- core.Progres
 		for _, s := range steps {
 			v, err := evalExpression(ctx, s.prog, newRow)
 			if err != nil {
-				return errResult(job, "eval",
+				return params.Err(job, "eval",
 					fmt.Sprintf("compute[%q] row %d: %v", s.column, i, err)), nil
 			}
 			newRow[s.column] = v

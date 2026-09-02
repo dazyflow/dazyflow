@@ -155,7 +155,7 @@ func (h *HTTPGateway) buildAuthorizeURL(p core.Principal, providerName, account,
 	if account == "" {
 		account = "default"
 	}
-	if err := validSecretName("oauth." + providerName + "." + account); err != nil {
+	if err := core.ValidSecretName("oauth." + providerName + "." + account); err != nil {
 		return "", http.StatusBadRequest, fmt.Sprintf("account %q: %v", account, err)
 	}
 	if returnTo == "" {

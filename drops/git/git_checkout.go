@@ -139,7 +139,7 @@ func executeGitCheckout(ctx context.Context, job core.Job, progress chan<- core.
 		sha = head.Hash().String()
 	}
 
-	emitProgress(progress, job, 1.0, "done")
+	params.EmitProgress(progress, job, 1.0, "done")
 	meta := map[string]any{
 		"url":  url,
 		"ref":  ref,

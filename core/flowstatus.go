@@ -60,17 +60,6 @@ func FlowRunStatusPublished(g Graph, published bool) FlowRunStatus {
 	return s
 }
 
-// HasConfiguredSchedulerTrigger reports whether the flow has a configured
-// trigger that fires via the SCHEDULER (cron / poll / google-form interval),
-// as opposed to one that fires from an inbound HTTP request or provider
-// event. Every kind is gated on publish now, so this is no longer a
-// publish-state question — it is still what the scheduler uses to decide
-// what to enroll.
-func HasConfiguredSchedulerTrigger(g Graph) bool {
-	hasScheduler, _, _ := classifyTriggers(g)
-	return hasScheduler
-}
-
 // HasConfiguredWebhookTrigger reports whether the flow has a REACHABLE
 // webhook_input — one carrying a secret key or a public hosted form. A
 // webhook node with neither is inert: the /trigger endpoint rejects every

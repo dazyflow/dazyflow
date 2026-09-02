@@ -3,32 +3,18 @@
 
 // Guard on the quiet-notice vocabulary: Notice, Loading and EmptyState.
 //
-// Two rules, both with no legitimate exception in this codebase.
-//
-// 1. No inline muted colour. `color: "var(--muted)"` inside a style object was
-//    written 69 times, and 42 of those were the same thing: a `card` turned
-//    into a quiet notice by hand. Because there was no name for it, the padding,
-//    the font size and even the wrapper element drifted while the message stayed
-//    identical. The fix at every single site is one of four things — the `muted`
-//    class, <Notice>, <Loading> or <EmptyState> — so there is nothing to
-//    allowlist.
-//
-//    Note what this does NOT flag: a muted colour held in a variable or returned
-//    from a function (`const tone = expired ? "var(--muted)" : ...`). That is a
-//    computed status colour, a different thing from a fixed style, and it stays
+// 1. No inline muted colour. A fixed `color: "var(--muted)"` in a style object
+//    is always one of four things: the `muted` class, <Notice>, <Loading> or
+//    <EmptyState>, so there is nothing to allowlist. A muted colour held in a
+//    variable or returned from a function is a computed status colour and stays
 //    legal.
+// 2. `common.loading` never goes in a card built by hand. The page-level
+//    placeholder is <Loading /> and the in-container one is <Loading inline />;
+//    both carry role="status", which hand-written versions did not.
 //
-// 2. `common.loading` never goes in a card built by hand. Ten different wrappers
-//    rendered that one string; the page-level placeholder is <Loading /> and the
-//    in-container one is <Loading inline />. Both carry role="status", which no
-//    hand-written version did — so every one of them was silent to a screen
-//    reader.
-//
-// What is deliberately NOT enforced: that every `common.loading` goes through
-// <Loading>. Some are inline in a button label ("Loading…" vs "Load more") or
-// inside a component-local text style scoped to one card footer, and forcing a
-// global primitive there would make those worse, not better. The rule above
-// catches the failure that actually happened.
+// Not enforced: that every `common.loading` goes through <Loading>. Some are
+// inline in a button label or a component-local footer style, where a global
+// primitive would be worse.
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";

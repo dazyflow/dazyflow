@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/engine"
 )
 
@@ -103,7 +104,7 @@ type aggSpec struct {
 func executeGroupAggregate(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	by, aggs, err := parseGroupParams(job.Params)
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 
 	rows, headers, errRes, ok := loadRowsAndHeaders(job)
@@ -121,7 +122,7 @@ func executeGroupAggregate(_ context.Context, job core.Job, _ chan<- core.Progre
 	if len(rows) > 0 || len(headers) > 0 {
 		for _, col := range by {
 			if _, ok := have[col]; !ok {
-				return errResult(job, "bad_input",
+				return params.Err(job, "bad_input",
 					fmt.Sprintf("by: column %q not in input headers (%v)", col, headers)), nil
 			}
 		}
@@ -130,7 +131,7 @@ func executeGroupAggregate(_ context.Context, job core.Job, _ chan<- core.Progre
 				continue
 			}
 			if _, ok := have[a.column]; !ok {
-				return errResult(job, "bad_input",
+				return params.Err(job, "bad_input",
 					fmt.Sprintf("aggregate %q: column %q not in input headers (%v)", a.output, a.column, headers)), nil
 			}
 		}
@@ -166,7 +167,7 @@ func executeGroupAggregate(_ context.Context, job core.Job, _ chan<- core.Progre
 		}
 		for _, a := range aggs {
 			if err := acc.ops[a.output].observe(row); err != nil {
-				return errResult(job, "eval",
+				return params.Err(job, "eval",
 					fmt.Sprintf("aggregate %q on row %d: %v", a.output, i, err)), nil
 			}
 		}

@@ -111,13 +111,6 @@ func paramFilled(p map[string]any, key string) bool {
 	return true
 }
 
-// resolveSecrets is the secret-only convenience wrapper around
-// resolveTemplates. Kept for code paths and tests that only care
-// about secret resolution; equivalent to passing prior=nil.
-func resolveSecrets(ctx context.Context, providers map[string]core.SecretProvider, job *core.Job) error {
-	return resolveTemplates(ctx, providers, core.Graph{}, nil, job)
-}
-
 // resolveTemplates is the collector-free wrapper kept for callers and
 // tests that don't need the resolved secret values back (only the side
 // effect of substituting them into the job). Equivalent to discarding
@@ -289,29 +282,14 @@ func resolveSlice(ctx context.Context, providers map[string]core.SecretProvider,
 //  1. Inline:        "Bearer ${secret.STRIPE_KEY}"   →  "Bearer sk_live_xyz"
 //  2. Whole-string:  "secret://STRIPE_KEY"           →  "sk_live_xyz"
 //
-// The whole-string form is checked FIRST, against the raw param — before any
-// substitution runs. That ordering is load-bearing security, not style.
-//
-// Both forms are AUTHOR-written references: they express the flow author's
-// intent to inject a credential here. Resolving the `scheme://NAME` form
-// against POST-substitution text instead would extend that authority to the
-// data, because ${upstream.…} and ${item.…} carry values the flow ingested
-// from the outside world — a webhook body, an HTTP response, a form field, a
-// spreadsheet cell. A value of the literal text "secret://conn.stripe.api_key"
-// would then resolve to the tenant's live Stripe key and hand it to the drop,
-// letting whoever controls that upstream data read any secret in the
-// organization (and, since vault:// / aws:// / gcp:// register into the same
-// provider map, anything in the tenant's cloud secret manager too). Redaction
-// does not save us: it scrubs the persisted Result, but the drop still
-// receives the plaintext in its params and can send it anywhere.
-//
-// So: whole-string form matches only the author's own literal, then inline
-// substitution runs and its output is never re-interpreted as a reference.
-// This mirrors SubstituteString, which likewise does not re-scan its own
-// replacements for further ${…} placeholders.
-//
-// Unknown schemes (e.g. `${item....}` outside for_each, or a literal
-// URL like `http://...`) are left unchanged.
+// The whole-string form is checked FIRST, against the raw param, and the
+// output of inline substitution is never re-interpreted as a reference. That
+// ordering is security, not style: ${upstream.…} and ${item.…} carry data the
+// flow ingested from outside (a webhook body, a spreadsheet cell), and
+// resolving `scheme://NAME` against post-substitution text would let whoever
+// controls that data read any secret the tenant's providers hold. Redaction
+// would not help, since the drop still receives the plaintext. Unknown schemes
+// and literal URLs are left unchanged.
 func resolveString(ctx context.Context, providers map[string]core.SecretProvider, sub Substituter, set *secretSet, s string) (string, error) {
 	// The whole-string `secret://NAME` form is secret-only by design.
 	// Upstream refs don't get this treatment — they're inline-${...}-only

@@ -1,16 +1,12 @@
-# HTTPS for the apex + (optionally) per-org subdomains. Caddy auto-provisions +
-# renews certs via Let's Encrypt. ACME_EMAIL comes from .env. Caddy forwards
-# X-Forwarded-Proto and upgrades WebSocket/SSE automatically, so dzd just needs
-# DAZYFLOW_TRUST_PROXY_HEADERS=1 (set in .env).
+# HTTPS for the apex and per-org subdomains. Caddy provisions and renews certs
+# via Let's Encrypt (ACME_EMAIL from .env), forwards X-Forwarded-Proto and
+# upgrades WebSocket/SSE, so dzd only needs DAZYFLOW_TRUST_PROXY_HEADERS=1.
 #
-# Per-org subdomains (klahr.dazyflow.app) use ON-DEMAND TLS: rather than a
-# wildcard certificate (which would need a DNS-01 challenge + a DNS-provider
-# plugin baked into a custom Caddy image), Caddy mints a normal HTTP-01 cert
-# the first time each org host is requested. The `ask` endpoint gates issuance
-# on dzd: it returns 2xx only for subdomains an org has actually CLAIMED, so a
-# stranger pointing random hosts at our IP can't make us burn Let's Encrypt
-# rate limits on certs for non-existent orgs. Requires the wildcard DNS record
-# `*.<apex>` (set at the registrar — see dazyflow-infra/README.md).
+# Per-org subdomains use ON-DEMAND TLS instead of a wildcard cert (which would
+# need DNS-01 and a DNS-provider plugin in a custom image). The `ask` endpoint
+# gates issuance on dzd, which answers 2xx only for subdomains an org has
+# CLAIMED, so strangers cannot burn Let's Encrypt rate limits on random hosts.
+# Requires the wildcard DNS record `*.<apex>`.
 {
 	email {$ACME_EMAIL}
 	on_demand_tls {
@@ -23,20 +19,13 @@ dazyflow.app {
 	reverse_proxy dzd:8080
 }
 
-# Documentation site — the static Vite/React docs SPA (docs.dazyflow.app),
-# served by nginx in the dedicated `docs` container (see Dockerfile.docs +
-# docker-compose.prod.yml).
-# Caddy terminates TLS here and reverse-proxies to that nginx container.
+# Documentation site (docs.dazyflow.app): Caddy terminates TLS and proxies to
+# the nginx `docs` container (Dockerfile.docs, docker-compose.prod.yml).
 #
-# TLS is ON-DEMAND, not a proactively-managed cert. `docs` is a subdomain of the
-# apex, so it matches the `*.dazyflow.app` policy below — and Caddy EXCLUDES any
-# name covered by an on-demand policy from up-front issuance. An explicit block
-# with a normal managed cert therefore never gets issued (it lands in a gap: no
-# proactive obtain, and the managed policy won't obtain at handshake either) and
-# every TLS handshake fails with an internal error. Using on-demand puts docs on
-# the same working path as the org subdomains; the `ask` endpoint authorizes it
-# via auth.servedInfraSubdomains (docs is reserved, never org-claimable, but we
-# do serve it). The site is rebuilt by rebuilding the `docs` image.
+# TLS is ON-DEMAND on purpose. `docs` matches the `*.dazyflow.app` on-demand
+# policy below, and Caddy excludes any such name from up-front issuance, so an
+# explicit managed cert here would never be obtained and every handshake would
+# fail. The `ask` endpoint authorizes it via auth.servedInfraSubdomains.
 docs.dazyflow.app {
 	tls {
 		on_demand

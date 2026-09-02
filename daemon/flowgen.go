@@ -720,20 +720,6 @@ func graphFromMap(m map[string]any) (core.Graph, error) {
 	return g, nil
 }
 
-func generatedFromGraph(g core.Graph) generatedGraph {
-	out := generatedGraph{Name: g.Name}
-	for _, n := range g.Nodes {
-		out.Nodes = append(out.Nodes, genNode{ID: n.ID, Module: n.Module, Params: n.Params})
-	}
-	for _, e := range g.Edges {
-		out.Edges = append(out.Edges, genEdge{From: e.From, FromPort: e.FromPort, To: e.To, ToPort: e.ToPort})
-	}
-	if len(g.Triggers) > 0 && g.Triggers[0].Type == "cron" {
-		out.Trigger = &genTrigger{Type: "cron", Cron: g.Triggers[0].Cron}
-	}
-	return out
-}
-
 func stampGraph(g *core.Graph, tenant, workspace string) {
 	g.Tenant = tenant
 	g.Workspace = workspace

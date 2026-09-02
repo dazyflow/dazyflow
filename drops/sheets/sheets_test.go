@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/rows"
 )
 
 func withSheetsEnv(t *testing.T, base string) {
@@ -358,7 +359,7 @@ func TestNormalizeRows_AllForms(t *testing.T) {
 }
 
 func TestDeriveHeaders_SortedUnion(t *testing.T) {
-	got := deriveHeaders([]map[string]any{
+	got := rows.DeriveHeaders([]map[string]any{
 		{"name": "Ada", "email": "a@x"},
 		{"email": "b@y", "age": 7},
 	})
@@ -368,30 +369,17 @@ func TestDeriveHeaders_SortedUnion(t *testing.T) {
 	}
 }
 
-func TestNormalizeHeaders_Forms(t *testing.T) {
-	if got := normalizeHeaders([]string{"a", "b"}); len(got) != 2 || got[0] != "a" {
-		t.Errorf("[]string: %v", got)
-	}
-	got := normalizeHeaders([]any{"a", 2, true})
-	if len(got) != 3 || got[0] != "a" || got[1] != "2" || got[2] != "true" {
-		t.Errorf("[]any: %v", got)
-	}
-	if got := normalizeHeaders(42); got != nil {
-		t.Errorf("unsupported should be nil: %v", got)
-	}
-}
-
 func TestCell_Coercions(t *testing.T) {
-	if cell(nil) != "" {
+	if rows.Cell(nil) != "" {
 		t.Error("nil cell")
 	}
-	if cell("hi") != "hi" {
+	if rows.Cell("hi") != "hi" {
 		t.Error("string cell")
 	}
-	if cell(7) != "7" {
+	if rows.Cell(7) != "7" {
 		t.Error("int cell")
 	}
-	if cell(true) != "true" {
+	if rows.Cell(true) != "true" {
 		t.Error("bool cell")
 	}
 }

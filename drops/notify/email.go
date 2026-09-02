@@ -118,31 +118,6 @@ func init() {
 	})
 }
 
-// emailTextInputOr returns the text wired into input port `port` (string or
-// raw bytes), or `fallback` when the port is unwired/empty. ok is false only
-// when the port carries a NON-text value — a wiring mistake the caller
-// rejects. Lets To and Subject each be supplied by an upstream wire or a
-// param (same pattern as gmail send).
-func emailTextInputOr(job core.Job, port, fallback string) (val string, ok bool) {
-	in, present := job.Input[port]
-	if !present || in.Inline == nil {
-		return fallback, true
-	}
-	switch v := in.Inline.(type) {
-	case string:
-		if v != "" {
-			return v, true
-		}
-		return fallback, true
-	case []byte:
-		if len(v) > 0 {
-			return string(v), true
-		}
-		return fallback, true
-	}
-	return "", false
-}
-
 // splitRecipients turns comma-separated addresses from the To input into the
 // recipient list, dropping empties so trailing commas don't break the send.
 func splitRecipients(s string) []string {
@@ -225,7 +200,7 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 	if len(to) == 0 {
 		to = params.StringSlice(job.Params, "to")
 	}
-	if wired, ok := emailTextInputOr(job, "to", ""); !ok {
+	if wired, ok := params.TextInputOr(job, "to", ""); !ok {
 		return params.Err(job, "bad_input", "'To' input must be text"), nil
 	} else if wired != "" {
 		to = splitRecipients(wired)
@@ -242,7 +217,7 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 
 	// Subject is optional — minimal friction for non-tech authors; To is the
 	// only per-send hard requirement (same as gmail send).
-	subject, ok := emailTextInputOr(job, "subject", params.StringDefault(job.Params, "subject", "(no subject)"))
+	subject, ok := params.TextInputOr(job, "subject", params.StringDefault(job.Params, "subject", "(no subject)"))
 	if !ok {
 		return params.Err(job, "bad_input", "'Subject' input must be text"), nil
 	}
@@ -326,11 +301,11 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 	// truth for who is visibly addressed.
 	rcpts := dedupeRecipients(to, cc, bcc)
 
-	emitProgress(progress, job, 0.3, "dial "+addr)
+	params.EmitProgress(progress, job, 0.3, "dial "+addr)
 	if err := smtputil.Send(ctx, addr, host, tlsMode, auth, fromAddr, rcpts, msg); err != nil {
 		return params.Err(job, "send_failed", err.Error()), nil
 	}
-	emitProgress(progress, job, 1.0, "delivered")
+	params.EmitProgress(progress, job, 1.0, "delivered")
 
 	meta := map[string]any{
 		"host": host,

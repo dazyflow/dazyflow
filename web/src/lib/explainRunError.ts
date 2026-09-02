@@ -12,7 +12,7 @@
 // first, falling through to a generic "details below" shape when
 // nothing matches.
 
-export type RunErrorAction = {
+type RunErrorAction = {
   // labelKey is an i18n key the renderer resolves. The action is
   // rendered as a button (when href is a route path) or a link
   // (when href is an external URL).

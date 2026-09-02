@@ -11,34 +11,18 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// template_refs.go makes ${upstream.…} and ${trigger.…} mean what they say:
-// "that node in this run", rather than "that node, but only if you wired it
-// straight into this one".
+// template_refs.go makes ${upstream.…} and ${trigger.…} mean "that node in this
+// run", not "that node, but only if it is wired straight into this one".
+// fetchPredecessors collects a node's DIRECT predecessors, which is right for
+// assembling inputs but too narrow for template references: in
+// webhook → if → email, the email step never saw the webhook's result.
 //
-// fetchPredecessors collects the DIRECT predecessors of a node, which is
-// exactly right for assembling its inputs — an input port is fed by an edge or
-// it is fed by nothing. Template resolution then reused that same map, and
-// inherited a restriction that makes no sense for it. In webhook → if → email,
-// the email step's map holds only the if, so:
-//
-//	${upstream.webhook_input_1.body}  failed the node outright
-//	${trigger.body.version}           was left in the text and MAILED OUT
-//
-// The second is the worse of the two: the reference menu offers that token, a
-// lint message suggests it, and the result was a literal "${trigger.body.
-// version}" in a customer's inbox with nothing anywhere reporting a problem.
-//
-// The fix is to look the referenced nodes up in the run. They are there: every
-// node's result is a completed job record at NodeJobID(runID, nodeID), and the
-// seeded trigger is written as one too. Only what a node's params actually
-// mention is fetched, so the common case — no cross-references at all — costs
-// nothing, and a flow cannot turn into a full scan of its own run by growing.
-//
-// The results are added to the SAME map the inputs came from, which is safe
-// because every reader of it is a keyed lookup: AssembleInput walks edges and
-// looks up prior[edge.From], so an entry for a node with no edge into this one
-// is never consulted. (me_routes.go's run inspector already relies on this,
-// passing a map of every record in the run to the same function.)
+// The referenced nodes are looked up in the run instead: every node's result is
+// a completed job record at NodeJobID(runID, nodeID), and the seeded trigger is
+// written as one too. Only nodes a node's params mention are fetched, so the
+// common case costs nothing. They are added to the SAME map the inputs came
+// from, which is safe because every reader is a keyed lookup: AssembleInput
+// walks edges and reads prior[edge.From], so an unwired entry is never consulted.
 
 // upstreamRefPattern matches ${upstream.<nodeID>.<port>…}. The node ID stops at
 // the dot that begins the port, which the substituter requires — a reference

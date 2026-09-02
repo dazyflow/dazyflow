@@ -288,14 +288,14 @@ func init() {
 func execute(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
 	d := current()
 	if d == nil {
-		return failed(job, "not_configured",
+		return params.Err(job, "not_configured",
 			"runners are not set up on this Dazyflow deployment"), nil
 	}
 	tenant, _ := core.TenantFromContext(ctx)
 	if tenant == "" {
 		// Without a tenant there is no way to know whose runners these are, and
 		// guessing would mean running a script on someone else's machine.
-		return failed(job, "no_tenant", "this step has no organisation to run against"), nil
+		return params.Err(job, "no_tenant", "this step has no organisation to run against"), nil
 	}
 
 	tags := targetTags(job)
@@ -305,19 +305,19 @@ func execute(ctx context.Context, job core.Job, progress chan<- core.Progress) (
 	// a Python one stops working if its indentation is rearranged.
 	script, ok := params.TextInputOr(job, "script", params.StringDefault(job.Params, "script", ""))
 	if !ok {
-		return failed(job, "bad_input",
+		return params.Err(job, "bad_input",
 			"the 'script' input must carry text — wire a step that produces text, "+
 				"or type the script on this step"), nil
 	}
 	script = strings.TrimSpace(script)
 	if script == "" {
-		return failed(job, "no_script", "this step has no script to run"), nil
+		return params.Err(job, "no_script", "this step has no script to run"), nil
 	}
 	if bad := badEnvName(job); bad != "" {
 		// Refused here rather than on the machine: an environment block cannot
 		// carry these, and a script that starts with a mangled environment fails
 		// somewhere far from the field that caused it.
-		return failed(job, "bad_env",
+		return params.Err(job, "bad_env",
 			"the environment variable name "+bad+" cannot be used — a name must not be "+
 				"empty, contain '=', or contain control characters"), nil
 	}
@@ -330,7 +330,7 @@ func execute(ctx context.Context, job core.Job, progress chan<- core.Progress) (
 		// Refused rather than read as the default: someone who wrote "ignore"
 		// meant not to fail, and silently failing anyway would look like the
 		// setting does nothing.
-		return failed(job, "bad_param",
+		return params.Err(job, "bad_param",
 			"'if the script exits non-zero' is "+onNonzero+", which is neither "+
 				ExitFail+" nor "+ExitContinue), nil
 	}
@@ -339,12 +339,12 @@ func execute(ctx context.Context, job core.Job, progress chan<- core.Progress) (
 		// Refused here rather than on the machine: the daemon knows the list,
 		// and a typo caught before the task is queued is a message about a
 		// field instead of a script that never started.
-		return failed(job, "bad_shell",
+		return params.Err(job, "bad_shell",
 			"this step asks to run the script with "+shell+
 				", which is not one of "+strings.Join(Shells, ", ")), nil
 	}
 	if len(tags) == 0 {
-		return failed(job, "no_target",
+		return params.Err(job, "no_target",
 			"this step has no tags saying where to run — pick a machine's name, "+
 				"or the tags the machines that may take this all carry"), nil
 	}
@@ -374,10 +374,10 @@ func execute(ctx context.Context, job core.Job, progress chan<- core.Progress) (
 		emit(job, progress, msg)
 	})
 	if err != nil {
-		return failed(job, "dispatch_failed", err.Error()), nil
+		return params.Err(job, "dispatch_failed", err.Error()), nil
 	}
 	if res.Error != "" {
-		return failed(job, "runner_error", res.Error), nil
+		return params.Err(job, "runner_error", res.Error), nil
 	}
 	if res.ExitCode != 0 && onNonzero != ExitContinue {
 		// The script's own stderr is the useful part — it is the author's
@@ -387,7 +387,7 @@ func execute(ctx context.Context, job core.Job, progress chan<- core.Progress) (
 		if trimmed := strings.TrimSpace(res.Stderr); trimmed != "" {
 			msg += ": " + trimmed
 		}
-		return failed(job, "nonzero_exit", msg), nil
+		return params.Err(job, "nonzero_exit", msg), nil
 	}
 	// Reached either because the script succeeded, or because the flow asked to
 	// handle the exit code itself. Both emit the same three outputs, so a step
@@ -560,13 +560,5 @@ func emit(job core.Job, progress chan<- core.Progress, msg string) {
 	default:
 		// A full progress channel must not stall the step; the message is
 		// advisory and the result is what matters.
-	}
-}
-
-func failed(job core.Job, code, msg string) core.Result {
-	return core.Result{
-		JobID:  job.ID,
-		Status: core.StatusError,
-		Error:  &core.JobError{Code: code, Message: msg},
 	}
 }

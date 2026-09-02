@@ -14,7 +14,7 @@ func TestMain(m *testing.M) { dropstest.EgressTestMain(m) }
 
 func TestGithubDo_SSRFGuardBlocksPrivate(t *testing.T) {
 	dropstest.AssertSSRFBlocked(t, func() error {
-		_, _, err := githubDo(context.Background(), "GET", "http://127.0.0.1:9/repos/x/y/issues", "tok", nil, 2000)
+		_, _, _, err := githubDoIdemH(context.Background(), "GET", "http://127.0.0.1:9/repos/x/y/issues", "tok", nil, 2000, "")
 		return err
 	})
 }

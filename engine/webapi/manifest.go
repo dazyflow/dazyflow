@@ -227,40 +227,21 @@ func retryPolicy(method string) core.RetryPolicy {
 	return ""
 }
 
-// connectionFields is the ergonomic point of this feature.
+// connectionFields declares the catalog's credential as a connection field, so
+// a tenant's own service appears on the Apps page beside Gmail and Stripe:
+// connected once, encrypted, injected at run time (engine/secrets.go) into
+// whichever of these params the author left unset, never visible in a flow.
 //
-// Injection is manifest-driven at run time (engine/secrets.go) and the Apps
-// page finds an integration by scanning manifests for the slug
-// (daemon/connectionverify.go), and neither cares whether the manifest was
-// written in Go or synthesized here. So declaring these puts a tenant's own
-// service on an Apps page beside Gmail and Stripe: connected once, encrypted,
-// injected into whichever of these params the author left unset, never visible
-// inside a flow. That is what `http_request` structurally cannot do — there,
-// the address and the ${secret.X} are re-typed in every step of every flow, and
-// rotating the token is forty edits.
+// The credential and NOTHING ELSE. The service address is deliberately not a
+// connection field: connections are writable with secret:write (the editor
+// role), the catalog address is set behind organization:admin, and an injected
+// connection value beats the descriptor's own (Transport.buildRequest). Making
+// the address a connection field would let the less privileged source redirect
+// the token to a host of its choosing. The per-step base_url PARAM remains,
+// which is flow-shaping power graph:edit already has.
 //
-// The credential and NOTHING ELSE. The service address deliberately is not a
-// connection field, though it was one until it became clear what that cost.
-//
-// A connection is writable with secret:write, which the plain editor role
-// holds; the catalog's address is set in Admin → Web APIs behind
-// organization:admin / module:register. Because an injected connection value
-// beats the descriptor's own (see Transport.buildRequest), declaring the
-// address here let the LESS privileged of the two sources override the more
-// privileged one — and since the token is sent as a header to whatever address
-// resolved, an editor could have pointed the org's catalog at a host of their
-// choosing and been handed the credential. The address has one owner now.
-//
-// Nothing is lost by it: a catalog belongs to exactly one tenant (Descriptor
-// requires it, and there is no instance-wide population), so there was never a
-// shared-catalog-per-deployment case for the connection to answer. A genuine
-// per-step exception is still the base_url PARAM, which is flow-shaping power
-// graph:edit already has.
-//
-// The credential is not marked Required. Required here means "counts toward
-// fully connected", and it does — but it is injected rather than typed, so
+// The credential is not marked Required: it is injected rather than typed, so
 // flagging it would mark every node incomplete until the connection exists.
-// That check belongs to the connection, not the node.
 func connectionFields(desc Descriptor) []core.ConnectionField {
 	var fields []core.ConnectionField
 	switch desc.Auth.Kind {

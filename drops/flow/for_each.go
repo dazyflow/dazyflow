@@ -225,7 +225,7 @@ func runForEachItems(
 				return
 			}
 			res, errEntry := run(runCtx, idx, value)
-			emitProgress(progress, job, float64(idx+1)/float64(len(items)),
+			params.EmitProgress(progress, job, float64(idx+1)/float64(len(items)),
 				fmt.Sprintf("item %d/%d done", idx+1, len(items)))
 			results[idx] = res
 			if errEntry != nil {

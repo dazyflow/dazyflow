@@ -17,35 +17,20 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// Self-serve signup. The endpoint:
+// Self-serve signup:
 //
 //	POST /api/v1/auth/signup    {email, password} → {token, subject, tenant, …}
 //
-// On success the new user gets:
+// A new user gets a random tenant ID (usr_<hex>, so the email is not leaked
+// into URLs or logs), a default workspace named "main", the `editor` and
+// `tenant_owner` roles, and an immediately-issued session matching the signin
+// endpoint's cookie + token shape. Anti-abuse is the per-IP auth rate limit
+// plus email verification (when DAZYFLOW_SMTP_URL + PUBLIC_BASE_URL are set);
+// there is no captcha or plan selection.
 //
-//	- a random tenant ID (usr_<hex>), so the email isn't leaked into a
-//	  tenant slug visible in URLs/logs;
-//	- a default workspace named "main";
-//	- two roles: `editor` (graph:run + graph:edit + graph:admin +
-//	  secret:read/write so OAuth flows work) and `tenant_owner`
-//	  (organization:admin, so they can manage users + API keys in their
-//	  own tenant later);
-//	- an immediately-issued session (auto sign-in), matching the
-//	  cookie + token shape of the signin endpoint.
-//
-// What this DELIBERATELY isn't (yet):
-//
-//   - Captcha — the per-IP auth rate limit plus email verification
-//     (active when DAZYFLOW_SMTP_URL + PUBLIC_BASE_URL are set; see
-//     email_verification.go) are the current anti-abuse story.
-//   - Plan selection / billing — every signup lands on the free
-//     tier; plan gating is a T3 item once Stripe is wired.
-//
-// Deployments that don't want self-serve signup leave
-// `EnableSignup` false; the endpoint returns 501 — except for emails in
-// the platform-admin allowlist (DAZYFLOW_PLATFORM_ADMINS), which may
-// always sign up so a fresh instance can bootstrap its first super-admin
-// without temporarily opening signup to the world.
+// With `EnableSignup` false the endpoint returns 501, except for emails in
+// DAZYFLOW_PLATFORM_ADMINS, so a fresh instance can bootstrap its first
+// super-admin without opening signup to the world.
 
 // signupRequest is the wire shape of POST /api/v1/auth/signup.
 type signupRequest struct {

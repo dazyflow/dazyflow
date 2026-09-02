@@ -176,7 +176,7 @@ func (h *HTTPGateway) uploadWorkspaceFile(rw http.ResponseWriter, r *http.Reques
 
 	out, err := rootFS.Create(dest)
 	if err != nil {
-		if isUploadSandboxEscape(err) {
+		if core.IsSandboxEscape(err) {
 			writeJSONError(rw, http.StatusBadRequest, "destination escapes workspace")
 			return
 		}
@@ -197,22 +197,4 @@ func (h *HTTPGateway) uploadWorkspaceFile(rw http.ResponseWriter, r *http.Reques
 		"path": dest,
 		"size": written,
 	})
-}
-
-// isUploadSandboxEscape mirrors drops/io/file_write.go's check;
-// kept local to avoid pulling that package into daemon.
-func isUploadSandboxEscape(err error) bool {
-	if err == nil {
-		return false
-	}
-	if errors.Is(err, os.ErrInvalid) {
-		return true
-	}
-	msg := err.Error()
-	for _, marker := range []string{"path escapes", "outside root", "invalid argument"} {
-		if strings.Contains(msg, marker) {
-			return true
-		}
-	}
-	return false
 }

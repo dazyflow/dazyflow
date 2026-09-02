@@ -14,6 +14,7 @@ import (
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/limits"
+	"github.com/dazyflow/dazyflow/drops/internal/rows"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -417,29 +418,6 @@ func TestNormalizeRows_Cov(t *testing.T) {
 	})
 }
 
-// --- normalizeHeaders ------------------------------------------------------
-
-func TestNormalizeHeaders_Cov(t *testing.T) {
-	t.Run("[]string passthrough", func(t *testing.T) {
-		got := normalizeHeaders([]string{"a", "b"})
-		if !reflect.DeepEqual(got, []string{"a", "b"}) {
-			t.Errorf("got %v", got)
-		}
-	})
-	t.Run("[]any coerced via cellStr", func(t *testing.T) {
-		got := normalizeHeaders([]any{"a", 2, nil, true})
-		want := []string{"a", "2", "", "true"}
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("got %v, want %v", got, want)
-		}
-	})
-	t.Run("unsupported returns nil", func(t *testing.T) {
-		if got := normalizeHeaders(map[string]any{}); got != nil {
-			t.Errorf("got %v, want nil", got)
-		}
-	})
-}
-
 // --- cellStr ---------------------------------------------------------------
 
 func TestCellStr_Cov(t *testing.T) {
@@ -456,8 +434,8 @@ func TestCellStr_Cov(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := cellStr(c.in); got != c.want {
-				t.Errorf("cellStr(%v) = %q, want %q", c.in, got, c.want)
+			if got := rows.Cell(c.in); got != c.want {
+				t.Errorf("rows.Cell(%v) = %q, want %q", c.in, got, c.want)
 			}
 		})
 	}

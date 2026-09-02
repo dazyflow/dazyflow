@@ -10,6 +10,23 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Changed
+
+- **Shared helpers replace per-connector copies.** One `drops/cursor` package
+  now backs the poll watermarks of Gmail, RSS, Google Forms and Home Assistant
+  (the daemon wires it once); OpenAI and Ollama read the chat-completion
+  envelope through `drops/internal/chatcompletion`; request-body, status-check,
+  progress and error-result helpers live in `drops/internal/params`; header
+  derivation and cell rendering in `drops/internal/rows`; secret-name
+  validation and sandbox-escape detection in `core`.
+
+### Removed
+
+- Dead code kept alive only by its own tests: `HasConfiguredSchedulerTrigger`
+  (Go and web), `webapi.ApplyRefresh`, `githubDo`, the `SetHTTPBase` hooks in
+  the 46elks and Fortnox connectors, and a dozen small wrappers. Test-only
+  helpers moved into `_test.go` files. Unused web exports un-exported.
+
 ## [0.28.8] - 2026-09-01
 
 ### Added

@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/engine"
 )
 
@@ -99,12 +100,12 @@ func executeSortRows(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 
 	keys, err := parseSortKeys(job.Params)
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 
 	descDefault, err := parseSortDir(job.Params)
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	for i := range keys {
 		if !keys[i].explicit {

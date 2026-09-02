@@ -8,24 +8,13 @@ import { explainApiError } from "../../lib/explainApiError";
 import { useAuth } from "../../auth";
 import { Button } from "../ui/Button";
 
-// ApprovalPanel is the full approve/reject control — decision plus an optional
-// comment, which rides out the step's `comment` port for downstream steps to
-// read. It mounts on RUN-SCOPED surfaces only (the run page today; the
-// Approvals inbox rolls its own list-shaped variant of the same thing).
-//
-// It used to mount in the Inspector too, and no longer does. The editor is
-// graph-scoped: its runID is "whichever run is latest" (Inspector's
-// currentRunID), so with two runs of one flow parked on the same step — which
-// nothing prevents, SubmitGraph has no active-run gate — it would decide one
-// of them without saying which. A parked run also blocks saving the flow, so
-// the inspector's actual job is disabled exactly when the panel appeared. The
-// canvas card keeps a quick decide-in-place bar (NodeApproveBar) for the run
-// the editor is already watching; anything more deliberate belongs here.
-//
-// The panel owns its own transient state (the comment + in-flight flag),
-// discarded on unmount. Resolving an approval flips the node status over SSE
-// and dispatches any downstream nodes, so there's no onResolved callback — the
-// view updates itself.
+// ApprovalPanel is the full approve/reject control: decision plus an optional
+// comment, which rides out the step's `comment` port. It mounts on RUN-SCOPED
+// surfaces only. The editor is graph-scoped (its runID is "whichever run is
+// latest"), so with two runs parked on the same step it would decide one
+// without saying which; the canvas card keeps NodeApproveBar for the run the
+// editor is already watching. The panel owns its transient state. Resolving an
+// approval flips the node status over SSE, so there is no onResolved callback.
 export function ApprovalPanel({
   runID,
   nodeID,

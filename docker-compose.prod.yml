@@ -54,37 +54,17 @@ services:
       - docs
 
   # Release images come from GitHub Container Registry, built and pushed by
-  # .github/workflows/ci.yml. This box only ever pulls.
+  # .github/workflows/ci.yml as both :X.Y.Z and :latest. This box only pulls;
+  # the `build:` stanza in docker-compose.yml stays as an escape hatch, but the
+  # deploy path is `make upgrade`, which sets VERSION to the tag it selected.
   #
-  # This replaces the self-hosted `registry:2` service that used to run here.
-  # That existed because the images had nowhere else to live: CI pushed to
-  # https://registry.dazyflow.app (Caddy fronting it with TLS + basic auth) and
-  # the host pulled from 127.0.0.1:5000, where Docker waives its HTTPS
-  # requirement. ghcr is the same blob store without the two doors, the
-  # credential pair, or the `registry garbage-collect` chore that kept a 50GB
-  # droplet from filling up.
-  #
-  # GHCR_OWNER is the GitHub account or org that owns the packages, lower-case
-  # (ghcr rejects an uppercase path segment). Set it in .env.
-  #
-  # A ghcr package is PRIVATE by default, and an anonymous `docker pull` of one
-  # fails with a 401 that reads like "not found". Either make both packages
-  # public, or log the host in once with a token holding read:packages:
-  #
-  #   docker login ghcr.io -u YOUR_LOGIN --password-stdin   (paste the PAT)
-  #
-  # GHCR_OWNER is deliberately `:?` rather than defaulted: an empty value would
-  # resolve to ghcr.io//dazyflow-dzd and fail at pull time with a registry error
-  # that says nothing about the real cause.
-  #
-  # The release image, pulled — never built here. The `build:` stanza in
-  # docker-compose.yml stays valid as an escape hatch (`--build` still works if
-  # the registry is ever unreachable), but the deploy path is pull-only: see the
-  # `upgrade` target in the Makefile.
-  #
-  # CI pushes every release as both :X.Y.Z and :latest, so an unset VERSION
-  # resolves to the newest release rather than to nothing. `make upgrade` sets
-  # it explicitly to the tag it selected, which is the deterministic path.
+  # GHCR_OWNER is the GitHub account or org owning the packages, lower-case
+  # (ghcr rejects uppercase path segments). It is `:?` rather than defaulted
+  # because an empty value resolves to ghcr.io//dazyflow-dzd and fails at pull
+  # time with an error that says nothing about the cause. A ghcr package is
+  # PRIVATE by default and an anonymous pull fails with a 401 that reads like
+  # "not found": make both packages public, or log the host in once with a
+  # token holding read:packages (`docker login ghcr.io -u LOGIN --password-stdin`).
   dzd:
     image: ghcr.io/${GHCR_OWNER:?set GHCR_OWNER in .env}/dazyflow-dzd:${VERSION:-latest}
 

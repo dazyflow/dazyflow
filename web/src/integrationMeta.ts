@@ -74,7 +74,7 @@ export type OAuthProviderMeta = {
   brand_logo?: string;
 };
 
-export const oauthProviderMeta: Record<string, OAuthProviderMeta> = {
+const oauthProviderMeta: Record<string, OAuthProviderMeta> = {
   slack: {
     name: "Slack",
     brand_logo: "/brands/slack.svg",

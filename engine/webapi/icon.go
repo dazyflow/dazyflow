@@ -17,35 +17,18 @@ import (
 	"time"
 )
 
-// A described API's logo, borrowed from the service's own favicon.
+// A described API's logo, borrowed from the service's own favicon. A catalog
+// is the one step source that arrives with no artwork, and a guess that is
+// usually right beats a globe that is never informative; the fallback when it
+// is missing or wrong is exactly that globe.
 //
-// A catalog is the one step source that arrives with no artwork. A built-in
-// drop names a file in /brands, an MCP tool can declare icons in its manifest,
-// and a described API declares nothing — so every operation an org imports
-// wears the same grey globe, and a flow calling three of the org's own services
-// looks like three copies of one step.
-//
-// The service does publish a mark, though: the favicon its own site serves.
-// Reading that is a GUESS, and a guess is the right trade here — decoration
-// that is usually right beats a glyph that is never informative, and the
-// fallback when it is missing or wrong is exactly today's globe.
-//
-// Three constraints shape the file, and all three are borrowed rather than
-// invented:
-//
-//   - The fetch goes through the injected Doer (doer.go), the same guarded
-//     caller a step uses. So a favicon request gets the SSRF dial guard, the
-//     tenant's egress allowlist, the per-(tenant, host) rate limit and a
-//     response cap — and this package still owns no http.Client, which is the
-//     rule doer.go exists to keep.
-//   - The bytes are INLINED as a data: URI, never stored as a URL. The app's
-//     CSP is `img-src 'self' data: blob:` (daemon/httporigin.go), so a third
-//     party's https URL would not render even if we kept it, and would tell
-//     that third party who opened the flow. Same constraint and same answer as
-//     engine/mcp/icons.go.
-//   - Everything fails soft and returns "". A logo is decoration: a service
-//     with no favicon, a slow host, or a body that is not an image still gets
-//     its catalog saved and its steps registered.
+//   - The fetch goes through the injected Doer (doer.go), so it gets the SSRF
+//     dial guard, the tenant's egress allowlist, the per-(tenant, host) rate
+//     limit and a response cap, and this package still owns no http.Client.
+//   - The bytes are INLINED as a data: URI. The app's CSP is
+//     `img-src 'self' data: blob:` (daemon/httporigin.go), so a third party's
+//     URL would not render and would tell that party who opened the flow.
+//   - Everything fails soft and returns "": a logo is decoration.
 const (
 	// maxLogoBytes bounds one fetched image, and it is deliberately tight.
 	//

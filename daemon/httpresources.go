@@ -36,7 +36,7 @@ type resourceView struct {
 // splits on the first dot to separate the name from the sub-path, so a
 // dotted resource name would be unreferenceable.
 func validResourceName(name string) error {
-	if err := validSecretName(name); err != nil {
+	if err := core.ValidSecretName(name); err != nil {
 		return err
 	}
 	if strings.Contains(name, ".") {

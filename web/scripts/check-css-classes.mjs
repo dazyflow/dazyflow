@@ -1,39 +1,25 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Guard on the className contract — the sibling of check-css-tokens.mjs.
+// Guard on the className contract, the sibling of check-css-tokens.mjs.
 //
-// `className="muted"` with no reachable `.muted` rule renders NOTHING. There is
-// no console warning, no build error, and nothing a reviewer sees in a diff:
-// the JSX looks exactly like the JSX that works. That is how five `.muted` hint
-// lines rendered at full body ink while the name sat reassuringly in the
-// stylesheet (only ever as `.badge.muted`), and how two `.icon-button` icons
-// kept the bordered default-button skin for months after the rule that styled
-// them was folded into `button.ghost.icon`.
+// `className="muted"` with no reachable `.muted` rule renders NOTHING: no
+// warning, no build error, and the JSX looks exactly like JSX that works. Two
+// failure shapes are reported because they need different fixes:
 //
-// The token guard next door catches the same failure for custom properties.
-// This one catches it for class names, which was the larger hole: a dead token
-// at least shows as a missing colour in review, while a dead class silently
-// inherits whatever the parent gives it.
-//
-// TWO failure shapes are reported, because they need different fixes:
-//
-//   never defined    No stylesheet mentions the name at all. Write the rule,
-//                    or drop the className.
+//   never defined    No stylesheet mentions the name. Write the rule, or drop
+//                    the className.
 //   unreachable      The name exists only inside a compound selector
-//                    (`.badge.muted`) and this element does not carry the
-//                    rest of that compound. Add the partner class, or give
-//                    the class a standalone rule.
+//                    (`.badge.muted`) and this element does not carry the rest
+//                    of that compound. Add the partner class, or give the class
+//                    a standalone rule.
 //
-// The modifier idiom is NOT a failure: `className={"status-dot " + status}`
-// puts both `status-dot` and `queued` on the element, so `.status-dot.queued`
-// matches. The checker therefore reasons per element, over the whole set of
-// classes an element carries, not per name in isolation.
+// The modifier idiom (`className={"status-dot " + status}`) is not a failure:
+// the checker reasons per element over the whole set of classes it carries.
 //
-// Why a plain .mjs script and not a vitest test: same reasons as
-// check-css-tokens.mjs — vitest runs with `css: false` so `?raw` imports yield
-// nothing, and reading files instead would need @types/node in the app's
-// tsconfig, which would make Node globals resolve inside browser code.
+// A plain .mjs script rather than a vitest test because vitest runs with
+// `css: false`, so `?raw` imports yield nothing, and reading files would need
+// @types/node in the app's tsconfig.
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";

@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/engine"
 )
 
@@ -73,25 +74,25 @@ func init() {
 func executeParseXML(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	ref, ok := job.Input["in"]
 	if !ok {
-		return errResult(job, "missing_input", "input port 'in' is required"), nil
+		return params.Err(job, "missing_input", "input port 'in' is required"), nil
 	}
 	text, ok := ref.Inline.(string)
 	if !ok {
-		return errResult(job, "bad_input", fmt.Sprintf("expected XML text, got %T", ref.Inline)), nil
+		return params.Err(job, "bad_input", fmt.Sprintf("expected XML text, got %T", ref.Inline)), nil
 	}
 	if strings.TrimSpace(text) == "" {
-		return errResult(job, "bad_input", "input 'in' is empty"), nil
+		return params.Err(job, "bad_input", "input 'in' is empty"), nil
 	}
 
 	value, err := xmlToValue(text)
 	if err != nil {
-		return errResult(job, "bad_input", "input is not valid XML: "+err.Error()), nil
+		return params.Err(job, "bad_input", "input is not valid XML: "+err.Error()), nil
 	}
 
 	if pathRaw, ok := job.Params["path"].(string); ok && pathRaw != "" {
 		value, err = digPath(value, pathRaw)
 		if err != nil {
-			return errResult(job, "bad_param", err.Error()), nil
+			return params.Err(job, "bad_param", err.Error()), nil
 		}
 	}
 
@@ -105,7 +106,7 @@ func executeParseXML(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 		rowsOut = []map[string]any{}
 	}
 	if err := capRows(len(rowsOut)); err != nil {
-		return errResult(job, "too_large", err.Error()), nil
+		return params.Err(job, "too_large", err.Error()), nil
 	}
 
 	return core.Result{

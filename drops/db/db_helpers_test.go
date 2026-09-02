@@ -10,6 +10,9 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/rows"
 )
 
 func TestNormalizeRows(t *testing.T) {
@@ -99,13 +102,13 @@ func TestNormalizeRows(t *testing.T) {
 func TestCoerceRowMap(t *testing.T) {
 	t.Run("map[string]any passes through", func(t *testing.T) {
 		in := map[string]any{"a": 1}
-		got, err := coerceRowMap(in)
+		got, err := rows.CoerceRowMap(in)
 		if err != nil || !reflect.DeepEqual(got, in) {
 			t.Fatalf("got (%v, %v)", got, err)
 		}
 	})
 	t.Run("map[string]string is widened", func(t *testing.T) {
-		got, err := coerceRowMap(map[string]string{"k": "v"})
+		got, err := rows.CoerceRowMap(map[string]string{"k": "v"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -114,7 +117,7 @@ func TestCoerceRowMap(t *testing.T) {
 		}
 	})
 	t.Run("non-map errors", func(t *testing.T) {
-		if _, err := coerceRowMap([]int{1}); err == nil {
+		if _, err := rows.CoerceRowMap([]int{1}); err == nil {
 			t.Error("want error")
 		}
 	})
@@ -164,25 +167,25 @@ func TestParamStringArray(t *testing.T) {
 
 func TestNormalizeHeaders(t *testing.T) {
 	t.Run("[]string passes through", func(t *testing.T) {
-		got, err := normalizeHeaders([]string{"a", "b"})
+		got, err := rows.NormalizeHeaders([]string{"a", "b"})
 		if err != nil || !reflect.DeepEqual(got, []string{"a", "b"}) {
 			t.Fatalf("got (%v, %v)", got, err)
 		}
 	})
 	t.Run("[]any of strings", func(t *testing.T) {
-		got, err := normalizeHeaders([]any{"a", "b"})
+		got, err := rows.NormalizeHeaders([]any{"a", "b"})
 		if err != nil || !reflect.DeepEqual(got, []string{"a", "b"}) {
 			t.Fatalf("got (%v, %v)", got, err)
 		}
 	})
 	t.Run("[]any with non-string names the index", func(t *testing.T) {
-		_, err := normalizeHeaders([]any{"a", 9})
+		_, err := rows.NormalizeHeaders([]any{"a", 9})
 		if err == nil || !strings.Contains(err.Error(), "headers[1]") {
 			t.Errorf("err = %v", err)
 		}
 	})
 	t.Run("unsupported type errors", func(t *testing.T) {
-		if _, err := normalizeHeaders(42); err == nil {
+		if _, err := rows.NormalizeHeaders(42); err == nil {
 			t.Error("want error")
 		}
 	})
@@ -259,8 +262,8 @@ func TestIsSandboxEscape(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := isSandboxEscape(c.err); got != c.want {
-				t.Errorf("isSandboxEscape(%v) = %v, want %v", c.err, got, c.want)
+			if got := core.IsSandboxEscape(c.err); got != c.want {
+				t.Errorf("core.IsSandboxEscape(%v) = %v, want %v", c.err, got, c.want)
 			}
 		})
 	}

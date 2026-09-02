@@ -7,7 +7,6 @@
 package net
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -148,7 +147,7 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 		return params.Err(job, "bad_param", err.Error()), nil
 	}
 
-	bodyReader, err := buildRequestBody(job)
+	bodyReader, err := params.RequestBody(job)
 	if err != nil {
 		return params.Err(job, "bad_input", err.Error()), nil
 	}
@@ -243,7 +242,7 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 		}, nil
 	}
 
-	if !statusAccepted(resp.StatusCode, expectStatus) {
+	if !params.StatusAccepted(resp.StatusCode, expectStatus) {
 		// Fold a bounded snippet of the response body into the error. APIs
 		// almost always explain a 4xx/5xx there (which param is missing, why
 		// auth failed, a rate-limit note); without it the error is just
@@ -321,44 +320,6 @@ func resolveURL(job core.Job) string {
 		}
 	}
 	return params.StringDefault(job.Params, "url", "")
-}
-
-// buildRequestBody honors the input port first (so POST bodies can be
-// piped from a previous node), and falls back to params.body for
-// inline-literal bodies in the graph definition.
-func buildRequestBody(job core.Job) (io.Reader, error) {
-	if input, ok := job.Input["request_body"]; ok {
-		switch v := input.Inline.(type) {
-		case string:
-			return strings.NewReader(v), nil
-		case []byte:
-			return bytes.NewReader(v), nil
-		case nil:
-			// fall through to params
-		default:
-			b, err := json.Marshal(v)
-			if err != nil {
-				return nil, fmt.Errorf("marshal request_body: %w", err)
-			}
-			return bytes.NewReader(b), nil
-		}
-	}
-	if s, ok := job.Params["body"].(string); ok && s != "" {
-		return strings.NewReader(s), nil
-	}
-	return nil, nil
-}
-
-func statusAccepted(got int, expect []int) bool {
-	if len(expect) == 0 {
-		return got >= 200 && got < 300
-	}
-	for _, e := range expect {
-		if got == e {
-			return true
-		}
-	}
-	return false
 }
 
 func formatExpectStatus(expect []int) string {

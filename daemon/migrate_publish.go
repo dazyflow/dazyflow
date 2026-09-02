@@ -88,17 +88,12 @@ func MigrateWebhookPublish(svc *Service, logger *log.Logger) {
 	}
 }
 
-// firesWithoutScheduler reports whether a flow has a trigger that used to fire
-// through the HEAD fallback — a reachable webhook (secret key or hosted form)
-// or an inbound provider event. Cron and poll triggers are excluded on
-// purpose: the scheduler already gated those on publish, so an unpublished one
-// was never live and must not be started by a migration.
-//
-// A node-level `disabled` on the trigger does NOT exclude a flow, because it
-// did not stop the request being accepted before this change either — the
-// endpoint and the event fan-outs only honour the whole-flow switch. The
-// migration preserves what was actually happening, not what arguably should
-// have been.
+// firesWithoutScheduler reports whether a flow has a trigger that fired through
+// the HEAD fallback: a reachable webhook (secret key or hosted form) or an
+// inbound provider event. Cron and poll triggers are excluded because the
+// scheduler already gated those on publish. A node-level `disabled` on the
+// trigger does not exclude a flow, because the endpoints only honour the
+// whole-flow switch: the migration preserves what was actually happening.
 func firesWithoutScheduler(g core.Graph) bool {
 	return core.HasConfiguredWebhookTrigger(g) || core.HasEventTrigger(g)
 }

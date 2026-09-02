@@ -212,19 +212,9 @@ const htmlTemplate = `<!DOCTYPE html>
 </html>`
 
 // PlainText renders the same Content as the text/plain alternative of a
-// multipart message.
-//
-// It exists because every caller used to hand-build that alternative next to
-// the Content — the same facts, the same link, written twice — and the two
-// drifted: one said "Failed step", the other "Failed step:  " with its own
-// column alignment, and adding a fact to the HTML left the text version
-// missing it. Worse, once the copy is translated, a hand-built twin doubles
-// every string in the catalogue for no reader's benefit.
-//
-// The Preheader and Eyebrow are deliberately absent: the preheader exists to
-// be the snippet an inbox list shows beside the subject, which a text body
-// already is, and the eyebrow is a visual kicker above a heading that the
-// heading itself repeats in words.
+// multipart message, so the two parts cannot drift and translation does not
+// double every string. The Preheader and Eyebrow are omitted: a text body is
+// already the inbox snippet, and the eyebrow repeats the heading.
 func PlainText(c Content) string {
 	var b strings.Builder
 	para := func(s string) {

@@ -12,6 +12,7 @@ import (
 	"strconv"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/cursor"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/engine"
 	"github.com/dazyflow/dazyflow/pollstate"
@@ -104,7 +105,7 @@ func executeGoogleFormTrigger(ctx context.Context, job core.Job, _ chan<- core.P
 	// lastSubmittedTime we've already emitted. The store hides the
 	// "cursor." prefix from the Credentials UI.
 	cursorName := fmt.Sprintf("cursor.gform.%s.%s", job.GraphID, job.NodeID)
-	last := readCursor(ctx, job.Tenant, cursorName)
+	last := cursor.Read(ctx, job.Tenant, cursorName)
 
 	fresh, newCursor, err := fetchNewResponses(ctx, job, formID, token, timeout, last)
 	if err != nil {
@@ -125,7 +126,7 @@ func executeGoogleFormTrigger(ctx context.Context, job core.Job, _ chan<- core.P
 	// a failure means at worst the next fire re-emits this batch (the
 	// trigger is at-least-once — see the plan's failover note).
 	if newCursor != "" && newCursor != last {
-		if werr := writeCursor(ctx, job.Tenant, cursorName, newCursor); werr != nil {
+		if werr := cursor.Write(ctx, job.Tenant, cursorName, newCursor); werr != nil {
 			// Surface as a soft failure: we already have the data, so emit
 			// it, but the operator should know the cursor didn't persist.
 			return core.Result{

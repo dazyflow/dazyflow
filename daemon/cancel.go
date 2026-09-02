@@ -62,20 +62,11 @@ func (s *Service) CancelGraphRun(ctx context.Context, p core.Principal, graphRun
 		reason = fmt.Sprintf("cancelled by %s", p.Subject)
 	}
 	cancelErr := &core.JobError{Code: "cancelled", Message: reason}
-	// cancelledResult stamps the cancel onto a node while KEEPING whatever that
-	// node had already published. It matters for a parked step: an
-	// await_approval node's result is the only record of what it was waiting on
-	// — the prompt, the value someone was being asked to decide about, the
-	// approval URL — and overwriting it with a bare error erased all of it, so
-	// a cancelled approval could no longer say what it had been for, on the run
-	// page or in the approvals history. Mirrors Approve, which also builds its
-	// terminal result on top of what the pause emitted.
-	//
-	// A node cancelled mid-execution has no result to carry, so for everything
-	// but a parked step this is exactly the error-only result it always was.
-	// Preserved output cannot leak downstream: classifyEdge blocks every edge
-	// out of a cancelled record regardless of which ports it holds, and the
-	// graph-record is terminal before any of them would be considered.
+	// cancelledResult stamps the cancel onto a node while keeping whatever it had
+	// already published. For a parked await_approval node that result is the only
+	// record of what it was waiting on (prompt, value, approval URL), and the run
+	// page and approvals history need it. Mirrors Approve. Preserved output cannot
+	// leak downstream: classifyEdge blocks every edge out of a cancelled record.
 	cancelledResult := func(prev *core.Result) *core.Result {
 		res := &core.Result{Status: core.StatusError, Error: cancelErr}
 		if prev == nil || len(prev.Output) == 0 {

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/engine"
 	"github.com/dazyflow/dazyflow/internal/celexpr"
 )
@@ -74,24 +75,24 @@ func init() {
 func executeExpression(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	exprStr, ok := job.Params["expr"].(string)
 	if !ok || strings.TrimSpace(exprStr) == "" {
-		return errResult(job, "bad_param", "param 'expr' is required (a CEL formula)"), nil
+		return params.Err(job, "bad_param", "param 'expr' is required (a CEL formula)"), nil
 	}
 
 	// Same length gate the linter applies, so the two stay in lockstep: a
 	// formula the linter refuses to check must not compile here either.
 	if len(exprStr) > celexpr.MaxExpressionLen {
-		return errResult(job, "bad_param", fmt.Sprintf(
+		return params.Err(job, "bad_param", fmt.Sprintf(
 			"formula is %d characters; the limit is %d", len(exprStr), celexpr.MaxExpressionLen)), nil
 	}
 	// Shared with the editor's linter (POST /tools/expression/validate) via
 	// internal/celexpr, so what the linter accepts is exactly what runs here.
 	env, err := celexpr.NewEnv()
 	if err != nil {
-		return errResult(job, "internal", fmt.Sprintf("cel env: %v", err)), nil
+		return params.Err(job, "internal", fmt.Sprintf("cel env: %v", err)), nil
 	}
 	prog, err := compileRowExpr(env, exprStr, "expression")
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 
 	var input any
@@ -101,11 +102,11 @@ func executeExpression(_ context.Context, job core.Job, _ chan<- core.Progress) 
 
 	v, _, err := prog.Eval(map[string]any{"input": input, "now": time.Now().UTC()})
 	if err != nil {
-		return errResult(job, "eval", err.Error()), nil
+		return params.Err(job, "eval", err.Error()), nil
 	}
 	result, err := unwrapCEL(v)
 	if err != nil {
-		return errResult(job, "eval", err.Error()), nil
+		return params.Err(job, "eval", err.Error()), nil
 	}
 
 	mime := "application/json"

@@ -1,44 +1,19 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package maillang holds the copy the daemon addresses to a PERSON, in every
-// language the product speaks — its transactional email, and the hosted intake
-// form, which is the same problem on a different channel: copy written at the
-// point of sending, in whatever language the author of the code happened to
-// speak. (The package keeps its name: mail is the bulk of it, and renaming a
-// package to add six strings buys nothing a reader needs.)
+// Package maillang holds the copy the daemon addresses to a person, in every
+// language the product speaks: transactional email and the hosted intake form.
 //
-// The web UI has i18next and a JSON catalogue per language; the daemon had
-// nothing, because until now every string it mailed was written in English at
-// the point of sending. That is fine for a log line and wrong for an email: an
-// invitation, a password reset and a "your flow failed" notice are the product
-// speaking to a person, and which person is known.
+// It is a struct rather than a map so a mistyped key is a compile error, not a
+// blank line in someone's inbox, and so the guard test can walk the fields to
+// prove no language is missing one or has dropped a format verb.
 //
-// WHY A STRUCT AND NOT A MAP. A struct makes a mistyped key a compile error
-// rather than a blank line in someone's inbox, and it lets the guard test walk
-// the fields to prove no language is missing one. The cost is that adding a
-// language means filling in a literal the compiler will NOT force you to
-// complete — a missing field silently zero-values — which is exactly what
-// maillang_test.go checks, along with the format verbs matching English so a
-// translation can't quietly drop the %s that carries the link.
-//
-// WHOSE LANGUAGE. Resolved per email by the caller, because the answer
-// genuinely differs:
-//
-//   - Mail to an account holder (verification, reset, welcome, a flow failure,
-//     a support reply) uses that user's own preference.
-//   - An invitation has no account to read a preference from — that is the
-//     point of an invitation — so it follows the person doing the inviting,
-//     who is the one who knows who they are writing to.
-//   - Mail a FLOW sends (an approval request, and its outcome) follows the
-//     flow's own language (core.Graph.Language), not any reader's preference:
-//     it is the flow speaking, and its author chose the language its steps
-//     write in.
-//
-// Not in here: the two support-queue notices (a customer replied, a ticket was
-// filed). Those go to the operator's own staff — an assigned agent or the
-// configured shared inbox — and a config-file address carries no language to
-// resolve. They stay English until there is something to read one from.
+// Whose language is resolved per message by the caller: mail to an account
+// holder uses that user's preference; an invitation follows the inviter, since
+// the recipient has no account yet; mail a flow sends (an approval request and
+// its outcome) follows core.Graph.Language, because it is the flow speaking.
+// The support-queue notices to the operator's own staff stay English: a
+// config-file address carries no language to resolve.
 package maillang
 
 import "strings"

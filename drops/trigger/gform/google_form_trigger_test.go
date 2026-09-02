@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/cursor"
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
@@ -88,14 +89,14 @@ func withEnv(t *testing.T, base string) map[string]string {
 	clearTitleCache() // fixtures all reuse form_id "F1"; don't let titles bleed across tests
 	SetHTTPBase(base)
 	SetTokenLookup(func(_ context.Context, account string) (string, error) { return "ya29-" + account, nil })
-	SetCursorStore(
+	cursor.SetStore(
 		func(_ context.Context, tenant, name string) (string, error) { return store[tenant+"/"+name], nil },
 		func(_ context.Context, tenant, name, value string) error { store[tenant+"/"+name] = value; return nil },
 	)
 	t.Cleanup(func() {
 		SetHTTPBase(formsAPIBase)
 		SetTokenLookup(nil)
-		SetCursorStore(nil, nil)
+		cursor.SetStore(nil, nil)
 	})
 	return store
 }
@@ -475,33 +476,6 @@ func TestFormsBaseURL_ParamWins(t *testing.T) {
 
 // --- cursor store guards ----------------------------------------------------
 
-func TestReadCursor_NilAndError(t *testing.T) {
-	// nil reader → "".
-	SetCursorStore(nil, nil)
-	t.Cleanup(func() { SetCursorStore(nil, nil) })
-	if got := readCursor(context.Background(), "t", "n"); got != "" {
-		t.Errorf("nil reader = %q", got)
-	}
-	// reader returning an error → "" (treat as start-from-beginning).
-	SetCursorStore(
-		func(_ context.Context, _, _ string) (string, error) {
-			return "ignored", context.Canceled
-		},
-		nil,
-	)
-	if got := readCursor(context.Background(), "t", "n"); got != "" {
-		t.Errorf("error reader = %q, want empty", got)
-	}
-}
-
-func TestWriteCursor_NilWriter(t *testing.T) {
-	SetCursorStore(nil, nil)
-	t.Cleanup(func() { SetCursorStore(nil, nil) })
-	if err := writeCursor(context.Background(), "t", "n", "v"); err != nil {
-		t.Errorf("nil writer should be a no-op, got %v", err)
-	}
-}
-
 // --- mapAnswers collision ---------------------------------------------------
 
 func TestMapAnswers_TitleCollisionDisambiguated(t *testing.T) {
@@ -657,14 +631,14 @@ func TestExecute_CursorWriteFailure_StillEmits(t *testing.T) {
 	SetTokenLookup(func(_ context.Context, account string) (string, error) { return "ya29-" + account, nil })
 	// Reader returns nothing (first fire); writer always fails so the soft
 	// failure branch runs — data is still emitted.
-	SetCursorStore(
+	cursor.SetStore(
 		func(_ context.Context, _, _ string) (string, error) { return "", nil },
 		func(_ context.Context, _, _, _ string) error { return context.Canceled },
 	)
 	t.Cleanup(func() {
 		SetHTTPBase(formsAPIBase)
 		SetTokenLookup(nil)
-		SetCursorStore(nil, nil)
+		cursor.SetStore(nil, nil)
 	})
 
 	res := runTrigger(t, "acme")
@@ -672,4 +646,12 @@ func TestExecute_CursorWriteFailure_StillEmits(t *testing.T) {
 	if len(out) != 1 || out[0]["Name"] != "Ada" {
 		t.Fatalf("expected data despite cursor write failure, got %+v", out)
 	}
+}
+
+// clearTitleCache drops every cached form structure. Used by tests to keep
+// fixtures (which all reuse one form_id) isolated.
+func clearTitleCache() {
+	titleCacheMu.Lock()
+	defer titleCacheMu.Unlock()
+	titleCache = map[string]titleCacheEntry{}
 }

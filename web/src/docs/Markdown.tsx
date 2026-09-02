@@ -178,7 +178,7 @@ function remarkDropComments() {
 // has no markdown source in the repo — it is generated from the drop manifests
 // by cmd/docsgen at build time. Writing those few links absolutely is what
 // makes one href correct in both places; this function is the other half.
-export function stripDocsOrigin(href: string): string | null {
+function stripDocsOrigin(href: string): string | null {
   if (!href.startsWith(DOCS + "/")) return null;
   return href.slice(DOCS.length);
 }

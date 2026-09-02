@@ -173,8 +173,10 @@ func TestIPRateLimiter_GCAndEvict(t *testing.T) {
 // the deny branch is covered.
 func TestIPRateLimiter_BurstExhaustion(t *testing.T) {
 	l := newIPRateLimiter(60, 2) // burst 2
-	if !l.Allow("ip") || !l.Allow("ip") {
-		t.Fatal("first two requests should pass the burst")
+	for i := 0; i < 2; i++ {
+		if !l.Allow("ip") {
+			t.Fatalf("request %d should pass the burst", i+1)
+		}
 	}
 	if l.Allow("ip") {
 		t.Fatal("third immediate request should be throttled")

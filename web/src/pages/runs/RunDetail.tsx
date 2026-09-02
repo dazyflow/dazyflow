@@ -1136,7 +1136,7 @@ function StatusChip({ status }: { status: JobStatus }) {
 // node, waiting for a human decision". Every other status is already
 // readable, so we let them pass through verbatim and don't pay an
 // i18n round-trip for "running" / "failed" / "queued".
-export function statusLabel(
+function statusLabel(
   status: JobStatus,
   t: (key: string) => string,
 ): string {

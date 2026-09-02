@@ -9,7 +9,7 @@ import "sync"
 // per-node state (a dedupe cursor, a poll watermark, an HTTP cache) when the
 // user hits "Reset state" in the editor. A drop that keeps such state
 // registers a key-builder from its init — the same place it calls
-// SetCursorStore — so the *format* of the reserved store keys lives once, in
+// cursor.SetStore — so the *format* of the reserved store keys lives once, in
 // the drop package that owns it, and the daemon stays agnostic. Pairs with
 // Manifest.NodeState, which is the user-facing half (the label + hint the UI
 // shows); this is the machinery half (which keys to delete).

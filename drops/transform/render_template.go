@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/engine"
 	"github.com/dazyflow/dazyflow/internal/htmltmpl"
 )
@@ -104,15 +105,15 @@ func init() {
 func executeRenderTemplate(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	tmplText, ok := templateTextInputOr(job, paramStringOr(job.Params, "template", ""))
 	if !ok {
-		return errResult(job, "bad_input", "the 'Template' input must be text"), nil
+		return params.Err(job, "bad_input", "the 'Template' input must be text"), nil
 	}
 	if strings.TrimSpace(tmplText) == "" {
-		return errResult(job, "bad_param", "render_template needs a 'template' — type one or connect the 'Template' input"), nil
+		return params.Err(job, "bad_param", "render_template needs a 'template' — type one or connect the 'Template' input"), nil
 	}
 
 	data, err := resolveTemplateData(job)
 	if err != nil {
-		return errResult(job, "bad_input", err.Error()), nil
+		return params.Err(job, "bad_input", err.Error()), nil
 	}
 
 	html, err := htmltmpl.Render(tmplText, data, 0)
@@ -122,12 +123,12 @@ func executeRenderTemplate(_ context.Context, job core.Job, _ chan<- core.Progre
 		case errors.As(err, &pe):
 			// A parse error is the author's mistake (mismatched {{ }}, bad
 			// action) — surface it as a param error.
-			return errResult(job, "bad_param", fmt.Sprintf("template: %v", pe.Err)), nil
+			return params.Err(job, "bad_param", fmt.Sprintf("template: %v", pe.Err)), nil
 		case errors.Is(err, htmltmpl.ErrTooLarge):
-			return errResult(job, "too_large", err.Error()), nil
+			return params.Err(job, "too_large", err.Error()), nil
 		default:
 			// An execution error (missing method, bad range operand, …).
-			return errResult(job, "eval", fmt.Sprintf("render: %v", err)), nil
+			return params.Err(job, "eval", fmt.Sprintf("render: %v", err)), nil
 		}
 	}
 

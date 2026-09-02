@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/engine"
 )
 
@@ -87,11 +88,11 @@ func executeDedupeRows(_ context.Context, job core.Job, _ chan<- core.Progress) 
 
 	by, err := parseDedupeBy(job.Params, headers, rows)
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	keep, err := parseKeep(job.Params)
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 
 	out := make([]map[string]any, 0, len(rows))

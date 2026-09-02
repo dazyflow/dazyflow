@@ -8,23 +8,25 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // TestIsUploadSandboxEscape_Cov covers every leg of the sandbox-escape
 // classifier.
 func TestIsUploadSandboxEscape_Cov(t *testing.T) {
-	if isUploadSandboxEscape(nil) {
+	if core.IsSandboxEscape(nil) {
 		t.Error("nil error should not be an escape")
 	}
-	if !isUploadSandboxEscape(os.ErrInvalid) {
+	if !core.IsSandboxEscape(os.ErrInvalid) {
 		t.Error("os.ErrInvalid should be an escape")
 	}
 	for _, msg := range []string{"path escapes root", "wrote outside root", "invalid argument here"} {
-		if !isUploadSandboxEscape(errors.New(msg)) {
+		if !core.IsSandboxEscape(errors.New(msg)) {
 			t.Errorf("%q should be an escape", msg)
 		}
 	}
-	if isUploadSandboxEscape(errors.New("disk full")) {
+	if core.IsSandboxEscape(errors.New("disk full")) {
 		t.Error("unrelated error should not be an escape")
 	}
 }

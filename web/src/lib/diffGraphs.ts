@@ -13,7 +13,7 @@ import type { Graph, Node, Edge } from "../types";
 // decides whether the editor prompts to publish at all — keep the two in
 // lockstep. When they drift the editor contradicts itself: the toolbar
 // announces unpublished changes and this view calls the draft identical.
-export type NodeChange = {
+type NodeChange = {
   id: string;
   // Which fields changed — module swap and/or params edit. Empty for an
   // added/removed node (the whole node is the change).

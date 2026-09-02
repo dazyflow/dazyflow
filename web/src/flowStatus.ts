@@ -65,7 +65,7 @@ const EVENT_TRIGGER_MODULES = new Set([
 
 // hasConfiguredAutoTrigger reports whether anything will fire the flow
 // without a manual Run. Rules mirror HasConfiguredAutoTrigger in Go.
-export function hasConfiguredAutoTrigger(
+function hasConfiguredAutoTrigger(
   triggers: Graph["triggers"],
   nodes: Pick<DazyGraphNode, "module" | "params">[],
 ): boolean {
@@ -93,35 +93,6 @@ export function hasConfiguredAutoTrigger(
         // payment). Mirrors core.EventTriggerModules — the node's presence is
         // enough, since the daemon's fan-out matches on module ID alone.
         if (EVENT_TRIGGER_MODULES.has(n.module)) return true;
-    }
-  }
-  return false;
-}
-
-// hasConfiguredSchedulerTrigger reports whether the flow has a configured
-// trigger that fires via the SCHEDULER (cron / poll / google-form interval) —
-// the subset of auto-triggers gated on publish state. Webhooks fire from an
-// HTTP endpoint and don't require publishing, so they're excluded. Mirrors
-// core.HasConfiguredSchedulerTrigger (Go).
-export function hasConfiguredSchedulerTrigger(
-  triggers: Graph["triggers"],
-  nodes: Pick<DazyGraphNode, "module" | "params">[],
-): boolean {
-  for (const tr of triggers ?? []) {
-    if (tr.type === "cron" && (tr.cron ?? "").trim() !== "") return true;
-  }
-  for (const n of nodes) {
-    switch (n.module) {
-      case "cron_trigger":
-        if (readString(n.params, "cron").trim() !== "") return true;
-        break;
-      case "poll_trigger":
-      case "google_form_trigger": {
-        const secs = readNumber(n.params, "interval_seconds");
-        if (secs !== undefined && secs > 0 && secs <= MAX_POLL_INTERVAL_SECONDS)
-          return true;
-        break;
-      }
     }
   }
   return false;

@@ -250,3 +250,13 @@ func genKeyPEM(t *testing.T) string {
 	}
 	return string(pem.EncodeToMemory(block))
 }
+
+// hostKeyCallback returns just the verifier — used by tests; the clone path
+// uses hostKeyDB directly so it can also constrain HostKeyAlgorithms.
+func hostKeyCallback(userKnownHosts string) (gossh.HostKeyCallback, error) {
+	db, err := hostKeyDB(userKnownHosts)
+	if err != nil {
+		return nil, err
+	}
+	return db.HostKeyCallback(), nil
+}

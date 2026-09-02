@@ -4,17 +4,9 @@
 import type { CSSProperties, ReactNode } from "react";
 
 // Notice is the quiet counterpart to ErrorNotice: a short, low-urgency message
-// in place of content the user might have expected. A load in progress, a
-// nothing-here line, a "you don't have permission to see this" note.
-//
-// It exists because that shape had been open-coded 42 times as
-// `<div className="card" style={{ color: "var(--muted)" }}>`. Nobody chose to
-// write it 42 times — each page just needed a muted card and there was nothing
-// to reach for, so the padding, the font size and the wrapper element drifted
-// apart while the message stayed the same.
-//
-// Everything visual lives in `.card.notice` and `.notice-line` (see app.css),
-// so callers pass only layout margins via `style`.
+// in place of content the user might have expected (loading, nothing here, no
+// permission). Everything visual lives in `.card.notice` and `.notice-line`
+// (app.css); callers pass only layout margins via `style`.
 export function Notice({
   children,
   inline,

@@ -18,19 +18,12 @@ import (
 	"github.com/dazyflow/dazyflow/daemon/support"
 )
 
-// HTTPGateway exposes Service over JSON/HTTP so browsers and other
-// non-gRPC clients can drive Dazyflow.
-//
-// The route list that used to live in this comment named
-// /api/v1/graphs/... endpoints that are no longer mounted, which made it
-// worse than no list at all. mountRoutes is the authoritative surface —
-// read it there, and note that route_sweep_test.go scrapes those
-// registrations so every mounted route stays covered without a doc edit.
-//
-// Auth is bearer token in `Authorization: Bearer <api-key>` — the same
-// API-key chain the gRPC server uses — or a session cookie for browser
-// clients. Cross-origin access is restricted per-deployment via
-// AllowedOrigins.
+// HTTPGateway exposes Service over JSON/HTTP so browsers and other non-gRPC
+// clients can drive Dazyflow. mountRoutes is the authoritative route list;
+// route_sweep_test.go scrapes those registrations so every mounted route stays
+// covered. Auth is `Authorization: Bearer <api-key>` (the same chain the gRPC
+// server uses) or a session cookie. Cross-origin access is restricted
+// per-deployment via AllowedOrigins.
 type HTTPGateway struct {
 	svc            *Service
 	logger         *log.Logger

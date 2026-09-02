@@ -15,6 +15,7 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/limits"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
+	"github.com/dazyflow/dazyflow/drops/internal/rows"
 	"github.com/dazyflow/dazyflow/engine"
 )
 
@@ -71,7 +72,7 @@ func init() {
 func executeExcelRead(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	path := params.StringDefault(job.Params, "path", "")
 	if in, ok := job.Input["path"]; ok && in.Inline != nil {
-		path = cellStr(in.Inline)
+		path = rows.Cell(in.Inline)
 	}
 	path = wsPath(path)
 	if path == "" {

@@ -606,7 +606,6 @@ func (f *fakeSaaS) slackPosts() []string   { return f.snapshot(func() []string {
 func (f *fakeSaaS) discordPosts() []string { return f.snapshot(func() []string { return f.discord }) }
 func (f *fakeSaaS) pushes() []string       { return f.snapshot(func() []string { return f.ntfy }) }
 func (f *fakeSaaS) texts() []string        { return f.snapshot(func() []string { return f.sms }) }
-func (f *fakeSaaS) gmailSent() []string    { return f.snapshot(func() []string { return f.gmail }) }
 func (f *fakeSaaS) calendarEvents() []string {
 	return f.snapshot(func() []string { return f.events })
 }

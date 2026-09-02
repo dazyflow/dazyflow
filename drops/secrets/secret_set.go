@@ -86,7 +86,7 @@ func executeSecretSet(ctx context.Context, job core.Job, _ chan<- core.Progress)
 		return params.Err(job, "bad_input",
 			"secret_set needs a 'name' param — the key it will store the value under in this tenant's secret store."), nil
 	}
-	if err := validSecretName(name); err != nil {
+	if err := core.ValidSecretName(name); err != nil {
 		return params.ErrDetails(job, "bad_input",
 			"The secret name is invalid. Names may contain letters, digits, '.', '_' and '-' only, and must be 1–128 characters.",
 			fmt.Sprintf("Validator rejected name %q: %v", name, err)), nil

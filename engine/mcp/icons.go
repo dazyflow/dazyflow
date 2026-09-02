@@ -169,7 +169,7 @@ func resolveIcon(ctx context.Context, client *http.Client, src string) (string, 
 		return normalizeDataIcon(src)
 	case strings.HasPrefix(strings.ToLower(src), "https://"):
 	default:
-		return "", fmt.Errorf("icon source is not https or data:")
+		return "", fmt.Errorf("icon source must be an https URL or a data URI")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, src, nil)

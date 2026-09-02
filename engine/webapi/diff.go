@@ -172,35 +172,3 @@ func canonicalOperation(op Operation) []byte {
 	}
 	return raw
 }
-
-// ApplyRefresh produces the operation list a confirmed refresh would store.
-//
-// Additions and changes are taken from the spec. Removals are taken only when
-// confirmed; without confirmation the stored operation is KEPT, so a refresh
-// that the admin has not signed off cannot cost a flow its steps. That makes
-// the unconfirmed path strictly additive, which is the safe default for
-// something a vendor's build pipeline can trigger.
-func ApplyRefresh(stored, incoming []Operation, confirmRemovals bool) []Operation {
-	incomingByID := make(map[string]Operation, len(incoming))
-	for _, op := range incoming {
-		incomingByID[op.ID] = op
-	}
-	out := make([]Operation, 0, len(incoming)+len(stored))
-	seen := map[string]bool{}
-	for _, op := range incoming {
-		out = append(out, op)
-		seen[op.ID] = true
-	}
-	if confirmRemovals {
-		return out
-	}
-	// Kept in stored order after the incoming ones, so a catalog that is never
-	// refreshed-with-removals does not reshuffle on every import.
-	for _, op := range stored {
-		if seen[op.ID] {
-			continue
-		}
-		out = append(out, op)
-	}
-	return out
-}

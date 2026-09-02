@@ -8,8 +8,6 @@ import (
 
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
-
-	"github.com/dazyflow/dazyflow/core"
 )
 
 // resolveRevision resolves ref to a commit hash, extending go-git's
@@ -28,14 +26,4 @@ func resolveRevision(repo *gogit.Repository, ref string) (plumbing.Hash, error) 
 		return rr.Hash(), nil
 	}
 	return plumbing.ZeroHash, fmt.Errorf("ref %q not found (no matching branch, tag, or commit)", ref)
-}
-
-func emitProgress(ch chan<- core.Progress, job core.Job, pct float64, msg string) {
-	if ch == nil {
-		return
-	}
-	select {
-	case ch <- core.Progress{JobID: job.ID, NodeID: job.NodeID, Percent: &pct, Message: msg}:
-	default:
-	}
 }

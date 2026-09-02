@@ -15,7 +15,6 @@ import (
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	gitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"github.com/skeema/knownhosts"
-	gossh "golang.org/x/crypto/ssh"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
@@ -226,14 +225,4 @@ func hostKeyDB(userKnownHosts string) (*knownhosts.HostKeyDB, error) {
 		return nil, err
 	}
 	return gitssh.NewKnownHostsDb(f.Name())
-}
-
-// hostKeyCallback returns just the verifier — used by tests; the clone path
-// uses hostKeyDB directly so it can also constrain HostKeyAlgorithms.
-func hostKeyCallback(userKnownHosts string) (gossh.HostKeyCallback, error) {
-	db, err := hostKeyDB(userKnownHosts)
-	if err != nil {
-		return nil, err
-	}
-	return db.HostKeyCallback(), nil
 }

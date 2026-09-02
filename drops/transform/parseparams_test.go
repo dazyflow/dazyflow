@@ -9,18 +9,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// ===== coerceRowMap (helpers.go alias) ================================
-
-func TestCov_CoerceRowMap(t *testing.T) {
-	m, err := coerceRowMap(map[string]any{"a": 1})
-	if err != nil || m["a"] != 1 {
-		t.Errorf("map: m=%v err=%v", m, err)
-	}
-	if _, err := coerceRowMap(42); err == nil {
-		t.Error("scalar should not coerce to a row map")
-	}
-}
-
 // ===== parseRouteParams error branches ================================
 
 func TestCov_ParseRouteParamsErrors(t *testing.T) {

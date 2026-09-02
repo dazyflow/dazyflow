@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
@@ -312,15 +313,15 @@ func TestExecuteEmail_AuthSetsCredentials(t *testing.T) {
 // TestEmitProgress covers the nil-channel guard and the full-buffer default arm.
 func TestEmitProgress(t *testing.T) {
 	// nil channel: must not panic.
-	emitProgress(nil, core.Job{ID: "j"}, 0.5, "x")
+	params.EmitProgress(nil, core.Job{ID: "j"}, 0.5, "x")
 
 	// full (unbuffered, no reader) channel: the select default arm drops it.
 	ch := make(chan core.Progress)
-	emitProgress(ch, core.Job{ID: "j"}, 0.5, "dropped")
+	params.EmitProgress(ch, core.Job{ID: "j"}, 0.5, "dropped")
 
 	// a buffered channel with room receives the message.
 	ch2 := make(chan core.Progress, 1)
-	emitProgress(ch2, core.Job{ID: "j", NodeID: "n"}, 0.7, "kept")
+	params.EmitProgress(ch2, core.Job{ID: "j", NodeID: "n"}, 0.7, "kept")
 	got := <-ch2
 	if got.Message != "kept" || got.NodeID != "n" || *got.Percent != 0.7 {
 		t.Errorf("progress = %+v", got)
@@ -339,16 +340,16 @@ func TestEmailTextInputOr_EmptyAndNonText(t *testing.T) {
 	if v, ok := job.Input["emptyStr"].Inline, true; !ok || v != "" {
 		t.Fatal("setup")
 	}
-	if v, ok := emailTextInputOr(job, "emptyStr", "fb"); !ok || v != "fb" {
+	if v, ok := params.TextInputOr(job, "emptyStr", "fb"); !ok || v != "fb" {
 		t.Errorf("empty string: %q/%v", v, ok)
 	}
-	if v, ok := emailTextInputOr(job, "emptyBytes", "fb"); !ok || v != "fb" {
+	if v, ok := params.TextInputOr(job, "emptyBytes", "fb"); !ok || v != "fb" {
 		t.Errorf("empty bytes: %q/%v", v, ok)
 	}
-	if v, ok := emailTextInputOr(job, "nilInline", "fb"); !ok || v != "fb" {
+	if v, ok := params.TextInputOr(job, "nilInline", "fb"); !ok || v != "fb" {
 		t.Errorf("nil inline: %q/%v", v, ok)
 	}
-	if _, ok := emailTextInputOr(job, "nonText", "fb"); ok {
+	if _, ok := params.TextInputOr(job, "nonText", "fb"); ok {
 		t.Error("non-text input should return ok=false")
 	}
 }

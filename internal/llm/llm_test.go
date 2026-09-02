@@ -5,6 +5,7 @@ package llm
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"testing"
 
@@ -227,4 +228,13 @@ func TestByIntegration(t *testing.T) {
 	if p, ok := ByIntegration("byintrenamed"); !ok || p.DefaultModel != "m-a2" {
 		t.Errorf("renamed integration = %+v, ok=%v", p, ok)
 	}
+}
+
+// RegisteredNames returns provider ids, sorted, for stable test/debug output.
+func RegisteredNames() []string {
+	mu.RLock()
+	defer mu.RUnlock()
+	out := append([]string(nil), order...)
+	sort.Strings(out)
+	return out
 }

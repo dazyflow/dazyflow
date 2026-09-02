@@ -425,47 +425,6 @@ func TestDiffOperations_ARenamedOperationIsARemovalAndAnAddition(t *testing.T) {
 	}
 }
 
-func TestApplyRefresh_KeepsRemovalsUntilTheyAreConfirmed(t *testing.T) {
-	stored := ops(op("a", "GET", "/a"), op("gone", "GET", "/gone"))
-	incoming := ops(op("a", "GET", "/a"), op("new", "GET", "/new"))
-
-	// Unconfirmed, a refresh is strictly ADDITIVE. A vendor's build pipeline can
-	// trigger a spec change; it must not be able to cost a flow its steps.
-	kept := webapi.ApplyRefresh(stored, incoming, false)
-	if len(kept) != 3 {
-		t.Fatalf("unconfirmed refresh produced %d operations, want all three", len(kept))
-	}
-	var found bool
-	for _, o := range kept {
-		if o.ID == "gone" {
-			found = true
-		}
-	}
-	if !found {
-		t.Error("the unconfirmed refresh dropped an operation flows may reference")
-	}
-
-	// Confirmed, the removal applies.
-	applied := webapi.ApplyRefresh(stored, incoming, true)
-	if len(applied) != 2 {
-		t.Fatalf("confirmed refresh produced %d operations, want two", len(applied))
-	}
-	for _, o := range applied {
-		if o.ID == "gone" {
-			t.Error("a confirmed removal was not applied")
-		}
-	}
-}
-
-func TestApplyRefresh_TakesTheIncomingShapeForAChange(t *testing.T) {
-	stored := ops(op("a", "GET", "/a"))
-	incoming := ops(op("a", "GET", "/a", webapi.Arg{Name: "limit", In: webapi.InQuery}))
-	got := webapi.ApplyRefresh(stored, incoming, false)
-	if len(got) != 1 || len(got[0].Args) != 1 {
-		t.Fatalf("got %+v, want the incoming operation's arguments", got)
-	}
-}
-
 // A spec parsed and then diffed against itself is the refresh nobody needs to
 // confirm. Worth pinning end to end: it is the common case, and if the parser
 // were non-deterministic in any way this is where it would show.

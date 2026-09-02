@@ -23,7 +23,7 @@
 // error message says exactly that.
 //
 // The state-changed trigger remembers the last state it emitted per (flow,
-// node) via the cursor store the daemon wires at startup (SetCursorStore),
+// node) via the cursor store the daemon wires at startup (cursor.SetStore),
 // the same mechanism google_form_trigger uses for its watermark.
 package homeassistant
 
@@ -31,7 +31,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
@@ -131,52 +130,4 @@ func (e entityState) friendlyName() string {
 		return n
 	}
 	return e.EntityID
-}
-
-// --- cursor (watermark) store, for the state-changed trigger ----------------
-
-// CursorReader returns the stored value for an exact tenant/name, or
-// ("", nil) when nothing has been stored yet (first observation).
-// CursorWriter persists one. The daemon wires these to the encrypted secret
-// store under a reserved "cursor." prefix (hidden from the Credentials UI)
-// via SetCursorStore — mirrors gform.SetCursorStore.
-type (
-	CursorReader func(ctx context.Context, tenant, name string) (string, error)
-	CursorWriter func(ctx context.Context, tenant, name, value string) error
-)
-
-var (
-	cursorMu     sync.RWMutex
-	cursorReader CursorReader
-	cursorWriter CursorWriter
-)
-
-func SetCursorStore(r CursorReader, w CursorWriter) {
-	cursorMu.Lock()
-	defer cursorMu.Unlock()
-	cursorReader, cursorWriter = r, w
-}
-
-func readCursor(ctx context.Context, tenant, name string) string {
-	cursorMu.RLock()
-	r := cursorReader
-	cursorMu.RUnlock()
-	if r == nil {
-		return ""
-	}
-	v, err := r(ctx, tenant, name)
-	if err != nil {
-		return "" // treat any read failure as "first observation"
-	}
-	return v
-}
-
-func writeCursor(ctx context.Context, tenant, name, value string) error {
-	cursorMu.RLock()
-	w := cursorWriter
-	cursorMu.RUnlock()
-	if w == nil {
-		return nil
-	}
-	return w(ctx, tenant, name, value)
 }

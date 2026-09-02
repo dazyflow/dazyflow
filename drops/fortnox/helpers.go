@@ -51,9 +51,6 @@ func resolveToken(ctx context.Context, job core.Job) (string, error) {
 
 var httpBase = apibase.New("https://api.fortnox.se/3")
 
-// SetHTTPBase swaps the Fortnox API root (tests point it at httptest).
-func SetHTTPBase(base string) { httpBase.Set(base) }
-
 func baseURL(job core.Job) string { return httpBase.For(job) }
 
 // fortnoxDo runs one authenticated Fortnox API call. `body` nil means no

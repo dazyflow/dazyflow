@@ -8,59 +8,30 @@ import {
   type ReactNode,
 } from "react";
 
-// Button is the app's single source of truth for clickable actions. Every
-// button reads its appearance from *what it does* (the variant), not from a
-// hand-picked class at the call site. The vocabulary is deliberately small:
+// Button is the single component for clickable actions. Appearance follows
+// what the action does (variant), never a hand-picked class at the call site.
 //
-//   variant — the action's intent:
-//     primary    The one forward/affirmative action on a surface (Save,
-//                Create, Connect, Submit). Aim for at most one per view.
-//     secondary  The standard, neutral action (Cancel, Back, …). Default.
-//     ghost      Low-emphasis: toolbar buttons, inline row actions, dismiss.
-//     danger     Destructive / irreversible (Delete, Revoke, Disconnect).
-//     warning    Reversible caution / paused state (pause or disable a flow).
-//     link       Reads as a text link, sitting in-flow inside prose or a row.
+//   variant: primary   the one affirmative action on a surface (at most one per view)
+//            secondary neutral (default)
+//            ghost     low emphasis: toolbars, inline row actions, dismiss
+//            danger    destructive; outlined by default
+//            warning   reversible caution (pause/disable)
+//            link      reads as a text link inside prose or a row
+//   size:    md (default) | sm (dense toolbars, chips) | icon (square; needs aria-label or title)
 //
-//   size — density, not meaning:
-//     md         Standard. Default.
-//     sm         Compact: dense toolbars, chips, inline rows.
-//     icon       Square, icon-only. MUST carry an aria-label (or title).
+// Modifiers are props: `icon`, `collapseLabel`, `block`, `loading`, `filled`.
+// `filled` applies only to danger and makes it solid, for the moment a
+// destructive action IS the affirmative one (a dialog's final confirm, the
+// Stop that replaces Run). `variant="ghost" className="danger"` is the one
+// sanctioned compound (`.ghost.danger` in app.css): a quiet inline destructive
+// icon with no border, used by row-level delete icons. It is not a bypass.
 //
-// Modifiers are props, never variants: `icon` (leading glyph), `collapseLabel`
-// (icon + label that drops to icon-only on narrow screens), `block`
-// (full-width), `loading` (shows busy + disables), `filled` (see below).
-//
-// `filled` only means anything with variant="danger", where it swaps the
-// outlined default for solid red on white. Use it for the moment a
-// destructive action IS the affirmative action — the final confirm in a
-// dialog, and the Stop button that replaces Run while a run is in flight.
-// Those need to hold the same visual weight as the button they stand in for,
-// which an outline cannot. Everything else destructive stays outlined.
-// It exists as a prop because the editor's Stop and the run-detail page's
-// Stop had each grown their own page-scoped CSS override of `.primary` /
-// `.danger` instead, so the same action rendered as a red block on one
-// surface and a red outline on the other.
-//
-// ONE deliberate exception, because the variant list can't express it: a quiet
-// inline destructive action is `variant="ghost" className="danger"`, which the
-// stylesheet defines as its own compound (`.ghost.danger`, app.css) — ghost's
-// transparent fill with danger's red ink, and NO border. Plain
-// `variant="danger"` is the outlined form and is what a standalone destructive
-// button should use. The compound is used by the row-level delete icons in
-// Files, CredentialsManager, IconUpload and AdminSecretManager. It looks like a
-// call site bypassing the variant API and is not — leaving this note here so
-// the next audit doesn't "fix" six correct call sites into growing a border.
-//
-// Toggle/tab/chip selectors (the `.active` family — theme options, role
-// templates, cron chips, segmented tabs) are *selectable state*, not actions,
-// and deliberately live outside this component.
-//
-// The emitted class names mirror the variant/size names so existing contextual
-// CSS (`.signin button.primary`, `.confirm-dialog .modal-foot button.danger`,
-// …) keeps matching unchanged. A `btn` base class is always present so anchors
-// rendered through <ButtonLink> pick up the same chrome as native buttons.
+// Selectable state (the `.active` family: tabs, chips, theme options) is not an
+// action and lives outside this component. Emitted class names mirror the
+// variant/size names so contextual CSS keeps matching, and `btn` is always
+// present so <ButtonLink> anchors share the chrome.
 
-export type ButtonVariant =
+type ButtonVariant =
   | "primary"
   | "secondary"
   | "ghost"
@@ -68,7 +39,7 @@ export type ButtonVariant =
   | "warning"
   | "link";
 
-export type ButtonSize = "md" | "sm" | "icon";
+type ButtonSize = "md" | "sm" | "icon";
 
 interface ButtonBaseProps {
   variant?: ButtonVariant;

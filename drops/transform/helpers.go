@@ -18,6 +18,7 @@ import (
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/limits"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/drops/internal/rows"
 	"github.com/dazyflow/dazyflow/internal/rowcel"
 )
@@ -53,14 +54,6 @@ func celProgram(env *cel.Env, ast *cel.Ast) (cel.Program, error) {
 	return env.Program(ast, cel.CostLimit(rowcel.CostLimit))
 }
 
-func errResult(job core.Job, code, msg string) core.Result {
-	return core.Result{
-		JobID:  job.ID,
-		Status: core.StatusError,
-		Error:  &core.JobError{Code: code, Message: msg},
-	}
-}
-
 // normalizeRows / coerceRowMap / normalizeHeaders / deriveHeaders are
 // thin aliases over the shared drops/internal/rows package. The
 // transform variant caps the input against the row ceiling (so a
@@ -69,10 +62,6 @@ func errResult(job core.Job, code, msg string) core.Result {
 // arrives in) — both expressed via Options.
 func normalizeRows(inline any) ([]map[string]any, error) {
 	return rows.Normalize(inline, rows.Options{Cap: capRows, AllowSingleObject: true})
-}
-
-func coerceRowMap(item any) (map[string]any, error) {
-	return rows.CoerceRowMap(item)
 }
 
 func normalizeHeaders(inline any) ([]string, error) {
@@ -92,11 +81,11 @@ func deriveHeaders(r []map[string]any) []string {
 func loadRowsAndHeaders(job core.Job) (rowsOut []map[string]any, headers []string, errRes core.Result, ok bool) {
 	rowsRef, present := job.Input["rows"]
 	if !present {
-		return nil, nil, errResult(job, "missing_input", "input port 'rows' is required"), false
+		return nil, nil, params.Err(job, "missing_input", "input port 'rows' is required"), false
 	}
 	rowsOut, err := normalizeRows(rowsRef.Inline)
 	if err != nil {
-		return nil, nil, errResult(job, "bad_input", err.Error()), false
+		return nil, nil, params.Err(job, "bad_input", err.Error()), false
 	}
 	// Folded-headers model: the column order travels ON the rows value
 	// (rowsRef.Headers), so there's one wire, not parallel rows + headers
@@ -109,7 +98,7 @@ func loadRowsAndHeaders(job core.Job) (rowsOut []map[string]any, headers []strin
 		if h, ok := job.Input["headers"]; ok && h.Inline != nil {
 			headers, err = normalizeHeaders(h.Inline)
 			if err != nil {
-				return nil, nil, errResult(job, "bad_input", err.Error()), false
+				return nil, nil, params.Err(job, "bad_input", err.Error()), false
 			}
 		}
 	}

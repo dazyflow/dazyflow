@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -705,11 +706,11 @@ func TestInstallGuardedHTTPTransport(t *testing.T) {
 
 func TestEmitProgress_NilAndBufferFull(t *testing.T) {
 	// nil channel ⇒ no-op, must not panic.
-	emitProgress(nil, core.Job{ID: "j"}, 0.5, "x")
+	params.EmitProgress(nil, core.Job{ID: "j"}, 0.5, "x")
 
 	// Full channel ⇒ default branch (dropped), must not block.
 	ch := make(chan core.Progress) // unbuffered, no reader
-	emitProgress(ch, core.Job{ID: "j"}, 0.5, "x")
+	params.EmitProgress(ch, core.Job{ID: "j"}, 0.5, "x")
 }
 
 // TestExecuteGitCheckout_QuotaPreflight covers the cheap refusal: an org

@@ -138,7 +138,7 @@ func executeNtfy(ctx context.Context, job core.Job, progress chan<- core.Progres
 			cut-- // don't split a multi-byte character (å, emoji, …)
 		}
 		body = body[:cut] + "…"
-		emitProgress(progress, job, 0.3, fmt.Sprintf(
+		params.EmitProgress(progress, job, 0.3, fmt.Sprintf(
 			"message was %d bytes; ntfy caps notifications at ~%d, so it was shortened — connect a summary instead of a full document if you need the whole thing.",
 			origBytes, ntfyMaxMessage))
 	}

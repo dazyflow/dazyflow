@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 )
 
 // --- compare.go: toStr -------------------------------------------------------
@@ -401,12 +402,12 @@ func TestEmitProgress_Cov(t *testing.T) {
 	job := core.Job{ID: "j1", NodeID: "n1"}
 
 	t.Run("nil channel is a no-op", func(t *testing.T) {
-		emitProgress(nil, job, 50, "half")
+		params.EmitProgress(nil, job, 50, "half")
 	})
 
 	t.Run("buffered channel receives", func(t *testing.T) {
 		ch := make(chan core.Progress, 1)
-		emitProgress(ch, job, 25, "quarter")
+		params.EmitProgress(ch, job, 25, "quarter")
 		select {
 		case p := <-ch:
 			if p.JobID != "j1" || p.Message != "quarter" || p.Percent == nil || *p.Percent != 25 {
@@ -419,7 +420,7 @@ func TestEmitProgress_Cov(t *testing.T) {
 
 	t.Run("full channel drops without blocking", func(t *testing.T) {
 		ch := make(chan core.Progress) // unbuffered, no reader -> default branch
-		emitProgress(ch, job, 75, "drop")
+		params.EmitProgress(ch, job, 75, "drop")
 	})
 }
 

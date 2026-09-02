@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/engine"
 )
 
@@ -71,7 +72,7 @@ func executeBuildCSV(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 	if raw, present := job.Params["columns"]; present {
 		cols, err := normalizeStringSlice(raw, "columns")
 		if err != nil {
-			return errResult(job, "bad_param", err.Error()), nil
+			return params.Err(job, "bad_param", err.Error()), nil
 		}
 		if len(cols) > 0 {
 			headers = cols
@@ -80,7 +81,7 @@ func executeBuildCSV(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 
 	comma, err := csvDelimiter(job.Params)
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	includeHeader := paramBoolDefault(job.Params, "header", true)
 
@@ -90,7 +91,7 @@ func executeBuildCSV(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 
 	if includeHeader {
 		if err := w.Write(headers); err != nil {
-			return errResult(job, "encode_failed", err.Error()), nil
+			return params.Err(job, "encode_failed", err.Error()), nil
 		}
 	}
 	rec := make([]string, len(headers))
@@ -99,12 +100,12 @@ func executeBuildCSV(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 			rec[i] = cellString(row[h])
 		}
 		if err := w.Write(rec); err != nil {
-			return errResult(job, "encode_failed", err.Error()), nil
+			return params.Err(job, "encode_failed", err.Error()), nil
 		}
 	}
 	w.Flush()
 	if err := w.Error(); err != nil {
-		return errResult(job, "encode_failed", err.Error()), nil
+		return params.Err(job, "encode_failed", err.Error()), nil
 	}
 
 	return core.Result{

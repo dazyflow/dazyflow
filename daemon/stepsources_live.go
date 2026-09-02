@@ -10,20 +10,12 @@ import (
 )
 
 // The LIVE half of a step source: what this process currently has registered,
-// and how it is kept in step with the store. stepsources.go holds the other
-// half — the naming and URL rules a source's configuration must obey.
-//
-// Both sources (MCP servers, web APIs) run the same state machine, and it is
-// the part where a divergence would be INVISIBLE. A naming rule that drifted
-// shows up the first time someone types a name; an applied-map that drifted
-// shows up as one org's steps quietly missing on one replica, hours later,
-// with nothing in a log to say so. So it is written once and both call it.
-//
-// What is deliberately NOT here: Save, Delete and DeleteByTenant. Those look
-// similar too, but their bodies are mostly validation and prose that belong to
-// one source or the other, and a divergence in them is loud — a save is
-// refused, a delete returns an error. Hoisting them would trade readable code
-// for five closures at each call site.
+// and how it is kept in step with the store. stepsources.go holds the naming
+// and URL rules. Both sources (MCP servers, web APIs) run this one state
+// machine because a divergence here is invisible: one org's steps quietly
+// missing on one replica, hours later. Save, Delete and DeleteByTenant stay
+// per-source; their bodies are mostly validation and a divergence there is
+// loud.
 
 // stepSourceKey identifies one org-configured step source: the tenant that
 // owns it and the name its step ids carry. Shared by both services AND by both

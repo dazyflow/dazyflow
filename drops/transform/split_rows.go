@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/engine"
 )
 
@@ -77,14 +78,14 @@ func executeSplitRows(ctx context.Context, job core.Job, _ chan<- core.Progress)
 
 	env, err := newRowCELEnv()
 	if err != nil {
-		return errResult(job, "internal", fmt.Sprintf("cel env: %v", err)), nil
+		return params.Err(job, "internal", fmt.Sprintf("cel env: %v", err)), nil
 	}
 	prog, err := compileOptionalFilter(env, job.Params)
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	if prog == nil {
-		return errResult(job, "bad_param", "filter: required"), nil
+		return params.Err(job, "bad_param", "filter: required"), nil
 	}
 
 	// Pre-size each side optimistically; if the split is skewed,
@@ -96,7 +97,7 @@ func executeSplitRows(ctx context.Context, job core.Job, _ chan<- core.Progress)
 	for i, row := range rows {
 		pass, err := evalFilter(ctx, prog, row)
 		if err != nil {
-			return errResult(job, "eval", fmt.Sprintf("filter row %d: %v", i, err)), nil
+			return params.Err(job, "eval", fmt.Sprintf("filter row %d: %v", i, err)), nil
 		}
 		if pass {
 			matched = append(matched, row)

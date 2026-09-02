@@ -4,34 +4,16 @@
 // Guard on the wide-table contract: every `.run-table` sits inside a
 // `.run-table-scroll`.
 //
-// The two rules are a pair, and only one of them is visible at the call site.
 // `.run-table` carries `min-width: 520px` below 640px, so on a phone the table
-// is deliberately wider than the screen — and something has to scroll it. The
-// wrapper is that something. Written without it, the table's overflow is
-// decided by whatever the card outside happens to say:
+// is deliberately wider than the screen and the wrapper is what scrolls it.
+// Without the wrapper the outer card decides: `overflow: hidden` clips the last
+// columns (unreachable Status/Agent/remove on the runners page), nothing makes
+// the whole PAGE scroll sideways, and `overflow: auto` turns the card into a
+// two-axis scroll container. The failure is invisible in review and on a
+// desktop, hence a structural check rather than a per-page render test.
 //
-//   overflow: hidden   the last columns are CLIPPED and unreachable. This is
-//                      what shipped on the runners page: Status, Agent and the
-//                      remove button could not be reached on a phone, and
-//                      nothing about the JSX looked wrong.
-//   nothing            the table pushes past the card and the whole PAGE
-//                      scrolls sideways, which moves the header and the nav.
-//   overflow: auto     works, but makes the card itself a scroll container in
-//                      both directions rather than the table.
-//
-// All four of the other tables in the app had one of the first two shapes, and
-// each was found by hand, one bug report at a time. Hence a guard: the failure
-// is invisible in review, invisible on a desktop, and only ever reported by
-// someone holding a phone.
-//
-// Deliberately structural rather than a render test. What is being checked is
-// that two class names appear together, which no jsdom test can see better than
-// a reader can — and the four pages carrying these tables have no test harness
-// at all, so proving it per page would mean four sets of auth/api/router
-// scaffolding to assert one wrapper div.
-//
-// Why a plain .mjs script: same as its siblings — it reads source files, which a
-// vitest test cannot do without pulling @types/node into the app's tsconfig.
+// A plain .mjs script because it reads source files, which a vitest test cannot
+// do without pulling @types/node into the app's tsconfig.
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";

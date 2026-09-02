@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/cursor"
 	"github.com/dazyflow/dazyflow/drops/internal/mailmsg"
 )
 
@@ -81,11 +82,11 @@ func TestGmailSearch_ReturnsMessages(t *testing.T) {
 func memCursor(t *testing.T) map[string]string {
 	t.Helper()
 	store := map[string]string{}
-	SetCursorStore(
+	cursor.SetStore(
 		func(_ context.Context, tenant, name string) (string, error) { return store[tenant+"|"+name], nil },
 		func(_ context.Context, tenant, name, value string) error { store[tenant+"|"+name] = value; return nil },
 	)
-	t.Cleanup(func() { SetCursorStore(nil, nil) })
+	t.Cleanup(func() { cursor.SetStore(nil, nil) })
 	return store
 }
 

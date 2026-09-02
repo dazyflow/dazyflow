@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/cursor"
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
@@ -198,8 +199,8 @@ func (c *memCursor) write(_ context.Context, tenant, name, value string) error {
 
 func TestStateChanged_FirstObservationDoesNotFire(t *testing.T) {
 	store := &memCursor{}
-	SetCursorStore(store.read, store.write)
-	defer SetCursorStore(nil, nil)
+	cursor.SetStore(store.read, store.write)
+	defer cursor.SetStore(nil, nil)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, `{"entity_id":"binary_sensor.door","state":"off","attributes":{},"last_changed":"2026-06-16T10:00:00Z"}`)
@@ -222,8 +223,8 @@ func TestStateChanged_FirstObservationDoesNotFire(t *testing.T) {
 
 func TestStateChanged_FiresOnChangeWithPrevious(t *testing.T) {
 	store := &memCursor{}
-	SetCursorStore(store.read, store.write)
-	defer SetCursorStore(nil, nil)
+	cursor.SetStore(store.read, store.write)
+	defer cursor.SetStore(nil, nil)
 
 	state := `{"entity_id":"binary_sensor.door","state":"off","attributes":{},"last_changed":"2026-06-16T10:00:00Z"}`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -476,32 +477,10 @@ func TestCovHttpFailureNonSSRFTransport(t *testing.T) {
 	}
 }
 
-func TestCovCursorNilStore(t *testing.T) {
-	SetCursorStore(nil, nil)
-	t.Cleanup(func() { SetCursorStore(nil, nil) })
-	if got := readCursor(context.Background(), "t", "n"); got != "" {
-		t.Fatalf("nil reader → empty, got %q", got)
-	}
-	if err := writeCursor(context.Background(), "t", "n", "v"); err != nil {
-		t.Fatalf("nil writer → nil err, got %v", err)
-	}
-}
-
-func TestCovReadCursorError(t *testing.T) {
-	reader := func(_ context.Context, _, _ string) (string, error) {
-		return "", errors.New("store down")
-	}
-	SetCursorStore(reader, nil)
-	t.Cleanup(func() { SetCursorStore(nil, nil) })
-	if got := readCursor(context.Background(), "t", "n"); got != "" {
-		t.Fatalf("read error → treat as first observation, got %q", got)
-	}
-}
-
 func TestCovReadStoredCursorUnparseable(t *testing.T) {
 	reader := func(_ context.Context, _, _ string) (string, error) { return "not json", nil }
-	SetCursorStore(reader, nil)
-	t.Cleanup(func() { SetCursorStore(nil, nil) })
+	cursor.SetStore(reader, nil)
+	t.Cleanup(func() { cursor.SetStore(nil, nil) })
 	if c := readStoredCursor(context.Background(), "t", "n"); c != nil {
 		t.Fatalf("unparseable cursor → nil, got %+v", c)
 	}
@@ -515,8 +494,8 @@ func TestCovStateChangedBadParam(t *testing.T) {
 }
 
 func TestCovStateChanged404(t *testing.T) {
-	SetCursorStore(nil, nil)
-	t.Cleanup(func() { SetCursorStore(nil, nil) })
+	cursor.SetStore(nil, nil)
+	t.Cleanup(func() { cursor.SetStore(nil, nil) })
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(404)
 		_, _ = io.WriteString(w, `{"message":"Entity not found."}`)
@@ -530,8 +509,8 @@ func TestCovStateChanged404(t *testing.T) {
 }
 
 func TestCovStateChangedBadJSON(t *testing.T) {
-	SetCursorStore(nil, nil)
-	t.Cleanup(func() { SetCursorStore(nil, nil) })
+	cursor.SetStore(nil, nil)
+	t.Cleanup(func() { cursor.SetStore(nil, nil) })
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "not json")
 	}))

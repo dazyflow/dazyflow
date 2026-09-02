@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/drops/internal/sandbox"
 )
 
@@ -706,14 +707,14 @@ func TestShellEnabled(t *testing.T) {
 
 // TestEmitProgress_NilChannel covers the nil-channel guard (no panic, no send).
 func TestEmitProgress_NilChannel(t *testing.T) {
-	emitProgress(nil, core.Job{ID: "j"}, 0.5, "halfway")
+	params.EmitProgress(nil, core.Job{ID: "j"}, 0.5, "halfway")
 }
 
 // TestEmitProgress_Delivers covers the successful-send branch and the field
 // wiring (JobID/NodeID/Percent/Message).
 func TestEmitProgress_Delivers(t *testing.T) {
 	ch := make(chan core.Progress, 1)
-	emitProgress(ch, core.Job{ID: "j", NodeID: "n"}, 0.25, "quarter")
+	params.EmitProgress(ch, core.Job{ID: "j", NodeID: "n"}, 0.25, "quarter")
 	p := <-ch
 	if p.JobID != "j" || p.NodeID != "n" || p.Message != "quarter" {
 		t.Fatalf("progress = %+v", p)
@@ -727,7 +728,7 @@ func TestEmitProgress_Delivers(t *testing.T) {
 // drops the update instead of blocking.
 func TestEmitProgress_FullChannelDrops(t *testing.T) {
 	ch := make(chan core.Progress) // unbuffered, no reader → send not ready
-	emitProgress(ch, core.Job{ID: "j"}, 1.0, "done")
+	params.EmitProgress(ch, core.Job{ID: "j"}, 1.0, "done")
 	// If we got here without blocking, the default branch fired.
 }
 

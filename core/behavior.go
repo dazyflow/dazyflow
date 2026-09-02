@@ -6,46 +6,24 @@ package core
 import "reflect"
 
 // BehaviorEqual reports whether two revisions of a flow would behave the
-// same — i.e. whether promoting one over the other would change anything a
-// run, a schedule, or an inbound trigger does.
+// same: whether promoting one over the other changes anything a run, a
+// schedule, or an inbound trigger does. It drives the editor's "your draft has
+// changes that aren't live yet" prompt, which must not nag about cosmetics the
+// diff view already ignores.
 //
-// It exists for the editor's "your draft has changes that aren't live yet"
-// prompt. That prompt used to be a plain DeepEqual of the two graphs, which
-// made the canvas nag about work nobody can publish anything meaningful
-// about: nudge a step, drop a note on the canvas, bend a wire, and the
-// editor announced unpublished changes while the diff view — which has
-// always ignored cosmetics — reported the draft as identical to the live
-// version. Two features, two answers, both looking at the same pair of
-// revisions.
+// Ignored as editor-only (mirror of the cosmetic set in
+// web/src/lib/diffGraphs.ts; keep the two in lockstep):
 //
-// EDITOR-ONLY, ignored here (mirror of the cosmetic set in
-// web/src/lib/diffGraphs.ts — keep the two in lockstep):
+//	Node.Position, Node.Label, Edge.Waypoints, Graph.Frames
 //
-//	Node.Position    where a step sits on the canvas
-//	Node.Label       what a step is called on the canvas. Editor presentation,
-//	                 like its position: the engine never reads it, and nothing
-//	                 outside the editor shows it — so promoting it changes
-//	                 nothing about the live flow. (Graph.Name is NOT in this
-//	                 list, and the difference is real: a flow's name reaches
-//	                 people through the flow list and failure mail.)
-//	Edge.Waypoints   hand-tuned wire routing
-//	Graph.Frames     comment boxes grouping steps
+// Graph.Name is NOT cosmetic: it reaches people through the flow list and
+// failure mail. Graph.Disabled is ignored for a different reason: the
+// scheduler, webhook and form endpoints read it off HEAD, so pausing is live
+// the moment it is saved and is not publishable drift.
 //
-// APPLIED FROM HEAD, so publishing is not what makes it take effect:
-//
-//	Graph.Disabled   the pause switch. The scheduler, webhook and form
-//	                 endpoints all read it off HEAD (see scheduler.go,
-//	                 webhook.go, form.go), so pausing is live the moment
-//	                 it is saved. Counting it as publishable drift made
-//	                 pausing a flow raise a "publish your changes" prompt
-//	                 for a change that was already in force.
-//
-// Everything else counts, deliberately: the comparison is a DeepEqual over
-// the graph with the fields above cleared, not an allowlist of the fields
-// we thought to check. A field added to Graph or Node therefore defaults to
-// "publishing it matters", which is the safe direction — the editor may ask
-// to publish something harmless, but it will never stay quiet about a real
-// behaviour change it didn't know to look at.
+// Everything else counts. The comparison is a DeepEqual with the fields above
+// cleared, not an allowlist, so a new field defaults to "publishing it
+// matters", which is the safe direction.
 func BehaviorEqual(a, b Graph) bool {
 	return reflect.DeepEqual(stripCosmetic(a), stripCosmetic(b))
 }

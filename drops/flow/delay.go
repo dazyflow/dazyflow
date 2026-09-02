@@ -86,7 +86,7 @@ func executeDelay(ctx context.Context, job core.Job, progress chan<- core.Progre
 		case <-ctx.Done():
 			return params.Err(job, "cancelled", ctx.Err().Error()), ctx.Err()
 		case <-timer.C:
-			emitProgress(progress, job, 1.0, "done")
+			params.EmitProgress(progress, job, 1.0, "done")
 			return core.Result{
 				JobID:  job.ID,
 				Status: core.StatusOK,
@@ -97,7 +97,7 @@ func executeDelay(ctx context.Context, job core.Job, progress chan<- core.Progre
 			if pct > 1 {
 				pct = 1
 			}
-			emitProgress(progress, job, pct, fmt.Sprintf("%v elapsed", time.Since(start).Round(time.Millisecond)))
+			params.EmitProgress(progress, job, pct, fmt.Sprintf("%v elapsed", time.Since(start).Round(time.Millisecond)))
 		}
 	}
 }

@@ -122,8 +122,6 @@ var httpBase = apibase.New("https://slack.com/api")
 // all Slack calls to a local httptest server.
 func SetHTTPBase(base string) { httpBase.Set(base) }
 
-func currentHTTPBase() string { return httpBase.Get() }
-
 // decodeSlackResponse reads + parses a Slack API JSON response.
 // Every Slack API call follows the same {ok, error, ...} envelope,
 // so the decoder is shared across drops.

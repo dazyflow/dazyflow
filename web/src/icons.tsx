@@ -245,7 +245,7 @@ const categoryColors: Record<string, string> = {
 // categoryColor returns the role tint for a category, or undefined when the
 // category has none (so callers fall back to a per-node Color, then the
 // global default).
-export function categoryColor(category?: string): string | undefined {
+function categoryColor(category?: string): string | undefined {
   return category ? categoryColors[category] : undefined;
 }
 
@@ -274,7 +274,7 @@ export function isBrandedIcon(name?: string): boolean {
 // saturated gradient behind a near-black glyph while the Inspector used a soft
 // tint behind a coloured one, so the same step looked like two different things
 // depending on which half of the screen you read.
-export const DROP_ICON_TINT = "22%";
+const DROP_ICON_TINT = "22%";
 
 // DropIcon is the ONE way a step's icon reaches a screen — the canvas node, the
 // Ctrl+K palette, the Apps cards, the config checklist and the Inspector header.

@@ -14,10 +14,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/cursor"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 	"github.com/dazyflow/dazyflow/engine"
@@ -162,7 +162,7 @@ func resolveURL(job core.Job) string {
 // forward — mirrors gmail_search_messages / google_form_trigger.
 func dedupeAndEmit(ctx context.Context, job core.Job, items []feedItem, progress chan<- core.Progress) core.Result {
 	name := cursorName(job.GraphID, job.NodeID)
-	raw := readCursor(ctx, job.Tenant, name)
+	raw := cursor.Read(ctx, job.Tenant, name)
 	first := raw == ""
 	prev := decodeIDs(raw)
 	seen := make(map[string]bool, len(prev))
@@ -185,7 +185,7 @@ func dedupeAndEmit(ctx context.Context, job core.Job, items []feedItem, progress
 	// New window: current feed ids (newest) ahead of the prior window, deduped
 	// and capped. Best-effort write — a failed write re-emits next run at worst.
 	newWindow := capIDs(dedupeIDs(append(append([]string{}, current...), prev...)), maxSeenIDs)
-	_ = writeCursor(ctx, job.Tenant, name, encodeIDs(newWindow))
+	_ = cursor.Write(ctx, job.Tenant, name, encodeIDs(newWindow))
 
 	// Explain the outcome in the run log, so an empty Items output reads as a
 	// deliberate non-event (baseline / nothing new) rather than a silent
@@ -271,49 +271,4 @@ func capIDs(ids []string, n int) []string {
 		return ids[:n]
 	}
 	return ids
-}
-
-// --- cursor store (wired by the daemon at startup; see SetCursorStore) ---
-
-type (
-	CursorReader func(ctx context.Context, tenant, name string) (string, error)
-	CursorWriter func(ctx context.Context, tenant, name, value string) error
-)
-
-var (
-	cursorMu     sync.RWMutex
-	cursorReader CursorReader
-	cursorWriter CursorWriter
-)
-
-// SetCursorStore wires the read/write pair the daemon backs with the encrypted
-// secret store under the reserved "cursor." prefix — mirrors gmail.SetCursorStore.
-func SetCursorStore(r CursorReader, w CursorWriter) {
-	cursorMu.Lock()
-	defer cursorMu.Unlock()
-	cursorReader, cursorWriter = r, w
-}
-
-func readCursor(ctx context.Context, tenant, name string) string {
-	cursorMu.RLock()
-	r := cursorReader
-	cursorMu.RUnlock()
-	if r == nil {
-		return ""
-	}
-	v, err := r(ctx, tenant, name)
-	if err != nil {
-		return "" // any read failure → treat as first run
-	}
-	return v
-}
-
-func writeCursor(ctx context.Context, tenant, name, value string) error {
-	cursorMu.RLock()
-	w := cursorWriter
-	cursorMu.RUnlock()
-	if w == nil {
-		return nil
-	}
-	return w(ctx, tenant, name, value)
 }

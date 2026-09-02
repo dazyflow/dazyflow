@@ -11,7 +11,7 @@
 // dependency-free internal triggers (cron/poll/webhook). It authenticates
 // with Google OAuth via the SetTokenLookup hook the daemon wires at
 // startup (the "google" provider, same as the sheets/gmail drops), and
-// remembers how far it has read via SetCursorStore.
+// remembers how far it has read via the cursor store.
 package gform
 
 import (
@@ -42,54 +42,6 @@ func SetTokenLookup(fn google.TokenLookup) { google.SetTokenLookup(fn) }
 
 func resolveToken(ctx context.Context, job core.Job) (string, error) {
 	return google.ResolveToken(ctx, job)
-}
-
-// --- cursor (watermark) store -----------------------------------------------
-
-// CursorReader returns the stored value for an exact tenant/name, or
-// ("", nil) when nothing has been stored yet (first fire). CursorWriter
-// persists one. The daemon wires these to the encrypted secret store under
-// a reserved "cursor." prefix (hidden from the Credentials UI) via
-// SetCursorStore.
-type (
-	CursorReader func(ctx context.Context, tenant, name string) (string, error)
-	CursorWriter func(ctx context.Context, tenant, name, value string) error
-)
-
-var (
-	cursorMu     sync.RWMutex
-	cursorReader CursorReader
-	cursorWriter CursorWriter
-)
-
-func SetCursorStore(r CursorReader, w CursorWriter) {
-	cursorMu.Lock()
-	defer cursorMu.Unlock()
-	cursorReader, cursorWriter = r, w
-}
-
-func readCursor(ctx context.Context, tenant, name string) string {
-	cursorMu.RLock()
-	r := cursorReader
-	cursorMu.RUnlock()
-	if r == nil {
-		return ""
-	}
-	v, err := r(ctx, tenant, name)
-	if err != nil {
-		return "" // treat any read failure as "start from the beginning"
-	}
-	return v
-}
-
-func writeCursor(ctx context.Context, tenant, name, value string) error {
-	cursorMu.RLock()
-	w := cursorWriter
-	cursorMu.RUnlock()
-	if w == nil {
-		return nil
-	}
-	return w(ctx, tenant, name, value)
 }
 
 // --- HTTP (SSRF-guarded, test seam) -----------------------------------------
@@ -297,14 +249,6 @@ func storeTitles(formID string, titles map[string]string) {
 	titleCacheMu.Lock()
 	defer titleCacheMu.Unlock()
 	titleCache[formID] = titleCacheEntry{titles: titles, expires: time.Now().Add(titleCacheTTL)}
-}
-
-// clearTitleCache drops every cached form structure. Used by tests to keep
-// fixtures (which all reuse one form_id) isolated.
-func clearTitleCache() {
-	titleCacheMu.Lock()
-	defer titleCacheMu.Unlock()
-	titleCache = map[string]titleCacheEntry{}
 }
 
 // maxTime returns the later of two RFC3339 timestamps (string form preserved).

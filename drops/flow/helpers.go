@@ -6,8 +6,6 @@ package flow
 import (
 	"encoding/json"
 	"fmt"
-
-	"github.com/dazyflow/dazyflow/core"
 )
 
 func paramInt(params map[string]any, key string) (int, error) {
@@ -39,14 +37,4 @@ func coerceInt(v any) (int, bool) {
 		}
 	}
 	return 0, false
-}
-
-func emitProgress(ch chan<- core.Progress, job core.Job, pct float64, msg string) {
-	if ch == nil {
-		return
-	}
-	select {
-	case ch <- core.Progress{JobID: job.ID, NodeID: job.NodeID, Percent: &pct, Message: msg}:
-	default:
-	}
 }

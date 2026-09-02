@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 )
 
 // ----------------------------------------------------------------------
@@ -75,20 +76,20 @@ func TestDownloadHeaders_Variants(t *testing.T) {
 
 func TestDownloadStatusOK(t *testing.T) {
 	// Empty expect → default 2xx.
-	if !downloadStatusOK(200, nil) {
+	if !params.StatusAccepted(200, nil) {
 		t.Error("200 with empty expect: want OK")
 	}
-	if downloadStatusOK(404, nil) {
+	if params.StatusAccepted(404, nil) {
 		t.Error("404 with empty expect: want NOT OK")
 	}
 	// Non-empty expect must match exactly.
-	if !downloadStatusOK(404, []int{404}) {
+	if !params.StatusAccepted(404, []int{404}) {
 		t.Error("404 in expect=[404]: want OK")
 	}
-	if downloadStatusOK(200, []int{404}) {
+	if params.StatusAccepted(200, []int{404}) {
 		t.Error("200 with expect=[404]: want NOT OK")
 	}
-	if !downloadStatusOK(204, []int{200, 204}) {
+	if !params.StatusAccepted(204, []int{200, 204}) {
 		t.Error("204 in expect=[200,204]: want OK")
 	}
 }

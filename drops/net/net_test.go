@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 )
 
 // ===== do.go Do =======================================================
@@ -96,7 +97,7 @@ func TestCov_DoEgressBlocked(t *testing.T) {
 // ===== http_request.go buildRequestBody ===============================
 
 func TestCov_BuildRequestBody(t *testing.T) {
-	r, err := buildRequestBody(core.Job{Input: map[string]core.Ref{"request_body": {Inline: "hi"}}})
+	r, err := params.RequestBody(core.Job{Input: map[string]core.Ref{"request_body": {Inline: "hi"}}})
 	if err != nil || r == nil {
 		t.Fatalf("string: r=%v err=%v", r, err)
 	}
@@ -105,21 +106,21 @@ func TestCov_BuildRequestBody(t *testing.T) {
 		t.Errorf("string body = %q", b)
 	}
 
-	r2, _ := buildRequestBody(core.Job{Input: map[string]core.Ref{"request_body": {Inline: []byte("bytes")}}})
+	r2, _ := params.RequestBody(core.Job{Input: map[string]core.Ref{"request_body": {Inline: []byte("bytes")}}})
 	b2, _ := io.ReadAll(r2)
 	if string(b2) != "bytes" {
 		t.Errorf("bytes body = %q", b2)
 	}
 
 	// struct/map input → JSON marshalled.
-	r3, _ := buildRequestBody(core.Job{Input: map[string]core.Ref{"request_body": {Inline: map[string]any{"a": 1}}}})
+	r3, _ := params.RequestBody(core.Job{Input: map[string]core.Ref{"request_body": {Inline: map[string]any{"a": 1}}}})
 	b3, _ := io.ReadAll(r3)
 	if !strings.Contains(string(b3), `"a":1`) {
 		t.Errorf("map body = %q", b3)
 	}
 
 	// nil input → falls through to params.body.
-	r4, _ := buildRequestBody(core.Job{
+	r4, _ := params.RequestBody(core.Job{
 		Input:  map[string]core.Ref{"request_body": {Inline: nil}},
 		Params: map[string]any{"body": "fromparam"},
 	})
@@ -129,7 +130,7 @@ func TestCov_BuildRequestBody(t *testing.T) {
 	}
 
 	// no input, no param → nil reader.
-	r5, _ := buildRequestBody(core.Job{})
+	r5, _ := params.RequestBody(core.Job{})
 	if r5 != nil {
 		t.Error("expected nil reader when no body")
 	}
@@ -138,16 +139,16 @@ func TestCov_BuildRequestBody(t *testing.T) {
 // ===== http_request.go statusAccepted / formatExpectStatus ===========
 
 func TestCov_StatusAccepted(t *testing.T) {
-	if !statusAccepted(204, nil) {
+	if !params.StatusAccepted(204, nil) {
 		t.Error("204 should be accepted with no expect list")
 	}
-	if statusAccepted(404, nil) {
+	if params.StatusAccepted(404, nil) {
 		t.Error("404 should not be accepted by default")
 	}
-	if !statusAccepted(404, []int{404, 410}) {
+	if !params.StatusAccepted(404, []int{404, 410}) {
 		t.Error("404 should be accepted when listed")
 	}
-	if statusAccepted(500, []int{404}) {
+	if params.StatusAccepted(500, []int{404}) {
 		t.Error("500 not in list")
 	}
 }

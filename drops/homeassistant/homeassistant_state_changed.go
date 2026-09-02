@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/cursor"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/engine"
 	"github.com/dazyflow/dazyflow/pollstate"
@@ -169,7 +170,7 @@ func noChange(job core.Job) core.Result {
 // readStoredCursor decodes the persisted cursorState, or nil when nothing is
 // stored yet (first observation) or the stored value is unparseable.
 func readStoredCursor(ctx context.Context, tenant, name string) *cursorState {
-	raw := readCursor(ctx, tenant, name)
+	raw := cursor.Read(ctx, tenant, name)
 	if raw == "" {
 		return nil
 	}
@@ -185,5 +186,5 @@ func writeStoredCursor(ctx context.Context, tenant, name string, c cursorState) 
 	if err != nil {
 		return err
 	}
-	return writeCursor(ctx, tenant, name, string(b))
+	return cursor.Write(ctx, tenant, name, string(b))
 }

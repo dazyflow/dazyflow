@@ -474,32 +474,13 @@ function EditorInner() {
   //   "update" — push the current draft to the live version
   const [publishConfirm, setPublishConfirm] =
     useState<"live" | "pause" | "update" | null>(null);
-  // lockedRunID is set when ANY run of this flow (this tab or another)
-  // is still in-flight. Save is gated on it so two editors can't race
-  // a save against a live run.
-  // The most-recent run for this graph in this session. Used by the
-  // Inspector's Output panel to fetch per-node results. Persisted via
-  // localStorage so a page refresh keeps the panel populated.
-  // Initial run resolves in priority order: URL ?run=... (deep link from
-  // the Runs page) → localStorage cached last-run for this graph → null.
-  // liveLogs holds per-node stdout/stderr lines streamed via SSE
-  // progress events. Cleared on every new run. The Inspector renders
-  // the buffer for the currently-selected node.
-  // On a phone the inspector is a FULLSCREEN sheet the user opens from the
-  // Inspect FAB, so a single tap on a step doesn't slam it over the canvas —
-  // see inspectorExpanded below. Everywhere else it is a side panel that
-  // opens on selection, which is pure CSS (`data-has-selection`).
-  //
-  // isSheet tracks MOBILE, the width the CSS switches between those two at.
-  // It gates the FAB and the close-X's "clear the selection" behaviour, both
-  // of which are sheet semantics: with a side panel there is nothing to
-  // reveal and nothing to dismiss.
-  //
-  // This used to track EDITOR_NARROW (1100), which put every window narrower
-  // than that into sheet mode — where selecting a step did nothing visible
-  // and the FAB was the only way in. EDITOR_NARROW still marks where the
-  // canvas starts reserving room beside the panel; it is no longer where the
-  // inspector changes shape.
+  // On a phone the inspector is a fullscreen sheet opened from the Inspect FAB,
+  // so a tap on a step does not slam it over the canvas (see inspectorExpanded);
+  // elsewhere it is a side panel that opens on selection, in pure CSS
+  // (`data-has-selection`). isSheet tracks MOBILE, the width where the CSS
+  // switches, and gates the FAB and the close-X's clear-selection behaviour.
+  // EDITOR_NARROW is a different threshold: where the canvas starts reserving
+  // room beside the panel.
   const [isSheet, setIsSheet] = useState<boolean>(() => isNarrower(MOBILE));
   useEffect(() => {
     const onResize = () => setIsSheet(isNarrower(MOBILE));

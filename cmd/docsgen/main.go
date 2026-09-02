@@ -290,9 +290,18 @@ func groupName(m core.Manifest) string {
 		return n
 	}
 	if m.Category != "" {
-		return strings.Title(strings.ReplaceAll(m.Category, "_", " ")) //nolint:staticcheck // ASCII slugs
+		return titleWords(strings.ReplaceAll(m.Category, "_", " "))
 	}
 	return "Other"
+}
+
+// titleWords capitalises the first letter of each ASCII word.
+func titleWords(s string) string {
+	words := strings.Fields(s)
+	for i, w := range words {
+		words[i] = strings.ToUpper(w[:1]) + w[1:]
+	}
+	return strings.Join(words, " ")
 }
 
 // bucketOf sorts a drop into one of the index's three reader-facing sections.

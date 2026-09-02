@@ -10,7 +10,6 @@ package excel
 import (
 	"fmt"
 	"io"
-	"sort"
 	"strings"
 
 	"github.com/dazyflow/dazyflow/core"
@@ -102,43 +101,4 @@ func normalizeRows(inline any) ([]map[string]any, error) {
 		return []map[string]any{v}, nil
 	}
 	return nil, fmt.Errorf("'rows' must be a JSON array of objects, got %T", inline)
-}
-
-func normalizeHeaders(inline any) []string {
-	switch v := inline.(type) {
-	case []string:
-		return v
-	case []any:
-		out := make([]string, 0, len(v))
-		for _, h := range v {
-			out = append(out, cellStr(h))
-		}
-		return out
-	}
-	return nil
-}
-
-func deriveHeaders(rows []map[string]any) []string {
-	seen := map[string]struct{}{}
-	for _, r := range rows {
-		for k := range r {
-			seen[k] = struct{}{}
-		}
-	}
-	out := make([]string, 0, len(seen))
-	for k := range seen {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
-}
-
-func cellStr(v any) string {
-	if v == nil {
-		return ""
-	}
-	if s, ok := v.(string); ok {
-		return s
-	}
-	return fmt.Sprintf("%v", v)
 }

@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/engine"
 )
 
@@ -102,7 +103,7 @@ func executeMapRows(_ context.Context, job core.Job, _ chan<- core.Progress) (co
 
 	spec, err := parseMapSpec(job.Params)
 	if err != nil {
-		return errResult(job, "bad_param", err.Error()), nil
+		return params.Err(job, "bad_param", err.Error()), nil
 	}
 
 	// 1. Filter rows. Reduces the working set before we do per-cell

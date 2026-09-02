@@ -22,44 +22,21 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// OAuth 2.0 authorization-code flow. This is what makes the
-// "connect your Slack account" experience work without the user
-// pasting tokens by hand — the daemon shepherds them through the
-// provider's authorization page, takes the code back, exchanges it
-// for tokens, and stores those tokens in the encrypted secret store
-// keyed by (tenant, provider, account_name).
+// OAuth 2.0 authorization-code flow: the daemon shepherds the user through the
+// provider's consent page, exchanges the returned code for tokens, and stores
+// them in the encrypted secret store keyed by (tenant, provider, account_name).
 //
-// Flow:
+//	1. GET /api/v1/oauth/{provider}/authorize?return_to=… mints a random state,
+//	   parks (tenant, provider, account_name, return_to) under it, and 302s to
+//	   the provider.
+//	2. GET /api/v1/oauth/{provider}/callback?code=…&state=… is UNAUTHENTICATED;
+//	   the state token is the only thing tying it to the original user. The
+//	   handler validates it, exchanges the code, stores the tokens, and 302s to
+//	   return_to.
 //
-//	1. User clicks "Connect Slack" in the UI.
-//	2. Browser hits GET /api/v1/oauth/slack/authorize?return_to=...
-//	   The handler mints a random state, parks the (tenant, provider,
-//	   account_name, return_to) tuple under that state, and 302s the
-//	   user to Slack's authorize URL.
-//	3. User authorizes on Slack's site.
-//	4. Slack 302s the user back to
-//	   GET /api/v1/oauth/slack/callback?code=...&state=...
-//	   (NB: this endpoint is UNAUTHENTICATED — the state token is the
-//	   only thing tying the callback to the original user.)
-//	5. Handler validates state, exchanges code for tokens via Slack's
-//	   token endpoint, stores the result in EncryptedSecrets, and 302s
-//	   the user to return_to.
-//
-// What this DELIBERATELY isn't (yet):
-//
-//   - PKCE: helpful for SPAs and mobile; not needed for the
-//     server-side flow we have. Add if/when we expose OAuth from a
-//     browser-only client.
-//   - Per-tenant client_id/secret: enterprises sometimes want their
-//     own OAuth app to control which scopes show in the consent
-//     screen. T3 feature.
-//
-// What it DOES handle:
-//
-//   - Refresh-on-expiry: GetOAuthToken transparently exchanges a stored
-//     refresh_token for a fresh access token when the current one is at
-//     or past expiry, so long-running scheduled flows keep working
-//     without the user reconnecting. See GetOAuthToken / refreshAccessToken.
+// GetOAuthToken refreshes transparently when a stored token is at or past
+// expiry, so scheduled flows keep working without reconnecting. Not
+// implemented: PKCE (server-side flow only) and per-tenant client credentials.
 
 // OAuthProvider describes how to talk to one OAuth 2.0 provider.
 // Hardcoded per provider (Slack, Gmail, GitHub, etc.) because the

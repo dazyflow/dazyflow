@@ -25,7 +25,7 @@ import { ICON } from "./icons";
 // (A full reload still drops in-flight uploads — surviving that needs the
 // Background Fetch API / a service worker, deliberately out of scope.)
 
-export type UploadStatus = "queued" | "uploading" | "done" | "error" | "canceled";
+type UploadStatus = "queued" | "uploading" | "done" | "error" | "canceled";
 
 export interface UploadTask {
   id: string;

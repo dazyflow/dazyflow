@@ -3,7 +3,10 @@
 
 package core
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 // ApprovalSigner builds the URL an external approver hits to resume a
 // paused await_approval node. Production implementations sign the URL
@@ -79,4 +82,26 @@ func WithFlow(ctx context.Context, flow string) context.Context {
 func FlowFromContext(ctx context.Context) (string, bool) {
 	v, ok := ctx.Value(flowCtxKey{}).(string)
 	return v, ok && v != ""
+}
+
+// ValidSecretName accepts 1..128 chars of [A-Za-z0-9_.-]. It keeps path-like
+// names and shell specials out of the secret store.
+func ValidSecretName(name string) error {
+	if name == "" {
+		return fmt.Errorf("name is empty")
+	}
+	if len(name) > 128 {
+		return fmt.Errorf("name too long (max 128)")
+	}
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9':
+		case r == '-' || r == '_' || r == '.':
+		default:
+			return fmt.Errorf("name may only contain [A-Za-z0-9_.-]")
+		}
+	}
+	return nil
 }

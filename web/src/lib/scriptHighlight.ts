@@ -53,7 +53,7 @@ export function scriptLangFor(lang: string | undefined): ScriptLang {
 // TokenKind names the classes the editor styles. Deliberately few: five colours
 // is what a reader can tell apart at a glance, and a scheme with twelve is a
 // scheme nobody reads.
-export type TokenKind = "comment" | "string" | "keyword" | "number" | "var";
+type TokenKind = "comment" | "string" | "keyword" | "number" | "var";
 
 export type ScriptToken = { kind: TokenKind; text: string } | string;
 

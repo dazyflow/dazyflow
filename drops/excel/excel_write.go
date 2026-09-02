@@ -12,6 +12,7 @@ import (
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
+	rowsutil "github.com/dazyflow/dazyflow/drops/internal/rows"
 	"github.com/dazyflow/dazyflow/engine"
 )
 
@@ -74,7 +75,7 @@ func executeExcelWrite(_ context.Context, job core.Job, _ chan<- core.Progress) 
 	path := params.StringDefault(job.Params, "path", "")
 	// The File input overrides the param when wired (same as excel_read).
 	if in, ok := job.Input["path"]; ok && in.Inline != nil {
-		path = cellStr(in.Inline)
+		path = rowsutil.Cell(in.Inline)
 	}
 	path = wsPath(path)
 	if path == "" {
@@ -95,7 +96,7 @@ func executeExcelWrite(_ context.Context, job core.Job, _ chan<- core.Progress) 
 		headers = in.Headers
 	}
 	if headers == nil {
-		headers = deriveHeaders(rows)
+		headers = rowsutil.DeriveHeaders(rows)
 	}
 	sheet := params.StringDefault(job.Params, "sheet", "Sheet1")
 	appendMode := params.BoolDefault(job.Params, "append", false)

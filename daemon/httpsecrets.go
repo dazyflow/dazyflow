@@ -28,30 +28,6 @@ import (
 
 const maxSecretValueBytes = 64 * 1024 // 64 KiB upper bound; OAuth tokens are ~hundreds of bytes
 
-// secretValidNameChars: alphanumerics + dash/underscore/dot. Stops
-// path-like names ("/.." "../") and shell-special characters from
-// landing in the store, which simplifies any future tooling that
-// scripts against secret names.
-func validSecretName(name string) error {
-	if name == "" {
-		return fmt.Errorf("name is empty")
-	}
-	if len(name) > 128 {
-		return fmt.Errorf("name too long (max 128)")
-	}
-	for _, r := range name {
-		switch {
-		case r >= 'a' && r <= 'z':
-		case r >= 'A' && r <= 'Z':
-		case r >= '0' && r <= '9':
-		case r == '-' || r == '_' || r == '.':
-		default:
-			return fmt.Errorf("name may only contain [A-Za-z0-9_.-]")
-		}
-	}
-	return nil
-}
-
 // checkReservedSecretWrite rejects user secret writes that would land in a
 // system-managed namespace. validSecretName permits dots, so without this a
 // member could craft reserved names:
@@ -218,7 +194,7 @@ func (h *HTTPGateway) secretCRUDGate(rw http.ResponseWriter, r *http.Request, p 
 // PUT semantics: idempotent, replaces any existing value at the
 // same name. Returns 204 on success.
 func (h *HTTPGateway) putSecret(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	name, scope, flow, ok := h.secretCRUDGate(rw, r, p, validSecretName, true)
+	name, scope, flow, ok := h.secretCRUDGate(rw, r, p, core.ValidSecretName, true)
 	if !ok {
 		return
 	}
@@ -285,7 +261,7 @@ func (h *HTTPGateway) listSecrets(rw http.ResponseWriter, r *http.Request, p cor
 // deleteSecret removes a secret. Idempotent — deleting a missing
 // secret returns 204 just like deleting an existing one.
 func (h *HTTPGateway) deleteSecret(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	name, scope, flow, ok := h.secretCRUDGate(rw, r, p, validSecretName, true)
+	name, scope, flow, ok := h.secretCRUDGate(rw, r, p, core.ValidSecretName, true)
 	if !ok {
 		return
 	}

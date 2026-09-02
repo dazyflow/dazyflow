@@ -248,27 +248,13 @@ version: ## Print the version that a build would stamp right now
 	@echo "version=$(VERSION) commit=$(COMMIT) date=$(BUILD_DATE)"
 
 # major/minor/patch cut an annotated release tag, bumping from the latest
-# existing tag (0.0.0 if none yet). They delegate to the shared _bump
-# recipe so the semver arithmetic lives in one place.
-#
-# The recipe promotes CHANGELOG.md itself: the [Unreleased] entries move
-# under a new [X.Y.Z] - YYYY-MM-DD heading, a fresh empty [Unreleased] is
-# left for the next cycle, and CHANGELOG + VERSION are committed together
-# so the tag points at the commit where the changelog announces the
-# version.
-#
-# This used to be a manual step you were told to do FIRST, and it drifted:
-# 0.3.0, 0.3.1, 0.3.2 and 0.4.0 were all tagged with no changelog entry,
-# because nothing checked. Promotion is mechanical — the curation happens
-# while you write entries under [Unreleased] during development — so the
-# mechanical half is automated and the judgement half is enforced: an
-# EMPTY [Unreleased] aborts the release, since it means nobody wrote down
-# what shipped. Pre-promoted by hand? The recipe detects the heading and
-# leaves the file alone.
-#
-# VERSION is committed because the Docker build reads it whenever compose
-# is invoked without the VERSION export (the production deploy path); a
-# stale file there is how a release ends up reporting itself as "dev".
+# existing tag (0.0.0 if none) via the shared _bump recipe. The recipe promotes
+# CHANGELOG.md ([Unreleased] entries move under a new [X.Y.Z] - date heading,
+# an empty [Unreleased] is left behind; an EMPTY [Unreleased] aborts, since it
+# means nobody wrote down what shipped) and commits CHANGELOG + VERSION
+# together so the tag points at the commit announcing the version. VERSION is
+# committed because the Docker build reads it when compose runs without the
+# VERSION export, and a stale file is how a release reports itself as "dev".
 # The tag is local; the recipe prints the push command.
 #
 #   make patch   0.1.0 -> 0.1.1
@@ -335,48 +321,25 @@ LATEST_TAG = git tag -l '[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -Ex '[0-
 latest: ## Print the newest release tag (deploy scripts: use `make -s latest`)
 	@$(LATEST_TAG)
 
-# Deploy the newest release tag.
+# Deploy the newest release tag. Commentary lives out here because make echoes
+# recipe lines, and this target usually runs from a flow step whose log should
+# show what happened, not why.
 #
-# The commentary lives out here rather than inside the recipe because make
-# ECHOES recipe lines, comments included. This target is normally run by a
-# flow step, so every one of those lines lands in the run log and buries the
-# three that say what actually happened.
+# `git fetch --tags --force --prune-tags` keeps a moved or deleted upstream tag
+# from letting a stale local tag win the selection.
 #
-# `git fetch --tags --force --prune-tags`
-#     --force updates a tag that was moved upstream; --prune-tags drops one
-#     deleted upstream. Without them a stale local tag can win the selection.
+# The caddy guard refuses to recreate a running production stack with a file
+# set that omits the overlay, which would tear down Caddy (TLS) and the docs
+# site. It compares what is RUNNING against what THIS invocation would apply,
+# so a host that sets COMPOSE_FILE itself is not nagged. `caddy` stands in for
+# "the overlay is in play" because it exists only there.
 #
-# The caddy guard
-#     Refuses to recreate a running production stack with a file set that omits
-#     the overlay: that would tear down Caddy (TLS) and the docs site and bring
-#     dzd back bare. The test compares what is RUNNING against what THIS
-#     invocation would apply, rather than testing PROD directly — a host that
-#     configures the overlay through compose's own COMPOSE_FILE is correctly
-#     set up and must not be nagged about a flag it doesn't need. caddy exists
-#     only in the overlay, so it stands in for "the overlay is in play"; we
-#     look for the running one with the overlay merged, since a compose
-#     invocation without it doesn't know the service exists.
+# `set -e` is load-bearing: the body is one continued line handed to a single
+# shell, so without it make only sees the exit status of the trailing `if` and
+# a failed build reports a successful upgrade.
 #
-# `set -e`
-#     Load-bearing, and its absence was a real outage. The body is ONE
-#     continued line, which make hands to a single shell — so make only ever
-#     saw the exit status of the LAST command, the trailing `if`, which returns
-#     0 unconditionally. A failed build therefore reported a SUCCESSFUL upgrade
-#     while the box kept serving the previous release with its tree checked out
-#     at the new tag. Not hypothetical: that is exactly how 0.25.0 "deployed"
-#     onto images that were still 15 hours old.
-#
-# The pull branch
-#     A host running the production overlay pulls prebuilt images from ghcr.
-#     Anything else — a self-host without the overlay — still builds from
-#     source, which is why the else branch stays.
-#
-#     Keyed on `caddy` because that service exists only in the production
-#     overlay. It used to key on `registry`, back when the images came from a
-#     registry:2 container running on this box; that service is gone, and a
-#     condition still naming it would silently take the ELSE branch and set a
-#     1-vCPU droplet compiling Go and two Vite builds — the exact failure the
-#     prebuilt-image path exists to prevent.
+# Hosts running the production overlay pull prebuilt images from ghcr; a
+# self-host without the overlay still builds from source.
 upgrade: ## Deploy the latest release tag, pulling its prebuilt images (PROD=1 on a production host)
 	git fetch --tags --force --prune-tags
 	@if docker compose -f docker-compose.yml -f docker-compose.prod.yml ps \
