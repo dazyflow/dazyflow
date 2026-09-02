@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-09-02
+
 ### Added
 
 - **Read email over IMAP: the new Mailbox app.** `imap_search_messages` finds
