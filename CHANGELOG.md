@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-09-02
+
 ### Added
 
 - **Move files over SFTP: the new SFTP app.** `sftp_list_files`,
