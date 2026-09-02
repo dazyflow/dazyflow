@@ -184,8 +184,11 @@ func TestMemMCPServerStore_Contract(t *testing.T) {
 	mcpServerStoreContract(t, NewMemMCPServerStore())
 }
 
+// Not parallel, and neither is the restart test below: both own the whole
+// tenant_mcp_servers table for their duration — they TRUNCATE it and then
+// write the same acme/vendor row — so running them concurrently has one
+// wiping the other's row out from under it.
 func TestPgMCPServerStore_Contract(t *testing.T) {
-	t.Parallel()
 	pool := pgRunnerPool(t)
 	ctx := context.Background()
 	store, err := NewPgMCPServerStore(ctx, pool)
@@ -202,15 +205,17 @@ func TestPgMCPServerStore_Contract(t *testing.T) {
 // reference mcp:<server>:<tool> by id, so forgetting a server on restart does
 // not degrade those flows, it breaks them.
 func TestPgMCPServerStore_SurvivesARestart(t *testing.T) {
-	t.Parallel()
 	pool := pgRunnerPool(t)
 	ctx := context.Background()
-	if _, err := pool.Exec(ctx, "TRUNCATE tenant_mcp_servers"); err != nil {
-		t.Fatalf("truncate: %v", err)
-	}
+	// The store creates the table, so it has to come before the TRUNCATE:
+	// truncating first only worked while another test happened to have opened
+	// a store already.
 	first, err := NewPgMCPServerStore(ctx, pool)
 	if err != nil {
 		t.Fatalf("NewPgMCPServerStore: %v", err)
+	}
+	if _, err := pool.Exec(ctx, "TRUNCATE tenant_mcp_servers"); err != nil {
+		t.Fatalf("truncate: %v", err)
 	}
 	at := time.Now().UTC().Truncate(time.Millisecond)
 	if err := first.Put(ctx, MCPServer{
