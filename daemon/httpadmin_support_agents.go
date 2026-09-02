@@ -20,7 +20,7 @@ import (
 
 // listSupportAgents returns every provisioned support-agent email.
 // GET /api/v1/admin/platform/support-agents
-func (h *HTTPGateway) listSupportAgents(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *orgAPI) listSupportAgents(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !isPlatformAdmin(p) {
 		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
 		return
@@ -40,7 +40,7 @@ func (h *HTTPGateway) listSupportAgents(rw http.ResponseWriter, r *http.Request,
 // grantSupportAgent provisions an email as a support agent. The role is stamped
 // at session issue, so any live sessions for that email are dropped to force a
 // re-auth that picks it up. POST /api/v1/admin/platform/support-agents {email}
-func (h *HTTPGateway) grantSupportAgent(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *orgAPI) grantSupportAgent(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !isPlatformAdmin(p) {
 		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
 		return
@@ -70,7 +70,7 @@ func (h *HTTPGateway) grantSupportAgent(rw http.ResponseWriter, r *http.Request,
 	// a vendor agent may not have signed in yet.
 	if h.Users != nil {
 		if u, err := h.Users.GetByEmail(r.Context(), email); err == nil {
-			h.revokeSubjectSessions(r.Context(), u.Subject)
+			h.revokeSessions(r.Context(), u.Subject)
 		}
 	}
 	h.audit(r.Context(), p, "support_agent.grant", email, "")
@@ -81,7 +81,7 @@ func (h *HTTPGateway) grantSupportAgent(rw http.ResponseWriter, r *http.Request,
 // revokeSupportAgent removes a support-agent grant. Live sessions are dropped so
 // the role is gone on the target's next request.
 // DELETE /api/v1/admin/platform/support-agents/{email}
-func (h *HTTPGateway) revokeSupportAgent(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *orgAPI) revokeSupportAgent(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !isPlatformAdmin(p) {
 		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
 		return
@@ -101,7 +101,7 @@ func (h *HTTPGateway) revokeSupportAgent(rw http.ResponseWriter, r *http.Request
 	}
 	if h.Users != nil {
 		if u, err := h.Users.GetByEmail(r.Context(), email); err == nil {
-			h.revokeSubjectSessions(r.Context(), u.Subject)
+			h.revokeSessions(r.Context(), u.Subject)
 		}
 	}
 	h.audit(r.Context(), p, "support_agent.revoke", email, "")

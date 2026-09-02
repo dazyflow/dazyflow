@@ -48,7 +48,7 @@ func validResourceName(name string) error {
 // putResource creates/replaces a resource definition. PUT semantics:
 // idempotent. Gated like a flow-scoped secret write (graph:edit at flow
 // scope, secret:write at organization scope).
-func (h *HTTPGateway) putResource(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *secretsAPI) putResource(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	name, scope, flow, ok := h.secretCRUDGate(rw, r, p, validResourceName, true)
 	if !ok {
 		return
@@ -80,7 +80,7 @@ func (h *HTTPGateway) putResource(rw http.ResponseWriter, r *http.Request, p cor
 // returned (it's not secret). Resources are hidden from the Credentials
 // listing (the "res." prefix is reserved), so this is the only way to see
 // them.
-func (h *HTTPGateway) listResources(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *secretsAPI) listResources(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	_, scope, flow, ok := h.secretCRUDGate(rw, r, p, noopSecretName, false)
 	if !ok {
 		return
@@ -107,7 +107,7 @@ func (h *HTTPGateway) listResources(rw http.ResponseWriter, r *http.Request, p c
 }
 
 // deleteResource removes a resource definition. Idempotent.
-func (h *HTTPGateway) deleteResource(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *secretsAPI) deleteResource(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	name, scope, flow, ok := h.secretCRUDGate(rw, r, p, validResourceName, true)
 	if !ok {
 		return
@@ -123,7 +123,7 @@ func (h *HTTPGateway) deleteResource(rw http.ResponseWriter, r *http.Request, p 
 // resourceStorageNames maps resource name → its full storage name at the
 // scope. ListScoped can't be used (it hides the reserved "res." prefix), so
 // this filters the raw name list itself.
-func (h *HTTPGateway) resourceStorageNames(ctx context.Context, tenant, flow string, scope SecretScope) (map[string]string, error) {
+func (h *secretsAPI) resourceStorageNames(ctx context.Context, tenant, flow string, scope SecretScope) (map[string]string, error) {
 	all, err := h.EncryptedSecrets.List(ctx, tenant)
 	if err != nil {
 		return nil, err

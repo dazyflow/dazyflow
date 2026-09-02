@@ -9,8 +9,24 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/dazyflow/dazyflow/auth"
 	"github.com/dazyflow/dazyflow/core"
 )
+
+// secretsAPI serves the secret, connection and resource endpoints. Its fields are the whole of what
+// those handlers touch.
+type secretsAPI struct {
+	auditor
+	flowLoader
+	svc              *Service
+	EncryptedSecrets *EncryptedSecrets
+	Profiles         auth.OrgProfileStore
+}
+
+// secretsAPI builds them from the gateway's configuration.
+func (h *HTTPGateway) secretsAPI() *secretsAPI {
+	return &secretsAPI{auditor: h.auditor(), flowLoader: h.flows(), svc: h.svc, EncryptedSecrets: h.EncryptedSecrets, Profiles: h.Profiles}
+}
 
 // CRUD endpoints for the built-in encrypted secret store. The shape
 // is deliberately small and follows the same Bearer-auth contract as
@@ -110,7 +126,7 @@ func authorizeSecretScope(p core.Principal, scope SecretScope, write bool) (int,
 // AuthorizeGraphEdit for writes (PUT/DELETE), AuthorizeGraphView for reads
 // (GET). Organization scope is delegated to authorizeSecretScope unchanged.
 // Returns (status, message) with status 0 meaning authorized.
-func (h *HTTPGateway) authorizeFlowSecretScope(ctx context.Context, p core.Principal, scope SecretScope, flow string, write bool) (int, string) {
+func (h *secretsAPI) authorizeFlowSecretScope(ctx context.Context, p core.Principal, scope SecretScope, flow string, write bool) (int, string) {
 	if scope != ScopeFlow {
 		return authorizeSecretScope(p, scope, write)
 	}
@@ -145,7 +161,7 @@ func noopSecretName(string) error { return nil }
 // bound to a tenant. Returns false after writing the error response. It's
 // the tenant-only subset of secretCRUDGate, for handlers that don't take a
 // {name}/scope (e.g. the OAuth listing/disconnect paths).
-func (h *HTTPGateway) requireSecretStore(rw http.ResponseWriter, p core.Principal) bool {
+func (h *secretsAPI) requireSecretStore(rw http.ResponseWriter, p core.Principal) bool {
 	if h.EncryptedSecrets == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "encrypted secret store is not configured")
 		return false
@@ -164,7 +180,7 @@ func (h *HTTPGateway) requireSecretStore(rw http.ResponseWriter, p core.Principa
 // selects the read-vs-write authorization. Returns the validated name, the
 // resolved scope + flow, and ok=false (after writing the error response) when
 // the handler should stop.
-func (h *HTTPGateway) secretCRUDGate(rw http.ResponseWriter, r *http.Request, p core.Principal, validate func(string) error, write bool) (name string, scope SecretScope, flow string, ok bool) {
+func (h *secretsAPI) secretCRUDGate(rw http.ResponseWriter, r *http.Request, p core.Principal, validate func(string) error, write bool) (name string, scope SecretScope, flow string, ok bool) {
 	if h.EncryptedSecrets == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "encrypted secret store is not configured")
 		return "", "", "", false
@@ -193,7 +209,7 @@ func (h *HTTPGateway) secretCRUDGate(rw http.ResponseWriter, r *http.Request, p 
 // putSecret writes a secret for the requesting principal's tenant.
 // PUT semantics: idempotent, replaces any existing value at the
 // same name. Returns 204 on success.
-func (h *HTTPGateway) putSecret(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *secretsAPI) putSecret(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	name, scope, flow, ok := h.secretCRUDGate(rw, r, p, core.ValidSecretName, true)
 	if !ok {
 		return
@@ -224,7 +240,7 @@ func (h *HTTPGateway) putSecret(rw http.ResponseWriter, r *http.Request, p core.
 // listSecrets returns the names (not the values) of the principal's
 // secrets. Sorted alphabetically by the store; the UI can render
 // them as-is.
-func (h *HTTPGateway) listSecrets(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *secretsAPI) listSecrets(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	// Listing names is gated on read/edit even though values aren't
 	// returned — names alone leak which services a flow uses. The list
 	// endpoints carry no {name}, so validate is a no-op.
@@ -260,7 +276,7 @@ func (h *HTTPGateway) listSecrets(rw http.ResponseWriter, r *http.Request, p cor
 
 // deleteSecret removes a secret. Idempotent — deleting a missing
 // secret returns 204 just like deleting an existing one.
-func (h *HTTPGateway) deleteSecret(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *secretsAPI) deleteSecret(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	name, scope, flow, ok := h.secretCRUDGate(rw, r, p, core.ValidSecretName, true)
 	if !ok {
 		return

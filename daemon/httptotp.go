@@ -21,13 +21,13 @@ import (
 
 // totpConfigured reports whether 2FA is usable on this install: a valid
 // 32-byte key AND a challenge store to bridge the login legs.
-func (h *HTTPGateway) totpConfigured() bool {
+func (h *authAPI) totpConfigured() bool {
 	return len(h.TOTPKey) == 32 && h.TOTPChallenges != nil
 }
 
 // requireTOTP writes a 503 and returns false when 2FA isn't configured.
 // Centralised so every endpoint reports the same posture.
-func (h *HTTPGateway) requireTOTP(rw http.ResponseWriter) bool {
+func (h *authAPI) requireTOTP(rw http.ResponseWriter) bool {
 	if h.totpConfigured() {
 		return true
 	}
@@ -43,7 +43,7 @@ func totpEmail(p core.Principal) string { return p.Subject }
 
 // totpStatus is GET /api/v1/me/totp — the Settings UI reads this to pick
 // which card to render.
-func (h *HTTPGateway) totpStatus(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *authAPI) totpStatus(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Users == nil {
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "password auth not configured")
 		return
@@ -72,7 +72,7 @@ func (h *HTTPGateway) totpStatus(rw http.ResponseWriter, r *http.Request, p core
 // totpSetup is POST /api/v1/me/totp/setup — mints a fresh secret, stores
 // it pending (enabled=false), and returns provisioning data. Idempotent:
 // calling again before confirm replaces the pending secret.
-func (h *HTTPGateway) totpSetup(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *authAPI) totpSetup(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.requireTOTP(rw) {
 		return
 	}
@@ -100,7 +100,7 @@ func (h *HTTPGateway) totpSetup(rw http.ResponseWriter, r *http.Request, p core.
 // totpConfirm is POST /api/v1/me/totp/confirm — validates the first code
 // against the pending secret, enables 2FA, and returns the recovery
 // codes ONCE.
-func (h *HTTPGateway) totpConfirm(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *authAPI) totpConfirm(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.requireTOTP(rw) {
 		return
 	}
@@ -139,7 +139,7 @@ func (h *HTTPGateway) totpConfirm(rw http.ResponseWriter, r *http.Request, p cor
 // totpDisable is POST /api/v1/me/totp/disable — clears 2FA. Re-auth
 // gate: the caller must pass their current password, so a stolen session
 // cookie alone can't turn 2FA off.
-func (h *HTTPGateway) totpDisable(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *authAPI) totpDisable(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.requireTOTP(rw) {
 		return
 	}
@@ -172,7 +172,7 @@ func (h *HTTPGateway) totpDisable(rw http.ResponseWriter, r *http.Request, p cor
 
 // totpRegenerate is POST /api/v1/me/totp/recovery-codes — drops every
 // existing recovery code and mints a fresh set, returned once.
-func (h *HTTPGateway) totpRegenerate(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *authAPI) totpRegenerate(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.requireTOTP(rw) {
 		return
 	}
@@ -199,7 +199,7 @@ func (h *HTTPGateway) totpRegenerate(rw http.ResponseWriter, r *http.Request, p 
 // the challenge token is the principal here — and rate-limited by the
 // caller (rateLimitAuth) to bound a brute-force pass against the 6-digit
 // space.
-func (h *HTTPGateway) totpVerify(rw http.ResponseWriter, r *http.Request) {
+func (h *authAPI) totpVerify(rw http.ResponseWriter, r *http.Request) {
 	if !h.requireTOTP(rw) {
 		return
 	}

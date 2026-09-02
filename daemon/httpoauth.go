@@ -18,6 +18,20 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
+// oauthAPI serves the OAuth connect-account endpoints. Its fields are the whole of what
+// those handlers touch.
+type oauthAPI struct {
+	auditor
+	svc              *Service
+	OAuth            *OAuthRegistry
+	EncryptedSecrets *EncryptedSecrets
+}
+
+// oauthAPI builds them from the gateway's configuration.
+func (h *HTTPGateway) oauthAPI() *oauthAPI {
+	return &oauthAPI{auditor: h.auditor(), svc: h.svc, OAuth: h.OAuth, EncryptedSecrets: h.EncryptedSecrets}
+}
+
 // HTTP surface for the OAuth flow. Two endpoints:
 //
 //	GET /api/v1/oauth/{provider}/authorize?account=NAME&return_to=/...
@@ -39,7 +53,7 @@ import (
 
 // oauthAuthorize starts the flow. Requires bearer auth so we know
 // which tenant the resulting token belongs to.
-func (h *HTTPGateway) oauthAuthorize(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *oauthAPI) oauthAuthorize(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	provider := r.PathValue("provider")
 	// Bind this browser-redirect flow to the caller's browser: mint a nonce,
 	// stash it on the pending state, and drop it as an httpOnly cookie the
@@ -84,7 +98,7 @@ func newOAuthBinding() (string, error) {
 // setOAuthStateCookie writes the browser-binding cookie. SameSite=Lax so it
 // rides the top-level redirect back from the provider; httpOnly so script
 // can't read it; Secure when the public origin is https.
-func (h *HTTPGateway) setOAuthStateCookie(rw http.ResponseWriter, binding string) {
+func (h *oauthAPI) setOAuthStateCookie(rw http.ResponseWriter, binding string) {
 	http.SetCookie(rw, &http.Cookie{
 		Name:     oauthStateCookie,
 		Value:    binding,
@@ -98,7 +112,7 @@ func (h *HTTPGateway) setOAuthStateCookie(rw http.ResponseWriter, binding string
 
 // clearOAuthStateCookie expires the binding cookie after the callback
 // consumes (or rejects) it, so a stale value can't linger.
-func (h *HTTPGateway) clearOAuthStateCookie(rw http.ResponseWriter) {
+func (h *oauthAPI) clearOAuthStateCookie(rw http.ResponseWriter) {
 	http.SetCookie(rw, &http.Cookie{
 		Name:     oauthStateCookie,
 		Value:    "",
@@ -125,7 +139,7 @@ func (h *HTTPGateway) clearOAuthStateCookie(rw http.ResponseWriter) {
 // binding, when non-empty, ties the flow to the caller's browser via the
 // dz_oauth_state cookie (the browser-redirect path sets it). Pass "" for the
 // JSON/manual path, where the authorize link is opened by a different agent.
-func (h *HTTPGateway) buildAuthorizeURL(p core.Principal, providerName, account, returnTo string, scopes []string, binding string) (string, int, string) {
+func (h *oauthAPI) buildAuthorizeURL(p core.Principal, providerName, account, returnTo string, scopes []string, binding string) (string, int, string) {
 	if h.OAuth == nil {
 		return "", http.StatusNotImplemented, "OAuth not configured"
 	}
@@ -204,7 +218,7 @@ func (h *HTTPGateway) buildAuthorizeURL(p core.Principal, providerName, account,
 // oauthCallback receives the provider's redirect, exchanges the
 // code for tokens, stores them, and 302s the user back to
 // `return_to`. No auth — state token is the only credential.
-func (h *HTTPGateway) oauthCallback(rw http.ResponseWriter, r *http.Request) {
+func (h *oauthAPI) oauthCallback(rw http.ResponseWriter, r *http.Request) {
 	if h.OAuth == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "OAuth not configured")
 		return
@@ -315,7 +329,7 @@ func redirectWithStatus(rw http.ResponseWriter, r *http.Request, returnTo, provi
 // oauthListProviders is the UI's hook for "what can I connect to?".
 // Returns the registered provider names plus, for each, whether
 // the tenant currently has a stored token under any account.
-func (h *HTTPGateway) oauthListProviders(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *oauthAPI) oauthListProviders(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.OAuth == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "OAuth not configured")
 		return
@@ -374,7 +388,7 @@ func (h *HTTPGateway) oauthListProviders(rw http.ResponseWriter, r *http.Request
 // connectedAccounts returns the account names this tenant has a stored
 // oauth.<provider>.<account> token for. One List() call + prefix match,
 // shared by oauthListProviders and oauthListAccounts.
-func (h *HTTPGateway) connectedAccounts(ctx context.Context, tenant, provider string) []string {
+func (h *oauthAPI) connectedAccounts(ctx context.Context, tenant, provider string) []string {
 	out := h.connectedAccountsByProvider(ctx, tenant)[provider]
 	if out == nil {
 		out = make([]string, 0)
@@ -387,7 +401,7 @@ func (h *HTTPGateway) connectedAccounts(ctx context.Context, tenant, provider st
 // provider, from the tenant's oauth.<provider>.<account> secret names. One
 // List() call serves both the all-providers listing (oauthListProviders) and
 // the per-provider lookup (connectedAccounts), so the prefix-scan lives once.
-func (h *HTTPGateway) connectedAccountsByProvider(ctx context.Context, tenant string) map[string][]string {
+func (h *oauthAPI) connectedAccountsByProvider(ctx context.Context, tenant string) map[string][]string {
 	out := map[string][]string{}
 	if h.EncryptedSecrets == nil {
 		return out
@@ -428,7 +442,7 @@ func (h *HTTPGateway) connectedAccountsByProvider(ctx context.Context, tenant st
 //	     "scopes":["..."]}
 //	  ]
 //	}
-func (h *HTTPGateway) oauthListAccounts(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *oauthAPI) oauthListAccounts(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.OAuth == nil {
 		writeAPIError(rw, http.StatusNotImplemented, "oauth_not_configured", "OAuth not configured")
 		return
@@ -493,7 +507,7 @@ func (h *HTTPGateway) oauthListAccounts(rw http.ResponseWriter, r *http.Request,
 // field is empty (some providers don't echo it on success) is treated
 // as fresh — we have no signal to declare it stale and false positives
 // would push users into a needless reauthorize loop.
-func (h *HTTPGateway) staleAccounts(ctx context.Context, tenant, provider string, accounts, required []string) []string {
+func (h *oauthAPI) staleAccounts(ctx context.Context, tenant, provider string, accounts, required []string) []string {
 	if h.OAuth == nil || tenant == "" {
 		return nil
 	}

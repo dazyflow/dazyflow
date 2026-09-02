@@ -14,6 +14,26 @@ import (
 	"github.com/dazyflow/dazyflow/daemon/support"
 )
 
+// supportAPI serves the support ticket, grant and bundle endpoints. Its fields are the whole of what
+// those handlers touch.
+type supportAPI struct {
+	auditor
+	svc              *Service
+	Tickets          core.TicketStore
+	Grants           core.GrantStore
+	Bundles          core.BundleStore
+	SupportAgents    support.AgentStore
+	SupportInbox     string
+	SupportGrantTTL  time.Duration
+	SupportRateLimit *ipRateLimiter
+	supportNow       func() time.Time
+}
+
+// supportAPI builds them from the gateway's configuration.
+func (h *HTTPGateway) supportAPI() *supportAPI {
+	return &supportAPI{auditor: h.auditor(), svc: h.svc, Tickets: h.Tickets, Grants: h.Grants, Bundles: h.Bundles, SupportAgents: h.SupportAgents, SupportInbox: h.SupportInbox, SupportGrantTTL: h.SupportGrantTTL, SupportRateLimit: h.SupportRateLimit, supportNow: h.supportNow}
+}
+
 // httpsupport.go wires the Support feature's HTTP surface: a support agent
 // requests a scoped, time-boxed, read-only view of one flow; an org admin
 // approves/denies/revokes; the agent then reads the REDACTED bundle. Every
@@ -31,14 +51,14 @@ import (
 // unset. Chosen as a working-session window (see the design decision).
 const defaultSupportGrantTTL = 4 * time.Hour
 
-func (h *HTTPGateway) supportTime() time.Time {
+func (h *supportAPI) supportTime() time.Time {
 	if h.supportNow != nil {
 		return h.supportNow()
 	}
 	return time.Now().UTC()
 }
 
-func (h *HTTPGateway) supportGrantTTL() time.Duration {
+func (h *supportAPI) supportGrantTTL() time.Duration {
 	if h.SupportGrantTTL > 0 {
 		return h.SupportGrantTTL
 	}
@@ -47,11 +67,11 @@ func (h *HTTPGateway) supportGrantTTL() time.Duration {
 
 // supportEnabled reports whether the grant store is wired; endpoints 501 when
 // not (a deployment with no support surface).
-func (h *HTTPGateway) supportEnabled() bool { return h.Grants != nil }
+func (h *supportAPI) supportEnabled() bool { return h.Grants != nil }
 
 // requestGrant: a support agent asks for read-only access to one flow.
 // POST /api/v1/support/grants  {tenant, flow_id, ticket_id?}
-func (h *HTTPGateway) requestGrant(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *supportAPI) requestGrant(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.supportEnabled() {
 		writeAPIError(rw, http.StatusNotImplemented, "support_disabled", "support is not enabled on this deployment")
 		return
@@ -116,7 +136,7 @@ func (h *HTTPGateway) requestGrant(rw http.ResponseWriter, r *http.Request, p co
 
 // listGrants: an org admin sees every grant scoped to their tenant (the consent
 // surface). GET /api/v1/support/grants
-func (h *HTTPGateway) listGrants(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *supportAPI) listGrants(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.supportEnabled() {
 		writeAPIError(rw, http.StatusNotImplemented, "support_disabled", "support is not enabled on this deployment")
 		return
@@ -136,7 +156,7 @@ func (h *HTTPGateway) listGrants(rw http.ResponseWriter, r *http.Request, p core
 // listMyGrants: a support agent sees every grant THEY requested, across every
 // org — the "flows I can reach" surface that powers one-click open. Keyed on
 // the agent, not a tenant. GET /api/v1/support/grants/mine
-func (h *HTTPGateway) listMyGrants(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *supportAPI) listMyGrants(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.supportEnabled() {
 		writeAPIError(rw, http.StatusNotImplemented, "support_disabled", "support is not enabled on this deployment")
 		return
@@ -155,7 +175,7 @@ func (h *HTTPGateway) listMyGrants(rw http.ResponseWriter, r *http.Request, p co
 
 // decideGrant: an org admin approves or denies a requested grant.
 // POST /api/v1/support/grants/{id}/decide  {decision: "approve"|"deny"}
-func (h *HTTPGateway) decideGrant(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *supportAPI) decideGrant(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	grant, ok := h.loadGrantForAdmin(rw, r, p)
 	if !ok {
 		return
@@ -194,7 +214,7 @@ func (h *HTTPGateway) decideGrant(rw http.ResponseWriter, r *http.Request, p cor
 
 // revokeGrant: an org admin (in the grant's tenant) OR the agent themselves ends
 // an approved grant early. POST /api/v1/support/grants/{id}/revoke
-func (h *HTTPGateway) revokeGrant(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *supportAPI) revokeGrant(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.supportEnabled() {
 		writeAPIError(rw, http.StatusNotImplemented, "support_disabled", "support is not enabled on this deployment")
 		return
@@ -226,7 +246,7 @@ func (h *HTTPGateway) revokeGrant(rw http.ResponseWriter, r *http.Request, p cor
 
 // supportView: a support agent reads the REDACTED bundle for one flow, gated by
 // an active grant. GET /api/v1/support/flows/{tenant}/{workspace}/{flow_id}?run_id=&mode=
-func (h *HTTPGateway) supportView(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *supportAPI) supportView(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.supportEnabled() {
 		writeAPIError(rw, http.StatusNotImplemented, "support_disabled", "support is not enabled on this deployment")
 		return
@@ -287,7 +307,7 @@ func (h *HTTPGateway) supportView(rw http.ResponseWriter, r *http.Request, p cor
 // supportRunSnapshot loads a run's records and projects them into a RunSnapshot,
 // but only when the run genuinely belongs to (tenant, flowID) — the grant scopes
 // support to one flow, so a run from another flow/tenant is treated as absent.
-func (h *HTTPGateway) supportRunSnapshot(ctx context.Context, tenant, workspace, flowID, runID string) (core.RunSnapshot, bool) {
+func (h *supportAPI) supportRunSnapshot(ctx context.Context, tenant, workspace, flowID, runID string) (core.RunSnapshot, bool) {
 	runRec, err := h.svc.Jobs.Get(ctx, runID)
 	if err != nil || runRec.Tenant != tenant || runRec.GraphID != flowID {
 		return core.RunSnapshot{}, false
@@ -306,7 +326,7 @@ func (h *HTTPGateway) supportRunSnapshot(ctx context.Context, tenant, workspace,
 
 // loadGrantForAdmin loads the {id} grant and enforces org-admin in its tenant.
 // Writes the error + returns ok=false on any failure.
-func (h *HTTPGateway) loadGrantForAdmin(rw http.ResponseWriter, r *http.Request, p core.Principal) (core.AccessGrant, bool) {
+func (h *supportAPI) loadGrantForAdmin(rw http.ResponseWriter, r *http.Request, p core.Principal) (core.AccessGrant, bool) {
 	if !h.supportEnabled() {
 		writeAPIError(rw, http.StatusNotImplemented, "support_disabled", "support is not enabled on this deployment")
 		return core.AccessGrant{}, false
@@ -322,4 +342,29 @@ func (h *HTTPGateway) loadGrantForAdmin(rw http.ResponseWriter, r *http.Request,
 		return core.AccessGrant{}, false
 	}
 	return grant, true
+}
+
+// allowSupportWrite throttles an authenticated support write (filing a ticket,
+// posting a message) per principal subject. Returns false having already written
+// the 429, so callers just return.
+//
+// Ticket creation is the expensive one: naming a flow makes the server build and
+// PERSIST a redacted bundle, so an unthrottled loop is a cheap way to grow the
+// database. Reads (the queue, a thread poll) are deliberately not limited — the
+// UI polls them by design.
+func (h *supportAPI) allowSupportWrite(rw http.ResponseWriter, p core.Principal) bool {
+	if h.SupportRateLimit == nil {
+		return true
+	}
+	key := p.Subject
+	if key == "" {
+		key = p.Tenant
+	}
+	if !h.SupportRateLimit.Allow(key) {
+		rw.Header().Set("Retry-After", "60")
+		writeAPIError(rw, http.StatusTooManyRequests, "rate_limited",
+			"you're filing support messages very quickly — wait a moment and try again")
+		return false
+	}
+	return true
 }

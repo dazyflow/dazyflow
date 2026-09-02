@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/dazyflow/dazyflow/auth"
@@ -510,4 +511,48 @@ func redactKey(k auth.APIKey, now time.Time) APIKeySummary {
 		s.Status = "expired"
 	}
 	return s
+}
+
+// adminCheck answers "is this email a platform admin", which is the whole of
+// what most callers need. Two layers: the immutable env allowlist and the
+// runtime grant store.
+type adminCheck struct {
+	allowlist []string
+	grants    PlatformAdminStore
+}
+
+// isPlatformAdmin reports whether email is a platform admin by EITHER layer —
+// the immutable env allowlist or a runtime grant. Used for display/effective
+// status; the env-only isPlatformAdminEmail still guards immutability (you
+// can't revoke an env admin).
+func (a adminCheck) isPlatformAdmin(email string) bool {
+	return a.isPlatformAdminEmail(email) || a.isPlatformAdminGranted(email)
+}
+
+// isPlatformAdminEmail reports whether email is in the allowlist. The
+// stored entries are already lowercased + trimmed at wiring time; we
+// normalize the candidate the same way so the comparison is exact.
+func (a adminCheck) isPlatformAdminEmail(email string) bool {
+	email = strings.ToLower(strings.TrimSpace(email))
+	if email == "" {
+		return false
+	}
+	for _, a := range a.allowlist {
+		if a == email {
+			return true
+		}
+	}
+	return false
+}
+
+// isPlatformAdminGranted reports whether email holds a runtime platform-admin
+// grant (the mutable layer). Cheap — reads the store's cached snapshot. Nil
+// store (not wired) means no runtime grants exist.
+func (a adminCheck) isPlatformAdminGranted(email string) bool {
+	return a.grants != nil && a.grants.Granted(email)
+}
+
+// admins exposes the platform-admin check to a domain handler.
+func (h *HTTPGateway) admins() adminCheck {
+	return adminCheck{allowlist: h.PlatformAdmins, grants: h.PlatformAdminGrants}
 }

@@ -9,6 +9,18 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
+// cloudSecretsAPI serves the cloud secret-manager configuration endpoints. Its fields are the whole of what
+// those handlers touch.
+type cloudSecretsAPI struct {
+	auditor
+	EncryptedSecrets *EncryptedSecrets
+}
+
+// cloudSecretsAPI builds them from the gateway's configuration.
+func (h *HTTPGateway) cloudSecretsAPI() *cloudSecretsAPI {
+	return &cloudSecretsAPI{auditor: h.auditor(), EncryptedSecrets: h.EncryptedSecrets}
+}
+
 // AWS / GCP variants of the BYO secret-manager config endpoints
 // (httpsecretmanager.go holds the original Vault/OpenBao one):
 //
@@ -23,7 +35,7 @@ import (
 // secretManagerGate centralizes the checks all six handlers share:
 // encrypted store present, tenant-bound principal, and the right secret
 // permission. Returns false after writing the error response.
-func (h *HTTPGateway) secretManagerGate(rw http.ResponseWriter, p core.Principal, perm core.Permission) bool {
+func (h *cloudSecretsAPI) secretManagerGate(rw http.ResponseWriter, p core.Principal, perm core.Permission) bool {
 	if h.EncryptedSecrets == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "encrypted secret store is not configured")
 		return false
@@ -51,7 +63,7 @@ type awsSecretManagerView struct {
 	Endpoint    string `json:"endpoint,omitempty"`
 }
 
-func (h *HTTPGateway) getSecretManagerAws(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *cloudSecretsAPI) getSecretManagerAws(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	getSecretManagerConfig(h, rw, r, p, "AWS secret-manager", awsConfigSecretName,
 		func(cfg AwsSecretsConfig, configured bool) any {
 			if !configured {
@@ -66,7 +78,7 @@ func (h *HTTPGateway) getSecretManagerAws(rw http.ResponseWriter, r *http.Reques
 		})
 }
 
-func (h *HTTPGateway) putSecretManagerAws(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *cloudSecretsAPI) putSecretManagerAws(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	putSecretManagerConfig(h, rw, r, p, "AWS Secrets Manager", awsConfigSecretName,
 		VerifyAwsConfig,
 		// Audit the region + key id — never the secret access key.
@@ -75,7 +87,7 @@ func (h *HTTPGateway) putSecretManagerAws(rw http.ResponseWriter, r *http.Reques
 		})
 }
 
-func (h *HTTPGateway) deleteSecretManagerAws(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *cloudSecretsAPI) deleteSecretManagerAws(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	deleteSecretManagerConfig(h, rw, r, p, "AWS Secrets Manager", awsConfigSecretName, "secret_manager.aws.delete")
 }
 
@@ -91,7 +103,7 @@ type gcpSecretManagerView struct {
 	Endpoint    string `json:"endpoint,omitempty"`
 }
 
-func (h *HTTPGateway) getSecretManagerGcp(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *cloudSecretsAPI) getSecretManagerGcp(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	getSecretManagerConfig(h, rw, r, p, "GCP secret-manager", gcpConfigSecretName,
 		func(cfg GcpSecretsConfig, configured bool) any {
 			if !configured {
@@ -105,7 +117,7 @@ func (h *HTTPGateway) getSecretManagerGcp(rw http.ResponseWriter, r *http.Reques
 		})
 }
 
-func (h *HTTPGateway) putSecretManagerGcp(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *cloudSecretsAPI) putSecretManagerGcp(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	putSecretManagerConfig(h, rw, r, p, "GCP Secret Manager", gcpConfigSecretName,
 		VerifyGcpConfig,
 		// Audit the project + service account — never the private key.
@@ -118,6 +130,6 @@ func (h *HTTPGateway) putSecretManagerGcp(rw http.ResponseWriter, r *http.Reques
 		})
 }
 
-func (h *HTTPGateway) deleteSecretManagerGcp(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *cloudSecretsAPI) deleteSecretManagerGcp(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	deleteSecretManagerConfig(h, rw, r, p, "GCP Secret Manager", gcpConfigSecretName, "secret_manager.gcp.delete")
 }

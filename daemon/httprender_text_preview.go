@@ -21,7 +21,7 @@ import (
 // authenticated caller — not org scoping. CEL mistakes are expected while the
 // user edits, so they come back as a 200 with an `error` field the UI renders
 // inline, never an HTTP error.
-func (h *HTTPGateway) renderTextPreview(rw http.ResponseWriter, r *http.Request, _ core.Principal) {
+func (h *flowAPI) renderTextPreview(rw http.ResponseWriter, r *http.Request, _ core.Principal) {
 	body, ok := decodeRequestJSON[struct {
 		Template  string           `json:"template"`
 		Column    string           `json:"column"`

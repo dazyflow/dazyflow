@@ -22,7 +22,7 @@ const minPasswordLen = 8
 // It verifies the current password (so a hijacked session can't silently
 // re-key the account) and revokes all of the subject's sessions on success,
 // forcing a fresh sign-in everywhere — the standard post-change hygiene.
-func (h *HTTPGateway) changePasswordHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *authAPI) changePasswordHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Users == nil {
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "password auth not configured")
 		return
@@ -75,7 +75,7 @@ func (h *HTTPGateway) changePasswordHandler(rw http.ResponseWriter, r *http.Requ
 // then revokes sessions (forcing a fresh sign-in under the new email) and
 // deletes the old row. Best-effort per record with warnings, so a partial
 // store outage degrades visibly rather than silently corrupting identity.
-func (h *HTTPGateway) changeEmailHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *authAPI) changeEmailHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Users == nil {
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "password auth not configured")
 		return

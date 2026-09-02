@@ -47,7 +47,7 @@ type cronValidateResponse struct {
 // The endpoint deliberately does not save anything — graphs persist
 // through PUT /graphs as usual; this is a pre-save sanity check that
 // keeps users from saving an expression that silently never fires.
-func (h *HTTPGateway) validateCron(rw http.ResponseWriter, r *http.Request, _ core.Principal) {
+func validateCron(rw http.ResponseWriter, r *http.Request, _ core.Principal) {
 	body, ok := decodeRequestJSON[cronValidateRequest](rw, r)
 	if !ok {
 		return

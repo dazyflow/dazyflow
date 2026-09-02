@@ -28,7 +28,7 @@ func TestTriggerEndpoints_Cov(t *testing.T) {
 		Triggers: []core.GraphTrigger{{Type: "cron", Cron: "*/5 * * * *"}},
 	}
 
-	eps := h.gw.triggerEndpoints("https://app.test/", g)
+	eps := h.gw.flowAPI().triggerEndpoints("https://app.test/", g)
 
 	kinds := map[string]int{}
 	var webhookAuth string
@@ -61,7 +61,7 @@ func TestTriggerEndpoints_Cov(t *testing.T) {
 	}
 
 	// A graph with no triggers yields an empty (non-nil) slice.
-	empty := h.gw.triggerEndpoints("https://app.test", core.Graph{ID: "x", Tenant: "t", Workspace: "ws"})
+	empty := h.gw.flowAPI().triggerEndpoints("https://app.test", core.Graph{ID: "x", Tenant: "t", Workspace: "ws"})
 	if empty == nil || len(empty) != 0 {
 		t.Errorf("no-trigger graph = %v, want empty slice", empty)
 	}

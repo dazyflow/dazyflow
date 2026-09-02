@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path"
@@ -16,6 +17,18 @@ import (
 
 	"github.com/dazyflow/dazyflow/core"
 )
+
+// filesAPI serves the workspace-file endpoints. Its fields are the whole of what
+// those handlers touch.
+type filesAPI struct {
+	svc    *Service
+	logger *log.Logger
+}
+
+// filesAPI builds them from the gateway's configuration.
+func (h *HTTPGateway) filesAPI() *filesAPI {
+	return &filesAPI{svc: h.svc, logger: h.logger}
+}
 
 // httpfiles exposes the persistent workspace sandbox (<base>/<tenant>/
 // <workspace>/) as a browsable, manageable filesystem — the read/manage
@@ -52,7 +65,7 @@ type fileEntry struct {
 // Returns the resolved (tenant, workspace) and ok=false (after writing the
 // error response) when the handler should stop. Shared by the file CRUD
 // (via openWorkspaceFS), the upload handler, and the usage endpoint.
-func (h *HTTPGateway) requireWorkspaceEdit(rw http.ResponseWriter, r *http.Request, p core.Principal) (tenant, workspace string, ok bool) {
+func (h *filesAPI) requireWorkspaceEdit(rw http.ResponseWriter, r *http.Request, p core.Principal) (tenant, workspace string, ok bool) {
 	tenant = r.PathValue("tenant")
 	workspace = r.PathValue("workspace")
 	if err := core.RequireWorkspace(p, tenant, workspace); err != nil {
@@ -73,7 +86,7 @@ func (h *HTTPGateway) requireWorkspaceEdit(rw http.ResponseWriter, r *http.Reque
 // openWorkspaceFS runs the shared auth + sandbox gate and returns an opened
 // os.Root for (tenant, workspace). The caller must Close it. On failure it
 // writes the error response and returns ok=false.
-func (h *HTTPGateway) openWorkspaceFS(rw http.ResponseWriter, r *http.Request, p core.Principal) (*os.Root, bool) {
+func (h *filesAPI) openWorkspaceFS(rw http.ResponseWriter, r *http.Request, p core.Principal) (*os.Root, bool) {
 	tenant, workspace, ok := h.requireWorkspaceEdit(rw, r, p)
 	if !ok {
 		return nil, false
@@ -113,7 +126,7 @@ func isScratch(rel string) bool {
 	return rel == scratchDirName || strings.HasPrefix(rel, scratchDirName+"/")
 }
 
-func (h *HTTPGateway) listWorkspaceFiles(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *filesAPI) listWorkspaceFiles(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	rootFS, ok := h.openWorkspaceFS(rw, r, p)
 	if !ok {
 		return
@@ -175,7 +188,7 @@ func (h *HTTPGateway) listWorkspaceFiles(rw http.ResponseWriter, r *http.Request
 	writeJSON(rw, http.StatusOK, map[string]any{"path": rel, "entries": entries})
 }
 
-func (h *HTTPGateway) downloadWorkspaceFile(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *filesAPI) downloadWorkspaceFile(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	rootFS, ok := h.openWorkspaceFS(rw, r, p)
 	if !ok {
 		return
@@ -229,7 +242,7 @@ func (h *HTTPGateway) downloadWorkspaceFile(rw http.ResponseWriter, r *http.Requ
 	_, _ = io.CopyN(rw, f, info.Size())
 }
 
-func (h *HTTPGateway) deleteWorkspaceFile(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *filesAPI) deleteWorkspaceFile(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	rootFS, ok := h.openWorkspaceFS(rw, r, p)
 	if !ok {
 		return
@@ -258,7 +271,7 @@ func (h *HTTPGateway) deleteWorkspaceFile(rw http.ResponseWriter, r *http.Reques
 	writeJSON(rw, http.StatusOK, map[string]any{"path": rel, "deleted": true})
 }
 
-func (h *HTTPGateway) mkdirWorkspaceDir(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *filesAPI) mkdirWorkspaceDir(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	rootFS, ok := h.openWorkspaceFS(rw, r, p)
 	if !ok {
 		return
@@ -287,7 +300,7 @@ func (h *HTTPGateway) mkdirWorkspaceDir(rw http.ResponseWriter, r *http.Request,
 	writeJSON(rw, http.StatusOK, map[string]any{"path": rel, "created": true})
 }
 
-func (h *HTTPGateway) renameWorkspaceFile(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *filesAPI) renameWorkspaceFile(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	rootFS, ok := h.openWorkspaceFS(rw, r, p)
 	if !ok {
 		return
@@ -348,7 +361,7 @@ func (h *HTTPGateway) renameWorkspaceFile(rw http.ResponseWriter, r *http.Reques
 	writeJSON(rw, http.StatusOK, map[string]any{"from": from, "to": to})
 }
 
-func (h *HTTPGateway) workspaceFileUsage(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *filesAPI) workspaceFileUsage(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, _, ok := h.requireWorkspaceEdit(rw, r, p)
 	if !ok {
 		return

@@ -178,7 +178,7 @@ func flowGenSystemPrompt(catalog string) string {
 
 // renderFlowGenerate is POST /api/v1/tools/flow/generate — the non-streaming
 // variant (single JSON response). The editor uses the streaming sibling.
-func (h *HTTPGateway) renderFlowGenerate(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *flowAPI) renderFlowGenerate(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	body, ok := decodeRequestJSON[struct {
 		Description string          `json:"description"`
 		Provider    string          `json:"provider"`
@@ -221,7 +221,7 @@ func (h *HTTPGateway) renderFlowGenerate(rw http.ResponseWriter, r *http.Request
 // generation moves through its phases, then a final "done" (with the graph)
 // or "error" frame. Streaming the validate-and-repair phases is what makes
 // the feature feel alive instead of a long spinner.
-func (h *HTTPGateway) renderFlowGenerateStream(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *flowAPI) renderFlowGenerateStream(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	body, ok := decodeRequestJSON[struct {
 		Description string          `json:"description"`
 		Provider    string          `json:"provider"`
@@ -282,14 +282,14 @@ func (h *HTTPGateway) renderFlowGenerateStream(rw http.ResponseWriter, r *http.R
 // already exist (reference an existing ${secret.NAME} rather than invent one).
 // Best-effort and nil-safe — returns "" when the secret store isn't wired (the
 // unit harness), so it never blocks generation.
-func (h *HTTPGateway) workspaceGrounding(ctx context.Context, tenant string) string {
+func (h *flowAPI) workspaceGrounding(ctx context.Context, tenant string) string {
 	if tenant == "" || h.EncryptedSecrets == nil {
 		return ""
 	}
 	var b strings.Builder
 
 	connected := make([]string, 0)
-	for prov, accts := range h.connectedAccountsByProvider(ctx, tenant) {
+	for prov, accts := range h.oauth.connectedAccountsByProvider(ctx, tenant) {
 		if len(accts) > 0 {
 			connected = append(connected, prov)
 		}
@@ -341,7 +341,7 @@ func refineDesc(base json.RawMessage, desc string) string {
 // pickProvider resolves the connected providers and selects one (the
 // requested name if connected, else the first). Returns the choice + the
 // full connected list (len 0 ⇒ none connected).
-func (h *HTTPGateway) pickProvider(ctx context.Context, want string) (connectedProvider, []connectedProvider) {
+func (h *flowAPI) pickProvider(ctx context.Context, want string) (connectedProvider, []connectedProvider) {
 	conn := h.connectedProviders(ctx)
 	if len(conn) == 0 {
 		return connectedProvider{}, nil
@@ -361,7 +361,7 @@ func (h *HTTPGateway) pickProvider(ctx context.Context, want string) (connectedP
 // generateFlow runs the grounded, structured, validate-and-repair loop and
 // returns the best graph plus any remaining lint issues. onProgress (nil-safe)
 // receives phase updates for the streaming UI.
-func (h *HTTPGateway) generateFlow(ctx context.Context, provider, key, desc string, mans []core.Manifest, tenant, workspace, tz string, onProgress func(phase, msg string)) (core.Graph, []core.LintIssue, error) {
+func (h *flowAPI) generateFlow(ctx context.Context, provider, key, desc string, mans []core.Manifest, tenant, workspace, tz string, onProgress func(phase, msg string)) (core.Graph, []core.LintIssue, error) {
 	emit := func(phase, msg string) {
 		if onProgress != nil {
 			onProgress(phase, msg)

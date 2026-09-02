@@ -10,8 +10,24 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dazyflow/dazyflow/auth"
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// metricsAPI serves the Prometheus metrics endpoints. Its fields are the whole of what
+// those handlers touch.
+type metricsAPI struct {
+	svc      *Service
+	Sessions auth.SessionStore
+	Metrics  *Metrics
+	DBPool   *pgxpool.Pool
+}
+
+// metricsAPI builds them from the gateway's configuration.
+func (h *HTTPGateway) metricsAPI() *metricsAPI {
+	return &metricsAPI{svc: h.svc, Sessions: h.Sessions, Metrics: h.Metrics, DBPool: h.DBPool}
+}
 
 // queueAger is the optional JobStore capability for reporting queue
 // latency. The Postgres store implements it; the in-memory dev store
@@ -44,7 +60,7 @@ var jobStatusOrder = []core.JobStatus{
 // gauge plus per-tenant disk usage. Unauthenticated by design — it's a
 // scrape endpoint, gated behind EnableMetrics and meant to be reachable
 // only from the operator's monitoring network.
-func (h *HTTPGateway) metrics(rw http.ResponseWriter, r *http.Request) {
+func (h *metricsAPI) metrics(rw http.ResponseWriter, r *http.Request) {
 	rw.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 
 	fmt.Fprint(rw, "# HELP dazyflow_up 1 when the daemon is serving.\n")
@@ -133,7 +149,7 @@ func (h *HTTPGateway) metrics(rw http.ResponseWriter, r *http.Request) {
 
 // quotaReporter returns the wired quota provider when it can enumerate
 // per-tenant usage (FSQuota does; a bare provider may not).
-func (h *HTTPGateway) quotaReporter() (core.QuotaReporter, bool) {
+func (h *metricsAPI) quotaReporter() (core.QuotaReporter, bool) {
 	if h.svc == nil || h.svc.Engine == nil || h.svc.Engine.Quota == nil {
 		return nil, false
 	}

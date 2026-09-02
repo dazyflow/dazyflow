@@ -41,7 +41,7 @@ type referenceGroups struct {
 // upstream nodes, the trigger/form fields, and (Phase 4) flow resources.
 // Access is gated by LoadGraph (visibility/ownership) exactly like the
 // other /me/flows reads.
-func (h *HTTPGateway) listReferences(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *secretsAPI) listReferences(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	_, _, id, g, ok := h.loadFlowForRequest(rw, r, p, "")
 	if !ok {
 		return
@@ -69,7 +69,7 @@ func (h *HTTPGateway) listReferences(rw http.ResponseWriter, r *http.Request, p 
 // as ${secret.NAME} tokens, deduped (a flow secret shadows an org one of
 // the same name, but the picker only needs the name once). Returns an
 // empty slice when the encrypted store isn't configured.
-func (h *HTTPGateway) secretRefs(ctx context.Context, p core.Principal, flow string) []referenceItem {
+func (h *secretsAPI) secretRefs(ctx context.Context, p core.Principal, flow string) []referenceItem {
 	out := []referenceItem{}
 	if h.EncryptedSecrets == nil || p.Tenant == "" {
 		return out
@@ -103,7 +103,7 @@ func (h *HTTPGateway) secretRefs(ctx context.Context, p core.Principal, flow str
 // resourceRefs lists the flow's configured resources as ${resource.NAME}
 // tokens, plus typed sub-paths (a google_sheet offers .rows and .headers),
 // deduped flow-then-organization. Empty when the store isn't configured.
-func (h *HTTPGateway) resourceRefs(ctx context.Context, p core.Principal, flow string) []referenceItem {
+func (h *secretsAPI) resourceRefs(ctx context.Context, p core.Principal, flow string) []referenceItem {
 	out := []referenceItem{}
 	if h.EncryptedSecrets == nil || p.Tenant == "" {
 		return out
@@ -163,7 +163,7 @@ func resourceSubpaths(typ string) []string {
 // node that can reach `node` (its ancestors) — so a param can only pull
 // from a node that may already have run. With no/unknown node it falls back
 // to every node in the flow.
-func (h *HTTPGateway) upstreamRefs(ctx context.Context, p core.Principal, g core.Graph, node string) []referenceItem {
+func (h *secretsAPI) upstreamRefs(ctx context.Context, p core.Principal, g core.Graph, node string) []referenceItem {
 	out := []referenceItem{}
 	scope := g
 	if node != "" {

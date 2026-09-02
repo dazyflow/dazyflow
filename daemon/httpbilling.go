@@ -25,6 +25,20 @@ import (
 // nature and verified via Stripe's HMAC signature instead, mirroring the
 // GitHub/Slack event endpoints.
 
+// billingAPI serves the billing endpoints. Its fields are the whole of what
+// those handlers need: the service for run counts and plan resolution, the
+// Stripe-backed store, and an audit sink.
+type billingAPI struct {
+	auditor
+	svc     *Service
+	Billing *BillingHandler
+}
+
+// billingAPI builds the billing handlers from the gateway's configuration.
+func (h *HTTPGateway) billingAPI() *billingAPI {
+	return &billingAPI{auditor: h.auditor(), svc: h.svc, Billing: h.Billing}
+}
+
 // maxStripeEventBytes caps incoming webhook payloads — Stripe events are
 // a few KB; 1 MiB is generous headroom.
 const maxStripeEventBytes = 1 << 20
@@ -70,7 +84,7 @@ func resolveTenantScope(rw http.ResponseWriter, r *http.Request, p core.Principa
 // GET /api/v1/me/billing — everything the Usage page needs to render the
 // plan state: plan, whether upgrading is possible on this deployment,
 // the free-tier cap (0 = no enforcement), and this month's run count.
-func (h *HTTPGateway) billingMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *billingAPI) billingMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, ok := resolveTenantScope(rw, r, p)
 	if !ok {
 		return
@@ -197,7 +211,7 @@ func isBuiltinTierID(id string) bool { return id == "free" || id == PlanPro }
 // show what differs from the current plan without any per-tier copy. Limits are
 // resolved through the same ResolveEffective the enforcement paths use, so the
 // catalog and reality agree.
-func (h *HTTPGateway) plansMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *billingAPI) plansMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, ok := resolveTenantScope(rw, r, p)
 	if !ok {
 		return
@@ -296,7 +310,7 @@ func (h *HTTPGateway) plansMe(rw http.ResponseWriter, r *http.Request, p core.Pr
 
 // POST /api/v1/me/billing/checkout — mint a Stripe Checkout session for
 // the pro plan and return its hosted URL; the web client redirects there.
-func (h *HTTPGateway) billingCheckout(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *billingAPI) billingCheckout(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Billing == nil || h.Billing.Stripe == nil {
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured",
 			"billing is not enabled on this deployment")
@@ -353,7 +367,7 @@ func (h *HTTPGateway) billingCheckout(rw http.ResponseWriter, r *http.Request, p
 
 // POST /api/v1/me/billing/portal — mint a billing-portal session for an
 // already-subscribed tenant (manage payment method, cancel, invoices).
-func (h *HTTPGateway) billingPortal(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *billingAPI) billingPortal(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Billing == nil || h.Billing.Stripe == nil {
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured",
 			"billing is not enabled on this deployment")
@@ -421,7 +435,7 @@ type stripeEvent struct {
 // the only auth (same model as the GitHub events endpoint). Handled
 // events flip the tenant's plan; everything else acks 200 so Stripe
 // stops retrying.
-func (h *HTTPGateway) stripeEvents(rw http.ResponseWriter, r *http.Request) {
+func (h *billingAPI) stripeEvents(rw http.ResponseWriter, r *http.Request) {
 	if h.Billing == nil || h.Billing.WebhookSecret == "" {
 		http.Error(rw, "Stripe events endpoint not configured (set DAZYFLOW_STRIPE_WEBHOOK_SECRET)",
 			http.StatusNotImplemented)
@@ -485,7 +499,7 @@ func (h *HTTPGateway) stripeEvents(rw http.ResponseWriter, r *http.Request) {
 // applyStripeEvent maps subscription lifecycle events onto the plan
 // store. The tenant arrives via client_reference_id (checkout) or the
 // subscription metadata stamped at Checkout time (lifecycle events).
-func (h *HTTPGateway) applyStripeEvent(r *http.Request, ev stripeEvent) error {
+func (h *billingAPI) applyStripeEvent(r *http.Request, ev stripeEvent) error {
 	obj := ev.Data.Object
 	switch ev.Type {
 	case "checkout.session.completed":

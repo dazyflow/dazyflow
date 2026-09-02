@@ -32,7 +32,7 @@ type putConnectionBody struct {
 // `slug` and returns its label and declared ConnectionFields. All drops in an
 // integration declare the same fields, so the first match wins. Empty fields
 // (with a nil error) means "no such connectable integration".
-func (h *HTTPGateway) connectionFieldsForSlug(ctx context.Context, p core.Principal, slug string) (integration string, fields []core.ConnectionField, err error) {
+func (h *secretsAPI) connectionFieldsForSlug(ctx context.Context, p core.Principal, slug string) (integration string, fields []core.ConnectionField, err error) {
 	manifests, err := h.svc.ListDrops(ctx, p)
 	if err != nil {
 		return "", nil, err
@@ -49,7 +49,7 @@ func (h *HTTPGateway) connectionFieldsForSlug(ctx context.Context, p core.Princi
 // declared field's stored value, overlaid with the (trimmed, non-empty)
 // values submitted in this request. The returned `changed` map is just the
 // submitted fields — what gets persisted once verification passes.
-func (h *HTTPGateway) candidateConnection(ctx context.Context, tenant, integration string, fields []core.ConnectionField, submitted map[string]string) (conn, changed map[string]string) {
+func (h *secretsAPI) candidateConnection(ctx context.Context, tenant, integration string, fields []core.ConnectionField, submitted map[string]string) (conn, changed map[string]string) {
 	declared := make(map[string]bool, len(fields))
 	conn = make(map[string]string, len(fields))
 	for _, f := range fields {
@@ -90,7 +90,7 @@ func missingRequired(fields []core.ConnectionField, conn map[string]string) stri
 // showing a misleading "Connected". Integrations without a verifier just
 // store — the field-by-field PUT /secrets path still works too; this one adds
 // the atomic verify-then-save the Apps page uses.
-func (h *HTTPGateway) putIntegrationConnection(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *secretsAPI) putIntegrationConnection(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.EncryptedSecrets == nil {
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "encrypted secret store is not configured")
 		return
@@ -155,7 +155,7 @@ func (h *HTTPGateway) putIntegrationConnection(rw http.ResponseWriter, r *http.R
 // so the UI can render the outcome inline without treating it as a request
 // error. 501 when the integration has no verifier; 409 when nothing is stored
 // yet to test.
-func (h *HTTPGateway) verifyIntegrationConnection(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *secretsAPI) verifyIntegrationConnection(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.EncryptedSecrets == nil {
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "encrypted secret store is not configured")
 		return

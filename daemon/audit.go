@@ -19,6 +19,17 @@ import (
 	"github.com/dazyflow/dazyflow/daemon/internal/pgstore"
 )
 
+// auditAPI serves the audit-trail read endpoints. Its fields are the whole of what
+// those handlers touch.
+type auditAPI struct {
+	Audit core.AuditLog
+}
+
+// auditAPI builds them from the gateway's configuration.
+func (h *HTTPGateway) auditAPI() *auditAPI {
+	return &auditAPI{Audit: h.Audit}
+}
+
 const defaultAuditLimit = 100
 
 // ---- in-memory backend ----------------------------------------------
@@ -253,11 +264,16 @@ func sanitizeAuditField(v string) string {
 	return out
 }
 
-func (h *HTTPGateway) audit(ctx context.Context, p core.Principal, action, target, detail string) {
-	if h.Audit == nil {
+// auditor writes audit events. It is the entire dependency a handler needs in
+// order to audit, so a domain handler takes one of these rather than the whole
+// gateway.
+type auditor struct{ log core.AuditLog }
+
+func (a auditor) audit(ctx context.Context, p core.Principal, action, target, detail string) {
+	if a.log == nil {
 		return
 	}
-	if err := h.Audit.Append(ctx, core.AuditEvent{
+	if err := a.log.Append(ctx, core.AuditEvent{
 		Time:   time.Now(),
 		Tenant: p.Tenant,
 		Actor:  sanitizeAuditField(p.Subject),
@@ -285,8 +301,8 @@ func (h *HTTPGateway) audit(ctx context.Context, p core.Principal, action, targe
 // ?tenant=) rather than a specific tenant's view. Best-effort like audit():
 // a write failure is logged, never blocking the auth path; a nil store is a
 // no-op.
-func (h *HTTPGateway) auditAuth(ctx context.Context, r *http.Request, tenant, actor, action, detail string) {
-	if h.Audit == nil {
+func (a auditor) auditAuth(ctx context.Context, r *http.Request, tenant, actor, action, detail string) {
+	if a.log == nil {
 		return
 	}
 	ipNote := "ip=" + clientIP(r)
@@ -295,7 +311,7 @@ func (h *HTTPGateway) auditAuth(ctx context.Context, r *http.Request, tenant, ac
 	} else {
 		detail += " " + ipNote
 	}
-	if err := h.Audit.Append(ctx, core.AuditEvent{
+	if err := a.log.Append(ctx, core.AuditEvent{
 		Time:   time.Now(),
 		Tenant: sanitizeAuditField(tenant),
 		Actor:  sanitizeAuditField(actor),
@@ -310,7 +326,7 @@ func (h *HTTPGateway) auditAuth(ctx context.Context, r *http.Request, tenant, ac
 // listAudit serves GET /api/v1/admin/audit — the admin audit trail,
 // organization:admin only, scoped to the caller's tenant (platform admins may
 // pass ?tenant=). Paginated via ?limit / ?offset.
-func (h *HTTPGateway) listAudit(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *auditAPI) listAudit(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Audit == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "audit log not configured")
 		return
@@ -342,3 +358,6 @@ func queryInt(r *http.Request, key string, def int) int {
 	}
 	return def
 }
+
+// auditor exposes the gateway's audit sink to a domain handler.
+func (h *HTTPGateway) auditor() auditor { return auditor{h.Audit} }

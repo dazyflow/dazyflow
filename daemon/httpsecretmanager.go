@@ -35,7 +35,7 @@ type secretManagerView struct {
 	AuthMethod string `json:"auth_method,omitempty"`
 }
 
-func (h *HTTPGateway) getSecretManager(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *cloudSecretsAPI) getSecretManager(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	getSecretManagerConfig(h, rw, r, p, "secret-manager", vaultConfigSecretName,
 		func(cfg VaultConfig, configured bool) any {
 			if !configured {
@@ -51,7 +51,7 @@ func (h *HTTPGateway) getSecretManager(rw http.ResponseWriter, r *http.Request, 
 		})
 }
 
-func (h *HTTPGateway) putSecretManager(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *cloudSecretsAPI) putSecretManager(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	putSecretManagerConfig(h, rw, r, p, "the secret manager", vaultConfigSecretName,
 		VerifyVaultConfig,
 		// Audit the connection target + auth method — never the credentials.
@@ -60,6 +60,6 @@ func (h *HTTPGateway) putSecretManager(rw http.ResponseWriter, r *http.Request, 
 		})
 }
 
-func (h *HTTPGateway) deleteSecretManager(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *cloudSecretsAPI) deleteSecretManager(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	deleteSecretManagerConfig(h, rw, r, p, "secret-manager", vaultConfigSecretName, "secret_manager.delete")
 }

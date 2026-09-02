@@ -16,7 +16,7 @@ import (
 // bounds the history (default 6, max 24). The current month is always
 // present — synthesized at zero when the tenant has no activity yet —
 // so the UI's headline numbers never depend on "did anything run".
-func (h *HTTPGateway) usageMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *preferencesAPI) usageMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.svc.Usage == nil {
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured",
 			"usage metering is not enabled on this deployment")

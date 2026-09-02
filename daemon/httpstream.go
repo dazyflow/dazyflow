@@ -17,7 +17,7 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-func (h *HTTPGateway) sampleNode(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *flowAPI) sampleNode(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant := r.PathValue("tenant")
 	workspace := r.PathValue("workspace")
 	id := r.PathValue("id")
@@ -66,7 +66,7 @@ func (h *HTTPGateway) sampleNode(rw http.ResponseWriter, r *http.Request, p core
 //
 // The stream closes when the job reaches a terminal state. The handler
 // also flushes on every event so browsers see updates promptly.
-func (h *HTTPGateway) jobEvents(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *flowAPI) jobEvents(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	jobID := r.PathValue("jobID")
 	rec, err := h.svc.GetJob(r.Context(), p, jobID)
 	if err != nil {
@@ -173,7 +173,7 @@ func (h *HTTPGateway) jobEvents(rw http.ResponseWriter, r *http.Request, p core.
 // load path on receipt, and uses `commit` to ignore the echo of its own
 // save. Mirrors jobEvents' SSE plumbing (headers, flush, 25s keep-alive,
 // disconnect on context cancel).
-func (h *HTTPGateway) watchFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *flowAPI) watchFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	// Validate scope + readability up front (and resolve the id parts) the
 	// same way a load would — a 403/404 here is clearer than a silent stream
 	// that never emits. The graph itself is discarded; only the key matters.
@@ -232,7 +232,7 @@ func (h *HTTPGateway) watchFlowMe(rw http.ResponseWriter, r *http.Request, p cor
 // This catches up subscribers that connect after the worker has already
 // processed some nodes — without it, the canvas would show stale
 // statuses until the next live transition.
-func (h *HTTPGateway) emitNodeSnapshots(rw http.ResponseWriter, ctx context.Context, graphRec core.JobRecord) {
+func (h *flowAPI) emitNodeSnapshots(rw http.ResponseWriter, ctx context.Context, graphRec core.JobRecord) {
 	if graphRec.Kind != core.JobKindGraph || len(graphRec.GraphPayload) == 0 {
 		return
 	}

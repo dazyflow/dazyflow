@@ -247,7 +247,7 @@ func deleteProviderConfig(ctx context.Context, es *EncryptedSecrets, tenant, sec
 // label names the provider in error messages ("AWS Secrets Manager");
 // audit returns the action plus the credential-free target/detail pair.
 func putSecretManagerConfig[T providerConfig](
-	h *HTTPGateway, rw http.ResponseWriter, r *http.Request, p core.Principal,
+	h *cloudSecretsAPI, rw http.ResponseWriter, r *http.Request, p core.Principal,
 	label, secretName string,
 	verify func(context.Context, T, time.Duration) error,
 	audit func(T) (action, target, detail string),
@@ -292,7 +292,7 @@ func putSecretManagerConfig[T providerConfig](
 // returns toView's zero-value view (each provider's zero view is
 // {Configured:false}). label names the provider in the load error.
 func getSecretManagerConfig[T any](
-	h *HTTPGateway, rw http.ResponseWriter, r *http.Request, p core.Principal,
+	h *cloudSecretsAPI, rw http.ResponseWriter, r *http.Request, p core.Principal,
 	label, secretName string,
 	toView func(cfg T, configured bool) any,
 ) {
@@ -315,7 +315,7 @@ func getSecretManagerConfig[T any](
 // deleteSecretManagerConfig is the shared DELETE body: gate → delete →
 // audit → 204. Deleting an absent config is a no-op success.
 func deleteSecretManagerConfig(
-	h *HTTPGateway, rw http.ResponseWriter, r *http.Request, p core.Principal,
+	h *cloudSecretsAPI, rw http.ResponseWriter, r *http.Request, p core.Principal,
 	label, secretName, auditAction string,
 ) {
 	// organization:admin, not secret:write — see putSecretManagerConfig:

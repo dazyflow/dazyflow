@@ -112,7 +112,7 @@ func TestGenerateFlow_ComposesAgainstAnOrgsMCPTool(t *testing.T) {
 	})
 
 	h := newGatewayHarness(t)
-	g, issues, err := h.gw.generateFlow(context.Background(), "fakeflowmcp", "key",
+	g, issues, err := h.gw.flowAPI().generateFlow(context.Background(), "fakeflowmcp", "key",
 		"file a bug in our tracker", mans, "acme", "main", "", nil)
 	if err != nil {
 		t.Fatalf("generateFlow: %v", err)

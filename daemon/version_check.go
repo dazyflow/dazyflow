@@ -18,6 +18,17 @@ import (
 	"github.com/dazyflow/dazyflow/core/buildinfo"
 )
 
+// versionAPI serves the update-check endpoints. Its fields are the whole of what
+// those handlers touch.
+type versionAPI struct {
+	UpdateURL string
+}
+
+// versionAPI builds them from the gateway's configuration.
+func (h *HTTPGateway) versionAPI() *versionAPI {
+	return &versionAPI{UpdateURL: h.UpdateURL}
+}
+
 // Version self-check — the System section of the platform admin page asks
 // "is there a newer release than the one I'm running?" and, if so, shows
 // the operator the one-line CLI command to upgrade.
@@ -193,7 +204,7 @@ type versionStatus struct {
 }
 
 // adminVersion handles GET /api/v1/admin/version.
-func (h *HTTPGateway) adminVersion(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *versionAPI) adminVersion(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if err := requirePlatformAdmin(p); err != nil {
 		adminError(rw, err)
 		return

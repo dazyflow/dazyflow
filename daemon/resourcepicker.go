@@ -38,7 +38,7 @@ func RegisterResourceLister(provider, kind string, fn ResourceLister) {
 // through to the lister. A session is required; the tenant scopes the OAuth
 // token the lister resolves. A lister error (not connected, provider API
 // failure) returns 502 so the picker can fall back to manual entry.
-func (h *HTTPGateway) listAccountResources(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *flowAPI) listAccountResources(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if p.Tenant == "" {
 		writeJSONError(rw, http.StatusForbidden, "principal has no tenant")
 		return

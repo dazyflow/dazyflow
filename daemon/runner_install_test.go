@@ -86,7 +86,7 @@ func TestScriptFetchesOnlyPathsThisDaemonServes(t *testing.T) {
 func TestServeRunnerScript_FillsInTheServerAddress(t *testing.T) {
 	gw := &HTTPGateway{svc: &Service{PublicBaseURL: "https://flows.acme.test/"}}
 	rw := httptest.NewRecorder()
-	gw.serveRunnerScript(rw, httptest.NewRequest(http.MethodGet, "/runner.sh", nil))
+	gw.runnerAPI().serveRunnerScript(rw, httptest.NewRequest(http.MethodGet, "/runner.sh", nil))
 
 	body := rw.Body.String()
 	if strings.Contains(body, urlPlaceholder) {
@@ -110,7 +110,7 @@ func TestServeRunnerScript_FallsBackToTheRequestHost(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/runner.sh", nil)
 	req.Host = "localhost:8080"
 	rw := httptest.NewRecorder()
-	gw.serveRunnerScript(rw, req)
+	gw.runnerAPI().serveRunnerScript(rw, req)
 
 	if !strings.Contains(rw.Body.String(), "http://localhost:8080") {
 		t.Errorf("no usable address:\n%s", firstLines(rw.Body.String(), 12))
@@ -128,7 +128,7 @@ func TestServeRunnerScript_HonoursForwardedProto(t *testing.T) {
 	req.Host = "flows.acme.test"
 	req.Header.Set("X-Forwarded-Proto", "https")
 	rw := httptest.NewRecorder()
-	gw.serveRunnerScript(rw, req)
+	gw.runnerAPI().serveRunnerScript(rw, req)
 
 	if !strings.Contains(rw.Body.String(), "https://flows.acme.test") {
 		t.Error("the installer would tell the agent to use plaintext")
@@ -146,7 +146,7 @@ func TestServeRunnerScript_IgnoresForwardedHeadersWhenNotTrusted(t *testing.T) {
 	req.Header.Set("X-Forwarded-Proto", "https")
 	req.Header.Set("X-Forwarded-Host", "evil.example")
 	rw := httptest.NewRecorder()
-	gw.serveRunnerScript(rw, req)
+	gw.runnerAPI().serveRunnerScript(rw, req)
 
 	body := rw.Body.String()
 	if strings.Contains(body, "evil.example") {
@@ -163,7 +163,7 @@ func TestServeRunnerScript_IgnoresForwardedHeadersWhenNotTrusted(t *testing.T) {
 func TestServeRunnerScript_CarriesTheAgentChecksum(t *testing.T) {
 	gw := &HTTPGateway{svc: &Service{PublicBaseURL: "https://example.com"}}
 	rw := httptest.NewRecorder()
-	gw.serveRunnerScript(rw, httptest.NewRequest(http.MethodGet, "/runner.sh", nil))
+	gw.runnerAPI().serveRunnerScript(rw, httptest.NewRequest(http.MethodGet, "/runner.sh", nil))
 
 	body := rw.Body.String()
 	if strings.Contains(body, agentSHAPlaceholder) {
@@ -188,7 +188,7 @@ func TestServeRunnerScript_CarriesTheAgentChecksum(t *testing.T) {
 func TestServeRunnerScript_CarriesTheVerbs(t *testing.T) {
 	gw := &HTTPGateway{svc: &Service{PublicBaseURL: "http://example.com"}}
 	rw := httptest.NewRecorder()
-	gw.serveRunnerScript(rw, httptest.NewRequest(http.MethodGet, "/runner.sh", nil))
+	gw.runnerAPI().serveRunnerScript(rw, httptest.NewRequest(http.MethodGet, "/runner.sh", nil))
 	if rw.Code != http.StatusOK {
 		t.Fatalf("status = %d", rw.Code)
 	}
@@ -226,7 +226,7 @@ func TestServeRunnerScript_CarriesTheVerbs(t *testing.T) {
 func TestServeRunnerAgent_IsReadableInABrowser(t *testing.T) {
 	gw := &HTTPGateway{svc: &Service{}}
 	rw := httptest.NewRecorder()
-	gw.serveRunnerAgent(rw, httptest.NewRequest(http.MethodGet, "/dzrunner.py", nil))
+	gw.runnerAPI().serveRunnerAgent(rw, httptest.NewRequest(http.MethodGet, "/dzrunner.py", nil))
 
 	if rw.Code != http.StatusOK {
 		t.Fatalf("status = %d", rw.Code)

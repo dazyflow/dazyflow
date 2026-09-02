@@ -45,7 +45,7 @@ func TestGenerateFlow_RepairsInvalidDraft(t *testing.T) {
 	llm.Register(llm.ProviderInfo{Name: "fakeflowrepair", Integration: "FakeFlowRepair", DefaultModel: "m", Provider: sp})
 
 	h := newGatewayHarness(t)
-	g, issues, err := h.gw.generateFlow(context.Background(), "fakeflowrepair", "key", "send a thing", nil, "t1", "main", "", nil)
+	g, issues, err := h.gw.flowAPI().generateFlow(context.Background(), "fakeflowrepair", "key", "send a thing", nil, "t1", "main", "", nil)
 	if err != nil {
 		t.Fatalf("generateFlow: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestGenerateFlow_ExhaustsRepairsReturnsBestEffort(t *testing.T) {
 	llm.Register(llm.ProviderInfo{Name: "fakeflowstuck", Integration: "FakeFlowStuck", DefaultModel: "m", Provider: sp})
 
 	h := newGatewayHarness(t)
-	g, issues, err := h.gw.generateFlow(context.Background(), "fakeflowstuck", "key", "x", nil, "t1", "main", "", nil)
+	g, issues, err := h.gw.flowAPI().generateFlow(context.Background(), "fakeflowstuck", "key", "x", nil, "t1", "main", "", nil)
 	if err != nil {
 		t.Fatalf("should return best-effort, not error: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestGenerateFlow_UnparseableErrors(t *testing.T) {
 	sp := &scriptedProvider{graphs: []map[string]any{{"not": "a graph"}}}
 	llm.Register(llm.ProviderInfo{Name: "fakeflowjunk", Integration: "FakeFlowJunk", DefaultModel: "m", Provider: sp})
 	h := newGatewayHarness(t)
-	if _, _, err := h.gw.generateFlow(context.Background(), "fakeflowjunk", "key", "x", nil, "t1", "main", "", nil); err == nil {
+	if _, _, err := h.gw.flowAPI().generateFlow(context.Background(), "fakeflowjunk", "key", "x", nil, "t1", "main", "", nil); err == nil {
 		t.Fatal("expected an error when the model never returns a usable flow")
 	}
 }
@@ -106,7 +106,7 @@ func TestGenerateFlow_CronTrigger(t *testing.T) {
 	llm.Register(llm.ProviderInfo{Name: "fakeflowcron", Integration: "FakeFlowCron", DefaultModel: "m", Provider: sp})
 
 	h := newGatewayHarness(t)
-	g, issues, err := h.gw.generateFlow(context.Background(), "fakeflowcron", "key", "every day at 9", nil, "t1", "main", "Europe/Stockholm", nil)
+	g, issues, err := h.gw.flowAPI().generateFlow(context.Background(), "fakeflowcron", "key", "every day at 9", nil, "t1", "main", "Europe/Stockholm", nil)
 	if err != nil {
 		t.Fatalf("generateFlow: %v", err)
 	}
@@ -132,7 +132,7 @@ func TestGenerateFlow_BadCronStripped(t *testing.T) {
 	llm.Register(llm.ProviderInfo{Name: "fakeflowbadcron", Integration: "FakeFlowBadCron", DefaultModel: "m", Provider: sp})
 
 	h := newGatewayHarness(t)
-	g, issues, err := h.gw.generateFlow(context.Background(), "fakeflowbadcron", "key", "x", nil, "t1", "main", "UTC", nil)
+	g, issues, err := h.gw.flowAPI().generateFlow(context.Background(), "fakeflowbadcron", "key", "x", nil, "t1", "main", "UTC", nil)
 	if err != nil {
 		t.Fatalf("generateFlow: %v", err)
 	}
@@ -163,7 +163,7 @@ func TestGenerateFlow_ProgressPhases(t *testing.T) {
 
 	var phases []string
 	h := newGatewayHarness(t)
-	_, _, err := h.gw.generateFlow(context.Background(), "fakeflowprog", "key", "x", nil, "t1", "main", "", func(phase, _ string) {
+	_, _, err := h.gw.flowAPI().generateFlow(context.Background(), "fakeflowprog", "key", "x", nil, "t1", "main", "", func(phase, _ string) {
 		phases = append(phases, phase)
 	})
 	if err != nil {
@@ -228,7 +228,7 @@ func TestPickProvider_Cov(t *testing.T) {
 	ctx := core.WithTenant(context.Background(), "t")
 
 	// No providers connected yet -> empty.
-	if chosen, conn := h.gw.pickProvider(ctx, ""); conn != nil || chosen.info.Name != "" {
+	if chosen, conn := h.gw.flowAPI().pickProvider(ctx, ""); conn != nil || chosen.info.Name != "" {
 		t.Fatalf("no-connection pick = %+v / %v, want empty", chosen, conn)
 	}
 
@@ -247,7 +247,7 @@ func TestPickProvider_Cov(t *testing.T) {
 
 	// At least our two providers are connected; default picks the first
 	// connected one in registration order.
-	chosen, conn := h.gw.pickProvider(ctx, "")
+	chosen, conn := h.gw.flowAPI().pickProvider(ctx, "")
 	if len(conn) < 2 {
 		t.Fatalf("connected providers = %d, want >=2", len(conn))
 	}
@@ -256,7 +256,7 @@ func TestPickProvider_Cov(t *testing.T) {
 	}
 
 	// Explicit want selects the matching provider.
-	want, _ := h.gw.pickProvider(ctx, "testprov_b")
+	want, _ := h.gw.flowAPI().pickProvider(ctx, "testprov_b")
 	if want.info.Name != "testprov_b" || want.key != "key-b" {
 		t.Fatalf("want=testprov_b pick = %+v", want)
 	}

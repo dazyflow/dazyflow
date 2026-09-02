@@ -118,16 +118,24 @@ const appCSP = "default-src 'self'; " +
 	"form-action 'self'; " +
 	"frame-ancestors 'none'"
 
+// urlBuilder answers "what origin did this request arrive on", which is all a
+// handler needs to build a link back to itself. Kept narrow deliberately: the
+// proxy-header gate is a security decision and lives in exactly one place.
+type urlBuilder struct {
+	svc        *Service
+	trustProxy bool
+}
+
 // requestIsHTTPS reports whether the request reached the user over TLS.
 // Directly: r.TLS is set. Behind a TLS-terminating reverse proxy the
 // connection to dzd is plain HTTP, so we consult X-Forwarded-Proto —
 // but only when TrustProxyHeaders is on, since an untrusted client
 // could otherwise forge it to flip on the Secure cookie flag.
-func (h *HTTPGateway) requestIsHTTPS(r *http.Request) bool {
+func (u urlBuilder) requestIsHTTPS(r *http.Request) bool {
 	if r.TLS != nil {
 		return true
 	}
-	if h.TrustProxyHeaders && strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+	if u.trustProxy && strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
 		return true
 	}
 	return false
@@ -177,14 +185,14 @@ func hostIsSubdomainOf(host, domain string) bool {
 // wildcard subdomain (anything under the configured apex), so the landing
 // handler can serve the app rather than the marketing page there. The port,
 // if any, is stripped first; false when the wildcard feature is off.
-func (h *HTTPGateway) isOrgSubdomainHost(host string) bool {
-	if h.WildcardDomain == "" {
+func isOrgSubdomainHost(host, wildcardDomain string) bool {
+	if wildcardDomain == "" {
 		return false
 	}
 	if i := strings.IndexByte(host, ':'); i >= 0 {
 		host = host[:i]
 	}
-	return hostIsSubdomainOf(host, h.WildcardDomain)
+	return hostIsSubdomainOf(host, wildcardDomain)
 }
 
 // IsValidWildcardDomain reports whether d is specific enough to use as a
@@ -210,3 +218,45 @@ func IsValidWildcardDomain(d string) bool {
 	}
 	return true
 }
+
+// effectiveBaseURL returns the origin to build user-facing URLs (trigger,
+// hosted form, editor link) against. The operator's --public-base-url is
+// authoritative when set. Otherwise we derive it from the request — honoring
+// X-Forwarded-Proto/Host so a reverse proxy's external origin wins — so the
+// trigger/form links a user gets are USABLE (absolute) instead of bare paths
+// like "/form/...". The derived value is best-effort: behind a proxy that
+// doesn't forward those headers it may be the internal host, which is why
+// public_base_configured still reports whether the authoritative value is set.
+func (u urlBuilder) effectiveBaseURL(r *http.Request) string {
+	if b := strings.TrimRight(u.svc.PublicBaseURL, "/"); b != "" {
+		return b
+	}
+	if r == nil {
+		return ""
+	}
+	scheme := "http"
+	if u.requestIsHTTPS(r) {
+		scheme = "https"
+	}
+	// Only trust X-Forwarded-Host when the operator has opted into proxy
+	// headers (DAZYFLOW_TRUST_PROXY_HEADERS), mirroring requestIsHTTPS. Without
+	// the gate a client could set X-Forwarded-Host to reflect an attacker origin
+	// back into the convenience URLs (canvas/trigger/share links) it receives.
+	host := r.Host
+	if u.trustProxy {
+		if fwd := r.Header.Get("X-Forwarded-Host"); fwd != "" {
+			host = fwd
+		}
+	}
+	if host == "" {
+		return ""
+	}
+	return scheme + "://" + host
+}
+
+// urls exposes the request-origin helpers to a domain handler.
+func (h *HTTPGateway) urls() urlBuilder {
+	return urlBuilder{svc: h.svc, trustProxy: h.TrustProxyHeaders}
+}
+
+func (h *HTTPGateway) requestIsHTTPS(r *http.Request) bool { return h.urls().requestIsHTTPS(r) }

@@ -263,7 +263,7 @@ func TestWebAPIsEndpoints_Usage(t *testing.T) {
 
 	body, _ := json.Marshal(saveBody())
 	rw := httptest.NewRecorder()
-	h.gw.saveWebAPI(rw, httptest.NewRequest("POST", "/api/v1/admin/web-apis", bytes.NewReader(body)),
+	h.gw.webAPIsAPI().saveWebAPI(rw, httptest.NewRequest("POST", "/api/v1/admin/web-apis", bytes.NewReader(body)),
 		adminPrincipal("acme"))
 	if rw.Code != 200 {
 		t.Fatalf("save code %d body %s", rw.Code, rw.Body)
@@ -303,7 +303,7 @@ func webAPIUsageReq(t *testing.T, h *gatewayHarness, p core.Principal, name stri
 	rw := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/api/v1/admin/web-apis/"+name+"/usage", nil)
 	req.SetPathValue("name", name)
-	h.gw.webAPIUsage(rw, req, p)
+	h.gw.webAPIsAPI().webAPIUsage(rw, req, p)
 	return rw
 }
 

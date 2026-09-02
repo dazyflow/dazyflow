@@ -15,6 +15,20 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
+// gitMirrorAPI serves the git-mirror endpoints. Its fields are the whole of what
+// those handlers touch.
+type gitMirrorAPI struct {
+	auditor
+	EncryptedSecrets *EncryptedSecrets
+	GitMirrors       GitMirrorStore
+	MirrorPusher     *MirrorPusher
+}
+
+// gitMirrorAPI builds them from the gateway's configuration.
+func (h *HTTPGateway) gitMirrorAPI() *gitMirrorAPI {
+	return &gitMirrorAPI{auditor: h.auditor(), EncryptedSecrets: h.EncryptedSecrets, GitMirrors: h.GitMirrors, MirrorPusher: h.MirrorPusher}
+}
+
 // The /api/v1/git/mirror endpoints configure and drive the workspace git
 // mirror. They sit beside /api/v1/git/credentials — same page in the UI,
 // same permission bar (secret:write to change it, secret:read to see it),
@@ -65,7 +79,7 @@ func mirrorResponse(m GitMirror) gitMirrorResponse {
 
 // mirrorPreflight is the shared gate: the feature must be wired, the caller
 // must have a tenant and the right permission, and we need the scope.
-func (h *HTTPGateway) mirrorPreflight(rw http.ResponseWriter, r *http.Request, p core.Principal, perm core.Permission) (tenant, workspace string, ok bool) {
+func (h *gitMirrorAPI) mirrorPreflight(rw http.ResponseWriter, r *http.Request, p core.Principal, perm core.Permission) (tenant, workspace string, ok bool) {
 	if h.GitMirrors == nil {
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured",
 			"git mirroring is not configured on this deployment")
@@ -86,7 +100,7 @@ func (h *HTTPGateway) mirrorPreflight(rw http.ResponseWriter, r *http.Request, p
 		writeAPIError(rw, http.StatusForbidden, "forbidden", err.Error())
 		return "", "", false
 	}
-	tenant, workspace, ok = h.resolveTenantWorkspaceScope(rw, r, p)
+	tenant, workspace, ok = resolveTenantWorkspaceScope(rw, r, p)
 	if !ok {
 		return "", "", false
 	}
@@ -97,7 +111,7 @@ func (h *HTTPGateway) mirrorPreflight(rw http.ResponseWriter, r *http.Request, p
 // and the outcome of its last push. An unconfigured workspace is a 200 with
 // configured=false rather than a 404: the UI renders the same panel either
 // way, and a 404 would make "no mirror yet" look like an error.
-func (h *HTTPGateway) getGitMirrorMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *gitMirrorAPI) getGitMirrorMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, workspace, ok := h.mirrorPreflight(rw, r, p, core.PermSecretRead)
 	if !ok {
 		return
@@ -127,7 +141,7 @@ type putGitMirrorBody struct {
 // credential must exist AND carry a private key. Checking the credential
 // here means "you picked a token-only credential" is a 400 on the form the
 // user is looking at, rather than a red mirror status they discover later.
-func (h *HTTPGateway) putGitMirrorMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *gitMirrorAPI) putGitMirrorMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, workspace, ok := h.mirrorPreflight(rw, r, p, core.PermSecretWrite)
 	if !ok {
 		return
@@ -202,7 +216,7 @@ func (h *HTTPGateway) putGitMirrorMe(rw http.ResponseWriter, r *http.Request, p 
 // deleteGitMirrorMe is DELETE /api/v1/git/mirror — stop mirroring and forget
 // the target. Idempotent; the remote repository is untouched (we never
 // delete anything on the far side).
-func (h *HTTPGateway) deleteGitMirrorMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *gitMirrorAPI) deleteGitMirrorMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, workspace, ok := h.mirrorPreflight(rw, r, p, core.PermSecretWrite)
 	if !ok {
 		return
@@ -223,7 +237,7 @@ func (h *HTTPGateway) deleteGitMirrorMe(rw http.ResponseWriter, r *http.Request,
 // returns the git error verbatim on failure because "permission denied
 // (publickey)" and "host key mismatch" are the two answers people actually
 // need and neither survives paraphrasing.
-func (h *HTTPGateway) pushGitMirrorMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *gitMirrorAPI) pushGitMirrorMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, ws, ok := h.mirrorPreflight(rw, r, p, core.PermSecretWrite)
 	if !ok {
 		return

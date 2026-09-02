@@ -44,7 +44,7 @@ const signupInviteTTL = 14 * 24 * time.Hour
 // and binds the account to the invited address: a recipient can't edit
 // the readonly form field (or forge the request) to claim a different
 // email than the one the owner invited.
-func (h *HTTPGateway) validSignupInvite(ctx context.Context, email, token string) bool {
+func (h *authAPI) validSignupInvite(ctx context.Context, email, token string) bool {
 	if token == "" || h.Invitations == nil {
 		return false
 	}
@@ -64,7 +64,7 @@ func (h *HTTPGateway) validSignupInvite(ctx context.Context, email, token string
 // Falls back to a path-only URL when no public base URL is configured
 // (useless in an inbox, but the create response still returns it for
 // copy/paste, and the UI rewrites it against window.origin).
-func (h *HTTPGateway) signupInviteURL(email, token string) string {
+func (h *authAPI) signupInviteURL(email, token string) string {
 	q := "/signup?email=" + url.QueryEscape(email) + "&signup_invite=" + url.QueryEscape(token)
 	base := strings.TrimRight(h.svc.PublicBaseURL, "/")
 	if base == "" {
@@ -77,7 +77,7 @@ func (h *HTTPGateway) signupInviteURL(email, token string) string {
 // Platform-admin only. Mints a pending signup-invite for the email and,
 // when a mailer is wired, sends the link. The response always carries
 // the link so the owner can copy/paste it regardless.
-func (h *HTTPGateway) createSignupInvite(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *authAPI) createSignupInvite(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Invitations == nil || h.Users == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
 		return
@@ -167,7 +167,7 @@ func (h *HTTPGateway) createSignupInvite(rw http.ResponseWriter, r *http.Request
 // admin only. Returns the deployment's pending + recently-resolved
 // signup-invites so the owner can see who's been invited and re-share or
 // revoke a link.
-func (h *HTTPGateway) listSignupInvites(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *authAPI) listSignupInvites(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Invitations == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
 		return
@@ -213,7 +213,7 @@ func (h *HTTPGateway) listSignupInvites(rw http.ResponseWriter, r *http.Request,
 // revokeSignupInvite handler: DELETE /api/v1/admin/signup-invites/{token}.
 // Platform-admin only. Refuses tokens that aren't signup-invites so an
 // org-invite can't be revoked through this surface.
-func (h *HTTPGateway) revokeSignupInvite(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *authAPI) revokeSignupInvite(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Invitations == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
 		return

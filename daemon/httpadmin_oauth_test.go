@@ -277,7 +277,7 @@ func TestStaleAccounts_MissingScopeFlagged(t *testing.T) {
 		"https://www.googleapis.com/auth/gmail.send",
 		"https://www.googleapis.com/auth/drive.readonly", // granted token lacks this
 	}
-	stale := h.gw.staleAccounts(context.Background(), "tenantA", "google", []string{"default"}, required)
+	stale := h.gw.oauthAPI().staleAccounts(context.Background(), "tenantA", "google", []string{"default"}, required)
 	if !contains(stale, "default") {
 		t.Errorf("expected default to be stale; got %v", stale)
 	}
@@ -293,7 +293,7 @@ func TestStaleAccounts_FullScopeNotFlagged(t *testing.T) {
 	h := newGatewayHarness(t)
 	h.gw.EncryptedSecrets = es
 	h.gw.OAuth = r
-	stale := h.gw.staleAccounts(context.Background(), "tenantA", "google", []string{"default"}, providerDefault("google").Scopes)
+	stale := h.gw.oauthAPI().staleAccounts(context.Background(), "tenantA", "google", []string{"default"}, providerDefault("google").Scopes)
 	if len(stale) != 0 {
 		t.Errorf("fully-scoped token should not be stale; got %v", stale)
 	}

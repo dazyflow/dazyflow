@@ -262,7 +262,7 @@ type putGitCredBody struct {
 // credentials (names + which parts are set; never the secret material). Backs
 // both the admin page and the git_checkout account picker. Gated on
 // secret:read since account names alone reveal which repos a tenant talks to.
-func (h *HTTPGateway) listGitCredsMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *secretsAPI) listGitCredsMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.EncryptedSecrets == nil {
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "encrypted secret store is not configured")
 		return
@@ -285,7 +285,7 @@ func (h *HTTPGateway) listGitCredsMe(rw http.ResponseWriter, r *http.Request, p 
 
 // putGitCredMe is PUT /api/v1/git/credentials/{account} — create or replace a
 // named git credential. The key (if any) is validated before storage.
-func (h *HTTPGateway) putGitCredMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *secretsAPI) putGitCredMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.EncryptedSecrets == nil {
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "encrypted secret store is not configured")
 		return
@@ -314,7 +314,7 @@ func (h *HTTPGateway) putGitCredMe(rw http.ResponseWriter, r *http.Request, p co
 }
 
 // deleteGitCredMe is DELETE /api/v1/git/credentials/{account}.
-func (h *HTTPGateway) deleteGitCredMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *secretsAPI) deleteGitCredMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.EncryptedSecrets == nil {
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "encrypted secret store is not configured")
 		return

@@ -199,7 +199,7 @@ func TestAssembleExport_IncludesSupportAuditAndRoles(t *testing.T) {
 	}
 	p := core.Principal{Subject: email, Tenant: tenant}
 
-	exp, err := h.assembleExport(ctx, p)
+	exp, err := h.gdprAPI().assembleExport(ctx, p)
 	if err != nil {
 		t.Fatalf("assembleExport: %v", err)
 	}
@@ -273,7 +273,7 @@ func TestAssembleExport_ExcludesOtherPeoplesData(t *testing.T) {
 	_ = audit.Append(ctx, core.AuditEvent{Tenant: tenant, Actor: "bob@example.com", Action: "auth.login", Detail: "ip=5.6.7.8"})
 
 	h := &HTTPGateway{svc: &Service{}, Users: users, Tickets: tickets, Audit: audit}
-	exp, err := h.assembleExport(ctx, core.Principal{Subject: email, Tenant: tenant})
+	exp, err := h.gdprAPI().assembleExport(ctx, core.Principal{Subject: email, Tenant: tenant})
 	if err != nil {
 		t.Fatalf("assembleExport: %v", err)
 	}
@@ -302,7 +302,7 @@ func TestAssembleExport_SurvivesUnconfiguredStores(t *testing.T) {
 	// Nothing wired but the user store — every other section must degrade.
 	h := &HTTPGateway{svc: &Service{}, Users: users}
 
-	exp, err := h.assembleExport(ctx, core.Principal{Subject: email, Tenant: "acme"})
+	exp, err := h.gdprAPI().assembleExport(ctx, core.Principal{Subject: email, Tenant: "acme"})
 	if err != nil {
 		t.Fatalf("assembleExport with no stores: %v", err)
 	}

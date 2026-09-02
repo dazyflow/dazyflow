@@ -505,7 +505,7 @@ func TestRequireSecretStore_Cov(t *testing.T) {
 
 	// No store -> 501, returns false.
 	rw := httptest.NewRecorder()
-	if h.gw.requireSecretStore(rw, core.Principal{Tenant: "t"}) {
+	if h.gw.secretsAPI().requireSecretStore(rw, core.Principal{Tenant: "t"}) {
 		t.Fatal("no-store should return false")
 	}
 	if rw.Code != http.StatusNotImplemented {
@@ -516,7 +516,7 @@ func TestRequireSecretStore_Cov(t *testing.T) {
 
 	// Store present but no tenant -> 403, false.
 	rw = httptest.NewRecorder()
-	if h.gw.requireSecretStore(rw, core.Principal{}) {
+	if h.gw.secretsAPI().requireSecretStore(rw, core.Principal{}) {
 		t.Fatal("no-tenant should return false")
 	}
 	if rw.Code != http.StatusForbidden {
@@ -525,7 +525,7 @@ func TestRequireSecretStore_Cov(t *testing.T) {
 
 	// Store + tenant -> true, no write.
 	rw = httptest.NewRecorder()
-	if !h.gw.requireSecretStore(rw, core.Principal{Tenant: "t"}) {
+	if !h.gw.secretsAPI().requireSecretStore(rw, core.Principal{Tenant: "t"}) {
 		t.Fatal("store+tenant should return true")
 	}
 	if rw.Code != http.StatusOK {

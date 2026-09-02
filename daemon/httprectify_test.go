@@ -38,7 +38,7 @@ func TestChangePassword(t *testing.T) {
 	body := `{"current_password":"oldpassword","new_password":"brandnewpass"}`
 	r := httptest.NewRequest("POST", "/api/v1/me/password", strings.NewReader(body))
 	rw := httptest.NewRecorder()
-	h.changePasswordHandler(rw, r, core.Principal{Subject: "alice@example.com"})
+	h.authAPI().changePasswordHandler(rw, r, core.Principal{Subject: "alice@example.com"})
 	if rw.Code != 200 {
 		t.Fatalf("status=%d body=%s", rw.Code, rw.Body.String())
 	}
@@ -63,7 +63,7 @@ func TestChangePassword_WrongCurrent(t *testing.T) {
 	body := `{"current_password":"WRONG","new_password":"brandnewpass"}`
 	r := httptest.NewRequest("POST", "/api/v1/me/password", strings.NewReader(body))
 	rw := httptest.NewRecorder()
-	h.changePasswordHandler(rw, r, core.Principal{Subject: "alice@example.com"})
+	h.authAPI().changePasswordHandler(rw, r, core.Principal{Subject: "alice@example.com"})
 	if rw.Code != 401 {
 		t.Fatalf("status=%d, want 401", rw.Code)
 	}
@@ -96,7 +96,7 @@ func TestChangeEmail_Rekey(t *testing.T) {
 	body := `{"new_email":"alice@new.com","password":"pw12345678"}`
 	r := httptest.NewRequest("POST", "/api/v1/me/email", strings.NewReader(body))
 	rw := httptest.NewRecorder()
-	h.changeEmailHandler(rw, r, core.Principal{Subject: oldEmail})
+	h.authAPI().changeEmailHandler(rw, r, core.Principal{Subject: oldEmail})
 	if rw.Code != 200 {
 		t.Fatalf("status=%d body=%s", rw.Code, rw.Body.String())
 	}
@@ -138,7 +138,7 @@ func TestChangeEmail_TargetTaken(t *testing.T) {
 	body := `{"new_email":"taken@example.com","password":"pw12345678"}`
 	r := httptest.NewRequest("POST", "/api/v1/me/email", strings.NewReader(body))
 	rw := httptest.NewRecorder()
-	h.changeEmailHandler(rw, r, core.Principal{Subject: "alice@example.com"})
+	h.authAPI().changeEmailHandler(rw, r, core.Principal{Subject: "alice@example.com"})
 	if rw.Code != 409 {
 		t.Fatalf("status=%d, want 409 (email taken)", rw.Code)
 	}

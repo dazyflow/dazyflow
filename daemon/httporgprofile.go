@@ -17,11 +17,24 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
+// orgProfileAPI serves the organization-profile endpoints. Its fields are the whole of what
+// those handlers touch.
+type orgProfileAPI struct {
+	auditor
+	WildcardDomain string
+	Profiles       auth.OrgProfileStore
+}
+
+// orgProfileAPI builds them from the gateway's configuration.
+func (h *HTTPGateway) orgProfileAPI() *orgProfileAPI {
+	return &orgProfileAPI{auditor: h.auditor(), WildcardDomain: h.WildcardDomain, Profiles: h.Profiles}
+}
+
 // getOrgProfile returns the per-org display name + last-edited time.
 // Always returns a row (even if the profile hasn't been written yet)
 // so the UI can show the current value (empty) and the tenant ID side
 // by side without distinguishing "no row" from "blank row".
-func (h *HTTPGateway) getOrgProfile(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *orgProfileAPI) getOrgProfile(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Profiles == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "org profiles not configured")
 		return
@@ -65,7 +78,7 @@ func (h *HTTPGateway) getOrgProfile(rw http.ResponseWriter, r *http.Request, p c
 // bloating the profile store.
 const maxOrgIconBytes = 256 * 1024
 
-func (h *HTTPGateway) putOrgProfile(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *orgProfileAPI) putOrgProfile(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Profiles == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "org profiles not configured")
 		return
@@ -121,7 +134,7 @@ func (h *HTTPGateway) putOrgProfile(rw http.ResponseWriter, r *http.Request, p c
 // + reserved-name check), then upserts; a label already claimed by another org
 // surfaces as 409 so the UI can say "taken" rather than 500. An empty label
 // clears the subdomain.
-func (h *HTTPGateway) putOrgSubdomain(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *orgProfileAPI) putOrgSubdomain(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Profiles == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "org profiles not configured")
 		return
@@ -174,7 +187,7 @@ func (h *HTTPGateway) putOrgSubdomain(rw http.ResponseWriter, r *http.Request, p
 // user types, so they learn a label is taken/invalid before saving. Returns
 // {available, reason}. The caller's OWN current label reads as available (so
 // re-saving an unchanged value isn't flagged as a conflict).
-func (h *HTTPGateway) orgSubdomainAvailable(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *orgProfileAPI) orgSubdomainAvailable(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Profiles == nil || h.WildcardDomain == "" {
 		writeJSON(rw, http.StatusOK, map[string]any{"available": false, "reason": "disabled"})
 		return
@@ -206,7 +219,7 @@ func (h *HTTPGateway) orgSubdomainAvailable(rw http.ResponseWriter, r *http.Requ
 // the tenant + display name are returned (both already public on the sign-in
 // surface); 404 when the label isn't claimed. No auth: a subdomain is public
 // by nature, and this leaks nothing a visit to the host wouldn't.
-func (h *HTTPGateway) resolveSubdomain(rw http.ResponseWriter, r *http.Request) {
+func (h *orgProfileAPI) resolveSubdomain(rw http.ResponseWriter, r *http.Request) {
 	if h.Profiles == nil || h.WildcardDomain == "" {
 		writeAPIError(rw, http.StatusNotFound, "not_found", "no such organization")
 		return
@@ -237,7 +250,7 @@ func (h *HTTPGateway) resolveSubdomain(rw http.ResponseWriter, r *http.Request) 
 // pointing arbitrary <random>.<apex> hosts at our IP can't make us mint certs
 // (Let's Encrypt rate-limit abuse) for hosts that map to no org. The apex
 // itself is served by its own managed-cert site block and never reaches here.
-func (h *HTTPGateway) tlsAllow(rw http.ResponseWriter, r *http.Request) {
+func (h *orgProfileAPI) tlsAllow(rw http.ResponseWriter, r *http.Request) {
 	if h.Profiles == nil || h.WildcardDomain == "" {
 		http.Error(rw, "subdomains disabled", http.StatusForbidden)
 		return

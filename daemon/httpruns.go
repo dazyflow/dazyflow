@@ -53,7 +53,7 @@ type dropsXML struct {
 	Drops   []core.Manifest `xml:"drop"`
 }
 
-func (h *HTTPGateway) listModules(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *flowAPI) listModules(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	q := DropSearch{
 		Query: r.URL.Query().Get("q"),
 	}
@@ -91,7 +91,7 @@ func (h *HTTPGateway) listModules(rw http.ResponseWriter, r *http.Request, p cor
 // newest first. Filter and paginate via ?status=&limit=&offset=. The
 // hard cap on limit is 200 so a misbehaving client can't drain the
 // table in one request.
-func (h *HTTPGateway) listRuns(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *flowAPI) listRuns(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant := r.PathValue("tenant")
 	workspace := r.PathValue("workspace")
 	id := r.PathValue("id")
@@ -113,7 +113,7 @@ func (h *HTTPGateway) listRuns(rw http.ResponseWriter, r *http.Request, p core.P
 // listAllRuns is the workspace-wide variant. tenant/workspace come from
 // the principal (Service.ListGraphRuns overrides any client-supplied
 // values), so this endpoint takes no path params — just query filters.
-func (h *HTTPGateway) listAllRuns(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *flowAPI) listAllRuns(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	opts, err := parseRunListOpts(r)
 	if err != nil {
 		writeJSONError(rw, http.StatusBadRequest, err.Error())
@@ -193,7 +193,7 @@ func parseRunListTime(s string) (time.Time, bool) {
 	return time.Time{}, false
 }
 
-func (h *HTTPGateway) writeRunList(rw http.ResponseWriter, r *http.Request, p core.Principal, opts core.ListGraphRunsOpts) {
+func (h *flowAPI) writeRunList(rw http.ResponseWriter, r *http.Request, p core.Principal, opts core.ListGraphRunsOpts) {
 	recs, err := h.svc.ListGraphRuns(r.Context(), p, opts)
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())

@@ -25,7 +25,7 @@ import (
 
 // sendWelcomeEmail greets a freshly-created account. Returns false (and
 // logs) on any failure; callers ignore the result.
-func (h *HTTPGateway) sendWelcomeEmail(r *http.Request, user auth.User) bool {
+func (h *authAPI) sendWelcomeEmail(r *http.Request, user auth.User) bool {
 	if h.svc.Mailer == nil {
 		return false
 	}

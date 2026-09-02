@@ -198,7 +198,7 @@ func (s *Service) SetTriggerEnabled(ctx context.Context, p core.Principal, tenan
 // cron/poll trigger in the workspace with its next-run preview. Backs the
 // Schedules page (list + calendar). Falls back to the principal's binding
 // when tenant/workspace query params are omitted.
-func (h *HTTPGateway) listSchedulesMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *flowAPI) listSchedulesMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant := r.URL.Query().Get("tenant")
 	workspace := r.URL.Query().Get("workspace")
 	if tenant == "" {
@@ -238,14 +238,14 @@ func (h *HTTPGateway) listSchedulesMe(rw http.ResponseWriter, r *http.Request, p
 // POST /me/flows/{flow_id}/triggers/{node_id}/{enable|disable}. Idempotent
 // per the underlying param toggle. A 409 means the flow is locked by an
 // active run (same as any edit).
-func (h *HTTPGateway) enableTriggerMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *flowAPI) enableTriggerMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	h.setTriggerEnabled(rw, r, p, true)
 }
-func (h *HTTPGateway) disableTriggerMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *flowAPI) disableTriggerMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	h.setTriggerEnabled(rw, r, p, false)
 }
-func (h *HTTPGateway) setTriggerEnabled(rw http.ResponseWriter, r *http.Request, p core.Principal, enabled bool) {
-	tenant, workspace, id, ok := h.readFlowID(rw, r, p)
+func (h *flowAPI) setTriggerEnabled(rw http.ResponseWriter, r *http.Request, p core.Principal, enabled bool) {
+	tenant, workspace, id, ok := readFlowID(rw, r, p)
 	if !ok {
 		return
 	}

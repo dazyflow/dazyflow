@@ -110,7 +110,7 @@ func TestSignInStartHost(t *testing.T) {
 	mk := func(host string) string {
 		r := httptest.NewRequest("GET", "/api/v1/auth/google/start", nil)
 		r.Host = host
-		return h.signInStartHost(r)
+		return h.authAPI().signInStartHost(r)
 	}
 	if got := mk("acme.dazyflow.app"); got != "acme.dazyflow.app" {
 		t.Errorf("subdomain host = %q, want acme.dazyflow.app", got)
@@ -126,7 +126,7 @@ func TestSignInStartHost(t *testing.T) {
 	off := &HTTPGateway{}
 	r := httptest.NewRequest("GET", "/", nil)
 	r.Host = "acme.dazyflow.app"
-	if got := off.signInStartHost(r); got != "" {
+	if got := off.authAPI().signInStartHost(r); got != "" {
 		t.Errorf("host tracked with feature off = %q, want empty", got)
 	}
 }

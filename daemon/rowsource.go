@@ -121,8 +121,8 @@ type rowSourceInfo struct {
 // (default "rows"), so the mapping editor can suggest them. Returns an empty
 // field list (not an error) when nothing is wired in or the producer isn't a
 // known row source — the box just stays free-text.
-func (h *HTTPGateway) listInputFields(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	tenant, workspace, id, ok := h.readFlowID(rw, r, p)
+func (h *flowAPI) listInputFields(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	tenant, workspace, id, ok := readFlowID(rw, r, p)
 	if !ok {
 		return
 	}
@@ -150,7 +150,7 @@ func (h *HTTPGateway) listInputFields(rw http.ResponseWriter, r *http.Request, p
 
 // inputFieldsFor finds the node wired into target.<port> and, if its module
 // is a registered row source, returns that source's field names.
-func (h *HTTPGateway) inputFieldsFor(ctx context.Context, p core.Principal, g core.Graph, target, port string) (*rowSourceInfo, []string) {
+func (h *flowAPI) inputFieldsFor(ctx context.Context, p core.Principal, g core.Graph, target, port string) (*rowSourceInfo, []string) {
 	var fromID string
 	for _, e := range g.Edges {
 		if e.To == target && e.ToPort == port {

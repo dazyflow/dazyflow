@@ -55,7 +55,7 @@ type adminUpsertProviderRequest struct {
 	ClientSecret string `json:"client_secret"`
 }
 
-func (h *HTTPGateway) listAdminOAuthProviders(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *oauthAPI) listAdminOAuthProviders(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if err := requirePlatformAdmin(p); err != nil {
 		adminError(rw, err)
 		return
@@ -95,7 +95,7 @@ func (h *HTTPGateway) listAdminOAuthProviders(rw http.ResponseWriter, r *http.Re
 	writeJSON(rw, http.StatusOK, map[string]any{"providers": rows})
 }
 
-func (h *HTTPGateway) upsertAdminOAuthProvider(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *oauthAPI) upsertAdminOAuthProvider(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if err := requirePlatformAdmin(p); err != nil {
 		adminError(rw, err)
 		return
@@ -147,7 +147,7 @@ func (h *HTTPGateway) upsertAdminOAuthProvider(rw http.ResponseWriter, r *http.R
 	})
 }
 
-func (h *HTTPGateway) deleteAdminOAuthProvider(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *oauthAPI) deleteAdminOAuthProvider(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if err := requirePlatformAdmin(p); err != nil {
 		adminError(rw, err)
 		return

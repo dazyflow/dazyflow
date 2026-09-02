@@ -47,7 +47,7 @@ func TestSystemNote_CarriesACodeForTheUIToTranslate(t *testing.T) {
 	if err := h.gw.Tickets.Create(ctx, tk); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if err := h.gw.appendSystemNote(ctx, "tk1", core.NoteCustomerClosed,
+	if err := h.gw.supportAPI().appendSystemNote(ctx, "tk1", core.NoteCustomerClosed,
 		"The customer closed this ticket.", now); err != nil {
 		t.Fatalf("append: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestSystemNote_EmptyBodyStillWritesNothing(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if err := h.gw.appendSystemNote(ctx, "tk1", core.SystemNote(""), "", now); err != nil {
+	if err := h.gw.supportAPI().appendSystemNote(ctx, "tk1", core.SystemNote(""), "", now); err != nil {
 		t.Fatalf("append: %v", err)
 	}
 	msgs, _ := h.gw.Tickets.ListMessages(ctx, "tk1")

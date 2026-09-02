@@ -16,6 +16,19 @@ import (
 	"github.com/dazyflow/dazyflow/engine/webapi"
 )
 
+// webAPIsAPI serves the web-API catalog endpoints. Its fields are the whole of what
+// those handlers touch.
+type webAPIsAPI struct {
+	auditor
+	svc     *Service
+	WebAPIs *WebAPIs
+}
+
+// webAPIsAPI builds them from the gateway's configuration.
+func (h *HTTPGateway) webAPIsAPI() *webAPIsAPI {
+	return &webAPIsAPI{auditor: h.auditor(), svc: h.svc, WebAPIs: h.WebAPIs}
+}
+
 // The admin API behind Admin → Web APIs.
 //
 // Every handler is scoped to p.Tenant and never takes a tenant from the
@@ -120,7 +133,7 @@ type webAPIRequest struct {
 	SpecURL *string `json:"spec_url,omitempty"`
 }
 
-func (h *HTTPGateway) webAPIsConfigured(rw http.ResponseWriter) bool {
+func (h *webAPIsAPI) webAPIsConfigured(rw http.ResponseWriter) bool {
 	if h.WebAPIs == nil || h.WebAPIs.Store == nil || h.WebAPIs.Catalog == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "web APIs are not configured on this deployment")
 		return false
@@ -141,7 +154,7 @@ func decodeWebAPIBody(r *http.Request, v any) error {
 }
 
 // webAPIRowFor renders one stored row with this process's live view merged in.
-func (h *HTTPGateway) webAPIRowFor(w WebAPI, live map[string][]string) webAPIRow {
+func (h *webAPIsAPI) webAPIRowFor(w WebAPI, live map[string][]string) webAPIRow {
 	ids, registered := live[w.Name]
 	ops := w.Operations
 	if ops == nil {
@@ -176,7 +189,7 @@ func (h *HTTPGateway) webAPIRowFor(w WebAPI, live map[string][]string) webAPIRow
 
 // liveWebAPIs indexes what this process currently has registered for the
 // tenant, by catalog name.
-func (h *HTTPGateway) liveWebAPIs(tenant string) map[string][]string {
+func (h *webAPIsAPI) liveWebAPIs(tenant string) map[string][]string {
 	out := map[string][]string{}
 	for _, st := range h.WebAPIs.Catalog.CatalogsFor(tenant) {
 		out[st.Name] = st.StepIDs
@@ -184,7 +197,7 @@ func (h *HTTPGateway) liveWebAPIs(tenant string) map[string][]string {
 	return out
 }
 
-func (h *HTTPGateway) listWebAPIs(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *webAPIsAPI) listWebAPIs(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !requireStepSourceAdmin(rw, p) || !h.webAPIsConfigured(rw) {
 		return
 	}
@@ -206,7 +219,7 @@ func (h *HTTPGateway) listWebAPIs(rw http.ResponseWriter, r *http.Request, p cor
 // One handler for the same reason saveMCPServer is one: a catalog is identified
 // by its name, and saving under an existing name replaces that configuration.
 // Two paths would have to agree on validation and on registration.
-func (h *HTTPGateway) saveWebAPI(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *webAPIsAPI) saveWebAPI(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !requireStepSourceAdmin(rw, p) || !h.webAPIsConfigured(rw) {
 		return
 	}
@@ -281,7 +294,7 @@ func (h *HTTPGateway) saveWebAPI(rw http.ResponseWriter, r *http.Request, p core
 // Same shape and same reasoning as the MCP servers' usage route: its own
 // endpoint because it loads every graph in the org, which is fine once when a
 // delete confirmation opens and wasteful on every render of the list.
-func (h *HTTPGateway) webAPIUsage(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *webAPIsAPI) webAPIUsage(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !requireStepSourceAdmin(rw, p) || !h.webAPIsConfigured(rw) {
 		return
 	}
@@ -308,7 +321,7 @@ func (h *HTTPGateway) webAPIUsage(rw http.ResponseWriter, r *http.Request, p cor
 	writeJSON(rw, http.StatusOK, usage)
 }
 
-func (h *HTTPGateway) deleteWebAPI(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *webAPIsAPI) deleteWebAPI(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !requireStepSourceAdmin(rw, p) || !h.webAPIsConfigured(rw) {
 		return
 	}
@@ -381,7 +394,7 @@ type webAPISpecResponse struct {
 // operations the admin actually picked — which is what makes "import
 // operations, never register a spec" true in the wiring and not only in the
 // documentation.
-func (h *HTTPGateway) parseWebAPISpec(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *webAPIsAPI) parseWebAPISpec(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !requireStepSourceAdmin(rw, p) || !h.webAPIsConfigured(rw) {
 		return
 	}

@@ -143,7 +143,7 @@ func TestFlowGenManual(t *testing.T) {
 			name := fmt.Sprintf("manual-%02d", a.Num)
 			llm.Register(llm.ProviderInfo{Name: name, Integration: "Manual", DefaultModel: "manual", Provider: mp})
 
-			graph, issues, err := h.generateFlow(context.Background(), name, "none", a.Prompt(), mans,
+			graph, issues, err := h.flowAPI().generateFlow(context.Background(), name, "none", a.Prompt(), mans,
 				"evaltenant", "default", "Europe/Stockholm", nil)
 			if len(mp.stops) > 0 {
 				t.Skipf("waiting for a reply: %s", mp.stops[len(mp.stops)-1])

@@ -24,7 +24,7 @@ const previewMaxBytes = 512 * 1024 // 512 KiB
 // authenticated caller — not org scoping. Template errors are expected while
 // the user is mid-typing, so they come back as a 200 with an `error` field
 // the UI renders inline, never an HTTP error.
-func (h *HTTPGateway) renderTemplatePreview(rw http.ResponseWriter, r *http.Request, _ core.Principal) {
+func (h *flowAPI) renderTemplatePreview(rw http.ResponseWriter, r *http.Request, _ core.Principal) {
 	body, ok := decodeRequestJSON[struct {
 		Template string `json:"template"`
 		Data     any    `json:"data"`

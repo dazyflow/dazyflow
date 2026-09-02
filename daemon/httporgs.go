@@ -7,16 +7,45 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/dazyflow/dazyflow/auth"
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/daemon/support"
 	"github.com/dazyflow/dazyflow/internal/datenames"
 	"github.com/dazyflow/dazyflow/internal/emailtheme"
 	"github.com/dazyflow/dazyflow/internal/maillang"
 )
+
+// orgAPI serves the organization, membership, invitation and org-admin endpoints. Its fields are the whole of what
+// those handlers touch.
+type orgAPI struct {
+	auditor
+	langPicker
+	seatQuota
+	svc            *Service
+	logger         *log.Logger
+	Users          auth.UserStore
+	Sessions       auth.SessionStore
+	Memberships    auth.MembershipStore
+	Invitations    auth.InvitationStore
+	Profiles       auth.OrgProfileStore
+	OrgAuth        auth.OrgAuthStore
+	SupportAgents  support.AgentStore
+	LogTail        *LogTail
+	WildcardDomain string
+	EnableSignup   bool
+	auth           *authAPI
+	revokeSessions func(ctx context.Context, subject string)
+}
+
+// orgAPI builds them from the gateway's configuration.
+func (h *HTTPGateway) orgAPI() *orgAPI {
+	return &orgAPI{auditor: h.auditor(), langPicker: h.lang(), seatQuota: h.seats(), svc: h.svc, logger: h.logger, Users: h.Users, Sessions: h.Sessions, Memberships: h.Memberships, Invitations: h.Invitations, Profiles: h.Profiles, OrgAuth: h.OrgAuth, SupportAgents: h.SupportAgents, LogTail: h.LogTail, WildcardDomain: h.WildcardDomain, EnableSignup: h.EnableSignup, auth: h.authAPI(), revokeSessions: h.platformAdminAPI().revokeSubjectSessions}
+}
 
 // switchOrg re-issues the caller's session against a tenant they
 // belong to. The session token itself doesn't change — we update the
@@ -29,7 +58,7 @@ import (
 // Memberships. We resolve the user's home tenant by looking up their
 // email in Users — that's the source of truth for "the org you got
 // at signup".
-func (h *HTTPGateway) switchOrg(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *orgAPI) switchOrg(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Sessions == nil || h.Users == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "sessions/users not configured")
 		return
@@ -122,7 +151,7 @@ const maxSelfServeOrgsPerUser = 10
 // seeds, so a self-invited admin membership marks an org this user created.
 // Best-effort: a store that can't list yields (0, err) and the caller lets
 // the create proceed rather than blocking on a transient store error.
-func (h *HTTPGateway) countOrgsCreatedBy(ctx context.Context, subject string) (int, error) {
+func (h *orgAPI) countOrgsCreatedBy(ctx context.Context, subject string) (int, error) {
 	if h.Memberships == nil {
 		return 0, nil
 	}
@@ -145,14 +174,14 @@ func (h *HTTPGateway) countOrgsCreatedBy(ctx context.Context, subject string) (i
 // the chosen name. The new org then shows up in the caller's whoami
 // memberships and is reachable via switch-org — no platform-admin step. The
 // tenant's workspace is provisioned lazily on first use (AutoFSWorkspaces).
-func (h *HTTPGateway) createOrg(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *orgAPI) createOrg(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Memberships == nil || h.Profiles == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "organizations not configured")
 		return
 	}
 	// Anti-abuse: on verification-active deployments an unverified signup
 	// can't spin up extra tenants. Mirrors invitation creation.
-	if !h.requireVerifiedInviter(rw, r, p) {
+	if !h.auth.requireVerifiedInviter(rw, r, p) {
 		return
 	}
 	// Per-creator cap: an unbounded self-serve create lets one account spin
@@ -220,7 +249,7 @@ func (h *HTTPGateway) createOrg(rw http.ResponseWriter, r *http.Request, p core.
 // org: the home user (the org owner) plus each Membership. Used by the
 // admin Members page. Tenant scope is the principal's own; platform
 // admins can pass ?tenant= to inspect another org.
-func (h *HTTPGateway) listMembers(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *orgAPI) listMembers(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Memberships == nil || h.Users == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "memberships not configured")
 		return
@@ -289,7 +318,7 @@ func (h *HTTPGateway) listMembers(rw http.ResponseWriter, r *http.Request, p cor
 // that would leave an org without a primary contact. To "transfer" the
 // org, a separate (TODO) endpoint would re-stamp Users.Tenant; for now
 // removing the home owner returns 409.
-func (h *HTTPGateway) removeMember(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *orgAPI) removeMember(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Memberships == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "memberships not configured")
 		return
@@ -338,7 +367,7 @@ func (h *HTTPGateway) removeMember(rw http.ResponseWriter, r *http.Request, p co
 // sessions, every org — a session carries one role set, and re-signing
 // in rebuilds it from the current memberships). Best-effort: a failed
 // sweep logs and moves on; sessions also expire on their own TTL.
-func (h *HTTPGateway) revokeMemberSessions(ctx context.Context, email string) {
+func (h *orgAPI) revokeMemberSessions(ctx context.Context, email string) {
 	if h.Users == nil || h.Sessions == nil {
 		return
 	}
@@ -375,7 +404,7 @@ func rolesGrantOrgAdmin(roles []core.Role) bool {
 // callerIsOrgOwner reports whether the principal is the home owner of
 // tenant — the owner's roles live on the User record (Users.Tenant==tenant),
 // not on a Membership row.
-func (h *HTTPGateway) callerIsOrgOwner(ctx context.Context, p core.Principal, tenant string) bool {
+func (h *orgAPI) callerIsOrgOwner(ctx context.Context, p core.Principal, tenant string) bool {
 	if h.Users == nil {
 		return false
 	}
@@ -388,7 +417,7 @@ func (h *HTTPGateway) callerIsOrgOwner(ctx context.Context, p core.Principal, te
 // mutual lockout). Acting on yourself, or acting as the org owner or a
 // platform admin, is always allowed; only a non-owner admin touching a
 // *peer* admin is refused.
-func (h *HTTPGateway) peerAdminBlocked(ctx context.Context, p core.Principal, targetEmail, tenant string, targetRoles []core.Role) bool {
+func (h *orgAPI) peerAdminBlocked(ctx context.Context, p core.Principal, targetEmail, tenant string, targetRoles []core.Role) bool {
 	if !rolesGrantOrgAdmin(targetRoles) {
 		return false // target isn't an admin — ordinary member edit
 	}
@@ -452,7 +481,7 @@ func capRolesToCaller(p core.Principal, roles []core.Role) error {
 // the org must always keep its owner-admin), and roles can't be emptied
 // (removing access is DELETE's job). Role grants are capped to the
 // caller's own permissions, same as invitations.
-func (h *HTTPGateway) updateMemberRoles(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *orgAPI) updateMemberRoles(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Memberships == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "memberships not configured")
 		return
@@ -538,30 +567,6 @@ func (h *HTTPGateway) updateMemberRoles(rw http.ResponseWriter, r *http.Request,
 	})
 }
 
-// createInvitation handler. Body: {email, roles, workspace}. Mints
-// a token, stores a pending Invitation, and returns the token + accept
-// URL. When the operator wired a mailer the link is also emailed; the
-// response always carries the URL so the admin can copy/paste it into
-// their channel of choice either way.
-// seatQuotaExceeded reports whether tenant has reached its plan's member
-// (seat) cap, and the cap itself. The effective limit encodes the plan — Pro
-// defaults to 0 (uncapped) but honors an explicit fair-use cap from its
-// tier/override, mirroring the run gate. Fails OPEN on a resolver/store error
-// so a billing or DB hiccup never blocks legitimate team growth. A 0 cap (the
-// default on deployments without billing, and Pro's default) means no
-// enforcement.
-func (h *HTTPGateway) seatQuotaExceeded(ctx context.Context, tenant string) (bool, int) {
-	limit := h.svc.effectiveLimits(ctx, tenant).MaxMembers
-	if limit <= 0 || h.Memberships == nil {
-		return false, limit
-	}
-	held, ok := h.seatHolders(ctx, tenant)
-	if !ok {
-		return false, limit // fail open
-	}
-	return len(held) >= limit, limit
-}
-
 // invitationSeatExceeded reports whether tenant has room for one more
 // INVITATION: the people seated today plus the invitations already outstanding,
 // each of which is a promise of a seat.
@@ -578,7 +583,7 @@ func (h *HTTPGateway) seatQuotaExceeded(ctx context.Context, tenant string) (boo
 //
 // invitee is excluded from the count so re-inviting someone doesn't run them
 // against their own outstanding invitation (or their own membership).
-func (h *HTTPGateway) invitationSeatExceeded(ctx context.Context, tenant, invitee string) (bool, int) {
+func (h *orgAPI) invitationSeatExceeded(ctx context.Context, tenant, invitee string) (bool, int) {
 	limit := h.svc.effectiveLimits(ctx, tenant).MaxMembers
 	if limit <= 0 || h.Memberships == nil {
 		return false, limit
@@ -608,86 +613,13 @@ func (h *HTTPGateway) invitationSeatExceeded(ctx context.Context, tenant, invite
 	return len(held) >= limit, limit
 }
 
-// seatMembership writes m, refusing when the tenant has no seat left for a new
-// person. Returns whether they were seated, and the plan limit for the message.
-//
-// Prefers a store that can decide and write atomically. The fallback — count,
-// then insert — has a window: two people accepting invitations in the same
-// moment both read the last free seat and both take it, leaving the org one
-// over its plan with nothing to signal it. Rare, and the whole point of a seat
-// limit is that it holds anyway.
-func (h *HTTPGateway) seatMembership(ctx context.Context, m auth.Membership) (bool, int, error) {
-	limit := h.svc.effectiveLimits(ctx, m.Tenant).MaxMembers
-	if limit <= 0 {
-		return true, limit, h.Memberships.PutMembership(ctx, m) // uncapped
-	}
-	if sl, ok := h.Memberships.(auth.SeatLimitedMembershipStore); ok {
-		// The store counts rows; the owner holds a seat without one, so hand
-		// it the row budget rather than the people budget.
-		rowLimit := limit
-		if h.ownerEmail(ctx, m.Tenant) != "" {
-			rowLimit--
-		}
-		if rowLimit < 0 {
-			rowLimit = 0
-		}
-		seated, err := sl.PutMembershipWithinLimit(ctx, m, rowLimit)
-		return seated, limit, err
-	}
-	if exceeded, _ := h.seatQuotaExceeded(ctx, m.Tenant); exceeded {
-		return false, limit, nil
-	}
-	return true, limit, h.Memberships.PutMembership(ctx, m)
-}
-
-// seatHolders is the set of email addresses occupying a seat in tenant: every
-// membership row plus the owner, who holds one without a row (ownership is
-// implicit in the home tenant). Returns ok=false on a store error so callers
-// can fail open — a DB hiccup must never lock an org out of growing.
-//
-// A set rather than a count, because the two sources can name the same person:
-// listMembers adds the owner on top of the rows for the People page, and this
-// has to agree with what that page shows or the limit means nothing.
-func (h *HTTPGateway) seatHolders(ctx context.Context, tenant string) (map[string]struct{}, bool) {
-	members, err := h.Memberships.ListByTenant(ctx, tenant)
-	if err != nil {
-		return nil, false
-	}
-	held := make(map[string]struct{}, len(members)+1)
-	for _, m := range members {
-		held[normalizeSeatEmail(m.UserEmail)] = struct{}{}
-	}
-	if owner := h.ownerEmail(ctx, tenant); owner != "" {
-		held[owner] = struct{}{}
-	}
-	return held, true
-}
-
-// ownerEmail returns the address of tenant's home owner, or "" when there
-// isn't one (an org an operator created) or the lookup fails.
-func (h *HTTPGateway) ownerEmail(ctx context.Context, tenant string) string {
-	if h.Users == nil {
-		return ""
-	}
-	users, err := h.Users.ListUsers(ctx)
-	if err != nil {
-		return ""
-	}
-	for _, u := range users {
-		if u.Tenant == tenant {
-			return normalizeSeatEmail(u.Email) // single home per tenant
-		}
-	}
-	return ""
-}
-
 // normalizeSeatEmail folds an address to the form seat counting compares on,
 // matching how memberships are keyed.
 func normalizeSeatEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
 }
 
-func (h *HTTPGateway) createInvitation(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *orgAPI) createInvitation(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Invitations == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
 		return
@@ -710,7 +642,7 @@ func (h *HTTPGateway) createInvitation(rw http.ResponseWriter, r *http.Request, 
 	// email that would never arrive, with no way forward. Creating the
 	// invitation and withholding only the send keeps the spam vector shut and
 	// still hands them a link that works.
-	mayEmailInvite := h.inviterVerified(r, p)
+	mayEmailInvite := h.auth.inviterVerified(r, p)
 	body, ok := decodeRequestJSON[struct {
 		Email     string      `json:"email"`
 		Roles     []core.Role `json:"roles"`
@@ -823,7 +755,7 @@ func (h *HTTPGateway) createInvitation(rw http.ResponseWriter, r *http.Request, 
 	})
 }
 
-func (h *HTTPGateway) inviteURL(token string) string {
+func (h *orgAPI) inviteURL(token string) string {
 	base := strings.TrimRight(h.svc.PublicBaseURL, "/")
 	if base == "" {
 		// Falls back to a path-only URL when the operator hasn't set
@@ -836,7 +768,7 @@ func (h *HTTPGateway) inviteURL(token string) string {
 
 // listInvitations returns the tenant's pending + recently-resolved
 // invitations. The admin Invitations page renders this.
-func (h *HTTPGateway) listInvitations(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *orgAPI) listInvitations(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Invitations == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
 		return
@@ -893,7 +825,7 @@ func (h *HTTPGateway) listInvitations(rw http.ResponseWriter, r *http.Request, p
 	writeJSON(rw, http.StatusOK, map[string]any{"invitations": out})
 }
 
-func (h *HTTPGateway) revokeInvitation(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *orgAPI) revokeInvitation(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Invitations == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
 		return
@@ -923,7 +855,7 @@ func (h *HTTPGateway) revokeInvitation(rw http.ResponseWriter, r *http.Request, 
 // viewInvitation: no auth required — the token IS the credential at
 // this step. Returns just enough for the /invite landing page to
 // render the org name and the email it was sent to.
-func (h *HTTPGateway) viewInvitation(rw http.ResponseWriter, r *http.Request) {
+func (h *orgAPI) viewInvitation(rw http.ResponseWriter, r *http.Request) {
 	if h.Invitations == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
 		return
@@ -967,7 +899,7 @@ func (h *HTTPGateway) viewInvitation(rw http.ResponseWriter, r *http.Request) {
 // acceptInvitation requires the caller to be signed in. We bind the
 // invitation's tenant + roles to the caller's email by creating a
 // Membership, then mark the invitation accepted.
-func (h *HTTPGateway) acceptInvitation(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *orgAPI) acceptInvitation(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Invitations == nil || h.Memberships == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
 		return
@@ -1050,7 +982,7 @@ func (h *HTTPGateway) acceptInvitation(rw http.ResponseWriter, r *http.Request, 
 // getOrgAuthConfig returns the per-org SSO config minus the secret. The
 // secret round-trips only on PUT (and is write-only after that — the
 // admin re-pastes it to change it).
-func (h *HTTPGateway) getOrgAuthConfig(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *orgAPI) getOrgAuthConfig(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.OrgAuth == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "org SSO config not configured")
 		return
@@ -1091,7 +1023,7 @@ func (h *HTTPGateway) getOrgAuthConfig(rw http.ResponseWriter, r *http.Request, 
 	})
 }
 
-func (h *HTTPGateway) putOrgAuthConfig(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *orgAPI) putOrgAuthConfig(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.OrgAuth == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "org SSO config not configured")
 		return
@@ -1133,7 +1065,7 @@ func (h *HTTPGateway) putOrgAuthConfig(rw http.ResponseWriter, r *http.Request, 
 	})
 }
 
-func (h *HTTPGateway) deleteOrgAuthConfig(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *orgAPI) deleteOrgAuthConfig(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.OrgAuth == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "org SSO config not configured")
 		return
@@ -1158,7 +1090,7 @@ func (h *HTTPGateway) deleteOrgAuthConfig(rw http.ResponseWriter, r *http.Reques
 // sign-in page needs to render correctly (currently just whether
 // self-serve signup is enabled). Unauthenticated — the response holds
 // no secrets, just feature flags.
-func (h *HTTPGateway) getPublicAuthConfig(rw http.ResponseWriter, r *http.Request) {
+func (h *orgAPI) getPublicAuthConfig(rw http.ResponseWriter, r *http.Request) {
 	writeJSON(rw, http.StatusOK, map[string]any{
 		"signup_enabled": h.EnableSignup,
 		// admin_bootstrap keeps the sign-up page reachable on a
@@ -1166,7 +1098,7 @@ func (h *HTTPGateway) getPublicAuthConfig(rw http.ResponseWriter, r *http.Reques
 		// still unclaimed, so the first super-admin can bootstrap
 		// without flipping EnableSignup on. It self-clears once every
 		// listed admin has an account. See adminBootstrapAvailable.
-		"admin_bootstrap": h.adminBootstrapAvailable(r.Context()),
+		"admin_bootstrap": h.auth.adminBootstrapAvailable(r.Context()),
 		// wildcard_domain, when set, lets the sign-in page derive the
 		// target org from a "<org>.<domain>" host so a visit to
 		// acme.dazyflow.app preselects org=acme. Empty = feature off.
@@ -1177,7 +1109,7 @@ func (h *HTTPGateway) getPublicAuthConfig(rw http.ResponseWriter, r *http.Reques
 // getPublicSSOStatus is the unauthenticated lookup the sign-in page
 // uses to decide whether to show a "Sign in with Google" button for
 // a given org. We expose only the booleans; secrets stay server-side.
-func (h *HTTPGateway) getPublicSSOStatus(rw http.ResponseWriter, r *http.Request) {
+func (h *orgAPI) getPublicSSOStatus(rw http.ResponseWriter, r *http.Request) {
 	if h.OrgAuth == nil {
 		writeJSON(rw, http.StatusOK, map[string]any{"google_enabled": false})
 		return
@@ -1192,4 +1124,116 @@ func (h *HTTPGateway) getPublicSSOStatus(rw http.ResponseWriter, r *http.Request
 		"google_enabled":          cfg.GoogleEnabled(),
 		"google_workspace_domain": cfg.GoogleWorkspaceDomain,
 	})
+}
+
+// seatQuota is the member-seat accounting: who occupies a seat in an org and
+// whether another one may be taken. Narrow on purpose, because both the org
+// routes and the sign-in path need the answer and neither should reach for the
+// other's handlers to get it.
+type seatQuota struct {
+	svc         *Service
+	Users       auth.UserStore
+	Memberships auth.MembershipStore
+}
+
+// ownerEmail returns the address of tenant's home owner, or "" when there
+// isn't one (an org an operator created) or the lookup fails.
+func (q seatQuota) ownerEmail(ctx context.Context, tenant string) string {
+	if q.Users == nil {
+		return ""
+	}
+	users, err := q.Users.ListUsers(ctx)
+	if err != nil {
+		return ""
+	}
+	for _, u := range users {
+		if u.Tenant == tenant {
+			return normalizeSeatEmail(u.Email) // single home per tenant
+		}
+	}
+	return ""
+}
+
+// seatHolders is the set of email addresses occupying a seat in tenant: every
+// membership row plus the owner, who holds one without a row (ownership is
+// implicit in the home tenant). Returns ok=false on a store error so callers
+// can fail open — a DB hiccup must never lock an org out of growing.
+//
+// A set rather than a count, because the two sources can name the same person:
+// listMembers adds the owner on top of the rows for the People page, and this
+// has to agree with what that page shows or the limit means nothing.
+func (q seatQuota) seatHolders(ctx context.Context, tenant string) (map[string]struct{}, bool) {
+	members, err := q.Memberships.ListByTenant(ctx, tenant)
+	if err != nil {
+		return nil, false
+	}
+	held := make(map[string]struct{}, len(members)+1)
+	for _, m := range members {
+		held[normalizeSeatEmail(m.UserEmail)] = struct{}{}
+	}
+	if owner := q.ownerEmail(ctx, tenant); owner != "" {
+		held[owner] = struct{}{}
+	}
+	return held, true
+}
+
+// createInvitation handler. Body: {email, roles, workspace}. Mints
+// a token, stores a pending Invitation, and returns the token + accept
+// URL. When the operator wired a mailer the link is also emailed; the
+// response always carries the URL so the admin can copy/paste it into
+// their channel of choice either way.
+// seatQuotaExceeded reports whether tenant has reached its plan's member
+// (seat) cap, and the cap itself. The effective limit encodes the plan — Pro
+// defaults to 0 (uncapped) but honors an explicit fair-use cap from its
+// tier/override, mirroring the run gate. Fails OPEN on a resolver/store error
+// so a billing or DB hiccup never blocks legitimate team growth. A 0 cap (the
+// default on deployments without billing, and Pro's default) means no
+// enforcement.
+func (q seatQuota) seatQuotaExceeded(ctx context.Context, tenant string) (bool, int) {
+	limit := q.svc.effectiveLimits(ctx, tenant).MaxMembers
+	if limit <= 0 || q.Memberships == nil {
+		return false, limit
+	}
+	held, ok := q.seatHolders(ctx, tenant)
+	if !ok {
+		return false, limit // fail open
+	}
+	return len(held) >= limit, limit
+}
+
+// seatMembership writes m, refusing when the tenant has no seat left for a new
+// person. Returns whether they were seated, and the plan limit for the message.
+//
+// Prefers a store that can decide and write atomically. The fallback — count,
+// then insert — has a window: two people accepting invitations in the same
+// moment both read the last free seat and both take it, leaving the org one
+// over its plan with nothing to signal it. Rare, and the whole point of a seat
+// limit is that it holds anyway.
+func (q seatQuota) seatMembership(ctx context.Context, m auth.Membership) (bool, int, error) {
+	limit := q.svc.effectiveLimits(ctx, m.Tenant).MaxMembers
+	if limit <= 0 {
+		return true, limit, q.Memberships.PutMembership(ctx, m) // uncapped
+	}
+	if sl, ok := q.Memberships.(auth.SeatLimitedMembershipStore); ok {
+		// The store counts rows; the owner holds a seat without one, so hand
+		// it the row budget rather than the people budget.
+		rowLimit := limit
+		if q.ownerEmail(ctx, m.Tenant) != "" {
+			rowLimit--
+		}
+		if rowLimit < 0 {
+			rowLimit = 0
+		}
+		seated, err := sl.PutMembershipWithinLimit(ctx, m, rowLimit)
+		return seated, limit, err
+	}
+	if exceeded, _ := q.seatQuotaExceeded(ctx, m.Tenant); exceeded {
+		return false, limit, nil
+	}
+	return true, limit, q.Memberships.PutMembership(ctx, m)
+}
+
+// seats exposes the seat accounting to a domain handler.
+func (h *HTTPGateway) seats() seatQuota {
+	return seatQuota{svc: h.svc, Users: h.Users, Memberships: h.Memberships}
 }

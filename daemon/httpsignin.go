@@ -10,17 +10,61 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/dazyflow/dazyflow/auth"
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/daemon/support"
 )
+
+// authAPI serves sign-in, sign-up, single sign-on, two-factor and
+// account-recovery. Its fields are the whole of what those handlers touch.
+type authAPI struct {
+	auditor
+	adminCheck
+	urlBuilder
+	langPicker
+	sessionCookies
+	seatQuota
+	svc            *Service
+	logger         *log.Logger
+	Users          auth.UserStore
+	Sessions       auth.SessionStore
+	Memberships    auth.MembershipStore
+	Invitations    auth.InvitationStore
+	Profiles       auth.OrgProfileStore
+	Blocklist      auth.BlocklistStore
+	OrgAuth        auth.OrgAuthStore
+	SupportAgents  support.AgentStore
+	TOTPChallenges auth.TOTPChallengeStore
+	TOTPKey        []byte
+	WildcardDomain string
+	EnableSignup   bool
+	PlatformAdmins []string
+
+	// Process-scoped once-per-email audit caches. Held by pointer because the
+	// gateway outlives this struct, which is rebuilt on every route mount.
+	platformAdminGranted *sync.Map
+	supportAgentGranted  *sync.Map
+
+	// Injected from sibling domains so this one does not reach for their
+	// handlers: the sign-in lockout check and whether support is wired.
+	signInLockout  func(ctx context.Context, u auth.User) (string, bool)
+	ticketsEnabled func() bool
+}
+
+// authAPI builds them from the gateway's configuration.
+func (h *HTTPGateway) authAPI() *authAPI {
+	return &authAPI{auditor: h.auditor(), adminCheck: h.admins(), urlBuilder: h.urls(), langPicker: h.lang(), sessionCookies: h.cookies(), seatQuota: h.seats(), svc: h.svc, logger: h.logger, Users: h.Users, Sessions: h.Sessions, Memberships: h.Memberships, Invitations: h.Invitations, Profiles: h.Profiles, Blocklist: h.Blocklist, OrgAuth: h.OrgAuth, SupportAgents: h.SupportAgents, TOTPChallenges: h.TOTPChallenges, TOTPKey: h.TOTPKey, WildcardDomain: h.WildcardDomain, EnableSignup: h.EnableSignup, PlatformAdmins: h.PlatformAdmins, platformAdminGranted: &h.platformAdminGranted, supportAgentGranted: &h.supportAgentGranted, signInLockout: h.platformAdminAPI().signInLockout, ticketsEnabled: h.supportAPI().ticketsEnabled}
+}
 
 // signIn validates an email+password pair, mints a session, and sets
 // the session cookie. The session token is also returned in the body so
 // non-browser clients can hand it back via Authorization: Bearer.
-func (h *HTTPGateway) signIn(rw http.ResponseWriter, r *http.Request) {
+func (h *authAPI) signIn(rw http.ResponseWriter, r *http.Request) {
 	if h.Sessions == nil || h.Users == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "password sign-in not configured")
 		return
@@ -91,7 +135,7 @@ func (h *HTTPGateway) signIn(rw http.ResponseWriter, r *http.Request) {
 // truth — roles are baked into the session at issue time, so an existing
 // session must re-authenticate to pick up an allowlist change. No-op when
 // the email isn't listed or the role is already present.
-func (h *HTTPGateway) elevatePlatformAdmin(ctx context.Context, u auth.User) auth.User {
+func (h *authAPI) elevatePlatformAdmin(ctx context.Context, u auth.User) auth.User {
 	env := h.isPlatformAdminEmail(u.Email)
 	if !env && !h.isPlatformAdminGranted(u.Email) {
 		return u
@@ -120,16 +164,9 @@ func (h *HTTPGateway) elevatePlatformAdmin(ctx context.Context, u auth.User) aut
 	return u
 }
 
-// isPlatformAdminGranted reports whether email holds a runtime platform-admin
-// grant (the mutable layer). Cheap — reads the store's cached snapshot. Nil
-// store (not wired) means no runtime grants exist.
-func (h *HTTPGateway) isPlatformAdminGranted(email string) bool {
-	return h.PlatformAdminGrants != nil && h.PlatformAdminGrants.Granted(email)
-}
-
 // elevateSessionRoles applies every session-issue role elevation in one place,
 // so the ~5 issue sites (sign-in, signup, SSO, TOTP) call a single chokepoint.
-func (h *HTTPGateway) elevateSessionRoles(ctx context.Context, u auth.User) auth.User {
+func (h *authAPI) elevateSessionRoles(ctx context.Context, u auth.User) auth.User {
 	return h.elevateSupportAgent(ctx, h.elevatePlatformAdmin(ctx, u))
 }
 
@@ -140,7 +177,7 @@ func (h *HTTPGateway) elevateSessionRoles(ctx context.Context, u auth.User) auth
 // No-op when unset or already present. The role itself grants no ambient
 // access — it only unlocks requesting an AccessGrant and the support-view
 // capability (AuthorizeGraphSupportView).
-func (h *HTTPGateway) elevateSupportAgent(ctx context.Context, u auth.User) auth.User {
+func (h *authAPI) elevateSupportAgent(ctx context.Context, u auth.User) auth.User {
 	if h.SupportAgents == nil || !h.SupportAgents.Granted(u.Email) {
 		return u
 	}
@@ -159,30 +196,6 @@ func (h *HTTPGateway) elevateSupportAgent(ctx context.Context, u auth.User) auth
 	return u
 }
 
-// isPlatformAdmin reports whether email is a platform admin by EITHER layer —
-// the immutable env allowlist or a runtime grant. Used for display/effective
-// status; the env-only isPlatformAdminEmail still guards immutability (you
-// can't revoke an env admin).
-func (h *HTTPGateway) isPlatformAdmin(email string) bool {
-	return h.isPlatformAdminEmail(email) || h.isPlatformAdminGranted(email)
-}
-
-// isPlatformAdminEmail reports whether email is in the allowlist. The
-// stored entries are already lowercased + trimmed at wiring time; we
-// normalize the candidate the same way so the comparison is exact.
-func (h *HTTPGateway) isPlatformAdminEmail(email string) bool {
-	email = strings.ToLower(strings.TrimSpace(email))
-	if email == "" {
-		return false
-	}
-	for _, a := range h.PlatformAdmins {
-		if a == email {
-			return true
-		}
-	}
-	return false
-}
-
 // adminBootstrapAvailable reports whether at least one platform-admin
 // email in the allowlist has not yet claimed an account. It's the
 // signal the sign-up page uses to keep itself reachable on a
@@ -197,7 +210,7 @@ func (h *HTTPGateway) isPlatformAdminEmail(email string) bool {
 // Unauthenticated callers reach this via getPublicAuthConfig; it leaks
 // only a single boolean, never which emails are listed. The allowlist
 // is tiny (typically 1-3), so the per-email lookups are cheap.
-func (h *HTTPGateway) adminBootstrapAvailable(ctx context.Context) bool {
+func (h *authAPI) adminBootstrapAvailable(ctx context.Context) bool {
 	if h.Users == nil || len(h.PlatformAdmins) == 0 {
 		return false
 	}
@@ -215,7 +228,7 @@ func (h *HTTPGateway) adminBootstrapAvailable(ctx context.Context) bool {
 // signOut deletes the server-side session and clears the cookie. It
 // silently no-ops when no session is attached so the browser can hit
 // this on logout without inspecting state first.
-func (h *HTTPGateway) signOut(rw http.ResponseWriter, r *http.Request) {
+func (h *authAPI) signOut(rw http.ResponseWriter, r *http.Request) {
 	if h.Sessions == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "sessions not configured")
 		return
@@ -238,7 +251,7 @@ func (h *HTTPGateway) signOut(rw http.ResponseWriter, r *http.Request) {
 // set of permissions any of their roles grant. The UI uses this for
 // role gating (whether to show the Admin link, the Edit button, etc.)
 // without re-implementing role unrolling client-side.
-func (h *HTTPGateway) whoami(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *authAPI) whoami(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	permSet := map[core.Permission]struct{}{}
 	for _, role := range p.Roles {
 		for _, perm := range role.Permissions {
@@ -301,7 +314,7 @@ type orgMembershipDTO struct {
 	Home        bool        `json:"home"`
 }
 
-func (h *HTTPGateway) collectMemberships(ctx context.Context, p core.Principal) []orgMembershipDTO {
+func (h *authAPI) collectMemberships(ctx context.Context, p core.Principal) []orgMembershipDTO {
 	// The home entry is the user's OWN tenant (from the user record), not the
 	// session's current tenant — otherwise switching into another org would
 	// make the home org follow p.Tenant and drop out of the list (it isn't a

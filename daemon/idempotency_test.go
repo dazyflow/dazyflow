@@ -21,7 +21,7 @@ func newIdemGateway() *HTTPGateway {
 }
 
 func doIdem(h *HTTPGateway, method, route, key string, handler func(http.ResponseWriter, *http.Request, core.Principal)) *httptest.ResponseRecorder {
-	wrapped := h.idempotencyMiddleware(route, handler)
+	wrapped := h.idempotencyAPI().idempotencyMiddleware(route, handler)
 	req := httptest.NewRequest(method, "/x", nil)
 	if key != "" {
 		req.Header.Set(idempotencyHeader, key)

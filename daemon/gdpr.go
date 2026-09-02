@@ -137,7 +137,7 @@ func (rep *EraseReport) tallyByTenant(ctx context.Context, name string, store an
 // does NOT remove org-level content (graphs/runs/logs) — that is org data,
 // erased via deleteOrgData when the org itself is being removed (the
 // account-deletion handler composes both for a personal org).
-func (h *HTTPGateway) eraseUserIdentity(ctx context.Context, email string) (EraseReport, error) {
+func (h *gdprAPI) eraseUserIdentity(ctx context.Context, email string) (EraseReport, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 	rep := EraseReport{Email: email}
 	if h.Users == nil {
@@ -288,7 +288,7 @@ func (h *HTTPGateway) eraseUserIdentity(ctx context.Context, email string) (Eras
 // memberships, invitations, the org's SSO config and profile, and the
 // tenant's audit trail. Used for org/tenant deletion and, composed with
 // eraseUserIdentity, for erasing a personal org on account deletion.
-func (h *HTTPGateway) deleteOrgData(ctx context.Context, tenant string) (EraseReport, error) {
+func (h *gdprAPI) deleteOrgData(ctx context.Context, tenant string) (EraseReport, error) {
 	tenant = strings.TrimSpace(tenant)
 	rep := EraseReport{Tenant: tenant}
 	if tenant == "" {
@@ -408,7 +408,7 @@ func (h *HTTPGateway) deleteOrgData(ctx context.Context, tenant string) (EraseRe
 // Collected in one place so the erasure loop is a loop rather than a dozen
 // near-identical blocks, and so the set is greppable next to the coverage test
 // that enumerates the same columns (gdpr_coverage_test.go).
-func (h *HTTPGateway) authorshipStores() map[string]any {
+func (h *gdprAPI) authorshipStores() map[string]any {
 	m := map[string]any{
 		"git_mirrors":     h.GitMirrors,
 		"drop_switches":   h.DropSwitches,
@@ -445,7 +445,7 @@ func (h *HTTPGateway) authorshipStores() map[string]any {
 // that split is a hazard rather than a style question: reading only one field
 // turns a half-wired deployment into a silent skip, and a silent skip here is
 // undeleted credentials that the report still calls erased.
-func (h *HTTPGateway) secretsStoreForErase() *EncryptedSecrets {
+func (h *gdprAPI) secretsStoreForErase() *EncryptedSecrets {
 	if h.EncryptedSecrets != nil {
 		return h.EncryptedSecrets
 	}
@@ -459,7 +459,7 @@ func (h *HTTPGateway) secretsStoreForErase() *EncryptedSecrets {
 // of `tenant`. Used to decide whether deleting an account may also wipe its
 // home org's data: only when the subject is the org's sole occupant, so we
 // never erase a shared org out from under its other members.
-func (h *HTTPGateway) tenantHasOtherMembers(ctx context.Context, tenant, email string) bool {
+func (h *gdprAPI) tenantHasOtherMembers(ctx context.Context, tenant, email string) bool {
 	if h.Memberships == nil {
 		return false
 	}

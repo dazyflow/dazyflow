@@ -53,19 +53,19 @@ func TestShareError_Cov(t *testing.T) {
 	h := newGatewayHarness(t)
 
 	rw := httptest.NewRecorder()
-	h.gw.shareError(rw, core.ErrUnauthorized)
+	h.gw.shareAPI().shareError(rw, core.ErrUnauthorized)
 	if rw.Code != 403 {
 		t.Fatalf("unauthorized = %d, want 403", rw.Code)
 	}
 
 	rw = httptest.NewRecorder()
-	h.gw.shareError(rw, errors.New("share store not configured"))
+	h.gw.shareAPI().shareError(rw, errors.New("share store not configured"))
 	if rw.Code != 501 {
 		t.Fatalf("not-configured = %d, want 501", rw.Code)
 	}
 
 	rw = httptest.NewRecorder()
-	h.gw.shareError(rw, errors.New("disk on fire"))
+	h.gw.shareAPI().shareError(rw, errors.New("disk on fire"))
 	if rw.Code != 500 {
 		t.Fatalf("generic = %d, want 500", rw.Code)
 	}

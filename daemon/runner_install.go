@@ -72,7 +72,7 @@ func agentChecksum() string {
 }
 
 // serveRunnerAgent hands over the agent script.
-func (h *HTTPGateway) serveRunnerAgent(rw http.ResponseWriter, _ *http.Request) {
+func (h *runnerAPI) serveRunnerAgent(rw http.ResponseWriter, _ *http.Request) {
 	b, err := runnerFiles.ReadFile("embed/dzrunner.py")
 	if err != nil {
 		writeJSONError(rw, http.StatusNotImplemented, "the runner agent is not bundled in this build")
@@ -87,7 +87,7 @@ func (h *HTTPGateway) serveRunnerAgent(rw http.ResponseWriter, _ *http.Request) 
 
 // serveRunnerScript hands over runner.sh with this server's address already
 // substituted, which is what leaves the token as the only thing to paste.
-func (h *HTTPGateway) serveRunnerScript(rw http.ResponseWriter, r *http.Request) {
+func (h *runnerAPI) serveRunnerScript(rw http.ResponseWriter, r *http.Request) {
 	b, err := runnerFiles.ReadFile("embed/runner.sh")
 	if err != nil {
 		writeJSONError(rw, http.StatusNotImplemented, "the runner script is not bundled in this build")
@@ -116,7 +116,7 @@ func (h *HTTPGateway) serveRunnerScript(rw http.ResponseWriter, r *http.Request)
 // "http://" — and an ungated X-Forwarded-Host let a primed cache point real
 // operators at somebody else's server. effectiveBaseURL gates both on
 // TrustProxyHeaders, which is the rule the rest of the gateway already follows.
-func (h *HTTPGateway) runnerBaseURL(r *http.Request) string {
+func (h *runnerAPI) runnerBaseURL(r *http.Request) string {
 	if h.svc != nil {
 		if b := h.effectiveBaseURL(r); b != "" {
 			return b

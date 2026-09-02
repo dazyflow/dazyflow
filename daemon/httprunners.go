@@ -7,12 +7,29 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/dazyflow/dazyflow/core"
 )
+
+// runnerAPI serves the self-hosted runner endpoints. Its fields are the whole of what
+// those handlers touch.
+type runnerAPI struct {
+	auditor
+	urlBuilder
+	svc         *Service
+	logger      *log.Logger
+	Runners     *Runners
+	RunnerTasks RunnerTaskStore
+}
+
+// runnerAPI builds them from the gateway's configuration.
+func (h *HTTPGateway) runnerAPI() *runnerAPI {
+	return &runnerAPI{auditor: h.auditor(), urlBuilder: h.urls(), svc: h.svc, logger: h.logger, Runners: h.Runners, RunnerTasks: h.RunnerTasks}
+}
 
 // Two audiences, two kinds of credential, and they must not be confused.
 //
@@ -64,7 +81,7 @@ func requireStepSourceAdmin(rw http.ResponseWriter, p core.Principal) bool {
 	return false
 }
 
-func (h *HTTPGateway) runnersConfigured(rw http.ResponseWriter) bool {
+func (h *runnerAPI) runnersConfigured(rw http.ResponseWriter) bool {
 	if h.Runners == nil || h.Runners.Store == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "runners are not configured on this deployment")
 		return false
@@ -76,7 +93,7 @@ func (h *HTTPGateway) runnersConfigured(rw http.ResponseWriter) bool {
 // queue. One function rather than `!h.runnersConfigured(rw) || h.RunnerTasks
 // == nil` followed by a write, which sent the 501 body TWICE when the registry
 // was the missing half — two concatenated JSON envelopes in one response.
-func (h *HTTPGateway) runnerTasksConfigured(rw http.ResponseWriter) bool {
+func (h *runnerAPI) runnerTasksConfigured(rw http.ResponseWriter) bool {
 	if !h.runnersConfigured(rw) {
 		return false
 	}
@@ -87,7 +104,7 @@ func (h *HTTPGateway) runnerTasksConfigured(rw http.ResponseWriter) bool {
 	return true
 }
 
-func (h *HTTPGateway) listRunners(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *runnerAPI) listRunners(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !requireStepSourceAdmin(rw, p) || !h.runnersConfigured(rw) {
 		return
 	}
@@ -139,7 +156,7 @@ type runnerTargetRow struct {
 // credentials and deletes runners. Sending an editor to the admin route instead
 // would have meant either a 403 on a field they are entitled to fill in, or
 // widening the endpoint that hands out registration tokens.
-func (h *HTTPGateway) listRunnerTargets(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *runnerAPI) listRunnerTargets(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !core.CanAdminOrg(p) && !p.Has(core.PermGraphEdit) {
 		writeAPIError(rw, http.StatusForbidden, "forbidden", "graph:edit required")
 		return
@@ -179,7 +196,7 @@ type mintTokenRequest struct {
 //
 // POST rather than GET because it creates something, and because a token in a
 // URL would end up in a proxy log.
-func (h *HTTPGateway) mintRunnerToken(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *runnerAPI) mintRunnerToken(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !requireStepSourceAdmin(rw, p) || !h.runnersConfigured(rw) {
 		return
 	}
@@ -227,7 +244,7 @@ type setRunnerLabelsRequest struct {
 // Retagging reroutes every step that targets the label — a machine can be
 // pulled into, or out of, work it was never meant for without anyone touching
 // a flow.
-func (h *HTTPGateway) setRunnerLabels(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *runnerAPI) setRunnerLabels(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !requireStepSourceAdmin(rw, p) || !h.runnersConfigured(rw) {
 		return
 	}
@@ -260,7 +277,7 @@ func (h *HTTPGateway) setRunnerLabels(rw http.ResponseWriter, r *http.Request, p
 	})
 }
 
-func (h *HTTPGateway) deleteRunner(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *runnerAPI) deleteRunner(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !requireStepSourceAdmin(rw, p) || !h.runnersConfigured(rw) {
 		return
 	}
@@ -297,7 +314,7 @@ type registerResponse struct {
 // organisation the runner joins. Accepting one from the caller would make a
 // typo a cross-tenant registration, and the token the only thing standing
 // between one org and another's work queue.
-func (h *HTTPGateway) registerRunner(rw http.ResponseWriter, r *http.Request) {
+func (h *runnerAPI) registerRunner(rw http.ResponseWriter, r *http.Request) {
 	if !h.runnersConfigured(rw) {
 		return
 	}
@@ -336,7 +353,7 @@ func (h *HTTPGateway) registerRunner(rw http.ResponseWriter, r *http.Request) {
 }
 
 // authRunner identifies the agent behind a request, or writes the 401 itself.
-func (h *HTTPGateway) authRunner(rw http.ResponseWriter, r *http.Request) (Runner, bool) {
+func (h *runnerAPI) authRunner(rw http.ResponseWriter, r *http.Request) (Runner, bool) {
 	cred := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	cred = strings.TrimSpace(cred)
 	if cred == "" {
@@ -374,7 +391,7 @@ type claimResponse struct {
 // The call doubles as the heartbeat — Authenticate records the check-in — which
 // is why an idle agent must keep polling rather than sleeping quietly. That is
 // also what makes "online" mean something without a connection to watch.
-func (h *HTTPGateway) claimRunnerTask(rw http.ResponseWriter, r *http.Request) {
+func (h *runnerAPI) claimRunnerTask(rw http.ResponseWriter, r *http.Request) {
 	if !h.runnerTasksConfigured(rw) {
 		return
 	}
@@ -411,7 +428,7 @@ type progressRequest struct {
 // lease having to be set to the longest imaginable runtime: a script that says
 // nothing for the whole lease is indistinguishable from an agent that died, and
 // the honest response to that is to let the task go.
-func (h *HTTPGateway) runnerTaskProgress(rw http.ResponseWriter, r *http.Request) {
+func (h *runnerAPI) runnerTaskProgress(rw http.ResponseWriter, r *http.Request) {
 	if !h.runnerTasksConfigured(rw) {
 		return
 	}
@@ -430,7 +447,7 @@ func (h *HTTPGateway) runnerTaskProgress(rw http.ResponseWriter, r *http.Request
 }
 
 // runnerTaskResult records the outcome and releases the task.
-func (h *HTTPGateway) runnerTaskResult(rw http.ResponseWriter, r *http.Request) {
+func (h *runnerAPI) runnerTaskResult(rw http.ResponseWriter, r *http.Request) {
 	if !h.runnerTasksConfigured(rw) {
 		return
 	}

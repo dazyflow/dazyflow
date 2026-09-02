@@ -117,7 +117,7 @@ func TestEmailDomainHelpers(t *testing.T) {
 func TestGoogleRedirectURI(t *testing.T) {
 	h := newGatewayHarness(t)
 	h.svc.PublicBaseURL = "https://app.example.com/"
-	if got := h.gw.googleRedirectURI(); got != "https://app.example.com/api/v1/auth/google/callback" {
+	if got := h.gw.authAPI().googleRedirectURI(); got != "https://app.example.com/api/v1/auth/google/callback" {
 		t.Errorf("googleRedirectURI = %q", got)
 	}
 }
@@ -127,15 +127,15 @@ func TestSignInRedirectURL(t *testing.T) {
 	r := httptest.NewRequest("GET", "https://apex.example.com/api/v1/auth/google/callback", nil)
 
 	// No host tracked -> path unchanged.
-	if got := h.gw.signInRedirectURL(r, googleSignInState{}, "/dash"); got != "/dash" {
+	if got := h.gw.authAPI().signInRedirectURL(r, googleSignInState{}, "/dash"); got != "/dash" {
 		t.Errorf("no host = %q, want /dash", got)
 	}
 	// Same host -> path unchanged.
-	if got := h.gw.signInRedirectURL(r, googleSignInState{Host: "apex.example.com"}, "/dash"); got != "/dash" {
+	if got := h.gw.authAPI().signInRedirectURL(r, googleSignInState{Host: "apex.example.com"}, "/dash"); got != "/dash" {
 		t.Errorf("same host = %q, want /dash", got)
 	}
 	// Different host -> absolute URL on the start host. Request is TLS so https.
-	got := h.gw.signInRedirectURL(r, googleSignInState{Host: "org.example.com"}, "/dash")
+	got := h.gw.authAPI().signInRedirectURL(r, googleSignInState{Host: "org.example.com"}, "/dash")
 	if got != "https://org.example.com/dash" {
 		t.Errorf("cross host = %q, want https://org.example.com/dash", got)
 	}

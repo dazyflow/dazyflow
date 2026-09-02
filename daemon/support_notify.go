@@ -50,7 +50,7 @@ const supportNotifyTimeout = 2 * time.Minute
 // queue resolves tickets cross-tenant on purpose (loadTicketForAgent, gated on
 // the support-agent role), so pinning it there would try to move the agent into
 // the customer's org for no benefit — and agents generally aren't members of it.
-func (h *HTTPGateway) ticketURLFor(t core.Ticket, agent bool) string {
+func (h *supportAPI) ticketURLFor(t core.Ticket, agent bool) string {
 	base := strings.TrimRight(h.svc.PublicBaseURL, "/")
 	if base == "" {
 		return ""
@@ -62,14 +62,14 @@ func (h *HTTPGateway) ticketURLFor(t core.Ticket, agent bool) string {
 }
 
 // supportMailReady reports whether this deployment can send support mail at all.
-func (h *HTTPGateway) supportMailReady() bool {
+func (h *supportAPI) supportMailReady() bool {
 	return h.svc != nil && h.svc.Mailer != nil
 }
 
 // notifySupportReplied mails the customer that support answered. Honours the
 // per-user opt-out; skipped entirely for subjects that aren't password accounts
 // (an API-key or SSO subject won't resolve in the user store).
-func (h *HTTPGateway) notifySupportReplied(t core.Ticket) {
+func (h *supportAPI) notifySupportReplied(t core.Ticket) {
 	if !h.supportMailReady() || t.CreatedBy == "" {
 		return
 	}
@@ -105,7 +105,7 @@ func (h *HTTPGateway) notifySupportReplied(t core.Ticket) {
 }
 
 // notifyTicketResolved mails the customer that support closed the loop.
-func (h *HTTPGateway) notifyTicketResolved(t core.Ticket) {
+func (h *supportAPI) notifyTicketResolved(t core.Ticket) {
 	if !h.supportMailReady() || t.CreatedBy == "" {
 		return
 	}
@@ -142,7 +142,7 @@ func (h *HTTPGateway) notifyTicketResolved(t core.Ticket) {
 // carries no language preference to read. Same for notifyTicketFiled below. Goes to
 // the assigned agent when there is one, otherwise the shared inbox — an
 // unclaimed ticket is nobody's personal responsibility.
-func (h *HTTPGateway) notifyUserReplied(t core.Ticket) {
+func (h *supportAPI) notifyUserReplied(t core.Ticket) {
 	to := supportQueueRecipient(t, h.SupportInbox)
 	if !h.supportMailReady() || to == "" {
 		return
@@ -176,7 +176,7 @@ func (h *HTTPGateway) notifyUserReplied(t core.Ticket) {
 // This one fires later and only when the reply was never opened — the case the
 // first mail did not reach, or reached and was forgotten. Same opt-out, because
 // it is the same kind of message: useful, not transactional.
-func (h *HTTPGateway) notifyWaitingOnUser(t core.Ticket) {
+func (h *supportAPI) notifyWaitingOnUser(t core.Ticket) {
 	if !h.supportMailReady() || t.CreatedBy == "" {
 		return
 	}
@@ -211,7 +211,7 @@ func (h *HTTPGateway) notifyWaitingOnUser(t core.Ticket) {
 //
 // English, like the other queue-side mail: it goes to the operator's own staff,
 // and a shared inbox from configuration carries no language preference.
-func (h *HTTPGateway) notifyWaitingOnSupport(t core.Ticket, waiting time.Duration) {
+func (h *supportAPI) notifyWaitingOnSupport(t core.Ticket, waiting time.Duration) {
 	to := supportQueueRecipient(t, h.SupportInbox)
 	if !h.supportMailReady() || to == "" {
 		return
@@ -249,7 +249,7 @@ func (h *HTTPGateway) notifyWaitingOnSupport(t core.Ticket, waiting time.Duratio
 // side is waiting" into the right mail for that side. Exported because the
 // sweeper is constructed in cmd/dzd, and kept as a one-line dispatch so the
 // sweep itself never learns which audience gets which template.
-func (h *HTTPGateway) NotifyTicketWaiting(t core.Ticket, side NudgeSide, waiting time.Duration) {
+func (h *supportAPI) NotifyTicketWaiting(t core.Ticket, side NudgeSide, waiting time.Duration) {
 	if side == NudgeUser {
 		h.notifyWaitingOnUser(t)
 		return
@@ -287,7 +287,7 @@ func supportQueueRecipient(t core.Ticket, inbox string) string {
 
 // notifyTicketFiled mails the shared support inbox that a new ticket landed.
 // No-op when the operator hasn't configured one.
-func (h *HTTPGateway) notifyTicketFiled(t core.Ticket) {
+func (h *supportAPI) notifyTicketFiled(t core.Ticket) {
 	if !h.supportMailReady() || h.SupportInbox == "" {
 		return
 	}
@@ -323,7 +323,7 @@ func (h *HTTPGateway) notifyTicketFiled(t core.Ticket) {
 
 // supportOptInAddress resolves a ticket subject to a mailable address, applying
 // the user's opt-out. Returns ok=false when there's nothing to send to.
-func (h *HTTPGateway) supportOptInAddress(ctx context.Context, subject string) (string, bool) {
+func (h *supportAPI) supportOptInAddress(ctx context.Context, subject string) (string, bool) {
 	if h.svc.Users == nil {
 		return "", false
 	}
@@ -339,7 +339,7 @@ func (h *HTTPGateway) supportOptInAddress(ctx context.Context, subject string) (
 
 // goSupportMail runs fn detached from the request, on the same bounded-context
 // pattern the failure notifier uses.
-func (h *HTTPGateway) goSupportMail(fn func(context.Context)) {
+func (h *supportAPI) goSupportMail(fn func(context.Context)) {
 	ctx, cancel := context.WithTimeout(context.Background(), supportNotifyTimeout)
 	go func() {
 		defer cancel()
@@ -347,8 +347,14 @@ func (h *HTTPGateway) goSupportMail(fn func(context.Context)) {
 	}()
 }
 
-func (h *HTTPGateway) sendSupportMail(ctx context.Context, to, text string, c emailtheme.Content, t core.Ticket) {
+func (h *supportAPI) sendSupportMail(ctx context.Context, to, text string, c emailtheme.Content, t core.Ticket) {
 	if err := h.svc.Mailer.SendThemed(ctx, to, text, c); err != nil && h.svc.Logger != nil {
 		h.svc.Logger.Printf("support-notify [ticket=%s tenant=%s]: %v", t.ID, t.Tenant, err)
 	}
+}
+
+// NotifyTicketWaiting is the nudge sweeper's entry point (see cmd/dzd), kept on
+// the gateway because that is what the daemon wiring holds.
+func (h *HTTPGateway) NotifyTicketWaiting(t core.Ticket, side NudgeSide, waiting time.Duration) {
+	h.supportAPI().NotifyTicketWaiting(t, side, waiting)
 }

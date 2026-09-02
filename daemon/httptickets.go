@@ -40,7 +40,7 @@ import (
 
 // ticketsEnabled reports whether the ticket store is wired; endpoints 501 when
 // not (a deployment with no support surface).
-func (h *HTTPGateway) ticketsEnabled() bool { return h.Tickets != nil }
+func (h *supportAPI) ticketsEnabled() bool { return h.Tickets != nil }
 
 // maxTicketBodyLen bounds a single subject/message so a paste can't balloon the
 // store. Generous — a stack trace or a paragraph fits.
@@ -57,7 +57,7 @@ type ticketView struct {
 // createTicket: an org member files a support ticket, optionally about a flow /
 // failed run. POST /api/v1/me/support/tickets
 // Body: {subject, flow_id?, run_id?, message?}
-func (h *HTTPGateway) createTicket(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *supportAPI) createTicket(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.ticketsEnabled() {
 		writeAPIError(rw, http.StatusNotImplemented, "support_disabled", "support is not enabled on this deployment")
 		return
@@ -133,7 +133,7 @@ func (h *HTTPGateway) createTicket(rw http.ResponseWriter, r *http.Request, p co
 }
 
 // listMyTickets: the org member's own ticket list. GET /api/v1/me/support/tickets
-func (h *HTTPGateway) listMyTickets(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *supportAPI) listMyTickets(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.ticketsEnabled() {
 		writeAPIError(rw, http.StatusNotImplemented, "support_disabled", "support is not enabled on this deployment")
 		return
@@ -156,7 +156,7 @@ func (h *HTTPGateway) listMyTickets(rw http.ResponseWriter, r *http.Request, p c
 
 // getMyTicket: one ticket + thread, scoped to the caller's tenant.
 // GET /api/v1/me/support/tickets/{id}
-func (h *HTTPGateway) getMyTicket(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *supportAPI) getMyTicket(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	t, ok := h.loadTicketForTenant(rw, r, p.Tenant)
 	if !ok {
 		return
@@ -166,7 +166,7 @@ func (h *HTTPGateway) getMyTicket(rw http.ResponseWriter, r *http.Request, p cor
 
 // postMyTicketMessage: an org member replies on their own ticket.
 // POST /api/v1/me/support/tickets/{id}/messages  {message}
-func (h *HTTPGateway) postMyTicketMessage(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *supportAPI) postMyTicketMessage(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	t, ok := h.loadTicketForTenant(rw, r, p.Tenant)
 	if !ok {
 		return
@@ -199,7 +199,7 @@ func (h *HTTPGateway) postMyTicketMessage(rw http.ResponseWriter, r *http.Reques
 // requester may withdraw ("closed") or reopen their ticket, but cannot declare
 // it "resolved" — that is support's verdict on the problem, and a customer
 // stamping it would corrupt the queue's own resolution record.
-func (h *HTTPGateway) setMyTicketStatus(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *supportAPI) setMyTicketStatus(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	t, ok := h.loadTicketForTenant(rw, r, p.Tenant)
 	if !ok {
 		return
@@ -247,7 +247,7 @@ func (h *HTTPGateway) setMyTicketStatus(rw http.ResponseWriter, r *http.Request,
 // is open and other surfaces prefetch, so "we fetched it" is not "a person
 // looked at it" — and the read receipt is what decides whether they get a
 // reminder, so a false positive here means silence when someone is waiting.
-func (h *HTTPGateway) markMyTicketRead(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *supportAPI) markMyTicketRead(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	t, ok := h.loadTicketForTenant(rw, r, p.Tenant)
 	if !ok {
 		return
@@ -258,7 +258,7 @@ func (h *HTTPGateway) markMyTicketRead(rw http.ResponseWriter, r *http.Request, 
 
 // markSupportTicketRead is the agent-side counterpart.
 // POST /api/v1/support/tickets/{id}/read
-func (h *HTTPGateway) markSupportTicketRead(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *supportAPI) markSupportTicketRead(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	t, ok := h.loadTicketForAgent(rw, r, p)
 	if !ok {
 		return
@@ -275,7 +275,7 @@ func (h *HTTPGateway) markSupportTicketRead(rw http.ResponseWriter, r *http.Requ
 // Best-effort. Failing to record a read costs at worst one extra reminder,
 // which is a far better outcome than failing the request that renders the
 // thread the person is trying to read.
-func (h *HTTPGateway) markTicketRead(ctx context.Context, t core.Ticket, side NudgeSide) {
+func (h *supportAPI) markTicketRead(ctx context.Context, t core.Ticket, side NudgeSide) {
 	now := h.supportTime()
 	if side == NudgeUser {
 		t.UserReadAt = now
@@ -288,7 +288,7 @@ func (h *HTTPGateway) markTicketRead(ctx context.Context, t core.Ticket, side Nu
 // ---- Support surface -------------------------------------------------------
 
 // listTicketQueue: the cross-tenant support queue. GET /api/v1/support/tickets
-func (h *HTTPGateway) listTicketQueue(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *supportAPI) listTicketQueue(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.ticketsEnabled() {
 		writeAPIError(rw, http.StatusNotImplemented, "support_disabled", "support is not enabled on this deployment")
 		return
@@ -311,7 +311,7 @@ func (h *HTTPGateway) listTicketQueue(rw http.ResponseWriter, r *http.Request, p
 // Separate from the listing because it must NOT be bounded by the list limit — a
 // tile reading "12 unassigned" because page one happens to hold 12 would be a lie
 // on a queue of 300.
-func (h *HTTPGateway) ticketQueueSummary(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *supportAPI) ticketQueueSummary(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.ticketsEnabled() {
 		writeAPIError(rw, http.StatusNotImplemented, "support_disabled", "support is not enabled on this deployment")
 		return
@@ -341,7 +341,7 @@ func (h *HTTPGateway) ticketQueueSummary(rw http.ResponseWriter, r *http.Request
 // name an arbitrary principal as support staff. Reassignment away from another
 // agent is allowed (teams hand work over) and audited into the org's log like
 // every other support action.
-func (h *HTTPGateway) assignSupportTicket(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *supportAPI) assignSupportTicket(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	t, ok := h.loadTicketForAgent(rw, r, p)
 	if !ok {
 		return
@@ -390,7 +390,7 @@ func (h *HTTPGateway) assignSupportTicket(rw http.ResponseWriter, r *http.Reques
 // which is exactly what support.AgentStore is keyed on. With no store wired
 // (single-node / tests) there is nothing to check against, so any subject is
 // accepted — the caller already had to hold PermSupportAgent to get here.
-func (h *HTTPGateway) isProvisionedSupportAgent(subject string) bool {
+func (h *supportAPI) isProvisionedSupportAgent(subject string) bool {
 	if h.SupportAgents == nil {
 		return true
 	}
@@ -399,7 +399,7 @@ func (h *HTTPGateway) isProvisionedSupportAgent(subject string) bool {
 
 // getSupportTicket: a support agent reads any ticket + thread.
 // GET /api/v1/support/tickets/{id}
-func (h *HTTPGateway) getSupportTicket(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *supportAPI) getSupportTicket(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	t, ok := h.loadTicketForAgent(rw, r, p)
 	if !ok {
 		return
@@ -409,7 +409,7 @@ func (h *HTTPGateway) getSupportTicket(rw http.ResponseWriter, r *http.Request, 
 
 // postSupportTicketMessage: a support agent replies (and self-assigns).
 // POST /api/v1/support/tickets/{id}/messages  {message}
-func (h *HTTPGateway) postSupportTicketMessage(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *supportAPI) postSupportTicketMessage(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	t, ok := h.loadTicketForAgent(rw, r, p)
 	if !ok {
 		return
@@ -441,7 +441,7 @@ func (h *HTTPGateway) postSupportTicketMessage(rw http.ResponseWriter, r *http.R
 
 // setSupportTicketStatus: a support agent resolves/closes/reopens a ticket.
 // POST /api/v1/support/tickets/{id}/status  {status}
-func (h *HTTPGateway) setSupportTicketStatus(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *supportAPI) setSupportTicketStatus(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	t, ok := h.loadTicketForAgent(rw, r, p)
 	if !ok {
 		return
@@ -484,7 +484,7 @@ func (h *HTTPGateway) setSupportTicketStatus(rw http.ResponseWriter, r *http.Req
 
 // loadTicketForTenant loads {id} and enforces it belongs to `tenant`. A
 // cross-tenant id 404s (never reveal another org's ticket exists).
-func (h *HTTPGateway) loadTicketForTenant(rw http.ResponseWriter, r *http.Request, tenant string) (core.Ticket, bool) {
+func (h *supportAPI) loadTicketForTenant(rw http.ResponseWriter, r *http.Request, tenant string) (core.Ticket, bool) {
 	if !h.ticketsEnabled() {
 		writeAPIError(rw, http.StatusNotImplemented, "support_disabled", "support is not enabled on this deployment")
 		return core.Ticket{}, false
@@ -498,7 +498,7 @@ func (h *HTTPGateway) loadTicketForTenant(rw http.ResponseWriter, r *http.Reques
 }
 
 // loadTicketForAgent loads {id} and enforces PermSupportAgent (cross-tenant).
-func (h *HTTPGateway) loadTicketForAgent(rw http.ResponseWriter, r *http.Request, p core.Principal) (core.Ticket, bool) {
+func (h *supportAPI) loadTicketForAgent(rw http.ResponseWriter, r *http.Request, p core.Principal) (core.Ticket, bool) {
 	if !h.ticketsEnabled() {
 		writeAPIError(rw, http.StatusNotImplemented, "support_disabled", "support is not enabled on this deployment")
 		return core.Ticket{}, false
@@ -517,7 +517,7 @@ func (h *HTTPGateway) loadTicketForAgent(rw http.ResponseWriter, r *http.Request
 
 // getMyTicketBundle returns the redacted diagnostic bundle attached to one of
 // the caller's own tickets. GET /api/v1/me/support/tickets/{id}/bundle
-func (h *HTTPGateway) getMyTicketBundle(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *supportAPI) getMyTicketBundle(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	t, ok := h.loadTicketForTenant(rw, r, p.Tenant)
 	if !ok {
 		return
@@ -527,7 +527,7 @@ func (h *HTTPGateway) getMyTicketBundle(rw http.ResponseWriter, r *http.Request,
 
 // getSupportTicketBundle returns the redacted diagnostic bundle for any ticket
 // (support agents). GET /api/v1/support/tickets/{id}/bundle
-func (h *HTTPGateway) getSupportTicketBundle(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *supportAPI) getSupportTicketBundle(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	t, ok := h.loadTicketForAgent(rw, r, p)
 	if !ok {
 		return
@@ -539,7 +539,7 @@ func (h *HTTPGateway) getSupportTicketBundle(rw http.ResponseWriter, r *http.Req
 // The payload is a redacted-by-construction SupportBundle (no secrets, no run
 // data) so it is safe to serve to both the ticket owner and support. 404 when no
 // bundle is attached or bundles aren't wired.
-func (h *HTTPGateway) writeTicketBundle(rw http.ResponseWriter, r *http.Request, t core.Ticket) {
+func (h *supportAPI) writeTicketBundle(rw http.ResponseWriter, r *http.Request, t core.Ticket) {
 	if h.Bundles == nil || t.BundleID == "" {
 		writeAPIError(rw, http.StatusNotFound, "no_bundle", "no diagnostic bundle attached to this ticket")
 		return
@@ -558,7 +558,7 @@ func (h *HTTPGateway) writeTicketBundle(rw http.ResponseWriter, r *http.Request,
 }
 
 // writeTicketView returns a ticket plus its (chronological) thread.
-func (h *HTTPGateway) writeTicketView(rw http.ResponseWriter, r *http.Request, t core.Ticket) {
+func (h *supportAPI) writeTicketView(rw http.ResponseWriter, r *http.Request, t core.Ticket) {
 	msgs, err := h.Tickets.ListMessages(r.Context(), t.ID)
 	if err != nil {
 		writeAPIError(rw, http.StatusInternalServerError, "internal_error", err.Error())
@@ -648,7 +648,7 @@ func messagesForUser(msgs []core.TicketMessage) []core.TicketMessage {
 // writeUserTicketView returns a ticket + thread with the support organisation's
 // internals stripped (the end-user surface). The support surface uses
 // writeTicketView, which serves the record as stored.
-func (h *HTTPGateway) writeUserTicketView(rw http.ResponseWriter, r *http.Request, t core.Ticket) {
+func (h *supportAPI) writeUserTicketView(rw http.ResponseWriter, r *http.Request, t core.Ticket) {
 	msgs, err := h.Tickets.ListMessages(r.Context(), t.ID)
 	if err != nil {
 		writeAPIError(rw, http.StatusInternalServerError, "internal_error", err.Error())
@@ -681,7 +681,7 @@ func decodeTicketMessageBody(rw http.ResponseWriter, r *http.Request) (string, b
 // appendTicketMessage scrubs the body for pasted secrets, clamps its length, and
 // persists it. Callers pass "" for author on system messages. It never appends
 // an empty (post-scrub/clamp) body.
-func (h *HTTPGateway) appendTicketMessage(ctx context.Context, ticketID, author string, kind core.AuthorKind, body, bundleID string, now time.Time) error {
+func (h *supportAPI) appendTicketMessage(ctx context.Context, ticketID, author string, kind core.AuthorKind, body, bundleID string, now time.Time) error {
 	scrubbed := clampTicketText(core.ScrubSecrets(body))
 	if strings.TrimSpace(scrubbed) == "" {
 		return nil
@@ -706,7 +706,7 @@ func (h *HTTPGateway) appendTicketMessage(ctx context.Context, ticketID, author 
 // the same thing in the reader's language. Kept separate from
 // appendTicketMessage because a code only ever belongs to a system note — a
 // person's message has an author instead.
-func (h *HTTPGateway) appendSystemNote(ctx context.Context, ticketID string, code core.SystemNote, body string, now time.Time) error {
+func (h *supportAPI) appendSystemNote(ctx context.Context, ticketID string, code core.SystemNote, body string, now time.Time) error {
 	scrubbed := clampTicketText(core.ScrubSecrets(body))
 	if strings.TrimSpace(scrubbed) == "" {
 		return nil
@@ -729,7 +729,7 @@ func (h *HTTPGateway) appendSystemNote(ctx context.Context, ticketID string, cod
 // flows (+ optional run) and persists it, returning the new bundle id. Returns ""
 // (no attachment) when bundles are disabled, the flow can't be loaded, or storing
 // fails — filing a ticket must never hinge on the diagnostic attachment.
-func (h *HTTPGateway) buildAndStoreBundle(ctx context.Context, p core.Principal, flowID, runID string, now time.Time) string {
+func (h *supportAPI) buildAndStoreBundle(ctx context.Context, p core.Principal, flowID, runID string, now time.Time) string {
 	if h.Bundles == nil {
 		return ""
 	}

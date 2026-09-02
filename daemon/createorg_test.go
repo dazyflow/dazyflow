@@ -267,7 +267,7 @@ func TestCollectMemberships_HomeSurvivesSwitch(t *testing.T) {
 
 	// Session is currently active in the OTHER org (post-switch state).
 	p := core.Principal{Subject: "alice@klahr.se", Tenant: "org_new", Workspace: "main"}
-	got := h.collectMemberships(t.Context(), p)
+	got := h.authAPI().collectMemberships(t.Context(), p)
 
 	seen := map[string]bool{}
 	var home string

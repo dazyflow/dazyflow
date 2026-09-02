@@ -62,7 +62,7 @@ type emailTemplateView struct {
 // secret:read, so any editor can pick and preview a template when building a
 // flow. Templates have no flow tier, so there is no scope query param. Returns
 // ok=false (after writing the error) when the handler should stop.
-func (h *HTTPGateway) emailTemplateGate(rw http.ResponseWriter, p core.Principal, write bool) bool {
+func (h *secretsAPI) emailTemplateGate(rw http.ResponseWriter, p core.Principal, write bool) bool {
 	if h.EncryptedSecrets == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "encrypted secret store is not configured")
 		return false
@@ -100,7 +100,7 @@ func validEmailTemplateName(name string) error {
 }
 
 // putEmailTemplate creates/replaces an org template. Idempotent.
-func (h *HTTPGateway) putEmailTemplate(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *secretsAPI) putEmailTemplate(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.emailTemplateGate(rw, p, true) {
 		return
 	}
@@ -146,7 +146,7 @@ func (h *HTTPGateway) putEmailTemplate(rw http.ResponseWriter, r *http.Request, 
 // listEmailTemplates returns the global built-ins followed by this org's
 // templates. HTML is included for both so the editor and live preview need no
 // second round-trip; built-ins are flagged read-only.
-func (h *HTTPGateway) listEmailTemplates(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *secretsAPI) listEmailTemplates(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.emailTemplateGate(rw, p, false) {
 		return
 	}
@@ -181,7 +181,7 @@ func (h *HTTPGateway) listEmailTemplates(rw http.ResponseWriter, r *http.Request
 // ({{if .Logo}}, {{safeURL .Logo}}) a browser can't execute, so a client-side
 // string replace would mangle them. Read-only (secret:read); takes the HTML in
 // the body so it previews unsaved edits.
-func (h *HTTPGateway) previewEmailTemplate(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *secretsAPI) previewEmailTemplate(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.emailTemplateGate(rw, p, false) {
 		return
 	}
@@ -239,7 +239,7 @@ func (h *HTTPGateway) previewEmailTemplate(rw http.ResponseWriter, r *http.Reque
 
 // previewLogo returns the org logo for the preview, or "" — same source the
 // runtime provider uses, so the preview matches a real send.
-func (h *HTTPGateway) previewLogo(r *http.Request, p core.Principal) string {
+func (h *secretsAPI) previewLogo(r *http.Request, p core.Principal) string {
 	if h.Profiles == nil {
 		return ""
 	}
@@ -273,7 +273,7 @@ type sendTestEmailBody struct {
 // secret:write action (like the connection "Test" button), a step up from the
 // secret:read needed to list/preview. The recipient defaults to the caller, so
 // the usual click is a zero-input "send the template to me".
-func (h *HTTPGateway) sendTestEmail(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *secretsAPI) sendTestEmail(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.EncryptedSecrets == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "encrypted secret store is not configured")
 		return
@@ -414,7 +414,7 @@ func (h *HTTPGateway) sendTestEmail(rw http.ResponseWriter, r *http.Request, p c
 
 // deleteEmailTemplate removes an org template. Idempotent. Built-in IDs are
 // global and read-only — deleting one is rejected.
-func (h *HTTPGateway) deleteEmailTemplate(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *secretsAPI) deleteEmailTemplate(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.emailTemplateGate(rw, p, true) {
 		return
 	}
@@ -438,7 +438,7 @@ func (h *HTTPGateway) deleteEmailTemplate(rw http.ResponseWriter, r *http.Reques
 // emailTemplateStorageNames maps org template name → its full storage name.
 // ListScoped hides the reserved "emailtmpl." prefix, so this filters the raw
 // name list itself (mirrors resourceStorageNames at tenant scope).
-func (h *HTTPGateway) emailTemplateStorageNames(ctx context.Context, tenant string) map[string]string {
+func (h *secretsAPI) emailTemplateStorageNames(ctx context.Context, tenant string) map[string]string {
 	all, err := h.EncryptedSecrets.List(ctx, tenant)
 	if err != nil {
 		return nil

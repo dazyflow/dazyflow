@@ -18,6 +18,21 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
+// runCtlAPI serves the run-control endpoints. Its fields are the whole of what
+// those handlers touch.
+type runCtlAPI struct {
+	auditor
+	svc          *Service
+	SlackEvents  *SlackEventsHandler
+	GitHubEvents *GitHubEventsHandler
+	StripeEvents *StripeEventsHandler
+}
+
+// runCtlAPI builds them from the gateway's configuration.
+func (h *HTTPGateway) runCtlAPI() *runCtlAPI {
+	return &runCtlAPI{auditor: h.auditor(), svc: h.svc, SlackEvents: h.SlackEvents, GitHubEvents: h.GitHubEvents, StripeEvents: h.StripeEvents}
+}
+
 // listPendingApprovals returns the await_approval inbox: every node
 // in the principal's scope currently parked with Status=awaiting and
 // a `pending_url` output. Sorted newest-first by the service layer.
@@ -26,7 +41,7 @@ import (
 // Admins (whose principal carries no workspace binding) get the
 // tenant-wide view by default; the UI uses this query param to
 // reflect the workspace switcher's current selection.
-func (h *HTTPGateway) listPendingApprovals(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *runCtlAPI) listPendingApprovals(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	approvals, err := h.svc.ListPendingApprovals(
 		r.Context(),
 		p,
@@ -48,7 +63,7 @@ func (h *HTTPGateway) listPendingApprovals(rw http.ResponseWriter, r *http.Reque
 // rather than a ?state= on the pending one: the two return different shapes —
 // a pending row is a thing to act on, a decided row is a record of an act —
 // and the inbox polls on a timer while this does not.
-func (h *HTTPGateway) listDecidedApprovals(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *runCtlAPI) listDecidedApprovals(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	limit := 0
 	if v := r.URL.Query().Get("limit"); v != "" {
 		n, err := strconv.Atoi(v)
@@ -80,7 +95,7 @@ func (h *HTTPGateway) listDecidedApprovals(rw http.ResponseWriter, r *http.Reque
 // The HMAC-based /approve/{runID}/{nodeID} endpoint stays available
 // for the email/Slack notification flow where the approver doesn't
 // have a session.
-func (h *HTTPGateway) approveAuthed(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *runCtlAPI) approveAuthed(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	runID := r.PathValue("runID")
 	nodeID := r.PathValue("nodeID")
 	decision := r.URL.Query().Get("decision")
@@ -135,7 +150,7 @@ func (h *HTTPGateway) approveAuthed(rw http.ResponseWriter, r *http.Request, p c
 // {"reason":"..."} for the audit trail. Maps service-layer errors to
 // the conventional status codes: 404 unknown run, 409 already
 // terminal, 403 unauthorized.
-func (h *HTTPGateway) cancelRun(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *runCtlAPI) cancelRun(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	runID := r.PathValue("runID")
 	var body struct {
 		Reason string `json:"reason"`
@@ -168,7 +183,7 @@ func (h *HTTPGateway) cancelRun(rw http.ResponseWriter, r *http.Request, p core.
 // resumeRun continues a run paused at a breakpoint (#12). Body {"step":true}
 // advances one node and pauses again; otherwise the run continues to the
 // next breakpoint or completion.
-func (h *HTTPGateway) resumeRun(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *runCtlAPI) resumeRun(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	runID := r.PathValue("runID")
 	var body struct {
 		Step bool `json:"step"`
@@ -200,7 +215,7 @@ func (h *HTTPGateway) resumeRun(rw http.ResponseWriter, r *http.Request, p core.
 	writeJSON(rw, http.StatusOK, map[string]string{"status": "resumed"})
 }
 
-func (h *HTTPGateway) runGraph(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *runCtlAPI) runGraph(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant := r.PathValue("tenant")
 	workspace := r.PathValue("workspace")
 	id := r.PathValue("id")
@@ -243,7 +258,7 @@ func (h *HTTPGateway) runGraph(rw http.ResponseWriter, r *http.Request, p core.P
 // principal), this runs under the caller's own token + graph:run, so it
 // respects normal flow visibility and shows up in the run list like any
 // other run.
-func (h *HTTPGateway) testTrigger(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *runCtlAPI) testTrigger(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant := r.PathValue("tenant")
 	workspace := r.PathValue("workspace")
 	id := r.PathValue("id")
@@ -312,7 +327,7 @@ func (h *HTTPGateway) testTrigger(rw http.ResponseWriter, r *http.Request, p cor
 // handler. Returns 501 if the handler isn't wired (so a misconfigured
 // deployment surfaces clearly instead of silently rejecting on bad
 // signature).
-func (h *HTTPGateway) slackEvents(rw http.ResponseWriter, r *http.Request) {
+func (h *runCtlAPI) slackEvents(rw http.ResponseWriter, r *http.Request) {
 	if h.SlackEvents == nil {
 		http.Error(rw, "Slack events endpoint not configured (set --slack-signing-secret on dzd)", http.StatusNotImplemented)
 		return
@@ -320,7 +335,7 @@ func (h *HTTPGateway) slackEvents(rw http.ResponseWriter, r *http.Request) {
 	h.SlackEvents.ServeHTTP(rw, r)
 }
 
-func (h *HTTPGateway) githubEvents(rw http.ResponseWriter, r *http.Request) {
+func (h *runCtlAPI) githubEvents(rw http.ResponseWriter, r *http.Request) {
 	if h.GitHubEvents == nil {
 		http.Error(rw, "GitHub events endpoint not configured (set --github-webhook-secret on dzd)", http.StatusNotImplemented)
 		return
@@ -331,7 +346,7 @@ func (h *HTTPGateway) githubEvents(rw http.ResponseWriter, r *http.Request) {
 // stripeTenantEvents is the tenant-scoped Stripe webhook (payment
 // triggers) — not to be confused with stripeEvents, the platform
 // billing webhook on the unsuffixed path.
-func (h *HTTPGateway) stripeTenantEvents(rw http.ResponseWriter, r *http.Request) {
+func (h *runCtlAPI) stripeTenantEvents(rw http.ResponseWriter, r *http.Request) {
 	if h.StripeEvents == nil {
 		http.Error(rw, "Stripe events endpoint not configured (encrypted secret store required)", http.StatusNotImplemented)
 		return

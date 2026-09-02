@@ -178,7 +178,7 @@ func canManageOrg(p core.Principal, tenant string) bool {
 // exportOrgHandler serves an org's full export (GET /admin/orgs/{tenant}/export).
 // Read-only; same authorization bar as deleting the org. Offered as the
 // export-first step so an admin can keep a copy before the irreversible wipe.
-func (h *HTTPGateway) exportOrgHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *gdprAPI) exportOrgHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant := strings.TrimSpace(r.PathValue("tenant"))
 	if tenant == "" {
 		writeAPIError(rw, http.StatusBadRequest, "bad_request", "tenant required")
@@ -201,7 +201,7 @@ func (h *HTTPGateway) exportOrgHandler(rw http.ResponseWriter, r *http.Request, 
 // unconfigured/erroring store yields an empty section rather than failing the
 // whole export. Reads stores directly (the handler already authorized) so it
 // works for a platform admin exporting an org they aren't a member of.
-func (h *HTTPGateway) assembleOrgExport(ctx context.Context, tenant string) OrgExport {
+func (h *gdprAPI) assembleOrgExport(ctx context.Context, tenant string) OrgExport {
 	exp := OrgExport{
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
 		Tenant:      tenant,
@@ -374,7 +374,7 @@ func looksSecretKey(key string) bool {
 // memberships. Require a session credential here so Subject is always the
 // authenticated human's own verified identity. (Mirrors the org-delete
 // step-up in httpgdpr.go.)
-func (h *HTTPGateway) exportHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *gdprAPI) exportHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Users == nil {
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "user store not configured")
 		return
@@ -401,7 +401,7 @@ func (h *HTTPGateway) exportHandler(rw http.ResponseWriter, r *http.Request, p c
 // assembleExport gathers the subject's data across stores. Each section is
 // best-effort: a store that's unconfigured or errors yields an empty
 // section rather than failing the whole export.
-func (h *HTTPGateway) assembleExport(ctx context.Context, p core.Principal) (DataExport, error) {
+func (h *gdprAPI) assembleExport(ctx context.Context, p core.Principal) (DataExport, error) {
 	exp := DataExport{
 		GeneratedAt:    time.Now().UTC().Format(time.RFC3339),
 		Memberships:    []exportMembership{},

@@ -24,6 +24,19 @@ import (
 	yaml "go.yaml.in/yaml/v3"
 )
 
+// catalogAPI serves the step-catalog and drop-metadata endpoints. Its fields are the whole of what
+// those handlers touch.
+type catalogAPI struct {
+	auditor
+	svc    *Service
+	whoami func(rw http.ResponseWriter, r *http.Request, p core.Principal)
+}
+
+// catalogAPI builds them from the gateway's configuration.
+func (h *HTTPGateway) catalogAPI() *catalogAPI {
+	return &catalogAPI{auditor: h.auditor(), svc: h.svc, whoami: h.authAPI().whoami}
+}
+
 //go:embed openapi.yaml
 var openapiYAML []byte
 
@@ -173,7 +186,7 @@ const (
 )
 
 // serviceDescriptor handles GET /api/v1.
-func (h *HTTPGateway) serviceDescriptor(rw http.ResponseWriter, _ *http.Request) {
+func (h *catalogAPI) serviceDescriptor(rw http.ResponseWriter, _ *http.Request) {
 	d := ServiceDescriptor{
 		Service: apiService,
 		Version: apiVersion,
@@ -198,14 +211,14 @@ func (h *HTTPGateway) serviceDescriptor(rw http.ResponseWriter, _ *http.Request)
 
 // openAPISpec serves the cached JSON form of openapi.yaml. Public —
 // the LLM client may not yet have a token when it asks for the spec.
-func (h *HTTPGateway) openAPISpec(rw http.ResponseWriter, _ *http.Request) {
+func (h *catalogAPI) openAPISpec(rw http.ResponseWriter, _ *http.Request) {
 	rw.Header().Set("Content-Type", "application/json")
 	_, _ = rw.Write(openapiJSON)
 }
 
 // catalogSummary handles GET /api/v1/catalog. Returns the one-page
 // overview by walking the registry once.
-func (h *HTTPGateway) catalogSummary(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *catalogAPI) catalogSummary(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	groups, manifests, cats, err := h.collectCatalog(r.Context(), p)
 	if err != nil {
 		writeAPIError(rw, http.StatusInternalServerError, "internal_error", err.Error())
@@ -237,7 +250,7 @@ func (h *HTTPGateway) catalogSummary(rw http.ResponseWriter, r *http.Request, p 
 // listIntegrationsHandler handles GET /api/v1/catalog/integrations.
 // Filtering supports ?q= (label/summary substring) and
 // ?category= (any drop in the group has this category).
-func (h *HTTPGateway) listIntegrationsHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *catalogAPI) listIntegrationsHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	groups, _, _, err := h.collectCatalog(r.Context(), p)
 	if err != nil {
 		writeAPIError(rw, http.StatusInternalServerError, "internal_error", err.Error())
@@ -274,7 +287,7 @@ func (h *HTTPGateway) listIntegrationsHandler(rw http.ResponseWriter, r *http.Re
 }
 
 // getIntegrationHandler handles GET /api/v1/catalog/integrations/{id}.
-func (h *HTTPGateway) getIntegrationHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *catalogAPI) getIntegrationHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	id := r.PathValue("id")
 	groups, _, _, err := h.collectCatalog(r.Context(), p)
 	if err != nil {
@@ -297,7 +310,7 @@ func (h *HTTPGateway) getIntegrationHandler(rw http.ResponseWriter, r *http.Requ
 }
 
 // listDropsHandler handles GET /api/v1/catalog/drops.
-func (h *HTTPGateway) listDropsHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *catalogAPI) listDropsHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	search := DropSearch{
 		Query: r.URL.Query().Get("q"),
 	}
@@ -338,7 +351,7 @@ func (h *HTTPGateway) listDropsHandler(rw http.ResponseWriter, r *http.Request, 
 }
 
 // getDropHandler handles GET /api/v1/catalog/drops/{id}.
-func (h *HTTPGateway) getDropHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *catalogAPI) getDropHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	id := r.PathValue("id")
 	manifests, err := h.svc.ListDrops(r.Context(), p)
 	if err != nil {
@@ -405,7 +418,7 @@ var integrationSummaries = map[string]string{
 // Drops with empty Integration fall under a synthetic "standard
 // library" group so they remain reachable from the integrations
 // endpoint instead of disappearing from the catalog.
-func (h *HTTPGateway) collectCatalog(ctx context.Context, p core.Principal) (
+func (h *catalogAPI) collectCatalog(ctx context.Context, p core.Principal) (
 	groups []integrationGroup,
 	manifests map[string]core.Manifest,
 	categories []string,
@@ -490,7 +503,7 @@ func (h *HTTPGateway) collectCatalog(ctx context.Context, p core.Principal) (
 // for what /api/v1/whoami serves. We delegate to the existing handler
 // rather than duplicate the principal-flattening logic; eventually
 // /api/v1/whoami will be retired in favor of /me.
-func (h *HTTPGateway) meHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *catalogAPI) meHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	h.whoami(rw, r, p)
 }
 
@@ -498,7 +511,7 @@ func (h *HTTPGateway) meHandler(rw http.ResponseWriter, r *http.Request, p core.
 // keys. Today the underlying store doesn't index by subject, so we
 // list the tenant and filter; a future indexing improvement on
 // AdminKeyStore lands here without changing the wire shape.
-func (h *HTTPGateway) listMyAPIKeysHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *catalogAPI) listMyAPIKeysHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.svc.AdminKeys == nil {
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "api key admin not configured")
 		return
@@ -527,7 +540,7 @@ func (h *HTTPGateway) listMyAPIKeysHandler(rw http.ResponseWriter, r *http.Reque
 // path used by the Connect MCP modal. No organization:admin required; the
 // service caps requested permissions to a subset of the caller's
 // own. Returns the secret exactly once.
-func (h *HTTPGateway) issueMyAPIKeyHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *catalogAPI) issueMyAPIKeyHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	params, ok := decodeRequestJSONOptional[SelfIssueAPIKeyParams](rw, r)
 	if !ok {
 		return
@@ -553,7 +566,7 @@ func (h *HTTPGateway) issueMyAPIKeyHandler(rw http.ResponseWriter, r *http.Reque
 // revokes their own key. The revoke path on AdminKeys works for any
 // key id, so we look up the key first and confirm subject match
 // before delegating.
-func (h *HTTPGateway) revokeMyAPIKeyHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *catalogAPI) revokeMyAPIKeyHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	id := r.PathValue("id")
 	if h.svc.AdminKeys == nil {
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "api key admin not configured")
@@ -584,7 +597,7 @@ func (h *HTTPGateway) revokeMyAPIKeyHandler(rw http.ResponseWriter, r *http.Requ
 // the LLM's discovery path for "how do I make this run on a schedule
 // / accept a webhook / show a hosted form?" without scraping
 // hardcoded knowledge from training.
-func (h *HTTPGateway) triggerKindsHandler(rw http.ResponseWriter, _ *http.Request, _ core.Principal) {
+func (h *catalogAPI) triggerKindsHandler(rw http.ResponseWriter, _ *http.Request, _ core.Principal) {
 	writeJSON(rw, http.StatusOK, map[string]any{"kinds": triggerKinds()})
 }
 

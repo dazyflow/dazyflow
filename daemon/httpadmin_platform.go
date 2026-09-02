@@ -15,6 +15,27 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
+// platformAdminAPI serves the platform-admin console endpoints. Its fields are the whole of what
+// those handlers touch.
+type platformAdminAPI struct {
+	auditor
+	adminCheck
+	svc                 *Service
+	Users               auth.UserStore
+	Sessions            auth.SessionStore
+	Memberships         auth.MembershipStore
+	Invitations         auth.InvitationStore
+	Profiles            auth.OrgProfileStore
+	Blocklist           auth.BlocklistStore
+	PlatformAdminGrants PlatformAdminStore
+	DropSwitches        DropSwitchStore
+}
+
+// platformAdminAPI builds them from the gateway's configuration.
+func (h *HTTPGateway) platformAdminAPI() *platformAdminAPI {
+	return &platformAdminAPI{auditor: h.auditor(), adminCheck: h.admins(), svc: h.svc, Users: h.Users, Sessions: h.Sessions, Memberships: h.Memberships, Invitations: h.Invitations, Profiles: h.Profiles, Blocklist: h.Blocklist, PlatformAdminGrants: h.PlatformAdminGrants, DropSwitches: h.DropSwitches}
+}
+
 // Platform-admin moderation surface: the cross-tenant tools a SaaS
 // operator (platform:admin) uses to keep the deployment healthy —
 // suspend/ban/delete misbehaving users and orgs, and a global/per-org
@@ -107,7 +128,7 @@ func decodeModerationBody(r *http.Request) moderationBody {
 // requirePlatform is the shared gate + nil-store guard for these
 // handlers. Returns false (after writing the error) when the caller
 // isn't a platform admin or the user store isn't configured.
-func (h *HTTPGateway) requirePlatform(rw http.ResponseWriter, p core.Principal) bool {
+func (h *platformAdminAPI) requirePlatform(rw http.ResponseWriter, p core.Principal) bool {
 	if !isPlatformAdmin(p) {
 		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
 		return false
@@ -123,7 +144,7 @@ func (h *HTTPGateway) requirePlatform(rw http.ResponseWriter, p core.Principal) 
 
 // platformListUsers returns every account on the deployment with its
 // moderation state — the platform-admin user roster.
-func (h *HTTPGateway) platformListUsers(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *platformAdminAPI) platformListUsers(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.requirePlatform(rw, p) {
 		return
 	}
@@ -147,7 +168,7 @@ func (h *HTTPGateway) platformListUsers(rw http.ResponseWriter, r *http.Request,
 	writeJSON(rw, http.StatusOK, map[string]any{"users": out})
 }
 
-func (h *HTTPGateway) toPlatformUserDTO(u auth.User, tenantName string) platformUserDTO {
+func (h *platformAdminAPI) toPlatformUserDTO(u auth.User, tenantName string) platformUserDTO {
 	status := u.Status
 	if status == "" {
 		status = auth.StatusActive
@@ -170,7 +191,7 @@ func (h *HTTPGateway) toPlatformUserDTO(u auth.User, tenantName string) platform
 // tenantNames batch-resolves tenant ids to org display names via the
 // profile store. Missing profiles / a nil store simply yield no entry —
 // callers fall back to the raw id.
-func (h *HTTPGateway) tenantNames(ctx context.Context, tenants []string) map[string]string {
+func (h *platformAdminAPI) tenantNames(ctx context.Context, tenants []string) map[string]string {
 	out := map[string]string{}
 	if h.Profiles == nil || len(tenants) == 0 {
 		return out
@@ -188,7 +209,7 @@ func (h *HTTPGateway) tenantNames(ctx context.Context, tenants []string) map[str
 }
 
 // platformGetUser returns one account plus the orgs it belongs to.
-func (h *HTTPGateway) platformGetUser(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *platformAdminAPI) platformGetUser(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.requirePlatform(rw, p) {
 		return
 	}
@@ -215,7 +236,7 @@ func (h *HTTPGateway) platformGetUser(rw http.ResponseWriter, r *http.Request, p
 // platformSuspendUser locks an account: it sets the suspended status and
 // kills the user's live sessions. Future requests (sessions AND API keys)
 // are refused by the auth ModerationGate. Reversible via unsuspend.
-func (h *HTTPGateway) platformSuspendUser(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *platformAdminAPI) platformSuspendUser(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.requirePlatform(rw, p) {
 		return
 	}
@@ -239,7 +260,7 @@ func (h *HTTPGateway) platformSuspendUser(rw http.ResponseWriter, r *http.Reques
 }
 
 // platformUnsuspendUser reverses a suspension, restoring access.
-func (h *HTTPGateway) platformUnsuspendUser(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *platformAdminAPI) platformUnsuspendUser(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.requirePlatform(rw, p) {
 		return
 	}
@@ -264,7 +285,7 @@ func (h *HTTPGateway) platformUnsuspendUser(rw http.ResponseWriter, r *http.Requ
 // clicking the emailed link — a support escape hatch for cases the normal
 // flow can't cover (a bounced verification mail, a mailer-less deployment).
 // Idempotent: verifying an already-verified account is a no-op success.
-func (h *HTTPGateway) platformVerifyUser(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *platformAdminAPI) platformVerifyUser(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.requirePlatform(rw, p) {
 		return
 	}
@@ -292,7 +313,7 @@ func (h *HTTPGateway) platformVerifyUser(rw http.ResponseWriter, r *http.Request
 // account via the runtime grant store (the mutable counterpart to the
 // DAZYFLOW_PLATFORM_ADMINS env allowlist). The role is stamped at session issue,
 // so we drop the target's live sessions to force a re-auth that picks it up.
-func (h *HTTPGateway) platformGrantAdmin(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *platformAdminAPI) platformGrantAdmin(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.requirePlatform(rw, p) {
 		return
 	}
@@ -331,7 +352,7 @@ func (h *HTTPGateway) platformGrantAdmin(rw http.ResponseWriter, r *http.Request
 // remove the email from DAZYFLOW_PLATFORM_ADMINS and restart instead) and
 // refuses self-revoke (lockout foot-gun). Dropping the target's sessions makes
 // the revoke take effect on their next request rather than at session expiry.
-func (h *HTTPGateway) platformRevokeAdmin(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *platformAdminAPI) platformRevokeAdmin(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.requirePlatform(rw, p) {
 		return
 	}
@@ -376,7 +397,7 @@ func (h *HTTPGateway) platformRevokeAdmin(rw http.ResponseWriter, r *http.Reques
 // platformBanUser suspends the account AND blocklists the email (or its
 // whole domain) so the person can't simply re-register. The account data
 // is kept — use delete (the GDPR erase endpoint) to remove it entirely.
-func (h *HTTPGateway) platformBanUser(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *platformAdminAPI) platformBanUser(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.requirePlatform(rw, p) {
 		return
 	}
@@ -419,7 +440,7 @@ func (h *HTTPGateway) platformBanUser(rw http.ResponseWriter, r *http.Request, p
 // acting on yourself, or on another platform admin (the env allowlist
 // can't be edited here, and suspending one in the DB would lock out a
 // fellow operator). Writes the error and returns ok=false on refusal.
-func (h *HTTPGateway) guardUserModeration(rw http.ResponseWriter, ctx context.Context, p core.Principal, email string) (auth.User, bool) {
+func (h *platformAdminAPI) guardUserModeration(rw http.ResponseWriter, ctx context.Context, p core.Principal, email string) (auth.User, bool) {
 	if email == "" {
 		writeJSONError(rw, http.StatusBadRequest, "email required")
 		return auth.User{}, false
@@ -447,7 +468,7 @@ func (h *HTTPGateway) guardUserModeration(rw http.ResponseWriter, ctx context.Co
 // revokeSubjectSessions kills every live session for a subject so a
 // suspension/ban takes effect immediately, not just on the session's
 // next request. Best-effort: the ModerationGate is the real enforcement.
-func (h *HTTPGateway) revokeSubjectSessions(ctx context.Context, subject string) {
+func (h *platformAdminAPI) revokeSubjectSessions(ctx context.Context, subject string) {
 	if rev, ok := h.Sessions.(auth.SessionRevoker); ok && subject != "" {
 		_, _ = rev.RevokeSubjectSessions(ctx, subject)
 	}
@@ -458,7 +479,7 @@ func (h *HTTPGateway) revokeSubjectSessions(ctx context.Context, subject string)
 // account suspended, or their home org suspended — and a user-facing
 // reason. Used by the sign-in and TOTP-completion paths so a locked-out
 // account fails at the door instead of one request later.
-func (h *HTTPGateway) signInLockout(ctx context.Context, u auth.User) (string, bool) {
+func (h *platformAdminAPI) signInLockout(ctx context.Context, u auth.User) (string, bool) {
 	if u.Suspended() {
 		return "your account has been suspended", true
 	}
@@ -479,7 +500,7 @@ func emailDomainOf(email string) string {
 // ---- orgs -----------------------------------------------------------
 
 // platformListOrgs returns every org profile with its moderation state.
-func (h *HTTPGateway) platformListOrgs(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *platformAdminAPI) platformListOrgs(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !isPlatformAdmin(p) {
 		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
 		return
@@ -503,7 +524,7 @@ func (h *HTTPGateway) platformListOrgs(rw http.ResponseWriter, r *http.Request, 
 	writeJSON(rw, http.StatusOK, map[string]any{"orgs": out})
 }
 
-func (h *HTTPGateway) toPlatformOrgDTO(ctx context.Context, pr auth.OrgProfile) platformOrgDTO {
+func (h *platformAdminAPI) toPlatformOrgDTO(ctx context.Context, pr auth.OrgProfile) platformOrgDTO {
 	status := pr.Status
 	if status == "" {
 		status = auth.StatusActive
@@ -527,7 +548,7 @@ func (h *HTTPGateway) toPlatformOrgDTO(ctx context.Context, pr auth.OrgProfile) 
 }
 
 // platformGetOrg returns one org plus its member emails.
-func (h *HTTPGateway) platformGetOrg(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *platformAdminAPI) platformGetOrg(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !isPlatformAdmin(p) {
 		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
 		return
@@ -564,22 +585,22 @@ func (h *HTTPGateway) platformGetOrg(rw http.ResponseWriter, r *http.Request, p 
 // platformSuspendOrg halts an org: scheduled and triggered flows stop
 // firing (SubmitGraph refuses) and every member is locked out at auth.
 // Member sessions are revoked for immediate effect.
-func (h *HTTPGateway) platformSuspendOrg(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *platformAdminAPI) platformSuspendOrg(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	h.setOrgSuspended(rw, r, p, true, false)
 }
 
 // platformUnsuspendOrg reverses an org suspension.
-func (h *HTTPGateway) platformUnsuspendOrg(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *platformAdminAPI) platformUnsuspendOrg(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	h.setOrgSuspended(rw, r, p, false, false)
 }
 
 // platformBanOrg suspends the org and blocklists every current member's
 // email so they can't re-register fresh accounts.
-func (h *HTTPGateway) platformBanOrg(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *platformAdminAPI) platformBanOrg(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	h.setOrgSuspended(rw, r, p, true, true)
 }
 
-func (h *HTTPGateway) setOrgSuspended(rw http.ResponseWriter, r *http.Request, p core.Principal, suspend, ban bool) {
+func (h *platformAdminAPI) setOrgSuspended(rw http.ResponseWriter, r *http.Request, p core.Principal, suspend, ban bool) {
 	if !isPlatformAdmin(p) {
 		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
 		return
@@ -631,7 +652,7 @@ func (h *HTTPGateway) setOrgSuspended(rw http.ResponseWriter, r *http.Request, p
 
 // revokeOrgMemberSessions kills the live sessions of every member of a
 // tenant, so an org suspension boots them immediately. Best-effort.
-func (h *HTTPGateway) revokeOrgMemberSessions(ctx context.Context, tenant string) {
+func (h *platformAdminAPI) revokeOrgMemberSessions(ctx context.Context, tenant string) {
 	for _, email := range h.orgMemberEmails(ctx, tenant) {
 		if u, err := h.Users.GetByEmail(ctx, email); err == nil {
 			h.revokeSubjectSessions(ctx, u.Subject)
@@ -640,7 +661,7 @@ func (h *HTTPGateway) revokeOrgMemberSessions(ctx context.Context, tenant string
 }
 
 // banOrgMembers blocklists every member email of a banned org.
-func (h *HTTPGateway) banOrgMembers(ctx context.Context, p core.Principal, tenant, reason string) {
+func (h *platformAdminAPI) banOrgMembers(ctx context.Context, p core.Principal, tenant, reason string) {
 	if h.Blocklist == nil {
 		return
 	}
@@ -656,7 +677,7 @@ func (h *HTTPGateway) banOrgMembers(ctx context.Context, p core.Principal, tenan
 
 // orgMemberEmails collects the distinct member emails of a tenant: the
 // explicit memberships plus any users whose home org is this tenant.
-func (h *HTTPGateway) orgMemberEmails(ctx context.Context, tenant string) []string {
+func (h *platformAdminAPI) orgMemberEmails(ctx context.Context, tenant string) []string {
 	seen := map[string]bool{}
 	if h.Memberships != nil {
 		if rows, err := h.Memberships.ListByTenant(ctx, tenant); err == nil {
@@ -686,7 +707,7 @@ func (h *HTTPGateway) orgMemberEmails(ctx context.Context, tenant string) []stri
 // platformListDrops returns the full drop catalog with each drop's
 // killswitch state (global + per-tenant). Unlike the build-time palette
 // (ListDrops), this includes drops that are switched off.
-func (h *HTTPGateway) platformListDrops(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *platformAdminAPI) platformListDrops(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !isPlatformAdmin(p) {
 		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
 		return
@@ -746,7 +767,7 @@ func (h *HTTPGateway) platformListDrops(rw http.ResponseWriter, r *http.Request,
 
 // platformDisableDrop switches a drop off, globally (no tenant in body)
 // or for a single org. The engine resolver refuses it on the next run.
-func (h *HTTPGateway) platformDisableDrop(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *platformAdminAPI) platformDisableDrop(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !isPlatformAdmin(p) {
 		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
 		return
@@ -776,7 +797,7 @@ func (h *HTTPGateway) platformDisableDrop(rw http.ResponseWriter, r *http.Reques
 }
 
 // platformEnableDrop clears a drop switch (global or per-tenant).
-func (h *HTTPGateway) platformEnableDrop(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *platformAdminAPI) platformEnableDrop(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !isPlatformAdmin(p) {
 		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
 		return
@@ -805,7 +826,7 @@ func (h *HTTPGateway) platformEnableDrop(rw http.ResponseWriter, r *http.Request
 
 // ---- tiers ----------------------------------------------------------
 
-func (h *HTTPGateway) requirePlatformEntitlements(rw http.ResponseWriter, p core.Principal) bool {
+func (h *platformAdminAPI) requirePlatformEntitlements(rw http.ResponseWriter, p core.Principal) bool {
 	if !isPlatformAdmin(p) {
 		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
 		return false
@@ -818,7 +839,7 @@ func (h *HTTPGateway) requirePlatformEntitlements(rw http.ResponseWriter, p core
 }
 
 // platformListTiers returns every tier (built-in + custom).
-func (h *HTTPGateway) platformListTiers(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *platformAdminAPI) platformListTiers(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.requirePlatformEntitlements(rw, p) {
 		return
 	}
@@ -832,7 +853,7 @@ func (h *HTTPGateway) platformListTiers(rw http.ResponseWriter, r *http.Request,
 
 // platformPutTier creates or updates a tier. The id comes from the body
 // (slugified by the client) on create, or the path on update.
-func (h *HTTPGateway) platformPutTier(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *platformAdminAPI) platformPutTier(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.requirePlatformEntitlements(rw, p) {
 		return
 	}
@@ -864,7 +885,7 @@ func (h *HTTPGateway) platformPutTier(rw http.ResponseWriter, r *http.Request, p
 }
 
 // platformDeleteTier removes a custom tier (built-ins are protected).
-func (h *HTTPGateway) platformDeleteTier(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *platformAdminAPI) platformDeleteTier(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.requirePlatformEntitlements(rw, p) {
 		return
 	}
@@ -881,7 +902,7 @@ func (h *HTTPGateway) platformDeleteTier(rw http.ResponseWriter, r *http.Request
 
 // platformGetEntitlement returns an org's current assignment, the
 // resolved effective limits, and the tier catalog for the editor.
-func (h *HTTPGateway) platformGetEntitlement(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *platformAdminAPI) platformGetEntitlement(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.requirePlatformEntitlements(rw, p) {
 		return
 	}
@@ -902,7 +923,7 @@ func (h *HTTPGateway) platformGetEntitlement(rw http.ResponseWriter, r *http.Req
 
 // platformPutEntitlement sets an org's tier, plan grant, and per-limit
 // overrides in one call.
-func (h *HTTPGateway) platformPutEntitlement(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *platformAdminAPI) platformPutEntitlement(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.requirePlatformEntitlements(rw, p) {
 		return
 	}
@@ -938,7 +959,7 @@ func (h *HTTPGateway) platformPutEntitlement(rw http.ResponseWriter, r *http.Req
 // platform-admin counterpart to the org-admin invite (which is locked to
 // the caller's own org). Role caps don't apply: a platform admin is
 // omnipotent across tenants.
-func (h *HTTPGateway) platformInviteMember(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *platformAdminAPI) platformInviteMember(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !isPlatformAdmin(p) {
 		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
 		return

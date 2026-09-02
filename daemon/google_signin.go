@@ -155,7 +155,7 @@ const googleSignInCookie = "dz_signin_state"
 // cookie reaching the callback. That does mean a sibling subdomain can
 // overwrite it — which is a far smaller exposure than the no-binding-at-all
 // it replaces, and it requires subdomain takeover to reach.
-func (h *HTTPGateway) setGoogleSignInCookie(rw http.ResponseWriter, binding, startHost string) {
+func (h *authAPI) setGoogleSignInCookie(rw http.ResponseWriter, binding, startHost string) {
 	c := &http.Cookie{
 		Name:     googleSignInCookie,
 		Value:    binding,
@@ -173,7 +173,7 @@ func (h *HTTPGateway) setGoogleSignInCookie(rw http.ResponseWriter, binding, sta
 
 // clearGoogleSignInCookie expires the binding cookie once the callback has
 // consumed or rejected it, so a stale nonce can't be replayed.
-func (h *HTTPGateway) clearGoogleSignInCookie(rw http.ResponseWriter) {
+func (h *authAPI) clearGoogleSignInCookie(rw http.ResponseWriter) {
 	http.SetCookie(rw, &http.Cookie{
 		Name:     googleSignInCookie,
 		Value:    "",
@@ -244,7 +244,7 @@ func consumeGoogleState(state string) (googleSignInState, bool) {
 // IN, so we can't expect a credential yet. Required query: tenant.
 // Optional: return_to (a path the callback redirects to on success;
 // defaults to "/").
-func (h *HTTPGateway) googleSignInStart(rw http.ResponseWriter, r *http.Request) {
+func (h *authAPI) googleSignInStart(rw http.ResponseWriter, r *http.Request) {
 	if h.OrgAuth == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "org SSO not configured")
 		return
@@ -302,7 +302,7 @@ func (h *HTTPGateway) googleSignInStart(rw http.ResponseWriter, r *http.Request)
 	http.Redirect(rw, r, googleAuthURL+"?"+q.Encode(), http.StatusFound)
 }
 
-func (h *HTTPGateway) googleRedirectURI() string {
+func (h *authAPI) googleRedirectURI() string {
 	base := strings.TrimRight(h.svc.PublicBaseURL, "/")
 	return base + "/api/v1/auth/google/callback"
 }
@@ -346,7 +346,7 @@ func appendQuery(base, key, val string) string {
 // a ?test_error=<code> query param so the page can render a friendly
 // banner. Used only when st.Test is true; production sign-in failures
 // fall through to writeJSONError as before.
-func (h *HTTPGateway) redirectTestError(rw http.ResponseWriter, r *http.Request, st googleSignInState, code string) {
+func (h *authAPI) redirectTestError(rw http.ResponseWriter, r *http.Request, st googleSignInState, code string) {
 	target := st.ReturnTo
 	if !safeReturnPath(target) {
 		target = "/admin/sso"
@@ -370,7 +370,7 @@ func safeReturnPath(p string) bool {
 // wildcard apex or one of its subdomains. Empty means "don't track a
 // host" — the callback then behaves exactly as the pre-subdomain code
 // (set the cookie inline on whatever host the callback ran on).
-func (h *HTTPGateway) signInStartHost(r *http.Request) string {
+func (h *authAPI) signInStartHost(r *http.Request) string {
 	if h.WildcardDomain == "" {
 		return ""
 	}
@@ -386,7 +386,7 @@ func (h *HTTPGateway) signInStartHost(r *http.Request) string {
 // handling the request (the apex callback bouncing back to an org
 // subdomain). When the hosts match, or no host was tracked, it returns
 // the path unchanged so the redirect stays relative.
-func (h *HTTPGateway) signInRedirectURL(r *http.Request, st googleSignInState, pathQuery string) string {
+func (h *authAPI) signInRedirectURL(r *http.Request, st googleSignInState, pathQuery string) string {
 	if st.Host == "" || sameHost(st.Host, r.Host) {
 		return pathQuery
 	}
@@ -415,7 +415,7 @@ func sameHost(a, b string) bool {
 // verify hd= when the org requires it, look up the user (creating
 // them if needed; their tenant will be the org doing SSO if they're
 // brand new), and issue a session.
-func (h *HTTPGateway) googleSignInCallback(rw http.ResponseWriter, r *http.Request) {
+func (h *authAPI) googleSignInCallback(rw http.ResponseWriter, r *http.Request) {
 	if h.OrgAuth == nil || h.Users == nil || h.Sessions == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "google sign-in not configured")
 		return
@@ -547,7 +547,7 @@ func (h *HTTPGateway) googleSignInCallback(rw http.ResponseWriter, r *http.Reque
 // /signin so the SPA there posts /auth/totp and gets its cookie on the right
 // origin; same-host stays relative. The challenge in the URL has the same
 // exposure model as the handoff token (single-use, minutes-long TTL).
-func (h *HTTPGateway) redirectToTOTP(rw http.ResponseWriter, r *http.Request, st googleSignInState, challenge string) {
+func (h *authAPI) redirectToTOTP(rw http.ResponseWriter, r *http.Request, st googleSignInState, challenge string) {
 	target := st.ReturnTo
 	if !safeReturnPath(target) {
 		target = "/"
@@ -568,7 +568,7 @@ func (h *HTTPGateway) redirectToTOTP(rw http.ResponseWriter, r *http.Request, st
 // UI polls for); a real sign-in gets a JSON error with the given HTTP status.
 // When state was never consumed, st is the zero value (st.Test == false), so
 // early errors take the JSON path.
-func (h *HTTPGateway) signInError(rw http.ResponseWriter, r *http.Request, st googleSignInState, testReason string, status int, msg string) {
+func (h *authAPI) signInError(rw http.ResponseWriter, r *http.Request, st googleSignInState, testReason string, status int, msg string) {
 	if st.Test {
 		h.redirectTestError(rw, r, st, testReason)
 		return
@@ -583,7 +583,7 @@ func (h *HTTPGateway) signInError(rw http.ResponseWriter, r *http.Request, st go
 // signed token and requires it to match the userinfo response, so a tampered
 // userinfo body can't substitute a different identity. Returns the verified
 // (lower-cased) email, or a (reason, status, msg) triple on failure.
-func (h *HTTPGateway) verifyGoogleIDToken(ctx context.Context, cfg auth.OrgAuthConfig, idToken string, info googleUserInfo) (claimsOut verifiedGoogleClaims, reason string, status int, msg string) {
+func (h *authAPI) verifyGoogleIDToken(ctx context.Context, cfg auth.OrgAuthConfig, idToken string, info googleUserInfo) (claimsOut verifiedGoogleClaims, reason string, status int, msg string) {
 	if idToken == "" {
 		return verifiedGoogleClaims{}, "no_id_token", http.StatusBadGateway, "google didn't return an id_token"
 	}
@@ -670,7 +670,7 @@ func validateGoogleClaims(vc verifiedGoogleClaims, cfg auth.OrgAuthConfig) (reas
 // seeding a default org profile) on first SSO sign-in. ok is false when a
 // create failed and an error response has already been written — the caller
 // must then return without further output.
-func (h *HTTPGateway) resolveSignInUser(rw http.ResponseWriter, r *http.Request, email string, st googleSignInState) (user auth.User, isNew, ok bool) {
+func (h *authAPI) resolveSignInUser(rw http.ResponseWriter, r *http.Request, email string, st googleSignInState) (user auth.User, isNew, ok bool) {
 	user, err := h.Users.GetByEmail(r.Context(), email)
 	isNew = err != nil
 	if !isNew {
@@ -712,7 +712,7 @@ func (h *HTTPGateway) resolveSignInUser(rw http.ResponseWriter, r *http.Request,
 // either signal, auto-enrolling any Google account that happens to know the
 // org's tenant id is far too broad, so we reject with a clear message.
 // Returns a non-empty reason/status/msg when the sign-in must be refused.
-func (h *HTTPGateway) resolveActiveOrg(r *http.Request, cfg auth.OrgAuthConfig, user auth.User, isNew bool, email string, st googleSignInState) (tenant, workspace string, roles []core.Role, reason string, status int, msg string) {
+func (h *authAPI) resolveActiveOrg(r *http.Request, cfg auth.OrgAuthConfig, user auth.User, isNew bool, email string, st googleSignInState) (tenant, workspace string, roles []core.Role, reason string, status int, msg string) {
 	if isNew || user.Tenant == st.Tenant || h.Memberships == nil {
 		return user.Tenant, user.Workspace, user.Roles, "", 0, ""
 	}
@@ -789,7 +789,7 @@ func emailDomain(email string) string {
 // signup defaults. Best-effort: a missing/erroring store reads as "no
 // invite" (ok=false), which (absent a domain match) correctly blocks
 // auto-enroll.
-func (h *HTTPGateway) pendingInvitation(ctx context.Context, email, tenant string) (inv auth.Invitation, ok bool) {
+func (h *authAPI) pendingInvitation(ctx context.Context, email, tenant string) (inv auth.Invitation, ok bool) {
 	if h.Invitations == nil {
 		return auth.Invitation{}, false
 	}
@@ -811,7 +811,7 @@ func (h *HTTPGateway) pendingInvitation(ctx context.Context, email, tenant strin
 // than this apex callback (per-org subdomains), it stashes the session under a
 // single-use handoff token and bounces to that host's /auth/handoff so the
 // cookie is scoped to one subdomain; otherwise it sets the cookie inline.
-func (h *HTTPGateway) completeSignIn(rw http.ResponseWriter, r *http.Request, st googleSignInState, sess auth.Session, token string) {
+func (h *authAPI) completeSignIn(rw http.ResponseWriter, r *http.Request, st googleSignInState, sess auth.Session, token string) {
 	target := st.ReturnTo
 	if !safeReturnPath(target) {
 		target = "/"

@@ -139,7 +139,7 @@ func TestCallerIsOrgOwner_Cov(t *testing.T) {
 	h := newGatewayHarness(t)
 
 	// No Users store -> never an owner.
-	if h.gw.callerIsOrgOwner(context.Background(), core.Principal{Subject: "x@y.z"}, "acme") {
+	if h.gw.orgAPI().callerIsOrgOwner(context.Background(), core.Principal{Subject: "x@y.z"}, "acme") {
 		t.Fatal("nil Users store should not report ownership")
 	}
 
@@ -149,13 +149,13 @@ func TestCallerIsOrgOwner_Cov(t *testing.T) {
 		Email: "owner@acme.test", Subject: "owner@acme.test", Tenant: "acme",
 	})
 
-	if !h.gw.callerIsOrgOwner(context.Background(), core.Principal{Subject: "Owner@Acme.test"}, "acme") {
+	if !h.gw.orgAPI().callerIsOrgOwner(context.Background(), core.Principal{Subject: "Owner@Acme.test"}, "acme") {
 		t.Fatal("home owner should be recognized (case-insensitive)")
 	}
-	if h.gw.callerIsOrgOwner(context.Background(), core.Principal{Subject: "owner@acme.test"}, "other") {
+	if h.gw.orgAPI().callerIsOrgOwner(context.Background(), core.Principal{Subject: "owner@acme.test"}, "other") {
 		t.Fatal("owner of acme should not own 'other'")
 	}
-	if h.gw.callerIsOrgOwner(context.Background(), core.Principal{Subject: "ghost@acme.test"}, "acme") {
+	if h.gw.orgAPI().callerIsOrgOwner(context.Background(), core.Principal{Subject: "ghost@acme.test"}, "acme") {
 		t.Fatal("unknown user should not own anything")
 	}
 }
@@ -176,20 +176,20 @@ func TestPeerAdminBlocked_Cov(t *testing.T) {
 	caller := core.Principal{Subject: "coadmin@acme.test"}
 
 	// Target isn't an admin -> not blocked.
-	if h.gw.peerAdminBlocked(context.Background(), caller, "bob@acme.test", "acme", memberRoles) {
+	if h.gw.orgAPI().peerAdminBlocked(context.Background(), caller, "bob@acme.test", "acme", memberRoles) {
 		t.Fatal("editing a non-admin should not be blocked")
 	}
 	// Acting on yourself -> not blocked.
-	if h.gw.peerAdminBlocked(context.Background(), caller, "coadmin@acme.test", "acme", adminRoles) {
+	if h.gw.orgAPI().peerAdminBlocked(context.Background(), caller, "coadmin@acme.test", "acme", adminRoles) {
 		t.Fatal("acting on yourself should not be blocked")
 	}
 	// A non-owner admin touching a peer admin -> blocked.
-	if !h.gw.peerAdminBlocked(context.Background(), caller, "peer@acme.test", "acme", adminRoles) {
+	if !h.gw.orgAPI().peerAdminBlocked(context.Background(), caller, "peer@acme.test", "acme", adminRoles) {
 		t.Fatal("non-owner admin touching a peer admin should be blocked")
 	}
 	// The org owner touching a peer admin -> allowed.
 	owner := core.Principal{Subject: "owner@acme.test"}
-	if h.gw.peerAdminBlocked(context.Background(), owner, "peer@acme.test", "acme", adminRoles) {
+	if h.gw.orgAPI().peerAdminBlocked(context.Background(), owner, "peer@acme.test", "acme", adminRoles) {
 		t.Fatal("org owner should be allowed to touch a peer admin")
 	}
 }
@@ -200,7 +200,7 @@ func TestSeatQuotaExceeded_Cov(t *testing.T) {
 	h := newGatewayHarness(t)
 
 	// No cap (FreeMaxMembers 0) -> never exceeded.
-	if ex, _ := h.gw.seatQuotaExceeded(context.Background(), "acme"); ex {
+	if ex, _ := h.gw.seats().seatQuotaExceeded(context.Background(), "acme"); ex {
 		t.Fatal("uncapped org should not exceed seats")
 	}
 
@@ -212,7 +212,7 @@ func TestSeatQuotaExceeded_Cov(t *testing.T) {
 		UserEmail: "a@acme.test", Tenant: "acme", Workspace: "main",
 		Roles: []core.Role{core.TeamRoleEditor()},
 	})
-	ex, limit := h.gw.seatQuotaExceeded(context.Background(), "acme")
+	ex, limit := h.gw.seats().seatQuotaExceeded(context.Background(), "acme")
 	if !ex || limit != 1 {
 		t.Fatalf("seatQuotaExceeded = %v, limit=%d, want true/1", ex, limit)
 	}
@@ -718,7 +718,7 @@ func TestSeatMembership_ConcurrentAcceptsCannotOverfill(t *testing.T) {
 			go func(i int) {
 				defer wg.Done()
 				<-start // line them all up on the same instant
-				ok, _, err := h.gw.seatMembership(context.Background(), auth.Membership{
+				ok, _, err := h.gw.seats().seatMembership(context.Background(), auth.Membership{
 					UserEmail: fmt.Sprintf("racer%d@example.com", i),
 					Tenant:    "t", Workspace: "main",
 					Roles: []core.Role{core.TeamRoleViewer()},
@@ -761,7 +761,7 @@ func TestSeatMembership_UpdatingAnExistingMemberIsNeverRefused(t *testing.T) {
 		UserEmail: "only@example.com", Tenant: "t", Workspace: "main",
 		Roles: []core.Role{core.TeamRoleViewer()},
 	})
-	seated, _, err := h.gw.seatMembership(t.Context(), auth.Membership{
+	seated, _, err := h.gw.seats().seatMembership(t.Context(), auth.Membership{
 		UserEmail: "only@example.com", Tenant: "t", Workspace: "main",
 		Roles: []core.Role{core.TeamRoleAdmin()},
 	})
@@ -776,7 +776,7 @@ func TestSeatMembership_UpdatingAnExistingMemberIsNeverRefused(t *testing.T) {
 		t.Errorf("roles = %+v, want the update applied", m.Roles)
 	}
 	// And a genuinely new person is still refused.
-	if ok, _, _ := h.gw.seatMembership(t.Context(), auth.Membership{
+	if ok, _, _ := h.gw.seats().seatMembership(t.Context(), auth.Membership{
 		UserEmail: "newcomer@example.com", Tenant: "t", Workspace: "main",
 	}); ok {
 		t.Error("a new person was seated in a full org")

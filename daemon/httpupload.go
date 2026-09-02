@@ -54,7 +54,7 @@ const uploadReadTimeout = 10 * time.Minute
 // Authorization mirrors the graph-edit gate: anyone who can edit a
 // graph in this workspace can stage files for it. Cross-tenant writes
 // are rejected at RequireWorkspace.
-func (h *HTTPGateway) uploadWorkspaceFile(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *filesAPI) uploadWorkspaceFile(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, workspace, ok := h.requireWorkspaceEdit(rw, r, p)
 	if !ok {
 		return

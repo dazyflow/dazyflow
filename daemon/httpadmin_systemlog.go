@@ -26,7 +26,7 @@ import (
 //
 // "?tail=N" caps the backfill (default 500; N<=0 means no backfill, stream
 // live only). platform:admin only — the daemon log is instance-wide.
-func (h *HTTPGateway) systemLogTail(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *orgAPI) systemLogTail(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !isPlatformAdmin(p) {
 		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
 		return

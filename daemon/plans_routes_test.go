@@ -57,7 +57,7 @@ func getPlansResponse(t *testing.T, h *HTTPGateway, tenant string) plansResponse
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/me/plans", nil)
 	rw := httptest.NewRecorder()
-	h.plansMe(rw, req, core.Principal{Tenant: tenant})
+	h.billingAPI().plansMe(rw, req, core.Principal{Tenant: tenant})
 	if rw.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rw.Code, rw.Body.String())
 	}

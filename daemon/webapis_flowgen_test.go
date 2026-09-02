@@ -147,7 +147,7 @@ func TestGenerateFlow_ComposesAgainstAWebAPIStep(t *testing.T) {
 	})
 
 	h := newGatewayHarness(t)
-	g, issues, err := h.gw.generateFlow(context.Background(), "fakeflowwebapi", "key",
+	g, issues, err := h.gw.flowAPI().generateFlow(context.Background(), "fakeflowwebapi", "key",
 		"place an order for ABC-123", mans, "acme", "main", "", nil)
 	if err != nil {
 		t.Fatalf("generateFlow: %v", err)
@@ -193,7 +193,7 @@ func TestConnectionFields_FoundForADescribedAPI(t *testing.T) {
 	h := newGatewayHarness(t)
 	h.svc.Engine.Resolver = &engine.NodeResolver{Native: engine.Default, WebAPI: cat}
 
-	integration, fields, err := h.gw.connectionFieldsForSlug(
+	integration, fields, err := h.gw.secretsAPI().connectionFieldsForSlug(
 		context.Background(), adminPrincipal("t"), core.ConnectionSlug("Order service"))
 	if err != nil {
 		t.Fatalf("connectionFieldsForSlug: %v", err)
@@ -223,7 +223,7 @@ func TestConnectionFields_FoundForADescribedAPI(t *testing.T) {
 
 	// And not for another org, which would be one tenant's connection page
 	// offering to fill in another's.
-	other, _, err := h.gw.connectionFieldsForSlug(
+	other, _, err := h.gw.secretsAPI().connectionFieldsForSlug(
 		context.Background(), adminPrincipal("globex"), core.ConnectionSlug("Order service"))
 	if err != nil {
 		t.Fatal(err)

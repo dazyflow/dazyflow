@@ -341,8 +341,8 @@ func (s *Service) boardExists(ctx context.Context, db *sql.DB, name string) bool
 // most on this surface: unlike the flows surface (where the service re-checks
 // permissions per flow), the board service just opens whatever sandbox dir
 // it's handed, so this is the only barrier.
-func (h *HTTPGateway) boardScope(rw http.ResponseWriter, r *http.Request, p core.Principal) (string, string, bool) {
-	return h.resolveScope(rw, r, p, "read boards in")
+func (h *flowAPI) boardScope(rw http.ResponseWriter, r *http.Request, p core.Principal) (string, string, bool) {
+	return resolveScope(rw, r, p, "read boards in")
 }
 
 // writeBoardError maps the board service sentinels onto the structured
@@ -361,7 +361,7 @@ func writeBoardError(rw http.ResponseWriter, err error) {
 	}
 }
 
-func (h *HTTPGateway) listBoardsMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *flowAPI) listBoardsMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, workspace, ok := h.boardScope(rw, r, p)
 	if !ok {
 		return
@@ -384,7 +384,7 @@ func (h *HTTPGateway) listBoardsMe(rw http.ResponseWriter, r *http.Request, p co
 	writeJSON(rw, http.StatusOK, map[string]any{"boards": boards})
 }
 
-func (h *HTTPGateway) getBoardMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *flowAPI) getBoardMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, workspace, ok := h.boardScope(rw, r, p)
 	if !ok {
 		return
@@ -403,7 +403,7 @@ func (h *HTTPGateway) getBoardMe(rw http.ResponseWriter, r *http.Request, p core
 	writeJSON(rw, http.StatusOK, page)
 }
 
-func (h *HTTPGateway) clearBoardMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *flowAPI) clearBoardMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, workspace, ok := h.boardScope(rw, r, p)
 	if !ok {
 		return
@@ -424,7 +424,7 @@ func (h *HTTPGateway) clearBoardMe(rw http.ResponseWriter, r *http.Request, p co
 	rw.WriteHeader(http.StatusNoContent)
 }
 
-func (h *HTTPGateway) deleteBoardRowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *flowAPI) deleteBoardRowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, workspace, ok := h.boardScope(rw, r, p)
 	if !ok {
 		return

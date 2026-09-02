@@ -19,7 +19,7 @@ import (
 // authenticated caller — not org scoping, mirroring renderTextPreview. A
 // formula-in-progress is expected to be broken, so a compile problem comes back
 // as a 200 with a structured `issue`, never an HTTP error.
-func (h *HTTPGateway) validateExpression(rw http.ResponseWriter, r *http.Request, _ core.Principal) {
+func (h *flowAPI) validateExpression(rw http.ResponseWriter, r *http.Request, _ core.Principal) {
 	body, ok := decodeRequestJSON[struct {
 		Expr string `json:"expr"`
 	}](rw, r)

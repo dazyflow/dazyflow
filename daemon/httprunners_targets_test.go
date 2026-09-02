@@ -46,7 +46,7 @@ func editorPrincipal(tenant string) core.Principal {
 func listTargets(t *testing.T, h *HTTPGateway, p core.Principal) *httptest.ResponseRecorder {
 	t.Helper()
 	rw := httptest.NewRecorder()
-	h.listRunnerTargets(rw, httptest.NewRequest("GET", "/api/v1/runners", nil), p)
+	h.runnerAPI().listRunnerTargets(rw, httptest.NewRequest("GET", "/api/v1/runners", nil), p)
 	return rw
 }
 
@@ -156,7 +156,7 @@ func setLabels(t *testing.T, h *HTTPGateway, p core.Principal, name, body string
 	rw := httptest.NewRecorder()
 	req := httptest.NewRequest("PUT", "/api/v1/admin/runners/"+name+"/labels", strings.NewReader(body))
 	req.SetPathValue("name", name)
-	h.setRunnerLabels(rw, req, p)
+	h.runnerAPI().setRunnerLabels(rw, req, p)
 	return rw
 }
 

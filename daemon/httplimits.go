@@ -10,6 +10,17 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
+// limitsAPI serves the workspace-limit endpoints. Its fields are the whole of what
+// those handlers touch.
+type limitsAPI struct {
+	svc *Service
+}
+
+// limitsAPI builds them from the gateway's configuration.
+func (h *HTTPGateway) limitsAPI() *limitsAPI {
+	return &limitsAPI{svc: h.svc}
+}
+
 // maxRequestBody is the global ceiling on any request body. It equals the
 // largest legitimate payload the API accepts (a file upload, maxUploadBytes);
 // handlers that decode smaller bodies wrap r.Body in a stricter
@@ -25,7 +36,7 @@ const maxRequestBody = maxUploadBytes
 // == -1, so the length pre-check can't see them) and any route that forgets to
 // set its own limit. Per-route handlers may re-wrap r.Body with a smaller
 // limit; the stricter one trips first, so this never loosens an existing cap.
-func (h *HTTPGateway) limitRequestBody(next http.Handler) http.Handler {
+func limitRequestBody(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPost, http.MethodPut, http.MethodPatch:
@@ -45,7 +56,7 @@ func (h *HTTPGateway) limitRequestBody(next http.Handler) http.Handler {
 // disk quota (used + limit) plus the daemon-wide graph caps. organization:admin
 // only. There's no write side — these are operator-configured (flags), so
 // the admin UI surfaces them rather than pretending to edit them.
-func (h *HTTPGateway) workspaceLimits(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *limitsAPI) workspaceLimits(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !requireOrgAdmin(rw, p) {
 		return
 	}

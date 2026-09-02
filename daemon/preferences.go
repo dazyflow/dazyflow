@@ -12,6 +12,19 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
+// preferencesAPI serves the user-preference and usage endpoints. Its fields are the whole of what
+// those handlers touch.
+type preferencesAPI struct {
+	auditor
+	svc   *Service
+	Users auth.UserStore
+}
+
+// preferencesAPI builds them from the gateway's configuration.
+func (h *HTTPGateway) preferencesAPI() *preferencesAPI {
+	return &preferencesAPI{auditor: h.auditor(), svc: h.svc, Users: h.Users}
+}
+
 // Account preferences live under /me/preferences (authenticated; the
 // caller acts on their own account). Two concerns share the surface:
 //
@@ -70,7 +83,7 @@ func responseFor(u auth.User) preferencesResponse {
 
 // getPreferences is GET /api/v1/me/preferences — the Settings UI and the
 // app-boot hydration both read this.
-func (h *HTTPGateway) getPreferences(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *preferencesAPI) getPreferences(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Users == nil {
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "password auth not configured")
 		return
@@ -92,7 +105,7 @@ func (h *HTTPGateway) getPreferences(rw http.ResponseWriter, r *http.Request, p 
 // putPreferences is PUT /api/v1/me/preferences — applies the present
 // fields and persists. Validates theme/language before writing so the
 // store never holds a value the client couldn't have produced.
-func (h *HTTPGateway) putPreferences(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *preferencesAPI) putPreferences(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Users == nil {
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "password auth not configured")
 		return

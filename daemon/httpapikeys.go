@@ -14,10 +14,22 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
+// apiKeyAPI serves the API-key management endpoints. Its fields are the whole of what
+// those handlers touch.
+type apiKeyAPI struct {
+	auditor
+	svc *Service
+}
+
+// apiKeyAPI builds them from the gateway's configuration.
+func (h *HTTPGateway) apiKeyAPI() *apiKeyAPI {
+	return &apiKeyAPI{auditor: h.auditor(), svc: h.svc}
+}
+
 // listAPIKeys, issueAPIKey, revokeAPIKey power the Admin UI's API
 // keys card. All three require organization:admin (enforced in Service);
 // without an AdminKeys store wired up they return 501.
-func (h *HTTPGateway) listAPIKeys(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *apiKeyAPI) listAPIKeys(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	// ?tenant= narrows to a specific tenant. Platform admins may pass
 	// any tenant; everyone else is force-scoped to their own.
 	keys, err := h.svc.ListAPIKeys(r.Context(), p, r.URL.Query().Get("tenant"))
@@ -30,7 +42,7 @@ func (h *HTTPGateway) listAPIKeys(rw http.ResponseWriter, r *http.Request, p cor
 
 // listTenants returns the set of tenants on this dzd. Platform admins
 // only. Powers the tenant switcher in the top bar for super-admin UIs.
-func (h *HTTPGateway) listTenants(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *apiKeyAPI) listTenants(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenants, err := h.svc.ListTenants(r.Context(), p)
 	if err != nil {
 		adminError(rw, err)
@@ -39,7 +51,7 @@ func (h *HTTPGateway) listTenants(rw http.ResponseWriter, r *http.Request, p cor
 	writeJSON(rw, http.StatusOK, map[string]any{"tenants": tenants})
 }
 
-func (h *HTTPGateway) issueAPIKey(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *apiKeyAPI) issueAPIKey(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	params, ok := decodeRequestJSON[IssueAPIKeyParams](rw, r)
 	if !ok {
 		return
@@ -55,7 +67,7 @@ func (h *HTTPGateway) issueAPIKey(rw http.ResponseWriter, r *http.Request, p cor
 
 // listUsers derives one entry per distinct Subject from the API keys
 // in the principal's tenant. Roles + permissions are rolled up.
-func (h *HTTPGateway) listUsers(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *apiKeyAPI) listUsers(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	users, err := h.svc.ListUsers(r.Context(), p, r.URL.Query().Get("tenant"))
 	if err != nil {
 		adminError(rw, err)
@@ -64,7 +76,7 @@ func (h *HTTPGateway) listUsers(rw http.ResponseWriter, r *http.Request, p core.
 	writeJSON(rw, http.StatusOK, map[string]any{"users": users})
 }
 
-func (h *HTTPGateway) revokeAPIKey(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *apiKeyAPI) revokeAPIKey(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	id := r.PathValue("id")
 	if err := h.svc.RevokeAPIKey(r.Context(), p, id); err != nil {
 		adminError(rw, err)

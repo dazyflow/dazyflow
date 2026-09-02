@@ -21,7 +21,7 @@ import (
 // recipient defaults to the caller's own address, so the usual click is
 // a zero-input "send me a test". A failure returns the real SMTP error
 // (auth/TLS/dial) verbatim — that diagnostic is the whole point.
-func (h *HTTPGateway) smtpTest(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *orgAPI) smtpTest(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if err := requirePlatformAdmin(p); err != nil {
 		adminError(rw, err)
 		return

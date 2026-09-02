@@ -223,7 +223,7 @@ func TestEraseUserIdentity_NoResidual(t *testing.T) {
 		Grants:      grants,
 	}
 
-	rep, err := h.eraseUserIdentity(ctx, email)
+	rep, err := h.gdprAPI().eraseUserIdentity(ctx, email)
 	if err != nil {
 		t.Fatalf("eraseUserIdentity: %v", err)
 	}
@@ -358,7 +358,7 @@ func TestDeleteOrgData_NoResidual(t *testing.T) {
 		Audit:       audit,
 	}
 
-	rep, err := h.deleteOrgData(ctx, tenant)
+	rep, err := h.gdprAPI().deleteOrgData(ctx, tenant)
 	if err != nil {
 		t.Fatalf("deleteOrgData: %v", err)
 	}
@@ -452,7 +452,7 @@ func TestTenantHasOtherMembers_Cov(t *testing.T) {
 	h := newGatewayHarness(t)
 
 	// Nil Memberships store -> false (no others known).
-	if h.gw.tenantHasOtherMembers(context.Background(), "acme", "a@acme.test") {
+	if h.gw.gdprAPI().tenantHasOtherMembers(context.Background(), "acme", "a@acme.test") {
 		t.Fatal("nil store should report no other members")
 	}
 
@@ -462,14 +462,14 @@ func TestTenantHasOtherMembers_Cov(t *testing.T) {
 		UserEmail: "a@acme.test", Tenant: "acme", Roles: []core.Role{core.TeamRoleEditor()},
 	})
 	// Sole occupant -> false.
-	if h.gw.tenantHasOtherMembers(context.Background(), "acme", "A@Acme.test") {
+	if h.gw.gdprAPI().tenantHasOtherMembers(context.Background(), "acme", "A@Acme.test") {
 		t.Fatal("sole occupant should report no other members")
 	}
 	// Add a second member -> true.
 	_ = mem.PutMembership(context.Background(), auth.Membership{
 		UserEmail: "b@acme.test", Tenant: "acme", Roles: []core.Role{core.TeamRoleEditor()},
 	})
-	if !h.gw.tenantHasOtherMembers(context.Background(), "acme", "a@acme.test") {
+	if !h.gw.gdprAPI().tenantHasOtherMembers(context.Background(), "acme", "a@acme.test") {
 		t.Fatal("shared org should report other members")
 	}
 }
@@ -497,7 +497,7 @@ func TestDeleteOrgData_ErasesSecrets(t *testing.T) {
 	}
 
 	h := &HTTPGateway{svc: &Service{}, EncryptedSecrets: es}
-	rep, err := h.deleteOrgData(ctx, tenant)
+	rep, err := h.gdprAPI().deleteOrgData(ctx, tenant)
 	if err != nil {
 		t.Fatalf("deleteOrgData: %v", err)
 	}
@@ -670,7 +670,7 @@ func TestDeleteOrgData_ErasesTenantIntegrations(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = h.MCPServers.Catalog.Close() })
 
-	rep, err := h.deleteOrgData(ctx, tenant)
+	rep, err := h.gdprAPI().deleteOrgData(ctx, tenant)
 	if err != nil {
 		t.Fatalf("deleteOrgData: %v", err)
 	}
@@ -769,7 +769,7 @@ func TestDeleteOrgData_WarnsOnLiveSubscription(t *testing.T) {
 	}}
 	h := &HTTPGateway{svc: &Service{Plans: plans}}
 
-	rep, err := h.deleteOrgData(ctx, "acme")
+	rep, err := h.gdprAPI().deleteOrgData(ctx, "acme")
 	if err != nil {
 		t.Fatalf("deleteOrgData: %v", err)
 	}
@@ -791,7 +791,7 @@ func TestDeleteOrgData_WarnsOnLiveSubscription(t *testing.T) {
 
 	// A lapsed subscription is not worth warning about: there is nothing left
 	// to cancel, and a warning nobody needs trains people to ignore them.
-	rep, err = h.deleteOrgData(ctx, "lapsed")
+	rep, err = h.gdprAPI().deleteOrgData(ctx, "lapsed")
 	if err != nil {
 		t.Fatalf("deleteOrgData(lapsed): %v", err)
 	}
@@ -839,7 +839,7 @@ func TestEraseUserIdentity_RevokesRolesAndScrubsGranters(t *testing.T) {
 		Blocklist:           blocklist,
 	}
 
-	rep, err := h.eraseUserIdentity(ctx, email)
+	rep, err := h.gdprAPI().eraseUserIdentity(ctx, email)
 	if err != nil {
 		t.Fatalf("eraseUserIdentity: %v", err)
 	}
@@ -913,7 +913,7 @@ func TestEraseUserIdentity_WarnsOnEnvPlatformAdmin(t *testing.T) {
 		Users:          users,
 		PlatformAdmins: []string{"root@platform.test", "Alice@Example.com"},
 	}
-	rep, err := h.eraseUserIdentity(ctx, email)
+	rep, err := h.gdprAPI().eraseUserIdentity(ctx, email)
 	if err != nil {
 		t.Fatalf("eraseUserIdentity: %v", err)
 	}
@@ -982,7 +982,7 @@ func TestEraseUserIdentity_ScrubsAuthorshipInSharedOrg(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = h.MCPServers.Catalog.Close() })
 
-	rep, err := h.eraseUserIdentity(ctx, email)
+	rep, err := h.gdprAPI().eraseUserIdentity(ctx, email)
 	if err != nil {
 		t.Fatalf("eraseUserIdentity: %v", err)
 	}

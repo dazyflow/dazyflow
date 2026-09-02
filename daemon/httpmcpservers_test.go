@@ -26,7 +26,7 @@ func mcpPost(t *testing.T, h *HTTPGateway, p core.Principal, body string) *httpt
 	t.Helper()
 	rw := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "/api/v1/admin/mcp-servers", strings.NewReader(body))
-	h.saveMCPServer(rw, req, p)
+	h.mcpAPI().saveMCPServer(rw, req, p)
 	return rw
 }
 
@@ -34,7 +34,7 @@ func mcpList(t *testing.T, h *HTTPGateway, p core.Principal) *httptest.ResponseR
 	t.Helper()
 	rw := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/api/v1/admin/mcp-servers", nil)
-	h.listMCPServers(rw, req, p)
+	h.mcpAPI().listMCPServers(rw, req, p)
 	return rw
 }
 
@@ -178,7 +178,7 @@ func TestMCPServersEndpoints_PutIgnoresABodyRename(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/api/v1/admin/mcp-servers/vendor",
 		strings.NewReader(`{"name":"somethingelse","url":"`+url+`"}`))
 	req.SetPathValue("name", "vendor")
-	h.saveMCPServer(rw, req, adminPrincipal("acme"))
+	h.mcpAPI().saveMCPServer(rw, req, adminPrincipal("acme"))
 	if rw.Code != 200 {
 		t.Fatalf("code %d body %s", rw.Code, rw.Body)
 	}
@@ -206,7 +206,7 @@ func TestMCPServersEndpoints_PutOmittingEnabledKeepsItOn(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/api/v1/admin/mcp-servers/vendor",
 		strings.NewReader(`{"url":"`+url+`"}`))
 	req.SetPathValue("name", "vendor")
-	h.saveMCPServer(rw, req, adminPrincipal("acme"))
+	h.mcpAPI().saveMCPServer(rw, req, adminPrincipal("acme"))
 	var saved mcpServerRow
 	_ = json.Unmarshal(rw.Body.Bytes(), &saved)
 	if !saved.Enabled {
@@ -263,7 +263,7 @@ func mcpUsage(t *testing.T, h *HTTPGateway, p core.Principal, name string) *http
 	rw := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/api/v1/admin/mcp-servers/"+name+"/usage", nil)
 	req.SetPathValue("name", name)
-	h.mcpServerUsage(rw, req, p)
+	h.mcpAPI().mcpServerUsage(rw, req, p)
 	return rw
 }
 
@@ -272,7 +272,7 @@ func TestMCPServersEndpoints_DeleteUnknownIs404(t *testing.T) {
 	rw := httptest.NewRecorder()
 	req := httptest.NewRequest("DELETE", "/api/v1/admin/mcp-servers/nope", nil)
 	req.SetPathValue("name", "nope")
-	h.deleteMCPServer(rw, req, adminPrincipal("acme"))
+	h.mcpAPI().deleteMCPServer(rw, req, adminPrincipal("acme"))
 	if rw.Code != 404 {
 		t.Fatalf("code %d, want 404", rw.Code)
 	}

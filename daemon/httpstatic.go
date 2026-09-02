@@ -15,6 +15,18 @@ import (
 	"strings"
 )
 
+// staticAPI serves the static-asset endpoints. Its fields are the whole of what
+// those handlers touch.
+type staticAPI struct {
+	svc            *Service
+	WildcardDomain string
+}
+
+// staticAPI builds them from the gateway's configuration.
+func (h *HTTPGateway) staticAPI() *staticAPI {
+	return &staticAPI{svc: h.svc, WildcardDomain: h.WildcardDomain}
+}
+
 // landingDistHandler serves an optional static marketing site
 // (landingDir) alongside the SPA (webDir) on the same origin. The
 // root is auth-gated — a signed-in browser gets the app shell, an
@@ -25,7 +37,7 @@ import (
 // landingDir (/style.css, /pricing, /privacy, /terms, /shots/*, …)
 // serve publicly; everything else (the SPA's own assets and
 // client-side routes) falls through to the SPA handler.
-func (h *HTTPGateway) landingDistHandler(landingDir, webDir string) http.Handler {
+func (h *staticAPI) landingDistHandler(landingDir, webDir string) http.Handler {
 	spa := webDistHandler(webDir)
 	landingFS := http.FileServer(http.Dir(landingDir))
 	landingIndex := filepath.Join(landingDir, "landing.html")
@@ -45,7 +57,7 @@ func (h *HTTPGateway) landingDistHandler(landingDir, webDir string) http.Handler
 		// anonymous visitor gets the SPA — which routes them to sign-in with
 		// their org preselected — instead of the apex marketing page.
 		if r.URL.Path == "/" {
-			if h.hasValidSession(r) || h.isOrgSubdomainHost(r.Host) {
+			if h.hasValidSession(r) || isOrgSubdomainHost(r.Host, h.WildcardDomain) {
 				spa.ServeHTTP(rw, r)
 				return
 			}
@@ -88,7 +100,7 @@ func landingHas(dir, urlPath string) bool {
 // (session cookie or Bearer token) that authenticates successfully.
 // Used to gate the marketing landing at / — it must not error the
 // request, only classify it.
-func (h *HTTPGateway) hasValidSession(r *http.Request) bool {
+func (h *staticAPI) hasValidSession(r *http.Request) bool {
 	token := credentialFromRequest(r)
 	if token == "" {
 		return false

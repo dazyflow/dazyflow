@@ -44,7 +44,7 @@ type signupRequest struct {
 	SignupInvite string `json:"signup_invite,omitempty"`
 }
 
-func (h *HTTPGateway) signUp(rw http.ResponseWriter, r *http.Request) {
+func (h *authAPI) signUp(rw http.ResponseWriter, r *http.Request) {
 	if h.Users == nil || h.Sessions == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "users/sessions not configured")
 		return

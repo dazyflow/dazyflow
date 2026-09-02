@@ -104,29 +104,6 @@ func (h *HTTPGateway) requireAuth(next func(rw http.ResponseWriter, r *http.Requ
 
 const sessionCookieName = "dazyflow_session"
 
-// sessionTTL is the sliding idle window, defaulting to 7d when SessionTTL
-// is unset (or non-positive). Centralizes the `ttl := h.SessionTTL; if ttl
-// <= 0 { ttl = … }` default repeated at every session-issue site and in
-// maybeRenewSession.
-func (h *HTTPGateway) sessionTTL() time.Duration {
-	if h.SessionTTL <= 0 {
-		return 7 * 24 * time.Hour
-	}
-	return h.SessionTTL
-}
-
-// maxSessionAge is the absolute ceiling a session can reach from CreatedAt,
-// defaulting to 30d when unset. A non-positive MaxSessionAge keeps the
-// default rather than disabling the cap, so the gateway always has a
-// backstop even if the daemon forgets to wire it; an operator who truly
-// wants unbounded sliding sets it explicitly to a very large value.
-func (h *HTTPGateway) maxSessionAge() time.Duration {
-	if h.MaxSessionAge <= 0 {
-		return 30 * 24 * time.Hour
-	}
-	return h.MaxSessionAge
-}
-
 // maybeRenewSession slides a cookie-backed session's expiry forward so an
 // active user isn't logged out at the idle-TTL boundary. It runs after a
 // successful authentication on every request, but only writes the store
@@ -150,7 +127,7 @@ func (h *HTTPGateway) maybeRenewSession(rw http.ResponseWriter, r *http.Request,
 	if err != nil {
 		return
 	}
-	next, renew := auth.NextSessionExpiry(sess, h.sessionTTL(), h.maxSessionAge(), time.Now())
+	next, renew := auth.NextSessionExpiry(sess, h.sessionTTL(), h.cookies().maxSessionAge(), time.Now())
 	if !renew {
 		return
 	}
@@ -160,36 +137,6 @@ func (h *HTTPGateway) maybeRenewSession(rw http.ResponseWriter, r *http.Request,
 		return
 	}
 	h.setSessionCookie(rw, r, token, next)
-}
-
-// setSessionCookie installs the host-only session cookie for token, expiring
-// at expires. The Secure flag tracks whether the request reached us over TLS
-// (requestIsHTTPS, which also honors a trusted X-Forwarded-Proto). Single
-// source for every cookie-issuing sign-in path (password, SSO, handoff).
-func (h *HTTPGateway) setSessionCookie(rw http.ResponseWriter, r *http.Request, token string, expires time.Time) {
-	http.SetCookie(rw, &http.Cookie{
-		Name:     sessionCookieName,
-		Value:    token,
-		Path:     "/",
-		Expires:  expires,
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		Secure:   h.requestIsHTTPS(r),
-	})
-}
-
-// clearSessionCookie expires the session cookie (sign-out). Mirrors
-// setSessionCookie's attributes so the browser matches and drops it.
-func (h *HTTPGateway) clearSessionCookie(rw http.ResponseWriter, r *http.Request) {
-	http.SetCookie(rw, &http.Cookie{
-		Name:     sessionCookieName,
-		Value:    "",
-		Path:     "/",
-		MaxAge:   -1,
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		Secure:   h.requestIsHTTPS(r),
-	})
 }
 
 // credentialFromRequest extracts a bearer credential from either the
@@ -206,4 +153,77 @@ func credentialFromRequest(r *http.Request) string {
 		return c.Value
 	}
 	return ""
+}
+
+// sessionCookies issues and clears the browser session cookie, and answers how
+// long a session lasts. The Secure flag is decided by urlBuilder, so the
+// proxy-header gate stays in one place.
+type sessionCookies struct {
+	urlBuilder
+	ttl    time.Duration
+	maxAge time.Duration
+}
+
+// sessionTTL is the sliding idle window, defaulting to 7d when SessionTTL
+// is unset (or non-positive). Centralizes the `ttl := c.ttl; if ttl
+// <= 0 { ttl = … }` default repeated at every session-issue site and in
+// maybeRenewSession.
+func (c sessionCookies) sessionTTL() time.Duration {
+	if c.ttl <= 0 {
+		return 7 * 24 * time.Hour
+	}
+	return c.ttl
+}
+
+// maxSessionAge is the absolute ceiling a session can reach from CreatedAt,
+// defaulting to 30d when unset. A non-positive MaxSessionAge keeps the
+// default rather than disabling the cap, so the gateway always has a
+// backstop even if the daemon forgets to wire it; an operator who truly
+// wants unbounded sliding sets it explicitly to a very large value.
+func (c sessionCookies) maxSessionAge() time.Duration {
+	if c.maxAge <= 0 {
+		return 30 * 24 * time.Hour
+	}
+	return c.maxAge
+}
+
+// setSessionCookie installs the host-only session cookie for token, expiring
+// at expires. The Secure flag tracks whether the request reached us over TLS
+// (requestIsHTTPS, which also honors a trusted X-Forwarded-Proto). Single
+// source for every cookie-issuing sign-in path (password, SSO, handoff).
+func (c sessionCookies) setSessionCookie(rw http.ResponseWriter, r *http.Request, token string, expires time.Time) {
+	http.SetCookie(rw, &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    token,
+		Path:     "/",
+		Expires:  expires,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   c.requestIsHTTPS(r),
+	})
+}
+
+// clearSessionCookie expires the session cookie (sign-out). Mirrors
+// setSessionCookie's attributes so the browser matches and drops it.
+func (c sessionCookies) clearSessionCookie(rw http.ResponseWriter, r *http.Request) {
+	http.SetCookie(rw, &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   c.requestIsHTTPS(r),
+	})
+}
+
+// cookies exposes session-cookie handling to a domain handler.
+func (h *HTTPGateway) cookies() sessionCookies {
+	return sessionCookies{urlBuilder: h.urls(), ttl: h.SessionTTL, maxAge: h.MaxSessionAge}
+}
+
+func (h *HTTPGateway) sessionTTL() time.Duration { return h.cookies().sessionTTL() }
+
+func (h *HTTPGateway) setSessionCookie(rw http.ResponseWriter, r *http.Request, token string, expires time.Time) {
+	h.cookies().setSessionCookie(rw, r, token, expires)
 }

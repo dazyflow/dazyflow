@@ -15,6 +15,19 @@ import (
 	"github.com/dazyflow/dazyflow/engine/mcp"
 )
 
+// mcpAPI serves the tenant MCP-server endpoints. Its fields are the whole of what
+// those handlers touch.
+type mcpAPI struct {
+	auditor
+	svc        *Service
+	MCPServers *MCPServers
+}
+
+// mcpAPI builds them from the gateway's configuration.
+func (h *HTTPGateway) mcpAPI() *mcpAPI {
+	return &mcpAPI{auditor: h.auditor(), svc: h.svc, MCPServers: h.MCPServers}
+}
+
 // The admin API behind Admin → MCP servers.
 //
 // Every handler is scoped to p.Tenant and never takes a tenant from the
@@ -92,7 +105,7 @@ type mcpServerRequest struct {
 	Enabled *bool `json:"enabled,omitempty"`
 }
 
-func (h *HTTPGateway) mcpServersConfigured(rw http.ResponseWriter) bool {
+func (h *mcpAPI) mcpServersConfigured(rw http.ResponseWriter) bool {
 	if h.MCPServers == nil || h.MCPServers.Store == nil || h.MCPServers.Catalog == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "MCP servers are not configured on this deployment")
 		return false
@@ -108,7 +121,7 @@ func decodeMCPBody(r *http.Request, v any) error {
 }
 
 // mcpRowFor renders one stored row with this process's live view merged in.
-func (h *HTTPGateway) mcpRowFor(s MCPServer, live map[string]mcp.ServerStatus) mcpServerRow {
+func (h *mcpAPI) mcpRowFor(s MCPServer, live map[string]mcp.ServerStatus) mcpServerRow {
 	st, registered := live[s.Name]
 	// Registered is not the same as connected any more: a server whose
 	// handshake failed stays in the catalog DESCRIBING its cached tools, so
@@ -142,7 +155,7 @@ func (h *HTTPGateway) mcpRowFor(s MCPServer, live map[string]mcp.ServerStatus) m
 // Only the tenant's OWN servers: an operator's instance-wide server is not
 // something an org configured and must not appear on a page whose every other
 // control would edit or delete it.
-func (h *HTTPGateway) liveMCPServers(tenant string) map[string]mcp.ServerStatus {
+func (h *mcpAPI) liveMCPServers(tenant string) map[string]mcp.ServerStatus {
 	out := map[string]mcp.ServerStatus{}
 	for _, st := range h.MCPServers.Catalog.ServersFor(tenant) {
 		if st.Tenant != tenant {
@@ -153,7 +166,7 @@ func (h *HTTPGateway) liveMCPServers(tenant string) map[string]mcp.ServerStatus 
 	return out
 }
 
-func (h *HTTPGateway) listMCPServers(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *mcpAPI) listMCPServers(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !requireStepSourceAdmin(rw, p) || !h.mcpServersConfigured(rw) {
 		return
 	}
@@ -176,7 +189,7 @@ func (h *HTTPGateway) listMCPServers(rw http.ResponseWriter, r *http.Request, p 
 // its name, and saving under an existing name replaces that configuration and
 // reconnects. Splitting them would mean two paths that must agree on
 // validation, sealing, and reconnection.
-func (h *HTTPGateway) saveMCPServer(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *mcpAPI) saveMCPServer(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !requireStepSourceAdmin(rw, p) || !h.mcpServersConfigured(rw) {
 		return
 	}
@@ -227,7 +240,7 @@ func (h *HTTPGateway) saveMCPServer(rw http.ResponseWriter, r *http.Request, p c
 // Its own endpoint rather than a field on the row: it loads every graph in the
 // org, which is fine once, when an admin opens a delete confirmation, and
 // wasteful on every render of the list.
-func (h *HTTPGateway) mcpServerUsage(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *mcpAPI) mcpServerUsage(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !requireStepSourceAdmin(rw, p) || !h.mcpServersConfigured(rw) {
 		return
 	}
@@ -254,7 +267,7 @@ func (h *HTTPGateway) mcpServerUsage(rw http.ResponseWriter, r *http.Request, p 
 	writeJSON(rw, http.StatusOK, usage)
 }
 
-func (h *HTTPGateway) refreshMCPServer(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *mcpAPI) refreshMCPServer(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !requireStepSourceAdmin(rw, p) || !h.mcpServersConfigured(rw) {
 		return
 	}
@@ -271,7 +284,7 @@ func (h *HTTPGateway) refreshMCPServer(rw http.ResponseWriter, r *http.Request, 
 	writeJSON(rw, http.StatusOK, h.mcpRowFor(saved, h.liveMCPServers(p.Tenant)))
 }
 
-func (h *HTTPGateway) deleteMCPServer(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *mcpAPI) deleteMCPServer(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !requireStepSourceAdmin(rw, p) || !h.mcpServersConfigured(rw) {
 		return
 	}

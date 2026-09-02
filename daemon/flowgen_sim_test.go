@@ -152,7 +152,7 @@ func TestFlowGen_StructuralGateRepairs(t *testing.T) {
 	llm.Register(llm.ProviderInfo{Name: "fakeflowstruct", Integration: "FakeFlowStruct", DefaultModel: "m", Provider: sp})
 
 	h := newGatewayHarness(t)
-	g, issues, err := h.gw.generateFlow(context.Background(), "fakeflowstruct", "key",
+	g, issues, err := h.gw.flowAPI().generateFlow(context.Background(), "fakeflowstruct", "key",
 		"log my new emails to a google sheet", allManifests(), "t1", "main", "", nil)
 	if err != nil {
 		t.Fatalf("generateFlow: %v", err)
@@ -178,7 +178,7 @@ func TestFlowGen_StructuralGateSurfaces(t *testing.T) {
 	llm.Register(llm.ProviderInfo{Name: "fakeflowstruckstuck", Integration: "FakeFlowStuckStruct", DefaultModel: "m", Provider: sp})
 
 	h := newGatewayHarness(t)
-	_, issues, err := h.gw.generateFlow(context.Background(), "fakeflowstruckstuck", "key",
+	_, issues, err := h.gw.flowAPI().generateFlow(context.Background(), "fakeflowstruckstuck", "key",
 		"log my emails", allManifests(), "t1", "main", "", nil)
 	if err != nil {
 		t.Fatalf("should return best-effort, not error: %v", err)
@@ -227,7 +227,7 @@ func TestFlowGen_AgentExploresThenEmits(t *testing.T) {
 	llm.Register(llm.ProviderInfo{Name: "fakeflowagent", Integration: "FakeFlowAgent", DefaultModel: "m", Provider: sp})
 
 	h := newGatewayHarness(t)
-	g, issues, err := h.gw.generateFlow(context.Background(), "fakeflowagent", "key",
+	g, issues, err := h.gw.flowAPI().generateFlow(context.Background(), "fakeflowagent", "key",
 		"log my new emails to a google sheet", allManifests(), "t1", "main", "", nil)
 	if err != nil {
 		t.Fatalf("generateFlow: %v", err)
@@ -254,7 +254,7 @@ func TestFlowGen_AgentValidatesBeforeEmit(t *testing.T) {
 	llm.Register(llm.ProviderInfo{Name: "fakeflowvalidate", Integration: "FakeFlowValidate", DefaultModel: "m", Provider: sp})
 
 	h := newGatewayHarness(t)
-	g, issues, err := h.gw.generateFlow(context.Background(), "fakeflowvalidate", "key",
+	g, issues, err := h.gw.flowAPI().generateFlow(context.Background(), "fakeflowvalidate", "key",
 		"log my emails", allManifests(), "t1", "main", "", nil)
 	if err != nil {
 		t.Fatalf("generateFlow: %v", err)
@@ -323,7 +323,7 @@ func TestFlowGen_WorkspaceGrounding(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	g := h.gw.workspaceGrounding(ctx, "t1")
+	g := h.gw.flowAPI().workspaceGrounding(ctx, "t1")
 	if !strings.Contains(g, "CONNECTED APPS") || !strings.Contains(g, "slack") {
 		t.Errorf("expected connected app slack in grounding, got: %q", g)
 	}
@@ -331,7 +331,7 @@ func TestFlowGen_WorkspaceGrounding(t *testing.T) {
 		t.Errorf("expected existing secret OPENAI_KEY in grounding, got: %q", g)
 	}
 	// A tenant with no store wired must not error or block generation.
-	if got := (&HTTPGateway{}).workspaceGrounding(ctx, "t1"); got != "" {
+	if got := (&HTTPGateway{}).flowAPI().workspaceGrounding(ctx, "t1"); got != "" {
 		t.Errorf("no-store grounding should be empty, got %q", got)
 	}
 }

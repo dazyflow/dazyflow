@@ -88,7 +88,7 @@ func consumeHandoff(code string) (handoffEntry, bool) {
 // On a missing/expired/replayed code it routes back to the sign-in page
 // rather than erroring, so a stale link (e.g. a back-button replay)
 // degrades to "sign in again" instead of a dead end.
-func (h *HTTPGateway) authHandoff(rw http.ResponseWriter, r *http.Request) {
+func (h *authAPI) authHandoff(rw http.ResponseWriter, r *http.Request) {
 	returnTo := r.URL.Query().Get("return_to")
 	if !safeReturnPath(returnTo) {
 		returnTo = "/"

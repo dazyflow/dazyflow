@@ -43,7 +43,7 @@ type connectedProvider struct {
 // connected (has a saved api_key for), in registration order. The registry
 // is populated by the drop packages the dzd binary imports, so the daemon
 // reads it without importing the drops.
-func (h *HTTPGateway) connectedProviders(ctx context.Context) []connectedProvider {
+func (h *flowAPI) connectedProviders(ctx context.Context) []connectedProvider {
 	if h.EncryptedSecrets == nil {
 		return nil
 	}
@@ -60,7 +60,7 @@ func (h *HTTPGateway) connectedProviders(ctx context.Context) []connectedProvide
 // renderTemplateLLMProviders is GET /api/v1/tools/llm-providers — the AI
 // providers this tenant has connected, so the editor can show a picker (and
 // nudge to the Apps page when the list is empty).
-func (h *HTTPGateway) renderTemplateLLMProviders(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *flowAPI) renderTemplateLLMProviders(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	ctx := core.WithTenant(r.Context(), p.Tenant)
 	type dto struct {
 		Name  string `json:"name"`
@@ -74,7 +74,7 @@ func (h *HTTPGateway) renderTemplateLLMProviders(rw http.ResponseWriter, r *http
 }
 
 // renderTemplateAssist is POST /api/v1/tools/render-template/assist.
-func (h *HTTPGateway) renderTemplateAssist(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *flowAPI) renderTemplateAssist(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	body, ok := decodeRequestJSON[struct {
 		Description string   `json:"description"`
 		Fields      []string `json:"fields"`

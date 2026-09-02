@@ -36,6 +36,17 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
+// idempotencyAPI serves the idempotency-key endpoints. Its fields are the whole of what
+// those handlers touch.
+type idempotencyAPI struct {
+	idempotency *idempotencyStore
+}
+
+// idempotencyAPI builds them from the gateway's configuration.
+func (h *HTTPGateway) idempotencyAPI() *idempotencyAPI {
+	return &idempotencyAPI{idempotency: h.idempotency}
+}
+
 const (
 	idempotencyHeader   = "Idempotency-Key"
 	idempotencyTTL      = 24 * time.Hour
@@ -171,7 +182,7 @@ func (s *idempotencyStore) removeFromOrderLocked(key string) {
 // (like Set-Cookie or Location) are not replayed today — we don't
 // emit them from the idempotent routes. If that changes, expand the
 // `replayable` allowlist in the response capture below.
-func (h *HTTPGateway) idempotencyMiddleware(routePattern string, next func(rw http.ResponseWriter, r *http.Request, p core.Principal)) func(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *idempotencyAPI) idempotencyMiddleware(routePattern string, next func(rw http.ResponseWriter, r *http.Request, p core.Principal)) func(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	return func(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 		if r.Method != http.MethodPost && r.Method != http.MethodPatch {
 			next(rw, r, p)

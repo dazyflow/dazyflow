@@ -115,25 +115,25 @@ func TestVerifyGoogleIDToken_Cov(t *testing.T) {
 	ctx := context.Background()
 
 	// Missing id_token -> no_id_token (no verifier needed).
-	if _, reason, status, _ := h.gw.verifyGoogleIDToken(ctx, cfg, "", googleUserInfo{}); reason != "no_id_token" || status != http.StatusBadGateway {
+	if _, reason, status, _ := h.gw.authAPI().verifyGoogleIDToken(ctx, cfg, "", googleUserInfo{}); reason != "no_id_token" || status != http.StatusBadGateway {
 		t.Fatalf("empty token reason=%q status=%d", reason, status)
 	}
 
 	// Verifier rejects the token.
 	installGoogleVerifier(t, clientID, stubGoogleVerifier{err: errors.New("bad sig")})
-	if _, reason, status, _ := h.gw.verifyGoogleIDToken(ctx, cfg, "tok", googleUserInfo{}); reason != "id_token_invalid" || status != http.StatusForbidden {
+	if _, reason, status, _ := h.gw.authAPI().verifyGoogleIDToken(ctx, cfg, "tok", googleUserInfo{}); reason != "id_token_invalid" || status != http.StatusForbidden {
 		t.Fatalf("invalid token reason=%q status=%d", reason, status)
 	}
 
 	// Verified, but the signed token has no email claim.
 	installGoogleVerifier(t, clientID, stubGoogleVerifier{claims: auth.Claims{Subject: "s"}})
-	if _, reason, status, _ := h.gw.verifyGoogleIDToken(ctx, cfg, "tok", googleUserInfo{}); reason != "no_email" || status != http.StatusBadGateway {
+	if _, reason, status, _ := h.gw.authAPI().verifyGoogleIDToken(ctx, cfg, "tok", googleUserInfo{}); reason != "no_email" || status != http.StatusBadGateway {
 		t.Fatalf("no-email reason=%q status=%d", reason, status)
 	}
 
 	// Verified email disagrees with the userinfo email -> mismatch.
 	installGoogleVerifier(t, clientID, stubGoogleVerifier{claims: auth.Claims{Extras: map[string]any{"email": "Signed@Acme.test"}}})
-	if _, reason, status, _ := h.gw.verifyGoogleIDToken(ctx, cfg, "tok", googleUserInfo{Email: "other@acme.test"}); reason != "email_mismatch" || status != http.StatusForbidden {
+	if _, reason, status, _ := h.gw.authAPI().verifyGoogleIDToken(ctx, cfg, "tok", googleUserInfo{Email: "other@acme.test"}); reason != "email_mismatch" || status != http.StatusForbidden {
 		t.Fatalf("mismatch reason=%q status=%d", reason, status)
 	}
 
@@ -143,7 +143,7 @@ func TestVerifyGoogleIDToken_Cov(t *testing.T) {
 	installGoogleVerifier(t, clientID, stubGoogleVerifier{claims: auth.Claims{Extras: map[string]any{
 		"email": "User@Acme.test", "email_verified": true, "hd": "acme.test",
 	}}})
-	vc, reason, _, _ := h.gw.verifyGoogleIDToken(ctx, cfg, "tok", googleUserInfo{Email: "user@acme.test"})
+	vc, reason, _, _ := h.gw.authAPI().verifyGoogleIDToken(ctx, cfg, "tok", googleUserInfo{Email: "user@acme.test"})
 	if reason != "" || vc.Email != "user@acme.test" {
 		t.Fatalf("happy path email=%q reason=%q", vc.Email, reason)
 	}
@@ -152,7 +152,7 @@ func TestVerifyGoogleIDToken_Cov(t *testing.T) {
 	}
 
 	// Userinfo email omitted is allowed (signed token is authoritative).
-	vc, reason, _, _ = h.gw.verifyGoogleIDToken(ctx, cfg, "tok", googleUserInfo{})
+	vc, reason, _, _ = h.gw.authAPI().verifyGoogleIDToken(ctx, cfg, "tok", googleUserInfo{})
 	if reason != "" || vc.Email != "user@acme.test" {
 		t.Fatalf("empty-userinfo email=%q reason=%q", vc.Email, reason)
 	}
@@ -169,7 +169,7 @@ func TestResolveSignInUser_Cov(t *testing.T) {
 
 	// First sign-in: a user is created in st.Tenant with a seeded org profile.
 	rw := httptest.NewRecorder()
-	user, isNew, ok := h.gw.resolveSignInUser(rw, r, "new@acme.test", st)
+	user, isNew, ok := h.gw.authAPI().resolveSignInUser(rw, r, "new@acme.test", st)
 	if !ok || !isNew || user.Tenant != "acme" || user.Email != "new@acme.test" {
 		t.Fatalf("new user = %+v isNew=%v ok=%v", user, isNew, ok)
 	}
@@ -179,7 +179,7 @@ func TestResolveSignInUser_Cov(t *testing.T) {
 
 	// Second sign-in for the same email: existing user, not new.
 	rw = httptest.NewRecorder()
-	user, isNew, ok = h.gw.resolveSignInUser(rw, r, "new@acme.test", st)
+	user, isNew, ok = h.gw.authAPI().resolveSignInUser(rw, r, "new@acme.test", st)
 	if !ok || isNew {
 		t.Fatalf("existing user isNew=%v ok=%v", isNew, ok)
 	}
@@ -194,7 +194,7 @@ func TestCompleteSignIn_Cov(t *testing.T) {
 	rw := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/api/v1/auth/google/callback", nil)
 	r.Host = "app.dazyflow.test"
-	h.gw.completeSignIn(rw, r, googleSignInState{ReturnTo: "/dashboard"}, sess, "tok-abc")
+	h.gw.authAPI().completeSignIn(rw, r, googleSignInState{ReturnTo: "/dashboard"}, sess, "tok-abc")
 	if rw.Code != http.StatusFound || rw.Header().Get("Location") != "/dashboard" {
 		t.Fatalf("same-host redirect = %d %q", rw.Code, rw.Header().Get("Location"))
 	}
@@ -204,7 +204,7 @@ func TestCompleteSignIn_Cov(t *testing.T) {
 
 	// An unsafe return path falls back to "/".
 	rw = httptest.NewRecorder()
-	h.gw.completeSignIn(rw, r, googleSignInState{ReturnTo: "https://evil.test/x"}, sess, "tok")
+	h.gw.authAPI().completeSignIn(rw, r, googleSignInState{ReturnTo: "https://evil.test/x"}, sess, "tok")
 	if loc := rw.Header().Get("Location"); loc != "/" {
 		t.Fatalf("unsafe return path redirect = %q, want /", loc)
 	}
@@ -212,7 +212,7 @@ func TestCompleteSignIn_Cov(t *testing.T) {
 	// Different host (per-org subdomain): bounces through /auth/handoff with a
 	// one-time token instead of setting an apex cookie.
 	rw = httptest.NewRecorder()
-	h.gw.completeSignIn(rw, r, googleSignInState{Host: "acme.dazyflow.test", ReturnTo: "/x"}, sess, "tok")
+	h.gw.authAPI().completeSignIn(rw, r, googleSignInState{Host: "acme.dazyflow.test", ReturnTo: "/x"}, sess, "tok")
 	loc := rw.Header().Get("Location")
 	if rw.Code != http.StatusFound || !strings.Contains(loc, "acme.dazyflow.test/api/v1/auth/handoff?ot=") {
 		t.Fatalf("handoff redirect = %d %q", rw.Code, loc)
@@ -616,7 +616,7 @@ func TestPendingInvitation_Cov(t *testing.T) {
 	ctx := context.Background()
 
 	// Nil store -> no invite.
-	if _, ok := h.gw.pendingInvitation(ctx, "a@x.com", "t"); ok {
+	if _, ok := h.gw.authAPI().pendingInvitation(ctx, "a@x.com", "t"); ok {
 		t.Fatal("nil invitations store returned an invite")
 	}
 
@@ -630,13 +630,13 @@ func TestPendingInvitation_Cov(t *testing.T) {
 		Token: "i2", Email: "old@x.com", Tenant: "acme", ExpiresAt: time.Now().Add(-time.Hour),
 	})
 
-	if inv, ok := h.gw.pendingInvitation(ctx, "A@X.com", "acme"); !ok || inv.Token != "i1" {
+	if inv, ok := h.gw.authAPI().pendingInvitation(ctx, "A@X.com", "acme"); !ok || inv.Token != "i1" {
 		t.Fatalf("pending invite = %+v ok=%v", inv, ok)
 	}
-	if _, ok := h.gw.pendingInvitation(ctx, "old@x.com", "acme"); ok {
+	if _, ok := h.gw.authAPI().pendingInvitation(ctx, "old@x.com", "acme"); ok {
 		t.Fatal("expired invite returned as pending")
 	}
-	if _, ok := h.gw.pendingInvitation(ctx, "nobody@x.com", "acme"); ok {
+	if _, ok := h.gw.authAPI().pendingInvitation(ctx, "nobody@x.com", "acme"); ok {
 		t.Fatal("nonexistent invite returned")
 	}
 }
@@ -652,14 +652,14 @@ func TestResolveActiveOrg_Cov(t *testing.T) {
 
 	// New user: lands in their own (home) tenant.
 	newUser := auth.User{Email: "n@x.com", Tenant: "home", Workspace: "main", Roles: []core.Role{core.TeamRoleViewer()}}
-	tn, ws, _, reason, _, _ := h.gw.resolveActiveOrg(r, cfg, newUser, true, "n@x.com", googleSignInState{Tenant: "acme"})
+	tn, ws, _, reason, _, _ := h.gw.authAPI().resolveActiveOrg(r, cfg, newUser, true, "n@x.com", googleSignInState{Tenant: "acme"})
 	if reason != "" || tn != "home" || ws != "main" {
 		t.Fatalf("new user resolve = %q/%q reason=%q", tn, ws, reason)
 	}
 
 	// Existing user, signing into home tenant (st.Tenant == user.Tenant).
 	home := auth.User{Email: "h@x.com", Tenant: "acme", Workspace: "main"}
-	if _, _, _, reason, _, _ := h.gw.resolveActiveOrg(r, cfg, home, false, "h@x.com", googleSignInState{Tenant: "acme"}); reason != "" {
+	if _, _, _, reason, _, _ := h.gw.authAPI().resolveActiveOrg(r, cfg, home, false, "h@x.com", googleSignInState{Tenant: "acme"}); reason != "" {
 		t.Fatalf("home tenant resolve reason = %q", reason)
 	}
 
@@ -668,13 +668,13 @@ func TestResolveActiveOrg_Cov(t *testing.T) {
 		UserEmail: "m@x.com", Tenant: "acme", Workspace: "ws2", Roles: []core.Role{core.TeamRoleEditor()},
 	})
 	other := auth.User{Email: "m@x.com", Tenant: "home"}
-	if tn, ws, _, reason, _, _ := h.gw.resolveActiveOrg(r, cfg, other, false, "m@x.com", googleSignInState{Tenant: "acme"}); reason != "" || tn != "acme" || ws != "ws2" {
+	if tn, ws, _, reason, _, _ := h.gw.authAPI().resolveActiveOrg(r, cfg, other, false, "m@x.com", googleSignInState{Tenant: "acme"}); reason != "" || tn != "acme" || ws != "ws2" {
 		t.Fatalf("membership resolve = %q/%q reason=%q", tn, ws, reason)
 	}
 
 	// Existing user, no membership, no domain match, no invite -> not_invited.
 	stranger := auth.User{Email: "s@x.com", Tenant: "home"}
-	_, _, _, reason, status, _ := h.gw.resolveActiveOrg(r, cfg, stranger, false, "s@x.com", googleSignInState{Tenant: "acme"})
+	_, _, _, reason, status, _ := h.gw.authAPI().resolveActiveOrg(r, cfg, stranger, false, "s@x.com", googleSignInState{Tenant: "acme"})
 	if reason != "not_invited" || status != http.StatusForbidden {
 		t.Fatalf("stranger resolve reason=%q status=%d, want not_invited/403", reason, status)
 	}
@@ -682,7 +682,7 @@ func TestResolveActiveOrg_Cov(t *testing.T) {
 	// Domain-authorized auto-join.
 	domainCfg := auth.OrgAuthConfig{Tenant: "acme", GoogleWorkspaceDomain: "acme.com"}
 	dom := auth.User{Email: "d@acme.com", Tenant: "home"}
-	tn, ws, roles, reason, _, _ := h.gw.resolveActiveOrg(r, domainCfg, dom, false, "d@acme.com", googleSignInState{Tenant: "acme"})
+	tn, ws, roles, reason, _, _ := h.gw.authAPI().resolveActiveOrg(r, domainCfg, dom, false, "d@acme.com", googleSignInState{Tenant: "acme"})
 	if reason != "" || tn != "acme" || ws != "main" || len(roles) == 0 {
 		t.Fatalf("domain join = %q/%q roles=%v reason=%q", tn, ws, roles, reason)
 	}
@@ -696,7 +696,7 @@ func TestResolveActiveOrg_Cov(t *testing.T) {
 		Roles: []core.Role{core.TeamRoleAdmin()}, ExpiresAt: time.Now().Add(time.Hour),
 	})
 	invUser := auth.User{Email: "i@x.com", Tenant: "home"}
-	tn, ws, _, reason, _, _ = h.gw.resolveActiveOrg(r, cfg, invUser, false, "i@x.com", googleSignInState{Tenant: "acme"})
+	tn, ws, _, reason, _, _ = h.gw.authAPI().resolveActiveOrg(r, cfg, invUser, false, "i@x.com", googleSignInState{Tenant: "acme"})
 	if reason != "" || tn != "acme" || ws != "wsInv" {
 		t.Fatalf("invite join = %q/%q reason=%q", tn, ws, reason)
 	}
@@ -708,14 +708,14 @@ func TestSignInError_Cov(t *testing.T) {
 	// Non-test: writes a JSON error with the given status.
 	rw := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/cb", nil)
-	h.gw.signInError(rw, r, googleSignInState{}, "exchange_failed", http.StatusBadGateway, "boom")
+	h.gw.authAPI().signInError(rw, r, googleSignInState{}, "exchange_failed", http.StatusBadGateway, "boom")
 	if rw.Code != http.StatusBadGateway {
 		t.Fatalf("non-test signInError = %d, want 502", rw.Code)
 	}
 
 	// Test mode: redirects to the SSO settings page with a test_error code.
 	rw = httptest.NewRecorder()
-	h.gw.signInError(rw, r, googleSignInState{Test: true, ReturnTo: "/admin/sso"}, "invalid_grant", http.StatusForbidden, "x")
+	h.gw.authAPI().signInError(rw, r, googleSignInState{Test: true, ReturnTo: "/admin/sso"}, "invalid_grant", http.StatusForbidden, "x")
 	if rw.Code != http.StatusFound {
 		t.Fatalf("test signInError = %d, want 302", rw.Code)
 	}

@@ -11,7 +11,42 @@ import (
 
 	"github.com/dazyflow/dazyflow/auth"
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/daemon/support"
 )
+
+// gdprAPI serves the data-export and erasure endpoints. Its fields are the whole of what
+// those handlers touch.
+type gdprAPI struct {
+	auditor
+	adminCheck
+	svc                 *Service
+	Users               auth.UserStore
+	Sessions            auth.SessionStore
+	Memberships         auth.MembershipStore
+	Invitations         auth.InvitationStore
+	Profiles            auth.OrgProfileStore
+	Blocklist           auth.BlocklistStore
+	OrgAuth             auth.OrgAuthStore
+	PlatformAdmins      []string
+	PlatformAdminGrants PlatformAdminStore
+	SupportAgents       support.AgentStore
+	Grants              core.GrantStore
+	Bundles             core.BundleStore
+	Tickets             core.TicketStore
+	Audit               core.AuditLog
+	Runners             *Runners
+	RunnerTasks         RunnerTaskStore
+	MCPServers          *MCPServers
+	WebAPIs             *WebAPIs
+	GitMirrors          GitMirrorStore
+	DropSwitches        DropSwitchStore
+	EncryptedSecrets    *EncryptedSecrets
+}
+
+// gdprAPI builds them from the gateway's configuration.
+func (h *HTTPGateway) gdprAPI() *gdprAPI {
+	return &gdprAPI{auditor: h.auditor(), adminCheck: h.admins(), svc: h.svc, Users: h.Users, Sessions: h.Sessions, Memberships: h.Memberships, Invitations: h.Invitations, Profiles: h.Profiles, Blocklist: h.Blocklist, OrgAuth: h.OrgAuth, PlatformAdmins: h.PlatformAdmins, PlatformAdminGrants: h.PlatformAdminGrants, SupportAgents: h.SupportAgents, Grants: h.Grants, Bundles: h.Bundles, Tickets: h.Tickets, Audit: h.Audit, Runners: h.Runners, RunnerTasks: h.RunnerTasks, MCPServers: h.MCPServers, WebAPIs: h.WebAPIs, GitMirrors: h.GitMirrors, DropSwitches: h.DropSwitches, EncryptedSecrets: h.EncryptedSecrets}
+}
 
 // HTTP surface for the GDPR data-subject rights: erasure (Art. 17) of an
 // account and deletion of an org/tenant. The actual cascade lives in
@@ -24,7 +59,7 @@ import (
 // When the user's home org is their personal org and they are its sole
 // member, the org's content (flows, runs, logs) is wiped too — a shared
 // org is left intact for its other members.
-func (h *HTTPGateway) deleteMyAccountHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *gdprAPI) deleteMyAccountHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Users == nil {
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "user store not configured")
 		return
@@ -61,7 +96,7 @@ func (h *HTTPGateway) deleteMyAccountHandler(rw http.ResponseWriter, r *http.Req
 // only — org admins can remove a member (DELETE …/admin/members) but not
 // erase the person's account globally. Same personal-org cascade as self
 // deletion.
-func (h *HTTPGateway) adminDeleteUserHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *gdprAPI) adminDeleteUserHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !isPlatformAdmin(p) {
 		writeAPIError(rw, http.StatusForbidden, "forbidden", "platform:admin required to erase an account")
 		return
@@ -102,7 +137,7 @@ func (h *HTTPGateway) adminDeleteUserHandler(rw http.ResponseWriter, r *http.Req
 // Allowed for a platform admin, or for an org admin acting on their own
 // tenant. Member user accounts are NOT erased (they may belong to other
 // orgs) — only the org's data and the memberships into it.
-func (h *HTTPGateway) adminDeleteOrgHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+func (h *gdprAPI) adminDeleteOrgHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant := strings.TrimSpace(r.PathValue("tenant"))
 	if tenant == "" {
 		writeAPIError(rw, http.StatusBadRequest, "bad_request", "tenant required")

@@ -524,7 +524,7 @@ func runScenarioEval(t *testing.T, provider, key string, asks []ask, refs map[in
 			defer cancel()
 
 			start := time.Now()
-			graph, issues, err := h.generateFlow(ctx, provider, key, a.Prompt(), mans,
+			graph, issues, err := h.flowAPI().generateFlow(ctx, provider, key, a.Prompt(), mans,
 				"evaltenant", "default", "Europe/Stockholm", nil)
 			s := scoreCandidate(a, refs[a.Num], graph, issues, manifests, err)
 			s.Seconds = time.Since(start).Seconds()

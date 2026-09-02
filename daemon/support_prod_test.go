@@ -430,24 +430,24 @@ func TestTicketURLFor_AudienceRoutes(t *testing.T) {
 	// The customer's view is tenant-scoped, so their link is pinned to the
 	// filing org — without it, a member of several orgs opens the mail in the
 	// wrong one and loadTicketForTenant answers "no ticket with that id".
-	if got := h.ticketURLFor(tk, false); got != "https://app.example.com/support/abc123?org=acme" {
+	if got := h.supportAPI().ticketURLFor(tk, false); got != "https://app.example.com/support/abc123?org=acme" {
 		t.Errorf("user URL = %q", got)
 	}
 	// The agent queue is cross-tenant by design, so it is NOT pinned: agents
 	// generally aren't members of the filing org, and moving them there would
 	// be wrong as well as useless.
-	if got := h.ticketURLFor(tk, true); got != "https://app.example.com/support/queue/abc123" {
+	if got := h.supportAPI().ticketURLFor(tk, true); got != "https://app.example.com/support/queue/abc123" {
 		t.Errorf("agent URL = %q", got)
 	}
 	// A single-tenant deployment carries no tenant on the ticket; the bare link
 	// is unambiguous there.
 	solo := core.Ticket{ID: "abc123"}
-	if got := h.ticketURLFor(solo, false); got != "https://app.example.com/support/abc123" {
+	if got := h.supportAPI().ticketURLFor(solo, false); got != "https://app.example.com/support/abc123" {
 		t.Errorf("tenantless user URL = %q", got)
 	}
 	// No public base URL configured: no link rather than a broken relative one.
 	bare := &HTTPGateway{svc: &Service{}}
-	if got := bare.ticketURLFor(tk, false); got != "" {
+	if got := bare.supportAPI().ticketURLFor(tk, false); got != "" {
 		t.Errorf("URL without a public base = %q, want empty", got)
 	}
 }
@@ -456,10 +456,10 @@ func TestSupportNotify_NoMailerIsSilent(t *testing.T) {
 	// A self-host with no SMTP configured must not panic on every reply.
 	h := &HTTPGateway{svc: &Service{}}
 	tk := core.Ticket{ID: "t1", Tenant: "acme", CreatedBy: "u@acme.test", Subject: "s"}
-	h.notifySupportReplied(tk)
-	h.notifyTicketResolved(tk)
-	h.notifyUserReplied(tk)
-	h.notifyTicketFiled(tk)
+	h.supportAPI().notifySupportReplied(tk)
+	h.supportAPI().notifyTicketResolved(tk)
+	h.supportAPI().notifyUserReplied(tk)
+	h.supportAPI().notifyTicketFiled(tk)
 }
 
 // --- Rate limiting ----------------------------------------------------------
@@ -470,7 +470,7 @@ func TestSupportWriteRateLimit(t *testing.T) {
 	allowed := 0
 	for i := 0; i < 10; i++ {
 		rw := httptest.NewRecorder()
-		if h.allowSupportWrite(rw, p) {
+		if h.supportAPI().allowSupportWrite(rw, p) {
 			allowed++
 			continue
 		}
@@ -489,7 +489,7 @@ func TestSupportWriteRateLimit(t *testing.T) {
 	// Throttling is per SUBJECT: one noisy user must not lock out everyone
 	// else behind the same office NAT.
 	other := core.Principal{Subject: "colleague@acme.test", Tenant: "acme"}
-	if !h.allowSupportWrite(httptest.NewRecorder(), other) {
+	if !h.supportAPI().allowSupportWrite(httptest.NewRecorder(), other) {
 		t.Error("a different subject was throttled by someone else's traffic")
 	}
 }
@@ -498,7 +498,7 @@ func TestSupportWriteRateLimit_Unset(t *testing.T) {
 	// No limiter configured (a hand-built gateway in tests) must allow through
 	// rather than deny-by-default.
 	h := &HTTPGateway{}
-	if !h.allowSupportWrite(httptest.NewRecorder(), core.Principal{Subject: "u"}) {
+	if !h.supportAPI().allowSupportWrite(httptest.NewRecorder(), core.Principal{Subject: "u"}) {
 		t.Error("nil limiter should not block")
 	}
 }

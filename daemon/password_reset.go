@@ -45,7 +45,7 @@ import (
 const resetTokenTTL = 1 * time.Hour
 
 // passwordResetActive reports whether this deployment can run the flow.
-func (h *HTTPGateway) passwordResetActive() bool {
+func (h *authAPI) passwordResetActive() bool {
 	return h.svc.Mailer != nil && h.svc.PublicBaseURL != "" && h.Users != nil
 }
 
@@ -53,7 +53,7 @@ func (h *HTTPGateway) passwordResetActive() bool {
 // Unauthenticated. ALWAYS 200 (non-enumerating): the response is
 // identical whether or not the address has an account, whether or not a
 // mailer is configured, and whether or not the send succeeds.
-func (h *HTTPGateway) requestPasswordReset(rw http.ResponseWriter, r *http.Request) {
+func (h *authAPI) requestPasswordReset(rw http.ResponseWriter, r *http.Request) {
 	body, ok := decodeRequestJSON[struct {
 		Email string `json:"email"`
 	}](rw, r)
@@ -92,7 +92,7 @@ func (h *HTTPGateway) requestPasswordReset(rw http.ResponseWriter, r *http.Reque
 // from a goroutine, so it must not touch the request. The token is
 // stored (PutUser) BEFORE the email is sent, so a recipient can never
 // receive a link whose token isn't yet valid.
-func (h *HTTPGateway) sendPasswordResetEmail(ctx context.Context, user auth.User) bool {
+func (h *authAPI) sendPasswordResetEmail(ctx context.Context, user auth.User) bool {
 	if !h.passwordResetActive() {
 		return false
 	}
@@ -140,7 +140,7 @@ func (h *HTTPGateway) sendPasswordResetEmail(ctx context.Context, user auth.User
 // password is replaced, the token is burned (single-use), and every
 // existing session for the account is revoked. Errors are uniform so a
 // probe can't tell a bad token from an unknown email.
-func (h *HTTPGateway) resetPassword(rw http.ResponseWriter, r *http.Request) {
+func (h *authAPI) resetPassword(rw http.ResponseWriter, r *http.Request) {
 	if h.Users == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "users not configured")
 		return

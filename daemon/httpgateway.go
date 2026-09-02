@@ -365,7 +365,7 @@ func (h *HTTPGateway) ServeListener(ctx context.Context, ln net.Listener) error 
 	mux := http.NewServeMux()
 	h.mountRoutes(mux)
 	srv := &http.Server{
-		Handler:           h.withCORSAndLogging(h.verifyCookieOrigin(h.limitRequestBody(jsonErrors(mux)))),
+		Handler:           h.withCORSAndLogging(h.verifyCookieOrigin(limitRequestBody(jsonErrors(mux)))),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		// No WriteTimeout — SSE responses are long-lived. Per-request
@@ -392,5 +392,5 @@ func (h *HTTPGateway) ServeListener(ctx context.Context, ln net.Listener) error 
 func ServeForTest(h *HTTPGateway, rw http.ResponseWriter, r *http.Request) {
 	mux := http.NewServeMux()
 	h.mountRoutes(mux)
-	h.withCORSAndLogging(h.verifyCookieOrigin(h.limitRequestBody(jsonErrors(mux)))).ServeHTTP(rw, r)
+	h.withCORSAndLogging(h.verifyCookieOrigin(limitRequestBody(jsonErrors(mux)))).ServeHTTP(rw, r)
 }
