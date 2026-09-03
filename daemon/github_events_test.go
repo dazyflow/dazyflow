@@ -30,13 +30,41 @@ func signGitHub(secret string, body []byte) string {
 type githubHarness struct {
 	*gatewayHarness
 	secret string
+	// fanouts receives one value per completed background fanout, so a test
+	// waits on the work rather than on the clock. Buffered and sent to
+	// non-blockingly: a test that never waits must not wedge the handler's
+	// goroutine. Mirrors stripeHarness.
+	fanouts chan struct{}
 }
 
 func newGitHubHarness(t *testing.T) *githubHarness {
 	t.Helper()
 	gh := newGatewayHarness(t)
-	gh.gw.GitHubEvents = NewGitHubEventsHandler(gh.svc, "test-webhook-secret")
-	return &githubHarness{gatewayHarness: gh, secret: "test-webhook-secret"}
+	h := &githubHarness{
+		gatewayHarness: gh,
+		secret:         "test-webhook-secret",
+		fanouts:        make(chan struct{}, 8),
+	}
+	events := NewGitHubEventsHandler(gh.svc, h.secret)
+	events.fanoutDone = func() {
+		select {
+		case h.fanouts <- struct{}{}:
+		default:
+		}
+	}
+	gh.gw.GitHubEvents = events
+	return h
+}
+
+// awaitFanout blocks until one dispatched fanout has finished. The timeout is
+// a hang guard, not a race — see stripeHarness.awaitFanout.
+func (h *githubHarness) awaitFanout(t *testing.T) {
+	t.Helper()
+	select {
+	case <-h.fanouts:
+	case <-time.After(30 * time.Second):
+		t.Fatal("the event's background fanout never finished")
+	}
 }
 
 func (h *githubHarness) post(t *testing.T, path, event string, body []byte) *httptest.ResponseRecorder {
@@ -126,32 +154,32 @@ func TestGitHubEvents_PushDispatchesToSubscribedGraphs(t *testing.T) {
 		t.Fatalf("code=%d body=%s", rw.Code, rw.Body.String())
 	}
 
-	// Wait briefly for the background fanout.
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		runs, err := h.store.ListGraphRuns(t.Context(), core.ListGraphRunsOpts{
-			Tenant: "t", Workspace: "ws", GraphID: "deploy-graph",
-		})
-		if err == nil && len(runs) > 0 {
-			// Verify the trigger node's outputs got the right values.
-			node, err := h.store.Get(t.Context(), NodeJobID(runs[0].ID, "trig"))
-			if err != nil {
-				t.Fatalf("get node record: %v", err)
-			}
-			if node.Status != core.JobStatusSucceeded {
-				t.Fatalf("trigger node status=%q want succeeded", node.Status)
-			}
-			if got, _ := node.Result.Output["ref"].Inline.(string); got != "refs/heads/main" {
-				t.Errorf("ref port = %q", got)
-			}
-			if got, _ := node.Result.Output["after"].Inline.(string); got != "def456" {
-				t.Errorf("after port = %q", got)
-			}
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
+	// The fanout runs in the background, so wait for it rather than for the
+	// clock, then assert once.
+	h.awaitFanout(t)
+	runs, err := h.store.ListGraphRuns(t.Context(), core.ListGraphRunsOpts{
+		Tenant: "t", Workspace: "ws", GraphID: "deploy-graph",
+	})
+	if err != nil {
+		t.Fatalf("list graph runs: %v", err)
 	}
-	t.Fatal("no graph-record materialized within 2s")
+	if len(runs) == 0 {
+		t.Fatal("the event dispatched no run")
+	}
+	// Verify the trigger node's outputs got the right values.
+	node, err := h.store.Get(t.Context(), NodeJobID(runs[0].ID, "trig"))
+	if err != nil {
+		t.Fatalf("get node record: %v", err)
+	}
+	if node.Status != core.JobStatusSucceeded {
+		t.Fatalf("trigger node status=%q want succeeded", node.Status)
+	}
+	if got, _ := node.Result.Output["ref"].Inline.(string); got != "refs/heads/main" {
+		t.Errorf("ref port = %q", got)
+	}
+	if got, _ := node.Result.Output["after"].Inline.(string); got != "def456" {
+		t.Errorf("after port = %q", got)
+	}
 }
 
 func TestGitHubEvents_PullRequestOpenedDispatches(t *testing.T) {
@@ -182,33 +210,37 @@ func TestGitHubEvents_PullRequestOpenedDispatches(t *testing.T) {
 		t.Fatalf("code=%d body=%s", rw.Code, rw.Body.String())
 	}
 
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		runs, err := h.store.ListGraphRuns(t.Context(), core.ListGraphRunsOpts{
-			Tenant: "t", Workspace: "ws", GraphID: "triage-graph",
-		})
-		if err == nil && len(runs) > 0 {
-			node, _ := h.store.Get(t.Context(), NodeJobID(runs[0].ID, "trig"))
-			if node.Status != core.JobStatusSucceeded {
-				t.Fatalf("status=%q", node.Status)
-			}
-			if got, _ := node.Result.Output["number"].Inline.(string); got != "42" {
-				t.Errorf("number = %q", got)
-			}
-			if got, _ := node.Result.Output["title"].Inline.(string); got != "Add fizzbuzz" {
-				t.Errorf("title = %q", got)
-			}
-			if got, _ := node.Result.Output["author"].Inline.(string); got != "alice" {
-				t.Errorf("author = %q", got)
-			}
-			if got, _ := node.Result.Output["head_ref"].Inline.(string); got != "feature/fizzbuzz" {
-				t.Errorf("head_ref = %q", got)
-			}
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
+	// The fanout runs in the background, so wait for it rather than for the
+	// clock, then assert once.
+	h.awaitFanout(t)
+	runs, err := h.store.ListGraphRuns(t.Context(), core.ListGraphRunsOpts{
+		Tenant: "t", Workspace: "ws", GraphID: "triage-graph",
+	})
+	if err != nil {
+		t.Fatalf("list graph runs: %v", err)
 	}
-	t.Fatal("no graph-record materialized within 2s")
+	if len(runs) == 0 {
+		t.Fatal("the event dispatched no run")
+	}
+	node, err := h.store.Get(t.Context(), NodeJobID(runs[0].ID, "trig"))
+	if err != nil {
+		t.Fatalf("get node record: %v", err)
+	}
+	if node.Status != core.JobStatusSucceeded {
+		t.Fatalf("status=%q", node.Status)
+	}
+	if got, _ := node.Result.Output["number"].Inline.(string); got != "42" {
+		t.Errorf("number = %q", got)
+	}
+	if got, _ := node.Result.Output["title"].Inline.(string); got != "Add fizzbuzz" {
+		t.Errorf("title = %q", got)
+	}
+	if got, _ := node.Result.Output["author"].Inline.(string); got != "alice" {
+		t.Errorf("author = %q", got)
+	}
+	if got, _ := node.Result.Output["head_ref"].Inline.(string); got != "feature/fizzbuzz" {
+		t.Errorf("head_ref = %q", got)
+	}
 }
 
 func TestGitHubEvents_PullRequestNonOpenedAckedNotDispatched(t *testing.T) {

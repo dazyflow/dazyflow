@@ -64,6 +64,19 @@ type StripeEventsHandler struct {
 	// now is injectable so tests can sign within the timestamp
 	// tolerance window deterministically.
 	now func() time.Time
+	// fanoutDone, when set, is called once a dispatched fanout has finished.
+	//
+	// The endpoint answers Stripe BEFORE the fanout completes, on purpose:
+	// Stripe retries a delivery it considers slow, so the 200 cannot wait on
+	// however many flows the event fans out to. That leaves a test with
+	// nothing to synchronise on, and three of them raced the clock with a
+	// 2-second sleep-poll budget — which is a coin flip under -race on a
+	// loaded CI runner, not a test.
+	//
+	// Injected the same way `now` is, and nil in production, so the
+	// behaviour under test is the real asynchronous path rather than a
+	// synchronous stand-in for it.
+	fanoutDone func()
 }
 
 // NewStripeEventsHandler wires a handler against the daemon Service.
@@ -196,7 +209,7 @@ func paymentPorts(ev stripeTriggerEvent, body []byte) (stripePaymentIntent, map[
 func (h *StripeEventsHandler) dispatchPayment(tenant string, ev stripeTriggerEvent, body []byte, rw http.ResponseWriter) {
 	_, ports := paymentPorts(ev, body)
 	seed := core.Result{Status: core.StatusOK, Output: ports}
-	go h.fanoutSeed(context.Background(), tenant, stripeOnPaymentModuleID, seed)
+	go h.runFanout(context.Background(), tenant, stripeOnPaymentModuleID, seed)
 
 	rw.WriteHeader(http.StatusOK)
 	_, _ = rw.Write([]byte("ok"))
@@ -210,7 +223,7 @@ func (h *StripeEventsHandler) dispatchPaymentFailed(tenant string, ev stripeTrig
 	}
 	ports["failure_message"] = core.Ref{MIME: "text/plain", Inline: msg}
 	seed := core.Result{Status: core.StatusOK, Output: ports}
-	go h.fanoutSeed(context.Background(), tenant, stripeOnPaymentFailedModuleID, seed)
+	go h.runFanout(context.Background(), tenant, stripeOnPaymentFailedModuleID, seed)
 
 	rw.WriteHeader(http.StatusOK)
 	_, _ = rw.Write([]byte("ok"))
@@ -264,7 +277,7 @@ func (h *StripeEventsHandler) dispatchSubscriptionCanceled(tenant string, ev str
 			"event":           {MIME: "application/json", Inline: raw},
 		},
 	}
-	go h.fanoutSeed(context.Background(), tenant, stripeOnSubscriptionCanceledModuleID, seed)
+	go h.runFanout(context.Background(), tenant, stripeOnSubscriptionCanceledModuleID, seed)
 
 	rw.WriteHeader(http.StatusOK)
 	_, _ = rw.Write([]byte("ok"))
@@ -293,6 +306,17 @@ func formatStripeAmount(minor int64, currency string) string {
 // fanoutSeed walks every workspace under the tenant, loads each
 // graph, and submits a run for any that declares a node with the
 // matching trigger module. Mirrors github_events.fanoutSeed.
+// runFanout is fanoutSeed plus the completion signal. Every dispatch goes
+// through it so no call site can forget to fire the hook.
+func (h *StripeEventsHandler) runFanout(ctx context.Context, tenant, moduleID string, seed core.Result) {
+	defer func() {
+		if h.fanoutDone != nil {
+			h.fanoutDone()
+		}
+	}()
+	h.fanoutSeed(ctx, tenant, moduleID, seed)
+}
+
 func (h *StripeEventsHandler) fanoutSeed(ctx context.Context, tenant, moduleID string, seed core.Result) {
 	fanoutSeed(ctx, h.svc, h.logger, "dazyflow-stripe-events", tenant, moduleID, seed,
 		func(n core.Node) bool { return n.Module == moduleID })

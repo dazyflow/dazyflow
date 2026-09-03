@@ -63,6 +63,12 @@ type GitHubEventsHandler struct {
 	svc           *Service
 	webhookSecret string
 	logger        *log.Logger
+	// fanoutDone, when set, is called once a dispatched fanout has finished.
+	// Nil in production. Same contract as the Stripe handler's: the endpoint
+	// answers GitHub before the fanout completes, so a test has nothing to
+	// synchronise on and otherwise has to race the clock. See
+	// StripeEventsHandler.fanoutDone for why that is a coin flip under -race.
+	fanoutDone func()
 }
 
 // NewGitHubEventsHandler wires a handler against the daemon Service.
@@ -197,7 +203,7 @@ func (h *GitHubEventsHandler) dispatchPush(tenant string, body []byte, rw http.R
 			"event":      {MIME: "application/json", Inline: raw},
 		},
 	}
-	go h.fanoutSeed(context.Background(), tenant, githubOnPushModuleID, seed)
+	go h.runFanout(context.Background(), tenant, githubOnPushModuleID, seed)
 
 	rw.WriteHeader(http.StatusOK)
 	_, _ = rw.Write([]byte("ok"))
@@ -266,7 +272,7 @@ func (h *GitHubEventsHandler) dispatchPullRequest(tenant string, body []byte, rw
 			"event":      {MIME: "application/json", Inline: raw},
 		},
 	}
-	go h.fanoutSeed(context.Background(), tenant, githubOnNewPRModuleID, seed)
+	go h.runFanout(context.Background(), tenant, githubOnNewPRModuleID, seed)
 
 	rw.WriteHeader(http.StatusOK)
 	_, _ = rw.Write([]byte("ok"))
@@ -275,6 +281,17 @@ func (h *GitHubEventsHandler) dispatchPullRequest(tenant string, body []byte, rw
 // fanoutSeed walks every workspace under the tenant, loads each
 // graph, and submits a run for any that declares a node with the
 // matching trigger module. Mirrors slack_events.fanoutSeed.
+// runFanout is fanoutSeed plus the completion signal. Every dispatch goes
+// through it so no call site can forget to fire the hook.
+func (h *GitHubEventsHandler) runFanout(ctx context.Context, tenant, moduleID string, seed core.Result) {
+	defer func() {
+		if h.fanoutDone != nil {
+			h.fanoutDone()
+		}
+	}()
+	h.fanoutSeed(ctx, tenant, moduleID, seed)
+}
+
 func (h *GitHubEventsHandler) fanoutSeed(ctx context.Context, tenant, moduleID string, seed core.Result) {
 	fanoutSeed(ctx, h.svc, h.logger, "dazyflow-github-events", tenant, moduleID, seed,
 		func(n core.Node) bool { return n.Module == moduleID })

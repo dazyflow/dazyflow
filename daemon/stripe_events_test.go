@@ -24,6 +24,11 @@ import (
 type stripeHarness struct {
 	*gatewayHarness
 	secret string
+	// fanouts receives one value per completed background fanout, so a test
+	// waits on the work rather than on the clock. Buffered and sent to
+	// non-blockingly: a test that never waits must not wedge the handler's
+	// goroutine.
+	fanouts chan struct{}
 }
 
 // newStripeHarness wires the events handler plus an in-memory encrypted
@@ -41,8 +46,31 @@ func newStripeHarness(t *testing.T) *stripeHarness {
 		t.Fatalf("put secret: %v", err)
 	}
 	gh.svc.EncryptedSecrets = es
-	gh.gw.StripeEvents = NewStripeEventsHandler(gh.svc)
-	return &stripeHarness{gatewayHarness: gh, secret: secret}
+	h := &stripeHarness{gatewayHarness: gh, secret: secret, fanouts: make(chan struct{}, 8)}
+	events := NewStripeEventsHandler(gh.svc)
+	events.fanoutDone = func() {
+		select {
+		case h.fanouts <- struct{}{}:
+		default:
+		}
+	}
+	gh.gw.StripeEvents = events
+	return h
+}
+
+// awaitFanout blocks until one dispatched fanout has finished.
+//
+// The timeout is a hang guard, not a race: the wait ends the moment the work
+// completes, so a slow or contended runner costs latency here rather than a
+// failure. That is the whole difference from the sleep-poll budget this
+// replaced.
+func (h *stripeHarness) awaitFanout(t *testing.T) {
+	t.Helper()
+	select {
+	case <-h.fanouts:
+	case <-time.After(30 * time.Second):
+		t.Fatal("the event's background fanout never finished")
+	}
 }
 
 func (h *stripeHarness) post(t *testing.T, path string, body []byte) *httptest.ResponseRecorder {
@@ -153,40 +181,40 @@ func TestStripeEvents_PaymentDispatchesToSubscribedGraphs(t *testing.T) {
 		t.Fatalf("code=%d body=%s", rw.Code, rw.Body.String())
 	}
 
-	// Wait briefly for the background fanout.
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		runs, err := h.store.ListGraphRuns(t.Context(), core.ListGraphRunsOpts{
-			Tenant: "t", Workspace: "ws", GraphID: "payment-alert",
-		})
-		if err == nil && len(runs) > 0 {
-			node, err := h.store.Get(t.Context(), NodeJobID(runs[0].ID, "trig"))
-			if err != nil {
-				t.Fatalf("get node record: %v", err)
-			}
-			if node.Status != core.JobStatusSucceeded {
-				t.Fatalf("trigger node status=%q want succeeded", node.Status)
-			}
-			if got, _ := node.Result.Output["amount_display"].Inline.(string); got != "49.99 USD" {
-				t.Errorf("amount_display port = %q", got)
-			}
-			if got, _ := node.Result.Output["amount"].Inline.(string); got != "4999" {
-				t.Errorf("amount port = %q", got)
-			}
-			if got, _ := node.Result.Output["currency"].Inline.(string); got != "USD" {
-				t.Errorf("currency port = %q", got)
-			}
-			if got, _ := node.Result.Output["customer_email"].Inline.(string); got != "buyer@example.com" {
-				t.Errorf("customer_email port = %q", got)
-			}
-			if got, _ := node.Result.Output["payment_id"].Inline.(string); got != "pi_123" {
-				t.Errorf("payment_id port = %q", got)
-			}
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
+	// The fanout runs in the background, so wait for it rather than for the
+	// clock, then assert once.
+	h.awaitFanout(t)
+	runs, err := h.store.ListGraphRuns(t.Context(), core.ListGraphRunsOpts{
+		Tenant: "t", Workspace: "ws", GraphID: "payment-alert",
+	})
+	if err != nil {
+		t.Fatalf("list graph runs: %v", err)
 	}
-	t.Fatal("no graph-record materialized within 2s")
+	if len(runs) == 0 {
+		t.Fatal("the event dispatched no run")
+	}
+	node, err := h.store.Get(t.Context(), NodeJobID(runs[0].ID, "trig"))
+	if err != nil {
+		t.Fatalf("get node record: %v", err)
+	}
+	if node.Status != core.JobStatusSucceeded {
+		t.Fatalf("trigger node status=%q want succeeded", node.Status)
+	}
+	if got, _ := node.Result.Output["amount_display"].Inline.(string); got != "49.99 USD" {
+		t.Errorf("amount_display port = %q", got)
+	}
+	if got, _ := node.Result.Output["amount"].Inline.(string); got != "4999" {
+		t.Errorf("amount port = %q", got)
+	}
+	if got, _ := node.Result.Output["currency"].Inline.(string); got != "USD" {
+		t.Errorf("currency port = %q", got)
+	}
+	if got, _ := node.Result.Output["customer_email"].Inline.(string); got != "buyer@example.com" {
+		t.Errorf("customer_email port = %q", got)
+	}
+	if got, _ := node.Result.Output["payment_id"].Inline.(string); got != "pi_123" {
+		t.Errorf("payment_id port = %q", got)
+	}
 }
 
 func TestStripeEvents_PaymentFailedDispatches(t *testing.T) {
@@ -219,32 +247,36 @@ func TestStripeEvents_PaymentFailedDispatches(t *testing.T) {
 		t.Fatalf("code=%d body=%s", rw.Code, rw.Body.String())
 	}
 
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		runs, err := h.store.ListGraphRuns(t.Context(), core.ListGraphRunsOpts{
-			Tenant: "t", Workspace: "ws", GraphID: "decline-alert",
-		})
-		if err == nil && len(runs) > 0 {
-			node, _ := h.store.Get(t.Context(), NodeJobID(runs[0].ID, "trig"))
-			if node.Status != core.JobStatusSucceeded {
-				t.Fatalf("status=%q", node.Status)
-			}
-			if got, _ := node.Result.Output["failure_message"].Inline.(string); got != "Your card was declined." {
-				t.Errorf("failure_message = %q", got)
-			}
-			// A failed intent has amount_received=0 — amount falls back
-			// to the requested amount.
-			if got, _ := node.Result.Output["amount_display"].Inline.(string); got != "25.00 EUR" {
-				t.Errorf("amount_display = %q", got)
-			}
-			if got, _ := node.Result.Output["payment_id"].Inline.(string); got != "pi_fail" {
-				t.Errorf("payment_id = %q", got)
-			}
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
+	// The fanout runs in the background, so wait for it rather than for the
+	// clock, then assert once.
+	h.awaitFanout(t)
+	runs, err := h.store.ListGraphRuns(t.Context(), core.ListGraphRunsOpts{
+		Tenant: "t", Workspace: "ws", GraphID: "decline-alert",
+	})
+	if err != nil {
+		t.Fatalf("list graph runs: %v", err)
 	}
-	t.Fatal("no graph-record materialized within 2s")
+	if len(runs) == 0 {
+		t.Fatal("the event dispatched no run")
+	}
+	node, err := h.store.Get(t.Context(), NodeJobID(runs[0].ID, "trig"))
+	if err != nil {
+		t.Fatalf("get node record: %v", err)
+	}
+	if node.Status != core.JobStatusSucceeded {
+		t.Fatalf("status=%q", node.Status)
+	}
+	if got, _ := node.Result.Output["failure_message"].Inline.(string); got != "Your card was declined." {
+		t.Errorf("failure_message = %q", got)
+	}
+	// A failed intent has amount_received=0 — amount falls back
+	// to the requested amount.
+	if got, _ := node.Result.Output["amount_display"].Inline.(string); got != "25.00 EUR" {
+		t.Errorf("amount_display = %q", got)
+	}
+	if got, _ := node.Result.Output["payment_id"].Inline.(string); got != "pi_fail" {
+		t.Errorf("payment_id = %q", got)
+	}
 }
 
 func TestStripeEvents_SubscriptionCanceledDispatches(t *testing.T) {
@@ -278,33 +310,37 @@ func TestStripeEvents_SubscriptionCanceledDispatches(t *testing.T) {
 		t.Fatalf("code=%d body=%s", rw.Code, rw.Body.String())
 	}
 
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		runs, err := h.store.ListGraphRuns(t.Context(), core.ListGraphRunsOpts{
-			Tenant: "t", Workspace: "ws", GraphID: "churn-alert",
-		})
-		if err == nil && len(runs) > 0 {
-			node, _ := h.store.Get(t.Context(), NodeJobID(runs[0].ID, "trig"))
-			if node.Status != core.JobStatusSucceeded {
-				t.Fatalf("status=%q", node.Status)
-			}
-			if got, _ := node.Result.Output["subscription_id"].Inline.(string); got != "sub_9" {
-				t.Errorf("subscription_id = %q", got)
-			}
-			if got, _ := node.Result.Output["customer"].Inline.(string); got != "cus_9" {
-				t.Errorf("customer = %q", got)
-			}
-			if got, _ := node.Result.Output["plan"].Inline.(string); got != "Pro monthly" {
-				t.Errorf("plan = %q", got)
-			}
-			if got, _ := node.Result.Output["ended_at"].Inline.(string); got != "2026-01-01T00:00:00Z" {
-				t.Errorf("ended_at = %q", got)
-			}
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
+	// The fanout runs in the background, so wait for it rather than for the
+	// clock, then assert once.
+	h.awaitFanout(t)
+	runs, err := h.store.ListGraphRuns(t.Context(), core.ListGraphRunsOpts{
+		Tenant: "t", Workspace: "ws", GraphID: "churn-alert",
+	})
+	if err != nil {
+		t.Fatalf("list graph runs: %v", err)
 	}
-	t.Fatal("no graph-record materialized within 2s")
+	if len(runs) == 0 {
+		t.Fatal("the event dispatched no run")
+	}
+	node, err := h.store.Get(t.Context(), NodeJobID(runs[0].ID, "trig"))
+	if err != nil {
+		t.Fatalf("get node record: %v", err)
+	}
+	if node.Status != core.JobStatusSucceeded {
+		t.Fatalf("status=%q", node.Status)
+	}
+	if got, _ := node.Result.Output["subscription_id"].Inline.(string); got != "sub_9" {
+		t.Errorf("subscription_id = %q", got)
+	}
+	if got, _ := node.Result.Output["customer"].Inline.(string); got != "cus_9" {
+		t.Errorf("customer = %q", got)
+	}
+	if got, _ := node.Result.Output["plan"].Inline.(string); got != "Pro monthly" {
+		t.Errorf("plan = %q", got)
+	}
+	if got, _ := node.Result.Output["ended_at"].Inline.(string); got != "2026-01-01T00:00:00Z" {
+		t.Errorf("ended_at = %q", got)
+	}
 }
 
 func TestStripeOnPaymentFailed_StandaloneRunErrors(t *testing.T) {

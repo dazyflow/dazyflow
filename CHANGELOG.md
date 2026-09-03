@@ -10,6 +10,23 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Five webhook tests raced the clock and went red on CI.** The
+  events endpoint answers Stripe *before* fanning the event out to the flows
+  that subscribe to it — deliberately, because Stripe retries a delivery it
+  considers slow — so the tests had nothing to synchronise on and polled the
+  job store for two seconds before giving up. Two seconds of wall clock is a
+  coin flip under `-race` on a loaded runner, not an assertion. The handler
+  now exposes a completion signal the way it already exposes an injectable
+  clock, and the tests wait on the work instead: they finish in ~0.03s rather
+  than up to 2s, and the remaining timeout is a hang guard, so a slow runner
+  costs latency rather than a failure. The asynchronous path is still what is
+  under test — nothing was made synchronous to make it pass. The GitHub
+  events handler had the identical two-second poll in its own two dispatch
+  tests, so it carries the same signal; both handlers now read the same way.
+
+
 ## [0.32.1] - 2026-09-03
 
 ### Added
