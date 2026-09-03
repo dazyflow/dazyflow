@@ -4,7 +4,8 @@
     "ports": [
       "Yes/No",
       "Yes/No values"
-    ]
+    ],
+    "label": "A AND B"
   },
   "await_approval": {
     "description": "Pause the flow until someone approves. Fill in 'Email these people' and Dazyflow mails them the approval link when the flow gets here, and tells them the outcome once it is decided; leave it blank and no mail is sent. To notify some other way — or instead — put this step BEFORE a notify step — it hands you an `Approval link` (the `pending_url` output) to put in that message (e.g. ntfy's 'Link to open', or an email body). Anyone who has the link can approve or reject — there's no per-person targeting, so send it only to the people who should decide; the flow records who clicked on the `Approver` output. The person taps the link to approve or reject; only then does the rest of the flow continue. On resume, the input `Value` comes out the `Approved` or `Rejected` port matching the decision (connect each to its follow-up — no separate Branch needed), alongside the `Approver` who decided and their `Comment`.",
@@ -15,6 +16,15 @@
       "Comment",
       "Rejected",
       "Value"
+    ],
+    "label": "Wait for approval",
+    "titles": [
+      "Email these people",
+      "Question to ask"
+    ],
+    "help": [
+      "Comma-separated email addresses to notify when the flow reaches this step, and again once someone decides. Leave blank and no email is sent — deliver the Approval link yourself, or let people work the Approvals inbox. The email carries the same Approval link the pending_url output does — anyone who opens it can decide, so list only the people who should.",
+      "The question shown on the approval page — e.g. 'A reply is ready to send. Approve?'. Note: anyone who opens the Approval link can approve or reject; the link is the only key, so share it only with the people who should decide. The flow records who clicked on the Approver output."
     ]
   },
   "base64": {
@@ -23,6 +33,22 @@
       "Pass-through",
       "Result",
       "Value"
+    ],
+    "label": "Base64",
+    "subtitle": "Encode or decode Base64",
+    "titles": [
+      "Alphabet",
+      "Mode"
+    ],
+    "help": [
+      "encode text → Base64, or decode Base64 → text.",
+      "standard Base64, or the URL-safe alphabet (- and _ instead of + and /)."
+    ],
+    "enum_names": [
+      "Decode",
+      "Encode",
+      "Standard",
+      "URL-safe"
     ]
   },
   "branch": {
@@ -32,7 +58,8 @@
       "Value",
       "Yes",
       "Yes/No value"
-    ]
+    ],
+    "label": "Branch"
   },
   "build_csv": {
     "description": "Turn rows into CSV text — the inverse of Read CSV. Connect in the rows from a DB query, a Sheets/Excel read, or any transform, and get a single CSV string you can attach to an email, write to a file, or POST to an API. Columns follow the rows' own column order; set 'columns' to pick or reorder a subset. 'delimiter' switches the separator (\"\\t\"/\"tab\" for TSV, \";\" for European CSVs), and 'header' toggles the header line.",
@@ -40,6 +67,18 @@
       "CSV",
       "Pass-through",
       "Rows"
+    ],
+    "label": "Write CSV",
+    "subtitle": "Rows into CSV text",
+    "titles": [
+      "Columns",
+      "Delimiter",
+      "Include header row"
+    ],
+    "help": [
+      "Field separator. Use \"\\t\" or \"tab\" for TSV, \";\" for European CSVs. A single character.",
+      "Optional explicit column order/subset. When empty, the rows' own column order is used.",
+      "When true the first line lists the column names."
     ]
   },
   "build_json": {
@@ -48,6 +87,18 @@
       "JSON",
       "Pass-through",
       "Rows"
+    ],
+    "label": "Write JSON",
+    "subtitle": "Rows into JSON text",
+    "titles": [
+      "Columns",
+      "Pretty-print",
+      "Single object"
+    ],
+    "help": [
+      "Lay the JSON out over several lines. Easier to read in a file or a log; leave off for an API body.",
+      "Optional explicit field order/subset. When empty, the rows' own column order is used.",
+      "When on and there is exactly one row, emit that object on its own instead of an array holding it. What most APIs that create one thing expect."
     ]
   },
   "build_xml": {
@@ -56,6 +107,22 @@
       "Pass-through",
       "Rows",
       "XML"
+    ],
+    "label": "Write XML",
+    "subtitle": "Rows into XML text",
+    "titles": [
+      "Columns",
+      "Include \u003c?xml …?\u003e line",
+      "Pretty-print",
+      "Root element",
+      "Row element"
+    ],
+    "help": [
+      "Lay the XML out over several lines. Easier to read in a file; leave off to keep a payload small.",
+      "Optional explicit field order/subset. When empty, the rows' own column order is used.",
+      "The element each row becomes.",
+      "The element everything is wrapped in.",
+      "Write the XML declaration at the top. Most systems that read XML files expect it; some APIs reject it inside a request body."
     ]
   },
   "build_yaml": {
@@ -64,6 +131,20 @@
       "Pass-through",
       "Rows",
       "YAML"
+    ],
+    "label": "Write YAML",
+    "subtitle": "Rows into YAML text",
+    "titles": [
+      "Columns",
+      "Indent",
+      "Separate documents",
+      "Single mapping"
+    ],
+    "help": [
+      "How many spaces each level is indented by. 2 is the convention almost everything uses.",
+      "Optional explicit field order/subset. When empty, the rows' own column order is used.",
+      "When on and there is exactly one row, emit that mapping on its own instead of a list holding it. What a config file usually wants.",
+      "Write each row as its own document, separated by \"---\". How a bundle of Kubernetes manifests is shaped. Ignored when 'Single mapping' applies."
     ]
   },
   "builtin_store_append": {
@@ -72,6 +153,21 @@
       "Pass-through",
       "Rows",
       "Rows saved"
+    ],
+    "label": "Collections",
+    "subtitle": "Save rows",
+    "integration": "Collections",
+    "titles": [
+      "Collection",
+      "Column types",
+      "Time column",
+      "Unique by"
+    ],
+    "help": [
+      "Every saved row is stamped with the time it was saved, in a column called saved_at, so you can sort newest-first. Rename it here, or set it to empty to turn the stamp off. If your own rows already include a column of that name, yours is kept.",
+      "Name of the collection to save into, e.g. leads or signups. Pick one you already have, or type a new name and it's created the first time rows arrive.",
+      "Optional. Column(s) that identify a row, e.g. date. When set, re-saving a row with the same key updates it in place instead of adding a duplicate, so re-running the flow is idempotent. Leave empty to always append.",
+      "Optional: force a column's type (e.g. {\"age\":\"INTEGER\"}). Everything defaults to text, which is fine for most things."
     ]
   },
   "builtin_store_find": {
@@ -81,6 +177,27 @@
       "Columns",
       "Pass-through",
       "Rows"
+    ],
+    "label": "Collections",
+    "subtitle": "Find rows",
+    "integration": "Collections",
+    "titles": [
+      "Collection",
+      "Direction",
+      "Max rows",
+      "Sort by",
+      "Where"
+    ],
+    "help": [
+      "Column to sort by. Leave blank to keep the order rows were saved in.",
+      "Keep only rows that match these conditions. Leave empty to return every row.",
+      "Name of the collection to read from, e.g. leads or invoices. Overridden by a value connected into the Collection input.",
+      "Optional cap on how many rows to return (applied after filtering).",
+      "Sort direction. Only applies when a sort column is set."
+    ],
+    "enum_names": [
+      "Ascending (A→Z, low→high)",
+      "Descending (Z→A, high→low)"
     ]
   },
   "builtin_store_query": {
@@ -89,6 +206,19 @@
       "Columns",
       "Pass-through",
       "Rows"
+    ],
+    "label": "Collections",
+    "subtitle": "Query with SQL",
+    "integration": "Collections",
+    "titles": [
+      "Query values",
+      "Row limit",
+      "SQL"
+    ],
+    "help": [
+      "A SELECT to run against your Collections.",
+      "Optional cap on the number of rows returned.",
+      "Values for any ? placeholders in the SQL, in order."
     ]
   },
   "caldav_create_event": {
@@ -103,6 +233,44 @@
       "Pass-through",
       "Start",
       "Summary"
+    ],
+    "label": "Calendar",
+    "subtitle": "Create event",
+    "integration": "Calendar",
+    "titles": [
+      "All-day event",
+      "Attendees",
+      "Calendar",
+      "Description",
+      "End",
+      "Location",
+      "Start",
+      "Summary",
+      "Timezone"
+    ],
+    "help": [
+      "Comma-separated email addresses to invite. Whether they receive an invitation is up to the calendar server. Overridden by the 'Attendees' input.",
+      "Hard deadline for the request, in milliseconds.",
+      "IANA timezone relative times are resolved in, e.g. \"Europe/Stockholm\". Empty = UTC.",
+      "Longer notes on the event. Overridden by the 'Description' input.",
+      "Make it an all-day entry rather than a timed one — a holiday, a deadline, a delivery date. The time of day in Start and End is ignored; End is the day AFTER the last day, which is how calendars represent a span.",
+      "The event's title, as it appears in the calendar. Overridden by the 'Summary' input.",
+      "When it ends. Same forms as Start. Leave blank for an hour after the start.",
+      "When it starts. Accepts a relative value — now, tomorrow+9h, +2h — or an absolute timestamp. Overridden by the 'Start' input.",
+      "Where it is — a room, an address, a call link. Overridden by the 'Location' input.",
+      "Which calendar to write to when the account has several. Leave blank to use the one set on the Calendar page."
+    ],
+    "connection": [
+      "Calendar",
+      "Calendar server",
+      "Password",
+      "The CalDAV address your provider publishes. Nextcloud looks like https://cloud.example.com/remote.php/dav/.",
+      "Username",
+      "Which calendar to use when the account has several. Leave blank if there's only one; Test connection will list them if there are more.",
+      "Work",
+      "Your calendar password — or, on a provider with two-factor sign-in (Fastmail, iCloud), an app password generated for this.",
+      "https://caldav.fastmail.com/",
+      "usually your email address"
     ]
   },
   "caldav_delete_event": {
@@ -111,6 +279,30 @@
       "Details",
       "Event",
       "Pass-through"
+    ],
+    "label": "Calendar",
+    "subtitle": "Cancel event",
+    "integration": "Calendar",
+    "titles": [
+      "Calendar",
+      "Event"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "The event's id, as emitted by List events or Create event. Overridden by the 'Event' input when connected.",
+      "Which calendar the event is on when the account has several. Leave blank to use the one set on the Calendar page."
+    ],
+    "connection": [
+      "Calendar",
+      "Calendar server",
+      "Password",
+      "The CalDAV address your provider publishes. Nextcloud looks like https://cloud.example.com/remote.php/dav/.",
+      "Username",
+      "Which calendar to use when the account has several. Leave blank if there's only one; Test connection will list them if there are more.",
+      "Work",
+      "Your calendar password — or, on a provider with two-factor sign-in (Fastmail, iCloud), an app password generated for this.",
+      "https://caldav.fastmail.com/",
+      "usually your email address"
     ]
   },
   "caldav_list_events": {
@@ -121,6 +313,36 @@
       "Events",
       "Pass-through",
       "Start of window"
+    ],
+    "label": "Calendar",
+    "subtitle": "List events",
+    "integration": "Calendar",
+    "titles": [
+      "Calendar",
+      "End of window",
+      "Max events",
+      "Start of window",
+      "Timezone"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "How many events to bring back at most, earliest first.",
+      "IANA timezone the day boundaries of \"today\"/\"tomorrow\" are taken in, e.g. \"Europe/Stockholm\". Empty = UTC. Ignored for absolute timestamps.",
+      "Only events ending at or after this time. Accepts a relative value — now, today, tomorrow, yesterday, +3d, -2h30m, tomorrow+9h — or an absolute timestamp. Leave blank for no lower bound.",
+      "Only events starting before this time. Same forms as the start of the window. Leave blank for no upper bound.",
+      "Which calendar to read when the account has several. Leave blank to use the one set on the Calendar page."
+    ],
+    "connection": [
+      "Calendar",
+      "Calendar server",
+      "Password",
+      "The CalDAV address your provider publishes. Nextcloud looks like https://cloud.example.com/remote.php/dav/.",
+      "Username",
+      "Which calendar to use when the account has several. Leave blank if there's only one; Test connection will list them if there are more.",
+      "Work",
+      "Your calendar password — or, on a provider with two-factor sign-in (Fastmail, iCloud), an app password generated for this.",
+      "https://caldav.fastmail.com/",
+      "usually your email address"
     ]
   },
   "caldav_update_event": {
@@ -134,6 +356,42 @@
       "Pass-through",
       "Start",
       "Summary"
+    ],
+    "label": "Calendar",
+    "subtitle": "Move or amend event",
+    "integration": "Calendar",
+    "titles": [
+      "Calendar",
+      "Description",
+      "End",
+      "Event",
+      "Location",
+      "Start",
+      "Summary",
+      "Timezone"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "IANA timezone relative times are resolved in. Empty = UTC.",
+      "New end. Leave blank to keep the current one — or, if you moved the start and left this blank, the event keeps its original length.",
+      "New location. Leave blank to keep the current one.",
+      "New notes. Leave blank to keep the current ones.",
+      "New start. Accepts the same relative forms as the other calendar steps. Leave blank to keep the current one.",
+      "New title. Leave blank to keep the current one.",
+      "The event's id, as emitted by List events or Create event. Overridden by the 'Event' input when connected.",
+      "Which calendar the event is on when the account has several. Leave blank to use the one set on the Calendar page."
+    ],
+    "connection": [
+      "Calendar",
+      "Calendar server",
+      "Password",
+      "The CalDAV address your provider publishes. Nextcloud looks like https://cloud.example.com/remote.php/dav/.",
+      "Username",
+      "Which calendar to use when the account has several. Leave blank if there's only one; Test connection will list them if there are more.",
+      "Work",
+      "Your calendar password — or, on a provider with two-factor sign-in (Fastmail, iCloud), an app password generated for this.",
+      "https://caldav.fastmail.com/",
+      "usually your email address"
     ]
   },
   "chatgpt": {
@@ -143,6 +401,34 @@
       "Pass-through",
       "Prompt",
       "Response"
+    ],
+    "label": "ChatGPT",
+    "subtitle": "Ask",
+    "integration": "ChatGPT",
+    "titles": [
+      "Max tokens",
+      "Model",
+      "Prompt",
+      "System prompt",
+      "Temperature"
+    ],
+    "help": [
+      "Cap on how long the reply can be. Higher allows longer answers.",
+      "Creativity dial (0–1): lower is more focused and repeatable, higher more varied.",
+      "Full conversation history ({role, content}); overrides the prompt.",
+      "Hard deadline for the AI request, in milliseconds.",
+      "Injected from the ChatGPT connection — leave unset.",
+      "Optional instruction that frames the reply.",
+      "Override the API host.",
+      "Single user message (used when no Prompt input and no messages)."
+    ],
+    "enum_names": [
+      "GPT-4o",
+      "GPT-4o mini"
+    ],
+    "connection": [
+      "API key",
+      "sk-…"
     ]
   },
   "claude": {
@@ -152,6 +438,35 @@
       "Pass-through",
       "Prompt",
       "Response"
+    ],
+    "label": "Claude",
+    "subtitle": "Ask",
+    "integration": "Claude",
+    "titles": [
+      "Max tokens",
+      "Model",
+      "Prompt",
+      "System prompt",
+      "Temperature"
+    ],
+    "help": [
+      "Cap on how long the reply can be. Higher allows longer answers.",
+      "Creativity dial (0–1): lower is more focused and repeatable, higher more varied.",
+      "Full conversation history ({role, content}); overrides the prompt.",
+      "Hard deadline for the AI request, in milliseconds.",
+      "Injected from the Claude connection — leave unset.",
+      "Optional instruction that frames the reply.",
+      "Override the API host.",
+      "Single user message (used when no Prompt input and no messages)."
+    ],
+    "enum_names": [
+      "Claude Haiku 4.5",
+      "Claude Opus 4.8",
+      "Claude Sonnet 4.6"
+    ],
+    "connection": [
+      "API key",
+      "sk-ant-…"
     ]
   },
   "claude_classify": {
@@ -162,6 +477,34 @@
       "Files",
       "Pass-through",
       "Text"
+    ],
+    "label": "Claude",
+    "subtitle": "Classify",
+    "integration": "Claude",
+    "titles": [
+      "Allow \"none of these\"",
+      "Categories",
+      "Category",
+      "Model",
+      "Text to classify",
+      "When to use it"
+    ],
+    "help": [
+      "Hard deadline for the AI request, in milliseconds.",
+      "Injected from the Claude connection — leave unset.",
+      "Let the AI answer 'none' when no category fits, instead of forcing a pick.",
+      "Or connect it into the Text input.",
+      "Override the API host.",
+      "The buckets to sort text into. Give each a name and a short 'when to use it' so the AI picks well."
+    ],
+    "enum_names": [
+      "Claude Haiku 4.5",
+      "Claude Opus 4.8",
+      "Claude Sonnet 4.6"
+    ],
+    "connection": [
+      "API key",
+      "sk-ant-…"
     ]
   },
   "claude_draft_reply": {
@@ -170,6 +513,39 @@
       "Message",
       "Pass-through",
       "Reply"
+    ],
+    "label": "Claude",
+    "subtitle": "Draft reply",
+    "integration": "Claude",
+    "titles": [
+      "Anything to include?",
+      "Message to reply to",
+      "Model",
+      "Reply language",
+      "Signature",
+      "Tone"
+    ],
+    "help": [
+      "Appended to the end of the reply.",
+      "Hard deadline for the AI request, in milliseconds.",
+      "Injected from the Claude connection — leave unset.",
+      "Language to write the reply in. Blank matches the incoming message.",
+      "Or connect it into the Message input.",
+      "Override the API host.",
+      "e.g. 'offer a refund', 'point them to the docs'."
+    ],
+    "enum_names": [
+      "Apologetic",
+      "Claude Haiku 4.5",
+      "Claude Opus 4.8",
+      "Claude Sonnet 4.6",
+      "Concise",
+      "Formal",
+      "Friendly"
+    ],
+    "connection": [
+      "API key",
+      "sk-ant-…"
     ]
   },
   "claude_extract": {
@@ -179,6 +555,40 @@
       "Files",
       "Pass-through",
       "Text"
+    ],
+    "label": "Claude",
+    "subtitle": "Extract fields",
+    "integration": "Claude",
+    "titles": [
+      "Field name",
+      "Fields to extract",
+      "If a field isn't found",
+      "Model",
+      "Text to read",
+      "Type",
+      "What it is"
+    ],
+    "help": [
+      "Hard deadline for the AI request, in milliseconds.",
+      "Injected from the Claude connection — leave unset.",
+      "Or connect it into the Text input.",
+      "Override the API host.",
+      "The fields to pull out — give each a name and what it is; the result is one object with those fields."
+    ],
+    "enum_names": [
+      "Claude Haiku 4.5",
+      "Claude Opus 4.8",
+      "Claude Sonnet 4.6",
+      "Date",
+      "Fail the step",
+      "Leave it empty",
+      "Number",
+      "Text",
+      "Yes/No"
+    ],
+    "connection": [
+      "API key",
+      "sk-ant-…"
     ]
   },
   "claude_summarize": {
@@ -188,6 +598,36 @@
       "Pass-through",
       "Summary",
       "Text"
+    ],
+    "label": "Claude",
+    "subtitle": "Summarize",
+    "integration": "Claude",
+    "titles": [
+      "Model",
+      "Output language",
+      "Roughly how many words",
+      "Style",
+      "Text to summarize"
+    ],
+    "help": [
+      "Hard deadline for the AI request, in milliseconds.",
+      "Injected from the Claude connection — leave unset.",
+      "Leave blank to match the input's language.",
+      "Or connect it into the Text input.",
+      "Override the API host.",
+      "Rough target length for the summary."
+    ],
+    "enum_names": [
+      "Bullet points",
+      "Claude Haiku 4.5",
+      "Claude Opus 4.8",
+      "Claude Sonnet 4.6",
+      "One sentence",
+      "Short paragraph"
+    ],
+    "connection": [
+      "API key",
+      "sk-ant-…"
     ]
   },
   "compare": {
@@ -196,6 +636,37 @@
       "A",
       "B",
       "Yes/No"
+    ],
+    "label": "Compare",
+    "titles": [
+      "A",
+      "B",
+      "Field in A",
+      "Test"
+    ],
+    "help": [
+      "For in_range: include the lower bound. Defaults to true (like Unreal's InRange).",
+      "For in_range: include the upper bound. Defaults to true (like Unreal's InRange).",
+      "How to compare A against B.",
+      "Literal value for A when the A input isn't connected. Parsed as JSON when possible (e.g. 200, true), otherwise treated as text.",
+      "Literal value for B when the B input isn't connected. Parsed as JSON when possible — a number, or a list like [200,201,204] for one_of, or [min,max] for in_range.",
+      "Optional dot-path into A when A is a JSON object (e.g. priority). Empty compares the whole value."
+    ],
+    "enum_names": [
+      "A contains B",
+      "A does not contain B",
+      "A does not equal B",
+      "A equals B",
+      "A has a value",
+      "A is empty",
+      "A is greater than B",
+      "A is greater than or equal to B",
+      "A is less than B",
+      "A is less than or equal to B",
+      "A is not one of B",
+      "A is one of B",
+      "A is outside range B",
+      "A is within range B"
     ]
   },
   "compute_rows": {
@@ -203,6 +674,11 @@
     "ports": [
       "Pass-through",
       "Rows"
+    ],
+    "label": "Add a calculated column",
+    "help": [
+      "CEL expression that must evaluate to a bool. Rows where it returns false are dropped.",
+      "Map of {output_column: CEL expression}. The expression's value becomes that cell. Existing columns are overwritten; new columns are added to the output schema."
     ]
   },
   "contains": {
@@ -212,6 +688,13 @@
       "Substring",
       "Text",
       "Yes"
+    ],
+    "label": "Contains",
+    "titles": [
+      "Substring"
+    ],
+    "help": [
+      "The text to look for inside the Text, when the Substring input isn't connected."
     ]
   },
   "cron_trigger": {
@@ -219,6 +702,15 @@
     "ports": [
       "Pass-through",
       "Time"
+    ],
+    "label": "Schedule",
+    "titles": [
+      "Runs",
+      "Time zone"
+    ],
+    "help": [
+      "IANA time zone the schedule is read in, e.g. \"Europe/Stockholm\". Empty = UTC. The editor stamps your browser's zone here automatically; search the list to change it.",
+      "Set this to run the flow automatically on a schedule — picked with the schedule editor. (Stored as a 5-field cron expression; \"0 9 * * *\" = every day at 09:00.) Leave it empty and the flow never runs on its own; it runs only when you press Run."
     ]
   },
   "date": {
@@ -228,6 +720,40 @@
       "Formatted",
       "Parts",
       "Pass-through"
+    ],
+    "label": "Date \u0026 time",
+    "subtitle": "Format or shift a date",
+    "titles": [
+      "At time of day",
+      "Custom format",
+      "Format",
+      "Language",
+      "Offset",
+      "Timezone"
+    ],
+    "help": [
+      "Build it from tokens: YYYY (2026) YY (26) MM (08) M (8) DD (27) D (27) HH (14) mm (05) ss (09), MMM/MMMM for a month name (Aug/August), ddd/dddd for a weekday (Thu/Thursday), hh with A for a 12-hour clock (02 PM), Z for the zone offset. Everything else — slashes, dots, spaces — is kept as typed, and literal words go in square brackets: \"[week of] D MMM\" → \"week of 27 Aug\". Tokens are case-sensitive (MM is the month, mm the minute); an unknown one fails the step rather than being printed as-is.",
+      "How the date is written on the 'out' port. Pick Custom to write your own — a field for it appears below.",
+      "Set the clock to this time of day, e.g. \"09:00\" or \"17:30:15\". Applied after the offset and in the output timezone, so Offset \"1d\" with At \"09:00\" is tomorrow morning rather than 24 hours from now. Empty keeps the time it already had.",
+      "Shift the time by an offset, e.g. \"3d\", \"-2h30m\", \"1w\" — \"1d\" is tomorrow. Units: w (weeks), d (days), h, m, s. Empty = no shift.",
+      "Which language day and month names are written in — Thursday/August, torsdag/augusti. Leave it on the flow's language (Settings → General) unless this one step should differ. Only names are affected: numbers, and the ISO/Unix/email formats, are the same in every language.",
+      "Which timezone the output is written in — it decides the date at midnight, which weekday that is, and the hour on the clock. Any IANA name: search the list, or type one (\"Europe/Stockholm\", \"Pacific/Auckland\"). \"Local\" is the server's own zone, which on a hosted instance is not yours."
+    ],
+    "enum_names": [
+      "Custom…",
+      "Date (2026-08-27)",
+      "Date and time (2026-08-27 14:05:09)",
+      "Email/HTTP (Thu, 27 Aug 2026 14:05:09 UTC)",
+      "English",
+      "Follow the flow's language",
+      "ISO-8601 (2026-08-27T14:05:09Z)",
+      "Svenska",
+      "Time, 12-hour (2:05:09 PM)",
+      "Time, 24-hour (14:05:09)",
+      "Unix milliseconds",
+      "Unix seconds",
+      "Weekday (Thursday)",
+      "Weekday, short (Thu)"
     ]
   },
   "dedupe_rows": {
@@ -236,6 +762,18 @@
       "Duplicate count",
       "Pass-through",
       "Rows"
+    ],
+    "label": "Remove duplicates",
+    "titles": [
+      "Keep"
+    ],
+    "help": [
+      "Columns that define duplicate identity. Absent = use every column in the headers (or, if no headers, every key of the row).",
+      "Which member of a duplicate group survives."
+    ],
+    "enum_names": [
+      "The first one",
+      "The last one"
     ]
   },
   "delay": {
@@ -243,6 +781,13 @@
     "ports": [
       "Delay (milliseconds)",
       "Pass-through"
+    ],
+    "label": "Delay",
+    "titles": [
+      "Wait (milliseconds)"
+    ],
+    "help": [
+      "How long to pause before continuing, in milliseconds (1000 = 1 second)."
     ]
   },
   "discord_send_message": {
@@ -252,6 +797,26 @@
       "Details",
       "Message ID",
       "Pass-through"
+    ],
+    "label": "Discord",
+    "subtitle": "Send message",
+    "integration": "Discord",
+    "titles": [
+      "Avatar URL",
+      "Message",
+      "Sender name",
+      "Thread ID"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "Override the avatar shown for this message.",
+      "Override the name shown for this message. Leave blank for the webhook's default.",
+      "Post into an existing thread in the channel instead of the main channel.",
+      "The message text (up to 2000 characters). Overridden by the 'Content' input."
+    ],
+    "connection": [
+      "Webhook URL",
+      "https://discord.com/api/webhooks/…"
     ]
   },
   "drive_download": {
@@ -261,6 +826,29 @@
       "Downloaded file",
       "File ID",
       "Pass-through"
+    ],
+    "label": "Google Drive",
+    "subtitle": "Download file",
+    "integration": "Google Drive",
+    "titles": [
+      "Export as",
+      "File",
+      "File name"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "Only used for Google Docs, Sheets and Slides (which have no raw download) — they're exported to this format. PDF works for all; docx/txt/html for Docs, xlsx/csv for Sheets, pptx for Slides. Ignored for regular files.",
+      "The Drive file to download — pick from your account's files. The File ID input overrides this when connected.",
+      "What to call the downloaded file — also the attachment name when emailed. Leave blank to use the file's own name in the run's scratch space."
+    ],
+    "enum_names": [
+      "CSV",
+      "Excel (.xlsx)",
+      "HTML",
+      "PDF",
+      "Plain text (.txt)",
+      "PowerPoint (.pptx)",
+      "Word (.docx)"
     ]
   },
   "drive_list_files": {
@@ -269,6 +857,28 @@
       "Count",
       "Files",
       "Pass-through"
+    ],
+    "label": "Google Drive",
+    "subtitle": "List files",
+    "integration": "Google Drive",
+    "titles": [
+      "Advanced query",
+      "In folder",
+      "Include trashed",
+      "Max files",
+      "Name contains",
+      "Order by",
+      "Type"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "Include files in the trash.",
+      "Match files whose name contains this text. Leave blank to match any name.",
+      "Raw Drive query expression ANDed with the other filters (e.g. \"starred = true\").",
+      "Restrict to files inside this folder — pick from your account's folders. Leave blank to search all of Drive.",
+      "Restrict to files of this MIME type. Leave blank for any type.",
+      "Sort order (a Drive orderBy expression).",
+      "Upper bound on files returned."
     ]
   },
   "drive_upload": {
@@ -280,6 +890,22 @@
       "Link",
       "Name in Drive",
       "Pass-through"
+    ],
+    "label": "Google Drive",
+    "subtitle": "Upload file",
+    "integration": "Google Drive",
+    "titles": [
+      "Content type",
+      "File to upload",
+      "Into folder",
+      "Name in Drive"
+    ],
+    "help": [
+      "Content type to store. Defaults to a guess from the file extension.",
+      "Folder to upload into — pick from your account's folders. Leave blank for the account's My Drive root.",
+      "Hard deadline for the upload, in milliseconds.",
+      "The workspace file to send (or connect the File input). scratch:// supported.",
+      "What to call the file in Drive. Connect the Name input to compute it — a dated backup, say. Defaults to the source file's own name."
     ]
   },
   "elks_send_sms": {
@@ -291,6 +917,29 @@
       "Pass-through",
       "Status",
       "To"
+    ],
+    "label": "46elks",
+    "subtitle": "Send SMS",
+    "integration": "46elks",
+    "titles": [
+      "Dry run",
+      "From",
+      "Message",
+      "To"
+    ],
+    "help": [
+      "A 46elks number (E.164) the recipient can reply to, or an alphanumeric sender name (max 11 chars, must contain a letter; no replies).",
+      "Hard deadline for the request, in milliseconds.",
+      "Override the API host (testing).",
+      "Recipient phone number in E.164 format. Overridden by the 'To' input.",
+      "The text to send. Overridden by the 'Message' input.",
+      "Validate the request with 46elks without sending or being billed."
+    ],
+    "connection": [
+      "API password",
+      "API username",
+      "From the 46elks dashboard.",
+      "u…"
     ]
   },
   "email": {
@@ -303,6 +952,13 @@
       "Email",
       "Local part",
       "Pass-through"
+    ],
+    "label": "Email",
+    "titles": [
+      "Email"
+    ],
+    "help": [
+      "An email address — plain (ada@acme.com) or with a display name (Ada Lovelace \u003cada@acme.com\u003e). Type it here, or connect a string into the 'email' input."
     ]
   },
   "email_send": {
@@ -314,6 +970,46 @@
       "Pass-through",
       "Subject",
       "To"
+    ],
+    "label": "Email",
+    "subtitle": "Send email",
+    "integration": "Email",
+    "titles": [
+      "BCC",
+      "Body",
+      "Body format",
+      "CC",
+      "Subject",
+      "Template",
+      "To"
+    ],
+    "help": [
+      "Blind-copy recipient(s), comma-separated. Hidden from the other recipients.",
+      "Carbon-copy recipient(s), comma-separated. Everyone on the email sees who's CC'd.",
+      "Email body text. Overridden by the 'Body' input.",
+      "How the body is sent. HTML renders formatting and links; Text sends it exactly as typed.",
+      "Optional reusable HTML template to wrap the body in (logo, header, footer). HTML format only. Leave blank to send the body as-is.",
+      "Recipient(s), comma-separated. Overridden by the 'To' input.",
+      "The email's subject line — e.g. \"Re: your submission\". Leave blank and it sends as \"(no subject)\". Overridden by the 'Subject' input."
+    ],
+    "enum_names": [
+      "HTML",
+      "Text"
+    ],
+    "connection": [
+      "587 (STARTTLS) or 465 (SSL/TLS)",
+      "Connection security",
+      "From address",
+      "Mail server",
+      "Password",
+      "Port",
+      "The sender recipients see. Add a display name with \"Reports \u003creports@example.com\u003e\" — most providers require the address itself to match your login.",
+      "Username",
+      "Your mail server password, or an app password if the provider issues one.",
+      "reports@example.com",
+      "smtp.example.com",
+      "starttls, implicit, or none",
+      "usually your email address"
     ]
   },
   "eq": {
@@ -322,6 +1018,15 @@
       "A",
       "B",
       "Yes/No"
+    ],
+    "label": "A = B",
+    "titles": [
+      "A",
+      "B"
+    ],
+    "help": [
+      "Literal value for A when the A input isn't connected. Parsed as JSON when possible (e.g. 200, true), otherwise treated as text.",
+      "Literal value for B when the B input isn't connected. Parsed as JSON when possible (e.g. 1000)."
     ]
   },
   "excel_read": {
@@ -331,6 +1036,25 @@
       "File path",
       "Pass-through",
       "Rows"
+    ],
+    "label": "Excel",
+    "subtitle": "Read sheet",
+    "integration": "Excel",
+    "titles": [
+      "Cells",
+      "File",
+      "First row is headers",
+      "Keep numbers as numbers",
+      "Sheet",
+      "Skip rows"
+    ],
+    "help": [
+      "Optional cell range within the sheet. Leave blank to read the whole sheet.",
+      "Output numbers and TRUE/FALSE as real values instead of text.",
+      "Skip this many rows at the top (e.g. a title banner) before reading.",
+      "The .xlsx file in the workspace. Ignored when a 'File' input is connected.",
+      "The sheet (tab) to read. Leave blank for the first sheet.",
+      "Treat the first row as column headers."
     ]
   },
   "excel_write": {
@@ -340,6 +1064,20 @@
       "File path",
       "Pass-through",
       "Rows"
+    ],
+    "label": "Excel",
+    "subtitle": "Write sheet",
+    "integration": "Excel",
+    "titles": [
+      "Add to existing sheet",
+      "File",
+      "Sheet"
+    ],
+    "help": [
+      "Accepted for compatibility; not applied.",
+      "Add the rows under what's already on the sheet instead of replacing it.",
+      "The sheet (tab) to write.",
+      "Where to save the .xlsx in the workspace. Ignored when a 'File' input is connected."
     ]
   },
   "expression": {
@@ -348,6 +1086,14 @@
       "Input",
       "Pass-through",
       "Result"
+    ],
+    "label": "Expression",
+    "subtitle": "Compute a value with a formula",
+    "titles": [
+      "Formula (CEL)"
+    ],
+    "help": [
+      "A CEL expression. The variable 'input' is the connected value and 'now' is the current timestamp; the expression's value is emitted on 'out'."
     ]
   },
   "file_picker": {
@@ -356,6 +1102,18 @@
       "File",
       "Pass-through",
       "Path"
+    ],
+    "label": "File",
+    "subtitle": "Pick file",
+    "titles": [
+      "File",
+      "File type (MIME)",
+      "Inline file bytes"
+    ],
+    "help": [
+      "Load the file into memory now (needed for remote modules that don't share the workspace). Default off so large files don't sit in memory.",
+      "Override the file's type. Defaults to a guess from the file extension.",
+      "Pick a file from the workspace."
     ]
   },
   "file_read": {
@@ -363,6 +1121,16 @@
     "ports": [
       "File",
       "Pass-through"
+    ],
+    "label": "File",
+    "subtitle": "Read",
+    "titles": [
+      "File",
+      "File type (MIME)"
+    ],
+    "help": [
+      "Override the file's type. Defaults to a generic binary type.",
+      "The workspace file to read."
     ]
   },
   "file_write": {
@@ -371,6 +1139,16 @@
       "Data",
       "Pass-through",
       "Saved file"
+    ],
+    "label": "File",
+    "subtitle": "Write",
+    "titles": [
+      "Create missing folders",
+      "Save to"
+    ],
+    "help": [
+      "Create the folders in 'Save to' if they don't exist yet.",
+      "Where to save the file in the workspace."
     ]
   },
   "for_each": {
@@ -381,6 +1159,15 @@
       "Loop body",
       "Pass-through",
       "Results"
+    ],
+    "label": "For each",
+    "titles": [
+      "Concurrency",
+      "Stop on first error"
+    ],
+    "help": [
+      "How many items to process at once. Higher is faster but hits rate limits sooner.",
+      "Stop the whole loop as soon as one item fails, instead of continuing with the rest."
     ]
   },
   "fortnox_create_customer": {
@@ -391,6 +1178,21 @@
       "Email",
       "Name",
       "Pass-through"
+    ],
+    "label": "Fortnox",
+    "subtitle": "Create customer",
+    "integration": "Fortnox",
+    "titles": [
+      "Account",
+      "Email",
+      "Name"
+    ],
+    "help": [
+      "Customer name. Overridden by the 'Name' input.",
+      "Hard deadline for the request, in milliseconds.",
+      "Overridden by the 'Email' input.",
+      "Override the API host (testing).",
+      "Which connected Fortnox account to use (for multiple connections)."
     ]
   },
   "fortnox_create_invoice": {
@@ -401,6 +1203,21 @@
       "Document number",
       "Pass-through",
       "Rows"
+    ],
+    "label": "Fortnox",
+    "subtitle": "Create invoice",
+    "integration": "Fortnox",
+    "titles": [
+      "Account",
+      "Customer",
+      "Rows"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "Invoice rows as Fortnox InvoiceRow objects (Description, Price, DeliveredQuantity, ArticleNumber, VAT…). Overridden by the 'Rows' input.",
+      "Override the API host (testing).",
+      "Pick the customer to bill — listed from your connected account. Overridden by the 'Customer number' input when connected.",
+      "Which connected Fortnox account to use (for multiple connections)."
     ]
   },
   "fortnox_list_invoices": {
@@ -411,6 +1228,31 @@
       "Invoices",
       "Page",
       "Pass-through"
+    ],
+    "label": "Fortnox",
+    "subtitle": "List invoices",
+    "integration": "Fortnox",
+    "titles": [
+      "Account",
+      "Limit",
+      "Page",
+      "Status filter"
+    ],
+    "help": [
+      "1-based page number. Overridden by the 'Page' input.",
+      "Hard deadline for the request, in milliseconds.",
+      "Max invoices per page.",
+      "Override the API host (testing).",
+      "Restrict to invoices of this status. Empty = all.",
+      "Which connected Fortnox account to use (for multiple connections)."
+    ],
+    "enum_names": [
+      "All",
+      "Cancelled",
+      "Fully paid",
+      "Unbooked",
+      "Unpaid",
+      "Unpaid \u0026 overdue"
     ]
   },
   "gcal_create_event": {
@@ -426,6 +1268,30 @@
       "Pass-through",
       "Start",
       "Summary"
+    ],
+    "label": "Google Calendar",
+    "subtitle": "Create event",
+    "integration": "Google Calendar",
+    "titles": [
+      "Attendees",
+      "Calendar",
+      "Description",
+      "End",
+      "Location",
+      "Start",
+      "Time zone",
+      "Title"
+    ],
+    "help": [
+      "Comma-separated attendee email addresses.",
+      "Event title.",
+      "Hard deadline for the request, in milliseconds.",
+      "IANA time zone for timed events. Optional when the timestamp carries an offset.",
+      "Optional event details.",
+      "Optional location text.",
+      "The calendar to add the event to — pick from your account's calendars, or 'primary' for your own.",
+      "When it ends: a timestamp, a plain date (exclusive) for an all-day event, or a relative value. Overridden by the End input when connected.",
+      "When it starts: a timestamp, a plain date for an all-day event, or a relative value like \"tomorrow+9h\". Overridden by the Start input when connected."
     ]
   },
   "gcal_delete_event": {
@@ -435,6 +1301,18 @@
       "Details",
       "Event",
       "Pass-through"
+    ],
+    "label": "Google Calendar",
+    "subtitle": "Cancel event",
+    "integration": "Google Calendar",
+    "titles": [
+      "Calendar",
+      "Event"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "The calendar the event is on — pick from your account's calendars, or 'primary' for your own.",
+      "The event's id, as emitted by List events or Create event. Overridden by the 'Event' input when connected."
     ]
   },
   "gcal_list_events": {
@@ -446,6 +1324,28 @@
       "Events",
       "Pass-through",
       "Start of window"
+    ],
+    "label": "Google Calendar",
+    "subtitle": "List events",
+    "integration": "Google Calendar",
+    "titles": [
+      "Calendar",
+      "End of window",
+      "Expand recurring events",
+      "Max events",
+      "Search text",
+      "Start of window",
+      "Timezone"
+    ],
+    "help": [
+      "Expand recurring events into individual instances.",
+      "Free-text search over event fields. Leave blank to match all.",
+      "Hard deadline for the request, in milliseconds.",
+      "IANA timezone the day boundaries of \"today\"/\"tomorrow\" are taken in, e.g. \"Europe/Stockholm\". Empty = UTC. Ignored for absolute timestamps.",
+      "Only events ending at or after this time. Accepts a relative value — now, today, tomorrow, yesterday, +3d, -2h30m, tomorrow+9h — or an absolute timestamp. Leave blank for no lower bound.",
+      "Only events starting before this time. Same forms as the start of the window. Leave blank for no upper bound.",
+      "The calendar to read — pick from your account's calendars, or 'primary' for your own.",
+      "Upper bound on events returned."
     ]
   },
   "gemini": {
@@ -455,6 +1355,43 @@
       "Pass-through",
       "Prompt",
       "Response"
+    ],
+    "label": "Gemini",
+    "subtitle": "Ask",
+    "integration": "Gemini",
+    "titles": [
+      "Max tokens",
+      "Model",
+      "Prompt",
+      "System prompt",
+      "Temperature"
+    ],
+    "help": [
+      "Cap on how long the reply can be. Higher allows longer answers.",
+      "Creativity dial (0–1): lower is more focused and repeatable, higher more varied.",
+      "Full conversation history ({role, content}); overrides the prompt.",
+      "Hard deadline for the AI request, in milliseconds.",
+      "Injected from the Gemini connection — leave unset.",
+      "Optional instruction that frames the reply.",
+      "Override the API host.",
+      "Single user message (used when no Prompt input and no messages)."
+    ],
+    "enum_names": [
+      "Gemini 2.5 Flash",
+      "Gemini 2.5 Flash-Lite",
+      "Gemini 3.1 Flash-Lite",
+      "Gemini 3.1 Pro (preview)",
+      "Gemini 3.5 Flash",
+      "Gemini 3.5 Flash-Lite",
+      "Gemini 3.6 Flash",
+      "Gemini 3.7 Flash",
+      "Gemini Flash (latest)",
+      "Gemini Flash-Lite (latest)",
+      "Gemini Pro (latest)"
+    ],
+    "connection": [
+      "AIza…",
+      "API key"
     ]
   },
   "gemini_classify": {
@@ -465,6 +1402,42 @@
       "Files",
       "Pass-through",
       "Text"
+    ],
+    "label": "Gemini",
+    "subtitle": "Classify",
+    "integration": "Gemini",
+    "titles": [
+      "Allow \"none of these\"",
+      "Categories",
+      "Category",
+      "Model",
+      "Text to classify",
+      "When to use it"
+    ],
+    "help": [
+      "Hard deadline for the AI request, in milliseconds.",
+      "Injected from the Gemini connection — leave unset.",
+      "Let the AI answer 'none' when no category fits, instead of forcing a pick.",
+      "Or connect it into the Text input.",
+      "Override the API host.",
+      "The buckets to sort text into. Give each a name and a short 'when to use it' so the AI picks well."
+    ],
+    "enum_names": [
+      "Gemini 2.5 Flash",
+      "Gemini 2.5 Flash-Lite",
+      "Gemini 3.1 Flash-Lite",
+      "Gemini 3.1 Pro (preview)",
+      "Gemini 3.5 Flash",
+      "Gemini 3.5 Flash-Lite",
+      "Gemini 3.6 Flash",
+      "Gemini 3.7 Flash",
+      "Gemini Flash (latest)",
+      "Gemini Flash-Lite (latest)",
+      "Gemini Pro (latest)"
+    ],
+    "connection": [
+      "AIza…",
+      "API key"
     ]
   },
   "gemini_draft_reply": {
@@ -473,6 +1446,47 @@
       "Message",
       "Pass-through",
       "Reply"
+    ],
+    "label": "Gemini",
+    "subtitle": "Draft reply",
+    "integration": "Gemini",
+    "titles": [
+      "Anything to include?",
+      "Message to reply to",
+      "Model",
+      "Reply language",
+      "Signature",
+      "Tone"
+    ],
+    "help": [
+      "Appended to the end of the reply.",
+      "Hard deadline for the AI request, in milliseconds.",
+      "Injected from the Gemini connection — leave unset.",
+      "Language to write the reply in. Blank matches the incoming message.",
+      "Or connect it into the Message input.",
+      "Override the API host.",
+      "e.g. 'offer a refund', 'point them to the docs'."
+    ],
+    "enum_names": [
+      "Apologetic",
+      "Concise",
+      "Formal",
+      "Friendly",
+      "Gemini 2.5 Flash",
+      "Gemini 2.5 Flash-Lite",
+      "Gemini 3.1 Flash-Lite",
+      "Gemini 3.1 Pro (preview)",
+      "Gemini 3.5 Flash",
+      "Gemini 3.5 Flash-Lite",
+      "Gemini 3.6 Flash",
+      "Gemini 3.7 Flash",
+      "Gemini Flash (latest)",
+      "Gemini Flash-Lite (latest)",
+      "Gemini Pro (latest)"
+    ],
+    "connection": [
+      "AIza…",
+      "API key"
     ]
   },
   "gemini_extract": {
@@ -482,6 +1496,48 @@
       "Files",
       "Pass-through",
       "Text"
+    ],
+    "label": "Gemini",
+    "subtitle": "Extract fields",
+    "integration": "Gemini",
+    "titles": [
+      "Field name",
+      "Fields to extract",
+      "If a field isn't found",
+      "Model",
+      "Text to read",
+      "Type",
+      "What it is"
+    ],
+    "help": [
+      "Hard deadline for the AI request, in milliseconds.",
+      "Injected from the Gemini connection — leave unset.",
+      "Or connect it into the Text input.",
+      "Override the API host.",
+      "The fields to pull out — give each a name and what it is; the result is one object with those fields."
+    ],
+    "enum_names": [
+      "Date",
+      "Fail the step",
+      "Gemini 2.5 Flash",
+      "Gemini 2.5 Flash-Lite",
+      "Gemini 3.1 Flash-Lite",
+      "Gemini 3.1 Pro (preview)",
+      "Gemini 3.5 Flash",
+      "Gemini 3.5 Flash-Lite",
+      "Gemini 3.6 Flash",
+      "Gemini 3.7 Flash",
+      "Gemini Flash (latest)",
+      "Gemini Flash-Lite (latest)",
+      "Gemini Pro (latest)",
+      "Leave it empty",
+      "Number",
+      "Text",
+      "Yes/No"
+    ],
+    "connection": [
+      "AIza…",
+      "API key"
     ]
   },
   "gemini_summarize": {
@@ -491,6 +1547,44 @@
       "Pass-through",
       "Summary",
       "Text"
+    ],
+    "label": "Gemini",
+    "subtitle": "Summarize",
+    "integration": "Gemini",
+    "titles": [
+      "Model",
+      "Output language",
+      "Roughly how many words",
+      "Style",
+      "Text to summarize"
+    ],
+    "help": [
+      "Hard deadline for the AI request, in milliseconds.",
+      "Injected from the Gemini connection — leave unset.",
+      "Leave blank to match the input's language.",
+      "Or connect it into the Text input.",
+      "Override the API host.",
+      "Rough target length for the summary."
+    ],
+    "enum_names": [
+      "Bullet points",
+      "Gemini 2.5 Flash",
+      "Gemini 2.5 Flash-Lite",
+      "Gemini 3.1 Flash-Lite",
+      "Gemini 3.1 Pro (preview)",
+      "Gemini 3.5 Flash",
+      "Gemini 3.5 Flash-Lite",
+      "Gemini 3.6 Flash",
+      "Gemini 3.7 Flash",
+      "Gemini Flash (latest)",
+      "Gemini Flash-Lite (latest)",
+      "Gemini Pro (latest)",
+      "One sentence",
+      "Short paragraph"
+    ],
+    "connection": [
+      "AIza…",
+      "API key"
     ]
   },
   "geo_location": {
@@ -501,6 +1595,35 @@
       "Longitude",
       "Pass-through",
       "Place"
+    ],
+    "label": "Location",
+    "subtitle": "Place → map coordinate",
+    "integration": "OpenStreetMap",
+    "titles": [
+      "Country bias",
+      "Language",
+      "Location",
+      "Place",
+      "Show map on card"
+    ],
+    "help": [
+      "A city or address. When set, it's geocoded and overrides the map pin. The Place input overrides this typed value.",
+      "Hard deadline for a Place lookup, in milliseconds.",
+      "Optional ISO language code for the returned place name (e.g. sv, de).",
+      "Optional comma-separated ISO country codes to bias geocoding of the Place (e.g. \"us\" or \"se,no\").",
+      "Show the interactive map on the step card. Turn off for a compact card — you can still pick in the inspector or drive it with the Place input.",
+      "The map pin as \"lat,lon\". Use the map to set it. Overridden when a Place is provided."
+    ],
+    "connection": [
+      "API key",
+      "Custom API URL",
+      "Geocoding backend",
+      "Optional — the base URL of your self-hosted Nominatim, Photon or LocationIQ.",
+      "Required for LocationIQ. Leave blank for Nominatim or Photon.",
+      "locationiq",
+      "nominatim",
+      "nominatim (default)",
+      "photon"
     ]
   },
   "geo_reverse": {
@@ -511,6 +1634,31 @@
       "Full result",
       "Pass-through",
       "Place"
+    ],
+    "label": "Look up a place",
+    "subtitle": "Map coordinate → place",
+    "integration": "OpenStreetMap",
+    "titles": [
+      "Language",
+      "Location",
+      "Show map on card"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "Optional ISO language code for the returned place name (e.g. sv, de).",
+      "Show the interactive map on the step card. Turn off for a compact card — you can still pick in the inspector or drive it with the Coordinate input.",
+      "The map pin as \"lat,lon\". Use the map to set it. Overridden by the Coordinate input."
+    ],
+    "connection": [
+      "API key",
+      "Custom API URL",
+      "Geocoding backend",
+      "Optional — the base URL of your self-hosted Nominatim, Photon or LocationIQ.",
+      "Required for LocationIQ. Leave blank for Nominatim or Photon.",
+      "locationiq",
+      "nominatim",
+      "nominatim (default)",
+      "photon"
     ]
   },
   "git_checkout": {
@@ -520,6 +1668,21 @@
       "Details",
       "Pass-through",
       "Repository folder"
+    ],
+    "label": "Git",
+    "subtitle": "Checkout",
+    "integration": "Git",
+    "titles": [
+      "Branch, tag, or commit",
+      "Clone depth",
+      "Git credential",
+      "Repository URL"
+    ],
+    "help": [
+      "Shallow-clone depth. 0 (default) clones the full history.",
+      "What to switch to after fetching. Leave empty for the repo's default branch.",
+      "Where the repository lives (https or ssh address). Use ${secret.NAME} placeholders for tokens embedded in the URL.",
+      "Which saved Git credential to authenticate with — an SSH key for git@/ssh:// URLs, or an access token (PAT) for https:// URLs. Manage these on the Git credentials page. Public repos need none."
     ]
   },
   "git_diff": {
@@ -529,6 +1692,21 @@
       "Diff",
       "Pass-through",
       "Repository folder"
+    ],
+    "label": "Git",
+    "subtitle": "Diff",
+    "integration": "Git",
+    "titles": [
+      "Compare from",
+      "Compare to",
+      "Repository folder",
+      "Since common ancestor"
+    ],
+    "help": [
+      "Compare from where the two refs diverged (git's three-dot A...B) so you see only what changed on the 'to' side. Off compares the two refs directly, which can show unrelated changes from the 'from' side.",
+      "End point. Defaults to the latest commit (HEAD).",
+      "Starting point — branch, tag, or commit SHA. Defaults to the commit before the latest (HEAD~1).",
+      "Workspace folder holding the repository — pick a checked-out repo folder. Overridden by the 'Repository folder' input."
     ]
   },
   "git_log": {
@@ -538,6 +1716,19 @@
       "Details",
       "Pass-through",
       "Repository folder"
+    ],
+    "label": "Git",
+    "subtitle": "Log",
+    "integration": "Git",
+    "titles": [
+      "Max commits",
+      "Repository folder",
+      "Start at"
+    ],
+    "help": [
+      "How many commits to return at most.",
+      "Where to start walking back from — branch, tag, or commit SHA. Defaults to the latest commit (HEAD).",
+      "Workspace folder holding the repository — pick a checked-out repo folder. Overridden by the 'Repository folder' input."
     ]
   },
   "github_add_comment": {
@@ -547,6 +1738,22 @@
       "Comment link",
       "Details",
       "Pass-through"
+    ],
+    "label": "GitHub",
+    "subtitle": "Add comment",
+    "integration": "GitHub",
+    "titles": [
+      "Comment",
+      "Issue or PR number",
+      "Repo name",
+      "Repo owner"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "The number from the issue/PR link — issues and PRs share one number space.",
+      "The repo's name, without the owner part.",
+      "The username or organization the repo lives under.",
+      "What to say (Markdown works). Overridden by the 'Comment' input."
     ]
   },
   "github_create_issue": {
@@ -558,6 +1765,29 @@
       "Issue number",
       "Pass-through",
       "Title"
+    ],
+    "label": "GitHub",
+    "subtitle": "Create issue",
+    "integration": "GitHub",
+    "titles": [
+      "Assignees",
+      "Body",
+      "Labels",
+      "Milestone number",
+      "Repo name",
+      "Repo owner",
+      "Title"
+    ],
+    "help": [
+      "GitHub usernames to assign.",
+      "Hard deadline for the request, in milliseconds.",
+      "Issue text (Markdown works). Overridden by the 'Body' input.",
+      "Issue title. Overridden by the 'Title' input.",
+      "Labels to attach — they must already exist on the repo.",
+      "Milestone number (not name).",
+      "Raw access token; overrides 'account'.",
+      "The repo's name, without the owner part.",
+      "The username or organization the repo lives under."
     ]
   },
   "github_list_issues": {
@@ -566,6 +1796,37 @@
       "Details",
       "Issues",
       "Pass-through"
+    ],
+    "label": "GitHub",
+    "subtitle": "List issues",
+    "integration": "GitHub",
+    "titles": [
+      "Assignee",
+      "Include pull requests",
+      "Labels",
+      "Max results",
+      "Page size",
+      "Repo name",
+      "Repo owner",
+      "State",
+      "Updated after"
+    ],
+    "help": [
+      "GitHub's issues API also returns pull requests. Off (default) filters them out so you get only real issues.",
+      "Hard deadline for the request, in milliseconds.",
+      "How many issues to request per page while paginating.",
+      "Only issues assigned to this username. 'none' = unassigned, '*' = any.",
+      "Only issues carrying ALL of these labels.",
+      "RFC3339 timestamp; only issues updated after this.",
+      "Raw access token; overrides 'account'.",
+      "Stop after this many issues, fetching across pages as needed.",
+      "The repo's name, without the owner part.",
+      "The username or organization the repo lives under."
+    ],
+    "enum_names": [
+      "All",
+      "Closed",
+      "Open"
     ]
   },
   "github_on_new_pr": {
@@ -579,7 +1840,10 @@
       "Source branch",
       "Target branch",
       "Title"
-    ]
+    ],
+    "label": "GitHub",
+    "subtitle": "On new PR",
+    "integration": "GitHub"
   },
   "github_on_push": {
     "description": "Starts the flow when commits are pushed to the connected repo. Outputs the branch (ref), the before/after commit SHAs, the commits list, the repo, and who pushed. Common uses: post a deploy alert when commits land on main, or kick off a CI-shaped pipeline.",
@@ -591,7 +1855,10 @@
       "Full event",
       "Pushed by",
       "Repository"
-    ]
+    ],
+    "label": "GitHub",
+    "subtitle": "On push",
+    "integration": "GitHub"
   },
   "gmail_get_attachments": {
     "description": "Take the files attached to an email and save them, ready to hand to a step that files them somewhere — Upload to Drive, Write file, or an email of your own. Connect Search emails' Matching emails into a For each and put this step in the loop body with Email = the row's id. Use 'Only these types' to take just the PDFs and ignore signature images. The First file output is the one to connect when each email carries a single document; the Files list carries them all.",
@@ -601,6 +1868,22 @@
       "First file",
       "How many",
       "Pass-through"
+    ],
+    "label": "Gmail",
+    "subtitle": "Download attachments",
+    "integration": "Gmail",
+    "titles": [
+      "Email",
+      "Only these types",
+      "Save into"
+    ],
+    "help": [
+      "Comma-separated file extensions to keep, e.g. \"pdf\". Leave blank to take every attachment. Inline signature images are always skipped.",
+      "Hard deadline for each download, in milliseconds.",
+      "Override the API host (testing).",
+      "Raw access token; overrides 'account'.",
+      "Which email to take the files from. Overridden by the Email input when connected.",
+      "Workspace folder to save the files in, so they outlive the run. Leave blank to keep them in the run's scratch area — fine when a later step files them somewhere else."
     ]
   },
   "gmail_get_message": {
@@ -612,6 +1895,25 @@
       "From",
       "Pass-through",
       "Subject"
+    ],
+    "label": "Gmail",
+    "subtitle": "Read email",
+    "integration": "Gmail",
+    "titles": [
+      "Fetch detail",
+      "Message ID"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "How much of the message to fetch (advanced).",
+      "Override the API host (testing).",
+      "Raw access token; overrides 'account'.",
+      "Which email to read. Overridden by the Message ID input when connected."
+    ],
+    "enum_names": [
+      "Everything",
+      "Headers only",
+      "Smallest — ids and labels"
     ]
   },
   "gmail_get_thread": {
@@ -625,6 +1927,18 @@
       "Pass-through",
       "Replied",
       "Summary"
+    ],
+    "label": "Gmail",
+    "subtitle": "Read conversation",
+    "integration": "Gmail",
+    "titles": [
+      "Conversation"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "Override the API host (testing).",
+      "Raw access token; overrides 'account'.",
+      "The conversation to read. Overridden by the Conversation input when connected."
     ]
   },
   "gmail_search_messages": {
@@ -633,6 +1947,23 @@
       "Matching emails",
       "Pass-through",
       "Search"
+    ],
+    "label": "Gmail",
+    "subtitle": "Search emails",
+    "integration": "Gmail",
+    "titles": [
+      "Max emails",
+      "Only new since last run",
+      "Page token",
+      "Search"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "Override the API host (testing).",
+      "Pagination token from a prior run's next_page_token output (advanced).",
+      "Raw access token; overrides 'account'.",
+      "When on, each run emits only emails that arrived since the previous run — nothing on the first run (it just remembers the newest email as the starting point). Turn this on when a published, polling flow acts on each match (e.g. sends a reply), so it doesn't re-process the same emails on every poll or blast the whole mailbox on publish. Leave off for ad-hoc searches that should return every match.",
+      "Works exactly like Gmail's search box, e.g. 'is:unread', 'newer_than:1d', 'from:someone@example.com'."
     ]
   },
   "gmail_send_email": {
@@ -644,6 +1975,31 @@
       "Pass-through",
       "Subject",
       "To"
+    ],
+    "label": "Gmail",
+    "subtitle": "Send email",
+    "integration": "Gmail",
+    "titles": [
+      "BCC",
+      "CC",
+      "Subject",
+      "Template"
+    ],
+    "help": [
+      "Blind-copy recipient(s), comma-separated. Hidden from the other recipients.",
+      "Body text. Overridden by the 'Body' input.",
+      "Carbon-copy recipient(s), comma-separated. Everyone on the email sees who's CC'd.",
+      "Gmail thread ID to reply within.",
+      "Hard deadline for the request, in milliseconds.",
+      "Optional reusable HTML template to wrap the body in (logo, header, footer). HTML format only. Leave blank to send the body as-is.",
+      "Override the API host (testing).",
+      "Raw access token; overrides 'account'.",
+      "Recipient(s), comma-separated. Overridden by the 'To' input.",
+      "The email's subject line — e.g. \"Re: your submission\". Leave blank and it sends as \"(no subject)\". Overridden by the 'Subject' input."
+    ],
+    "enum_names": [
+      "HTML",
+      "Text"
     ]
   },
   "google_form_trigger": {
@@ -652,6 +2008,18 @@
       "Count",
       "New responses",
       "Time"
+    ],
+    "label": "Google Forms",
+    "subtitle": "New responses",
+    "integration": "Google Forms",
+    "titles": [
+      "Check every",
+      "Form"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "How often to check for new responses once the flow is published. Leave blank to only check when you press Run (for testing).",
+      "The Google Form to watch for new responses."
     ]
   },
   "gpt_classify": {
@@ -662,6 +2030,33 @@
       "Files",
       "Pass-through",
       "Text"
+    ],
+    "label": "ChatGPT",
+    "subtitle": "Classify",
+    "integration": "ChatGPT",
+    "titles": [
+      "Allow \"none of these\"",
+      "Categories",
+      "Category",
+      "Model",
+      "Text to classify",
+      "When to use it"
+    ],
+    "help": [
+      "Hard deadline for the AI request, in milliseconds.",
+      "Injected from the ChatGPT connection — leave unset.",
+      "Let the AI answer 'none' when no category fits, instead of forcing a pick.",
+      "Or connect it into the Text input.",
+      "Override the API host.",
+      "The buckets to sort text into. Give each a name and a short 'when to use it' so the AI picks well."
+    ],
+    "enum_names": [
+      "GPT-4o",
+      "GPT-4o mini"
+    ],
+    "connection": [
+      "API key",
+      "sk-…"
     ]
   },
   "gpt_draft_reply": {
@@ -670,6 +2065,38 @@
       "Message",
       "Pass-through",
       "Reply"
+    ],
+    "label": "ChatGPT",
+    "subtitle": "Draft reply",
+    "integration": "ChatGPT",
+    "titles": [
+      "Anything to include?",
+      "Message to reply to",
+      "Model",
+      "Reply language",
+      "Signature",
+      "Tone"
+    ],
+    "help": [
+      "Appended to the end of the reply.",
+      "Hard deadline for the AI request, in milliseconds.",
+      "Injected from the ChatGPT connection — leave unset.",
+      "Language to write the reply in. Blank matches the incoming message.",
+      "Or connect it into the Message input.",
+      "Override the API host.",
+      "e.g. 'offer a refund', 'point them to the docs'."
+    ],
+    "enum_names": [
+      "Apologetic",
+      "Concise",
+      "Formal",
+      "Friendly",
+      "GPT-4o",
+      "GPT-4o mini"
+    ],
+    "connection": [
+      "API key",
+      "sk-…"
     ]
   },
   "gpt_extract": {
@@ -679,6 +2106,39 @@
       "Files",
       "Pass-through",
       "Text"
+    ],
+    "label": "ChatGPT",
+    "subtitle": "Extract fields",
+    "integration": "ChatGPT",
+    "titles": [
+      "Field name",
+      "Fields to extract",
+      "If a field isn't found",
+      "Model",
+      "Text to read",
+      "Type",
+      "What it is"
+    ],
+    "help": [
+      "Hard deadline for the AI request, in milliseconds.",
+      "Injected from the ChatGPT connection — leave unset.",
+      "Or connect it into the Text input.",
+      "Override the API host.",
+      "The fields to pull out — give each a name and what it is; the result is one object with those fields."
+    ],
+    "enum_names": [
+      "Date",
+      "Fail the step",
+      "GPT-4o",
+      "GPT-4o mini",
+      "Leave it empty",
+      "Number",
+      "Text",
+      "Yes/No"
+    ],
+    "connection": [
+      "API key",
+      "sk-…"
     ]
   },
   "gpt_summarize": {
@@ -688,6 +2148,35 @@
       "Pass-through",
       "Summary",
       "Text"
+    ],
+    "label": "ChatGPT",
+    "subtitle": "Summarize",
+    "integration": "ChatGPT",
+    "titles": [
+      "Model",
+      "Output language",
+      "Roughly how many words",
+      "Style",
+      "Text to summarize"
+    ],
+    "help": [
+      "Hard deadline for the AI request, in milliseconds.",
+      "Injected from the ChatGPT connection — leave unset.",
+      "Leave blank to match the input's language.",
+      "Or connect it into the Text input.",
+      "Override the API host.",
+      "Rough target length for the summary."
+    ],
+    "enum_names": [
+      "Bullet points",
+      "GPT-4o",
+      "GPT-4o mini",
+      "One sentence",
+      "Short paragraph"
+    ],
+    "connection": [
+      "API key",
+      "sk-…"
     ]
   },
   "group_aggregate": {
@@ -695,6 +2184,11 @@
     "ports": [
       "Pass-through",
       "Rows"
+    ],
+    "label": "Group \u0026 summarize",
+    "help": [
+      "Columns to group by. Empty list = a single group covering all input rows.",
+      "Map of output_column_name → {op, column?}. column is required for sum/avg/min/max/first/last/collect; omitted for count. The short form {\"revenue\":\"sum\"} is also accepted: the op alone, with the output name doubling as the source column."
     ]
   },
   "gt": {
@@ -703,6 +2197,15 @@
       "A",
       "B",
       "Yes/No"
+    ],
+    "label": "A \u003e B",
+    "titles": [
+      "A",
+      "B"
+    ],
+    "help": [
+      "Literal value for A when the A input isn't connected. Parsed as JSON when possible (e.g. 200, true), otherwise treated as text.",
+      "Literal value for B when the B input isn't connected. Parsed as JSON when possible (e.g. 1000)."
     ]
   },
   "gte": {
@@ -711,6 +2214,15 @@
       "A",
       "B",
       "Yes/No"
+    ],
+    "label": "A ≥ B",
+    "titles": [
+      "A",
+      "B"
+    ],
+    "help": [
+      "Literal value for A when the A input isn't connected. Parsed as JSON when possible (e.g. 200, true), otherwise treated as text.",
+      "Literal value for B when the B input isn't connected. Parsed as JSON when possible (e.g. 1000)."
     ]
   },
   "hash": {
@@ -719,6 +2231,26 @@
       "Digest",
       "Pass-through",
       "Value"
+    ],
+    "label": "Hash",
+    "subtitle": "Checksum or HMAC a value",
+    "titles": [
+      "Algorithm",
+      "HMAC key",
+      "Output encoding"
+    ],
+    "help": [
+      "Hash algorithm. Use sha256 or stronger for security; sha1/md5 are for checksums/compatibility only.",
+      "Render the digest as lowercase hex (default) or standard Base64.",
+      "When set, compute a keyed HMAC with this secret instead of a plain hash. Connect a ${secret.NAME} in rather than pasting the key."
+    ],
+    "enum_names": [
+      "Base64",
+      "Hex",
+      "MD5",
+      "SHA-1",
+      "SHA-256",
+      "SHA-512"
     ]
   },
   "homeassistant_call_service": {
@@ -728,6 +2260,26 @@
       "Entity",
       "Pass-through",
       "Service"
+    ],
+    "label": "Home Assistant",
+    "subtitle": "Call service",
+    "integration": "Home Assistant",
+    "titles": [
+      "Entity",
+      "Service",
+      "Service data"
+    ],
+    "help": [
+      "Extra service options passed through as-is — e.g. {\"brightness_pct\":50} or {\"temperature\":21}.",
+      "Hard deadline for the request, in milliseconds.",
+      "What to do, as domain.service — e.g. light.turn_on, switch.toggle, scene.turn_on, script.run. Overridden by the 'Service' input.",
+      "Which entity it acts on — e.g. light.living_room. Leave empty for services that don't target one. Overridden by the 'Entity' input."
+    ],
+    "connection": [
+      "Create one in Home Assistant under Profile → Long-Lived Access Tokens.",
+      "Instance URL",
+      "Long-lived access token",
+      "http://homeassistant.local:8123"
     ]
   },
   "homeassistant_get_state": {
@@ -738,6 +2290,22 @@
       "Full entity",
       "Pass-through",
       "State"
+    ],
+    "label": "Home Assistant",
+    "subtitle": "Get state",
+    "integration": "Home Assistant",
+    "titles": [
+      "Entity"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "Which entity to read — e.g. sensor.kitchen_temperature, light.living_room, binary_sensor.front_door. Overridden by the 'Entity' input."
+    ],
+    "connection": [
+      "Create one in Home Assistant under Profile → Long-Lived Access Tokens.",
+      "Instance URL",
+      "Long-lived access token",
+      "http://homeassistant.local:8123"
     ]
   },
   "homeassistant_state_changed": {
@@ -748,6 +2316,24 @@
       "Previous state",
       "State",
       "Time"
+    ],
+    "label": "Home Assistant",
+    "subtitle": "When state changes",
+    "integration": "Home Assistant",
+    "titles": [
+      "Check every",
+      "Entity"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "How often to check for a change once the flow is published. Leave blank to only check when you press Run (for testing).",
+      "Which entity to watch — e.g. binary_sensor.front_door, light.living_room, sensor.kitchen_temperature."
+    ],
+    "connection": [
+      "Create one in Home Assistant under Profile → Long-Lived Access Tokens.",
+      "Instance URL",
+      "Long-lived access token",
+      "http://homeassistant.local:8123"
     ]
   },
   "http_download": {
@@ -758,6 +2344,32 @@
       "Downloaded file",
       "Pass-through",
       "URL"
+    ],
+    "label": "Download a file",
+    "subtitle": "Save a file from a URL",
+    "integration": "HTTP",
+    "titles": [
+      "Accepted status codes",
+      "Allow private networks",
+      "Body",
+      "Create missing folders",
+      "Headers",
+      "Max download bytes",
+      "Method",
+      "Save to",
+      "URL"
+    ],
+    "help": [
+      "Abort if the download exceeds this many bytes. Default 100 MiB; 0 = unlimited (still bounded by quota).",
+      "Body to send with a POST request. The Body input overrides this when connected. May include ${secret.NAME} placeholders.",
+      "Create the folders in 'Save to' if they don't exist yet.",
+      "Disable the private-address guard. Only for intentional local targets.",
+      "GET fetches the file; POST sends the Body along (for export-style endpoints).",
+      "Hard deadline for the whole download, in milliseconds.",
+      "Request headers. Values may include ${secret.NAME} secret placeholders (e.g. an Authorization bearer token).",
+      "Status codes treated as success. Empty defaults to 2xx.",
+      "The web address to download. The URL input overrides this when connected.",
+      "Where to save the file in the workspace. Prefix with scratch:// for an in-between file that's cleaned up after the run."
     ]
   },
   "http_request": {
@@ -769,6 +2381,30 @@
       "Response",
       "Status",
       "URL"
+    ],
+    "label": "Web request",
+    "subtitle": "Call a URL or API",
+    "integration": "HTTP",
+    "titles": [
+      "Accepted status codes",
+      "Allow private networks",
+      "Body",
+      "Cache key",
+      "Headers",
+      "Max response bytes",
+      "Method",
+      "URL"
+    ],
+    "help": [
+      "Disable the private-address guard. Only enable when calling a local service intentionally.",
+      "Extra request headers (one per key). Values may include ${secret.NAME} placeholders that resolve to stored secrets.",
+      "Fail responses larger than this. Default 10 MiB.",
+      "Hard deadline for the full request, in milliseconds.",
+      "Set this on a GET you poll repeatedly to skip re-downloading unchanged data: the step remembers the server's ETag/Last-Modified and sends them next time. When nothing changed the server replies fast with status 304 and an empty Response — branch on status to skip work. Use a unique name per polled URL.",
+      "Status codes treated as success. Empty defaults to 2xx.",
+      "Text to send with the request (POST/PUT/PATCH). The Body input overrides this when connected.",
+      "The web address to call. The URL input overrides this when connected.",
+      "What kind of request to make. GET fetches data; POST/PUT/PATCH send the Body along."
     ]
   },
   "http_upload": {
@@ -778,6 +2414,34 @@
       "File",
       "Pass-through",
       "Response"
+    ],
+    "label": "Upload a file",
+    "subtitle": "Send a file to a URL",
+    "integration": "HTTP",
+    "titles": [
+      "Accepted status codes",
+      "Allow private networks",
+      "Content type",
+      "File to upload",
+      "Filename",
+      "Form field name",
+      "Headers",
+      "Method",
+      "Send as form upload",
+      "URL"
+    ],
+    "help": [
+      "Content-Type for a direct upload. Defaults to a guess from the file extension.",
+      "Defaults to PUT for a direct upload, POST for a form upload.",
+      "Disable the private-address guard. Only for intentional local targets.",
+      "Field name used for a form upload.",
+      "Filename sent with a form upload. Defaults to the file's own name.",
+      "Hard deadline for the whole upload, in milliseconds.",
+      "Off = send the file bytes directly (what upload links expect). On = send as a form attachment for services that ask for one.",
+      "Request headers (e.g. Authorization). Values may include ${secret.NAME} secrets.",
+      "Status codes treated as success. Empty defaults to 2xx.",
+      "The web address to upload to.",
+      "The workspace file to send (or connect the File input). scratch:// supported."
     ]
   },
   "if": {
@@ -787,6 +2451,35 @@
       "No",
       "Value",
       "Yes"
+    ],
+    "label": "If",
+    "titles": [
+      "Compare to",
+      "Field in the value",
+      "Test"
+    ],
+    "help": [
+      "For \"is within range\": include the lower bound.",
+      "For \"is within range\": include the upper bound.",
+      "How to test the Value against Compare to.",
+      "Optional dot-path into the Value when it is a JSON object (e.g. status). Empty tests the whole value. The full payload still routes — only the test reads the field.",
+      "What to compare the Value against, used when the Compare to input isn't connected. Parsed as JSON when possible — a number, or a list like [200,201,204] for \"is one of\", or [min,max] for \"is within range\"."
+    ],
+    "enum_names": [
+      "contains",
+      "does not contain",
+      "does not equal",
+      "equals",
+      "has a value",
+      "is empty",
+      "is greater than",
+      "is greater than or equal to",
+      "is less than",
+      "is less than or equal to",
+      "is not one of",
+      "is one of",
+      "is outside range",
+      "is within range"
     ]
   },
   "imap_get_attachments": {
@@ -797,6 +2490,40 @@
       "First file",
       "How many",
       "Pass-through"
+    ],
+    "label": "Mailbox",
+    "subtitle": "Download attachments",
+    "integration": "Mailbox",
+    "titles": [
+      "Email",
+      "Folder",
+      "Only these types",
+      "Save into"
+    ],
+    "help": [
+      "Comma-separated file extensions to keep, e.g. \"pdf\". Leave blank to take every attachment. Inline signature images are always skipped.",
+      "Hard deadline for the whole download, in milliseconds.",
+      "Which email to take the files from — the id from a Search emails match. Overridden by the 'Email' input when connected.",
+      "Which folder the email is in, e.g. \"INBOX\". Leave blank to use the folder set on the Mailbox page.",
+      "Workspace folder to save the files in, so they outlive the run. Leave blank to keep them in the run's scratch area — fine when a later step files them somewhere else."
+    ],
+    "connection": [
+      "993 (SSL/TLS) or 143 (STARTTLS)",
+      "Connection security",
+      "Folder",
+      "INBOX",
+      "Mail server (IMAP)",
+      "Password",
+      "Port",
+      "Username",
+      "Which folder the steps read by default. A step can point at another one.",
+      "Your mailbox password — or, on a provider with two-factor sign-in (Gmail, Fastmail, iCloud), an app password generated for this.",
+      "imap.example.com",
+      "implicit",
+      "implicit for 993, starttls for 143",
+      "none",
+      "starttls",
+      "usually your email address"
     ]
   },
   "imap_get_message": {
@@ -808,6 +2535,36 @@
       "From",
       "Pass-through",
       "Subject"
+    ],
+    "label": "Mailbox",
+    "subtitle": "Read email",
+    "integration": "Mailbox",
+    "titles": [
+      "Email",
+      "Folder"
+    ],
+    "help": [
+      "Hard deadline for reading the email, in milliseconds.",
+      "Which email to read — the id from a Search emails match. Overridden by the 'Email' input when connected.",
+      "Which folder the email is in, e.g. \"INBOX\". Leave blank to use the folder set on the Mailbox page. An email's id only means anything inside the folder it came from."
+    ],
+    "connection": [
+      "993 (SSL/TLS) or 143 (STARTTLS)",
+      "Connection security",
+      "Folder",
+      "INBOX",
+      "Mail server (IMAP)",
+      "Password",
+      "Port",
+      "Username",
+      "Which folder the steps read by default. A step can point at another one.",
+      "Your mailbox password — or, on a provider with two-factor sign-in (Gmail, Fastmail, iCloud), an app password generated for this.",
+      "imap.example.com",
+      "implicit",
+      "implicit for 993, starttls for 143",
+      "none",
+      "starttls",
+      "usually your email address"
     ]
   },
   "imap_mark_seen": {
@@ -816,6 +2573,36 @@
       "Details",
       "Email",
       "Pass-through"
+    ],
+    "label": "Mailbox",
+    "subtitle": "Mark as read",
+    "integration": "Mailbox",
+    "titles": [
+      "Email",
+      "Folder"
+    ],
+    "help": [
+      "Hard deadline for the change, in milliseconds.",
+      "Which email to mark read — the id from a Search emails match. Overridden by the 'Email' input when connected.",
+      "Which folder the email is in, e.g. \"INBOX\". Leave blank to use the folder set on the Mailbox page. An email's id only means anything inside the folder it came from."
+    ],
+    "connection": [
+      "993 (SSL/TLS) or 143 (STARTTLS)",
+      "Connection security",
+      "Folder",
+      "INBOX",
+      "Mail server (IMAP)",
+      "Password",
+      "Port",
+      "Username",
+      "Which folder the steps read by default. A step can point at another one.",
+      "Your mailbox password — or, on a provider with two-factor sign-in (Gmail, Fastmail, iCloud), an app password generated for this.",
+      "imap.example.com",
+      "implicit",
+      "implicit for 993, starttls for 143",
+      "none",
+      "starttls",
+      "usually your email address"
     ]
   },
   "imap_search_messages": {
@@ -825,6 +2612,50 @@
       "Matching emails",
       "Pass-through",
       "Subject"
+    ],
+    "label": "Mailbox",
+    "subtitle": "Search emails",
+    "integration": "Mailbox",
+    "titles": [
+      "Body contains",
+      "Folder",
+      "From",
+      "Max emails",
+      "Only new since last run",
+      "Only the last N days",
+      "Subject contains",
+      "To",
+      "Unread only"
+    ],
+    "help": [
+      "Hard deadline for the whole search, in milliseconds.",
+      "How many matches to bring back at most, newest first.",
+      "Ignore anything older than this many days. Leave blank to search the whole folder.",
+      "Match a recipient — useful on a shared mailbox that receives several addresses.",
+      "Match the sender. Any part of the address or name counts, so \"@customer.com\" finds everyone at that company. Overridden by the 'From' input.",
+      "Match words in the message text. Slower than the other fields on a large mailbox — most servers search bodies without an index.",
+      "Match words in the subject line. Overridden by the 'Subject' input.",
+      "Only emails still marked unread. Searching never marks anything read by itself.",
+      "When on, each run emits only emails that arrived since the previous run — nothing on the first run (it just remembers where the folder is up to). Turn this on when a published, polling flow acts on each match, so it doesn't re-process the same emails on every poll. Leave off for ad-hoc searches that should return every match.",
+      "Which folder to search, e.g. \"INBOX\" or \"INBOX/Invoices\". Leave blank to use the folder set on the Mailbox page."
+    ],
+    "connection": [
+      "993 (SSL/TLS) or 143 (STARTTLS)",
+      "Connection security",
+      "Folder",
+      "INBOX",
+      "Mail server (IMAP)",
+      "Password",
+      "Port",
+      "Username",
+      "Which folder the steps read by default. A step can point at another one.",
+      "Your mailbox password — or, on a provider with two-factor sign-in (Gmail, Fastmail, iCloud), an app password generated for this.",
+      "imap.example.com",
+      "implicit",
+      "implicit for 993, starttls for 143",
+      "none",
+      "starttls",
+      "usually your email address"
     ]
   },
   "join_rows": {
@@ -834,12 +2665,32 @@
       "Pass-through",
       "Right rows",
       "Rows"
+    ],
+    "label": "Combine two lists",
+    "help": [
+      "Join flavor. inner = matched only. left = all left + matched right. right = all right + matched left. outer = full union. anti = the left rows that have no match on the right — the \"which of these are new?\" question — emitted with their own columns only.",
+      "Join key mapping {left_col: right_col}. Multiple entries = multi-column key.",
+      "Suffix appended to right-side column names that collide with left-side column names (key columns excluded — they're dropped from the right output entirely)."
+    ],
+    "enum_names": [
+      "All left rows",
+      "All right rows",
+      "Everything from both",
+      "Only left rows with NO match",
+      "Only matching rows"
     ]
   },
   "json": {
     "description": "Emit a literal JSON value, decoded. Type a JSON array or object and it parses once at run time, emitting the real value (not a string) on the 'out' port — so it connects straight into ports that want structured JSON, like a Slack message's Blocks. Distinct from Text, which emits its content as a plain string.",
     "ports": [
       "JSON"
+    ],
+    "label": "JSON",
+    "titles": [
+      "JSON"
+    ],
+    "help": [
+      "A JSON value — e.g. an array of Slack Block Kit blocks like [ {…}, {…} ]. Parsed and emitted decoded on 'out'."
     ]
   },
   "klarna_capture_order": {
@@ -850,6 +2701,34 @@
       "Captured amount (smallest unit)",
       "Order ID",
       "Pass-through"
+    ],
+    "label": "Klarna",
+    "subtitle": "Capture order",
+    "integration": "Klarna",
+    "titles": [
+      "Amount (smallest unit)",
+      "Description",
+      "Order ID"
+    ],
+    "help": [
+      "A note shown on the customer's Klarna statement (e.g. \"Order shipped\").",
+      "Hard deadline for the request, in milliseconds.",
+      "Leave empty to capture the whole remaining authorized amount. For a partial capture, enter the amount in the currency's smallest unit — e.g. 2500 = 25.00. Overridden by the 'Amount' input.",
+      "Override the API host (testing).",
+      "The Klarna order to capture. Overridden by the 'Order ID' input."
+    ],
+    "connection": [
+      "API password",
+      "API username",
+      "From the Klarna Merchant Portal.",
+      "PK…",
+      "Region",
+      "eu",
+      "eu-playground",
+      "na",
+      "na-playground",
+      "oc",
+      "oc-playground"
     ]
   },
   "klarna_get_order": {
@@ -863,6 +2742,30 @@
       "Pass-through",
       "Remaining authorized (smallest unit)",
       "Status"
+    ],
+    "label": "Klarna",
+    "subtitle": "Get order",
+    "integration": "Klarna",
+    "titles": [
+      "Order ID"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "Override the API host (testing).",
+      "The Klarna order id to look up. Overridden by the 'Order ID' input."
+    ],
+    "connection": [
+      "API password",
+      "API username",
+      "From the Klarna Merchant Portal.",
+      "PK…",
+      "Region",
+      "eu",
+      "eu-playground",
+      "na",
+      "na-playground",
+      "oc",
+      "oc-playground"
     ]
   },
   "klarna_refund_order": {
@@ -873,6 +2776,34 @@
       "Pass-through",
       "Refund ID",
       "Refunded amount (smallest unit)"
+    ],
+    "label": "Klarna",
+    "subtitle": "Refund order",
+    "integration": "Klarna",
+    "titles": [
+      "Amount (smallest unit)",
+      "Description",
+      "Order ID"
+    ],
+    "help": [
+      "A note shown on the customer's Klarna statement (e.g. \"Returned\").",
+      "Hard deadline for the request, in milliseconds.",
+      "Leave empty to refund the whole remaining refundable amount (captured minus already refunded). For a partial refund, enter the amount in the currency's smallest unit — e.g. 500 = 5.00. Overridden by the 'Amount' input.",
+      "Override the API host (testing).",
+      "The Klarna order to refund. Overridden by the 'Order ID' input."
+    ],
+    "connection": [
+      "API password",
+      "API username",
+      "From the Klarna Merchant Portal.",
+      "PK…",
+      "Region",
+      "eu",
+      "eu-playground",
+      "na",
+      "na-playground",
+      "oc",
+      "oc-playground"
     ]
   },
   "lt": {
@@ -881,6 +2812,15 @@
       "A",
       "B",
       "Yes/No"
+    ],
+    "label": "A \u003c B",
+    "titles": [
+      "A",
+      "B"
+    ],
+    "help": [
+      "Literal value for A when the A input isn't connected. Parsed as JSON when possible (e.g. 200, true), otherwise treated as text.",
+      "Literal value for B when the B input isn't connected. Parsed as JSON when possible (e.g. 1000)."
     ]
   },
   "lte": {
@@ -889,6 +2829,15 @@
       "A",
       "B",
       "Yes/No"
+    ],
+    "label": "A ≤ B",
+    "titles": [
+      "A",
+      "B"
+    ],
+    "help": [
+      "Literal value for A when the A input isn't connected. Parsed as JSON when possible (e.g. 200, true), otherwise treated as text.",
+      "Literal value for B when the B input isn't connected. Parsed as JSON when possible (e.g. 1000)."
     ]
   },
   "map_rows": {
@@ -896,6 +2845,16 @@
     "ports": [
       "Pass-through",
       "Rows"
+    ],
+    "label": "Choose \u0026 rename columns",
+    "help": [
+      "Column rename map {old_name: new_name}. Applied AFTER select/drop/default so other ops can still refer to original names.",
+      "Columns to keep (mutually exclusive with drop). If absent and drop is absent, all input columns are kept.",
+      "Columns to remove (mutually exclusive with select).",
+      "Default values for missing or null cells, keyed by INPUT column name.",
+      "Drop rows where any listed (column == value). String-compared.",
+      "Keep only rows where every listed (column == value). String-compared, so 30 matches \"30\".",
+      "Keep only rows where every listed column's value appears in the given list. String-compared."
     ]
   },
   "merge": {
@@ -904,7 +2863,8 @@
       "Inputs",
       "Merged list",
       "Pass-through"
-    ]
+    ],
+    "label": "Merge"
   },
   "mqtt_publish": {
     "description": "Publish a message to a topic on an MQTT broker. The topic and payload can be typed on the step or connected from an earlier step (the matching input overrides the param). Broker is a tcp:// or ssl:// address (a bare host:port defaults to tcp://…:1883). The broker address and optional username/password are set once as the MQTT connection on the Apps page. Private-network brokers are blocked unless the operator allows private egress.",
@@ -913,6 +2873,36 @@
       "Pass-through",
       "Payload",
       "Topic"
+    ],
+    "label": "MQTT",
+    "subtitle": "Publish",
+    "integration": "MQTT",
+    "titles": [
+      "Client ID",
+      "Payload",
+      "QoS",
+      "Retain",
+      "Topic"
+    ],
+    "help": [
+      "Broker keeps this as the topic's last known message for new subscribers.",
+      "Delivery guarantee: 0 at-most-once, 1 at-least-once, 2 exactly-once.",
+      "Hard deadline for connect + publish, in milliseconds.",
+      "MQTT client id. Defaults to a dazyflow-derived id.",
+      "Message body. Overridden by the 'Payload' input.",
+      "Topic to publish to. Overridden by the 'Topic' input."
+    ],
+    "enum_names": [
+      "0 — at most once",
+      "1 — at least once",
+      "2 — exactly once"
+    ],
+    "connection": [
+      "Broker",
+      "Leave blank for anonymous brokers.",
+      "Password",
+      "Username",
+      "tcp://broker.example.com:1883"
     ]
   },
   "mysql_insert_rows": {
@@ -921,6 +2911,22 @@
       "Pass-through",
       "Rows",
       "Rows saved"
+    ],
+    "label": "MySQL",
+    "subtitle": "Insert rows",
+    "integration": "MySQL",
+    "titles": [
+      "Column mapping"
+    ],
+    "help": [
+      "Auto-create the table from headers when missing. Defaults true.",
+      "Optional. Choose which incoming fields to write and name their columns — {incoming field: column name}. Only listed fields are written (others dropped); blank a column name to skip a field. Leave empty to write every field. For row filtering or defaults, use a Map rows step first.",
+      "Optional: force a column's SQL type (e.g. {\"total\":\"DECIMAL(10,2)\"}). Columns default to text otherwise.",
+      "The table to write rows into (created automatically if it doesn't exist)."
+    ],
+    "connection": [
+      "Connection string",
+      "user:pass@tcp(host:3306)/db"
     ]
   },
   "mysql_query": {
@@ -929,6 +2935,23 @@
       "Columns",
       "Pass-through",
       "Rows"
+    ],
+    "label": "MySQL",
+    "subtitle": "Query",
+    "integration": "MySQL",
+    "titles": [
+      "Query values",
+      "Row limit",
+      "SQL"
+    ],
+    "help": [
+      "Optional cap on how many rows to return.",
+      "The SELECT query to run. Use ? placeholders for values and supply them under 'Query values'.",
+      "Values for the ? placeholders in the SQL, in order."
+    ],
+    "connection": [
+      "Connection string",
+      "user:pass@tcp(host:3306)/db"
     ]
   },
   "mysql_upsert_rows": {
@@ -937,6 +2960,24 @@
       "Pass-through",
       "Rows",
       "Rows saved"
+    ],
+    "label": "MySQL",
+    "subtitle": "Upsert rows",
+    "integration": "MySQL",
+    "titles": [
+      "Column mapping"
+    ],
+    "help": [
+      "Auto-create the table (with a UNIQUE on conflict_columns) when missing. Defaults true.",
+      "Columns that identify an existing row; a match updates it instead of inserting a duplicate (e.g. [\"email\"]).",
+      "Optional. Choose which incoming fields to write and name their columns — {incoming field: column name}. Only listed fields are written (others dropped); blank a column name to skip a field. conflict_columns refer to the mapped (output) names. Leave empty to write every field.",
+      "Optional: force a column's SQL type. Columns default to text otherwise.",
+      "The table to write rows into.",
+      "Which columns to overwrite when a row already exists. Empty = leave existing rows untouched (insert-only)."
+    ],
+    "connection": [
+      "Connection string",
+      "user:pass@tcp(host:3306)/db"
     ]
   },
   "neq": {
@@ -945,6 +2986,15 @@
       "A",
       "B",
       "Yes/No"
+    ],
+    "label": "A ≠ B",
+    "titles": [
+      "A",
+      "B"
+    ],
+    "help": [
+      "Literal value for A when the A input isn't connected. Parsed as JSON when possible (e.g. 200, true), otherwise treated as text.",
+      "Literal value for B when the B input isn't connected. Parsed as JSON when possible (e.g. 1000)."
     ]
   },
   "not": {
@@ -952,7 +3002,8 @@
     "ports": [
       "Yes/No",
       "Yes/No value"
-    ]
+    ],
+    "label": "NOT"
   },
   "notion_create_page": {
     "description": "Add a page to Notion. Type a Title and an optional Page body (blank lines start new paragraphs), then pick where it goes: a database (the page becomes a row) or a parent page (it becomes a subpage). Title and Page body can also be connected from an earlier step — a connection overrides the typed value. Extra database columns (Status, dates, tags…) go in the advanced 'properties' field as raw Notion JSON.",
@@ -963,6 +3014,30 @@
       "Page body",
       "Pass-through",
       "Title"
+    ],
+    "label": "Notion",
+    "subtitle": "Create page",
+    "integration": "Notion",
+    "titles": [
+      "Add to database",
+      "Add under page",
+      "Body blocks (Notion JSON)",
+      "Page body",
+      "Properties (Notion JSON)",
+      "Title"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "Plain text for the page body — blank lines start a new paragraph. Overridden by the 'Page body' input when connected.",
+      "Raw Notion block objects for the page body (advanced).",
+      "Raw Notion properties object for extra database columns, passed through verbatim and merged with Title (advanced).",
+      "Raw Notion token; overrides 'account'.",
+      "The database the page goes into (as a new row) — paste its ID. Set this or 'Add under page', not both.",
+      "The page the new page goes under (as a subpage) — paste its ID. Set this or 'Add to database', not both.",
+      "The page title. Overridden by the 'Title' input when connected."
+    ],
+    "secret_notes": [
+      "Notion integration token (or connect via OAuth)."
     ]
   },
   "notion_query_database": {
@@ -972,6 +3047,28 @@
       "Details",
       "Pass-through",
       "Rows"
+    ],
+    "label": "Notion",
+    "subtitle": "Query database",
+    "integration": "Notion",
+    "titles": [
+      "Database ID",
+      "Filter (Notion JSON)",
+      "Max results",
+      "Sort (Notion JSON)",
+      "Start cursor"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "How many rows to return at most (Notion caps this at 100).",
+      "Pagination cursor from a prior run's next_cursor output (advanced).",
+      "Raw Notion filter object, passed through verbatim (advanced).",
+      "Raw Notion sorts array, passed through verbatim (advanced).",
+      "Raw Notion token; overrides 'account'.",
+      "Which database to read — paste its ID. Overridden by the 'Database ID' input when connected."
+    ],
+    "secret_notes": [
+      "Notion integration token (or connect via OAuth)."
     ]
   },
   "nshift_create_shipment": {
@@ -981,6 +3078,24 @@
       "Shipment",
       "Shipment ID",
       "Tracking numbers"
+    ],
+    "label": "nShift",
+    "subtitle": "Create shipment",
+    "integration": "nShift",
+    "titles": [
+      "Shipment"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "Override the API host (testing).",
+      "The shipment payload (sender / receiver / parcels / service), following nShift's /shipments schema. Overridden by the 'Shipment' input."
+    ],
+    "connection": [
+      "API key",
+      "Environment",
+      "Generated in nShift Delivery under API settings.",
+      "integration",
+      "production"
     ]
   },
   "nshift_delete_shipment": {
@@ -989,6 +3104,24 @@
       "Deleted",
       "Pass-through",
       "Shipment ID"
+    ],
+    "label": "nShift",
+    "subtitle": "Delete shipment",
+    "integration": "nShift",
+    "titles": [
+      "Shipment ID"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "Override the API host (testing).",
+      "The nShift shipment id to delete. Overridden by the 'Shipment ID' input."
+    ],
+    "connection": [
+      "API key",
+      "Environment",
+      "Generated in nShift Delivery under API settings.",
+      "integration",
+      "production"
     ]
   },
   "nshift_get_shipment": {
@@ -998,6 +3131,24 @@
       "Shipment",
       "Shipment ID",
       "Tracking numbers"
+    ],
+    "label": "nShift",
+    "subtitle": "Get shipment",
+    "integration": "nShift",
+    "titles": [
+      "Shipment ID"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "Override the API host (testing).",
+      "The nShift shipment id to look up. Overridden by the 'Shipment ID' input."
+    ],
+    "connection": [
+      "API key",
+      "Environment",
+      "Generated in nShift Delivery under API settings.",
+      "integration",
+      "production"
     ]
   },
   "ntfy": {
@@ -1008,12 +3159,52 @@
       "Message",
       "Pass-through",
       "Title"
+    ],
+    "label": "ntfy",
+    "subtitle": "Send notification",
+    "integration": "ntfy",
+    "titles": [
+      "Link to open",
+      "Message",
+      "Priority",
+      "Tags",
+      "Title",
+      "Topic"
+    ],
+    "help": [
+      "A name you pick for this notification channel — letters, numbers, dashes or underscores, no spaces. To receive the messages, subscribe to this same topic in the ntfy app or open ntfy.sh/\u003cyour-topic\u003e in a browser.",
+      "Emoji/tag shortcodes.",
+      "Hard deadline for the request, in milliseconds.",
+      "How urgently it buzzes. Leave unset for the normal level.",
+      "Notification title.",
+      "The text to send. Optional if you connect a Message input from another step.",
+      "Web address opened when the notification is tapped. Connect an Await approval step's 'Approval link' into the matching input so the recipient can approve straight from the notification."
+    ],
+    "enum_names": [
+      "1 — Min",
+      "2 — Low",
+      "3 — Default",
+      "4 — High",
+      "5 — Max"
+    ],
+    "connection": [
+      "Access token",
+      "Server URL",
+      "https://ntfy.sh",
+      "tk_… (for protected topics)"
     ]
   },
   "number": {
     "description": "Emit a literal numeric value. Later steps see it as a JSON number on the 'out' port — connect it into a comparison (In Range, Compare), an operator, or a numeric input like a Delay step's duration.",
     "ports": [
       "Number"
+    ],
+    "label": "Number",
+    "titles": [
+      "Number"
+    ],
+    "help": [
+      "The number to emit (e.g. 200 or 0.95)."
     ]
   },
   "ollama": {
@@ -1023,6 +3214,33 @@
       "Pass-through",
       "Prompt",
       "Response"
+    ],
+    "label": "Ollama",
+    "subtitle": "Ask",
+    "integration": "Ollama",
+    "titles": [
+      "Max tokens",
+      "Model",
+      "Prompt",
+      "System prompt",
+      "Temperature"
+    ],
+    "help": [
+      "Cap on how long the reply can be. Higher allows longer answers.",
+      "Creativity dial (0–1): lower is more focused and repeatable, higher more varied.",
+      "Full conversation history ({role, content}); overrides the prompt.",
+      "Hard deadline for the AI request, in milliseconds.",
+      "Injected from the Ollama connection — leave unset.",
+      "Optional instruction that frames the reply.",
+      "Override the API host.",
+      "Single user message (used when no Prompt input and no messages)."
+    ],
+    "connection": [
+      "API key",
+      "Server URL",
+      "Where Ollama is listening. A localhost address also needs DAZYFLOW_ALLOW_PRIVATE_EGRESS set on the daemon.",
+      "http://localhost:11434",
+      "only if your instance is behind a proxy"
     ]
   },
   "ollama_classify": {
@@ -1033,6 +3251,32 @@
       "Files",
       "Pass-through",
       "Text"
+    ],
+    "label": "Ollama",
+    "subtitle": "Classify",
+    "integration": "Ollama",
+    "titles": [
+      "Allow \"none of these\"",
+      "Categories",
+      "Category",
+      "Model",
+      "Text to classify",
+      "When to use it"
+    ],
+    "help": [
+      "Hard deadline for the AI request, in milliseconds.",
+      "Injected from the Ollama connection — leave unset.",
+      "Let the AI answer 'none' when no category fits, instead of forcing a pick.",
+      "Or connect it into the Text input.",
+      "Override the API host.",
+      "The buckets to sort text into. Give each a name and a short 'when to use it' so the AI picks well."
+    ],
+    "connection": [
+      "API key",
+      "Server URL",
+      "Where Ollama is listening. A localhost address also needs DAZYFLOW_ALLOW_PRIVATE_EGRESS set on the daemon.",
+      "http://localhost:11434",
+      "only if your instance is behind a proxy"
     ]
   },
   "ollama_draft_reply": {
@@ -1041,6 +3285,39 @@
       "Message",
       "Pass-through",
       "Reply"
+    ],
+    "label": "Ollama",
+    "subtitle": "Draft reply",
+    "integration": "Ollama",
+    "titles": [
+      "Anything to include?",
+      "Message to reply to",
+      "Model",
+      "Reply language",
+      "Signature",
+      "Tone"
+    ],
+    "help": [
+      "Appended to the end of the reply.",
+      "Hard deadline for the AI request, in milliseconds.",
+      "Injected from the Ollama connection — leave unset.",
+      "Language to write the reply in. Blank matches the incoming message.",
+      "Or connect it into the Message input.",
+      "Override the API host.",
+      "e.g. 'offer a refund', 'point them to the docs'."
+    ],
+    "enum_names": [
+      "Apologetic",
+      "Concise",
+      "Formal",
+      "Friendly"
+    ],
+    "connection": [
+      "API key",
+      "Server URL",
+      "Where Ollama is listening. A localhost address also needs DAZYFLOW_ALLOW_PRIVATE_EGRESS set on the daemon.",
+      "http://localhost:11434",
+      "only if your instance is behind a proxy"
     ]
   },
   "ollama_extract": {
@@ -1050,6 +3327,40 @@
       "Files",
       "Pass-through",
       "Text"
+    ],
+    "label": "Ollama",
+    "subtitle": "Extract fields",
+    "integration": "Ollama",
+    "titles": [
+      "Field name",
+      "Fields to extract",
+      "If a field isn't found",
+      "Model",
+      "Text to read",
+      "Type",
+      "What it is"
+    ],
+    "help": [
+      "Hard deadline for the AI request, in milliseconds.",
+      "Injected from the Ollama connection — leave unset.",
+      "Or connect it into the Text input.",
+      "Override the API host.",
+      "The fields to pull out — give each a name and what it is; the result is one object with those fields."
+    ],
+    "enum_names": [
+      "Date",
+      "Fail the step",
+      "Leave it empty",
+      "Number",
+      "Text",
+      "Yes/No"
+    ],
+    "connection": [
+      "API key",
+      "Server URL",
+      "Where Ollama is listening. A localhost address also needs DAZYFLOW_ALLOW_PRIVATE_EGRESS set on the daemon.",
+      "http://localhost:11434",
+      "only if your instance is behind a proxy"
     ]
   },
   "ollama_summarize": {
@@ -1059,6 +3370,36 @@
       "Pass-through",
       "Summary",
       "Text"
+    ],
+    "label": "Ollama",
+    "subtitle": "Summarize",
+    "integration": "Ollama",
+    "titles": [
+      "Model",
+      "Output language",
+      "Roughly how many words",
+      "Style",
+      "Text to summarize"
+    ],
+    "help": [
+      "Hard deadline for the AI request, in milliseconds.",
+      "Injected from the Ollama connection — leave unset.",
+      "Leave blank to match the input's language.",
+      "Or connect it into the Text input.",
+      "Override the API host.",
+      "Rough target length for the summary."
+    ],
+    "enum_names": [
+      "Bullet points",
+      "One sentence",
+      "Short paragraph"
+    ],
+    "connection": [
+      "API key",
+      "Server URL",
+      "Where Ollama is listening. A localhost address also needs DAZYFLOW_ALLOW_PRIVATE_EGRESS set on the daemon.",
+      "http://localhost:11434",
+      "only if your instance is behind a proxy"
     ]
   },
   "openmeteo_current": {
@@ -1070,6 +3411,28 @@
       "Pass-through",
       "Summary",
       "Temperature"
+    ],
+    "label": "Open-Meteo",
+    "subtitle": "Current conditions",
+    "integration": "Open-Meteo",
+    "titles": [
+      "Latitude",
+      "Longitude",
+      "Units"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "Latitude of the point, -90..90. Overridden by a \"lat,lon\" value on the Coordinate input.",
+      "Longitude of the point, -180..180. Overridden by the Coordinate input.",
+      "metric = °C + m/s, imperial = °F + mph."
+    ],
+    "enum_names": [
+      "Imperial (°F, mph)",
+      "Metric (°C, m/s)"
+    ],
+    "connection": [
+      "API key",
+      "Optional — only for Open-Meteo's commercial (paid) plan. Leave blank for free non-commercial use."
     ]
   },
   "openmeteo_forecast": {
@@ -1080,6 +3443,30 @@
       "Full response",
       "Pass-through",
       "Summary"
+    ],
+    "label": "Open-Meteo",
+    "subtitle": "Daily forecast",
+    "integration": "Open-Meteo",
+    "titles": [
+      "Days",
+      "Latitude",
+      "Longitude",
+      "Units"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "How many days to return, counting from today (1..16).",
+      "Latitude of the point, -90..90. Overridden by a \"lat,lon\" value on the Coordinate input.",
+      "Longitude of the point, -180..180. Overridden by the Coordinate input.",
+      "metric = °C + m/s, imperial = °F + mph."
+    ],
+    "enum_names": [
+      "Imperial (°F, mph)",
+      "Metric (°C, m/s)"
+    ],
+    "connection": [
+      "API key",
+      "Optional — only for Open-Meteo's commercial (paid) plan. Leave blank for free non-commercial use."
     ]
   },
   "or": {
@@ -1087,7 +3474,8 @@
     "ports": [
       "Yes/No",
       "Yes/No values"
-    ]
+    ],
+    "label": "A OR B"
   },
   "parse_csv": {
     "description": "Turn CSV text into rows. Feed it an HTTP response, a downloaded file's contents, or any comma-separated text and it parses into the standard rows + headers shape that Sheets, Excel, Postgres, and the transform family consume. By default the first line is the header row and names the columns; set 'header' false for headerless data (columns become col1, col2, …). 'delimiter' switches the separator — use \"\\t\" or \"tab\" for tab-separated values, \";\" for European CSVs. Rows shorter than the header are padded with empty strings; longer rows keep their extra cells under the padded names.",
@@ -1095,6 +3483,16 @@
       "CSV",
       "Pass-through",
       "Rows"
+    ],
+    "label": "Read CSV",
+    "subtitle": "CSV text into rows",
+    "titles": [
+      "Delimiter",
+      "First row is header"
+    ],
+    "help": [
+      "Field separator. Use \"\\t\" or \"tab\" for TSV, \";\" for European CSVs. A single character.",
+      "When true the first line names the columns; when false columns are named col1, col2, …"
     ]
   },
   "parse_json": {
@@ -1104,6 +3502,12 @@
       "Pass-through",
       "Rows",
       "Value"
+    ],
+    "label": "Read JSON",
+    "subtitle": "Read fields from text",
+    "help": [
+      "Optional dot-path into the parsed JSON before rows are built, e.g. \"data.items\". Each segment indexes an object key. Point it at an object or a list of objects to get rows; point it at a single value (a version string, an id) and 'Rows' comes out empty while 'Value' carries what you asked for.",
+      "Strip a leading/trailing Markdown code fence and surrounding prose before parsing. On by default so raw LLM output parses cleanly."
     ]
   },
   "parse_xml": {
@@ -1113,6 +3517,11 @@
       "Rows",
       "Value",
       "XML"
+    ],
+    "label": "Read XML",
+    "subtitle": "XML text into rows",
+    "help": [
+      "Optional dot-path into the parsed document (relative to the root's children) before rows are built, e.g. \"channel.item\". Each segment indexes a child element name."
     ]
   },
   "parse_yaml": {
@@ -1122,6 +3531,20 @@
       "Rows",
       "Value",
       "YAML"
+    ],
+    "label": "Read YAML",
+    "subtitle": "YAML text into rows",
+    "titles": [
+      "Path",
+      "When there are several documents"
+    ],
+    "help": [
+      "How to treat a file with \"---\" separators. \"One row per document\" suits a manifest bundle; \"Only the first\" suits a file whose later documents are overrides you don't want.",
+      "Optional dot-path into the parsed YAML before rows are built, e.g. \"spec.containers\". Each segment indexes a mapping key. Point it at a mapping or a list of mappings to get rows; point it at a single value (a version, a name) and 'Rows' comes out empty while 'Value' carries what you asked for."
+    ],
+    "enum_names": [
+      "One row per document",
+      "Only the first"
     ]
   },
   "pdf_info": {
@@ -1132,7 +3555,10 @@
       "Pages",
       "Pass-through",
       "Password-protected"
-    ]
+    ],
+    "label": "PDF",
+    "subtitle": "Read PDF details",
+    "integration": "PDF"
   },
   "pdf_merge": {
     "description": "Join several PDFs into one. Connect file-producing steps into the Files input — the attachments a month of invoice emails carried, the pages a scanner sent one at a time — and they're combined in the order they arrive. The natural end of a filing flow: one file for the accountant instead of forty. Runs on this machine; nothing is uploaded anywhere.",
@@ -1141,6 +3567,19 @@
       "PDF",
       "Pages",
       "Pass-through"
+    ],
+    "label": "PDF",
+    "subtitle": "Combine PDFs",
+    "integration": "PDF",
+    "titles": [
+      "Blank page between documents",
+      "File name",
+      "Save into"
+    ],
+    "help": [
+      "Insert a blank page between each document, so it's obvious where one invoice ends and the next begins on paper.",
+      "What to call the combined file. \".pdf\" is added if you leave it off.",
+      "Workspace folder to save it in, so it outlives the run. Leave blank to keep it in the run's scratch area — fine when a later step emails or files it."
     ]
   },
   "pdf_split": {
@@ -1151,6 +3590,19 @@
       "First file",
       "How many",
       "Pass-through"
+    ],
+    "label": "PDF",
+    "subtitle": "Split a PDF",
+    "integration": "PDF",
+    "titles": [
+      "Name prefix",
+      "Pages per file",
+      "Save into"
+    ],
+    "help": [
+      "How many pages each piece gets. 1 makes a file per page.",
+      "What to call the pieces — they get \"-1\", \"-2\" and so on. Leave blank to use \"page\".",
+      "Workspace folder to save the pieces in, so they outlive the run. Leave blank to keep them in the run's scratch area."
     ]
   },
   "phone": {
@@ -1163,6 +3615,15 @@
       "Pass-through",
       "Phone",
       "Type"
+    ],
+    "label": "Phone",
+    "titles": [
+      "Default region",
+      "Phone"
+    ],
+    "help": [
+      "A phone number — local (070-123 45 67) or international (+46701234567). Type it here, or connect a string into the 'phone' input.",
+      "ISO 3166 alpha-2 country code (SE, NO, DK, FI, GB…) to assume when the number isn't written in +international form. Ignored for a number that already starts with +."
     ]
   },
   "poll_trigger": {
@@ -1170,6 +3631,13 @@
     "ports": [
       "Pass-through",
       "Time"
+    ],
+    "label": "Interval",
+    "titles": [
+      "Every"
+    ],
+    "help": [
+      "Set this to run the flow automatically every N minutes/hours/days — e.g. every 5 minutes. Leave it empty and the flow never runs on its own; it runs only when you press Run."
     ]
   },
   "postgres_insert_rows": {
@@ -1178,6 +3646,23 @@
       "Pass-through",
       "Rows",
       "Rows saved"
+    ],
+    "label": "Postgres",
+    "subtitle": "Insert rows",
+    "integration": "Postgres",
+    "titles": [
+      "Column mapping"
+    ],
+    "help": [
+      "Auto-create the table from headers when missing. Defaults true.",
+      "Optional. Choose which incoming fields to write and name their columns — {incoming field: column name}. Only listed fields are written (others dropped); blank a column name to skip a field. Leave empty to write every field. For row filtering or defaults, use a Map rows step first.",
+      "Optional: force a column's SQL type (e.g. {\"id\":\"bigint\"}). Columns default to text otherwise.",
+      "The Postgres schema the table lives in.",
+      "The table to write rows into (created automatically if it doesn't exist)."
+    ],
+    "connection": [
+      "Connection string",
+      "postgres://user:pass@host:5432/db"
     ]
   },
   "postgres_query": {
@@ -1186,6 +3671,23 @@
       "Columns",
       "Pass-through",
       "Rows"
+    ],
+    "label": "Postgres",
+    "subtitle": "Query",
+    "integration": "Postgres",
+    "titles": [
+      "Query values",
+      "Row limit",
+      "SQL"
+    ],
+    "help": [
+      "Optional cap on how many rows to return.",
+      "The SELECT query to run. Use $1, $2 … placeholders for values and supply them under 'Query values'.",
+      "Values for the $1, $2 … placeholders in the SQL, in order."
+    ],
+    "connection": [
+      "Connection string",
+      "postgres://user:pass@host:5432/db"
     ]
   },
   "postgres_upsert_rows": {
@@ -1194,6 +3696,25 @@
       "Pass-through",
       "Rows",
       "Rows saved"
+    ],
+    "label": "Postgres",
+    "subtitle": "Upsert rows",
+    "integration": "Postgres",
+    "titles": [
+      "Column mapping"
+    ],
+    "help": [
+      "Auto-create the table (with a UNIQUE on conflict_columns) when missing. Defaults true.",
+      "Columns that identify an existing row; a match updates it instead of inserting a duplicate (e.g. [\"email\"]).",
+      "Optional. Choose which incoming fields to write and name their columns — {incoming field: column name}. Only listed fields are written (others dropped); blank a column name to skip a field. conflict_columns refer to the mapped (output) names. Leave empty to write every field.",
+      "Optional: force a column's SQL type. Columns default to text otherwise.",
+      "The Postgres schema the table lives in.",
+      "The table to write rows into.",
+      "Which columns to overwrite when a row already exists. Empty = leave existing rows untouched (insert-only)."
+    ],
+    "connection": [
+      "Connection string",
+      "postgres://user:pass@host:5432/db"
     ]
   },
   "regex": {
@@ -1203,6 +3724,28 @@
       "Pass-through",
       "Result",
       "Text"
+    ],
+    "label": "Regex",
+    "subtitle": "Extract, replace, split, or match",
+    "titles": [
+      "Mode",
+      "Pattern",
+      "Replacement",
+      "Replacements",
+      "Text to search"
+    ],
+    "help": [
+      "For replace mode: the substitution text. $1 / ${name} insert capture groups. Ignored when a Replacements table is filled in.",
+      "RE2 regular expression. Inline flags like (?i) work; capture groups become columns in extract mode. Can be left empty in replace mode when a Replacements table is filled in — the words to look for are then the table's own.",
+      "Replace mode, many words at once: what to look for on the left, what to write on the right. Each match becomes whatever its row says; a match no row mentions is left as it is. Leave Pattern empty and the words are looked for literally, or write a pattern (e.g. with (?i)) and each match is looked up in this table.",
+      "The text to run the pattern over. Or connect the Text input, which overrides this. Inside a For each, type the field to read — e.g. ${item.description}.",
+      "extract matches (rows + first on 'out'), replace (text), split by the pattern (list), or match/test (boolean)."
+    ],
+    "enum_names": [
+      "Extract matches",
+      "Replace matches",
+      "Split on the pattern",
+      "Test for a match"
     ]
   },
   "render_table": {
@@ -1211,6 +3754,19 @@
       "HTML table",
       "Pass-through",
       "Rows"
+    ],
+    "label": "Make a table",
+    "subtitle": "HTML table from rows",
+    "titles": [
+      "Column names",
+      "If there are no rows",
+      "Table name"
+    ],
+    "help": [
+      "An optional name for the table, shown as a caption above the header row. Leave blank for no caption. Takes a reference, so it can name the run's own data — e.g. \"Orders for ${upstream.today.out}\".",
+      "Rename headers: the column as it appears in the data on the left, the heading you want on the right. Columns you don't list keep their own name, and listing one does not hide the others — this only changes the text in the header row.",
+      "What to show instead of an empty table when the input has zero rows — plain text or HTML, e.g. \"No results yet\". Leave blank to output nothing at all.",
+      "Which columns to include, in order. A plain name uses the data's own column name as the header; {\"column\":\"customer_email\",\"label\":\"Customer\"} keeps reading that column but heads it \"Customer\". Leave empty to use every column the data has, in its natural order. The inspector's column editor writes this for you."
     ]
   },
   "render_template": {
@@ -1220,6 +3776,16 @@
       "Pass-through",
       "Rendered HTML",
       "Template"
+    ],
+    "label": "Fill a template",
+    "subtitle": "For rich HTML emails",
+    "titles": [
+      "Data",
+      "Template"
+    ],
+    "help": [
+      "HTML template (Go html/template). {{.field}} inserts a value from the data, {{range .items}}…{{end}} loops, {{if .x}}…{{end}} branches. Helpers: default, upper, lower, join. Values are auto-escaped. Overridden by the 'Template' input.",
+      "Merge data the template sees as the root context, so {{.name}} reads data.name. Usually connected in via the 'Data' input (which overrides this); set here for fixed or test content."
     ]
   },
   "render_text": {
@@ -1228,6 +3794,16 @@
       "Pass-through",
       "Rendered text",
       "Rows"
+    ],
+    "label": "Make text",
+    "subtitle": "Text from a list",
+    "help": [
+      "Appended to the joined text when at least one row is rendered.",
+      "CEL expression rendering one line per row. Sees the row as 'row' and the current time as 'now'. Non-string results are stringified. Takes precedence over 'column'.",
+      "Name of a single column to take each line from. Used when 'template' is absent.",
+      "Prepended to the joined text when at least one row is rendered.",
+      "String placed between rendered lines. Defaults to a newline.",
+      "Text emitted when there are zero input rows. Defaults to the empty string."
     ]
   },
   "roaring_company_overview": {
@@ -1238,6 +3814,26 @@
       "Org number",
       "Pass-through",
       "Status"
+    ],
+    "label": "Roaring",
+    "subtitle": "Company overview",
+    "integration": "Roaring",
+    "titles": [
+      "API version",
+      "Country",
+      "Org number"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "ISO country of the register (Roaring is per-country). Defaults to Sweden.",
+      "Override the API host (testing).",
+      "Roaring Company Overview API version segment.",
+      "The organisation number to look up. Overridden by the 'Org number' input."
+    ],
+    "connection": [
+      "Consumer Key",
+      "Consumer Secret",
+      "From the Roaring portal under Development → Access keys."
     ]
   },
   "roaring_company_search": {
@@ -1247,6 +3843,26 @@
       "Pass-through",
       "Query",
       "Results"
+    ],
+    "label": "Roaring",
+    "subtitle": "Company search",
+    "integration": "Roaring",
+    "titles": [
+      "API version",
+      "Country",
+      "Query"
+    ],
+    "help": [
+      "Company name to search for. Overridden by the 'Query' input.",
+      "Hard deadline for the request, in milliseconds.",
+      "ISO country of the register (Roaring is per-country). Defaults to Sweden.",
+      "Override the API host (testing).",
+      "Roaring Company Search API version segment."
+    ],
+    "connection": [
+      "Consumer Key",
+      "Consumer Secret",
+      "From the Roaring portal under Development → Access keys."
     ]
   },
   "route_rows": {
@@ -1263,6 +3879,13 @@
       "Routing slot 7",
       "Routing slot 8",
       "Rows"
+    ],
+    "label": "Route rows",
+    "help": [
+      "CEL expression returning bool. Sees 'row' as map\u003cstring,dyn\u003e.",
+      "Ordered list of routing rules. Each row is sent to the FIRST matching route; unmatched rows land on the default slot.",
+      "Output port name. One of rows_1..rows_8.",
+      "Slot name that catches rows matching no route. Defaults to 'default'."
     ]
   },
   "rss": {
@@ -1271,6 +3894,20 @@
       "Feed URL",
       "Items",
       "Pass-through"
+    ],
+    "label": "RSS / Atom feed",
+    "subtitle": "New items from a feed",
+    "titles": [
+      "Feed URL",
+      "Only new items"
+    ],
+    "help": [
+      "On: remember what's been emitted and fire only for new items (the first poll baselines silently). Off: emit the whole current feed every run.",
+      "The RSS or Atom feed URL. Can also be connected into the 'url' input."
+    ],
+    "node_state": [
+      "Forget which items it has already emitted. The next run baselines again (recording current items, emitting none), then fires only for items published after that.",
+      "Remembered items"
     ]
   },
   "run_on_runner": {
@@ -1282,6 +3919,34 @@
       "Output",
       "Pass-through",
       "Script"
+    ],
+    "label": "Run on your machine",
+    "subtitle": "A script, on a runner you host",
+    "titles": [
+      "Environment variables",
+      "Give up after (seconds)",
+      "If the script exits non-zero",
+      "Run it with",
+      "Script",
+      "Where to run it"
+    ],
+    "help": [
+      "A script that exits non-zero has failed, and by default so does this step. Choose 'Carry on' and the step succeeds instead, with the script's exit code on the 'Exit code' output for the flow to branch on — the way a script author expects exit codes to work (2 might mean 'nothing to do today' rather than 'broken'). This covers ONLY a script that ran and returned a code: a machine that is switched off, an agent that refused the script, or a script the runner had to stop still fail the step, because there is no exit code to hand you and pretending otherwise would send the flow down the wrong path.",
+      "Defaults to 600. The runner kills the script when this elapses.",
+      "Tags the machine must carry — ALL of them. One tag sends the work to whichever machine carrying it is free; adding a second narrows that to machines carrying both. Every machine's own name is also a tag, so picking a name pins this step to that one machine.",
+      "The script to run on that machine. It runs as the user the runner agent runs as, in the agent's working directory. Connect the 'script' input instead to have an earlier step supply it.",
+      "Values the script reads from its environment — $NAME in a shell, os.environ in Python. Use ${secret.NAME} for anything sensitive: the value reaches the machine but is never written into the flow, and is blanked out of the run's output and logs. A value set here wins over one the agent's own environment already has.",
+      "What starts the script on that machine. 'The machine's own shell' is /bin/sh on a unix box and cmd on Windows — the behaviour a runner has always had. Anything else writes the script to a temporary file and starts that interpreter with it, so choose Python and write Python. An agent older than this Dazyflow release does not know how to do that and will use the machine's shell regardless — re-run the install command on the machine to upgrade it."
+    ],
+    "enum_names": [
+      "Carry on — the flow checks the exit code",
+      "Fail this step",
+      "Node.js",
+      "PowerShell",
+      "Python 3",
+      "The machine's own shell",
+      "bash",
+      "sh (POSIX shell)"
     ]
   },
   "secret_set": {
@@ -1290,6 +3955,12 @@
       "Pass-through",
       "Secret name",
       "Value"
+    ],
+    "label": "Secrets",
+    "subtitle": "Set secret",
+    "help": [
+      "Secret name. Stored as an organization secret; reference it as ${secret.\u003cname\u003e}. Allowed characters: [A-Za-z0-9_.-], up to 128 chars.",
+      "Value to store. Overridden by the 'value' input port when connected."
     ]
   },
   "sftp_download_file": {
@@ -1299,6 +3970,41 @@
       "File name",
       "Pass-through",
       "Size"
+    ],
+    "label": "SFTP",
+    "subtitle": "Download file",
+    "integration": "SFTP",
+    "titles": [
+      "File",
+      "Folder",
+      "Save into"
+    ],
+    "help": [
+      "Folder to resolve a bare file name against. Leave blank to use the folder set on the SFTP page.",
+      "Hard deadline for the transfer, in milliseconds. Raise it for large files.",
+      "Which file to fetch — a full remote path, or just a name to take it from the folder. Overridden by the 'File' input when connected.",
+      "Workspace folder to save the file in, so it outlives the run. Leave blank to keep it in the run's scratch area — fine when a later step reads or files it."
+    ],
+    "connection": [
+      "/incoming",
+      "22",
+      "An alternative to the fingerprint, if you already have an OpenSSH known_hosts line for this server.",
+      "Fill in either a password or a private key below — whichever the server expects.",
+      "Folder",
+      "Host key fingerprint",
+      "Key passphrase",
+      "Only if the private key is encrypted.",
+      "Password",
+      "Port",
+      "Proves you're talking to the right server. Leave it blank and Test connection will show you the server's fingerprint to paste in.",
+      "SHA256:…",
+      "SSH private key",
+      "Server",
+      "The remote folder the steps work in by default. A step can point at another one.",
+      "The whole key including the BEGIN/END lines. Preferred over a password where the server allows it.",
+      "Username",
+      "known_hosts entry",
+      "sftp.example.com"
     ]
   },
   "sftp_list_files": {
@@ -1308,6 +4014,43 @@
       "Folder",
       "How many",
       "Pass-through"
+    ],
+    "label": "SFTP",
+    "subtitle": "List files",
+    "integration": "SFTP",
+    "titles": [
+      "Folder",
+      "Max files",
+      "Only files like",
+      "Only new since last run"
+    ],
+    "help": [
+      "Hard deadline for the listing, in milliseconds.",
+      "How many files to bring back at most, oldest first.",
+      "Shell-style pattern the file name must match, e.g. \"*.csv\". Case-insensitive. Leave blank to list every file.",
+      "When on, each run emits only files that appeared since the previous run — nothing on the first run (it just remembers where the folder is up to). Turn this on when a published, polling flow acts on each file, so it doesn't re-process the folder every time. Leave off for ad-hoc listings that should return everything.",
+      "Which remote folder to list. Leave blank to use the folder set on the SFTP page. Overridden by the 'Folder' input."
+    ],
+    "connection": [
+      "/incoming",
+      "22",
+      "An alternative to the fingerprint, if you already have an OpenSSH known_hosts line for this server.",
+      "Fill in either a password or a private key below — whichever the server expects.",
+      "Folder",
+      "Host key fingerprint",
+      "Key passphrase",
+      "Only if the private key is encrypted.",
+      "Password",
+      "Port",
+      "Proves you're talking to the right server. Leave it blank and Test connection will show you the server's fingerprint to paste in.",
+      "SHA256:…",
+      "SSH private key",
+      "Server",
+      "The remote folder the steps work in by default. A step can point at another one.",
+      "The whole key including the BEGIN/END lines. Preferred over a password where the server allows it.",
+      "Username",
+      "known_hosts entry",
+      "sftp.example.com"
     ]
   },
   "sftp_upload_file": {
@@ -1317,6 +4060,41 @@
       "File",
       "Name",
       "Pass-through"
+    ],
+    "label": "SFTP",
+    "subtitle": "Upload file",
+    "integration": "SFTP",
+    "titles": [
+      "File to upload",
+      "Folder",
+      "Name on the server"
+    ],
+    "help": [
+      "Hard deadline for the transfer, in milliseconds. Raise it for large files.",
+      "Remote folder to upload into. Leave blank to use the folder set on the SFTP page.",
+      "What to call the file once it's there. Leave blank to keep the name it already has. Overridden by the 'Name' input.",
+      "Workspace file to upload. Overridden by the 'File' input when connected."
+    ],
+    "connection": [
+      "/incoming",
+      "22",
+      "An alternative to the fingerprint, if you already have an OpenSSH known_hosts line for this server.",
+      "Fill in either a password or a private key below — whichever the server expects.",
+      "Folder",
+      "Host key fingerprint",
+      "Key passphrase",
+      "Only if the private key is encrypted.",
+      "Password",
+      "Port",
+      "Proves you're talking to the right server. Leave it blank and Test connection will show you the server's fingerprint to paste in.",
+      "SHA256:…",
+      "SSH private key",
+      "Server",
+      "The remote folder the steps work in by default. A step can point at another one.",
+      "The whole key including the BEGIN/END lines. Preferred over a password where the server allows it.",
+      "Username",
+      "known_hosts entry",
+      "sftp.example.com"
     ]
   },
   "sheets_append_row": {
@@ -1328,6 +4106,30 @@
       "Rows saved",
       "Spreadsheet ID",
       "Updated range"
+    ],
+    "label": "Google Sheets",
+    "subtitle": "Append rows",
+    "integration": "Google Sheets",
+    "titles": [
+      "Adding rows",
+      "Column mapping",
+      "From field",
+      "Sheet column",
+      "Spreadsheet",
+      "Tab",
+      "Value format"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "Map each incoming field to a sheet column. Both sides are picked from dropdowns — the sheet's own columns and the incoming record's fields. Each value is written under the column you choose (the row order here doesn't matter); a column the sheet doesn't have yet is added at the end. When set, this replaces the 'headers' input. Leave empty to use the row keys / 'headers' input.",
+      "The sheet tab the append targets.",
+      "The spreadsheet to append to."
+    ],
+    "enum_names": [
+      "Insert new rows",
+      "Like typing in Sheets",
+      "Overwrite existing cells",
+      "Raw values"
     ]
   },
   "sheets_export_pdf": {
@@ -1337,6 +4139,18 @@
       "PDF",
       "Pass-through",
       "Spreadsheet ID"
+    ],
+    "label": "Google Sheets",
+    "subtitle": "Export PDF",
+    "integration": "Google Sheets",
+    "titles": [
+      "File name",
+      "Spreadsheet"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "The spreadsheet to export.",
+      "What to call the PDF — also the attachment name when emailed. '.pdf' is added for you; leave blank for an automatic name."
     ]
   },
   "sheets_read_range": {
@@ -1345,6 +4159,30 @@
       "Pass-through",
       "Rows",
       "Spreadsheet ID"
+    ],
+    "label": "Google Sheets",
+    "subtitle": "Read range",
+    "integration": "Google Sheets",
+    "titles": [
+      "Cells",
+      "First row is headers",
+      "Include row numbers",
+      "Spreadsheet",
+      "Tab",
+      "Value format"
+    ],
+    "help": [
+      "Add a _row column holding each row's real position in the sheet. Feed those rows to Update cells to write a value back to the row it came from — how you mark something done.",
+      "Hard deadline for the request, in milliseconds.",
+      "Optional cell range within the tab (A1 notation). Leave blank to read the whole tab.",
+      "The sheet tab or named range to read.",
+      "The spreadsheet to read.",
+      "Treat the first row as column headers."
+    ],
+    "enum_names": [
+      "As displayed",
+      "Formulas",
+      "Raw values"
     ]
   },
   "sheets_update_cells": {
@@ -1355,6 +4193,27 @@
       "Pass-through",
       "Rows",
       "Spreadsheet"
+    ],
+    "label": "Google Sheets",
+    "subtitle": "Update cells",
+    "integration": "Google Sheets",
+    "titles": [
+      "Columns to write",
+      "Row-number column",
+      "Spreadsheet",
+      "Tab",
+      "Value format"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "The column holding each row's position in the sheet. Read range adds _row when 'Include row numbers' is on.",
+      "The spreadsheet to write to.",
+      "The tab the rows came from.",
+      "Which columns to change. Leave empty to write every column the rows carry (except the row-number column)."
+    ],
+    "enum_names": [
+      "Interpret like typing (dates, formulas)",
+      "Store exactly as given"
     ]
   },
   "site_check": {
@@ -1367,6 +4226,23 @@
       "Up?",
       "Went down",
       "What happened"
+    ],
+    "label": "Is it up?",
+    "subtitle": "Alert when a site breaks, and when it's back",
+    "titles": [
+      "Address",
+      "Expected status",
+      "Must contain"
+    ],
+    "help": [
+      "How long to wait before calling it down, in milliseconds.",
+      "Optional. Text the response must contain — catches a server that answers 200 with an error page.",
+      "Require this exact response code. Leave blank to accept any success (200–299).",
+      "The address to check. Can also be connected into the Address input."
+    ],
+    "node_state": [
+      "Forget whether the site was last seen up or down. The next check treats what it finds as the starting point (and still alerts if it finds it down).",
+      "Remembered up/down state"
     ]
   },
   "slack_list_channels": {
@@ -1374,6 +4250,25 @@
     "ports": [
       "Channels",
       "Pass-through"
+    ],
+    "label": "Slack",
+    "subtitle": "List channels",
+    "integration": "Slack",
+    "titles": [
+      "Max channels",
+      "Skip archived channels",
+      "Which channels"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "Override the API host (proxy / self-hosted / testing).",
+      "Raw bot token; overrides 'account'."
+    ],
+    "enum_names": [
+      "Direct messages",
+      "Everything the bot can see",
+      "Public + private channels",
+      "Public channels"
     ]
   },
   "slack_on_mention": {
@@ -1385,6 +4280,15 @@
       "Message",
       "Time",
       "Workspace"
+    ],
+    "label": "Slack",
+    "subtitle": "On mention",
+    "integration": "Slack",
+    "titles": [
+      "Only in channel"
+    ],
+    "help": [
+      "React only to mentions in this one channel — pick it from your connected workspace (or type a channel ID like C0123). Mentions elsewhere are ignored. Leave empty to react everywhere the bot is mentioned."
     ]
   },
   "slack_send_message": {
@@ -1396,6 +4300,25 @@
       "Message",
       "Pass-through",
       "Reply in thread"
+    ],
+    "label": "Slack",
+    "subtitle": "Send message",
+    "integration": "Slack",
+    "titles": [
+      "Blocks",
+      "Channel",
+      "Message",
+      "Reply in thread"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "Name of the connected Slack workspace.",
+      "Override the API host (proxy / self-hosted / testing).",
+      "Pick a channel from your connected workspace, or type a name like #general / a channel ID. The bot must already be a member. Overridden by the 'Channel' input.",
+      "Raw bot token (xoxb-…). Overrides 'account'.",
+      "Slack Block Kit layout for rich messages; replaces the plain text rendering.",
+      "The text to send. Overridden by the 'Message' input.",
+      "Timestamp of a parent message to reply under. Connect the Reply-in-thread input to answer the message that started the flow — an On mention trigger's Timestamp, say."
     ]
   },
   "smhi_current": {
@@ -1407,6 +4330,18 @@
       "Pass-through",
       "Summary",
       "Temperature"
+    ],
+    "label": "SMHI Weather",
+    "subtitle": "Current conditions",
+    "integration": "SMHI",
+    "titles": [
+      "Latitude",
+      "Longitude"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "Latitude of the point, -90..90. Overridden by a \"lat,lon\" value on the Coordinate input.",
+      "Longitude of the point, -180..180. Overridden by the Coordinate input."
     ]
   },
   "smhi_forecast": {
@@ -1417,6 +4352,20 @@
       "Full response",
       "Pass-through",
       "Summary"
+    ],
+    "label": "SMHI Weather",
+    "subtitle": "Daily forecast",
+    "integration": "SMHI",
+    "titles": [
+      "Days",
+      "Latitude",
+      "Longitude"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "How many days to return, counting from today (1..10).",
+      "Latitude of the point, -90..90. Overridden by a \"lat,lon\" value on the Coordinate input.",
+      "Longitude of the point, -180..180. Overridden by the Coordinate input."
     ]
   },
   "sort_rows": {
@@ -1424,6 +4373,19 @@
     "ports": [
       "Pass-through",
       "Rows"
+    ],
+    "label": "Sort rows",
+    "titles": [
+      "Direction",
+      "Sort by"
+    ],
+    "help": [
+      "Comma-separated column names in priority order; earlier names win ties. E.g. \"revenue,created_at\". To override Direction for one column, prefix it with '-' (descending) or '+' (ascending).",
+      "Which way to sort. Applies to every column in 'Sort by' except ones prefixed with '-' or '+', which keep their own direction."
+    ],
+    "enum_names": [
+      "Ascending (A→Z, low→high)",
+      "Descending (Z→A, high→low)"
     ]
   },
   "split_rows": {
@@ -1433,6 +4395,10 @@
       "Pass-through",
       "Rows",
       "Unmatched"
+    ],
+    "label": "Split rows",
+    "help": [
+      "CEL expression that must return a bool. Rows where it's true land on 'matched', false on 'unmatched'."
     ]
   },
   "sqlite_insert_rows": {
@@ -1441,6 +4407,21 @@
       "Pass-through",
       "Rows",
       "Rows saved"
+    ],
+    "label": "SQLite",
+    "subtitle": "Insert rows",
+    "integration": "SQLite",
+    "titles": [
+      "Column mapping",
+      "Database file",
+      "Table"
+    ],
+    "help": [
+      "Auto-create the table from the supplied headers if it doesn't exist. Set false to fail loudly when the table is missing.",
+      "Database file kept in your workspace. Created automatically on first save.",
+      "Optional. Choose which incoming fields to write and name their columns — {incoming field: column name}. Only listed fields are written (others dropped); blank a column name to skip a field. Leave empty to write every field. For row filtering or defaults, use a Map rows step first.",
+      "Override per-column type (e.g. {\"age\":\"INTEGER\",\"created_at\":\"DATETIME\"}). Defaults to TEXT for every header.",
+      "Which table to save into. Created from the row columns when create_table=true (the default)."
     ]
   },
   "sqlite_query": {
@@ -1449,6 +4430,21 @@
       "Columns",
       "Pass-through",
       "Rows"
+    ],
+    "label": "SQLite",
+    "subtitle": "Query",
+    "integration": "SQLite",
+    "titles": [
+      "Database file",
+      "Query values",
+      "Row limit",
+      "SQL"
+    ],
+    "help": [
+      "Optional cap on how many rows to return.",
+      "Path to the SQLite database file in your workspace.",
+      "The SELECT query to run. Use ? placeholders for values and supply them under 'Query values'.",
+      "Values for the ? placeholders in the SQL, in order."
     ]
   },
   "sqlite_upsert_rows": {
@@ -1457,6 +4453,22 @@
       "Pass-through",
       "Rows",
       "Rows saved"
+    ],
+    "label": "SQLite",
+    "subtitle": "Upsert rows",
+    "integration": "SQLite",
+    "titles": [
+      "Column mapping",
+      "Database file"
+    ],
+    "help": [
+      "Auto-create the table (with a UNIQUE on conflict_columns) when missing. Defaults true.",
+      "Columns that identify an existing row; a match updates it instead of inserting a duplicate (e.g. [\"email\"]).",
+      "Optional. Choose which incoming fields to write and name their columns — {incoming field: column name}. Only listed fields are written (others dropped); blank a column name to skip a field. conflict_columns refer to the mapped (output) names. Leave empty to write every field.",
+      "Optional: force a column's SQL type. Columns default to text otherwise.",
+      "Path to the SQLite database file in your workspace (created if missing).",
+      "The table to write rows into.",
+      "Which columns to overwrite when a row already exists. Empty = leave existing rows untouched (insert-only)."
     ]
   },
   "stripe_cancel_subscription": {
@@ -1467,6 +4479,27 @@
       "Pass-through",
       "Status",
       "Subscription"
+    ],
+    "label": "Stripe",
+    "subtitle": "Cancel subscription",
+    "integration": "Stripe",
+    "titles": [
+      "Subscription",
+      "When to cancel"
+    ],
+    "help": [
+      "At period end: the subscription stays active until the period the customer already paid for ends. Immediately: cancel right now.",
+      "Hard deadline for the request, in milliseconds.",
+      "Override the API host (testing).",
+      "Pick the subscription to cancel — listed from your account once the STRIPE_API_KEY secret is set. Overridden by the 'Subscription' input when connected."
+    ],
+    "enum_names": [
+      "At period end",
+      "Immediately"
+    ],
+    "connection": [
+      "Secret API key",
+      "sk_live_… / sk_test_…"
     ]
   },
   "stripe_create_customer": {
@@ -1478,6 +4511,27 @@
       "Email",
       "Name",
       "Pass-through"
+    ],
+    "label": "Stripe",
+    "subtitle": "Create customer",
+    "integration": "Stripe",
+    "titles": [
+      "Description",
+      "Email",
+      "Metadata",
+      "Name"
+    ],
+    "help": [
+      "Customer email. Overridden by the 'Email' input.",
+      "Hard deadline for the request, in milliseconds.",
+      "Overridden by the 'Description' input.",
+      "Overridden by the 'Name' input.",
+      "Override the API host (testing).",
+      "Your own key/value labels on the customer (e.g. a CRM id)."
+    ],
+    "connection": [
+      "Secret API key",
+      "sk_live_… / sk_test_…"
     ]
   },
   "stripe_create_payment_link": {
@@ -1488,6 +4542,23 @@
       "Payment URL",
       "Price",
       "Quantity"
+    ],
+    "label": "Stripe",
+    "subtitle": "Create payment link",
+    "integration": "Stripe",
+    "titles": [
+      "Price",
+      "Quantity"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "One of your Stripe Prices, listed from your account once the STRIPE_API_KEY secret is set (Products → Pricing in the dashboard). Overridden by the 'Price' input when connected.",
+      "Override the API host (testing).",
+      "Units of the price (1–999999, Stripe's per-line-item limit). Overridden by the 'Quantity' input."
+    ],
+    "connection": [
+      "Secret API key",
+      "sk_live_… / sk_test_…"
     ]
   },
   "stripe_create_refund": {
@@ -1499,6 +4570,31 @@
       "Payment intent",
       "Refund ID",
       "Status"
+    ],
+    "label": "Stripe",
+    "subtitle": "Create refund",
+    "integration": "Stripe",
+    "titles": [
+      "Amount (smallest unit)",
+      "Payment",
+      "Reason"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "Leave empty to refund the whole payment. For a partial refund, enter the amount in the currency's smallest unit — e.g. 500 = 5.00 USD/EUR (cents), but 500 = 500 JPY (yen has no smaller unit). Overridden by the 'Amount' input when connected.",
+      "Override the API host (testing).",
+      "Pick the payment to refund — your account's succeeded payments, listed once the STRIPE_API_KEY secret is set. Overridden by the 'Payment intent' input when connected.",
+      "Stripe's refund-reason label, shown in the dashboard."
+    ],
+    "enum_names": [
+      "(none)",
+      "Duplicate",
+      "Fraudulent",
+      "Requested by customer"
+    ],
+    "connection": [
+      "Secret API key",
+      "sk_live_… / sk_test_…"
     ]
   },
   "stripe_get_customer": {
@@ -1508,6 +4604,21 @@
       "Email",
       "Name",
       "Pass-through"
+    ],
+    "label": "Stripe",
+    "subtitle": "Get customer",
+    "integration": "Stripe",
+    "titles": [
+      "Customer"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "Override the API host (testing).",
+      "The cus_… id to look up. Overridden by the Customer input."
+    ],
+    "connection": [
+      "Secret API key",
+      "sk_live_… / sk_test_…"
     ]
   },
   "stripe_list_events": {
@@ -1518,6 +4629,39 @@
       "Events",
       "Last ID",
       "Pass-through"
+    ],
+    "label": "Stripe",
+    "subtitle": "List events",
+    "integration": "Stripe",
+    "titles": [
+      "After id",
+      "Event types",
+      "Limit"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "Max events per poll.",
+      "Only events newer than this event id (evt_…). Overridden by the 'After id' input — usually a saved cursor secret.",
+      "Override the API host (testing).",
+      "Pick the events to watch for. Empty = every event. Need one that's not listed? Add it as a custom type (Stripe's dotted name, e.g. payout.failed)."
+    ],
+    "enum_names": [
+      "Charge refunded",
+      "Checkout completed",
+      "Customer created",
+      "Dispute opened",
+      "Invoice paid",
+      "Invoice payment failed",
+      "Payment failed",
+      "Payment succeeded",
+      "Payout paid",
+      "Subscription canceled",
+      "Subscription created",
+      "Subscription updated"
+    ],
+    "connection": [
+      "Secret API key",
+      "sk_live_… / sk_test_…"
     ]
   },
   "stripe_list_subscriptions": {
@@ -1529,6 +4673,33 @@
       "First ID",
       "Pass-through",
       "Subscriptions"
+    ],
+    "label": "Stripe",
+    "subtitle": "List subscriptions",
+    "integration": "Stripe",
+    "titles": [
+      "Customer",
+      "Limit",
+      "Status"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "Override the API host (testing).",
+      "Pick a customer to list only their subscriptions, or leave empty for the whole account (e.g. a past-due sweep). Listed once the STRIPE_API_KEY secret is set. Overridden by the 'Customer' input.",
+      "Which subscription states to list."
+    ],
+    "enum_names": [
+      "Active",
+      "All states",
+      "Canceled",
+      "On trial",
+      "Past due",
+      "Paused",
+      "Unpaid"
+    ],
+    "connection": [
+      "Secret API key",
+      "sk_live_… / sk_test_…"
     ]
   },
   "stripe_on_payment": {
@@ -1542,6 +4713,12 @@
       "Full event",
       "Payment ID",
       "Payment intent"
+    ],
+    "label": "Stripe",
+    "subtitle": "On payment",
+    "integration": "Stripe",
+    "secret_notes": [
+      "Webhook signing secret (whsec_…)."
     ]
   },
   "stripe_on_payment_failed": {
@@ -1556,6 +4733,12 @@
       "Full event",
       "Payment ID",
       "Payment intent"
+    ],
+    "label": "Stripe",
+    "subtitle": "On payment failed",
+    "integration": "Stripe",
+    "secret_notes": [
+      "Webhook signing secret (whsec_…)."
     ]
   },
   "stripe_on_subscription_canceled": {
@@ -1567,6 +4750,12 @@
       "Plan",
       "Subscription",
       "Subscription ID"
+    ],
+    "label": "Stripe",
+    "subtitle": "On subscription canceled",
+    "integration": "Stripe",
+    "secret_notes": [
+      "Webhook signing secret (whsec_…)."
     ]
   },
   "stripe_search_customers": {
@@ -1579,6 +4768,22 @@
       "First email",
       "Pass-through",
       "Query"
+    ],
+    "label": "Stripe",
+    "subtitle": "Search customers",
+    "integration": "Stripe",
+    "titles": [
+      "Limit",
+      "Query"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "Override the API host (testing).",
+      "Stripe search syntax, e.g. email:'a@b.com'. Overridden by the 'Query' input."
+    ],
+    "connection": [
+      "Secret API key",
+      "sk_live_… / sk_test_…"
     ]
   },
   "stripe_send_invoice": {
@@ -1592,6 +4797,164 @@
       "Invoice URL",
       "Pass-through",
       "Status"
+    ],
+    "label": "Stripe",
+    "subtitle": "Send invoice",
+    "integration": "Stripe",
+    "titles": [
+      "Amount",
+      "Currency",
+      "Customer",
+      "Days until due",
+      "Description"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "In the smallest currency unit (12000 = 120.00). Overridden by the 'Amount' input.",
+      "Override the API host (testing).",
+      "Payment terms — when the invoice falls due.",
+      "Pick the customer to bill — listed from your account once the STRIPE_API_KEY secret is set. Overridden by the 'Customer' input when connected.",
+      "The invoice's single line item, shown to the customer. Overridden by the 'Description' input.",
+      "Three-letter ISO code (stored lowercase). Pick a common one, type any Stripe-supported code, or use a reference like ${item.currency} for a per-row currency."
+    ],
+    "enum_names": [
+      "AED — UAE Dirham",
+      "AFN — Afghan Afghani",
+      "ALL — Albanian Lek",
+      "AMD — Armenian Dram",
+      "ANG — Netherlands Antillean Guilder",
+      "AOA — Angolan Kwanza",
+      "ARS — Argentine Peso",
+      "AUD — Australian Dollar",
+      "AWG — Aruban Florin",
+      "AZN — Azerbaijani Manat",
+      "BAM — Bosnia-Herzegovina Convertible Mark",
+      "BBD — Barbadian Dollar",
+      "BDT — Bangladeshi Taka",
+      "BGN — Bulgarian Lev",
+      "BIF — Burundian Franc",
+      "BMD — Bermudian Dollar",
+      "BND — Brunei Dollar",
+      "BOB — Bolivian Boliviano",
+      "BRL — Brazilian Real",
+      "BSD — Bahamian Dollar",
+      "BWP — Botswanan Pula",
+      "BYN — Belarusian Ruble",
+      "BZD — Belize Dollar",
+      "CAD — Canadian Dollar",
+      "CDF — Congolese Franc",
+      "CHF — Swiss Franc",
+      "CLP — Chilean Peso",
+      "CNY — Chinese Yuan",
+      "COP — Colombian Peso",
+      "CRC — Costa Rican Colón",
+      "CVE — Cape Verdean Escudo",
+      "CZK — Czech Koruna",
+      "DJF — Djiboutian Franc",
+      "DKK — Danish Krone",
+      "DOP — Dominican Peso",
+      "DZD — Algerian Dinar",
+      "EGP — Egyptian Pound",
+      "ETB — Ethiopian Birr",
+      "EUR — Euro",
+      "FJD — Fijian Dollar",
+      "FKP — Falkland Islands Pound",
+      "GBP — British Pound",
+      "GEL — Georgian Lari",
+      "GIP — Gibraltar Pound",
+      "GMD — Gambian Dalasi",
+      "GNF — Guinean Franc",
+      "GTQ — Guatemalan Quetzal",
+      "GYD — Guyanaese Dollar",
+      "HKD — Hong Kong Dollar",
+      "HNL — Honduran Lempira",
+      "HTG — Haitian Gourde",
+      "HUF — Hungarian Forint",
+      "IDR — Indonesian Rupiah",
+      "ILS — Israeli New Shekel",
+      "INR — Indian Rupee",
+      "ISK — Icelandic Króna",
+      "JMD — Jamaican Dollar",
+      "JPY — Japanese Yen",
+      "KES — Kenyan Shilling",
+      "KGS — Kyrgystani Som",
+      "KHR — Cambodian Riel",
+      "KMF — Comorian Franc",
+      "KRW — South Korean Won",
+      "KYD — Cayman Islands Dollar",
+      "KZT — Kazakhstani Tenge",
+      "LAK — Laotian Kip",
+      "LBP — Lebanese Pound",
+      "LKR — Sri Lankan Rupee",
+      "LRD — Liberian Dollar",
+      "LSL — Lesotho Loti",
+      "MAD — Moroccan Dirham",
+      "MDL — Moldovan Leu",
+      "MGA — Malagasy Ariary",
+      "MKD — Macedonian Denar",
+      "MMK — Myanmar Kyat",
+      "MNT — Mongolian Tugrik",
+      "MOP — Macanese Pataca",
+      "MUR — Mauritian Rupee",
+      "MVR — Maldivian Rufiyaa",
+      "MWK — Malawian Kwacha",
+      "MXN — Mexican Peso",
+      "MYR — Malaysian Ringgit",
+      "MZN — Mozambican Metical",
+      "NAD — Namibian Dollar",
+      "NGN — Nigerian Naira",
+      "NIO — Nicaraguan Córdoba",
+      "NOK — Norwegian Krone",
+      "NPR — Nepalese Rupee",
+      "NZD — New Zealand Dollar",
+      "PAB — Panamanian Balboa",
+      "PEN — Peruvian Sol",
+      "PGK — Papua New Guinean Kina",
+      "PHP — Philippine Peso",
+      "PKR — Pakistani Rupee",
+      "PLN — Polish Złoty",
+      "PYG — Paraguayan Guarani",
+      "QAR — Qatari Riyal",
+      "RON — Romanian Leu",
+      "RSD — Serbian Dinar",
+      "RWF — Rwandan Franc",
+      "SAR — Saudi Riyal",
+      "SBD — Solomon Islands Dollar",
+      "SCR — Seychellois Rupee",
+      "SEK — Swedish Krona",
+      "SGD — Singapore Dollar",
+      "SHP — Saint Helena Pound",
+      "SLE — Sierra Leonean Leone",
+      "SOS — Somali Shilling",
+      "SRD — Surinamese Dollar",
+      "STD — São Tomé \u0026 Príncipe Dobra",
+      "SZL — Swazi Lilangeni",
+      "THB — Thai Baht",
+      "TJS — Tajikistani Somoni",
+      "TOP — Tongan Paʻanga",
+      "TRY — Turkish Lira",
+      "TTD — Trinidad \u0026 Tobago Dollar",
+      "TWD — New Taiwan Dollar",
+      "TZS — Tanzanian Shilling",
+      "UAH — Ukrainian Hryvnia",
+      "UGX — Ugandan Shilling",
+      "USD — US Dollar",
+      "UYU — Uruguayan Peso",
+      "UZS — Uzbekistani Som",
+      "VND — Vietnamese Dong",
+      "VUV — Vanuatu Vatu",
+      "WST — Samoan Tala",
+      "XAF — Central African CFA Franc",
+      "XCD — East Caribbean Dollar",
+      "XOF — West African CFA Franc",
+      "XPF — CFP Franc",
+      "YER — Yemeni Rial",
+      "ZAR — South African Rand",
+      "ZMW — Zambian Kwacha"
+    ],
+    "connection": [
+      "Secret API key",
+      "sk_live_… / sk_test_…"
     ]
   },
   "subgraph": {
@@ -1600,6 +4963,15 @@
       "Inputs",
       "Outputs",
       "Pass-through"
+    ],
+    "label": "Reusable flow",
+    "titles": [
+      "Flow ID"
+    ],
+    "help": [
+      "The ID of the flow to run as a step.",
+      "map of parent input port → child step ID (the step receives the Ref as its only input)",
+      "map of parent output port → {node, port} in the child"
     ]
   },
   "switch": {
@@ -1615,12 +4987,44 @@
       "Case 8",
       "Default",
       "Value"
+    ],
+    "label": "Switch",
+    "titles": [
+      "Cases",
+      "Equals",
+      "Key field",
+      "Slot"
+    ],
+    "help": [
+      "Optional dot-path into the input to match on (e.g. status). Empty matches the whole input value. The full payload rides through regardless.",
+      "Ordered list of {slot, equals}. The FIRST case whose value matches the key wins; the payload rides out that slot. Unmatched payloads go to default.",
+      "Output port name. One of case_1..case_8.",
+      "Value to match the key against — a literal (\"paid\", 200, true) or a list ([200,201,204]) to match any element."
     ]
   },
   "text": {
     "description": "Emit a literal string value. The 'text' param can be multi-line; later steps see it as text/plain on the 'out' port. Set 'Written in' to a language and the box becomes a code editor — monospace, syntax-coloured, and it stops wrapping long lines — which is how you keep a SQL query, a shell script or a chunk of YAML in a flow. It is still a plain string on the way out; the JSON step is the one that parses.",
     "ports": [
       "Text"
+    ],
+    "label": "Text",
+    "titles": [
+      "Text",
+      "Written in"
+    ],
+    "help": [
+      "Changes the EDITOR, not the value: pick a language and the box above becomes monospace, syntax-coloured, and stops wrapping long lines. What comes out is the same plain string either way. Leave it on plain text for prose — a system prompt or an email body reads worse in a monospace font, not better.",
+      "The text to emit."
+    ],
+    "enum_names": [
+      "JSON",
+      "JavaScript",
+      "Plain text",
+      "PowerShell",
+      "Python",
+      "SQL",
+      "Shell",
+      "YAML"
     ]
   },
   "twilio_send_sms": {
@@ -1632,6 +5036,28 @@
       "Pass-through",
       "Status",
       "To"
+    ],
+    "label": "Twilio",
+    "subtitle": "Send SMS",
+    "integration": "Twilio",
+    "titles": [
+      "From",
+      "Message",
+      "Messaging Service SID",
+      "To"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "One of your Twilio phone numbers (E.164). Leave blank if using a Messaging Service SID.",
+      "Override the API host (testing).",
+      "Recipient phone number in E.164 format. Overridden by the 'To' input.",
+      "Send via a Twilio Messaging Service instead of a single 'From' number.",
+      "The text to send. Overridden by the 'Body' input."
+    ],
+    "connection": [
+      "ACxxxxxxxx…",
+      "Account SID",
+      "Auth token"
     ]
   },
   "unwrap_results": {
@@ -1640,6 +5066,12 @@
       "Pass-through",
       "Results",
       "Rows"
+    ],
+    "label": "Collect loop results",
+    "help": [
+      "Drop results whose status is error. When false, failed items emit a row {_error_code, _error_message, _index} instead.",
+      "Which body step to extract from each result. Optional when the for_each body is a single step.",
+      "Which output port of the body step to extract from each result. Optional when that step has exactly one output port."
     ]
   },
   "url": {
@@ -1650,6 +5082,13 @@
       "Path",
       "Query params",
       "URL"
+    ],
+    "label": "URL",
+    "titles": [
+      "URL"
+    ],
+    "help": [
+      "A web address starting with http:// or https://. Type it here, or connect a string into the 'url' input."
     ]
   },
   "weather_current": {
@@ -1661,6 +5100,31 @@
       "Pass-through",
       "Summary",
       "Temperature"
+    ],
+    "label": "Weather",
+    "subtitle": "Current conditions",
+    "integration": "OpenWeather",
+    "titles": [
+      "Language",
+      "Latitude",
+      "Longitude",
+      "Units"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "Latitude of the point, -90..90. Overridden by a \"lat,lon\" value on the Coordinate input.",
+      "Longitude of the point, -180..180. Overridden by the Coordinate input.",
+      "Optional ISO language code for the weather Description (e.g. sv, de, es). Defaults to English.",
+      "metric = °C + m/s, imperial = °F + mph, standard = K + m/s."
+    ],
+    "enum_names": [
+      "Imperial (°F, mph)",
+      "Kelvin (K, m/s)",
+      "Metric (°C, m/s)"
+    ],
+    "connection": [
+      "API key",
+      "Your OpenWeather API key. The free plan works — no paid subscription needed."
     ]
   },
   "weather_forecast": {
@@ -1671,6 +5135,33 @@
       "Full response",
       "Pass-through",
       "Summary"
+    ],
+    "label": "Weather",
+    "subtitle": "Daily forecast",
+    "integration": "OpenWeather",
+    "titles": [
+      "Days",
+      "Language",
+      "Latitude",
+      "Longitude",
+      "Units"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "How many days to return, counting from today (1..5).",
+      "Latitude of the point, -90..90. Overridden by a \"lat,lon\" value on the Coordinate input.",
+      "Longitude of the point, -180..180. Overridden by the Coordinate input.",
+      "Optional ISO language code for the per-day conditions (e.g. sv, de, es). Defaults to English.",
+      "metric = °C + m/s, imperial = °F + mph, standard = K + m/s."
+    ],
+    "enum_names": [
+      "Imperial (°F, mph)",
+      "Kelvin (K, m/s)",
+      "Metric (°C, m/s)"
+    ],
+    "connection": [
+      "API key",
+      "Your OpenWeather API key. The free plan works — no paid subscription needed."
     ]
   },
   "web_watch": {
@@ -1682,6 +5173,23 @@
       "Pass-through",
       "What it said before",
       "What it says now"
+    ],
+    "label": "Watch a page",
+    "subtitle": "Tell me when it changes",
+    "titles": [
+      "Compare the words, not the code",
+      "Page address",
+      "Watch just this"
+    ],
+    "help": [
+      "Hard deadline for the fetch, in milliseconds.",
+      "On: strip the HTML and compare the visible text, so invisible markup churn doesn't count as a change. Off: compare the raw response exactly as it arrives (right for JSON or a plain-text endpoint).",
+      "Optional. A pattern picking out the one part of the page to compare — the first bracketed group, or the whole match if there are no brackets. Leave blank to compare the whole page.",
+      "The page to watch. Can also be connected into the Page address input."
+    ],
+    "node_state": [
+      "Forget what the page said last time. The next check records the page as it is then, and only later changes fire.",
+      "What the page last said"
     ]
   },
   "webhook_input": {
@@ -1689,6 +5197,19 @@
     "ports": [
       "Body",
       "Headers"
+    ],
+    "label": "Webhook",
+    "titles": [
+      "Form fields",
+      "Form title",
+      "Public hosted form",
+      "Secret keys"
+    ],
+    "help": [
+      "Also expose a public intake form at /form/\u003ctenant\u003e/\u003cworkspace\u003e/\u003cid\u003e — no token required (possession of the URL is the credential).",
+      "Bearer tokens callers may send (Authorization: Bearer …) to POST this flow's /trigger endpoint. The endpoint accepts ANY listed key, so you can add a new key, migrate callers, then revoke the old one with zero downtime. Leave empty only if you rely solely on a public hosted form.",
+      "Field names the hosted form collects. Defaults to name, email, message.",
+      "Heading shown on the hosted form. Defaults to the flow's name."
     ]
   },
   "webhook_send": {
@@ -1698,6 +5219,25 @@
       "Details",
       "Pass-through",
       "URL"
+    ],
+    "label": "Webhook",
+    "subtitle": "Send to a URL",
+    "integration": "Webhook",
+    "titles": [
+      "Allow private networks",
+      "Body",
+      "Content type",
+      "Headers",
+      "Method",
+      "URL"
+    ],
+    "help": [
+      "Content-Type sent with a text body.",
+      "Extra request headers.",
+      "Hard deadline for the request, in milliseconds.",
+      "Permit sending to private/internal addresses. Only takes effect if the operator has enabled private egress.",
+      "Text to send. The Body input overrides this when connected.",
+      "The webhook address to send to. The URL input overrides this when connected."
     ]
   }
 }

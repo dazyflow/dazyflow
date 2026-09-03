@@ -3,7 +3,10 @@
 
 import { SV_DESCRIPTIONS } from "../i18n/drops/descriptions.sv";
 import { primaryLanguage } from "./language";
-import { SV_INTEGRATION_PROSE } from "../i18n/drops/integrationProse.sv";
+import {
+  SV_INTEGRATION_NAMES,
+  SV_INTEGRATION_PROSE,
+} from "../i18n/drops/integrationProse.sv";
 import {
   SV_CONNECTION_TEXT,
   SV_ENUM_LABELS,
@@ -44,10 +47,12 @@ type LabelledDrop = Pick<Manifest, "label"> &
 // gets a Swedish reading, and an entry identical to its key would be noise, so
 // those are left out and resolved by the fallback.
 
-const SV_LABELS: Record<string, string> = {
+export const SV_LABELS: Record<string, string> = {
   "A AND B": "A OCH B",
   "A OR B": "A ELLER B",
+  "Calendar": "Kalender",
   "Is it up?": "Är den uppe?",
+  "Mailbox": "Brevlåda",
   NOT: "INTE",
   "Add a calculated column": "Lägg till en beräknad kolumn",
   Branch: "Förgrening",
@@ -75,6 +80,7 @@ const SV_LABELS: Record<string, string> = {
   Merge: "Slå samman",
   Number: "Tal",
   Phone: "Telefon",
+  "Read YAML": "Läs YAML",
   "RSS / Atom feed": "RSS-/Atomflöde",
   "Read CSV": "Läs CSV",
   "Read JSON": "Läs JSON",
@@ -100,9 +106,12 @@ const SV_LABELS: Record<string, string> = {
   Weather: "Väder",
   "Web request": "Webbanrop",
   "Write CSV": "Skriv CSV",
+  "Write JSON": "Skriv JSON",
+  "Write XML": "Skriv XML",
+  "Write YAML": "Skriv YAML",
 };
 
-const SV_SUBTITLES: Record<string, string> = {
+export const SV_SUBTITLES: Record<string, string> = {
   "A script, on a runner you host": "Ett skript, på en körnod du driver",
   "Add comment": "Lägg till kommentar",
   "Alert when a site breaks, and when it's back": "Larma när en sajt går ner, och när den är tillbaka",
@@ -208,6 +217,7 @@ const SV_SUBTITLES: Record<string, string> = {
   Write: "Skriv",
   "Write sheet": "Skriv blad",
   Diff: "Diff",
+  "XML text into rows": "XML-text till rader",
   "YAML text into rows": "YAML-text till rader",
 };
 
@@ -530,6 +540,7 @@ type Vocabulary = {
   connections: Record<string, string>;
   nodeState: Record<string, string>;
   prose: DescriptionMap;
+  appNames: Record<string, string>;
 };
 
 const VOCABULARY: Record<string, Vocabulary> = {
@@ -545,6 +556,7 @@ const VOCABULARY: Record<string, Vocabulary> = {
     connections: SV_CONNECTION_TEXT,
     nodeState: SV_NODE_STATE,
     prose: SV_INTEGRATION_PROSE,
+    appNames: SV_INTEGRATION_NAMES,
   },
 };
 
@@ -665,6 +677,27 @@ export function connectionText(text: string, lang?: string): string {
   return vocabularyFor(lang)?.connections[text] ?? text;
 }
 
+// splitConnectionNote splits a single-secret drop's connection note into the
+// two things the Apps page renders from it: the field's LABEL and an example
+// value for its placeholder. "Anthropic API key (sk-ant-…)." becomes
+// { label: "Anthropic API key", example: "sk-ant-…" }; a note with no
+// parenthetical is all label.
+//
+// It lives here, beside connectionText, because the label half is localized
+// and the coverage guard has to reproduce the same split to know which half
+// needs a translation — two copies of this regex would drift apart, and the
+// half nobody noticed would be the one that stopped matching the vocabulary.
+export function splitConnectionNote(note: string): {
+  label: string;
+  example: string;
+} {
+  const paren = note.match(/^(.*?)\s*\(([^)]*)\)\s*\.?$/);
+  return {
+    label: (paren ? paren[1] : note.replace(/\.$/, "")).trim(),
+    example: paren ? paren[2] : "",
+  };
+}
+
 export function nodeStateText(text: string, lang?: string): string {
   if (!text) return "";
   return vocabularyFor(lang)?.nodeState[text] ?? text;
@@ -684,6 +717,16 @@ export function integrationProse(
   const entry = vocabularyFor(lang)?.prose[key];
   if (!entry) return english;
   return entry.en === descriptionFingerprint(english) ? entry.sv : english;
+}
+
+// integrationName localizes an app's name — the heading on its Apps page, the
+// name in a "needs setup" message, the group a step belongs to in the palette.
+// Takes the English name rather than the slug so both spellings the product
+// uses go through one map: the curated display name ("Mailbox (IMAP)") and the
+// shorter Integration a manifest carries ("Calendar").
+export function integrationName(name: string, lang?: string): string {
+  if (!name) return "";
+  return vocabularyFor(lang)?.appNames[name] ?? name;
 }
 
 // dropLabelIsDefault reports whether `label` is still just the drop's name —

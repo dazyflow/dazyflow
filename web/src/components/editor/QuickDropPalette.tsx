@@ -14,7 +14,12 @@ import { useTranslation } from "react-i18next";
 import { DropIcon, ICON } from "../../icons";
 import { Button } from "../ui/Button";
 import { scoreDrop } from "../../lib/dropSearch";
-import { dropCategoryLabel, dropLabel, dropSubtitle } from "../../lib/dropText";
+import {
+  dropCategoryLabel,
+  dropLabel,
+  dropSubtitle,
+  integrationName,
+} from "../../lib/dropText";
 import type { Manifest } from "../../types";
 
 type Props = {
@@ -396,7 +401,7 @@ function QuickRow({
             </span>
           ) : drop.integration ? (
             <span className="quick-palette-row-integration">
-              {drop.integration}
+              {integrationName(drop.integration, lang)}
             </span>
           ) : (
             <span className="quick-palette-row-integration faint">

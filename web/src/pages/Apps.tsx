@@ -11,7 +11,9 @@ import { useAuth } from "../auth";
 import { DropIcon, ICON, iconFor, isBrandedIcon } from "../icons";
 import {
   connectionText,
+  integrationName,
   integrationProse,
+  splitConnectionNote,
   dropCategoryLabel,
   dropDescription,
   dropLabel,
@@ -118,7 +120,7 @@ export function Apps() {
   // possible order, alphabetical is the one that guarantees that.
   const groups = useMemo(() => {
     const nameOf = (g: { slug: string; meta: { name: string } }) =>
-      groupDisplayName(g.slug, g.meta.name, t);
+      groupDisplayName(g.slug, g.meta.name, t, i18n.language);
     const rank = (slug: string) => {
       const i = FEATURED_APPS.indexOf(slug);
       return i === -1 ? FEATURED_APPS.length : i;
@@ -129,7 +131,7 @@ export function Apps() {
         ? d
         : nameOf(a).localeCompare(nameOf(b), undefined, { sensitivity: "base" });
     });
-  }, [drops, t]);
+  }, [drops, t, i18n.language]);
 
   // Connection state per app, computed once for the whole list rather than per
   // card: the status filter needs every app's state to count the options, and
@@ -149,7 +151,7 @@ export function Apps() {
   const haystacks = useMemo(() => {
     const out = new Map<string, string>();
     for (const g of groups) {
-      const name = groupDisplayName(g.slug, g.meta.name, t);
+      const name = groupDisplayName(g.slug, g.meta.name, t, i18n.language);
       const parts = [name, g.slug, g.meta.description];
       for (const d of g.drops) {
         parts.push(dropLabel(d, i18n.language), d.id, dropSubtitle(d, i18n.language) ?? "");
@@ -479,7 +481,7 @@ function IntegrationCard({
             </span>
           )}
           <h2>
-            {groupDisplayName(slug, meta.name, t)}
+            {groupDisplayName(slug, meta.name, t, i18n.language)}
           </h2>
           {connected && (
             <span
@@ -593,9 +595,9 @@ export function AppDetail() {
     const all = drops ?? [];
     const filtered = all.filter((m) => integrationSlugFor(m) === slug);
     const base = integrationMeta[slug] ?? uncuratedMeta(slug, filtered);
-    const m = { ...base, name: groupDisplayName(slug, base.name, t) };
+    const m = { ...base, name: groupDisplayName(slug, base.name, t, i18n.language) };
     return { meta: m, integrationDrops: filtered };
-  }, [drops, slug, t]);
+  }, [drops, slug, t, i18n.language]);
 
   if (error) {
     return (
@@ -996,12 +998,9 @@ function SecretCard({
   // placeholder "sk-ant-…". Notes without a parenthetical fall back to
   // the whole note as the label and a generic placeholder.
   const note = req.note ?? req.name;
-  const paren = note.match(/^(.*?)\s*\(([^)]*)\)\s*\.?$/);
-  const fieldLabel = connectionText(
-    (paren ? paren[1] : note.replace(/\.$/, "")).trim(),
-    i18n.language,
-  );
-  const placeholder = paren ? paren[2] : t("integrations.connection.valuePlaceholder");
+  const parts = splitConnectionNote(note);
+  const fieldLabel = connectionText(parts.label, i18n.language);
+  const placeholder = parts.example || t("integrations.connection.valuePlaceholder");
   const titleName = qualify ? `${name} — ${fieldLabel}` : name;
 
   const save = async () => {
@@ -1502,7 +1501,11 @@ function ConnectionFieldsCard({
                   value={values[f.key] ?? ""}
                   onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
                 >
-                  <option value="">{f.placeholder || t("connections.defaultOption")}</option>
+                  <option value="">
+                    {f.placeholder
+                      ? connectionText(f.placeholder, i18n.language)
+                      : t("connections.defaultOption")}
+                  </option>
                   {f.options.map((opt) => (
                     <option key={opt} value={opt}>
                       {opt}
@@ -1512,7 +1515,7 @@ function ConnectionFieldsCard({
               ) : (
                 <input
                   type={f.secret ? "password" : "text"}
-                  placeholder={f.placeholder ?? ""}
+                  placeholder={connectionText(f.placeholder ?? "", i18n.language)}
                   value={values[f.key] ?? ""}
                   onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
                   autoComplete="off"
@@ -1716,16 +1719,18 @@ function uncuratedMeta(
 // Two slugs get a localized name instead of integrationMeta's: the catch-all
 // bucket, which reads as "Built-in" rather than "Standard library" to anyone
 // who is not a programmer, and the MCP bucket, whose steps come from servers
-// the org added rather than from a connector we wrote. Everything else uses
-// its curated name, which is a product name and not translated.
+// the org added rather than from a connector we wrote. Every other curated
+// name goes through integrationName, which translates the ones that are
+// generic English ("Mailbox (IMAP)") and leaves a product name alone.
 function groupDisplayName(
   slug: string,
   metaName: string,
   t: (key: string) => string,
+  lang?: string,
 ): string {
   if (slug === "standard-library") return t("integrations.builtinGroup");
   if (slug === "mcp") return t("integrations.mcpGroup");
-  return metaName;
+  return integrationName(metaName, lang);
 }
 
 // integrationSlugFor returns the slug a drop belongs to. Drops

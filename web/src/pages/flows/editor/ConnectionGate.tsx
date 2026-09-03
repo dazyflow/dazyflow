@@ -4,6 +4,7 @@
 import { useTranslation } from "react-i18next";
 import { Button } from "../../../components/ui/Button";
 import { oauthProviderDisplay } from "../../../integrationMeta";
+import { integrationName } from "../../../lib/dropText";
 import type { MissingConnection, SetupNeed } from "../../../lib/requiredConnections";
 import { useEscapeToClose } from "../../../components/ui/useEscapeToClose";
 
@@ -50,7 +51,7 @@ export function ConnectionGate({
   onRunAnyway: () => void;
   onCancel: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const hasUserFixable =
     missing.length > 0 || missingSecrets.length > 0 || missingSetups.length > 0;
   const hasAdminBlocked =
@@ -88,7 +89,7 @@ export function ConnectionGate({
                 ))}
                 {missingSetups.map((s) => (
                   <li key={s.slug}>
-                    <strong>{s.integration}</strong>
+                    <strong>{integrationName(s.integration, i18n.language)}</strong>
                   </li>
                 ))}
               </ul>

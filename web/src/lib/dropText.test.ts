@@ -13,8 +13,10 @@ import {
   enumLabel,
   fieldHelp,
   fieldTitle,
+  integrationName,
   integrationProse,
   nodeStateText,
+  splitConnectionNote,
   portLabel,
 } from "./dropText";
 import { SV_DESCRIPTIONS } from "../i18n/drops/descriptions.sv";
@@ -302,6 +304,34 @@ describe("the params-schema surface", () => {
     expect(fieldHelp("Event title.", "de")).toBe("Event title.");
     expect(enumLabel("Brand-new option", "sv")).toBe("Brand-new option");
     expect(fieldTitle("", "sv")).toBe("");
+  });
+
+  it("translates an app's name where it is generic English", () => {
+    // Both spellings the product uses: the Integration a manifest carries and
+    // the curated display name on the Apps page.
+    expect(integrationName("Mailbox", "sv")).toBe("Brevlåda");
+    expect(integrationName("Mailbox (IMAP)", "sv")).toBe("Brevlåda (IMAP)");
+    expect(integrationName("Collections", "sv")).toBe("Samlingar");
+    // A brand is a brand.
+    expect(integrationName("Slack", "sv")).toBe("Slack");
+    expect(integrationName("Google Sheets", "sv")).toBe("Google Sheets");
+    expect(integrationName("", "sv")).toBe("");
+    expect(integrationName("Mailbox (IMAP)", "en")).toBe("Mailbox (IMAP)");
+  });
+
+  it("splits a connection note into the label it localizes and its example", () => {
+    expect(splitConnectionNote("Anthropic API key (sk-ant-…).")).toEqual({
+      label: "Anthropic API key",
+      example: "sk-ant-…",
+    });
+    // No parenthetical: all label, and the trailing period goes.
+    expect(splitConnectionNote("Notion integration token.")).toEqual({
+      label: "Notion integration token",
+      example: "",
+    });
+    expect(connectionText(splitConnectionNote("Notion integration token.").label, "sv")).toBe(
+      "Notion-integrationstoken",
+    );
   });
 
   it("carries no identity or empty entries", () => {

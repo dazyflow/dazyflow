@@ -338,3 +338,24 @@ export const SV_INTEGRATION_PROSE: DescriptionMap = {
     sv: "Skicka en avisering till vilken URL som helst — Slacks incoming-webhook-URL:er, Discord, Teams, PagerDuty eller din egen mottagare. Ta det här när tjänsten inte har en egen anslutning här, eller när du vill ha den enklaste möjliga leveransen utan svar.",
   },
 };
+
+// The app's own NAME, where it is generic English rather than a product name.
+//
+// Two populations, one map, because the key is the English either way: the
+// display names on the Apps pages ("Mailbox (IMAP)") and the shorter
+// Integration a manifest carries ("Calendar"), which the palette and the
+// Inspector show. Brands are absent on purpose — Slack stays Slack, and so do
+// SFTP, PDF and HTTP. "Standard library" and "MCP servers" are absent for a
+// different reason: the Apps page already renders those two through i18n keys
+// (integrations.builtinGroup / mcpGroup), and a second translation here would
+// be free to drift from them.
+export const SV_INTEGRATION_NAMES: Record<string, string> = {
+  Calendar: "Kalender",
+  "Calendar (CalDAV)": "Kalender (CalDAV)",
+  Collections: "Samlingar",
+  Email: "E-post",
+  "Email (SMTP)": "E-post (SMTP)",
+  Mailbox: "Brevlåda",
+  "Mailbox (IMAP)": "Brevlåda (IMAP)",
+  "Outgoing webhooks": "Utgående webhookar",
+};

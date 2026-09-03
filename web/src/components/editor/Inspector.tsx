@@ -39,6 +39,7 @@ import {
   dropDescription,
   dropLabel,
   dropSubtitle,
+  integrationName,
   nodeStateText,
 } from "../../lib/dropText";
 import { oauthProviderForIntegration } from "../../integrationMeta";
@@ -357,7 +358,7 @@ export function Inspector({
           // ("Gmail", "Slack") — drives the inline "Connect Gmail"
           // button when no accounts are connected. Falls back to a
           // generic label inside AccountField when absent.
-          providerLabel: d.manifest?.integration,
+          providerLabel: integrationName(d.manifest?.integration ?? "", i18n.language),
         }
       : undefined;
 

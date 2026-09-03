@@ -10,6 +10,43 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Swedish went missing across the step catalogue, and nothing said so.**
+  Every drop string is looked up by its English text and falls back to that
+  English when there is no match, so a missing or stale translation renders
+  perfectly good English instead of failing — 207 of them were. Whole families
+  added since the last translation pass (Calendar, Mailbox, SFTP, PDF, and the
+  JSON/XML/YAML writers) had untranslated field labels, help text and
+  dropdowns; the connection cards for Calendar, Mailbox, SFTP and Ollama asked
+  for their server and credentials in English; and rewording the catalogue's
+  own help from "wire" to "connect" orphaned 38 existing translations in one
+  go, each of them silently reverting a Swedish reader to English. Seven
+  strings had been filed in the dropdown map when they were help text and
+  titles, where no lookup would ever reach them, and a dead weekday dropdown
+  left seven translations behind. All of it is now translated, including the app names
+  that were generic English rather than brands — Mailbox (IMAP), Calendar
+  (CalDAV), Email (SMTP), Collections, Outgoing webhooks — wherever they name
+  an app: the Apps pages, the palette's app chip, the "needs setup" list and
+  the template gallery's blocked-app notice.
+
+- **A connection field's placeholder was never translated.** The label above
+  the input and the help under it went through the vocabulary; the example
+  inside the input did not, so "usually your email address" and "only if your
+  instance is behind a proxy" stayed English — and four translations written
+  for them had sat unused since they were added.
+
+### Changed
+
+- **`make drop-catalog` now records every string a drop puts on a screen**, not
+  just its description and its pin labels: the step name, the action line, the
+  app, every params_schema title, help paragraph and dropdown option, the
+  connection card, and the "keeps state" copy. The web build's coverage guard
+  reads that catalogue, so what it does not record is what nobody notices —
+  adding a drop, adding a param, or rewording either now fails the guard until
+  the Swedish is written or refreshed, and a translation whose English is gone
+  fails it too.
+
 ## [0.31.2] - 2026-09-03
 
 ### Changed

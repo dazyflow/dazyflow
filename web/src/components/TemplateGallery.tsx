@@ -21,6 +21,7 @@ import {
   templateCategory,
   templateTitle,
 } from "../lib/templateText";
+import { integrationName } from "../lib/dropText";
 import { ErrorNotice } from "./ui/ErrorNotice";
 import { Loading } from "./ui/Loading";
 
@@ -334,6 +335,7 @@ export function TemplateGallery() {
                   : oauthBlockedIntegrations(
                       tpl.integrations ?? [],
                       availableProviders,
+                      i18n.language,
                     );
               const adminBlocked = missingIntegrationNames.length > 0;
               return (
@@ -404,13 +406,14 @@ export function TemplateGallery() {
 function oauthBlockedIntegrations(
   integrationSlugs: string[],
   availableProviders: Set<string>,
+  lang?: string,
 ): string[] {
   const out = new Set<string>();
   for (const slug of integrationSlugs) {
     const provider = oauthProviderForIntegration(slug);
     if (!provider) continue;
     if (availableProviders.has(provider)) continue;
-    out.add(displayNameForIntegrationSlug(slug));
+    out.add(integrationName(displayNameForIntegrationSlug(slug), lang));
   }
   return [...out].sort();
 }

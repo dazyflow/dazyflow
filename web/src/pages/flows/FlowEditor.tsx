@@ -153,7 +153,13 @@ import { ConfigChecklistModal } from "../../components/editor/ConfigChecklistMod
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import { PublishCelebration } from "../../components/editor/PublishCelebration";
 import { QuickDropPalette } from "../../components/editor/QuickDropPalette";
-import { dropLabel, dropLabelIsDefault, fieldTitle, portLabel } from "../../lib/dropText";
+import {
+  dropLabel,
+  dropLabelIsDefault,
+  fieldTitle,
+  integrationName,
+  portLabel,
+} from "../../lib/dropText";
 import { CanvasContextMenu, type ContextMenuItem } from "../../components/editor/CanvasContextMenu";
 import { PromptModal } from "../../components/ui/PromptModal";
 import { PublishLabelModal } from "../../components/editor/PublishLabelModal";
@@ -4460,7 +4466,7 @@ function EditorInner() {
                         ) : (
                           <SetupIcon size={ICON.sm} className="editor-conn-chip-logo" />
                         )}
-                        {s.integration}
+                        {integrationName(s.integration, i18nLanguage)}
                       </span>
                     );
                   })}
