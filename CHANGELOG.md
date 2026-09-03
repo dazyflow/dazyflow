@@ -10,6 +10,39 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Changed
+
+- **Show all data sits in the data panel's top-right corner.** It used to
+  trail the port tabs inside the panel's header, which wraps — so on a step
+  with several output ports it dropped onto a second row, and it was in a
+  different place on every card. As a bare faint glyph on the code surface it
+  also carried no more weight than the panel's own chrome, so it did not read
+  as something you could press. It is pinned now, and rests as a bordered chip
+  the way every other icon control in the app does.
+
+### Fixed
+
+- **A wire dragged onto a Text step made the flow unsaveable, with nothing on
+  the canvas to undo.** Dragging off a step's output onto empty canvas opens
+  the palette and wires up whatever you pick. Text and Number are value
+  sources — a literal you type on the step, with no inputs at all — but the
+  palette offered them anyway and then wired to an invented `in` port. Nothing
+  was drawn, because the canvas draws no wire to a port a step does not have,
+  so there was no wire to delete; meanwhile every save came back `invalid
+  graph: edge 0: node "text_1" (text) has no input port "in"`. The palette no
+  longer offers a step that cannot take the wire, and a step spawned with
+  nowhere to land is placed unwired rather than attached to a port that does
+  not exist.
+
+- **A refused save retried itself every 1.5 seconds, forever.** The editor
+  keeps the graph marked unsaved after a failed write and re-armed its timer
+  as soon as the attempt finished, so a graph the daemon refuses was sent
+  again on a loop. Each attempt cleared the error banner and then set it
+  again, and that banner takes room on the page — so the canvas jumped up and
+  down about once a second while nothing was being fixed. Autosave now stands
+  down after a refusal until the flow changes. **Save** is never blocked, so
+  you can still ask for the write yourself.
+
 ## [0.33.0] - 2026-09-03
 
 ### Fixed

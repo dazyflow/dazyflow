@@ -37,10 +37,16 @@ type Props = {
 export function NodeDataFace({ ports, outputs, active, onSelect, onExpand }: Props) {
   const port = ports.find((p) => p.port === active) ?? ports[0];
   const { tier, view } = dataFaceSource(port ? outputs?.[port.port] : undefined, port);
+  // An empty face has nothing to open onto, and the caller may not offer the
+  // dialog at all — so the corner button, and the room the head leaves for it,
+  // both hang off this one condition.
+  const expandable = !!onExpand && tier !== "none";
 
   return (
     <div className="dz-face nodrag nowheel">
-      <div className="dz-face-head">
+      {/* Literal class names, per the note below: the modifier is written out
+          rather than assembled, so check-css-classes can see it. */}
+      <div className={expandable ? "dz-face-head dz-face-head-inset" : "dz-face-head"}>
         {/* The badge is what makes an example safe to show: a preview built
             on the step's shipped example must never read as one built on a
             real run.
@@ -66,23 +72,30 @@ export function NodeDataFace({ ports, outputs, active, onSelect, onExpand }: Pro
             ))}
           </div>
         )}
-        {/* nodrag/stopPropagation: the face lives inside a React Flow node, so
-            without them a click here drags the card or selects the step. */}
-        {onExpand && tier !== "none" && (
-          <button
-            type="button"
-            className="dz-face-expand nodrag"
-            aria-label={i18n.t("nodeCard.face.expand")}
-            title={i18n.t("nodeCard.face.expand")}
-            onClick={(e) => {
-              e.stopPropagation();
-              onExpand();
-            }}
-          >
-            <Maximize2 size={ICON.xs} strokeWidth={2.2} />
-          </button>
-        )}
       </div>
+
+      {/* Pinned to the well's top-right corner (see .dz-face-expand), so it is
+          in the same place on every card instead of trailing however many port
+          tabs this step happens to have. Rendered after the head rather than
+          inside it: it is out of flow either way, and this keeps it after the
+          tabs in reading and tab order.
+
+          nodrag/stopPropagation: the face lives inside a React Flow node, so
+          without them a click here drags the card or selects the step. */}
+      {expandable && (
+        <button
+          type="button"
+          className="dz-face-expand nodrag"
+          aria-label={i18n.t("nodeCard.face.expand")}
+          title={i18n.t("nodeCard.face.expand")}
+          onClick={(e) => {
+            e.stopPropagation();
+            onExpand?.();
+          }}
+        >
+          <Maximize2 size={ICON.sm} strokeWidth={2.2} />
+        </button>
+      )}
 
       <div className="dz-face-body">
         <FaceSummary view={view} />

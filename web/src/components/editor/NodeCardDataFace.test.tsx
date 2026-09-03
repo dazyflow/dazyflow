@@ -82,6 +82,30 @@ describe("the card's data face", () => {
     expect(screen.getByText("Faktura 4471")).toBeInTheDocument();
   });
 
+  it("keeps Show all data in the card's corner, out of the wrapping head", async () => {
+    // The button was easy to miss: it trailed the port tabs inside the head,
+    // which wraps — so on a step with several output ports it moved to a
+    // second row, and its position differed from card to card. It is pinned to
+    // the well's top-right corner now, which only holds if it stays OUT of the
+    // head element the tabs wrap inside.
+    const user = userEvent.setup();
+    renderCard({ dataView: true, outputs: { messages: { data: rows } } });
+    const expand = screen.getByRole("button", { name: "Show all data" });
+    expect(expand.closest(".dz-face-head")).toBeNull();
+    expect(expand.closest(".dz-face")).not.toBeNull();
+    // Still the same button, wherever it sits.
+    await user.click(expand);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("offers no way to expand a step that has produced nothing", () => {
+    // Nothing to open onto, so no button — and no reserved gap in the head
+    // for one that is not there.
+    renderCard({ dataView: true });
+    expect(screen.queryByRole("button", { name: "Show all data" })).toBeNull();
+    expect(document.querySelector(".dz-face-head-inset")).toBeNull();
+  });
+
   it("opens with the canvas-wide Data view, with no click on the card", () => {
     renderCard({ dataView: true, outputs: { messages: { data: rows } } });
     expect(screen.getByText("from, subject")).toBeInTheDocument();

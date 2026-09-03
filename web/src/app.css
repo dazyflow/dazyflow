@@ -4646,6 +4646,7 @@ button.warning:hover:not(:disabled) {
 /* The data face itself — one rendering per port kind. Its own well (the code
    surface) so it reads as data rather than as more card chrome. */
 .dz-face {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -4676,6 +4677,12 @@ button.warning:hover:not(:disabled) {
   align-items: center;
   gap: var(--space-1h);
   flex-wrap: wrap;
+}
+/* Room for the pinned "Show all data" button, which is out of flow and so
+   cannot reserve its own. Only on a face that HAS one — an empty face has
+   nothing to expand, and the gap would be a hole with no cause. */
+.dz-face-head-inset {
+  padding-right: calc(var(--space-5) + var(--space-1));
 }
 .dz-face-prov {
   display: inline-flex;
@@ -4852,33 +4859,44 @@ button.warning:hover:not(:disabled) {
   color: var(--code-fg);
 }
 
-/* "Show all data" — opens the same value at reading size in a dialog. Sits at
-   the end of the face head, after the port tabs. */
+/* "Show all data" — opens the same value at reading size in a dialog.
+   Pinned to the well's top-right corner rather than trailing the port tabs.
+   Two reasons, both about being findable:
+
+   It used to MOVE. The head wraps, and the tabs take the free space, so on a
+   router with several branches the button dropped onto a second row — a
+   control that sits somewhere different on every card is one nobody learns
+   the position of.
+
+   It used to read as decoration. A bare --faint glyph on the code surface is
+   the same weight as the well's own chrome, so it did not look like anything
+   you could press. It now rests as a bordered chip on the panel surface,
+   which is how every other icon control in the app announces itself, and
+   keeps the accent for hover. */
 .dz-face-expand {
-  flex: none;
+  position: absolute;
+  top: var(--space-1);
+  right: var(--space-1);
+  z-index: 1;
   display: grid;
   place-items: center;
-  width: var(--space-4);
-  height: var(--space-4);
-  margin-left: var(--space-1);
+  width: var(--space-5);
+  height: var(--space-5);
   padding: 0;
-  border: 0;
+  border: 1px solid var(--surface-3);
   border-radius: var(--r-1);
-  background: none;
-  color: var(--faint);
+  background: var(--surface);
+  color: var(--ink-soft);
   cursor: pointer;
   transition:
     color 140ms,
-    background 140ms;
+    background 140ms,
+    border-color 140ms;
 }
 .dz-face-expand:hover {
   color: var(--accent);
+  border-color: var(--accent);
   background: var(--surface-2);
-}
-/* The tabs take the free space with margin-left: auto, so without this the
-   expand button is pushed flush against the last tab. */
-.dz-face-head .dz-face-tabs + .dz-face-expand {
-  margin-left: var(--space-1h);
 }
 
 /* ── The data dialog (NodeDataModal) ───────────────────────────────────────
