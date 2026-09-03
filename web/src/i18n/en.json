@@ -122,7 +122,11 @@
     "organizations": "Organizations",
     "expiresAt": "expires {{date}}",
     "emailInvalid": "That doesn't look like a valid email yet.",
-    "auditReason": "Reason (recorded in the audit log)"
+    "auditReason": "Reason (recorded in the audit log)",
+    "download": "Download",
+    "downloadCsv": "Download CSV",
+    "prevPage": "Previous",
+    "nextPage": "Next"
   },
   "commentNode": {
     "color": "Comment colour",
@@ -1324,7 +1328,6 @@
     "emptyBody": "Add a “Collections · Save rows” step to a flow and the rows it saves show up here as a collection you can revisit.",
     "searchPlaceholder": "Search rows…",
     "sortBy": "Sort by {{column}}",
-    "downloadCsv": "Download CSV",
     "clear": "Clear",
     "clearing": "Clearing…",
     "clearTitle": "Clear this collection?",
@@ -1334,8 +1337,36 @@
     "deleteRowConfirm": "Delete this row? This can't be undone.",
     "boardEmpty": "This collection has no rows yet.",
     "noMatches": "No rows match your search.",
-    "rowCount": "Showing {{shown}} of {{total}} rows",
-    "truncatedNote": "(first {{limit}} loaded)"
+    "rowRange": "Rows {{from}}–{{to}} of {{total}}",
+    "pageScopeNote": "Search, sort and CSV cover this page.",
+    "matchCount": "{{shown}} match your search.",
+    "share": "Share",
+    "manageShare": "Sharing",
+    "sharedMarker": "Has a public link"
+  },
+  "publicCollection": {
+    "notFoundTitle": "This link is not active",
+    "notFoundBody": "It may have been turned off or replaced with a new one. Ask whoever sent it for a fresh link.",
+    "loadFailed": "Could not load this table. Try again in a moment.",
+    "stale": "Could not refresh just now — showing what was loaded last.",
+    "refresh": "Refresh",
+    "updated": "Updated {{when}}",
+    "searchPlaceholder": "Search these rows",
+    "noMatches": "No rows match your search.",
+    "empty": "This collection has no rows yet.",
+    "rowRange": "Rows {{from}}–{{to}} of {{total}}",
+    "pageScopeNote": "Search and CSV cover this page."
+  },
+  "shareCollection": {
+    "title": "Share “{{name}}”",
+    "description": "Create a link that shows this collection as a read-only table. Anyone with the link can open it without signing in.",
+    "beforeYouShare": "The page shows this collection's rows as they are — every column, no filtering. Check what is in it before you create the link, and treat the link itself as the password.",
+    "liveWarning": "The link is live: it always shows the collection's current rows, including anything your flows add later. Turn it off when you are done with it.",
+    "open": "Open the page",
+    "create": "Create the link",
+    "regenerate": "Replace the link",
+    "disable": "Turn off",
+    "forbidden": "You need edit access to this workspace to publish a collection."
   },
   "runList": {
     "title": "Runs",
@@ -1517,7 +1548,18 @@
     "logTruncated": "Log truncated — this run produced more lines than the per-run limit. Later output was not recorded.",
     "reportProblem": "Report a problem",
     "result": "Result",
-    "resultFrom": "From “{{label}}”"
+    "resultFrom": "From “{{label}}”",
+    "copyResult": "Copy the result",
+    "downloadResult": "Save the result as a file",
+    "resultRows_one": "{{count}} row",
+    "resultRows_other": "{{count}} rows",
+    "resultRowsCapped": "Showing the first {{shown}} of {{total}} rows — the download has all of them",
+    "resultShowAll": "Show everything ({{count}} characters)",
+    "resultShowLess": "Show less",
+    "files": "Files",
+    "fileFrom": "from “{{label}}”",
+    "downloadFile": "Download this file",
+    "fileTemporary": "temporary — not kept after the run"
   },
   "nodeCard": {
     "breakpoint": "pause point",

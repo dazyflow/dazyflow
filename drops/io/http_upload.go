@@ -39,11 +39,11 @@ func init() {
 			Examples: []core.ParamsExample{
 				{
 					Title:  "PUT to an S3 presigned URL",
-					Params: json.RawMessage(`{"url":"https://bucket.s3.amazonaws.com/uploads/report.xlsx?X-Amz-Signature=...","path":"workspace://reports/report.xlsx","content_type":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}`),
+					Params: json.RawMessage(`{"url":"https://bucket.s3.amazonaws.com/uploads/report.xlsx?X-Amz-Signature=...","path":"reports/report.xlsx","content_type":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}`),
 				},
 				{
 					Title:  "Multipart POST to a form-data API",
-					Params: json.RawMessage(`{"url":"https://api.example.com/v1/attachments","path":"workspace://uploads/photo.jpg","multipart":true,"field_name":"file","filename":"photo.jpg","headers":{"Authorization":"Bearer ${secret.EXAMPLE_API_TOKEN}"}}`),
+					Params: json.RawMessage(`{"url":"https://api.example.com/v1/attachments","path":"uploads/photo.jpg","multipart":true,"field_name":"file","filename":"photo.jpg","headers":{"Authorization":"Bearer ${secret.EXAMPLE_API_TOKEN}"}}`),
 				},
 			},
 			ExecutionModel: core.ExecutionBatch,

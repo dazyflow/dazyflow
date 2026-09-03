@@ -18,11 +18,18 @@ vi.mock("../auth", () => {
 
 const listBoards = vi.fn();
 const getBoard = vi.fn();
+// The page also asks which collections have a public link, to mark them.
+// Best-effort on the page, so the default is an empty list.
+const listCollectionShares = vi.fn((..._a: unknown[]) =>
+  Promise.resolve({ shares: [] }),
+);
 vi.mock("../api", () => ({
   APIError: class extends Error {},
+  isErrorCode: () => false,
   api: {
     listBoards: (...a: unknown[]) => listBoards(...a),
     getBoard: (...a: unknown[]) => getBoard(...a),
+    listCollectionShares: (...a: unknown[]) => listCollectionShares(...a),
   },
 }));
 
@@ -201,7 +208,7 @@ describe("Collections sorting", () => {
     setup();
     await ready();
     await userEvent.click(header("name"));
-    await userEvent.click(screen.getByRole("button", { name: "results.downloadCsv" }));
+    await userEvent.click(screen.getByRole("button", { name: "common.downloadCsv" }));
 
     expect(written).toHaveLength(1);
     const names = written[0]
@@ -230,6 +237,116 @@ describe("Collections sorting", () => {
     await userEvent.click(screen.getByRole("button", { name: /leads/ }));
     await waitFor(() =>
       expect(container.querySelectorAll("thead th")[0].getAttribute("aria-sort")).toBe("none"),
+    );
+  });
+});
+
+// Paging. A collection that outgrew the endpoint's 1000-row window used to
+// end there: the footer said "first 1000 loaded" and no control reached row
+// 1001, so months of saved rows were in the store and unreachable.
+//
+// The fixtures return a handful of rows rather than a full 1000 — the window
+// SIZE is the daemon's business (boardRowLimit); what this page owes is the
+// offset it asks for, the range it reports, and which way it can still move.
+describe("Collections paging", () => {
+  const PAGE = 1000;
+
+  // A window of `count` rows starting at `offset`, out of `total`.
+  const page = (offset: number, total: number, count: number, name = "orders") => ({
+    name,
+    columns: ["name"],
+    rows: Array.from({ length: count }, (_, i) => ({
+      _dz_rowid: offset + i + 1,
+      name: `row-${offset + i + 1}`,
+    })),
+    total,
+    truncated: offset + count < total,
+  });
+
+  const next = () => screen.getByRole("button", { name: /common\.nextPage/ });
+  const prev = () => screen.getByRole("button", { name: /common\.prevPage/ });
+
+  it("hides the pager for a collection that fits on one page", async () => {
+    listBoards.mockResolvedValue({ boards: [{ name: "orders", rows: 3 }] });
+    getBoard.mockResolvedValue(page(0, 3, 3));
+    render(<Results />);
+
+    await waitFor(() => expect(screen.getByText("row-1")).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: /common\.nextPage/ })).toBeNull();
+    // The range still reports itself.
+    expect(screen.getByText(/results\.rowRange:1,3,3/)).toBeInTheDocument();
+  });
+
+  it("asks the server for the next window and reports the new range", async () => {
+    listBoards.mockResolvedValue({ boards: [{ name: "orders", rows: 2500 }] });
+    getBoard.mockResolvedValue(page(0, 2500, 3));
+    render(<Results />);
+    await waitFor(() => expect(screen.getByText("row-1")).toBeInTheDocument());
+    expect(screen.getByText(/results\.rowRange:1,3,2500/)).toBeInTheDocument();
+
+    getBoard.mockResolvedValue(page(PAGE, 2500, 3));
+    await userEvent.click(next());
+
+    await waitFor(() =>
+      expect(getBoard).toHaveBeenLastCalledWith(
+        "tok",
+        "orders",
+        expect.objectContaining({ limit: PAGE, offset: PAGE }),
+      ),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByText(/results\.rowRange:1001,1003,2500/),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it("stops offering Next on the last page and Previous on the first", async () => {
+    listBoards.mockResolvedValue({ boards: [{ name: "orders", rows: 1500 }] });
+    getBoard.mockResolvedValue(page(0, 1500, 3));
+    render(<Results />);
+    await waitFor(() => expect(screen.getByText("row-1")).toBeInTheDocument());
+    expect(prev()).toBeDisabled();
+    expect(next()).toBeEnabled();
+
+    // A window that reaches the end: offset + rows === total.
+    getBoard.mockResolvedValue(page(PAGE, PAGE + 3, 3));
+    await userEvent.click(next());
+    await waitFor(() => expect(next()).toBeDisabled());
+    expect(prev()).toBeEnabled();
+  });
+
+  // Landing on page four of a collection you have only just opened reads as
+  // missing rows, so switching collections starts at the beginning.
+  it("returns to the first page when another collection is picked", async () => {
+    listBoards.mockResolvedValue({
+      boards: [
+        { name: "orders", rows: 2500 },
+        { name: "leads", rows: 4 },
+      ],
+    });
+    getBoard.mockResolvedValue(page(0, 2500, 3));
+    render(<Results />);
+    await waitFor(() => expect(screen.getByText("row-1")).toBeInTheDocument());
+
+    getBoard.mockResolvedValue(page(PAGE, 2500, 3));
+    await userEvent.click(next());
+    await waitFor(() =>
+      expect(getBoard).toHaveBeenLastCalledWith(
+        "tok",
+        "orders",
+        expect.objectContaining({ offset: PAGE }),
+      ),
+    );
+
+    getBoard.mockResolvedValue(page(0, 4, 4, "leads"));
+    await userEvent.click(screen.getByRole("button", { name: /leads/ }));
+    await waitFor(() =>
+      expect(getBoard).toHaveBeenLastCalledWith(
+        "tok",
+        "leads",
+        expect.objectContaining({ offset: 0 }),
+      ),
     );
   });
 });

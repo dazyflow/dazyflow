@@ -3920,8 +3920,76 @@ button.warning:hover:not(:disabled) {
   border-left: 2px solid var(--success);
 }
 .run-result-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
   font-size: var(--text-sm);
   color: var(--muted);
+}
+/* Copy / download sit on the head row, not above the value: they belong to
+   the result, and a reader scanning for the answer should meet the value
+   first. */
+.run-result-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1h);
+}
+/* A rows result's table is inside the card's padding, so its own cell padding
+   pushed the first column's NAME 16px right of the "From …" label and of the
+   <pre> a text result renders in — a ragged left edge down the one card whose
+   job is to be read. The outer cells give their outside padding back; the
+   padding BETWEEN columns is untouched. */
+.run-result th:first-child,
+.run-result td:first-child {
+  padding-left: 0;
+}
+.run-result th:last-child,
+.run-result td:last-child {
+  padding-right: 0;
+}
+/* The row count under a rows result, and the show-everything toggle under a
+   long text one — the same quiet footnote in both shapes. */
+.run-result-note {
+  font-size: var(--text-xs);
+  color: var(--faint);
+}
+/* Files the run wrote. One row per file: name, which step, download. */
+.run-files {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.run-file-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1h) 0;
+  color: var(--muted);
+}
+.run-file-row + .run-file-row {
+  border-top: 1px solid var(--border);
+}
+.run-file-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Pushes the trailing action to the right edge, so the download buttons line
+   up down the list however long the names are. */
+.run-file-meta {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  color: var(--faint);
+}
+.run-file-gone {
+  font-size: var(--text-xs);
+  color: var(--faint);
+  font-style: italic;
 }
 .run-result-value {
   font-family: var(--font-mono);
@@ -12817,6 +12885,24 @@ button:active,
    Button, including the selected state — which was a ternary on `background`
    rather than the `active` class sitting right beside it in the same
    className. */
+/* The footer under a collection's table: the row range on the left, the
+   pager on the right. Only rendered once a collection is bigger than one
+   page, so a small one keeps a bare line of text. */
+.board-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-top: var(--space-2);
+  color: var(--faint);
+  font-size: var(--text-xs);
+}
+.board-pager {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1h);
+}
 .board-item {
   display: flex;
   width: 100%;
@@ -13525,4 +13611,116 @@ button:active,
   gap: var(--space-2);
   margin-top: var(--space-2);
   cursor: pointer;
+}
+
+/* ── Public collection page (/board/:token) ──
+   The login-free read-only table behind a collection share link. Deliberately
+   NOT dressed like the TV board next door: that one is furniture on a wall,
+   read from across a room, and it earns its nebula and glass. This is a
+   document someone was sent — the shape of a report, on a plain ground, in one
+   readable column. The chrome's whole job is to say whose data this is and
+   let the reader take it away. */
+.pub-view {
+  min-height: 100vh;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4);
+  background: var(--bg);
+  color: var(--ink);
+}
+/* The dead-link and first-load states are the whole screen, so they centre
+   and carry the mark — an unsigned empty page reads as broken rather than as
+   a link that has been turned off. */
+.pub-message {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.pub-message h1 {
+  font-size: var(--text-2xl);
+  margin: 0 0 var(--space-3);
+}
+.pub-message p {
+  color: var(--muted);
+  max-width: 44ch;
+}
+.pub-message .pub-brand {
+  justify-content: center;
+  margin-bottom: var(--space-5);
+}
+.pub-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+.pub-head-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.pub-head-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.pub-org-ico {
+  display: inline-flex;
+  flex: none;
+}
+.pub-titles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+/* The org name sits ABOVE the collection name, small: the reader knows who
+   sent them the link, and what they came for is the table's own name. */
+.pub-eyebrow {
+  font-size: var(--text-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.pub-title {
+  font-size: var(--text-2xl);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pub-updated {
+  font-size: var(--text-xs);
+  color: var(--faint);
+}
+.pub-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.pub-foot {
+  margin-top: auto;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+.pub-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--faint);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.pub-brand img {
+  width: 18px;
+  height: 18px;
+  opacity: 0.85;
 }

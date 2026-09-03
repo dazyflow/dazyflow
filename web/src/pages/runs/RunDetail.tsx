@@ -18,7 +18,10 @@ import { integrationSlug } from "../../integrationMeta";
 import { explainApiError } from "../../lib/explainApiError";
 import { ApprovalPanel } from "../../components/editor/ApprovalPanel";
 import { supportContactWithContext } from "../../lib/supportContact";
-import { isResultNode, previewOutput } from "../../lib/runResult";
+import { pickResultNode, resultView } from "../../lib/runResult";
+import { collectArtifacts } from "../../lib/runArtifacts";
+import { RunResultPanel } from "./RunResultPanel";
+import { RunFilesPanel } from "./RunFilesPanel";
 import { ReportProblemModal } from "../../components/dialogs/ReportProblemModal";
 import type { Graph, JobRecord, JobStatus, Manifest, Ref, RunLogEntry } from "../../types";
 import { formatDateTime, formatRelative } from "../../lib/datetime";
@@ -333,26 +336,14 @@ export function RunDetail() {
   // resultNode: what the run actually produced. A failed run leads with the
   // error banner, so this is only for the clean ones — where the page used to
   // report duration and step counts but never the answer, leaving it folded
-  // inside a step, then inside a port. Prefer the flow's end steps (no edge
-  // leaves them) so intermediate plumbing doesn't get mistaken for the
-  // result; when the graph can't be loaded (a deleted flow) fall back to the
-  // last step that ran, which is the same node in a linear flow.
-  const resultNode =
-    run.Status === "succeeded"
-      ? orderedNodes
-          .filter(
-            (n) =>
-              n.Status === "succeeded" && previewOutput(n.Result?.output) !== "",
-          )
-          .reverse()
-          .find((n) => !graph || isResultNode(n.NodeID, graph.edges)) ??
-        [...orderedNodes]
-          .reverse()
-          .find(
-            (n) =>
-              n.Status === "succeeded" && previewOutput(n.Result?.output) !== "",
-          )
-      : undefined;
+  // inside a step, then inside a port. See pickResultNode for the rules,
+  // including why a flow that ends in a file gets no Result panel.
+  const resultNode = pickResultNode(orderedNodes, graph?.edges, run.Status);
+
+  // Files the run's steps named on their outputs. Independent of run status:
+  // a failed run's earlier steps may still have written the file the reader
+  // is looking for, and a cancelled one certainly did.
+  const artifacts = collectArtifacts(orderedNodes);
 
   // Empty when the run carries no usable timestamp at all — the subtitle is
   // then dropped rather than rendered as "Started " with a hole in it.
@@ -557,18 +548,22 @@ export function RunDetail() {
           raises after a manual Run, so a run reached from the run list reads
           the same as one you just watched. */}
       {resultNode && (
-        <>
-          <h2 style={{ marginTop: "var(--space-4)" }}>{t("runDetail.result")}</h2>
-          <div className="card run-result">
-            <div className="run-result-head">
-              {t("runDetail.resultFrom", { label: nodeLabel(resultNode.NodeID) })}
-            </div>
-            <pre className="run-result-value">
-              {previewOutput(resultNode.Result?.output)}
-            </pre>
-          </div>
-        </>
+        <RunResultPanel
+          view={resultView(resultNode.Result?.output)}
+          from={nodeLabel(resultNode.NodeID)}
+          filenameStem={graph?.name || run.GraphID}
+        />
       )}
+
+      {/* Files the run wrote: a result that is a file has nothing to show
+          above, only a path folded inside a step. */}
+      <RunFilesPanel
+        artifacts={artifacts}
+        tenant={activeTenant || me?.tenant || ""}
+        workspace={activeWorkspace || me?.workspace || ""}
+        token={token}
+        nodeLabel={nodeLabel}
+      />
 
       <h2 style={{ marginTop: "var(--space-4)" }}>{t("runDetail.timeline")}</h2>
       {orderedNodes.length === 0 && (

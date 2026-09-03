@@ -24,6 +24,41 @@ func TestResolve(t *testing.T) {
 			t.Errorf("Resolve = (%q, %q), want (/ws, sub/file.txt)", root, rel)
 		}
 	})
+	// The redundant workspace:// spelling several step examples carried. It
+	// used to pass through unresolved, so the path cleaned to
+	// "workspace:/sub/file.txt" and the step wrote into a directory literally
+	// named "workspace:" while reporting success.
+	t.Run("legacy workspace:// prefix resolves to the workspace", func(t *testing.T) {
+		job := core.Job{WorkspaceRoot: "/ws"}
+		root, rel, err := Resolve(job, WorkspaceScheme+"sub/file.txt")
+		if err != nil {
+			t.Fatalf("err = %v", err)
+		}
+		if root != "/ws" || rel != "sub/file.txt" {
+			t.Errorf("Resolve = (%q, %q), want (/ws, sub/file.txt)", root, rel)
+		}
+		// And it lands in exactly the same place as the canonical spelling.
+		bareRoot, bareRel, err := Resolve(job, "sub/file.txt")
+		if err != nil {
+			t.Fatalf("bare err = %v", err)
+		}
+		if root != bareRoot || rel != bareRel {
+			t.Errorf("prefixed (%q,%q) != bare (%q,%q)", root, rel, bareRoot, bareRel)
+		}
+	})
+	// Only a LEADING prefix is a scheme. A file whose name happens to contain
+	// the text is just a file.
+	t.Run("the prefix is only stripped at the front", func(t *testing.T) {
+		job := core.Job{WorkspaceRoot: "/ws"}
+		_, rel, err := Resolve(job, "notes/workspace://odd.txt")
+		if err != nil {
+			t.Fatalf("err = %v", err)
+		}
+		if rel != "notes/workspace://odd.txt" {
+			t.Errorf("rel = %q, want it untouched", rel)
+		}
+	})
+	// scratch:// still wins: it is a real second root, not a spelling.
 	t.Run("scratch path resolves against ScratchRoot", func(t *testing.T) {
 		job := core.Job{WorkspaceRoot: "/ws", ScratchRoot: "/scratch"}
 		root, rel, err := Resolve(job, Scheme+"a/b.json")

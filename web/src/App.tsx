@@ -62,6 +62,7 @@ import { AdminWebAPIs } from "./pages/admin/AdminWebAPIs";
 import { AdminRunnerDetail } from "./pages/admin/AdminRunnerDetail";
 import { AcceptInvite } from "./pages/auth/AcceptInvite";
 import { PublicOverview } from "./pages/PublicOverview";
+import { PublicCollection } from "./pages/PublicCollection";
 import { UploadsProvider } from "./uploads";
 
 export function App() {
@@ -74,6 +75,16 @@ export function App() {
     return (
       <Routes>
         <Route path="/tv/:token" element={<PublicOverview />} />
+      </Routes>
+    );
+  }
+  // Public collection table, same deal: the link is the credential, and the
+  // person opening it is usually the one who asked for the data rather than
+  // anyone with an account here.
+  if (pathname.startsWith("/board/")) {
+    return (
+      <Routes>
+        <Route path="/board/:token" element={<PublicCollection />} />
       </Routes>
     );
   }

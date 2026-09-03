@@ -10,6 +10,61 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Added
+
+- **A run's result is a table when the run produced a table.** The run-detail
+  Result panel pretty-printed everything as JSON, so a flow ending in "Group
+  and count" or "Save rows" — the shape a manually-run flow most often
+  produces — asked the reader to parse braces to find a number. Rows now
+  render as a real table, in the column order the producing step emitted
+  (`core.Ref.Headers`), and both shapes get a Copy and a Download: rows leave
+  as CSV, text as `.txt` or `.json`. A long text result folds behind a
+  show-everything toggle rather than being cut at the 600-character banner
+  cap.
+- **Files a run wrote are listed on the run page, with a download.** A flow
+  whose last step is "Save as file", "Write Excel" or "Merge PDFs" has no
+  value to show — the answer is a file, and the only trace of it was a path
+  string folded inside a step's output port, with no way to tell which entry
+  on the Files page this run had produced. Steps' output refs are now
+  collected into a Files panel. No new storage: an artifact is a workspace
+  file, served by the endpoint that already serves them. A `scratch://` path
+  is listed as temporary rather than offered as a download the server would
+  refuse.
+- **Collections can be published as a login-free read-only page.** A flow
+  that only runs by hand still has to show its answer to somebody, and that
+  somebody is usually the person who asked for the data rather than anyone
+  with an account — previously a screenshot or a seat. A collection can now
+  be shared as `/board/<token>`: one regenerable token per collection, the
+  same credential model as the hosted forms and the TV overview, with search,
+  paging and CSV on the page. Minting takes `graph:edit` (a read-only viewer
+  cannot publish data they were only trusted to read), is audited, and is
+  listed per workspace so a member can see which collections are public. The
+  page carries the collection's rows unredacted — that being the point — so
+  the dialog says so before the link exists. The row-delete handle is
+  stripped from the public payload, and the response is `no-store`.
+
+### Fixed
+
+- **A `workspace://` path wrote the file into a directory called
+  `workspace:`.** Only `scratch://` was ever a real scheme; the redundant
+  `workspace://` spelling was never resolved, so the path cleaned to
+  `workspace:/reports/summary.json`, the step reported success, and the file
+  landed somewhere the author had not asked for — visible afterwards only as a
+  junk folder on the Files page. `drops/excel` stripped the prefix, so the same
+  path worked there and misfired in every other file step. It is now stripped
+  once, in the shared sandbox resolver, and the eight step examples that
+  carried it use the canonical bare relative path the editor's file picker
+  writes.
+
+### Changed
+
+- **Collections pages past the first thousand rows.** The endpoint caps a page
+  at 1000 rows and the footer said "first 1000 loaded", but no control reached
+  row 1001 — so a collection a flow had been appending to for months was in
+  the store and off the screen. The page now pages at the server's own cap,
+  reports the row range it is showing, and says that search, sort and CSV
+  cover the loaded page.
+
 ## [0.33.1] - 2026-09-03
 
 ### Changed

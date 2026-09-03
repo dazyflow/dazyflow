@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/xuri/excelize/v2"
 
@@ -77,7 +78,7 @@ func executeExcelWrite(_ context.Context, job core.Job, _ chan<- core.Progress) 
 	if in, ok := job.Input["path"]; ok && in.Inline != nil {
 		path = rowsutil.Cell(in.Inline)
 	}
-	path = wsPath(path)
+	path = strings.TrimSpace(path)
 	if path == "" {
 		return params.Err(job, "bad_param", "'path' is required"), nil
 	}

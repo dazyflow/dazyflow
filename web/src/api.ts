@@ -17,6 +17,8 @@ import type {
   IssuedAPIKey,
   InvitationDetails,
   ShareLink,
+  CollectionShareLink,
+  PublicCollectionData,
   PublicOverview,
   AdminOAuthProvider,
   InvitationSummary,
@@ -2359,6 +2361,85 @@ export const api = {
     const q = qs.toString();
     return request<void>(token, "DELETE", `/me/share${q ? `?${q}` : ""}`);
   },
+  // --- Public collection links -----------------------------------------
+  // One link per collection. listCollectionShares backs the "public" marking
+  // on the Collections page; createCollectionShare mints or rotates (rotating
+  // invalidates the old link); deleteCollectionShare revokes.
+  listCollectionShares: (token: string, tenant?: string, workspace?: string) => {
+    const qs = new URLSearchParams();
+    if (tenant) qs.set("tenant", tenant);
+    if (workspace) qs.set("workspace", workspace);
+    const q = qs.toString();
+    return request<{ shares: CollectionShareLink[] }>(
+      token,
+      "GET",
+      `/me/collection-shares${q ? `?${q}` : ""}`,
+    );
+  },
+  getCollectionShare: (
+    token: string,
+    name: string,
+    tenant?: string,
+    workspace?: string,
+  ) => {
+    const qs = new URLSearchParams();
+    if (tenant) qs.set("tenant", tenant);
+    if (workspace) qs.set("workspace", workspace);
+    const q = qs.toString();
+    return request<CollectionShareLink>(
+      token,
+      "GET",
+      `/me/collection-shares/${encodeURIComponent(name)}${q ? `?${q}` : ""}`,
+    );
+  },
+  createCollectionShare: (
+    token: string,
+    name: string,
+    tenant?: string,
+    workspace?: string,
+  ) => {
+    const qs = new URLSearchParams();
+    if (tenant) qs.set("tenant", tenant);
+    if (workspace) qs.set("workspace", workspace);
+    const q = qs.toString();
+    return request<CollectionShareLink>(
+      token,
+      "POST",
+      `/me/collection-shares/${encodeURIComponent(name)}${q ? `?${q}` : ""}`,
+    );
+  },
+  deleteCollectionShare: (
+    token: string,
+    name: string,
+    tenant?: string,
+    workspace?: string,
+  ) => {
+    const qs = new URLSearchParams();
+    if (tenant) qs.set("tenant", tenant);
+    if (workspace) qs.set("workspace", workspace);
+    const q = qs.toString();
+    return request<void>(
+      token,
+      "DELETE",
+      `/me/collection-shares/${encodeURIComponent(name)}${q ? `?${q}` : ""}`,
+    );
+  },
+  // getPublicCollection is unauthenticated — the link token IS the credential.
+  getPublicCollection: (
+    shareToken: string,
+    opts: { limit?: number; offset?: number } = {},
+  ) => {
+    const qs = new URLSearchParams();
+    if (opts.limit) qs.set("limit", String(opts.limit));
+    if (opts.offset) qs.set("offset", String(opts.offset));
+    const q = qs.toString();
+    return request<PublicCollectionData>(
+      null,
+      "GET",
+      `/public/collection/${encodeURIComponent(shareToken)}${q ? `?${q}` : ""}`,
+    );
+  },
+
   // getPublicOverview is unauthenticated — the share token IS the credential.
   // Backs the live TV page; returns a sanitized, sensitive-data-free snapshot.
   getPublicOverview: (shareToken: string) =>

@@ -33,7 +33,7 @@ func init() {
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Drop a generated artifact into the reports folder",
-					Params: json.RawMessage(`{"path":"workspace://reports/summary.json","mkdirs":true}`),
+					Params: json.RawMessage(`{"path":"reports/summary.json","mkdirs":true}`),
 				},
 				{
 					Title:  "Persist to a scratch path that lives only as long as the run",

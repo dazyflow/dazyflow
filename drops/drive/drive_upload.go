@@ -39,7 +39,7 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"drive", "google", "upload", "file"},
 			Examples: []core.ParamsExample{
-				{Title: "Upload into a folder", Params: json.RawMessage(`{"account":"default","path":"workspace://reports/report.pdf","folder_id":"REPLACE_WITH_FOLDER_ID"}`)},
+				{Title: "Upload into a folder", Params: json.RawMessage(`{"account":"default","path":"reports/report.pdf","folder_id":"REPLACE_WITH_FOLDER_ID"}`)},
 			},
 			RequiresConnections: []core.ConnectionRequirement{
 				{Kind: "oauth", Name: "google", Note: "Google OAuth — drive.file scope."},

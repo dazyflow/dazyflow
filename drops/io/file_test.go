@@ -139,6 +139,38 @@ func TestFileWrite_FromFileRef(t *testing.T) {
 	}
 }
 
+// The redundant workspace:// spelling, which this drop's own example carried.
+// Nothing resolved the prefix, so the path cleaned to
+// "workspace:/reports/summary.json": the step reported success and wrote the
+// file into a directory literally named "workspace:", which is not where the
+// author asked for it and shows up on the Files page as junk. Only the excel
+// drops stripped it, so the same path worked there and misfired here.
+func TestFileWrite_LegacyWorkspaceScheme(t *testing.T) {
+	root := t.TempDir()
+	res, err := executeFileWrite(t.Context(), core.Job{
+		WorkspaceRoot: root,
+		Params:        map[string]any{"path": "workspace://reports/summary.json", "mkdirs": true},
+		Input:         map[string]core.Ref{"in": {Inline: "hello"}},
+	}, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if res.Status != core.StatusOK {
+		t.Fatalf("status=%q, err=%+v", res.Status, res.Error)
+	}
+	data, err := os.ReadFile(filepath.Join(root, "reports", "summary.json"))
+	if err != nil {
+		t.Fatalf("file did not land at the asked-for path: %v", err)
+	}
+	if string(data) != "hello" {
+		t.Errorf("contents = %q, want hello", data)
+	}
+	// And nothing was created under the prefix.
+	if _, err := os.Stat(filepath.Join(root, "workspace:")); err == nil {
+		t.Error(`a "workspace:" directory was created from the scheme prefix`)
+	}
+}
+
 func TestFileWrite_Mkdirs(t *testing.T) {
 	root := t.TempDir()
 	res, err := executeFileWrite(t.Context(), core.Job{

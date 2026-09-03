@@ -122,7 +122,11 @@
     "organizations": "Organisationer",
     "expiresAt": "går ut {{date}}",
     "emailInvalid": "Det där ser inte ut som en giltig e-postadress än.",
-    "auditReason": "Orsak (loggas i granskningsloggen)"
+    "auditReason": "Orsak (loggas i granskningsloggen)",
+    "download": "Ladda ner",
+    "downloadCsv": "Ladda ner CSV",
+    "prevPage": "Föregående",
+    "nextPage": "Nästa"
   },
   "commentNode": {
     "color": "Kommentarens färg",
@@ -1324,7 +1328,6 @@
     "emptyBody": "Lägg till ett steg av typen ”Samlingar · Spara rader” i ett flöde, så dyker raderna det sparar upp här som en samling du kan återkomma till.",
     "searchPlaceholder": "Sök rader…",
     "sortBy": "Sortera på {{column}}",
-    "downloadCsv": "Ladda ner CSV",
     "clear": "Töm",
     "clearing": "Tömmer…",
     "clearTitle": "Töm den här samlingen?",
@@ -1334,8 +1337,36 @@
     "deleteRowConfirm": "Ta bort den här raden? Detta kan inte ångras.",
     "boardEmpty": "Den här samlingen har inga rader än.",
     "noMatches": "Inga rader matchar din sökning.",
-    "rowCount": "Visar {{shown}} av {{total}} rader",
-    "truncatedNote": "(första {{limit}} laddade)"
+    "rowRange": "Rader {{from}}–{{to}} av {{total}}",
+    "pageScopeNote": "Sökning, sortering och CSV gäller den här sidan.",
+    "matchCount": "{{shown}} matchar din sökning.",
+    "share": "Dela",
+    "manageShare": "Delas",
+    "sharedMarker": "Har en offentlig länk"
+  },
+  "publicCollection": {
+    "notFoundTitle": "Den här länken är inte aktiv",
+    "notFoundBody": "Den kan ha stängts av eller ersatts med en ny. Be den som skickade den om en ny länk.",
+    "loadFailed": "Kunde inte läsa in tabellen. Försök igen om en stund.",
+    "stale": "Kunde inte uppdatera just nu — visar det som lästes in senast.",
+    "refresh": "Uppdatera",
+    "updated": "Uppdaterad {{when}}",
+    "searchPlaceholder": "Sök i raderna",
+    "noMatches": "Inga rader matchar din sökning.",
+    "empty": "Den här samlingen har inga rader än.",
+    "rowRange": "Rader {{from}}–{{to}} av {{total}}",
+    "pageScopeNote": "Sökning och CSV gäller den här sidan."
+  },
+  "shareCollection": {
+    "title": "Dela ”{{name}}”",
+    "description": "Skapa en länk som visar den här samlingen som en tabell utan redigering. Alla med länken kan öppna den utan att logga in.",
+    "beforeYouShare": "Sidan visar samlingens rader som de är — alla kolumner, ingen filtrering. Kontrollera vad som finns i den innan du skapar länken, och behandla länken som ett lösenord.",
+    "liveWarning": "Länken är aktiv: den visar alltid samlingens aktuella rader, inklusive det som dina flöden lägger till senare. Stäng av den när du är klar.",
+    "open": "Öppna sidan",
+    "create": "Skapa länken",
+    "regenerate": "Byt ut länken",
+    "disable": "Stäng av",
+    "forbidden": "Du behöver redigeringsbehörighet i den här arbetsytan för att publicera en samling."
   },
   "runList": {
     "title": "Körningar",
@@ -1517,7 +1548,18 @@
     "logTruncated": "Loggen klipptes av — körningen producerade fler rader än gränsen per körning. Senare utdata sparades inte.",
     "reportProblem": "Rapportera ett problem",
     "result": "Resultat",
-    "resultFrom": "Från ”{{label}}”"
+    "resultFrom": "Från ”{{label}}”",
+    "copyResult": "Kopiera resultatet",
+    "downloadResult": "Spara resultatet som en fil",
+    "resultRows_one": "{{count}} rad",
+    "resultRows_other": "{{count}} rader",
+    "resultRowsCapped": "Visar de första {{shown}} av {{total}} raderna — nedladdningen innehåller alla",
+    "resultShowAll": "Visa allt ({{count}} tecken)",
+    "resultShowLess": "Visa mindre",
+    "files": "Filer",
+    "fileFrom": "från ”{{label}}”",
+    "downloadFile": "Ladda ner den här filen",
+    "fileTemporary": "tillfällig — sparas inte efter körningen"
   },
   "nodeCard": {
     "breakpoint": "pauspunkt",

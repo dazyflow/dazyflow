@@ -632,6 +632,10 @@ export type Ref = {
   mime?: string;
   ref?: string;
   data?: unknown; // serialized as Inline in Go
+  // headers is the column order of a rows value, carried by the value itself
+  // (core.Ref.Headers) rather than derived from the first row's keys — so a
+  // table renders the columns in the order the producing step emitted them.
+  headers?: string[];
 };
 
 // ShareLink is the workspace's public overview (TV-dashboard) link. url is
@@ -642,6 +646,32 @@ export type ShareLink = {
   url: string;
   created_at: string;
   created_by?: string;
+};
+
+// CollectionShareLink is one collection's public link. Mirrors
+// daemon.collectionShareResponse.
+export type CollectionShareLink = {
+  collection: string;
+  token: string;
+  url: string;
+  created_at: string;
+  created_by?: string;
+};
+
+// PublicCollectionData is the unauthenticated table the public collection page
+// renders. Unlike PublicOverview below, this DOES carry the workspace's own
+// data — that is the point of the link — minus the row-delete handle, which is
+// a key for an authenticated mutation and never leaves the app. Mirrors
+// daemon.PublicCollectionData.
+export type PublicCollectionData = {
+  label?: string;
+  icon?: string;
+  collection: string;
+  generated_at: string;
+  columns: string[];
+  rows: Record<string, unknown>[];
+  total: number;
+  offset: number;
 };
 
 // PublicOverview is the sanitized, unauthenticated status snapshot the TV

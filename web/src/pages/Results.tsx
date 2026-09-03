@@ -2,21 +2,39 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useEffect, useMemo, useState } from "react";
-import { Table2, Download, Search, Trash2, RefreshCw, ArrowDown, ArrowUp } from "lucide-react";
+import {
+  Table2,
+  Download,
+  Search,
+  Trash2,
+  RefreshCw,
+  ArrowDown,
+  ArrowUp,
+  ChevronLeft,
+  ChevronRight,
+  Share2,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth";
 import { api, type BoardSummary, type BoardPage } from "../api";
 import { Button } from "../components/ui/Button";
 import { ConfirmModal } from "../components/ui/ConfirmModal";
+import { ShareCollectionModal } from "../components/dialogs/ShareCollectionModal";
 import { explainApiError } from "../lib/explainApiError";
 import { sortRowsByColumn } from "../lib/compareCells";
-import { formatDateTime } from "../lib/datetime";
+import { formatCell, formatCellDisplay, rowsToCSV } from "../lib/cells";
 import { downloadText } from "../lib/download";
 import { ErrorNotice } from "../components/ui/ErrorNotice";
 import { ICON } from "../icons";
 import { Loading } from "../components/ui/Loading";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Notice } from "../components/ui/Notice";
+
+// PAGE_SIZE matches the daemon's boardRowLimit (daemon/results.go), the
+// largest window the endpoint will return. Paging at the server's own cap
+// rather than something smaller keeps the client-side search and sort covering
+// as many rows as they ever did, while making the rows past it reachable.
+const PAGE_SIZE = 1000;
 
 // Results — the in-app view of Collections. Left: the workspace's
 // boards (tables) with row counts. Right: the selected board as a friendly
@@ -44,6 +62,16 @@ export function Results() {
   // delete and a whole-collection clear don't share one modal.
   const [rowPendingDelete, setRowPendingDelete] = useState<number | null>(null);
   const [deletingRow, setDeletingRow] = useState(false);
+  // Which window of the collection is loaded. A collection that outgrows one
+  // page used to end at row 1000: the server capped the page, the footer said
+  // so, and there was no control that reached row 1001 — so the rows a flow
+  // had been saving for months were in the store and off the screen.
+  const [offset, setOffset] = useState(0);
+  // Which collections have a live public link. Loaded once per workspace so
+  // the list can mark them: a member who cannot see WHICH collections are
+  // published has no way to notice one that shouldn't be.
+  const [shared, setShared] = useState<Set<string>>(new Set());
+  const [sharing, setSharing] = useState<string | null>(null);
 
   const tenant = activeTenant || me?.tenant || undefined;
   const workspace = activeWorkspace || me?.workspace || undefined;
@@ -78,7 +106,38 @@ export function Results() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, activeTenant, activeWorkspace]);
 
-  // Load the selected board's rows.
+  // The public-link list. Best-effort: a deployment without the store answers
+  // with an empty list, and a failure here must not stop the rows loading —
+  // the marking is a hint, not the page.
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    api
+      .listCollectionShares(token, tenant, workspace)
+      .then((r) => {
+        if (!cancelled) {
+          setShared(new Set((r.shares ?? []).map((sh) => sh.collection)));
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, activeTenant, activeWorkspace]);
+
+  // Picking a different collection starts at its beginning: the offset that
+  // was right for the last one means nothing here, and landing on page four
+  // of a collection you just opened reads as missing rows.
+  useEffect(() => {
+    setOffset(0);
+    setQuery("");
+    // A different collection has different columns, so the old sort column
+    // usually doesn't exist in it.
+    setSort(null);
+  }, [selected]);
+
+  // Load the selected board's window of rows.
   useEffect(() => {
     let cancelled = false;
     if (!token || !selected) {
@@ -86,12 +145,8 @@ export function Results() {
       return;
     }
     setTableLoading(true);
-    setQuery("");
-    // A different collection has different columns, so the old sort column
-    // usually doesn't exist in it.
-    setSort(null);
     api
-      .getBoard(token, selected, { tenant, workspace })
+      .getBoard(token, selected, { tenant, workspace, limit: PAGE_SIZE, offset })
       .then((p) => {
         if (!cancelled) setPage(p);
       })
@@ -105,7 +160,7 @@ export function Results() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, selected]);
+  }, [token, selected, offset]);
 
   // What the table shows: the loaded rows, searched and then ordered. Search is
   // client-side over the loaded page (see the "first N loaded" note) and so is
@@ -134,6 +189,11 @@ export function Results() {
     return sortRowsByColumn(found, sort.column, sort.desc, i18n.language);
   }, [page, query, sort]);
 
+  // hasMore/paged drive the pager. `total` is the whole collection's count,
+  // so both are answerable without a probe request.
+  const hasMore = !!page && offset + page.rows.length < page.total;
+  const paged = !!page && (offset > 0 || hasMore);
+
   // Clicking a header cycles ascending → descending → back to saved order.
   const cycleSort = (column: string) => {
     setSort((cur) => {
@@ -145,7 +205,7 @@ export function Results() {
 
   const downloadCSV = () => {
     if (!page) return;
-    downloadText(toCSV(page.columns, visibleRows), "text/csv;charset=utf-8", `${page.name}.csv`);
+    downloadText(rowsToCSV(page.columns, visibleRows), "text/csv;charset=utf-8", `${page.name}.csv`);
   };
 
   // doClearBoard performs the (irreversible) clear once the user has
@@ -252,7 +312,21 @@ export function Results() {
                   <Table2 size={ICON.sm} />
                   {b.name}
                 </span>
-                <span style={{ color: "var(--faint)", fontSize: "var(--text-xs)" }}>
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "var(--space-1)",
+                    color: "var(--faint)",
+                    fontSize: "var(--text-xs)",
+                  }}
+                >
+                  {shared.has(b.name) && (
+                    <Share2
+                      size={ICON.xs}
+                      aria-label={t("results.sharedMarker")}
+                    />
+                  )}
                   {b.rows}
                 </span>
               </Button>
@@ -289,7 +363,17 @@ export function Results() {
                 disabled={!page || page.rows.length === 0}
               >
                 <Download size={ICON.sm} />
-                {t("results.downloadCsv")}
+                {t("common.downloadCsv")}
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => selected && setSharing(selected)}
+                disabled={!selected}
+              >
+                <Share2 size={ICON.sm} />
+                {shared.has(selected ?? "")
+                  ? t("results.manageShare")
+                  : t("results.share")}
               </Button>
               <Button
                 variant="ghost"
@@ -389,15 +473,46 @@ export function Results() {
                     </Notice>
                   )}
                 </div>
-                <div
-                  style={{
-                    marginTop: "var(--space-2)",
-                    color: "var(--faint)",
-                    fontSize: "var(--text-xs)",
-                  }}
-                >
-                  {t("results.rowCount", { shown: visibleRows.length, total: page.total })}
-                  {page.truncated && " " + t("results.truncatedNote", { limit: page.rows.length })}
+                <div className="board-foot">
+                  <span>
+                    {t("results.rowRange", {
+                      from: page.rows.length === 0 ? 0 : offset + 1,
+                      to: offset + page.rows.length,
+                      total: page.total,
+                    })}
+                    {/* Search and sort run over the loaded window, and so does
+                        the CSV — say so once there IS more than one window,
+                        rather than letting a filtered page read as a
+                        filtered collection. Separated by a dot: run together
+                        with a space, the range and the note read as one
+                        sentence ("…of 1206 Search, sort and CSV cover…"). */}
+                    {paged && " · " + t("results.pageScopeNote")}
+                    {query &&
+                      " · " +
+                        t("results.matchCount", { shown: visibleRows.length })}
+                  </span>
+                  {paged && (
+                    <span className="board-pager">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setOffset((o) => Math.max(0, o - PAGE_SIZE))}
+                        disabled={offset === 0 || tableLoading}
+                      >
+                        <ChevronLeft size={ICON.sm} />
+                        {t("common.prevPage")}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setOffset((o) => o + PAGE_SIZE)}
+                        disabled={!hasMore || tableLoading}
+                      >
+                        {t("common.nextPage")}
+                        <ChevronRight size={ICON.sm} />
+                      </Button>
+                    </span>
+                  )}
                 </div>
               </>
             )}
@@ -414,6 +529,20 @@ export function Results() {
           onCancel={() => setConfirmClear(false)}
         />
       )}
+      {sharing && (
+        <ShareCollectionModal
+          collection={sharing}
+          onClose={() => setSharing(null)}
+          onChange={(link) =>
+            setShared((cur) => {
+              const next = new Set(cur);
+              if (link) next.add(sharing);
+              else next.delete(sharing);
+              return next;
+            })
+          }
+        />
+      )}
       {rowPendingDelete !== null && (
         <ConfirmModal
           danger
@@ -426,41 +555,4 @@ export function Results() {
       )}
     </div>
   );
-}
-
-// formatCell renders a SQLite value for the table / CSV. Null shows blank;
-// objects (shouldn't occur for the Collections store, which holds scalars)
-// fall back to JSON so nothing renders "[object Object]".
-function formatCell(v: unknown): string {
-  if (v === null || v === undefined) return "";
-  if (typeof v === "object") return JSON.stringify(v);
-  return String(v);
-}
-
-// An RFC3339 instant, which is what every timestamp a flow writes looks like
-// (the Collections "Save rows" step stamps saved_at this way). Anchored and
-// deliberately narrow: a free-text column that merely CONTAINS a date must
-// not be rewritten, only a cell that is one.
-const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:?\d{2})$/;
-
-// formatCellDisplay is formatCell for the on-screen table only. Timestamps
-// come out of the store as "2026-08-31T07:21:54Z" — correct, and unreadable
-// to the person the Collections page is for, who also has to do the UTC
-// arithmetic in their head. CSV keeps the raw value (see toCSV): a
-// spreadsheet wants the machine form.
-function formatCellDisplay(v: unknown): string {
-  const s = formatCell(v);
-  return ISO_INSTANT.test(s) ? formatDateTime(s) : s;
-}
-
-
-// toCSV builds RFC-4180-ish CSV: fields are quoted and embedded quotes
-// doubled. Good enough for the "open it in Excel/Sheets" path.
-function toCSV(columns: string[], rows: Record<string, unknown>[]): string {
-  const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
-  const header = columns.map(esc).join(",");
-  const body = rows
-    .map((r) => columns.map((c) => esc(formatCell(r[c]))).join(","))
-    .join("\n");
-  return body ? `${header}\n${body}` : header;
 }

@@ -216,6 +216,7 @@ func mergeErase(a, b EraseReport) EraseReport {
 	// pass left them — usually zero — while the org pass had in fact erased
 	// rows.
 	a.Shares += b.Shares
+	a.CollectionShares += b.CollectionShares
 	a.Secrets += b.Secrets
 	a.Tickets += b.Tickets
 	a.Bundles += b.Bundles

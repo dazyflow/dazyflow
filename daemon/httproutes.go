@@ -323,6 +323,14 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/me/share", h.requireAuth(shareapi.createShareMe))
 	mux.HandleFunc("DELETE /api/v1/me/share", h.requireAuth(shareapi.deleteShareMe))
 
+	// /me/collection-shares — the per-collection public link. Unlike the
+	// overview link above, the page behind this one carries the collection's
+	// actual rows, so minting one takes graph:edit (see collectionshare.go).
+	mux.HandleFunc("GET /api/v1/me/collection-shares", h.requireAuth(shareapi.listCollectionSharesMe))
+	mux.HandleFunc("GET /api/v1/me/collection-shares/{name}", h.requireAuth(shareapi.getCollectionShareMe))
+	mux.HandleFunc("POST /api/v1/me/collection-shares/{name}", h.requireAuth(shareapi.createCollectionShareMe))
+	mux.HandleFunc("DELETE /api/v1/me/collection-shares/{name}", h.requireAuth(shareapi.deleteCollectionShareMe))
+
 	// /me/connections — LLM-friendly OAuth surface. List returns
 	// provider catalog + which accounts the caller has linked. Authorize
 	// returns JSON {authorize_url} (no 302) so an MCP/CLI client can
@@ -576,6 +584,11 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// surfaces. The token resolves to a (tenant, workspace) and returns a
 	// sanitized, sensitive-data-free status snapshot.
 	mux.HandleFunc("GET /api/v1/public/overview/{token}", h.rateLimitWebhook(shareapi.publicOverview))
+
+	// The public collection table. Same token-is-the-credential model, same
+	// per-IP throttle; the payload is the collection's rows, so the handler
+	// keeps it out of shared caches.
+	mux.HandleFunc("GET /api/v1/public/collection/{token}", h.rateLimitWebhook(shareapi.publicCollection))
 
 	// HMAC-verified approval endpoint for email/Slack approvers. The
 	// token in the URL is the auth here, so no requireAuth wrapper —

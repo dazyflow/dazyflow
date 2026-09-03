@@ -38,11 +38,11 @@ func init() {
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Pick a spreadsheet to feed into excel_read",
-					Params: json.RawMessage(`{"path":"workspace://reports/sales.xlsx"}`),
+					Params: json.RawMessage(`{"path":"reports/sales.xlsx"}`),
 				},
 				{
 					Title:  "Pin a MIME and inline bytes for a remote module",
-					Params: json.RawMessage(`{"path":"workspace://uploads/report.pdf","mime":"application/pdf","inline":true}`),
+					Params: json.RawMessage(`{"path":"uploads/report.pdf","mime":"application/pdf","inline":true}`),
 					Notes:  "inline=true reads the file into memory now — only use for files small enough to ship across the connect.",
 				},
 			},

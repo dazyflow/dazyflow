@@ -40,7 +40,7 @@ func init() {
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Save a public report to the workspace",
-					Params: json.RawMessage(`{"url":"https://example.com/data/export.csv","path":"workspace://imports/export.csv","mkdirs":true}`),
+					Params: json.RawMessage(`{"url":"https://example.com/data/export.csv","path":"imports/export.csv","mkdirs":true}`),
 				},
 				{
 					Title:  "Authenticated download to a scratch path",

@@ -10,18 +10,10 @@ package excel
 import (
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/sandbox"
 )
-
-// wsPath strips the legacy "workspace://" scheme the old native drop used;
-// the sandbox resolver wants a bare workspace-relative path (or scratch://).
-func wsPath(p string) string {
-	s := strings.TrimSpace(p)
-	return strings.TrimPrefix(s, "workspace://")
-}
 
 // maxSandboxFileBytes caps how large a workspace file we'll pull fully into
 // memory. An .xlsx is a zip, so the compressed file is normally far smaller

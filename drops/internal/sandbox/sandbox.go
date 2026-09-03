@@ -26,6 +26,20 @@ import (
 // run finishes (see CleanupPolicy / the dispatcher's scratch reclaim).
 const Scheme = "scratch://"
 
+// WorkspaceScheme is an optional, redundant spelling of "workspace-relative".
+// A bare path is the canonical form — it is what the editor's workspace-path
+// widget writes and what the drops emit in their output refs — but this prefix
+// was in several step examples, so flows built by copying one carry it.
+//
+// It is stripped here rather than ignored because ignoring it was silent and
+// wrong: nothing resolved the prefix, so "workspace://reports/x.csv" cleaned
+// to the relative path "workspace:/reports/x.csv" and the step wrote a file
+// into a directory literally named "workspace:" — reporting success, in a
+// place the author never asked for and the Files page shows as junk. Only
+// drops/excel stripped it, so the same path worked there and misfired
+// everywhere else.
+const WorkspaceScheme = "workspace://"
+
 // Resolve picks the root a sandbox path refers to. A scratch:// path
 // resolves against the job's per-run ScratchRoot; everything else is
 // workspace-relative against the persistent WorkspaceRoot. Returns the
@@ -40,7 +54,7 @@ func Resolve(job core.Job, p string) (root, rel string, err error) {
 	if job.WorkspaceRoot == "" {
 		return "", "", fmt.Errorf("no workspace sandbox configured")
 	}
-	return job.WorkspaceRoot, p, nil
+	return job.WorkspaceRoot, strings.TrimPrefix(p, WorkspaceScheme), nil
 }
 
 // OpenRoot resolves p (which may carry the scratch:// scheme) and

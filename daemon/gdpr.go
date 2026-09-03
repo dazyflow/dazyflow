@@ -66,40 +66,41 @@ type tenantDirRemover interface {
 // EraseReport tallies what an erasure removed. Returned to the caller and
 // folded into the audit detail so the action is itself accountable.
 type EraseReport struct {
-	Email          string   `json:"email,omitempty"`
-	Subject        string   `json:"subject,omitempty"`
-	Tenant         string   `json:"tenant,omitempty"`
-	UserDeleted    bool     `json:"user_deleted,omitempty"`
-	Sessions       int      `json:"sessions_revoked"`
-	APIKeys        int      `json:"api_keys_deleted"`
-	Memberships    int      `json:"memberships_deleted"`
-	Invitations    int      `json:"invitations_deleted"`
-	AuditEvents    int      `json:"audit_events"`
-	Jobs           int      `json:"jobs_deleted"`
-	RunLogs        int      `json:"run_logs_deleted"`
-	Shares         int      `json:"shares_deleted"`
-	Secrets        int      `json:"secrets_deleted"`
-	MCPServers     int      `json:"mcp_servers_deleted"`
-	WebAPIs        int      `json:"web_apis_deleted"`
-	Runners        int      `json:"runners_deleted"`
-	RunnerTasks    int      `json:"runner_tasks_deleted"`
-	GitMirrors     int      `json:"git_mirrors_deleted"`
-	DropSwitches   int      `json:"drop_switches_deleted"`
-	Plans          int      `json:"billing_rows_deleted"`
-	Entitlements   int      `json:"entitlements_deleted"`
-	UsageCounters  int      `json:"usage_counters_deleted"`
-	RoleGrants     int      `json:"role_grants_revoked"`
-	GrantedByRefs  int      `json:"granted_by_refs_anonymized"`
-	AuthoredRefs   int      `json:"authored_refs_anonymized"`
-	BusEvents      int      `json:"bus_events_deleted"`
-	Tickets        int      `json:"support_tickets_deleted"`
-	Bundles        int      `json:"support_bundles_deleted"`
-	Grants         int      `json:"access_grants_deleted"`
-	WorkspaceWiped bool     `json:"workspace_wiped,omitempty"`
-	SandboxWiped   bool     `json:"sandbox_wiped,omitempty"`
-	OrgAuthDeleted bool     `json:"org_auth_deleted,omitempty"`
-	OrgProfileGone bool     `json:"org_profile_deleted,omitempty"`
-	Warnings       []string `json:"warnings,omitempty"`
+	Email            string   `json:"email,omitempty"`
+	Subject          string   `json:"subject,omitempty"`
+	Tenant           string   `json:"tenant,omitempty"`
+	UserDeleted      bool     `json:"user_deleted,omitempty"`
+	Sessions         int      `json:"sessions_revoked"`
+	APIKeys          int      `json:"api_keys_deleted"`
+	Memberships      int      `json:"memberships_deleted"`
+	Invitations      int      `json:"invitations_deleted"`
+	AuditEvents      int      `json:"audit_events"`
+	Jobs             int      `json:"jobs_deleted"`
+	RunLogs          int      `json:"run_logs_deleted"`
+	Shares           int      `json:"shares_deleted"`
+	CollectionShares int      `json:"collection_shares_deleted"`
+	Secrets          int      `json:"secrets_deleted"`
+	MCPServers       int      `json:"mcp_servers_deleted"`
+	WebAPIs          int      `json:"web_apis_deleted"`
+	Runners          int      `json:"runners_deleted"`
+	RunnerTasks      int      `json:"runner_tasks_deleted"`
+	GitMirrors       int      `json:"git_mirrors_deleted"`
+	DropSwitches     int      `json:"drop_switches_deleted"`
+	Plans            int      `json:"billing_rows_deleted"`
+	Entitlements     int      `json:"entitlements_deleted"`
+	UsageCounters    int      `json:"usage_counters_deleted"`
+	RoleGrants       int      `json:"role_grants_revoked"`
+	GrantedByRefs    int      `json:"granted_by_refs_anonymized"`
+	AuthoredRefs     int      `json:"authored_refs_anonymized"`
+	BusEvents        int      `json:"bus_events_deleted"`
+	Tickets          int      `json:"support_tickets_deleted"`
+	Bundles          int      `json:"support_bundles_deleted"`
+	Grants           int      `json:"access_grants_deleted"`
+	WorkspaceWiped   bool     `json:"workspace_wiped,omitempty"`
+	SandboxWiped     bool     `json:"sandbox_wiped,omitempty"`
+	OrgAuthDeleted   bool     `json:"org_auth_deleted,omitempty"`
+	OrgProfileGone   bool     `json:"org_profile_deleted,omitempty"`
+	Warnings         []string `json:"warnings,omitempty"`
 }
 
 func (r *EraseReport) warnf(format string, args ...any) {
@@ -322,8 +323,11 @@ func (h *gdprAPI) deleteOrgData(ctx context.Context, tenant string) (EraseReport
 	rep.tallyByTenant(ctx, "api_keys", h.svc.AdminKeys, tenant, func(n int) { rep.APIKeys = n })
 	rep.tallyByTenant(ctx, "memberships", h.Memberships, tenant, func(n int) { rep.Memberships = n })
 	rep.tallyByTenant(ctx, "invitations", h.Invitations, tenant, func(n int) { rep.Invitations = n })
-	// Public overview share links for the tenant's workspaces.
+	// Public overview share links for the tenant's workspaces, and the
+	// per-collection public links.
 	rep.tallyByTenant(ctx, "shares", h.svc.Shares, tenant, func(n int) { rep.Shares = n })
+	rep.tallyByTenant(ctx, "collection_shares", h.svc.CollectionShares, tenant,
+		func(n int) { rep.CollectionShares = n })
 	// Support surface: the org's tickets (customer-written chat), the redacted
 	// diagnostic bundles built from its flows, and any access grants naming it.
 	// Nil-safe via tallyByTenant's capability probe, so a deployment with the
@@ -432,6 +436,7 @@ func (h *gdprAPI) authorshipStores() map[string]any {
 	}
 	if h.svc != nil {
 		m["shares"] = h.svc.Shares
+		m["collection_shares"] = h.svc.CollectionShares
 	}
 	return m
 }

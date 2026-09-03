@@ -662,8 +662,10 @@ func main() {
 		FreeMaxMembers:      freeMaxMembers,
 		Mailer:              mailer,
 		RunLogs:             stores.runLogs,
-		// Shares backs the per-workspace public overview (TV-dashboard) links.
-		Shares: stores.shares,
+		// Shares backs the per-workspace public overview (TV-dashboard) links;
+		// CollectionShares the per-collection public tables.
+		Shares:           stores.shares,
+		CollectionShares: stores.collectionShares,
 		// Users lets failure_notify resolve a flow owner's notification
 		// preferences (the account-level failure-email channel). Same
 		// store the gateway authenticates against.
@@ -1021,16 +1023,17 @@ func applyNetworkPolicy(httpEgressAllow, publicBaseURL, httpListen string, devMo
 
 // coreStores bundles the durable control-plane stores that share one pool.
 type coreStores struct {
-	pool     *pgxpool.Pool
-	keys     auth.AdminKeyStore
-	users    auth.UserStore
-	sessions auth.SessionStore
-	jobs     core.JobStore
-	usage    daemon.UsageStore
-	plans    daemon.PlanStore
-	runLogs  daemon.RunLogStore
-	shares   daemon.ShareStore
-	mirrors  daemon.GitMirrorStore
+	pool             *pgxpool.Pool
+	keys             auth.AdminKeyStore
+	users            auth.UserStore
+	sessions         auth.SessionStore
+	jobs             core.JobStore
+	usage            daemon.UsageStore
+	plans            daemon.PlanStore
+	runLogs          daemon.RunLogStore
+	shares           daemon.ShareStore
+	collectionShares daemon.CollectionShareStore
+	mirrors          daemon.GitMirrorStore
 }
 
 // openCoreStores connects the shared pgxpool and opens the key / user /
@@ -1121,6 +1124,10 @@ func openCoreStores(ctx context.Context, dsn string, maxConns, minConns int, ses
 	if err != nil {
 		log.Fatalf("postgres share store: %v", err)
 	}
+	pgCollectionShares, err := daemon.NewPgCollectionShareStore(ctx, pool)
+	if err != nil {
+		log.Fatalf("postgres collection-share store: %v", err)
+	}
 	pgMirrors, err := daemon.NewPgGitMirrorStore(ctx, pool)
 	if err != nil {
 		log.Fatalf("postgres git-mirror store: %v", err)
@@ -1131,16 +1138,17 @@ func openCoreStores(ctx context.Context, dsn string, maxConns, minConns int, ses
 	seedDefaultUser(ctx, pgUsers, devSeed)
 	log.Print("postgres stores enabled: jobs, api-keys, sessions, users, usage (durable across restart)")
 	return coreStores{
-		pool:     pool,
-		keys:     pgKeys,
-		users:    pgUsers,
-		sessions: auth.NewCachingSessionStore(pgSessions, sessionCacheTTL, 0),
-		jobs:     pgJobs,
-		usage:    pgUsage,
-		plans:    cachedPlans,
-		runLogs:  pgRunLogs,
-		shares:   pgShares,
-		mirrors:  pgMirrors,
+		pool:             pool,
+		keys:             pgKeys,
+		users:            pgUsers,
+		sessions:         auth.NewCachingSessionStore(pgSessions, sessionCacheTTL, 0),
+		jobs:             pgJobs,
+		usage:            pgUsage,
+		plans:            cachedPlans,
+		runLogs:          pgRunLogs,
+		shares:           pgShares,
+		collectionShares: pgCollectionShares,
+		mirrors:          pgMirrors,
 	}
 }
 

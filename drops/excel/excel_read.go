@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/xuri/excelize/v2"
 
@@ -74,7 +75,7 @@ func executeExcelRead(_ context.Context, job core.Job, _ chan<- core.Progress) (
 	if in, ok := job.Input["path"]; ok && in.Inline != nil {
 		path = rows.Cell(in.Inline)
 	}
-	path = wsPath(path)
+	path = strings.TrimSpace(path)
 	if path == "" {
 		return params.Err(job, "bad_param", "'path' is required"), nil
 	}

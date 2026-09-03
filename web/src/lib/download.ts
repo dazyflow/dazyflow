@@ -15,10 +15,11 @@
 // step (Firefox ignores a click on a detached anchor), which is exactly the
 // shape of thing that should exist once.
 
-// downloadText saves `text` as a file. `mime` sets the type so the OS opens it
-// with something sensible.
-export function downloadText(text: string, mime: string, filename: string) {
-  const url = URL.createObjectURL(new Blob([text], { type: mime }));
+// downloadBlob saves bytes the app already holds. The two callers that reach
+// for it hold a Blob rather than a string — a file fetched from the workspace
+// endpoint, which needs the Authorization header a plain anchor cannot send.
+export function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
   try {
     const a = document.createElement("a");
     a.href = url;
@@ -32,6 +33,12 @@ export function downloadText(text: string, mime: string, filename: string) {
     // otherwise leak the blob for the lifetime of the document.
     URL.revokeObjectURL(url);
   }
+}
+
+// downloadText saves `text` as a file. `mime` sets the type so the OS opens it
+// with something sensible.
+export function downloadText(text: string, mime: string, filename: string) {
+  downloadBlob(new Blob([text], { type: mime }), filename);
 }
 
 // downloadJson saves an object as a pretty-printed .json file. Indented

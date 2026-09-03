@@ -32,7 +32,7 @@ func init() {
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Reference a CSV by path",
-					Params: json.RawMessage(`{"path":"workspace://imports/customers.csv","mime":"text/csv"}`),
+					Params: json.RawMessage(`{"path":"imports/customers.csv","mime":"text/csv"}`),
 				},
 				{
 					Title:  "Read a JSON config from scratch storage",

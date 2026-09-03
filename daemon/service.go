@@ -383,6 +383,13 @@ type Service struct {
 	// CRUD endpoints + the public overview endpoint disabled.
 	Shares ShareStore
 
+	// CollectionShares, when set, persists the per-collection public links
+	// (the login-free read-only table at /board/{token}). Nil leaves the
+	// /me/collection-shares CRUD + the public collection endpoint disabled,
+	// which is the right default for a deployment without Postgres: a link
+	// that cannot be revoked after a restart must not be mintable.
+	CollectionShares CollectionShareStore
+
 	// OrgProfiles, when set, resolves a tenant's human-facing org display
 	// name. The public overview uses it to title the TV board with the org
 	// name instead of a generic label. Nil = the board falls back to its
