@@ -49,12 +49,12 @@ func init() {
 				{Port: "id", Label: "Conversation", MIME: []string{"text/plain", "application/json"}},
 			},
 			Outputs: []core.Port{
-				{Port: "replied", Label: "Replied", MIME: []string{core.MIMEBool}},
-				{Port: "summary", Label: "Summary", MIME: []string{"application/json"}},
-				{Port: "messages", Label: "Messages", MIME: []string{"application/json"}},
-				{Port: "count", Label: "How many", MIME: []string{"text/plain"}},
-				{Port: "last_from", Label: "Last from", MIME: []string{"text/plain"}},
-				{Port: "last_date", Label: "Last message", MIME: []string{"text/plain"}},
+				{Port: "replied", Label: "Replied", MIME: []string{core.MIMEBool}, Example: json.RawMessage(`true`)},
+				{Port: "summary", Label: "Summary", MIME: []string{"application/json"}, Example: json.RawMessage(`{"thread_id":"18f2a9c4d1e0b7a3","subject":"Faktura 4471","last_from":"anna@nordkraft.se","last_date":"Thu, 12 Feb 2026 09:12:04 +0100","count":3,"replied":true}`)},
+				{Port: "messages", Label: "Messages", MIME: []string{"application/json"}, Example: json.RawMessage(`[{"id":"18f2a9c4d1e0b7a3","threadId":"18f2a9c4d1e0b7a3","date":"Thu, 12 Feb 2026 09:12:04 +0100","from":"Fortnox <faktura@fortnox.se>","subject":"Faktura 4471","body":"Din faktura 4471 är nu tillgänglig."}]`)},
+				{Port: "count", Label: "How many", MIME: []string{"text/plain"}, Example: json.RawMessage(`"3"`)},
+				{Port: "last_from", Label: "Last from", MIME: []string{"text/plain"}, Example: json.RawMessage(`"anna@nordkraft.se"`)},
+				{Port: "last_date", Label: "Last message", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Thu, 12 Feb 2026 09:12:04 +0100"`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

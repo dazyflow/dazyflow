@@ -66,10 +66,10 @@ func init() {
 				// Emitted ONLY when something changed, so the engine's
 				// skip-cascade keeps the alert dormant on a quiet check —
 				// same shape as Branch's unused port.
-				{Port: "on_change", Label: "On change", MIME: []string{"text/plain"}},
-				{Port: "value", Label: "What it says now", MIME: []string{"text/plain"}},
-				{Port: "previous", Label: "What it said before", MIME: []string{"text/plain"}},
-				{Port: "changed", Label: "Changed?", MIME: []string{core.MIMEBool}},
+				{Port: "on_change", Label: "On change", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Version 0.31.2 — utgiven 12 februari 2026"`)},
+				{Port: "value", Label: "What it says now", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Version 0.31.2 — utgiven 12 februari 2026"`)},
+				{Port: "previous", Label: "What it said before", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Version 0.31.1 — utgiven 5 februari 2026"`)},
+				{Port: "changed", Label: "Changed?", MIME: []string{core.MIMEBool}, Example: json.RawMessage(`true`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

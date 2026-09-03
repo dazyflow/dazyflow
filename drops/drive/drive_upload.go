@@ -55,9 +55,9 @@ func init() {
 				{Port: "name", Label: "Name in Drive", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				{Port: "file_id", Label: "File ID", MIME: []string{"text/plain"}},
-				{Port: "web_view_link", Label: "Link", MIME: []string{"text/plain"}},
-				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
+				{Port: "file_id", Label: "File ID", MIME: []string{"text/plain"}, Example: json.RawMessage(`"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs"`)},
+				{Port: "web_view_link", Label: "Link", MIME: []string{"text/plain"}, Example: json.RawMessage(`"https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs/view"`)},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}, Example: json.RawMessage(`{"file_id":"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs","name":"Faktura-4471.pdf","web_view_link":"https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs/view","bytes":48213}`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

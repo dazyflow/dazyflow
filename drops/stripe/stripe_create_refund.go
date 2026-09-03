@@ -43,9 +43,10 @@ func init() {
 				{Port: "amount", Label: "Amount (smallest unit)", MIME: []string{"text/plain", "application/json"}},
 			},
 			Outputs: []core.Port{
-				{Port: "refund_id", Label: "Refund ID", MIME: []string{"text/plain"}},
-				{Port: "status", Label: "Status", MIME: []string{"text/plain"}},
-				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
+				{Port: "refund_id", Label: "Refund ID", MIME: []string{"text/plain"}, Example: json.RawMessage(`"re_3QxPl2Fk9mNaB1cD"`)},
+				{Port: "status", Label: "Status", MIME: []string{"text/plain"}, Example: json.RawMessage(`"succeeded"`)},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"},
+					Example: json.RawMessage(`{"id":"re_3QxPl2Fk9mNaB1cD","status":"succeeded","amount":24900,"payment_intent":"pi_3QxPkzFk9mNaB1cD"}`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

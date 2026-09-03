@@ -50,7 +50,7 @@ func init() {
 			},
 			Outputs: []core.Port{
 				{Port: "pdf", Label: "PDF", MIME: []string{"application/pdf"}},
-				{Port: "pages", Label: "Pages", MIME: []string{"text/plain"}},
+				{Port: "pages", Label: "Pages", MIME: []string{"text/plain"}, Example: json.RawMessage(`"18"`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

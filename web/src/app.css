@@ -4719,6 +4719,12 @@ button.warning:hover:not(:disabled) {
   color: var(--status-completed);
   border: 1px solid var(--status-completed);
 }
+/* An example is dashed and muted, a real value solid and green — the badge
+   text says which, and the styling says it again at a glance. */
+.dz-face-prov-example {
+  color: var(--accent);
+  border: 1px dashed var(--accent);
+}
 .dz-face-prov-none {
   color: var(--faint);
   border: 1px dashed var(--border-strong);

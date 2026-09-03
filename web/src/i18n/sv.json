@@ -1573,6 +1573,7 @@
     "languageHint": "Skrivet i {{lang}}.",
     "face": {
       "fromRun": "Från senaste körningen",
+      "example": "Exempel",
       "noData": "Inga data ännu",
       "emptyHint": "Kör steget för att se vad det producerar.",
       "items_one": "{{count}} post",

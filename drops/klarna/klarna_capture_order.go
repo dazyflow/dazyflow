@@ -41,8 +41,8 @@ func init() {
 				{Port: "amount", Label: "Amount (smallest unit)", MIME: []string{"text/plain", "application/json"}},
 			},
 			Outputs: []core.Port{
-				{Port: "capture_id", Label: "Capture ID", MIME: []string{"text/plain"}},
-				{Port: "captured_amount", Label: "Captured amount (smallest unit)", MIME: []string{"text/plain"}},
+				{Port: "capture_id", Label: "Capture ID", MIME: []string{"text/plain"}, Example: json.RawMessage(`"cap_9f2ab7"`)},
+				{Port: "captured_amount", Label: "Captured amount (smallest unit)", MIME: []string{"text/plain"}, Example: json.RawMessage(`"24900"`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

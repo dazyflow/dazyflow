@@ -4,13 +4,21 @@
 import i18n from "../../i18n";
 import { portLabel } from "../../lib/dropText";
 import { portTypeLabel } from "../../lib/ports";
-import { dataFaceView } from "../../lib/dataFace";
+import { dataFaceSource, dataFaceView, type DataFaceTier } from "../../lib/dataFace";
 import type { Port, Ref } from "../../types";
 
 // The card's data face: what the step emitted, uncovered when the header
 // folds down. One rendering per port kind — a table of Items reads nothing
 // like a blob of Text, and collapsing both into pretty-printed JSON is what
 // made the output unreadable on the card in the first place.
+
+// The badge per tier. Literal class names, one per row — see the note at the
+// call site.
+const PROV: Record<DataFaceTier, { cls: string; key: string }> = {
+  run: { cls: "dz-face-prov dz-face-prov-run", key: "nodeCard.face.fromRun" },
+  example: { cls: "dz-face-prov dz-face-prov-example", key: "nodeCard.face.example" },
+  none: { cls: "dz-face-prov dz-face-prov-none", key: "nodeCard.face.noData" },
+};
 
 type Props = {
   // Output ports worth a tab (facePorts has already dropped the pass pin).
@@ -23,21 +31,20 @@ type Props = {
 
 export function NodeDataFace({ ports, outputs, active, onSelect }: Props) {
   const port = ports.find((p) => p.port === active) ?? ports[0];
-  const ref = port ? outputs?.[port.port] : undefined;
-  const view = dataFaceView(ref);
+  const { tier, view } = dataFaceSource(port ? outputs?.[port.port] : undefined, port);
 
   return (
     <div className="dz-face nodrag nowheel">
       <div className="dz-face-head">
-        {view.kind === "empty" ? (
-          <span className="dz-face-prov dz-face-prov-none">
-            {i18n.t("nodeCard.face.noData")}
-          </span>
-        ) : (
-          <span className="dz-face-prov dz-face-prov-run">
-            {i18n.t("nodeCard.face.fromRun")}
-          </span>
-        )}
+        {/* The badge is what makes an example safe to show: a preview built
+            on the step's shipped example must never read as one built on a
+            real run.
+
+            Class and key are written out per tier rather than concatenated:
+            check-css-classes reads literal class text, so a name assembled
+            from a variable is invisible to it — and a modifier it cannot see
+            is exactly what it exists to catch. */}
+        <span className={PROV[tier].cls}>{i18n.t(PROV[tier].key)}</span>
         {ports.length > 1 && (
           <div className="dz-face-tabs" role="tablist">
             {ports.map((p) => (
@@ -62,7 +69,7 @@ export function NodeDataFace({ ports, outputs, active, onSelect }: Props) {
 
       {port && (
         <div className="dz-face-foot">
-          <span>{countLabel(view)}</span>
+          <span>{countLabel(view, tier)}</span>
           <span>{portTypeLabel(port, (k, dflt) => i18n.t(k, dflt))}</span>
         </div>
       )}
@@ -150,7 +157,10 @@ function FaceBody({ view }: { view: ReturnType<typeof dataFaceView> }) {
 
 // countLabel is the left half of the footer: how much came out. Only a list
 // has a count worth stating — "1 item" on a single record is noise.
-function countLabel(view: ReturnType<typeof dataFaceView>): string {
+function countLabel(view: ReturnType<typeof dataFaceView>, tier: DataFaceTier): string {
+  // An example's row count is illustrative — "2 items" beside a shipped
+  // example would read as a fact about the last run.
+  if (tier !== "run") return "";
   if (view.kind === "table") return i18n.t("nodeCard.face.items", { count: view.total });
   return "";
 }

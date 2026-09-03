@@ -69,8 +69,8 @@ func init() {
 			// Assistant reports as changed are still EMITTED under "meta" for run
 			// records (emitted-but-undeclared convention); chain control via pass.
 			Outputs: []core.Port{
-				{Port: "entity_id", Label: "Entity", MIME: []string{"text/plain"}},
-				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
+				{Port: "entity_id", Label: "Entity", MIME: []string{"text/plain"}, Example: json.RawMessage(`"light.kitchen_ceiling"`)},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}, Example: json.RawMessage(`{"service":"light.turn_on","entity_id":"light.kitchen_ceiling","changed_count":1,"changed_entities":["light.kitchen_ceiling"]}`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

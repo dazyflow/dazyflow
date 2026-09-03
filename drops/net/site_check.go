@@ -49,11 +49,11 @@ func init() {
 				{Port: "url", Label: "Address", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				{Port: "on_down", Label: "Went down", MIME: []string{"text/plain"}},
-				{Port: "on_up", Label: "Came back", MIME: []string{"text/plain"}},
-				{Port: "up", Label: "Up?", MIME: []string{core.MIMEBool}},
-				{Port: "status", Label: "Status code", MIME: []string{"text/plain"}},
-				{Port: "detail", Label: "What happened", MIME: []string{"text/plain"}},
+				{Port: "on_down", Label: "Went down", MIME: []string{"text/plain"}, Example: json.RawMessage(`"https://dazyflow.app is down — 503 Service Unavailable"`)},
+				{Port: "on_up", Label: "Came back", MIME: []string{"text/plain"}, Example: json.RawMessage(`"https://dazyflow.app is back up — 200 OK in 148 ms"`)},
+				{Port: "up", Label: "Up?", MIME: []string{core.MIMEBool}, Example: json.RawMessage(`true`)},
+				{Port: "status", Label: "Status code", MIME: []string{"text/plain"}, Example: json.RawMessage(`"200"`)},
+				{Port: "detail", Label: "What happened", MIME: []string{"text/plain"}, Example: json.RawMessage(`"200 OK in 148 ms"`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

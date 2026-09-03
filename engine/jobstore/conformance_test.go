@@ -345,6 +345,53 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 		}
 	})
 
+	t.Run("ListNodeRecords_by_graph_across_runs", func(t *testing.T) {
+		// GraphID is the flow's whole history, where GraphRunID is one run.
+		// The editor's card data faces read it: newest-first across every run
+		// of one flow, so a step covered only by an older run still has a
+		// value while the newest run holds the rest.
+		s := mk(t)
+		ctx := t.Context()
+		now := time.Now()
+		mk3 := func(id, graphID, runID, nodeID string, offset time.Duration) {
+			mustEnqueue(t, s, ctx, core.JobRecord{
+				ID: id, Kind: core.JobKindNode, Status: core.JobStatusSucceeded,
+				Tenant: "acme", Workspace: "ws", GraphID: graphID,
+				GraphRunID: runID, NodeID: nodeID, EnqueuedAt: now.Add(offset),
+			})
+		}
+		mk3("g1-old-src", "flow-1", "run-old", "src", -3*time.Minute)
+		mk3("g1-old-sink", "flow-1", "run-old", "sink", -3*time.Minute)
+		mk3("g1-new-src", "flow-1", "run-new", "src", -time.Minute)
+		mk3("g2-src", "flow-2", "run-x", "src", -30*time.Second)
+
+		got, err := s.ListNodeRecords(ctx, core.ListNodeRecordsOpts{Tenant: "acme", GraphID: "flow-1"})
+		if err != nil {
+			t.Fatalf("ListNodeRecords by graph: %v", err)
+		}
+		if len(got) != 3 {
+			t.Errorf("flow-1 node rows = %d, want 3 (got %v)", len(got), ids(got))
+		}
+		for _, r := range got {
+			if r.GraphID != "flow-1" {
+				t.Errorf("another flow's row leaked: %s (graph %s)", r.ID, r.GraphID)
+			}
+		}
+		// Newest first, so a fold that keeps the first hit per node takes
+		// run-new's src and run-old's sink.
+		if len(got) > 0 && got[0].ID != "g1-new-src" {
+			t.Errorf("first row = %s, want the newest (g1-new-src); order = %v", got[0].ID, ids(got))
+		}
+
+		// Combining both filters narrows to one run of one flow.
+		got, _ = s.ListNodeRecords(ctx, core.ListNodeRecordsOpts{
+			Tenant: "acme", GraphID: "flow-1", GraphRunID: "run-old",
+		})
+		if len(got) != 2 {
+			t.Errorf("flow-1/run-old rows = %d, want 2 (got %v)", len(got), ids(got))
+		}
+	})
+
 	t.Run("Renew_missing_or_unowned", func(t *testing.T) {
 		s := mk(t)
 		ctx := t.Context()

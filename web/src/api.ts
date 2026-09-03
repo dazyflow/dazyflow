@@ -56,6 +56,7 @@ import type {
   GitMirror,
   MirrorPushResult,
   ReferenceGroups,
+  Ref,
   ResourceDef,
   EmailTemplateSummary,
   SecretManagerStatus,
@@ -1298,6 +1299,18 @@ export const api = {
       error?: string;
       need_connect?: boolean;
     }>(token, "POST", "/tools/flow/generate", { description, provider }),
+  // flowSamples returns the most recent output of each of the flow's steps,
+  // keyed by node id then port — folded out of the node records the runs
+  // already wrote, newest-first across every run. It is what lets a card's
+  // data face show something on a freshly opened editor, before anything has
+  // run in this session. Bounded by run retention: a pruned run's values are
+  // gone, and the card falls back to "no data yet".
+  flowSamples: (token: string, tenant: string, workspace: string, id: string) =>
+    request<{ flow: string; nodes: Record<string, Record<string, Ref>> }>(
+      token,
+      "GET",
+      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/samples`,
+    ),
   // sampleNode fires a partial run that ends at nodeID — the daemon
   // strips every node and edge outside nodeID's upstream chain before
   // submitting. Returns the run_id so the caller can subscribe to the

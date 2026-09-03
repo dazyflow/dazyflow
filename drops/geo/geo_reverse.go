@@ -51,8 +51,8 @@ func init() {
 				{Port: "coordinate", Label: "Coordinate", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				{Port: "place", Label: "Place", MIME: []string{"text/plain"}},
-				{Port: "coordinate", Label: "Coordinate", MIME: []string{"text/plain"}},
+				{Port: "place", Label: "Place", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Sergels torg, Norrmalm, Stockholm, 111 57, Sverige"`)},
+				{Port: "coordinate", Label: "Coordinate", MIME: []string{"text/plain"}, Example: json.RawMessage(`"59.3326,18.0649"`)},
 				{Port: "address", Label: "Address", MIME: []string{"application/json"}},
 				{Port: "result", Label: "Full result", MIME: []string{"application/json"}},
 			},

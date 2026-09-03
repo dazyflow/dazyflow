@@ -47,10 +47,10 @@ func init() {
 				// common single-match lookup (search by email) wires straight
 				// into a Customer input without a For-each — mirrors List
 				// subscriptions' first_id.
-				{Port: "first_id", Label: "First ID", MIME: []string{"text/plain"}},
-				{Port: "first_email", Label: "First email", MIME: []string{"text/plain"}},
+				{Port: "first_id", Label: "First ID", MIME: []string{"text/plain"}, Example: json.RawMessage(`"cus_RkP2mNaB1cDeFg"`)},
+				{Port: "first_email", Label: "First email", MIME: []string{"text/plain"}, Example: json.RawMessage(`"anna@nordkraft.se"`)},
 				{Port: "count", Label: "Count", MIME: []string{"application/json"}},
-				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}, Example: json.RawMessage(`{"count":3,"query":"email:\"anna@nordkraft.se\""}`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

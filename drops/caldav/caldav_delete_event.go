@@ -45,7 +45,7 @@ func init() {
 				{Port: "id", Label: "Event", MIME: []string{"text/plain", "application/json"}},
 			},
 			Outputs: []core.Port{
-				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}, Example: json.RawMessage(`{"id":"9f2ab7c4-d1e0-b7a3-8f12-4471e0b7a39f","calendar":"personal"}`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

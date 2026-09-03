@@ -68,7 +68,11 @@ func init() {
 				// The same record shape Gmail's Search emails emits — {id,
 				// date, from, subject, body, unread} — so the For each /
 				// ${item.id} idioms built on that carry over unchanged.
-				{Port: "messages", Label: "Matching emails", MIME: []string{"application/json"}},
+				{Port: "messages", Label: "Matching emails", MIME: []string{"application/json"},
+					Example: json.RawMessage(`[
+						{"id":"4471","date":"Thu, 12 Feb 2026 09:12:04 +0100","from":"Fortnox <faktura@fortnox.se>","subject":"Faktura 4471","body":"Din faktura 4471 är nu tillgänglig.","unread":true},
+						{"id":"4470","date":"Thu, 12 Feb 2026 08:47:51 +0100","from":"anna@nordkraft.se","subject":"Påminnelse","body":"Hej! Hinner ni titta på detta i veckan?","unread":false}
+					]`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

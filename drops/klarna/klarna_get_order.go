@@ -39,11 +39,11 @@ func init() {
 				{Port: "order_id", Label: "Order ID", Required: true, MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				{Port: "status", Label: "Status", MIME: []string{"text/plain"}},
-				{Port: "order_amount", Label: "Order amount (smallest unit)", MIME: []string{"text/plain"}},
-				{Port: "captured_amount", Label: "Captured amount (smallest unit)", MIME: []string{"text/plain"}},
-				{Port: "remaining_authorized_amount", Label: "Remaining authorized (smallest unit)", MIME: []string{"text/plain"}},
-				{Port: "currency", Label: "Currency", MIME: []string{"text/plain"}},
+				{Port: "status", Label: "Status", MIME: []string{"text/plain"}, Example: json.RawMessage(`"CAPTURED"`)},
+				{Port: "order_amount", Label: "Order amount (smallest unit)", MIME: []string{"text/plain"}, Example: json.RawMessage(`"24900"`)},
+				{Port: "captured_amount", Label: "Captured amount (smallest unit)", MIME: []string{"text/plain"}, Example: json.RawMessage(`"24900"`)},
+				{Port: "remaining_authorized_amount", Label: "Remaining authorized (smallest unit)", MIME: []string{"text/plain"}, Example: json.RawMessage(`"0"`)},
+				{Port: "currency", Label: "Currency", MIME: []string{"text/plain"}, Example: json.RawMessage(`"SEK"`)},
 				{Port: "order", Label: "Order", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{

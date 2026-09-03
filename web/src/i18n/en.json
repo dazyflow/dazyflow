@@ -1573,6 +1573,7 @@
     "languageHint": "Written in {{lang}}.",
     "face": {
       "fromRun": "From the last run",
+      "example": "Example",
       "noData": "No data yet",
       "emptyHint": "Run this step to see what it produces.",
       "items_one": "{{count}} item",

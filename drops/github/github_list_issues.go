@@ -42,7 +42,7 @@ func init() {
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{
 				{Port: "issues", Label: "Issues", MIME: []string{"application/json"}},
-				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}, Example: json.RawMessage(`{"count":12,"truncated":false}`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

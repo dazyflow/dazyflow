@@ -87,6 +87,11 @@ export function useRunStream({
   const [runOutputs, setRunOutputs] = useState<
     Record<string, Record<string, Ref>>
   >({});
+  // Historical per-node outputs (see the fetch below). Separate from
+  // runOutputs so a run's clear-down cannot wipe them.
+  const [samples, setSamples] = useState<
+    Record<string, Record<string, Ref>>
+  >({});
   const [runDone, setRunDone] = useState<RunDone | null>(null);
   // The run behind the error banner, when that error came from a run failing
   // rather than a save or a permission problem. What makes Retry offerable.
@@ -444,6 +449,33 @@ export function useRunStream({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [graphID, token]);
 
+  // What this flow's steps last produced, from the runs already on record —
+  // so a freshly opened editor's card data faces show real values instead of
+  // "no data yet".
+  //
+  // Deliberately NOT merged into runOutputs. subscribeToRun clears that map
+  // on every run, and the attach-on-open effect above races this fetch; kept
+  // apart, the caller reads `runOutputs[id] ?? samples[id]` and a live value
+  // always wins over a historical one with no ordering to get right.
+  //
+  // Bounded by run retention — a pruned run leaves its steps blank, which is
+  // the honest reading of a badge that says "from the last run".
+  useEffect(() => {
+    if (!token || !graphID || !tenant || !workspace) return;
+    let live = true;
+    void (async () => {
+      try {
+        const { nodes } = await api.flowSamples(token, tenant, workspace, graphID);
+        if (live && nodes) setSamples(nodes);
+      } catch {
+        // A card with no sample says so on its own; nothing to report.
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [token, graphID, tenant, workspace]);
+
   // Abort the live stream when the editor unmounts. streamAbortRef always points
   // at the current stream, whereas an effect's own cleanup would capture only
   // the controller from when it ran — which a later run may have superseded.
@@ -457,6 +489,7 @@ export function useRunStream({
     pausedAt,
     stepping,
     runOutputs,
+    samples,
     runDone,
     failedRun,
     liveLogs,

@@ -47,8 +47,8 @@ func init() {
 				// Only the friendly scalar is a pin; the full comment metadata
 				// (id, node_id, …) is still EMITTED under "meta" so run records
 				// keep it for debugging — it's just not a pin.
-				{Port: "comment_url", Label: "Comment link", MIME: []string{"text/plain"}},
-				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
+				{Port: "comment_url", Label: "Comment link", MIME: []string{"text/plain"}, Example: json.RawMessage(`"https://github.com/dazyflow/dazyflow/issues/128#issuecomment-2447108392"`)},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}, Example: json.RawMessage(`{"id":2447108392,"node_id":"IC_kwDOMv1cD85_2Fyo","html_url":"https://github.com/dazyflow/dazyflow/issues/128#issuecomment-2447108392"}`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

@@ -42,9 +42,10 @@ func init() {
 				{Port: "subscription", Label: "Subscription", Required: true, MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				{Port: "status", Label: "Status", MIME: []string{"text/plain"}},
-				{Port: "ends_at", Label: "Ends at", MIME: []string{"text/plain"}},
-				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
+				{Port: "status", Label: "Status", MIME: []string{"text/plain"}, Example: json.RawMessage(`"canceled"`)},
+				{Port: "ends_at", Label: "Ends at", MIME: []string{"text/plain"}, Example: json.RawMessage(`"2026-03-12T09:12:04Z"`)},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"},
+					Example: json.RawMessage(`{"id":"sub_1QxPl2Fk9mNaB1cD","status":"canceled","cancel_at_period_end":false,"ends_at":"2026-03-12T09:12:04Z"}`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

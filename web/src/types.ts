@@ -193,6 +193,12 @@ export type Port = {
   // the "you fed a whole list into a one-at-a-time step" tell — see the loop
   // hint in FlowEditor.
   list?: boolean;
+  // example is a worked example of what this port CARRIES (core.Port.Example),
+  // as the literal value — an Items port's is an array of records, a Text
+  // port's a string. It lets a card's data face say what a step produces
+  // before it has ever run; the face badges it as an example so it can never
+  // be read as a real value. Absent on most ports.
+  example?: unknown;
   // inline_only marks an input that takes a VALUE and cannot take a file.
   // Set on every input of a tenant runner's drop: the runner is on another
   // machine, and a file reference is a path on the daemon's own disk. The

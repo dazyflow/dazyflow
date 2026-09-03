@@ -237,6 +237,14 @@ type ListNodeRecordsOpts struct {
 	Limit      int
 	Offset     int
 
+	// GraphID narrows to the node records of ONE flow, across all of its
+	// runs. GraphRunID answers "what happened in this run"; this answers
+	// "what has this flow's steps produced lately", which is what the editor
+	// needs to show a step's last output without a run id to hand. Backed by
+	// jobs_graph_idx (graph_id, enqueued_at DESC), so the newest-first order
+	// the callers want is the index's own.
+	GraphID string
+
 	// HasOutputPort narrows to records whose Result carries this output
 	// port, letting a caller ask for a KIND of node without a module column
 	// to filter on. The approval views use it: an await_approval node is the

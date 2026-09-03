@@ -52,7 +52,7 @@ func init() {
 				// path is re-emitted as text so another Excel step downstream can
 				// target the same file by wire (mirrors sheets append's
 				// spreadsheet_id).
-				{Port: "path", Label: "File path", MIME: []string{"text/plain"}},
+				{Port: "path", Label: "File path", MIME: []string{"text/plain"}, Example: json.RawMessage(`"rapporter/februari.xlsx"`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

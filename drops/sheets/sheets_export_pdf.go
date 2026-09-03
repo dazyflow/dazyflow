@@ -50,7 +50,7 @@ func init() {
 				// records/debugging but not declared as a pin (same as append
 				// rows and gmail). spreadsheet_id is re-emitted so any sheet
 				// step downstream can target the same spreadsheet by wire.
-				{Port: "spreadsheet_id", Label: "Spreadsheet ID", MIME: []string{"text/plain"}},
+				{Port: "spreadsheet_id", Label: "Spreadsheet ID", MIME: []string{"text/plain"}, Example: json.RawMessage(`"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"`)},
 				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{

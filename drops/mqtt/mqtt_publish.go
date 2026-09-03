@@ -51,7 +51,7 @@ func init() {
 				{Port: "payload", Label: "Payload", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}, Example: json.RawMessage(`{"broker":"tcp://mqtt.nordkraft.se:1883","topic":"fakturor/betald","qos":1,"retain":false,"bytes":42}`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

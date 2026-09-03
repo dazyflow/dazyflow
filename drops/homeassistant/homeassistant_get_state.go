@@ -51,7 +51,7 @@ func init() {
 				{Port: "entity_id", Label: "Entity", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				{Port: "state", Label: "State", MIME: []string{"text/plain"}},
+				{Port: "state", Label: "State", MIME: []string{"text/plain"}, Example: json.RawMessage(`"on"`)},
 				{Port: "attributes", Label: "Attributes", MIME: []string{"application/json"}},
 				{Port: "entity", Label: "Full entity", MIME: []string{"application/json"}},
 			},

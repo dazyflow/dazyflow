@@ -175,15 +175,23 @@ func numberInputOr(job core.Job, port string, fallback int) (int, bool) {
 // its own 'Failure reason' pin. Returns a fresh slice per call so a caller
 // can safely append to it.
 func paymentTriggerOutputs() []core.Port {
+	// The examples mirror daemon.paymentPorts, which is what actually fills
+	// these pins when a webhook lands — including its two surprises: `amount`
+	// is the minor unit as a STRING (fmt.Sprintf("%d")), and `currency` is
+	// upper-cased. `payment` and `event` show the fields daemon's
+	// stripePaymentIntent / stripeTriggerEvent read, which is the subset a
+	// flow has any reason to template across.
 	return []core.Port{
-		{Port: "amount_display", Label: "Amount (display)", MIME: []string{"text/plain"}},
-		{Port: "amount", Label: "Amount (smallest unit)", MIME: []string{"text/plain"}},
-		{Port: "currency", Label: "Currency", MIME: []string{"text/plain"}},
-		{Port: "customer_email", Label: "Customer email", MIME: []string{"text/plain"}},
-		{Port: "description", Label: "Description", MIME: []string{"text/plain"}},
-		{Port: "payment_id", Label: "Payment ID", MIME: []string{"text/plain"}},
-		{Port: "payment", Label: "Payment intent", MIME: []string{"application/json"}},
-		{Port: "event", Label: "Full event", MIME: []string{"application/json"}},
+		{Port: "amount_display", Label: "Amount (display)", MIME: []string{"text/plain"}, Example: json.RawMessage(`"249.00 SEK"`)},
+		{Port: "amount", Label: "Amount (smallest unit)", MIME: []string{"text/plain"}, Example: json.RawMessage(`"24900"`)},
+		{Port: "currency", Label: "Currency", MIME: []string{"text/plain"}, Example: json.RawMessage(`"SEK"`)},
+		{Port: "customer_email", Label: "Customer email", MIME: []string{"text/plain"}, Example: json.RawMessage(`"anna@nordkraft.se"`)},
+		{Port: "description", Label: "Description", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Faktura 4471"`)},
+		{Port: "payment_id", Label: "Payment ID", MIME: []string{"text/plain"}, Example: json.RawMessage(`"pi_3QxPkzFk9mNaB1cD"`)},
+		{Port: "payment", Label: "Payment intent", MIME: []string{"application/json"},
+			Example: json.RawMessage(`{"id":"pi_3QxPkzFk9mNaB1cD","amount":24900,"amount_received":24900,"currency":"sek","receipt_email":"anna@nordkraft.se","description":"Faktura 4471"}`)},
+		{Port: "event", Label: "Full event", MIME: []string{"application/json"},
+			Example: json.RawMessage(`{"id":"evt_3QxPkzFk9mNaB1cD","type":"payment_intent.succeeded","data":{"object":{"id":"pi_3QxPkzFk9mNaB1cD","amount":24900,"currency":"sek","receipt_email":"anna@nordkraft.se","description":"Faktura 4471"}}}`)},
 	}
 }
 

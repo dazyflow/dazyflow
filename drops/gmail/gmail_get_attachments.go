@@ -54,8 +54,11 @@ func init() {
 			},
 			Outputs: []core.Port{
 				{Port: "first", Label: "First file"},
-				{Port: "files", Label: "Files", MIME: []string{"application/json"}},
-				{Port: "count", Label: "How many", MIME: []string{"text/plain"}},
+				{Port: "files", Label: "Files", MIME: []string{"application/json"},
+					Example: json.RawMessage(`[
+						{"name":"Faktura-4471.pdf","mime":"application/pdf","size":48213,"path":"attachments/Faktura-4471.pdf"}
+					]`)},
+				{Port: "count", Label: "How many", MIME: []string{"text/plain"}, Example: json.RawMessage(`"1"`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

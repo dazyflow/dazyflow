@@ -40,9 +40,9 @@ func init() {
 			ExecutionModel: core.ExecutionTrigger,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{
-				{Port: "ref", Label: "Branch ref", MIME: []string{"text/plain"}},
-				{Port: "before", Label: "Commit before", MIME: []string{"text/plain"}},
-				{Port: "after", Label: "Commit after", MIME: []string{"text/plain"}},
+				{Port: "ref", Label: "Branch ref", MIME: []string{"text/plain"}, Example: json.RawMessage(`"refs/heads/master"`)},
+				{Port: "before", Label: "Commit before", MIME: []string{"text/plain"}, Example: json.RawMessage(`"5b5d4d6d3f9b2e8c5a3d6f0b1e4a9c7d2f83c0c3"`)},
+				{Port: "after", Label: "Commit after", MIME: []string{"text/plain"}, Example: json.RawMessage(`"c0c3608e7a1d4f9b2e8c5a3d6f0b1e4a9c7d2f83"`)},
 				{Port: "commits", Label: "Commits", MIME: []string{"application/json"}},
 				{Port: "repository", Label: "Repository", MIME: []string{"application/json"}},
 				{Port: "pusher", Label: "Pushed by", MIME: []string{"application/json"}},

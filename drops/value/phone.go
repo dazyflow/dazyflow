@@ -66,10 +66,10 @@ func init() {
 				{Port: "phone", Label: "Phone", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				{Port: "out", Label: "E.164", MIME: []string{"text/plain"}},
-				{Port: "country", Label: "Country", MIME: []string{"text/plain"}},
-				{Port: "national", Label: "National number", MIME: []string{"text/plain"}},
-				{Port: "type", Label: "Type", MIME: []string{"text/plain"}},
+				{Port: "out", Label: "E.164", MIME: []string{"text/plain"}, Example: json.RawMessage(`"+46701234567"`)},
+				{Port: "country", Label: "Country", MIME: []string{"text/plain"}, Example: json.RawMessage(`"SE"`)},
+				{Port: "national", Label: "National number", MIME: []string{"text/plain"}, Example: json.RawMessage(`"070 123 45 67"`)},
+				{Port: "type", Label: "Type", MIME: []string{"text/plain"}, Example: json.RawMessage(`"mobile"`)},
 				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{

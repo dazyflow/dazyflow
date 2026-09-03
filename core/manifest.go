@@ -123,6 +123,36 @@ type Port struct {
 	// Drives the "you wired a list into a one-at-a-time step — wrap it in a
 	// For each loop" hint: a List output into a non-List input is the tell.
 	List bool `json:"list,omitempty" xml:"list,omitempty"`
+	// Example is a worked example of what this port CARRIES, as literal JSON
+	// — an Items port's example is an array of records, a Text port's is a
+	// string. It exists so a step can say what it produces before it has ever
+	// run: the editor renders it on the card's data face, badged as an
+	// example so it can never be mistaken for a real value, and the reference
+	// picker reads its field names. Optional; a port without one shows
+	// nothing until the step runs.
+	//
+	// Values are illustrative payloads, not UI copy, so they are NOT
+	// translated — a field name is whatever the upstream API calls it, and a
+	// flow author wiring ${…subject} needs the real key.
+	//
+	// output_example_contract_test.go pins every declared example to its
+	// port's declared Kind and Cardinality, so an example cannot promise a
+	// shape the port does not carry.
+	//
+	// Three kinds of port deliberately carry none, because an example there
+	// would be a lie rather than a help:
+	//
+	//   - a port whose shape comes from the INPUT, not the step (the row
+	//     transforms, the parsers, a query's columns, a webhook's payload) —
+	//     an example would describe one caller's data as the step's own;
+	//   - a control-flow or exec pin (if/then, approved/rejected), which
+	//     carries a signal rather than a value;
+	//   - a FILE port, whose value is a reference to a blob. The editor's
+	//     data face renders an example as an inline value, so a file name
+	//     would read as text rather than as a file — expressing those needs
+	//     the face to accept a ref, not just a value.
+	Example json.RawMessage `json:"example,omitempty" xml:"example,omitempty"`
+
 	// InlineOnly marks an input that takes a VALUE and cannot take a file
 	// reference. Set on every input of a tenant runner's drop: a Ref's path is
 	// on the daemon's own disk, which means nothing to a process on another

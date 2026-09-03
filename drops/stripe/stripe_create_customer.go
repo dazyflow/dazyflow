@@ -44,8 +44,9 @@ func init() {
 				{Port: "description", Label: "Description", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				{Port: "customer_id", Label: "Customer ID", MIME: []string{"text/plain"}},
-				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
+				{Port: "customer_id", Label: "Customer ID", MIME: []string{"text/plain"}, Example: json.RawMessage(`"cus_RkP2mNaB1cDeFg"`)},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"},
+					Example: json.RawMessage(`{"id":"cus_RkP2mNaB1cDeFg","email":"anna@nordkraft.se","name":"Anna Lindqvist"}`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

@@ -50,9 +50,9 @@ func init() {
 				{Port: "spreadsheet_id", Label: "Spreadsheet", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				{Port: "updated_cells", Label: "Cells changed", MIME: []string{"text/plain"}},
-				{Port: "spreadsheet_id", Label: "Spreadsheet", MIME: []string{"text/plain"}},
-				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
+				{Port: "updated_cells", Label: "Cells changed", MIME: []string{"text/plain"}, Example: json.RawMessage(`"12"`)},
+				{Port: "spreadsheet_id", Label: "Spreadsheet", MIME: []string{"text/plain"}, Example: json.RawMessage(`"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"`)},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}, Example: json.RawMessage(`{"updated_cells":12,"rows":3,"columns":4}`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

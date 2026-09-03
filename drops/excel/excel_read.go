@@ -50,7 +50,7 @@ func init() {
 				{Port: "rows", Label: "Rows", MIME: []string{"application/json"}},
 				// path is re-emitted so any Excel step downstream can target the
 				// same file by wire (mirrors sheets_read_range's spreadsheet_id).
-				{Port: "path", Label: "File path", MIME: []string{"text/plain"}},
+				{Port: "path", Label: "File path", MIME: []string{"text/plain"}, Example: json.RawMessage(`"rapporter/februari.xlsx"`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

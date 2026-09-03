@@ -220,13 +220,13 @@ func init() {
 				},
 			},
 			Outputs: []core.Port{
-				{Port: "out", Label: "Output", MIME: []string{"text/plain"}},
+				{Port: "out", Label: "Output", MIME: []string{"text/plain"}, Example: json.RawMessage(`"3 files changed, 41 insertions(+), 8 deletions(-)"`)},
 				// The script's own report on how it went. Emitted on every run
 				// that actually reached the machine, success or not — a script
 				// that succeeds can still have written warnings to stderr, and
 				// a flow handling its own failures needs the number.
-				{Port: "exit_code", Label: "Exit code", MIME: []string{"text/plain"}},
-				{Port: "stderr", Label: "Error output", MIME: []string{"text/plain"}},
+				{Port: "exit_code", Label: "Exit code", MIME: []string{"text/plain"}, Example: json.RawMessage(`"0"`)},
+				{Port: "stderr", Label: "Error output", MIME: []string{"text/plain"}, Example: json.RawMessage(`"warning: 2 deprecated flags ignored"`)},
 			},
 			ParamsSchema: json.RawMessage(`{
   "type": "object",

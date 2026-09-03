@@ -50,9 +50,9 @@ func init() {
 				{Port: "coordinate", Label: "Coordinate", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				{Port: "summary", Label: "Summary", MIME: []string{"text/plain"}},
-				{Port: "temperature", Label: "Temperature", MIME: []string{"text/plain"}},
-				{Port: "conditions", Label: "Conditions", MIME: []string{"text/plain"}},
+				{Port: "summary", Label: "Summary", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Light rain, 4.2°C (feels 1.8°C), humidity 87%, wind 5.1 m/s"`)},
+				{Port: "temperature", Label: "Temperature", MIME: []string{"text/plain"}, Example: json.RawMessage(`"4.2"`)},
+				{Port: "conditions", Label: "Conditions", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Rain"`)},
 				{Port: "weather", Label: "Full response", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{

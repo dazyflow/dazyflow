@@ -578,6 +578,7 @@ function EditorInner() {
     pausedAt,
     stepping,
     runOutputs,
+    samples,
     runDone,
     failedRun,
     liveLogs,
@@ -586,6 +587,15 @@ function EditorInner() {
     resumeRun,
     refreshLock,
   } = run;
+  // What each step last produced, as every editor surface should read it:
+  // this session's live run values over the historical ones the samples fetch
+  // brought back. Per node, not per port — a run writes a node's whole output
+  // map at once, so a live entry supersedes its historical twin wholesale.
+  const nodeOutputs = useMemo(
+    () => ({ ...samples, ...runOutputs }),
+    [samples, runOutputs],
+  );
+
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   // The toolbar's scrolling half holds the secondary tools and gets whatever
   // width the pinned actions leave it — on a narrow window, or any width with
@@ -1960,9 +1970,9 @@ function EditorInner() {
   // RenderTableColumns / RenderTextPreview).
   const inspectorUpstreamRows = useMemo(() => {
     if (!inspectorRowsSource) return undefined;
-    const data = runOutputs[inspectorRowsSource.nodeId]?.[inspectorRowsSource.port]?.data;
+    const data = nodeOutputs[inspectorRowsSource.nodeId]?.[inspectorRowsSource.port]?.data;
     return Array.isArray(data) ? (data as Record<string, unknown>[]) : undefined;
-  }, [inspectorRowsSource, runOutputs]);
+  }, [inspectorRowsSource, nodeOutputs]);
 
   const onInspectorChange = (id: string, patch: Partial<DazyNodeData>) => {
     setNodes((nds) =>
@@ -2285,7 +2295,7 @@ function EditorInner() {
       const connectedOutputs = connectedOutputsByNode.get(n.id) ?? EMPTY_PORTS;
       const wiredPlace = wiredPlaceByNode.get(n.id);
       const inlineEditable = n.id === soleId;
-      const outputs = runOutputs[n.id];
+      const outputs = nodeOutputs[n.id];
       const configErrors = configErrorsByNode.get(n.id);
       const setupNeeded = setupNeededByNode.get(n.id);
       const loopHint = loopHintByNode.get(n.id);
@@ -2377,7 +2387,7 @@ function EditorInner() {
     setNodeParam,
     connectedInputsByNode,
     connectedOutputsByNode,
-    runOutputs,
+    nodeOutputs,
     dataView,
     configErrorsByNode,
     setupNeededByNode,
@@ -5066,8 +5076,8 @@ function EditorInner() {
           rowsSource={inspectorRowsSource}
           tokenLabels={tokenLabels}
           runCoordinate={
-            inspectorSelected && typeof runOutputs[inspectorSelected.id]?.coordinate?.data === "string"
-              ? (runOutputs[inspectorSelected.id].coordinate.data as string)
+            inspectorSelected && typeof nodeOutputs[inspectorSelected.id]?.coordinate?.data === "string"
+              ? (nodeOutputs[inspectorSelected.id].coordinate.data as string)
               : undefined
           }
           missingKeys={

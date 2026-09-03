@@ -47,7 +47,7 @@ func init() {
 			},
 			Outputs: []core.Port{
 				{Port: "out", Label: "Downloaded file"},
-				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}, Example: json.RawMessage(`{"file_id":"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs","name":"Faktura-4471.pdf","path":"fakturor/Faktura-4471.pdf","bytes":48213}`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

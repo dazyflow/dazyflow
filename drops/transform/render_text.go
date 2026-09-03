@@ -48,7 +48,7 @@ func init() {
 				{Port: "rows", Label: "Rows", Required: true, MIME: []string{"application/json"}},
 			},
 			Outputs: []core.Port{
-				{Port: "text", Label: "Rendered text", MIME: []string{"text/plain"}},
+				{Port: "text", Label: "Rendered text", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Faktura 4471 från Fortnox — 249,00 SEK, betald 12 februari."`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

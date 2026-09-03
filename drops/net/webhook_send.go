@@ -49,7 +49,7 @@ func init() {
 			// bytes sent, response text) are still EMITTED under "meta" for run
 			// records, just not a pin (same as gmail send / ntfy).
 			Outputs: []core.Port{
-				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}, Example: json.RawMessage(`{"url":"https://hooks.nordkraft.se/faktura","method":"POST","status":200,"bytes_sent":128,"response":"ok"}`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

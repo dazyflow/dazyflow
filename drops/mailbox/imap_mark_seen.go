@@ -49,7 +49,7 @@ func init() {
 			// pass-through pin, which fires on success. Same shape as the send
 			// steps (email_send, gmail_send_email, ntfy).
 			Outputs: []core.Port{
-				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}, Example: json.RawMessage(`{"id":"4471","folder":"INBOX","flags":["\\Seen"]}`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

@@ -43,8 +43,9 @@ func init() {
 				{Port: "quantity", Label: "Quantity", MIME: []string{"text/plain", "application/json"}},
 			},
 			Outputs: []core.Port{
-				{Port: "url", Label: "Payment URL", MIME: []string{"text/plain"}},
-				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
+				{Port: "url", Label: "Payment URL", MIME: []string{"text/plain"}, Example: json.RawMessage(`"https://buy.stripe.com/test_aEU5kQ2mNaB1cDeFg00"`)},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"},
+					Example: json.RawMessage(`{"id":"plink_1QxPl2Fk9mNaB1cD","url":"https://buy.stripe.com/test_aEU5kQ2mNaB1cDeFg00","price":"price_1QxPkzFk9mNaB1cD","quantity":1}`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

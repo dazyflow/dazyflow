@@ -39,7 +39,7 @@ func init() {
 				{Port: "query", Label: "Query", Required: true, MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				{Port: "count", Label: "Match count", MIME: []string{"text/plain"}},
+				{Port: "count", Label: "Match count", MIME: []string{"text/plain"}, Example: json.RawMessage(`"3"`)},
 				{Port: "results", Label: "Results", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{

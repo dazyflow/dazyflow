@@ -60,7 +60,7 @@ func init() {
 				{Port: "url", Label: "Feed URL", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				{Port: "items", Label: "Items", MIME: []string{"application/json"}},
+				{Port: "items", Label: "Items", MIME: []string{"application/json"}, Example: json.RawMessage(`[{"id":"https://dazyflow.app/blog/0-31-2","title":"Dazyflow 0.31.2","link":"https://dazyflow.app/blog/0-31-2","published":"2026-02-12T08:00:00Z","author":"Angels Ware","summary":"Bug fixes and better Swedish coverage.","content":"<p>Bug fixes and better Swedish coverage.</p>"}]`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

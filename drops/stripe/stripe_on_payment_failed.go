@@ -42,7 +42,7 @@ func init() {
 			// Same payment-event outputs as stripe_on_payment, with a
 			// 'Failure reason' pin prepended (Stripe's decline message).
 			Outputs: append([]core.Port{
-				{Port: "failure_message", Label: "Failure reason", MIME: []string{"text/plain"}},
+				{Port: "failure_message", Label: "Failure reason", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Your card was declined."`)},
 			}, paymentTriggerOutputs()...),
 			ParamsSchema: json.RawMessage(`{"type":"object"}`),
 			Idempotent:   false,

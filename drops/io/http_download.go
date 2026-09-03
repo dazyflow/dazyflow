@@ -70,7 +70,7 @@ func init() {
 				// result) so run records keep it for debugging — it's just not
 				// a pin (same as gmail send / sheets append).
 				{Port: "out", Label: "Downloaded file"},
-				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}, Example: json.RawMessage(`{"status":200,"bytes":48213,"content_type":"application/pdf"}`)},
 			},
 			ParamsSchema: json.RawMessage(
 				`{

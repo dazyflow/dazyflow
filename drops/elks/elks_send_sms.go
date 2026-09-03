@@ -50,9 +50,9 @@ func init() {
 				{Port: "message", Label: "Message", Required: true, MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				{Port: "message_id", Label: "Message ID", MIME: []string{"text/plain"}},
-				{Port: "status", Label: "Status", MIME: []string{"text/plain"}},
-				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
+				{Port: "message_id", Label: "Message ID", MIME: []string{"text/plain"}, Example: json.RawMessage(`"s0f9a2b7c4d1e0b7a38f124471e0b7a39"`)},
+				{Port: "status", Label: "Status", MIME: []string{"text/plain"}, Example: json.RawMessage(`"sent"`)},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}, Example: json.RawMessage(`{"id":"s0f9a2b7c4d1e0b7a38f124471e0b7a39","status":"sent","to":"+46701234567","from":"Nordkraft","cost":3500,"parts":1}`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

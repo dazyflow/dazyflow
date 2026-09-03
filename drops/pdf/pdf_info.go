@@ -47,9 +47,9 @@ func init() {
 				{Port: "file", Label: "File", Required: true},
 			},
 			Outputs: []core.Port{
-				{Port: "pages", Label: "Pages", MIME: []string{"text/plain"}},
-				{Port: "encrypted", Label: "Password-protected", MIME: []string{"text/plain"}},
-				{Port: "info", Label: "Details", MIME: []string{"application/json"}},
+				{Port: "pages", Label: "Pages", MIME: []string{"text/plain"}, Example: json.RawMessage(`"12"`)},
+				{Port: "encrypted", Label: "Password-protected", MIME: []string{"text/plain"}, Example: json.RawMessage(`"false"`)},
+				{Port: "info", Label: "Details", MIME: []string{"application/json"}, Example: json.RawMessage(`{"pages":12,"version":"1.7","title":"Faktura 4471","author":"Fortnox","subject":"Faktura","creator":"Fortnox Invoicing","producer":"pdfTeX","created":"2026-02-12T09:12:04Z","modified":"2026-02-12T09:12:04Z","encrypted":false,"keywords":"faktura,4471","size_bytes":48213,"page_size":"A4","tagged":true}`)},
 			},
 			ParamsSchema: json.RawMessage(`{"type":"object","properties":{}}`),
 			Idempotent:   true,

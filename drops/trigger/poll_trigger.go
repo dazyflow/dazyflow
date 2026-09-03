@@ -43,7 +43,7 @@ func init() {
 				// the pass OUTPUT here and fill it in Execute. It carries the
 				// fire timestamp, so threading it also forwards "when it fired".
 				{Port: core.PassPort, Label: "Pass-through"},
-				{Port: "fired_at", Label: "Time", MIME: []string{"text/plain"}},
+				{Port: "fired_at", Label: "Time", MIME: []string{"text/plain"}, Example: json.RawMessage(`"2026-02-12T08:00:00Z"`)},
 			},
 			// interval_seconds lives on the node (like cron_trigger's schedule),
 			// read by the scheduler. Max mirrors core.MaxPollIntervalSeconds

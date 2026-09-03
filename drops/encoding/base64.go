@@ -48,7 +48,7 @@ func init() {
 				{Port: "in", Label: "Value", Required: true, MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				{Port: "out", Label: "Result", MIME: []string{"text/plain"}},
+				{Port: "out", Label: "Result", MIME: []string{"text/plain"}, Example: json.RawMessage(`"RmFrdHVyYSA0NDcxIMOkciBiZXRhbGQu"`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

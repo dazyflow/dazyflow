@@ -58,7 +58,7 @@ func init() {
 			// originates data and takes no pass pin (you can't wire into a
 			// literal). See core.WithPassthrough / Manifest.ValueSource.
 			ValueSource: true,
-			Outputs:     []core.Port{{Port: "out", Label: "Text", MIME: []string{"text/plain"}}},
+			Outputs:     []core.Port{{Port: "out", Label: "Text", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Faktura 4471 är betald."`)}},
 			ParamsSchema: json.RawMessage(`{
   "type": "object",
   "properties": {

@@ -51,7 +51,7 @@ func init() {
 			Outputs: []core.Port{
 				{Port: "files", Label: "Files", MIME: []string{"application/json"}},
 				{Port: "first", Label: "First file"},
-				{Port: "count", Label: "How many", MIME: []string{"text/plain"}},
+				{Port: "count", Label: "How many", MIME: []string{"text/plain"}, Example: json.RawMessage(`"4"`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

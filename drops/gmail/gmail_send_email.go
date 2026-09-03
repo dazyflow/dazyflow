@@ -58,7 +58,7 @@ func init() {
 			// just not a pin. Re-expose it as a named port if a reply-in-thread
 			// feature ever needs to wire it.
 			Outputs: []core.Port{
-				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}, Example: json.RawMessage(`{"id":"18f2a9c4d1e0b7a3","threadId":"18f2a9c4d1e0b7a3"}`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

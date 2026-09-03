@@ -54,8 +54,8 @@ func init() {
 				{Port: "attendees", Label: "Attendees", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				{Port: "event_id", Label: "Event ID", MIME: []string{"text/plain"}},
-				{Port: "html_link", Label: "Link", MIME: []string{"text/plain"}},
+				{Port: "event_id", Label: "Event ID", MIME: []string{"text/plain"}, Example: json.RawMessage(`"7f2ab9c4d1e0b7a3"`)},
+				{Port: "html_link", Label: "Link", MIME: []string{"text/plain"}, Example: json.RawMessage(`"https://www.google.com/calendar/event?eid=N2YyYWI5YzRkMWUwYjdhMw"`)},
 				{Port: "event", Label: "Event", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{

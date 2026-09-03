@@ -49,7 +49,7 @@ func init() {
 				{Port: "rows", Label: "Rows", MIME: []string{"application/json"}},
 				// spreadsheet_id is re-emitted (same as append's) so any sheet
 				// step downstream can target the same spreadsheet by wire.
-				{Port: "spreadsheet_id", Label: "Spreadsheet ID", MIME: []string{"text/plain"}},
+				{Port: "spreadsheet_id", Label: "Spreadsheet ID", MIME: []string{"text/plain"}, Example: json.RawMessage(`"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

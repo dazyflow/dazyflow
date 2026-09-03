@@ -58,7 +58,7 @@ func init() {
 				Label: "Value",
 			}},
 			Outputs: []core.Port{
-				{Port: "pending_url", Label: "Approval link", MIME: []string{"text/plain"}},
+				{Port: "pending_url", Label: "Approval link", MIME: []string{"text/plain"}, Example: json.RawMessage(`"https://dazyflow.example/approve/9f2ab7c4d1e0b7a3"`)},
 				// Branch-style decision ports: the input Value rides out exactly
 				// one of these — `approved` on approve, `rejected` on reject — so
 				// downstream edges fork on the decision by port presence, the
@@ -67,8 +67,8 @@ func init() {
 				{Port: "approved", Label: "Approved"},
 				{Port: "rejected", Label: "Rejected"},
 				// The authenticated subject that made the decision.
-				{Port: "approver", Label: "Approver", MIME: []string{"text/plain"}},
-				{Port: "comment", Label: "Comment", MIME: []string{"text/plain"}},
+				{Port: "approver", Label: "Approver", MIME: []string{"text/plain"}, Example: json.RawMessage(`"anna@nordkraft.se"`)},
+				{Port: "comment", Label: "Comment", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Ser bra ut — kör."`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

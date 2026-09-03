@@ -64,8 +64,8 @@ func init() {
 				// so run records keep it for debugging — it's just not a pin.
 				// `path` is the auto-assigned workspace folder the repo landed
 				// in — downstream steps (shell, file_read) read it from here.
-				{Port: "path", Label: "Repository folder", MIME: []string{"text/plain"}},
-				{Port: "sha", Label: "Commit SHA", MIME: []string{"text/plain"}},
+				{Port: "path", Label: "Repository folder", MIME: []string{"text/plain"}, Example: json.RawMessage(`"repos/dazyflow"`)},
+				{Port: "sha", Label: "Commit SHA", MIME: []string{"text/plain"}, Example: json.RawMessage(`"c0c3608e7a1d4f9b2e8c5a3d6f0b1e4a9c7d2f83"`)},
 				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(

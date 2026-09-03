@@ -38,8 +38,8 @@ func init() {
 				{Port: "company_id", Label: "Org number", Required: true, MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				{Port: "name", Label: "Company name", MIME: []string{"text/plain"}},
-				{Port: "status", Label: "Status", MIME: []string{"text/plain"}},
+				{Port: "name", Label: "Company name", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Nordkraft AB"`)},
+				{Port: "status", Label: "Status", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Aktiv"`)},
 				{Port: "company", Label: "Company", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{

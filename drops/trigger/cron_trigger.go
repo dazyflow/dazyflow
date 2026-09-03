@@ -46,7 +46,7 @@ func init() {
 				// a generic pin. See poll_trigger for the full rationale; it
 				// carries the fire timestamp too.
 				{Port: core.PassPort, Label: "Pass-through"},
-				{Port: "fired_at", Label: "Time", MIME: []string{"text/plain"}},
+				{Port: "fired_at", Label: "Time", MIME: []string{"text/plain"}, Example: json.RawMessage(`"2026-02-12T08:00:00Z"`)},
 			},
 			// cron + tz live on the node (Phase 2: schedule config is on the
 			// entry point). Neither is required — a blank schedule means

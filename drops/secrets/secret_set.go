@@ -48,7 +48,7 @@ func init() {
 			Outputs: []core.Port{
 				// Echoes the name that was written — never the value, so a
 				// downstream node can't leak the secret into a Result.
-				{Port: "name", Label: "Secret name", MIME: []string{"text/plain"}},
+				{Port: "name", Label: "Secret name", MIME: []string{"text/plain"}, Example: json.RawMessage(`"FORTNOX_API_KEY"`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

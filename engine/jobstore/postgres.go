@@ -590,6 +590,10 @@ func (s *Postgres) ListNodeRecords(ctx context.Context, opts core.ListNodeRecord
 		args = append(args, opts.GraphRunID)
 		q += fmt.Sprintf(" AND graph_run_id = $%d", len(args))
 	}
+	if opts.GraphID != "" {
+		args = append(args, opts.GraphID)
+		q += fmt.Sprintf(" AND graph_id = $%d", len(args))
+	}
 	if opts.HasOutputPort != "" {
 		args = append(args, opts.HasOutputPort)
 		// jsonb_exists, not the `?` operator: `?` is a placeholder in most

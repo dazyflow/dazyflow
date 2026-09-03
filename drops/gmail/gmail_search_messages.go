@@ -54,7 +54,11 @@ func init() {
 				// ID stubs at run time. next_page_token is still EMITTED for
 				// API callers that paginate by hand, but not declared:
 				// pagination is dev plumbing a flow can't loop on anyway.
-				{Port: "messages", Label: "Matching emails", MIME: []string{"application/json"}},
+				{Port: "messages", Label: "Matching emails", MIME: []string{"application/json"},
+					Example: json.RawMessage(`[
+						{"id":"18f2a9c4d1e0b7a3","threadId":"18f2a9c4d1e0b7a3","date":"Thu, 12 Feb 2026 09:12:04 +0100","from":"Fortnox <faktura@fortnox.se>","subject":"Faktura 4471","body":"Din faktura 4471 är nu tillgänglig."},
+						{"id":"18f2a7b19c3d5e21","threadId":"18f2a7b19c3d5e21","date":"Thu, 12 Feb 2026 08:47:51 +0100","from":"Stripe <billing@stripe.com>","subject":"Your receipt #A82","body":"Thanks for your payment of 249.00 SEK."}
+					]`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

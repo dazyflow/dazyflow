@@ -135,23 +135,44 @@ function textView(raw: string): DataFaceView {
   return { kind: "text", text, truncated };
 }
 
+// Where a face's data came from. The distinction is the whole reason an
+// example is safe to show: a preview built on a shipped example must never
+// read as one built on a real run, or an author trusts a field that was
+// never there.
+export type DataFaceTier = "run" | "example" | "none";
+
+// dataFaceSource picks what a port's face shows and says where it came from.
+// A real value always wins; a port's shipped example fills in only when
+// nothing has run.
+export function dataFaceSource(
+  ref: Ref | undefined,
+  port: Port | undefined,
+): { tier: DataFaceTier; view: DataFaceView } {
+  const live = dataFaceView(ref);
+  if (live.kind !== "empty") return { tier: "run", view: live };
+  if (port?.example !== undefined && port.example !== null) {
+    const shipped = dataFaceView({ data: port.example });
+    if (shipped.kind !== "empty") return { tier: "example", view: shipped };
+  }
+  return { tier: "none", view: { kind: "empty" } };
+}
+
 // facePorts are the output ports worth a tab. The passthrough pin carries the
 // input untouched, so it is never what someone opened the face to look at.
 export function facePorts(outputs: Port[] | undefined): Port[] {
   return (outputs ?? []).filter((p) => p.port !== "pass");
 }
 
-// firstPortWithValue is the tab to open on: the first port that actually
-// produced something, so a router's empty branch does not greet you with an
-// empty panel while its populated one sits behind a tab.
+// firstPortWithValue is the tab to open on: the port with the most real thing
+// to show, so a router's empty branch does not greet you with an empty panel
+// while its populated one sits behind a tab. Run data first, then a shipped
+// example, then whatever is declared first.
 export function firstPortWithValue(
   ports: Port[],
   outputs: Record<string, Ref> | undefined,
 ): string | undefined {
   if (!ports.length) return undefined;
-  const withValue = ports.find((p) => {
-    const ref = outputs?.[p.port];
-    return ref !== undefined && dataFaceView(ref).kind !== "empty";
-  });
-  return (withValue ?? ports[0]).port;
+  const byTier = (want: DataFaceTier) =>
+    ports.find((p) => dataFaceSource(outputs?.[p.port], p).tier === want);
+  return (byTier("run") ?? byTier("example") ?? ports[0]).port;
 }

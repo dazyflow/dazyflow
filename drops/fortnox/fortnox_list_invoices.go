@@ -45,8 +45,8 @@ func init() {
 			},
 			Outputs: []core.Port{
 				{Port: "invoices", Label: "Invoices", MIME: []string{"application/json"}},
-				{Port: "has_more", Label: "Has more", MIME: []string{"text/plain"}},
-				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
+				{Port: "has_more", Label: "Has more", MIME: []string{"text/plain"}, Example: json.RawMessage(`"false"`)},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}, Example: json.RawMessage(`{"count":20,"page":1,"total_pages":3,"next_page":2}`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

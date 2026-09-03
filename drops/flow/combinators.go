@@ -62,7 +62,7 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs:         []core.Port{{Port: "in", Required: true, Label: "Yes/No value", MIME: []string{core.MIMEBool}}},
-			Outputs:        []core.Port{{Port: "result", Label: "Yes/No", MIME: []string{core.MIMEBool}}},
+			Outputs:        []core.Port{{Port: "result", Label: "Yes/No", MIME: []string{core.MIMEBool}, Example: json.RawMessage(`true`)}},
 			ParamsSchema:   json.RawMessage(`{"type":"object"}`),
 			Idempotent:     true,
 			NoPassthrough:  true, // pure predicate — see operators.go.
@@ -112,7 +112,7 @@ func registerCombinator(c combinatorSpec) {
 				Min:      &min,
 				MIME:     []string{core.MIMEBool},
 			}},
-			Outputs:       []core.Port{{Port: "result", Label: "Yes/No", MIME: []string{core.MIMEBool}}},
+			Outputs:       []core.Port{{Port: "result", Label: "Yes/No", MIME: []string{core.MIMEBool}, Example: json.RawMessage(`true`)}},
 			ParamsSchema:  json.RawMessage(`{"type":"object"}`),
 			Idempotent:    true,
 			NoPassthrough: true, // pure predicate — see operators.go.

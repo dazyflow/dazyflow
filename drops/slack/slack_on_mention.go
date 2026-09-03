@@ -44,11 +44,11 @@ func init() {
 			ExecutionModel: core.ExecutionTrigger,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{
-				{Port: "text", Label: "Message", MIME: []string{"text/plain"}},
-				{Port: "user", Label: "From user", MIME: []string{"text/plain"}},
-				{Port: "channel", Label: "Channel", MIME: []string{"text/plain"}},
-				{Port: "team", Label: "Workspace", MIME: []string{"text/plain"}},
-				{Port: "ts", Label: "Time", MIME: []string{"text/plain"}},
+				{Port: "text", Label: "Message", MIME: []string{"text/plain"}, Example: json.RawMessage(`"@dazyflow kan du köra fakturaflödet igen?"`)},
+				{Port: "user", Label: "From user", MIME: []string{"text/plain"}, Example: json.RawMessage(`"U024BE7LH"`)},
+				{Port: "channel", Label: "Channel", MIME: []string{"text/plain"}, Example: json.RawMessage(`"C024BE91L"`)},
+				{Port: "team", Label: "Workspace", MIME: []string{"text/plain"}, Example: json.RawMessage(`"T024BE7LD"`)},
+				{Port: "ts", Label: "Time", MIME: []string{"text/plain"}, Example: json.RawMessage(`"1770883924.000200"`)},
 				// The whole event stays a wireable pin: compositions template
 				// across several of its fields through ONE wire (e.g. the
 				// mention→GitHub-issue template uses user+channel+text

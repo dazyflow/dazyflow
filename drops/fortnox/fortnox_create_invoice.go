@@ -42,8 +42,8 @@ func init() {
 				{Port: "rows", Label: "Rows", MIME: []string{"application/json"}},
 			},
 			Outputs: []core.Port{
-				{Port: "document_number", Label: "Document number", MIME: []string{"text/plain"}},
-				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
+				{Port: "document_number", Label: "Document number", MIME: []string{"text/plain"}, Example: json.RawMessage(`"4471"`)},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}, Example: json.RawMessage(`{"document_number":"4471","customer_number":"1042","total":249}`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

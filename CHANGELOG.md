@@ -12,6 +12,57 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ### Added
 
+- **A step can say what it produces before it has ever run.** Building a flow
+  meant running it to find out what came out of each step, so wiring the next
+  one was guesswork until the first real run — and "just run it" is not free
+  when the step sends an email. An output port can now carry `Example`, a
+  worked example of what it *carries*, which the editor renders on the card's
+  data face with a dashed **Example** badge so it can never be read as a real
+  value. A real value always supersedes it, and no row count is shown beside
+  an example, because "2 items" next to synthetic data reads as a fact about
+  the last run.
+
+  242 of the catalogue's 413 output ports now carry one: every plain-text
+  port, every yes/no port, and every record the steps build themselves —
+  Gmail and IMAP messages and attachments, Stripe's payment events and
+  `Details`, Fortnox, Klarna, nShift, Roaring, GitHub, Drive, Sheets,
+  Calendar, Notion, Slack, RSS, PDF, the weather and geocoding steps, the AI
+  summarize/classify/reply steps, and the value parsers.
+
+  The remaining ports carry none, deliberately, in three groups. A port whose
+  shape comes from the INPUT rather than the step — the row transforms, the
+  parsers, a query's columns, a webhook's payload — would otherwise describe
+  one caller's data as if it were the step's own. A control-flow pin
+  (if/then, approved/rejected) carries a signal, not a value. And a raw
+  vendor passthrough (`Full response`, `Customer`, `Full event`) is named by
+  the vendor's API, not by our code, so an example could not be verified
+  against this repo — and a wrong field name is exactly the harm the feature
+  exists to prevent. File ports are a fourth, technical gap: the data face
+  renders an example as an inline value, so a file name would read as text.
+
+  Every declared example is pinned to its port's declared kind by
+  `drops/output_example_contract_test.go`, so it cannot promise a shape the
+  port does not carry.
+
+
+- **A step's last output survives a reload.** The card data faces read
+  per-node outputs, and those lived only in the editor's memory for the length
+  of a session — reload, and every face went back to "no data yet", so a flow
+  you had already run was as opaque as one you hadn't. `GET
+  /api/v1/me/flows/{flow_id}/samples` answers "what did each of this flow's
+  steps last produce?" and the editor seeds itself from it on open. Nothing
+  new is stored: a node record already holds what its node produced and the
+  run viewer already serves those values to the same people, so this reads the
+  same rows keyed by flow instead of by run. It merges newest-first across
+  runs rather than reading only the newest, which matters because sampling one
+  step runs its upstream chain alone — so the newest run often covers a
+  fraction of the graph while older runs hold the rest. Live values from a run
+  in progress always win over the historical ones. The port hover-peek reads
+  the same map and gains the same persistence. Bounded by run retention: once
+  a run's records are pruned its values go too, and the card says "no data
+  yet" again.
+
+
 - **A step card now folds open to show what the step produces.** Knowing what
   comes out of a step meant running the flow and reading the run page, so
   wiring the next step was guesswork until the first real run. The card's

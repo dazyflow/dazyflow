@@ -48,11 +48,11 @@ func init() {
 			ExecutionModel: core.ExecutionTrigger,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{
-				{Port: "state", Label: "State", MIME: []string{"text/plain"}},
-				{Port: "previous_state", Label: "Previous state", MIME: []string{"text/plain"}},
+				{Port: "state", Label: "State", MIME: []string{"text/plain"}, Example: json.RawMessage(`"on"`)},
+				{Port: "previous_state", Label: "Previous state", MIME: []string{"text/plain"}, Example: json.RawMessage(`"off"`)},
 				{Port: "attributes", Label: "Attributes", MIME: []string{"application/json"}},
 				{Port: "entity", Label: "Full entity", MIME: []string{"application/json"}},
-				{Port: "fired_at", Label: "Time", MIME: []string{"text/plain"}},
+				{Port: "fired_at", Label: "Time", MIME: []string{"text/plain"}, Example: json.RawMessage(`"2026-02-12T08:12:04Z"`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

@@ -49,8 +49,8 @@ func init() {
 				{Port: "body", Label: "Body", Required: true, MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				{Port: "message_sid", Label: "Message ID", MIME: []string{"text/plain"}},
-				{Port: "status", Label: "Status", MIME: []string{"text/plain"}},
+				{Port: "message_sid", Label: "Message ID", MIME: []string{"text/plain"}, Example: json.RawMessage(`"SM9f2ab7c4d1e0b7a38f124471e0b7a39f"`)},
+				{Port: "status", Label: "Status", MIME: []string{"text/plain"}, Example: json.RawMessage(`"queued"`)},
 				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{

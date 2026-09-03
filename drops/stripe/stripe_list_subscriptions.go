@@ -43,9 +43,9 @@ func init() {
 			},
 			Outputs: []core.Port{
 				{Port: "subscriptions", Label: "Subscriptions", MIME: []string{"application/json"}},
-				{Port: "first_id", Label: "First ID", MIME: []string{"text/plain"}},
+				{Port: "first_id", Label: "First ID", MIME: []string{"text/plain"}, Example: json.RawMessage(`"sub_1QxPl2Fk9mNaB1cD"`)},
 				{Port: "count", Label: "Count", MIME: []string{"application/json"}},
-				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}, Example: json.RawMessage(`{"count":2,"customer":"cus_RkP2mNaB1cDeFg"}`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

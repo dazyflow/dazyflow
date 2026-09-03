@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   cell,
   columnsOf,
+  dataFaceSource,
   dataFaceView,
   facePorts,
   firstPortWithValue,
@@ -105,6 +106,43 @@ describe("dataFaceView", () => {
   });
 });
 
+describe("dataFaceSource", () => {
+  const listPort = port({ port: "messages", mime: ["application/json"], list: true });
+  const withExample = port({
+    port: "messages",
+    mime: ["application/json"],
+    list: true,
+    example: [{ from: "faktura@fortnox.se", subject: "Faktura 4471" }],
+  });
+
+  it("prefers a real value over the port's shipped example", () => {
+    const got = dataFaceSource({ data: [{ from: "real@example.com" }] }, withExample);
+    expect(got.tier).toBe("run");
+    if (got.view.kind !== "table") throw new Error("want a table");
+    expect(got.view.rows[0][0]).toBe("real@example.com");
+  });
+
+  it("falls back to the example when nothing has run", () => {
+    const got = dataFaceSource(undefined, withExample);
+    expect(got.tier).toBe("example");
+    if (got.view.kind !== "table") throw new Error("want a table");
+    expect(got.view.columns).toEqual(["from", "subject"]);
+  });
+
+  it("is empty on a port with no run value and no example", () => {
+    expect(dataFaceSource(undefined, listPort)).toEqual({
+      tier: "none",
+      view: { kind: "empty" },
+    });
+  });
+
+  it("treats a run value that carried nothing as nothing, and still shows the example", () => {
+    // A step that ran and emitted an empty string has produced no preview;
+    // the example is more use than a blank panel.
+    expect(dataFaceSource({ data: "" }, withExample).tier).toBe("example");
+  });
+});
+
 describe("facePorts", () => {
   it("drops the passthrough pin, which never holds what you opened the face for", () => {
     expect(facePorts([port({ port: "pass" }), port({ port: "out" })]).map((p) => p.port)).toEqual([
@@ -126,6 +164,22 @@ describe("firstPortWithValue", () => {
 
   it("falls back to the first port when nothing has run", () => {
     expect(firstPortWithValue(ports, undefined)).toBe("unmatched");
+  });
+
+  it("opens on a port carrying an example over one carrying nothing", () => {
+    const withExample = [
+      port({ port: "bare" }),
+      port({ port: "shipped", mime: ["text/plain"], example: "Faktura 4471" }),
+    ];
+    expect(firstPortWithValue(withExample, undefined)).toBe("shipped");
+  });
+
+  it("still prefers real data over an example", () => {
+    const withExample = [
+      port({ port: "shipped", mime: ["text/plain"], example: "Faktura 4471" }),
+      port({ port: "ran", mime: ["text/plain"] }),
+    ];
+    expect(firstPortWithValue(withExample, { ran: { data: "actual" } })).toBe("ran");
   });
 
   it("is undefined when the drop declares no outputs", () => {

@@ -62,7 +62,7 @@ func init() {
 			// EMITTED under "meta" for run records, just not a pin (same as
 			// gmail send / sheets append).
 			Outputs: []core.Port{
-				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}, Example: json.RawMessage(`{"server":"https://ntfy.sh","topic":"fakturor","url":"https://ntfy.sh/fakturor","status":200,"bytes_sent":42,"truncated":false,"original_bytes":42}`)},
 			},
 			// server + token are NOT params: they're the per-tenant connection
 			// (ConnectionFields above), injected into unset params at run time

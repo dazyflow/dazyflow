@@ -59,8 +59,8 @@ func init() {
 				// server, so the pin carries it per-run rather than declaring
 				// one. Same shape as Download attachments' First file.
 				{Port: "file", Label: "File"},
-				{Port: "name", Label: "File name", MIME: []string{"text/plain"}},
-				{Port: "size", Label: "Size", MIME: []string{"text/plain"}},
+				{Port: "name", Label: "File name", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Faktura-4471.pdf"`)},
+				{Port: "size", Label: "Size", MIME: []string{"text/plain"}, Example: json.RawMessage(`"48213"`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

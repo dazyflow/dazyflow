@@ -39,7 +39,7 @@ func init() {
 				{Port: "shipment_id", Label: "Shipment ID", Required: true, MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				{Port: "deleted", Label: "Deleted", MIME: []string{"text/plain"}},
+				{Port: "deleted", Label: "Deleted", MIME: []string{"text/plain"}, Example: json.RawMessage(`"true"`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

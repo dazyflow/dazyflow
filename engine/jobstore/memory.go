@@ -387,6 +387,9 @@ func (m *Memory) ListNodeRecords(_ context.Context, opts core.ListNodeRecordsOpt
 		if opts.GraphRunID != "" && r.GraphRunID != opts.GraphRunID {
 			continue
 		}
+		if opts.GraphID != "" && r.GraphID != opts.GraphID {
+			continue
+		}
 		if opts.HasOutputPort != "" {
 			if r.Result == nil {
 				continue

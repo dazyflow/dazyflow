@@ -55,8 +55,9 @@ func init() {
 				{Port: "coordinate", Label: "Coordinate", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				{Port: "summary", Label: "Summary", MIME: []string{"text/plain"}},
-				{Port: "daily", Label: "Daily", MIME: []string{"application/json"}},
+				{Port: "summary", Label: "Summary", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Thu Feb 12: Light rain, 1–5°C\nFri Feb 13: Cloudy, 0–4°C"`)},
+				{Port: "daily", Label: "Daily", MIME: []string{"application/json"},
+					Example: json.RawMessage(`[{"date":"2026-02-12","dt":1770894000,"temp_min":1.4,"temp_max":5.1,"pop":0.62,"conditions":"Rain","description":"light rain"}]`)},
 				{Port: "weather", Label: "Full response", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{

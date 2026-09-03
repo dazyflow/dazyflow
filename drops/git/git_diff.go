@@ -59,7 +59,7 @@ func init() {
 				// (files_changed, insertions, …) is still EMITTED under
 				// "meta" so run records keep it for debugging — it's just
 				// not a pin.
-				{Port: "diff", Label: "Diff", MIME: []string{"text/plain"}},
+				{Port: "diff", Label: "Diff", MIME: []string{"text/plain"}, Example: json.RawMessage(`"diff --git a/README.md b/README.md\n@@ -1,3 +1,4 @@\n+A new line\n"`)},
 				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(

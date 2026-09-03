@@ -82,10 +82,10 @@ func init() {
 				{Port: "email", Label: "Email", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				{Port: "out", Label: "Address", MIME: []string{"text/plain"}},
-				{Port: "local", Label: "Local part", MIME: []string{"text/plain"}},
-				{Port: "domain", Label: "Domain", MIME: []string{"text/plain"}},
-				{Port: "name", Label: "Display name", MIME: []string{"text/plain"}},
+				{Port: "out", Label: "Address", MIME: []string{"text/plain"}, Example: json.RawMessage(`"anna.lindqvist@nordkraft.se"`)},
+				{Port: "local", Label: "Local part", MIME: []string{"text/plain"}, Example: json.RawMessage(`"anna.lindqvist"`)},
+				{Port: "domain", Label: "Domain", MIME: []string{"text/plain"}, Example: json.RawMessage(`"nordkraft.se"`)},
+				{Port: "name", Label: "Display name", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Anna Lindqvist"`)},
 				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{

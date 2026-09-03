@@ -52,7 +52,7 @@ func init() {
 				// File first — it's the pin most flows wire onward; Path is
 				// there for steps that want the location as text.
 				{Port: "file", Label: "File"},
-				{Port: "path", Label: "Path", MIME: []string{"text/plain"}},
+				{Port: "path", Label: "Path", MIME: []string{"text/plain"}, Example: json.RawMessage(`"fakturor/Faktura-4471.pdf"`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

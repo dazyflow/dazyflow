@@ -52,10 +52,10 @@ func init() {
 				{Port: "place", Label: "Place", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				{Port: "coordinate", Label: "Coordinate", MIME: []string{"text/plain"}},
-				{Port: "lat", Label: "Latitude", MIME: []string{"text/plain"}},
-				{Port: "lon", Label: "Longitude", MIME: []string{"text/plain"}},
-				{Port: "place", Label: "Place", MIME: []string{"text/plain"}},
+				{Port: "coordinate", Label: "Coordinate", MIME: []string{"text/plain"}, Example: json.RawMessage(`"59.3293,18.0686"`)},
+				{Port: "lat", Label: "Latitude", MIME: []string{"text/plain"}, Example: json.RawMessage(`"59.3293"`)},
+				{Port: "lon", Label: "Longitude", MIME: []string{"text/plain"}, Example: json.RawMessage(`"18.0686"`)},
+				{Port: "place", Label: "Place", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Sergels torg, Norrmalm, Stockholm, 111 57, Sverige"`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

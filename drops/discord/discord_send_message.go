@@ -48,8 +48,8 @@ func init() {
 				{Port: "content", Label: "Content", Required: true, MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				{Port: "message_id", Label: "Message ID", MIME: []string{"text/plain"}},
-				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
+				{Port: "message_id", Label: "Message ID", MIME: []string{"text/plain"}, Example: json.RawMessage(`"1204471829384756123"`)},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}, Example: json.RawMessage(`{"message_id":"1204471829384756123","channel_id":"1204471829384756000","status":200}`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

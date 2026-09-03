@@ -70,8 +70,9 @@ func init() {
 				{Port: "in", Label: "Date", MIME: []string{"text/plain", "application/json"}},
 			},
 			Outputs: []core.Port{
-				{Port: "out", Label: "Formatted", MIME: []string{"text/plain"}},
-				{Port: "value", Label: "Parts", MIME: []string{"application/json"}},
+				{Port: "out", Label: "Formatted", MIME: []string{"text/plain"}, Example: json.RawMessage(`"12 February 2026"`)},
+				{Port: "value", Label: "Parts", MIME: []string{"application/json"},
+					Example: json.RawMessage(`{"iso":"2026-02-12T09:12:04+01:00","unix":1770883924,"year":2026,"month":2,"day":12,"hour":9,"minute":12,"second":4,"weekday":"Thursday","tz":"Europe/Stockholm"}`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

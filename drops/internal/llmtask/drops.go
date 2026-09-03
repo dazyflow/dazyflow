@@ -47,7 +47,7 @@ func askDrop(cfg Config) engine.NativeDrop {
 			Inputs:           inputsWithFiles(cfg, core.Port{Port: "prompt", Label: "Prompt"}),
 			// Port id stays "text" (existing wires reference it); the label is
 			// the role, "Response", matching the task drops' Summary/Reply.
-			Outputs:      []core.Port{{Port: "text", Label: "Response", MIME: []string{"text/plain"}}},
+			Outputs:      []core.Port{{Port: "text", Label: "Response", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Fortnox skickade faktura 4471 på 249,00 SEK; den betalades 12 februari."`)}},
 			ParamsSchema: schemaJSON(props, nil),
 			Idempotent:   true,
 			RetryPolicy:  core.RetryExponentialBackoff,
@@ -132,7 +132,7 @@ func summarizeDrop(cfg Config) engine.NativeDrop {
 			ConnectionFields: connFields(cfg),
 			ExecutionModel:   core.ExecutionBatch, ProcessModel: core.ProcessLongLived,
 			Inputs:       inputsWithFiles(cfg, core.Port{Port: "text", Label: "Text"}),
-			Outputs:      []core.Port{{Port: "summary", Label: "Summary", MIME: []string{"text/plain"}}},
+			Outputs:      []core.Port{{Port: "summary", Label: "Summary", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Fortnox skickade faktura 4471 på 249,00 SEK; den betalades 12 februari."`)}},
 			ParamsSchema: schemaJSON(props, nil),
 			Idempotent:   true, RetryPolicy: core.RetryExponentialBackoff,
 		},
@@ -340,7 +340,7 @@ func classifyDrop(cfg Config) engine.NativeDrop {
 			ExecutionModel:   core.ExecutionBatch, ProcessModel: core.ProcessLongLived,
 			Inputs: inputsWithFiles(cfg, core.Port{Port: "text", Label: "Text"}),
 			Outputs: []core.Port{
-				{Port: "category", Label: "Category", MIME: []string{"text/plain"}},
+				{Port: "category", Label: "Category", MIME: []string{"text/plain"}, Example: json.RawMessage(`"invoice"`)},
 				{Port: "confidence", Label: "Confidence", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: schemaJSON(props, []string{"categories"}),
@@ -452,7 +452,7 @@ func draftReplyDrop(cfg Config) engine.NativeDrop {
 			ConnectionFields: connFields(cfg),
 			ExecutionModel:   core.ExecutionBatch, ProcessModel: core.ProcessLongLived,
 			Inputs:       []core.Port{{Port: "text", Label: "Message"}},
-			Outputs:      []core.Port{{Port: "reply", Label: "Reply", MIME: []string{"text/plain"}}},
+			Outputs:      []core.Port{{Port: "reply", Label: "Reply", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Hej Anna! Tack för påminnelsen — fakturan är betald sedan i morse."`)}},
 			ParamsSchema: schemaJSON(props, nil),
 			Idempotent:   true, RetryPolicy: core.RetryExponentialBackoff,
 		},

@@ -53,9 +53,9 @@ func init() {
 				// not a pin — undeclared outputs can't be wired and don't
 				// clutter the card. spreadsheet_id is emitted so it can feed
 				// another sheet step's 'spreadsheet_id' input.
-				{Port: "appended_rows", Label: "Rows saved", MIME: []string{"text/plain"}},
-				{Port: "updated_range", Label: "Updated range", MIME: []string{"text/plain"}},
-				{Port: "spreadsheet_id", Label: "Spreadsheet ID", MIME: []string{"text/plain"}},
+				{Port: "appended_rows", Label: "Rows saved", MIME: []string{"text/plain"}, Example: json.RawMessage(`"2"`)},
+				{Port: "updated_range", Label: "Updated range", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Sheet1!A14:D15"`)},
+				{Port: "spreadsheet_id", Label: "Spreadsheet ID", MIME: []string{"text/plain"}, Example: json.RawMessage(`"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"`)},
 				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{

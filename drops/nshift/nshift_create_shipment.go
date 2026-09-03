@@ -39,8 +39,8 @@ func init() {
 				{Port: "shipment", Label: "Shipment", Required: true, MIME: []string{"application/json"}},
 			},
 			Outputs: []core.Port{
-				{Port: "shipment_id", Label: "Shipment ID", MIME: []string{"text/plain"}},
-				{Port: "tracking_numbers", Label: "Tracking numbers", MIME: []string{"text/plain"}},
+				{Port: "shipment_id", Label: "Shipment ID", MIME: []string{"text/plain"}, Example: json.RawMessage(`"SHP-2026-004471"`)},
+				{Port: "tracking_numbers", Label: "Tracking numbers", MIME: []string{"text/plain"}, Example: json.RawMessage(`"00370724470000000018"`)},
 				{Port: "shipment", Label: "Shipment", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{

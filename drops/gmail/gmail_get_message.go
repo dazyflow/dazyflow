@@ -52,10 +52,10 @@ func init() {
 				// Friendly scalar pins instead of a JSON blob — same move as
 				// sheets append. The full flattened message is still EMITTED
 				// under "message" for run records/debugging, just not a pin.
-				{Port: "date", Label: "Date", MIME: []string{"text/plain"}},
-				{Port: "from", Label: "From", MIME: []string{"text/plain"}},
-				{Port: "subject", Label: "Subject", MIME: []string{"text/plain"}},
-				{Port: "body", Label: "Body", MIME: []string{"text/plain"}},
+				{Port: "date", Label: "Date", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Thu, 12 Feb 2026 09:12:04 +0100"`)},
+				{Port: "from", Label: "From", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Fortnox <faktura@fortnox.se>"`)},
+				{Port: "subject", Label: "Subject", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Faktura 4471"`)},
+				{Port: "body", Label: "Body", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Din faktura 4471 är nu tillgänglig."`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

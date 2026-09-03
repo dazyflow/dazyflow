@@ -50,9 +50,9 @@ func init() {
 				// (id, node_id, state, …) is still EMITTED under "meta" so run
 				// records keep it for debugging — it's just not a pin (same as
 				// gmail send / sheets append).
-				{Port: "issue_url", Label: "Issue link", MIME: []string{"text/plain"}},
-				{Port: "issue_number", Label: "Issue number", MIME: []string{"text/plain"}},
-				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
+				{Port: "issue_url", Label: "Issue link", MIME: []string{"text/plain"}, Example: json.RawMessage(`"https://github.com/dazyflow/dazyflow/issues/128"`)},
+				{Port: "issue_number", Label: "Issue number", MIME: []string{"text/plain"}, Example: json.RawMessage(`"128"`)},
+				{Port: "meta", Label: "Details", MIME: []string{"application/json"}, Example: json.RawMessage(`{"number":128,"html_url":"https://github.com/dazyflow/dazyflow/issues/128","id":2447108392,"node_id":"I_kwDOMv1cD84Ojd2o","state":"open"}`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",

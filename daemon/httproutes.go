@@ -241,6 +241,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/me/flows/{flow_id}/watch", h.requireAuth(flowapi.watchFlowMe))
 	mux.HandleFunc("GET /api/v1/me/flows/{flow_id}/references", h.requireAuth(secretsapi.listReferences))
 	mux.HandleFunc("GET /api/v1/me/flows/{flow_id}/input-fields", h.requireAuth(flowapi.listInputFields))
+	mux.HandleFunc("GET /api/v1/me/flows/{flow_id}/samples", h.requireAuth(flowapi.flowSamples))
 	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/restore",
 		h.requireAuth(idem.idempotencyMiddleware("/me/flows/{flow_id}/restore", flowapi.restoreFlowMe)))
 	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/duplicate",

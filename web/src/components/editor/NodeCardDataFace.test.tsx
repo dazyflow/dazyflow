@@ -105,6 +105,54 @@ describe("the card's data face", () => {
     expect(screen.getByText("No data yet")).toBeInTheDocument();
   });
 
+  it("shows the step's shipped example, badged, with nothing run", () => {
+    renderCard({
+      dataView: true,
+      manifest: {
+        id: "gmail_search_messages",
+        label: "Find emails",
+        outputs: [
+          {
+            port: "messages",
+            label: "Matching emails",
+            list: true,
+            example: [{ from: "faktura@fortnox.se", subject: "Faktura 4471" }],
+          },
+        ],
+      },
+    });
+    expect(screen.getByText("faktura@fortnox.se")).toBeInTheDocument();
+    // Badged as an example, and NOT as a real run — this is the whole reason
+    // showing synthetic data is safe.
+    expect(screen.getByText("Example")).toBeInTheDocument();
+    expect(screen.queryByText("From the last run")).toBeNull();
+    // No row count: "1 item" beside an example would read as a fact about
+    // the last run.
+    expect(screen.queryByText("1 item")).toBeNull();
+  });
+
+  it("lets a real value supersede the example on the same port", () => {
+    renderCard({
+      dataView: true,
+      manifest: {
+        id: "gmail_search_messages",
+        label: "Find emails",
+        outputs: [
+          {
+            port: "messages",
+            label: "Matching emails",
+            list: true,
+            example: [{ from: "faktura@fortnox.se" }],
+          },
+        ],
+      },
+      outputs: { messages: { data: [{ from: "real@nordkraft.se" }] } },
+    });
+    expect(screen.getByText("real@nordkraft.se")).toBeInTheDocument();
+    expect(screen.queryByText("faktura@fortnox.se")).toBeNull();
+    expect(screen.getByText("From the last run")).toBeInTheDocument();
+  });
+
   it("offers no fold on a drop whose only output is the passthrough pin", () => {
     renderCard({
       dataView: true,

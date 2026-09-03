@@ -51,9 +51,9 @@ func init() {
 				// Friendly scalar pins — same move as gmail_get_message. The
 				// full Notion page object is still EMITTED under "meta" for
 				// run records/debugging, just not a pin.
-				{Port: "title", Label: "Title", MIME: []string{"text/plain"}},
-				{Port: "url", Label: "Page URL", MIME: []string{"text/plain"}},
-				{Port: "id", Label: "Page ID", MIME: []string{"text/plain"}},
+				{Port: "title", Label: "Title", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Faktura 4471"`)},
+				{Port: "url", Label: "Page URL", MIME: []string{"text/plain"}, Example: json.RawMessage(`"https://www.notion.so/Faktura-4471-9f2ab7c4d1e0b7a3"`)},
+				{Port: "id", Label: "Page ID", MIME: []string{"text/plain"}, Example: json.RawMessage(`"9f2ab7c4-d1e0-b7a3-8f12-4471e0b7a39f"`)},
 				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{

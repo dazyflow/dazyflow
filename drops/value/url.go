@@ -53,9 +53,9 @@ func init() {
 				{Port: "url", Label: "URL", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				{Port: "out", Label: "URL", MIME: []string{"text/plain"}},
-				{Port: "host", Label: "Host", MIME: []string{"text/plain"}},
-				{Port: "path", Label: "Path", MIME: []string{"text/plain"}},
+				{Port: "out", Label: "URL", MIME: []string{"text/plain"}, Example: json.RawMessage(`"https://docs.dazyflow.app/guide/runners?ref=flow"`)},
+				{Port: "host", Label: "Host", MIME: []string{"text/plain"}, Example: json.RawMessage(`"docs.dazyflow.app"`)},
+				{Port: "path", Label: "Path", MIME: []string{"text/plain"}, Example: json.RawMessage(`"/guide/runners"`)},
 				{Port: "query", Label: "Query params", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
