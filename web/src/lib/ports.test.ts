@@ -9,6 +9,7 @@ import {
   inputHasRoom,
   mimeCompatible,
   pickPort,
+  spawnPort,
   portsConnectable,
   portKind,
   portCardinality,
@@ -84,6 +85,36 @@ describe("pickPort", () => {
   it("returns the fallback handle id when the drop has no ports", () => {
     expect(pickPort([], ["text/plain"], "in")).toBe("in");
     expect(pickPort(undefined, ["text/plain"], "out")).toBe("out");
+  });
+});
+
+describe("spawnPort", () => {
+  it("refuses to invent a port on a drop that has none on that side", () => {
+    // The bug this exists for: dragging off a step's output, picking Text from
+    // the palette, and getting a wire into "text_1.in". Text is a value source
+    // — no inputs at all — so that port does not exist. React Flow draws no
+    // edge for an unknown handle, so nothing appeared on the canvas to delete,
+    // while every autosave from then on came back "invalid graph: edge 0: node
+    // \"text_1\" (text) has no input port \"in\"" and the editor retried it
+    // on a timer. null means "place it unwired".
+    expect(spawnPort(undefined, ["text/plain"], false, "in")).toBeNull();
+    expect(spawnPort([], ["text/plain"], false, "in")).toBeNull();
+    expect(spawnPort(undefined, undefined, true, "out")).toBeNull();
+  });
+
+  it("lands a pass-pin drag on the new drop's pass pin", () => {
+    const inputs: Port[] = [
+      { port: "pass", label: "Pass-through" },
+      { port: "body", label: "Message" },
+    ];
+    expect(spawnPort(inputs, undefined, true, "in")).toBe("pass");
+    // Not a pass drag: the real input wins, as pickPort decides.
+    expect(spawnPort(inputs, undefined, false, "in")).toBe("body");
+  });
+
+  it("falls back to a data port when the new drop has no pass pin", () => {
+    const inputs: Port[] = [{ port: "url", mime: ["text/plain"] }];
+    expect(spawnPort(inputs, undefined, true, "in")).toBe("url");
   });
 });
 

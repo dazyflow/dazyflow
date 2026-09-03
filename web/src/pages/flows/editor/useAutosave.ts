@@ -13,8 +13,9 @@ const AUTOSAVE_DEBOUNCE_MS = 1500;
 
 // useAutosave owns when the editor writes, and whether it is allowed to.
 //
-// Almost all of its value is in the five guards, and every one exists to stop
-// the editor writing the wrong thing over the right thing:
+// Almost all of its value is in the six guards. Five exist to stop the editor
+// writing the wrong thing over the right thing; the last stops it writing the
+// same refused thing over and over:
 //
 //   loadFailed    the in-memory graph is the empty fallback, not the server's
 //   lockedRunID   a run is in flight and executes the SAVED graph
@@ -23,6 +24,8 @@ const AUTOSAVE_DEBOUNCE_MS = 1500;
 //                 autosaving then writes flow A's graph under flow B's id, which
 //                 is real data loss and has actually happened
 //   saving        a PUT is already in flight; don't race a second one
+//   rejected      the daemon refused this exact graph; retrying it on a timer
+//                 is a save loop that flashes the error banner, not a fix
 //
 // Guards are invisible when they work, which is exactly how they rot.
 // FlowEditorSave.test.tsx asserts the ABSENCE of a write for each, which is the
@@ -92,6 +95,15 @@ export function useAutosave({
   // Set when the initial load failed with anything other than a 404. A 404 is
   // the normal state of a flow that has never been saved, and must NOT block.
   const [loadFailed, setLoadFailed] = useState(false);
+  // Set when an autosave was REFUSED. Retrying does not make a rejected graph
+  // acceptable: `dirty` stays true, and the debounce effect re-arms the moment
+  // `saving` flips back, so the editor re-PUT the identical graph every 1.5s
+  // for as long as the tab was open. Each attempt cleared the error banner and
+  // then set it again, and that banner sits in the layout — so the canvas
+  // jumped up and down once a beat while nothing was being fixed. Hold off
+  // until the content changes; the Save button is never blocked, so the author
+  // can always ask again on purpose.
+  const [rejected, setRejected] = useState(false);
 
   const save = useCallback(
     async (autosave = false): Promise<boolean> => {
@@ -108,11 +120,15 @@ export function useAutosave({
       try {
         const res = await api.saveGraph(token, buildGraph(), autosave);
         setDirty(false);
+        setRejected(false);
         onSaved(res, autosave);
         return true;
       } catch (e) {
         const msg = (e as Error).message;
         onError(explainApiError(e, t));
+        // Only the unattended path stands down. A manual retry is the author
+        // asking, and it re-arms autosave by clearing this on success.
+        if (autosave) setRejected(true);
         if (
           isHTTPStatus(e, 409) ||
           isErrorCode(e, "conflict") ||
@@ -149,6 +165,7 @@ export function useAutosave({
     if (!canEdit || lockedRunID) return;
     if (previewing) return;
     if (loadFailed) return;
+    if (rejected) return;
     if (loadedID.current !== null && loadedID.current !== graphID) return;
     const handle = window.setTimeout(() => {
       void saveRef.current(true);
@@ -168,8 +185,18 @@ export function useAutosave({
     lockedRunID,
     previewing,
     loadFailed,
+    rejected,
     ...reArmOn,
   ]);
+
+  // Editing after a refusal is what lifts it: the graph is no longer the one
+  // the daemon rejected, so it is worth another attempt. Declared after the
+  // debounce effect so clearing the flag re-runs that effect on the next
+  // render rather than within this commit.
+  useEffect(() => {
+    setRejected(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [...reArmOn]);
 
   // Flush a pending edit when the page unloads (refresh, close, navigate).
   //

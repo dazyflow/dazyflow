@@ -91,7 +91,7 @@ import {
   setupDestination,
   type SetupNeed,
 } from "../../lib/requiredConnections";
-import { mimeCompatible, pickPort, portsConnectable, inputHasRoom, connectionHint, PASS_PORT } from "../../lib/ports";
+import { mimeCompatible, spawnPort, portsConnectable, inputHasRoom, connectionHint, PASS_PORT } from "../../lib/ports";
 import {
   canRedo as historyCanRedo,
   canUndo as historyCanUndo,
@@ -135,7 +135,6 @@ import type {
   GraphTrigger,
   LintIssue,
   Manifest,
-  Port,
   OAuthProviderStatus,
   Visibility,
 } from "../../types";
@@ -1436,22 +1435,29 @@ function EditorInner() {
 
   // Palette list filtered to drops that have a compatible port to wire to.
   // Dragging from an output wants drops with a matching input, and vice
-  // versa. Falls back to the full list if nothing matches, so the user is
-  // never stuck with an empty palette.
+  // versa. Falls back to every wireable drop if nothing matches on type, so
+  // the user is never stuck with an empty palette.
   const connectDrops = useMemo(() => {
     if (!connectFrom) return manifests;
     const wantInput = connectFrom.handleType === "source";
     const matches = manifests.filter((m) => {
-      const ports = wantInput
-        ? m.inputs?.length
-          ? m.inputs
-          : [{ port: "in" } as Port]
-        : m.outputs?.length
-        ? m.outputs
-        : [{ port: "out" } as Port];
+      const ports = wantInput ? m.inputs : m.outputs;
+      // Nothing declared on the side the wire needs means there is no port to
+      // land on — a value source (Text, Number) has no inputs at all. It used
+      // to be offered here against a synthesised "in"/"out", and picking it
+      // wired the drag to a port that does not exist: React Flow draws no edge
+      // for an unknown handle, so the wire was invisible and undeletable,
+      // while the daemon refused the graph ("has no input port") and the flow
+      // stopped saving. Drops whose ports are named by their own params
+      // (dynamic_ports) declare placeholder pins, so they still match above.
+      if (!ports?.length) return false;
       return ports.some((p) => mimeCompatible(p.mime, connectSourceMime));
     });
-    return matches.length ? matches : manifests;
+    // Fall back to everything that CAN be wired on this side rather than to
+    // the whole catalog: an empty palette is bad, but one offering steps that
+    // cannot take the wire is what produced the phantom port.
+    if (matches.length) return matches;
+    return manifests.filter((m) => (wantInput ? m.inputs : m.outputs)?.length);
   }, [connectFrom, connectSourceMime, manifests]);
 
   // Entry points (trigger drops) — what a brand-new flow's palette is seeded
@@ -1523,28 +1529,22 @@ function EditorInner() {
       ]);
       setParamsByID((p) => ({ ...p, [newID]: {} }));
       const isSource = from.handleType === "source";
-      // Dragging from a pass/exec pin is a pure "run this next" gesture, so it
-      // must land on the spawned drop's pass pin (triangle → triangle) — not on
-      // a data port pickPort would otherwise pick (its untyped source loosely
-      // matches any typed input, e.g. a trigger's timestamp into RSS's URL).
-      // Fall back to pickPort when the new drop has no matching pass pin (a
-      // value source, or a trigger spawned upstream).
       const fromPass = from.handleId === PASS_PORT;
-      const hasPassIn = m.inputs?.some((p) => p.port === PASS_PORT);
-      const hasPassOut = m.outputs?.some((p) => p.port === PASS_PORT);
+      // The pin on the SPAWNED drop that the wire lands on — null when it has
+      // none on that side, in which case the drop is placed unwired rather than
+      // wired to an invented port that is not on the node. See spawnPort.
+      const newPort = isSource
+        ? spawnPort(m.inputs, connectSourceMime, fromPass, "in")
+        : spawnPort(m.outputs, connectSourceMime, fromPass, "out");
+      if (newPort === null) {
+        setDirty(true);
+        return;
+      }
       const conn: Connection = {
         source: isSource ? from.nodeId : newID,
-        sourceHandle: isSource
-          ? from.handleId
-          : fromPass && hasPassOut
-            ? PASS_PORT
-            : pickPort(m.outputs, connectSourceMime, "out"),
+        sourceHandle: isSource ? from.handleId : newPort,
         target: isSource ? newID : from.nodeId,
-        targetHandle: isSource
-          ? fromPass && hasPassIn
-            ? PASS_PORT
-            : pickPort(m.inputs, connectSourceMime, "in")
-          : from.handleId,
+        targetHandle: isSource ? newPort : from.handleId,
       };
       setEdges((eds) =>
         addEdge({ ...conn, style: { stroke: "var(--accent)", strokeWidth: 1.5 } }, eds),

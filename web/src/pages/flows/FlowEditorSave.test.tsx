@@ -275,6 +275,32 @@ describe("editor autosave guards", () => {
     expect(saveGraph).not.toHaveBeenCalled();
   });
 
+  it("does not re-PUT a graph the daemon refused", async () => {
+    // A refusal is not a transient failure: retrying writes the identical
+    // rejected graph. `dirty` stays true after a failed save, and the effect
+    // re-armed the moment `saving` flipped back, so the editor PUT once every
+    // 1500ms for as long as the tab was open — each attempt clearing and
+    // re-setting the in-layout error banner, which made the whole canvas jump
+    // up and down about once a second. Reported in the wild as a flickering
+    // "invalid graph: edge 0: node \"text_1\" (text) has no input port \"in\"".
+    saveGraph.mockRejectedValue(
+      Object.assign(new Error("invalid graph: edge 0: node \"text_1\" (text) has no input port \"in\""), {
+        status: 400,
+      }),
+    );
+    loadGraph.mockResolvedValue(graphWithUnzonedSchedule());
+    mount();
+    await letAutosaveFire();
+    await awaitAutosave();
+    const attempts = saveGraph.mock.calls.length;
+    // Several debounce windows' worth of idle time: a loop would have written
+    // on every one of them.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(12_000);
+    });
+    expect(saveGraph.mock.calls.length).toBe(attempts);
+  });
+
   it("still autosaves after a 404 load, which means a genuinely new flow", async () => {
     // 404 is the one failure that does NOT block: a flow being created has no
     // server copy yet, so the empty in-memory graph IS the truth.

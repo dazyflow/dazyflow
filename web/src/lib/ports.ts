@@ -197,3 +197,31 @@ export function pickPort(
   if (loose) return loose.port;
   return (ports.find((p) => mimeCompatible(p.mime, otherMime)) ?? ports[0]).port;
 }
+
+// spawnPort picks the pin on a drop spawned by a drag off another drop's pin —
+// where the wire has to land on the NEW step. null means "nowhere": the drop
+// declares no ports on that side, so it must be placed unwired.
+//
+// That null is the whole point. pickPort's fallback names a port that may not
+// exist, which is fine where the caller already knows the drop has one, and a
+// lie here: a value source (Text, Number) has no inputs at all, so dragging off
+// an output and picking Text wired the graph to "text_1.in". React Flow draws
+// no edge for a handle the node does not have, so the wire was invisible and
+// undeletable, and every save from then on was refused by the daemon — a flow
+// that could not be saved and showed nothing to fix. Drops whose ports come
+// from their own params (dynamic_ports) declare placeholder pins, so they are
+// not this case.
+//
+// A drag off a pass/exec pin is a "run this next" gesture and must land on the
+// new drop's pass pin — not on a data port pickPort would otherwise choose,
+// since an untyped pass source loosely matches any typed input.
+export function spawnPort(
+  ports: Port[] | undefined,
+  otherMime: string[] | undefined,
+  fromPass: boolean,
+  fallback: string,
+): string | null {
+  if (!ports?.length) return null;
+  if (fromPass && ports.some((p) => p.port === PASS_PORT)) return PASS_PORT;
+  return pickPort(ports, otherMime, fallback);
+}
