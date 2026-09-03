@@ -113,6 +113,7 @@ import {
 } from "../../lib/edgeError";
 import { suggestNextDrops, topDropsByUsage } from "../../lib/suggest";
 import { explainApiError } from "../../lib/explainApiError";
+import { findStrayEdges } from "../../lib/strayEdges";
 import { lintMessage } from "./editor/lintMessage";
 import { buildTestEventSample } from "./editor/testEventSample";
 import {
@@ -1130,6 +1131,35 @@ function EditorInner() {
     // i18nLanguage is in the deps so a language switch renames the cards.
   }, [manifests, i18nLanguage]);
 
+  // Prune edges pointing at ports their steps haven't got. Deliberately after
+  // the back-fill above rather than in hydrateGraph: at graph-load time the
+  // drop catalog usually hasn't arrived, so every manifest is undefined and
+  // there is nothing to check against. Such an edge draws nothing, carries
+  // nothing, and makes the daemon refuse EVERY save — so a flow holding one
+  // cannot be saved and shows its author nothing to fix. See lib/strayEdges.
+  useEffect(() => {
+    if (manifests.length === 0 || nodes.length === 0) return;
+    const ports = new Map(
+      nodes.map((n) => [
+        n.id,
+        { manifest: n.data.manifest, disabled: disabledNodes.has(n.id) },
+      ]),
+    );
+    const stray = findStrayEdges(edges, ports);
+    if (stray.length === 0) return;
+    const dead = new Set(stray.map((s) => s.edge));
+    setEdges((eds) => eds.filter((e) => !dead.has(e)));
+    // The prune is a real change to the document, so it has to be saveable —
+    // otherwise the flow looks fixed and comes back broken on reload.
+    setDirty(true);
+    setConnHint(
+      t("editor.strayEdgesDropped", {
+        count: stray.length,
+        steps: [...new Set(stray.map((s) => s.reason.nodeID))].join(", "),
+      }),
+    );
+  }, [manifests, nodes, edges, disabledNodes, t]);
+
   // Publish the open flow's label to the top bar. Falls back to the
   // route id until the graph's display name loads. A dedicated
   // unmount-only cleanup clears it so the wordmark returns when the
@@ -1908,11 +1938,37 @@ function EditorInner() {
           data: { label: cn.data?.label ?? moduleID, moduleID, manifest },
         };
       });
+      // Ports are checked, not trusted: a payload can come from an older graph
+      // or another deployment where the drop had a port it no longer has, and
+      // pasting that edge would reintroduce an invisible wire that blocks
+      // every save (see lib/strayEdges). Only judged when a manifest is known
+      // and its ports are its own — same conditions the daemon applies.
+      const pasteHasPort = (
+        m: Manifest | undefined,
+        side: "inputs" | "outputs",
+        port: string | null | undefined,
+      ) => {
+        if (!m || m.dynamic_ports) return true;
+        const ports = m[side];
+        if (!ports) return true;
+        return ports.some((p) => p.port === (port ?? (side === "inputs" ? "in" : "out")));
+      };
+      // Built once, off the nodes already mapped above, rather than searching
+      // the payload per edge.
+      const manifestOfClipNode = new Map(
+        newNodes.map((n) => [n.id, n.data.manifest]),
+      );
       const newEdges = (payload.edges ?? [])
         .map((ed) => {
           const s = idMap.get(ed.source);
           const t = idMap.get(ed.target);
           if (!s || !t) return null;
+          if (
+            !pasteHasPort(manifestOfClipNode.get(s), "outputs", ed.sourceHandle) ||
+            !pasteHasPort(manifestOfClipNode.get(t), "inputs", ed.targetHandle)
+          ) {
+            return null;
+          }
           return {
             id: `${s}.${ed.sourceHandle ?? "out"}->${t}.${ed.targetHandle ?? "in"}`,
             source: s,
@@ -4933,11 +4989,15 @@ function EditorInner() {
                 depth. A whole-graph layout action belongs with zoom and
                 fit-view, and this cluster is pinned to the canvas, so it is
                 reachable at any width without scrolling the toolbar.
-                Disabled, not hidden, below 2 nodes so it stays discoverable. */}
+                Never disabled: it used to grey out below 2 nodes to stay
+                "discoverable", but the dimming it took to do that reads as
+                absent on a stroked outline glyph (see the note in app.css), so
+                the control disappeared exactly on the new flows whose author
+                had not found it yet. autoLayout is already a no-op under two
+                nodes, so the button can simply always be live. */}
             <ControlButton
               className="dz-tidy-control"
               onClick={autoLayout}
-              disabled={nodes.length < 2}
               title={t("editor.tidyTitle")}
               aria-label={t("editor.tidy")}
             >

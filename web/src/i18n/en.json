@@ -2130,7 +2130,9 @@
     "lintScriptMismatch": "This step runs its script with {{interpreter}}, but the step feeding it says the script is written in {{language}}. The step decides what actually runs, so set one of them to match the other.",
     "lintScriptUnrunnable": "This step is given a script that says it is {{language}} — a data format rather than a program, so a machine has nothing to run it with.",
     "dataView": "Data view",
-    "dataViewTitle": "Fold every card open to show what each step produces"
+    "dataViewTitle": "Fold every card open to show what each step produces",
+    "strayEdgesDropped_one": "Removed 1 connection that pointed at a port the step hasn't got ({{steps}}). It could never carry data and was blocking every save.",
+    "strayEdgesDropped_other": "Removed {{count}} connections that pointed at ports their steps haven't got ({{steps}}). They could never carry data and were blocking every save."
   },
   "iconUpload": {
     "upload": "Upload image"

@@ -10,6 +10,35 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Tidy vanished on flows with fewer than two steps.** It greyed out below
+  two nodes, deliberately, "so it stays discoverable" — but React Flow dims
+  its own controls through `fill-opacity`, which does nothing to an outline
+  glyph, so this button carried an `opacity: 0.4` instead. Forty percent on a
+  1px stroked icon over the pale canvas grid does not read as unavailable, it
+  reads as absent, and it disappeared precisely on the new flows whose author
+  had not found it yet. The control is never disabled now; `autoLayout`
+  already did nothing under two nodes, so there was never anything to guard
+  against. (Second report on this button — the first moved it out of the
+  scrolling toolbar into the pinned canvas cluster; both are now under test.)
+
+- **A flow could hold a connection that made every save fail, with nothing on
+  screen to fix.** An edge pointing at a port its step hasn't got draws
+  nothing (React Flow renders no wire for a handle that isn't there), carries
+  nothing, and is refused by the daemon — `edge 0: node "text_1" (text) has no
+  input port "in"` — so every autosave failed and moving a step was enough to
+  trigger one. `spawnPort` closed the path that created these, but left the
+  flows that already had one permanently stuck. The editor now prunes such
+  edges once it knows the drops' ports, says which step was involved, and
+  leaves the flow dirty so the repair is saved. The prune mirrors
+  `core.Validate`'s own exemptions — an uncatalogued step, a disabled step, or
+  one whose ports come from its params is never judged — so it cannot remove
+  an edge the daemon would have accepted. Two paths that could still create
+  one are closed as well: a wire into a step that declares no inputs is now
+  refused on the canvas, and paste checks ports instead of trusting the
+  clipboard.
+
 ## [0.34.0] - 2026-09-03
 
 ### Added

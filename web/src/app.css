@@ -5241,18 +5241,18 @@ button.warning:hover:not(:disabled) {
    glyphs are solid paths, so its stylesheet forces `fill: currentColor` on
    every svg inside a control button — which turns a stroked Lucide icon into
    a filled blob. Undo that here and size the icon like the built-in ones.
-   The disabled look also needs redoing: React Flow dims via `fill-opacity`,
-   which does nothing to an outline. */
+   No disabled rule here, deliberately. React Flow dims its own controls via
+   `fill-opacity`, which does nothing to an outline, so this button carried an
+   `opacity: 0.4` instead — and 40% on a 1px stroked glyph over the pale canvas
+   grid does not read as "dimmed", it reads as "not there". That is why Tidy
+   looked missing on flows with fewer than two steps. The button is never
+   disabled now (see FlowEditor). */
 .react-flow__controls .dz-tidy-control svg {
   width: 14px;
   max-width: 14px;
   height: 14px;
   max-height: 14px;
   fill: none;
-}
-.react-flow__controls .dz-tidy-control:disabled {
-  opacity: 0.4;
-  cursor: default;
 }
 
 /* Minimap — themed to match the canvas Controls (surface + border) rather

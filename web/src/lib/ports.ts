@@ -114,6 +114,14 @@ export function portsConnectable(
   targetInputs: Port[] | undefined,
   targetHandle: string | null | undefined,
 ): boolean {
+  // A target that declares its ports and declares NONE on this side cannot
+  // accept a wire at all — a value source (Text, Number) or a trigger. The
+  // permissive rule below is for pins nobody typed; this is a node with no pin
+  // to type. Saying yes here is how a graph ends up with an edge to
+  // "text_1.in", which draws nothing and blocks every save (see
+  // lib/strayEdges). An absent list means "no manifest", which stays
+  // permissive.
+  if (targetInputs?.length === 0) return false;
   const out = sourceOutputs?.find((p) => p.port === (sourceHandle ?? "out"));
   const inp = targetInputs?.find((p) => p.port === (targetHandle ?? "in"));
   if (!out || !inp) return true;

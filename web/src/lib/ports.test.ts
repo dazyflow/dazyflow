@@ -238,3 +238,28 @@ describe("inputHasRoom", () => {
     expect(inputHasRoom(undefined, "in", 1, false, false)).toBe(false);
   });
 });
+
+// A node that declares its ports and declares none on the target side cannot
+// take a wire at all — a value source (Text, Number) or a trigger. The
+// permissive rule for undeclared pins used to say yes here, which is how a
+// graph got an edge to "text_1.in": invisible on the canvas, and refused by
+// every save (see lib/strayEdges).
+describe("portsConnectable — a target with no inputs", () => {
+  const out = [{ port: "out", mime: ["text/plain"] }];
+
+  it("refuses a wire into a step that declares no inputs", () => {
+    expect(portsConnectable(out, "out", [], "in")).toBe(false);
+    expect(portsConnectable(out, "out", [], null)).toBe(false);
+  });
+
+  it("still allows a step with no MANIFEST (undefined, not empty)", () => {
+    // A runner or MCP step this client has no manifest for keeps the
+    // permissive treatment the server also gives it.
+    expect(portsConnectable(out, "out", undefined, "in")).toBe(true);
+  });
+
+  it("still allows an undeclared handle on a step that has inputs", () => {
+    // Comment nodes and exec pins rely on this.
+    expect(portsConnectable(out, "out", [{ port: "rows" }], null)).toBe(true);
+  });
+});

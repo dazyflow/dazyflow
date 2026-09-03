@@ -2130,7 +2130,9 @@
     "lintScriptMismatch": "Det här steget kör sitt skript med {{interpreter}}, men steget som matar det säger att skriptet är skrivet i {{language}}. Steget avgör vad som faktiskt körs, så ändra det ena så att det stämmer med det andra.",
     "lintScriptUnrunnable": "Det här steget får ett skript som sägs vara {{language}} — ett dataformat snarare än ett program, så en maskin har inget att köra det med.",
     "dataView": "Datavy",
-    "dataViewTitle": "Fäll upp alla kort för att se vad varje steg producerar"
+    "dataViewTitle": "Fäll upp alla kort för att se vad varje steg producerar",
+    "strayEdgesDropped_one": "Tog bort 1 koppling som pekade på en port som steget inte har ({{steps}}). Den kunde aldrig föra data och blockerade varje sparning.",
+    "strayEdgesDropped_other": "Tog bort {{count}} kopplingar som pekade på portar som stegen inte har ({{steps}}). De kunde aldrig föra data och blockerade varje sparning."
   },
   "iconUpload": {
     "upload": "Ladda upp bild"
