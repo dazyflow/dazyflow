@@ -59,6 +59,7 @@ import {
   AlignHorizontalDistributeCenter,
   AlignVerticalDistributeCenter,
   StickyNote,
+  Table2,
   LayoutGrid,
   ChevronLeft,
   ChevronRight,
@@ -330,6 +331,10 @@ function EditorInner() {
   // Saved with the graph (node.breakpoint). pausedAt is the node the live
   // run is currently holding after; stepping mirrors the run's step mode.
   const [breakpoints, setBreakpoints] = useState<Set<string>>(() => new Set());
+  // Data view: every card folds its header down to show what the step emits.
+  // A canvas-wide mode rather than per-card state, so one toggle answers
+  // "what is actually flowing through here?" for the whole graph.
+  const [dataView, setDataView] = useState(false);
   // Disabled steps: node IDs switched off. Saved with the graph
   // (node.disabled); at run time the engine skips them and everything
   // downstream (the skip cascade) — a setup-time aid.
@@ -2303,6 +2308,7 @@ function EditorInner() {
         wiredPlace,
         inlineEditable,
         outputs,
+        dataView,
         configErrors,
         setupNeeded,
         loopHint,
@@ -2337,6 +2343,7 @@ function EditorInner() {
           wiredPlace,
           inlineEditable,
           outputs,
+          dataView,
           configErrors,
           setupNeeded,
           loopHint,
@@ -2371,6 +2378,7 @@ function EditorInner() {
     connectedInputsByNode,
     connectedOutputsByNode,
     runOutputs,
+    dataView,
     configErrorsByNode,
     setupNeededByNode,
     loopHintByNode,
@@ -2567,6 +2575,10 @@ function EditorInner() {
             e.preventDefault();
             toggleBreakpoint();
           }
+          break;
+        case "v":
+          e.preventDefault();
+          setDataView((on) => !on);
           break;
       }
     };
@@ -3905,6 +3917,20 @@ function EditorInner() {
             >
               <StickyNote size={ICON.sm} />
               <span className="toolbar-label">{t("editor.addFrame")}</span>
+            </Button>
+            {/* Data view folds every card's header down at once, so a value
+                can be traced through the whole flow in one glance rather than
+                one card at a time. */}
+            <Button
+              variant="ghost"
+              className={"editor-dataview" + (dataView ? " on" : "")}
+              aria-pressed={dataView}
+              onClick={() => setDataView((v) => !v)}
+              title={`${t("editor.dataViewTitle")} — v`}
+              aria-label={t("editor.dataView")}
+            >
+              <Table2 size={ICON.sm} />
+              <span className="toolbar-label">{t("editor.dataView")}</span>
             </Button>
           </div>
 

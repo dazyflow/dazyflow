@@ -4262,7 +4262,10 @@ button.warning:hover:not(:disabled) {
   }
   .editor .inspector,
   .editor .canvas > .react-flow,
-  .dz-node {
+  .dz-node,
+  .dz-fold-data,
+  .dz-fold-lid,
+  .dz-fold-chev {
     transition: none;
   }
 }
@@ -4579,6 +4582,254 @@ button.warning:hover:not(:disabled) {
 /* Header row: icon next to the title block. The ports section sits
    below it spanning the full card width so its left/right columns line
    up with the card edges (not indented under the icon). */
+/* The fold (data face). The data panel grows above the header via the
+   grid 0fr->1fr idiom, which pushes the header down to exactly where it must
+   land; the header then rotates about its own bottom edge and is pulled back
+   up by its own height. No measured pixel values, so a card whose header
+   carries three chips folds as correctly as a bare one. */
+.dz-fold {
+  position: relative;
+  perspective: 1100px;
+}
+.dz-fold-data {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 420ms cubic-bezier(0.22, 0.68, 0.24, 1);
+}
+.dz-fold.open .dz-fold-data {
+  grid-template-rows: 1fr;
+}
+.dz-fold-data-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+.dz-fold-lid {
+  position: relative;
+  transform-origin: center bottom;
+  transform-style: preserve-3d;
+  transition: transform 500ms cubic-bezier(0.32, 0.9, 0.28, 1);
+}
+.dz-fold.open .dz-fold-lid {
+  transform: translateY(-100%) rotateX(-180deg);
+}
+.dz-fold-front,
+.dz-fold-back {
+  backface-visibility: hidden;
+}
+.dz-fold-front {
+  display: flex;
+  flex-direction: column;
+}
+.dz-fold-back {
+  position: absolute;
+  inset: 0;
+  transform: rotateX(180deg);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-1);
+  /* The crease: light catching the folded edge, so the seam reads as a fold
+     rather than as two unrelated blocks. */
+  border-top: 1px solid var(--accent);
+  opacity: 0.85;
+}
+.dz-fold-back-name::after {
+  content: attr(data-name);
+}
+.dz-fold-back-name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dz-fold-chev {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--space-5);
+  height: var(--space-5);
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-1);
+  background: none;
+  color: var(--faint);
+  cursor: pointer;
+  transition:
+    color 140ms,
+    background 140ms,
+    transform 300ms;
+}
+.dz-fold-chev:hover {
+  color: var(--accent);
+  background: var(--surface-2);
+}
+.dz-fold.open .dz-fold-chev {
+  transform: rotate(180deg);
+  color: var(--accent);
+}
+
+/* The data face itself — one rendering per port kind. Its own well (the code
+   surface) so it reads as data rather than as more card chrome. */
+.dz-face {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+  padding: var(--space-2);
+  background: var(--code-bg);
+  border: 1px solid var(--surface-3);
+  border-radius: var(--r-2);
+}
+.dz-face-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1h);
+  flex-wrap: wrap;
+}
+.dz-face-prov {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  padding: var(--space-0) var(--space-1h);
+  border-radius: var(--r-3);
+  white-space: nowrap;
+}
+.dz-face-prov-run {
+  color: var(--status-completed);
+  border: 1px solid var(--status-completed);
+}
+.dz-face-prov-none {
+  color: var(--faint);
+  border: 1px dashed var(--border-strong);
+}
+.dz-face-tabs {
+  display: flex;
+  gap: var(--space-0);
+  margin-left: auto;
+}
+.dz-face-tab {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  padding: var(--space-0) var(--space-1h);
+  border: 1px solid transparent;
+  border-radius: var(--r-1);
+  background: none;
+  color: var(--faint);
+  cursor: pointer;
+}
+.dz-face-tab:hover {
+  color: var(--ink-soft);
+}
+.dz-face-tab.active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.dz-face-body {
+  min-width: 0;
+}
+.dz-face-scroll {
+  overflow-x: auto;
+}
+.dz-face-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+}
+.dz-face-table th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--json-key);
+  padding: 0 var(--space-2) var(--space-1) 0;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--surface-3);
+}
+.dz-face-table td {
+  padding: var(--space-1) var(--space-2) var(--space-1) 0;
+  color: var(--code-fg);
+  white-space: nowrap;
+  border-bottom: 1px solid var(--surface-2);
+}
+.dz-face-table tr:last-child td {
+  border-bottom: 0;
+}
+.dz-face-more {
+  color: var(--faint);
+}
+.dz-face-kv {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0);
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+}
+.dz-face-kv-row {
+  display: flex;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.dz-face-kv dt {
+  color: var(--json-key);
+  flex: none;
+}
+.dz-face-kv dd {
+  margin: 0;
+  color: var(--json-string);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dz-face-kv dd.num {
+  color: var(--json-number);
+}
+.dz-face-text {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  line-height: 1.5;
+  color: var(--code-fg);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.dz-face-file {
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+}
+.dz-face-file-name {
+  color: var(--code-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dz-face-file-mime {
+  color: var(--faint);
+}
+.dz-face-bool {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--ink);
+}
+.dz-face-empty {
+  margin: 0;
+  font-size: var(--text-2xs);
+  color: var(--faint);
+}
+.dz-face-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--faint);
+}
 .dz-node-main {
   display: flex;
   /* Title is a single line now (no sub-text), so center it against the
@@ -5018,6 +5269,10 @@ button.warning:hover:not(:disabled) {
 /* Toolbar breakpoint toggle reads as "armed" when active. */
 .editor-toolbar .editor-bp.on {
   color: var(--danger);
+}
+/* Data view toggle: accent while every card is folded open. */
+.editor-toolbar .editor-dataview.on {
+  color: var(--accent);
 }
 /* Floating "Inspect" button (small screens): opens the inspector overlay.
    Upper-right of the canvas, primary purple so it's clearly the way in. */

@@ -636,7 +636,7 @@
     "useTemplate": "Använd den här mallen",
     "forking": "Skapar…",
     "notSignedIn": "Inte inloggad.",
-    "workspaceLoading": "Ett \u00f6gonblick \u2014 din arbetsyta h\u00e5ller p\u00e5 att \u00f6ppnas. F\u00f6rs\u00f6k igen om en sekund.",
+    "workspaceLoading": "Ett ögonblick — din arbetsyta håller på att öppnas. Försök igen om en sekund.",
     "forkFailed": "Kunde inte skapa \"{{title}}\": {{error}}",
     "integrationsUsed": "appar som används",
     "filteredByTemplate": "Visar: {{title}}",
@@ -1570,7 +1570,18 @@
     "portValueOnly": "tar ett värde, inte en fil",
     "continueOnError": "Kan inte stoppa körningen",
     "continueOnErrorHint": "Om det här steget misslyckas fortsätter körningen och slutför sina andra grenar. Allt efter det hoppas ändå över.",
-    "languageHint": "Skrivet i {{lang}}."
+    "languageHint": "Skrivet i {{lang}}.",
+    "face": {
+      "fromRun": "Från senaste körningen",
+      "noData": "Inga data ännu",
+      "emptyHint": "Kör steget för att se vad det producerar.",
+      "items_one": "{{count}} post",
+      "items_other": "{{count}} poster",
+      "more": "+{{count}} till",
+      "show": "Visa vad {{name}} producerar",
+      "hide": "Dölj vad {{name}} producerar",
+      "toggleTitle": "Fäll ner rubriken för att se stegets utdata"
+    }
   },
   "issueKey": {
     "title": "Skapa API-nyckel",
@@ -2072,7 +2083,9 @@
     "ctxContinueOnError": "Fel här stoppar inte körningen",
     "ctxContinueOnErrorHint": "Körningen fortsätter och slutför sina andra grenar. Steg efter det här hoppas ändå över — det finns ingen utdata att mata dem med.",
     "lintScriptMismatch": "Det här steget kör sitt skript med {{interpreter}}, men steget som matar det säger att skriptet är skrivet i {{language}}. Steget avgör vad som faktiskt körs, så ändra det ena så att det stämmer med det andra.",
-    "lintScriptUnrunnable": "Det här steget får ett skript som sägs vara {{language}} — ett dataformat snarare än ett program, så en maskin har inget att köra det med."
+    "lintScriptUnrunnable": "Det här steget får ett skript som sägs vara {{language}} — ett dataformat snarare än ett program, så en maskin har inget att köra det med.",
+    "dataView": "Datavy",
+    "dataViewTitle": "Fäll upp alla kort för att se vad varje steg producerar"
   },
   "iconUpload": {
     "upload": "Ladda upp bild"

@@ -162,8 +162,11 @@ export type DazyNodeData = {
   // every card collapsed — and align/distribute use the deselected height.
   inlineEditable?: boolean;
   // This node's output values from the latest run (#10), keyed by port —
-  // shown as a hover-peek on each output port.
+  // shown as a hover-peek on each output port, and on the card's data face.
   outputs?: Record<string, Ref>;
+  // Canvas-wide Data view: every card folds its header down to show what the
+  // step emits. A card's own chevron overrides this until the toggle moves.
+  dataView?: boolean;
   // Required values this drop is still missing (#13), each keyed by the
   // param/port it concerns. An error whose `key` is an input port marks that
   // pin red on the card; the rest (pure-literal params with no pin, a loop's

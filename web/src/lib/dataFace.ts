@@ -1,0 +1,157 @@
+// SPDX-FileCopyrightText: 2026 Angels' Ware
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+import type { Port, Ref } from "../types";
+
+// Shaping a step's output for the card's data face — the panel uncovered when
+// the header folds down.
+//
+// The card is 200px wide and the run may have produced a thousand rows, so
+// everything here caps hard: this is the glance, and the inspector is where
+// the whole value lives. Pure functions so the caps are testable without a
+// canvas.
+
+export const MAX_ROWS = 3;
+export const MAX_COLUMNS = 4;
+export const MAX_CELL = 28;
+export const MAX_FIELDS = 4;
+export const MAX_TEXT_LINES = 5;
+export const MAX_TEXT = 220;
+
+export type DataFaceView =
+  | { kind: "table"; columns: string[]; rows: string[][]; total: number; moreColumns: number }
+  | { kind: "record"; fields: { key: string; value: string; numeric: boolean }[]; more: number }
+  | { kind: "text"; text: string; truncated: boolean }
+  | { kind: "file"; name: string; mime?: string }
+  | { kind: "bool"; value: boolean }
+  | { kind: "empty" };
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+// cell renders one value on a single line. Nested objects collapse to their
+// JSON so a column of them still shows SOMETHING recognisable — a row whose
+// every cell reads "[object Object]" is worse than no table at all.
+export function cell(v: unknown, max = MAX_CELL): string {
+  let s: string;
+  if (v === null || v === undefined) s = "—";
+  else if (typeof v === "string") s = v;
+  else {
+    try {
+      s = JSON.stringify(v) ?? String(v);
+    } catch {
+      s = String(v);
+    }
+  }
+  s = s.replace(/\s+/g, " ").trim();
+  if (s === "") s = "—";
+  return s.length > max ? s.slice(0, max) + "…" : s;
+}
+
+// columnsOf unions the keys of the sampled rows rather than reading only the
+// first: a list whose first record happens to omit an optional field would
+// otherwise hide that column for every row behind it.
+export function columnsOf(rows: Record<string, unknown>[]): string[] {
+  const seen: string[] = [];
+  for (const row of rows) {
+    for (const k of Object.keys(row)) {
+      if (!seen.includes(k)) seen.push(k);
+    }
+  }
+  return seen;
+}
+
+// fileNameOf reads the display name of an output held by reference — a blob in
+// storage rather than an inline value. "Faktura.pdf" beats the ref URI.
+function fileNameOf(ref: Ref): string | undefined {
+  if (!ref.ref) return undefined;
+  const base = ref.ref.replace(/^[a-z]+:\/\//, "").split("/").pop();
+  return base || undefined;
+}
+
+// dataFaceView picks the rendering for one port's value. An absent, blank or
+// empty value is "empty" rather than a rendering of nothing: the card then
+// says what the port WILL carry, which is the whole point of a face you can
+// open before a first run.
+export function dataFaceView(ref: Ref | undefined): DataFaceView {
+  if (!ref) return { kind: "empty" };
+
+  const v = ref.data;
+
+  if (v === undefined || v === null) {
+    const name = fileNameOf(ref);
+    return name ? { kind: "file", name, mime: ref.mime } : { kind: "empty" };
+  }
+
+  if (typeof v === "boolean") return { kind: "bool", value: v };
+
+  if (Array.isArray(v)) {
+    const records = v.filter(isRecord);
+    // A list of records is a table; a list of anything else (strings, numbers)
+    // has no columns to name, so it reads better as lines of text.
+    if (records.length === v.length && records.length > 0) {
+      const sample = records.slice(0, MAX_ROWS);
+      const all = columnsOf(sample);
+      const columns = all.slice(0, MAX_COLUMNS);
+      return {
+        kind: "table",
+        columns,
+        rows: sample.map((r) => columns.map((c) => cell(r[c]))),
+        total: v.length,
+        moreColumns: all.length - columns.length,
+      };
+    }
+    if (v.length === 0) return { kind: "empty" };
+    return textView(v.map((x) => cell(x, MAX_TEXT)).join("\n"));
+  }
+
+  if (isRecord(v)) {
+    const keys = Object.keys(v);
+    return {
+      kind: "record",
+      fields: keys.slice(0, MAX_FIELDS).map((k) => ({
+        key: k,
+        value: cell(v[k]),
+        numeric: typeof v[k] === "number",
+      })),
+      more: Math.max(0, keys.length - MAX_FIELDS),
+    };
+  }
+
+  if (typeof v === "string") return v.trim() === "" ? { kind: "empty" } : textView(v);
+
+  return textView(String(v));
+}
+
+function textView(raw: string): DataFaceView {
+  const lines = raw.split("\n");
+  let text = lines.slice(0, MAX_TEXT_LINES).join("\n");
+  let truncated = lines.length > MAX_TEXT_LINES;
+  if (text.length > MAX_TEXT) {
+    text = text.slice(0, MAX_TEXT);
+    truncated = true;
+  }
+  return { kind: "text", text, truncated };
+}
+
+// facePorts are the output ports worth a tab. The passthrough pin carries the
+// input untouched, so it is never what someone opened the face to look at.
+export function facePorts(outputs: Port[] | undefined): Port[] {
+  return (outputs ?? []).filter((p) => p.port !== "pass");
+}
+
+// firstPortWithValue is the tab to open on: the first port that actually
+// produced something, so a router's empty branch does not greet you with an
+// empty panel while its populated one sits behind a tab.
+export function firstPortWithValue(
+  ports: Port[],
+  outputs: Record<string, Ref> | undefined,
+): string | undefined {
+  if (!ports.length) return undefined;
+  const withValue = ports.find((p) => {
+    const ref = outputs?.[p.port];
+    return ref !== undefined && dataFaceView(ref).kind !== "empty";
+  });
+  return (withValue ?? ports[0]).port;
+}

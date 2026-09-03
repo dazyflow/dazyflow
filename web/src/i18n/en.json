@@ -636,7 +636,7 @@
     "useTemplate": "Use this template",
     "forking": "Creating…",
     "notSignedIn": "Not signed in.",
-    "workspaceLoading": "Just a moment \u2014 still opening your workspace. Try again in a second.",
+    "workspaceLoading": "Just a moment — still opening your workspace. Try again in a second.",
     "forkFailed": "Couldn't create \"{{title}}\": {{error}}",
     "integrationsUsed": "apps used",
     "adminBlocked_one": "Needs {{names}}, which isn't set up on this Dazyflow yet.",
@@ -1570,7 +1570,18 @@
     "portValueOnly": "takes a value, not a file",
     "continueOnError": "Can't fail the run",
     "continueOnErrorHint": "If this step fails the run carries on and finishes its other branches. Anything after it is still skipped.",
-    "languageHint": "Written in {{lang}}."
+    "languageHint": "Written in {{lang}}.",
+    "face": {
+      "fromRun": "From the last run",
+      "noData": "No data yet",
+      "emptyHint": "Run this step to see what it produces.",
+      "items_one": "{{count}} item",
+      "items_other": "{{count}} items",
+      "more": "+{{count}} more",
+      "show": "Show what {{name}} produces",
+      "hide": "Hide what {{name}} produces",
+      "toggleTitle": "Fold the header down to see this step's output"
+    }
   },
   "issueKey": {
     "title": "Issue API key",
@@ -2072,7 +2083,9 @@
     "ctxContinueOnError": "Failing here doesn't fail the run",
     "ctxContinueOnErrorHint": "The run carries on and finishes its other branches. Steps after this one are still skipped — there's no output to feed them.",
     "lintScriptMismatch": "This step runs its script with {{interpreter}}, but the step feeding it says the script is written in {{language}}. The step decides what actually runs, so set one of them to match the other.",
-    "lintScriptUnrunnable": "This step is given a script that says it is {{language}} — a data format rather than a program, so a machine has nothing to run it with."
+    "lintScriptUnrunnable": "This step is given a script that says it is {{language}} — a data format rather than a program, so a machine has nothing to run it with.",
+    "dataView": "Data view",
+    "dataViewTitle": "Fold every card open to show what each step produces"
   },
   "iconUpload": {
     "upload": "Upload image"

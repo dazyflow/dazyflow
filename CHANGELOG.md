@@ -10,6 +10,22 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Added
+
+- **A step card now folds open to show what the step produces.** Knowing what
+  comes out of a step meant running the flow and reading the run page, so
+  wiring the next step was guesswork until the first real run. The card's
+  header now folds down about its own bottom edge and uncovers a data panel:
+  a table for a list of records, a key–value list for one record, the first
+  lines of text, a file's name — whichever the port carries — with a tab per
+  output port so a router's two branches are read separately. The step's name
+  travels down with the fold and captions its own data. Ports stay on their
+  rows throughout, so no wire moves sideways. **Data view** in the toolbar (or
+  `v`) folds every card at once, which is how you trace one value through the
+  whole flow; a card's own chevron overrides it for that card. The panel shows
+  values from the latest run in this editor session — a step that has not run
+  says so rather than showing an empty box.
+
 ### Fixed
 
 - **Swedish went missing across the step catalogue, and nothing said so.**

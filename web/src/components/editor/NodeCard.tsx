@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { memo, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { Handle, Position, useStore, type NodeProps } from "@xyflow/react";
-import { AlertTriangle, Braces, Check, ChevronRight, Database, FileCode, FileText, Plug, Repeat, ShieldOff, Terminal, Unplug, X } from "lucide-react";
+import { AlertTriangle, Braces, Check, ChevronDown, ChevronRight, Database, FileCode, FileText, Plug, Repeat, ShieldOff, Terminal, Unplug, X } from "lucide-react";
 import i18n from "../../i18n";
 import { portTypeLabel } from "../../lib/ports";
 import { telFieldFlag, regionDisplayName } from "../../lib/phoneFlag";
@@ -29,6 +29,8 @@ import {
 import { JsonEditor, isInvalidJSON } from "../ui/JsonEditor";
 import { Button } from "../ui/Button";
 import { GeoPointField } from "../fields/GeoPointField";
+import { NodeDataFace } from "./NodeDataFace";
+import { facePorts, firstPortWithValue } from "../../lib/dataFace";
 
 // PICKER_FORMATS are the string-param formats whose value is an opaque
 // resource ID chosen from a dropdown. On the card they render read-only as
@@ -134,6 +136,37 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
   // they emit. Sources/triggers declare none and fall back to the bare
   // "in" dot below, so we don't splatter a meaningless "in" label on them.
   const hasDeclaredInputs = !!d.manifest?.inputs?.length;
+
+  // The data face: the header folds down to uncover what this step emits.
+  // `dataView` is the canvas-wide toggle; a chevron click overrides it for
+  // one card until the toggle moves again, so "show me everything" and "show
+  // me this one" don't fight over the same state.
+  const faceOut = facePorts(outputs);
+  const [faceOverride, setFaceOverride] = useState<boolean | null>(null);
+  const [facePort, setFacePort] = useState<string | undefined>(undefined);
+  useEffect(() => setFaceOverride(null), [d.dataView]);
+  const faceOpen = faceOut.length > 0 && (faceOverride ?? d.dataView ?? false);
+  const activePort = facePort ?? firstPortWithValue(faceOut, d.outputs) ?? "";
+  // Rendered on whichever face the viewer is looking at — the header while
+  // shut, the folded strip once open. One copy, so the toggle is never a
+  // keyboard stop on a face that is turned away.
+  const foldToggle = faceOut.length > 0 && (
+    <button
+      type="button"
+      className="dz-fold-chev nodrag"
+      aria-expanded={faceOpen}
+      aria-label={i18n.t(faceOpen ? "nodeCard.face.hide" : "nodeCard.face.show", {
+        name: d.label || d.moduleID,
+      })}
+      title={i18n.t("nodeCard.face.toggleTitle")}
+      onClick={(e) => {
+        e.stopPropagation();
+        setFaceOverride(!faceOpen);
+      }}
+    >
+      <ChevronDown size={ICON.sm} strokeWidth={2.2} />
+    </button>
+  );
 
   // Inline default editing (#7): on the SELECTED card, a compact field for
   // each input PORT that maps to a primitive param and isn't currently
@@ -365,73 +398,118 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
         />
       )}
 
-      <div className="dz-node-main">
-        <DropIcon
-          icon={d.manifest?.icon}
-          category={d.manifest?.category}
-          brandColor={d.manifest?.color}
-          brandLogo={d.manifest?.brand_logo}
-          glyphSize={ICON.md}
-        />
-        <div className="dz-node-body">
-          <div className="label">{d.label}</div>
-          {d.manifest?.subtitle && (
-            <div className="dz-node-subtitle">
-              {dropSubtitle(d.manifest, i18n.language)}
+      {/* The fold: the data panel grows above the header, and the header
+          rotates about its own bottom edge to land back on top of the space
+          it vacated — face-down, showing the step's name as the caption for
+          its own output. The ports below never move sideways, so no wire
+          geometry changes. */}
+      <div className={"dz-fold" + (faceOpen ? " open" : "")}>
+        <div className="dz-fold-data">
+          <div className="dz-fold-data-inner">
+            {/* Mounted only while open. A table in every card on the canvas
+                is real work for the memoised card list, and the lid covers
+                this space on the way back up. */}
+            {faceOpen && (
+              <NodeDataFace
+                ports={faceOut}
+                outputs={d.outputs}
+                active={activePort}
+                onSelect={setFacePort}
+              />
+            )}
+          </div>
+        </div>
+        <div className="dz-fold-lid">
+          <div className="dz-fold-front">
+            <div className="dz-node-main">
+              <DropIcon
+                icon={d.manifest?.icon}
+                category={d.manifest?.category}
+                brandColor={d.manifest?.color}
+                brandLogo={d.manifest?.brand_logo}
+                glyphSize={ICON.md}
+              />
+              <div className="dz-node-body">
+                <div className="label">{d.label}</div>
+                {d.manifest?.subtitle && (
+                  <div className="dz-node-subtitle">
+                    {dropSubtitle(d.manifest, i18n.language)}
+                  </div>
+                )}
+                {/* A step that leaves the daemon says so, on the canvas.
+                    This is the one place it has to be visible: wiring a secret into
+                    a step is the moment someone should know it is being sent to
+                    hardware the org runs, and the palette is long gone by then. */}
+                {isRunnerStep(d.moduleID) && (
+                  <div
+                    className="dz-node-chip dz-node-runner"
+                    title={i18n.t("runners.onYourHardwareHint", {
+                      name: runnerTargetOf(d.params) || i18n.t("runners.noTargetYet"),
+                    })}
+                  >
+                    <Plug size={ICON.xs} strokeWidth={2.2} />
+                    {runnerTargetOf(d.params) || i18n.t("runners.noTargetYet")}
+                  </div>
+                )}
+                {/* Stateful drops (RSS dedupe, poll watermarks) show a subtle "keeps
+                    state" chip so an empty output reads as memory, not breakage —
+                    and it signals the right-click "Reset state" action exists. */}
+                {d.manifest?.node_state && (
+                  <div
+                    title={nodeStateText(
+                      d.manifest.node_state.reset_hint || d.manifest.node_state.label,
+                      i18n.language,
+                    )}
+                    className="dz-node-chip"
+                  >
+                    <Repeat size={ICON.xs} strokeWidth={2.2} />
+                    {nodeStateText(d.manifest.node_state.label, i18n.language)}
+                  </div>
+                )}
+                {/* What the text on this node is written in. A Text node holding a
+                    SQL query and one holding an email body are different nodes to
+                    anyone reading the flow, and without this they look identical. */}
+                {language.label && (
+                  <div
+                    className="dz-node-chip dz-node-lang"
+                    title={i18n.t("nodeCard.languageHint", { lang: language.label })}
+                  >
+                    <LangGlyphIcon glyph={glyphFor(language.value)} />
+                    {language.label}
+                  </div>
+                )}
+                {/* A step whose failure does not fail the run. Worth a chip for the
+                    same reason the runner one is: someone reading the flow to work
+                    out why a run went green needs to see which steps could not have
+                    turned it red. */}
+                {d.continueOnError && (
+                  <div className="dz-node-chip dz-node-keepgoing" title={i18n.t("nodeCard.continueOnErrorHint")}>
+                    <ShieldOff size={ICON.xs} strokeWidth={2.2} />
+                    {i18n.t("nodeCard.continueOnError")}
+                  </div>
+                )}
+              </div>
+              {!faceOpen && foldToggle}
             </div>
-          )}
-          {/* A step that leaves the daemon says so, on the canvas.
-              This is the one place it has to be visible: wiring a secret into
-              a step is the moment someone should know it is being sent to
-              hardware the org runs, and the palette is long gone by then. */}
-          {isRunnerStep(d.moduleID) && (
-            <div
-              className="dz-node-chip dz-node-runner"
-              title={i18n.t("runners.onYourHardwareHint", {
-                name: runnerTargetOf(d.params) || i18n.t("runners.noTargetYet"),
-              })}
-            >
-              <Plug size={ICON.xs} strokeWidth={2.2} />
-              {runnerTargetOf(d.params) || i18n.t("runners.noTargetYet")}
-            </div>
-          )}
-          {/* Stateful drops (RSS dedupe, poll watermarks) show a subtle "keeps
-              state" chip so an empty output reads as memory, not breakage —
-              and it signals the right-click "Reset state" action exists. */}
-          {d.manifest?.node_state && (
-            <div
-              title={nodeStateText(
-                d.manifest.node_state.reset_hint || d.manifest.node_state.label,
-                i18n.language,
-              )}
-              className="dz-node-chip"
-            >
-              <Repeat size={ICON.xs} strokeWidth={2.2} />
-              {nodeStateText(d.manifest.node_state.label, i18n.language)}
-            </div>
-          )}
-          {/* What the text on this node is written in. A Text node holding a
-              SQL query and one holding an email body are different nodes to
-              anyone reading the flow, and without this they look identical. */}
-          {language.label && (
-            <div
-              className="dz-node-chip dz-node-lang"
-              title={i18n.t("nodeCard.languageHint", { lang: language.label })}
-            >
-              <LangGlyphIcon glyph={glyphFor(language.value)} />
-              {language.label}
-            </div>
-          )}
-          {/* A step whose failure does not fail the run. Worth a chip for the
-              same reason the runner one is: someone reading the flow to work
-              out why a run went green needs to see which steps could not have
-              turned it red. */}
-          {d.continueOnError && (
-            <div className="dz-node-chip dz-node-keepgoing" title={i18n.t("nodeCard.continueOnErrorHint")}>
-              <ShieldOff size={ICON.xs} strokeWidth={2.2} />
-              {i18n.t("nodeCard.continueOnError")}
-            </div>
-          )}
+          </div>
+          {/* The lid's reverse. The step's name travels down with the fold so
+              the data above it is never anonymous, and the strip doubles as
+              the divider from the ports below. */}
+          <div className="dz-fold-back">
+            <DropIcon
+              icon={d.manifest?.icon}
+              category={d.manifest?.category}
+              brandColor={d.manifest?.color}
+              brandLogo={d.manifest?.brand_logo}
+              glyphSize={ICON.xs}
+            />
+            {/* The name rides on a data attribute and is drawn by CSS, not
+                written as a text node: the front face already carries the
+                step's real heading, and a second copy would be a duplicate
+                for anything reading the card by its text. */}
+            <span className="dz-fold-back-name" data-name={d.label} />
+            {faceOpen && foldToggle}
+          </div>
         </div>
       </div>
 
