@@ -4636,6 +4636,20 @@ button.warning:hover:not(:disabled) {
 .dz-fold-back-name::after {
   content: attr(data-name);
 }
+/* The strip borrows its height from the front face, and on a single-line
+   header (a bare trigger: icon and name, no subtitle or chips) that height is
+   exactly the 28px icon chip — so the icon sat flush against the crease above
+   it and against the strip's bottom edge, with no margin either side. The
+   strip is a caption rather than a second header, so its icon is the compact
+   one it already asks for (ICON.xs): it now sits inside the strip on every
+   card instead of filling the short ones edge to edge.
+
+   Scoped under .dz-node to outrank the `.dz-node .icon` chip size, which is
+   an equally specific selector further down the sheet. */
+.dz-node .dz-fold-back .icon {
+  width: var(--space-4);
+  height: var(--space-4);
+}
 .dz-fold-back-name {
   flex: 1;
   min-width: 0;
@@ -4678,7 +4692,9 @@ button.warning:hover:not(:disabled) {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  margin-bottom: var(--space-2);
+  /* The gap down to the folded-over header strip. --space-3 matches the
+     card's own padding, so the data well is not jammed against the crease. */
+  margin-bottom: var(--space-3);
   padding: var(--space-2);
   background: var(--code-bg);
   border: 1px solid var(--surface-3);
