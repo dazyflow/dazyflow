@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.33.1] - 2026-09-03
+
 ### Changed
 
 - **Show all data sits in the data panel's top-right corner.** It used to
