@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.34.0] - 2026-09-03
+
 ### Added
 
 - **A run's result is a table when the run produced a table.** The run-detail
