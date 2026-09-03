@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.32.1] - 2026-09-03
+
 ### Added
 
 - **A step's data opens in a dialog for reading.** **Show all data** in the
