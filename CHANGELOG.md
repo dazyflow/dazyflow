@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-09-03
+
 ### Added
 
 - **A step can say what it produces before it has ever run.** Building a flow
