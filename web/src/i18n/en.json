@@ -1581,7 +1581,9 @@
       "more": "+{{count}} more",
       "show": "Show what {{name}} produces",
       "hide": "Hide what {{name}} produces",
-      "toggleTitle": "Fold the header down to see this step's output"
+      "toggleTitle": "Show what this step produces",
+      "expand": "Show all data",
+      "modalTitle": "{{name}} — output"
     }
   },
   "issueKey": {

@@ -3,13 +3,14 @@
 
 import type { Port, Ref } from "../types";
 
-// Shaping a step's output for the card's data face — the panel uncovered when
-// the header folds down.
+// Shaping a step's output for the card's data face — the panel that expands
+// below the header — and for the dialog behind its "show all" button.
 //
 // The card is 200px wide and the run may have produced a thousand rows, so
-// everything here caps hard: this is the glance, and the inspector is where
-// the whole value lives. Pure functions so the caps are testable without a
-// canvas.
+// the card caps hard: it is the glance. The same shaping serves the dialog
+// with the caps lifted (see DataFaceCaps), so a table reads as a table on
+// both surfaces and only the truncation differs. Pure functions, so every cap
+// is testable without a canvas.
 
 export const MAX_ROWS = 3;
 export const MAX_COLUMNS = 4;
@@ -17,6 +18,41 @@ export const MAX_CELL = 28;
 export const MAX_FIELDS = 4;
 export const MAX_TEXT_LINES = 5;
 export const MAX_TEXT = 220;
+
+// How much of a value a surface renders. The caps above are the card's, and
+// they are deliberately brutal — three rows in 200px is a glance, not a read.
+// The dialog is a reading surface with its own scroll, so it needs the same
+// shaping (a table is still a table) with the truncation lifted.
+export type DataFaceCaps = {
+  rows: number;
+  columns: number;
+  cell: number;
+  fields: number;
+  textLines: number;
+  text: number;
+};
+
+export const GLANCE_CAPS: DataFaceCaps = {
+  rows: MAX_ROWS,
+  columns: MAX_COLUMNS,
+  cell: MAX_CELL,
+  fields: MAX_FIELDS,
+  textLines: MAX_TEXT_LINES,
+  text: MAX_TEXT,
+};
+
+// Generous rather than infinite: a step can emit tens of thousands of rows,
+// and the cost of rendering all of them is paid by the browser on the main
+// thread. These bound the DOM, not the reading — the footer still reports the
+// true total, so a clipped table says so.
+export const FULL_CAPS: DataFaceCaps = {
+  rows: 500,
+  columns: 60,
+  cell: 400,
+  fields: 300,
+  textLines: 4000,
+  text: 200000,
+};
 
 export type DataFaceView =
   | { kind: "table"; columns: string[]; rows: string[][]; total: number; moreColumns: number }
@@ -74,7 +110,10 @@ function fileNameOf(ref: Ref): string | undefined {
 // empty value is "empty" rather than a rendering of nothing: the card then
 // says what the port WILL carry, which is the whole point of a face you can
 // open before a first run.
-export function dataFaceView(ref: Ref | undefined): DataFaceView {
+export function dataFaceView(
+  ref: Ref | undefined,
+  caps: DataFaceCaps = GLANCE_CAPS,
+): DataFaceView {
   if (!ref) return { kind: "empty" };
 
   const v = ref.data;
@@ -91,45 +130,45 @@ export function dataFaceView(ref: Ref | undefined): DataFaceView {
     // A list of records is a table; a list of anything else (strings, numbers)
     // has no columns to name, so it reads better as lines of text.
     if (records.length === v.length && records.length > 0) {
-      const sample = records.slice(0, MAX_ROWS);
+      const sample = records.slice(0, caps.rows);
       const all = columnsOf(sample);
-      const columns = all.slice(0, MAX_COLUMNS);
+      const columns = all.slice(0, caps.columns);
       return {
         kind: "table",
         columns,
-        rows: sample.map((r) => columns.map((c) => cell(r[c]))),
+        rows: sample.map((r) => columns.map((c) => cell(r[c], caps.cell))),
         total: v.length,
         moreColumns: all.length - columns.length,
       };
     }
     if (v.length === 0) return { kind: "empty" };
-    return textView(v.map((x) => cell(x, MAX_TEXT)).join("\n"));
+    return textView(v.map((x) => cell(x, caps.text)).join("\n"), caps);
   }
 
   if (isRecord(v)) {
     const keys = Object.keys(v);
     return {
       kind: "record",
-      fields: keys.slice(0, MAX_FIELDS).map((k) => ({
+      fields: keys.slice(0, caps.fields).map((k) => ({
         key: k,
-        value: cell(v[k]),
+        value: cell(v[k], caps.cell),
         numeric: typeof v[k] === "number",
       })),
-      more: Math.max(0, keys.length - MAX_FIELDS),
+      more: Math.max(0, keys.length - caps.fields),
     };
   }
 
-  if (typeof v === "string") return v.trim() === "" ? { kind: "empty" } : textView(v);
+  if (typeof v === "string") return v.trim() === "" ? { kind: "empty" } : textView(v, caps);
 
-  return textView(String(v));
+  return textView(String(v), caps);
 }
 
-function textView(raw: string): DataFaceView {
+function textView(raw: string, caps: DataFaceCaps): DataFaceView {
   const lines = raw.split("\n");
-  let text = lines.slice(0, MAX_TEXT_LINES).join("\n");
-  let truncated = lines.length > MAX_TEXT_LINES;
-  if (text.length > MAX_TEXT) {
-    text = text.slice(0, MAX_TEXT);
+  let text = lines.slice(0, caps.textLines).join("\n");
+  let truncated = lines.length > caps.textLines;
+  if (text.length > caps.text) {
+    text = text.slice(0, caps.text);
     truncated = true;
   }
   return { kind: "text", text, truncated };
@@ -147,11 +186,12 @@ export type DataFaceTier = "run" | "example" | "none";
 export function dataFaceSource(
   ref: Ref | undefined,
   port: Port | undefined,
+  caps: DataFaceCaps = GLANCE_CAPS,
 ): { tier: DataFaceTier; view: DataFaceView } {
-  const live = dataFaceView(ref);
+  const live = dataFaceView(ref, caps);
   if (live.kind !== "empty") return { tier: "run", view: live };
   if (port?.example !== undefined && port.example !== null) {
-    const shipped = dataFaceView({ data: port.example });
+    const shipped = dataFaceView({ data: port.example }, caps);
     if (shipped.kind !== "empty") return { tier: "example", view: shipped };
   }
   return { tier: "none", view: { kind: "empty" } };

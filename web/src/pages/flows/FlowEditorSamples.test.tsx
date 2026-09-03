@@ -107,8 +107,10 @@ describe("a step's last output on a freshly opened editor", () => {
     await user.click(await screen.findByRole("button", { name: "editor.dataView" }));
     // Scoped to the data face: the same value also reaches the port hover-peek,
     // which reads the same per-node outputs and so gains the same persistence.
+    // A short text value is its own shape line, so the card shows it verbatim
+    // rather than describing it.
     await waitFor(() =>
-      expect(document.querySelector(".dz-face-text")?.textContent).toContain(
+      expect(document.querySelector(".dz-face-line-value")?.textContent).toContain(
         "Ordered 2kg of beans",
       ),
     );

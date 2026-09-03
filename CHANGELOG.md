@@ -10,6 +10,62 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Added
+
+- **A step's data opens in a dialog for reading.** **Show all data** in the
+  face header opens what a step emitted at reading size: every column, up to
+  500 rows, cells at 400 characters instead of the card's 28, column headers
+  pinned while the rows scroll, and a tab per output port. It is a centred
+  panel on a desktop and fullscreen on a phone — the shape the Ctrl+K palette
+  already takes. An `Example` renders there too, badged as one, which is why
+  this is a dialog and not a second browser window: a window pointed at a run
+  route has no run to show for a step that has never run, and would be blocked
+  by default besides.
+
+  The card keeps the glance, because **Data view** (`v`) opens every card at
+  once to see where a value stopped moving through a flow, and no dialog can
+  do that. This is the per-port escalation behind it.
+
+### Changed
+
+- **A card now expands instead of folding over.** The header — icon, name,
+  chips and chevron — stays where it is, and the data panel opens below it, so
+  the header captions its own data by sitting above it rather than travelling
+  down to it. With every card open at once under **Data view**, a header that
+  stays put is also what lets you tell which card you are reading.
+
+- **A card names the fields a step emits rather than sampling its rows.** The
+  face used to render the same table the dialog does, at three rows and four
+  columns with every cell cut at 28 characters. In a 300px card that could not
+  be read, and it hid the thing the canvas is actually for: choosing what to
+  wire next is a question about field NAMES, and names are short enough that
+  all of them fit on a line where a row of truncated values did not. A step
+  now reads `author, content, id, link +3 more`, with its row count and port
+  type beneath — and a value that is short enough to be its own summary, like
+  a trigger's timestamp, is simply shown. One line per card also scans across
+  a whole flow under **Data view** in a way three cramped rows never did. The
+  values themselves are a click away in the dialog.
+
+### Fixed
+
+- **A step's data table did not draw on a wide card.** The fold rotated the
+  header about its own bottom edge, which needed a `perspective` 3D context
+  around the data panel — and past roughly 700px of card width Chrome stopped
+  rasterising the table inside it. The rows were in the DOM, correctly laid
+  out, fully opaque and correctly coloured, and simply never painted: the card
+  showed its **From the last run** badge and its row count above an empty box.
+  Expanding downward needs no transform at all, so the whole class of bug goes
+  with it.
+
+- **Opening a card's data no longer resizes the card.** A seven-column table
+  dragged the card from its 200px minimum to nearly 800px and took every wire
+  endpoint with it, so pressing `v` reflowed the whole graph. Flex and grid
+  items default to `min-width: auto` — "never narrower than my content" — so
+  the table's width propagated out through every wrapper, and the panel's
+  `overflow: auto` never engaged, because the card simply grew to fit it. The
+  well is now excluded from the card's intrinsic width, so a card measures the
+  same width open as shut whatever its data.
+
 ## [0.32.0] - 2026-09-03
 
 ### Added

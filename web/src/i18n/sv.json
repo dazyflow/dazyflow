@@ -1581,7 +1581,9 @@
       "more": "+{{count}} till",
       "show": "Visa vad {{name}} producerar",
       "hide": "Dölj vad {{name}} producerar",
-      "toggleTitle": "Fäll ner rubriken för att se stegets utdata"
+      "toggleTitle": "Visa vad steget producerar",
+      "expand": "Visa alla data",
+      "modalTitle": "{{name}} — utdata"
     }
   },
   "issueKey": {

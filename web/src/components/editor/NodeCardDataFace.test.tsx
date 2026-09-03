@@ -54,20 +54,37 @@ describe("the card's data face", () => {
     );
   });
 
-  it("uncovers the step's output when the header is folded down", async () => {
+  it("names the fields the step emits when the face is opened", async () => {
     const user = userEvent.setup();
     renderCard({ outputs: { messages: { data: rows } } });
     await user.click(screen.getByRole("button", { name: /Show what/ }));
-    // The columns are read off the records, and the footer counts the whole
-    // list rather than the sampled slice.
-    expect(screen.getByText("faktura@fortnox.se")).toBeInTheDocument();
-    expect(screen.getByText("subject")).toBeInTheDocument();
+    // The card is a shape line: the FIELD NAMES, read off the records, and a
+    // count of the whole list rather than of the sampled slice. Deciding what
+    // to wire next is a question about names, and a 300px card can show all of
+    // them where it could not show a row of values.
+    expect(screen.getByText("from, subject")).toBeInTheDocument();
     expect(screen.getByText("2 items")).toBeInTheDocument();
+    // The values themselves are the dialog's job, not the canvas's.
+    expect(screen.queryByText("faktura@fortnox.se")).toBeNull();
+  });
+
+  it("shows the values themselves in the dialog behind Show all data", async () => {
+    const user = userEvent.setup();
+    renderCard({ dataView: true, outputs: { messages: { data: rows } } });
+    expect(screen.queryByText("faktura@fortnox.se")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Show all data" }));
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    // Every row, not the card's sampled three, and cells that are not clipped
+    // to a card's width.
+    expect(screen.getByText("faktura@fortnox.se")).toBeInTheDocument();
+    expect(screen.getByText("billing@stripe.com")).toBeInTheDocument();
+    expect(screen.getByText("Faktura 4471")).toBeInTheDocument();
   });
 
   it("opens with the canvas-wide Data view, with no click on the card", () => {
     renderCard({ dataView: true, outputs: { messages: { data: rows } } });
-    expect(screen.getByText("faktura@fortnox.se")).toBeInTheDocument();
+    expect(screen.getByText("from, subject")).toBeInTheDocument();
   });
 
   it("says a step has not run rather than showing an empty panel", () => {
@@ -80,7 +97,7 @@ describe("the card's data face", () => {
     const user = userEvent.setup();
     renderCard({ dataView: true, outputs: { messages: { data: rows } } });
     await user.click(screen.getByRole("button", { name: /Hide what/ }));
-    expect(screen.queryByText("faktura@fortnox.se")).toBeNull();
+    expect(screen.queryByText("from, subject")).toBeNull();
   });
 
   it("reads a router's branches separately, one tab each", async () => {
@@ -99,9 +116,9 @@ describe("the card's data face", () => {
     });
     // Opens on the branch that actually produced something, not on the first
     // declared port.
-    expect(screen.getByText("kept")).toBeInTheDocument();
+    expect(screen.getByText("id")).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "Unmatched" }));
-    expect(screen.queryByText("kept")).toBeNull();
+    expect(screen.queryByText("id")).toBeNull();
     expect(screen.getByText("No data yet")).toBeInTheDocument();
   });
 
@@ -121,7 +138,7 @@ describe("the card's data face", () => {
         ],
       },
     });
-    expect(screen.getByText("faktura@fortnox.se")).toBeInTheDocument();
+    expect(screen.getByText("from, subject")).toBeInTheDocument();
     // Badged as an example, and NOT as a real run — this is the whole reason
     // showing synthetic data is safe.
     expect(screen.getByText("Example")).toBeInTheDocument();
@@ -148,9 +165,11 @@ describe("the card's data face", () => {
       },
       outputs: { messages: { data: [{ from: "real@nordkraft.se" }] } },
     });
-    expect(screen.getByText("real@nordkraft.se")).toBeInTheDocument();
-    expect(screen.queryByText("faktura@fortnox.se")).toBeNull();
+    // Both tiers describe the same shape here, so the badge is what says which
+    // one won — and the count, which an example never gets.
     expect(screen.getByText("From the last run")).toBeInTheDocument();
+    expect(screen.queryByText("Example")).toBeNull();
+    expect(screen.getByText("1 item")).toBeInTheDocument();
   });
 
   it("offers no fold on a drop whose only output is the passthrough pin", () => {

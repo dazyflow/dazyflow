@@ -1,10 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { Maximize2 } from "lucide-react";
 import i18n from "../../i18n";
+import { ICON } from "../../icons";
 import { portLabel } from "../../lib/dropText";
 import { portTypeLabel } from "../../lib/ports";
-import { dataFaceSource, dataFaceView, type DataFaceTier } from "../../lib/dataFace";
+import { cell, dataFaceSource, dataFaceView, type DataFaceTier } from "../../lib/dataFace";
 import type { Port, Ref } from "../../types";
 
 // The card's data face: what the step emitted, uncovered when the header
@@ -27,9 +29,12 @@ type Props = {
   outputs?: Record<string, Ref>;
   active: string;
   onSelect: (port: string) => void;
+  // Opens the dialog on the port the face is currently showing. Omitted when
+  // there is nothing to open onto — an empty face has no data to browse.
+  onExpand?: () => void;
 };
 
-export function NodeDataFace({ ports, outputs, active, onSelect }: Props) {
+export function NodeDataFace({ ports, outputs, active, onSelect, onExpand }: Props) {
   const port = ports.find((p) => p.port === active) ?? ports[0];
   const { tier, view } = dataFaceSource(port ? outputs?.[port.port] : undefined, port);
 
@@ -61,10 +66,26 @@ export function NodeDataFace({ ports, outputs, active, onSelect }: Props) {
             ))}
           </div>
         )}
+        {/* nodrag/stopPropagation: the face lives inside a React Flow node, so
+            without them a click here drags the card or selects the step. */}
+        {onExpand && tier !== "none" && (
+          <button
+            type="button"
+            className="dz-face-expand nodrag"
+            aria-label={i18n.t("nodeCard.face.expand")}
+            title={i18n.t("nodeCard.face.expand")}
+            onClick={(e) => {
+              e.stopPropagation();
+              onExpand();
+            }}
+          >
+            <Maximize2 size={ICON.xs} strokeWidth={2.2} />
+          </button>
+        )}
       </div>
 
       <div className="dz-face-body">
-        <FaceBody view={view} />
+        <FaceSummary view={view} />
       </div>
 
       {port && (
@@ -77,7 +98,64 @@ export function NodeDataFace({ ports, outputs, active, onSelect }: Props) {
   );
 }
 
-function FaceBody({ view }: { view: ReturnType<typeof dataFaceView> }) {
+// The card's shape line: WHAT came out, not a sample of it.
+//
+// The card used to render the same table the dialog does, at three rows and
+// four columns with cells cut at 28 characters. In a 300px card that could
+// not be read, and it duplicated the dialog badly — while hiding the thing
+// the canvas is actually for. Deciding what to wire next is a question about
+// FIELD NAMES, and names are short: all four fit on a line that a table's
+// truncated values did not. One line per card also scans across a whole flow
+// under Data view in a way three cramped rows never did.
+//
+// The row count is not repeated here — the footer already states it, and only
+// for a real run (see countLabel).
+function FaceSummary({ view }: { view: ReturnType<typeof dataFaceView> }) {
+  const more = (n: number) =>
+    n > 0 ? <span className="dz-face-more">{i18n.t("nodeCard.face.more", { count: n })}</span> : null;
+
+  switch (view.kind) {
+    case "table":
+      return (
+        <div className="dz-face-line">
+          <span className="dz-face-line-names">{view.columns.join(", ")}</span>
+          {more(view.moreColumns)}
+        </div>
+      );
+
+    case "record":
+      return (
+        <div className="dz-face-line">
+          <span className="dz-face-line-names">{view.fields.map((f) => f.key).join(", ")}</span>
+          {more(view.more)}
+        </div>
+      );
+
+    // A short value IS its own summary — a trigger's timestamp reads better
+    // than any description of it would. cell() collapses the newlines, so a
+    // multi-line blob still occupies one line.
+    case "text":
+      return <div className="dz-face-line dz-face-line-value">{cell(view.text, 64)}</div>;
+
+    case "file":
+      return <div className="dz-face-line dz-face-line-value">{view.name}</div>;
+
+    case "bool":
+      return (
+        <div className="dz-face-line dz-face-line-value">
+          {view.value ? i18n.t("common.yes") : i18n.t("common.no")}
+        </div>
+      );
+
+    default:
+      return <p className="dz-face-empty">{i18n.t("nodeCard.face.emptyHint")}</p>;
+  }
+}
+
+// Exported so the dialog renders the SAME markup as the card's dialog-side
+// renderings rather than a second table that drifts from it. Only the caps
+// and the CSS differ: the dialog scopes its own sizing off .dz-datamodal.
+export function FaceBody({ view }: { view: ReturnType<typeof dataFaceView> }) {
   switch (view.kind) {
     case "table":
       return (
