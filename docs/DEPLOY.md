@@ -388,6 +388,18 @@ field).
 
 What it changes when set:
 
+- **Apex deep links forward to the org's subdomain.** Mail carries apex links
+  on purpose — the apex is the one host that stays valid when an org renames or
+  drops its label, and an emailed link outlives that. But session cookies are
+  host-only, so a member of an org that has a subdomain used to arrive at the
+  apex signed out and authenticate a second time, on a second host. The links
+  already name the org (`?org=<tenant>`), so the apex now 302s the whole request
+  — path and query intact — to `<label>.<apex>`, where that member's session
+  already lives. Only for `GET`, only when the request carries no valid session
+  on the apex (someone signed in there is left alone), and the host is built
+  from the claimed label plus your configured apex, never from anything in the
+  request.
+
 - **CORS + CSRF** accept any `*.<apex>` subdomain as a browser origin, in
   addition to the exact `DAZYFLOW_WEB_ORIGIN` entries. The apex itself is
   not implied — list it in `DAZYFLOW_WEB_ORIGIN` as usual. The match is a
@@ -410,8 +422,11 @@ Infrastructure prerequisites:
 - A wildcard DNS record `*.<apex>` pointing at the proxy. (One-time, at the
   registrar — every org subdomain rides this; nothing per-org to create.)
 - `DAZYFLOW_PUBLIC_BASE_URL` set to the apex (`https://<apex>`).
-- The proxy must route every `*.<apex>` host to the same dzd upstream
-  (the sign-in handoff state is held in-process).
+- The proxy must route every `*.<apex>` host to the dzd upstream(s). Any pod
+  will do — the sign-in handoff is stored in Postgres, so the apex callback and
+  the subdomain that redeems its one-time code need not be the same process.
+  (Before that it was an in-process map, and this line required a single
+  upstream.)
 
 **TLS — on-demand, no wildcard cert needed.** The bundled `deploy/Caddyfile`
 serves the apex with a normal managed (HTTP-01) certificate and serves

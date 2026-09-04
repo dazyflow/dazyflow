@@ -10,7 +10,51 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Changed
+
+- **An apex deep link now forwards to the org's own subdomain.** Notification
+  mail — "View run details", the approvals inbox, usage — is built from
+  `DAZYFLOW_PUBLIC_BASE_URL`, which is the apex. That is deliberate: the apex is
+  the one host that stays valid when an org renames or drops its subdomain
+  label, and an emailed link outlives that. But session cookies are host-only
+  (one org's subdomain must never read another's), so a member of an org that
+  HAS a subdomain landed on the apex with no session, signed in a second time,
+  and ended up with two sessions on two hosts.
+
+  The links already carry `?org=<tenant>`, so the apex forwards the whole
+  request — path and query verbatim — to `<label>.<apex>`. Apex links stay
+  stable; the browser ends up where its session is.
+
+  It redirects on a URL parameter, so it is deliberately narrow: the host comes
+  from the label in our own store plus the configured apex and never from
+  anything in the request; only `GET`, and never an `/api/` path; only when the
+  request carries no valid session on the apex, since bouncing someone signed in
+  there would take their session away; and only from the apex, so it cannot
+  loop. Single-host deployments are untouched.
+
 ### Fixed
+
+- **The Google sign-in binding cookie was never actually cleared on an org
+  subdomain, and was widened on every deployment with subdomains configured.**
+  Two defects in the same three lines, found while fixing the connector OAuth
+  callback, which had the identical shape.
+
+  The cookie is scoped to the apex when a sign-in begins on a subdomain, so it
+  survives the hop to the apex callback. But the clear did not pass a Domain, so
+  the browser expired a *host-only* cookie that had never existed and left the
+  real one live for its full ten minutes — the opposite of what the comment
+  above it promised. Set and clear now share one rule rather than restating it,
+  which is how they drifted.
+
+  The rule itself was also wrong: it widened the cookie unless the flow started
+  on the public base URL, but compared a HOST against a full URL, and the helper
+  it used strips only a port. `dazyflow.app` never equalled
+  `https://dazyflow.app`, so the test was always true and the cookie was widened
+  even for apex sign-ins that had no hop to survive. It compares hosts now.
+
+  Neither was directly exploitable — the sign-in state is single-use and
+  consumed server-side — but an auth cookie living longer and reaching further
+  than intended is worth having right.
 
 - **Connecting an app over OAuth failed on an org subdomain.** From
   `acme.dazyflow.app`, every connector authorization came back to
@@ -90,6 +134,12 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
   The payload column is `BYTEA` rather than `JSONB`: the store is opaque to what
   it carries, and JSONB would normalize it — reordering keys, respacing — so
   what came out would not be what went in.
+
+  It also lifts a second constraint that came from the same place: per-org
+  subdomains required every `*.<apex>` host to route to ONE dzd upstream,
+  because the sign-in handoff — the one-time code the apex callback hands to the
+  subdomain — was an in-process map. It is in Postgres now, so the two legs need
+  not be the same pod. `docs/DEPLOY.md` said otherwise until now.
 
   If you have cookie affinity configured you can drop it; it is now inert.
 

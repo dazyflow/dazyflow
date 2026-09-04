@@ -26,12 +26,11 @@ import (
 // a URL exactly like an OAuth authorization code does, and over the same
 // TLS hop; the brief lifetime + single use keep that exposure bounded.
 //
-// Module-scoped (like googleSignInStates) so its lifecycle is
-// independent of the gateway. This shares the SSO flow's existing
-// single-instance assumption: the apex callback and the subdomain
-// handoff must land on the same dzd process (all *.<domain> hosts route
-// to one upstream), which is the case for the supported single-node /
-// sticky-routed deployments.
+// The code lives in auth.EphemeralStore, so the apex callback and the subdomain
+// handoff need not be served by the same dzd: they are two requests moments
+// apart, and on more than one replica the load balancer decides which pod sees
+// each. That used to be an in-process map, which is why subdomain traffic once
+// had to be pinned to a single upstream.
 type handoffEntry struct {
 	Token     string    // the session token to install as the cookie
 	ExpiresAt time.Time // session expiry — becomes the cookie's Expires

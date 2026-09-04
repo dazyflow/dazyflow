@@ -13,6 +13,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/dazyflow/dazyflow/auth"
 )
 
 // staticAPI serves the static-asset endpoints. Its fields are the whole of what
@@ -20,11 +22,94 @@ import (
 type staticAPI struct {
 	svc            *Service
 	WildcardDomain string
+	// Profiles resolves an org to its claimed subdomain label. Only read for
+	// the apex bounce below; nil simply disables it.
+	Profiles auth.OrgProfileStore
 }
 
 // staticAPI builds them from the gateway's configuration.
 func (h *HTTPGateway) staticAPI() *staticAPI {
-	return &staticAPI{svc: h.svc, WildcardDomain: h.WildcardDomain}
+	return &staticAPI{svc: h.svc, WildcardDomain: h.WildcardDomain, Profiles: h.Profiles}
+}
+
+// withOrgBounce wraps a static handler so a deep link naming an org that has
+// its own subdomain is forwarded there before anything is served. Applied at
+// the mount rather than inside either handler: both are mounted depending on
+// whether a landing site is configured, and one of them delegates to the other,
+// so this is the only place it lands exactly once.
+func (h *staticAPI) withOrgBounce(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		if target := h.orgBounceTarget(r); target != "" {
+			http.Redirect(rw, r, target, http.StatusFound)
+			return
+		}
+		next.ServeHTTP(rw, r)
+	})
+}
+
+// orgBounceTarget decides whether to send this request on to an org's own
+// subdomain, returning the absolute URL to redirect to or "" to serve it here.
+//
+// Mail carries apex links — "View run details", the approvals inbox — because
+// the apex is the one host that is always valid: an org can rename or drop its
+// subdomain label, and an emailed link outlives that. But session cookies are
+// host-only (deliberately: one org's subdomain must never read another's), so a
+// member of an org that HAS a subdomain arrives at the apex with no session,
+// gets the sign-in page, and ends up with a second session on a second host.
+//
+// The link already names the org — `?org=<tenant>`, which the app uses to pick
+// the active org — so the apex can forward the whole request to the host where
+// that member's session already lives. Apex links stay stable; the browser ends
+// up in the right place.
+//
+// Deliberately narrow, because this redirects on a URL parameter:
+//
+//   - the host is built from a label read out of OUR store and the configured
+//     apex, never from anything in the request, so it cannot be pointed
+//     elsewhere;
+//   - only GET, and only when the request carries no valid session HERE —
+//     someone signed in on the apex is already where they should be, and
+//     bouncing them would take their session away;
+//   - only from the apex, so the redirect cannot loop.
+func (h *staticAPI) orgBounceTarget(r *http.Request) string {
+	if h.WildcardDomain == "" || h.Profiles == nil || r.Method != http.MethodGet {
+		return ""
+	}
+	// An unregistered /api/ path is an API 404, not something to redirect a
+	// client to another host over.
+	if strings.HasPrefix(r.URL.Path, "/api/") {
+		return ""
+	}
+	// Already on a subdomain (or some other host entirely): nothing to do.
+	if !sameHost(bareHost(r.Host), h.WildcardDomain) {
+		return ""
+	}
+	tenant := strings.TrimSpace(r.URL.Query().Get("org"))
+	if tenant == "" {
+		return ""
+	}
+	if h.hasValidSession(r) {
+		return ""
+	}
+	pr, err := h.Profiles.GetOrgProfile(r.Context(), tenant)
+	if err != nil || strings.TrimSpace(pr.Subdomain) == "" {
+		return ""
+	}
+	// Re-validated rather than trusted: it is a DNS label when it is claimed,
+	// and it has to still be one before it becomes part of a host.
+	// ValidateSubdomain reports no error for an empty label, so the emptiness
+	// is checked too — "" would otherwise build the host ".<apex>".
+	label, err := auth.ValidateSubdomain(pr.Subdomain)
+	if err != nil || label == "" {
+		return ""
+	}
+	u := *r.URL
+	u.Scheme = "https"
+	if !strings.HasPrefix(h.svc.PublicBaseURL, "https") {
+		u.Scheme = "http"
+	}
+	u.Host = label + "." + h.WildcardDomain
+	return u.String()
 }
 
 // landingDistHandler serves an optional static marketing site

@@ -603,9 +603,9 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// unknown GET path. Empty WebDist = no static serving.
 	if h.WebDist != "" {
 		if h.LandingDir != "" {
-			mux.Handle("GET /", staticapi.landingDistHandler(h.LandingDir, h.WebDist))
+			mux.Handle("GET /", staticapi.withOrgBounce(staticapi.landingDistHandler(h.LandingDir, h.WebDist)))
 		} else {
-			mux.Handle("GET /", webDistHandler(h.WebDist))
+			mux.Handle("GET /", staticapi.withOrgBounce(webDistHandler(h.WebDist)))
 		}
 	}
 }

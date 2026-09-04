@@ -157,19 +157,53 @@ func (h *authAPI) setGoogleSignInCookie(rw http.ResponseWriter, binding, startHo
 		Secure:   strings.HasPrefix(h.svc.PublicBaseURL, "https"),
 		SameSite: http.SameSiteLaxMode,
 	}
-	if h.WildcardDomain != "" && startHost != "" && !sameHost(startHost, h.svc.PublicBaseURL) {
-		c.Domain = h.WildcardDomain
-	}
+	c.Domain = h.signInCookieDomain(startHost)
 	http.SetCookie(rw, c)
+}
+
+// signInCookieDomain is the Domain the binding cookie is scoped to for a flow
+// that started on startHost — the apex when that is an org subdomain (so the
+// cookie survives the hop to the apex callback), "" for a host-only cookie.
+//
+// Shared by set and clear, and that is the point: expiring a cookie with a
+// different Domain than it was set with does not remove it, it creates a second
+// one and leaves the original live. The two drifted apart exactly that way.
+func (h *authAPI) signInCookieDomain(startHost string) string {
+	if h.WildcardDomain == "" || startHost == "" {
+		return ""
+	}
+	// Compared against the public base URL's HOST. It was compared against the
+	// whole URL, and bareHost only strips a port — so "dazyflow.app" never
+	// equalled "https://dazyflow.app", the test was always true, and the cookie
+	// was widened even for a sign-in that began on the apex and had no hop to
+	// survive.
+	if sameHost(startHost, publicBaseHost(h.svc.PublicBaseURL)) {
+		return ""
+	}
+	return h.WildcardDomain
+}
+
+// publicBaseHost extracts the host from a configured base URL, tolerating a
+// bare host with no scheme.
+func publicBaseHost(base string) string {
+	base = strings.TrimSpace(base)
+	if base == "" {
+		return ""
+	}
+	if u, err := url.Parse(base); err == nil && u.Host != "" {
+		return u.Host
+	}
+	return base
 }
 
 // clearGoogleSignInCookie expires the binding cookie once the callback has
 // consumed or rejected it, so a stale nonce can't be replayed.
-func (h *authAPI) clearGoogleSignInCookie(rw http.ResponseWriter) {
+func (h *authAPI) clearGoogleSignInCookie(rw http.ResponseWriter, startHost string) {
 	http.SetCookie(rw, &http.Cookie{
 		Name:     googleSignInCookie,
 		Value:    "",
 		Path:     "/api/v1/auth/google",
+		Domain:   h.signInCookieDomain(startHost),
 		MaxAge:   -1,
 		HttpOnly: true,
 		Secure:   strings.HasPrefix(h.svc.PublicBaseURL, "https"),
@@ -421,12 +455,12 @@ func (h *authAPI) googleSignInCallback(rw http.ResponseWriter, r *http.Request) 
 	// code is never redeemed against a victim's session. Mandatory, not
 	// conditional on a binding being present — see googleSignInState.Binding.
 	if !signInBindingOK(r, st) {
-		h.clearGoogleSignInCookie(rw)
+		h.clearGoogleSignInCookie(rw, st.Host)
 		h.signInError(rw, r, st, "state_mismatch", http.StatusBadRequest,
 			"This sign-in was started in a different browser or has expired. Please sign in again.")
 		return
 	}
-	h.clearGoogleSignInCookie(rw)
+	h.clearGoogleSignInCookie(rw, st.Host)
 	if code == "" {
 		writeJSONError(rw, http.StatusBadRequest, "missing code")
 		return

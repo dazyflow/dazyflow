@@ -220,3 +220,68 @@ func TestOAuthSubdomain_ApexFlowStaysRelative(t *testing.T) {
 		t.Fatalf("apex flow redirected absolutely to %q, want relative", loc)
 	}
 }
+
+// The same defect, in the SSO flow's own binding cookie: it is widened to the
+// apex when a sign-in starts on an org subdomain, but the clear did not match,
+// so the callback "expired" a host-only cookie that was never there and left
+// the real one live for its full ten minutes. Set and clear now share one rule.
+func TestSignInCookie_ClearMatchesTheDomainItWasSetWith(t *testing.T) {
+	t.Parallel()
+	h, _ := newOAuthHarness(t)
+	h.gw.WildcardDomain = apexHost
+	h.gw.svc.PublicBaseURL = "https://" + apexHost
+	api := h.gw.authAPI()
+
+	// A flow that began on an org subdomain: the cookie is scoped to the apex.
+	set := httptest.NewRecorder()
+	api.setGoogleSignInCookie(set, "nonce-abc", orgHost)
+	setC := cookieNamed(set, googleSignInCookie)
+	if setC == nil || setC.Domain != apexHost {
+		t.Fatalf("set cookie Domain=%v, want %q", setC, apexHost)
+	}
+
+	// Clearing it must target the same Domain, or the browser keeps the
+	// original and only adds an expired host-only twin.
+	clear := httptest.NewRecorder()
+	api.clearGoogleSignInCookie(clear, orgHost)
+	clearC := cookieNamed(clear, googleSignInCookie)
+	if clearC == nil {
+		t.Fatal("clear set no cookie")
+	}
+	if clearC.Domain != setC.Domain {
+		t.Fatalf("clear Domain=%q but it was set with %q — the real cookie survives", clearC.Domain, setC.Domain)
+	}
+	if clearC.MaxAge >= 0 {
+		t.Fatalf("clear MaxAge=%d, want negative", clearC.MaxAge)
+	}
+}
+
+// An apex-origin sign-in stays host-only on both halves.
+func TestSignInCookie_ApexFlowStaysHostOnly(t *testing.T) {
+	t.Parallel()
+	h, _ := newOAuthHarness(t)
+	h.gw.WildcardDomain = apexHost
+	h.gw.svc.PublicBaseURL = "https://" + apexHost
+	api := h.gw.authAPI()
+
+	set := httptest.NewRecorder()
+	api.setGoogleSignInCookie(set, "nonce-abc", apexHost)
+	clear := httptest.NewRecorder()
+	api.clearGoogleSignInCookie(clear, apexHost)
+
+	if c := cookieNamed(set, googleSignInCookie); c == nil || c.Domain != "" {
+		t.Fatalf("apex sign-in cookie Domain=%v, want host-only", c)
+	}
+	if c := cookieNamed(clear, googleSignInCookie); c == nil || c.Domain != "" {
+		t.Fatalf("apex clear Domain=%v, want host-only", c)
+	}
+}
+
+func cookieNamed(rw *httptest.ResponseRecorder, name string) *http.Cookie {
+	for _, c := range rw.Result().Cookies() {
+		if c.Name == name {
+			return c
+		}
+	}
+	return nil
+}
