@@ -25,6 +25,13 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
   request — path and query verbatim — to `<label>.<apex>`. Apex links stay
   stable; the browser ends up where its session is.
 
+  The redirect carries the request's port. Behind a proxy on 443 the browser
+  sends none and none is invented, which is the production shape — but on any
+  other port the port was dropped and the redirect pointed at :80, where nothing
+  answers. Every unit test used a host without a port, so none of them saw it;
+  it surfaced the first time a real browser followed the redirect against a
+  deployment on :8642.
+
   It redirects on a URL parameter, so it is deliberately narrow: the host comes
   from the label in our own store plus the configured apex and never from
   anything in the request; only `GET`, and never an `/api/` path; only when the

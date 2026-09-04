@@ -9,6 +9,7 @@ package daemon
 // index.html so client-side routes deep-link.
 
 import (
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -108,7 +109,15 @@ func (h *staticAPI) orgBounceTarget(r *http.Request) string {
 	if !strings.HasPrefix(h.svc.PublicBaseURL, "https") {
 		u.Scheme = "http"
 	}
-	u.Host = label + "." + h.WildcardDomain
+	// Carry the request's port across. Behind a proxy on 443 the browser sends
+	// no port and none is added, which is the production shape — but a
+	// deployment reachable on any other port had the port dropped here and the
+	// redirect sent to :80, where nothing answers.
+	target := label + "." + h.WildcardDomain
+	if _, port, err := net.SplitHostPort(r.Host); err == nil && port != "" {
+		target = net.JoinHostPort(target, port)
+	}
+	u.Host = target
 	return u.String()
 }
 

@@ -34,7 +34,7 @@ func bounceAPI(t *testing.T, wildcard string) (*staticAPI, *recordingOrgProfiles
 		t.Fatal(err)
 	}
 	return &staticAPI{
-		svc:            &Service{PublicBaseURL: "https://dazyflow.app"},
+		svc:            &Service{PublicBaseURL: "https://" + wildcard},
 		WildcardDomain: wildcard,
 		Profiles:       profiles,
 	}, profiles
@@ -55,6 +55,25 @@ func TestOrgBounce_ApexDeepLinkGoesToTheOrgSubdomain(t *testing.T) {
 	want := "https://acme.dazyflow.app/runs/abc123?org=acme"
 	if got != want {
 		t.Fatalf("bounce = %q, want %q", got, want)
+	}
+}
+
+// The port has to come across. Behind a proxy on 443 the browser sends none and
+// none is added — which is why every other test here reads correctly without
+// one, and why dropping the port went unnoticed until the redirect was followed
+// by a real browser against a deployment on :8642 and refused at :80.
+func TestOrgBounce_CarriesThePortAcross(t *testing.T) {
+	t.Parallel()
+	api, _ := bounceAPI(t, "dazyflow.test")
+	api.svc.PublicBaseURL = "http://dazyflow.test:8642"
+
+	got := bounceFor(t, api, "GET", "dazyflow.test:8642", "/runs/abc?org=acme")
+	if got != "http://acme.dazyflow.test:8642/runs/abc?org=acme" {
+		t.Fatalf("bounce = %q, want the port carried across", got)
+	}
+	// And the proxy shape, where the browser sends no port at all.
+	if got := bounceFor(t, api, "GET", "dazyflow.test", "/runs/abc?org=acme"); got != "http://acme.dazyflow.test/runs/abc?org=acme" {
+		t.Fatalf("bounce = %q, want no port invented", got)
 	}
 }
 
