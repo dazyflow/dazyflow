@@ -76,7 +76,7 @@ func TestEphemeralState_MintedOnOneReplicaRedeemedOnAnother(t *testing.T) {
 
 		state, err := podA.mint(pendingOAuth{
 			tenant: "acme", provider: "google", account: "work",
-			returnTo: "/connections", binding: "bind-abc",
+			returnTo: "/connections", binding: "bind-abc", host: "acme.dazyflow.app",
 		})
 		if err != nil {
 			t.Fatalf("mint on pod A: %v", err)
@@ -86,7 +86,10 @@ func TestEphemeralState_MintedOnOneReplicaRedeemedOnAnother(t *testing.T) {
 			t.Fatal("pod B could not consume the pending authorization pod A minted")
 		}
 		if got.tenant != "acme" || got.provider != "google" || got.account != "work" ||
-			got.returnTo != "/connections" || got.binding != "bind-abc" {
+			got.returnTo != "/connections" || got.binding != "bind-abc" ||
+			// The origin host has to survive too, or a callback served by
+			// another replica cannot send the user back where they started.
+			got.host != "acme.dazyflow.app" {
 			t.Fatalf("pending authorization crossed replicas but lost content: %+v", got)
 		}
 		if got.created.IsZero() {

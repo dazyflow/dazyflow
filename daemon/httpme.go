@@ -1020,6 +1020,9 @@ func (h *flowAPI) startConnectionMe(rw http.ResponseWriter, r *http.Request, p c
 		r.URL.Query().Get("return_to"),
 		scopeSubsetForIntegration(provider, r.URL.Query().Get("integration")),
 		"",
+		// Still worth recording: if the agent opens the link in this same
+		// browser, the callback should return it to the subdomain it came from.
+		h.oauth.originHost(r),
 	)
 	if status != http.StatusOK {
 		// Code mapping: 501 = OAuth subsystem not configured;

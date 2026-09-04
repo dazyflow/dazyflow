@@ -12,6 +12,33 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ### Fixed
 
+- **Connecting an app over OAuth failed on an org subdomain.** From
+  `acme.dazyflow.app`, every connector authorization came back to
+  "OAuth state did not match this browser session".
+
+  The provider only ever redirects to the APEX callback — that is the single
+  registered `redirect_uri` — so a flow begun on a subdomain finishes on
+  `dazyflow.app`. The browser-binding cookie (RFC 6749 §10.12) was host-only, so
+  the browser correctly declined to send it across that hop, and the callback
+  rejected the flow it had itself started. It is now scoped to the apex when
+  per-org subdomains are configured. That does not weaken what the nonce is
+  for — it proves "same browser", and it stays httpOnly, path-scoped to
+  `/api/v1/oauth`, single-use and ten minutes old at most; every host it now
+  reaches is this same application.
+
+  Fixing the rejection exposed the second half. The return trip was
+  path-relative, so a user who began on `acme.dazyflow.app` was dropped on the
+  apex, where their host-only session cookie does not exist — the connection had
+  been stored, but they appeared to have been signed out. The pending
+  authorization now records the host the flow started on (as the Google sign-in
+  state already did) and the callback returns the browser there. The host is
+  re-validated against the configured wildcard domain before use, so a state row
+  naming a foreign host cannot turn the unauthenticated callback into an open
+  redirect.
+
+  Single-host deployments are untouched: host-only cookie, relative redirect,
+  exactly as before.
+
 - **Tidy was reported missing a third time — so it is back in the toolbar, with
   its name on it.** The first two reports were each answered by changing a
   mechanism: it was moved out of the scrolling toolbar half (where it genuinely

@@ -229,6 +229,14 @@ type pendingOAuth struct {
 	// Empty for the JSON/manual authorize path (the link is handed to a
 	// different agent), which relies on the unguessable single-use state.
 	binding string
+	// host is the host the browser started the flow on — "acme.dazyflow.app"
+	// — captured only when it is this deployment's apex or one of its org
+	// subdomains. The provider always redirects to the APEX callback (that is
+	// the one registered redirect_uri), so without this the user is returned to
+	// the apex, where their host-only session cookie does not exist and they
+	// land signed out. Empty when per-org subdomains are not configured, which
+	// is the single-host case and needs none of this.
+	host    string
 	created time.Time
 }
 
@@ -241,20 +249,21 @@ type pendingOAuthWire struct {
 	Account  string    `json:"account"`
 	ReturnTo string    `json:"return_to"`
 	Binding  string    `json:"binding"`
+	Host     string    `json:"host,omitempty"`
 	Created  time.Time `json:"created"`
 }
 
 func (p pendingOAuth) wire() pendingOAuthWire {
 	return pendingOAuthWire{
 		Tenant: p.tenant, Provider: p.provider, Account: p.account,
-		ReturnTo: p.returnTo, Binding: p.binding, Created: p.created,
+		ReturnTo: p.returnTo, Binding: p.binding, Host: p.host, Created: p.created,
 	}
 }
 
 func (w pendingOAuthWire) pending() pendingOAuth {
 	return pendingOAuth{
 		tenant: w.Tenant, provider: w.Provider, account: w.Account,
-		returnTo: w.ReturnTo, binding: w.Binding, created: w.Created,
+		returnTo: w.ReturnTo, binding: w.Binding, host: w.Host, created: w.Created,
 	}
 }
 

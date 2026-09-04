@@ -25,11 +25,16 @@ type oauthAPI struct {
 	svc              *Service
 	OAuth            *OAuthRegistry
 	EncryptedSecrets *EncryptedSecrets
+	// WildcardDomain is the apex under which org subdomains are served
+	// ("dazyflow.app"). Empty disables per-org subdomains, and with it
+	// everything below about returning the browser to the host it came from.
+	WildcardDomain string
 }
 
 // oauthAPI builds them from the gateway's configuration.
 func (h *HTTPGateway) oauthAPI() *oauthAPI {
-	return &oauthAPI{auditor: h.auditor(), svc: h.svc, OAuth: h.OAuth, EncryptedSecrets: h.EncryptedSecrets}
+	return &oauthAPI{auditor: h.auditor(), svc: h.svc, OAuth: h.OAuth,
+		EncryptedSecrets: h.EncryptedSecrets, WildcardDomain: h.WildcardDomain}
 }
 
 // HTTP surface for the OAuth flow. Two endpoints:
@@ -72,13 +77,31 @@ func (h *oauthAPI) oauthAuthorize(rw http.ResponseWriter, r *http.Request, p cor
 		// scope set, unchanged.
 		scopeSubsetForIntegration(provider, r.URL.Query().Get("integration")),
 		binding,
+		h.originHost(r),
 	)
 	if status != http.StatusOK {
 		writeJSONError(rw, status, msg)
 		return
 	}
-	h.setOAuthStateCookie(rw, binding)
+	h.setOAuthStateCookie(rw, r, binding)
 	http.Redirect(rw, r, target, http.StatusFound)
+}
+
+// originHost reports the host the browser is on, when it is this deployment's
+// apex or one of its org subdomains. "" otherwise — including every
+// single-host deployment, where the callback lands back where it started and
+// none of the subdomain handling applies.
+//
+// Mirrors signInStartHost: same rule, same reason.
+func (h *oauthAPI) originHost(r *http.Request) string {
+	if h.WildcardDomain == "" {
+		return ""
+	}
+	bare := strings.ToLower(bareHost(r.Host))
+	if bare == h.WildcardDomain || hostIsSubdomainOf(bare, h.WildcardDomain) {
+		return r.Host
+	}
+	return ""
 }
 
 // oauthStateCookie is the name of the browser-binding cookie for the OAuth
@@ -98,11 +121,23 @@ func newOAuthBinding() (string, error) {
 // setOAuthStateCookie writes the browser-binding cookie. SameSite=Lax so it
 // rides the top-level redirect back from the provider; httpOnly so script
 // can't read it; Secure when the public origin is https.
-func (h *oauthAPI) setOAuthStateCookie(rw http.ResponseWriter, binding string) {
+func (h *oauthAPI) setOAuthStateCookie(rw http.ResponseWriter, r *http.Request, binding string) {
 	http.SetCookie(rw, &http.Cookie{
-		Name:     oauthStateCookie,
-		Value:    binding,
-		Path:     "/api/v1/oauth",
+		Name:  oauthStateCookie,
+		Value: binding,
+		Path:  "/api/v1/oauth",
+		// Scoped to the whole apex when org subdomains are in play. The
+		// provider only ever redirects to the APEX callback — that is the
+		// single registered redirect_uri — so a host-only cookie set on
+		// "acme.dazyflow.app" is simply not sent there, and the callback
+		// rejected every flow started from a subdomain with "OAuth state did
+		// not match this browser session".
+		//
+		// Widening it does not weaken what the nonce is for. It proves "same
+		// browser"; it is httpOnly, path-scoped to /api/v1/oauth, single-use
+		// and ten minutes old at most. Every host it now reaches is this same
+		// application — there is no untrusted subdomain to leak it to.
+		Domain:   h.cookieDomain(r),
 		MaxAge:   int(h.OAuth.state.ttl / time.Second),
 		HttpOnly: true,
 		Secure:   strings.HasPrefix(h.svc.PublicBaseURL, "https"),
@@ -110,13 +145,26 @@ func (h *oauthAPI) setOAuthStateCookie(rw http.ResponseWriter, binding string) {
 	})
 }
 
+// cookieDomain returns the apex to scope the binding cookie to, or "" for a
+// host-only cookie. Only widened for a request that is genuinely on this
+// deployment's apex or one of its subdomains.
+func (h *oauthAPI) cookieDomain(r *http.Request) string {
+	if r == nil || h.originHost(r) == "" {
+		return ""
+	}
+	return h.WildcardDomain
+}
+
 // clearOAuthStateCookie expires the binding cookie after the callback
 // consumes (or rejects) it, so a stale value can't linger.
-func (h *oauthAPI) clearOAuthStateCookie(rw http.ResponseWriter) {
+func (h *oauthAPI) clearOAuthStateCookie(rw http.ResponseWriter, r *http.Request) {
 	http.SetCookie(rw, &http.Cookie{
-		Name:     oauthStateCookie,
-		Value:    "",
-		Path:     "/api/v1/oauth",
+		Name:  oauthStateCookie,
+		Value: "",
+		Path:  "/api/v1/oauth",
+		// Must match the domain it was set with, or the browser expires a
+		// different cookie and leaves the real one in place.
+		Domain:   h.cookieDomain(r),
 		MaxAge:   -1,
 		HttpOnly: true,
 		Secure:   strings.HasPrefix(h.svc.PublicBaseURL, "https"),
@@ -139,7 +187,7 @@ func (h *oauthAPI) clearOAuthStateCookie(rw http.ResponseWriter) {
 // binding, when non-empty, ties the flow to the caller's browser via the
 // dz_oauth_state cookie (the browser-redirect path sets it). Pass "" for the
 // JSON/manual path, where the authorize link is opened by a different agent.
-func (h *oauthAPI) buildAuthorizeURL(p core.Principal, providerName, account, returnTo string, scopes []string, binding string) (string, int, string) {
+func (h *oauthAPI) buildAuthorizeURL(p core.Principal, providerName, account, returnTo string, scopes []string, binding, host string) (string, int, string) {
 	if h.OAuth == nil {
 		return "", http.StatusNotImplemented, "OAuth not configured"
 	}
@@ -188,6 +236,7 @@ func (h *oauthAPI) buildAuthorizeURL(p core.Principal, providerName, account, re
 		account:  account,
 		returnTo: returnTo,
 		binding:  binding,
+		host:     host,
 	})
 	if err != nil {
 		return "", http.StatusInternalServerError, fmt.Sprintf("mint state: %v", err)
@@ -260,45 +309,70 @@ func (h *oauthAPI) oauthCallback(rw http.ResponseWriter, r *http.Request) {
 	if pending.binding != "" {
 		c, cerr := r.Cookie(oauthStateCookie)
 		if cerr != nil || subtle.ConstantTimeCompare([]byte(c.Value), []byte(pending.binding)) != 1 {
-			h.clearOAuthStateCookie(rw)
+			h.clearOAuthStateCookie(rw, r)
 			writeJSONError(rw, http.StatusBadRequest, "OAuth state did not match this browser session")
 			return
 		}
-		h.clearOAuthStateCookie(rw)
+		h.clearOAuthStateCookie(rw, r)
 	}
 
 	if providerErr != "" {
 		// User declined consent, scope refused, etc. Bounce back to
 		// the UI with the error in the query so the UI can show a
 		// toast.
-		redirectWithStatus(rw, r, pending.returnTo, providerName, pending.account, "error",
-			"provider returned error: "+providerErr)
+		h.redirectBack(rw, r, pending, providerName, "error", "provider returned error: "+providerErr)
 		return
 	}
 	if code == "" {
-		redirectWithStatus(rw, r, pending.returnTo, providerName, pending.account, "error",
-			"provider returned no code")
+		h.redirectBack(rw, r, pending, providerName, "error", "provider returned no code")
 		return
 	}
 
 	tok, err := h.OAuth.exchangeCode(r.Context(), prov, code)
 	if err != nil {
-		redirectWithStatus(rw, r, pending.returnTo, providerName, pending.account, "error",
-			"exchange: "+err.Error())
+		h.redirectBack(rw, r, pending, providerName, "error", "exchange: "+err.Error())
 		return
 	}
 	if _, err := h.OAuth.store(r.Context(), pending.tenant, providerName, pending.account, tok); err != nil {
-		redirectWithStatus(rw, r, pending.returnTo, providerName, pending.account, "error",
-			"store: "+err.Error())
+		h.redirectBack(rw, r, pending, providerName, "error", "store: "+err.Error())
 		return
 	}
-	redirectWithStatus(rw, r, pending.returnTo, providerName, pending.account, "success", "")
+	h.redirectBack(rw, r, pending, providerName, "success", "")
+}
+
+// redirectBack sends the browser to return_to, on the host the flow STARTED on.
+//
+// The provider redirects to the apex callback, so by the time we are here the
+// browser is on "dazyflow.app" whatever it was on before. Returning a
+// path-only redirect would leave a user who began on "acme.dazyflow.app"
+// sitting on the apex — where their host-only session cookie does not exist, so
+// the connection they just authorized appears to have signed them out.
+//
+// The host is re-validated rather than trusted: it was checked when the state
+// was minted, and it is checked again here, so a state row that somehow carried
+// a foreign host cannot turn the callback into an open redirect.
+func (h *oauthAPI) redirectBack(rw http.ResponseWriter, r *http.Request, pending pendingOAuth, providerName, status, errMsg string) {
+	target := pending.host
+	if target != "" {
+		bare := strings.ToLower(bareHost(target))
+		sameHost := strings.EqualFold(target, r.Host)
+		valid := h.WildcardDomain != "" &&
+			(bare == h.WildcardDomain || hostIsSubdomainOf(bare, h.WildcardDomain))
+		if sameHost || !valid {
+			target = "" // already there, or not ours — stay path-relative
+		}
+	}
+	scheme := "https"
+	if !strings.HasPrefix(h.svc.PublicBaseURL, "https") {
+		scheme = "http"
+	}
+	redirectWithStatus(rw, r, pending.returnTo, providerName, pending.account, status, errMsg, scheme, target)
 }
 
 // redirectWithStatus 302s the user back to return_to with
 // `?oauth=success|error&provider=…&account=…[&error=…]` so the UI
 // can render a toast without polling.
-func redirectWithStatus(rw http.ResponseWriter, r *http.Request, returnTo, provider, account, status, errMsg string) {
+func redirectWithStatus(rw http.ResponseWriter, r *http.Request, returnTo, provider, account, status, errMsg, scheme, host string) {
 	// Defense in depth: returnTo was already validated when the state was
 	// minted, but re-check here before url.Parse/http.Redirect so a value
 	// that ever slips through (or a future caller) can't turn the callback
@@ -323,6 +397,12 @@ func redirectWithStatus(rw http.ResponseWriter, r *http.Request, returnTo, provi
 		q.Set("error", errMsg)
 	}
 	u.RawQuery = q.Encode()
+	// host is empty for every single-host deployment and whenever the browser
+	// is already where it started, which keeps the redirect path-relative.
+	if host != "" {
+		u.Scheme = scheme
+		u.Host = host
+	}
 	http.Redirect(rw, r, u.String(), http.StatusFound)
 }
 
