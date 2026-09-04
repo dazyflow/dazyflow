@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.36.0] - 2026-09-04
+
 ### Changed
 
 - **An apex deep link now forwards to the org's own subdomain.** Notification
