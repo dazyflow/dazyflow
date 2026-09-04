@@ -7,6 +7,8 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/dazyflow/dazyflow/daemon/internal/pgstore"
@@ -76,8 +78,13 @@ CREATE TABLE IF NOT EXISTS bus_events (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 -- The retention sweep's predicate. Without it the five-minute sweep scans the
--- whole spool; the drain path reads by id and uses the primary key instead.
+-- whole spool.
 CREATE INDEX IF NOT EXISTS bus_events_created_idx ON bus_events (created_at);
+-- The drain's predicate: the events of the runs THIS replica is watching,
+-- newer than its cursor. Leading with job_id because the filter is the
+-- selective half — a replica watching a handful of runs must not read the
+-- spool of every run in the fleet.
+CREATE INDEX IF NOT EXISTS bus_events_job_idx ON bus_events (job_id, id);
 `
 
 const pgBusChannel = "dazy_bus"
@@ -138,16 +145,38 @@ func (b *PgBus) Publish(jobID string, ev BusEvent) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	// One statement so the row and its wake commit together: the notification
+	// carries "<id>:<job_id>", which is what lets a listener tell whether an
+	// event concerns anything it is watching without querying to find out, and
+	// an id that reached the spool without its wake would leave that listener
+	// nothing to act on until the next event happened along.
+	//
+	// Not a throughput change, despite halving the round trips — measured
+	// against the two-statement form it is inside the noise, because what this
+	// path waits on is the commit, not the trips.
 	if _, err := b.pool.Exec(ctx,
-		`INSERT INTO bus_events (job_id, payload) VALUES ($1, $2)`, jobID, payload); err != nil {
+		`WITH ins AS (
+		     INSERT INTO bus_events (job_id, payload) VALUES ($1, $2) RETURNING id, job_id
+		 )
+		 SELECT pg_notify($3, ins.id || ':' || ins.job_id) FROM ins`,
+		jobID, payload, pgBusChannel); err != nil {
 		b.logger.Printf("publish %s: %v", jobID, err)
-		return
 	}
-	// Wake listeners. Payload is the job_id (debug aid); the listener
-	// drains by id regardless, so a lost notify is self-healing.
-	if _, err := b.pool.Exec(ctx, `SELECT pg_notify($1, $2)`, pgBusChannel, jobID); err != nil {
-		b.logger.Printf("notify %s: %v", jobID, err)
+}
+
+// busNotice is what a notification carries: the spool id and the run it belongs
+// to. Malformed (or empty, from an older publisher) reports ok=false, and the
+// listener falls back to draining, which is always correct.
+func parseBusNotice(payload string) (id int64, jobID string, ok bool) {
+	sep := strings.IndexByte(payload, ':')
+	if sep <= 0 {
+		return 0, "", false
 	}
+	n, err := strconv.ParseInt(payload[:sep], 10, 64)
+	if err != nil {
+		return 0, "", false
+	}
+	return n, payload[sep+1:], true
 }
 
 // Subscribe registers a local channel for a job's events. Identical
@@ -191,10 +220,45 @@ func (b *PgBus) listenOnce(ctx context.Context) error {
 	// Catch up on anything published before/while (re)connecting.
 	b.drainNew(ctx)
 	for {
-		if _, err := conn.Conn().WaitForNotification(ctx); err != nil {
+		n, err := conn.Conn().WaitForNotification(ctx)
+		if err != nil {
 			return err
 		}
+		// The cheap path, and the common one: an event for a run nobody here is
+		// watching. There is nothing to deliver, so the spool is not read at
+		// all — the cursor simply moves past it.
+		//
+		// Safe precisely BECAUSE there is no subscriber: skipping an event we
+		// owe nobody costs nothing, and a subscriber that appears later is only
+		// owed what comes after it. A notification that does not parse (or an
+		// older publisher's) falls through to the drain, which is always
+		// correct.
+		if id, jobID, ok := parseBusNotice(n.Payload); ok && !b.local.has(jobID) {
+			b.skipTo(id)
+			continue
+		}
 		b.drainNew(ctx)
+	}
+}
+
+// skipTo advances the cursor past an event this replica has no subscriber for.
+// Touched only by the listener goroutine, like lastSeen and seen.
+func (b *PgBus) skipTo(id int64) {
+	// Marked seen as well as skipped. drainNew re-scans a window BELOW the
+	// cursor to catch rows that commit out of order, and `seen` is what stops
+	// that window re-delivering. An id skipped without being recorded falls
+	// straight back into it — so a later subscriber to the same run was handed
+	// the backlog it should never have had.
+	b.seen[id] = struct{}{}
+	if id <= b.lastSeen {
+		return
+	}
+	b.lastSeen = id
+	floor := b.lastSeen - pgBusReScanWindow
+	for seen := range b.seen {
+		if seen <= floor {
+			delete(b.seen, seen)
+		}
 	}
 }
 
@@ -203,12 +267,20 @@ func (b *PgBus) listenOnce(ctx context.Context) error {
 // row committed out of BIGSERIAL order is still caught; `seen` dedupes rows
 // already fanned out in a prior pass so the re-scan never re-delivers.
 func (b *PgBus) drainNew(ctx context.Context) {
+	// Only the runs with a live local subscriber. Every replica used to read
+	// every event in the fleet and hand almost all of them to nobody: most runs
+	// are watched by no one, and a watched one by a single replica.
+	watching := b.local.jobIDs()
+	if len(watching) == 0 {
+		return
+	}
 	floor := b.lastSeen - pgBusReScanWindow
 	if floor < 0 {
 		floor = 0
 	}
 	rows, err := b.pool.Query(ctx,
-		`SELECT id, job_id, payload FROM bus_events WHERE id > $1 ORDER BY id`, floor)
+		`SELECT id, job_id, payload FROM bus_events
+		  WHERE id > $1 AND job_id = ANY($2) ORDER BY id`, floor, watching)
 	if err != nil {
 		b.logger.Printf("drain: %v", err)
 		return

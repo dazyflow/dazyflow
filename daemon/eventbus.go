@@ -161,3 +161,27 @@ func (b *MemoryBus) Publish(jobID string, ev BusEvent) {
 func (b *MemoryBus) Subscribe(jobID string) (<-chan BusEvent, func()) {
 	return b.local.subscribe(jobID)
 }
+
+// jobIDs snapshots the jobs with at least one live local subscriber, and
+// reports whether jobID is among them.
+//
+// The Postgres bus reads it to decide what it actually needs from the spool:
+// on a replica watching nothing, that is nothing at all.
+func (l *localSubscribers) jobIDs() []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if len(l.subs) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(l.subs))
+	for id := range l.subs {
+		out = append(out, id)
+	}
+	return out
+}
+
+func (l *localSubscribers) has(jobID string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return len(l.subs[jobID]) > 0
+}

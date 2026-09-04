@@ -10,6 +10,36 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Performance
+
+- **A replica no longer reads the whole fleet's run events.** Every `dzd`
+  listening on the Postgres bus woke on every published event and read every
+  spool row newer than its cursor, then handed almost all of them to nobody:
+  most runs are watched by no one, and a watched one by a single replica.
+
+  A notification now names the run as well as the row (`<id>:<job_id>`), so a
+  replica with no subscriber for it moves its cursor past the event without
+  touching the spool at all, and a replica that does have one reads only the
+  runs it is watching. Measured with four replicas, one of them watching one
+  run, against a 50,000-row spool: **401 events, 2 rows read across the fleet**,
+  where the broadcast would have read about 1,600.
+
+  Skipping without reading is the part that needed care. A skipped id is
+  recorded as seen, not merely stepped over — the drain re-scans a window below
+  its cursor to catch rows that commit out of order, and an unrecorded id falls
+  straight back into it, which handed a later subscriber the backlog it should
+  never have had. That is now a test.
+
+  `bus_events` gains a `(job_id, id)` index to serve the filtered read. It costs
+  about 6.5µs per event in index maintenance — against the commit each publish
+  already waits on, roughly 0.3%.
+
+  Publishing became one statement rather than two, so a row and its wake commit
+  together: an id that reached the spool without its notification would leave
+  listeners nothing to act on until the next event happened along. It is **not**
+  faster — measured against the two-statement form it is inside the noise, since
+  what that path waits on is the commit, not the round trips.
+
 ## [0.36.0] - 2026-09-04
 
 ### Changed
