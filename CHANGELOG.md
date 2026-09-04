@@ -39,6 +39,41 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
   there would take their session away; and only from the apex, so it cannot
   loop. Single-host deployments are untouched.
 
+- **Multi-replica deployments no longer need sticky sessions.** Four pieces of
+  short-lived auth state were held in the minting pod's memory: the Google
+  sign-in state, the connector OAuth pending authorization, the
+  per-org-subdomain sign-in handoff, and the TOTP challenge. Each is minted on
+  one request and consumed on a *second* one moments later — an OAuth/SSO
+  callback, or the second leg of a 2FA sign-in — so a load balancer that sent
+  that second request elsewhere produced "invalid or expired state" at random.
+  Cookie affinity on the ingress was the workaround, and `docs/DEPLOY.md`
+  carried it as a deployment constraint rather than a tuning choice.
+
+  All four now share one Postgres table (`auth_ephemeral`), kept apart by a
+  kind column, since they differ only in what they carry. Deployments without a
+  database keep the in-memory store, which is correct for a single instance.
+
+  Two details worth stating, because both are load-bearing:
+
+  - The **expiry is part of the lookup**, not a later check, so a row the sweep
+    has not reached yet still reads as gone. A late sweep cannot become an
+    accepted stale token.
+  - The TOTP **guess budget is a column, incremented atomically**, so the
+    brute-force cap counts across replicas. Had the count lived in the payload,
+    each pod would have granted a fresh five guesses.
+
+  The payload column is `BYTEA` rather than `JSONB`: the store is opaque to what
+  it carries, and JSONB would normalize it — reordering keys, respacing — so
+  what came out would not be what went in.
+
+  It also lifts a second constraint that came from the same place: per-org
+  subdomains required every `*.<apex>` host to route to ONE dzd upstream,
+  because the sign-in handoff — the one-time code the apex callback hands to the
+  subdomain — was an in-process map. It is in Postgres now, so the two legs need
+  not be the same pod. `docs/DEPLOY.md` said otherwise until now.
+
+  If you have cookie affinity configured you can drop it; it is now inert.
+
 ### Fixed
 
 - **The Google sign-in binding cookie was never actually cleared on an org
@@ -112,45 +147,6 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
   Both controls are now under test for: always rendered, never disabled however
   small the flow, the toolbar copy outside `.toolbar-scroll`, and carrying a
   visible label.
-
-### Changed
-
-- **Multi-replica deployments no longer need sticky sessions.** Four pieces of
-  short-lived auth state were held in the minting pod's memory: the Google
-  sign-in state, the connector OAuth pending authorization, the
-  per-org-subdomain sign-in handoff, and the TOTP challenge. Each is minted on
-  one request and consumed on a *second* one moments later — an OAuth/SSO
-  callback, or the second leg of a 2FA sign-in — so a load balancer that sent
-  that second request elsewhere produced "invalid or expired state" at random.
-  Cookie affinity on the ingress was the workaround, and `docs/DEPLOY.md`
-  carried it as a deployment constraint rather than a tuning choice.
-
-  All four now share one Postgres table (`auth_ephemeral`), kept apart by a
-  kind column, since they differ only in what they carry. Deployments without a
-  database keep the in-memory store, which is correct for a single instance.
-
-  Two details worth stating, because both are load-bearing:
-
-  - The **expiry is part of the lookup**, not a later check, so a row the sweep
-    has not reached yet still reads as gone. A late sweep cannot become an
-    accepted stale token.
-  - The TOTP **guess budget is a column, incremented atomically**, so the
-    brute-force cap counts across replicas. Had the count lived in the payload,
-    each pod would have granted a fresh five guesses.
-
-  The payload column is `BYTEA` rather than `JSONB`: the store is opaque to what
-  it carries, and JSONB would normalize it — reordering keys, respacing — so
-  what came out would not be what went in.
-
-  It also lifts a second constraint that came from the same place: per-org
-  subdomains required every `*.<apex>` host to route to ONE dzd upstream,
-  because the sign-in handoff — the one-time code the apex callback hands to the
-  subdomain — was an in-process map. It is in Postgres now, so the two legs need
-  not be the same pod. `docs/DEPLOY.md` said otherwise until now.
-
-  If you have cookie affinity configured you can drop it; it is now inert.
-
-### Fixed
 
 - **Erasing an org left its flows on disk in the synthesized git mirror.**
   Postgres-backed flow storage clears an erased org's rows, but the mirror
