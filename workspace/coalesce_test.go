@@ -14,10 +14,10 @@ import (
 
 func countCommits(t *testing.T, s *Store) int {
 	t.Helper()
-	if _, err := s.repo.Head(); err != nil {
+	if _, err := s.git().repo.Head(); err != nil {
 		return 0 // no commits yet (fresh in-memory repo has no HEAD)
 	}
-	iter, err := s.repo.Log(&git.LogOptions{})
+	iter, err := s.git().repo.Log(&git.LogOptions{})
 	if err != nil {
 		t.Fatalf("log: %v", err)
 	}

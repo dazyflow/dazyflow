@@ -223,17 +223,13 @@ The steps:
    `DAZYFLOW_APPROVAL_HMAC_SECRET` on every pod if you use unauthenticated
    approval links.
 
-   > **The git workspace is not safe for two pods to write at once.** Access to
-   > a workspace is serialized by a mutex held in the writing process, and
-   > nothing coordinates across processes. Two pods committing to one tenant's
-   > workspace share a single `.git/index`, and concurrent writes to it corrupt
-   > the repository — the same failure the in-process lock exists to prevent,
-   > which is reproducible in a test the moment that lock is removed. Runs,
-   > schedules, secrets and events are all Postgres-backed and unaffected; this
-   > is specifically flow authoring. Until graph storage moves into Postgres,
-   > keep editing on one pod (route `/api/v1/graphs` writes to a single replica)
-   > or accept that two people editing flows in different orgs at the same
-   > moment is fine while two editing the *same* org's workspace is not.
+   > **Set `DAZYFLOW_GRAPH_STORE=postgres` before running more than one pod.**
+   > A git workspace is serialized only *within* a process: two pods committing
+   > to one org's workspace share a single `.git/index`, and concurrent writes
+   > corrupt the repository. Runs, schedules, secrets and events are unaffected
+   > — this is specifically flow authoring. See
+   > [Flow storage](#flow-storage-git-or-postgres) for the switch and the
+   > one-command migration.
 3. **Add the scale-up resources.** `deploy/k8s/scale-up.yaml` ships a
    `PodDisruptionBudget` (`minAvailable: 1`), a CPU `HorizontalPodAutoscaler`
    (`minReplicas: 2`; DOKS ships metrics-server — for backlog-aware scaling
@@ -246,6 +242,131 @@ The steps:
    there blocks node drains entirely — which is why it lives in this overlay,
    not the single-pod base. The `NetworkPolicy` is the one piece worth adopting
    even on a single pod.
+
+### Flow storage: git or Postgres
+
+Flows and their revision history live in one of two places, chosen by
+`DAZYFLOW_GRAPH_STORE`:
+
+| | `git` (default) | `postgres` |
+|---|---|---|
+| Where | one repo per workspace under `DAZYFLOW_DATA_DIR` | rows every replica shares |
+| History, diff, rollback, labels | yes | yes |
+| Safe to write from >1 pod | **no** | **yes** |
+| Needs `ReadWriteMany` `/data` | yes | no |
+| Git mirroring to your own remote | yes | yes (synthesized) |
+
+Both keep the same revision history and the same semantics — the same
+conformance suite runs against both backends. What differs is the trade at the
+bottom two rows: git gives the org a repository it owns and can clone, and
+that repository is exactly what cannot be written from two processes at once.
+
+#### Moving an existing install
+
+**Deploying a new version migrates nothing.** `DAZYFLOW_GRAPH_STORE` defaults to
+`git`, so an upgrade leaves flow storage exactly where it was. The move is
+deliberate, in this order:
+
+```sh
+# 1. Back up Postgres and $DAZYFLOW_DATA_DIR/workspace.
+# 2. Copy the flows across. Read-only on git; re-runnable; safe to run while
+#    the old version is still serving.
+dzd --migrate-workspaces-to-postgres
+
+# 3. Check that everything came across, before trusting it.
+dzd --verify-workspace-migration          # exits non-zero on any difference
+
+# 4. Switch and restart.
+DAZYFLOW_GRAPH_STORE=postgres
+```
+
+The migration copies every flow's full history, labels and published pointers,
+and **keeps the revision ids** — so a published pointer, a bookmarked revision
+or a rollback someone is about to do still resolves afterwards.
+
+`--verify-workspace-migration` compares the two stores flow by flow: current
+content, published pointer, every revision's id, content and label. It reports
+every difference rather than the first, and exits non-zero if any exist. A
+failure means the git workspaces are still the authoritative copy. Re-running
+the migration repairs a partial one.
+
+#### Can the git directory be deleted afterwards?
+
+**Archive it, don't delete it** — even on a clean verification. Two things live
+only there:
+
+- **Flows deleted before the migration.** The migration copies flows that still
+  exist; a flow someone removed last month is not in that set, and its history
+  is only in git. Restoring it later means going back to that directory.
+- **History past 10,000 revisions per flow**, if the migration reported any
+  flow as truncated. It names them in the log.
+
+And delete only `$DAZYFLOW_DATA_DIR/workspace`. The rest of that directory is
+live state the flow store has nothing to do with: `sandbox/` holds every org's
+files, `file_write` output and `git_checkout` caches, and `mirrorcache/` is the
+synthesized mirror. Removing the data directory wholesale would take those with
+it.
+
+**Mirroring in postgres mode** works by synthesizing a repository from the
+revision log — every revision becomes a commit carrying the author, message and
+timestamp the row records — and pushing that. Synthesis is deterministic, so
+every replica derives the same commit hashes from the same rows: a pod that has
+never mirrored this workspace rebuilds and its push still fast-forwards onto
+what the previous one left, rather than force-pushing over your history.
+
+The repository lives under `$DAZYFLOW_DATA_DIR/mirrorcache` on whichever pod
+pushes. It is a **cache**, not state you have to protect: deleting it, or losing
+the pod entirely, costs one rebuild at roughly 390 revisions/second and nothing
+else. Steady-state pushes append at ~2.5 ms per revision and do not slow down as
+history grows. Budget about 1 MB per 1,000 revisions, and only for workspaces
+that have a mirror configured.
+
+> **One-time divergence when you migrate.** Revision *ids* carry across the
+> migration, but a synthesized repository computes different commit hashes than
+> the original git workspace did — the tree encoding and committer metadata are
+> not the ones git used. So the first push after migrating diverges from an
+> existing mirror. Either point the mirror at a fresh remote, or allow one
+> force-push ("Overwrite unrelated history" in Admin → Git sync) to restart it.
+> This affects only installs that both migrate and mirror, once.
+
+### Sizing execution
+
+`DAZYFLOW_WORKER_COUNT` (default 8) is the per-process ceiling on concurrent
+steps: each worker claims and runs one step at a time, and a step doing I/O
+holds its worker for the whole call. Measured against a real Postgres queue with
+50 ms steps, on one machine:
+
+| Workers | Steps/sec | Efficiency vs. `W / 50ms` |
+|---:|---:|---:|
+| 2 | 28 | 71% |
+| 8 | 120 | 75% |
+| 16 | 220 | 69% |
+| 32 | 337 | 53% |
+| 64 | 398 | 31% |
+
+Near-linear to ~16, knee around 32, and flat past that on queue round-trips
+rather than on the worker count. Add replicas beyond the knee rather than more
+workers per process.
+
+`DAZYFLOW_PG_MAX_CONNS` tracks the worker count when left unset —
+`max(20, workers + 12)` — because the two cannot be chosen independently. What a
+starved pool costs is not throughput (workers are I/O-bound; 8 vs 64 connections
+at 32 workers differed by ~12%) but **latency on everything else sharing the
+pool**, the HTTP request path most visibly. At 32 workers, a 20-connection pool
+logged 4,319 waits for a free connection where 32 connections logged 51. Watch
+`dazyflow_pg_pool_empty_acquires_total`.
+
+> **More workers is not always the fix.** Outbound connector calls are paced per
+> (org, host) by the egress limiter — **5 calls/sec and 8 in flight by default**,
+> active unless you change `DAZYFLOW_EGRESS_*`. A worker waiting on that budget
+> is a worker held, so one org fanning out to a single API can occupy every
+> worker in a process. Two consequences: raising the worker count does nothing
+> for a single org hammering one host, and on a **shared deployment you should
+> set `DAZYFLOW_MAX_CONCURRENT_JOBS`** (off by default) so one org cannot take
+> the whole fleet. The diagnostic that separates the two cases is
+> `dazyflow_jobs_oldest_queued_seconds`: climbing means steps are waiting for a
+> worker; flat while flows still feel slow means the egress budget, not the
+> workers.
 
 **Scheduler enrollment.** `flow_schedules` is a projection: every write that
 changes what fires (publish, unpublish, pause, resume, a cadence edit, a delete)

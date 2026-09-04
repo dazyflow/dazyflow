@@ -297,7 +297,8 @@ func (h *gdprAPI) deleteOrgData(ctx context.Context, tenant string) (EraseReport
 		return rep, fmt.Errorf("tenant required")
 	}
 
-	// Workspace (git store) + sandbox (scratch/files) directories.
+	// The org's flows (git directory or Postgres rows, whichever backs this
+	// deployment) and its sandbox scratch/files.
 	if wr, ok := h.svc.Workspaces.(tenantDirRemover); ok {
 		if err := wr.RemoveTenant(tenant); err != nil {
 			rep.warnf("workspace: %v", err)

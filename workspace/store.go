@@ -1,802 +1,260 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package workspace stores graphs in a Git repository owned by the
-// customer. Every save commits with the author's identity in the message
-// and trailers, giving teams full history/audit/diff without bespoke
-// tooling. Environments (staging, production) are modeled as Git tags
-// pointing at frozen graph revisions.
+// Package workspace stores a tenant's flows, with full revision history.
+//
+// Every save records a revision carrying the author's identity, and an
+// environment (published, staging) is a pointer at a frozen revision. Two
+// backends implement that:
+//
+//   - git, one repository per workspace on local disk. History, diff and audit
+//     come for free from a format the customer already owns and can clone.
+//   - Postgres, a revision log shared by every replica. The same semantics
+//     without a working tree, so flow authoring is safe on more than one dzd.
+//
+// Store is the façade over both. Callers hold a *Store and never see which
+// backend answers.
 package workspace
 
 import (
-	"encoding/json"
+	"context"
 	"errors"
-	"fmt"
-	"os"
-	"path"
-	"path/filepath"
-	"strings"
-	"sync"
 	"time"
 
-	"github.com/go-git/go-billy/v5"
-	"github.com/go-git/go-billy/v5/memfs"
-	"github.com/go-git/go-billy/v5/osfs"
-	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/cache"
-	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/go-git/go-git/v5/plumbing/storer"
-	"github.com/go-git/go-git/v5/storage"
-	"github.com/go-git/go-git/v5/storage/filesystem"
-	"github.com/go-git/go-git/v5/storage/memory"
+	"github.com/go-git/go-git/v5/plumbing/transport"
 
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// Store wraps a Git working tree. Graphs live under graphs/<id>.json;
-// environments under refs/tags/graphs/<id>/<env>.
+// backend is the storage half of a workspace: revisions of graphs, the
+// environment pointers into them, and the labels attached to them.
 //
-// mu serializes every repo access. go-git's repository/storer types are
-// not safe for concurrent use, and reads (ListGraphs/Load) run on tickers
-// concurrently with the HTTP gateway's Save path — so an unguarded Store
-// data-races on the storage map. It's a full Mutex rather than an RWMutex on
-// purpose: the filesystem backend's object LRU cache is mutated *during
-// reads*, so even two concurrent readers would race on it.
-//
-// For a disk store the mutex is shared by DIRECTORY, not owned by the Store —
-// see dirMutex. Graph save/load/list are infrequent next to job execution, so
-// full mutual exclusion per workspace is a fine trade for correctness.
+// Locking is the backend's own business. The git backend serializes per
+// directory (two Stores over one working tree share a single `.git/index`);
+// the Postgres backend leaves it to the database.
+type backend interface {
+	save(graph core.Graph, author string, coalesce bool) (string, error)
+	delete(graphID, author string) (string, error)
+
+	load(graphID string) (core.Graph, error)
+	loadAt(ref, graphID string) (core.Graph, error)
+	listGraphs() ([]string, error)
+	history(graphID string, limit int) ([]Revision, error)
+
+	// head is a token that changes whenever anything in the workspace does.
+	// Callers memoize whole-workspace views against it; its content is opaque.
+	head() (string, error)
+	resolve(ref string) (string, error)
+	// resolveGraph is resolve scoped to one flow. Git needed no such thing —
+	// every flow shared one commit history, so a revision named all of them —
+	// but a Postgres revision belongs to exactly one flow.
+	resolveGraph(graphID, ref string) (string, error)
+
+	envCommit(graphID, env string) (string, error)
+	setEnv(graphID, env, commit string) error
+	clearEnv(graphID, env string) error
+
+	setLabel(graphID, commit, label string) error
+	label(graphID, commit string) (string, error)
+
+	// refs surfaces the underlying branch/tag names. Empty on a backend with
+	// no such concept; the API exists for callers doing their own git listing.
+	refs(prefix string) ([]string, error)
+
+	// mirror returns the git-mirroring half of this backend, and false when
+	// the backend cannot mirror. See Store.Push.
+	mirror() (gitMirrorer, bool)
+}
+
+// gitMirrorer is the push half of a backend that has a real git repository
+// behind it.
+type gitMirrorer interface {
+	push(ctx context.Context, remoteURL string, auth transport.AuthMethod, allowUnrelated bool) (PushResult, error)
+}
+
+// Store is a workspace: the flows of one (tenant, workspace) pair and their
+// history. Safe for concurrent use.
 type Store struct {
-	mu   *sync.Mutex
-	repo *git.Repository
-	fs   billy.Filesystem
+	b backend
 }
 
-// dirLocks maps an absolute workspace directory to the mutex that serializes
-// access to it, for the lifetime of the process.
-//
-// The lock cannot live on the Store, because a caller that caches Stores may
-// evict one and open a second for the same directory while the first is still
-// in use. Two Stores over one working tree share a single `.git/index` file,
-// and two concurrent worktree Adds against it corrupt the repository. Sharing
-// the mutex by directory makes that overlap harmless.
-//
-// Entries are never removed: an eviction that also dropped the mutex would
-// reintroduce exactly the race it exists to prevent. One pointer per workspace
-// ever opened is a rounding error next to the repository it guards.
-var dirLocks sync.Map // absolute dir → *sync.Mutex
-
-func dirMutex(dir string) *sync.Mutex {
-	if v, ok := dirLocks.Load(dir); ok {
-		return v.(*sync.Mutex)
-	}
-	v, _ := dirLocks.LoadOrStore(dir, new(sync.Mutex))
-	return v.(*sync.Mutex)
-}
-
-// objectCacheBytes bounds one repository's decompressed-object cache.
-//
-// go-git defaults it to 96 MiB per repository, which is sized for a source
-// tree, not for a workspace holding a few dozen small JSON documents — and a
-// process that keeps a Store per tenant open would carry that ceiling per
-// tenant. A whole 10-flow workspace is tens of kilobytes on disk, so this is
-// still far more than one needs; it only stops a pathological workspace from
-// pinning two orders of magnitude more. A miss re-reads from disk, where the
-// OS page cache is the real backstop.
-const objectCacheBytes = 2 * 1024 * 1024
-
-// OpenFS opens (or initializes) a Store rooted at dir on the local
-// filesystem. If dir is empty an in-memory Store is created — useful for
-// tests and ephemeral workspaces.
+// OpenFS opens (or initializes) a git-backed Store rooted at dir on the local
+// filesystem. If dir is empty an in-memory Store is created — useful for tests
+// and ephemeral workspaces.
 func OpenFS(dir string) (*Store, error) {
-	if dir == "" {
-		return openMemory()
-	}
-	return openDisk(dir)
-}
-
-func openMemory() (*Store, error) {
-	fs := memfs.New()
-	storer := memory.NewStorage()
-	repo, err := git.Init(storer, fs)
-	if err != nil {
-		return nil, fmt.Errorf("init memory repo: %w", err)
-	}
-	// A memory store's content lives only here, so it gets its own lock: there
-	// is no directory for a second Store to collide over.
-	return &Store{mu: new(sync.Mutex), repo: repo, fs: fs}, nil
-}
-
-func openDisk(dir string) (*Store, error) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, fmt.Errorf("mkdir %q: %w", dir, err)
-	}
-	// Absolute + cleaned so two spellings of one directory take the same lock.
-	abs, err := filepath.Abs(dir)
-	if err != nil {
-		return nil, fmt.Errorf("resolve %q: %w", dir, err)
-	}
-	wt := osfs.New(dir)
-	gitDir, err := wt.Chroot(".git")
+	b, err := openBackend(dir)
 	if err != nil {
 		return nil, err
 	}
-	storer := filesystem.NewStorage(gitDir, cache.NewObjectLRU(objectCacheBytes))
-
-	repo, err := openOrInit(storer, wt)
-	if err != nil {
-		return nil, err
-	}
-	return &Store{mu: dirMutex(filepath.Clean(abs)), repo: repo, fs: wt}, nil
+	return &Store{b: b}, nil
 }
 
-func openOrInit(storer storage.Storer, wt billy.Filesystem) (*git.Repository, error) {
-	repo, err := git.Open(storer, wt)
-	if err == nil {
-		return repo, nil
-	}
-	if !errors.Is(err, git.ErrRepositoryNotExists) {
-		return nil, fmt.Errorf("open repo: %w", err)
-	}
-	repo, err = git.Init(storer, wt)
-	if err != nil {
-		return nil, fmt.Errorf("init repo: %w", err)
-	}
-	// Seed an initial commit with a .gitkeep so HEAD resolves to a
-	// real tree from the moment the store opens. Without this,
-	// ListGraphs walks a HEAD whose hash has no reachable object and
-	// go-git nil-derefs inside the filesystem object store.
-	tree, err := repo.Worktree()
-	if err != nil {
-		return nil, fmt.Errorf("seed worktree: %w", err)
-	}
-	f, err := wt.Create(".gitkeep")
-	if err != nil {
-		return nil, fmt.Errorf("seed gitkeep: %w", err)
-	}
-	if err := f.Close(); err != nil {
-		return nil, fmt.Errorf("seed gitkeep close: %w", err)
-	}
-	if _, err := tree.Add(".gitkeep"); err != nil {
-		return nil, fmt.Errorf("seed add: %w", err)
-	}
-	if _, err := tree.Commit("init", &git.CommitOptions{
-		Author: &object.Signature{
-			Name:  "dazyflow",
-			Email: "dazyflow@local",
-			When:  time.Now(),
-		},
-	}); err != nil {
-		return nil, fmt.Errorf("seed commit: %w", err)
-	}
-	return repo, nil
-}
-
-// autosaveCoalesceWindow bounds how long a run of editor autosaves of the
-// same graph by the same author collapses into a single commit. Each
-// coalescing autosave amends the previous one as long as it landed within
-// this window, so a continuous editing session is one commit and every
-// pause longer than the window starts a fresh one. Explicit saves never
-// coalesce, so the user can still drop intentional checkpoints.
-const autosaveCoalesceWindow = 90 * time.Second
-
-// autosaveMessage / explicitMessage are the commit subjects. They differ so
-// a later autosave can recognise (and amend) a previous autosave commit
-// without ever amending an explicit checkpoint.
-func autosaveMessage(graphID, author string) string {
-	return fmt.Sprintf("autosave: update %s [user:%s]", graphID, author)
-}
-func explicitMessage(graphID, author string) string {
-	return fmt.Sprintf("graph: update %s [user:%s]", graphID, author)
-}
-
-// headIsRecentAutosave reports whether HEAD is an autosave commit for this
-// exact (graph, author) that landed within the coalesce window — i.e. the
-// next autosave should amend it rather than stack a new commit. Caller holds
-// s.mu.
-func (s *Store) headIsRecentAutosave(graphID, author string) bool {
-	ref, err := s.repo.Head()
-	if err != nil {
-		return false
-	}
-	c, err := s.repo.CommitObject(ref.Hash())
-	if err != nil {
-		return false
-	}
-	if c.Message != autosaveMessage(graphID, author) {
-		return false
-	}
-	return time.Since(c.Author.When) <= autosaveCoalesceWindow
-}
-
-// Save writes the graph and commits a new revision. Use this for explicit
-// saves — it always produces its own commit (an intentional checkpoint).
+// Save records a new revision of graph and returns its id.
 func (s *Store) Save(graph core.Graph, author string) (string, error) {
-	return s.save(graph, author, false)
+	return s.b.save(graph, author, false)
 }
 
 // SaveCoalescing is the editor-autosave variant: a save that immediately
-// follows a recent autosave of the same graph by the same author amends it
-// instead of stacking a new commit, so a continuous editing session stays
-// one commit in the history. See autosaveCoalesceWindow.
+// follows a recent autosave of the same graph by the same author replaces it
+// instead of stacking a new revision, so a continuous editing session stays one
+// entry in the history. See autosaveCoalesceWindow.
 func (s *Store) SaveCoalescing(graph core.Graph, author string) (string, error) {
-	return s.save(graph, author, true)
+	return s.b.save(graph, author, true)
 }
 
-func (s *Store) save(graph core.Graph, author string, coalesce bool) (string, error) {
-	// The ID becomes a path here and a git ref name at publish time, so it is
-	// checked at the store boundary: every writer (the API, dzctl, MCP, the
-	// flow generator, git sync) reaches the repository through this method.
-	if err := core.ValidGraphID(graph.ID); err != nil {
-		return "", err
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	wt, err := s.repo.Worktree()
-	if err != nil {
-		return "", err
-	}
-	relPath := graphPath(graph.ID)
-
-	data, err := json.MarshalIndent(graph, "", "  ")
-	if err != nil {
-		return "", fmt.Errorf("marshal graph: %w", err)
-	}
-
-	if err := s.fs.MkdirAll(path.Dir(relPath), 0o755); err != nil {
-		return "", err
-	}
-	f, err := s.fs.Create(relPath)
-	if err != nil {
-		return "", err
-	}
-	if _, err := f.Write(data); err != nil {
-		_ = f.Close()
-		return "", err
-	}
-	if err := f.Close(); err != nil {
-		return "", err
-	}
-
-	if _, err := wt.Add(relPath); err != nil {
-		return "", fmt.Errorf("git add: %w", err)
-	}
-
-	// Coalesce a run of autosaves into one commit by amending the previous
-	// autosave when it's recent and for the same graph+author.
-	amend := coalesce && s.headIsRecentAutosave(graph.ID, author)
-	msg := explicitMessage(graph.ID, author)
-	if coalesce {
-		msg = autosaveMessage(graph.ID, author)
-	}
-	hash, err := wt.Commit(msg, &git.CommitOptions{
-		Author: &object.Signature{
-			Name:  author,
-			Email: author,
-			When:  time.Now(),
-		},
-		AllowEmptyCommits: false,
-		Amend:             amend,
-	})
-	if err != nil {
-		if errors.Is(err, git.ErrEmptyCommit) {
-			// ErrEmptyCommit means the staged tree equals the new commit's
-			// parent tree — but which parent that is depends on whether we
-			// amended, and the two cases need opposite handling:
-			//
-			//   - Plain commit: go-git's parent is HEAD, so identical content
-			//     is a true no-op. Re-saving unchanged content (e.g. the AI
-			//     chat's "apply" after the agent already saved via MCP) hits
-			//     this; surface the existing HEAD as the commit.
-			//
-			//   - Amend: go-git sets the new commit's parent to HEAD's *parent*
-			//     and compares against THAT (worktree_commit.go). So this fires
-			//     when an editing burst nets back to the pre-autosave state —
-			//     add a node then delete it, drag a wire then undo it. Here HEAD
-			//     (the autosave we're amending) still carries the change the user
-			//     reverted. Returning it would silently drop the revert: the node
-			//     reappears on the next load and stale graph runs. Instead drop
-			//     the now-empty autosave by moving the branch back to its parent,
-			//     so HEAD, index, and worktree all agree on the reverted state.
-			if amend {
-				return s.dropAmendedHead()
-			}
-			head, herr := s.repo.Head()
-			if herr != nil {
-				return "", fmt.Errorf("commit: %w (and head lookup: %v)", err, herr)
-			}
-			return head.Hash().String(), nil
-		}
-		return "", fmt.Errorf("commit: %w", err)
-	}
-	return hash.String(), nil
-}
-
-// dropAmendedHead rewinds the current branch to HEAD's first parent. It's the
-// recovery path when amending an autosave produced an empty commit: the editing
-// burst netted back to the pre-autosave content, so the autosave commit we were
-// amending is now redundant and must be discarded — otherwise HEAD keeps the
-// change the user undid. The staged index and worktree already match the parent
-// (that's exactly why go-git reported the commit empty), so moving the ref
-// leaves a clean tree with no further index/worktree work. Caller holds s.mu.
-func (s *Store) dropAmendedHead() (string, error) {
-	head, err := s.repo.Head()
-	if err != nil {
-		return "", fmt.Errorf("amend-empty: head lookup: %w", err)
-	}
-	c, err := s.repo.CommitObject(head.Hash())
-	if err != nil {
-		return "", fmt.Errorf("amend-empty: head commit: %w", err)
-	}
-	// No parent means we'd be amending the root commit — there's nothing to
-	// rewind to. This can't happen in practice (the seed "init" commit is
-	// always the root), but guard rather than index out of range.
-	if len(c.ParentHashes) == 0 {
-		return head.Hash().String(), nil
-	}
-	parent := c.ParentHashes[0]
-	if err := s.repo.Storer.SetReference(plumbing.NewHashReference(head.Name(), parent)); err != nil {
-		return "", fmt.Errorf("amend-empty: rewind to parent: %w", err)
-	}
-	return parent.String(), nil
-}
-
-// Revision is one entry in a graph's commit history.
-type Revision struct {
-	Commit   string    `json:"commit"`
-	Author   string    `json:"author"`
-	Message  string    `json:"message"`
-	When     time.Time `json:"when"`
-	Autosave bool      `json:"autosave"`
-	// Label is the optional human name a publish gave this revision
-	// (e.g. "Black Friday config"), empty when unlabeled. Keyed to the
-	// commit, so rollback to an older revision brings its label back.
-	Label string `json:"label,omitempty"`
-}
-
-// History returns the commits that touched graphs/<id>.json, newest first,
-// capped at limit (limit <= 0 applies a default). It's the backing data for
-// the editor's version-history panel; restoring a revision is a normal Save
-// of that revision's content (a new commit at the top), so history is never
-// rewritten.
-func (s *Store) History(id string, limit int) ([]Revision, error) {
-	if id == "" {
-		return nil, errors.New("graphID required")
-	}
-	if limit <= 0 {
-		limit = 100
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	rel := graphPath(id)
-	iter, err := s.repo.Log(&git.LogOptions{FileName: &rel, Order: git.LogOrderCommitterTime})
-	if err != nil {
-		return nil, fmt.Errorf("log %s: %w", rel, err)
-	}
-	defer iter.Close()
-	revs := make([]Revision, 0, limit)
-	err = iter.ForEach(func(c *object.Commit) error {
-		if len(revs) >= limit {
-			return storer.ErrStop
-		}
-		revs = append(revs, Revision{
-			Commit:   c.Hash.String(),
-			Author:   c.Author.Name,
-			Message:  c.Message,
-			When:     c.Author.When,
-			Autosave: strings.HasPrefix(c.Message, "autosave:"),
-			Label:    s.revisionLabel(id, c.Hash.String()),
-		})
-		return nil
-	})
-	if err != nil && !errors.Is(err, storer.ErrStop) {
-		return nil, fmt.Errorf("walk history: %w", err)
-	}
-	return revs, nil
-}
-
-// Delete removes graphs/<id>.json from the worktree and commits the
-// removal. Returns the resulting commit hash on success. Idempotent
-// in the "file doesn't exist" sense: a missing path returns
-// (commit="", nil) so the caller can surface "deleted or already
-// gone" as the same outcome.
+// Delete removes a flow and records the removal. Returns the resulting revision
+// id. Idempotent in the "already gone" sense: a missing flow returns
+// (commit="", nil) so the caller can surface "deleted or already gone" as one
+// outcome.
 func (s *Store) Delete(graphID, author string) (string, error) {
-	if graphID == "" {
-		return "", errors.New("graphID required")
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	wt, err := s.repo.Worktree()
-	if err != nil {
-		return "", err
-	}
-	relPath := graphPath(graphID)
-	if _, statErr := s.fs.Stat(relPath); statErr != nil {
-		// Not present in the worktree. Treat as already-deleted —
-		// keeps the caller's semantics simple (HTTP 204 whether the
-		// resource was there or not, matching REST conventions).
-		return "", nil
-	}
-	if err := s.fs.Remove(relPath); err != nil {
-		return "", fmt.Errorf("remove %s: %w", relPath, err)
-	}
-	if _, err := wt.Add(relPath); err != nil {
-		return "", fmt.Errorf("git add (removal): %w", err)
-	}
-	msg := fmt.Sprintf("graph: delete %s [user:%s]", graphID, author)
-	hash, err := wt.Commit(msg, &git.CommitOptions{
-		Author: &object.Signature{
-			Name:  author,
-			Email: author,
-			When:  time.Now(),
-		},
-		AllowEmptyCommits: false,
-	})
-	if err != nil {
-		if errors.Is(err, git.ErrEmptyCommit) {
-			head, herr := s.repo.Head()
-			if herr != nil {
-				return "", fmt.Errorf("commit: %w (and head lookup: %v)", err, herr)
-			}
-			return head.Hash().String(), nil
-		}
-		return "", fmt.Errorf("commit: %w", err)
-	}
-	return hash.String(), nil
+	return s.b.delete(graphID, author)
 }
 
-// ErrGraphNotFound is returned by Load/LoadAt when the commit resolves but
-// holds no graphs/<id>.json — i.e. the flow genuinely does not exist yet.
-// It exists to be distinguishable: callers that branch on "new flow" vs
-// "existing flow" (saveGraph most importantly, where the two paths run
-// different authorization) must fail closed on every OTHER error rather
-// than treating a corrupt object, an I/O fault or an unreadable commit as
-// an invitation to take the create path.
-var ErrGraphNotFound = errors.New("graph not found")
+// Load reads a flow at the workspace's current revision. Returns
+// ErrGraphNotFound when the flow does not exist; any other error means the
+// store could not be read and says nothing about whether the flow exists.
+func (s *Store) Load(id string) (core.Graph, error) { return s.b.load(id) }
 
-// Load reads graphs/<id>.json from HEAD. Returns ErrGraphNotFound when the
-// flow does not exist; any other error means the store could not be read
-// and says nothing about whether the flow exists.
-func (s *Store) Load(id string) (core.Graph, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	head, err := s.repo.Head()
-	if err != nil {
-		// An unborn HEAD is a repo with no commits — openMemory (and any
-		// freshly created workspace before its first save) starts there. No
-		// commits means no graphs, so this is a genuine not-found and not a
-		// store fault: the caller's create path is the correct branch.
-		if errors.Is(err, plumbing.ErrReferenceNotFound) {
-			return core.Graph{}, fmt.Errorf("graph %q: %w", id, ErrGraphNotFound)
-		}
-		return core.Graph{}, fmt.Errorf("head: %w", err)
-	}
-	return s.loadAt(head.Hash(), id)
+// LoadAt reads a flow as of ref (an environment pointer, "HEAD", or a raw
+// revision id).
+func (s *Store) LoadAt(ref, id string) (core.Graph, error) { return s.b.loadAt(ref, id) }
+
+// ListGraphs returns the IDs of every flow currently in the workspace.
+func (s *Store) ListGraphs() ([]string, error) { return s.b.listGraphs() }
+
+// History returns the revisions that touched a flow, newest first, capped at
+// limit (limit <= 0 applies a default). Restoring a revision is an ordinary
+// Save of that revision's content — a new entry at the top — so history is
+// never rewritten.
+func (s *Store) History(id string, limit int) ([]Revision, error) { return s.b.history(id, limit) }
+
+// Head is a token that changes whenever anything in the workspace does. A cheap
+// cache key for callers that memoize views derived from the whole flow set
+// (e.g. the drop-suggestion adjacency): when it is unchanged, nothing those
+// views depend on has changed either. Its content is opaque.
+func (s *Store) Head() (string, error) { return s.b.head() }
+
+// Resolve turns a ref ("HEAD", an environment pointer, or a raw revision id)
+// into a revision id. Used by callers that need to record the exact revision a
+// ref pointed at — e.g. which one a label was attached to.
+func (s *Store) Resolve(ref string) (string, error) { return s.b.resolve(ref) }
+
+// ResolveFor is Resolve scoped to one flow: it returns the revision of graphID
+// that ref names. Prefer it wherever the flow is known — it is the only form
+// that means anything on a backend where a revision belongs to one flow.
+func (s *Store) ResolveFor(graphID, ref string) (string, error) {
+	return s.b.resolveGraph(graphID, ref)
 }
 
-// LoadAt reads graphs/<id>.json from the commit identified by ref (a
-// branch, tag, or hex hash).
-func (s *Store) LoadAt(ref, id string) (core.Graph, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	hash, err := s.resolve(ref)
-	if err != nil {
-		return core.Graph{}, err
-	}
-	return s.loadAt(hash, id)
-}
-
-func (s *Store) loadAt(hash plumbing.Hash, id string) (core.Graph, error) {
-	commit, err := s.repo.CommitObject(hash)
-	if err != nil {
-		return core.Graph{}, fmt.Errorf("commit %s: %w", hash, err)
-	}
-	tree, err := commit.Tree()
-	if err != nil {
-		return core.Graph{}, err
-	}
-	file, err := tree.File(graphPath(id))
-	if err != nil {
-		// Distinguish "this flow has never been saved" from "the store is
-		// broken". Callers authorize differently on the two — see
-		// ErrGraphNotFound — so collapsing them into one opaque error is a
-		// security-relevant loss of information, not just poor ergonomics.
-		if errors.Is(err, object.ErrFileNotFound) ||
-			errors.Is(err, object.ErrDirectoryNotFound) ||
-			errors.Is(err, object.ErrEntryNotFound) {
-			return core.Graph{}, fmt.Errorf("graph %q at %s: %w", id, hash, ErrGraphNotFound)
-		}
-		return core.Graph{}, fmt.Errorf("graph %q at %s: %w", id, hash, err)
-	}
-	contents, err := file.Contents()
-	if err != nil {
-		return core.Graph{}, err
-	}
-	var g core.Graph
-	if err := json.Unmarshal([]byte(contents), &g); err != nil {
-		return core.Graph{}, fmt.Errorf("parse %s: %w", file.Name, err)
-	}
-	return g, nil
-}
-
-// PromoteToEnvironment moves the environment tag (refs/tags/graphs/<id>/<env>)
-// to the supplied commit. Common envs: staging, production.
+// PromoteToEnvironment points env (e.g. "published") at commit. Environment
+// pointers are intentionally movable, so this replaces any previous target.
 func (s *Store) PromoteToEnvironment(graphID, env, commit string) error {
-	if env == "" {
-		return errors.New("env required")
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	hash, err := s.resolve(commit)
-	if err != nil {
-		return err
-	}
-	name := plumbing.NewTagReferenceName(envTag(graphID, env))
-	// Force update — env tags are intentionally movable.
-	ref := plumbing.NewHashReference(name, hash)
-	if err := s.repo.Storer.SetReference(ref); err != nil {
-		return fmt.Errorf("set tag: %w", err)
-	}
-	return nil
+	return s.b.setEnv(graphID, env, commit)
 }
 
-// ClearEnvironment removes the environment tag (refs/tags/graphs/<id>/<env>),
-// reverting the flow to having no revision pinned for that env. Unpublishing a
-// flow clears the PublishedEnv tag, which takes it fully offline: the
-// scheduler treats it as "not live" (PublishedCommit returns "") and the
-// webhook/form/event endpoints reject it (LoadPublished returns
-// ErrNotPublished). Idempotent — clearing an env that was never set is a
-// no-op, not an error.
+// ClearEnvironment removes the environment pointer, reverting the flow to
+// having no revision pinned for that env. Unpublishing a flow clears
+// PublishedEnv, which takes it fully offline: the scheduler treats it as not
+// live (PublishedCommit returns "") and the webhook, hosted-form and
+// provider-event endpoints reject it (LoadPublished returns ErrNotPublished).
+// Idempotent.
 func (s *Store) ClearEnvironment(graphID, env string) error {
-	if env == "" {
-		return errors.New("env required")
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	name := plumbing.NewTagReferenceName(envTag(graphID, env))
-	if err := s.repo.Storer.RemoveReference(name); err != nil &&
-		!errors.Is(err, plumbing.ErrReferenceNotFound) {
-		return fmt.Errorf("remove tag: %w", err)
-	}
-	return nil
+	return s.b.clearEnv(graphID, env)
 }
 
-// PublishedEnv is the environment name for the "live" published version
-// of a flow — the revision automatic triggers (cron/poll/webhook) run.
-// Publishing moves this tag to a commit via PromoteToEnvironment; rollback
-// re-publishes an older commit. HEAD remains the editable draft.
-const PublishedEnv = "published"
-
-// PublishedCommit returns the commit hash the flow's published tag points
-// at, or "" when the flow has never been published. "" is not an error: it is
-// the normal state of a draft. Callers that decide whether something FIRES
-// should prefer LoadPublished, which turns it into ErrNotPublished rather
-// than leaving each caller to remember the check.
+// PublishedCommit returns the revision a flow is published at, or "" when it
+// has never been published.
 func (s *Store) PublishedCommit(id string) (string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.publishedCommit(id)
+	return s.b.envCommit(id, PublishedEnv)
 }
 
-func (s *Store) publishedCommit(id string) (string, error) {
-	name := plumbing.NewTagReferenceName(envTag(id, PublishedEnv))
-	ref, err := s.repo.Reference(name, true)
-	if err != nil {
-		if errors.Is(err, plumbing.ErrReferenceNotFound) {
-			return "", nil
-		}
-		return "", err
-	}
-	return ref.Hash().String(), nil
-}
-
-// ErrNotPublished is returned by LoadPublished for a flow that has never been
-// published. Every automatic-firing path treats it as "this flow does not run
-// yet" rather than an error worth surfacing.
-var ErrNotPublished = errors.New("flow is not published")
-
-// LoadPublished reads the flow at its published tag. This is the version
-// automatic triggers run — a published flow fires its last published
-// revision, never whatever half-finished draft is at HEAD, which is what
-// makes the editor's 1.5s autosave safe on a live flow. The manual-run,
-// sample, and test-trigger paths deliberately keep using Load (HEAD) so an
-// author can test edits before publishing them.
+// LoadPublished reads a flow at its published revision. This is the version
+// automatic triggers run — a published flow fires its last published revision,
+// never whatever half-finished draft is current, which is what makes the
+// editor's autosave safe on a live flow. The manual-run, sample and
+// test-trigger paths deliberately keep using Load so an author can try edits
+// before publishing them.
 //
-// An unpublished flow returns ErrNotPublished and fires NOTHING. This used to
-// be LoadPublishedOrHead, which fell back to HEAD — so a never-published flow
-// with a webhook DID fire (running its draft) while the same flow with a
-// schedule did not, because the scheduler gated on the published commit
-// separately. "Published" now means one thing on every path.
+// An unpublished flow returns ErrNotPublished and fires NOTHING.
 func (s *Store) LoadPublished(id string) (core.Graph, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	commit, err := s.publishedCommit(id)
+	commit, err := s.b.envCommit(id, PublishedEnv)
 	if err != nil {
 		return core.Graph{}, err
 	}
 	if commit == "" {
 		return core.Graph{}, ErrNotPublished
 	}
-	return s.loadAt(plumbing.NewHash(commit), id)
+	return s.b.loadAt(commit, id)
 }
 
-// ListGraphs returns the IDs of every graph currently committed at HEAD.
-func (s *Store) ListGraphs() ([]string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	head, err := s.repo.Head()
-	if errors.Is(err, plumbing.ErrReferenceNotFound) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	commit, err := s.repo.CommitObject(head.Hash())
-	if err != nil {
-		return nil, err
-	}
-	tree, err := commit.Tree()
-	if err != nil {
-		return nil, err
-	}
-	var ids []string
-	err = tree.Files().ForEach(func(f *object.File) error {
-		if dir, base := path.Split(f.Name); dir == "graphs/" && strings.HasSuffix(base, ".json") {
-			ids = append(ids, strings.TrimSuffix(base, ".json"))
-		}
-		return nil
-	})
-	return ids, err
-}
-
-// Head returns the current HEAD commit hash as a hex string, or "" when
-// the repo has no commits yet. A cheap cache key for callers that
-// memoize views derived from the whole graph set (e.g. the drop-suggestion
-// adjacency) — when HEAD is unchanged, nothing the derived view depends on
-// has changed either.
-func (s *Store) Head() (string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	head, err := s.repo.Head()
-	if errors.Is(err, plumbing.ErrReferenceNotFound) {
-		return "", nil
-	}
-	if err != nil {
-		return "", err
-	}
-	return head.Hash().String(), nil
-}
-
-// Resolve turns a ref (branch, tag, "HEAD", or raw hash) into its commit
-// hash as a hex string. Used by callers that need to record the exact
-// revision a ref pointed at (e.g. which commit a label was attached to).
-func (s *Store) Resolve(ref string) (string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	h, err := s.resolve(ref)
-	if err != nil {
-		return "", err
-	}
-	return h.String(), nil
-}
-
-func (s *Store) resolve(ref string) (plumbing.Hash, error) {
-	if h, err := s.repo.ResolveRevision(plumbing.Revision(ref)); err == nil {
-		return *h, nil
-	}
-	// Treat ref as raw hash.
-	if len(ref) == 40 {
-		return plumbing.NewHash(ref), nil
-	}
-	return plumbing.ZeroHash, fmt.Errorf("could not resolve %q", ref)
-}
-
-func graphPath(id string) string        { return "graphs/" + id + ".json" }
-func envTag(graphID, env string) string { return "graphs/" + graphID + "/" + env }
-
-// labelTag names the annotated tag that carries a revision's human label:
-// refs/tags/graphs/<id>/labels/<commit>. Distinct namespace from the env
-// tags (graphs/<id>/<env>) so labels never collide with a published/staging
-// pointer and the scheduler's resolve path is untouched.
-func labelTag(graphID, commit string) string {
-	return "graphs/" + graphID + "/labels/" + commit
-}
-
-// SetRevisionLabel attaches a human label to a specific commit, stored as an
-// annotated Git tag at labelTag(id, commit). Labels are keyed by commit, not
-// by environment: republishing an older revision (rollback) brings back the
-// label it was given, and the version-history panel shows each revision's
-// name. Re-labeling replaces the previous label; an empty label clears it.
+// SetRevisionLabel attaches a human label to a specific revision. Labels are
+// keyed by revision, not by environment: republishing an older one (rollback)
+// brings back the label it was given, and the version-history panel shows each
+// revision's name. Re-labeling replaces the previous label; an empty label
+// clears it.
 func (s *Store) SetRevisionLabel(graphID, commit, label string) error {
-	if graphID == "" {
-		return errors.New("graphID required")
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	hash, err := s.resolve(commit)
-	if err != nil {
-		return err
-	}
-	name := plumbing.NewTagReferenceName(labelTag(graphID, hash.String()))
-	// Force-replace: drop any existing label tag for this commit first
-	// (CreateTag errors if the tag already exists).
-	if err := s.repo.Storer.RemoveReference(name); err != nil &&
-		!errors.Is(err, plumbing.ErrReferenceNotFound) {
-		return fmt.Errorf("clear label: %w", err)
-	}
-	if strings.TrimSpace(label) == "" {
-		return nil // empty label = clear
-	}
-	_, err = s.repo.CreateTag(labelTag(graphID, hash.String()), hash, &git.CreateTagOptions{
-		Message: label,
-		Tagger: &object.Signature{
-			Name:  "dazyflow",
-			Email: "dazyflow@local",
-			When:  time.Now(),
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("create label tag: %w", err)
-	}
-	return nil
+	return s.b.setLabel(graphID, commit, label)
 }
 
-// RevisionLabel returns the human label attached to graphID@commit, or ""
-// when the revision is unlabeled.
+// RevisionLabel returns the human label attached to graphID@commit, or "" when
+// the revision is unlabeled.
 func (s *Store) RevisionLabel(graphID, commit string) (string, error) {
-	if graphID == "" {
-		return "", errors.New("graphID required")
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	hash, err := s.resolve(commit)
-	if err != nil {
-		return "", err
-	}
-	return s.revisionLabel(graphID, hash.String()), nil
+	return s.b.label(graphID, commit)
 }
 
-// revisionLabel reads a commit's label tag, returning "" when absent or
-// unreadable. commit must be a full hash string. Caller holds s.mu.
-func (s *Store) revisionLabel(graphID, commit string) string {
-	name := plumbing.NewTagReferenceName(labelTag(graphID, commit))
-	ref, err := s.repo.Reference(name, false)
-	if err != nil {
-		return ""
+// Branches and Tags surface the underlying refs for callers that want to do
+// their own listing/diff. Empty on a backend with no such concept.
+func (s *Store) Branches() ([]string, error) { return s.b.refs("refs/heads/") }
+func (s *Store) Tags() ([]string, error)     { return s.b.refs("refs/tags/") }
+
+// ErrMirrorUnsupported is returned by Push on a backend with no git repository
+// behind it. The mirror is an export of the customer's own history, so a
+// deployment that wants one keeps its flows in git.
+var ErrMirrorUnsupported = errors.New("this workspace is not git-backed, so it cannot be mirrored to a git remote")
+
+// Push mirrors the workspace to a git remote.
+//
+// Callers must treat a returned error as "the mirror is stale", never as a
+// failure of whatever triggered the push — a save or publish has already
+// succeeded by the time we get here.
+func (s *Store) Push(ctx context.Context, remoteURL string, auth transport.AuthMethod) (PushResult, error) {
+	m, ok := s.b.mirror()
+	if !ok {
+		return PushResult{}, ErrMirrorUnsupported
 	}
-	tag, err := s.repo.TagObject(ref.Hash())
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(tag.Message)
+	return m.push(ctx, remoteURL, auth, false)
 }
 
-// Branches/Tags surface the underlying refs for callers that want to do
-// their own listing/diff.
-func (s *Store) Branches() ([]string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return listRefs(s.repo, "refs/heads/")
-}
-func (s *Store) Tags() ([]string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return listRefs(s.repo, "refs/tags/")
+// PushOverwritingUnrelated is Push with the shared-history check disabled: it
+// will overwrite a remote holding an unrelated repository.
+//
+// Only ever call this for an action a human just confirmed. The automatic
+// mirror path must use Push, so that a misconfigured or repurposed remote fails
+// loudly instead of being erased by a background job nobody was watching.
+func (s *Store) PushOverwritingUnrelated(ctx context.Context, remoteURL string, auth transport.AuthMethod) (PushResult, error) {
+	m, ok := s.b.mirror()
+	if !ok {
+		return PushResult{}, ErrMirrorUnsupported
+	}
+	return m.push(ctx, remoteURL, auth, true)
 }
 
-func listRefs(repo *git.Repository, prefix string) ([]string, error) {
-	refs, err := repo.References()
-	if err != nil {
-		return nil, err
-	}
-	var out []string
-	err = refs.ForEach(func(r *plumbing.Reference) error {
-		name := string(r.Name())
-		if strings.HasPrefix(name, prefix) {
-			out = append(out, strings.TrimPrefix(name, prefix))
-		}
-		return nil
-	})
-	return out, err
+// Revision is one entry in a flow's history.
+type Revision struct {
+	Commit   string    `json:"commit"`
+	Author   string    `json:"author"`
+	Message  string    `json:"message"`
+	When     time.Time `json:"when"`
+	Autosave bool      `json:"autosave"`
+	// Label is the optional human name a publish gave this revision (e.g.
+	// "Black Friday config"), empty when unlabeled. Keyed to the revision, so
+	// rollback to an older one brings its label back.
+	Label string `json:"label,omitempty"`
+}
+
+// git returns the git backend behind this Store, for the package's own
+// white-box tests. Nil when the Store is not git-backed.
+func (s *Store) git() *gitBackend {
+	b, _ := s.b.(*gitBackend)
+	return b
 }

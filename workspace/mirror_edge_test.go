@@ -240,7 +240,7 @@ func TestMirror_DivergedRemoteIsStillRelated(t *testing.T) {
 	}
 	// Sanity: the branch tip is now something we do not hold, while the tag
 	// still is — which is exactly the "diverged but related" shape.
-	if s.repo.Storer.HasEncodedObject(stranger) == nil {
+	if s.git().repo.Storer.HasEncodedObject(stranger) == nil {
 		t.Fatal("setup: the fabricated commit should be unknown locally")
 	}
 
@@ -484,7 +484,7 @@ func TestMirror_FailedPushLeavesBothSidesIntact(t *testing.T) {
 	remote := mirrorOf(t, s)
 	refsBefore := remoteRefs(t, remote)
 
-	localBefore, err := s.mirroredRefs()
+	localBefore, err := s.git().mirroredRefs()
 	if err != nil {
 		t.Fatalf("local refs: %v", err)
 	}
@@ -492,7 +492,7 @@ func TestMirror_FailedPushLeavesBothSidesIntact(t *testing.T) {
 	if _, err := s.Push(context.Background(), "ssh://git@127.0.0.1:1/nope.git", nil); err == nil {
 		t.Fatal("push to a dead address should fail")
 	}
-	localAfter, err := s.mirroredRefs()
+	localAfter, err := s.git().mirroredRefs()
 	if err != nil {
 		t.Fatalf("local refs after: %v", err)
 	}

@@ -1597,7 +1597,7 @@ func (s *Service) LabelRevision(ctx context.Context, p core.Principal, tenant, w
 	if core.AuthorizeGraphView(p, g) != nil {
 		return "", fmt.Errorf("graph %q: %w", id, core.ErrNotFound)
 	}
-	commit, err := store.Resolve(target)
+	commit, err := store.ResolveFor(id, target)
 	if err != nil {
 		return "", err
 	}

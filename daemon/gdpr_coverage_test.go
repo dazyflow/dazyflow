@@ -52,6 +52,9 @@ var tenantTableDisposition = map[string]struct {
 	"run_logs":              {erasedByCascade, "run output, may contain personal data from flows"},
 	"bus_events":            {erasedByCascade, "spooled run events"},
 	"flow_schedules":        {erasedByCascade, "scheduler enrollment projection"},
+	"flow_revisions":        {erasedByCascade, "the org's flows and their history"},
+	"flow_heads":            {erasedByCascade, "current revision of each flow"},
+	"flow_envs":             {erasedByCascade, "published/staging pointers"},
 	"workspace_shares":      {erasedByCascade, "public overview links"},
 	"collection_shares":     {erasedByCascade, "public collection links"},
 	"encrypted_secrets":     {erasedByCascade, "connector credentials"},
@@ -111,7 +114,10 @@ func TestEveryTenantTableHasAnErasureDisposition(t *testing.T) {
 	t.Parallel()
 	// Scan the packages that own schema. Relative to daemon/, which is this
 	// test's working directory.
-	roots := []string{".", "../auth", "../engine", "../core"}
+	// Every package that declares tenant-scoped DDL. workspace joined the list
+	// when flows gained a Postgres backend: a table the scan cannot see is a
+	// table erasure can forget, which is the exact failure this guards.
+	roots := []string{".", "../auth", "../engine", "../core", "../workspace"}
 
 	found := map[string]string{} // table → file that declares it
 	for _, root := range roots {

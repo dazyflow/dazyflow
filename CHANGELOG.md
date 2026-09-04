@@ -10,6 +10,114 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Added
+
+- **Flows can live in Postgres instead of git**, which is what makes flow
+  authoring safe on more than one `dzd`. `DAZYFLOW_GRAPH_STORE=postgres` (default
+  `git`) switches the store; everything else about a flow — history, diff,
+  rollback, labels, published/staging pointers, autosave coalescing — behaves
+  identically, because both backends are held to one conformance suite rather
+  than to two sets of tests that drift.
+
+  The reason it matters: a git working tree is serialized only *within* a
+  process. Two pods committing to one org's workspace share a single
+  `.git/index` and corrupt it — reproducible in a test the moment the
+  in-process lock is removed. Runs, schedules, secrets and events were already
+  Postgres-backed; flow authoring was the last thing pinning the app to one pod.
+
+  Moving an existing install is deliberate — **an upgrade migrates nothing**,
+  since `DAZYFLOW_GRAPH_STORE` defaults to `git`:
+
+  ```sh
+  dzd --migrate-workspaces-to-postgres   # read-only on git, re-runnable
+  dzd --verify-workspace-migration       # exits non-zero on any difference
+  # then set DAZYFLOW_GRAPH_STORE=postgres and restart
+  ```
+
+  `--verify-workspace-migration` exists so that "is it safe to archive the git
+  workspaces now?" has an answer other than hoping: it compares the two stores
+  flow by flow — current content, published pointer, and every revision's id,
+  content and label — reports every difference rather than the first, and fails
+  the command if any exist.
+
+  It carries each flow's full history, its labels and its published pointer, and
+  **keeps the revision ids** — so a published pointer, a bookmarked revision, or
+  a rollback someone is midway through still resolves on the other side.
+
+  The git directory is left untouched, and is worth **archiving rather than
+  deleting** even after a clean verification: flows deleted *before* the
+  migration were never in scope and live on only there.
+
+  **Git mirroring works in postgres mode too**, by synthesizing a repository
+  from the revision log: every revision becomes a commit carrying the author,
+  message and timestamp its row records, and that is what gets pushed.
+
+  The whole thing turns on synthesis being deterministic. Whichever replica
+  mirrors rebuilds from the same rows, so nothing may depend on the machine or
+  the clock — the committer is a fixed identity, every timestamp comes from the
+  row normalized to UTC, the flow's JSON is re-encoded canonically rather than
+  echoed, and commits follow the `seq` Postgres already assigned. Get that wrong
+  and every failover force-pushes over the customer's history, so it is asserted
+  directly: a repository built incrementally must be byte-identical to one
+  rebuilt from scratch, and a pod that has never mirrored a workspace must
+  fast-forward onto what the previous one left — with the shared-history check
+  on, not bypassed.
+
+  That makes `$DAZYFLOW_DATA_DIR/mirrorcache` a disposable cache rather than
+  state to protect. Losing it costs one rebuild at ~390 revisions/second
+  (measured, and flat — it does not degrade as history grows); steady-state
+  pushes append at ~2.5 ms per revision, also flat. About 1 MB per 1,000
+  revisions, only for workspaces with a mirror configured.
+
+  **One-time divergence when migrating:** revision ids carry across, but a
+  synthesized repository computes different commit hashes than the original git
+  workspace did. The first push after migrating therefore diverges from an
+  existing mirror — point it at a fresh remote, or allow one overwrite. Only
+  installs that both migrate and mirror, once.
+
+- Internally, `workspace.Store` is now a façade over a backend interface. The
+  public API did not change, so none of its callers did either — the git
+  implementation moved behind `gitBackend` unmodified, and `pgBackend` is the
+  new one alongside it.
+
+### Changed
+
+- **A stock `dzd` now runs eight steps at once instead of two.**
+  `DAZYFLOW_WORKER_COUNT` defaulted to 2, and since each worker runs one step at
+  a time — holding it for the whole of any connector call — that was the
+  per-process ceiling on concurrent steps. Measured against a real Postgres
+  queue with 50 ms steps: 2 workers do 28 steps/sec, 8 do 120, 16 do 220 (all
+  near 70% of the theoretical `W / 50ms`), 32 do 337 and 64 do 398 — so the knee
+  is around 32 and past it the limit is queue round-trips, not the worker count.
+  Eight is four times the old throughput at the same efficiency and still modest
+  for the 1-CPU/512Mi pod in `deploy/k8s`; these goroutines are I/O-bound and
+  cost almost nothing idle. Beyond the knee, add replicas.
+
+- **`DAZYFLOW_PG_MAX_CONNS` follows the worker count when unset**, at
+  `max(20, workers + 12)`, so raising one no longer silently starves the other.
+  The default install is unchanged (8 + 12 = 20, the old value). What a starved
+  pool costs turned out not to be throughput — 8 versus 64 connections at 32
+  workers differed by ~12%, because workers are I/O-bound — but **latency on
+  everything else sharing the pool**, the HTTP request path most visibly: at 32
+  workers a 20-connection pool logged 4,319 waits for a free connection where 32
+  connections logged 51.
+
+- **`DAZYFLOW_MAX_CONCURRENT_JOBS` is reachable.** The per-org ceiling on
+  running steps was read from `const maxConcurrentJobs = 0` — a hardcoded zero,
+  so the throttle, its store support and its tests were all live while the knob
+  could not be set without recompiling. It is an env var now, still defaulting
+  to off (a single-org install has nothing to protect itself from).
+
+  It is worth setting on a shared deployment, and the reason is worth stating
+  plainly: outbound calls are paced per (org, host) by the egress limiter — 5
+  calls/sec and 8 in flight by default, active unless `DAZYFLOW_EGRESS_*` says
+  otherwise — and a worker waiting on that budget is a worker held. So one org
+  fanning out to a single API can occupy every worker in a process, and raising
+  the worker count makes that blast radius larger, not smaller. The diagnostic
+  that separates the two cases is `dazyflow_jobs_oldest_queued_seconds`:
+  climbing means steps are waiting for a worker, flat-while-slow means the
+  egress budget. `docs/DEPLOY.md` has the sizing table and both knobs.
+
 ### Performance
 
 - **Memory no longer grows with the number of tenants.** Every workspace a

@@ -839,14 +839,14 @@ func TestStore_LoadAt_FortyCharHashThatDoesntExist(t *testing.T) {
 func TestStore_LoadAt_InvalidJSONInGraphFile(t *testing.T) {
 	s, _ := OpenFS("")
 	// Use the internal worktree to write a bogus graph file + commit.
-	wt, err := s.repo.Worktree()
+	wt, err := s.git().repo.Worktree()
 	if err != nil {
 		t.Fatalf("worktree: %v", err)
 	}
-	if err := s.fs.MkdirAll("graphs", 0o755); err != nil {
+	if err := s.git().fs.MkdirAll("graphs", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	f, err := s.fs.Create("graphs/broken.json")
+	f, err := s.git().fs.Create("graphs/broken.json")
 	if err != nil {
 		t.Fatal(err)
 	}

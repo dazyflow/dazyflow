@@ -90,7 +90,7 @@ type PushResult struct {
 // Callers must treat a returned error as "the mirror is stale", never as a
 // failure of whatever triggered the push — a save or publish has already
 // succeeded by the time we get here.
-func (s *Store) Push(ctx context.Context, remoteURL string, auth transport.AuthMethod) (PushResult, error) {
+func (s *gitBackend) Push(ctx context.Context, remoteURL string, auth transport.AuthMethod) (PushResult, error) {
 	return s.push(ctx, remoteURL, auth, false)
 }
 
@@ -101,11 +101,11 @@ func (s *Store) Push(ctx context.Context, remoteURL string, auth transport.AuthM
 // mirror path must use Push, so that a misconfigured or repurposed remote
 // fails loudly instead of being erased by a background job nobody was
 // watching.
-func (s *Store) PushOverwritingUnrelated(ctx context.Context, remoteURL string, auth transport.AuthMethod) (PushResult, error) {
+func (s *gitBackend) PushOverwritingUnrelated(ctx context.Context, remoteURL string, auth transport.AuthMethod) (PushResult, error) {
 	return s.push(ctx, remoteURL, auth, true)
 }
 
-func (s *Store) push(ctx context.Context, remoteURL string, auth transport.AuthMethod, allowUnrelated bool) (PushResult, error) {
+func (s *gitBackend) push(ctx context.Context, remoteURL string, auth transport.AuthMethod, allowUnrelated bool) (PushResult, error) {
 	if strings.TrimSpace(remoteURL) == "" {
 		return PushResult{}, errors.New("remote URL required")
 	}
@@ -225,7 +225,7 @@ func (r refSet) has(name string) (int, bool) {
 // mirroredRefs lists this repo's branch and tag refs. Caller holds s.mu.
 // Symbolic refs (HEAD) are skipped: a mirror pushes the refs HEAD points
 // through, and pushing HEAD itself is neither needed nor meaningful here.
-func (s *Store) mirroredRefs() (refSet, error) {
+func (s *gitBackend) mirroredRefs() (refSet, error) {
 	iter, err := s.repo.References()
 	if err != nil {
 		return nil, err
@@ -280,7 +280,7 @@ func listRemoteMirroredRefs(ctx context.Context, remote *git.Remote, auth transp
 // remote's tip is normally either our HEAD or an ancestor of it, and both are
 // present locally. Walking would cost the whole history to answer a question
 // one lookup settles.
-func (s *Store) sharesHistory(remoteHashes []plumbing.Hash) bool {
+func (s *gitBackend) sharesHistory(remoteHashes []plumbing.Hash) bool {
 	for _, h := range remoteHashes {
 		if h.IsZero() {
 			continue

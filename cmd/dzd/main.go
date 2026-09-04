@@ -70,6 +70,7 @@ import (
 	"github.com/dazyflow/dazyflow/engine/mcp"
 	"github.com/dazyflow/dazyflow/engine/webapi"
 	"github.com/dazyflow/dazyflow/pollstate"
+	"github.com/dazyflow/dazyflow/workspace"
 )
 
 func main() {
@@ -81,6 +82,8 @@ func main() {
 	// (import-users-from-json).
 	rotateKeyB64 := flag.String("rotate-master-key", "", "rotate the encrypted-secret store's KEK: re-wrap every tenant DEK from DAZYFLOW_MASTER_KEY (the CURRENT key) to this new base64-encoded 32-byte key, print a report, and EXIT without serving. Re-runnable. After it succeeds, restart dzd with DAZYFLOW_MASTER_KEY set to the new key. No secret values are re-entered.")
 	importUsersFrom := flag.String("import-users-from-json", "", "one-time migration: import users from this JSON user file into the Postgres user store (requires DAZYFLOW_POSTGRES_DSN), then exit. Idempotent — accounts already in Postgres are skipped, never overwritten.")
+	verifyWorkspaces := flag.Bool("verify-workspace-migration", false, "compare the Postgres flow store against the git workspaces under DAZYFLOW_DATA_DIR — current content, published pointers, every revision and label — report any difference, and exit. Read-only. Run it before archiving the git directory.")
+	migrateWorkspaces := flag.Bool("migrate-workspaces-to-postgres", false, "one-time migration: copy every flow under DAZYFLOW_DATA_DIR/workspace — full revision history, labels and published pointers — into the Postgres flow store, then exit. Idempotent and re-runnable; the git directory is left untouched, so it stays the archive for flows deleted before the migration. Set DAZYFLOW_GRAPH_STORE=postgres afterwards.")
 	flag.Parse()
 
 	// Install the system-log tee as early as possible so the platform-admin
@@ -98,13 +101,25 @@ func main() {
 	// password, missing master key) so the bundled defaults boot for local
 	// development. It must NOT be set in production.
 	devMode := envBool("DAZYFLOW_DEV", false)
-	// Workers per process. Two is plenty for hand-tuned in-house
-	// workloads; raise it (DAZYFLOW_WORKER_COUNT) on an execution-heavy
-	// node, or scale out by adding dzd replicas behind Postgres. Both
-	// axes are safe: the job queue claims with FOR UPDATE SKIP LOCKED so
-	// workers never double-claim. Each worker can run one node at a time,
-	// so this is the per-process concurrency ceiling for flow execution.
-	workerCount := envInt("DAZYFLOW_WORKER_COUNT", 2)
+	// Workers per process, and so the per-process ceiling on concurrent steps:
+	// each worker claims and runs ONE node at a time, and a step doing I/O
+	// (any connector call) holds its worker for the whole call.
+	//
+	// Measured against a real Postgres queue with 50ms steps, throughput is
+	// near-linear to ~16 workers (~70% of the theoretical W/50ms), reaches the
+	// knee around 32, and flattens past that on queue round-trips rather than
+	// on the worker count. Eight is the default because it is four times the
+	// throughput of the old two at the same efficiency, while staying modest
+	// enough for the 1-CPU/512Mi pod in deploy/k8s — these goroutines are
+	// I/O-bound and cost almost nothing idle. Raise it on an execution-heavy
+	// node, or add replicas; both are safe, since the queue claims with
+	// FOR UPDATE SKIP LOCKED and workers never double-claim.
+	//
+	// Note what a HIGHER count does not fix: outbound calls are paced per
+	// (tenant, host) by the egress limiter (drops/net, 5/s and 8 in flight by
+	// default), and a worker waiting on that budget is a worker held. See
+	// DAZYFLOW_MAX_CONCURRENT_JOBS below for the fairness half of this.
+	workerCount := envInt("DAZYFLOW_WORKER_COUNT", 8)
 	if workerCount < 1 {
 		workerCount = 1
 	}
@@ -162,16 +177,26 @@ func main() {
 	maxGraphTimeout := envDuration("DAZYFLOW_MAX_GRAPH_TIMEOUT", 0)
 	// Resource guards. MAX_GRAPH_NODES is a defense-in-depth ceiling
 	// against pathologically large graphs; 1000 nodes is generous for
-	// real workflows. MAX_CONCURRENT_JOBS is 0 (unlimited) until
-	// per-tenant fairness becomes a real concern.
+	// real workflows.
 	const maxGraphNodes = 1000
+	// Per-tenant ceiling on RUNNING node jobs — the fairness throttle that
+	// stops one org occupying every worker in the fleet. It matters more the
+	// more workers there are, and most of all for steps that block on the
+	// egress budget: a tenant fanning out to one host waits on 5 calls/s
+	// while holding a worker per queued call.
+	//
+	// Default 0 (off), because the common self-hosted install is one org, and
+	// capping it there would only throttle the tenant it is meant to protect.
+	// Set it on a shared deployment; a few times the per-flow parallelism you
+	// expect is a reasonable starting point. Soft cap — see
+	// jobstore.Postgres.SetMaxConcurrentPerTenant.
+	maxConcurrentJobs := envInt("DAZYFLOW_MAX_CONCURRENT_JOBS", 0)
 	// Wires, not just steps: readiness is re-evaluated per dependent per
 	// completion, so a graph inside the node ceiling can still carry
 	// hundreds of thousands of connections and cost minutes of CPU per run.
 	// 5000 is ~5 wires per step at the node ceiling — far above any real
 	// flow, far below the pathological ones.
 	const maxGraphEdges = 5000
-	const maxConcurrentJobs = 0
 	slackSigningSecret := envStr("DAZYFLOW_SLACK_SIGNING_SECRET", "")
 	githubWebhookSecret := envStr("DAZYFLOW_GITHUB_WEBHOOK_SECRET", "")
 	approvalHMACSecret := envStr("DAZYFLOW_APPROVAL_HMAC_SECRET", "")
@@ -265,7 +290,7 @@ func main() {
 	// Durable stores: keys / sessions / users / jobs all persist to one
 	// shared pgxpool and survive a restart. Declared as interfaces so a
 	// fake can slot in under test.
-	stores := openCoreStores(ctx, postgresDSN, pgMaxConns, pgMinConns, sessionCacheTTL, devKey || devMode)
+	stores := openCoreStores(ctx, postgresDSN, pgMaxConns, pgMinConns, workerCount, sessionCacheTTL, devKey || devMode)
 	ks, users, sessions, jobs, pgPool := stores.keys, stores.users, stores.sessions, stores.jobs, stores.pool
 	defer pgPool.Close()
 
@@ -321,18 +346,86 @@ func main() {
 	// gets a git-backed store under workspaceDir/<tenant>/<workspace> on
 	// first access. This lets self-serve signups (tenant usr_<hex>) save
 	// graphs without pre-registration. Empty workspaceDir = in-memory.
-	workspaces := daemon.NewAutoFSWorkspaces(workspaceDir)
+	// Where flows live. Git (the default) keeps one repository per workspace
+	// under DAZYFLOW_DATA_DIR, which is what gives an org history it can clone
+	// and mirror — and what makes flow AUTHORING unsafe on more than one dzd,
+	// since a working tree on shared storage has no cross-process lock.
+	// Postgres keeps the same revision history as rows every replica shares.
+	//
+	// See --migrate-workspaces-to-postgres for moving an existing install, and
+	// docs/DEPLOY.md for what mirroring does in each mode.
+	graphStore := strings.ToLower(strings.TrimSpace(envStr("DAZYFLOW_GRAPH_STORE", "git")))
+	switch graphStore {
+	case "", "git", "postgres":
+	default:
+		log.Fatalf("DAZYFLOW_GRAPH_STORE=%q: expected \"git\" or \"postgres\"", graphStore)
+	}
+	if graphStore == "postgres" && pgPool == nil {
+		log.Fatal("DAZYFLOW_GRAPH_STORE=postgres requires DAZYFLOW_POSTGRES_DSN")
+	}
+
+	// The git lookup is built either way: it is the flow store in git mode, and
+	// the migration SOURCE in postgres mode.
+	fsWorkspaces := daemon.NewAutoFSWorkspaces(workspaceDir)
 	// Cap the resident workspace set. Each open workspace holds a git
 	// repository; without a cap, one sweep over every tenant leaves all of
 	// them in memory for the life of the process. 0 disables eviction.
 	if n := envInt("DAZYFLOW_MAX_OPEN_WORKSPACES", 0); n != 0 {
-		workspaces.SetMaxOpen(n)
+		fsWorkspaces.SetMaxOpen(n)
 		log.Printf("workspace cache: at most %d open at once", n)
 	}
-	if workspaceDir != "" {
-		log.Printf("workspace store: %s/<tenant>/<workspace> (auto-provisioned)", workspaceDir)
+
+	var workspaces daemon.WorkspaceLookup = fsWorkspaces
+	if graphStore == "postgres" {
+		if err := workspace.EnsurePgWorkspaceSchema(ctx, pgPool); err != nil {
+			log.Fatalf("flow store schema: %v", err)
+		}
+		pgws := daemon.NewPgWorkspaces(pgPool)
+		// Mirroring needs a real repository, and Postgres has none — one is
+		// synthesized from the revision log into this cache. Deterministically,
+		// so any replica derives the same commits and a cold one's push
+		// fast-forwards onto a warm one's. That makes the cache disposable, and
+		// it lives under the pod's own data dir rather than being shared.
+		pgws.SetMirrorCache(filepath.Join(dataDir, "mirrorcache"))
+		workspaces = pgws
+		log.Printf("flow store: postgres (shared by every replica; git mirrors synthesized into %s)",
+			filepath.Join(dataDir, "mirrorcache"))
+	} else if workspaceDir != "" {
+		log.Printf("flow store: git at %s/<tenant>/<workspace> (auto-provisioned)", workspaceDir)
 	} else {
-		log.Println("workspace store: in-memory (graphs lost on restart)")
+		log.Println("flow store: in-memory (flows lost on restart)")
+	}
+
+	// One-time migration: copy the git workspaces into Postgres, then exit.
+	if *migrateWorkspaces {
+		if pgPool == nil {
+			log.Fatal("--migrate-workspaces-to-postgres requires DAZYFLOW_POSTGRES_DSN")
+		}
+		if workspaceDir == "" {
+			log.Fatal("--migrate-workspaces-to-postgres requires DAZYFLOW_DATA_DIR (the git workspaces to read)")
+		}
+		if err := workspace.EnsurePgWorkspaceSchema(ctx, pgPool); err != nil {
+			log.Fatalf("flow store schema: %v", err)
+		}
+		migrateWorkspacesToPostgres(ctx, fsWorkspaces, daemon.NewPgWorkspaces(pgPool))
+		return
+	}
+
+	// Read-only: does the Postgres store hold everything the git workspaces do?
+	if *verifyWorkspaces {
+		if pgPool == nil {
+			log.Fatal("--verify-workspace-migration requires DAZYFLOW_POSTGRES_DSN")
+		}
+		// Create the tables if they are absent, so verifying before migrating
+		// reports "this flow is missing" rather than a raw SQL error about a
+		// relation that does not exist.
+		if err := workspace.EnsurePgWorkspaceSchema(ctx, pgPool); err != nil {
+			log.Fatalf("flow store schema: %v", err)
+		}
+		if !verifyWorkspaceMigration(ctx, fsWorkspaces, daemon.NewPgWorkspaces(pgPool)) {
+			os.Exit(1)
+		}
+		return
 	}
 
 	// Event bus: Postgres LISTEN/NOTIFY so any dzd replica can stream a
@@ -1052,20 +1145,33 @@ type coreStores struct {
 // short-TTL read cache. devSeed seeds the bundled default user for local
 // development. Fatal on any failure — dzd has no in-memory fallback. The
 // caller owns the returned pool and must Close it.
-func openCoreStores(ctx context.Context, dsn string, maxConns, minConns int, sessionCacheTTL time.Duration, devSeed bool) coreStores {
+func openCoreStores(ctx context.Context, dsn string, maxConns, minConns, workerCount int, sessionCacheTTL time.Duration, devSeed bool) coreStores {
 	poolCfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		log.Fatalf("postgres dsn: %v", err)
 	}
-	// Pool sizing: pgx defaults MaxConns to max(4, NumCPU), which is too
-	// small for real multi-tenant load — every worker, the gateway, the
-	// scheduler, and the reaper share this one pool, so 4 connections starve
-	// under even modest concurrency. Default to 20 (override with
-	// DAZYFLOW_PG_MAX_CONNS) and keep a couple of warm connections.
-	if maxConns > 0 {
+	// Pool sizing: pgx defaults MaxConns to max(4, NumCPU), which is too small
+	// for real load — every worker, the gateway, the scheduler and the reaper
+	// share this one pool, so 4 connections starve under even modest
+	// concurrency.
+	//
+	// An unset pool FOLLOWS the worker count, because the two cannot be chosen
+	// independently: raising workers without raising this starves the pool, and
+	// what suffers is not throughput (workers are I/O-bound, and measurement
+	// shows 8 vs 64 connections at 32 workers differs by ~12%) but LATENCY on
+	// everything else sharing the pool — the HTTP gateway most visibly. At 32
+	// workers, 20 connections logged 4,319 waits for a free connection where 32
+	// logged 51.
+	//
+	// So: room for every worker plus headroom for the request path, the
+	// scheduler, the sweeps, and the two permanent holders below. The floor of
+	// 20 keeps the default install exactly where it was.
+	const poolHeadroom = 12
+	switch {
+	case maxConns > 0:
 		poolCfg.MaxConns = int32(maxConns)
-	} else {
-		poolCfg.MaxConns = 20
+	default:
+		poolCfg.MaxConns = int32(max(20, workerCount+poolHeadroom))
 	}
 	// PgBus's LISTEN loop and PgLeader's advisory-lock session each hold ONE
 	// pooled connection for the whole process lifetime, so the effective query
@@ -1217,6 +1323,12 @@ const ticketNudgeInterval = 15 * time.Minute
 func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitGroup) func() bool {
 	// Spin up worker goroutines. Each is independent and competes for
 	// claims; the JobStore makes that contention safe.
+	//
+	// Logged as one line because the number is the per-process step-concurrency
+	// ceiling, and an operator chasing execution lag
+	// (dazyflow_jobs_oldest_queued_seconds) needs to see it without counting
+	// the per-worker "started" lines.
+	log.Printf("workers: %d (each runs one step at a time)", d.workerCount)
 	for i := 0; i < d.workerCount; i++ {
 		w := daemon.NewWorker(daemon.WorkerConfig{
 			// Unique per process AND per worker goroutine: the job store's
@@ -2776,4 +2888,77 @@ func listenOrigins(httpListen string) []string {
 	}
 	// SetSelfOrigins expands the other loopback spellings itself.
 	return []string{"http://localhost:" + port, "https://localhost:" + port}
+}
+
+// migrateWorkspacesToPostgres copies every git workspace into the Postgres flow
+// store and reports what moved. Fatal on the first failure: a half-migrated
+// install is worse than one that has not started, and the operation is
+// re-runnable, so stopping at the fault lets the operator fix it and repeat.
+func migrateWorkspacesToPostgres(ctx context.Context, src *daemon.AutoFSWorkspaces, dst *daemon.PgWorkspaces) {
+	var total workspace.MigrateResult
+	pairs := 0
+	for key, from := range src.All() {
+		tenant, ws, ok := strings.Cut(key, "/")
+		if !ok {
+			continue
+		}
+		to, err := dst.Open(tenant, ws)
+		if err != nil {
+			log.Fatalf("workspace migration: open destination %s: %v", key, err)
+		}
+		res, err := workspace.Migrate(ctx, to, from)
+		if err != nil {
+			log.Fatalf("workspace migration: %s: %v", key, err)
+		}
+		pairs++
+		total.Flows += res.Flows
+		total.Revisions += res.Revisions
+		total.Published += res.Published
+		for _, id := range res.Truncated {
+			log.Printf("workspace migration: %s/%s kept only its newest revisions (history longer than the migration cap)", key, id)
+		}
+	}
+	log.Printf("workspace migration complete: %d workspace(s), %d flow(s), %d revision(s), %d published pointer(s) → Postgres.",
+		pairs, total.Flows, total.Revisions, total.Published)
+	log.Print("The git workspaces are untouched. Set DAZYFLOW_GRAPH_STORE=postgres to start serving from Postgres; keep the git directory as the archive for flows deleted before this ran.")
+}
+
+// verifyWorkspaceMigration compares every git workspace against its migrated
+// copy and reports what differs. Returns whether they agree.
+//
+// Read-only on both sides, and non-fatal on a difference: the operator wants
+// the WHOLE list of what is wrong, not the first entry.
+func verifyWorkspaceMigration(ctx context.Context, src *daemon.AutoFSWorkspaces, dst *daemon.PgWorkspaces) bool {
+	var flows, revisions, issues int
+	for key, from := range src.All() {
+		tenant, ws, ok := strings.Cut(key, "/")
+		if !ok {
+			continue
+		}
+		to, err := dst.Open(tenant, ws)
+		if err != nil {
+			log.Printf("verify: open %s: %v", key, err)
+			issues++
+			continue
+		}
+		res, err := workspace.VerifyMigration(ctx, to, from)
+		if err != nil {
+			log.Printf("verify: %s: %v", key, err)
+			issues++
+			continue
+		}
+		flows += res.Flows
+		revisions += res.Revisions
+		for _, issue := range res.Issues {
+			log.Printf("verify: %s/%s: %s", key, issue.GraphID, issue.Detail)
+			issues++
+		}
+	}
+	if issues > 0 {
+		log.Printf("verification FAILED: %d difference(s) across %d flow(s). The git workspaces are still the authoritative copy — do not archive them.", issues, flows)
+		return false
+	}
+	log.Printf("verification passed: %d flow(s) and %d revision(s) match the git workspaces.", flows, revisions)
+	log.Print("Flows DELETED before the migration were never in scope and live on only in git, so archive that directory rather than deleting it.")
+	return true
 }
