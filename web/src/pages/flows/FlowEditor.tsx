@@ -4147,6 +4147,36 @@ function EditorInner() {
             </Button>
           )}
 
+          {/* Tidy, PINNED and labelled.
+
+              Third report that this control is "gone", and the first two were
+              both answered by fixing a mechanism while the symptom stayed: it
+              was moved out of the scrolling toolbar (where it really did slide
+              off-screen), then un-dimmed on small flows (where 40% opacity on a
+              stroked glyph read as absent). Each time it was measurably on
+              screen afterwards — and each time someone came back and said they
+              could not find it.
+
+              What survived both fixes is that the canvas cluster gives it no
+              NAME: an unlabelled 2x2 grid glyph tucked among zoom and fit-view
+              is not something you spot when you are looking for "tidy up". So
+              it is here too, next to Run, with its label showing. The canvas
+              icon stays for anyone who has learned it — same relationship as
+              zoom buttons and a scroll wheel — but discovery no longer depends
+              on recognising a glyph.
+
+              Pinned rather than back in the scrolling half, because that is
+              exactly what the first report was about. */}
+          <Button
+            variant="ghost"
+            data-tidy="toolbar"
+            onClick={autoLayout}
+            title={t("editor.tidyTitle")}
+          >
+            <LayoutGrid size={ICON.sm} aria-hidden="true" />
+            <span className="toolbar-label">{t("editor.tidy")}</span>
+          </Button>
+
           {/* Run-status chip — shown only when it says something the adjacent
               control does not.
 

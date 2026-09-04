@@ -10,6 +10,31 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Tidy was reported missing a third time — so it is back in the toolbar, with
+  its name on it.** The first two reports were each answered by changing a
+  mechanism: it was moved out of the scrolling toolbar half (where it genuinely
+  slid off-screen), and later stopped greying out below two steps (where 40%
+  opacity on a 1px stroked glyph read as absent rather than unavailable). After
+  both, it was measurably on screen — present, unclipped, full opacity, topmost
+  under a hit test at every viewport — and someone still could not find it.
+
+  What both fixes missed is that the canvas Controls cluster gives the action no
+  NAME. An unlabelled 2×2-grid glyph tucked under zoom and fit-view is not
+  something you spot when you are looking for "tidy up", which is why every
+  report says "gone" rather than "broken".
+
+  Tidy is now also in the toolbar beside Run, labelled, in the **pinned**
+  region — not the scrolling half, which is precisely what the first report was
+  about. The canvas icon stays for anyone who has learned it, the same
+  relationship zoom buttons have with a scroll wheel. Its label collapses with
+  every other secondary action below the 960px container query, as before.
+
+  Both controls are now under test for: always rendered, never disabled however
+  small the flow, the toolbar copy outside `.toolbar-scroll`, and carrying a
+  visible label.
+
 ### Changed
 
 - **Multi-replica deployments no longer need sticky sessions.** Four pieces of
