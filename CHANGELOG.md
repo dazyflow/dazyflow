@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.35.0] - 2026-09-04
+
 ### Added
 
 - **Flows can live in Postgres instead of git**, which is what makes flow
