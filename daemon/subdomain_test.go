@@ -4,9 +4,12 @@
 package daemon
 
 import (
+	"context"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/dazyflow/dazyflow/auth"
 )
 
 func TestHostIsSubdomainOf(t *testing.T) {
@@ -139,21 +142,23 @@ func TestSignInStartHost(t *testing.T) {
 func TestHandoffStoreSingleUse(t *testing.T) {
 	t.Parallel()
 	exp := time.Now().Add(time.Hour)
-	code, err := mintHandoff("sess-token-123", exp)
+	api := &authAPI{Ephemeral: auth.NewMemEphemeralStore()}
+	ctx := context.Background()
+	code, err := api.mintHandoff(ctx, "sess-token-123", exp)
 	if err != nil {
 		t.Fatalf("mintHandoff: %v", err)
 	}
-	entry, ok := consumeHandoff(code)
+	entry, ok := api.consumeHandoff(ctx, code)
 	if !ok {
 		t.Fatal("first consume should succeed")
 	}
 	if entry.Token != "sess-token-123" {
 		t.Errorf("token = %q, want sess-token-123", entry.Token)
 	}
-	if _, ok := consumeHandoff(code); ok {
+	if _, ok := api.consumeHandoff(ctx, code); ok {
 		t.Error("second consume should fail (single-use)")
 	}
-	if _, ok := consumeHandoff("never-minted"); ok {
+	if _, ok := api.consumeHandoff(ctx, "never-minted"); ok {
 		t.Error("unknown code should not consume")
 	}
 }

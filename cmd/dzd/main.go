@@ -1498,6 +1498,41 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 		}()
 	}
 
+	// Mirror-cache erasure sweep. A tenant erased while this replica was down —
+	// or erased by another replica, which can only clear its own copy — leaves
+	// that org's flows in this replica's synthesized mirror. Every replica
+	// converges here. One query plus a directory listing, so an hour is
+	// generous; the startup pass is what makes a restart catch up promptly.
+	if pgws, ok := d.svc.Workspaces.(*daemon.PgWorkspaces); ok {
+		bgWg.Add(1)
+		go func() {
+			defer bgWg.Done()
+			sweep := func() {
+				n, err := pgws.PruneMirrorCache(ctx)
+				if err != nil {
+					if ctx.Err() == nil {
+						log.Printf("mirror cache sweep: %v", err)
+					}
+					return
+				}
+				if n > 0 {
+					log.Printf("mirror cache sweep: removed %d erased org(s)", n)
+				}
+			}
+			sweep()
+			t := time.NewTicker(time.Hour)
+			defer t.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.C:
+					sweep()
+				}
+			}
+		}()
+	}
+
 	// Orphaned-graph-run reaper. A worker that dies between a run's last node
 	// going terminal and the dispatcher's completion check leaves the graph
 	// record stuck "running" with nothing left to re-fire it. This sweep
@@ -1803,13 +1838,28 @@ func buildGateway(ctx context.Context, bgWg *sync.WaitGroup, d gatewayDeps) {
 	gw.Sessions = d.sessions
 	gw.SessionTTL = d.sessionTTL
 	gw.MaxSessionAge = d.sessionMaxAge
+
+	// Short-lived sign-in state — the Google sign-in state, the connector OAuth
+	// pending authorization, the per-org-subdomain handoff, and the TOTP
+	// challenge. Each is minted on one request and redeemed on the next, so on
+	// more than one replica they cannot live in the minting process's memory:
+	// the second request lands wherever the load balancer sends it, finds
+	// nothing, and the user is told their sign-in expired. In Postgres they are
+	// visible to every replica, which is what removes the sticky-session
+	// requirement.
+	ephemeral := ephemeralStore(ctx, d.pgPool, bgWg)
+	gw.Ephemeral = ephemeral
+	if d.oauth != nil {
+		d.oauth.SetEphemeralStore(ephemeral)
+	}
+
 	// TOTP 2FA: enabled only when DAZYFLOW_TOTP_KEY decodes to a 32-byte AES
 	// key. Absent/malformed → 2FA stays off (the /totp endpoints 503 and
-	// sign-in never asks for a second factor). The in-memory challenge store
-	// bridges the two sign-in legs.
+	// sign-in never asks for a second factor). The challenge store bridges the
+	// two sign-in legs.
 	if totpKey, terr := auth.LoadTOTPKey(); terr == nil {
 		gw.TOTPKey = totpKey
-		gw.TOTPChallenges = auth.NewMemTOTPChallengeStore()
+		gw.TOTPChallenges = auth.NewEphemeralTOTPChallengeStore(ephemeral)
 		log.Print("two-factor authentication (TOTP) enabled (DAZYFLOW_TOTP_KEY set)")
 	} else if !errors.Is(terr, auth.ErrTOTPKeyMissing) {
 		// Set-but-broken is an operator mistake worth shouting about; merely
@@ -2961,4 +3011,44 @@ func verifyWorkspaceMigration(ctx context.Context, src *daemon.AutoFSWorkspaces,
 	log.Printf("verification passed: %d flow(s) and %d revision(s) match the git workspaces.", flows, revisions)
 	log.Print("Flows DELETED before the migration were never in scope and live on only in git, so archive that directory rather than deleting it.")
 	return true
+}
+
+// ephemeralStore returns the store for short-lived sign-in state, and starts
+// its expiry sweep.
+//
+// Postgres when there is one, so the second leg of an SSO or 2FA sign-in can
+// land on any replica; process memory otherwise, which is correct for a single
+// instance and is what the dev/in-memory configuration uses.
+func ephemeralStore(ctx context.Context, pool *pgxpool.Pool, bgWg *sync.WaitGroup) auth.EphemeralStore {
+	var store auth.EphemeralStore
+	if pool != nil {
+		pg, err := auth.NewPgEphemeralStore(ctx, pool)
+		if err != nil {
+			log.Fatalf("postgres sign-in state store: %v", err)
+		}
+		store = pg
+		log.Print("sign-in state: postgres (no sticky sessions needed)")
+	} else {
+		store = auth.NewMemEphemeralStore()
+		log.Print("sign-in state: in-process memory (single instance only)")
+	}
+	// Entries expire in minutes and are already unreadable past their expiry —
+	// the sweep is housekeeping, not enforcement, so it can be infrequent.
+	bgWg.Add(1)
+	go func() {
+		defer bgWg.Done()
+		t := time.NewTicker(15 * time.Minute)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				if _, err := store.Sweep(ctx); err != nil && ctx.Err() == nil {
+					log.Printf("sign-in state sweep: %v", err)
+				}
+			}
+		}
+	}()
+	return store
 }

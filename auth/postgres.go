@@ -53,6 +53,30 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 CREATE INDEX IF NOT EXISTS sessions_expires_idx ON sessions (expires_at);
 
+-- Short-lived auth state that spans two requests: the Google sign-in state, the
+-- connector OAuth pending authorization, the per-org-subdomain sign-in handoff,
+-- and the TOTP challenge. One table, kept apart by a kind column, because they
+-- differ only in what they carry. Here rather than in memory so the second
+-- request can land on any replica -- see auth.EphemeralStore.
+--
+-- Not in the GDPR erasure cascade, and deliberately: there is no tenant column
+-- to key one on, and every row is unreadable past its expires_at (minutes) and
+-- swept shortly after. The most identifying thing any of them carries is the
+-- email on a half-finished 2FA sign-in, which cannot outlive its five minutes.
+CREATE TABLE IF NOT EXISTS auth_ephemeral (
+    kind       TEXT NOT NULL,
+    token      TEXT NOT NULL,
+    -- BYTEA, not JSONB: the payload is opaque to this table, and JSONB would
+    -- normalize it — reordering keys and respacing — so what comes out is not
+    -- what went in. Every caller happens to store JSON today; none of them
+    -- should have to know that the store cares.
+    payload    BYTEA NOT NULL,
+    attempts   INTEGER NOT NULL DEFAULT 0,
+    expires_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (kind, token)
+);
+CREATE INDEX IF NOT EXISTS auth_ephemeral_expires_idx ON auth_ephemeral (expires_at);
+
 CREATE TABLE IF NOT EXISTS users (
     email         TEXT PRIMARY KEY,
     password_hash BYTEA NOT NULL,

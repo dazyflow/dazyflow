@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"github.com/dazyflow/dazyflow/core"
+
+	"github.com/dazyflow/dazyflow/auth"
 )
 
 // OAuth 2.0 authorization-code flow: the daemon shepherds the user through the
@@ -230,22 +232,53 @@ type pendingOAuth struct {
 	created time.Time
 }
 
-// oauthStateStore is a TTL-bounded in-memory map keyed by state
-// tokens. Process-local on purpose — pending OAuth flows are short-
-// lived (the user is mid-redirect) and survival across daemon
-// restarts isn't required. A multi-replica deployment with a
-// load-balancer that doesn't sticky-route OAuth callbacks would
-// need a shared store; that's T3 work.
+// pendingOAuthWire is pendingOAuth's serializable form. The struct's own fields
+// are unexported — they never leave the package — so the wire shape is spelled
+// out here rather than by exporting them and churning every call site.
+type pendingOAuthWire struct {
+	Tenant   string    `json:"tenant"`
+	Provider string    `json:"provider"`
+	Account  string    `json:"account"`
+	ReturnTo string    `json:"return_to"`
+	Binding  string    `json:"binding"`
+	Created  time.Time `json:"created"`
+}
+
+func (p pendingOAuth) wire() pendingOAuthWire {
+	return pendingOAuthWire{
+		Tenant: p.tenant, Provider: p.provider, Account: p.account,
+		ReturnTo: p.returnTo, Binding: p.binding, Created: p.created,
+	}
+}
+
+func (w pendingOAuthWire) pending() pendingOAuth {
+	return pendingOAuth{
+		tenant: w.Tenant, provider: w.Provider, account: w.Account,
+		returnTo: w.ReturnTo, binding: w.Binding, created: w.Created,
+	}
+}
+
+// oauthStateStore holds pending authorizations, keyed by state token.
+//
+// Backed by auth.EphemeralStore rather than a process-local map, because the
+// two legs of an OAuth flow are two separate requests: the user is redirected
+// to the provider by one replica and comes back to whichever one the load
+// balancer picks. With the state in memory, a callback landing elsewhere found
+// nothing and the user saw "invalid or expired state" at random.
 type oauthStateStore struct {
-	mu      sync.Mutex
-	pending map[string]pendingOAuth
-	ttl     time.Duration
+	store auth.EphemeralStore
+	ttl   time.Duration
 }
 
 func newOAuthStateStore(ttl time.Duration) *oauthStateStore {
-	return &oauthStateStore{
-		pending: map[string]pendingOAuth{},
-		ttl:     ttl,
+	return &oauthStateStore{store: auth.NewMemEphemeralStore(), ttl: ttl}
+}
+
+// setStore swaps in a shared store. Called once at wiring time, before any
+// flow is in progress.
+func (s *oauthStateStore) setStore(store auth.EphemeralStore) {
+	if store != nil {
+		s.store = store
 	}
 }
 
@@ -257,11 +290,11 @@ func (s *oauthStateStore) mint(p pendingOAuth) (string, error) {
 		return "", err
 	}
 	state := hex.EncodeToString(tok)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.sweepLocked(time.Now())
 	p.created = time.Now()
-	s.pending[state] = p
+	if err := putEphemeral(context.Background(), s.store,
+		auth.EphemeralOAuthPending, state, p.wire(), p.created.Add(s.ttl)); err != nil {
+		return "", err
+	}
 	return state, nil
 }
 
@@ -269,25 +302,11 @@ func (s *oauthStateStore) mint(p pendingOAuth) (string, error) {
 // (zero, false) if missing or expired. Single-use by design — a
 // stolen state token can't be replayed.
 func (s *oauthStateStore) consume(state string) (pendingOAuth, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.sweepLocked(time.Now())
-	p, ok := s.pending[state]
+	w, ok := consumeEphemeral[pendingOAuthWire](context.Background(), s.store, auth.EphemeralOAuthPending, state)
 	if !ok {
 		return pendingOAuth{}, false
 	}
-	delete(s.pending, state)
-	return p, true
-}
-
-// sweepLocked drops expired entries. Called inline from mint/consume
-// so we never accumulate stale state.
-func (s *oauthStateStore) sweepLocked(now time.Time) {
-	for k, v := range s.pending {
-		if now.Sub(v.created) > s.ttl {
-			delete(s.pending, k)
-		}
-	}
+	return w.pending(), true
 }
 
 // ----- token exchange ------------------------------------------------
@@ -627,4 +646,12 @@ func (r *OAuthRegistry) refreshLock(name string) *sync.Mutex {
 		r.refreshLocks[name] = m
 	}
 	return m
+}
+
+// SetEphemeralStore points the pending-authorization state at a shared store,
+// so a callback may land on a different replica than the redirect did. Call it
+// once at wiring time; without it the registry keeps its own process-local
+// store, which is correct for a single instance.
+func (r *OAuthRegistry) SetEphemeralStore(s auth.EphemeralStore) {
+	r.state.setStore(s)
 }

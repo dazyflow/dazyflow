@@ -326,7 +326,7 @@ func TestGoogleSignInCallback_EarlyErrors(t *testing.T) {
 	}
 
 	// Valid state but missing code -> 400.
-	state, bindCookie := boundGoogleState(t, "acme", "/", "", false)
+	state, bindCookie := boundGoogleState(t, h.gw, "acme", "/", "", false)
 	rw = httptest.NewRecorder()
 	rNoCode := httptest.NewRequest("GET", "/api/v1/auth/google/callback?state="+state, nil)
 	rNoCode.AddCookie(bindCookie)
@@ -337,7 +337,7 @@ func TestGoogleSignInCallback_EarlyErrors(t *testing.T) {
 
 	// Valid state + code, but the org's Google config is gone (not enabled) ->
 	// signInError -> JSON 400 not_configured.
-	state2, bind2 := boundGoogleState(t, "acme", "/", "", false)
+	state2, bind2 := boundGoogleState(t, h.gw, "acme", "/", "", false)
 	rw = httptest.NewRecorder()
 	rNotEnabled := httptest.NewRequest("GET", "/api/v1/auth/google/callback?state="+state2+"&code=abc", nil)
 	rNotEnabled.AddCookie(bind2)
@@ -348,7 +348,7 @@ func TestGoogleSignInCallback_EarlyErrors(t *testing.T) {
 
 	// Admin "Test" sign-in: a state minted with test=true routes failures to
 	// the friendly ?test_error= page (redirectTestError) instead of JSON.
-	testState, bind3 := boundGoogleState(t, "acme", "/admin/sso", "", true)
+	testState, bind3 := boundGoogleState(t, h.gw, "acme", "/admin/sso", "", true)
 	rw = httptest.NewRecorder()
 	rTest := httptest.NewRequest("GET", "/api/v1/auth/google/callback?state="+testState+"&code=abc", nil)
 	rTest.AddCookie(bind3)
@@ -362,7 +362,7 @@ func TestGoogleSignInCallback_EarlyErrors(t *testing.T) {
 
 	// Admin "Test" sign-in where the user declined consent (?error=) also
 	// routes to the test-error page (denied) — state is consumed up front.
-	deniedState, _ := boundGoogleState(t, "acme", "/admin/sso", "", true)
+	deniedState, _ := boundGoogleState(t, h.gw, "acme", "/admin/sso", "", true)
 	rw = httptest.NewRecorder()
 	ServeForTest(h.gw, rw, httptest.NewRequest("GET", "/api/v1/auth/google/callback?state="+deniedState+"&error=access_denied", nil))
 	if rw.Code != http.StatusFound {
@@ -437,7 +437,7 @@ func boolJSON(b bool) string {
 // user creation, session issuance, and same-host cookie redirect.
 func TestGoogleSignInCallback_NewUserSuccess(t *testing.T) {
 	h := googleCallbackEnv(t, "fresh@acme.test", "", true)
-	state, bindCookie := boundGoogleState(t, "acme", "/dashboard", "", false)
+	state, bindCookie := boundGoogleState(t, h.gw, "acme", "/dashboard", "", false)
 
 	rw := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/api/v1/auth/google/callback?state="+state+"&code=abc", nil)
@@ -469,7 +469,7 @@ func TestGoogleSignInCallback_ExistingUserSuccess(t *testing.T) {
 		Email: "returning@acme.test", Subject: "returning@acme.test",
 		Tenant: "acme", Workspace: "main", Roles: []core.Role{core.TeamRoleEditor()},
 	})
-	state, bindCookie := boundGoogleState(t, "acme", "/", "", false)
+	state, bindCookie := boundGoogleState(t, h.gw, "acme", "/", "", false)
 
 	rw := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/api/v1/auth/google/callback?state="+state+"&code=abc", nil)
@@ -485,7 +485,7 @@ func TestGoogleSignInCallback_ExistingUserSuccess(t *testing.T) {
 // the Google side then stops, redirecting with ?test=ok and minting no user.
 func TestGoogleSignInCallback_TestModeSuccess(t *testing.T) {
 	h := googleCallbackEnv(t, "tester@acme.test", "acme.test", true)
-	state, bindCookie := boundGoogleState(t, "acme", "/admin/sso", "", true)
+	state, bindCookie := boundGoogleState(t, h.gw, "acme", "/admin/sso", "", true)
 
 	rw := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/api/v1/auth/google/callback?state="+state+"&code=abc", nil)
@@ -507,7 +507,7 @@ func TestGoogleSignInCallback_TestModeSuccess(t *testing.T) {
 // not-verified rejection through the live callback.
 func TestGoogleSignInCallback_EmailNotVerified(t *testing.T) {
 	h := googleCallbackEnv(t, "unverified@acme.test", "", false)
-	state, bindCookie := boundGoogleState(t, "acme", "/", "", false)
+	state, bindCookie := boundGoogleState(t, h.gw, "acme", "/", "", false)
 
 	rw := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/api/v1/auth/google/callback?state="+state+"&code=abc", nil)
@@ -546,7 +546,7 @@ func TestGoogleSignInCallback_DomainMismatch(t *testing.T) {
 		claims: auth.Claims{Extras: map[string]any{"email": "x@gmail.com"}},
 	})
 
-	state, bindCookie := boundGoogleState(t, "acme", "/", "", false)
+	state, bindCookie := boundGoogleState(t, h.gw, "acme", "/", "", false)
 	rw := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/api/v1/auth/google/callback?state="+state+"&code=abc", nil)
 	r.AddCookie(bindCookie)
@@ -575,7 +575,7 @@ func TestGoogleSignInCallback_ExchangeFailure(t *testing.T) {
 	t.Cleanup(tokenSrv.Close)
 	withGoogleEndpoints(t, tokenSrv.URL, "http://unused.invalid")
 
-	state, bindCookie := boundGoogleState(t, "acme", "/", "", false)
+	state, bindCookie := boundGoogleState(t, h.gw, "acme", "/", "", false)
 	rw := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/api/v1/auth/google/callback?state="+state+"&code=abc", nil)
 	r.AddCookie(bindCookie)
@@ -596,7 +596,7 @@ func TestGoogleSignInCallback_DomainAutoEnroll(t *testing.T) {
 		Email: "joiner@acme.test", Subject: "joiner@acme.test",
 		Tenant: "elsewhere", Workspace: "main", Roles: []core.Role{core.TeamRoleEditor()},
 	})
-	state, bindCookie := boundGoogleState(t, "acme", "/", "", false)
+	state, bindCookie := boundGoogleState(t, h.gw, "acme", "/", "", false)
 
 	rw := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/api/v1/auth/google/callback?state="+state+"&code=abc", nil)
@@ -729,13 +729,17 @@ func TestSignInError_Cov(t *testing.T) {
 // returned cookie to the request: a callback arriving without it is precisely
 // the login-CSRF attempt the binding exists to reject, so omitting it is a
 // 400 rather than a convenience.
-func boundGoogleState(t *testing.T, tenant, returnTo, host string, test bool) (string, *http.Cookie) {
+func boundGoogleState(t *testing.T, gw *HTTPGateway, tenant, returnTo, host string, test bool) (string, *http.Cookie) {
 	t.Helper()
 	binding, err := newOAuthBinding()
 	if err != nil {
 		t.Fatalf("newOAuthBinding: %v", err)
 	}
-	state, err := mintGoogleState(tenant, returnTo, host, binding, test)
+	// Mint into the gateway's own store, since that is what the callback reads.
+	if gw.Ephemeral == nil {
+		gw.Ephemeral = auth.NewMemEphemeralStore()
+	}
+	state, err := gw.authAPI().mintGoogleState(context.Background(), tenant, returnTo, host, binding, test)
 	if err != nil {
 		t.Fatalf("mintGoogleState: %v", err)
 	}
@@ -792,7 +796,7 @@ func TestGoogleSignInCallback_RejectsUnboundBrowser(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h := googleCallbackEnv(t, "attacker@acme.test", "", true)
-			state, _ := boundGoogleState(t, "acme", "/dashboard", "", false)
+			state, _ := boundGoogleState(t, h.gw, "acme", "/dashboard", "", false)
 
 			rw := httptest.NewRecorder()
 			r := httptest.NewRequest("GET", "/api/v1/auth/google/callback?state="+state+"&code=abc", nil)
@@ -826,7 +830,7 @@ func TestGoogleSignInCallback_RejectsUnboundBrowser(t *testing.T) {
 // request carrying the correct cookie still fails.
 func TestGoogleSignInCallback_StateIsSingleUse(t *testing.T) {
 	h := googleCallbackEnv(t, "replay@acme.test", "", true)
-	state, bindCookie := boundGoogleState(t, "acme", "/", "", false)
+	state, bindCookie := boundGoogleState(t, h.gw, "acme", "/", "", false)
 
 	for i, wantCode := range []int{http.StatusFound, http.StatusBadRequest} {
 		rw := httptest.NewRecorder()

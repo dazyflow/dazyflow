@@ -98,14 +98,6 @@ func googleIDTokenVerifier(ctx context.Context, clientID string) (auth.IDTokenVe
 	return v, nil
 }
 
-// googleSignInStates pairs a random state value with the tenant the
-// user is signing into. Module-scoped because the lifecycle is shorter
-// than the gateway's; expired entries get reaped on each new mint.
-var googleSignInStates = struct {
-	mu    sync.Mutex
-	items map[string]googleSignInState
-}{items: map[string]googleSignInState{}}
-
 type googleSignInState struct {
 	Tenant   string
 	Created  time.Time
@@ -201,43 +193,28 @@ func signInBindingOK(r *http.Request, st googleSignInState) bool {
 
 const googleSignInStateTTL = 10 * time.Minute
 
-func mintGoogleState(tenant, returnTo, host, binding string, test bool) (string, error) {
+func (h *authAPI) mintGoogleState(ctx context.Context, tenant, returnTo, host, binding string, test bool) (string, error) {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}
-	s := hex.EncodeToString(b)
-	googleSignInStates.mu.Lock()
-	defer googleSignInStates.mu.Unlock()
-	now := time.Now()
-	for k, v := range googleSignInStates.items {
-		if now.Sub(v.Created) > googleSignInStateTTL {
-			delete(googleSignInStates.items, k)
-		}
-	}
-	googleSignInStates.items[s] = googleSignInState{
+	state := hex.EncodeToString(b)
+	st := googleSignInState{
 		Tenant:   tenant,
-		Created:  now,
+		Created:  time.Now(),
 		ReturnTo: returnTo,
 		Host:     host,
 		Test:     test,
 		Binding:  binding,
 	}
-	return s, nil
+	if err := putEphemeral(ctx, h.Ephemeral, auth.EphemeralGoogleSignIn, state, st, time.Now().Add(googleSignInStateTTL)); err != nil {
+		return "", err
+	}
+	return state, nil
 }
 
-func consumeGoogleState(state string) (googleSignInState, bool) {
-	googleSignInStates.mu.Lock()
-	defer googleSignInStates.mu.Unlock()
-	v, ok := googleSignInStates.items[state]
-	if !ok {
-		return googleSignInState{}, false
-	}
-	delete(googleSignInStates.items, state)
-	if time.Since(v.Created) > googleSignInStateTTL {
-		return googleSignInState{}, false
-	}
-	return v, true
+func (h *authAPI) consumeGoogleState(ctx context.Context, state string) (googleSignInState, bool) {
+	return consumeEphemeral[googleSignInState](ctx, h.Ephemeral, auth.EphemeralGoogleSignIn, state)
 }
 
 // googleSignInStart is unauthenticated by design — the user is signing
@@ -279,7 +256,7 @@ func (h *authAPI) googleSignInStart(rw http.ResponseWriter, r *http.Request) {
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
-	state, err := mintGoogleState(tenant, returnTo, startHost, binding, test)
+	state, err := h.mintGoogleState(r.Context(), tenant, returnTo, startHost, binding, test)
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
@@ -427,7 +404,7 @@ func (h *authAPI) googleSignInCallback(rw http.ResponseWriter, r *http.Request) 
 	var st googleSignInState
 	hasState := false
 	if state != "" {
-		st, hasState = consumeGoogleState(state)
+		st, hasState = h.consumeGoogleState(r.Context(), state)
 	}
 	if errStr := r.URL.Query().Get("error"); errStr != "" {
 		h.signInError(rw, r, st, "denied", http.StatusBadRequest, "google: "+errStr)
@@ -817,7 +794,7 @@ func (h *authAPI) completeSignIn(rw http.ResponseWriter, r *http.Request, st goo
 		target = "/"
 	}
 	if st.Host != "" && !sameHost(st.Host, r.Host) {
-		code, err := mintHandoff(token, sess.ExpiresAt)
+		code, err := h.mintHandoff(r.Context(), token, sess.ExpiresAt)
 		if err != nil {
 			writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("sign-in handoff: %v", err))
 			return

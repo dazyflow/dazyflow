@@ -99,6 +99,10 @@ type HTTPGateway struct {
 	// (sign-in would fail closed for enrolled users), so cmd/dzd wires
 	// both together.
 	TOTPChallenges auth.TOTPChallengeStore
+	// Ephemeral holds the short-lived state the sign-in flows mint on one
+	// request and redeem on the next. Postgres-backed on a multi-replica
+	// deployment, which is what lets the second request land anywhere.
+	Ephemeral auth.EphemeralStore
 
 	// EncryptedSecrets powers the /api/v1/secrets CRUD endpoints. Nil
 	// means the encrypted store isn't configured for this deployment;
@@ -342,6 +346,13 @@ func NewHTTPGateway(svc *Service) *HTTPGateway {
 		svc:         svc,
 		logger:      log.New(log.Writer(), "http-api: ", log.LstdFlags),
 		idempotency: newIdempotencyStore(),
+		// Short-lived sign-in state. Defaulted at construction for the same
+		// reason as the limiters below — mountRoutes runs per request under
+		// ServeForTest, so mutating a field there races. cmd/dzd replaces this
+		// with the Postgres-backed store when there is a database, which is
+		// what lets the second leg of an SSO or 2FA sign-in land on any
+		// replica.
+		Ephemeral: auth.NewMemEphemeralStore(),
 		// Defaulted here rather than in mountRoutes. These endpoints
 		// (support + provider events) are reachable by strangers, so they
 		// must always be throttled — a generous per-IP allowance that

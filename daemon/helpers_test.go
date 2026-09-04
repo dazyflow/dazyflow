@@ -4,21 +4,26 @@
 package daemon
 
 import (
+	"context"
 	"errors"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/dazyflow/dazyflow/auth"
 )
 
 func TestGoogleStateRoundTrip(t *testing.T) {
 	t.Parallel()
-	s, err := mintGoogleState("acme", "/dash", "acme.example.com", "bind-nonce", true)
+	api := &authAPI{Ephemeral: auth.NewMemEphemeralStore()}
+	ctx := context.Background()
+	s, err := api.mintGoogleState(ctx, "acme", "/dash", "acme.example.com", "bind-nonce", true)
 	if err != nil {
 		t.Fatalf("mintGoogleState: %v", err)
 	}
 	if s == "" {
 		t.Fatal("empty state")
 	}
-	st, ok := consumeGoogleState(s)
+	st, ok := api.consumeGoogleState(ctx, s)
 	if !ok {
 		t.Fatal("consumeGoogleState: not found")
 	}
@@ -27,11 +32,11 @@ func TestGoogleStateRoundTrip(t *testing.T) {
 		t.Fatalf("state = %+v", st)
 	}
 	// Single-use: a second consume misses.
-	if _, ok := consumeGoogleState(s); ok {
+	if _, ok := api.consumeGoogleState(ctx, s); ok {
 		t.Fatal("state consumable twice")
 	}
 	// Unknown state misses.
-	if _, ok := consumeGoogleState("deadbeef"); ok {
+	if _, ok := api.consumeGoogleState(ctx, "deadbeef"); ok {
 		t.Fatal("unknown state found")
 	}
 }

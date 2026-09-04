@@ -4,11 +4,13 @@
 package daemon
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"net/http"
-	"sync"
 	"time"
+
+	"github.com/dazyflow/dazyflow/auth"
 )
 
 // One-time sign-in handoff tokens bridge an OAuth/SSO sign-in that
@@ -30,15 +32,9 @@ import (
 // handoff must land on the same dzd process (all *.<domain> hosts route
 // to one upstream), which is the case for the supported single-node /
 // sticky-routed deployments.
-var handoffStore = struct {
-	mu    sync.Mutex
-	items map[string]handoffEntry
-}{items: map[string]handoffEntry{}}
-
 type handoffEntry struct {
 	Token     string    // the session token to install as the cookie
 	ExpiresAt time.Time // session expiry — becomes the cookie's Expires
-	Created   time.Time
 }
 
 // handoffTTL bounds how long a one-time code is valid. The redirect from
@@ -46,40 +42,21 @@ type handoffEntry struct {
 // cover the round-trip plus clock skew; keep it short.
 const handoffTTL = 2 * time.Minute
 
-func mintHandoff(token string, expiresAt time.Time) (string, error) {
+func (h *authAPI) mintHandoff(ctx context.Context, token string, expiresAt time.Time) (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}
 	code := hex.EncodeToString(b)
-	handoffStore.mu.Lock()
-	defer handoffStore.mu.Unlock()
-	now := time.Now()
-	for k, v := range handoffStore.items {
-		if now.Sub(v.Created) > handoffTTL {
-			delete(handoffStore.items, k)
-		}
-	}
-	handoffStore.items[code] = handoffEntry{
-		Token:     token,
-		ExpiresAt: expiresAt,
-		Created:   now,
+	entry := handoffEntry{Token: token, ExpiresAt: expiresAt}
+	if err := putEphemeral(ctx, h.Ephemeral, auth.EphemeralSignInHandoff, code, entry, time.Now().Add(handoffTTL)); err != nil {
+		return "", err
 	}
 	return code, nil
 }
 
-func consumeHandoff(code string) (handoffEntry, bool) {
-	handoffStore.mu.Lock()
-	defer handoffStore.mu.Unlock()
-	v, ok := handoffStore.items[code]
-	if !ok {
-		return handoffEntry{}, false
-	}
-	delete(handoffStore.items, code)
-	if time.Since(v.Created) > handoffTTL {
-		return handoffEntry{}, false
-	}
-	return v, true
+func (h *authAPI) consumeHandoff(ctx context.Context, code string) (handoffEntry, bool) {
+	return consumeEphemeral[handoffEntry](ctx, h.Ephemeral, auth.EphemeralSignInHandoff, code)
 }
 
 // authHandoff runs on the org subdomain. It consumes the one-time code
@@ -94,7 +71,7 @@ func (h *authAPI) authHandoff(rw http.ResponseWriter, r *http.Request) {
 		returnTo = "/"
 	}
 	code := r.URL.Query().Get("ot")
-	entry, ok := consumeHandoff(code)
+	entry, ok := h.consumeHandoff(r.Context(), code)
 	if !ok {
 		http.Redirect(rw, r, "/signin?error=handoff_expired", http.StatusFound)
 		return

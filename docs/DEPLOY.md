@@ -178,30 +178,17 @@ dropping a message that never went out, the worse failure for these connectors.
 No configuration is needed; the table is created on boot and `dzd` refuses to
 start if it can't be (same as every other Postgres-backed store).
 
-> **Session affinity is required.** Four short-lived pieces of auth state are
-> held in each pod's memory rather than in Postgres: the Google sign-in state
-> (`daemon/google_signin.go`), the connector OAuth pending-authorization state
-> (`daemon/oauth.go`), the sign-in handoff tokens used by the per-org-subdomain
-> flow (`daemon/auth_handoff.go`), and TOTP challenges
-> (`auth.MemTOTPChallengeStore`). Each is minted on one request and consumed on
-> a *second* request moments later — the OAuth/SSO callback, or the second leg
-> of a 2FA sign-in. If the load balancer sends that second request to a
-> different pod, the state isn't there and the user sees "invalid or expired
-> state" (or a failed 2FA prompt) at random.
+> **Session affinity is not required.** Four pieces of short-lived auth state
+> are minted on one request and consumed on a *second* one moments later — the
+> Google sign-in state, the connector OAuth pending authorization, the
+> per-org-subdomain sign-in handoff, and the TOTP challenge. They used to live
+> in the minting pod's memory, so a second request landing elsewhere found
+> nothing and the user saw "invalid or expired state" (or a failed 2FA prompt)
+> at random; sticky sessions were the workaround.
 >
-> So on multi-replica: enable sticky sessions on the ingress. For
-> ingress-nginx that is the cookie affinity annotations:
->
-> ```yaml
-> nginx.ingress.kubernetes.io/affinity: "cookie"
-> nginx.ingress.kubernetes.io/session-cookie-name: "dz_affinity"
-> nginx.ingress.kubernetes.io/session-cookie-max-age: "600"
-> ```
->
-> Everything else — the run event bus, the scheduler leader, write dedupe,
-> sessions, secrets — is Postgres-backed and needs no affinity. Moving these
-> four stores to Postgres would remove the requirement; until then it is a
-> deployment constraint, not an optional tuning.
+> They are in Postgres now (`auth_ephemeral`), so any pod can serve either leg.
+> If you already enabled cookie affinity on the ingress you can drop it — it
+> does no harm, it just no longer does anything.
 
 The steps:
 
@@ -300,6 +287,11 @@ only there:
   is only in git. Restoring it later means going back to that directory.
 - **History past 10,000 revisions per flow**, if the migration reported any
   flow as truncated. It names them in the log.
+
+Erasing an org (GDPR Art. 17) removes its synthesized mirror as well as its
+rows. The replica handling the erasure clears its own copy immediately, and
+every other replica clears its copy on an hourly sweep — so a pod that was down
+at the time still converges.
 
 And delete only `$DAZYFLOW_DATA_DIR/workspace`. The rest of that directory is
 live state the flow store has nothing to do with: `sandbox/` holds every org's

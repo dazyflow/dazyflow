@@ -40,6 +40,7 @@ type authAPI struct {
 	OrgAuth        auth.OrgAuthStore
 	SupportAgents  support.AgentStore
 	TOTPChallenges auth.TOTPChallengeStore
+	Ephemeral      auth.EphemeralStore
 	TOTPKey        []byte
 	WildcardDomain string
 	EnableSignup   bool
@@ -58,7 +59,7 @@ type authAPI struct {
 
 // authAPI builds them from the gateway's configuration.
 func (h *HTTPGateway) authAPI() *authAPI {
-	return &authAPI{auditor: h.auditor(), adminCheck: h.admins(), urlBuilder: h.urls(), langPicker: h.lang(), sessionCookies: h.cookies(), seatQuota: h.seats(), svc: h.svc, logger: h.logger, Users: h.Users, Sessions: h.Sessions, Memberships: h.Memberships, Invitations: h.Invitations, Profiles: h.Profiles, Blocklist: h.Blocklist, OrgAuth: h.OrgAuth, SupportAgents: h.SupportAgents, TOTPChallenges: h.TOTPChallenges, TOTPKey: h.TOTPKey, WildcardDomain: h.WildcardDomain, EnableSignup: h.EnableSignup, PlatformAdmins: h.PlatformAdmins, platformAdminGranted: &h.platformAdminGranted, supportAgentGranted: &h.supportAgentGranted, signInLockout: h.platformAdminAPI().signInLockout, ticketsEnabled: h.supportAPI().ticketsEnabled}
+	return &authAPI{auditor: h.auditor(), adminCheck: h.admins(), urlBuilder: h.urls(), langPicker: h.lang(), sessionCookies: h.cookies(), seatQuota: h.seats(), svc: h.svc, logger: h.logger, Users: h.Users, Sessions: h.Sessions, Memberships: h.Memberships, Invitations: h.Invitations, Profiles: h.Profiles, Blocklist: h.Blocklist, OrgAuth: h.OrgAuth, SupportAgents: h.SupportAgents, TOTPChallenges: h.TOTPChallenges, Ephemeral: h.Ephemeral, TOTPKey: h.TOTPKey, WildcardDomain: h.WildcardDomain, EnableSignup: h.EnableSignup, PlatformAdmins: h.PlatformAdmins, platformAdminGranted: &h.platformAdminGranted, supportAgentGranted: &h.supportAgentGranted, signInLockout: h.platformAdminAPI().signInLockout, ticketsEnabled: h.supportAPI().ticketsEnabled}
 }
 
 // signIn validates an email+password pair, mints a session, and sets

@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"iter"
+	"os"
 	"path/filepath"
 	"sort"
 
@@ -141,5 +142,67 @@ func (p *PgWorkspaces) RemoveTenant(tenant string) error {
 			return fmt.Errorf("erase %s: %w", tbl, err)
 		}
 	}
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+	// The synthesized mirror is a full copy of the org's flows — every revision,
+	// as plain JSON in git objects. Dropping the rows without it would leave the
+	// erased org's content on disk.
+	//
+	// This clears THIS replica's copy. Any other replica that mirrored the org
+	// has its own, which PruneMirrorCache removes on its next sweep.
+	return p.removeMirrorCache(st)
+}
+
+func (p *PgWorkspaces) removeMirrorCache(tenant string) error {
+	if p.mirrorCache == "" {
+		return nil
+	}
+	if err := os.RemoveAll(filepath.Join(p.mirrorCache, tenant)); err != nil {
+		return fmt.Errorf("erase mirror cache: %w", err)
+	}
+	return nil
+}
+
+// PruneMirrorCache removes synthesized mirrors belonging to tenants the flow
+// store no longer holds.
+//
+// It is the multi-replica half of the erasure above: the replica that served
+// the erasure clears its own copy immediately, and every other replica that
+// ever mirrored that org clears its copy here. Cheap — one query plus a
+// directory listing — and safe to run on every replica.
+//
+// A tenant whose flows were all deleted still has rows (a deletion writes a
+// tombstone revision, it does not remove the flow), so "no rows" means erased
+// or never seen, never merely empty.
+func (p *PgWorkspaces) PruneMirrorCache(ctx context.Context) (int, error) {
+	if p.mirrorCache == "" {
+		return 0, nil
+	}
+	entries, err := os.ReadDir(p.mirrorCache)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	removed := 0
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		var live bool
+		if err := p.pool.QueryRow(ctx,
+			`SELECT EXISTS (SELECT 1 FROM flow_heads WHERE tenant=$1)`, e.Name()).Scan(&live); err != nil {
+			return removed, err
+		}
+		if live {
+			continue
+		}
+		if err := p.removeMirrorCache(e.Name()); err != nil {
+			return removed, err
+		}
+		removed++
+	}
+	return removed, nil
 }

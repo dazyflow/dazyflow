@@ -10,6 +10,50 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Changed
+
+- **Multi-replica deployments no longer need sticky sessions.** Four pieces of
+  short-lived auth state were held in the minting pod's memory: the Google
+  sign-in state, the connector OAuth pending authorization, the
+  per-org-subdomain sign-in handoff, and the TOTP challenge. Each is minted on
+  one request and consumed on a *second* one moments later — an OAuth/SSO
+  callback, or the second leg of a 2FA sign-in — so a load balancer that sent
+  that second request elsewhere produced "invalid or expired state" at random.
+  Cookie affinity on the ingress was the workaround, and `docs/DEPLOY.md`
+  carried it as a deployment constraint rather than a tuning choice.
+
+  All four now share one Postgres table (`auth_ephemeral`), kept apart by a
+  kind column, since they differ only in what they carry. Deployments without a
+  database keep the in-memory store, which is correct for a single instance.
+
+  Two details worth stating, because both are load-bearing:
+
+  - The **expiry is part of the lookup**, not a later check, so a row the sweep
+    has not reached yet still reads as gone. A late sweep cannot become an
+    accepted stale token.
+  - The TOTP **guess budget is a column, incremented atomically**, so the
+    brute-force cap counts across replicas. Had the count lived in the payload,
+    each pod would have granted a fresh five guesses.
+
+  The payload column is `BYTEA` rather than `JSONB`: the store is opaque to what
+  it carries, and JSONB would normalize it — reordering keys, respacing — so
+  what came out would not be what went in.
+
+  If you have cookie affinity configured you can drop it; it is now inert.
+
+### Fixed
+
+- **Erasing an org left its flows on disk in the synthesized git mirror.**
+  Postgres-backed flow storage clears an erased org's rows, but the mirror
+  synthesis writes a full copy of every revision of every flow into
+  `$DAZYFLOW_DATA_DIR/mirrorcache` — and nothing removed it, so Art. 17 erasure
+  reported success while the content stayed. The replica that handles the
+  erasure now clears its own copy as part of it, and every replica runs an
+  hourly sweep for orgs the flow store no longer holds, which covers both the
+  copies other replicas made and a pod that was down when the erasure ran.
+  (A org that merely deleted all its flows is not swept: a deletion writes a
+  tombstone revision rather than removing rows, so "no rows" means erased.)
+
 ## [0.35.0] - 2026-09-04
 
 ### Added
