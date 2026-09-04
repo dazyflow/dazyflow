@@ -51,6 +51,7 @@ var tenantTableDisposition = map[string]struct {
 	"jobs":                  {erasedByCascade, "run history + payloads"},
 	"run_logs":              {erasedByCascade, "run output, may contain personal data from flows"},
 	"bus_events":            {erasedByCascade, "spooled run events"},
+	"flow_schedules":        {erasedByCascade, "scheduler enrollment projection"},
 	"workspace_shares":      {erasedByCascade, "public overview links"},
 	"collection_shares":     {erasedByCascade, "public collection links"},
 	"encrypted_secrets":     {erasedByCascade, "connector credentials"},

@@ -11,6 +11,7 @@ import (
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/engine/jobstore"
+	"github.com/dazyflow/dazyflow/workspace"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -641,5 +642,188 @@ func TestPgRunnerStore_DeleteByTenant(t *testing.T) {
 	if _, err := store.RedeemToken(ctx, []byte("live-keeper"),
 		Runner{Tenant: "keeper", Name: "box2"}, []byte("cred-new")); err != nil {
 		t.Errorf("other tenant's token stopped working: %v", err)
+	}
+}
+
+// TestPgScheduleStore_Projection exercises the durable ScheduleStore: schema
+// provisioning, the per-flow replace that adds/updates/removes in one shot, the
+// erasure cascade, and the reconcile's prune.
+func TestPgScheduleStore_Projection(t *testing.T) {
+	pool, ctx := covPGPool(t)
+	if _, err := pool.Exec(ctx, "DROP TABLE IF EXISTS flow_schedules CASCADE"); err != nil {
+		t.Fatalf("drop: %v", err)
+	}
+	store, err := NewPgScheduleStore(ctx, pool)
+	if err != nil {
+		t.Fatalf("NewPgScheduleStore: %v", err)
+	}
+
+	spec := func(tenant, graphID, entrySuffix, specKey string) ScheduleSpec {
+		return ScheduleSpec{
+			Tenant: tenant, Workspace: "ws", GraphID: graphID,
+			EntryKey: tenant + "/ws/" + graphID + entrySuffix,
+			SpecKey:  specKey, Cron: "*/5 * * * *", TZ: "UTC",
+		}
+	}
+
+	// Two triggers on one flow, plus a flow in another tenant.
+	if err := store.ReplaceFlowSchedules(ctx, "t1", "ws", "f1", []ScheduleSpec{
+		spec("t1", "f1", "#a", "cron:a"), spec("t1", "f1", "#b", "cron:b"),
+	}); err != nil {
+		t.Fatalf("replace f1: %v", err)
+	}
+	if err := store.ReplaceFlowSchedules(ctx, "t2", "ws", "f2", []ScheduleSpec{
+		spec("t2", "f2", "#a", "cron:a"),
+	}); err != nil {
+		t.Fatalf("replace f2: %v", err)
+	}
+	all, err := store.ListSchedules(ctx)
+	if err != nil || len(all) != 3 {
+		t.Fatalf("ListSchedules = %d / %v, want 3", len(all), err)
+	}
+
+	// A poll spec round-trips its interval rather than a cron expression.
+	poll := ScheduleSpec{Tenant: "t1", Workspace: "ws", GraphID: "f3",
+		EntryKey: "t1/ws/f3@n1", SpecKey: "poll:300", IntervalSeconds: 300}
+	if err := store.ReplaceFlowSchedules(ctx, "t1", "ws", "f3", []ScheduleSpec{poll}); err != nil {
+		t.Fatalf("replace f3: %v", err)
+	}
+	all, _ = store.ListSchedules(ctx)
+	var gotPoll bool
+	for _, s := range all {
+		if s.EntryKey == "t1/ws/f3@n1" {
+			gotPoll = true
+			if s.IntervalSeconds != 300 || !s.IsPoll() || s.Cron != "" {
+				t.Fatalf("poll spec round-trip = %+v", s)
+			}
+		}
+	}
+	if !gotPoll {
+		t.Fatal("poll spec missing after replace")
+	}
+
+	// Replace is a complete swap: two entries become one, the other dropped.
+	if err := store.ReplaceFlowSchedules(ctx, "t1", "ws", "f1", []ScheduleSpec{
+		spec("t1", "f1", "#b", "cron:b-edited"),
+	}); err != nil {
+		t.Fatalf("re-replace f1: %v", err)
+	}
+	all, _ = store.ListSchedules(ctx)
+	if len(all) != 3 { // f1#b, f3@n1, t2/f2#a
+		t.Fatalf("after replace = %d entries, want 3", len(all))
+	}
+	for _, s := range all {
+		if s.EntryKey == "t1/ws/f1#a" {
+			t.Fatal("replace left the dropped entry behind")
+		}
+		if s.EntryKey == "t1/ws/f1#b" && s.SpecKey != "cron:b-edited" {
+			t.Fatalf("replace did not update the spec key: %+v", s)
+		}
+	}
+
+	// An empty set takes the flow offline.
+	if err := store.ReplaceFlowSchedules(ctx, "t1", "ws", "f1", nil); err != nil {
+		t.Fatalf("clear f1: %v", err)
+	}
+	all, _ = store.ListSchedules(ctx)
+	if len(all) != 2 {
+		t.Fatalf("after clear = %d entries, want 2", len(all))
+	}
+
+	// A spec naming a different flow than the one being replaced is refused,
+	// and the transaction leaves nothing behind.
+	err = store.ReplaceFlowSchedules(ctx, "t1", "ws", "f3", []ScheduleSpec{spec("t1", "other", "#x", "cron:x")})
+	if err == nil {
+		t.Fatal("ReplaceFlowSchedules accepted a spec for another flow")
+	}
+	all, _ = store.ListSchedules(ctx)
+	if len(all) != 2 {
+		t.Fatalf("failed replace changed the table: %d entries, want 2", len(all))
+	}
+
+	// PruneMissingFlows drops rows for flows the workspaces no longer hold.
+	n, err := store.PruneMissingFlows(ctx, map[string]struct{}{"t2/ws/f2": {}})
+	if err != nil || n != 1 {
+		t.Fatalf("PruneMissingFlows = %d / %v, want 1", n, err)
+	}
+	all, _ = store.ListSchedules(ctx)
+	if len(all) != 1 || all[0].Tenant != "t2" {
+		t.Fatalf("after prune = %+v, want only t2's row", all)
+	}
+
+	// Erasure cascade.
+	d, err := store.DeleteByTenant(ctx, "t2")
+	if err != nil || d != 1 {
+		t.Fatalf("DeleteByTenant = %d / %v, want 1", d, err)
+	}
+	if all, _ = store.ListSchedules(ctx); len(all) != 0 {
+		t.Fatalf("after erasure = %d entries, want 0", len(all))
+	}
+}
+
+// The duplicate-EntryKey bug lived in the gap between these two: the derivation
+// was tested with its own output, and the durable store was tested with
+// hand-written specs. Nothing pushed REAL derived specs into real Postgres,
+// where entry_key is a primary key — so a flow carrying the same trigger twice
+// rolled back its whole insert and silently lost every schedule it had.
+func TestPgScheduleStore_AcceptsEveryDerivedSpecSet(t *testing.T) {
+	pool, ctx := covPGPool(t)
+	if _, err := pool.Exec(ctx, "DROP TABLE IF EXISTS flow_schedules CASCADE"); err != nil {
+		t.Fatalf("drop: %v", err)
+	}
+	store, err := NewPgScheduleStore(ctx, pool)
+	if err != nil {
+		t.Fatalf("NewPgScheduleStore: %v", err)
+	}
+	ws, err := workspace.OpenFS("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	richWorkspace(t, ws)
+
+	ids, err := ws.ListGraphs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored := 0
+	for _, id := range ids {
+		g, err := ws.Load(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		specs := DeriveScheduleSpecs(scheduleCronParser, "t", "ws", g, nil)
+		if err := store.ReplaceFlowSchedules(ctx, "t", "ws", id, specs); err != nil {
+			t.Fatalf("flow %q derived %d specs the store refused: %v", id, len(specs), err)
+		}
+		stored += len(specs)
+	}
+
+	// Everything derived is readable back, unchanged and complete.
+	back, err := store.ListSchedules(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(back) != stored {
+		t.Fatalf("stored %d specs, read back %d", stored, len(back))
+	}
+	byKey := make(map[string]ScheduleSpec, len(back))
+	for _, s := range back {
+		byKey[s.EntryKey] = s
+	}
+	for _, id := range ids {
+		g, _ := ws.Load(id)
+		for _, want := range DeriveScheduleSpecs(scheduleCronParser, "t", "ws", g, nil) {
+			got, ok := byKey[want.EntryKey]
+			if !ok {
+				t.Errorf("%s: spec %q missing after round-trip", id, want.EntryKey)
+				continue
+			}
+			if got != want {
+				t.Errorf("%s: spec %q changed in the round-trip:\n got  %+v\n want %+v", id, want.EntryKey, got, want)
+			}
+		}
+	}
+	if _, err := store.DeleteByTenant(ctx, "t"); err != nil {
+		t.Fatal(err)
 	}
 }

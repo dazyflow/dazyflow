@@ -93,6 +93,7 @@ type EraseReport struct {
 	GrantedByRefs    int      `json:"granted_by_refs_anonymized"`
 	AuthoredRefs     int      `json:"authored_refs_anonymized"`
 	BusEvents        int      `json:"bus_events_deleted"`
+	FlowSchedules    int      `json:"flow_schedules_deleted"`
 	Tickets          int      `json:"support_tickets_deleted"`
 	Bundles          int      `json:"support_bundles_deleted"`
 	Grants           int      `json:"access_grants_deleted"`
@@ -315,6 +316,9 @@ func (h *gdprAPI) deleteOrgData(ctx context.Context, tenant string) (EraseReport
 	}
 	// Job records (run history + payloads/results).
 	rep.tallyByTenant(ctx, "jobs", h.svc.Jobs, tenant, func(n int) { rep.Jobs = n })
+	// The scheduler's enrollment projection. Removing the workspace below
+	// would leave these rows pointing at flows that no longer exist.
+	rep.tallyByTenant(ctx, "flow_schedules", h.svc.Schedules, tenant, func(n int) { rep.FlowSchedules = n })
 	// Run logs and spooled bus events reference jobs, so delete them
 	// while the job rows are still present to scope the join.
 	rep.tallyByTenant(ctx, "run_logs", h.svc.RunLogs, tenant, func(n int) { rep.RunLogs = n })

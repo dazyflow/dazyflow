@@ -322,6 +322,13 @@ func main() {
 	// first access. This lets self-serve signups (tenant usr_<hex>) save
 	// graphs without pre-registration. Empty workspaceDir = in-memory.
 	workspaces := daemon.NewAutoFSWorkspaces(workspaceDir)
+	// Cap the resident workspace set. Each open workspace holds a git
+	// repository; without a cap, one sweep over every tenant leaves all of
+	// them in memory for the life of the process. 0 disables eviction.
+	if n := envInt("DAZYFLOW_MAX_OPEN_WORKSPACES", 0); n != 0 {
+		workspaces.SetMaxOpen(n)
+		log.Printf("workspace cache: at most %d open at once", n)
+	}
 	if workspaceDir != "" {
 		log.Printf("workspace store: %s/<tenant>/<workspace> (auto-provisioned)", workspaceDir)
 	} else {
@@ -621,9 +628,12 @@ func main() {
 		Auth:       authChain,
 		Workspaces: workspaces,
 		Jobs:       jobs,
-		Engine:     eng,
-		Bus:        bus,
-		WorkerID:   instanceID,
+		// Schedules is what the scheduler rescans. Without it every rescan
+		// re-reads every flow of every tenant from git.
+		Schedules: stores.schedules,
+		Engine:    eng,
+		Bus:       bus,
+		WorkerID:  instanceID,
 		// AdminKeys uses the same MemKeyStore the Authenticator reads
 		// from, so admin-issued keys are immediately recognized.
 		AdminKeys:              ks,
@@ -1034,6 +1044,7 @@ type coreStores struct {
 	shares           daemon.ShareStore
 	collectionShares daemon.CollectionShareStore
 	mirrors          daemon.GitMirrorStore
+	schedules        daemon.ScheduleStore
 }
 
 // openCoreStores connects the shared pgxpool and opens the key / user /
@@ -1132,6 +1143,10 @@ func openCoreStores(ctx context.Context, dsn string, maxConns, minConns int, ses
 	if err != nil {
 		log.Fatalf("postgres git-mirror store: %v", err)
 	}
+	pgSchedules, err := daemon.NewPgScheduleStore(ctx, pool)
+	if err != nil {
+		log.Fatalf("postgres schedule store: %v", err)
+	}
 	if sessionCacheTTL > 0 {
 		log.Printf("session lookup cache: ttl=%s", sessionCacheTTL)
 	}
@@ -1149,6 +1164,7 @@ func openCoreStores(ctx context.Context, dsn string, maxConns, minConns int, ses
 		shares:           pgShares,
 		collectionShares: pgCollectionShares,
 		mirrors:          pgMirrors,
+		schedules:        pgSchedules,
 	}
 }
 
@@ -1323,6 +1339,52 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 			log.Printf("scheduler stopped: %v", err)
 		}
 	}()
+
+	// Schedule-projection reconcile. Every write that changes what fires
+	// re-derives that flow's rows, so this exists for the cases those can't
+	// cover: the first boot after upgrade (the table starts empty), a
+	// projection write that failed after its commit landed, and a flow deleted
+	// while this dzd was down.
+	//
+	// It is the O(all flows) git walk the rescan used to do every 30s, so it
+	// runs rarely and on the leader only. Set the interval to 0 to disable it
+	// once you trust the write paths.
+	reconcileInterval := envDuration("DAZYFLOW_SCHEDULE_RECONCILE_INTERVAL", time.Hour)
+	if reconcileInterval > 0 && d.svc != nil && d.svc.Schedules != nil {
+		bgWg.Add(1)
+		go func() {
+			defer bgWg.Done()
+			// Polled rather than ticked at the full interval so the first pass
+			// lands as soon as this node wins the election — on a cold start
+			// after upgrade nothing fires until it has.
+			t := time.NewTicker(5 * time.Second)
+			defer t.Stop()
+			var last time.Time
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.C:
+					if isLeader != nil && !isLeader() {
+						continue
+					}
+					if !last.IsZero() && time.Since(last) < reconcileInterval {
+						continue
+					}
+					start := time.Now()
+					n, err := d.svc.ReconcileSchedules(ctx)
+					last = time.Now() // also on failure, so a broken pass doesn't spin
+					if err != nil {
+						if ctx.Err() == nil {
+							log.Printf("schedule reconcile: %v", err)
+						}
+						continue
+					}
+					log.Printf("schedule reconcile: %d flow(s) in %s", n, time.Since(start).Round(time.Millisecond))
+				}
+			}
+		}()
+	}
 
 	// Orphaned-graph-run reaper. A worker that dies between a run's last node
 	// going terminal and the dispatcher's completion check leaves the graph

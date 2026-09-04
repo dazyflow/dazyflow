@@ -75,6 +75,9 @@ CREATE TABLE IF NOT EXISTS bus_events (
     payload    JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- The retention sweep's predicate. Without it the five-minute sweep scans the
+-- whole spool; the drain path reads by id and uses the primary key instead.
+CREATE INDEX IF NOT EXISTS bus_events_created_idx ON bus_events (created_at);
 `
 
 const pgBusChannel = "dazy_bus"

@@ -10,6 +10,118 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Performance
+
+- **Memory no longer grows with the number of tenants.** Every workspace a
+  process ever touched stayed open for its lifetime, each holding a go-git
+  repository — so one sweep over an install left one repository resident per
+  tenant, permanently. `AutoFSWorkspaces` now evicts least-recently-used, and
+  `WorkspaceEnumerator.All` yields one store at a time (an `iter.Seq2`, so the
+  `for key, store := range enum.All()` call sites are unchanged) instead of
+  returning them all in a map, so a sweep can't defeat the cap. Measured on a
+  full read of every flow, 10 per tenant:
+
+  | Tenants | Before | After (cap 512) |
+  |---:|---:|---:|
+  | 1,000 | 224 MB | 141 MB |
+  | 3,000 | 462 MB | 143 MB |
+
+  Tripling the tenants moves the capped figure by 2 MB. That is the point: the
+  resident cost follows `DAZYFLOW_MAX_OPEN_WORKSPACES` (default 512, 0 to
+  disable), not the size of the install. Eviction is off when graphs are in
+  memory rather than on disk, where dropping a store would discard the only
+  copy of that tenant's flows.
+
+  Part of the drop is separate and applies whatever the cap: go-git sizes a
+  repository's object cache for a source tree at **96 MiB each**, and a
+  workspace holding a few dozen small JSON documents is given 2 MiB.
+
+- **A workspace's lock is now held per directory rather than per `Store`.**
+  Caching stores and evicting them means two `Store` values for one working
+  tree can be alive at once, and they share a single `.git/index` — two
+  concurrent worktree writes corrupt the repository, which is reproducible in a
+  test (`commit: EOF`) the moment the lock is per-`Store`. The mutex is keyed by
+  absolute directory for the life of the process, so the overlap is harmless.
+  This makes the eviction above safe; it does **not** make a workspace safe
+  across two `dzd` processes on shared storage, which is a different problem.
+
+
+- **Five sweeps that ran on a timer were scanning whole tables to do it.** Each
+  runs on a fixed schedule regardless of how much work it has, so the cost grew
+  with the install while the frequency stayed put. Measured on a 2M-row `jobs`
+  table (~220k runs) plus 1M run-log, 500k audit and 500k bus-event rows:
+
+  | Sweep | Before | After |
+  |---|---:|---:|
+  | Concurrency promoter, every 2s **per replica** | 52 ms | 0.4 ms |
+  | Orphaned-run reaper, every 60s **per replica** | 14 ms | 0.5 ms |
+  | Job retention, hourly, nothing to delete | 668 ms | 0.1 ms |
+  | Run-log retention, hourly, nothing to delete | 190 ms | 0.02 ms |
+  | Audit retention, hourly, nothing to delete | 131 ms | 0.05 ms |
+  | Bus-event sweep, every 5 min | 1053 ms | 62 ms |
+
+  The two graph-run sweeps don't filter by tenant, so `jobs_tenant_status_idx`
+  could only serve them by scanning all of itself and filtering;
+  `jobs_graph_status_idx` is partial on `kind = 'graph'` (one row in nine) and
+  ordered by `enqueued_at`, so it also removes the sort. The three retention
+  sweeps had no index on the column they filter by at all — worst in the case
+  that ends every pass, proving there is nothing left to delete, which is a full
+  scan. `jobs_prune_idx` mirrors the existing `runner_tasks_prune_idx`: partial
+  on terminal status, so a row enters it once when it finishes and is never
+  updated in it again. `audit_events_prune_idx` is partial on the same
+  `action <> 'approval'` exemption the sweep applies, so approval events —
+  which are kept indefinitely — are never indexed.
+
+  Cost is one extra index write per row as it goes terminal: a few percent on
+  the completion `UPDATE`, nothing measurable on `INSERT`.
+
+  **Upgrading a large install:** these are created at boot like every other
+  index here, and a plain `CREATE INDEX` holds a write lock while it builds —
+  roughly a second per million rows for `jobs_prune_idx` in the measurement
+  above. If your `jobs` table is big enough for that to matter, build them
+  first, without the lock, and boot will find them already there:
+
+  ```sql
+  CREATE INDEX CONCURRENTLY IF NOT EXISTS jobs_graph_status_idx
+      ON jobs (status, enqueued_at DESC) WHERE kind = 'graph';
+  CREATE INDEX CONCURRENTLY IF NOT EXISTS jobs_prune_idx
+      ON jobs (finished_at) WHERE status IN ('succeeded','failed','cancelled','skipped');
+  CREATE INDEX CONCURRENTLY IF NOT EXISTS bus_events_created_idx ON bus_events (created_at);
+  CREATE INDEX CONCURRENTLY IF NOT EXISTS run_logs_ts_idx ON run_logs (ts);
+  CREATE INDEX CONCURRENTLY IF NOT EXISTS audit_events_prune_idx
+      ON audit_events (ts) WHERE action <> 'approval';
+  ```
+
+### Changed
+
+- **The scheduler no longer reads every flow in the install to find out what to
+  fire.** Its rescan derived the enrollment set by walking every tenant's git
+  workspace and loading every flow, every 30 seconds, holding each workspace's
+  mutex against the editor while it went. That is O(all flows in the install)
+  per pass: measured at 1,000 tenants × 10 flows it took 3.7s and left 224 MB
+  resident, and it scales linearly, so around 100,000 flows a pass no longer
+  fits inside its own 30s ticker — the scheduler saturates a core and fires
+  every cron late, because rescan and the fire tick share a goroutine.
+
+  What a flow asks for is now derived once, when it changes, into a
+  `flow_schedules` table, and a rescan is one query. Publishing, unpublishing,
+  pausing, resuming, editing a cadence and deleting a flow each re-derive that
+  one flow's rows. The same measurement is **87ms**, and the parsed cron
+  schedule of an unchanged entry is carried across passes rather than re-parsed.
+
+  Nothing about *when* a flow fires changes: the cadence still comes from the
+  draft (so a timing edit takes effect on save) while the revision that runs is
+  still the published one, and an entry keeps its next-fire time and poll
+  backoff across a rescan exactly as before.
+
+  `DAZYFLOW_SCHEDULE_RECONCILE_INTERVAL` (default `1h`, `0` disables) rebuilds
+  the table from the workspaces on the scheduler leader. It is the backstop for
+  what the write paths can't cover — the first boot after upgrade, when the
+  table starts empty; a projection write that failed after its commit landed; a
+  flow deleted while this dzd was down. It skips flows whose rows already match,
+  so a steady-state pass writes nothing. Deployments without Postgres keep the
+  old walk.
+
 ### Fixed
 
 - **Tidy vanished on flows with fewer than two steps.** It greyed out below

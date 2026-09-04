@@ -9,13 +9,16 @@
 package daemon
 
 import (
+	"container/list"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"iter"
 	"log"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -48,7 +51,11 @@ type WorkspaceLookup interface {
 // enumerate (e.g. a lazy remote registry) simply won't drive the
 // scheduler.
 type WorkspaceEnumerator interface {
-	All() map[string]*workspace.Store
+	// All yields every known (tenant, workspace) store, one at a time. It is a
+	// sequence rather than a map so a caller sweeping a large install doesn't
+	// force every workspace to be open at once — AutoFSWorkspaces evicts as
+	// the iteration advances. Callers must not retain a store past its yield.
+	All() iter.Seq2[string, *workspace.Store]
 }
 
 // MapWorkspaces is a static lookup keyed by "tenant/workspace".
@@ -76,9 +83,9 @@ func (m MapWorkspaces) List(tenant string) ([]string, error) {
 	return out, nil
 }
 
-// All returns the underlying map directly — MapWorkspaces already keys
-// by "tenant/workspace", which is exactly what the scheduler wants.
-func (m MapWorkspaces) All() map[string]*workspace.Store { return m }
+// All iterates the underlying map directly — MapWorkspaces already keys by
+// "tenant/workspace", and its stores are caller-owned, so nothing is evicted.
+func (m MapWorkspaces) All() iter.Seq2[string, *workspace.Store] { return maps.All(m) }
 
 // AutoFSWorkspaces lazily provisions a git-backed workspace.Store per
 // (tenant, workspace) under a base directory. The first access to a
@@ -91,14 +98,58 @@ func (m MapWorkspaces) All() map[string]*workspace.Store { return m }
 // crafted tenant/workspace name can't escape the base directory.
 type AutoFSWorkspaces struct {
 	base string
-	mu   sync.Mutex
-	open map[string]*workspace.Store
+
+	mu sync.Mutex
+	// open indexes order by key; order is most-recently-used first. A store
+	// stays open until it is evicted, so this bounds how much of a large
+	// install is resident at once — see maxOpen and evictLocked.
+	open  map[string]*list.Element
+	order *list.List
+	// maxOpen caps the open set. 0 means unlimited, which is mandatory in
+	// memory mode: an in-memory store IS the tenant's graphs, so evicting one
+	// deletes them.
+	maxOpen int
 }
+
+// openWorkspace is one entry of the open set, carrying its key so an eviction
+// picked off the back of the list can find its map entry.
+type openWorkspace struct {
+	key   string
+	store *workspace.Store
+}
+
+// defaultMaxOpenWorkspaces bounds the resident workspace set. Each open store
+// holds a go-git repository plus its object cache, so without a cap a single
+// sweep over every tenant leaves all of them resident for the life of the
+// process. Generous enough that an install's actively-edited workspaces all
+// stay hot; a miss costs one repository open, not a lost edit.
+const defaultMaxOpenWorkspaces = 512
 
 // NewAutoFSWorkspaces returns a lookup rooted at base. Each tenant
 // gets base/<tenant>/<workspace> as its git store directory.
 func NewAutoFSWorkspaces(base string) *AutoFSWorkspaces {
-	return &AutoFSWorkspaces{base: base, open: map[string]*workspace.Store{}}
+	a := &AutoFSWorkspaces{
+		base:  base,
+		open:  map[string]*list.Element{},
+		order: list.New(),
+	}
+	if base != "" {
+		a.maxOpen = defaultMaxOpenWorkspaces
+	}
+	return a
+}
+
+// SetMaxOpen overrides how many stores stay resident. Ignored in memory mode,
+// where eviction would discard the only copy of a tenant's graphs. n <= 0
+// disables eviction.
+func (a *AutoFSWorkspaces) SetMaxOpen(n int) {
+	if a.base == "" {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.maxOpen = n
+	a.evictLocked()
 }
 
 func (a *AutoFSWorkspaces) Open(tenant, ws string) (*workspace.Store, error) {
@@ -109,8 +160,9 @@ func (a *AutoFSWorkspaces) Open(tenant, ws string) (*workspace.Store, error) {
 	key := st + "/" + wsClean
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if s, ok := a.open[key]; ok {
-		return s, nil
+	if el, ok := a.open[key]; ok {
+		a.order.MoveToFront(el)
+		return el.Value.(*openWorkspace).store, nil
 	}
 	// Empty base = in-memory mode: OpenFS("") returns a memory store.
 	// We still cache per key so a tenant's graphs persist across
@@ -123,8 +175,27 @@ func (a *AutoFSWorkspaces) Open(tenant, ws string) (*workspace.Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("provision workspace %q/%q: %w", tenant, ws, err)
 	}
-	a.open[key] = s
+	a.open[key] = a.order.PushFront(&openWorkspace{key: key, store: s})
+	a.evictLocked()
 	return s, nil
+}
+
+// evictLocked drops least-recently-used stores until the open set fits.
+// Dropping a store does not close anything: a caller still holding one keeps
+// using it, and a reopen of the same directory shares its lock (see
+// workspace.dirMutex), so the two cannot corrupt each other. Caller holds a.mu.
+func (a *AutoFSWorkspaces) evictLocked() {
+	if a.maxOpen <= 0 {
+		return
+	}
+	for a.order.Len() > a.maxOpen {
+		el := a.order.Back()
+		if el == nil {
+			return
+		}
+		a.order.Remove(el)
+		delete(a.open, el.Value.(*openWorkspace).key)
+	}
 }
 
 // List returns the workspace directories present under base/<tenant>.
@@ -177,8 +248,9 @@ func (a *AutoFSWorkspaces) RemoveTenant(tenant string) error {
 	}
 	a.mu.Lock()
 	prefix := st + "/"
-	for k := range a.open {
+	for k, el := range a.open {
 		if k == st || strings.HasPrefix(k, prefix) {
+			a.order.Remove(el)
 			delete(a.open, k)
 		}
 	}
@@ -193,43 +265,56 @@ func (a *AutoFSWorkspaces) RemoveTenant(tenant string) error {
 // opening (and caching) each. Used by the scheduler's periodic rescan
 // to discover cron/poll triggers across all tenants. In memory mode
 // (empty base) it returns the stores opened so far this process.
-func (a *AutoFSWorkspaces) All() map[string]*workspace.Store {
-	if a.base == "" {
-		a.mu.Lock()
-		defer a.mu.Unlock()
-		out := make(map[string]*workspace.Store, len(a.open))
-		for k, v := range a.open {
-			out[k] = v
+func (a *AutoFSWorkspaces) All() iter.Seq2[string, *workspace.Store] {
+	return func(yield func(string, *workspace.Store) bool) {
+		if a.base == "" {
+			// Memory mode: nothing is on disk, so the open set IS the set.
+			// Snapshot it rather than yielding under the lock, so the consumer
+			// is free to Open (or remove) a workspace while iterating.
+			a.mu.Lock()
+			snapshot := make([]*openWorkspace, 0, len(a.open))
+			for el := a.order.Front(); el != nil; el = el.Next() {
+				snapshot = append(snapshot, el.Value.(*openWorkspace))
+			}
+			a.mu.Unlock()
+			for _, ow := range snapshot {
+				if !yield(ow.key, ow.store) {
+					return
+				}
+			}
+			return
 		}
-		return out
-	}
-	out := make(map[string]*workspace.Store)
-	tenants, err := os.ReadDir(a.base)
-	if err != nil {
-		return out // base not created yet → nothing scheduled
-	}
-	for _, te := range tenants {
-		if !te.IsDir() {
-			continue
-		}
-		tenant := te.Name()
-		wsEntries, err := os.ReadDir(filepath.Join(a.base, tenant))
+		tenants, err := os.ReadDir(a.base)
 		if err != nil {
-			continue
+			return // base not created yet → nothing to enumerate
 		}
-		for _, we := range wsEntries {
-			if !we.IsDir() {
+		for _, te := range tenants {
+			if !te.IsDir() {
 				continue
 			}
-			ws := we.Name()
-			s, err := a.Open(tenant, ws)
+			tenant := te.Name()
+			wsEntries, err := os.ReadDir(filepath.Join(a.base, tenant))
 			if err != nil {
 				continue
 			}
-			out[tenant+"/"+ws] = s
+			for _, we := range wsEntries {
+				if !we.IsDir() {
+					continue
+				}
+				ws := we.Name()
+				// Opening here is what makes the eviction bound work: each
+				// step admits one store and drops the least-recently-used, so
+				// a sweep costs maxOpen resident stores, not one per tenant.
+				s, err := a.Open(tenant, ws)
+				if err != nil {
+					continue
+				}
+				if !yield(tenant+"/"+ws, s) {
+					return
+				}
+			}
 		}
 	}
-	return out
 }
 
 // safeWorkspaceSegment validates tenant and workspace as single path
@@ -263,9 +348,13 @@ type Service struct {
 	Auth       auth.Authenticator
 	Workspaces WorkspaceLookup
 	Jobs       core.JobStore
-	Engine     *engine.Engine
-	Bus        Bus
-	WorkerID   string // identifies this dzd instance in JobStore records
+
+	// Schedules projects what the scheduler enrolls. Nil falls the scheduler
+	// back to deriving its set by walking every workspace on every rescan.
+	Schedules ScheduleStore
+	Engine    *engine.Engine
+	Bus       Bus
+	WorkerID  string // identifies this dzd instance in JobStore records
 
 	// AdminKeys, when set, powers the API key admin endpoints. Without
 	// it those endpoints return 501. Splitting from Auth keeps the
@@ -444,6 +533,14 @@ type Service struct {
 	OnWorkspaceCommit func(tenant, workspace, trigger string)
 }
 
+// logf writes a daemon-side warning when a Logger is configured. Nil-safe so
+// best-effort paths stay one-liners.
+func (s *Service) logf(format string, args ...any) {
+	if s.Logger != nil {
+		s.Logger.Printf(format, args...)
+	}
+}
+
 // workspaceCommitted fans a store write out to OnWorkspaceCommit. Nil-safe
 // so every call site is a plain one-liner.
 func (s *Service) workspaceCommitted(tenant, ws, trigger string) {
@@ -607,6 +704,7 @@ func (s *Service) SetFlowEnabled(ctx context.Context, p core.Principal, tenant, 
 	}
 	// Pausing/resuming a flow changes what fires, so it counts as a publish
 	// -level change even though it lands as an ordinary commit.
+	s.reprojectSchedule(ctx, tenant, ws, id)
 	s.workspaceCommitted(tenant, ws, PushOnPublish)
 	return commit, nil
 }
@@ -654,6 +752,7 @@ func (s *Service) DeleteGraph(ctx context.Context, p core.Principal, tenant, ws,
 	// so clones don't orphan in the workspace after the flow is gone.
 	// Best-effort: a cleanup failure must not fail the delete.
 	s.removeGitCache(tenant, ws, id)
+	s.reprojectSchedule(ctx, tenant, ws, id)
 	// A deletion is a commit like any other, and mirroring it is the point:
 	// the mirror's history is where a flow deleted by mistake is recovered
 	// from. PushOnPublish because a delete also takes a live flow offline.
@@ -951,6 +1050,7 @@ func (s *Service) saveGraph(ctx context.Context, p core.Principal, g core.Graph,
 	})
 	// Same fan-out for the git mirror. Autosaves come through here too, so
 	// the consumer debounces rather than pushing per keystroke pause.
+	s.reprojectSchedule(ctx, g.Tenant, g.Workspace, g.ID)
 	s.workspaceCommitted(g.Tenant, g.Workspace, PushOnSave)
 	return commit, nil
 }
@@ -1367,6 +1467,7 @@ func (s *Service) PublishFlow(ctx context.Context, p core.Principal, tenant, ws,
 			return "", err
 		}
 	}
+	s.reprojectSchedule(ctx, tenant, ws, id)
 	s.workspaceCommitted(tenant, ws, PushOnPublish)
 	return commit, nil
 }
@@ -1403,6 +1504,7 @@ func (s *Service) UnpublishFlow(ctx context.Context, p core.Principal, tenant, w
 	if err := store.ClearEnvironment(id, workspace.PublishedEnv); err != nil {
 		return err
 	}
+	s.reprojectSchedule(ctx, tenant, ws, id)
 	// The published TAG is gone; a mirror that misses this keeps advertising
 	// the flow as live (see workspace.Push's delete refspecs).
 	s.workspaceCommitted(tenant, ws, PushOnPublish)
@@ -1521,6 +1623,9 @@ func (s *Service) PromoteGraph(ctx context.Context, p core.Principal, tenant, ws
 	if err := store.PromoteToEnvironment(graphID, env, commit); err != nil {
 		return err
 	}
+	// Only the published env changes what the scheduler enrols, but
+	// re-deriving on any promote is cheap and keeps the rule in one place.
+	s.reprojectSchedule(ctx, tenant, ws, graphID)
 	s.workspaceCommitted(tenant, ws, PushOnPublish)
 	return nil
 }

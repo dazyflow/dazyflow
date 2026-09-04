@@ -5,6 +5,7 @@ package daemon
 
 import (
 	"context"
+	"maps"
 	"testing"
 	"time"
 
@@ -95,7 +96,7 @@ func TestAutoFSWorkspaces_MemoryEnumeration(t *testing.T) {
 		t.Fatalf("List(acme) = %v, want [main staging]", list)
 	}
 
-	all := a.All()
+	all := maps.Collect(a.All())
 	if _, ok := all["acme/main"]; !ok {
 		t.Fatalf("All missing acme/main: %v", keys(all))
 	}
@@ -145,7 +146,7 @@ func TestAutoFSWorkspaces_DiskEnumeration(t *testing.T) {
 	}
 
 	// All walks every tenant/workspace dir on disk.
-	all := a.All()
+	all := maps.Collect(a.All())
 	if len(all) != 3 {
 		t.Fatalf("All = %d, want 3 (%v)", len(all), keys(all))
 	}

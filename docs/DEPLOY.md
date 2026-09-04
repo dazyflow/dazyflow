@@ -164,7 +164,9 @@ mechanism you choose — losing it makes every stored flow secret undecryptable.
 
 When one pod isn't enough, the app scales out without code changes: the
 Postgres event bus lets any pod stream a run's events (`PgBus`), a Postgres
-advisory-lock leader ensures only one pod fires each schedule (`PgLeader`), and
+advisory-lock leader ensures only one pod fires each schedule (`PgLeader`), the
+scheduler reads what to fire from a `flow_schedules` table rather than from
+local disk (so a schedule authored on one pod is enrolled on the leader), and
 a shared `write_dedupe` table (`PgWriteDedupeStore`) means a job reclaimed from a
 dead pod's expired lease won't re-fire a non-idempotent external write (Twilio
 SMS, Gmail/Discord/Sheets/Home Assistant) the original pod already sent. That
@@ -220,6 +222,18 @@ The steps:
    `accessModes` to `[ReadWriteMany]`. Set the same
    `DAZYFLOW_APPROVAL_HMAC_SECRET` on every pod if you use unauthenticated
    approval links.
+
+   > **The git workspace is not safe for two pods to write at once.** Access to
+   > a workspace is serialized by a mutex held in the writing process, and
+   > nothing coordinates across processes. Two pods committing to one tenant's
+   > workspace share a single `.git/index`, and concurrent writes to it corrupt
+   > the repository — the same failure the in-process lock exists to prevent,
+   > which is reproducible in a test the moment that lock is removed. Runs,
+   > schedules, secrets and events are all Postgres-backed and unaffected; this
+   > is specifically flow authoring. Until graph storage moves into Postgres,
+   > keep editing on one pod (route `/api/v1/graphs` writes to a single replica)
+   > or accept that two people editing flows in different orgs at the same
+   > moment is fine while two editing the *same* org's workspace is not.
 3. **Add the scale-up resources.** `deploy/k8s/scale-up.yaml` ships a
    `PodDisruptionBudget` (`minAvailable: 1`), a CPU `HorizontalPodAutoscaler`
    (`minReplicas: 2`; DOKS ships metrics-server — for backlog-aware scaling
@@ -232,6 +246,15 @@ The steps:
    there blocks node drains entirely — which is why it lives in this overlay,
    not the single-pod base. The `NetworkPolicy` is the one piece worth adopting
    even on a single pod.
+
+**Scheduler enrollment.** `flow_schedules` is a projection: every write that
+changes what fires (publish, unpublish, pause, resume, a cadence edit, a delete)
+re-derives that flow's rows, and the flow's own graph plus its published tag stay
+authoritative. `DAZYFLOW_SCHEDULE_RECONCILE_INTERVAL` (default `1h`) rebuilds the
+table from the workspaces on the scheduler leader, which is what fills it on the
+first boot after upgrading and what repairs any drift since. It reads every flow
+of every tenant, so it is deliberately infrequent and leader-only; a pass where
+nothing changed writes nothing. Set it to `0` to disable it.
 
 `/metrics` is off by default. If you enable it (`DAZYFLOW_ENABLE_METRICS=1`)
 note it shares port 8080 with the API, so it can't be isolated by
@@ -353,6 +376,14 @@ host); CI builds both the site (`make docs-site`) and the image
 (`Dockerfile.docs`) so the published docs can't drift from the code.
 
 ## Version stamping & upgrades
+
+> **Schema on boot.** `dzd` applies its own `CREATE TABLE / CREATE INDEX IF NOT
+> EXISTS` DDL at startup, so an upgrade that adds an index builds it then — and a
+> plain `CREATE INDEX` holds a write lock for as long as the build takes. On a
+> small install that is imperceptible. If your `jobs` table has hundreds of
+> millions of rows, build any new indexes with `CREATE INDEX CONCURRENTLY`
+> before rolling the new image, and boot will find them already there; each
+> release's changelog entry lists the statements when it adds one.
 
 The running release is stamped into the binary at build time and surfaced on the
 public `GET /api/v1` descriptor (`build.version`), in the startup log, in the web

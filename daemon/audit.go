@@ -94,6 +94,10 @@ CREATE TABLE IF NOT EXISTS audit_events (
     detail  TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS audit_events_tenant_id ON audit_events (tenant, id DESC);
+-- Retention's predicate, partial on the same exemption the sweep applies:
+-- approval events are kept indefinitely, so they need never be indexed here.
+CREATE INDEX IF NOT EXISTS audit_events_prune_idx
+    ON audit_events (ts) WHERE action <> 'approval';
 `
 
 // PgAuditLog persists the audit trail to Postgres (durable, multi-node).

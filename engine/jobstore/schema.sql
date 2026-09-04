@@ -57,6 +57,25 @@ CREATE INDEX IF NOT EXISTS jobs_graph_idx ON jobs (graph_id, enqueued_at DESC);
 -- those full-scans the jobs table.
 CREATE INDEX IF NOT EXISTS jobs_tenant_status_idx ON jobs (tenant, status);
 
+-- Graph-run sweep index. The concurrency promoter looks for queued graph runs
+-- every couple of seconds on every replica, and the orphan reaper for running
+-- ones every minute. Neither filters by tenant, so jobs_tenant_status_idx can
+-- only serve them by scanning its whole self and filtering — work that grows
+-- with the table on a fixed-frequency sweep. Ordering by enqueued_at here also
+-- drops the sort those queries would otherwise do.
+CREATE INDEX IF NOT EXISTS jobs_graph_status_idx
+    ON jobs (status, enqueued_at DESC)
+    WHERE kind = 'graph';
+
+-- Retention's predicate. Terminal rows are almost the whole table, so without
+-- this the hourly sweep scans all of them to find the few old enough to
+-- delete — and scans all of them to prove there are none, which is what every
+-- pass ends with. A row enters this index once, when it finishes, and is never
+-- updated in it again. Mirrors runner_tasks_prune_idx.
+CREATE INDEX IF NOT EXISTS jobs_prune_idx
+    ON jobs (finished_at)
+    WHERE status IN ('succeeded', 'failed', 'cancelled', 'skipped');
+
 -- Approval index. The approvals page reads two slices of await_approval
 -- node-records — parked (the inbox) and decided (the history beneath it) —
 -- and both are needle-in-haystack queries: an approval is a rounding error

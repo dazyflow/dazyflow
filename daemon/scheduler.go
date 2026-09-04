@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"hash/fnv"
 	"log"
-	"strings"
 	"sync"
 	"time"
 
@@ -260,7 +259,7 @@ func NewScheduler(svc *Service) *Scheduler {
 	return &Scheduler{
 		svc:         svc,
 		clock:       time.Now,
-		parser:      cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow),
+		parser:      scheduleCronParser,
 		logger:      log.New(log.Writer(), "scheduler: ", log.LstdFlags),
 		interval:    1 * time.Second,
 		rescanEvery: 30 * time.Second,
@@ -346,16 +345,38 @@ func (s *Scheduler) Run(ctx context.Context) error {
 	}
 }
 
-// rescan inspects the workspace lookup for graphs with cron triggers and
-// rebuilds the tracked map. Existing entries' next-fire time is preserved
-// when the spec didn't change so we don't double-fire.
+// rescan rebuilds the tracked set from the current schedule source, so
+// workspace edits take effect without restarting dzd.
 func (s *Scheduler) rescan(ctx context.Context) error {
+	specs, err := s.collectSpecs(ctx)
+	if err != nil {
+		return err
+	}
+	s.applySpecs(specs, s.clock())
+	return nil
+}
+
+// collectSpecs returns the live schedule set: the published, non-disabled
+// flows and the cadence each asks for.
+//
+// A ScheduleStore serves it as one query. Without one, it falls back to
+// walking every workspace — a git load per flow, per pass, across every
+// tenant, holding each workspace mutex against the editor as it goes. That
+// walk is O(all flows in the install) every rescanEvery, so it is the ceiling
+// on how many flows an install can hold, not a tuning knob.
+func (s *Scheduler) collectSpecs(ctx context.Context) ([]ScheduleSpec, error) {
+	if store := s.svc.Schedules; store != nil {
+		return store.ListSchedules(ctx)
+	}
+	return s.collectSpecsFromWorkspaces()
+}
+
+func (s *Scheduler) collectSpecsFromWorkspaces() ([]ScheduleSpec, error) {
 	enum, ok := s.svc.Workspaces.(WorkspaceEnumerator)
 	if !ok {
-		return fmt.Errorf("scheduler: workspace lookup does not support enumeration")
+		return nil, fmt.Errorf("scheduler: workspace lookup does not support enumeration")
 	}
-	now := s.clock()
-	next := make(map[string]*scheduledGraph)
+	var out []ScheduleSpec
 	for key, store := range enum.All() {
 		tenant, workspace, ok := splitKey(key)
 		if !ok {
@@ -371,166 +392,73 @@ func (s *Scheduler) rescan(ctx context.Context) error {
 			if err != nil {
 				continue
 			}
-			// A disabled flow is paused — skip every trigger here.
-			// Cron + poll triggers will resume automatically once the
-			// flow is re-enabled and the scheduler re-scans.
-			if g.Disabled {
-				continue
-			}
-			// Require published: a scheduled flow fires only once it's been
-			// published. A never-published draft with a configured schedule
-			// is not enrolled, so it doesn't tick (and the editor shows a
-			// "needs publish" chip). The schedule timing itself is still read
-			// from HEAD below, so editing the interval after publishing takes
-			// effect immediately — only enrollment gates on publish state.
+			// Enrollment requires a published flow. The cadence itself is read
+			// from the draft above, so a timing or pause edit takes effect
+			// immediately; only the executed revision is pinned to publish.
 			if pub, err := store.PublishedCommit(gid); err != nil || pub == "" {
 				continue
 			}
-			for _, t := range g.Triggers {
-				var entry *scheduledGraph
-				switch t.Type {
-				case "cron":
-					if t.Cron == "" {
-						continue
-					}
-					sched, err := parseCronInTZ(s.parser, t.Cron, t.TZ)
-					if err != nil {
-						s.logger.Printf("bad cron %q (tz %q) on %s/%s/%s: %v",
-							t.Cron, t.TZ, tenant, workspace, gid, err)
-						continue
-					}
-					entry = &scheduledGraph{
-						graphID:    gid,
-						tenant:     tenant,
-						workspace:  workspace,
-						scheduleFn: sched,
-						specKey:    "cron:" + t.Cron + "|" + t.TZ,
-					}
-				default:
-					// "webhook" and any other type aren't scheduler-driven.
-					// "poll" is no longer a graph-level trigger — the interval
-					// lives on the poll_trigger NODE now (scanned below), so a
-					// legacy graph-level poll falls through here and is ignored
-					// (the trigger lint flags it for migration to a node).
-					continue
-				}
-
-				// Keyed by the schedule itself, so a flow with two different
-				// schedules gets two entries while identical triggers collapse
-				// into one. Keying by array index instead gave every duplicate
-				// its own entry — and its own fire — so one saved flow could
-				// run itself as many times a minute as it had copies. An edited
-				// expression is a different key, hence a new entry anchored from
-				// now, which is what makes a tightened schedule take effect.
-				k := fmt.Sprintf("%s/%s/%s#%s", tenant, workspace, gid, entry.specKey)
-				if existing, ok := s.tracked[k]; ok && !existing.scheduleAt.IsZero() {
-					entry.scheduleAt = existing.scheduleAt
-				} else {
-					entry.scheduleAt = entry.nextFireFrom(now)
-				}
-				next[k] = entry
-			}
-
-			// cron_trigger NODES carry their own schedule (Phase 2: the
-			// cron expression lives on the node, not only on a graph-level
-			// trigger). Scan them in addition to g.Triggers so a
-			// node-authored schedule fires too. Keyed by node ID — stable
-			// across edits, unlike the trigger-array index used above, so
-			// rescans don't reshuffle keys and double-fire.
-			for _, node := range g.Nodes {
-				if node.Module != "cron_trigger" {
-					continue
-				}
-				if triggerNodeDisabled(node) {
-					continue // this trigger is individually paused
-				}
-				expr, _ := node.Params["cron"].(string)
-				expr = strings.TrimSpace(expr)
-				if expr == "" {
-					continue // unscheduled node — runs only on manual Run
-				}
-				tz, _ := node.Params["tz"].(string)
-				sched, err := parseCronInTZ(s.parser, expr, tz)
-				if err != nil {
-					s.logger.Printf("bad cron %q (tz %q) on node %s of %s/%s/%s: %v",
-						expr, tz, node.ID, tenant, workspace, gid, err)
-					continue
-				}
-				entry := &scheduledGraph{
-					graphID:    gid,
-					tenant:     tenant,
-					workspace:  workspace,
-					scheduleFn: sched,
-					specKey:    "cron:" + expr + "|" + tz,
-				}
-				k := fmt.Sprintf("%s/%s/%s@%s", tenant, workspace, gid, node.ID)
-				if existing, ok := s.tracked[k]; ok && !existing.scheduleAt.IsZero() && existing.specKey == entry.specKey {
-					entry.scheduleAt = existing.scheduleAt
-				} else {
-					entry.scheduleAt = entry.nextFireFrom(now)
-				}
-				next[k] = entry
-			}
-
-			// poll_trigger NODES carry their interval on the node (same
-			// model as cron_trigger above; poll is no longer a graph-level
-			// trigger). Same overflow/ceiling guard the old graph-level poll
-			// used: reject <= 0 and anything past the 1-year max, since
-			// IntervalSeconds * time.Second overflows int64 ns past ~292y and
-			// would otherwise fire every tick.
-			//
-			// google_form_trigger uses the identical interval mechanism: the
-			// scheduler just fires the graph on the node's interval_seconds,
-			// and the node itself fetches new Form responses since its stored
-			// cursor at execute time (see drops/trigger/gform).
-			for _, node := range g.Nodes {
-				if node.Module != "poll_trigger" && node.Module != "google_form_trigger" {
-					continue
-				}
-				if triggerNodeDisabled(node) {
-					continue // this trigger is individually paused
-				}
-				secs := paramSeconds(node.Params, "interval_seconds")
-				if secs == 0 {
-					continue // unset — runs only on manual Run
-				}
-				if secs < 0 || secs > core.MaxPollIntervalSeconds {
-					s.logger.Printf("bad poll interval %d on node %s of %s/%s/%s",
-						secs, node.ID, tenant, workspace, gid)
-					continue
-				}
-				entry := &scheduledGraph{
-					graphID:   gid,
-					tenant:    tenant,
-					workspace: workspace,
-					interval:  time.Duration(secs) * time.Second,
-					specKey:   fmt.Sprintf("poll:%d", secs),
-				}
-				k := fmt.Sprintf("%s/%s/%s@%s", tenant, workspace, gid, node.ID)
-				if existing, ok := s.tracked[k]; ok && !existing.scheduleAt.IsZero() && existing.specKey == entry.specKey {
-					// Preserve timing AND learned cadence across rescans so a
-					// workspace edit doesn't reset jitter or empty-streak backoff.
-					// A changed interval (specKey differs) falls through to a fresh
-					// staggered first fire so the new cadence takes effect now.
-					entry.scheduleAt = existing.scheduleAt
-					entry.emptyStreak = existing.emptyStreak
-					entry.lastMarkerAt = existing.lastMarkerAt
-				} else {
-					// First enrollment: pull the initial fire EARLIER by a
-					// deterministic per-entry jitter so flows sharing an interval
-					// (a post-deploy mass enrollment) don't all fire on the same
-					// tick. Steady-state cadence stays the base interval, measured
-					// from that staggered first fire. See staggeredNextFire.
-					entry.scheduleAt = entry.staggeredNextFire(k, now)
-				}
-				next[k] = entry
-			}
+			out = append(out, DeriveScheduleSpecs(s.parser, tenant, workspace, g, s.logger.Printf)...)
 		}
 	}
+	return out, nil
+}
+
+// applySpecs swaps in a tracked set built from specs, carrying each surviving
+// entry's next-fire time and poll backoff forward so a rescan neither
+// double-fires nor resets a learned cadence. An entry whose SpecKey changed is
+// re-anchored from now, which is what makes an edited schedule take effect
+// without waiting out the old one.
+func (s *Scheduler) applySpecs(specs []ScheduleSpec, now time.Time) {
+	next := make(map[string]*scheduledGraph, len(specs))
+	// Held across the whole rebuild: the carried-forward fields are the same
+	// ones fireDue and reanchor mutate. Nothing here does I/O.
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, spec := range specs {
+		// Unchanged cadence: carry the whole entry forward — the parsed cron
+		// schedule included. Re-parsing every expression on every pass is the
+		// dominant cost of a rescan once the spec set is served as data.
+		if prev, ok := s.tracked[spec.EntryKey]; ok && prev.specKey == spec.SpecKey && !prev.scheduleAt.IsZero() {
+			carried := *prev
+			next[spec.EntryKey] = &carried
+			continue
+		}
+		entry, err := s.entryFromSpec(spec)
+		if err != nil {
+			s.logger.Printf("schedule %s: %v", spec.EntryKey, err)
+			continue
+		}
+		// First enrollment, or a changed cadence: pull the fire earlier by a
+		// deterministic per-entry offset so flows sharing an interval don't all
+		// land on one tick. A no-op for cron entries.
+		entry.scheduleAt = entry.staggeredNextFire(spec.EntryKey, now)
+		next[spec.EntryKey] = entry
+	}
 	s.tracked = next
-	s.mu.Unlock()
-	return nil
+}
+
+// entryFromSpec builds the runtime entry for a spec, resolving a cron
+// expression to its schedule. A spec that fails to parse here was already
+// rejected by DeriveScheduleSpecs, so this only guards a spec that reached the
+// scheduler by another route.
+func (s *Scheduler) entryFromSpec(spec ScheduleSpec) (*scheduledGraph, error) {
+	e := &scheduledGraph{
+		graphID:   spec.GraphID,
+		tenant:    spec.Tenant,
+		workspace: spec.Workspace,
+		specKey:   spec.SpecKey,
+	}
+	if spec.IsPoll() {
+		e.interval = time.Duration(spec.IntervalSeconds) * time.Second
+		return e, nil
+	}
+	sched, err := parseCronInTZ(s.parser, spec.Cron, spec.TZ)
+	if err != nil {
+		return nil, err
+	}
+	e.scheduleFn = sched
+	return e, nil
 }
 
 // reanchor resets every tracked entry's next-fire from now, discarding a stale
@@ -665,6 +593,14 @@ func (s *Scheduler) fireGraph(ctx context.Context, e *scheduledGraph) {
 	g, err := store.LoadPublished(e.graphID)
 	if err != nil {
 		s.logger.Printf("load %s/%s/%s: %v", e.tenant, e.workspace, e.graphID, err)
+		return
+	}
+	// Paused flows are dropped when specs are derived, so reaching here means
+	// the enrollment set is stale. Free to check, and the enrollment set is
+	// data now rather than something re-read from the flow every 30s. Manual
+	// runs of a paused flow still work — only the automatic fire is refused.
+	if g.Disabled {
+		s.logger.Printf("skip %s/%s/%s: flow is paused", e.tenant, e.workspace, e.graphID)
 		return
 	}
 	p := s.systemPrincipal(e.tenant, e.workspace)

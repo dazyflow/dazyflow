@@ -416,3 +416,31 @@ func TestRescan_IdenticalCronTriggersCollapse(t *testing.T) {
 		t.Fatalf("tracked = %d, want 3 (one per distinct schedule)", got)
 	}
 }
+
+// A stale enrollment must not fire a paused flow. The spec set no longer
+// re-reads the flow's pause switch on every rescan, so fireGraph is what
+// stands between a projection that failed to update and a flow the user
+// believes is off.
+func TestFireGraph_PausedFlowSkip(t *testing.T) {
+	t.Parallel()
+	svc, ws, jobs := fireGraphSvc(t)
+	g := core.Graph{
+		ID: "paused", Tenant: "acme", Workspace: "ws1", Disabled: true,
+		Nodes: []core.Node{{ID: "n", Module: "delay", Params: map[string]any{"ms": 1}}},
+	}
+	commit, err := ws.Save(g, "u")
+	if err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if err := ws.PromoteToEnvironment(g.ID, workspace.PublishedEnv, commit); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+
+	sched := NewScheduler(svc)
+	sched.fireGraph(context.Background(), &scheduledGraph{graphID: "paused", tenant: "acme", workspace: "ws1"})
+
+	runs, _ := jobs.ListByGraph(t.Context(), "paused")
+	if len(runs) != 0 {
+		t.Fatalf("paused flow fired %d runs, want 0", len(runs))
+	}
+}

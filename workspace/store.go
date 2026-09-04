@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -37,19 +38,53 @@ import (
 // environments under refs/tags/graphs/<id>/<env>.
 //
 // mu serializes every repo access. go-git's repository/storer types are
-// not safe for concurrent use, and the scheduler's rescan reads
-// (ListGraphs/Load) run on tickers concurrently with the HTTP gateway's
-// Save path — so an unguarded Store data-races on the storage map. It's a
-// full Mutex rather than an RWMutex on purpose: the filesystem backend's
-// object LRU cache is mutated *during reads*, so even two concurrent
-// readers would race on it. Graph save/load/list are infrequent next to
-// job execution, so full mutual exclusion per (tenant,workspace) store is
-// a fine trade for correctness.
+// not safe for concurrent use, and reads (ListGraphs/Load) run on tickers
+// concurrently with the HTTP gateway's Save path — so an unguarded Store
+// data-races on the storage map. It's a full Mutex rather than an RWMutex on
+// purpose: the filesystem backend's object LRU cache is mutated *during
+// reads*, so even two concurrent readers would race on it.
+//
+// For a disk store the mutex is shared by DIRECTORY, not owned by the Store —
+// see dirMutex. Graph save/load/list are infrequent next to job execution, so
+// full mutual exclusion per workspace is a fine trade for correctness.
 type Store struct {
-	mu   sync.Mutex
+	mu   *sync.Mutex
 	repo *git.Repository
 	fs   billy.Filesystem
 }
+
+// dirLocks maps an absolute workspace directory to the mutex that serializes
+// access to it, for the lifetime of the process.
+//
+// The lock cannot live on the Store, because a caller that caches Stores may
+// evict one and open a second for the same directory while the first is still
+// in use. Two Stores over one working tree share a single `.git/index` file,
+// and two concurrent worktree Adds against it corrupt the repository. Sharing
+// the mutex by directory makes that overlap harmless.
+//
+// Entries are never removed: an eviction that also dropped the mutex would
+// reintroduce exactly the race it exists to prevent. One pointer per workspace
+// ever opened is a rounding error next to the repository it guards.
+var dirLocks sync.Map // absolute dir → *sync.Mutex
+
+func dirMutex(dir string) *sync.Mutex {
+	if v, ok := dirLocks.Load(dir); ok {
+		return v.(*sync.Mutex)
+	}
+	v, _ := dirLocks.LoadOrStore(dir, new(sync.Mutex))
+	return v.(*sync.Mutex)
+}
+
+// objectCacheBytes bounds one repository's decompressed-object cache.
+//
+// go-git defaults it to 96 MiB per repository, which is sized for a source
+// tree, not for a workspace holding a few dozen small JSON documents — and a
+// process that keeps a Store per tenant open would carry that ceiling per
+// tenant. A whole 10-flow workspace is tens of kilobytes on disk, so this is
+// still far more than one needs; it only stops a pathological workspace from
+// pinning two orders of magnitude more. A miss re-reads from disk, where the
+// OS page cache is the real backstop.
+const objectCacheBytes = 2 * 1024 * 1024
 
 // OpenFS opens (or initializes) a Store rooted at dir on the local
 // filesystem. If dir is empty an in-memory Store is created — useful for
@@ -68,25 +103,32 @@ func openMemory() (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("init memory repo: %w", err)
 	}
-	return &Store{repo: repo, fs: fs}, nil
+	// A memory store's content lives only here, so it gets its own lock: there
+	// is no directory for a second Store to collide over.
+	return &Store{mu: new(sync.Mutex), repo: repo, fs: fs}, nil
 }
 
 func openDisk(dir string) (*Store, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("mkdir %q: %w", dir, err)
 	}
+	// Absolute + cleaned so two spellings of one directory take the same lock.
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return nil, fmt.Errorf("resolve %q: %w", dir, err)
+	}
 	wt := osfs.New(dir)
 	gitDir, err := wt.Chroot(".git")
 	if err != nil {
 		return nil, err
 	}
-	storer := filesystem.NewStorage(gitDir, cache.NewObjectLRUDefault())
+	storer := filesystem.NewStorage(gitDir, cache.NewObjectLRU(objectCacheBytes))
 
 	repo, err := openOrInit(storer, wt)
 	if err != nil {
 		return nil, err
 	}
-	return &Store{repo: repo, fs: wt}, nil
+	return &Store{mu: dirMutex(filepath.Clean(abs)), repo: repo, fs: wt}, nil
 }
 
 func openOrInit(storer storage.Storer, wt billy.Filesystem) (*git.Repository, error) {

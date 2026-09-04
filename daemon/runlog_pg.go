@@ -31,6 +31,9 @@ CREATE TABLE IF NOT EXISTS run_logs (
 );
 ALTER TABLE run_logs ADD COLUMN IF NOT EXISTS stream TEXT NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS run_logs_run_idx ON run_logs (run_id, seq);
+-- Retention's predicate. run_logs_run_idx leads with run_id, so it cannot
+-- serve a sweep that only knows a cutoff time.
+CREATE INDEX IF NOT EXISTS run_logs_ts_idx ON run_logs (ts);
 `
 
 func NewPgRunLogStore(ctx context.Context, pool *pgxpool.Pool) (*PgRunLogStore, error) {
