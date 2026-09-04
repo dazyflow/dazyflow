@@ -9,6 +9,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dazyflow/dazyflow/daemon/internal/pgstore"
@@ -50,6 +51,12 @@ type PgBus struct {
 
 	local localSubscribers
 
+	// pending buffers publishes until the writer flushes them as one statement.
+	// See Publish.
+	pendingMu sync.Mutex
+	pending   []pendingBusEvent
+	wake      chan struct{}
+
 	// lastSeen and seen are touched ONLY by the single listener goroutine
 	// (drainNew); no lock needed. lastSeen is the high-water id fanned out.
 	// seen dedupes the trailing re-scan window so an event whose row committed
@@ -69,6 +76,28 @@ type PgBus struct {
 // Beyond the window the JobStore re-read self-heal is the backstop (terminal/
 // node state is durable), so this strictly improves on never re-scanning.
 const pgBusReScanWindow = 256
+
+// Publishing is batched, because each event was its own transaction and a
+// transaction is a commit — the one thing on this path that waits for disk. A
+// step publishes two or three events, and measured against the queue's own
+// writes the bus was costing about a third of execution throughput.
+//
+// The window is short enough to be invisible in a live stream and long enough
+// that a busy fleet collapses many events into one commit.
+const (
+	pgBusFlushEvery = 20 * time.Millisecond
+	// pgBusMaxBatch bounds one statement; beyond it the writer flushes early.
+	pgBusMaxBatch = 256
+	// pgBusMaxPending bounds the buffer if the database stalls. Publishing is
+	// already best-effort — the JobStore is the source of truth and a
+	// subscriber re-reads it — so shedding the oldest beats unbounded growth.
+	pgBusMaxPending = 20_000
+)
+
+type pendingBusEvent struct {
+	jobID   string
+	payload []byte
+}
 
 const pgBusSchema = `
 CREATE TABLE IF NOT EXISTS bus_events (
@@ -101,6 +130,7 @@ func NewPgBus(ctx context.Context, pool *pgxpool.Pool) (*PgBus, error) {
 		logger:    log.New(log.Writer(), "bus-pg: ", log.LstdFlags),
 		retention: time.Hour,
 		seen:      make(map[int64]struct{}),
+		wake:      make(chan struct{}, 1),
 	}
 	var maxID *int64
 	if err := pool.QueryRow(ctx, `SELECT max(id) FROM bus_events`).Scan(&maxID); err != nil {
@@ -131,6 +161,7 @@ func NewPgBus(ctx context.Context, pool *pgxpool.Pool) (*PgBus, error) {
 	}
 	go b.listen(ctx)
 	go b.sweep(ctx)
+	go b.writer(ctx)
 	return b, nil
 }
 
@@ -143,24 +174,74 @@ func (b *PgBus) Publish(jobID string, ev BusEvent) {
 		b.logger.Printf("marshal event for %s: %v", jobID, err)
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	b.pendingMu.Lock()
+	if len(b.pending) >= pgBusMaxPending {
+		// The database is not keeping up. Shed the oldest rather than grow
+		// without bound; a subscriber's authority is the JobStore, which it
+		// re-reads, and this path has always been best-effort.
+		b.pending = b.pending[1:]
+	}
+	b.pending = append(b.pending, pendingBusEvent{jobID: jobID, payload: payload})
+	n := len(b.pending)
+	b.pendingMu.Unlock()
+	if n >= pgBusMaxBatch {
+		select {
+		case b.wake <- struct{}{}:
+		default:
+		}
+	}
+}
+
+// Flush writes anything buffered, for a caller that must see its own publishes
+// on the far side — the erasure cascade, and tests.
+func (b *PgBus) Flush(ctx context.Context) { b.flush(ctx) }
+
+// writer drains the publish buffer into one statement per flush.
+func (b *PgBus) writer(ctx context.Context) {
+	t := time.NewTicker(pgBusFlushEvery)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			b.flush(context.WithoutCancel(ctx)) // one last pass for what is buffered
+			return
+		case <-t.C:
+		case <-b.wake:
+		}
+		b.flush(ctx)
+	}
+}
+
+// flush writes the buffered events as a single insert, and notifies for each
+// inside the same transaction — so a batch is one commit and every row still
+// carries its own wake.
+func (b *PgBus) flush(ctx context.Context) {
+	b.pendingMu.Lock()
+	batch := b.pending
+	if len(batch) > pgBusMaxBatch {
+		batch, b.pending = batch[:pgBusMaxBatch], batch[pgBusMaxBatch:]
+	} else {
+		b.pending = nil
+	}
+	b.pendingMu.Unlock()
+	if len(batch) == 0 {
+		return
+	}
+	jobIDs := make([]string, len(batch))
+	payloads := make([][]byte, len(batch))
+	for i, e := range batch {
+		jobIDs[i], payloads[i] = e.jobID, e.payload
+	}
+	writeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	// One statement so the row and its wake commit together: the notification
-	// carries "<id>:<job_id>", which is what lets a listener tell whether an
-	// event concerns anything it is watching without querying to find out, and
-	// an id that reached the spool without its wake would leave that listener
-	// nothing to act on until the next event happened along.
-	//
-	// Not a throughput change, despite halving the round trips — measured
-	// against the two-statement form it is inside the noise, because what this
-	// path waits on is the commit, not the trips.
-	if _, err := b.pool.Exec(ctx,
+	if _, err := b.pool.Exec(writeCtx,
 		`WITH ins AS (
-		     INSERT INTO bus_events (job_id, payload) VALUES ($1, $2) RETURNING id, job_id
+		     INSERT INTO bus_events (job_id, payload)
+		     SELECT * FROM unnest($1::text[], $2::jsonb[]) RETURNING id, job_id
 		 )
 		 SELECT pg_notify($3, ins.id || ':' || ins.job_id) FROM ins`,
-		jobID, payload, pgBusChannel); err != nil {
-		b.logger.Printf("publish %s: %v", jobID, err)
+		jobIDs, payloads, pgBusChannel); err != nil {
+		b.logger.Printf("publish batch of %d: %v", len(batch), err)
 	}
 }
 
@@ -352,6 +433,11 @@ func (b *PgBus) drainNew(ctx context.Context) {
 // bus_events has no tenant column, so it scopes via the jobs table (same
 // database). Part of the org/account erasure cascade (Art. 17).
 func (b *PgBus) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
+	// Publishing is buffered, so anything still in hand would be written AFTER
+	// this delete and leave the erased org's events on disk. Flush first, then
+	// erase what is there. (The cascade cancels the org's active runs before
+	// reaching here, so nothing should be producing events by now anyway.)
+	b.flush(ctx)
 	tag, err := b.pool.Exec(ctx,
 		`DELETE FROM bus_events WHERE job_id IN (SELECT id FROM jobs WHERE tenant = $1)`, tenant)
 	if err != nil {

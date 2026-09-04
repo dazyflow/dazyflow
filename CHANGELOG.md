@@ -10,6 +10,59 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Performance
+
+- **A third more work through the same database**: the execution path saturated
+  at ~285 steps/sec and now saturates at ~390, on the same hardware and the same
+  Postgres. Offered 480 steps/sec it delivered 258 before and 397 now; offered
+  320 it delivered 284 and now keeps up entirely, with queue latency falling
+  from 0.35s to 0.01s.
+
+  The rig said the ceiling was the database rather than the fleet — doubling
+  workers and doubling replicas both changed nothing — so the work was to make a
+  step cost fewer transactions. It went from 13.1 to 8.4.
+
+  **The event bus was most of it.** Every published event was its own INSERT and
+  therefore its own commit, and a step publishes two or three. They are now
+  buffered and written as one statement per 20ms flush window, which took the
+  bus from 2.15 statements per step to 0.40. `STRESS_BUS=memory` puts the
+  ceiling at 402 steps/sec, so little is left in that direction.
+
+  Two consequences of buffering worth knowing. Publishing is now asynchronous,
+  so an event is visible to other replicas within the flush window rather than
+  immediately — invisible in a live stream, and the JobStore remains the source
+  of truth a subscriber re-reads. And erasure now flushes before it deletes,
+  because buffered events would otherwise have been written to disk moments
+  after the org they belong to was erased.
+
+- **The completion check no longer runs on every step.** Finishing a step read
+  every node record in its run to ask whether the run was done — on a chain of
+  steps, one whole-run read per step. When a step has just queued its successor
+  the answer cannot be yes, so the check is skipped there and runs once, at the
+  end. Worth about one SELECT per step.
+
+  Measured on its own it moved throughput by roughly 1%, which is the useful
+  half of the finding: reads do not wait for disk and commits do, so the
+  round-trip count that matters is transactions rather than statements.
+
+### Added
+
+- **A load rig for the execution path** (`make stress`, `tests/stress/`). It
+  drives the real queue, dispatcher, workers and event bus against a real
+  Postgres with several simulated replicas contending for the same work — which
+  is what no benchmark here covered, and what a single-process one cannot show.
+
+  It reports achieved versus offered throughput, queue latency, backlog, pool
+  waits, bytes per run and **commits per second**, because that last number is
+  what distinguishes "add more workers" from "the database is the ceiling".
+
+  On the machine it was written on it said the latter, plainly: 3x8 workers gave
+  281 steps/s, 3x16 gave 284, 6x8 gave 270 — and the commit rate sat at 3,758/s
+  throughout. At **~13.4 database transactions per step**, throughput is that
+  ceiling divided by the round trips a step costs, so adding pods past the knee
+  only grows the backlog. Someone else's hardware will give different numbers;
+  the point is that they can now get them.
+
 ## [0.37.0] - 2026-09-04
 
 ### Performance

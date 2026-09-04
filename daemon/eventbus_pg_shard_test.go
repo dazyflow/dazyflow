@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/engine/jobstore"
 )
 
 func TestParseBusNotice(t *testing.T) {
@@ -120,5 +121,51 @@ func TestPgBus_SubscribingAfterUnwatchedTrafficDoesNotReplay(t *testing.T) {
 	ev := recv(t, ch, 5*time.Second)
 	if ev.NodeStatus == nil || ev.NodeStatus.NodeID != "after-subscribe" {
 		t.Fatalf("first event after subscribing = %+v — the backlog was replayed", ev)
+	}
+}
+
+// Publishing is buffered now, which puts a window between "an event was
+// published" and "the row exists". Erasure has to see through it, or an org's
+// events are written to disk moments after it was erased.
+func TestPgBus_ErasureSeesBufferedEvents(t *testing.T) {
+	pool, ctx := pgBusPool(t)
+	js, err := jobstore.NewPostgresFromPool(ctx, pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, "TRUNCATE jobs"); err != nil {
+		t.Fatal(err)
+	}
+	bus, err := NewPgBus(ctx, pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := js.Enqueue(ctx, core.JobRecord{
+		ID: "run-doomed", Kind: core.JobKindGraph, Tenant: "doomed", Workspace: "ws",
+		GraphID: "g", NodeID: "*", Status: core.JobStatusRunning,
+		Job: core.Job{ID: "run-doomed", GraphID: "g"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Published and erased inside the flush window, deliberately: no sleep.
+	bus.Publish("run-doomed", BusEvent{
+		NodeStatus: &NodeStatusEvent{NodeID: "n", Status: core.JobStatusRunning},
+	})
+	if _, err := bus.DeleteByTenant(ctx, "doomed"); err != nil {
+		t.Fatalf("erase: %v", err)
+	}
+
+	// Give the writer more than a flush interval to write anything it still
+	// holds, then confirm nothing of that org's landed.
+	time.Sleep(200 * time.Millisecond)
+	bus.Flush(ctx)
+	var left int
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM bus_events WHERE job_id = 'run-doomed'`).Scan(&left); err != nil {
+		t.Fatal(err)
+	}
+	if left != 0 {
+		t.Fatalf("%d event(s) for an erased org reached the spool after erasure", left)
 	}
 }

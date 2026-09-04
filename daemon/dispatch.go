@@ -160,11 +160,18 @@ func (d *Dispatcher) AdvanceAfterCompletion(
 	// stable record id and tolerates a conflict, so re-dispatching these same
 	// dependents when the node finally resumes is a no-op rather than a
 	// second notification.
+	enqueued := 0
 	if status == core.JobStatusSucceeded || status == core.JobStatusAwaiting ||
 		(status == core.JobStatusFailed && !d.failurePropagates(graph, nodeID)) {
-		d.dispatchReady(ctx, graph, graphRunID, nodeID)
+		enqueued = d.dispatchReady(ctx, graph, graphRunID, nodeID)
 	}
-	d.maybeCompleteGraph(ctx, graph, graphRunID, nodeID, status, resultErr)
+	// Something was just queued, so the run is not finished and the completion
+	// check would read every node record in it only to say so. On a chain of
+	// steps that is one whole-run read per step; here it is one, at the end.
+	// The reaper re-runs the check anyway for a run that somehow strands.
+	if enqueued == 0 {
+		d.maybeCompleteGraph(ctx, graph, graphRunID, nodeID, status, resultErr)
+	}
 }
 
 // resumeFrom re-drives advancement from the nodes a run is paused after —
@@ -194,8 +201,8 @@ func (d *Dispatcher) PublishNodeStatus(
 	}})
 }
 
-func (d *Dispatcher) dispatchReady(ctx context.Context, graph core.Graph, graphRunID, completedNodeID string) {
-	d.dispatchReadyIndexed(ctx, graph, graphRunID, completedNodeID, d.indexFor(graphRunID, graph))
+func (d *Dispatcher) dispatchReady(ctx context.Context, graph core.Graph, graphRunID, completedNodeID string) int {
+	return d.dispatchReadyIndexed(ctx, graph, graphRunID, completedNodeID, d.indexFor(graphRunID, graph))
 }
 
 // dispatchReadyIndexed is dispatchReady over a prebuilt edge index. The
@@ -204,12 +211,17 @@ func (d *Dispatcher) dispatchReady(ctx context.Context, graph core.Graph, graphR
 // predecessor record, so a densely wired flow cost O(nodes² × edges) —
 // minutes of CPU for a few hundred no-op steps, and a store round trip per
 // edge per evaluation.
+// dispatchReadyIndexed returns how many dependents it turned into NEW runnable
+// work. The caller uses that to skip the completion check: a run with something
+// freshly queued cannot be finished, and asking the store to confirm that costs
+// a read of every node record in the run, on every step.
 func (d *Dispatcher) dispatchReadyIndexed(
 	ctx context.Context,
 	graph core.Graph,
 	graphRunID, completedNodeID string,
 	ix *dispatchIndex,
-) {
+) int {
+	enqueued := 0
 	// Loop-body nodes run once per item under their for_each (see loopBodyOwners),
 	// never standalone — so the normal dispatcher must skip them, including the
 	// for_each's own "body" pin edge that feeds the body entry node.
@@ -230,7 +242,15 @@ func (d *Dispatcher) dispatchReadyIndexed(
 				Workspace:  graph.Workspace,
 				Job:        core.Job{GraphID: graph.ID, NodeID: nodeID},
 			}
-			if err := d.store.Enqueue(ctx, newRec); err != nil && !errors.Is(err, core.ErrConflict) {
+			switch err := d.store.Enqueue(ctx, newRec); {
+			case err == nil:
+				enqueued++
+			case errors.Is(err, core.ErrConflict):
+				// The record already exists — a re-dispatch of a dependent
+				// that may well be terminal already. Deliberately NOT counted:
+				// treating it as new work would skip the completion check on a
+				// run that really has finished, and leave it hanging.
+			default:
 				d.logger.Printf("enqueue dependent %s: %v", nodeID, err)
 			}
 		case depSkipped:
@@ -245,6 +265,7 @@ func (d *Dispatcher) dispatchReadyIndexed(
 			}
 		}
 	}
+	return enqueued
 }
 
 func (d *Dispatcher) recordSkippedIndexed(
