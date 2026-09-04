@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.37.0] - 2026-09-04
+
 ### Performance
 
 - **A replica no longer reads the whole fleet's run events.** Every `dzd`
