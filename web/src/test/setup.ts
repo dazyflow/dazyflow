@@ -8,6 +8,14 @@
 import "@testing-library/jest-dom/vitest";
 import { afterEach, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
+import { registerVocabulary } from "../lib/dropText";
+import { SV_VOCABULARY } from "../i18n/drops/sv";
+
+// The browser fetches a language's drop vocabulary on demand (dropText's
+// loadVocabulary, awaited before the first render). Tests get it registered up
+// front instead: several suites assert on rendered Swedish, and awaiting a
+// fetch in each would only re-state what the boot path already guarantees.
+registerVocabulary("sv", SV_VOCABULARY);
 
 // Node ships a `localStorage` global that shadows jsdom's and throws on every
 // method when the process was started without a valid --localstorage-file, so

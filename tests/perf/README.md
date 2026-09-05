@@ -227,3 +227,69 @@ without `DAZYFLOW_TEST_DB`: over the in-memory store both paths read the same
 objects, so the projection is free there **by construction** and the cost it
 removes — transferring and detoasting a JSONB column — does not exist. A
 benchmark that ran green on the memory store would have measured nothing.
+
+## The run viewer's timeline (2026-09-05)
+
+The endpoint beside the header above — `GET /api/v1/me/runs/{id}/nodes`, the
+step timeline, re-asked for every two seconds while a run is live. Over a real
+Postgres, a 40 KB flow and a hundred steps (`daemon/httpbench_test.go`, n=6):
+
+| | Before | After |
+|---|---:|---:|
+| `ListRunNodes` | 5.722ms | **3.370ms** (-41%, p=0.002) |
+| Bytes allocated | 878 KiB | **440 KiB** (-50%) |
+| Allocations | 6,417 | **3,164** (-51%) |
+
+Two independent causes, and the profile is what separated them. Of the
+handler's time, 34% was `fillRunNodeInputs` — which reconstructs what each
+step received, needs the flow the run pinned at submit, and was fetching that
+record and decoding the whole flow JSON **on every poll**, for a document that
+cannot change for the life of the run. The workers have shared one parsed copy
+per process since the execution-path work (`RunCache`, keyed by run and
+interned by payload bytes so runs of one flow share a parse); the read path now
+shares the same cache. That alone is -28%, and a Postgres round trip per poll.
+The lesson generalizes: a cache built for the write path is worth checking
+against the read path that asks the same question.
+
+The rest was the over-fetch of the run list one layer down. The node read
+returned twenty columns and decoded two JSON documents per step so the view
+could render eight fields; nine of the columns are ids the caller already holds
+or queue bookkeeping no view shows, and the `job` document was decoded whole to
+reach one member of it, which Postgres can project instead (`job -> 'input'`).
+
+`core.NodeRunReader` is the contract, implemented by both backends and pinned
+by the conformance suite the same way `core.RunSummaryReader` is: the narrow
+read must agree, step for step, with the full read it replaces. The comparator
+is hand-written, because `core.NodeRun` carries pointers and maps and `==`
+would compare them by identity — the trap that made the run-summary conformance
+pass on Memory and fail on Postgres with two values that printed identically.
+
+## The web bundle, per language (2026-09-05)
+
+Not a Go benchmark — measured off `npx vite build` output, gzipped at level 9,
+summing the entry chunk and everything `dist/index.html` preloads.
+
+| | Before | After |
+|---|---:|---:|
+| First paint, gzipped | 272.2 KB | **228.2 KB** (-16%) |
+| JavaScript to parse | 739 KB | **606 KB** (-18%) |
+| Editor / apps / runs, extra | +91.6 KB | **0** for an English reader |
+
+Both UI catalogues (~45 KB gzipped each) sat in an eagerly loaded chunk, and
+the Swedish drop vocabulary — the translation of every step's label, subtitle,
+description, port, field and enum, 91.6 KB gzipped — sat in the chunk
+`lib/dropText.ts` pulled in, which the editor, the apps pages and the run views
+all import. So every visitor downloaded and parsed every language.
+
+Only the fallback catalogue is bundled now; the rest are code-split per
+language, and `i18n.setLanguage` fetches a language's catalogue **and** its drop
+vocabulary before changing to it, so no screen paints raw message keys. A
+Swedish reader transfers the same bytes as before in two more requests, both
+immutably cached after the first load. To re-measure:
+
+```sh
+cd web && npx vite build
+cd dist/assets && for f in <entry and preloads named in ../index.html>; do
+  printf '%s %s\n' "$(gzip -9 -c "$f" | wc -c)" "$f"
+done
+```

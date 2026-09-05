@@ -393,6 +393,14 @@ type Service struct {
 	modelsOnce  sync.Once
 	modelsCache *modelCatalog
 
+	// runsCache is the process-wide cache of parsed run payloads, shared with
+	// the workers (see RunCache). The read paths want it as much as the
+	// execution path does: the run viewer polls every couple of seconds and
+	// each poll otherwise re-reads and re-decodes the run's whole flow JSON.
+	// Lazily initialized via runsOnce so a zero-value Service literal works.
+	runsOnce  sync.Once
+	runsCache *RunCache
+
 	// EncryptedSecrets is the per-tenant encrypted secret store that
 	// integration drops (Gmail OAuth, Claude API key, etc.) read from.
 	// Nil leaves the store CRUD endpoints + any drop that depends on

@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { setLanguage } from "../i18n/index";
 import { Bell, Download, Monitor, Moon, ShieldCheck, Sun } from "lucide-react";
 import { applyTheme, getThemeMode, type ThemeMode } from "../theme";
 import { useAuth } from "../auth";
@@ -47,11 +48,13 @@ export function Settings() {
     if (token) void api.updatePreferences(token, { theme: mode }).catch(() => {});
   };
   const pickLanguage = (code: string) => {
-    // changeLanguage swaps the active catalogue AND, via the
-    // languagedetector's localStorage cache, persists the choice locally
-    // so it survives reloads. Mirror it to the account so the locale
-    // roams; best-effort, same contract as the theme write.
-    void i18n.changeLanguage(code);
+    // setLanguage fetches the language's catalogue and drop vocabulary, then
+    // swaps to it — atomically, so no screen paints raw message keys in
+    // between. The switch also persists the choice locally via the
+    // languagedetector's localStorage cache, so it survives reloads. Mirror it
+    // to the account so the locale roams; best-effort, same contract as the
+    // theme write.
+    void setLanguage(code);
     if (token) void api.updatePreferences(token, { language: code }).catch(() => {});
   };
 

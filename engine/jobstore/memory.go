@@ -509,6 +509,22 @@ func (m *Memory) CountGraphRuns(ctx context.Context, opts core.ListGraphRunsOpts
 	return len(recs), nil
 }
 
+// ListNodeRuns is core.NodeRunReader. Same reason as the run summaries above:
+// there is no read to narrow when the records are already in memory, so this
+// is a projection of the same list — which keeps the daemon's in-memory tests
+// on the code path production takes.
+func (m *Memory) ListNodeRuns(ctx context.Context, graphRunID string, limit int) ([]core.NodeRun, error) {
+	recs, err := m.ListNodeRecords(ctx, core.ListNodeRecordsOpts{GraphRunID: graphRunID, Limit: limit})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]core.NodeRun, 0, len(recs))
+	for _, rec := range recs {
+		out = append(out, core.SummarizeNodeRun(rec))
+	}
+	return out, nil
+}
+
 func (m *Memory) ListNodeRecords(_ context.Context, opts core.ListNodeRecordsOpts) ([]core.JobRecord, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

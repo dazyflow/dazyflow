@@ -1,19 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { SV_DESCRIPTIONS } from "../i18n/drops/descriptions.sv";
 import { primaryLanguage } from "./language";
-import {
-  SV_INTEGRATION_NAMES,
-  SV_INTEGRATION_PROSE,
-} from "../i18n/drops/integrationProse.sv";
-import {
-  SV_CONNECTION_TEXT,
-  SV_ENUM_LABELS,
-  SV_FIELD_HELP,
-  SV_FIELD_TITLES,
-  SV_NODE_STATE,
-} from "../i18n/drops/fields.sv";
 import type { Manifest } from "../types";
 
 // The resolvers take the smallest shape that carries the text, so the
@@ -21,453 +9,6 @@ import type { Manifest } from "../types";
 // vocabulary as a full Manifest.
 type LabelledDrop = Pick<Manifest, "label"> &
   Partial<Pick<Manifest, "id" | "subtitle" | "description">>;
-
-// ---------------------------------------------------------------------------
-// Localized drop vocabulary.
-//
-// The catalog is authored in English on the Go side and stays that way: it is
-// what the API, the MCP tools and the AI generator are grounded on, so
-// translating core.Manifest would change the contract every non-human consumer
-// reads. Only the human UI localizes, and it does so here — one hop from the
-// manifest text to the reader's language, applied at render time.
-//
-// Why these strings live in a lib module and not in i18n/*.json:
-//   - The key is the English catalog string itself, so a label changing on the
-//     Go side MISSES here and falls back to the new English. Per-drop-id keys
-//     would instead keep showing a stale translation of text that no longer
-//     exists — silently wrong beats visibly untranslated.
-//   - i18next treats "." in a key as a path separator; catalog strings are
-//     prose ("A ≠ B", "Place → map coordinate") and can grow a dot at any
-//     time. Natural keys in a plain Record dodge that entirely.
-//   - Two maps of 87 labels + 89 subtitles dedupe the 145 drops (five Stripe
-//     drops share one label), and they belong beside the search aliases in
-//     dropSearch.ts that translate the same vocabulary in the other direction.
-//
-// Brand names are absent on purpose — Slack stays Slack. Only generic English
-// gets a Swedish reading, and an entry identical to its key would be noise, so
-// those are left out and resolved by the fallback.
-
-export const SV_LABELS: Record<string, string> = {
-  "A AND B": "A OCH B",
-  "A OR B": "A ELLER B",
-  "Calendar": "Kalender",
-  "Is it up?": "Är den uppe?",
-  "Mailbox": "Brevlåda",
-  NOT: "INTE",
-  "Add a calculated column": "Lägg till en beräknad kolumn",
-  Branch: "Förgrening",
-  "Choose & rename columns": "Välj och byt namn på kolumner",
-  "Collect loop results": "Samla resultat från loopen",
-  Collections: "Samlingar",
-  "Combine two lists": "Kombinera två listor",
-  Compare: "Jämför",
-  Contains: "Innehåller",
-  "Date & time": "Datum och tid",
-  Delay: "Fördröjning",
-  "Download a file": "Ladda ner en fil",
-  Email: "E-post",
-  Expression: "Uttryck",
-  File: "Fil",
-  "Fill a template": "Fyll i en mall",
-  "For each": "För varje",
-  "Group & summarize": "Gruppera och summera",
-  If: "Om",
-  Interval: "Intervall",
-  Location: "Plats",
-  "Look up a place": "Slå upp en plats",
-  "Make a table": "Gör en tabell",
-  "Make text": "Gör text",
-  Merge: "Slå samman",
-  Number: "Tal",
-  Phone: "Telefon",
-  "Read YAML": "Läs YAML",
-  "RSS / Atom feed": "RSS-/Atomflöde",
-  "Read CSV": "Läs CSV",
-  "Read JSON": "Läs JSON",
-  "Read XML": "Läs XML",
-  "Remove duplicates": "Ta bort dubbletter",
-  "Reusable flow": "Återanvändbart flöde",
-  "Route rows": "Dirigera rader",
-  // "Runner" is "körnod" throughout the UI (see the runners.* block in
-  // sv.json); the step names the machine, not the agent process.
-  "Run on your machine": "Kör på din maskin",
-  Schedule: "Schema",
-  Secrets: "Hemligheter",
-  "SMHI Weather": "SMHI Väder",
-  "Sort rows": "Sortera rader",
-  "Split rows": "Dela rader",
-  // A multiway conditional. "Switch" reads as an electrical switch to a
-  // non-technical Swedish user, and the Home Assistant switch entity is
-  // already called that — "Flerval" says multiple-choice instead.
-  Switch: "Flerval",
-  "Upload a file": "Ladda upp en fil",
-  "Wait for approval": "Vänta på godkännande",
-  "Watch a page": "Bevaka en sida",
-  Weather: "Väder",
-  "Web request": "Webbanrop",
-  "Write CSV": "Skriv CSV",
-  "Write JSON": "Skriv JSON",
-  "Write XML": "Skriv XML",
-  "Write YAML": "Skriv YAML",
-};
-
-export const SV_SUBTITLES: Record<string, string> = {
-  "A script, on a runner you host": "Ett skript, på en körnod du driver",
-  "Add comment": "Lägg till kommentar",
-  "Alert when a site breaks, and when it's back": "Larma när en sajt går ner, och när den är tillbaka",
-  "Append rows": "Lägg till rader",
-  Ask: "Fråga",
-  "CSV text into rows": "CSV-text till rader",
-  "Call a URL or API": "Anropa en URL eller ett API",
-  "Call service": "Anropa tjänst",
-  "Cancel event": "Avboka händelse",
-  "Cancel subscription": "Avsluta prenumeration",
-  "Capture order": "Debitera order",
-  // Git's subtitle, not a payment page — the version-control sense.
-  Checkout: "Checka ut",
-  "Checksum or HMAC a value": "Kontrollsumma eller HMAC av ett värde",
-  Classify: "Klassificera",
-  "Combine PDFs": "Kombinera PDF:er",
-  "Company overview": "Företagsöversikt",
-  "Company search": "Företagssökning",
-  "Compute a value with a formula": "Beräkna ett värde med en formel",
-  "Create customer": "Skapa kund",
-  "Create event": "Skapa händelse",
-  "Create invoice": "Skapa faktura",
-  "Create issue": "Skapa ärende",
-  "Create page": "Skapa sida",
-  "Create payment link": "Skapa betallänk",
-  "Create refund": "Skapa återbetalning",
-  "Create shipment": "Boka försändelse",
-  "Current conditions": "Väder just nu",
-  "Daily forecast": "Dygnsprognos",
-  "Delete shipment": "Ta bort försändelse",
-  "Download attachments": "Ladda ner bilagor",
-  "Download file": "Ladda ner fil",
-  "Draft reply": "Utkast till svar",
-  "Encode or decode Base64": "Koda eller avkoda Base64",
-  "Export PDF": "Exportera PDF",
-  "Extract fields": "Extrahera fält",
-  "Extract, replace, split, or match": "Extrahera, ersätt, dela eller matcha",
-  "Find rows": "Hitta rader",
-  "For rich HTML emails": "För HTML-mejl med formatering",
-  "Format or shift a date": "Formatera eller flytta ett datum",
-  "Get customer": "Hämta kund",
-  "Get order": "Hämta order",
-  "Get shipment": "Hämta försändelse",
-  "Get state": "Hämta status",
-  "HTML table from rows": "HTML-tabell från rader",
-  "Insert rows": "Infoga rader",
-  "List channels": "Lista kanaler",
-  "List events": "Lista händelser",
-  "List files": "Lista filer",
-  "List invoices": "Lista fakturor",
-  "List issues": "Lista ärenden",
-  "List subscriptions": "Lista prenumerationer",
-  Log: "Logg",
-  "Map coordinate → place": "Kartkoordinat → plats",
-  "Mark as read": "Markera som läst",
-  "Move or amend event": "Flytta eller ändra händelse",
-  "New items from a feed": "Nya inlägg från ett flöde",
-  "New responses": "Nya svar",
-  "On mention": "När du omnämns",
-  "On new PR": "Vid ny PR",
-  "On payment": "Vid betalning",
-  "On payment failed": "Vid nekad betalning",
-  "On push": "Vid push",
-  "On subscription canceled": "När en prenumeration avslutas",
-  "Pick file": "Välj fil",
-  "Place → map coordinate": "Plats → kartkoordinat",
-  Publish: "Publicera",
-  Query: "Fråga",
-  "Query database": "Fråga databasen",
-  "Query with SQL": "Fråga med SQL",
-  Read: "Läs",
-  "Read PDF details": "Läs PDF-detaljer",
-  "Read conversation": "Läs konversation",
-  "Read email": "Läs mejl",
-  "Read fields from text": "Läs fält från text",
-  "Read range": "Läs område",
-  "Read sheet": "Läs blad",
-  "Refund order": "Återbetala order",
-  "Rows into CSV text": "Rader till CSV-text",
-  "Rows into JSON text": "Rader till JSON-text",
-  "Rows into XML text": "Rader till XML-text",
-  "Rows into YAML text": "Rader till YAML-text",
-  "Save a file from a URL": "Spara en fil från en URL",
-  "Save rows": "Spara rader",
-  "Search customers": "Sök kunder",
-  "Search emails": "Sök mejl",
-  "Send SMS": "Skicka SMS",
-  "Send a file to a URL": "Skicka en fil till en URL",
-  "Send email": "Skicka e-post",
-  "Send invoice": "Skicka faktura",
-  "Send message": "Skicka meddelande",
-  "Send notification": "Skicka notis",
-  "Send to a URL": "Skicka till en URL",
-  "Set secret": "Ange hemlighet",
-  "Split a PDF": "Dela en PDF",
-  Summarize: "Sammanfatta",
-  "Tell me when it changes": "Säg till när den ändras",
-  "Text from a list": "Text från en lista",
-  "Update cells": "Uppdatera celler",
-  "Upload file": "Ladda upp fil",
-  "Upsert rows": "Infoga eller uppdatera rader",
-  "When state changes": "När status ändras",
-  Write: "Skriv",
-  "Write sheet": "Skriv blad",
-  Diff: "Diff",
-  "XML text into rows": "XML-text till rader",
-  "YAML text into rows": "YAML-text till rader",
-};
-
-// Port labels — the names on a card's wiring pins ("Rows", "Pass-through",
-// "Body"). Same natural-key scheme as the labels above. Strings that read the
-// same in Swedish (JSON, PDF, URL, Text, the bare A/B operands) are absent
-// rather than mapped to themselves.
-// Exported for the coverage guard in dropTextCoverage.test.ts, which needs to
-// spot an entry no drop reaches any more — a question portLabel() cannot be
-// asked, since it is only ever handed labels that DO exist.
-export const SV_PORTS: Record<string, string> = {
-  Address: "Adress",
-  "After ID": "Efter ID",
-  "Amount (display)": "Belopp (visning)",
-  "Amount (smallest unit)": "Belopp (minsta enhet)",
-  "Approval link": "Godkännandelänk",
-  Approved: "Godkänt",
-  Approver: "Godkännare",
-  Attachments: "Bilagor",
-  Attendees: "Deltagare",
-  Attributes: "Attribut",
-  Author: "Avsändare",
-  Blocks: "Block",
-  Body: "Innehåll",
-  "Branch ref": "Grenreferens",
-  "Calendar ID": "Kalender-ID",
-  "Came back": "Kom tillbaka",
-  "Capture ID": "Debiterings-ID",
-  "Captured amount (smallest unit)": "Debiterat belopp (minsta enhet)",
-  "Case 1": "Fall 1",
-  "Case 2": "Fall 2",
-  "Case 3": "Fall 3",
-  "Case 4": "Fall 4",
-  "Case 5": "Fall 5",
-  "Case 6": "Fall 6",
-  "Case 7": "Fall 7",
-  "Case 8": "Fall 8",
-  Category: "Kategori",
-  "Cells changed": "Ändrade celler",
-  "Changed?": "Ändrad?",
-  Channel: "Kanal",
-  Channels: "Kanaler",
-  Collection: "Samling",
-  Columns: "Kolumner",
-  Comment: "Kommentar",
-  "Comment link": "Kommentarslänk",
-  "Commit SHA": "Commit-SHA",
-  "Commit after": "Commit efter",
-  "Commit before": "Commit före",
-  Company: "Företag",
-  "Company name": "Företagsnamn",
-  "Compare to": "Jämför med",
-  Conditions: "Väderläge",
-  Confidence: "Säkerhet",
-  Content: "Innehåll",
-  "Conversation": "Konversation",
-  Coordinate: "Koordinat",
-  Count: "Antal",
-  Country: "Land",
-  Currency: "Valuta",
-  Customer: "Kund",
-  "Customer ID": "Kund-ID",
-  "Customer email": "Kundens e-post",
-  "Customer number": "Kundnummer",
-  Customers: "Kunder",
-  Daily: "Per dygn",
-  "Database ID": "Databas-ID",
-  Date: "Datum",
-  Default: "Standard",
-  "Delay (milliseconds)": "Fördröjning (millisekunder)",
-  Deleted: "Borttagen",
-  Description: "Beskrivning",
-  Details: "Detaljer",
-  Digest: "Sammandrag",
-  "Display name": "Visningsnamn",
-  "Document number": "Dokumentnummer",
-  Domain: "Domän",
-  "Downloaded file": "Nedladdad fil",
-  "Duplicate count": "Antal dubbletter",
-  Email: "E-post",
-  End: "Slut",
-  "End of window": "Fönstrets slut",
-  "Ended at": "Slutade",
-  "Ends at": "Slutar",
-  Entity: "Enhet",
-  "Error output": "Felutskrift",
-  "Exit code": "Avslutningskod",
-  Event: "Händelse",
-  "Event ID": "Händelse-ID",
-  Events: "Händelser",
-  "Failed rows": "Misslyckade rader",
-  "Failure reason": "Orsak till fel",
-  "Feed URL": "Flödes-URL",
-  Fields: "Fält",
-  File: "Fil",
-  "File ID": "Fil-ID",
-  "File name": "Filnamn",
-  "File path": "Filsökväg",
-  Files: "Filer",
-  "First file": "Första filen",
-  "First ID": "Första ID",
-  "First email": "Första e-post",
-  Folder: "Mapp",
-  Formatted: "Formaterat",
-  From: "Från",
-  "From user": "Från användare",
-  "Full entity": "Hela enheten",
-  "Full event": "Hela händelsen",
-  "Full response": "Hela svaret",
-  "Full result": "Hela resultatet",
-  "How many": "Antal",
-  "HTML table": "HTML-tabell",
-  "Has more": "Fler finns",
-  Headers: "Rubriker",
-  Host: "Värd",
-  Input: "Indata",
-  Inputs: "Indata",
-  "Invoice ID": "Faktura-ID",
-  "Invoice URL": "Faktura-URL",
-  Invoices: "Fakturor",
-  "Issue link": "Ärendelänk",
-  "Issue number": "Ärendenummer",
-  Issues: "Ärenden",
-  Items: "Poster",
-  "Last from": "Senast från",
-  "Last ID": "Sista ID",
-  "Last message": "Senaste meddelandet",
-  Latitude: "Latitud",
-  "Left rows": "Vänstra rader",
-  Link: "Länk",
-  "Link to open": "Länk att öppna",
-  List: "Lista",
-  "Local part": "Lokal del",
-  Location: "Plats",
-  Longitude: "Longitud",
-  "Loop body": "Loopens innehåll",
-  "Match count": "Antal träffar",
-  Matched: "Träffar",
-  Matches: "Träffar",
-  "Matching emails": "Matchande mejl",
-  "Merged list": "Sammanslagen lista",
-  Message: "Meddelande",
-  "Message ID": "Meddelande-ID",
-  "Messages": "Meddelanden",
-  Name: "Namn",
-  "Name in Drive": "Namn i Drive",
-  "National number": "Nationellt nummer",
-  "New responses": "Nya svar",
-  No: "Nej",
-  Number: "Tal",
-  "On change": "Vid ändring",
-  "Order ID": "Order-ID",
-  "Order amount (smallest unit)": "Orderbelopp (minsta enhet)",
-  "Org number": "Organisationsnummer",
-  Output: "Utdata",
-  Outputs: "Utdata",
-  "Page address": "Sidans adress",
-  "PR link": "PR-länk",
-  "PR number": "PR-nummer",
-  Page: "Sida",
-  "Page ID": "Sid-ID",
-  "Page URL": "Sid-URL",
-  "Page body": "Sidans innehåll",
-  Pages: "Sidor",
-  Parts: "Delar",
-  // Matches the existing nodeCard.passThrough copy in sv.json, which already
-  // calls this "Genomströmning" — one word for one concept.
-  "Pass-through": "Genomströmning",
-  "Password-protected": "Lösenordsskyddad",
-  Path: "Sökväg",
-  Payload: "Nyttolast",
-  "Payment ID": "Betalnings-ID",
-  "Payment URL": "Betalnings-URL",
-  "Payment intent": "Betalningsavsikt",
-  Phone: "Telefon",
-  Place: "Plats",
-  "Previous state": "Tidigare status",
-  Price: "Pris",
-  "Pushed by": "Pushad av",
-  Quantity: "Antal",
-  Query: "Fråga",
-  "Query params": "Frågeparametrar",
-  "Refund ID": "Återbetalnings-ID",
-  "Refunded amount (smallest unit)": "Återbetalat belopp (minsta enhet)",
-  Rejected: "Avslaget",
-  "Remaining authorized (smallest unit)": "Kvar reserverat (minsta enhet)",
-  "Rendered HTML": "Renderad HTML",
-  "Rendered text": "Renderad text",
-  "Replied": "Besvarad",
-  Reply: "Svar",
-  "Reply in thread": "Svara i tråden",
-  Repository: "Repo",
-  "Repository folder": "Repo-mapp",
-  Response: "Svar",
-  Result: "Resultat",
-  Results: "Resultat",
-  "Right rows": "Högra rader",
-  "Routing slot 1": "Utgång 1",
-  "Routing slot 2": "Utgång 2",
-  "Routing slot 3": "Utgång 3",
-  "Routing slot 4": "Utgång 4",
-  "Routing slot 5": "Utgång 5",
-  "Routing slot 6": "Utgång 6",
-  "Routing slot 7": "Utgång 7",
-  "Routing slot 8": "Utgång 8",
-  Rows: "Rader",
-  "Rows saved": "Sparade rader",
-  "Saved file": "Sparad fil",
-  Script: "Skript",
-  Search: "Sök",
-  "Secret name": "Hemlighetens namn",
-  Service: "Tjänst",
-  Shipment: "Försändelse",
-  "Shipment ID": "Försändelse-ID",
-  Size: "Storlek",
-  "Source branch": "Källgren",
-  "Spreadsheet": "Kalkylblad",
-  "Spreadsheet ID": "Kalkylblads-ID",
-  "Start of window": "Fönstrets början",
-  State: "Status",
-  "Status code": "Statuskod",
-  Subject: "Ämne",
-  Subscription: "Prenumeration",
-  "Subscription ID": "Prenumerations-ID",
-  Subscriptions: "Prenumerationer",
-  Substring: "Deltext",
-  Summary: "Sammanfattning",
-  "Target branch": "Målgren",
-  Temperature: "Temperatur",
-  Template: "Mall",
-  Time: "Tid",
-  Title: "Rubrik",
-  To: "Till",
-  Topic: "Ämne (topic)",
-  "Tracking numbers": "Kollinummer",
-  Type: "Typ",
-  Unmatched: "Utan träff",
-  "Up?": "Uppe?",
-  "Updated range": "Uppdaterat område",
-  Value: "Värde",
-  "Went down": "Gick ner",
-  "What happened": "Vad hände",
-  "What it said before": "Vad den sa förut",
-  "What it says now": "Vad den säger nu",
-  Workspace: "Arbetsyta",
-  Yes: "Ja",
-  "Yes/No": "Ja/Nej",
-  "Yes/No value": "Ja/Nej-värde",
-  "Yes/No values": "Ja/Nej-värden",
-};
 
 // descriptionFingerprint is a 32-bit FNV-1a over Unicode code points, hex,
 // zero-padded to 8 chars. Descriptions are paragraphs, so unlike the short
@@ -510,25 +51,11 @@ const EN_CATEGORIES: Record<string, string> = {
   trigger: "Triggers",
 };
 
-// Mirrors EN_CATEGORIES' product vocabulary, not the raw enum: the English
-// chips deliberately read "Files & data" rather than "io", so the Swedish ones
-// say "Filer och data" rather than "In/ut".
-const SV_CATEGORIES: Record<string, string> = {
-  ai: "AI",
-  flow_control: "Flödesstyrning",
-  io: "Filer och data",
-  logic: "Logik",
-  network: "Appar och tjänster",
-  system: "System",
-  transformation: "Ändra data",
-  trigger: "Triggers",
-};
-
 // DescriptionMap is keyed by drop id; `en` is the fingerprint of the English
 // paragraph the translation was made from.
 export type DescriptionMap = Record<string, { en: string; sv: string }>;
 
-type Vocabulary = {
+export type Vocabulary = {
   labels: Record<string, string>;
   subtitles: Record<string, string>;
   descriptions: DescriptionMap;
@@ -543,22 +70,43 @@ type Vocabulary = {
   appNames: Record<string, string>;
 };
 
-const VOCABULARY: Record<string, Vocabulary> = {
-  sv: {
-    labels: SV_LABELS,
-    subtitles: SV_SUBTITLES,
-    descriptions: SV_DESCRIPTIONS,
-    categories: SV_CATEGORIES,
-    ports: SV_PORTS,
-    fieldTitles: SV_FIELD_TITLES,
-    fieldHelp: SV_FIELD_HELP,
-    enums: SV_ENUM_LABELS,
-    connections: SV_CONNECTION_TEXT,
-    nodeState: SV_NODE_STATE,
-    prose: SV_INTEGRATION_PROSE,
-    appNames: SV_INTEGRATION_NAMES,
-  },
+// VOCABULARY is filled at boot, not at build time. Every table in it is one
+// language's translation of the whole catalog — ~90 KB gzipped for Swedish —
+// and a reader needs exactly one of them, so they are code-split per language
+// and loaded by loadVocabulary below. An English reader loads none: the empty
+// registry is already the right answer, because every resolver falls back to
+// the manifest's own English when its language has no vocabulary.
+const VOCABULARY: Record<string, Vocabulary> = {};
+
+// The languages with a vocabulary module, and how to fetch it. English is
+// absent on purpose — it is the fallback every resolver already returns.
+const VOCABULARY_LOADERS: Record<string, () => Promise<Vocabulary>> = {
+  sv: () => import("../i18n/drops/sv").then((m) => m.SV_VOCABULARY),
 };
+
+// loadVocabulary makes `lang`'s drop text available to the resolvers below,
+// and resolves once it is. Await it before the first render (and again on a
+// language change) so no screen paints English that is about to become
+// Swedish. A language with no module, a failed fetch: both leave the registry
+// as it was, which renders the catalog's English — the same fallback a missing
+// translation already takes.
+export async function loadVocabulary(lang: string | undefined): Promise<void> {
+  const code = primaryLanguage(lang);
+  if (!code || VOCABULARY[code]) return;
+  const load = VOCABULARY_LOADERS[code];
+  if (!load) return;
+  try {
+    VOCABULARY[code] = await load();
+  } catch {
+    /* untranslated beats blocked: resolvers keep returning English */
+  }
+}
+
+// registerVocabulary is loadVocabulary's synchronous half, for tests that want
+// the Swedish text without an await.
+export function registerVocabulary(lang: string, v: Vocabulary): void {
+  VOCABULARY[primaryLanguage(lang)] = v;
+}
 
 // vocabularyFor resolves a language tag to its vocabulary. Regional tags
 // ("sv-SE", "sv-FI") collapse to the base language, matching the i18n config's

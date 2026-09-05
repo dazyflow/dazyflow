@@ -30,10 +30,8 @@ import {
   nodeStateText,
   portLabel,
   splitConnectionNote,
-  SV_LABELS,
-  SV_PORTS,
-  SV_SUBTITLES,
 } from "./dropText";
+import { SV_LABELS, SV_PORTS, SV_SUBTITLES } from "../i18n/drops/sv";
 import { SV_DESCRIPTIONS } from "../i18n/drops/descriptions.sv";
 import {
   SV_INTEGRATION_NAMES,

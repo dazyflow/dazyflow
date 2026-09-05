@@ -1199,7 +1199,7 @@ func newRunView(rec core.RunSummary) runView {
 	}
 }
 
-func newNodeRunView(rec core.JobRecord) nodeRunView {
+func newNodeRunView(rec core.NodeRun) nodeRunView {
 	v := nodeRunView{
 		NodeID:     rec.NodeID,
 		Status:     rec.Status,
@@ -1207,7 +1207,7 @@ func newNodeRunView(rec core.JobRecord) nodeRunView {
 		StartedAt:  rec.StartedAt,
 		FinishedAt: rec.FinishedAt,
 		DurationMS: durationMS(rec.StartedAt, rec.FinishedAt),
-		Inputs:     rec.Job.Input,
+		Inputs:     rec.Inputs,
 		Error:      resultError(rec.Result),
 	}
 	if rec.Result != nil {
@@ -1275,16 +1275,14 @@ func (h *flowAPI) listRunNodesMe(rw http.ResponseWriter, r *http.Request, p core
 	// Scoped on the summary: the run's own record is only opened when the
 	// inputs below actually need the flow it ran, and this handler is polled
 	// every couple of seconds while the run is live.
-	run, ok := h.loadRunSummaryScoped(rw, r, p, runID)
-	if !ok {
+	if _, ok := h.loadRunSummaryScoped(rw, r, p, runID); !ok {
 		return
 	}
-	nodes, err := h.svc.Jobs.ListNodeRecords(r.Context(), core.ListNodeRecordsOpts{
-		Tenant:     run.Tenant,
-		Workspace:  run.Workspace,
-		GraphRunID: runID,
-		Limit:      1000, // typical graphs have <100 nodes; cap defensively
-	})
+	// The narrow read: the timeline renders eight fields per step, and this
+	// list is re-polled every couple of seconds per open tab. The run is
+	// already scoped above, so the tenant and workspace predicates the wide
+	// read took would only re-state what the run id decides.
+	nodes, err := core.ListNodeRuns(r.Context(), h.svc.Jobs, runID, 1000) // typical graphs have <100 nodes; cap defensively
 	if err != nil {
 		writeAPIError(rw, http.StatusInternalServerError, "internal_error", err.Error())
 		return
@@ -1327,7 +1325,7 @@ func (h *flowAPI) fillRunNodeInputs(
 	ctx context.Context,
 	p core.Principal,
 	runID string,
-	recs []core.JobRecord,
+	recs []core.NodeRun,
 	views []nodeRunView,
 ) {
 	need := false
@@ -1340,7 +1338,10 @@ func (h *flowAPI) fillRunNodeInputs(
 	if !need || h.svc == nil || h.svc.Jobs == nil {
 		return
 	}
-	graph, err := loadGraphFromRun(ctx, h.svc.Jobs, runID)
+	// Through the run cache: this handler is polled every couple of seconds
+	// while a run is live, and a run's flow payload is pinned at submit, so
+	// every poll after the first is served without a round trip or a decode.
+	graph, err := h.svc.RunCache().graphForRun(ctx, h.svc.Jobs, runID)
 	if err != nil {
 		return
 	}
@@ -1390,19 +1391,19 @@ func (h *flowAPI) getRunNodeMe(rw http.ResponseWriter, r *http.Request, p core.P
 		writeAPIError(rw, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
-	view := newNodeRunView(nodeRec)
+	view := newNodeRunView(core.SummarizeNodeRun(nodeRec))
 	// One node asked for on its own: its predecessors' records have to be read
 	// to say what it received. Cheap — a node has a handful of inbound edges.
 	if len(view.Inputs) == 0 {
-		if graph, err := loadGraphFromRun(r.Context(), h.svc.Jobs, runID); err == nil {
-			recs := []core.JobRecord{nodeRec}
+		if graph, err := h.svc.RunCache().graphForRun(r.Context(), h.svc.Jobs, runID); err == nil {
+			recs := []core.NodeRun{core.SummarizeNodeRun(nodeRec)}
 			for _, e := range graph.Edges {
 				if e.To != nodeRec.NodeID {
 					continue
 				}
 				pred, perr := h.svc.Jobs.Get(r.Context(), NodeJobID(runID, e.From))
 				if perr == nil {
-					recs = append(recs, pred)
+					recs = append(recs, core.SummarizeNodeRun(pred))
 				}
 			}
 			views := []nodeRunView{view}

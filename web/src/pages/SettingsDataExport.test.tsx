@@ -11,7 +11,9 @@ import userEvent from "@testing-library/user-event";
 vi.mock("react-i18next", () => {
   const t = (k: string) => k;
   const value = { t, i18n: { language: "en", changeLanguage: () => {} } };
-  return { useTranslation: () => value };
+  // initReactI18next too: Settings imports the app's i18n instance for
+  // setLanguage, and that module installs this plugin at load.
+  return { useTranslation: () => value, initReactI18next: { type: "3rdParty", init: () => {} } };
 });
 vi.mock("../auth", () => {
   const auth = { token: "session_tok" };

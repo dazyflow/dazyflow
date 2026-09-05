@@ -767,21 +767,7 @@ func (w *Worker) fetchGraph(ctx context.Context, graphRunID string) (core.Graph,
 
 // fetchRun is fetchGraph with the run's own metadata alongside.
 func (w *Worker) fetchRun(ctx context.Context, graphRunID string) (cachedRun, error) {
-	if run, ok := w.graphs.get(graphRunID); ok {
-		return run, nil
-	}
-	rec, err := loadRunRecord(ctx, w.store, graphRunID)
-	if err != nil {
-		return cachedRun{}, err
-	}
-	// Decode through the cache so concurrent runs of one flow share a parse.
-	g, err := w.graphs.graphFor(rec.GraphPayload)
-	if err != nil {
-		return cachedRun{}, fmt.Errorf("unmarshal graph %s: %w", graphRunID, err)
-	}
-	run := cachedRun{graph: g, triggerDepth: rec.TriggerDepth, manual: rec.Manual}
-	w.graphs.put(graphRunID, run)
-	return run, nil
+	return w.graphs.runFor(ctx, w.store, graphRunID)
 }
 
 // runTriggerDepth is how deep the trigger chain that started this run was.

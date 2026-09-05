@@ -1357,7 +1357,9 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 	// free, so per-worker caches re-read the run record once per worker. Sized
 	// by the RUNS in flight, not the workers: under a backlog the queue
 	// interleaves orgs, so a window of a few runs misses on nearly every step.
-	runs := daemon.NewRunCache(0)
+	// The Service owns it so the run-viewer endpoints share the same entries —
+	// a run a worker here is executing is the run a browser here is polling.
+	runs := d.svc.RunCache()
 	for i := 0; i < d.workerCount; i++ {
 		w := daemon.NewWorker(daemon.WorkerConfig{
 			// Unique per process AND per worker goroutine: the job store's

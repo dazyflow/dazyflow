@@ -96,7 +96,7 @@ func TestNewNodeRunView_RetrySignal(t *testing.T) {
 	future := time.Now().Add(30 * time.Second)
 	at := &future
 	// A node between attempts: queued, attempt>0, with a future horizon.
-	requeued := core.JobRecord{
+	requeued := core.NodeRun{
 		NodeID:      "n",
 		Status:      core.JobStatusQueued,
 		Attempt:     2,
@@ -111,13 +111,13 @@ func TestNewNodeRunView_RetrySignal(t *testing.T) {
 	}
 
 	// A terminally failed node must NOT advertise a retry — that's "needs you".
-	failed := core.JobRecord{NodeID: "n", Status: core.JobStatusFailed, Attempt: 3}
+	failed := core.NodeRun{NodeID: "n", Status: core.JobStatusFailed, Attempt: 3}
 	if fv := newNodeRunView(failed); fv.WillRetry || fv.RetryAt != nil {
 		t.Errorf("terminal failure must not set retry signal, got will_retry=%v retry_at=%v", fv.WillRetry, fv.RetryAt)
 	}
 
 	// A first-time queued node (attempt 0, no horizon) is not a retry.
-	fresh := core.JobRecord{NodeID: "n", Status: core.JobStatusQueued}
+	fresh := core.NodeRun{NodeID: "n", Status: core.JobStatusQueued}
 	if fv := newNodeRunView(fresh); fv.WillRetry {
 		t.Error("a fresh queued node should not set will_retry")
 	}

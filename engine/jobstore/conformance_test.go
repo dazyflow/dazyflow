@@ -5,6 +5,7 @@ package jobstore
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
@@ -22,6 +23,7 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 	t.Helper()
 	conformanceOutcomes(t, mk)
 	conformanceRunSummaries(t, mk)
+	conformanceNodeRuns(t, mk)
 	t.Run("CountsByStatus", func(t *testing.T) {
 		s := mk(t)
 		ctx := t.Context()
@@ -1132,6 +1134,127 @@ func conformanceRunSummaries(t *testing.T, mk func(t *testing.T) core.JobStore) 
 			t.Errorf("unlimited count = %d, want 6", n)
 		}
 	})
+}
+
+// conformanceNodeRuns pins the narrow node-timeline read to the full one: the
+// node runs a store returns must be exactly core.SummarizeNodeRun of the
+// records ListNodeRecords returns for the same run, in the same order. That
+// equality is the contract — a projection that disagreed about a step's
+// inputs, its retry horizon or which steps a run has would make the run
+// viewer read differently depending on the backend an install runs.
+func conformanceNodeRuns(t *testing.T, mk func(t *testing.T) core.JobStore) {
+	t.Helper()
+	t.Run("NodeRuns", func(t *testing.T) {
+		s := mk(t)
+		ctx := t.Context()
+		reader, ok := s.(core.NodeRunReader)
+		if !ok {
+			t.Skip("store does not implement NodeRunReader")
+		}
+		base := time.Now().UTC().Add(-time.Hour).Truncate(time.Millisecond)
+		started, finished := base.Add(time.Second), base.Add(2*time.Second)
+		horizon := base.Add(time.Minute)
+
+		// A finished step, carrying both what it received and what it produced.
+		mustEnqueue(t, s, ctx, core.JobRecord{
+			ID: "run1-a", Kind: core.JobKindNode, GraphRunID: "run1", GraphID: "g1",
+			NodeID: "a", Tenant: "t", Workspace: "ws", Status: core.JobStatusSucceeded,
+			Job:        core.Job{GraphID: "g1", NodeID: "a", Input: map[string]core.Ref{"in": {Inline: "hello"}}},
+			Result:     &core.Result{Status: core.StatusOK, Output: map[string]core.Ref{"out": {Inline: 42}}},
+			EnqueuedAt: base, StartedAt: &started, FinishedAt: &finished,
+		})
+		// A step between automatic attempts: queued, with a horizon.
+		mustEnqueue(t, s, ctx, core.JobRecord{
+			ID: "run1-b", Kind: core.JobKindNode, GraphRunID: "run1", GraphID: "g1",
+			NodeID: "b", Tenant: "t", Workspace: "ws", Status: core.JobStatusQueued,
+			Job: core.Job{GraphID: "g1", NodeID: "b"}, Attempt: 2,
+			EnqueuedAt: base.Add(time.Minute), AvailableAt: &horizon,
+		})
+		// A failed step whose result stores an explicit error.
+		mustEnqueue(t, s, ctx, core.JobRecord{
+			ID: "run1-c", Kind: core.JobKindNode, GraphRunID: "run1", GraphID: "g1",
+			NodeID: "c", Tenant: "t", Workspace: "ws", Status: core.JobStatusFailed,
+			Job:        core.Job{GraphID: "g1", NodeID: "c"},
+			Result:     &core.Result{Status: core.StatusError, Error: &core.JobError{Code: "boom", Message: "it broke"}},
+			EnqueuedAt: base.Add(2 * time.Minute),
+		})
+		// Another run's step, to catch a projection that drops the predicate.
+		mustEnqueue(t, s, ctx, core.JobRecord{
+			ID: "run2-a", Kind: core.JobKindNode, GraphRunID: "run2", GraphID: "g1",
+			NodeID: "a", Tenant: "t", Workspace: "ws", Status: core.JobStatusSucceeded,
+			Job: core.Job{GraphID: "g1", NodeID: "a"}, EnqueuedAt: base,
+		})
+		// And the run's own graph record, which neither read may ever return.
+		mustEnqueue(t, s, ctx, core.JobRecord{
+			ID: "run1", Kind: core.JobKindGraph, GraphID: "g1", Tenant: "t",
+			Workspace: "ws", Status: core.JobStatusRunning, EnqueuedAt: base,
+			GraphPayload: []byte(`{"id":"g1"}`),
+		})
+
+		for _, limit := range []int{0, 2, 100} {
+			recs, err := s.ListNodeRecords(ctx, core.ListNodeRecordsOpts{GraphRunID: "run1", Limit: limit})
+			if err != nil {
+				t.Fatalf("ListNodeRecords limit=%d: %v", limit, err)
+			}
+			want := make([]core.NodeRun, 0, len(recs))
+			for _, rec := range recs {
+				want = append(want, core.SummarizeNodeRun(rec))
+			}
+			got, err := reader.ListNodeRuns(ctx, "run1", limit)
+			if err != nil {
+				t.Fatalf("ListNodeRuns limit=%d: %v", limit, err)
+			}
+			if len(got) != len(want) {
+				t.Fatalf("limit=%d: %d node runs, want %d", limit, len(got), len(want))
+			}
+			for i := range want {
+				if !sameNodeRun(got[i], want[i]) {
+					t.Errorf("limit=%d row %d:\n got %+v\nwant %+v", limit, i, got[i], want[i])
+				}
+			}
+		}
+		// A run with no steps is an empty list, not an error.
+		empty, err := reader.ListNodeRuns(ctx, "no-such-run", 100)
+		if err != nil {
+			t.Fatalf("ListNodeRuns(missing): %v", err)
+		}
+		if len(empty) != 0 {
+			t.Errorf("ListNodeRuns(missing) = %+v, want empty", empty)
+		}
+	})
+}
+
+// sameNodeRun compares two node runs by value. Plain == would compare the
+// *time.Time and map fields by pointer, which is never equal across two reads.
+func sameNodeRun(a, b core.NodeRun) bool {
+	sameTime := func(x, y *time.Time) bool {
+		if x == nil || y == nil {
+			return x == y
+		}
+		return x.Equal(*y)
+	}
+	if a.NodeID != b.NodeID || a.Status != b.Status || a.Attempt != b.Attempt {
+		return false
+	}
+	if !sameTime(a.StartedAt, b.StartedAt) || !sameTime(a.FinishedAt, b.FinishedAt) ||
+		!sameTime(a.AvailableAt, b.AvailableAt) {
+		return false
+	}
+	if (a.Result == nil) != (b.Result == nil) {
+		return false
+	}
+	// Refs carry arbitrary decoded JSON, so the values compare through their
+	// encoding rather than by ==.
+	return sameJSON(a.Inputs, b.Inputs) && sameJSON(a.Result, b.Result)
+}
+
+// sameJSON reports whether two values encode identically. Both sides came out
+// of the same stored bytes, so re-encoding them is a faithful comparison and
+// does not depend on how deeply either was decoded.
+func sameJSON(a, b any) bool {
+	ab, aerr := json.Marshal(a)
+	bb, berr := json.Marshal(b)
+	return aerr == nil && berr == nil && string(ab) == string(bb)
 }
 
 // sameSummary compares two summaries by value. Plain == would compare the

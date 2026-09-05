@@ -397,6 +397,68 @@ func SummarizeRun(rec JobRecord) RunSummary {
 	return s
 }
 
+// NodeRun is the slice of a node record the run viewer's timeline renders:
+// which step it was, how it went, when, and the values it consumed and
+// produced. Everything else on the record belongs to the queue rather than to
+// the view — the ids that link it to its run, the tenant and workspace the run
+// was already scoped by, the lease and worker that claimed it — and the run
+// viewer re-reads this list every couple of seconds while a run is live, once
+// per open tab, so carrying them is the same waste RunSummary removed a layer
+// up.
+type NodeRun struct {
+	NodeID     string
+	Status     JobStatus
+	Attempt    int
+	StartedAt  *time.Time
+	FinishedAt *time.Time
+	// AvailableAt is the retry horizon: a queued node with attempts behind it
+	// and a future availability is between automatic attempts, which the view
+	// reports as "retrying" rather than as stuck.
+	AvailableAt *time.Time
+	// Inputs is what the node received. Written on the record's job, not
+	// derived from the result — a node that has not finished still has them.
+	Inputs map[string]Ref
+	Result *Result
+}
+
+// SummarizeNodeRun projects a full record onto the node run above. It is the
+// fallback path's definition of the projection, and so also the specification
+// the store implementations are checked against.
+func SummarizeNodeRun(rec JobRecord) NodeRun {
+	return NodeRun{
+		NodeID: rec.NodeID, Status: rec.Status, Attempt: rec.Attempt,
+		StartedAt: rec.StartedAt, FinishedAt: rec.FinishedAt,
+		AvailableAt: rec.AvailableAt, Inputs: rec.Job.Input, Result: rec.Result,
+	}
+}
+
+// NodeRunReader is an optional JobStore extension that reads one run's node
+// records in the shape above. Same scoping and ordering as ListNodeRecords
+// for the same run — newest-first — so a caller can swap one for the other
+// and see the same steps in the same order.
+type NodeRunReader interface {
+	ListNodeRuns(ctx context.Context, graphRunID string, limit int) ([]NodeRun, error)
+}
+
+// ListNodeRuns reads one run's node timeline, using the store's narrow
+// projection when it has one and falling back to a full ListNodeRecords
+// otherwise. Callers use this rather than type-asserting themselves, so a
+// store without the extension stays correct rather than unsupported.
+func ListNodeRuns(ctx context.Context, store JobStore, graphRunID string, limit int) ([]NodeRun, error) {
+	if r, ok := store.(NodeRunReader); ok {
+		return r.ListNodeRuns(ctx, graphRunID, limit)
+	}
+	recs, err := store.ListNodeRecords(ctx, ListNodeRecordsOpts{GraphRunID: graphRunID, Limit: limit})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]NodeRun, 0, len(recs))
+	for _, rec := range recs {
+		out = append(out, SummarizeNodeRun(rec))
+	}
+	return out, nil
+}
+
 // ListRunSummaries reads a page of run summaries, using the store's narrow
 // projection when it has one and falling back to a full ListGraphRuns
 // otherwise. Callers use this rather than type-asserting themselves, so a

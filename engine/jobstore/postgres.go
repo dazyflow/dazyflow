@@ -783,6 +783,13 @@ const summaryCols = `SELECT id, graph_id, tenant, workspace, status, enqueued_at
 const summarySelect = summaryCols + `kind = 'graph'`
 const summaryByID = summaryCols + `id = $1`
 
+// isJSONNull reports whether a scanned JSON column carries no value. Two
+// shapes mean that and both have to be caught: a SQL NULL (or an absent `->`
+// member) arrives as no bytes, while a stored JSON null arrives as the four
+// bytes `null` — which every Unmarshal below would happily decode into a
+// zero-valued struct and present as real content.
+func isJSONNull(b []byte) bool { return len(b) == 0 || string(b) == "null" }
+
 func scanSummary(r row) (core.RunSummary, error) {
 	var (
 		sum     core.RunSummary
@@ -796,7 +803,7 @@ func scanSummary(r row) (core.RunSummary, error) {
 	// result that stored an explicit JSON null arrives as the four bytes
 	// "null", which decodes into a zero JobError and would invent a failure
 	// on a run that succeeded — so both are "no error".
-	if len(errJSON) > 0 && string(errJSON) != "null" {
+	if !isJSONNull(errJSON) {
 		var je core.JobError
 		if err := json.Unmarshal(errJSON, &je); err != nil {
 			return core.RunSummary{}, fmt.Errorf("unmarshal run error: %w", err)
@@ -837,6 +844,62 @@ func (s *Postgres) CountGraphRuns(ctx context.Context, opts core.ListGraphRunsOp
 		return 0, wrapPgErr(err)
 	}
 	return n, nil
+}
+
+// ListNodeRuns is core.NodeRunReader: one run's timeline, projected in SQL.
+//
+// The wide read this replaces on the run viewer's poll returned twenty
+// columns and decoded two JSON documents per step to render eight fields.
+// Nine of those columns are ids the caller already has (the run it asked
+// for, the tenant it scoped by) or queue bookkeeping no view shows, and the
+// `job` document is read for one member of it — so the projection asks
+// Postgres for that member instead of the document.
+func (s *Postgres) ListNodeRuns(ctx context.Context, graphRunID string, limit int) ([]core.NodeRun, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	const q = `SELECT node_id, status, job -> 'input', result, started_at, finished_at, attempt, available_at
+	             FROM jobs
+	            WHERE kind = 'node' AND graph_run_id = $1
+	            ORDER BY enqueued_at DESC, id DESC
+	            LIMIT $2`
+	rows, err := s.pool.Query(ctx, q, graphRunID, limit)
+	if err != nil {
+		return nil, wrapPgErr(err)
+	}
+	defer rows.Close()
+	out := make([]core.NodeRun, 0, 32)
+	for rows.Next() {
+		var (
+			n          core.NodeRun
+			inputJSON  []byte
+			resultJSON []byte
+		)
+		if err := rows.Scan(&n.NodeID, &n.Status, &inputJSON, &resultJSON,
+			&n.StartedAt, &n.FinishedAt, &n.Attempt, &n.AvailableAt); err != nil {
+			return nil, wrapPgErr(err)
+		}
+		// A missing member and a stored JSON null both arrive here: the first
+		// as no bytes, the second as the four bytes `null`, which decodes into
+		// an empty map rather than the nil the full read produces.
+		if !isJSONNull(inputJSON) {
+			if err := json.Unmarshal(inputJSON, &n.Inputs); err != nil {
+				return nil, fmt.Errorf("unmarshal node input: %w", err)
+			}
+		}
+		if !isJSONNull(resultJSON) {
+			var res core.Result
+			if err := json.Unmarshal(resultJSON, &res); err != nil {
+				return nil, fmt.Errorf("unmarshal result: %w", err)
+			}
+			n.Result = &res
+		}
+		out = append(out, n)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, wrapPgErr(err)
+	}
+	return out, nil
 }
 
 func (s *Postgres) ListNodeRecords(ctx context.Context, opts core.ListNodeRecordsOpts) ([]core.JobRecord, error) {

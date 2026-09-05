@@ -11,7 +11,7 @@
     "build:docs": "tsc -b && vite build --mode docs",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit && tsc -p tsconfig.test.json --noEmit",
-    "test": "eslint src --quiet && tsc -p tsconfig.test.json --noEmit && node scripts/check-css-tokens.mjs && node scripts/check-css-classes.mjs && node scripts/check-css-breakpoints.mjs && node scripts/check-icon-sizes.mjs && node scripts/check-modal-a11y.mjs && node scripts/check-ui-primitives.mjs && node scripts/check-style-scales.mjs && node scripts/check-wide-tables.mjs && node scripts/check-overlay-metrics.mjs && vitest run",
+    "test": "eslint src --quiet && tsc -p tsconfig.test.json --noEmit && node scripts/check-css-tokens.mjs && node scripts/check-css-classes.mjs && node scripts/check-css-breakpoints.mjs && node scripts/check-icon-sizes.mjs && node scripts/check-modal-a11y.mjs && node scripts/check-ui-primitives.mjs && node scripts/check-style-scales.mjs && node scripts/check-wide-tables.mjs && node scripts/check-overlay-metrics.mjs && node scripts/check-eager-locales.mjs && vitest run",
     "test:watch": "vitest",
     "lint": "eslint src"
   },

@@ -12,6 +12,53 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ### Performance
 
+- **The run viewer's timeline stopped re-reading and re-parsing the flow on
+  every poll, and stopped reading twelve columns to render eight fields.**
+  `GET /api/v1/me/runs/{id}/nodes` is the endpoint an open run view re-asks
+  for every two seconds while a run is live. Over a real Postgres, a 40 KB
+  flow and a hundred steps: **5.72ms → 3.37ms (-41%)**, with **50% fewer bytes
+  allocated and 51% fewer allocations** per request.
+
+  Two independent causes. The handler reconstructs what each step *received*,
+  which needs the flow the run pinned at submit — and it fetched that record
+  and decoded the whole flow JSON on every poll, for a document that cannot
+  change for the life of the run. The workers have shared one parsed copy per
+  process since the execution-path work (`RunCache`, keyed by run and interned
+  by payload bytes so runs of one flow share a parse); the read path now shares
+  the same cache, so a run a worker here is executing is the run a browser here
+  is polling. That alone was **-28%** and a Postgres round trip per poll.
+
+  The rest is the same over-fetch the run list had a layer up: the node read
+  returned twenty columns and decoded two JSON documents per step so the view
+  could render a node id, a status, two timestamps, an attempt count, a retry
+  horizon, and the values the step consumed and produced. Nine of the columns
+  are ids the caller already holds or queue bookkeeping no view shows, and the
+  `job` document was decoded whole to reach one member of it — which Postgres
+  can project instead. Stores expose the narrow read as `core.NodeRunReader`,
+  implemented by both backends and pinned by a conformance suite that requires
+  it to agree, step for step, with the full read it replaces.
+
+- **An English reader no longer downloads the Swedish translation of the whole
+  product.** Both UI catalogues and the entire Swedish drop vocabulary were
+  bundled into chunks the app loads eagerly, so every visitor paid for every
+  language — on the sign-in page, before anything else could load.
+
+  The first-paint download is **272.2 KB → 228.2 KB gzipped (-16%)**, and the
+  JavaScript the browser has to parse before it can render is **739 KB → 606 KB
+  (-18%)**. A reader who then opens the flow editor, the apps pages or a run
+  view saves a further **91.6 KB gzipped**, which is the Swedish drop
+  vocabulary those pages were pulling in whatever language they rendered in.
+  For an English session that opens the editor, **135.6 KB gzipped** of the
+  transfer is gone.
+
+  Only the fallback catalogue is bundled now — it is the one that has to be
+  resident, since it answers any key another language is missing — and the rest
+  are code-split per language. `i18n.setLanguage` is the one way the app
+  switches: it fetches the catalogue and the drop vocabulary and only then
+  changes the language, so no screen paints raw message keys or a language the
+  reader did not choose. A Swedish reader transfers the same bytes as before,
+  in two more requests, both immutably cached after the first load.
+
 - **The run list stopped fetching every run's whole flow to render seven
   columns.** A run record pins the flow JSON it ran at submit — tens of
   kilobytes, TOASTed and compressed in Postgres — and the list read fetched

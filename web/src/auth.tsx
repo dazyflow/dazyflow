@@ -7,7 +7,7 @@ import { api, APIError, setUnauthorizedHandler, COOKIE_SESSION } from "./api";
 import { pickActive } from "./lib/pickActive";
 import { ORG_PARAM, resolveOrgDeepLink } from "./lib/orgDeepLink";
 import { explainApiError } from "./lib/explainApiError";
-import i18n from "./i18n/index";
+import i18n, { setLanguage } from "./i18n/index";
 import { applyTheme } from "./theme";
 import type { Permission, WhoAmI } from "./types";
 
@@ -356,7 +356,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           applyTheme(p.theme);
         }
         if (p.language && p.language !== i18n.resolvedLanguage) {
-          void i18n.changeLanguage(p.language);
+          void setLanguage(p.language);
         }
       })
       .catch(() => {

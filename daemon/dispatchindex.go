@@ -6,6 +6,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"sync"
 
@@ -237,6 +238,38 @@ func (c *RunCache) graphFor(payload []byte) (core.Graph, error) {
 	return g, nil
 }
 
+// runFor is the cached read of a run's pinned flow: the parsed graph plus the
+// run's own metadata, for a run id. A miss costs the record round trip and one
+// decode; every later caller in this process — another worker's step, or a
+// browser polling the run view every couple of seconds — is served from memory.
+//
+// A run's payload is immutable once submitted, so a hit can never be stale.
+func (c *RunCache) runFor(ctx context.Context, store core.JobStore, graphRunID string) (cachedRun, error) {
+	if c != nil {
+		if run, ok := c.get(graphRunID); ok {
+			return run, nil
+		}
+	}
+	rec, err := loadRunRecord(ctx, store, graphRunID)
+	if err != nil {
+		return cachedRun{}, err
+	}
+	// Decode through the cache so concurrent runs of one flow share a parse.
+	g, err := c.graphFor(rec.GraphPayload)
+	if err != nil {
+		return cachedRun{}, fmt.Errorf("unmarshal graph %s: %w", graphRunID, err)
+	}
+	run := cachedRun{graph: g, triggerDepth: rec.TriggerDepth, manual: rec.Manual}
+	c.put(graphRunID, run)
+	return run, nil
+}
+
+// graphForRun is runFor when only the flow is wanted.
+func (c *RunCache) graphForRun(ctx context.Context, store core.JobStore, graphRunID string) (core.Graph, error) {
+	run, err := c.runFor(ctx, store, graphRunID)
+	return run.graph, err
+}
+
 func (c *RunCache) get(runID string) (cachedRun, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -245,7 +278,7 @@ func (c *RunCache) get(runID string) (cachedRun, bool) {
 }
 
 func (c *RunCache) put(runID string, run cachedRun) {
-	if runID == "" {
+	if c == nil || runID == "" {
 		return
 	}
 	c.mu.Lock()
@@ -325,4 +358,12 @@ func resultStateBytes(r *core.Result) int64 {
 		total += int64(core.ApproxValueSize(ref.Inline, budget))
 	}
 	return total
+}
+
+// RunCache is the one cache of parsed run payloads a process keeps. The
+// workers and the HTTP read paths share it: a run's steps and the browser
+// watching them ask the same question, and the answer cannot change.
+func (s *Service) RunCache() *RunCache {
+	s.runsOnce.Do(func() { s.runsCache = NewRunCache(0) })
+	return s.runsCache
 }
