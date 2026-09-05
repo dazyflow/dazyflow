@@ -91,7 +91,11 @@ func (h *flowAPI) listModules(rw http.ResponseWriter, r *http.Request, p core.Pr
 	// json.RawMessage is worse still (v2 re-validates and reformats raw
 	// bytes) — measured both. Writing the envelope around one encoding is
 	// the only shape that pays for neither. The wire bytes are unchanged.
-	writeSharedJSONPair(rw, "drops", "modules", mans)
+	//
+	// Cached: this is the largest body the API serves and compressing it
+	// is 71% of the request, so the compressed form is kept keyed by the
+	// body's own fingerprint and a client that still holds it gets a 304.
+	writeSharedJSONPairCached(rw, r, "drops", "modules", mans, !h.noCompression)
 }
 
 // listRuns returns a slim summary of recent runs for a single graph,

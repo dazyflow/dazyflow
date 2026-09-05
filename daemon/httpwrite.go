@@ -84,26 +84,38 @@ func encodeJSONPooled(v any, fn func([]byte)) error {
 	return nil
 }
 
-// writeSharedJSONPair writes {"<a>":<v>,"<b>":<v>} for one value encoded
-// ONCE. It exists for the drop catalog, which is ~1 MB and is served under
-// both its canonical key and its legacy alias: encoding it twice (what
-// handing one slice to a map does), or re-parsing it once through a
-// json.RawMessage, both cost more than the whole rest of the request —
-// measured. Keys are compile-time constants at the call site, so they
-// need no escaping.
-func writeSharedJSONPair(rw http.ResponseWriter, a, b string, v any) {
+// writeCachedJSON is writeJSON plus the response cache: the same bytes,
+// with a content-derived ETag, a compressed form reused across requests,
+// and a 304 when the caller already holds them. Worth it for a body big
+// enough that compressing it dominates the request; a small one is
+// cheaper to just write.
+func writeCachedJSON(rw http.ResponseWriter, r *http.Request, v any, allowGzip bool) {
 	err := encodeJSONPooled(v, func(value []byte) {
 		rw.Header().Set("Content-Type", "application/json")
-		rw.WriteHeader(http.StatusOK)
-		for _, part := range [][]byte{
+		// encodeJSONPooled trims the newline Encode appends; writeJSON
+		// keeps it, and these have to stay the same bytes.
+		writeCachedParts(rw, r, [][]byte{value, []byte("\n")}, allowGzip)
+	})
+	if err != nil {
+		writeJSONError(rw, http.StatusInternalServerError, err.Error())
+	}
+}
+
+// writeSharedJSONPairCached writes {"<a>":<v>,"<b>":<v>} for one value
+// encoded ONCE, through the response cache. It exists for the drop
+// catalog, which is ~1 MB and is served under both its canonical key and
+// its legacy alias: encoding it twice (what handing one slice to a map
+// does), or re-parsing it once through a json.RawMessage, both cost more
+// than the whole rest of the request — measured. Keys are compile-time
+// constants at the call site, so they need no escaping.
+func writeSharedJSONPairCached(rw http.ResponseWriter, r *http.Request, a, b string, v any, allowGzip bool) {
+	err := encodeJSONPooled(v, func(value []byte) {
+		rw.Header().Set("Content-Type", "application/json")
+		writeCachedParts(rw, r, [][]byte{
 			[]byte(`{"` + a + `":`), value,
 			[]byte(`,"` + b + `":`), value,
 			[]byte("}\n"),
-		} {
-			if _, werr := rw.Write(part); werr != nil {
-				return
-			}
-		}
+		}, allowGzip)
 	})
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())

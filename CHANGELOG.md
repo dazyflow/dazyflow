@@ -12,6 +12,66 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ### Performance
 
+- **The catalog endpoints stopped recompressing bytes they had just
+  compressed, and a browser that already holds the catalog now transfers
+  nothing.** Against a real daemon and Postgres at 24 concurrent clients,
+  `GET /api/v1/drops` went from **127 to 366 requests/sec** (mean 190.3ms →
+  65.9ms, p95 290ms → 125ms) and `GET /api/v1/catalog/drops` from **194 to 369**
+  (mean 124.3ms → 65.3ms). In the microbenchmark the palette request is
+  **15.6ms → 5.0ms**.
+
+  Compressing the ~1 MB palette body was **71% of its request** — 10.7ms of
+  gzip against 3.6ms of JSON encoding and 0.8ms of actually assembling the
+  catalog — and the bytes being compressed are almost always the ones
+  compressed a moment earlier. The compressed form is now kept and reused,
+  keyed by a fingerprint of the body itself (hardware CRC32 plus length:
+  12.8 GB/s, so fingerprinting the megabyte costs 0.08ms where compressing it
+  costs 10.7ms).
+
+  Content-addressing is what makes this safe with **no invalidation to wire
+  up**, which is why the earlier attempt at this was abandoned: the catalog
+  varies by tenant, by platform drop switches, and by whichever models a
+  tenant's credential can currently call, and none of that has to be tracked
+  because different bytes give a different key. Two tenants share an entry only
+  when their catalogs are byte-identical, so one org's private runner drops
+  cannot be served to another — asserted by a test that changes a manifest and
+  requires the tag to move.
+
+  The same fingerprint is served as an `ETag` with `Cache-Control: private,
+  no-cache` — stored, but revalidated every time, since no freshness lifetime
+  is defensible for a catalog that moves when a runner registers. A returning
+  browser now gets a **304 carrying zero bytes instead of 267 KB**. Responses
+  also carry a `Content-Length` again; the streaming compressor had to drop it
+  and fall back to chunked framing because it could not know the length in
+  advance.
+
+  Two things worth recording. The remaining floor on both endpoints is the JSON
+  encode (~3.6ms), of which **30% is `encoding/json` v2 re-validating and
+  reformatting the `json.RawMessage` schema blobs the daemon produced itself** —
+  the same v2 behaviour that made the `RawMessage` route slower than double
+  encoding above. And a cache keyed on anything cheaper than the finished bytes
+  was rejected: the only candidates (a generation counter across three
+  subsystems, or slice-identity of the schema bytes) trade a guaranteed-correct
+  key for one that fails silently and tenant-visibly.
+
+- **Built assets are cached for a year instead of being revalidated on every
+  page load.** `http.FileServer` sends no `Cache-Control` at all, which leaves
+  the browser on heuristic freshness derived from the file's modification time —
+  near zero immediately after a deploy, which is exactly when every cache is
+  cold. Vite content-hashes everything it emits, so those files cannot change
+  meaning: they now ship `public, max-age=31536000, immutable`, and the app
+  shell's six critical-path assets (331 KB) plus the 160 code-split chunks
+  behind them stop being asked about at all.
+
+  The lifetime is only granted to a file that proves it deserves one — under
+  `assets/` *and* carrying the hash in its name — because a year-long cache
+  cannot be corrected without renaming the file. A test asserts the real build
+  output is entirely hash-named, so the directory half of that rule stays true.
+  `index.html` and the client-side routes that fall back to it stay `no-cache`
+  so a deploy is visible immediately, and unhashed marks (logos, favicons) get
+  an hour rather than `no-cache`, which would have added a round trip per mark
+  where the heuristic sometimes skipped it.
+
 - **Authenticating a request went from ~485µs to ~2.6µs, and the request path
   now compresses.** Both are the same omission in two places: the work in front
   of the work nobody had measured, because the stress rig deliberately stops at

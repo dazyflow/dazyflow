@@ -141,3 +141,31 @@ func BenchmarkListDropsDiscard(b *testing.B) { benchRequestDiscard(b, "/api/v1/d
 // BenchmarkListDropsGzip adds what a real browser sends, so the cost of
 // compressing the catalog is visible next to the bytes it saves.
 func BenchmarkListDropsGzip(b *testing.B) { benchRequestDiscard(b, "/api/v1/drops", "gzip") }
+
+// BenchmarkListDropsRevalidate is the palette request a browser that
+// already has the catalog makes: conditional, and answered with a 304.
+func BenchmarkListDropsRevalidate(b *testing.B) {
+	handler, token := benchGateway(b)
+	// One unconditional request to learn the current tag.
+	warm := httptest.NewRequest("GET", "/api/v1/drops", nil)
+	warm.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, warm)
+	etag := rec.Header().Get("ETag")
+	if etag == "" {
+		b.Fatal("no ETag on the catalog response")
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		req := httptest.NewRequest("GET", "/api/v1/drops", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Accept-Encoding", "gzip")
+		req.Header.Set("If-None-Match", etag)
+		rw := &discardWriter{}
+		handler.ServeHTTP(rw, req)
+		if rw.status != http.StatusNotModified {
+			b.Fatalf("GET /api/v1/drops conditional = %d, want 304", rw.status)
+		}
+	}
+}

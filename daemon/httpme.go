@@ -46,11 +46,15 @@ type flowAPI struct {
 	runCtl           *runCtlAPI
 	secrets          *secretsAPI
 	oauth            *oauthAPI
+	// noCompression mirrors the gateway's opt-out. Handlers that encode
+	// their own cached body have to honour it themselves: when it is set
+	// the streaming middleware is not installed at all.
+	noCompression bool
 }
 
 // flowAPI builds them from the gateway's configuration.
 func (h *HTTPGateway) flowAPI() *flowAPI {
-	return &flowAPI{auditor: h.auditor(), flowLoader: h.flows(), urlBuilder: h.urls(), svc: h.svc, Users: h.Users, EncryptedSecrets: h.EncryptedSecrets, runCtl: h.runCtlAPI(), secrets: h.secretsAPI(), oauth: h.oauthAPI()}
+	return &flowAPI{auditor: h.auditor(), flowLoader: h.flows(), urlBuilder: h.urls(), svc: h.svc, Users: h.Users, EncryptedSecrets: h.EncryptedSecrets, runCtl: h.runCtlAPI(), secrets: h.secretsAPI(), oauth: h.oauthAPI(), noCompression: h.DisableCompression}
 }
 
 // splitFlowID parses the {flow_id} path parameter back into

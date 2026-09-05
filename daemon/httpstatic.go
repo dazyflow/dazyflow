@@ -230,6 +230,7 @@ func webDistHandler(root string) http.Handler {
 		clean := filepath.Clean(r.URL.Path)
 		p := filepath.Join(root, clean)
 		if info, err := os.Stat(p); err == nil && !info.IsDir() {
+			setStaticCacheControl(rw.Header(), clean)
 			fileServer.ServeHTTP(rw, r)
 			return
 		}
@@ -243,6 +244,77 @@ func webDistHandler(root string) http.Handler {
 			http.NotFound(rw, r)
 			return
 		}
+		// The shell names this build's hashed assets, so it must be
+		// revalidated every time or a deploy is invisible until the
+		// browser's heuristic freshness expires.
+		rw.Header().Set("Cache-Control", "no-cache")
 		http.ServeFile(rw, r, indexPath)
 	})
+}
+
+// immutableAsset reports whether a request path names a file that cannot
+// change meaning: one of the build's own emitted assets, under assets/ and
+// carrying the content hash in its name. Both conditions are required. The
+// usual recipe keys off the directory alone, but a file cached for a year
+// cannot be corrected without renaming it, so a name that does not prove
+// its own immutability does not get the lifetime — and
+// TestContentHashed_CoversTheRealBuildOutput asserts the build really does
+// hash everything it puts there, which is what makes the directory half of
+// the test meaningful.
+func immutableAsset(clean string) bool {
+	dir, file := filepath.Split(filepath.ToSlash(clean))
+	return strings.HasSuffix(dir, "/assets/") && contentHashed(file)
+}
+
+// contentHashed reports whether a name carries the content hash Vite
+// appends (`FlowEditor-BdAWitUj.js`, `index--GYgTU5i.js.map`): a `-` and
+// eight base64url characters before the extension.
+func contentHashed(name string) bool {
+	name = strings.TrimSuffix(name, ".map")
+	ext := filepath.Ext(name)
+	if ext == "" {
+		return false
+	}
+	stem := name[:len(name)-len(ext)]
+	if len(stem) < 9 || stem[len(stem)-9] != '-' {
+		return false
+	}
+	for _, c := range stem[len(stem)-8:] {
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '-', c == '_':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// setStaticCacheControl gives a built asset the lifetime its name earns.
+// Nothing else did: http.FileServer sends no Cache-Control at all, which
+// leaves a browser on heuristic freshness — and since a fresh deploy has
+// just been modified, the heuristic is about zero, so every hashed script
+// and stylesheet was revalidated on every page load. A hashed name cannot
+// change meaning, so it can be kept for a year and never asked about
+// again; anything else keeps revalidating.
+func setStaticCacheControl(h http.Header, clean string) {
+	if h.Get("Cache-Control") != "" {
+		return
+	}
+	if immutableAsset(clean) {
+		h.Set("Cache-Control", "public, max-age=31536000, immutable")
+		return
+	}
+	// An HTML entry point names this build's hashed assets, so it has to
+	// be revalidated or a deploy stays invisible.
+	if strings.HasSuffix(clean, ".html") {
+		h.Set("Cache-Control", "no-cache")
+		return
+	}
+	// Unhashed and replaceable in place: logos, favicons, brand marks. An
+	// hour is long enough to spare a page load the round trips and short
+	// enough that a replaced logo lands the same day. Plain "no-cache"
+	// would be worse than the status quo here — it would force a
+	// conditional request per mark on every load, where the browser's
+	// heuristic freshness at least sometimes skipped it.
+	h.Set("Cache-Control", "public, max-age=3600")
 }

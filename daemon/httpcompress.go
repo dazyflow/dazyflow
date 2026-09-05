@@ -113,8 +113,9 @@ func (w *gzipResponseWriter) WriteHeader(status int) {
 	}
 	// Vary goes on every compressible response, including the ones left
 	// uncompressed below: a cache keyed without it would serve a gzipped
-	// body to a client that never asked for one.
-	h.Add("Vary", "Accept-Encoding")
+	// body to a client that never asked for one. A handler that already
+	// declared it (the response cache does) must not get it twice.
+	addVaryAcceptEncoding(h)
 	if n, err := strconv.Atoi(h.Get("Content-Length")); err == nil && n < gzipMinSize {
 		w.ResponseWriter.WriteHeader(status)
 		return

@@ -5,15 +5,22 @@ package daemon
 
 import (
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// writeSharedJSONPair frames the envelope by hand to avoid encoding a big
-// value twice. That is only safe if it is byte-for-byte what the obvious
-// map form produced, which is what this asserts — against the real
+// plainPairRequest is a request that asks for no compression, so the
+// writer emits the bytes directly and they can be compared as-is.
+func plainPairRequest() *http.Request {
+	return httptest.NewRequest("GET", "/api/v1/drops", nil)
+}
+
+// writeSharedJSONPairCached frames the envelope by hand to avoid encoding
+// a big value twice. That is only safe if it is byte-for-byte what the
+// obvious map form produced, which is what this asserts — against the real
 // manifest type, so a field's own custom marshaling is covered too.
 func TestWriteSharedJSONPair_ByteIdenticalToMap(t *testing.T) {
 	cases := map[string][]core.Manifest{
@@ -31,7 +38,7 @@ func TestWriteSharedJSONPair_ByteIdenticalToMap(t *testing.T) {
 			writeJSON(want, 200, map[string]any{"drops": mans, "modules": mans})
 
 			got := httptest.NewRecorder()
-			writeSharedJSONPair(got, "drops", "modules", mans)
+			writeSharedJSONPairCached(got, plainPairRequest(), "drops", "modules", mans, true)
 
 			if got.Body.String() != want.Body.String() {
 				t.Fatalf("bytes differ\n got: %s\nwant: %s", got.Body.String(), want.Body.String())
@@ -60,14 +67,14 @@ func TestWriteSharedJSONPair_ByteIdenticalToMap(t *testing.T) {
 func TestWriteSharedJSONPair_Concurrent(t *testing.T) {
 	mans := []core.Manifest{{ID: "a", Label: "A"}, {ID: "b", Label: "B"}}
 	want := httptest.NewRecorder()
-	writeSharedJSONPair(want, "drops", "modules", mans)
+	writeJSON(want, 200, map[string]any{"drops": mans, "modules": mans})
 	expect := want.Body.String()
 
 	done := make(chan string, 16)
 	for range 16 {
 		go func() {
 			rw := httptest.NewRecorder()
-			writeSharedJSONPair(rw, "drops", "modules", mans)
+			writeSharedJSONPairCached(rw, plainPairRequest(), "drops", "modules", mans, true)
 			done <- rw.Body.String()
 		}()
 	}

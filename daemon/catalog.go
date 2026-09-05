@@ -30,11 +30,15 @@ type catalogAPI struct {
 	auditor
 	svc    *Service
 	whoami func(rw http.ResponseWriter, r *http.Request, p core.Principal)
+	// noCompression mirrors the gateway's opt-out, for the handlers that
+	// encode their own cached body: when it is set the streaming
+	// middleware is not installed and nothing else would honour it.
+	noCompression bool
 }
 
 // catalogAPI builds them from the gateway's configuration.
 func (h *HTTPGateway) catalogAPI() *catalogAPI {
-	return &catalogAPI{auditor: h.auditor(), svc: h.svc, whoami: h.authAPI().whoami}
+	return &catalogAPI{auditor: h.auditor(), svc: h.svc, whoami: h.authAPI().whoami, noCompression: h.DisableCompression}
 }
 
 //go:embed openapi.yaml
@@ -344,10 +348,12 @@ func (h *catalogAPI) listDropsHandler(rw http.ResponseWriter, r *http.Request, p
 		}
 		results = filtered
 	}
-	writeJSON(rw, http.StatusOK, map[string]any{
+	// Cached: this is the same catalog the palette serves, in the paginated
+	// envelope, and compressing it is most of the request.
+	writeCachedJSON(rw, r, map[string]any{
 		"items": results,
 		"page":  map[string]any{"next": nil, "size": len(results), "total": len(results)},
-	})
+	}, !h.noCompression)
 }
 
 // getDropHandler handles GET /api/v1/catalog/drops/{id}.
