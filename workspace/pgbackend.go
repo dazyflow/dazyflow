@@ -396,6 +396,49 @@ func (p *pgBackend) listGraphs() ([]string, error) {
 	return out, rows.Err()
 }
 
+// listAtHead answers the whole flow list in ONE query. Per flow it is three:
+// resolve the head revision, read its content, then read the env pointer —
+// so a workspace of fifty flows cost 151 round trips to render a sidebar.
+// The env pointer is an outer join because an unpublished flow still belongs
+// in the list.
+func (p *pgBackend) listAtHead(env string) ([]FlowAtHead, error) {
+	rows, err := p.pool.Query(p.ctx(),
+		`SELECT h.graph_id, r.content, COALESCE(e.revision, '')
+		   FROM flow_heads h
+		   JOIN flow_revisions r
+		     ON r.tenant=h.tenant AND r.workspace=h.workspace
+		    AND r.graph_id=h.graph_id AND r.revision=h.revision
+		   LEFT JOIN flow_envs e
+		     ON e.tenant=h.tenant AND e.workspace=h.workspace
+		    AND e.graph_id=h.graph_id AND e.env=$3
+		  WHERE h.tenant=$1 AND h.workspace=$2 AND r.content IS NOT NULL
+		  ORDER BY h.graph_id`,
+		p.tenant, p.workspace, env)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []FlowAtHead
+	for rows.Next() {
+		var (
+			id      string
+			content []byte
+			rev     string
+		)
+		if err := rows.Scan(&id, &content, &rev); err != nil {
+			return nil, err
+		}
+		var g core.Graph
+		if err := json.Unmarshal(content, &g); err != nil {
+			// Same rule as the git backend: one unreadable flow does not
+			// take the list down with it.
+			continue
+		}
+		out = append(out, FlowAtHead{ID: id, Graph: g, EnvCommit: rev})
+	}
+	return out, rows.Err()
+}
+
 func (p *pgBackend) history(graphID string, limit int) ([]Revision, error) {
 	if graphID == "" {
 		return nil, errors.New("graphID required")

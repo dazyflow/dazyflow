@@ -41,6 +41,67 @@ func mustSave(t *testing.T, s *Store, g core.Graph, author string) string {
 func runWorkspaceConformance(t *testing.T, mk func(t *testing.T) *Store) {
 	t.Helper()
 
+	// ListAtHead is the flow list's read. It has to agree, flow for flow,
+	// with the per-flow reads it replaces — otherwise the sidebar and the
+	// editor disagree about what a workspace contains, and only on one
+	// backend.
+	t.Run("ListAtHead", func(t *testing.T) {
+		s := mk(t)
+		mustSave(t, s, flow("alpha", "Alpha"), "u")
+		mustSave(t, s, flow("beta", "Beta"), "u")
+		gamma := mustSave(t, s, flow("gamma", "Gamma"), "u")
+		if err := s.PromoteToEnvironment("gamma", PublishedEnv, gamma); err != nil {
+			t.Fatalf("publish gamma: %v", err)
+		}
+		// A deleted flow must not come back in the batch read.
+		mustSave(t, s, flow("gone", "Gone"), "u")
+		if _, err := s.Delete("gone", "u"); err != nil {
+			t.Fatalf("delete: %v", err)
+		}
+
+		got, err := s.ListAtHead(PublishedEnv)
+		if err != nil {
+			t.Fatalf("ListAtHead: %v", err)
+		}
+		ids, err := s.ListGraphs()
+		if err != nil {
+			t.Fatalf("ListGraphs: %v", err)
+		}
+		if len(got) != len(ids) {
+			t.Fatalf("ListAtHead returned %d flows, ListGraphs %d (%v)", len(got), len(ids), ids)
+		}
+		byID := map[string]FlowAtHead{}
+		for _, f := range got {
+			byID[f.ID] = f
+		}
+		for _, id := range ids {
+			f, ok := byID[id]
+			if !ok {
+				t.Fatalf("ListAtHead omitted %q", id)
+			}
+			want, err := s.Load(id)
+			if err != nil {
+				t.Fatalf("Load %s: %v", id, err)
+			}
+			if f.Graph.Name != want.Name || len(f.Graph.Nodes) != len(want.Nodes) {
+				t.Errorf("%s: got %+v, want %+v", id, f.Graph, want)
+			}
+			pub, err := s.PublishedCommit(id)
+			if err != nil {
+				t.Fatalf("PublishedCommit %s: %v", id, err)
+			}
+			if f.EnvCommit != pub {
+				t.Errorf("%s: env commit %q, want %q", id, f.EnvCommit, pub)
+			}
+		}
+		if byID["gamma"].EnvCommit == "" {
+			t.Error("gamma is published but ListAtHead reports no pointer")
+		}
+		if byID["alpha"].EnvCommit != "" {
+			t.Errorf("alpha is unpublished but ListAtHead reports %q", byID["alpha"].EnvCommit)
+		}
+	})
+
 	t.Run("SaveLoadRoundTrip", func(t *testing.T) {
 		s := mk(t)
 		mustSave(t, s, flow("f1", "First"), "ada@example.com")

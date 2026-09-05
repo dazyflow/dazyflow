@@ -12,6 +12,50 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ### Performance
 
+- **The run list stopped fetching every run's whole flow to render seven
+  columns.** A run record pins the flow JSON it ran at submit — tens of
+  kilobytes, TOASTed and compressed in Postgres — and the list read fetched
+  and decompressed all of it for every row, to show an id, a status, three
+  timestamps and an error code. The run views poll every two seconds while a
+  run is live, so an open tab was moving megabytes a minute for a table of
+  scalars.
+
+  `GET /api/v1/me/runs` end to end, over a real Postgres and a 40 KB flow:
+  **12.5ms → 5.4ms at the default page of 20 (-57%)** and **71.0ms → 9.1ms at
+  a page of 200 (-87%)**, with per-request allocation down 89% and 96%. At the
+  store, the narrow read is **flat in flow size** where the old one is linear:
+  a 200-row page went 107.6ms → 3.9ms, and 10.4 MB → 166 KB.
+
+  Same shape on three other reads. The run-detail header
+  (`GET /api/v1/me/runs/{id}`, also polled) is **1597µs → 586µs (-63%)**: it
+  shows nothing the payload could answer, and the node-list endpoint beside it
+  was loading that payload twice per request. The per-submit concurrency
+  admission check materialized up to 200 whole records to produce one integer,
+  and is now a count: **3.36ms → 0.36ms**, 268 KB → 1.2 KB. And the promoter
+  sweep — every couple of seconds, on every replica — read a page of 200 whole
+  records to collect the set of tenant names in them.
+
+  Stores expose this as `core.RunSummaryReader`, implemented by both the
+  Postgres and in-memory backends and pinned by one conformance suite that
+  requires the projection to agree, run for run, with the full read it
+  replaces.
+
+- **The flow list reads the workspace in one pass instead of one flow at a
+  time.** Rendering the sidebar loaded each flow whole and then looked up its
+  published pointer separately. On the Postgres graph store that is three
+  round trips per flow — 151 of them for a fifty-flow workspace — and on the
+  git store it re-read `.git/HEAD`, re-decoded the same commit and re-walked
+  the same tree once per flow, then opened a ref file per published pointer.
+
+  Fifty flows: **53.4ms → 15.9ms (-70%) on the Postgres store** (151 round
+  trips → 1) and **29.5ms → 22.8ms (-23%) on the git one**, with 41% fewer
+  allocations. Ten flows on git: **5.8ms → 3.6ms (-37%)**. What remains is
+  decoding the flows themselves, which the list genuinely needs — a flow's
+  trigger nodes are what decide whether it shows as live.
+
+  `Store.ListAtHead` is the new read, implemented by both backends and
+  covered by the shared workspace conformance suite.
+
 - **The catalog endpoints stopped recompressing bytes they had just
   compressed, and a browser that already holds the catalog now transfers
   nothing.** Against a real daemon and Postgres at 24 concurrent clients,

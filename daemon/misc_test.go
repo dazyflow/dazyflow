@@ -317,7 +317,7 @@ func TestRunViewHelpers(t *testing.T) {
 	// newRunView falls back to EnqueuedAt for duration when StartedAt is nil.
 	enq := time.Unix(100, 0)
 	fin := enq.Add(2 * time.Second)
-	rv := newRunView(core.JobRecord{
+	rv := newRunView(core.RunSummary{
 		ID: "r2", Tenant: "t", Workspace: "ws", GraphID: "g",
 		Status: core.JobStatusSucceeded, EnqueuedAt: enq, FinishedAt: &fin,
 	})

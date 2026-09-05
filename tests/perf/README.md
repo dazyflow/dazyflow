@@ -34,6 +34,12 @@ go run golang.org/x/perf/cmd/benchstat@latest old.txt new.txt
 | `SubmitValidation` | The pair, as one submit actually pays for it |
 | `AuthenticateSession` | The auth chain every authenticated HTTP and gRPC request goes through, against a real Postgres |
 
+Two more live beside the code they measure, because they need a real store
+rather than the catalog: `daemon/httpbench_test.go` carries the request-path
+benchmarks (they need the gateway's unexported wiring) and
+`engine/jobstore/listbench_test.go` and `workspace/flowlistbench_test.go` carry
+the polled reads below.
+
 `AuthenticateSession*` need `DAZYFLOW_TEST_DB` and skip without it. They come in
 four shapes on purpose, because the interesting number is a difference:
 `NoGate` is the session lookup alone, plain is the full chain, and `Cached` is
@@ -156,3 +162,68 @@ Two traps worth keeping. A 32-bit CRC alone is a weak validator, so the tag is
 CRC plus body length. And the uncompressed path now pays the 0.08ms
 fingerprint for nothing — it is kept because every browser sends
 `Accept-Encoding: gzip`, so that path is only reached by hand-rolled clients.
+
+## The polled reads (2026-09-05)
+
+The passes above all measured a request a person waits for once. These measure
+the ones a browser repeats: the run views poll every two seconds while a run is
+live, and the sidebar's flow list loads on every page.
+
+Both were the same defect, and neither was visible in a request count or a
+statement count — only in what each statement dragged back. A run record pins
+the flow JSON it ran at submit, tens of kilobytes, TOASTed and compressed in
+Postgres. The run-list read fetched and decompressed all of it for every row,
+to render an id, a status, three timestamps and an error code.
+
+`GET /api/v1/me/runs` through the real handler stack over a real Postgres, with
+a 40 KB flow (`daemon/httpbench_test.go`, n=6):
+
+| | Before | After |
+|---|---:|---:|
+| Page of 20 (the default) | 12.48ms | **5.41ms** (-57%, p=0.002) |
+| Page of 200 (a busy workspace) | 71.05ms | **9.11ms** (-87%, p=0.002) |
+| Allocated per request, page of 200 | 6.33 MB | **282 KB** (-96%) |
+
+At the store (`engine/jobstore/listbench_test.go`), the shape is the point —
+**the narrow read is flat in flow size where the old one is linear**:
+
+| Page of 200 | 12-step flow (4.8 KB) | 100-step flow (40 KB) |
+|---|---:|---:|
+| Full records | 20.5ms, 1.60 MB | 107.6ms, 10.38 MB |
+| Summaries | **4.06ms, 166 KB** | **3.88ms, 166 KB** |
+
+Three neighbours had the same shape. The run-detail header is polled beside the
+list and shows nothing the payload could answer (1597µs → **586µs**, -63%); the
+per-submit admission check materialized up to 200 whole records to produce one
+integer (3.36ms → **0.36ms**, 268 KB → 1.2 KB); and the promoter sweep, which
+runs every couple of seconds on every replica, read a page of 200 whole records
+to collect the set of tenant names in them.
+
+The flow list was the same question one layer over: it loaded each flow whole
+and then looked up its published pointer separately. Fifty flows, 30 steps each
+(`workspace/flowlistbench_test.go`, n=6):
+
+| | Before | After |
+|---|---:|---:|
+| Postgres graph store | 53.36ms | **15.89ms** (-70%, p=0.002) |
+| git store | 29.48ms | **22.79ms** (-23%, p=0.002) |
+| Allocations (git, 50 flows) | 56.9k | **33.8k** (-41%) |
+
+On Postgres that is **151 round trips reduced to 1** — head revision, content
+and published pointer were a query each, per flow. On git it re-read
+`.git/HEAD` and re-decoded the same commit and tree once per flow. What is left
+on both is decoding the flows themselves, which the list genuinely needs: a
+flow's trigger nodes are what decide whether it shows as live.
+
+**Both are contracts, not call-site fixes.** `core.RunSummaryReader` and
+`workspace.Store.ListAtHead` are implemented by both backends of their
+respective stores and pinned by the existing conformance suites, which require
+the narrow read to agree — row for row — with the full read it replaces. A
+projection that quietly disagreed about which runs exist would show a different
+list depending on which backend an install runs.
+
+One measurement note. The run-list benchmark needs a real Postgres and skips
+without `DAZYFLOW_TEST_DB`: over the in-memory store both paths read the same
+objects, so the projection is free there **by construction** and the cost it
+removes — transferring and detoasting a JSONB column — does not exist. A
+benchmark that ran green on the memory store would have measured nothing.

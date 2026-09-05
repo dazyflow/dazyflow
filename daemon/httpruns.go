@@ -205,7 +205,7 @@ func parseRunListTime(s string) (time.Time, bool) {
 }
 
 func (h *flowAPI) writeRunList(rw http.ResponseWriter, r *http.Request, p core.Principal, opts core.ListGraphRunsOpts) {
-	recs, err := h.svc.ListGraphRuns(r.Context(), p, opts)
+	recs, err := h.svc.ListGraphRunSummaries(r.Context(), p, opts)
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
@@ -219,7 +219,7 @@ func (h *flowAPI) writeRunList(rw http.ResponseWriter, r *http.Request, p core.P
 			EnqueuedAt: rec.EnqueuedAt,
 			StartedAt:  rec.StartedAt,
 			FinishedAt: rec.FinishedAt,
-			ErrorCode:  errorCode(rec.Result),
+			ErrorCode:  rec.ErrorCode(),
 		})
 	}
 	writeJSON(rw, http.StatusOK, map[string]any{"runs": out})
@@ -236,11 +236,4 @@ type runSummary struct {
 	StartedAt  *time.Time     `json:"started_at,omitempty"`
 	FinishedAt *time.Time     `json:"finished_at,omitempty"`
 	ErrorCode  string         `json:"error_code,omitempty"`
-}
-
-func errorCode(r *core.Result) string {
-	if r == nil || r.Error == nil {
-		return ""
-	}
-	return r.Error.Code
 }

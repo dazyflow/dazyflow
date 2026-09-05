@@ -1179,7 +1179,7 @@ func resultError(res *core.Result) *core.JobError {
 	return res.Error
 }
 
-func newRunView(rec core.JobRecord) runView {
+func newRunView(rec core.RunSummary) runView {
 	// Graph-records don't carry a distinct started_at (only node-records
 	// do), so the run's end-to-end duration is enqueue → finish.
 	runStart := rec.StartedAt
@@ -1195,7 +1195,7 @@ func newRunView(rec core.JobRecord) runView {
 		StartedAt:  rec.StartedAt,
 		FinishedAt: rec.FinishedAt,
 		DurationMS: durationMS(runStart, rec.FinishedAt),
-		Error:      resultError(rec.Result),
+		Error:      rec.Error,
 	}
 }
 
@@ -1242,27 +1242,46 @@ func (h *flowAPI) loadRunScoped(rw http.ResponseWriter, r *http.Request, p core.
 	return rec, true
 }
 
+// loadRunSummaryScoped is loadRunScoped for the handlers that need the run's
+// identity and status but not the flow it ran. Same 404-for-both rule, so run
+// existence still never leaks across tenants.
+func (h *flowAPI) loadRunSummaryScoped(rw http.ResponseWriter, r *http.Request, p core.Principal, runID string) (core.RunSummary, bool) {
+	sum, err := h.svc.GetRunSummary(r.Context(), p, runID)
+	if err != nil {
+		if errors.Is(err, core.ErrNotFound) || errors.Is(err, core.ErrUnauthorized) {
+			writeAPIError(rw, http.StatusNotFound, "run_not_found", "no run with that id")
+			return core.RunSummary{}, false
+		}
+		writeAPIError(rw, http.StatusInternalServerError, "internal_error", err.Error())
+		return core.RunSummary{}, false
+	}
+	return sum, true
+}
+
 func (h *flowAPI) listRunsMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	h.listAllRuns(rw, r, p)
 }
 
 func (h *flowAPI) getRunMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	rec, ok := h.loadRunScoped(rw, r, p, r.PathValue("run_id"))
+	sum, ok := h.loadRunSummaryScoped(rw, r, p, r.PathValue("run_id"))
 	if !ok {
 		return
 	}
-	writeJSON(rw, http.StatusOK, newRunView(rec))
+	writeJSON(rw, http.StatusOK, newRunView(sum))
 }
 
 func (h *flowAPI) listRunNodesMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	runID := r.PathValue("run_id")
-	runRec, ok := h.loadRunScoped(rw, r, p, runID)
+	// Scoped on the summary: the run's own record is only opened when the
+	// inputs below actually need the flow it ran, and this handler is polled
+	// every couple of seconds while the run is live.
+	run, ok := h.loadRunSummaryScoped(rw, r, p, runID)
 	if !ok {
 		return
 	}
 	nodes, err := h.svc.Jobs.ListNodeRecords(r.Context(), core.ListNodeRecordsOpts{
-		Tenant:     runRec.Tenant,
-		Workspace:  runRec.Workspace,
+		Tenant:     run.Tenant,
+		Workspace:  run.Workspace,
 		GraphRunID: runID,
 		Limit:      1000, // typical graphs have <100 nodes; cap defensively
 	})

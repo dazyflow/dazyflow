@@ -9,9 +9,15 @@ package daemon
 // rather than the handler.
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/dazyflow/dazyflow/auth"
 	"github.com/dazyflow/dazyflow/core"
@@ -30,6 +36,14 @@ func benchGateway(b *testing.B) (http.Handler, string) {
 func benchGatewayT(t *testing.T) (http.Handler, string) { return buildBenchGateway(t) }
 
 func buildBenchGateway(b testing.TB) (http.Handler, string) {
+	h, tok, _ := buildBenchGatewayWith(b, jobstore.NewMemory())
+	return h, tok
+}
+
+// buildBenchGatewayWith is buildBenchGateway over a caller-supplied job
+// store, so a benchmark can put the real Postgres one behind the handler.
+// It also returns the Service, for seeding.
+func buildBenchGatewayWith(b testing.TB, jobs core.JobStore) (http.Handler, string, *Service) {
 	ks := auth.NewMemKeyStore()
 	role := core.Role{Name: "editor", Permissions: []core.Permission{
 		core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
@@ -42,7 +56,7 @@ func buildBenchGateway(b testing.TB) (http.Handler, string) {
 	svc := &Service{
 		Auth:       auth.Chain{&auth.APIKeyAuthenticator{Store: ks}},
 		Workspaces: MapWorkspaces{"t/ws": wsStore},
-		Jobs:       jobstore.NewMemory(),
+		Jobs:       jobs,
 		Engine:     &engine.Engine{Resolver: &engine.NodeResolver{Native: engine.Default}},
 		Bus:        NewMemoryBus(),
 		AdminKeys:  ks,
@@ -51,7 +65,7 @@ func buildBenchGateway(b testing.TB) (http.Handler, string) {
 	mux := http.NewServeMux()
 	gw.mountRoutes(mux)
 	handler := gw.withCORSAndLogging(gw.verifyCookieOrigin(limitRequestBody(gzipResponses(true, jsonErrors(mux)))))
-	return handler, token
+	return handler, token, svc
 }
 
 func benchRequest(b *testing.B, method, path string) {
@@ -168,4 +182,149 @@ func BenchmarkListDropsRevalidate(b *testing.B) {
 			b.Fatalf("GET /api/v1/drops conditional = %d, want 304", rw.status)
 		}
 	}
+}
+
+// The run list is the endpoint an open tab polls every two seconds, and the
+// only one whose rows used to carry each run's whole stored flow. It needs a
+// real Postgres to mean anything: over the in-memory store both paths read
+// the same objects, so the projection is free there by construction and the
+// cost it removes — transferring and detoasting a JSONB column — does not
+// exist. Skips without DAZYFLOW_TEST_DB.
+func benchRunListGateway(b *testing.B) (http.Handler, string) {
+	b.Helper()
+	url := os.Getenv("DAZYFLOW_TEST_DB")
+	if url == "" {
+		b.Skip("set DAZYFLOW_TEST_DB to run the Postgres request benchmarks")
+	}
+	ctx := context.Background()
+	store, err := jobstore.OpenPostgres(ctx, url)
+	if err != nil {
+		b.Fatalf("OpenPostgres: %v", err)
+	}
+	b.Cleanup(store.Close)
+	handler, token, _ := buildBenchGatewayWith(b, store)
+
+	// A 40 KB flow is the payload the run pins at submit — a hundred steps
+	// with a realistic amount of configuration on each.
+	g := core.Graph{ID: "bench-flow", Tenant: "t", Workspace: "ws"}
+	for i := range 100 {
+		g.Nodes = append(g.Nodes, core.Node{
+			ID: fmt.Sprintf("n%d", i), Module: "http_request",
+			Params: map[string]any{
+				"url":    "https://api.example.com/v1/resource/" + strconv.Itoa(i),
+				"method": "POST",
+				"body": map[string]any{
+					"note": "a realistic amount of configuration on every step, so the stored payload is the size a real flow's is",
+					"idx":  i,
+				},
+			},
+		})
+	}
+	payload, err := json.Marshal(g)
+	if err != nil {
+		b.Fatalf("marshal graph: %v", err)
+	}
+	if _, err := store.DeleteByTenant(ctx, "t"); err != nil {
+		b.Fatalf("clear tenant: %v", err)
+	}
+	base := time.Now().Add(-2000 * time.Second)
+	for i := range 2000 {
+		rec := core.JobRecord{
+			ID: fmt.Sprintf("benchrun-%06d", i), Kind: core.JobKindGraph,
+			GraphID: "bench-flow", Tenant: "t", Workspace: "ws",
+			Status: core.JobStatusSucceeded, GraphPayload: payload,
+			EnqueuedAt: base.Add(time.Duration(i) * time.Second),
+		}
+		if i%7 == 0 {
+			rec.Status = core.JobStatusFailed
+			rec.Result = &core.Result{Status: core.StatusError,
+				Error: &core.JobError{Code: "http_status", Message: "502 from upstream"}}
+		}
+		if err := store.Enqueue(ctx, rec); err != nil {
+			b.Fatalf("seed %d: %v", i, err)
+		}
+	}
+	return handler, token
+}
+
+func benchRunListAt(b *testing.B, limit int) {
+	handler, token := benchRunListGateway(b)
+	path := "/api/v1/me/runs?limit=" + strconv.Itoa(limit)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		req := httptest.NewRequest("GET", path, nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Accept-Encoding", "gzip")
+		rw := &discardWriter{}
+		handler.ServeHTTP(rw, req)
+		if rw.status != http.StatusOK {
+			b.Fatalf("GET %s = %d", path, rw.status)
+		}
+	}
+}
+
+// BenchmarkRunList20 is the default page the runs view asks for.
+func BenchmarkRunList20(b *testing.B) { benchRunListAt(b, 20) }
+
+// BenchmarkRunList200 is the page a tab watching a busy workspace polls:
+// RunList re-asks for as many rows as it currently shows.
+func BenchmarkRunList200(b *testing.B) { benchRunListAt(b, 200) }
+
+// The run-detail view polls two endpoints every couple of seconds while a
+// run is live: the run itself and its node records. Both are scoped by
+// loading the run record, which carries the run's whole stored flow.
+func benchRunDetailGateway(b *testing.B) (http.Handler, string, string) {
+	b.Helper()
+	handler, token := benchRunListGateway(b)
+	url := os.Getenv("DAZYFLOW_TEST_DB")
+	ctx := context.Background()
+	store, err := jobstore.OpenPostgres(ctx, url)
+	if err != nil {
+		b.Fatalf("OpenPostgres: %v", err)
+	}
+	b.Cleanup(store.Close)
+	// Node records for one of the seeded runs, so the detail view has a
+	// timeline to render.
+	const runID = "benchrun-001000"
+	for i := range 100 {
+		if err := store.Enqueue(ctx, core.JobRecord{
+			ID: fmt.Sprintf("%s-n%d", runID, i), Kind: core.JobKindNode,
+			GraphRunID: runID, GraphID: "bench-flow", NodeID: fmt.Sprintf("n%d", i),
+			Tenant: "t", Workspace: "ws", Status: core.JobStatusSucceeded,
+			Result: &core.Result{Status: core.StatusOK, Output: map[string]core.Ref{
+				"body": {Inline: map[string]any{"ok": true, "id": "0123456789abcdef"}},
+			}},
+		}); err != nil {
+			b.Fatalf("seed node %d: %v", i, err)
+		}
+	}
+	return handler, token, runID
+}
+
+func benchGET(b *testing.B, handler http.Handler, token, path string) {
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		req := httptest.NewRequest("GET", path, nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Accept-Encoding", "gzip")
+		rw := &discardWriter{}
+		handler.ServeHTTP(rw, req)
+		if rw.status != http.StatusOK {
+			b.Fatalf("GET %s = %d", path, rw.status)
+		}
+	}
+}
+
+// BenchmarkGetRun is the run-detail header: seven scalars and an error code.
+func BenchmarkGetRun(b *testing.B) {
+	handler, token, runID := benchRunDetailGateway(b)
+	benchGET(b, handler, token, "/api/v1/me/runs/"+runID)
+}
+
+// BenchmarkListRunNodes is the timeline beneath it.
+func BenchmarkListRunNodes(b *testing.B) {
+	handler, token, runID := benchRunDetailGateway(b)
+	benchGET(b, handler, token, "/api/v1/me/runs/"+runID+"/nodes")
 }

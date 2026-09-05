@@ -21,6 +21,7 @@ import (
 func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 	t.Helper()
 	conformanceOutcomes(t, mk)
+	conformanceRunSummaries(t, mk)
 	t.Run("CountsByStatus", func(t *testing.T) {
 		s := mk(t)
 		ctx := t.Context()
@@ -1021,6 +1022,137 @@ func conformanceOutcomes(t *testing.T, mk func(t *testing.T) core.JobStore) {
 			t.Errorf("Outcomes(nil) = %+v, want empty", empty)
 		}
 	})
+}
+
+// conformanceRunSummaries pins the narrow projection to the full read: the
+// summaries a store returns must be exactly core.SummarizeRun of the records
+// ListGraphRuns returns for the same options. That equality is the contract —
+// a projection that quietly disagreed about which runs match, or about a
+// run's error code, would show a different run list depending on the backend.
+func conformanceRunSummaries(t *testing.T, mk func(t *testing.T) core.JobStore) {
+	t.Helper()
+	t.Run("RunSummaries", func(t *testing.T) {
+		s := mk(t)
+		ctx := t.Context()
+		reader, ok := s.(core.RunSummaryReader)
+		if !ok {
+			t.Skip("store does not implement RunSummaryReader")
+		}
+		base := time.Now().UTC().Add(-time.Hour).Truncate(time.Millisecond)
+		payload := []byte(`{"id":"g1","nodes":[{"id":"a","module":"noop"}]}`)
+		for i := range 6 {
+			rec := core.JobRecord{
+				ID: fmt.Sprintf("sum-%d", i), Kind: core.JobKindGraph,
+				GraphID: "g1", Tenant: "t", Workspace: "ws",
+				Status: core.JobStatusSucceeded, GraphPayload: payload,
+				EnqueuedAt: base.Add(time.Duration(i) * time.Minute),
+			}
+			if i%2 == 1 {
+				rec.Status = core.JobStatusFailed
+				rec.Result = &core.Result{Status: core.StatusError,
+					Error: &core.JobError{Code: "boom", Message: "it broke"}}
+			}
+			mustEnqueue(t, s, ctx, rec)
+		}
+		// A second tenant's run, to catch a projection that drops a predicate.
+		mustEnqueue(t, s, ctx, core.JobRecord{
+			ID: "other", Kind: core.JobKindGraph, GraphID: "g1", Tenant: "other",
+			Workspace: "ws", Status: core.JobStatusFailed, EnqueuedAt: base,
+		})
+		// And a node record, which neither read may ever return.
+		mustEnqueue(t, s, ctx, core.JobRecord{
+			ID: "node-row", Kind: core.JobKindNode, GraphID: "g1", NodeID: "a",
+			Tenant: "t", Workspace: "ws", Status: core.JobStatusSucceeded, EnqueuedAt: base,
+		})
+
+		for _, opts := range []core.ListGraphRunsOpts{
+			{Tenant: "t", Workspace: "ws", Limit: 4},
+			{Tenant: "t", Workspace: "ws", Limit: 3, Offset: 2},
+			{Tenant: "t", Status: core.JobStatusFailed, Limit: 10},
+			{Tenant: "t", GraphID: "g1", Since: base.Add(2 * time.Minute), Limit: 10},
+			{Tenant: "t", Until: base.Add(2 * time.Minute), Limit: 10},
+			{Limit: 20},
+		} {
+			recs, err := s.ListGraphRuns(ctx, opts)
+			if err != nil {
+				t.Fatalf("ListGraphRuns %+v: %v", opts, err)
+			}
+			want := make([]core.RunSummary, 0, len(recs))
+			for _, rec := range recs {
+				want = append(want, core.SummarizeRun(rec))
+			}
+			got, err := reader.ListGraphRunSummaries(ctx, opts)
+			if err != nil {
+				t.Fatalf("ListGraphRunSummaries %+v: %v", opts, err)
+			}
+			if len(got) != len(want) {
+				t.Fatalf("%+v: %d summaries, want %d", opts, len(got), len(want))
+			}
+			for i := range want {
+				if !sameSummary(got[i], want[i]) {
+					t.Errorf("%+v row %d:\n got %+v\nwant %+v", opts, i, got[i], want[i])
+				}
+			}
+			// The count answers the same question, capped at Limit.
+			n, err := reader.CountGraphRuns(ctx, opts)
+			if err != nil {
+				t.Fatalf("CountGraphRuns %+v: %v", opts, err)
+			}
+			if n != len(want) {
+				t.Errorf("%+v: count = %d, want %d", opts, n, len(want))
+			}
+		}
+
+		// The point read must agree with the list on the same run — including
+		// on a succeeded one, where a stored JSON null must not read back as
+		// a zero-valued failure.
+		for _, id := range []string{"sum-0", "sum-1"} {
+			rec, err := s.Get(ctx, id)
+			if err != nil {
+				t.Fatalf("Get %s: %v", id, err)
+			}
+			got, err := reader.GetGraphRunSummary(ctx, id)
+			if err != nil {
+				t.Fatalf("GetGraphRunSummary %s: %v", id, err)
+			}
+			if !sameSummary(got, core.SummarizeRun(rec)) {
+				t.Errorf("%s:\n got %+v\nwant %+v", id, got, core.SummarizeRun(rec))
+			}
+		}
+		if _, err := reader.GetGraphRunSummary(ctx, "no-such-run"); !errors.Is(err, core.ErrNotFound) {
+			t.Errorf("GetGraphRunSummary(missing) = %v, want ErrNotFound", err)
+		}
+
+		// An unset Limit counts every match rather than stopping at a page.
+		n, err := reader.CountGraphRuns(ctx, core.ListGraphRunsOpts{Tenant: "t"})
+		if err != nil {
+			t.Fatalf("CountGraphRuns unlimited: %v", err)
+		}
+		if n != 6 {
+			t.Errorf("unlimited count = %d, want 6", n)
+		}
+	})
+}
+
+// sameSummary compares two summaries by value. Plain == would compare the
+// *time.Time fields by pointer, which is never equal across two reads.
+func sameSummary(a, b core.RunSummary) bool {
+	sameTime := func(x, y *time.Time) bool {
+		if x == nil || y == nil {
+			return x == y
+		}
+		return x.Equal(*y)
+	}
+	sameErr := func(x, y *core.JobError) bool {
+		if x == nil || y == nil {
+			return x == y
+		}
+		return *x == *y
+	}
+	return a.ID == b.ID && a.GraphID == b.GraphID && a.Tenant == b.Tenant &&
+		a.Workspace == b.Workspace && a.Status == b.Status && sameErr(a.Error, b.Error) &&
+		a.EnqueuedAt.Equal(b.EnqueuedAt) &&
+		sameTime(a.StartedAt, b.StartedAt) && sameTime(a.FinishedAt, b.FinishedAt)
 }
 
 func mustEnqueue(t *testing.T, s core.JobStore, ctx context.Context, rec core.JobRecord) {

@@ -39,6 +39,11 @@ type backend interface {
 	load(graphID string) (core.Graph, error)
 	loadAt(ref, graphID string) (core.Graph, error)
 	listGraphs() ([]string, error)
+	// listAtHead reads every flow at head, each with its pointer for env, in
+	// one pass. The flow list is what needs it: done a flow at a time it is
+	// three round trips per flow on Postgres, and on git it re-resolves the
+	// same HEAD, commit and tree once per flow.
+	listAtHead(env string) ([]FlowAtHead, error)
 	history(graphID string, limit int) ([]Revision, error)
 
 	// head is a token that changes whenever anything in the workspace does.
@@ -70,6 +75,14 @@ type backend interface {
 // behind it.
 type gitMirrorer interface {
 	push(ctx context.Context, remoteURL string, auth transport.AuthMethod, allowUnrelated bool) (PushResult, error)
+}
+
+// FlowAtHead is one flow as the flow list needs it: its current content and
+// whether — and at which revision — it is published.
+type FlowAtHead struct {
+	ID        string
+	Graph     core.Graph
+	EnvCommit string
 }
 
 // Store is a workspace: the flows of one (tenant, workspace) pair and their
@@ -161,6 +174,11 @@ func (s *Store) PromoteToEnvironment(graphID, env, commit string) error {
 func (s *Store) ClearEnvironment(graphID, env string) error {
 	return s.b.clearEnv(graphID, env)
 }
+
+// ListAtHead reads every flow in the workspace at head, each with its pointer
+// for env (use PublishedEnv for the published revision). One pass over the
+// workspace instead of a load and an env lookup per flow.
+func (s *Store) ListAtHead(env string) ([]FlowAtHead, error) { return s.b.listAtHead(env) }
 
 // PublishedCommit returns the revision a flow is published at, or "" when it
 // has never been published.

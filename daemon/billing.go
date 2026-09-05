@@ -265,13 +265,12 @@ func (s *Service) runningGraphRuns(ctx context.Context, tenant string, limit int
 	if page <= 1 {
 		page = 200
 	}
-	recs, err := s.Jobs.ListGraphRuns(ctx, core.ListGraphRunsOpts{
+	// A count, not a page of records: this is on the submit path, and the
+	// records it used to materialize each carry the flow JSON their run
+	// pinned — up to 200 of them, to produce one integer.
+	return core.CountRuns(ctx, s.Jobs, core.ListGraphRunsOpts{
 		Tenant: tenant, Status: core.JobStatusRunning, Limit: page,
 	})
-	if err != nil {
-		return 0, err
-	}
-	return len(recs), nil
 }
 
 // admitGraphRun reports whether a new top-level run for tenant may START now

@@ -470,6 +470,45 @@ func (m *Memory) ListGraphRuns(_ context.Context, opts core.ListGraphRunsOpts) (
 	return out, nil
 }
 
+// ListGraphRunSummaries and CountGraphRuns give the in-memory store the same
+// core.RunSummaryReader contract the Postgres one implements, so a caller
+// exercising the narrow path in a test exercises it in production too. There
+// is no read to narrow here — the records are already in memory — so these
+// are projections of the same list, which is exactly what the conformance
+// suite pins them to.
+func (m *Memory) ListGraphRunSummaries(ctx context.Context, opts core.ListGraphRunsOpts) ([]core.RunSummary, error) {
+	recs, err := m.ListGraphRuns(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	var out []core.RunSummary
+	for _, rec := range recs {
+		out = append(out, core.SummarizeRun(rec))
+	}
+	return out, nil
+}
+
+func (m *Memory) GetGraphRunSummary(ctx context.Context, jobID string) (core.RunSummary, error) {
+	rec, err := m.Get(ctx, jobID)
+	if err != nil {
+		return core.RunSummary{}, err
+	}
+	return core.SummarizeRun(rec), nil
+}
+
+func (m *Memory) CountGraphRuns(ctx context.Context, opts core.ListGraphRunsOpts) (int, error) {
+	// Limit means "count no further than", so an unset one must not fall
+	// through to ListGraphRuns' default page of 50 and under-report.
+	if opts.Limit <= 0 {
+		opts.Limit = len(m.records) + 1
+	}
+	recs, err := m.ListGraphRuns(ctx, opts)
+	if err != nil {
+		return 0, err
+	}
+	return len(recs), nil
+}
+
 func (m *Memory) ListNodeRecords(_ context.Context, opts core.ListNodeRecordsOpts) ([]core.JobRecord, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

@@ -562,6 +562,77 @@ func (s *gitBackend) envCommitLocked(id, env string) (string, error) {
 	return ref.Hash().String(), nil
 }
 
+// listAtHead walks HEAD's tree once and decodes every flow in it, then reads
+// the env tags in one pass over the references. Done per flow instead, each
+// load re-reads .git/HEAD and its branch ref from disk and re-decodes the same
+// commit and tree, and each env lookup opens another ref file.
+func (s *gitBackend) listAtHead(env string) ([]FlowAtHead, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	head, err := s.repo.Head()
+	if errors.Is(err, plumbing.ErrReferenceNotFound) {
+		return nil, nil // no commits yet: an empty workspace, not a fault
+	}
+	if err != nil {
+		return nil, err
+	}
+	commit, err := s.repo.CommitObject(head.Hash())
+	if err != nil {
+		return nil, err
+	}
+	tree, err := commit.Tree()
+	if err != nil {
+		return nil, err
+	}
+	// One pass over the refs, keyed by the flow id its env tag names. An
+	// empty env means the caller wants content only, so the pass is skipped.
+	envAt := map[string]string{}
+	if env != "" {
+		refs, err := s.repo.References()
+		if err != nil {
+			return nil, err
+		}
+		suffix := "/" + env
+		if err := refs.ForEach(func(r *plumbing.Reference) error {
+			name := strings.TrimPrefix(string(r.Name()), "refs/tags/graphs/")
+			if name == string(r.Name()) || !strings.HasSuffix(name, suffix) {
+				return nil
+			}
+			id := strings.TrimSuffix(name, suffix)
+			// A label tag is graphs/<id>/labels/<commit>; only a flow id with
+			// no separator left in it is an env pointer.
+			if id == "" || strings.Contains(id, "/") {
+				return nil
+			}
+			envAt[id] = r.Hash().String()
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+	}
+	var out []FlowAtHead
+	err = tree.Files().ForEach(func(f *object.File) error {
+		dir, base := path.Split(f.Name)
+		if dir != "graphs/" || !strings.HasSuffix(base, ".json") {
+			return nil
+		}
+		contents, err := f.Contents()
+		if err != nil {
+			return err
+		}
+		id := strings.TrimSuffix(base, ".json")
+		var g core.Graph
+		if err := json.Unmarshal([]byte(contents), &g); err != nil {
+			// One unreadable flow must not hide the rest of the list; the
+			// per-flow load path reports it when that flow is opened.
+			return nil
+		}
+		out = append(out, FlowAtHead{ID: id, Graph: g, EnvCommit: envAt[id]})
+		return nil
+	})
+	return out, err
+}
+
 // ErrNotPublished is returned by LoadPublished for a flow that has never been
 // published. Every automatic-firing path treats it as "this flow does not run
 // yet" rather than an error worth surfacing.

@@ -472,7 +472,7 @@ func (h *gdprAPI) assembleExport(ctx context.Context, p core.Principal) (DataExp
 		}
 	}
 	if h.svc != nil && h.svc.Jobs != nil {
-		runs, err := h.svc.Jobs.ListGraphRuns(ctx, core.ListGraphRunsOpts{
+		runs, err := core.ListRunSummaries(ctx, h.svc.Jobs, core.ListGraphRunsOpts{
 			Tenant: u.Tenant, Workspace: u.Workspace, Limit: exportRunCap,
 		})
 		if err == nil {

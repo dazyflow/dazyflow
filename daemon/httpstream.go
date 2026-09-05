@@ -100,7 +100,7 @@ func (h *flowAPI) jobEvents(rw http.ResponseWriter, r *http.Request, p core.Prin
 	// Snapshot first so the UI has the current state without racing
 	// against subscriber delivery. Emit the same clean runView the REST
 	// /me/runs/{id} endpoint returns — not the raw JobRecord.
-	writeSSE(rw, "snapshot", newRunView(rec))
+	writeSSE(rw, "snapshot", newRunView(core.SummarizeRun(rec)))
 	// Followed by per-node status snapshots — late subscribers (the UI
 	// that connects after Submit returns) catch up on transitions that
 	// already happened.

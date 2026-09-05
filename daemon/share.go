@@ -211,7 +211,7 @@ func (s *Service) PublicWorkspaceOverview(ctx context.Context, token string, now
 	}
 
 	// Recent-run window — matches the Dashboard's so the two surfaces agree.
-	runs, err := s.Jobs.ListGraphRuns(ctx, core.ListGraphRunsOpts{
+	runs, err := core.ListRunSummaries(ctx, s.Jobs, core.ListGraphRunsOpts{
 		Tenant:    share.Tenant,
 		Workspace: share.Workspace,
 		Limit:     shareRunWindow,
@@ -397,7 +397,7 @@ func flowSortRank(f PublicFlowState) int {
 // runStartedOrEnqueued is the run's effective wall-clock time: when it began
 // if known, else when it was enqueued. Mirrors the Dashboard's client-side
 // choice so "today" counts agree.
-func runStartedOrEnqueued(r core.JobRecord) time.Time {
+func runStartedOrEnqueued(r core.RunSummary) time.Time {
 	if r.StartedAt != nil {
 		return *r.StartedAt
 	}

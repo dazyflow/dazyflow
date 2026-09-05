@@ -668,18 +668,12 @@ func (s *Postgres) ListByGraph(ctx context.Context, graphID string) ([]core.JobR
 	return out, rows.Err()
 }
 
-func (s *Postgres) ListGraphRuns(ctx context.Context, opts core.ListGraphRunsOpts) ([]core.JobRecord, error) {
-	// Build the SELECT with optional predicates. The kind='graph' clause
-	// is non-negotiable — that's the whole point of this method vs
-	// ListByGraph.
-	limit := opts.Limit
-	if limit <= 0 {
-		limit = 50
-	}
-	q := `SELECT id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result,
-	             enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id, parent_node_rec_id, manual
-	        FROM jobs WHERE kind = 'graph'`
-	args := []any{}
+// graphRunPredicates appends the shared graph-run scope clauses to q and
+// their values to args. Split out because three reads share this WHERE —
+// the full-record list, the summary projection and the count — and a filter
+// that applied to only some of them would silently disagree about which runs
+// exist.
+func graphRunPredicates(q string, args []any, opts core.ListGraphRunsOpts) (string, []any) {
 	if opts.Tenant != "" {
 		args = append(args, opts.Tenant)
 		q += fmt.Sprintf(" AND tenant = $%d", len(args))
@@ -704,17 +698,38 @@ func (s *Postgres) ListGraphRuns(ctx context.Context, opts core.ListGraphRunsOpt
 		args = append(args, opts.Until)
 		q += fmt.Sprintf(" AND enqueued_at < $%d", len(args))
 	}
+	return q, args
+}
+
+// graphRunOrderLimit appends the shared newest-first ordering and paging.
+//
+// id DESC is a deterministic tiebreaker: enqueued_at ties are common (a
+// scheduler/webhook fan-out submits many runs in the same instant), and
+// without a unique secondary key LIMIT/OFFSET pagination can repeat or skip
+// a row across page boundaries. id is random, not chronological, but it
+// gives a stable total order, which is all pagination needs.
+func graphRunOrderLimit(q string, args []any, opts core.ListGraphRunsOpts) (string, []any) {
+	limit := opts.Limit
+	if limit <= 0 {
+		limit = 50
+	}
 	args = append(args, limit)
-	// id DESC is a deterministic tiebreaker: enqueued_at ties are common (a
-	// scheduler/webhook fan-out submits many runs in the same instant), and
-	// without a unique secondary key LIMIT/OFFSET pagination can repeat or skip
-	// a row across page boundaries. id is random, not chronological, but it
-	// gives a stable total order, which is all pagination needs.
 	q += fmt.Sprintf(" ORDER BY enqueued_at DESC, id DESC LIMIT $%d", len(args))
 	if opts.Offset > 0 {
 		args = append(args, opts.Offset)
 		q += fmt.Sprintf(" OFFSET $%d", len(args))
 	}
+	return q, args
+}
+
+func (s *Postgres) ListGraphRuns(ctx context.Context, opts core.ListGraphRunsOpts) ([]core.JobRecord, error) {
+	// The kind='graph' clause is non-negotiable — that's the whole point of
+	// this method vs ListByGraph.
+	q := `SELECT id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result,
+	             enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id, parent_node_rec_id, manual
+	        FROM jobs WHERE kind = 'graph'`
+	q, args := graphRunPredicates(q, []any{}, opts)
+	q, args = graphRunOrderLimit(q, args, opts)
 	rows, err := s.pool.Query(ctx, q, args...)
 	if err != nil {
 		return nil, wrapPgErr(err)
@@ -729,6 +744,99 @@ func (s *Postgres) ListGraphRuns(ctx context.Context, opts core.ListGraphRunsOpt
 		out = append(out, rec)
 	}
 	return out, rows.Err()
+}
+
+// ListGraphRunSummaries is ListGraphRuns without the columns a list view
+// never shows. The one that matters is graph_payload: it holds the flow JSON
+// the run pinned at submit, so a 20-row page was fetching (and Postgres was
+// detoasting and decompressing) hundreds of kilobytes to render seven
+// scalars per row, every two seconds, for every open tab.
+//
+// The error code is projected in SQL rather than by decoding result, which
+// is the other large JSONB column on the row.
+func (s *Postgres) ListGraphRunSummaries(ctx context.Context, opts core.ListGraphRunsOpts) ([]core.RunSummary, error) {
+	q, args := graphRunPredicates(summarySelect, []any{}, opts)
+	q, args = graphRunOrderLimit(q, args, opts)
+	rows, err := s.pool.Query(ctx, q, args...)
+	if err != nil {
+		return nil, wrapPgErr(err)
+	}
+	defer rows.Close()
+	var out []core.RunSummary
+	for rows.Next() {
+		sum, err := scanSummary(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, sum)
+	}
+	return out, rows.Err()
+}
+
+// summarySelect projects a run record onto core.RunSummary. The error is
+// taken as the `error` member of the stored result rather than the result
+// itself: the result also carries every output value the run produced, and
+// none of these callers read one.
+const summaryCols = `SELECT id, graph_id, tenant, workspace, status, enqueued_at, started_at, finished_at,
+	             result->'error'
+	        FROM jobs WHERE `
+const summarySelect = summaryCols + `kind = 'graph'`
+const summaryByID = summaryCols + `id = $1`
+
+func scanSummary(r row) (core.RunSummary, error) {
+	var (
+		sum     core.RunSummary
+		errJSON []byte
+	)
+	if err := r.Scan(&sum.ID, &sum.GraphID, &sum.Tenant, &sum.Workspace, &sum.Status,
+		&sum.EnqueuedAt, &sum.StartedAt, &sum.FinishedAt, &errJSON); err != nil {
+		return core.RunSummary{}, err
+	}
+	// A result with no `error` member scans as SQL NULL and arrives empty. A
+	// result that stored an explicit JSON null arrives as the four bytes
+	// "null", which decodes into a zero JobError and would invent a failure
+	// on a run that succeeded — so both are "no error".
+	if len(errJSON) > 0 && string(errJSON) != "null" {
+		var je core.JobError
+		if err := json.Unmarshal(errJSON, &je); err != nil {
+			return core.RunSummary{}, fmt.Errorf("unmarshal run error: %w", err)
+		}
+		sum.Error = &je
+	}
+	return sum, nil
+}
+
+// GetGraphRunSummary is the point-read counterpart, for the run-detail
+// header.
+func (s *Postgres) GetGraphRunSummary(ctx context.Context, jobID string) (core.RunSummary, error) {
+	// Deliberately NOT filtered to kind='graph': this is a projection of Get,
+	// which does not filter either, so a caller swapping one for the other
+	// cannot find an id newly rejected.
+	sum, err := scanSummary(s.pool.QueryRow(ctx, summaryByID, jobID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return core.RunSummary{}, core.ErrNotFound
+	}
+	if err != nil {
+		return core.RunSummary{}, wrapPgErr(err)
+	}
+	return sum, nil
+}
+
+// CountGraphRuns answers "how many" without building any row. The LIMIT is
+// pushed inside the subquery so a caller asking whether a cap is reached
+// stops there instead of counting a tenant's whole history.
+func (s *Postgres) CountGraphRuns(ctx context.Context, opts core.ListGraphRunsOpts) (int, error) {
+	q := `SELECT 1 FROM jobs WHERE kind = 'graph'`
+	q, args := graphRunPredicates(q, []any{}, opts)
+	if opts.Limit > 0 {
+		args = append(args, opts.Limit)
+		q += fmt.Sprintf(" LIMIT $%d", len(args))
+	}
+	var n int
+	if err := s.pool.QueryRow(ctx, `SELECT count(*) FROM (`+q+`) capped`, args...).Scan(&n); err != nil {
+		return 0, wrapPgErr(err)
+	}
+	return n, nil
 }
 
 func (s *Postgres) ListNodeRecords(ctx context.Context, opts core.ListNodeRecordsOpts) ([]core.JobRecord, error) {

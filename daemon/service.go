@@ -655,7 +655,7 @@ func (s *Service) EffectiveLimitsFor(ctx context.Context, tenant string) Effecti
 // status keeps the cost bounded regardless of run history.
 func (s *Service) hasActiveRun(ctx context.Context, tenant, ws, graphID string) (bool, error) {
 	for _, st := range []core.JobStatus{core.JobStatusQueued, core.JobStatusRunning, core.JobStatusAwaiting} {
-		recs, err := s.Jobs.ListGraphRuns(ctx, core.ListGraphRunsOpts{
+		n, err := core.CountRuns(ctx, s.Jobs, core.ListGraphRunsOpts{
 			Tenant:    tenant,
 			Workspace: ws,
 			GraphID:   graphID,
@@ -665,7 +665,7 @@ func (s *Service) hasActiveRun(ctx context.Context, tenant, ws, graphID string) 
 		if err != nil {
 			return false, err
 		}
-		if len(recs) > 0 {
+		if n > 0 {
 			return true, nil
 		}
 	}
@@ -1171,28 +1171,23 @@ func (s *Service) ListGraphs(ctx context.Context, p core.Principal, tenant, ws s
 	if err != nil {
 		return nil, err
 	}
-	ids, err := store.ListGraphs()
+	// Admin principals see everything, so they need only the ids.
+	if core.IsFlowAdminPrincipal(p) {
+		return store.ListGraphs()
+	}
+	// Everyone else needs each flow's Visibility/Owner, which only the flow
+	// itself carries — so read the workspace in one pass rather than opening
+	// a flow at a time. An unloadable flow is absent from that read, which is
+	// the same "hide rather than list what the user cannot open" outcome the
+	// per-flow path reached by skipping its error.
+	flows, err := store.ListAtHead("")
 	if err != nil {
 		return nil, err
 	}
-	// Filter to flows the principal can view. We have to crack open
-	// each graph file to read its Visibility/Owner — there's no
-	// index in the workspace store today. Admin principals skip the
-	// loop entirely since they can see everything.
-	if core.IsFlowAdminPrincipal(p) {
-		return ids, nil
-	}
-	visible := make([]string, 0, len(ids))
-	for _, id := range ids {
-		g, err := store.Load(id)
-		if err != nil {
-			// Corrupt or unloadable graph — hide rather than show a
-			// listing the user can't open. Surfaces via "missing from
-			// list" rather than a server error.
-			continue
-		}
-		if core.AuthorizeGraphView(p, g) == nil {
-			visible = append(visible, id)
+	visible := make([]string, 0, len(flows))
+	for _, f := range flows {
+		if core.AuthorizeGraphView(p, f.Graph) == nil {
+			visible = append(visible, f.ID)
 		}
 	}
 	return visible, nil
@@ -1233,34 +1228,32 @@ func (s *Service) ListFlowSummaries(ctx context.Context, p core.Principal, tenan
 	if err != nil {
 		return nil, err
 	}
-	ids, err := store.ListGraphs()
+	// One pass over the workspace rather than a load and a published-pointer
+	// lookup per flow: on the Postgres store that was three round trips per
+	// flow, and on the git one it re-resolved the same HEAD, commit and tree
+	// every time.
+	flows, err := store.ListAtHead(workspace.PublishedEnv)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]FlowSummary, 0, len(ids))
+	out := make([]FlowSummary, 0, len(flows))
 	isAdmin := core.IsFlowAdminPrincipal(p)
-	for _, id := range ids {
-		g, err := store.Load(id)
-		if err != nil {
-			continue
-		}
-		if !isAdmin && core.AuthorizeGraphView(p, g) != nil {
+	for _, f := range flows {
+		if !isAdmin && core.AuthorizeGraphView(p, f.Graph) != nil {
 			continue
 		}
 		// Publish-aware status: a scheduler-triggered flow that's never been
 		// published shows "needs publish" (the scheduler won't run it yet).
-		// PublishedCommit is a cheap tag lookup; on error we fall back to
-		// treating it as unpublished, which is the safe (non-misleading) side.
-		pub, _ := store.PublishedCommit(id)
+		published := f.EnvCommit != ""
 		out = append(out, FlowSummary{
-			ID:          id,
-			Name:        g.Name,
-			Icon:        g.Icon,
-			Description: g.Description,
-			Owner:       g.Owner,
-			Visibility:  g.EffectiveVisibility(),
-			RunStatus:   core.FlowRunStatusPublished(g, pub != ""),
-			Published:   pub != "",
+			ID:          f.ID,
+			Name:        f.Graph.Name,
+			Icon:        f.Graph.Icon,
+			Description: f.Graph.Description,
+			Owner:       f.Graph.Owner,
+			Visibility:  f.Graph.EffectiveVisibility(),
+			RunStatus:   core.FlowRunStatusPublished(f.Graph, published),
+			Published:   published,
 		})
 	}
 	return out, nil
@@ -1319,18 +1312,15 @@ func (s *Service) DropSuggestions(ctx context.Context, p core.Principal, tenant,
 	}
 	s.suggestMu.Unlock()
 
-	ids, err := store.ListGraphs()
+	flows, err := store.ListAtHead("")
 	if err != nil {
 		return nil, err
 	}
 	type counts struct{ flows, edges int }
 	// Key: [from, fromPort, to, toPort].
 	agg := map[[4]string]*counts{}
-	for _, id := range ids {
-		g, err := store.Load(id)
-		if err != nil {
-			continue
-		}
+	for _, f := range flows {
+		g := f.Graph
 		if !isAdmin && core.AuthorizeGraphView(p, g) != nil {
 			continue
 		}
@@ -1790,6 +1780,21 @@ func (s *Service) GetJob(ctx context.Context, p core.Principal, jobID string) (c
 	return rec, nil
 }
 
+// GetRunSummary is GetJob for the callers that show a run's HEADER rather
+// than replay it: same authorization, without fetching the flow JSON the run
+// pinned at submit. The run-detail view re-polls this while a run is live,
+// and nothing it renders comes from that payload.
+func (s *Service) GetRunSummary(ctx context.Context, p core.Principal, jobID string) (core.RunSummary, error) {
+	sum, err := core.GetRunSummary(ctx, s.Jobs, jobID)
+	if err != nil {
+		return core.RunSummary{}, err
+	}
+	if err := core.RequireWorkspace(p, sum.Tenant, sum.Workspace); err != nil {
+		return core.RunSummary{}, err
+	}
+	return sum, nil
+}
+
 // ErrRunLogsDisabled means this deployment has no persistent run-log store
 // wired, so the run-log endpoints cannot work here at all — a 501, distinct
 // from "that run id is unknown" (404). Typed so runStoreError classifies it
@@ -1859,6 +1864,20 @@ func (s *Service) ListJobsForGraph(ctx context.Context, p core.Principal, graphI
 // tenant before hitting the store — clients can't read across tenant
 // boundaries even by passing a tenant they don't own.
 func (s *Service) ListGraphRuns(ctx context.Context, p core.Principal, opts core.ListGraphRunsOpts) ([]core.JobRecord, error) {
+	return s.Jobs.ListGraphRuns(ctx, s.scopeRunOpts(p, opts))
+}
+
+// ListGraphRunSummaries is ListGraphRuns for the callers that show a run
+// LIST: same scoping, without fetching each run's pinned flow JSON. See
+// core.RunSummary — the run list is polled, so that payload was by far the
+// largest thing on the response's critical path and nothing read it.
+func (s *Service) ListGraphRunSummaries(ctx context.Context, p core.Principal, opts core.ListGraphRunsOpts) ([]core.RunSummary, error) {
+	return core.ListRunSummaries(ctx, s.Jobs, s.scopeRunOpts(p, opts))
+}
+
+// scopeRunOpts applies the tenant/workspace scope both run reads share, so
+// the narrow one cannot drift from the one that enforces it today.
+func (s *Service) scopeRunOpts(p core.Principal, opts core.ListGraphRunsOpts) core.ListGraphRunsOpts {
 	// Platform admins may pass any tenant; everyone else is
 	// force-scoped to their own. When no tenant is supplied at all,
 	// fall back to the principal's tenant (preserves the original
@@ -1871,7 +1890,7 @@ func (s *Service) ListGraphRuns(ctx context.Context, p core.Principal, opts core
 	if p.Workspace != "" {
 		opts.Workspace = p.Workspace
 	}
-	return s.Jobs.ListGraphRuns(ctx, opts)
+	return opts
 }
 
 // PendingApproval is the slim payload the inbox uses — JobRecord +

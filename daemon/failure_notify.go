@@ -220,7 +220,7 @@ func (s *Service) failureEmailThrottled(ctx context.Context, graph core.Graph, r
 	// Bounded: the count is for a log line, and a flow failing more than this
 	// in an hour is already comprehensively described by "a lot".
 	const scan = 100
-	runs, err := s.Jobs.ListGraphRuns(ctx, core.ListGraphRunsOpts{
+	runs, err := core.ListRunSummaries(ctx, s.Jobs, core.ListGraphRunsOpts{
 		Tenant:    graph.Tenant,
 		Workspace: graph.Workspace,
 		GraphID:   graph.ID,

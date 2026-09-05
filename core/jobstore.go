@@ -334,6 +334,132 @@ type ListGraphRunsOpts struct {
 	Offset int
 }
 
+// RunSummary is the slice of a graph-run record that the list views, the
+// promoter and the admission check actually read: identity, status and
+// timing. The rest of the record is dead weight on those reads, and one
+// field of it is enormous — GraphPayload holds the whole flow JSON the run
+// pinned at submit, tens of kilobytes per row, TOASTed and compressed in
+// Postgres. A run list is polled every couple of seconds by every open tab,
+// so it was transferring and decompressing megabytes to render seven scalars.
+type RunSummary struct {
+	ID         string
+	GraphID    string
+	Tenant     string
+	Workspace  string
+	Status     JobStatus
+	EnqueuedAt time.Time
+	StartedAt  *time.Time
+	FinishedAt *time.Time
+	// Error is the run's failure, projected out of the stored Result so the
+	// Result itself — which also holds every output value the run produced —
+	// never has to be fetched or decoded.
+	Error *JobError
+}
+
+// ErrorCode is the failure's code, or "" for a run that did not fail.
+func (s RunSummary) ErrorCode() string {
+	if s.Error == nil {
+		return ""
+	}
+	return s.Error.Code
+}
+
+// RunSummaryReader is an optional JobStore extension that reads graph runs
+// without their payloads, and counts them without materializing rows at all.
+// Same scoping and ordering as ListGraphRuns — newest-first, Limit/Offset —
+// so a caller can swap one for the other and see the same runs.
+//
+// CountGraphRuns honours Limit as a ceiling, because its callers only ask
+// whether a bound is reached: counting past it is work with no reader.
+// Limit <= 0 counts every match.
+type RunSummaryReader interface {
+	ListGraphRunSummaries(ctx context.Context, opts ListGraphRunsOpts) ([]RunSummary, error)
+	CountGraphRuns(ctx context.Context, opts ListGraphRunsOpts) (int, error)
+	// GetGraphRunSummary is the same projection for one run by id, for the
+	// run-detail header — which the browser re-polls while the run is live
+	// and which shows nothing the payload could answer. ErrNotFound when
+	// there is no such record.
+	GetGraphRunSummary(ctx context.Context, jobID string) (RunSummary, error)
+}
+
+// SummarizeRun projects a full record onto the summary the readers above
+// return. It is the fallback path's definition of the projection, and so
+// also the specification the store implementations are checked against.
+func SummarizeRun(rec JobRecord) RunSummary {
+	s := RunSummary{
+		ID: rec.ID, GraphID: rec.GraphID, Tenant: rec.Tenant, Workspace: rec.Workspace,
+		Status: rec.Status, EnqueuedAt: rec.EnqueuedAt,
+		StartedAt: rec.StartedAt, FinishedAt: rec.FinishedAt,
+	}
+	if rec.Result != nil {
+		s.Error = rec.Result.Error
+	}
+	return s
+}
+
+// ListRunSummaries reads a page of run summaries, using the store's narrow
+// projection when it has one and falling back to a full ListGraphRuns
+// otherwise. Callers use this rather than type-asserting themselves, so a
+// store without the extension stays correct rather than unsupported.
+func ListRunSummaries(ctx context.Context, store JobStore, opts ListGraphRunsOpts) ([]RunSummary, error) {
+	if r, ok := store.(RunSummaryReader); ok {
+		return r.ListGraphRunSummaries(ctx, opts)
+	}
+	recs, err := store.ListGraphRuns(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]RunSummary, 0, len(recs))
+	for _, rec := range recs {
+		out = append(out, SummarizeRun(rec))
+	}
+	return out, nil
+}
+
+// GetRunSummary reads one run's summary. It is exactly SummarizeRun of what
+// Get returns for the same id — including for an id that is not a run's, so
+// that swapping a caller from Get to this one cannot change which ids it
+// accepts. Same fallback arrangement as ListRunSummaries.
+func GetRunSummary(ctx context.Context, store JobStore, jobID string) (RunSummary, error) {
+	if r, ok := store.(RunSummaryReader); ok {
+		return r.GetGraphRunSummary(ctx, jobID)
+	}
+	rec, err := store.Get(ctx, jobID)
+	if err != nil {
+		return RunSummary{}, err
+	}
+	return SummarizeRun(rec), nil
+}
+
+// CountRuns counts the runs matching opts, capped at opts.Limit when that is
+// positive. Same fallback arrangement as ListRunSummaries — but the fallback
+// has to PAGE, because ListGraphRuns imposes a default page size on an unset
+// Limit, and returning that page's length would report "50" for a tenant with
+// thousands of runs.
+func CountRuns(ctx context.Context, store JobStore, opts ListGraphRunsOpts) (int, error) {
+	if r, ok := store.(RunSummaryReader); ok {
+		return r.CountGraphRuns(ctx, opts)
+	}
+	const page = 200
+	ceiling := opts.Limit
+	opts.Limit = page
+	total := 0
+	for {
+		if ceiling > 0 && ceiling-total < page {
+			opts.Limit = ceiling - total
+		}
+		recs, err := store.ListGraphRuns(ctx, opts)
+		if err != nil {
+			return 0, err
+		}
+		total += len(recs)
+		if len(recs) < opts.Limit || (ceiling > 0 && total >= ceiling) {
+			return total, nil
+		}
+		opts.Offset += len(recs)
+	}
+}
+
 var (
 	ErrNoJobs   = errors.New("no jobs available")
 	ErrNotFound = errors.New("job not found")

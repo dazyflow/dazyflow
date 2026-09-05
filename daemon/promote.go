@@ -48,30 +48,49 @@ func (s *Service) promotePendingRuns(ctx context.Context, tenant string) {
 				return
 			}
 		}
-		run, ok := s.oldestPendingRun(ctx, tenant)
+		runID, ok := s.oldestPendingRun(ctx, tenant)
 		if !ok {
 			return // nothing pending
 		}
-		won, err := starter.MarkGraphRunning(ctx, run.ID)
+		won, err := starter.MarkGraphRunning(ctx, runID)
 		if err != nil {
 			return
 		}
 		if !won {
 			continue // another promoter took this one; try the next
 		}
+		// Only the promoter that WON needs the run's flow payload, so it is
+		// fetched here rather than by the scan above: this loop runs up to
+		// maxPerCall times per tenant per sweep, and the scan is a page of 50.
+		//
+		// The record is already marked running at this point, and nothing
+		// re-dispatches a run — the stuck-run reaper only re-checks
+		// COMPLETION. So a failed read has to end the run here, or it sits
+		// running with no work queued for as long as the install lives.
+		run, err := s.Jobs.Get(ctx, runID)
+		if err != nil {
+			jobErr := &core.JobError{Code: "promote_failed", Message: err.Error()}
+			_ = s.Jobs.Complete(ctx, runID, core.JobStatusFailed, &core.Result{
+				Status: core.StatusError, Error: jobErr,
+			})
+			s.bus().Publish(runID, BusEvent{Terminal: &TerminalEvent{
+				JobID: runID, Status: core.JobStatusFailed, Error: jobErr,
+			}})
+			return
+		}
 		s.startPendingRun(ctx, run)
 	}
 }
 
-// oldestPendingRun returns the tenant's earliest-enqueued pending (queued)
-// graph run. ListGraphRuns sorts newest-first, so we scan a batch and pick the
-// minimum enqueue time for FIFO fairness.
-func (s *Service) oldestPendingRun(ctx context.Context, tenant string) (core.JobRecord, bool) {
-	recs, err := s.Jobs.ListGraphRuns(ctx, core.ListGraphRunsOpts{
+// oldestPendingRun returns the id of the tenant's earliest-enqueued pending
+// (queued) graph run. The list sorts newest-first, so we scan a batch and pick
+// the minimum enqueue time for FIFO fairness.
+func (s *Service) oldestPendingRun(ctx context.Context, tenant string) (string, bool) {
+	recs, err := core.ListRunSummaries(ctx, s.Jobs, core.ListGraphRunsOpts{
 		Tenant: tenant, Status: core.JobStatusQueued, Limit: 50,
 	})
 	if err != nil || len(recs) == 0 {
-		return core.JobRecord{}, false
+		return "", false
 	}
 	oldest := recs[0]
 	for _, r := range recs[1:] {
@@ -79,7 +98,7 @@ func (s *Service) oldestPendingRun(ctx context.Context, tenant string) (core.Job
 			oldest = r
 		}
 	}
-	return oldest, true
+	return oldest.ID, true
 }
 
 // startPendingRun dispatches a run that was just flipped from pending to
@@ -171,7 +190,10 @@ func (s *Service) SweepPromotePending(ctx context.Context) {
 	if _, ok := s.Jobs.(core.GraphRunStarter); !ok {
 		return
 	}
-	recs, err := s.Jobs.ListGraphRuns(ctx, core.ListGraphRunsOpts{
+	// Only the tenant column is read here, so this takes the summary list:
+	// the sweep runs every couple of seconds on every replica, and a page of
+	// 200 whole records is 200 flow payloads fetched to build a set of names.
+	recs, err := core.ListRunSummaries(ctx, s.Jobs, core.ListGraphRunsOpts{
 		Status: core.JobStatusQueued, Limit: 200,
 	})
 	if err != nil {
