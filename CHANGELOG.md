@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.37.1] - 2026-09-05
+
 ### Performance
 
 - **A third more work through the same database**: the execution path saturated
