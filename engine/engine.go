@@ -688,7 +688,13 @@ func newJobID() (string, error) {
 // original maps rather than failing the node — resolution would then mutate
 // in place, the pre-existing behavior.
 func cloneNodeIO(params map[string]any, env map[string]string) (map[string]any, map[string]string) {
-	outParams := params
+	// Never hand back the caller's map: the graph these params come from is
+	// shared by every step of the run and, via the worker's run cache, by
+	// every concurrent run of the same flow. Secret resolution writes into
+	// what it gets back, so a shared map would leak one run's resolved values
+	// into another's. A shallow clone is the floor when the deep copy cannot
+	// be made.
+	outParams := maps.Clone(params)
 	if len(params) > 0 {
 		if b, err := json.Marshal(params); err == nil {
 			var cp map[string]any

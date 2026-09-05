@@ -390,6 +390,30 @@ func (m *Memory) Get(_ context.Context, jobID string) (core.JobRecord, error) {
 	return *r, nil
 }
 
+// Outcomes implements core.OutcomeReader — see the Postgres implementation
+// for why dependents read this narrow shape rather than whole records.
+func (m *Memory) Outcomes(_ context.Context, jobIDs []string) (map[string]core.NodeOutcome, error) {
+	if len(jobIDs) == 0 {
+		return nil, nil
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make(map[string]core.NodeOutcome, len(jobIDs))
+	for _, id := range jobIDs {
+		r, ok := m.records[id]
+		if !ok {
+			continue
+		}
+		oc := core.NodeOutcome{Status: r.Status}
+		if r.Result != nil {
+			res := *r.Result
+			oc.Result = &res
+		}
+		out[id] = oc
+	}
+	return out, nil
+}
+
 func (m *Memory) ListGraphRuns(_ context.Context, opts core.ListGraphRunsOpts) ([]core.JobRecord, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

@@ -575,6 +575,43 @@ func (s *Postgres) Get(ctx context.Context, jobID string) (core.JobRecord, error
 	return rec, err
 }
 
+// Outcomes implements core.OutcomeReader: the status and result of many node
+// records in one round trip, reading only the two columns a dependent uses.
+// The full-record path would decode each predecessor's Job JSON — params,
+// input refs and env — on a read that never looks at it.
+func (s *Postgres) Outcomes(ctx context.Context, jobIDs []string) (map[string]core.NodeOutcome, error) {
+	if len(jobIDs) == 0 {
+		return nil, nil
+	}
+	const q = `SELECT id, status, result FROM jobs WHERE id = ANY($1)`
+	rows, err := s.pool.Query(ctx, q, jobIDs)
+	if err != nil {
+		return nil, wrapPgErr(err)
+	}
+	defer rows.Close()
+	out := make(map[string]core.NodeOutcome, len(jobIDs))
+	for rows.Next() {
+		var (
+			id         string
+			status     string
+			resultJSON []byte
+		)
+		if err := rows.Scan(&id, &status, &resultJSON); err != nil {
+			return nil, err
+		}
+		oc := core.NodeOutcome{Status: core.JobStatus(status)}
+		if len(resultJSON) > 0 {
+			var res core.Result
+			if err := json.Unmarshal(resultJSON, &res); err != nil {
+				return nil, fmt.Errorf("unmarshal result %s: %w", id, err)
+			}
+			oc.Result = &res
+		}
+		out[id] = oc
+	}
+	return out, rows.Err()
+}
+
 // MarkGraphRunning implements core.GraphRunStarter: flip a pending (queued)
 // graph record to running. The WHERE status='queued' is the admission guard —
 // only one promoter's UPDATE affects a row, so concurrent sweeps on multiple

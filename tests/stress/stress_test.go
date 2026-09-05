@@ -164,7 +164,7 @@ func newReplica(t *testing.T, ctx context.Context, dsn string, id int, p params,
 		Jobs: jobs, Bus: bus, Engine: eng,
 		WorkerID: fmt.Sprintf("replica-%d", id),
 	}
-	runs := daemon.NewRunCache(8 * p.workers) // one per process, as dzd wires it
+	runs := daemon.NewRunCache(0) // one per process, as dzd wires it
 	for w := range p.workers {
 		worker := daemon.NewWorker(daemon.WorkerConfig{
 			ID:           fmt.Sprintf("r%d-w%d", id, w),

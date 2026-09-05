@@ -476,6 +476,14 @@
   padding: 0;
 }
 
+/* Placeholder while a route's code chunk loads. Reserves the content area
+   so the shell does not collapse and reflow when the page arrives; empty on
+   purpose, since a cached chunk lands within a frame and a spinner that
+   appears for one frame reads as a glitch. */
+.page-loading {
+  min-height: 60vh;
+}
+
 /* Page title */
 .page-title {
   display: flex;

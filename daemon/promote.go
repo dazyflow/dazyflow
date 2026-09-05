@@ -116,7 +116,8 @@ func (s *Service) startPendingRun(ctx context.Context, run core.JobRecord) {
 	// exactly as the immediate-start path would.
 	seededSet := s.seededNodes(ctx, run.ID, len(g.Nodes))
 
-	if errs := dispatchRoots(ctx, s.Jobs, g, run.ID, seededSet); len(errs) > 0 {
+	queued, errs := dispatchRoots(ctx, s.Jobs, g, run.ID, seededSet)
+	if len(errs) > 0 {
 		merged := errs[0]
 		_ = s.Jobs.Complete(ctx, run.ID, core.JobStatusFailed, &core.Result{
 			Status: core.StatusError,
@@ -131,7 +132,7 @@ func (s *Service) startPendingRun(ctx context.Context, run core.JobRecord) {
 
 	// Seeds may already cover the whole graph (e.g. a one-node webhook run) —
 	// finalize now instead of waiting for a node transition that never comes.
-	if allNodesAccountedFor(ctx, s.Jobs, g, run.ID) {
+	if queued == 0 && allNodesAccountedFor(ctx, s.Jobs, g, run.ID) {
 		if cerr := s.Jobs.Complete(ctx, run.ID, core.JobStatusSucceeded, &core.Result{Status: core.StatusOK}); cerr == nil {
 			s.bus().Publish(run.ID, BusEvent{Terminal: &TerminalEvent{
 				JobID: run.ID, Status: core.JobStatusSucceeded,

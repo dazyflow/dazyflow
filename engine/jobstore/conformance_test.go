@@ -20,6 +20,7 @@ import (
 
 func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 	t.Helper()
+	conformanceOutcomes(t, mk)
 	t.Run("CountsByStatus", func(t *testing.T) {
 		s := mk(t)
 		ctx := t.Context()
@@ -953,6 +954,71 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 		}
 		if err != nil && !errors.Is(err, core.ErrNotFound) {
 			t.Errorf("MarkGraphRunning(missing) = %v, want nil or ErrNotFound", err)
+		}
+	})
+}
+
+func conformanceOutcomes(t *testing.T, mk func(t *testing.T) core.JobStore) {
+	t.Helper()
+	t.Run("Outcomes", func(t *testing.T) {
+		s := mk(t)
+		ctx := t.Context()
+		reader, ok := s.(core.OutcomeReader)
+		if !ok {
+			t.Skip("store does not implement OutcomeReader")
+		}
+		mustEnqueue(t, s, ctx, core.JobRecord{ID: "ok1", Kind: core.JobKindNode, Status: core.JobStatusQueued, Tenant: "t"})
+		mustEnqueue(t, s, ctx, core.JobRecord{ID: "fail1", Kind: core.JobKindNode, Status: core.JobStatusQueued, Tenant: "t"})
+		mustEnqueue(t, s, ctx, core.JobRecord{ID: "queued1", Kind: core.JobKindNode, Status: core.JobStatusQueued, Tenant: "t"})
+		want := core.Result{Status: core.StatusOK, Output: map[string]core.Ref{"out": {Ref: "v"}}}
+		if err := s.Complete(ctx, "ok1", core.JobStatusSucceeded, &want); err != nil {
+			t.Fatalf("Complete ok1: %v", err)
+		}
+		if err := s.Complete(ctx, "fail1", core.JobStatusFailed, nil); err != nil {
+			t.Fatalf("Complete fail1: %v", err)
+		}
+
+		// One call answers for every id, including the one that is absent —
+		// which the batch reports by omission, not by failing the whole read.
+		got, err := reader.Outcomes(ctx, []string{"ok1", "fail1", "queued1", "nope"})
+		if err != nil {
+			t.Fatalf("Outcomes: %v", err)
+		}
+		if len(got) != 3 {
+			t.Fatalf("got %d outcomes, want 3: %+v", len(got), got)
+		}
+		if _, present := got["nope"]; present {
+			t.Error("an unknown id came back with an outcome")
+		}
+		if got["ok1"].Status != core.JobStatusSucceeded {
+			t.Errorf("ok1 status = %q, want succeeded", got["ok1"].Status)
+		}
+		if got["ok1"].Result == nil || got["ok1"].Result.Output["out"].Ref != "v" {
+			t.Errorf("ok1 result = %+v, want the completed one", got["ok1"].Result)
+		}
+		if got["fail1"].Status != core.JobStatusFailed {
+			t.Errorf("fail1 status = %q, want failed", got["fail1"].Status)
+		}
+		if got["queued1"].Status != core.JobStatusQueued || got["queued1"].Result != nil {
+			t.Errorf("queued1 = %+v, want queued with no result", got["queued1"])
+		}
+
+		// Same shape as Get, so a caller can fall back to it — that fallback is
+		// live for any store that does not implement the extension.
+		rec, err := s.Get(ctx, "ok1")
+		if err != nil {
+			t.Fatalf("Get ok1: %v", err)
+		}
+		if rec.Status != got["ok1"].Status || rec.Result.Output["out"].Ref != got["ok1"].Result.Output["out"].Ref {
+			t.Errorf("Outcomes disagrees with Get: %+v vs %+v", got["ok1"], rec)
+		}
+
+		empty, err := reader.Outcomes(ctx, nil)
+		if err != nil {
+			t.Fatalf("Outcomes(nil): %v", err)
+		}
+		if len(empty) != 0 {
+			t.Errorf("Outcomes(nil) = %+v, want empty", empty)
 		}
 	})
 }

@@ -16,6 +16,13 @@ import (
 type Registry struct {
 	mu    sync.RWMutex
 	nodes map[string]NativeDrop
+	// derived caches DerivedManifests. Applying the universal transforms
+	// costs an allocation per port slice per drop — half a megabyte across
+	// the built-in catalog — and the catalog is asked for on every graph
+	// validation, save and submit, which are request paths. Registration
+	// happens at init, so this is built once and dropped only if a drop
+	// registers later.
+	derived map[string]core.Manifest
 }
 
 func NewRegistry() *Registry {
@@ -58,7 +65,34 @@ func (r *Registry) Register(n NativeDrop) error {
 		return fmt.Errorf("module %q already registered", n.Manifest.ID)
 	}
 	r.nodes[n.Manifest.ID] = n
+	r.derived = nil
 	return nil
+}
+
+// DerivedManifests returns every registered manifest with the universal
+// transforms applied — the passthrough pin and list-port marking that the
+// palette, validation and input assembly all expect.
+//
+// The map and the manifests in it are SHARED with every other caller: read
+// them, and clone the map before handing it to anything that edits its own
+// view of the catalog.
+func (r *Registry) DerivedManifests() map[string]core.Manifest {
+	r.mu.RLock()
+	derived := r.derived
+	r.mu.RUnlock()
+	if derived != nil {
+		return derived
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.derived == nil {
+		d := make(map[string]core.Manifest, len(r.nodes))
+		for id, n := range r.nodes {
+			d[id] = core.MarkListPorts(core.WithPassthrough(n.Manifest))
+		}
+		r.derived = d
+	}
+	return r.derived
 }
 
 func (r *Registry) Get(id string) (core.Transport, bool) {

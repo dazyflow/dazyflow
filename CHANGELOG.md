@@ -10,6 +10,58 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Performance
+
+- **Another 11% through the same database, and a step now costs 4.0 statements
+  instead of 5.1.** Offered 2,000 steps/sec against 2 replicas x 8 workers, the
+  fleet delivered a mean of 723 steps/sec before (4 runs, 689-766) and 797 after
+  (8 runs, 757-838) — while the commit rate *fell* from ~3,630/sec to
+  ~3,240/sec. The measurements are `make stress` with `STRESS_BUS=memory
+  STRESS_STEP_MS=0`; run-to-run spread is wide enough that a single pair of runs
+  says nothing, which is why these are repeated.
+
+  **The run cache was missing on nearly every step.** A worker re-reads the run
+  record to get the flow, and the cache in front of that held eight runs. Eight
+  is right for the runs one worker is advancing and wrong for the runs a fleet
+  has in flight: under a backlog the queue interleaves orgs, so consecutive
+  steps on one worker belong to different runs. Each miss cost a round trip
+  *and* a fresh decode of the whole flow JSON — together 16% of all CPU.
+
+  The window is now 4,096 runs, which is only affordable because the decodes are
+  deduplicated: a run pins its flow definition at submit time, so every run of
+  one flow carries a byte-identical payload and they share a single parse
+  (bounded at 128 distinct flows). Without that, a window that size would hold
+  one parsed graph per in-flight run.
+
+- **A step reads its predecessors in one query.** `core.OutcomeReader` is a new
+  optional JobStore extension returning just status and result for a batch of
+  ids; both stores implement it and the conformance suite covers it. A fan-in
+  step cost one full-record read per incoming edge, each of them decoding the
+  predecessor's Job JSON — params, input refs and env — that a dependent never
+  looks at.
+
+- **Submitting a run no longer reads a record to learn what it just wrote.**
+  `dispatchRoots` reports how many records it queued, and a run with queued work
+  demonstrably still owes it, so the "is everything already accounted for" walk
+  is skipped. That read was on the path a person waits behind after pressing
+  Run.
+
+- **The drop catalog is derived once, not per request.** Every graph validation,
+  save and submit asked the resolver for the tenant's catalog, and each call
+  re-applied the passthrough pin and list-port marking to all 182 built-ins:
+  700µs and half a megabyte of garbage. The registry now caches that derivation
+  and callers clone the map. Measured with `go test ./tests/perf/`: catalog
+  snapshot 745µs -> 106µs and 492KB -> 111KB; snapshot plus validation, which is
+  what a submit pays, 820µs -> 176µs. `MarkListPorts` — which also runs on every
+  node execution — copies only when a port actually changes.
+
+- **The web app loads a third of what it used to.** The build was a single
+  2.35MB bundle, so opening the sign-in page downloaded and parsed React Flow,
+  xterm, Leaflet, the Markdown renderer and the entire admin tree. Those routes
+  are now `React.lazy` chunks behind a Suspense boundary: first paint went from
+  707KB to 267KB gzipped, and the JavaScript the browser has to parse before it
+  can show anything from 2.3MB to 723KB.
+
 ## [0.37.1] - 2026-09-05
 
 ### Performance

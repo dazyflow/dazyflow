@@ -6,6 +6,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/dazyflow/dazyflow/core"
@@ -145,19 +146,19 @@ func (r *NodeResolver) lookup(ctx context.Context, id string) (core.Transport, b
 // worse, would tell them a runner by that name exists somewhere. The same holds
 // for an org's own MCP server.
 func (r *NodeResolver) ManifestsForTenant(tenant string) map[string]core.Manifest {
+	// Every processing drop carries the universal passthrough pin, surfaced
+	// here once so the palette, validation, and input assembly all see it
+	// without per-drop wiring. MarkListPorts then tags list-carrying ports
+	// (rows/responses/…) so the editor can flag a list wired into a
+	// one-at-a-time step. For the built-ins that whole derivation is cached
+	// by the registry; this clones it because callers edit their own view
+	// (the palette deletes drops a platform admin switched off).
 	out := map[string]core.Manifest{}
-	add := func(src map[string]core.Manifest) {
-		for id, m := range src {
-			// Every processing drop carries the universal passthrough pin,
-			// surfaced here once so the palette, validation, and input
-			// assembly all see it without per-drop wiring. MarkListPorts then
-			// tags list-carrying ports (rows/responses/…) so the editor can
-			// flag a list wired into a one-at-a-time step.
-			out[id] = core.MarkListPorts(core.WithPassthrough(m))
-		}
-	}
 	if r.Native != nil {
-		add(r.Native.Manifests())
+		out = maps.Clone(r.Native.DerivedManifests())
+		if out == nil {
+			out = map[string]core.Manifest{}
+		}
 	}
 	if r.Remote != nil {
 		// An empty tenant yields nothing, matching Get: the tenant-less callers

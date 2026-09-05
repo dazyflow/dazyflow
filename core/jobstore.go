@@ -180,6 +180,26 @@ type OwnedCompleter interface {
 	CompleteOwned(ctx context.Context, jobID, worker string, status JobStatus, result *Result) error
 }
 
+// NodeOutcome is the slice of a node record a DEPENDENT needs: whether the
+// step produced data, and what it produced. Everything else on the record —
+// the Job with its params, input refs and env, the lease and timing columns —
+// is dead weight on that read.
+type NodeOutcome struct {
+	Status JobStatus
+	Result *Result
+}
+
+// OutcomeReader is an optional JobStore extension that reads the outcomes of
+// several node records in ONE round trip. A step assembles its input from
+// every predecessor that feeds it, and reading those one full record at a
+// time costs a query per incoming edge plus a decode of each predecessor's
+// Job JSON, which the dependent never looks at. Keys of the returned map are
+// the job IDs that exist; a missing ID is absent rather than an error, so one
+// call reports both.
+type OutcomeReader interface {
+	Outcomes(ctx context.Context, jobIDs []string) (map[string]NodeOutcome, error)
+}
+
 // CompleteEnqueuer is an optional JobStore extension that writes a node's
 // completion and queues the dependents it released as ONE transaction.
 // Done separately they are two commits per step — the dominant cost on the

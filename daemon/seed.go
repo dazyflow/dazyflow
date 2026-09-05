@@ -22,7 +22,8 @@ import (
 // logic — it doesn't cascade skips or handle fallback edges. Those
 // scenarios are correctly handled later when a worker completes a
 // regular node and triggers the engine's full dispatcher.
-func enqueueReadyDependents(ctx context.Context, store core.JobStore, graph core.Graph, graphRunID, sourceNodeID string) {
+// Returns how many records it queued.
+func enqueueReadyDependents(ctx context.Context, store core.JobStore, graph core.Graph, graphRunID, sourceNodeID string) int {
 	// Loop-body nodes run once per item under their for_each, never standalone,
 	// so the seed path must skip them just as the live dispatcher does.
 	bodyOwners := loopBodyOwners(graph)
@@ -32,6 +33,7 @@ func enqueueReadyDependents(ctx context.Context, store core.JobStore, graph core
 			dependents[e.To] = struct{}{}
 		}
 	}
+	var queued int
 	for nodeID := range dependents {
 		if _, owned := bodyOwners[nodeID]; owned {
 			continue
@@ -51,8 +53,11 @@ func enqueueReadyDependents(ctx context.Context, store core.JobStore, graph core
 		}
 		// Idempotent: conflict means another path enqueued this node
 		// first, which is fine.
-		_ = store.Enqueue(ctx, rec)
+		if err := store.Enqueue(ctx, rec); err == nil {
+			queued++
+		}
 	}
+	return queued
 }
 
 func allPredsSucceeded(ctx context.Context, store core.JobStore, graph core.Graph, graphRunID, nodeID string) bool {
@@ -268,7 +273,7 @@ func (s *Service) SubmitGraphOpts(
 		return graphRunID, nil
 	}
 
-	enqueueErrs := populateSeededRun(ctx, s.Jobs, g, graphRunID, seeds)
+	queued, enqueueErrs := populateSeededRun(ctx, s.Jobs, g, graphRunID, seeds)
 	if len(enqueueErrs) > 0 {
 		merged := errors.Join(enqueueErrs...)
 		_ = s.Jobs.Complete(ctx, graphRunID, core.JobStatusFailed, &core.Result{
@@ -287,7 +292,10 @@ func (s *Service) SubmitGraphOpts(
 	// in a terminal record — happens when seeds cover the whole graph),
 	// finalize the graph-record now. Otherwise let workers drive the
 	// usual maybeCompleteGraph path.
-	if allNodesAccountedFor(ctx, s.Jobs, g, graphRunID) {
+	// A record queued just now is work the run still owes, so the walk below
+	// can only confirm what we already know — at the cost of a read per
+	// submit on the path a person waits behind when they press Run.
+	if queued == 0 && allNodesAccountedFor(ctx, s.Jobs, g, graphRunID) {
 		final := &core.Result{Status: core.StatusOK}
 		if cerr := s.Jobs.Complete(ctx, graphRunID, core.JobStatusSucceeded, final); cerr == nil {
 			s.bus().Publish(graphRunID, BusEvent{Terminal: &TerminalEvent{
@@ -353,13 +361,17 @@ func persistSeedsOnly(
 // when a run actually starts (immediately for admitted runs, or at promotion
 // for a pending one). seededNodeIDs reports which nodes carry pre-completed
 // seed records.
+// The queued count it returns is what lets the caller skip the
+// allNodesAccountedFor walk: a record enqueued here is queued, so the run
+// demonstrably has work left and the walk can only say so after a read.
 func dispatchRoots(
 	ctx context.Context,
 	store core.JobStore,
 	g core.Graph,
 	graphRunID string,
 	seededNodeIDs map[string]struct{},
-) []error {
+) (int, []error) {
+	var queued int
 	var enqueueErrs []error
 	hasIncoming := make(map[string]bool, len(g.Nodes))
 	for _, e := range g.Edges {
@@ -384,12 +396,14 @@ func dispatchRoots(
 		}
 		if err := store.Enqueue(ctx, nodeRec); err != nil {
 			enqueueErrs = append(enqueueErrs, fmt.Errorf("root %q: %w", node.ID, err))
+			continue
 		}
+		queued++
 	}
 	for seedID := range seededNodeIDs {
-		enqueueReadyDependents(ctx, store, g, graphRunID, seedID)
+		queued += enqueueReadyDependents(ctx, store, g, graphRunID, seedID)
 	}
-	return enqueueErrs
+	return queued, enqueueErrs
 }
 
 // populateSeededRun persists seeds and dispatches roots in one step — the
@@ -400,13 +414,14 @@ func populateSeededRun(
 	g core.Graph,
 	graphRunID string,
 	seeds map[string]core.Result,
-) []error {
+) (int, []error) {
 	errs := persistSeedsOnly(ctx, store, g, graphRunID, seeds)
 	seededSet := make(map[string]struct{}, len(seeds))
 	for nodeID := range seeds {
 		seededSet[nodeID] = struct{}{}
 	}
-	return append(errs, dispatchRoots(ctx, store, g, graphRunID, seededSet)...)
+	queued, dispatchErrs := dispatchRoots(ctx, store, g, graphRunID, seededSet)
+	return queued, append(errs, dispatchErrs...)
 }
 
 // allNodesAccountedFor returns true when every node in the graph has

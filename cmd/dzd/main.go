@@ -1342,8 +1342,10 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 	// the per-worker "started" lines.
 	log.Printf("workers: %d (each runs one step at a time)", d.workerCount)
 	// One run cache for the process: a run's steps land on whichever worker is
-	// free, so per-worker caches re-read the run record once per worker.
-	runs := daemon.NewRunCache(8 * d.workerCount)
+	// free, so per-worker caches re-read the run record once per worker. Sized
+	// by the RUNS in flight, not the workers: under a backlog the queue
+	// interleaves orgs, so a window of a few runs misses on nearly every step.
+	runs := daemon.NewRunCache(0)
 	for i := 0; i < d.workerCount; i++ {
 		w := daemon.NewWorker(daemon.WorkerConfig{
 			// Unique per process AND per worker goroutine: the job store's

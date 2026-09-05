@@ -597,16 +597,20 @@ var listPortNames = map[string]bool{
 // slices so the registry's stored manifest is never mutated, and only ever sets
 // List true — a drop that needs a different answer can set Port.List itself.
 func MarkListPorts(m Manifest) Manifest {
+	// Copy only when a port actually changes: this runs on every node
+	// execution (the engine re-marks the transport's manifest before
+	// assembling input) and most drops declare no list-named port at all.
 	mark := func(ports []Port) []Port {
-		if len(ports) == 0 {
-			return ports
-		}
-		out := make([]Port, len(ports))
-		copy(out, ports)
-		for i := range out {
-			if !out[i].List && listPortNames[out[i].Port] {
-				out[i].List = true
+		out := ports
+		for i := range ports {
+			if ports[i].List || !listPortNames[ports[i].Port] {
+				continue
 			}
+			if &out[0] == &ports[0] {
+				out = make([]Port, len(ports))
+				copy(out, ports)
+			}
+			out[i].List = true
 		}
 		return out
 	}

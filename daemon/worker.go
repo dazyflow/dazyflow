@@ -770,9 +770,14 @@ func (w *Worker) fetchRun(ctx context.Context, graphRunID string) (cachedRun, er
 	if run, ok := w.graphs.get(graphRunID); ok {
 		return run, nil
 	}
-	g, rec, err := loadRunFromStore(ctx, w.store, graphRunID)
+	rec, err := loadRunRecord(ctx, w.store, graphRunID)
 	if err != nil {
 		return cachedRun{}, err
+	}
+	// Decode through the cache so concurrent runs of one flow share a parse.
+	g, err := w.graphs.graphFor(rec.GraphPayload)
+	if err != nil {
+		return cachedRun{}, fmt.Errorf("unmarshal graph %s: %w", graphRunID, err)
 	}
 	run := cachedRun{graph: g, triggerDepth: rec.TriggerDepth, manual: rec.Manual}
 	w.graphs.put(graphRunID, run)
@@ -805,18 +810,29 @@ func loadGraphFromRun(ctx context.Context, store core.JobStore, graphRunID strin
 // loadRunFromStore is loadGraphFromRun plus the record itself, for callers
 // that also need the run's own metadata (its trigger-chain depth).
 func loadRunFromStore(ctx context.Context, store core.JobStore, graphRunID string) (core.Graph, core.JobRecord, error) {
-	graphRec, err := store.Get(ctx, graphRunID)
+	graphRec, err := loadRunRecord(ctx, store, graphRunID)
 	if err != nil {
-		return core.Graph{}, core.JobRecord{}, fmt.Errorf("get graph-record %s: %w", graphRunID, err)
-	}
-	if len(graphRec.GraphPayload) == 0 {
-		return core.Graph{}, graphRec, fmt.Errorf("graph-record %s has no payload", graphRunID)
+		return core.Graph{}, graphRec, err
 	}
 	var g core.Graph
 	if err := json.Unmarshal(graphRec.GraphPayload, &g); err != nil {
 		return core.Graph{}, graphRec, fmt.Errorf("unmarshal graph %s: %w", graphRunID, err)
 	}
 	return g, graphRec, nil
+}
+
+// loadRunRecord reads a graph-run record and checks it carries a payload,
+// leaving the decode to the caller — the worker routes it through RunCache so
+// runs of the same flow share one parse.
+func loadRunRecord(ctx context.Context, store core.JobStore, graphRunID string) (core.JobRecord, error) {
+	graphRec, err := store.Get(ctx, graphRunID)
+	if err != nil {
+		return core.JobRecord{}, fmt.Errorf("get graph-record %s: %w", graphRunID, err)
+	}
+	if len(graphRec.GraphPayload) == 0 {
+		return graphRec, fmt.Errorf("graph-record %s has no payload", graphRunID)
+	}
+	return graphRec, nil
 }
 
 // fetchPredecessors collects the Result of every node that feeds into rec.NodeID,
@@ -826,29 +842,69 @@ func loadRunFromStore(ctx context.Context, store core.JobStore, graphRunID strin
 // states are tolerated by the edge's on_error, so omission means the
 // downstream module sees no value on those input ports.
 func (w *Worker) fetchPredecessors(ctx context.Context, graph core.Graph, rec core.JobRecord) (map[string]core.Result, error) {
-	prior := make(map[string]core.Result)
+	// Collect the distinct upstream nodes first so the whole set is read in
+	// one round trip: a fan-in step otherwise costs a query per incoming
+	// edge, on the hottest path there is.
+	var from []string
+	seen := make(map[string]struct{}, len(graph.Edges))
 	for _, edge := range graph.Edges {
 		if edge.To != rec.NodeID {
 			continue
 		}
-		if _, already := prior[edge.From]; already {
+		if _, dup := seen[edge.From]; dup {
 			continue
 		}
-		predID := NodeJobID(rec.GraphRunID, edge.From)
-		predRec, err := w.store.Get(ctx, predID)
-		if err != nil {
-			return nil, fmt.Errorf("predecessor %q: %w", edge.From, err)
+		seen[edge.From] = struct{}{}
+		from = append(from, edge.From)
+	}
+	if len(from) == 0 {
+		return map[string]core.Result{}, nil
+	}
+
+	outcomes, err := w.predecessorOutcomes(ctx, rec.GraphRunID, from)
+	if err != nil {
+		return nil, err
+	}
+	prior := make(map[string]core.Result, len(from))
+	for _, nodeID := range from {
+		oc, ok := outcomes[NodeJobID(rec.GraphRunID, nodeID)]
+		if !ok {
+			return nil, fmt.Errorf("predecessor %q: %w", nodeID, core.ErrNotFound)
 		}
-		switch predRec.Status {
+		switch oc.Status {
 		case core.JobStatusFailed, core.JobStatusSkipped:
 			continue
 		}
-		if predRec.Result == nil {
-			return nil, fmt.Errorf("predecessor %q has no result yet", edge.From)
+		if oc.Result == nil {
+			return nil, fmt.Errorf("predecessor %q has no result yet", nodeID)
 		}
-		prior[edge.From] = *predRec.Result
+		prior[nodeID] = *oc.Result
 	}
 	return prior, nil
+}
+
+// predecessorOutcomes reads the upstream nodes' outcomes, in one query when
+// the store offers it and one record at a time otherwise.
+func (w *Worker) predecessorOutcomes(ctx context.Context, graphRunID string, nodeIDs []string) (map[string]core.NodeOutcome, error) {
+	ids := make([]string, len(nodeIDs))
+	for i, nodeID := range nodeIDs {
+		ids[i] = NodeJobID(graphRunID, nodeID)
+	}
+	if reader, ok := w.store.(core.OutcomeReader); ok {
+		return reader.Outcomes(ctx, ids)
+	}
+	out := make(map[string]core.NodeOutcome, len(ids))
+	for i, id := range ids {
+		predRec, err := w.store.Get(ctx, id)
+		if errors.Is(err, core.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("predecessor %q: %w", nodeIDs[i], err)
+		}
+		out[id] = core.NodeOutcome{Status: predRec.Status, Result: predRec.Result}
+	}
+	return out, nil
 }
 
 // maybeSubmitChild checks whether the parked node was produced by a

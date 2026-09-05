@@ -191,10 +191,11 @@ func (s *Service) submitGraphWithParent(
 	if err := s.Jobs.Enqueue(ctx, graphRec); err != nil {
 		return "", fmt.Errorf("enqueue child graph: %w", err)
 	}
-	if errs := populateSeededRun(ctx, s.Jobs, g, graphRunID, seeds); len(errs) > 0 {
+	queued, errs := populateSeededRun(ctx, s.Jobs, g, graphRunID, seeds)
+	if len(errs) > 0 {
 		return graphRunID, fmt.Errorf("enqueue child roots: %v", errs)
 	}
-	if allNodesAccountedFor(ctx, s.Jobs, g, graphRunID) {
+	if queued == 0 && allNodesAccountedFor(ctx, s.Jobs, g, graphRunID) {
 		final := &core.Result{Status: core.StatusOK}
 		_ = s.Jobs.Complete(ctx, graphRunID, core.JobStatusSucceeded, final)
 		s.bus().Publish(graphRunID, BusEvent{Terminal: &TerminalEvent{

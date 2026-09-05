@@ -5,6 +5,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"sync"
 
@@ -158,17 +159,82 @@ type cachedRun struct {
 // Share one across a process's workers (WorkerConfig.Runs): a run's steps land
 // on whichever worker is free, so per-worker caches each re-read the run
 // record once — on a fleet of many workers that is a read per step.
+//
+// The window has to span every run the fleet has IN FLIGHT, not just the few
+// a worker is advancing: under a backlog the queue interleaves orgs, so
+// consecutive steps on one worker belong to different runs and a small window
+// misses on every step. Each miss is a round trip AND a re-parse of the whole
+// flow JSON. A window that large is only affordable because the parses are
+// deduplicated — see graphs below.
 type RunCache struct {
 	mu      sync.Mutex
 	max     int
 	entries map[string]cachedRun
 	order   []string
+
+	// graphs interns parsed graphs by their payload bytes. A run pins its
+	// flow definition at submit time, so every run of one flow carries a
+	// byte-identical payload and they can share a single parse; different
+	// bytes are a different flow, which is why the key is the payload and
+	// not the (mutable) flow id. Without this the window above would hold
+	// one parsed graph per in-flight run — hundreds of megabytes at a few
+	// thousand runs — instead of one per distinct flow.
+	graphs     map[string]core.Graph
+	graphOrder []string
 }
 
-// NewRunCache bounds the cache at capacity runs; 0 means a small per-worker
-// window.
+// maxCachedRuns is the default window when the caller does not size one. An
+// entry is a graph header plus two fields, so this costs tens of kilobytes.
+const maxCachedRuns = 4096
+
+// maxInternedGraphs bounds the parse cache. Unlike a run entry this holds the
+// payload (its key) and the decoded graph, so it is sized by distinct flows
+// under load rather than by runs.
+const maxInternedGraphs = 128
+
+// NewRunCache bounds the cache at capacity runs; 0 means the default window.
 func NewRunCache(capacity int) *RunCache {
 	return &RunCache{max: capacity}
+}
+
+// graphFor decodes payload, reusing another run's decode of the same flow.
+// The returned Graph shares its slices with every other holder, which is the
+// same sharing the run window already relies on: the run path only reads a
+// cached graph.
+func (c *RunCache) graphFor(payload []byte) (core.Graph, error) {
+	if c == nil {
+		var g core.Graph
+		return g, json.Unmarshal(payload, &g)
+	}
+	c.mu.Lock()
+	// Keying a map with string(byteSlice) does not allocate — the compiler
+	// hashes the bytes in place — so a hit costs one pass over the payload.
+	if g, ok := c.graphs[string(payload)]; ok {
+		c.mu.Unlock()
+		return g, nil
+	}
+	c.mu.Unlock()
+
+	var g core.Graph
+	if err := json.Unmarshal(payload, &g); err != nil {
+		return core.Graph{}, err
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.graphs == nil {
+		c.graphs = map[string]core.Graph{}
+	}
+	key := string(payload)
+	if _, dup := c.graphs[key]; !dup {
+		c.graphs[key] = g
+		c.graphOrder = append(c.graphOrder, key)
+		if len(c.graphOrder) > maxInternedGraphs {
+			delete(c.graphs, c.graphOrder[0])
+			c.graphOrder = c.graphOrder[1:]
+		}
+	}
+	return g, nil
 }
 
 func (c *RunCache) get(runID string) (cachedRun, bool) {
@@ -194,7 +260,7 @@ func (c *RunCache) put(runID string, run cachedRun) {
 	c.order = append(c.order, runID)
 	limit := c.max
 	if limit <= 0 {
-		limit = maxCachedTopologies
+		limit = maxCachedRuns
 	}
 	if len(c.order) > limit {
 		delete(c.entries, c.order[0])
