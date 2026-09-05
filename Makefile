@@ -209,7 +209,7 @@ vet: ## Run go vet
 
 stress: ## Load-test the execution path against a scratch DB (STRESS_DSN, see tests/stress/README.md)
 	@test -n "$(STRESS_DSN)" || { echo "STRESS_DSN is required — point it at a SCRATCH database; the rig truncates jobs and bus_events"; exit 1; }
-	STRESS_DSN="$(STRESS_DSN)" go test ./tests/stress/ -run TestStressQueue -v -timeout 30m
+	STRESS_DSN="$(STRESS_DSN)" go test ./tests/stress/ -run TestStressQueue -v -timeout 30m -count=1
 
 flowgen-eval: ## Score the AI flow generator against every scenario in tests/usecases/README.md (needs FLOWGEN_EVAL_KEY; writes a report)
 	@test -n "$$FLOWGEN_EVAL_KEY" || { echo "set FLOWGEN_EVAL_KEY=<provider api key> (it calls a real model, which costs money)"; exit 1; }

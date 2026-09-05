@@ -506,6 +506,148 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 		}
 	})
 
+	// CompleteAndEnqueue: the node's outcome and its released dependents in
+	// one write. The two stores must agree on every edge — the worker relies
+	// on ErrConflict meaning "nothing landed" and on a cancelled run
+	// swallowing the dependents.
+	t.Run("CompleteAndEnqueue_writes_both", func(t *testing.T) {
+		s := mk(t)
+		ce, ok := s.(core.CompleteEnqueuer)
+		if !ok {
+			t.Skip("store does not implement CompleteEnqueuer")
+		}
+		ctx := t.Context()
+		mustEnqueue(t, s, ctx, core.JobRecord{ID: "run", Kind: core.JobKindGraph, Tenant: "t", Status: core.JobStatusRunning, Manual: true})
+		mustEnqueue(t, s, ctx, core.JobRecord{ID: "run/a", Kind: core.JobKindNode, GraphRunID: "run", GraphID: "g", NodeID: "a", Tenant: "t"})
+		mustEnqueue(t, s, ctx, core.JobRecord{ID: "run/old", Kind: core.JobKindNode, GraphRunID: "run", GraphID: "g", NodeID: "old", Tenant: "t"})
+		if _, err := s.Claim(ctx, "w1", time.Minute); err != nil {
+			t.Fatalf("claim: %v", err)
+		}
+		deps := []core.JobRecord{
+			{ID: "run/b", GraphRunID: "run", GraphID: "g", NodeID: "b", Tenant: "t", Workspace: "ws", Job: core.Job{GraphID: "g", NodeID: "b"}},
+			{ID: "run/old", GraphRunID: "run", GraphID: "g", NodeID: "old", Tenant: "t", Job: core.Job{GraphID: "g", NodeID: "old"}},
+		}
+		adv, err := ce.CompleteAndEnqueue(ctx, "run/a", "w1", core.JobStatusSucceeded, &core.Result{Status: core.StatusOK}, deps)
+		if err != nil {
+			t.Fatalf("CompleteAndEnqueue: %v", err)
+		}
+		if adv.RunStatus != core.JobStatusRunning {
+			t.Errorf("RunStatus = %q, want running", adv.RunStatus)
+		}
+		// The pre-existing dependent is left alone and not counted.
+		if adv.Enqueued != 1 {
+			t.Errorf("Enqueued = %d, want 1", adv.Enqueued)
+		}
+		a, _ := s.Get(ctx, "run/a")
+		if a.Status != core.JobStatusSucceeded || a.Result == nil || a.FinishedAt == nil || a.LeaseUntil != nil {
+			t.Errorf("a = %+v, want succeeded with result, finish time, no lease", a)
+		}
+		b, err := s.Get(ctx, "run/b")
+		if err != nil {
+			t.Fatalf("dependent b not queued: %v", err)
+		}
+		if b.Status != core.JobStatusQueued || b.Kind != core.JobKindNode || b.Job.NodeID != "b" || b.Workspace != "ws" || b.EnqueuedAt.IsZero() {
+			t.Errorf("b = %+v, want a queued node record with job, workspace and enqueue time", b)
+		}
+		if old, _ := s.Get(ctx, "run/old"); old.Status != core.JobStatusQueued {
+			t.Errorf("old = %q, want left queued", old.Status)
+		}
+		// Re-completing is a conflict, and lands nothing new.
+		_, err = ce.CompleteAndEnqueue(ctx, "run/a", "w1", core.JobStatusFailed, nil,
+			[]core.JobRecord{{ID: "run/c", GraphRunID: "run", GraphID: "g", NodeID: "c", Tenant: "t"}})
+		if !errors.Is(err, core.ErrConflict) {
+			t.Errorf("re-complete = %v, want ErrConflict", err)
+		}
+		if _, err := s.Get(ctx, "run/c"); !errors.Is(err, core.ErrNotFound) {
+			t.Errorf("c after fenced write = %v, want ErrNotFound", err)
+		}
+	})
+
+	t.Run("CompleteAndEnqueue_fenced_writes_nothing", func(t *testing.T) {
+		s := mk(t)
+		ce, ok := s.(core.CompleteEnqueuer)
+		if !ok {
+			t.Skip("store does not implement CompleteEnqueuer")
+		}
+		ctx := t.Context()
+		mustEnqueue(t, s, ctx, core.JobRecord{ID: "run/a", Kind: core.JobKindNode, GraphRunID: "run", NodeID: "a", Tenant: "t"})
+		if _, err := s.Claim(ctx, "owner", time.Minute); err != nil {
+			t.Fatalf("claim: %v", err)
+		}
+		deps := []core.JobRecord{{ID: "run/b", GraphRunID: "run", GraphID: "g", NodeID: "b", Tenant: "t"}}
+		if _, err := ce.CompleteAndEnqueue(ctx, "run/a", "thief", core.JobStatusSucceeded, nil, deps); !errors.Is(err, core.ErrConflict) {
+			t.Fatalf("non-owner = %v, want ErrConflict", err)
+		}
+		if a, _ := s.Get(ctx, "run/a"); a.Status != core.JobStatusRunning {
+			t.Errorf("a = %q after fenced write, want running", a.Status)
+		}
+		if _, err := s.Get(ctx, "run/b"); !errors.Is(err, core.ErrNotFound) {
+			t.Errorf("b after fenced write = %v, want ErrNotFound", err)
+		}
+		if _, err := ce.CompleteAndEnqueue(ctx, "ghost", "", core.JobStatusSucceeded, nil, deps); !errors.Is(err, core.ErrNotFound) {
+			t.Errorf("missing = %v, want ErrNotFound", err)
+		}
+		if _, err := ce.CompleteAndEnqueue(ctx, "run/a", "owner", core.JobStatusRunning, nil, nil); !errors.Is(err, core.ErrConflict) {
+			t.Errorf("non-terminal status = %v, want ErrConflict", err)
+		}
+	})
+
+	t.Run("CompleteAndEnqueue_cancelled_run_swallows_dependents", func(t *testing.T) {
+		s := mk(t)
+		ce, ok := s.(core.CompleteEnqueuer)
+		if !ok {
+			t.Skip("store does not implement CompleteEnqueuer")
+		}
+		ctx := t.Context()
+		mustEnqueue(t, s, ctx, core.JobRecord{ID: "run", Kind: core.JobKindGraph, Tenant: "t", Status: core.JobStatusRunning})
+		mustEnqueue(t, s, ctx, core.JobRecord{ID: "run/a", Kind: core.JobKindNode, GraphRunID: "run", NodeID: "a", Tenant: "t"})
+		if err := s.Complete(ctx, "run", core.JobStatusCancelled, nil); err != nil {
+			t.Fatalf("cancel run: %v", err)
+		}
+		adv, err := ce.CompleteAndEnqueue(ctx, "run/a", "", core.JobStatusSucceeded, &core.Result{Status: core.StatusOK},
+			[]core.JobRecord{{ID: "run/b", GraphRunID: "run", GraphID: "g", NodeID: "b", Tenant: "t"}})
+		if err != nil {
+			t.Fatalf("CompleteAndEnqueue: %v", err)
+		}
+		if adv.RunStatus != core.JobStatusCancelled || adv.Enqueued != 0 {
+			t.Errorf("adv = %+v, want cancelled run and nothing enqueued", adv)
+		}
+		// The node's own outcome still lands: it did run.
+		if a, _ := s.Get(ctx, "run/a"); a.Status != core.JobStatusSucceeded {
+			t.Errorf("a = %q, want succeeded", a.Status)
+		}
+		if _, err := s.Get(ctx, "run/b"); !errors.Is(err, core.ErrNotFound) {
+			t.Errorf("b under a cancelled run = %v, want ErrNotFound", err)
+		}
+	})
+
+	t.Run("CompleteAndEnqueue_awaiting_parks", func(t *testing.T) {
+		s := mk(t)
+		ce, ok := s.(core.CompleteEnqueuer)
+		if !ok {
+			t.Skip("store does not implement CompleteEnqueuer")
+		}
+		ctx := t.Context()
+		mustEnqueue(t, s, ctx, core.JobRecord{ID: "run/a", Kind: core.JobKindNode, GraphRunID: "run", NodeID: "a", Tenant: "t"})
+		deps := []core.JobRecord{{ID: "run/b", GraphRunID: "run", GraphID: "g", NodeID: "b", Tenant: "t"}}
+		adv, err := ce.CompleteAndEnqueue(ctx, "run/a", "", core.JobStatusAwaiting, &core.Result{Status: core.StatusOK}, deps)
+		if err != nil || adv.Enqueued != 1 {
+			t.Fatalf("park = %+v, %v; want one dependent queued", adv, err)
+		}
+		if a, _ := s.Get(ctx, "run/a"); a.Status != core.JobStatusAwaiting || a.FinishedAt != nil {
+			t.Errorf("a = %+v, want awaiting with no finish time", a)
+		}
+		// A re-park is the conflict Complete makes it.
+		if _, err := ce.CompleteAndEnqueue(ctx, "run/a", "", core.JobStatusAwaiting, nil, nil); !errors.Is(err, core.ErrConflict) {
+			t.Errorf("re-park = %v, want ErrConflict", err)
+		}
+		// Resuming succeeds; the same dependent again is not counted twice.
+		adv, err = ce.CompleteAndEnqueue(ctx, "run/a", "", core.JobStatusSucceeded, &core.Result{Status: core.StatusOK}, deps)
+		if err != nil || adv.Enqueued != 0 {
+			t.Errorf("resume = %+v, %v; want success with nothing new", adv, err)
+		}
+	})
+
 	t.Run("Get_missing_returns_NotFound", func(t *testing.T) {
 		s := mk(t)
 		_, err := s.Get(t.Context(), "no-such-id")

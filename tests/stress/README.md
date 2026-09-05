@@ -83,6 +83,63 @@ Two lessons worth keeping, because the first one is counter-intuitive:
 ceiling to aim at — 402 steps/s here, against 397 achieved, so there is little
 left in that direction.
 
+The next cut was the commit count itself. A step's completion and the enqueue of
+its successors were two transactions; they are now one statement, which also
+returns the run's status so the cancel check no longer costs a read of its own.
+Per step that is 8.4 → 5.1 statements and 3.9 → 2.8 write transactions; at 48
+workers offered 1,000 steps/s the fleet went from 614 to ~660 while the commit
+rate *fell* from ~5,000/s to ~3,300/s. What a step costs now, from the trace:
+
+| Per step | Statement |
+|---:|---|
+| 1.1 | claim (`UPDATE … FOR UPDATE SKIP LOCKED`) |
+| 1.0 | complete + enqueue successors + read run status (one CTE) |
+| 0.3 | graph record and root for a new run, amortised |
+| 0.2–0.4 | event bus flush, amortised |
+| 2.0 | point reads: predecessor results, and the run record once per replica |
+| 0.1 | completion check, once per run |
+
+The remaining gap to the fleet's theoretical rate is per-statement latency under
+load rather than the number of commits: with 48 clients on one machine each of
+the ~5 round trips a step still makes waits its turn.
+
+## Should you tune Postgres?
+
+Mostly no — measured, not assumed. With 48 workers offered 990 steps/s on a
+stock Postgres 16 in Docker:
+
+| Setting | Steps/s |
+|---|---:|
+| stock (`shared_buffers` 128MB, `wal_buffers` 4MB, `synchronous_commit` on) | 614 |
+| `commit_delay = 2000` (group commit, durable) | 615 |
+| `shared_buffers` 1GB + `wal_buffers` 64MB | 613 |
+| `synchronous_commit = off` | **661** |
+| all of the above together | 661 |
+
+The disk does ~1,240 fdatasyncs/s (`pg_test_fsync`), yet the run commits 5,000
+times a second — Postgres already shares ~4 commits per flush. Sampling
+`pg_stat_activity` mid-run shows why the knobs do not bite: at most **one**
+backend is ever in `IO:WALSync` (waiting for disk), while up to 26 sit in
+`LWLock:WALWrite` — queued for the lock that serialises WAL insertion. That is
+contention from many small transactions, and no durability or buffer setting
+removes it. The rest sit in `Client:ClientRead`: idle, waiting for a worker to
+send the next statement.
+
+So the ceiling is statements per step, on both sides at once — each write
+transaction contends for the WAL lock, and each round trip stalls the worker
+that issued it. That is what the merged completion write above acts on.
+`synchronous_commit = off` is the one setting worth knowing
+about, and it buys ~7% by dropping the last few hundred milliseconds of commits
+on a Postgres crash (not a client crash); a step could re-run. Decide that
+deliberately or leave it on.
+
+**Two things to check before drawing conclusions from your own numbers**, both
+of which produced convincing wrong answers here first: `go test` caches results
+when nothing Go can see has changed, and a Postgres setting is invisible to it —
+always run with `-count=1` (`make stress` does). And the `submitted` line must
+read ~100% of target; if the rig's own submitter is the limit, "achieved" is
+measured against load that was never offered.
+
 ## What it does not measure
 
 The HTTP request path, SSE fan-out to browsers, and anything a connector does

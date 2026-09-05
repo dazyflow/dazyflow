@@ -180,6 +180,31 @@ type OwnedCompleter interface {
 	CompleteOwned(ctx context.Context, jobID, worker string, status JobStatus, result *Result) error
 }
 
+// CompleteEnqueuer is an optional JobStore extension that writes a node's
+// completion and queues the dependents it released as ONE transaction.
+// Done separately they are two commits per step — the dominant cost on the
+// execution path — and leave a window where the node is finished but its
+// successor is not yet queued, which nothing but a stuck-run sweep closes.
+//
+// Semantics match CompleteOwned followed by Enqueue of each dependent: the
+// write is fenced on worker's lease when worker is set, ErrConflict means
+// nothing was written, and a dependent that already exists is left alone
+// and not counted. Dependents are also not queued when the run's own record
+// is already terminal (cancelled), so a node finishing mid-cancel can't
+// revive the run; RunStatus reports that state as of the write.
+type CompleteEnqueuer interface {
+	CompleteAndEnqueue(ctx context.Context, jobID, worker string, status JobStatus, result *Result, dependents []JobRecord) (Advance, error)
+}
+
+// Advance is what CompleteAndEnqueue saw and did.
+type Advance struct {
+	// RunStatus is the graph-run record's status at the time of the write,
+	// or "" when the node has no run record.
+	RunStatus JobStatus
+	// Enqueued counts dependents newly queued; pre-existing ones don't count.
+	Enqueued int
+}
+
 // JobCounter is an optional JobStore extension exposing aggregate
 // node-job counts for metrics — queue depth (queued) and in-flight
 // (running) are the load-bearing signals. Implemented by the Memory and

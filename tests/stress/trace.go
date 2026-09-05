@@ -46,15 +46,28 @@ func shapeOf(sql string) string {
 	if verb == "with" {
 		verb = "with-cte"
 	}
+	shape := verb
 	for i, w := range f {
 		switch w {
 		case "from", "into", "update":
 			if i+1 < len(f) {
-				return verb + " " + strings.Trim(f[i+1], "(),")
+				shape = verb + " " + strings.Trim(f[i+1], "(),")
+			}
+		}
+		if shape != verb {
+			break
+		}
+	}
+	// Reads all look alike by table; the first few words of the filter tell
+	// a point read of a run record from a scan of its nodes.
+	if verb == "select" {
+		for i, w := range f {
+			if w == "where" {
+				return shape + " " + strings.Join(f[i+1:min(i+7, len(f))], " ")
 			}
 		}
 	}
-	return verb
+	return shape
 }
 
 type stmtLine struct {

@@ -45,6 +45,28 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
   half of the finding: reads do not wait for disk and commits do, so the
   round-trip count that matters is transactions rather than statements.
 
+- **A step's completion and the successors it releases are one write.** They
+  were two commits, with a window between them where a step was finished but
+  its successor not yet queued — which only the stuck-run sweep could close.
+  The store now does both in a single statement, which also returns the run's
+  status, so the "was this run cancelled meanwhile" read that followed every
+  completion comes back with the write instead. A successor that also waits on
+  other steps is still decided after the commit, on purpose: two predecessors
+  finishing at once may each see the other unfinished unless each reads only
+  after its own write is visible, and that guarantee is what keeps a join from
+  stranding.
+
+  Per step: statements 8.4 → 5.1, write transactions 3.9 → 2.8. With 48
+  workers offered 1,000 steps/sec the fleet delivers ~660 against 614 before —
+  while committing ~3,300 times a second instead of ~5,000, so the same
+  database has room it did not have.
+
+- **One run cache per process** rather than per worker (`WorkerConfig.Runs`),
+  so a run's record is read once per replica rather than once per worker its
+  steps land on. `dzd` also now waits for the event bus's final flush before
+  closing its database pool; events published in the last flush window before
+  shutdown were dropped.
+
 ### Added
 
 - **A load rig for the execution path** (`make stress`, `tests/stress/`). It
@@ -62,6 +84,14 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
   ceiling divided by the round trips a step costs, so adding pods past the knee
   only grows the backlog. Someone else's hardware will give different numbers;
   the point is that they can now get them.
+
+  It also settles whether to tune Postgres: mostly no. Group commit, 8x the WAL
+  buffers and 8x the shared buffers each changed throughput by under 1%;
+  `synchronous_commit = off` alone bought ~7%, at the cost of the last few
+  hundred milliseconds of commits on a database crash. Mid-run, at most one
+  backend was ever waiting on disk while dozens queued for the WAL-write lock —
+  the cost is many small transactions, which is an application property. The
+  README carries the table and the wait-event evidence.
 
 ## [0.37.0] - 2026-09-04
 

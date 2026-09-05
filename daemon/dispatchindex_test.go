@@ -91,7 +91,7 @@ func TestTopologyCache_ReusesPerRun(t *testing.T) {
 }
 
 func TestRunGraphCache_EvictsOldest(t *testing.T) {
-	var c runGraphCache
+	var c RunCache
 	for i := 0; i < maxCachedTopologies+3; i++ {
 		c.put(string(rune('a'+i)), cachedRun{graph: core.Graph{ID: string(rune('a' + i))}})
 	}

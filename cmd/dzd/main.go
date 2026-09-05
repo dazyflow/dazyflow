@@ -434,6 +434,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("postgres event bus: %v", err)
 	}
+	// Deferred after the pool's Close, so it runs first: the last flush
+	// window's events land before the pool goes.
+	defer pgBus.Close()
 	// RecordingBus persists every published run event (progress lines,
 	// node transitions, terminal) as run logs — `dzctl job logs` and the
 	// logs endpoints read them back. Decorating at the bus keeps one
@@ -1329,6 +1332,9 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 	// (dazyflow_jobs_oldest_queued_seconds) needs to see it without counting
 	// the per-worker "started" lines.
 	log.Printf("workers: %d (each runs one step at a time)", d.workerCount)
+	// One run cache for the process: a run's steps land on whichever worker is
+	// free, so per-worker caches re-read the run record once per worker.
+	runs := daemon.NewRunCache(8 * d.workerCount)
 	for i := 0; i < d.workerCount; i++ {
 		w := daemon.NewWorker(daemon.WorkerConfig{
 			// Unique per process AND per worker goroutine: the job store's
@@ -1341,6 +1347,7 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 			// Best-effort inside the Service; a dead mailer can't stop a
 			// flow from pausing.
 			OnNodeAwaiting: d.svc.HandleNodeAwaiting,
+			Runs:           runs,
 		}, d.jobs, d.eng, d.bus)
 		// Enable subgraph execution: the worker hands a parked subgraph
 		// node's child graph to the Service to submit and run. Without this,

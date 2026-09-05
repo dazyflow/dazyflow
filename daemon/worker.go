@@ -69,6 +69,11 @@ type WorkerConfig struct {
 	// parked nodes (await_approval, subgraph) return from Execute promptly
 	// and so never approach it. Default 30m; set negative to disable.
 	DefaultNodeTimeout time.Duration
+
+	// Runs is the run-record cache, shared by every worker in the process so a
+	// run is read once per process rather than once per worker that touches
+	// it. nil gives the worker a small private one.
+	Runs *RunCache
 }
 
 func (c *WorkerConfig) withDefaults() WorkerConfig {
@@ -121,9 +126,9 @@ type Worker struct {
 	engine     *engine.Engine
 	bus        Bus
 	dispatcher *Dispatcher
-	// graphs caches the parsed graph of the last few runs this worker
-	// touched — see fetchGraph.
-	graphs runGraphCache
+	// graphs caches the parsed graph of recent runs — see fetchGraph. Shared
+	// across the process's workers when WorkerConfig.Runs is set.
+	graphs *RunCache
 	// runState accumulates stored result bytes per run — the ceiling that
 	// stops one payload being amplified across a long chain of steps.
 	runState runStateMeter
@@ -137,12 +142,17 @@ type Worker struct {
 
 func NewWorker(cfg WorkerConfig, store core.JobStore, eng *engine.Engine, bus Bus) *Worker {
 	c := cfg.withDefaults()
+	graphs := c.Runs
+	if graphs == nil {
+		graphs = NewRunCache(0)
+	}
 	return &Worker{
 		cfg:        c,
 		store:      store,
 		engine:     eng,
 		bus:        bus,
 		dispatcher: NewDispatcher(store, bus, eng, c.Logger),
+		graphs:     graphs,
 	}
 }
 
@@ -266,7 +276,7 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 		return leaseLost.Load()
 	}
 
-	graph, fetchErr := w.fetchGraph(jobCtx, rec.GraphRunID)
+	run, fetchErr := w.fetchRun(jobCtx, rec.GraphRunID)
 	if fetchErr != nil {
 		if stopLease() {
 			w.cfg.Logger.Printf("[%s] %s: lease lost; abandoning (reclaimed elsewhere)", w.cfg.ID, rec.ID)
@@ -275,6 +285,7 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 		w.failNode(jobCtx, rec, "load_graph", fetchErr.Error(), nil)
 		return
 	}
+	graph := run.graph
 
 	// Disabled switch: the node is off — record it as skipped without
 	// executing. dispatchReady then evaluates its dependents, and the
@@ -477,7 +488,12 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 		}
 	}
 
-	cerr := w.completeNode(jobCtx, rec.ID, status, &result)
+	// The outcome and the dependents it releases are one write; the rest of
+	// the advance (publish, completion check) follows once it has landed. On
+	// jobCtx, so a node finishing during a graceful shutdown still enqueues
+	// its dependents — see jobCtx.
+	plan := w.dispatcher.PlanAdvance(jobCtx, graph, rec.GraphRunID, rec.NodeID, status, &result, run.manual)
+	adv, cerr := w.completeAndEnqueue(jobCtx, rec.ID, status, &result, plan.enqueue)
 	if errors.Is(cerr, core.ErrConflict) {
 		// Fenced: we lost the lease (reclaimed elsewhere) or the record is
 		// already terminal. Abandon — don't advance dependents off our
@@ -491,11 +507,39 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 	if cerr != nil {
 		w.cfg.Logger.Printf("[%s] complete %s: %v", w.cfg.ID, rec.ID, cerr)
 	}
+	w.dispatcher.FinishAdvance(jobCtx, graph, rec.GraphRunID, rec.NodeID, status, &result, plan, adv)
+}
 
-	// Dispatch dependents + check graph completion via the shared dispatcher
-	// (used by both worker and approval path). On jobCtx, so a node finishing
-	// during a graceful shutdown still enqueues its dependents — see jobCtx.
-	w.dispatcher.AdvanceAfterCompletion(jobCtx, graph, rec.GraphRunID, rec.NodeID, status, result.Error)
+// completeAndEnqueue writes a node's outcome together with the dependents it
+// releases when the store can do that as one transaction
+// (core.CompleteEnqueuer), and as the separate writes they used to be
+// otherwise — including the run-status read that gates them.
+func (w *Worker) completeAndEnqueue(ctx context.Context, jobID string, status core.JobStatus, result *core.Result, deps []core.JobRecord) (core.Advance, error) {
+	if ce, ok := w.store.(core.CompleteEnqueuer); ok {
+		return ce.CompleteAndEnqueue(ctx, jobID, w.cfg.ID, status, result, deps)
+	}
+	if err := w.completeNode(ctx, jobID, status, result); err != nil {
+		return core.Advance{}, err
+	}
+	var adv core.Advance
+	if len(deps) > 0 {
+		if grec, err := w.store.Get(ctx, deps[0].GraphRunID); err == nil {
+			adv.RunStatus = grec.Status
+			if core.IsTerminalStatus(grec.Status) {
+				return adv, nil
+			}
+		}
+	}
+	for _, d := range deps {
+		switch err := w.store.Enqueue(ctx, d); {
+		case err == nil:
+			adv.Enqueued++
+		case errors.Is(err, core.ErrConflict):
+		default:
+			w.cfg.Logger.Printf("[%s] enqueue dependent %s: %v", w.cfg.ID, d.NodeID, err)
+		}
+	}
+	return adv, nil
 }
 
 // completeNode writes a node's terminal/awaiting status, fenced on lease
@@ -717,15 +761,22 @@ func (w *Worker) bodyRunner(body core.Graph, graphRunID string) engine.BodyRunne
 // re-decoding it for every node was the single largest cost of running a
 // large flow: the whole graph JSON, once per step.
 func (w *Worker) fetchGraph(ctx context.Context, graphRunID string) (core.Graph, error) {
+	run, err := w.fetchRun(ctx, graphRunID)
+	return run.graph, err
+}
+
+// fetchRun is fetchGraph with the run's own metadata alongside.
+func (w *Worker) fetchRun(ctx context.Context, graphRunID string) (cachedRun, error) {
 	if run, ok := w.graphs.get(graphRunID); ok {
-		return run.graph, nil
+		return run, nil
 	}
 	g, rec, err := loadRunFromStore(ctx, w.store, graphRunID)
 	if err != nil {
-		return core.Graph{}, err
+		return cachedRun{}, err
 	}
-	w.graphs.put(graphRunID, cachedRun{graph: g, triggerDepth: rec.TriggerDepth})
-	return g, nil
+	run := cachedRun{graph: g, triggerDepth: rec.TriggerDepth, manual: rec.Manual}
+	w.graphs.put(graphRunID, run)
+	return run, nil
 }
 
 // runTriggerDepth is how deep the trigger chain that started this run was.

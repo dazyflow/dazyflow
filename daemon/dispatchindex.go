@@ -146,26 +146,39 @@ var debugDispatch = os.Getenv("DAZYFLOW_DEBUG_DISPATCH") != ""
 type cachedRun struct {
 	graph        core.Graph
 	triggerDepth int
+	// manual: a person started this run from the app and is watching it —
+	// what a breakpoint needs to know (see shouldPauseAfter).
+	manual bool
 }
 
-// runGraphCache holds that for the last few runs a worker advanced. A run's
-// payload is immutable once submitted, so the only staleness risk would be a
-// caller mutating the returned graph — nothing on the run path does; every
-// consumer reads it.
-type runGraphCache struct {
+// RunCache holds that for recent runs. A run's payload is immutable once
+// submitted, so the only staleness risk would be a caller mutating the
+// returned graph — nothing on the run path does; every consumer reads it.
+//
+// Share one across a process's workers (WorkerConfig.Runs): a run's steps land
+// on whichever worker is free, so per-worker caches each re-read the run
+// record once — on a fleet of many workers that is a read per step.
+type RunCache struct {
 	mu      sync.Mutex
+	max     int
 	entries map[string]cachedRun
 	order   []string
 }
 
-func (c *runGraphCache) get(runID string) (cachedRun, bool) {
+// NewRunCache bounds the cache at capacity runs; 0 means a small per-worker
+// window.
+func NewRunCache(capacity int) *RunCache {
+	return &RunCache{max: capacity}
+}
+
+func (c *RunCache) get(runID string) (cachedRun, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	r, ok := c.entries[runID]
 	return r, ok
 }
 
-func (c *runGraphCache) put(runID string, run cachedRun) {
+func (c *RunCache) put(runID string, run cachedRun) {
 	if runID == "" {
 		return
 	}
@@ -179,7 +192,11 @@ func (c *runGraphCache) put(runID string, run cachedRun) {
 	}
 	c.entries[runID] = run
 	c.order = append(c.order, runID)
-	if len(c.order) > maxCachedTopologies {
+	limit := c.max
+	if limit <= 0 {
+		limit = maxCachedTopologies
+	}
+	if len(c.order) > limit {
 		delete(c.entries, c.order[0])
 		c.order = c.order[1:]
 	}

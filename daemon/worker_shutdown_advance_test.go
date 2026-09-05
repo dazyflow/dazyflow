@@ -63,6 +63,13 @@ func (s ctxHonoringStore) CompleteOwned(ctx context.Context, jobID, worker strin
 	return s.Memory.CompleteOwned(ctx, jobID, worker, status, result)
 }
 
+func (s ctxHonoringStore) CompleteAndEnqueue(ctx context.Context, jobID, worker string, status core.JobStatus, result *core.Result, deps []core.JobRecord) (core.Advance, error) {
+	if err := ctx.Err(); err != nil {
+		return core.Advance{}, err
+	}
+	return s.Memory.CompleteAndEnqueue(ctx, jobID, worker, status, result, deps)
+}
+
 func (s ctxHonoringStore) ListNodeRecords(ctx context.Context, opts core.ListNodeRecordsOpts) ([]core.JobRecord, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err

@@ -9,6 +9,7 @@ package jobstore
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"sync"
 	"time"
@@ -61,6 +62,10 @@ func (m *Memory) SetMaxConcurrentPerTenant(n int) {
 func (m *Memory) Enqueue(_ context.Context, rec core.JobRecord) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	return m.enqueueLocked(rec)
+}
+
+func (m *Memory) enqueueLocked(rec core.JobRecord) error {
 	if _, exists := m.records[rec.ID]; exists {
 		return core.ErrConflict
 	}
@@ -216,11 +221,44 @@ func (m *Memory) CompleteOwned(_ context.Context, jobID, worker string, status c
 	return m.complete(jobID, worker, status, result)
 }
 
+// CompleteAndEnqueue implements core.CompleteEnqueuer under one lock hold,
+// which is this store's transaction.
+func (m *Memory) CompleteAndEnqueue(_ context.Context, jobID, worker string, status core.JobStatus, result *core.Result, deps []core.JobRecord) (core.Advance, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.completeLocked(jobID, worker, status, result); err != nil {
+		return core.Advance{}, err
+	}
+	var adv core.Advance
+	if run, ok := m.records[m.records[jobID].GraphRunID]; ok {
+		adv.RunStatus = run.Status
+		if core.IsTerminalStatus(run.Status) {
+			return adv, nil
+		}
+	}
+	for _, d := range deps {
+		d.Kind = core.JobKindNode
+		d.Status = core.JobStatusQueued
+		switch err := m.enqueueLocked(d); {
+		case err == nil:
+			adv.Enqueued++
+		case errors.Is(err, core.ErrConflict):
+		default:
+			return adv, err
+		}
+	}
+	return adv, nil
+}
+
 // complete is the shared body. worker == "" skips the ownership check
 // (the plain Complete used by non-lease callers).
 func (m *Memory) complete(jobID, worker string, status core.JobStatus, result *core.Result) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	return m.completeLocked(jobID, worker, status, result)
+}
+
+func (m *Memory) completeLocked(jobID, worker string, status core.JobStatus, result *core.Result) error {
 	r, ok := m.records[jobID]
 	if !ok {
 		return core.ErrNotFound

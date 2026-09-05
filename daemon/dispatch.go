@@ -134,35 +134,17 @@ func (d *Dispatcher) AdvanceAfterCompletion(
 	if grecErr == nil && core.IsTerminalStatus(grec.Status) {
 		return
 	}
-	// Breakpoint / step gate (#12): if this node carries a breakpoint (or
-	// the run is stepping), hold here — don't dispatch its dependents and
-	// don't complete the graph. The node keeps its Succeeded status (output
-	// inspectable); the run idles until Continue/Step re-drives it via
-	// Service.ResumeGraphRun. Only pause on success — a failed breakpoint
-	// node should still propagate failure normally.
-	//
 	// Only a run somebody started and is watching (JobRecord.Manual) pauses on
 	// a breakpoint; see shouldPauseAfter. An unreadable record reads as "not
 	// watched" — losing a pause is a worse-debugging-session, keeping one on a
 	// triggered run is a run that never ends.
 	watched := grecErr == nil && grec.Manual
-	if status == core.JobStatusSucceeded && shouldPauseAfter(graph, graphRunID, nodeID, watched) {
-		breakpoints.addPaused(graphRunID, nodeID)
-		d.bus.Publish(graphRunID, BusEvent{Paused: &PausedEvent{
-			NodeID:   nodeID,
-			Stepping: breakpoints.isStepping(graphRunID),
-		}})
+	if pausesAfter(graph, graphRunID, nodeID, status, watched) {
+		d.publishPaused(graphRunID, nodeID)
 		return
 	}
-	// A node that parked has published its pause-time outputs (the approval
-	// link), so its dependents are considered now — classifyEdge lets through
-	// only the ports it actually emitted. Enqueue is keyed on the node's
-	// stable record id and tolerates a conflict, so re-dispatching these same
-	// dependents when the node finally resumes is a no-op rather than a
-	// second notification.
 	enqueued := 0
-	if status == core.JobStatusSucceeded || status == core.JobStatusAwaiting ||
-		(status == core.JobStatusFailed && !d.failurePropagates(graph, nodeID)) {
+	if d.advances(graph, nodeID, status) {
 		enqueued = d.dispatchReady(ctx, graph, graphRunID, nodeID)
 	}
 	// Something was just queued, so the run is not finished and the completion
@@ -171,6 +153,154 @@ func (d *Dispatcher) AdvanceAfterCompletion(
 	// The reaper re-runs the check anyway for a run that somehow strands.
 	if enqueued == 0 {
 		d.maybeCompleteGraph(ctx, graph, graphRunID, nodeID, status, resultErr)
+	}
+}
+
+// advancePlan is what a node's completion does to its run, decided BEFORE the
+// completion is written so the store can commit both together
+// (core.CompleteEnqueuer) — one commit per step instead of two, and no window
+// with the node finished but its successor not yet queued.
+//
+// Deciding early is sound for a dependent this node alone releases, and for
+// one whose other predecessors are already terminal. It is not sound for a
+// dependent still waiting on a step that may be finishing right now: the
+// guarantee that at least one of two concurrent completions sees the other
+// rests on each reading the other only after its own write is visible. So a
+// dependent not released here is re-examined after the commit, on the
+// ordinary read-then-dispatch path (revisit).
+type advancePlan struct {
+	// pause holds the run at a breakpoint: nothing is released.
+	pause bool
+	// enqueue is the dependents this completion releases.
+	enqueue []core.JobRecord
+	// revisit is set when some dependent was waiting or is to be skipped;
+	// FinishAdvance then runs the full dispatch pass.
+	revisit bool
+}
+
+// PlanAdvance decides a node's dependents from its about-to-be-written
+// outcome. watched is the run's JobRecord.Manual.
+func (d *Dispatcher) PlanAdvance(
+	ctx context.Context,
+	graph core.Graph,
+	graphRunID, nodeID string,
+	status core.JobStatus,
+	result *core.Result,
+	watched bool,
+) advancePlan {
+	if pausesAfter(graph, graphRunID, nodeID, status, watched) {
+		return advancePlan{pause: true}
+	}
+	if !d.advances(graph, nodeID, status) {
+		return advancePlan{}
+	}
+	ix := d.indexFor(graphRunID, graph)
+	ix.put(completedRecord(graphRunID, nodeID, status, result))
+	var plan advancePlan
+	for _, depID := range ix.outgoing[nodeID] {
+		if _, owned := ix.bodyOwners[depID]; owned {
+			continue
+		}
+		if decision, _ := d.analyzeDependentIndexed(ctx, graph, graphRunID, depID, ix); decision != depEnqueue {
+			plan.revisit = true
+			continue
+		}
+		plan.enqueue = append(plan.enqueue, dependentRecord(graph, graphRunID, depID))
+	}
+	return plan
+}
+
+// FinishAdvance is the rest of AdvanceAfterCompletion once the planned
+// completion has committed: adv is what the store saw and did.
+func (d *Dispatcher) FinishAdvance(
+	ctx context.Context,
+	graph core.Graph,
+	graphRunID, nodeID string,
+	status core.JobStatus,
+	result *core.Result,
+	plan advancePlan,
+	adv core.Advance,
+) {
+	var resultErr *core.JobError
+	if result != nil {
+		resultErr = result.Error
+	}
+	d.PublishNodeStatus(graphRunID, nodeID, status, resultErr)
+	// The cancel guard, read in the same statement as the completion.
+	if core.IsTerminalStatus(adv.RunStatus) {
+		return
+	}
+	if plan.pause {
+		d.publishPaused(graphRunID, nodeID)
+		return
+	}
+	enqueued := adv.Enqueued
+	if plan.revisit {
+		// The record is committed now, so the pass reads the siblings fresh;
+		// only our own record is seeded, since the store holds exactly it.
+		ix := d.indexFor(graphRunID, graph)
+		ix.put(completedRecord(graphRunID, nodeID, status, result))
+		enqueued += d.dispatchReadyIndexed(ctx, graph, graphRunID, nodeID, ix)
+	}
+	if enqueued == 0 {
+		d.maybeCompleteGraph(ctx, graph, graphRunID, nodeID, status, resultErr)
+	}
+}
+
+// advances reports whether a node in this state releases its dependents. A
+// node that parked has published its pause-time outputs (the approval link),
+// so its dependents are considered now — classifyEdge lets through only the
+// ports it actually emitted. Enqueue is keyed on the node's stable record id
+// and tolerates a conflict, so re-dispatching these same dependents when the
+// node finally resumes is a no-op rather than a second notification.
+func (d *Dispatcher) advances(graph core.Graph, nodeID string, status core.JobStatus) bool {
+	return status == core.JobStatusSucceeded || status == core.JobStatusAwaiting ||
+		(status == core.JobStatusFailed && !d.failurePropagates(graph, nodeID))
+}
+
+// pausesAfter is the breakpoint / step gate (#12): a node that carries a
+// breakpoint (or a run that is stepping) holds here — dependents are not
+// dispatched and the graph is not completed. The node keeps its Succeeded
+// status (output inspectable); the run idles until Continue/Step re-drives
+// it via Service.ResumeGraphRun. Only on success — a failed breakpoint node
+// should still propagate failure normally.
+func pausesAfter(graph core.Graph, graphRunID, nodeID string, status core.JobStatus, watched bool) bool {
+	return status == core.JobStatusSucceeded && shouldPauseAfter(graph, graphRunID, nodeID, watched)
+}
+
+func (d *Dispatcher) publishPaused(graphRunID, nodeID string) {
+	breakpoints.addPaused(graphRunID, nodeID)
+	d.bus.Publish(graphRunID, BusEvent{Paused: &PausedEvent{
+		NodeID:   nodeID,
+		Stepping: breakpoints.isStepping(graphRunID),
+	}})
+}
+
+// completedRecord is the node record a completion writes, as the dispatch
+// index needs it: enough for classifyEdge, so the pass that follows the
+// write does not read back what it just wrote.
+func completedRecord(graphRunID, nodeID string, status core.JobStatus, result *core.Result) core.JobRecord {
+	return core.JobRecord{
+		ID:         NodeJobID(graphRunID, nodeID),
+		Kind:       core.JobKindNode,
+		GraphRunID: graphRunID,
+		NodeID:     nodeID,
+		Status:     status,
+		Result:     result,
+	}
+}
+
+// dependentRecord is the queued node record for a released dependent.
+func dependentRecord(graph core.Graph, graphRunID, nodeID string) core.JobRecord {
+	return core.JobRecord{
+		ID:         NodeJobID(graphRunID, nodeID),
+		Kind:       core.JobKindNode,
+		GraphRunID: graphRunID,
+		GraphID:    graph.ID,
+		NodeID:     nodeID,
+		Tenant:     graph.Tenant,
+		Workspace:  graph.Workspace,
+		Job:        core.Job{GraphID: graph.ID, NodeID: nodeID},
 	}
 }
 
@@ -232,17 +362,7 @@ func (d *Dispatcher) dispatchReadyIndexed(
 		}
 		switch decision, reason := d.analyzeDependentIndexed(ctx, graph, graphRunID, nodeID, ix); decision {
 		case depEnqueue:
-			newRec := core.JobRecord{
-				ID:         NodeJobID(graphRunID, nodeID),
-				Kind:       core.JobKindNode,
-				GraphRunID: graphRunID,
-				GraphID:    graph.ID,
-				NodeID:     nodeID,
-				Tenant:     graph.Tenant,
-				Workspace:  graph.Workspace,
-				Job:        core.Job{GraphID: graph.ID, NodeID: nodeID},
-			}
-			switch err := d.store.Enqueue(ctx, newRec); {
+			switch err := d.store.Enqueue(ctx, dependentRecord(graph, graphRunID, nodeID)); {
 			case err == nil:
 				enqueued++
 			case errors.Is(err, core.ErrConflict):

@@ -371,6 +371,84 @@ func (s *Postgres) CompleteOwned(ctx context.Context, jobID, worker string, stat
 	return s.complete(ctx, jobID, worker, status, result)
 }
 
+// CompleteAndEnqueue implements core.CompleteEnqueuer as one statement: a
+// data-modifying CTE completes the node, reads its run's status and inserts
+// the dependents, so all of it is one round trip and one commit. The
+// fencing rules are complete()'s; a dependent that already exists is skipped
+// by ON CONFLICT rather than aborting the whole write, and none are inserted
+// when the run record is already terminal.
+func (s *Postgres) CompleteAndEnqueue(ctx context.Context, jobID, worker string, status core.JobStatus, result *core.Result, deps []core.JobRecord) (core.Advance, error) {
+	if !core.IsTerminalStatus(status) && status != core.JobStatusAwaiting {
+		return core.Advance{}, core.ErrConflict
+	}
+	var resJSON any
+	if result != nil {
+		b, err := json.Marshal(result)
+		if err != nil {
+			return core.Advance{}, fmt.Errorf("marshal result: %w", err)
+		}
+		resJSON = b
+	}
+	n := len(deps)
+	ids, runs, graphs, nodes, tenants, workspaces, jobs := make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n)
+	for i, d := range deps {
+		jobJSON, err := json.Marshal(d.Job)
+		if err != nil {
+			return core.Advance{}, fmt.Errorf("marshal job: %w", err)
+		}
+		ids[i], runs[i], graphs[i], nodes[i], tenants[i], workspaces[i], jobs[i] = d.ID, d.GraphRunID, d.GraphID, d.NodeID, d.Tenant, d.Workspace, string(jobJSON)
+	}
+	finishedClause := "finished_at = now()"
+	terminalGuard := "'succeeded','failed','cancelled'"
+	if status == core.JobStatusAwaiting {
+		finishedClause = "finished_at = finished_at"
+		terminalGuard += ",'awaiting'"
+	}
+	fence := ""
+	args := []any{jobID, string(status), resJSON, ids, runs, graphs, nodes, tenants, workspaces, jobs}
+	if worker != "" {
+		fence = " AND worker_id = $11"
+		args = append(args, worker)
+	}
+	q := `
+		WITH done AS (
+			UPDATE jobs SET status = $2, result = $3::jsonb, ` + finishedClause + `, lease_until = NULL
+			 WHERE id = $1 AND status NOT IN (` + terminalGuard + `)` + fence + `
+			RETURNING graph_run_id
+		), run AS (
+			SELECT g.status FROM jobs g JOIN done ON g.id = done.graph_run_id
+		), ins AS (
+			INSERT INTO jobs (id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job)
+			SELECT d.id, 'node', d.run, d.graph, d.node, d.tenant, d.workspace, 'queued', d.job::jsonb
+			  FROM unnest($4::text[], $5::text[], $6::text[], $7::text[], $8::text[], $9::text[], $10::text[])
+			       AS d(id, run, graph, node, tenant, workspace, job)
+			 WHERE EXISTS (SELECT 1 FROM done)
+			   AND NOT EXISTS (SELECT 1 FROM run WHERE run.status IN ('succeeded','failed','cancelled'))
+			ON CONFLICT (id) DO NOTHING
+			RETURNING id
+		)
+		SELECT (SELECT count(*) FROM done), (SELECT status FROM run), (SELECT count(*) FROM ins)
+	`
+	var completed, enqueued int
+	var runStatus *string
+	if err := s.pool.QueryRow(ctx, q, args...).Scan(&completed, &runStatus, &enqueued); err != nil {
+		return core.Advance{}, wrapPgErr(err)
+	}
+	if completed == 0 {
+		var exists bool
+		_ = s.pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM jobs WHERE id = $1)", jobID).Scan(&exists)
+		if !exists {
+			return core.Advance{}, core.ErrNotFound
+		}
+		return core.Advance{}, core.ErrConflict
+	}
+	adv := core.Advance{Enqueued: enqueued}
+	if runStatus != nil {
+		adv.RunStatus = core.JobStatus(*runStatus)
+	}
+	return adv, nil
+}
+
 // complete is the shared body. worker == "" skips the ownership fence
 // (the plain Complete used by non-lease callers).
 func (s *Postgres) complete(ctx context.Context, jobID, worker string, status core.JobStatus, result *core.Result) error {

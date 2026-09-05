@@ -56,6 +56,9 @@ type PgBus struct {
 	pendingMu sync.Mutex
 	pending   []pendingBusEvent
 	wake      chan struct{}
+	// drained closes once the writer has made its final flush, so whoever owns
+	// the pool can wait for it before closing — see Close.
+	drained chan struct{}
 
 	// lastSeen and seen are touched ONLY by the single listener goroutine
 	// (drainNew); no lock needed. lastSeen is the high-water id fanned out.
@@ -131,6 +134,7 @@ func NewPgBus(ctx context.Context, pool *pgxpool.Pool) (*PgBus, error) {
 		retention: time.Hour,
 		seen:      make(map[int64]struct{}),
 		wake:      make(chan struct{}, 1),
+		drained:   make(chan struct{}),
 	}
 	var maxID *int64
 	if err := pool.QueryRow(ctx, `SELECT max(id) FROM bus_events`).Scan(&maxID); err != nil {
@@ -198,6 +202,7 @@ func (b *PgBus) Flush(ctx context.Context) { b.flush(ctx) }
 
 // writer drains the publish buffer into one statement per flush.
 func (b *PgBus) writer(ctx context.Context) {
+	defer close(b.drained)
 	t := time.NewTicker(pgBusFlushEvery)
 	defer t.Stop()
 	for {
@@ -209,6 +214,17 @@ func (b *PgBus) writer(ctx context.Context) {
 		case <-b.wake:
 		}
 		b.flush(ctx)
+	}
+}
+
+// Close waits for the final flush that cancelling the bus's context starts,
+// so events published in the last flush window reach the table before the
+// pool is closed under them. Bounded, so a caller that closes without having
+// cancelled cannot hang.
+func (b *PgBus) Close() {
+	select {
+	case <-b.drained:
+	case <-time.After(2 * time.Second):
 	}
 }
 

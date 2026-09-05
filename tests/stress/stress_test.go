@@ -109,6 +109,7 @@ type replica struct {
 	pool *pgxpool.Pool
 	jobs *jobstore.Postgres
 	svc  *daemon.Service
+	bus  *daemon.PgBus // nil under STRESS_BUS=memory
 }
 
 func newReplica(t *testing.T, ctx context.Context, dsn string, id int, p params, trace *stmtCounter) *replica {
@@ -148,17 +149,23 @@ func newReplica(t *testing.T, ctx context.Context, dsn string, id int, p params,
 		Jobs: jobs, Bus: bus, Engine: eng,
 		WorkerID: fmt.Sprintf("replica-%d", id),
 	}
+	runs := daemon.NewRunCache(8 * p.workers) // one per process, as dzd wires it
 	for w := range p.workers {
 		worker := daemon.NewWorker(daemon.WorkerConfig{
 			ID:           fmt.Sprintf("r%d-w%d", id, w),
 			PollInterval: 25 * time.Millisecond,
 			MaxRetries:   1,
 			Logger:       quiet(),
+			Runs:         runs,
 		}, jobs, eng, bus)
 		worker.SubGraphRunner = svc
 		go func() { _ = worker.Run(ctx) }()
 	}
-	return &replica{id: id, pool: pool, jobs: jobs, svc: svc}
+	r := &replica{id: id, pool: pool, jobs: jobs, svc: svc}
+	if pgb, ok := bus.(*daemon.PgBus); ok {
+		r.bus = pgb
+	}
+	return r
 }
 
 func stressGraph(p params, tenant string) core.Graph {
@@ -214,10 +221,14 @@ func TestStressQueue(t *testing.T) {
 		replicas[i] = newReplica(t, ctx, dsn, i, p, trace)
 	}
 	// Cancel BEFORE closing: each replica's bus listener holds a pooled
-	// connection until its context ends, and Close waits for it.
+	// connection until its context ends, and Close waits for it. The bus
+	// writer flushes once more on cancel; let it finish before the pool goes.
 	defer func() {
 		cancel()
 		for _, r := range replicas {
+			if r.bus != nil {
+				r.bus.Close()
+			}
 			r.pool.Close()
 		}
 	}()
@@ -244,20 +255,40 @@ func TestStressQueue(t *testing.T) {
 
 	// Offer runs at a fixed rate, spread across orgs and round-robined across
 	// replicas — a load balancer's view.
+	//
+	// Several submitters share the ticker. SubmitGraph is synchronous and costs
+	// a transaction, so one goroutine tops out well below a high target rate
+	// and the rig then reports "achieved X% of offered" against a rate it never
+	// actually offered. The report below uses the SUBMITTED rate, not the
+	// target, for the same reason.
 	var submitted, submitFailed atomic.Int64
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
+	ticks := make(chan int, p.rate)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		defer close(ticks)
 		tick := time.NewTicker(time.Second / time.Duration(max(p.rate, 1)))
 		defer tick.Stop()
-		i := 0
-		for {
+		for i := 0; ; i++ {
 			select {
 			case <-stop:
 				return
 			case <-tick.C:
+				select {
+				case ticks <- i:
+				default: // submitters are all busy: the offered rate is what it is
+				}
+			}
+		}
+	}()
+	const submitters = 8
+	for range submitters {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range ticks {
 				r := replicas[i%len(replicas)]
 				tenant := fmt.Sprintf("t%03d", i%max(p.tenants, 1))
 				princ := daemon.SystemPrincipal("dazyflow-stress", tenant, "main")
@@ -266,10 +297,9 @@ func TestStressQueue(t *testing.T) {
 				} else {
 					submitted.Add(1)
 				}
-				i++
 			}
-		}
-	}()
+		}()
+	}
 
 	// Sample while the load runs.
 	type sample struct {
@@ -307,7 +337,9 @@ func TestStressQueue(t *testing.T) {
 	first, last := samples[0], samples[len(samples)-1]
 	span := last.at.Sub(first.at).Seconds()
 	stepsPerSec := float64(last.done-first.done) / span
-	offeredSteps := float64(p.rate * p.nodes)
+	targetSteps := float64(p.rate * p.nodes)
+	// What was really put on the queue, as opposed to what was asked for.
+	offeredSteps := float64(submitted.Load()*int64(p.nodes)) / float64(p.seconds)
 
 	var maxOldest, sumOldest float64
 	maxQueued := 0
@@ -335,10 +367,12 @@ func TestStressQueue(t *testing.T) {
 	t.Logf("")
 	t.Logf("  fleet         %d replicas x %d workers = %d concurrent steps, %d conns each",
 		p.replicas, p.workers, p.replicas*p.workers, p.conns)
-	t.Logf("  load          %d runs/s offered x %d steps = %.0f steps/s, %dms each, %d orgs",
-		p.rate, p.nodes, offeredSteps, p.stepMS, p.tenants)
+	t.Logf("  load          target %d runs/s x %d steps = %.0f steps/s, %dms each, %d orgs",
+		p.rate, p.nodes, targetSteps, p.stepMS, p.tenants)
+	t.Logf("  submitted     %.0f steps/s actually offered   (%.0f%% of target — below 100%% the SUBMITTER is the limit)",
+		offeredSteps, 100*offeredSteps/max(targetSteps, 1))
 	t.Logf("  ---")
-	t.Logf("  achieved      %.0f steps/s   (%.0f%% of offered)", stepsPerSec, 100*stepsPerSec/offeredSteps)
+	t.Logf("  achieved      %.0f steps/s   (%.0f%% of what was offered)", stepsPerSec, 100*stepsPerSec/max(offeredSteps, 1))
 	t.Logf("  theoretical   %.0f steps/s   (%d workers / %dms)",
 		float64(p.replicas*p.workers)*1000/float64(max(p.stepMS, 1)), p.replicas*p.workers, p.stepMS)
 	t.Logf("  queue latency %.2fs mean, %.2fs worst   (oldest step still waiting)", sumOldest/float64(len(samples)), maxOldest)
