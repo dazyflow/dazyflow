@@ -38,11 +38,37 @@ type Postgres struct {
 	// Set once at startup before any worker claims, so no synchronization
 	// is needed for the read in Claim.
 	maxConcurrent int
+	// burstSpacing spreads one org's burst along the queue; see Enqueue.
+	burstSpacing time.Duration
 }
+
+// DefaultBurstSpacing is the queue distance between two steps an org has
+// waiting at once: a burst of N steps from one org spans N×spacing of queue,
+// so it competes with other orgs' steps as if it had arrived at one step per
+// spacing (10/s here), and an org with nothing waiting lands ahead of all
+// but its first. The order only matters when someone else is waiting: an org
+// alone on the queue still gets every worker, whatever its slots say.
+//
+// Why not smaller: the tail advances one spacing per enqueue, but wall time
+// advances too, and GREATEST(now, tail+spacing) only spreads a burst while
+// the tail outruns the clock. Under load an enqueue takes a few ms, and
+// several enqueues in flight for the same org read the same tail and land on
+// the same slot — at 10ms both effects let a real burst degrade to FIFO,
+// which is what the load rig showed. 100ms outpaces both by a wide margin.
+const DefaultBurstSpacing = 100 * time.Millisecond
+
+// SetBurstSpacing overrides DefaultBurstSpacing. Set once at startup.
+func (s *Postgres) SetBurstSpacing(d time.Duration) { s.burstSpacing = d }
 
 // SetMaxConcurrentPerTenant caps how many node jobs a single tenant may
 // have running at once. Claim withholds new (queued) work from a tenant
 // at the cap; reclaiming an expired lease is exempt. 0 = no cap.
+//
+// Fairness does not depend on it: the queue order already spreads one org's
+// burst so it cannot starve the others (see Enqueue). The cap is a hard
+// ceiling on top, for steps that hold a worker without running — waiting on
+// the egress budget, say — where any share of the fleet is too much to hand
+// one org.
 //
 // NOTE: this is a best-effort SOFT cap. The per-tenant running count is
 // read in the same statement that claims, but it is not locked against
@@ -82,7 +108,7 @@ func NewPostgresFromPool(ctx context.Context, pool *pgxpool.Pool) (*Postgres, er
 	if _, err := pool.Exec(ctx, schemaSQL); err != nil {
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
-	return &Postgres{pool: pool}, nil
+	return &Postgres{pool: pool, burstSpacing: DefaultBurstSpacing}, nil
 }
 
 // Close releases the pool only when this store opened it (OpenPostgres).
@@ -138,9 +164,22 @@ func (s *Postgres) Enqueue(ctx context.Context, rec core.JobRecord) error {
 	} else if status == core.JobStatusRunning {
 		started = time.Now().UTC()
 	}
+	// slot_at is the record's place in the queue. FIFO would be enqueued_at;
+	// instead a queued step is placed one spacing behind the last step its org
+	// already has waiting, so an org that queues a thousand steps at once
+	// spreads them along the queue rather than putting all of them ahead of
+	// everyone else's next step — which lands at the front, having nothing
+	// waiting. The org's queue tail is one index probe (jobs_tenant_queue_idx),
+	// at the end where nothing has been claimed yet; counting its backlog
+	// instead cost a heap visit per waiting row, inside the hot statement.
+	// Records that never wait (graph records, seeds) take their enqueue time.
 	const q = `
-		INSERT INTO jobs (id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result, enqueued_at, started_at, finished_at, parent_node_rec_id, manual)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, COALESCE($12, now()), $13, $14, $15, $16)
+		INSERT INTO jobs (id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result, enqueued_at, started_at, finished_at, parent_node_rec_id, manual, slot_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, COALESCE($12, now()), $13, $14, $15, $16,
+		        CASE WHEN $2 = 'node' AND $8 = 'queued' AND $17::interval > '0s'::interval
+		            THEN GREATEST(COALESCE($12, now()),
+		                          (SELECT max(b.slot_at) FROM jobs b WHERE b.kind = 'node' AND b.status = 'queued' AND b.tenant = $6) + $17::interval)
+		            ELSE COALESCE($12, now()) END)
 	`
 	var enqueued any
 	if !rec.EnqueuedAt.IsZero() {
@@ -148,7 +187,8 @@ func (s *Postgres) Enqueue(ctx context.Context, rec core.JobRecord) error {
 	}
 	_, err = s.pool.Exec(ctx, q,
 		rec.ID, string(kind), rec.GraphRunID, rec.GraphID, rec.NodeID,
-		rec.Tenant, rec.Workspace, string(status), jobJSON, graphPayload, resJSON, enqueued, started, finished, rec.ParentNodeRecID, rec.Manual)
+		rec.Tenant, rec.Workspace, string(status), jobJSON, graphPayload, resJSON, enqueued, started, finished, rec.ParentNodeRecID, rec.Manual,
+		s.burstSpacing.String())
 	if err != nil {
 		return wrapPgErr(err)
 	}
@@ -172,8 +212,11 @@ func (s *Postgres) Claim(ctx context.Context, worker string, lease time.Duration
 const claimReturning = `id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result,
 		           enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id, parent_node_rec_id, manual`
 
-// claimQuery picks the oldest claimable node job (queued, or running with
-// an expired lease) and marks it running under the caller's worker.
+// claimQuery picks the first claimable node job (queued, or running with an
+// expired lease) in queue order and marks it running under the caller's
+// worker. Queue order is slot_at — assigned at enqueue, see Enqueue — which is
+// FIFO except that one org's burst is spread out, so the fairness decision
+// costs nothing here: one index scan, skipping past rows other workers hold.
 const claimQuery = `
 		UPDATE jobs
 		   SET status = 'running',
@@ -188,7 +231,7 @@ const claimQuery = `
 		              (status = 'queued' AND (available_at IS NULL OR available_at <= now()))
 		           OR (status = 'running' AND lease_until < now())
 		            )
-		      ORDER BY enqueued_at
+		      ORDER BY slot_at, enqueued_at
 		      FOR UPDATE SKIP LOCKED
 		      LIMIT 1
 		 )
@@ -219,7 +262,7 @@ const claimCappedQuery = `
 		                        AND r.lease_until > now()) < $3)
 		           OR (status = 'running' AND lease_until < now())
 		            )
-		      ORDER BY enqueued_at
+		      ORDER BY slot_at, enqueued_at
 		      FOR UPDATE SKIP LOCKED
 		      LIMIT 1
 		 )
@@ -405,23 +448,31 @@ func (s *Postgres) CompleteAndEnqueue(ctx context.Context, jobID, worker string,
 		terminalGuard += ",'awaiting'"
 	}
 	fence := ""
-	args := []any{jobID, string(status), resJSON, ids, runs, graphs, nodes, tenants, workspaces, jobs}
+	args := []any{jobID, string(status), resJSON, ids, runs, graphs, nodes, tenants, workspaces, jobs, s.burstSpacing.String()}
 	if worker != "" {
-		fence = " AND worker_id = $11"
+		fence = " AND worker_id = $12"
 		args = append(args, worker)
 	}
+	// The dependents take queue slots behind the org's queue tail, as
+	// Enqueue does, and one spacing apart from each other.
 	q := `
 		WITH done AS (
 			UPDATE jobs SET status = $2, result = $3::jsonb, ` + finishedClause + `, lease_until = NULL
 			 WHERE id = $1 AND status NOT IN (` + terminalGuard + `)` + fence + `
-			RETURNING graph_run_id
+			RETURNING graph_run_id, tenant
 		), run AS (
 			SELECT g.status FROM jobs g JOIN done ON g.id = done.graph_run_id
+		), tail AS (
+			SELECT max(b.slot_at) AS at FROM jobs b JOIN done ON b.tenant = done.tenant
+			 WHERE b.kind = 'node' AND b.status = 'queued'
 		), ins AS (
-			INSERT INTO jobs (id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job)
-			SELECT d.id, 'node', d.run, d.graph, d.node, d.tenant, d.workspace, 'queued', d.job::jsonb
+			INSERT INTO jobs (id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, slot_at)
+			SELECT d.id, 'node', d.run, d.graph, d.node, d.tenant, d.workspace, 'queued', d.job::jsonb,
+			       CASE WHEN $11::interval > '0s'::interval
+			            THEN GREATEST(now(), (SELECT at FROM tail) + $11::interval) + $11::interval * (d.ord - 1)
+			            ELSE now() END
 			  FROM unnest($4::text[], $5::text[], $6::text[], $7::text[], $8::text[], $9::text[], $10::text[])
-			       AS d(id, run, graph, node, tenant, workspace, job)
+			       WITH ORDINALITY AS d(id, run, graph, node, tenant, workspace, job, ord)
 			 WHERE EXISTS (SELECT 1 FROM done)
 			   AND NOT EXISTS (SELECT 1 FROM run WHERE run.status IN ('succeeded','failed','cancelled'))
 			ON CONFLICT (id) DO NOTHING

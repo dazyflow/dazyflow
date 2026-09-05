@@ -24,13 +24,27 @@ type Memory struct {
 	records       map[string]*core.JobRecord
 	clock         func() time.Time
 	maxConcurrent int // per-tenant running-node cap; 0 = unlimited
+	// slots is each record's place in the queue — enqueue time, or one
+	// burstSpacing behind the org's last waiting step. Mirrors the Postgres
+	// store's slot_at; see Postgres.Enqueue for the reasoning.
+	slots        map[string]time.Time
+	burstSpacing time.Duration
 }
 
 func NewMemory() *Memory {
 	return &Memory{
-		records: make(map[string]*core.JobRecord),
-		clock:   time.Now,
+		records:      make(map[string]*core.JobRecord),
+		slots:        make(map[string]time.Time),
+		clock:        time.Now,
+		burstSpacing: DefaultBurstSpacing,
 	}
+}
+
+// SetBurstSpacing overrides DefaultBurstSpacing. Set once at startup.
+func (m *Memory) SetBurstSpacing(d time.Duration) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.burstSpacing = d
 }
 
 // DeleteByTenant hard-deletes every job record owned by a tenant (GDPR
@@ -41,6 +55,7 @@ func (m *Memory) DeleteByTenant(_ context.Context, tenant string) (int, error) {
 	n := 0
 	for id, r := range m.records {
 		if r.Tenant == tenant {
+			delete(m.slots, id)
 			delete(m.records, id)
 			n++
 		}
@@ -96,6 +111,22 @@ func (m *Memory) enqueueLocked(rec core.JobRecord) error {
 		}
 	}
 	rec.Attempt = 0
+	// One spacing behind the org's queue tail; see Postgres.Enqueue.
+	slot := rec.EnqueuedAt
+	if rec.Kind == core.JobKindNode && rec.Status == core.JobStatusQueued && m.burstSpacing > 0 {
+		var tail time.Time
+		for id, r := range m.records {
+			if r.Kind == core.JobKindNode && r.Status == core.JobStatusQueued && r.Tenant == rec.Tenant {
+				if t := m.slots[id]; t.After(tail) {
+					tail = t
+				}
+			}
+		}
+		if !tail.IsZero() && tail.Add(m.burstSpacing).After(slot) {
+			slot = tail.Add(m.burstSpacing)
+		}
+	}
+	m.slots[rec.ID] = slot
 	copy := rec
 	m.records[rec.ID] = &copy
 	return nil
@@ -149,7 +180,17 @@ func (m *Memory) Claim(_ context.Context, worker string, lease time.Duration) (c
 	if len(candidates) == 0 {
 		return core.JobRecord{}, core.ErrNoJobs
 	}
+	// Queue order: slot, then enqueue time — the Postgres claim's ORDER BY.
+	slot := func(r *core.JobRecord) time.Time {
+		if t, ok := m.slots[r.ID]; ok {
+			return t
+		}
+		return r.EnqueuedAt
+	}
 	sort.Slice(candidates, func(i, j int) bool {
+		if si, sj := slot(candidates[i]), slot(candidates[j]); !si.Equal(sj) {
+			return si.Before(sj)
+		}
 		return candidates[i].EnqueuedAt.Before(candidates[j].EnqueuedAt)
 	})
 	picked := candidates[0]

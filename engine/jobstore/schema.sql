@@ -34,13 +34,20 @@ CREATE TABLE IF NOT EXISTS jobs (
 -- on every OpenPostgres).
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS parent_node_rec_id TEXT NOT NULL DEFAULT '';
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS manual BOOLEAN NOT NULL DEFAULT FALSE;
+-- The record's place in the queue: enqueue time, pushed later for a step whose
+-- org already has steps waiting, so one org's burst is spread along the queue
+-- instead of heading it (see Enqueue in postgres.go).
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS slot_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
--- Workqueue index: node-kind rows in a claimable state. The predicate
--- must be IMMUTABLE, so it can't reference now() — the time-window
--- filters (available_at <= now(), lease_until < now()) live in the
--- Claim query's WHERE clause and run against this narrowed subset.
-CREATE INDEX IF NOT EXISTS jobs_queue_idx
-    ON jobs (enqueued_at)
+-- Workqueue index: node-kind rows in a claimable state, in queue order (the
+-- claim's ORDER BY slot_at, enqueued_at). The predicate must be IMMUTABLE, so
+-- it can't reference now() — the time-window filters (available_at <= now(),
+-- lease_until < now()) live in the Claim query's WHERE clause and run against
+-- this narrowed subset. Replaces jobs_queue_idx, which ordered by enqueued_at
+-- alone; the oldest-queued metric sorts the few queued rows itself.
+DROP INDEX IF EXISTS jobs_queue_idx;
+CREATE INDEX IF NOT EXISTS jobs_slot_idx
+    ON jobs (slot_at, enqueued_at)
     WHERE kind = 'node' AND status IN ('queued', 'running');
 
 -- Per-graph-run index so workers can quickly find sibling/predecessor
@@ -50,16 +57,18 @@ CREATE INDEX IF NOT EXISTS jobs_graph_run_idx ON jobs (graph_run_id);
 -- Per-graph history index for the timeline view in dzctl.
 CREATE INDEX IF NOT EXISTS jobs_graph_idx ON jobs (graph_id, enqueued_at DESC);
 
--- Tenant-scoped index. Backs the capped-claim correlated subquery
--- (r.tenant = jobs.tenant AND r.status = 'running' — on the hot claim path),
--- the tenant/workspace-filtered ListGraphRuns/ListNodeRecords, per-tenant
--- retention + GDPR-erasure sweeps, and DeleteByTenant. Without it every one of
--- those full-scans the jobs table.
-CREATE INDEX IF NOT EXISTS jobs_tenant_status_idx ON jobs (tenant, status);
+-- Tenant-scoped index. Backs the tenant/workspace-filtered
+-- ListGraphRuns/ListNodeRecords, per-tenant retention + GDPR-erasure sweeps,
+-- DeleteByTenant, and — via slot_at — the enqueue's probe for an org's queue
+-- tail (max slot_at over its queued rows). Without it every one of those
+-- full-scans the jobs table. Replaces jobs_tenant_status_idx (tenant, status),
+-- of which it is a superset.
+DROP INDEX IF EXISTS jobs_tenant_status_idx;
+CREATE INDEX IF NOT EXISTS jobs_tenant_queue_idx ON jobs (tenant, status, slot_at);
 
 -- Graph-run sweep index. The concurrency promoter looks for queued graph runs
 -- every couple of seconds on every replica, and the orphan reaper for running
--- ones every minute. Neither filters by tenant, so jobs_tenant_status_idx can
+-- ones every minute. Neither filters by tenant, so jobs_tenant_queue_idx can
 -- only serve them by scanning its whole self and filtering — work that grows
 -- with the table on a fixed-frequency sweep. Ordering by enqueued_at here also
 -- drops the sort those queries would otherwise do.

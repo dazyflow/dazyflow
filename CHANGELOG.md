@@ -61,6 +61,32 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
   while committing ~3,300 times a second instead of ~5,000, so the same
   database has room it did not have.
 
+- **The queue is fair between orgs.** It was first-come-first-served across
+  the whole fleet, so one org's flow fanning out into thousands of steps put
+  every other org's next step behind all of them: in the load rig, a burst of
+  6,400 steps from one org made everyone else wait 5.9 seconds at worst and
+  1.7 on average — as long as the burster itself. A step now takes a queue slot
+  one spacing (`DAZYFLOW_QUEUE_BURST_SPACING`, 100ms) behind the last step its
+  org already has waiting, so a burst spreads itself along the queue and an org
+  with nothing waiting lands at the front. Same burst: everyone else waits 0.12
+  seconds at worst, 0.02 on average, and the burster takes 32 seconds instead
+  of 6 — it pays for its own burst. An org alone on the queue is unaffected
+  (slots only order competing orgs), throughput at the ceiling is unchanged,
+  and the claim itself is still one index scan.
+
+  Two designs were measured and rejected on the way, for the record: serving
+  the org with the fewest running steps first at claim time made every worker
+  compute the same order and herd onto the same rows — 81ms per claim under
+  load, throughput down 70% — and a 10ms spacing degraded to FIFO under load,
+  because an enqueue takes longer than that and concurrent enqueues for one org
+  read the same tail.
+
+  `DAZYFLOW_MAX_CONCURRENT_JOBS` stays as a hard ceiling for the case fair
+  ordering cannot address: steps that hold a worker without running, such as
+  waiting on the egress budget. Schema: `jobs.slot_at`, `jobs_slot_idx`
+  replaces `jobs_queue_idx`, `jobs_tenant_queue_idx` replaces
+  `jobs_tenant_status_idx`; both are applied on startup.
+
 - **One run cache per process** rather than per worker (`WorkerConfig.Runs`),
   so a run's record is read once per replica rather than once per worker its
   steps land on. `dzd` also now waits for the event bus's final flush before

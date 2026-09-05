@@ -36,6 +36,8 @@ one, never the database an install is using.
 | `STRESS_NODES` | 8 | Steps per run |
 | `STRESS_STEP_MS` | 50 | How long a step occupies its worker |
 | `STRESS_TENANTS` | 50 | Distinct orgs the load is spread across |
+| `STRESS_HOG_RUNS` | 0 | Runs one extra org bursts at the start, each `STRESS_HOG_WIDTH` (64) independent steps — the fairness scenario |
+| `STRESS_BURST_SPACING` | store default | Queue burst spacing, e.g. `0` for plain FIFO, to A/B fairness |
 
 ## Reading the result
 
@@ -102,6 +104,32 @@ rate *fell* from ~5,000/s to ~3,300/s. What a step costs now, from the trace:
 The remaining gap to the fleet's theoretical rate is per-statement latency under
 load rather than the number of commits: with 48 clients on one machine each of
 the ~5 round trips a step still makes waits its turn.
+
+## Is the queue fair?
+
+`STRESS_HOG_RUNS=100` has one extra org dump 100 runs of 64 independent steps
+(6,400 steps) on the queue at the start while 50 others trickle in at 480
+steps/s, and reports how long *everyone else* waited. A chain would not do as a
+hog — only one of its steps is ever queued — which is why the hog's flow is
+wide.
+
+| Queue order | Everyone else, worst | Everyone else, mean | The hog, worst |
+|---|---:|---:|---:|
+| first-come-first-served (`STRESS_BURST_SPACING=0`) | 5.86s | 1.71s | 5.86s |
+| burst spacing 100ms (default) | **0.12s** | **0.02s** | 32.17s |
+
+The hog pays for its own burst and nobody else notices it. Throughput at the
+ceiling was the same either way (640 vs 622 steps/s, inside the noise), because
+the fairness is decided at enqueue — one index probe for the org's queue tail —
+and the claim stays a single index scan.
+
+Two designs that looked right and measured wrong, kept here so they are not
+tried again: deciding fairness *at claim time* (serve the org with the fewest
+running steps) made every worker compute the same order and herd onto the same
+few rows — 81ms per claim under load and throughput down 70%; and a 10ms
+spacing degraded to plain FIFO under load, because an enqueue takes longer than
+10ms then, and several enqueues in flight for one org read the same tail, so
+the tail never outran the clock.
 
 ## Should you tune Postgres?
 

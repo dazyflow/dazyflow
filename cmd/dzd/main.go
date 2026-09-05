@@ -191,6 +191,11 @@ func main() {
 	// expect is a reasonable starting point. Soft cap — see
 	// jobstore.Postgres.SetMaxConcurrentPerTenant.
 	maxConcurrentJobs := envInt("DAZYFLOW_MAX_CONCURRENT_JOBS", 0)
+	// Queue fairness. A step is placed this far behind each step its org
+	// already has waiting, so one org's burst spreads along the queue and any
+	// org with nothing waiting goes ahead of all but the burst's first step.
+	// 0 restores plain FIFO. See jobstore.DefaultBurstSpacing.
+	burstSpacing := envDuration("DAZYFLOW_QUEUE_BURST_SPACING", jobstore.DefaultBurstSpacing)
 	// Wires, not just steps: readiness is re-evaluated per dependent per
 	// completion, so a graph inside the node ceiling can still carry
 	// hundreds of thousands of connections and cost minutes of CPU per run.
@@ -333,8 +338,12 @@ func main() {
 		return
 	}
 
-	// Per-tenant concurrency cap (fairness throttle) on the Postgres job
-	// store — a documented soft cap.
+	if bs, ok := jobs.(interface{ SetBurstSpacing(time.Duration) }); ok && burstSpacing != jobstore.DefaultBurstSpacing {
+		bs.SetBurstSpacing(burstSpacing)
+		log.Printf("queue burst spacing: %s", burstSpacing)
+	}
+	// Per-tenant concurrency cap — a hard ceiling on top of the fair queue
+	// order; a documented soft cap.
 	if mc := maxConcurrentJobs; mc > 0 {
 		if js, ok := jobs.(*jobstore.Postgres); ok {
 			js.SetMaxConcurrentPerTenant(mc)

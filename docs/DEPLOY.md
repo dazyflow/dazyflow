@@ -352,13 +352,21 @@ logged 4,319 waits for a free connection where 32 connections logged 51. Watch
 > (org, host) by the egress limiter — **5 calls/sec and 8 in flight by default**,
 > active unless you change `DAZYFLOW_EGRESS_*`. A worker waiting on that budget
 > is a worker held, so one org fanning out to a single API can occupy every
-> worker in a process. Two consequences: raising the worker count does nothing
-> for a single org hammering one host, and on a **shared deployment you should
-> set `DAZYFLOW_MAX_CONCURRENT_JOBS`** (off by default) so one org cannot take
-> the whole fleet. The diagnostic that separates the two cases is
+> worker in a process. Raising the worker count does nothing for a single org
+> hammering one host. The diagnostic that separates the two cases is
 > `dazyflow_jobs_oldest_queued_seconds`: climbing means steps are waiting for a
 > worker; flat while flows still feel slow means the egress budget, not the
 > workers.
+
+**Fairness between orgs.** The queue is not first-come-first-served across the
+fleet: a step joins it one `DAZYFLOW_QUEUE_BURST_SPACING` (100ms) behind the
+last step its org already has waiting, so one org's burst of thousands of steps
+spreads itself along the queue and every other org's next step — having nothing
+of its own waiting — lands at the front. Nothing to configure on a shared
+deployment; an org alone on the queue still gets every worker. What the order
+cannot fix is steps that hold a worker *without running* (the egress wait
+above): for that, `DAZYFLOW_MAX_CONCURRENT_JOBS` caps an org's running steps
+outright. Off by default.
 
 **Scheduler enrollment.** `flow_schedules` is a projection: every write that
 changes what fires (publish, unpublish, pause, resume, a cadence edit, a delete)

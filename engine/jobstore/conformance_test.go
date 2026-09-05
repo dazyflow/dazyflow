@@ -6,6 +6,7 @@ package jobstore
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -645,6 +646,85 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 		adv, err = ce.CompleteAndEnqueue(ctx, "run/a", "", core.JobStatusSucceeded, &core.Result{Status: core.StatusOK}, deps)
 		if err != nil || adv.Enqueued != 0 {
 			t.Errorf("resume = %+v, %v; want success with nothing new", adv, err)
+		}
+	})
+
+	// Queue order is a fairness policy both stores must share: FIFO, except
+	// that an org's burst is spread one spacing apart, so another org's step
+	// queued after the burst still lands ahead of all but its first step.
+	t.Run("Claim_spreads_one_orgs_burst", func(t *testing.T) {
+		s := mk(t)
+		ctx := t.Context()
+		// A spacing no test machine can drift past between two enqueues.
+		s.(interface{ SetBurstSpacing(time.Duration) }).SetBurstSpacing(time.Hour)
+		for i := range 4 {
+			mustEnqueue(t, s, ctx, core.JobRecord{ID: fmt.Sprintf("hog-%d", i), Kind: core.JobKindNode, Tenant: "hog"})
+		}
+		mustEnqueue(t, s, ctx, core.JobRecord{ID: "new-0", Kind: core.JobKindNode, Tenant: "new"})
+		want := []string{"hog-0", "new-0", "hog-1", "hog-2", "hog-3"}
+		for _, id := range want {
+			rec, err := s.Claim(ctx, "w", time.Minute)
+			if err != nil || rec.ID != id {
+				t.Fatalf("claim = %q, %v; want %q (order %v)", rec.ID, err, id, want)
+			}
+		}
+		// The org's later steps queue behind its remaining backlog, not at
+		// the front: while hog-1..3 are running nothing waits, so a new step
+		// takes the next free slot — plain FIFO again.
+		mustEnqueue(t, s, ctx, core.JobRecord{ID: "hog-4", Kind: core.JobKindNode, Tenant: "hog"})
+		mustEnqueue(t, s, ctx, core.JobRecord{ID: "new-1", Kind: core.JobKindNode, Tenant: "new"})
+		if rec, _ := s.Claim(ctx, "w", time.Minute); rec.ID != "hog-4" {
+			t.Errorf("claim = %q, want hog-4 (FIFO once the burst has drained)", rec.ID)
+		}
+	})
+
+	t.Run("Claim_is_fifo_for_a_lone_org", func(t *testing.T) {
+		s := mk(t)
+		ctx := t.Context()
+		for i := range 5 {
+			mustEnqueue(t, s, ctx, core.JobRecord{ID: fmt.Sprintf("j%d", i), Kind: core.JobKindNode, Tenant: "a"})
+		}
+		for i := range 5 {
+			rec, err := s.Claim(ctx, "w", time.Minute)
+			if err != nil || rec.ID != fmt.Sprintf("j%d", i) {
+				t.Fatalf("claim %d = %q, %v; want j%d", i, rec.ID, err, i)
+			}
+		}
+	})
+
+	t.Run("Claim_reclaims_expired_lease_before_new_work", func(t *testing.T) {
+		s := mk(t)
+		ctx := t.Context()
+		mustEnqueue(t, s, ctx, core.JobRecord{ID: "stale", Kind: core.JobKindNode, Tenant: "a"})
+		if rec, err := s.Claim(ctx, "w1", time.Millisecond); err != nil || rec.ID != "stale" {
+			t.Fatalf("claim stale = %v, %v", rec.ID, err)
+		}
+		time.Sleep(20 * time.Millisecond) // the lease is gone
+		// An idle org queues fresh work; by load alone it would win.
+		mustEnqueue(t, s, ctx, core.JobRecord{ID: "fresh", Kind: core.JobKindNode, Tenant: "b"})
+		rec, err := s.Claim(ctx, "w2", time.Minute)
+		if err != nil || rec.ID != "stale" {
+			t.Fatalf("claim = %v, %v; want the expired lease reclaimed first", rec.ID, err)
+		}
+		if rec.Attempt != 2 || rec.WorkerID != "w2" {
+			t.Errorf("reclaimed = attempt %d by %q, want attempt 2 by w2", rec.Attempt, rec.WorkerID)
+		}
+	})
+
+	t.Run("Claim_skips_not_yet_available_and_other_kinds", func(t *testing.T) {
+		s := mk(t)
+		ctx := t.Context()
+		mustEnqueue(t, s, ctx, core.JobRecord{ID: "run", Kind: core.JobKindGraph, Tenant: "a", Status: core.JobStatusRunning})
+		mustEnqueue(t, s, ctx, core.JobRecord{ID: "later", Kind: core.JobKindNode, Tenant: "a"})
+		if err := s.Requeue(ctx, "later", time.Now().Add(time.Hour)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.Claim(ctx, "w", time.Minute); !errors.Is(err, core.ErrNoJobs) {
+			t.Fatalf("claim = %v, want ErrNoJobs (a graph record and a step not yet due)", err)
+		}
+		mustEnqueue(t, s, ctx, core.JobRecord{ID: "due", Kind: core.JobKindNode, Tenant: "a"})
+		if rec, err := s.Claim(ctx, "w", time.Minute); err != nil || rec.ID != "due" {
+			t.Fatalf("claim = %v, %v; want due", rec.ID, err)
 		}
 	})
 

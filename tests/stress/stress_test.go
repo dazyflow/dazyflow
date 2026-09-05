@@ -38,10 +38,15 @@ type params struct {
 	replicas, workers, conns int
 	rate, seconds            int
 	nodes, stepMS, tenants   int
+	// hogRuns is a burst one extra org dumps on the queue at the start — the
+	// fairness question: how long does everyone else wait behind it? Each of
+	// its runs is hogWidth INDEPENDENT steps, all queued at once; a chain
+	// meters itself and hogs nothing.
+	hogRuns, hogWidth int
 }
 
 func load() params {
-	p := params{replicas: 3, workers: 8, conns: 20, rate: 20, seconds: 60, nodes: 8, stepMS: 50, tenants: 50}
+	p := params{replicas: 3, workers: 8, conns: 20, rate: 20, seconds: 60, nodes: 8, stepMS: 50, tenants: 50, hogWidth: 64}
 	for _, f := range []struct {
 		env string
 		dst *int
@@ -50,6 +55,7 @@ func load() params {
 		{"STRESS_CONNS", &p.conns}, {"STRESS_RATE", &p.rate},
 		{"STRESS_SECONDS", &p.seconds}, {"STRESS_NODES", &p.nodes},
 		{"STRESS_STEP_MS", &p.stepMS}, {"STRESS_TENANTS", &p.tenants},
+		{"STRESS_HOG_RUNS", &p.hogRuns}, {"STRESS_HOG_WIDTH", &p.hogWidth},
 	} {
 		if v := os.Getenv(f.env); v != "" {
 			fmt.Sscan(v, f.dst)
@@ -131,6 +137,15 @@ func newReplica(t *testing.T, ctx context.Context, dsn string, id int, p params,
 	if err != nil {
 		t.Fatal(err)
 	}
+	// STRESS_BURST_SPACING overrides the queue's burst spacing ("0" for plain
+	// FIFO), to see what fairness costs and what it buys.
+	if v := os.Getenv("STRESS_BURST_SPACING"); v != "" {
+		d, perr := time.ParseDuration(v)
+		if perr != nil {
+			t.Fatalf("STRESS_BURST_SPACING: %v", perr)
+		}
+		jobs.SetBurstSpacing(d)
+	}
 	// STRESS_BUS=memory takes the event bus off the database entirely, to see
 	// what it is costing. Not a supported deployment — a memory bus reaches no
 	// other replica — purely an attribution knob.
@@ -166,6 +181,19 @@ func newReplica(t *testing.T, ctx context.Context, dsn string, id int, p params,
 		r.bus = pgb
 	}
 	return r
+}
+
+// hogGraph is one org fanning out: hogWidth steps with no wires between them,
+// so a single submit puts all of them on the queue at once.
+func hogGraph(p params, tenant string) core.Graph {
+	g := core.Graph{ID: "hog", Tenant: tenant, Workspace: "main"}
+	for i := range p.hogWidth {
+		g.Nodes = append(g.Nodes, core.Node{
+			ID: fmt.Sprintf("h%d", i), Module: stressStepModule,
+			Params: map[string]any{"ms": p.stepMS},
+		})
+	}
+	return g
 }
 
 func stressGraph(p params, tenant string) core.Graph {
@@ -301,12 +329,38 @@ func TestStressQueue(t *testing.T) {
 		}()
 	}
 
+	// The hog: one org submits its whole burst at once, alongside everyone
+	// else's steady trickle. Its steps are older than theirs from then on, so a
+	// FIFO queue serves the burst first and the trickle waits behind it.
+	const hogTenant = "hog"
+	if p.hogRuns > 0 {
+		hogRuns := make(chan int, p.hogRuns)
+		for i := range p.hogRuns {
+			hogRuns <- i
+		}
+		close(hogRuns)
+		for range submitters {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				princ := daemon.SystemPrincipal("dazyflow-stress", hogTenant, "main")
+				for i := range hogRuns {
+					if _, err := replicas[i%len(replicas)].svc.SubmitGraph(ctx, princ, hogGraph(p, hogTenant)); err != nil {
+						submitFailed.Add(1)
+					}
+				}
+			}()
+		}
+	}
+
 	// Sample while the load runs.
 	type sample struct {
 		at        time.Time
 		done      int
 		queued    int
 		oldestSec float64
+		// The oldest queued step per org, split hog / everyone else.
+		hogWait, othersWait float64
 	}
 	var samples []sample
 	deadline := time.Now().Add(time.Duration(p.seconds) * time.Second)
@@ -320,12 +374,32 @@ func TestStressQueue(t *testing.T) {
 		if at, ok, err := replicas[0].jobs.OldestQueuedEnqueuedAt(ctx); err == nil && ok {
 			oldest = time.Since(at).Seconds()
 		}
-		samples = append(samples, sample{
+		smp := sample{
 			at:        time.Now(),
 			done:      counts[core.JobStatusSucceeded] + counts[core.JobStatusFailed] + counts[core.JobStatusSkipped],
 			queued:    counts[core.JobStatusQueued],
 			oldestSec: oldest,
-		})
+		}
+		if p.hogRuns > 0 {
+			rows, err := admin.Query(ctx, `SELECT tenant, extract(epoch FROM now() - min(enqueued_at))
+			                                 FROM jobs WHERE kind = 'node' AND status = 'queued' GROUP BY tenant`)
+			if err == nil {
+				for rows.Next() {
+					var tenant string
+					var wait float64
+					if rows.Scan(&tenant, &wait) != nil {
+						continue
+					}
+					if tenant == hogTenant {
+						smp.hogWait = wait
+					} else {
+						smp.othersWait = max(smp.othersWait, wait)
+					}
+				}
+				rows.Close()
+			}
+		}
+		samples = append(samples, smp)
 	}
 	close(stop)
 	wg.Wait()
@@ -381,6 +455,17 @@ func TestStressQueue(t *testing.T) {
 	t.Logf("  database      %.0f commits/s, %.1f per step   (flat while achieved is flat = the DB is the ceiling)",
 		commitsPerSec, commitsPerSec/max(stepsPerSec, 1))
 	t.Logf("  storage       %.1f MB for %d runs = %.1f KB/run", float64(grew)/1e6, runs, float64(grew)/float64(max(runs, 1))/1e3)
+	if p.hogRuns > 0 {
+		var hogWorst, othersWorst, othersSum float64
+		for _, s := range samples {
+			hogWorst = max(hogWorst, s.hogWait)
+			othersWorst = max(othersWorst, s.othersWait)
+			othersSum += s.othersWait
+		}
+		t.Logf("  hog           one org burst %d runs x %d independent steps = %d steps at the start", p.hogRuns, p.hogWidth, p.hogRuns*p.hogWidth)
+		t.Logf("  everyone else waited %.2fs at worst, %.2fs mean   (the hog itself: %.2fs at worst)",
+			othersWorst, othersSum/float64(len(samples)), hogWorst)
+	}
 	if f := submitFailed.Load(); f > 0 {
 		t.Logf("  REFUSED       %d submissions failed", f)
 	}
