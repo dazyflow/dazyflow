@@ -174,6 +174,8 @@ func main() {
 	// cache immediately; the TTL only bounds cross-instance revocation
 	// lag, so keep it short. 0 disables the cache.
 	sessionCacheTTL := envDuration("DAZYFLOW_SESSION_CACHE_TTL", 15*time.Second)
+	// Compression is on unless something at the edge already does it.
+	noCompression := envBool("DAZYFLOW_DISABLE_COMPRESSION", false)
 	maxGraphTimeout := envDuration("DAZYFLOW_MAX_GRAPH_TIMEOUT", 0)
 	// Resource guards. MAX_GRAPH_NODES is a defense-in-depth ceiling
 	// against pathologically large graphs; 1000 nodes is generous for
@@ -932,7 +934,16 @@ func main() {
 		// (session, API key, OIDC) is refused once its user or org is
 		// suspended. svc.Auth feeds both the gRPC interceptors and the HTTP
 		// gateway, so this one wrap covers the whole surface.
-		svc.Auth = &auth.ModerationGate{Inner: authChain, Users: users, Orgs: orgProfileStore}
+		// CacheTTL shares the session cache's knob because it buys the same
+		// trade in the same place: the lockout reads are two more per-request
+		// primary-key lookups, and the window over which a revocation can lag
+		// on ANOTHER replica is already bounded by the session cache. Suspend
+		// and unsuspend invalidate locally (see Service.InvalidateModeration),
+		// so the acting replica is never stale.
+		svc.Auth = &auth.ModerationGate{
+			Inner: authChain, Users: users, Orgs: orgProfileStore,
+			CacheTTL: sessionCacheTTL,
+		}
 		log.Print("memberships + invitations + org-auth + org-profile stores: postgres-backed")
 
 		// One-time, idempotent: migrate pre-rename "tenant:admin" roles to
@@ -986,6 +997,7 @@ func main() {
 			enableSignup:     enableSignup,
 			enableMetrics:    enableMetrics,
 			trustProxy:       trustProxyHeaders,
+			noCompression:    noCompression,
 			authRatePerMin:   authRatePerMin,
 			authRateBurst:    authRateBurst,
 		})
@@ -1837,6 +1849,7 @@ type gatewayDeps struct {
 	enableSignup    bool
 	enableMetrics   bool
 	trustProxy      bool
+	noCompression   bool
 	authRatePerMin  int
 	authRateBurst   int
 }
@@ -1913,6 +1926,10 @@ func buildGateway(ctx context.Context, bgWg *sync.WaitGroup, d gatewayDeps) {
 	gw.TrustProxyHeaders = d.trustProxy
 	if d.trustProxy {
 		log.Print("trusting X-Forwarded-Proto from reverse proxy (Secure cookies + HSTS on forwarded-https)")
+	}
+	gw.DisableCompression = d.noCompression
+	if d.noCompression {
+		log.Print("response compression disabled (DAZYFLOW_DISABLE_COMPRESSION)")
 	}
 	gw.WebDist = d.webDist       // empty disables static frontend serving
 	gw.LandingDir = d.landingDir // empty disables the marketing landing; / serves the SPA

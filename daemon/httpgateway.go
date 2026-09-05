@@ -339,6 +339,14 @@ type HTTPGateway struct {
 	// falls through to the SPA. Empty = no landing; / serves the SPA
 	// for everyone (the historical behaviour).
 	LandingDir string
+
+	// DisableCompression turns off gzip for responses that ask for it.
+	// Off by default (so compression is ON): the API's list and catalog
+	// bodies are large JSON and nothing in front of dzd necessarily
+	// compresses — Caddy's reverse_proxy does not unless told to, and a
+	// bare Ingress or direct bind has no proxy at all. Set it when
+	// something at the edge already encodes, to stop paying twice.
+	DisableCompression bool
 }
 
 func NewHTTPGateway(svc *Service) *HTTPGateway {
@@ -376,7 +384,7 @@ func (h *HTTPGateway) ServeListener(ctx context.Context, ln net.Listener) error 
 	mux := http.NewServeMux()
 	h.mountRoutes(mux)
 	srv := &http.Server{
-		Handler:           h.withCORSAndLogging(h.verifyCookieOrigin(limitRequestBody(jsonErrors(mux)))),
+		Handler:           h.withCORSAndLogging(h.verifyCookieOrigin(limitRequestBody(gzipResponses(!h.DisableCompression, jsonErrors(mux))))),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		// No WriteTimeout — SSE responses are long-lived. Per-request
@@ -403,5 +411,5 @@ func (h *HTTPGateway) ServeListener(ctx context.Context, ln net.Listener) error 
 func ServeForTest(h *HTTPGateway, rw http.ResponseWriter, r *http.Request) {
 	mux := http.NewServeMux()
 	h.mountRoutes(mux)
-	h.withCORSAndLogging(h.verifyCookieOrigin(limitRequestBody(jsonErrors(mux)))).ServeHTTP(rw, r)
+	h.withCORSAndLogging(h.verifyCookieOrigin(limitRequestBody(gzipResponses(!h.DisableCompression, jsonErrors(mux))))).ServeHTTP(rw, r)
 }

@@ -84,7 +84,14 @@ func (h *flowAPI) listModules(rw http.ResponseWriter, r *http.Request, p core.Pr
 	// Emit both keys: "drops" is the new canonical name; "modules" is
 	// kept for the legacy /api/v1/modules clients (and a transition
 	// window for anything that still reads the old key).
-	writeJSON(rw, http.StatusOK, map[string]any{"drops": mans, "modules": mans})
+	//
+	// The catalog is encoded ONCE and the same bytes are written under
+	// both keys. Handing the slice to a map made the encoder walk the
+	// whole catalog twice by reflection, and routing it back through a
+	// json.RawMessage is worse still (v2 re-validates and reformats raw
+	// bytes) — measured both. Writing the envelope around one encoding is
+	// the only shape that pays for neither. The wire bytes are unchanged.
+	writeSharedJSONPair(rw, "drops", "modules", mans)
 }
 
 // listRuns returns a slim summary of recent runs for a single graph,

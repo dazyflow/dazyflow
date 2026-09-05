@@ -7,11 +7,13 @@ package daemon
 // through these, so status/content-type handling stays in one place.
 
 import (
+	"bytes"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 )
 
 func writeJSON(rw http.ResponseWriter, status int, body any) {
@@ -50,4 +52,60 @@ func writeSSE(rw http.ResponseWriter, event string, payload any) {
 		return
 	}
 	_, _ = fmt.Fprintf(rw, "event: %s\ndata: %s\n\n", event, b)
+}
+
+// jsonBufPool retains the encoding buffer for the few big list responses.
+// The catalog encodes to ~500 KB and the buffer reaches that by doubling,
+// so without pooling every palette request allocates the whole ladder.
+var jsonBufPool = sync.Pool{New: func() any { return new(bytes.Buffer) }}
+
+// jsonBufMaxKeep is the largest buffer worth holding between requests. A
+// pooled buffer is per-P, so a handful of oversized ones would be pinned
+// for the process's life; the catalog fits well under this.
+const jsonBufMaxKeep = 1 << 21 // 2 MiB
+
+// encodeJSONPooled marshals v into a pooled buffer and hands it to fn.
+// The buffer is only valid for the duration of the call.
+func encodeJSONPooled(v any, fn func([]byte)) error {
+	buf := jsonBufPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer func() {
+		if buf.Cap() <= jsonBufMaxKeep {
+			jsonBufPool.Put(buf)
+		}
+	}()
+	// Encoder.Encode appends a newline; the callers here frame their own
+	// value, so trim it back off.
+	if err := json.NewEncoder(buf).Encode(v); err != nil {
+		return err
+	}
+	b := buf.Bytes()
+	fn(bytes.TrimSuffix(b, []byte("\n")))
+	return nil
+}
+
+// writeSharedJSONPair writes {"<a>":<v>,"<b>":<v>} for one value encoded
+// ONCE. It exists for the drop catalog, which is ~1 MB and is served under
+// both its canonical key and its legacy alias: encoding it twice (what
+// handing one slice to a map does), or re-parsing it once through a
+// json.RawMessage, both cost more than the whole rest of the request —
+// measured. Keys are compile-time constants at the call site, so they
+// need no escaping.
+func writeSharedJSONPair(rw http.ResponseWriter, a, b string, v any) {
+	err := encodeJSONPooled(v, func(value []byte) {
+		rw.Header().Set("Content-Type", "application/json")
+		rw.WriteHeader(http.StatusOK)
+		for _, part := range [][]byte{
+			[]byte(`{"` + a + `":`), value,
+			[]byte(`,"` + b + `":`), value,
+			[]byte("}\n"),
+		} {
+			if _, werr := rw.Write(part); werr != nil {
+				return
+			}
+		}
+	})
+	if err != nil {
+		writeJSONError(rw, http.StatusInternalServerError, err.Error())
+	}
 }

@@ -254,6 +254,7 @@ func (h *platformAdminAPI) platformSuspendUser(rw http.ResponseWriter, r *http.R
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
+	h.invalidateModeration(u.Subject, "")
 	h.revokeSubjectSessions(r.Context(), u.Subject)
 	h.audit(r.Context(), p, "platform.user.suspend", email, body.Reason)
 	writeJSON(rw, http.StatusOK, map[string]any{"user": h.toPlatformUserDTO(u, h.tenantNames(r.Context(), []string{u.Tenant})[u.Tenant])})
@@ -277,6 +278,7 @@ func (h *platformAdminAPI) platformUnsuspendUser(rw http.ResponseWriter, r *http
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
+	h.invalidateModeration(u.Subject, "")
 	h.audit(r.Context(), p, "platform.user.unsuspend", email, "")
 	writeJSON(rw, http.StatusOK, map[string]any{"user": h.toPlatformUserDTO(u, h.tenantNames(r.Context(), []string{u.Tenant})[u.Tenant])})
 }
@@ -419,6 +421,7 @@ func (h *platformAdminAPI) platformBanUser(rw http.ResponseWriter, r *http.Reque
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
+	h.invalidateModeration(u.Subject, "")
 	h.revokeSubjectSessions(r.Context(), u.Subject)
 	value, kind := email, auth.BlockEmail
 	if body.Domain {
@@ -471,6 +474,18 @@ func (h *platformAdminAPI) guardUserModeration(rw http.ResponseWriter, ctx conte
 func (h *platformAdminAPI) revokeSubjectSessions(ctx context.Context, subject string) {
 	if rev, ok := h.Sessions.(auth.SessionRevoker); ok && subject != "" {
 		_, _ = rev.RevokeSubjectSessions(ctx, subject)
+	}
+}
+
+// invalidateModeration drops the gate's memo of a subject's / a tenant's
+// lockout state, so a status flip written just above is enforced on the
+// very next request on THIS replica rather than after the memo window.
+// Other replicas re-read within that window; this mirrors how a sign-out
+// invalidates the session cache locally and lags elsewhere. Either
+// argument may be empty. No-op when the gate has caching turned off.
+func (h *platformAdminAPI) invalidateModeration(subject, tenant string) {
+	if g, ok := h.svc.Auth.(*auth.ModerationGate); ok {
+		g.Invalidate(subject, tenant)
 	}
 }
 
@@ -637,6 +652,7 @@ func (h *platformAdminAPI) setOrgSuspended(rw http.ResponseWriter, r *http.Reque
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
+	h.invalidateModeration("", pr.Tenant)
 	action := "platform.org.unsuspend"
 	if suspend {
 		action = "platform.org.suspend"

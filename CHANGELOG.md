@@ -12,6 +12,60 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ### Performance
 
+- **Authenticating a request went from ~485µs to ~2.6µs, and the request path
+  now compresses.** Both are the same omission in two places: the work in front
+  of the work nobody had measured, because the stress rig deliberately stops at
+  the queue and never crosses the HTTP boundary.
+
+  **The lockout gate was two uncached reads on every authenticated request.**
+  Session validation had a memo in front of it (`CachingSessionStore`), so the
+  auth path looked handled — but `ModerationGate`, which runs *after* it to
+  refuse a suspended user or org, did two primary-key SELECTs per request with
+  no cache at all, and the user read pulled 22 columns and decoded four JSON
+  blobs (roles, recovery codes, notify and UI prefs) to reach one boolean.
+  Measured against a real Postgres: the whole chain 485µs, the already-memoized
+  session lookup inside it 1.4µs. The gate now memoizes the two answers — the
+  derived boolean only, never the row, which carries the password hash and the
+  TOTP secret — for `DAZYFLOW_SESSION_CACHE_TTL` (15s default, 0 disables).
+  Chain: **485µs → 2.6µs serial, 258µs → 1.6µs under concurrency, 65 allocs →
+  3.** End to end against a real dzd on `GET /api/v1/me`: at 24 concurrent
+  clients, 23.3ms mean / 980 rps → **18.6ms / 1,214 rps**, and that understates
+  it — the database was on localhost, so a deployment with any real distance to
+  Postgres was paying that distance twice per request.
+
+  Revocation semantics deliberately mirror the session cache, since it is the
+  same request path: suspend, unsuspend and ban invalidate on the replica that
+  applied them, so only *other* replicas lag, by the window sessions already lag
+  by. A transient store error still fails open, as before, but is no longer
+  remembered — a blip cannot pin the gate open for the window.
+
+- **The API compresses its responses.** Nothing in front of dzd necessarily
+  did: Caddy's `reverse_proxy` does not encode unless told to, and a bare
+  Ingress or a direct bind has no proxy at all. The flow editor's palette
+  (`GET /api/v1/drops`) is ~1.0 MB of JSON and was going over the wire whole;
+  it is now **1,040,322 → 267,472 bytes (-74%)**. `text/event-stream` is never
+  compressed, so live run views keep flushing frame by frame, and an
+  already-encoded body is passed through untouched. `BestSpeed` is the level,
+  chosen by measurement: it gives up 42KB of ratio against default compression
+  to halve the CPU. `DAZYFLOW_DISABLE_COMPRESSION=1` for deployments that
+  already encode at the edge.
+
+- **The drop catalog was serialized twice into one response.** It ships under
+  its canonical `drops` key and its legacy `modules` alias, and handing the same
+  slice to both made the encoder walk all 182 manifests twice by reflection —
+  67% of the request. It is encoded once and the same bytes are written under
+  both keys: **11.2ms → 7.95ms (-29%, p=0.002, n=6)**, with the wire bytes
+  unchanged and a test asserting that byte-for-byte. Worth recording that the
+  obvious fix is the wrong one: routing the single encoding back through a
+  `json.RawMessage` was *slower* than the double encode (13.4ms), because
+  encoding/json v2 re-validates and reformats raw bytes.
+
+  New benchmarks cover both paths — `tests/perf/auth_bench_test.go` for the auth
+  chain (needs `DAZYFLOW_TEST_DB`) and `daemon/httpbench_test.go` for the
+  request path. The HTTP ones mount the routes once, the way `ServeListener`
+  does; `ServeForTest` remounts every route per call (~7.8ms), so benchmarking
+  through it measures the router instead of the handler.
+
 - **Another 11% through the same database, and a step now costs 4.0 statements
   instead of 5.1.** Offered 2,000 steps/sec against 2 replicas x 8 workers, the
   fleet delivered a mean of 723 steps/sec before (4 runs, 689-766) and 797 after
