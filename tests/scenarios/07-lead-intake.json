@@ -6,10 +6,8 @@
   "nodes": [
     {
       "id": "intake",
-      "module": "webhook_input",
+      "module": "form_input",
       "params": {
-        "secrets": ["REPLACE_WITH_WEBHOOK_SECRET"],
-        "public_form": true
       }
     },
     {

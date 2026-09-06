@@ -103,7 +103,7 @@ func lintTriggers(g Graph) []LintIssue {
 			// Webhook config (secret + hosted form) lives on the webhook_input
 			// node now — a graph-level webhook trigger is ignored at runtime.
 			issues = append(issues, triggerIssue("trigger_webhook_deprecated",
-				"Webhook config is now set on the Webhook input node, not as a graph-level trigger — this one is ignored. Set the secret (and hosted-form options) on the webhook_input node instead."))
+				"Webhook config is now set on the Webhook step, not as a graph-level trigger — this one is ignored. Set the secret on the Webhook step, and use the Form step for a hosted form."))
 		default:
 			issues = append(issues, triggerIssue("trigger_unknown_type",
 				fmt.Sprintf("Trigger type %q isn't recognized, so this flow won't be triggered. The only graph-level trigger is cron; webhook and poll are configured on their nodes.", tr.Type)))
@@ -115,7 +115,7 @@ func lintTriggers(g Graph) []LintIssue {
 	// findings stay grouped (cron, then poll, then webhook) regardless of
 	// how the nodes are interleaved on the canvas — preserving the issue
 	// ordering callers/tests expect.
-	var cronNodes, pollNodes, webhookNodes []Node
+	var cronNodes, pollNodes, webhookNodes, formNodes, requestNodes, replyNodes []Node
 	hasCronNode := false
 	for _, n := range g.Nodes {
 		switch n.Module {
@@ -124,8 +124,14 @@ func lintTriggers(g Graph) []LintIssue {
 			hasCronNode = true
 		case "poll_trigger":
 			pollNodes = append(pollNodes, n)
-		case "webhook_input":
+		case WebhookInputModule:
 			webhookNodes = append(webhookNodes, n)
+		case FormInputModule:
+			formNodes = append(formNodes, n)
+		case RequestInputModule:
+			requestNodes = append(requestNodes, n)
+		case ReplyModule:
+			replyNodes = append(replyNodes, n)
 		}
 	}
 
@@ -170,38 +176,59 @@ func lintTriggers(g Graph) []LintIssue {
 		}
 	}
 
-	// webhook_input nodes carry the secret + hosted-form opt-in. A node with
-	// neither a secret nor a public form is unreachable: the /trigger endpoint
-	// rejects unauthenticated POSTs and there's no form to receive submissions.
+	// webhook_input nodes carry the secret. Without one the /trigger endpoint
+	// rejects every unauthenticated POST, so the flow never starts on its own.
 	for _, n := range webhookNodes {
-		publicForm, _ := n.Params["public_form"].(bool)
-		if len(WebhookSecrets(n.Params)) == 0 && !publicForm {
-			// Worded for people who don't know what a bearer token or an
-			// endpoint is: name the two fixes exactly as the editor's
-			// Webhook inspector labels them.
+		if len(WebhookSecrets(n.Params)) == 0 {
 			issues = append(issues, nodeTriggerIssue("trigger_webhook_no_secret", n.ID,
-				"This Webhook step can't receive anything yet, so the flow will never start on its own. Open the Webhook step and either turn on \"Host a form for me\" (anyone with the link can submit), or press Generate under \"For developers\" to create the secret key other systems must send when they call this flow."))
+				"This Webhook step can't receive anything yet, so the flow will never start on its own. Open it and press Generate to create the secret key other systems must send when they call this flow."))
 		}
-		// The hosted page renders only the first MaxHostedFormFields, and a
-		// submission carries no more than that either — so say so here rather
-		// than letting the owner publish a form whose tail silently never
-		// appears and could never be filled in.
+	}
+
+	// form_input needs no key — its presence is the opt-in — so the only way
+	// to misconfigure one is to declare fields the hosted page won't render.
+	for _, n := range formNodes {
 		names := formFieldNames(n.Params)
+		// The page renders only the first MaxHostedFormFields, and a submission
+		// carries no more than that either — so say so here rather than letting
+		// the owner publish a form whose tail silently never appears and could
+		// never be filled in.
 		if declared := len(names); declared > MaxHostedFormFields {
 			issues = append(issues, nodeTriggerIssue("trigger_form_too_many_fields", n.ID,
-				fmt.Sprintf("This Webhook step's hosted form declares %d fields, but a form shows and accepts at most %d — the rest are ignored. Remove the extras, or collect them in one field.",
+				fmt.Sprintf("This Form step declares %d fields, but a form shows and accepts at most %d — the rest are ignored. Remove the extras, or collect them in one field.",
 					declared, MaxHostedFormFields)))
 		}
-		// The page drops a name longer than the cap rather than rendering it,
-		// for the same reason the tail past MaxHostedFormFields never appears:
-		// it is an amplifier on the one endpoint that needs no credential. Say
-		// so here, so the owner isn't left with a field that silently never
-		// shows up. Reported once with a count — a generated list can be all of
-		// them, and one issue per field would drown the panel.
+		// The page drops an over-long name rather than rendering it, for the
+		// same reason: it is an amplifier on the one endpoint that needs no
+		// credential. Reported once with a count — a generated list can be all
+		// of them, and one issue per field would drown the panel.
 		if over := countOver(names, MaxHostedFormFieldLen); over > 0 {
 			issues = append(issues, nodeTriggerIssue("trigger_form_field_name_too_long", n.ID,
-				fmt.Sprintf("This Webhook step's hosted form has %d field name(s) longer than %d characters, which the form won't show. Shorten them — a field name is the label someone reads above the box.",
+				fmt.Sprintf("This Form step has %d field name(s) longer than %d characters, which the form won't show. Shorten them — a field name is the label someone reads above the box.",
 					over, MaxHostedFormFieldLen)))
+		}
+	}
+
+	// request_input carries only keys — there is no hosted form to fall back
+	// on, so a key-less Request step can never be called.
+	for _, n := range requestNodes {
+		if len(WebhookSecrets(n.Params)) == 0 {
+			issues = append(issues, nodeTriggerIssue("trigger_request_no_secret", n.ID,
+				"This Request step can't receive anything yet, so the flow will never start on its own. Open it and press Generate to create the secret key the systems calling this flow must send."))
+		}
+	}
+
+	// The Request/Reply pair only pays off when both halves are present: a
+	// Request with no Reply answers its caller with a bare run status, and a
+	// Reply with nothing waiting on it is dead configuration.
+	if len(requestNodes) > 0 && len(replyNodes) == 0 {
+		issues = append(issues, nodeTriggerIssue("trigger_request_no_reply", requestNodes[0].ID,
+			"This flow answers its callers, but it has no Reply step — they'll get the run's status instead of an answer. Add a Reply step and put what you want to send back in it."))
+	}
+	for _, n := range replyNodes {
+		if len(requestNodes) == 0 {
+			issues = append(issues, nodeTriggerIssue("reply_without_request", n.ID,
+				"This Reply can't reach anyone: the flow doesn't start from a Request step, so nobody is waiting for an answer. It will record what it would have sent and the flow will carry on."))
 		}
 	}
 
@@ -236,7 +263,7 @@ func countOver(names []string, max int) int {
 	return n
 }
 
-// formFieldNames reads a webhook_input node's declared hosted-form fields,
+// formFieldNames reads a form_input node's declared fields,
 // tolerating the []any of strings JSON unmarshalling produces.
 func formFieldNames(params map[string]any) []string {
 	switch arr := params["form_fields"].(type) {

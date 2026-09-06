@@ -10,6 +10,55 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING: the hosted form is its own step.** `public_form`, `form_fields`
+  and `form_title` are gone from the Webhook step; add a **Form** step instead.
+  A flow that used both halves at once becomes two steps — the form and the
+  webhook are two different doors, and they always were.
+
+  What this buys: one contract per trigger, with no exceptions to explain.
+  Webhook acknowledges and returns, Form is a page a person fills in, Request
+  answers the caller. The Form step needs no switch and no key — adding it *is*
+  the opt-in, so the "host a form for me" toggle is gone too, and a Webhook step
+  with no key is now simply unreachable rather than maybe-a-form.
+
+  **Form URLs do not change.** `/form/<tenant>/<workspace>/<flow>` is keyed by
+  flow, not by step, so every shared link, QR code and embedded snippet keeps
+  working. Flows carrying the old params must be re-authored: the params no
+  longer validate, so a save reports them rather than dropping them silently.
+  The guide's "Forms & webhooks" page is now two pages, **Forms** and
+  **Webhooks**.
+
+### Added
+
+- **A flow can answer its caller.** Two new steps: **Request**, a trigger for a
+  system that asks the flow something and waits, and **Reply**, the step whose
+  value is sent back. Callers POST `/call/<tenant>/<workspace>/<flow>` with a
+  bearer key — the same multi-key rotation the webhook uses — and the connection
+  is held until a Reply runs, up to 30 seconds (`?wait=0` opts out and answers
+  immediately with the run id).
+
+  Reply does not end the flow: it answers on the pass-through pin and the run
+  carries on, so a caller with a short timeout (a Slack slash command's three
+  seconds) can be acknowledged before the slow steps run. Only the first Reply a
+  run reaches answers, so a success branch and a rejection branch each carrying
+  one behaves as expected. A run that ends without reaching one answers with the
+  run's id and status instead, and a run nobody is waiting on (a schedule, the
+  editor's Run button) records what Reply would have sent and continues.
+
+  `/call` honours **`Idempotency-Key`**, which is what makes a caller's own
+  timeout safe: a retry carrying a key that is still in flight joins the run its
+  first request started instead of firing a second one, and a retry of a
+  finished call replays the answer with `Idempotency-Replay: true`. A 202
+  ("still running") is never cached — a retry joins and waits again — while a
+  failed run is, because its side effects already happened.
+
+  `/trigger` is deliberately untouched. Its 202-immediately is a contract
+  senders like Stripe and GitHub rely on, so answering callers got their own
+  endpoint and their own trigger step rather than a mode of that one. New guide
+  page: **Request & reply**.
+
 ## [0.37.3] - 2026-09-06
 
 ### Performance

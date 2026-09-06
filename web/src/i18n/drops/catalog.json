@@ -1170,6 +1170,21 @@
       "Stop the whole loop as soon as one item fails, instead of continuing with the rest."
     ]
   },
+  "form_input": {
+    "description": "Starts the flow when someone fills in the form Dazyflow hosts for you — no website and no key needed, just a link you can share. Body carries what they typed, one entry per field. Anyone with the link can submit, so treat it as public.",
+    "ports": [
+      "Body"
+    ],
+    "label": "Form",
+    "titles": [
+      "Form fields",
+      "Form title"
+    ],
+    "help": [
+      "Heading shown at the top of the form. Defaults to the flow's name.",
+      "The questions the form asks, one per field. Each becomes a key on the Body output, so later steps know the columns before the first submission arrives. Defaults to name, email, message."
+    ]
+  },
   "fortnox_create_customer": {
     "description": "Create a customer in your connected Fortnox account. Name (required) and Email can be typed on the step or connected from an earlier step (the matching input port overrides the param). The new customer's number comes out on the 'Customer number' output, ready to connect into 'Create invoice'.\n\nFortnox has no idempotency key, so this step does not auto-retry — a retried create would make a duplicate customer.",
     "ports": [
@@ -3806,6 +3821,37 @@
       "Text emitted when there are zero input rows. Defaults to the empty string."
     ]
   },
+  "reply": {
+    "description": "Answers whoever called this flow's Request address, then lets the flow carry on — so a caller with a short timeout can be acknowledged before the slow steps run. Wire the value into Body, or type it into the param; a wired value keeps its own type (a list or record is sent as JSON), typed text is sent as text. Only the first Reply a run reaches answers; when a run reaches none, the caller gets the run's status instead.",
+    "ports": [
+      "Pass-through",
+      "Reply body",
+      "Sent"
+    ],
+    "label": "Reply",
+    "titles": [
+      "Response code",
+      "What to send back"
+    ],
+    "help": [
+      "The HTTP status the caller receives. 200 unless you need to signal something specific (201 created, 202 accepted, 422 rejected).",
+      "The text the caller receives. Supports ${...} references. Ignored when something is wired into the Body input, which keeps its own type."
+    ]
+  },
+  "request_input": {
+    "description": "Starts the flow when another system calls its address AND waits for an answer. Body is what was sent (JSON or text); Headers carries the request's metadata. Pair it with a Reply step — what Reply produces is sent back as the response. Use the Webhook step instead when the caller only notifies you and wants an immediate acknowledgement.",
+    "ports": [
+      "Body",
+      "Headers"
+    ],
+    "label": "Request",
+    "titles": [
+      "Secret keys"
+    ],
+    "help": [
+      "Bearer tokens callers may send (Authorization: Bearer …) to POST this flow's /call endpoint. The endpoint accepts ANY listed key, so you can add a new key, migrate callers, then revoke the old one with zero downtime. With no key the endpoint rejects every call."
+    ]
+  },
   "roaring_company_overview": {
     "description": "Look up a company in Roaring by its organisation number — the enrichment step that turns a bare org number (e.g. from an order or a form) into structured company data: registered name, status, address and tax info. The org number can be typed on the step or connected from an earlier step (the 'Org number' input overrides the param). Defaults to Sweden ('se'); set 'country' for another Nordic market Roaring covers.\n\nOut come the 'name' and 'status' as text and the whole Roaring record on the 'Company' output. This is a read — safe to retry. Connect your Roaring account once on the Apps page (Consumer Key + Secret).",
     "ports": [
@@ -5193,23 +5239,17 @@
     ]
   },
   "webhook_input": {
-    "description": "Starts the flow when something is sent to its web address — a submission from the flow's hosted form, or an HTTP request from another system. Body is what was sent (form fields / JSON); Headers carries the request's metadata.",
+    "description": "Starts the flow when another system sends something to its web address, and acknowledges the delivery straight away. Body is what was sent (JSON or text); Headers carries the request's metadata. Use the Form step when the sender is a person, and the Request step when the caller waits for an answer.",
     "ports": [
       "Body",
       "Headers"
     ],
     "label": "Webhook",
     "titles": [
-      "Form fields",
-      "Form title",
-      "Public hosted form",
       "Secret keys"
     ],
     "help": [
-      "Also expose a public intake form at /form/\u003ctenant\u003e/\u003cworkspace\u003e/\u003cid\u003e — no token required (possession of the URL is the credential).",
-      "Bearer tokens callers may send (Authorization: Bearer …) to POST this flow's /trigger endpoint. The endpoint accepts ANY listed key, so you can add a new key, migrate callers, then revoke the old one with zero downtime. Leave empty only if you rely solely on a public hosted form.",
-      "Field names the hosted form collects. Defaults to name, email, message.",
-      "Heading shown on the hosted form. Defaults to the flow's name."
+      "Bearer tokens callers may send (Authorization: Bearer …) to POST this flow's /trigger endpoint. The endpoint accepts ANY listed key, so you can add a new key, migrate callers, then revoke the old one with zero downtime. With no key the endpoint rejects every delivery."
     ]
   },
   "webhook_send": {

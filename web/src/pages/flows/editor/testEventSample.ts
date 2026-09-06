@@ -6,16 +6,15 @@
 // external caller. Pure: no editor state, no network.
 
 // buildTestEventSample produces the JSON object the "Send test event"
-// button POSTs to /test-trigger. When the webhook trigger has
-// public_form opted in, formFields names the exact form inputs the
-// hosted form will collect — we mirror that shape so the test fires
-// with the same payload the real form would. Per-field defaults pick
+// button POSTs to /test-trigger. For a Form step, formFields names the exact
+// inputs the hosted form collects — we mirror that shape so the test fires
+// with the same payload a real submission would. Per-field defaults pick
 // realistic-looking values for common names (email, phone, message)
 // so a non-techie watching the canvas light up sees believable data
 // instead of "string" everywhere. Unknown fields fall back to "Sample
-// <field>". A nil or empty formFields list reproduces the legacy
-// {name, email, message, submitted_at} sample — used when a webhook
-// trigger isn't form-backed.
+// <field>". A nil or empty formFields list gives the generic
+// {name, email, message, submitted_at} sample — used for a Webhook or Request
+// step, which declares no fields.
 export function buildTestEventSample(formFields?: string[]): Record<string, string> {
   if (!formFields || formFields.length === 0) {
     return {

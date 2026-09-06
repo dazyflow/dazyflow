@@ -135,13 +135,18 @@ describe.skipIf(!existsSync(BUNDLE))("rendered bundle", () => {
     expect(missing).toEqual([]);
   });
 
-  it("places teams & approvals between forms and failures", () => {
+  it("places teams & approvals between request/reply and failures", () => {
     expect(getPage("/guide/teams-and-approvals")?.title).toBe(
       "Teams & approvals",
     );
     const { prev, next } = neighbours("/guide/teams-and-approvals");
-    expect(prev?.link).toBe("/guide/forms-and-webhooks");
+    expect(prev?.link).toBe("/guide/request-and-reply");
     expect(next?.link).toBe("/guide/when-a-flow-fails");
+  });
+
+  it("places request & reply directly after forms & webhooks", () => {
+    const { prev } = neighbours("/guide/request-and-reply");
+    expect(prev?.link).toBe("/guide/webhooks");
   });
 });
 

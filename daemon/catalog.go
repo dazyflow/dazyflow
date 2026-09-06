@@ -631,30 +631,16 @@ func triggerKinds() []map[string]any {
 		},
 		{
 			"kind":    "webhook",
-			"summary": "Accept POSTs from an external system. Optional secret authenticates the caller; optional public_form opts the flow into a hosted intake form.",
+			"summary": "Deprecated graph-level webhook. Inbound HTTP now lives on steps: Webhook (acknowledge and return), Request (answer the caller with a Reply step), Form (a page Dazyflow hosts). Add the matching trigger node instead.",
 			"fields": map[string]any{
 				"type": map[string]any{"const": "webhook"},
 				"secret": map[string]any{
 					"type":        "string",
 					"description": "Optional. When set, callers must send `Authorization: Bearer <secret>`. Surfaced to the user in the save response's `endpoints[].auth` field.",
 				},
-				"public_form": map[string]any{
-					"type":        "boolean",
-					"description": "When true, the flow ALSO gets a hosted intake form at /form/<tenant>/<workspace>/<id>. The form is public — possession of the URL is the only credential.",
-				},
-				"form_fields": map[string]any{
-					"type":        "array",
-					"items":       map[string]any{"type": "string"},
-					"description": "Names of the fields the hosted form renders. Empty defaults to name/email/message. Field names become keys in the JSON delivered to the webhook_input node.",
-				},
-				"form_title": map[string]any{
-					"type":        "string",
-					"description": "Heading shown on the hosted form. Empty falls back to the flow's name.",
-				},
 			},
 			"examples": []map[string]any{
 				{"title": "Secret-protected webhook", "trigger": map[string]any{"type": "webhook", "secret": "${secret.STRIPE_WEBHOOK_SECRET}"}},
-				{"title": "Public contact form", "trigger": map[string]any{"type": "webhook", "public_form": true, "form_fields": []string{"name", "email", "message"}, "form_title": "Get in touch"}},
 			},
 		},
 		{

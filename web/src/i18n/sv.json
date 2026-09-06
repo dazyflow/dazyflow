@@ -543,6 +543,7 @@
       "bearerSecretDesc": "Anroparen skickar <0>Authorization: Bearer …</0> i varje anrop. Vilken som helst av nycklarna fungerar — lägg till en ny, ställ om dina anropare och återkalla sedan den gamla utan avbrott.",
       "curlLabel": "Exempelanrop (curl)",
       "curlDesc": "En body i klartext landar som text på stegets Body-utgång; en JSON-body (Content-Type: application/json) kommer in som strukturerad data du kan plocka fält ur.",
+      "requestCurlDesc": "Kommandot skriver ut det som ditt Svara-steg skickar tillbaka. Lägg till <0>?wait=0</0> i adressen för att få en direkt kvittens i stället för att vänta på svaret.",
       "curlNeedsKey": "Generera en nyckel först — som det står skickar kommandot platshållaren och nekas.",
       "curlNeedsPublish": "Publicera flödet innan du kör det här — ett opublicerat utkast tar inte emot anrop, med eller utan nyckel.",
       "curlNeedsRepublish": "Nyckeln ligger i ditt utkast. Publicera dina ändringar innan du kör det här, annars nekas anropet.",
@@ -569,8 +570,6 @@
         "urlLabel": "Webhook-adress"
       },
       "form": {
-        "enable": "Publicera ett formulär åt mig (ingen webbplats behövs)",
-        "enableDesc": "Vi publicerar en enkel webbsida åt dig — dela länken, så startar varje svar det här flödet.",
         "urlLabel": "Formulärlänk",
         "fieldsLabel": "Formulärfält",
         "fieldsDesc": "Kommaseparerade. Lämna tomt för name, email, message.",
@@ -633,7 +632,10 @@
       "emptyTitle": "Ingen webhook konfigurerad",
       "emptyDesc": "Lägg till en webhook så att verktyg som Zapier, Typeform eller din egen kod kan trigga flödet.",
       "add": "Konfigurera en webhook",
-      "removeTitle": "Ta bort webhook-triggern (avpublicerar även formuläret)"
+      "removeTitle": "Ta bort webhook-triggern"
+    },
+    "request": {
+      "help": "Andra system anropar flödets adress med den hemliga nyckeln nedan och väntar på svaret som ditt Svara-steg skapar."
     }
   },
   "templates": {
@@ -1949,18 +1951,22 @@
     "deleteNode": "Ta bort steg",
     "resetState": "Återställ {{label}}",
     "deleteConfirm": "Ta bort steg \"{{id}}\" och dess kopplingar?",
-    "webhookDevSummary": "För utvecklare — starta flödet via HTTP-anrop",
     "webhookStatus": {
-      "off": "Tar inte emot än — slå på formuläret nedan, eller lägg till en hemlig nyckel under ”För utvecklare”.",
-      "form": "Tar emot — alla med formulärlänken kan starta det här flödet.",
-      "secret": "Tar emot — system som skickar den hemliga nyckeln kan starta det här flödet.",
-      "both": "Tar emot — via formulärlänken, och via den hemliga nyckeln för andra system.",
-      "stale": "Tar emot — men besökarna får fortfarande den senast publicerade versionen. Publicera för att göra dina ändringar live.",
-      "pending": {
-        "form": "Tar inte emot än — formulärlänken svarar ”inte tillgängligt” tills du publicerar flödet.",
-        "secret": "Tar inte emot än — den hemliga nyckeln avvisas tills du publicerar flödet.",
-        "both": "Tar inte emot än — både formulärlänken och den hemliga nyckeln börjar fungera när du publicerar flödet."
-      }
+      "off": "Tar inte emot än — tryck på Generera nedan för att skapa den hemliga nyckel avsändarna måste skicka med.",
+      "on": "Tar emot — system som skickar den hemliga nyckeln kan starta det här flödet.",
+      "pending": "Tar inte emot än — den hemliga nyckeln avvisas tills du publicerar flödet.",
+      "stale": "Tar emot — men avsändarna når fortfarande den senast publicerade versionen. Publicera för att göra dina ändringar live."
+    },
+    "formStatus": {
+      "on": "Öppet — alla med formulärlänken kan fylla i det och starta flödet.",
+      "pending": "Inte öppet än — formulärlänken svarar ”inte tillgängligt” tills du publicerar flödet.",
+      "stale": "Öppet — men besökarna får fortfarande den senast publicerade versionen. Publicera för att göra dina ändringar live."
+    },
+    "requestStatus": {
+      "off": "Svarar inte än — tryck på Generera nedan för att skapa den hemliga nyckel anroparna måste skicka.",
+      "on": "Svarar — system som skickar den hemliga nyckeln får ditt Svara-steg tillbaka.",
+      "pending": "Svarar inte än — den hemliga nyckeln avvisas tills du publicerar flödet.",
+      "stale": "Svarar — men anroparna får fortfarande den senast publicerade versionen. Publicera för att göra dina ändringar live."
     },
     "aboutStep": "Vad det här steget gör"
   },

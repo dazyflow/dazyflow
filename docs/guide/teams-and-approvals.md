@@ -151,8 +151,8 @@ somebody handled it.
 
 ## Where next
 
-- [Forms & webhooks](./forms-and-webhooks.md) — the intake side: a form anyone can
-  fill in, feeding the flow you're approving.
+- [Forms](./forms.md) — the intake side: a page anyone can fill in, feeding the
+  flow you're approving.
 - [When a run fails](./when-a-flow-fails.md) — reading a run that stopped for a
   reason other than waiting on you.
 - [Step catalog: flow control](https://docs.dazyflow.app/reference/steps/flow-control) — the *Wait for

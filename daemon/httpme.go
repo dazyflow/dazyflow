@@ -546,9 +546,9 @@ func (h *flowAPI) triggerEndpoints(base string, g core.Graph) []map[string]any {
 	base = strings.TrimRight(base, "/")
 	out := []map[string]any{}
 	scope := g.Tenant + "/" + g.Workspace + "/" + g.ID
-	// Trigger config lives on nodes now (the Triggers menu is gone): the
-	// webhook_input node carries the secret + hosted-form opt-in, and the
-	// Schedule/Poll nodes carry their schedule.
+	// Trigger config lives on nodes: the Webhook and Request steps carry their
+	// keys, the Form step is its own door, and the Schedule/Poll nodes carry
+	// their schedule.
 	for _, n := range g.Nodes {
 		switch n.Module {
 		case webhookInputModuleID:
@@ -562,14 +562,24 @@ func (h *flowAPI) triggerEndpoints(base string, g core.Graph) []map[string]any {
 				ep["auth"] = "Authorization: Bearer " + keys[0]
 			}
 			out = append(out, ep)
-			if pf, _ := n.Params["public_form"].(bool); pf {
-				out = append(out, map[string]any{
-					"kind":   "hosted_form",
-					"method": "GET (renders) / POST (submits)",
-					"url":    base + "/form/" + scope,
-					"note":   "Public page — possession of the URL is the only credential.",
-				})
+		case core.FormInputModule:
+			out = append(out, map[string]any{
+				"kind":   "hosted_form",
+				"method": "GET (renders) / POST (submits)",
+				"url":    base + "/form/" + scope,
+				"note":   "Public page — possession of the URL is the only credential.",
+			})
+		case core.RequestInputModule:
+			ep := map[string]any{
+				"kind":   "request",
+				"method": "POST",
+				"url":    base + "/call/" + scope,
+				"note":   "Holds the connection until the flow's Reply step answers; ?wait=0 returns immediately instead.",
 			}
+			if keys := core.WebhookSecrets(n.Params); len(keys) > 0 {
+				ep["auth"] = "Authorization: Bearer " + keys[0]
+			}
+			out = append(out, ep)
 		case "cron_trigger":
 			if c, _ := n.Params["cron"].(string); c != "" {
 				out = append(out, map[string]any{

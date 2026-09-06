@@ -60,10 +60,10 @@ func FlowRunStatusPublished(g Graph, published bool) FlowRunStatus {
 	return s
 }
 
-// HasConfiguredWebhookTrigger reports whether the flow has a REACHABLE
-// webhook_input — one carrying a secret key or a public hosted form. A
-// webhook node with neither is inert: the /trigger endpoint rejects every
-// inbound call, so it does not make the flow live.
+// HasConfiguredWebhookTrigger reports whether the flow has a REACHABLE inbound
+// HTTP trigger: a Webhook or Request step carrying a secret key, or a Form
+// step (which needs none). A key-less Webhook is inert — the endpoint rejects
+// every inbound call, so it does not make the flow live.
 func HasConfiguredWebhookTrigger(g Graph) bool {
 	_, hasWebhook, _ := classifyTriggers(g)
 	return hasWebhook
@@ -110,7 +110,8 @@ var EventTriggerModules = map[string]bool{
 // covered here the moment that test tells you to list it.
 func IsTriggerModule(module string) bool {
 	switch module {
-	case "webhook_input", "cron_trigger", "poll_trigger", "google_form_trigger":
+	case WebhookInputModule, FormInputModule, RequestInputModule,
+		"cron_trigger", "poll_trigger", "google_form_trigger":
 		return true
 	}
 	return EventTriggerModules[module]
@@ -126,7 +127,8 @@ func IsTriggerModule(module string) bool {
 // step the payload the original run received (see Service.ReplayRun). A
 // scheduler trigger needs no such help — it just runs again.
 func IsInboundEventTriggerModule(module string) bool {
-	return module == "webhook_input" || EventTriggerModules[module]
+	return module == WebhookInputModule || module == FormInputModule ||
+		module == RequestInputModule || EventTriggerModules[module]
 }
 
 // classifyTriggers scans g once and reports the three ways a flow can fire on
@@ -150,9 +152,20 @@ func classifyTriggers(g Graph) (hasScheduler, hasWebhook, hasEvent bool) {
 			if secs, ok := paramInt(n.Params, "interval_seconds"); ok && secs > 0 && secs <= MaxPollIntervalSeconds {
 				hasScheduler = true
 			}
-		case "webhook_input":
-			publicForm, _ := n.Params["public_form"].(bool)
-			if len(WebhookSecrets(n.Params)) > 0 || publicForm {
+		case WebhookInputModule:
+			// A key-less webhook step is inert: /trigger rejects every
+			// unauthenticated POST.
+			if len(WebhookSecrets(n.Params)) > 0 {
+				hasWebhook = true
+			}
+		case FormInputModule:
+			// The step's presence IS the opt-in — the form needs no key, so
+			// there is nothing further to configure before it can receive.
+			hasWebhook = true
+		case RequestInputModule:
+			// Same reachability rule as the webhook, minus the form: the
+			// /call endpoint rejects every key-less call.
+			if len(WebhookSecrets(n.Params)) > 0 {
 				hasWebhook = true
 			}
 		default:
@@ -180,9 +193,10 @@ func classifyTriggers(g Graph) (hasScheduler, hasWebhook, hasEvent bool) {
 //   - poll / google form: a poll_trigger or google_form_trigger node whose
 //     interval_seconds is a positive value within the scheduler's ceiling
 //     (the scheduler skips a zero/blank or out-of-range interval).
-//   - webhook: a webhook_input node that is reachable — it has a secret or
-//     a public hosted form (otherwise the /trigger endpoint rejects every
-//     inbound call, mirroring lintTriggers' "no secret, no form" warning).
+//   - webhook / request: a node carrying at least one secret (otherwise the
+//     endpoint rejects every inbound call, mirroring lintTriggers' warning).
+//   - form: a form_input node, whose presence is enough — the hosted form
+//     takes no key.
 //   - provider event: an enabled EventTriggerModules node (a Slack mention, a
 //     GitHub push, a Stripe payment …). These were previously NOT counted, so
 //     a flow whose only trigger was "On mention" reported as manual-only in

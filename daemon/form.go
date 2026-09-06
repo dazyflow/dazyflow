@@ -30,8 +30,8 @@ var defaultFormFields = []string{"name", "email", "message"}
 // handleForm serves the hosted intake form: a public page a
 // non-technical user can point people at without anyone needing a
 // bearer token or a curl command. GET renders the form; POST accepts a
-// submission and fires the flow with the field values as webhook_input
-// body. Only graphs whose webhook trigger sets public_form=true expose
+// submission and fires the flow with the field values on the Form step's
+// body port. Only graphs carrying a Form step expose
 // anything here — every other path is a 404.
 //
 // This is the "first-class intake source" that closes the biggest
@@ -70,7 +70,7 @@ func (w *WebhookListener) handleForm(rw http.ResponseWriter, r *http.Request) {
 	}
 	fields, title, ok := publicFormConfig(g)
 	if !ok {
-		// Either no webhook_input node or it hasn't opted into a public form.
+		// No Form step, so there is no hosted form here.
 		// Don't reveal which — the same page as every other miss keeps
 		// non-public graphs invisible.
 		renderFormUnavailable(rw, g.Language)
@@ -145,13 +145,13 @@ func (w *WebhookListener) handleForm(rw http.ResponseWriter, r *http.Request) {
 		seed := buildFormSeed(fields, values)
 		seeds := map[string]core.Result{}
 		for _, n := range g.Nodes {
-			if n.Module == webhookInputModuleID && !triggerNodeDisabled(n) {
+			if n.Module == core.FormInputModule && !triggerNodeDisabled(n) {
 				seeds[n.ID] = seed
 			}
 		}
 		if len(seeds) == 0 {
 			// Unreachable by construction: publicFormConfig above already
-			// found a live (non-paused) webhook_input, and this loop's
+			// found a live (non-paused) form_input, and this loop's
 			// predicate is the weaker one. Kept as a guard, answering the
 			// same way the owner-side refusals below do rather than with a
 			// bare status, so a future edit that breaks the invariant still
@@ -326,7 +326,7 @@ func jsonScalarToString(v any) string {
 const maxFormFields = core.MaxHostedFormFields
 
 // collectFormValues builds the {field: value} map seeded into the
-// flow's webhook_input.body port from a hosted-form POST. It accepts
+// flow's form_input.body port from a hosted-form POST. It accepts
 // every posted field (Zapier, Make, Typeform attach utm_*, source,
 // submitted_at etc. that owners commonly forget to declare), not just
 // the ones named in form_fields — the old "declared-only" filter
@@ -363,21 +363,17 @@ func collectFormValues(declared []string, posted url.Values) map[string]any {
 }
 
 // publicFormConfig returns the hosted-form fields and title from the graph's
-// webhook_input node when it has opted into a public form (the node's
-// public_form param), else ok=false. Config lives on the node now — the
-// Triggers menu is gone.
+// Form step, else ok=false. The step's presence IS the opt-in: a form takes no
+// key, so there is nothing further to switch on.
 func publicFormConfig(g core.Graph) (fields []string, title string, ok bool) {
 	for _, n := range g.Nodes {
-		if n.Module != webhookInputModuleID {
+		if n.Module != core.FormInputModule {
 			continue
 		}
 		// A paused trigger step has no public form. Rendering the form and
 		// then refusing (or worse, accepting into a run that skips the very
 		// node meant to receive it) is a crueller answer than not offering it.
 		if triggerNodeDisabled(n) {
-			continue
-		}
-		if pf, _ := n.Params["public_form"].(bool); !pf {
 			continue
 		}
 		t, _ := n.Params["form_title"].(string)
@@ -455,7 +451,7 @@ func declaredFormValues(declared []string, posted url.Values) map[string]string 
 // none is carried. Without this the collection a form fills comes out
 // alphabetical — "What you like about us" ahead of "Your name" — even though
 // the editor already offers the declared order as the columns, via the
-// webhook_input row source in rowsource.go. Same order, both sides.
+// form_input row source in rowsource.go. Same order, both sides.
 func formSeedHeaders(declared []string, values map[string]any) []string {
 	out := make([]string, 0, len(values))
 	seen := make(map[string]struct{}, len(values))
@@ -480,7 +476,7 @@ func formSeedHeaders(declared []string, values map[string]any) []string {
 }
 
 // buildFormSeed mirrors buildWebhookSeed's output shape (body + headers
-// ports) but takes an already-parsed field map, so webhook_input
+// ports) but takes an already-parsed field map, so form_input
 // downstream sees the same {key: value} object it would from a JSON
 // webhook POST — i.e. ${trigger.body.email} works identically whether
 // the data arrived via the hosted form or a real webhook.
@@ -496,7 +492,6 @@ func buildFormSeed(declared []string, values map[string]any) core.Result {
 				Inline:  values,
 				Headers: formSeedHeaders(declared, values),
 			},
-			"headers": {MIME: "application/json", Inline: map[string]any{}},
 		},
 	}
 }

@@ -25,6 +25,8 @@
 
 // params_schema field labels — the form's left column.
 export const SV_FIELD_TITLES: Record<string, string> = {
+  "Response code": "Svarskod",
+  "What to send back": "Vad som ska skickas tillbaka",
   "Address": "Adress",
   "All-day event": "Heldagshändelse",
   "API version": "API-version",
@@ -207,7 +209,6 @@ export const SV_FIELD_TITLES: Record<string, string> = {
   "Price": "Pris",
   "Priority": "Prioritet",
   "Properties (Notion JSON)": "Egenskaper (Notion-JSON)",
-  "Public hosted form": "Publikt formulär",
   "Quantity": "Antal",
   "Query": "Fråga",
   "Query values": "Frågevärden",
@@ -309,6 +310,12 @@ export const SV_FIELD_TITLES: Record<string, string> = {
 
 // Per-field help text, shown behind the (i) on a field.
 export const SV_FIELD_HELP: Record<string, string> = {
+  "Bearer tokens callers may send (Authorization: Bearer …) to POST this flow's /trigger endpoint. The endpoint accepts ANY listed key, so you can add a new key, migrate callers, then revoke the old one with zero downtime. With no key the endpoint rejects every delivery.": "Bearer-tokens som avsändare kan skicka (Authorization: Bearer …) för att POST:a till flödets /trigger-adress. Adressen godtar VILKEN som helst av nycklarna i listan, så du kan lägga till en ny nyckel, flytta över avsändarna och sedan återkalla den gamla utan avbrott. Utan nyckel avvisas varje leverans.",
+  "Heading shown at the top of the form. Defaults to the flow's name.": "Rubrik som visas överst i formuläret. Utan värde används flödets namn.",
+  "The questions the form asks, one per field. Each becomes a key on the Body output, so later steps know the columns before the first submission arrives. Defaults to name, email, message.": "Frågorna formuläret ställer, en per fält. Varje fält blir en nyckel på utgången Innehåll, så senare steg känner till kolumnerna redan innan det första svaret kommer in. Standard är name, email, message.",
+  "Bearer tokens callers may send (Authorization: Bearer …) to POST this flow's /call endpoint. The endpoint accepts ANY listed key, so you can add a new key, migrate callers, then revoke the old one with zero downtime. With no key the endpoint rejects every call.": "Bearer-tokens som anropare kan skicka (Authorization: Bearer …) för att POST:a till flödets /call-adress. Adressen godtar VILKEN som helst av nycklarna i listan, så du kan lägga till en ny nyckel, flytta över anroparna och sedan återkalla den gamla utan avbrott. Utan nyckel avvisas varje anrop.",
+  "The HTTP status the caller receives. 200 unless you need to signal something specific (201 created, 202 accepted, 422 rejected).": "HTTP-statusen som anroparen får. 200 om du inte behöver signalera något särskilt (201 skapad, 202 mottagen, 422 avvisad).",
+  "The text the caller receives. Supports ${...} references. Ignored when something is wired into the Body input, which keeps its own type.": "Texten som anroparen får. Stöder ${...}-referenser. Ignoreras när något är kopplat till ingången Innehåll, vars värde behåller sin egen typ.",
   "1-based page number. Overridden by the 'Page' input.": "Sidnummer som börjar på 1. Ingången Sida vinner över detta.",
   "A 46elks number (E.164) the recipient can reply to, or an alphanumeric sender name (max 11 chars, must contain a letter; no replies).": "Ett 46elks-nummer (E.164) som mottagaren kan svara till, eller ett alfanumeriskt avsändarnamn (max 11 tecken, måste innehålla en bokstav; går inte att svara på).",
   "A CEL expression. The variable 'input' is the connected value and 'now' is the current timestamp; the expression's value is emitted on 'out'.": "Ett CEL-uttryck. Variabeln 'input' är det inkopplade värdet och 'now' är aktuell tidsstämpel; uttryckets värde skickas ut på 'out'.",
@@ -325,7 +332,6 @@ export const SV_FIELD_HELP: Record<string, string> = {
   "Abort if the download exceeds this many bytes. Default 100 MiB; 0 = unlimited (still bounded by quota).": "Avbryt om nedladdningen överstiger så här många byte. Standard 100 MiB; 0 = obegränsat (ändå begränsat av kvoten).",
   "Accepted for compatibility; not applied.": "Tas emot för kompatibilitet; används inte.",
   "Add the rows under what's already on the sheet instead of replacing it.": "Lägg raderna under det som redan finns i bladet i stället för att ersätta det.",
-  "Also expose a public intake form at /form/<tenant>/<workspace>/<id> — no token required (possession of the URL is the credential).": "Visa även ett publikt formulär på /form/<tenant>/<workspace>/<id> — ingen token krävs (att ha URL:en är legitimationen).",
   "An optional name for the table, shown as a caption above the header row. Leave blank for no caption. Takes a reference, so it can name the run's own data — e.g. \"Orders for ${upstream.today.out}\".": "Ett valfritt namn på tabellen, som visas som rubrik ovanför rubrikraden. Lämna tomt för ingen rubrik. Tar en referens, så namnet kan komma från körningens egna data — t.ex. \"Ordrar för ${upstream.today.out}\".",
   "Appended to the end of the reply.": "Läggs till i slutet av svaret.",
   "Appended to the joined text when at least one row is rendered.": "Läggs till efter den sammanfogade texten när minst en rad renderas.",
@@ -333,7 +339,6 @@ export const SV_FIELD_HELP: Record<string, string> = {
   "Auto-create the table (with a UNIQUE on conflict_columns) when missing. Defaults true.": "Skapa tabellen automatiskt (med UNIQUE på conflict_columns) om den saknas. Standard: på.",
   "Auto-create the table from headers when missing. Defaults true.": "Skapa tabellen automatiskt utifrån rubrikerna om den saknas. Standard: på.",
   "Auto-create the table from the supplied headers if it doesn't exist. Set false to fail loudly when the table is missing.": "Skapa tabellen automatiskt utifrån de angivna rubrikerna om den inte finns. Sätt false för att misslyckas tydligt när tabellen saknas.",
-  "Bearer tokens callers may send (Authorization: Bearer …) to POST this flow's /trigger endpoint. The endpoint accepts ANY listed key, so you can add a new key, migrate callers, then revoke the old one with zero downtime. Leave empty only if you rely solely on a public hosted form.": "Bearer-tokens som anropare får skicka (Authorization: Bearer …) för att POSTa till flödets /trigger-ändpunkt. Ändpunkten godtar VILKEN som helst av de listade nycklarna, så du kan lägga till en ny nyckel, flytta över anroparna och sedan återkalla den gamla utan avbrott. Lämna tomt bara om du helt förlitar dig på ett publikt formulär.",
   "Blind-copy recipient(s), comma-separated. Hidden from the other recipients.": "Mottagare för hemlig kopia, kommaseparerade. Syns inte för de andra mottagarna.",
   "Body text. Overridden by the 'Body' input.": "Innehållstext. Ingången Innehåll vinner över detta.",
   "Body to send with a POST request. The Body input overrides this when connected. May include ${secret.NAME} placeholders.": "Innehåll att skicka med en POST-förfrågan. Ingången Innehåll vinner över detta när den är inkopplad. Får innehålla platshållare som ${secret.NAMN}.",
@@ -471,7 +476,6 @@ export const SV_FIELD_HELP: Record<string, string> = {
   "Extra service options passed through as-is — e.g. {\"brightness_pct\":50} or {\"temperature\":21}.": "Extra tjänstinställningar som skickas vidare som de är — t.ex. {\"brightness_pct\":50} eller {\"temperature\":21}.",
   "Fail responses larger than this. Default 10 MiB.": "Misslyckas på svar större än detta. Standard 10 MiB.",
   "Field name used for a form upload.": "Fältnamn som används vid en formuläruppladdning.",
-  "Field names the hosted form collects. Defaults to name, email, message.": "Fältnamnen som det publicerade formuläret samlar in. Standard är name, email, message.",
   "Field separator. Use \"\\t\" or \"tab\" for TSV, \";\" for European CSVs. A single character.": "Fältavgränsare. Använd \"\\t\" eller \"tab\" för TSV, \";\" för europeiska CSV-filer. Ett enda tecken.",
   "Filename sent with a form upload. Defaults to the file's own name.": "Filnamn som skickas med en formuläruppladdning. Standard är filens eget namn.",
   "Folder to upload into — pick from your account's folders. Leave blank for the account's My Drive root.": "Mapp att ladda upp till — välj bland kontots mappar. Lämna tomt för kontots rot i Min enhet.",
@@ -493,7 +497,6 @@ export const SV_FIELD_HELP: Record<string, string> = {
   "Hard deadline for the whole download, in milliseconds.": "Absolut tidsgräns för hela nedladdningen, i millisekunder.",
   "Hard deadline for the whole upload, in milliseconds.": "Absolut tidsgräns för hela uppladdningen, i millisekunder.",
   "Hash algorithm. Use sha256 or stronger for security; sha1/md5 are for checksums/compatibility only.": "Hash-algoritm. Använd sha256 eller starkare av säkerhetsskäl; sha1/md5 är bara för kontrollsummor och kompatibilitet.",
-  "Heading shown on the hosted form. Defaults to the flow's name.": "Rubrik som visas på det publicerade formuläret. Standard är flödets namn.",
   "How long to pause before continuing, in milliseconds (1000 = 1 second).": "Hur länge det ska pausas innan flödet fortsätter, i millisekunder (1000 = 1 sekund).",
   "How many commits to return at most.": "Hur många commits som som mest returneras.",
   "How many days to return, counting from today (1..10).": "Hur många dagar som returneras, räknat från i dag (1..10).",

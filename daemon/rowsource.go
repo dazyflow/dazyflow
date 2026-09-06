@@ -74,12 +74,12 @@ func SetSheetsFieldFetcher(fn func(ctx context.Context, node core.Node) ([]strin
 
 func init() {
 	// Built-in row sources:
-	//  - the hosted webhook form, whose fields are its declared form_fields;
+	//  - the hosted form, whose fields are its declared form_fields;
 	//  - the Google Form trigger, which fetches its question titles live via
 	//    the injected fetcher (falling back to the structural keys);
 	//  - Gmail search, whose match stubs always carry id + threadId;
 	//  - Sheets read range, whose fields are the sheet's live header row.
-	RegisterRowSource("webhook_input", "body", func(_ context.Context, n core.Node) ([]string, error) {
+	RegisterRowSource(core.FormInputModule, "body", func(_ context.Context, n core.Node) ([]string, error) {
 		fs := stringSliceParam(n.Params, "form_fields")
 		if len(fs) == 0 {
 			fs = defaultFormFields

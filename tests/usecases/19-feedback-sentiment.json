@@ -5,7 +5,7 @@
   "workspace": "default",
   "name": "Read the feedback, escalate the unhappy ones",
   "nodes": [
-    {"id": "form", "module": "webhook_input", "params": {"public_form": true, "form_fields": ["name", "email", "how_was_it"], "form_title": "How did we do?"}},
+    {"id": "form", "module": "form_input", "params": {"form_fields": ["name", "email", "how_was_it"], "form_title": "How did we do?"}},
     {"id": "as_text", "module": "render_template", "params": {"template": "{{.name}} <{{.email}}> said:\n\n{{.how_was_it}}"}},
     {"id": "mood", "module": "claude_classify", "params": {"categories": [{"name": "happy", "description": "Pleased, complimentary, would recommend."}, {"name": "neutral", "description": "Matter-of-fact, mixed, or just an observation."}, {"name": "unhappy", "description": "Disappointed, frustrated, or reporting something that went wrong."}]}},
     {"id": "row", "module": "expression", "params": {"expr": "[{'name': input.name, 'email': input.email, 'said': input.how_was_it}]"}},

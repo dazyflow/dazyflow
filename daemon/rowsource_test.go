@@ -31,13 +31,13 @@ func inputFieldsResp(t *testing.T, body []byte) (string, []string) {
 	return mod, resp.Fields
 }
 
-func TestInputFields_WebhookFormSource(t *testing.T) {
+func TestInputFields_HostedFormSource(t *testing.T) {
 	h := newGatewayHarness(t)
 	g := core.Graph{
 		ID: "f", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
-			{ID: "form", Module: "webhook_input", Params: map[string]any{
-				"public_form": true, "form_fields": []any{"name", "email", "company"},
+			{ID: "form", Module: "form_input", Params: map[string]any{
+				"form_fields": []any{"name", "email", "company"},
 			}},
 			{ID: "append", Module: "sheets_append_row", Params: map[string]any{"spreadsheet_id": "S"}},
 		},
@@ -52,7 +52,7 @@ func TestInputFields_WebhookFormSource(t *testing.T) {
 		t.Fatalf("status=%d body=%s", rw.Code, rw.Body.String())
 	}
 	mod, fields := inputFieldsResp(t, rw.Body.Bytes())
-	if mod != "webhook_input" {
+	if mod != "form_input" {
 		t.Errorf("source module = %q", mod)
 	}
 	if len(fields) != 3 || fields[0] != "name" || fields[2] != "company" {

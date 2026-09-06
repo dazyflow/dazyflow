@@ -1,14 +1,14 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The reachability line above the webhook config, and the one thing it must
-// never do: claim a form link works when it doesn't.
+// The reachability lines above the Webhook and Form config, and the one thing
+// neither may do: claim a door works when it doesn't.
 //
-// It sits directly above the form URL and its Copy button, so it is read at
-// the exact moment an owner decides whether to send that link to a customer.
-// It used to answer from the DRAFT alone — turn the hosted form on and it went
-// green immediately, while /form served the published revision and answered
-// every visitor with a 404 until the flow was published.
+// The form line sits directly above the form URL and its Copy button, so it is
+// read at the exact moment an owner decides whether to send that link to a
+// customer. Both answer about the PUBLISHED flow, because /trigger and /form
+// both serve that — answering from the draft went green immediately while
+// every visitor still got a 404.
 
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
@@ -21,60 +21,67 @@ vi.mock("react-i18next", () => {
     Trans: ({ i18nKey }: { i18nKey: string }) => <>{i18nKey}</>,
   };
 });
-vi.mock("../../i18n", () => ({ default: { language: "en", t: (k: string) => k } }));
+vi.mock("../../i18n", () => ({
+  default: { language: "en", t: (k: string) => k },
+}));
 
-import { WebhookStatusLine } from "./TriggersModal";
+import { FormStatusLine, WebhookStatusLine } from "./TriggersModal";
 import type { GraphTrigger } from "../../types";
 
-const form = { public_form: true } as GraphTrigger;
-const secret = { secrets: ["s"] } as unknown as GraphTrigger;
-const both = { public_form: true, secrets: ["s"] } as unknown as GraphTrigger;
+const keyed = { secrets: ["s"] } as unknown as GraphTrigger;
+const bare = {} as GraphTrigger;
 
-const line = () => screen.getByText(/^inspector\.webhookStatus\./).textContent;
+const line = (kind: string) =>
+  screen.getByText(new RegExp(`^inspector\\.${kind}\\.`)).textContent;
 // classList, not a substring match: "webhook-status" literally contains "ok".
-const classes = (c: HTMLElement) => c.querySelector(".webhook-status")!.classList;
+const classes = (c: HTMLElement) =>
+  c.querySelector(".webhook-status")!.classList;
 
 describe("WebhookStatusLine", () => {
-  it("does not promise a working form link on an unpublished draft", () => {
+  it("reports no door at all until a key exists", () => {
     const { container } = render(
-      <WebhookStatusLine webhook={form} triggerLive={{ published: false, dirty: true }} />,
+      <WebhookStatusLine
+        webhook={bare}
+        triggerLive={{ published: true, dirty: false }}
+      />,
     );
-    expect(line()).toBe("inspector.webhookStatus.pending.form");
-    // Green is the signal an owner reads as "safe to send". It must be absent
-    // until a stranger with the link would actually get a form.
+    expect(line("webhookStatus")).toBe("inspector.webhookStatus.off");
     expect(classes(container).contains("ok")).toBe(false);
   });
 
-  it("names the secret key when that is the only door", () => {
-    render(
-      <WebhookStatusLine webhook={secret} triggerLive={{ published: false, dirty: false }} />,
+  it("does not promise a working key on an unpublished draft", () => {
+    const { container } = render(
+      <WebhookStatusLine
+        webhook={keyed}
+        triggerLive={{ published: false, dirty: true }}
+      />,
     );
-    expect(line()).toBe("inspector.webhookStatus.pending.secret");
-  });
-
-  it("names both doors when both are configured", () => {
-    render(
-      <WebhookStatusLine webhook={both} triggerLive={{ published: false, dirty: false }} />,
-    );
-    expect(line()).toBe("inspector.webhookStatus.pending.both");
+    expect(line("webhookStatus")).toBe("inspector.webhookStatus.pending");
+    expect(classes(container).contains("ok")).toBe(false);
   });
 
   it("goes green once published and clean", () => {
     const { container } = render(
-      <WebhookStatusLine webhook={form} triggerLive={{ published: true, dirty: false }} />,
+      <WebhookStatusLine
+        webhook={keyed}
+        triggerLive={{ published: true, dirty: false }}
+      />,
     );
-    expect(line()).toBe("inspector.webhookStatus.form");
+    expect(line("webhookStatus")).toBe("inspector.webhookStatus.on");
     expect(classes(container).contains("ok")).toBe(true);
   });
 
-  it("warns that visitors still get the last published version", () => {
-    // Published, with edits on top: the link works, but the fields someone is
-    // filling in are not the ones on screen. Still green — a stranger CAN use
-    // it right now — with the stale marker on top.
+  it("warns that senders still reach the last published version", () => {
+    // Published, with edits on top: the door works, but it leads to the
+    // version on the server, not the one on screen. Still green — a sender
+    // CAN use it right now — with the stale marker on top.
     const { container } = render(
-      <WebhookStatusLine webhook={form} triggerLive={{ published: true, dirty: true }} />,
+      <WebhookStatusLine
+        webhook={keyed}
+        triggerLive={{ published: true, dirty: true }}
+      />,
     );
-    expect(line()).toBe("inspector.webhookStatus.stale");
+    expect(line("webhookStatus")).toBe("inspector.webhookStatus.stale");
     expect(classes(container).contains("ok")).toBe(true);
     expect(classes(container).contains("stale")).toBe(true);
   });
@@ -82,14 +89,36 @@ describe("WebhookStatusLine", () => {
   it("stays on the door-only answer while publish state is unknown", () => {
     // Still loading, or a surface that doesn't pass it. Saying "not published"
     // here would be a guess, and a wrong one most of the time.
-    render(<WebhookStatusLine webhook={form} />);
-    expect(line()).toBe("inspector.webhookStatus.form");
+    render(<WebhookStatusLine webhook={keyed} />);
+    expect(line("webhookStatus")).toBe("inspector.webhookStatus.on");
+  });
+});
+
+describe("FormStatusLine", () => {
+  it("does not promise a working link on an unpublished draft", () => {
+    // The one thing this line must never do: an owner reads it and sends the
+    // link to a customer, who gets "not available" until the flow is live.
+    const { container } = render(
+      <FormStatusLine triggerLive={{ published: false, dirty: true }} />,
+    );
+    expect(line("formStatus")).toBe("inspector.formStatus.pending");
+    expect(classes(container).contains("ok")).toBe(false);
   });
 
-  it("reports no door at all before publish state can matter", () => {
-    render(
-      <WebhookStatusLine webhook={{} as GraphTrigger} triggerLive={{ published: false, dirty: false }} />,
+  it("is open the moment the flow is published — a form needs no key", () => {
+    const { container } = render(
+      <FormStatusLine triggerLive={{ published: true, dirty: false }} />,
     );
-    expect(line()).toBe("inspector.webhookStatus.off");
+    expect(line("formStatus")).toBe("inspector.formStatus.on");
+    expect(classes(container).contains("ok")).toBe(true);
+  });
+
+  it("warns that visitors still get the last published version", () => {
+    const { container } = render(
+      <FormStatusLine triggerLive={{ published: true, dirty: true }} />,
+    );
+    expect(line("formStatus")).toBe("inspector.formStatus.stale");
+    expect(classes(container).contains("ok")).toBe(true);
+    expect(classes(container).contains("stale")).toBe(true);
   });
 });

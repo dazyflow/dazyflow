@@ -120,16 +120,18 @@ func TestLintTriggers_FlagsBadConfigs(t *testing.T) {
 			},
 		},
 		{
-			name: "webhook node with neither secret nor public form",
+			name: "webhook node with no secret",
 			graph: Graph{
 				Nodes: []Node{webhookInputNode()},
 			},
 			wantCode: "trigger_webhook_no_secret",
 		},
 		{
-			name: "webhook node with public form, no secret — fine (form is secret-less)",
+			// The Form step needs no key: its presence is the opt-in, so there
+			// is nothing to warn about on a bare one.
+			name: "form node with no config — fine (the form is secret-less)",
 			graph: Graph{
-				Nodes: []Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"public_form": true}}},
+				Nodes: []Node{{ID: "in", Module: FormInputModule}},
 			},
 		},
 		{

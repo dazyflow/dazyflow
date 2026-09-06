@@ -85,9 +85,14 @@ function hasConfiguredAutoTrigger(
         break;
       }
       case "webhook_input":
-        if (webhookKeys(n.params).length > 0 || n.params?.public_form === true)
-          return true;
+      case "request_input":
+        // A key-less step is inert — /trigger and /call both reject an
+        // unauthenticated caller.
+        if (webhookKeys(n.params).length > 0) return true;
         break;
+      case "form_input":
+        // The step's presence IS the opt-in: a hosted form takes no key.
+        return true;
       default:
         // Provider-event triggers (a Slack mention, a GitHub push, a Stripe
         // payment). Mirrors core.EventTriggerModules — the node's presence is

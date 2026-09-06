@@ -19,7 +19,6 @@ import { Trans, useTranslation } from "react-i18next";
 import type { Graph, GraphTrigger } from "../../types";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
-import { Switch } from "../ui/Switch";
 import { ConfirmModal } from "../ui/ConfirmModal";
 import { Button } from "../ui/Button";
 import { webhookKeys } from "../../flowStatus";
@@ -58,34 +57,35 @@ function TriggerEmpty({
   );
 }
 
-// FormTab is the non-technical home: a single "host a form for me"
-// toggle that, when flipped on, creates the webhook trigger behind the
-// scenes (via onChange → upsertWebhook) and reveals the form link,
-// embed snippet, field/title config, and recent-submission health.
-// FormTab + WebhookTab are exported so the node Inspector can render them
-// for a selected webhook_input node — its params ({secret, public_form,
-// form_fields, form_title}) are the same shape as the legacy GraphTrigger,
-// so they're passed straight in as `webhook` and onChange merges a patch.
+// FormTab is the Form step's panel and the product's least technical surface:
+// the link people open, what it asks them, an embed snippet, and
+// recent-submission health. There is no on/off toggle — adding the step is the
+// opt-in.
+//
+// FormTab, WebhookTab and RequestTab are exported so the node Inspector can
+// render them for a selected trigger node; a node's params bag has the same
+// shape as the legacy GraphTrigger, so it is passed straight in and onChange
+// merges a patch.
 export function FormTab({
   graph,
-  webhook,
+  form,
   onChange,
 }: {
   graph: Graph;
-  webhook?: GraphTrigger;
+  form?: GraphTrigger;
   onChange: (patch: Partial<GraphTrigger>) => void;
 }) {
   const { t } = useTranslation();
   const { me } = useAuth();
   const baseURL = me?.public_base_url || "";
-  const enabled = !!webhook?.public_form;
   const host = (baseURL || webhookHostFallback).replace(/\/+$/, "");
   const formURL = `${host}/form/${graph.tenant}/${graph.workspace}/${graph.id}`;
-  // Read form config off the webhook trigger; tolerate its absence
-  // (the toggle creates it on enable).
-  const formTitle = webhook?.form_title;
-  const formFields = webhook?.form_fields ?? [];
-  const embedTitle = (formTitle || graph.name || graph.id).replace(/"/g, "&quot;");
+  const formTitle = form?.form_title;
+  const formFields = form?.form_fields ?? [];
+  const embedTitle = (formTitle || graph.name || graph.id).replace(
+    /"/g,
+    "&quot;",
+  );
   const embedCode =
     `<iframe src="${formURL}" title="${embedTitle}" ` +
     `width="100%" height="600" loading="lazy" style="border:0;max-width:480px"></iframe>`;
@@ -98,79 +98,74 @@ export function FormTab({
   const [fieldsDraft, setFieldsDraft] = useState<string | null>(null);
   return (
     <div>
-      {/* One switch, one helper line. The fuller pitch used to repeat
-          here as two stacked paragraphs — the WebhookStatusLine above
-          (in the Inspector) now carries the context instead. */}
-      <Switch
-        checked={enabled}
-        onChange={(checked) => onChange({ public_form: checked })}
-        label={t("settings.triggers.form.enable")}
-        // The pitch is only needed while the form is OFF — once on,
-        // the link card below says it better than a sentence could.
-        description={enabled ? undefined : t("settings.triggers.form.enableDesc")}
-      />
-      {enabled && (
-        <div className="hosted-form-body">
-          {/* Visible by default: just the link and the submission
+      {/* No on/off switch: adding the Form step is the opt-in. The switch
+          existed only while the form shared a node with the webhook. */}
+      <div className="hosted-form-body">
+        {/* Visible by default: just the link and the submission
               count. Everything configurable lives behind two collapsed
               disclosures (customize / embed) — the defaults are fine
               for most flows, so the open state stays four lines. */}
-          <CodeField
-            label={t("settings.triggers.form.urlLabel")}
-            icon={<LinkIcon size={ICON.xs} aria-hidden="true" />}
-            value={formURL}
-            action={{ href: formURL, label: t("settings.triggers.form.preview") }}
-          />
-          <details className="webhook-recipes">
-            <summary>{t("settings.triggers.form.customizeSummary")}</summary>
-            <div className="webhook-recipes-body">
-              <div className="sf-field">
-                <div className="label-row">
-                  <label>{t("settings.triggers.form.fieldsLabel")}</label>
-                </div>
-                <input
-                  type="text"
-                  value={fieldsDraft ?? fieldsText}
-                  placeholder="name, email, message"
-                  onChange={(e) => {
-                    setFieldsDraft(e.target.value);
-                    const fields = e.target.value
-                      .split(",")
-                      .map((s) => s.trim())
-                      .filter(Boolean);
-                    onChange({ form_fields: fields.length > 0 ? fields : undefined });
-                  }}
-                  onBlur={() => setFieldsDraft(null)}
-                />
-                <div className="desc">{t("settings.triggers.form.fieldsDesc")}</div>
+        <CodeField
+          label={t("settings.triggers.form.urlLabel")}
+          icon={<LinkIcon size={ICON.xs} aria-hidden="true" />}
+          value={formURL}
+          action={{ href: formURL, label: t("settings.triggers.form.preview") }}
+        />
+        <details className="webhook-recipes">
+          <summary>{t("settings.triggers.form.customizeSummary")}</summary>
+          <div className="webhook-recipes-body">
+            <div className="sf-field">
+              <div className="label-row">
+                <label>{t("settings.triggers.form.fieldsLabel")}</label>
               </div>
-              <div className="sf-field">
-                <div className="label-row">
-                  <label>{t("settings.triggers.form.titleLabel")}</label>
-                </div>
-                <input
-                  type="text"
-                  value={formTitle ?? ""}
-                  placeholder={graph.name || graph.id}
-                  onChange={(e) => onChange({ form_title: e.target.value || undefined })}
-                />
+              <input
+                type="text"
+                value={fieldsDraft ?? fieldsText}
+                placeholder="name, email, message"
+                onChange={(e) => {
+                  setFieldsDraft(e.target.value);
+                  const fields = e.target.value
+                    .split(",")
+                    .map((s) => s.trim())
+                    .filter(Boolean);
+                  onChange({
+                    form_fields: fields.length > 0 ? fields : undefined,
+                  });
+                }}
+                onBlur={() => setFieldsDraft(null)}
+              />
+              <div className="desc">
+                {t("settings.triggers.form.fieldsDesc")}
               </div>
             </div>
-          </details>
-          {/* Same disclosure element as "Example request (curl)" and
+            <div className="sf-field">
+              <div className="label-row">
+                <label>{t("settings.triggers.form.titleLabel")}</label>
+              </div>
+              <input
+                type="text"
+                value={formTitle ?? ""}
+                placeholder={graph.name || graph.id}
+                onChange={(e) =>
+                  onChange({ form_title: e.target.value || undefined })
+                }
+              />
+            </div>
+          </div>
+        </details>
+        {/* Same disclosure element as "Example request (curl)" and
               "How do I connect my website form?" — and the snippet uses
               the same CodeBlock as every other copyable code, so code
               looks and copies the same everywhere. */}
-          <details className="webhook-recipes">
-            <summary>{t("settings.triggers.form.embedSummary")}</summary>
-            <div className="webhook-recipes-body">
-              <div className="desc">{t("settings.triggers.form.embedDesc")}</div>
-              <CodeBlock value={embedCode} />
-            </div>
-          </details>
-          <RecentSubmissions graph={graph} />
-        </div>
-      )}
+        <details className="webhook-recipes">
+          <summary>{t("settings.triggers.form.embedSummary")}</summary>
+          <div className="webhook-recipes-body">
+            <div className="desc">{t("settings.triggers.form.embedDesc")}</div>
+            <CodeBlock value={embedCode} />
+          </div>
+        </details>
+        <RecentSubmissions graph={graph} />
+      </div>
     </div>
   );
 }
@@ -242,13 +237,98 @@ export function WebhookTab({
       <details className="webhook-recipes">
         <summary>{t("settings.triggers.curlLabel")}</summary>
         <div className="webhook-recipes-body">
-          <CodeBlock value={buildCurl(graph, webhookKeys(webhook)[0] ?? "", baseURL)} />
+          <CodeBlock
+            value={buildCurl(graph, webhookKeys(webhook)[0] ?? "", baseURL)}
+          />
           <CurlCaveat webhook={webhook} triggerLive={triggerLive} />
           <div className="desc">
-            <Trans i18nKey="settings.triggers.curlDesc" components={[<code />]} />
+            <Trans
+              i18nKey="settings.triggers.curlDesc"
+              components={[<code />]}
+            />
           </div>
         </div>
       </details>
+    </div>
+  );
+}
+
+// RequestTab is the Request step's whole panel: the address callers POST to,
+// the keys that guard it, and a curl that prints the flow's own Reply. There is
+// no form half — a Request is always a system asking a question.
+export function RequestTab({
+  graph,
+  request,
+  onChange,
+  triggerLive,
+}: {
+  graph: Graph;
+  request: GraphTrigger;
+  onChange: (patch: Partial<GraphTrigger>) => void;
+  triggerLive?: { published: boolean; dirty: boolean };
+}) {
+  const { t } = useTranslation();
+  const { me } = useAuth();
+  const baseURL = me?.public_base_url || "";
+  return (
+    <div>
+      <RequestStatusLine request={request} triggerLive={triggerLive} />
+      <p className="settings-help">{t("triggers.request.help")}</p>
+      <CodeField
+        label={t("settings.triggers.recipes.urlLabel")}
+        method="POST"
+        value={buildRequestURL(graph, baseURL)}
+      />
+      <WebhookKeys webhook={request} onChange={onChange} />
+      <details className="webhook-recipes">
+        <summary>{t("settings.triggers.curlLabel")}</summary>
+        <div className="webhook-recipes-body">
+          <CodeBlock
+            value={buildRequestCurl(
+              graph,
+              webhookKeys(request)[0] ?? "",
+              baseURL,
+            )}
+          />
+          <CurlCaveat webhook={request} triggerLive={triggerLive} />
+          <div className="desc">
+            <Trans
+              i18nKey="settings.triggers.requestCurlDesc"
+              components={[<code />]}
+            />
+          </div>
+        </div>
+      </details>
+    </div>
+  );
+}
+
+// RequestStatusLine is the Request step's counterpart: can a caller reach this
+// right now, answered about the PUBLISHED flow, since /call serves that.
+export function RequestStatusLine({
+  request,
+  triggerLive,
+}: {
+  request?: GraphTrigger;
+  triggerLive?: { published: boolean; dirty: boolean };
+}) {
+  const { t } = useTranslation();
+  const hasKey = webhookKeys(request).length > 0;
+  const pending = triggerLive !== undefined && !triggerLive.published;
+  const stale =
+    triggerLive !== undefined && triggerLive.published && triggerLive.dirty;
+  const key = !hasKey ? "off" : pending ? "pending" : stale ? "stale" : "on";
+  const ok = hasKey && !pending;
+  return (
+    <div
+      className={"webhook-status" + (ok ? " ok" : "") + (stale ? " stale" : "")}
+    >
+      {ok ? (
+        <Check size={ICON.sm} aria-hidden="true" />
+      ) : (
+        <Info size={ICON.sm} aria-hidden="true" />
+      )}
+      <span>{t(`inspector.requestStatus.${key}`)}</span>
     </div>
   );
 }
@@ -325,31 +405,42 @@ export function WebhookStatusLine({
 }) {
   const { t } = useTranslation();
   const hasSecret = webhookKeys(webhook).length > 0;
-  const hasForm = webhook?.public_form === true;
-  const door = hasForm && hasSecret ? "both" : hasForm ? "form" : hasSecret ? "secret" : "off";
-
   // Undefined publish state (still loading, or a surface that doesn't pass it)
-  // keeps the old door-only answer rather than inventing a warning.
+  // keeps the door-only answer rather than inventing a warning.
   const pending = triggerLive !== undefined && !triggerLive.published;
-  // Published, but the draft has moved on: the doors ARE open, they just lead
-  // to the last published version. Worth saying — the fields someone is
-  // filling in are not the ones on screen.
+  // Published, but the draft has moved on: the door IS open, it just leads to
+  // the last published version.
   const stale = triggerLive !== undefined && triggerLive.published && triggerLive.dirty;
-
-  const key =
-    door === "off"
-      ? "off"
-      : pending
-        ? `pending.${door}`
-        : stale
-          ? "stale"
-          : door;
-  // Green is reserved for "a stranger can use this right now".
-  const ok = door !== "off" && !pending;
+  const key = !hasSecret ? "off" : pending ? "pending" : stale ? "stale" : "on";
+  // Green is reserved for "a caller can use this right now".
+  const ok = hasSecret && !pending;
   return (
     <div className={"webhook-status" + (ok ? " ok" : "") + (stale ? " stale" : "")}>
       {ok ? <Check size={ICON.sm} aria-hidden="true" /> : <Info size={ICON.sm} aria-hidden="true" />}
       <span>{t(`inspector.webhookStatus.${key}`)}</span>
+    </div>
+  );
+}
+
+// FormStatusLine answers the one question that matters above a link someone is
+// about to send to a customer: does it work yet? The form itself needs no
+// configuration — its only precondition is that the flow is published, and
+// /form serves the published revision, so an unpublished draft's link answers
+// visitors with "not available".
+export function FormStatusLine({
+  triggerLive,
+}: {
+  triggerLive?: { published: boolean; dirty: boolean };
+}) {
+  const { t } = useTranslation();
+  const pending = triggerLive !== undefined && !triggerLive.published;
+  const stale = triggerLive !== undefined && triggerLive.published && triggerLive.dirty;
+  const key = pending ? "pending" : stale ? "stale" : "on";
+  const ok = !pending;
+  return (
+    <div className={"webhook-status" + (ok ? " ok" : "") + (stale ? " stale" : "")}>
+      {ok ? <Check size={ICON.sm} aria-hidden="true" /> : <Info size={ICON.sm} aria-hidden="true" />}
+      <span>{t(`inspector.formStatus.${key}`)}</span>
     </div>
   );
 }
@@ -395,6 +486,31 @@ function buildWebhookURL(graph: Graph, baseURL: string): string {
   return `${host}/trigger/${graph.tenant}/${graph.workspace}/${graph.id}`;
 }
 
+// buildRequestURL returns the public address callers POST to when they want an
+// answer back. Distinct path from /trigger on purpose: one URL shape, one
+// contract.
+function buildRequestURL(graph: Graph, baseURL: string): string {
+  const host = (baseURL || webhookHostFallback).replace(/\/+$/, "");
+  return `${host}/call/${graph.tenant}/${graph.workspace}/${graph.id}`;
+}
+
+// buildRequestCurl prints the call AND what comes back — JSON by default,
+// since a system asking a question is the audience here.
+function buildRequestCurl(
+  graph: Graph,
+  secret: string,
+  baseURL: string,
+): string {
+  const url = buildRequestURL(graph, baseURL);
+  const auth = secret || "<bearer-secret>";
+  return [
+    `curl -X POST '${url}' \\`,
+    `  -H 'Authorization: Bearer ${auth}' \\`,
+    `  -H 'Content-Type: application/json' \\`,
+    `  -d '{"question":"hello"}'`,
+  ].join("\n");
+}
+
 // RecentSubmissions surfaces the failure count for the per-graph runs
 // list. The hosted form renders "Thanks!" the moment the run is
 // accepted by the scheduler, *not* when downstream nodes finish — so a
@@ -407,7 +523,11 @@ function RecentSubmissions({ graph }: { graph: Graph }) {
   const [runs, setRuns] = useState<{
     total: number;
     failed: number;
-    lastFailed?: { id: string; finished_at?: string | null; error_code?: string };
+    lastFailed?: {
+      id: string;
+      finished_at?: string | null;
+      error_code?: string;
+    };
   } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
@@ -459,7 +579,10 @@ function RecentSubmissions({ graph }: { graph: Graph }) {
   return (
     <div className="hosted-form-runs hosted-form-runs-warn">
       <strong>
-        {t("settings.triggers.form.runsSomeFailed", { ok, failed: runs.failed })}
+        {t("settings.triggers.form.runsSomeFailed", {
+          ok,
+          failed: runs.failed,
+        })}
       </strong>
       {runs.lastFailed?.error_code && (
         <div className="desc">
@@ -629,7 +752,10 @@ function WebhookKeys({
           : t("settings.triggers.generateAnother")}
       </Button>
       <div className="desc">
-        <Trans i18nKey="settings.triggers.bearerSecretDesc" components={[<code />]} />
+        <Trans
+          i18nKey="settings.triggers.bearerSecretDesc"
+          components={[<code />]}
+        />
       </div>
       {pendingRevoke !== null && (
         <ConfirmModal
@@ -813,7 +939,9 @@ export function TriggerScheduleField({
   onChange: (next: string) => void;
 }) {
   const { t, i18n } = useTranslation();
-  const [schedule, setSchedule] = useState<Schedule>(() => scheduleFromCron(value));
+  const [schedule, setSchedule] = useState<Schedule>(() =>
+    scheduleFromCron(value),
+  );
   const lastEmitted = useRef<string>("");
   useEffect(() => {
     if (value === lastEmitted.current) return;
@@ -888,7 +1016,9 @@ export function TriggerScheduleField({
             type="button"
             role="tab"
             aria-selected={schedule.kind === p.kind}
-            className={"cron-preset-chip" + (schedule.kind === p.kind ? " active" : "")}
+            className={
+              "cron-preset-chip" + (schedule.kind === p.kind ? " active" : "")
+            }
             onClick={() => switchTo(p.kind)}
           >
             {t(p.labelKey)}
@@ -896,7 +1026,11 @@ export function TriggerScheduleField({
         ))}
       </div>
 
-      <SchedulePresetControls schedule={schedule} locale={locale} onChange={setSchedule} />
+      <SchedulePresetControls
+        schedule={schedule}
+        locale={locale}
+        onChange={setSchedule}
+      />
 
       {/* Anchor the time to the user's own clock so a bare "at 09:00"
           isn't read as UTC or the server's zone. Hidden for "hourly"
@@ -911,15 +1045,25 @@ export function TriggerScheduleField({
       {validation.kind === "invalid" && (
         <div
           className="desc"
-          style={{ color: "var(--danger)", display: "flex", gap: "var(--space-1h)", alignItems: "flex-start" }}
+          style={{
+            color: "var(--danger)",
+            display: "flex",
+            gap: "var(--space-1h)",
+            alignItems: "flex-start",
+          }}
         >
-          <AlertCircle size={ICON.sm} style={{ flexShrink: 0, marginTop: "var(--space-0)" }} />
+          <AlertCircle
+            size={ICON.sm}
+            style={{ flexShrink: 0, marginTop: "var(--space-0)" }}
+          />
           <span>{validation.error}</span>
         </div>
       )}
       {validation.kind === "valid" && validation.nextFires.length > 0 && (
         <div className="desc muted">
-          <div className="cron-next-head">{t("settings.triggers.cronNextLocal", { tz })}</div>
+          <div className="cron-next-head">
+            {t("settings.triggers.cronNextLocal", { tz })}
+          </div>
           <ul className="cron-next-list">
             {validation.nextFires.map((iso, i) => (
               <li key={i}>{formatCronTime(iso)}</li>
@@ -976,7 +1120,9 @@ function SchedulePresetControls({
     case "hourly":
       return (
         <div className="cron-preset-row">
-          <span className="cron-preset-prefix">{t("settings.triggers.atMinute")}</span>
+          <span className="cron-preset-prefix">
+            {t("settings.triggers.atMinute")}
+          </span>
           <input
             type="number"
             min={0}
@@ -985,19 +1131,27 @@ function SchedulePresetControls({
             onChange={(e) =>
               onChange({
                 ...schedule,
-                minute: clamp(parseIntOr(e.target.value, schedule.minute), 0, 59),
+                minute: clamp(
+                  parseIntOr(e.target.value, schedule.minute),
+                  0,
+                  59,
+                ),
               })
             }
             className="cron-minute-input"
             aria-label={t("settings.triggers.minuteLabel")}
           />
-          <span className="cron-preset-suffix">{t("settings.triggers.pastTheHour")}</span>
+          <span className="cron-preset-suffix">
+            {t("settings.triggers.pastTheHour")}
+          </span>
         </div>
       );
     case "daily":
       return (
         <div className="cron-preset-row">
-          <span className="cron-preset-prefix">{t("settings.triggers.atTime")}</span>
+          <span className="cron-preset-prefix">
+            {t("settings.triggers.atTime")}
+          </span>
           <TimeOfDayInput
             hour={schedule.hour}
             minute={schedule.minute}
@@ -1009,7 +1163,9 @@ function SchedulePresetControls({
       return (
         <div className="cron-preset-stack">
           <div className="cron-preset-row">
-            <span className="cron-preset-prefix">{t("settings.triggers.onDays")}</span>
+            <span className="cron-preset-prefix">
+              {t("settings.triggers.onDays")}
+            </span>
             <DayOfWeekPicker
               selected={schedule.days}
               locale={locale}
@@ -1017,11 +1173,15 @@ function SchedulePresetControls({
             />
           </div>
           <div className="cron-preset-row">
-            <span className="cron-preset-prefix">{t("settings.triggers.atTime")}</span>
+            <span className="cron-preset-prefix">
+              {t("settings.triggers.atTime")}
+            </span>
             <TimeOfDayInput
               hour={schedule.hour}
               minute={schedule.minute}
-              onChange={(hour, minute) => onChange({ ...schedule, hour, minute })}
+              onChange={(hour, minute) =>
+                onChange({ ...schedule, hour, minute })
+              }
             />
           </div>
         </div>
@@ -1030,7 +1190,9 @@ function SchedulePresetControls({
       return (
         <div className="cron-preset-stack">
           <div className="cron-preset-row">
-            <span className="cron-preset-prefix">{t("settings.triggers.onDayOfMonth")}</span>
+            <span className="cron-preset-prefix">
+              {t("settings.triggers.onDayOfMonth")}
+            </span>
             <input
               type="number"
               min={1}
@@ -1045,11 +1207,15 @@ function SchedulePresetControls({
               className="cron-day-input"
               aria-label={t("settings.triggers.dayOfMonthLabel")}
             />
-            <span className="cron-preset-suffix">{t("settings.triggers.atTime")}</span>
+            <span className="cron-preset-suffix">
+              {t("settings.triggers.atTime")}
+            </span>
             <TimeOfDayInput
               hour={schedule.hour}
               minute={schedule.minute}
-              onChange={(hour, minute) => onChange({ ...schedule, hour, minute })}
+              onChange={(hour, minute) =>
+                onChange({ ...schedule, hour, minute })
+              }
             />
           </div>
           {schedule.day > 28 && (
@@ -1094,7 +1260,9 @@ function TimeOfDayInput({
         min={0}
         max={23}
         value={hour}
-        onChange={(e) => onChange(clamp(parseIntOr(e.target.value, hour), 0, 23), minute)}
+        onChange={(e) =>
+          onChange(clamp(parseIntOr(e.target.value, hour), 0, 23), minute)
+        }
         aria-label={t("settings.triggers.hourLabel")}
       />
       <span aria-hidden="true">:</span>
@@ -1103,7 +1271,9 @@ function TimeOfDayInput({
         min={0}
         max={59}
         value={String(minute).padStart(2, "0")}
-        onChange={(e) => onChange(hour, clamp(parseIntOr(e.target.value, minute), 0, 59))}
+        onChange={(e) =>
+          onChange(hour, clamp(parseIntOr(e.target.value, minute), 0, 59))
+        }
         aria-label={t("settings.triggers.minuteLabel")}
       />
     </span>

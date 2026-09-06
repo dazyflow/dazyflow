@@ -36,9 +36,8 @@ func TestHostedForm_FieldCountIsCapped(t *testing.T) {
 	}
 	g := graph("formbomb", []core.Node{{
 		ID:     "in",
-		Module: "webhook_input",
+		Module: "form_input",
 		Params: map[string]any{
-			"public_form": true,
 			"form_fields": names,
 			"form_title":  "Contact",
 		},
@@ -106,9 +105,8 @@ func TestHostedForm_FieldNameLengthIsCapped(t *testing.T) {
 	}
 	g := graph("formnamebomb", []core.Node{{
 		ID:     "in",
-		Module: "webhook_input",
+		Module: "form_input",
 		Params: map[string]any{
-			"public_form": true,
 			"form_fields": names,
 			"form_title":  strings.Repeat("T", nameLen),
 		},

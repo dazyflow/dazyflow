@@ -236,10 +236,6 @@ func TestUseCase34_OneDeadChannelDoesNotBlockTheRest(t *testing.T) {
 	me := s.signUp(t, "comms@example.com")
 
 	g := useCase(t, "34-announce-everywhere.json")
-	// The hosted form's POST renders a page rather than returning a run id,
-	// so the test fires the same flow through its /trigger endpoint, which
-	// needs a key on the node. The entry point isn't what's under test here.
-	patchParams(&g, "form", map[string]any{"secrets": []any{"test-webhook-key"}})
 	pointAt(&g, f, "slack")
 	patchParams(&g, "discord", map[string]any{"webhook_url": f.URL() + "/webhooks/discord"})
 	patchParams(&g, "push", map[string]any{"server": f.URL() + "/ntfy"})
@@ -252,7 +248,7 @@ func TestUseCase34_OneDeadChannelDoesNotBlockTheRest(t *testing.T) {
 	}
 	me.publishFlow(id)
 
-	runID := me.fireWebhook(id, "test-webhook-key", map[string]any{"headline": "Vi flyttar", "message": "Nya lokaler från måndag."})
+	runID := me.fireForm(id, map[string]any{"headline": "Vi flyttar", "message": "Nya lokaler från måndag."})
 	if status := me.waitForRun(runID); status != "succeeded" {
 		t.Fatalf("a non-critical channel failing sank the whole run: status=%q\n%s",
 			status, me.failedNodeReport(runID))
@@ -272,7 +268,7 @@ func TestUseCase34_OneDeadChannelDoesNotBlockTheRest(t *testing.T) {
 
 	// With Discord back, the same flow reaches all four.
 	f.fail("discord", false)
-	runID = me.fireWebhook(id, "test-webhook-key", map[string]any{"headline": "Igen", "message": "Andra gången."})
+	runID = me.fireForm(id, map[string]any{"headline": "Igen", "message": "Andra gången."})
 	if status := me.waitForRun(runID); status != "succeeded" {
 		t.Fatalf("second run: status=%q\n%s", status, me.failedNodeReport(runID))
 	}
@@ -370,7 +366,6 @@ func TestUseCase22_TimeOffWaitsForTheManager(t *testing.T) {
 	me := s.signUp(t, "chef@example.com")
 
 	g := useCase(t, "22-time-off-request.json")
-	patchParams(&g, "form", map[string]any{"secrets": []any{"test-webhook-key"}})
 	patchParams(&g, "ask", map[string]any{"server": f.URL() + "/ntfy"})
 	pointAt(&g, f, "book", "tell_team")
 	host, port := f.smtpHostPort()
@@ -383,7 +378,7 @@ func TestUseCase22_TimeOffWaitsForTheManager(t *testing.T) {
 	}
 	me.publishFlow(id)
 
-	runID := me.fireWebhook(id, "test-webhook-key", map[string]any{
+	runID := me.fireForm(id, map[string]any{
 		"name": "Ida", "email": "ida@example.com",
 		"from_date": "2026-09-01", "to_date": "2026-09-08", "reason": "Semester",
 	})
@@ -428,7 +423,6 @@ func TestUseCase22_RejectingBooksNothing(t *testing.T) {
 	me := s.signUp(t, "chef2@example.com")
 
 	g := useCase(t, "22-time-off-request.json")
-	patchParams(&g, "form", map[string]any{"secrets": []any{"test-webhook-key"}})
 	patchParams(&g, "ask", map[string]any{"server": f.URL() + "/ntfy"})
 	pointAt(&g, f, "book", "tell_team")
 	host, port := f.smtpHostPort()
@@ -439,7 +433,7 @@ func TestUseCase22_RejectingBooksNothing(t *testing.T) {
 		t.Fatalf("save: status=%d body=%s", r.status, r.body)
 	}
 	me.publishFlow(id)
-	runID := me.fireWebhook(id, "test-webhook-key", map[string]any{
+	runID := me.fireForm(id, map[string]any{
 		"name": "Nils", "email": "nils@example.com",
 		"from_date": "2026-12-20", "to_date": "2027-01-07", "reason": "Jul",
 	})
@@ -476,7 +470,6 @@ func TestUseCase17_SpamNeverReachesTheSheet(t *testing.T) {
 	me := s.signUp(t, "hej@example.com")
 
 	g := useCase(t, "17-contact-form-spam-filter.json")
-	patchParams(&g, "form", map[string]any{"secrets": []any{"test-webhook-key"}})
 	patchParams(&g, "judge", map[string]any{"api_key": "sk-mock", "base_url": f.URL()})
 	pointAt(&g, f, "keep", "tell_us")
 
@@ -487,7 +480,7 @@ func TestUseCase17_SpamNeverReachesTheSheet(t *testing.T) {
 	me.publishFlow(id)
 
 	// A real enquiry gets through.
-	runID := me.fireWebhook(id, "test-webhook-key", map[string]any{
+	runID := me.fireForm(id, map[string]any{
 		"name": "Ida", "email": "ida@example.com",
 		"message": "Hej! Kan ni offerera ett nytt tak till vår lada?",
 	})
@@ -511,7 +504,7 @@ func TestUseCase17_SpamNeverReachesTheSheet(t *testing.T) {
 	}
 
 	// Junk is dropped silently: no row, no ping.
-	runID = me.fireWebhook(id, "test-webhook-key", map[string]any{
+	runID = me.fireForm(id, map[string]any{
 		"name": "Growth Guru", "email": "seo@spam.example",
 		"message": "We offer premium SEO backlink packages to boost your ranking!",
 	})

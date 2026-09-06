@@ -32,7 +32,8 @@ func richGraph() Graph {
 			node("cron", "cron_trigger", map[string]any{"cron": "*/5 * * * *", "tz": "Europe/Stockholm", "disabled": true}),
 			node("poll", "poll_trigger", map[string]any{"interval_seconds": float64(300), "disabled": false}),
 			node("form", "google_form_trigger", map[string]any{"interval_seconds": float64(900)}),
-			node("hook", "webhook_input", map[string]any{"public_form": true, "secret": "s3cret"}),
+			node("hook", "webhook_input", map[string]any{"secret": "s3cret"}),
+			node("intake", "form_input", map[string]any{"form_fields": []any{"name", "email"}}),
 			node("event", "slack_on_mention", map[string]any{"channel": "#ops"}),
 			// The ordinary steps: their params are what a header elides.
 			node("n1", "http_request", map[string]any{

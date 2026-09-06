@@ -131,8 +131,7 @@ func TestWebhookSendLoop_IsBroken(t *testing.T) {
 	s.publish(t, core.Graph{
 		ID: "whsendloop", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{
-			{ID: "intake", Module: "webhook_input", Params: map[string]any{
-				"public_form": true,
+			{ID: "intake", Module: "form_input", Params: map[string]any{
 				"form_fields": []any{"name"},
 			}},
 			{ID: "again", Module: "webhook_send", Params: map[string]any{
@@ -176,8 +175,7 @@ func TestFailureNotifyLoop_IsBroken(t *testing.T) {
 		// The run has to FAIL for the notifier to fire: a module this daemon
 		// has no drop for fails at the step, which is a failed run.
 		Nodes: []core.Node{
-			{ID: "intake", Module: "webhook_input", Params: map[string]any{
-				"public_form": true,
+			{ID: "intake", Module: "form_input", Params: map[string]any{
 				"form_fields": []any{"name"},
 			}},
 			{ID: "boom", Module: "runner.no_such_step"},
@@ -239,8 +237,7 @@ func TestAliasedSelfCall_LoopIsBroken(t *testing.T) {
 	s.publish(t, core.Graph{
 		ID: "aliasloop", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{
-			{ID: "intake", Module: "webhook_input", Params: map[string]any{
-				"public_form": true,
+			{ID: "intake", Module: "form_input", Params: map[string]any{
 				"form_fields": []any{"name"},
 			}},
 			{ID: "again", Module: "http_request", Params: map[string]any{

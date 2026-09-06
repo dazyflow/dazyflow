@@ -309,12 +309,13 @@ func (h *runCtlAPI) testTrigger(rw http.ResponseWriter, r *http.Request, p core.
 	seed := buildWebhookSeed(rawBody, r)
 	seeds := map[string]core.Result{}
 	for _, n := range g.Nodes {
-		if n.Module == webhookInputModuleID {
+		switch n.Module {
+		case webhookInputModuleID, core.RequestInputModule, core.FormInputModule:
 			seeds[n.ID] = seed
 		}
 	}
 	if len(seeds) == 0 {
-		writeJSONError(rw, http.StatusBadRequest, "flow has no webhook_input node to send a test event to")
+		writeJSONError(rw, http.StatusBadRequest, "flow has no Webhook, Form or Request step to send a test event to")
 		return
 	}
 	// A test fired from the editor with a made-up payload is the definition of

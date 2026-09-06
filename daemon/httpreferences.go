@@ -258,9 +258,8 @@ func triggerFieldTokens(g core.Graph) []referenceItem {
 	return out
 }
 
-// hostedFormFields collects the form field names a flow's hosted form
-// exposes, from a public_form graph trigger or a webhook_input node with
-// public_form set, deduped. Empty when the flow has no hosted form.
+// hostedFormFields collects the field names a flow's hosted form exposes,
+// deduped. Empty when the flow has no Form step.
 func hostedFormFields(g core.Graph) []string {
 	seen := map[string]bool{}
 	var fields []string
@@ -276,16 +275,8 @@ func hostedFormFields(g core.Graph) []string {
 			fields = append(fields, f)
 		}
 	}
-	for _, t := range g.Triggers {
-		if t.PublicForm {
-			add(t.FormFields)
-		}
-	}
 	for _, n := range g.Nodes {
-		if n.Module != "webhook_input" {
-			continue
-		}
-		if pf, _ := n.Params["public_form"].(bool); !pf {
+		if n.Module != core.FormInputModule {
 			continue
 		}
 		add(stringSliceParam(n.Params, "form_fields"))

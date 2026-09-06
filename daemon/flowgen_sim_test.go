@@ -393,7 +393,7 @@ func TestFlowGenEval(t *testing.T) {
 	scoreGraph(t, "C: contact form -> Slack (render_text)", core.Graph{
 		Name: "Form to Slack",
 		Nodes: []core.Node{
-			{ID: "form", Module: "webhook_input", Params: map[string]any{"public_form": true, "form_fields": []any{"name", "email", "message"}}},
+			{ID: "form", Module: "form_input", Params: map[string]any{"form_fields": []any{"name", "email", "message"}}},
 			{ID: "render", Module: "render_text", Params: map[string]any{"template": "'New enquiry from ' + row.name + ' <' + row.email + '>: ' + row.message"}},
 			{ID: "notify", Module: "slack_send_message", Params: map[string]any{"channel": "#sales"}},
 		},

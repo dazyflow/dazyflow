@@ -3623,11 +3623,11 @@ function EditorInner() {
   // you are already looking at, so it hands the new job to subscribeToRun and
   // stays put. Otherwise this is doRun's shape exactly.
 
-  // A webhook flow waits for an external POST — clicking "Run" gives its
-  // webhook_input node no body, which confuses non-technical users. When
-  // the flow is webhook-triggered we offer "Send test event" instead: it
+  // An inbound-delivery flow waits for something from outside — clicking
+  // "Run" gives its trigger step no body, which confuses non-technical users.
+  // For a Webhook, Form or Request step we offer "Send test event" instead: it
   // fires the flow with a synthetic sample payload so the canvas lights
-  // up exactly as a real submission would.
+  // up exactly as a real delivery would.
   //
   // Keyed off the NODE, not g.triggers. This used to require a graph-level
   // webhook trigger as well, and trigger config moved onto the nodes when the
@@ -3641,9 +3641,10 @@ function EditorInner() {
   // The node alone is the right test: a secret gates the PUBLIC /trigger
   // endpoint, while test-trigger runs under the user's own token, so an
   // unconfigured webhook node is still worth firing a sample at.
-  const webhookNode = nodes.find(
-    (n) => (n.data as DazyNodeData | undefined)?.moduleID === "webhook_input",
-  );
+  const webhookNode = nodes.find((n) => {
+    const m = (n.data as DazyNodeData | undefined)?.moduleID;
+    return m === "webhook_input" || m === "request_input" || m === "form_input";
+  });
   const hasWebhookTrigger = webhookNode !== undefined;
 
   // openTestEvent pre-fills the sample editor with a payload shaped to the
@@ -3835,7 +3836,9 @@ function EditorInner() {
         m === "cron_trigger" ||
         m === "poll_trigger" ||
         m === "google_form_trigger" ||
-        m === "webhook_input"
+        m === "webhook_input" ||
+        m === "request_input" ||
+        m === "form_input"
       );
     });
   // runStatus drives the header chip: unlike hasAnyTrigger (presence of a

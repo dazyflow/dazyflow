@@ -543,6 +543,7 @@
       "bearerSecretDesc": "Callers send <0>Authorization: Bearer …</0> with every request. Any listed key works — add a new one, switch your callers over, then revoke the old one without downtime.",
       "curlLabel": "Example request (curl)",
       "curlDesc": "A plain-text body arrives on the step's Body output as text; a JSON body (Content-Type: application/json) arrives as structured data you can pick fields from.",
+      "requestCurlDesc": "The command prints what your Reply step sends back. Add <0>?wait=0</0> to the address to get an immediate acknowledgement instead of waiting for the answer.",
       "curlNeedsKey": "Generate a key first — as printed, this command sends the placeholder and will be refused.",
       "curlNeedsPublish": "Publish the flow before you run this — an unpublished draft refuses deliveries, key or no key.",
       "curlNeedsRepublish": "This key is part of your draft. Publish your changes before you run this, or the request will be refused.",
@@ -569,8 +570,6 @@
         "urlLabel": "Webhook address"
       },
       "form": {
-        "enable": "Host a form for me (no website needed)",
-        "enableDesc": "We host a simple web page for you — share the link, and every submission starts this flow.",
         "urlLabel": "Form link",
         "fieldsLabel": "Form fields",
         "fieldsDesc": "Comma-separated. Leave blank for name, email, message.",
@@ -633,7 +632,10 @@
       "emptyTitle": "No webhook set up",
       "emptyDesc": "Add a webhook so tools like Zapier, Typeform, or your own code can fire this flow.",
       "add": "Set up a webhook",
-      "removeTitle": "Remove the webhook trigger (also turns off the hosted form)"
+      "removeTitle": "Remove the webhook trigger"
+    },
+    "request": {
+      "help": "Other systems call this flow's address with the secret key below and wait for the answer your Reply step produces."
     }
   },
   "templates": {
@@ -1949,18 +1951,22 @@
     "deleteNode": "Delete step",
     "resetState": "Reset {{label}}",
     "deleteConfirm": "Delete step \"{{id}}\" and its connections?",
-    "webhookDevSummary": "For developers — trigger this flow by HTTP request",
     "webhookStatus": {
-      "off": "Not receiving yet — turn on the form below, or set a secret key under “For developers”.",
-      "form": "Receiving — anyone with the form link can start this flow.",
-      "secret": "Receiving — systems that send the secret key can start this flow.",
-      "both": "Receiving — via the form link, and via the secret key for other systems.",
-      "stale": "Receiving — but visitors still get the last published version. Publish to make your latest changes live.",
-      "pending": {
-        "form": "Not receiving yet — the form link returns “not available” until you publish this flow.",
-        "secret": "Not receiving yet — the secret key is rejected until you publish this flow.",
-        "both": "Not receiving yet — the form link and the secret key both start working once you publish this flow."
-      }
+      "off": "Not receiving yet — press Generate below to create the secret key senders must include.",
+      "on": "Receiving — systems that send the secret key can start this flow.",
+      "pending": "Not receiving yet — the secret key is rejected until you publish this flow.",
+      "stale": "Receiving — but senders still reach the last published version. Publish to make your latest changes live."
+    },
+    "formStatus": {
+      "on": "Open — anyone with the form link can fill it in and start this flow.",
+      "pending": "Not open yet — the form link returns “not available” until you publish this flow.",
+      "stale": "Open — but visitors still get the last published version. Publish to make your latest changes live."
+    },
+    "requestStatus": {
+      "off": "Not answering yet — press Generate below to create the secret key callers must send.",
+      "on": "Answering — systems that send the secret key get your Reply back.",
+      "pending": "Not answering yet — the secret key is rejected until you publish this flow.",
+      "stale": "Answering — but callers still get the last published version. Publish to make your latest changes live."
     },
     "aboutStep": "What this step does"
   },

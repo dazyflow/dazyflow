@@ -463,12 +463,12 @@ func describeDrop(c *DazydClient) Tool {
 
 // describeTriggerKinds returns the typed schema for every supported
 // trigger kind (cron, webhook, poll) plus worked examples. Use this
-// BEFORE composing a flow with a trigger — esp. webhook+public_form,
+// BEFORE composing a flow with a trigger — esp. the inbound HTTP steps,
 // which isn't obvious from any single drop's description.
 func describeTriggerKinds(c *DazydClient) Tool {
 	return Tool{
 		Name:        "describe_trigger_kinds",
-		Description: "Return the schema for every supported GraphTrigger kind (cron, webhook, poll), with per-field descriptions and worked examples. Consult this when composing a flow that needs to fire on a schedule, accept a webhook, or show a hosted intake form (webhook + public_form:true).",
+		Description: "Return the schema for every supported GraphTrigger kind (cron, webhook, poll), with per-field descriptions and worked examples. Consult this when composing a flow that needs to fire on a schedule. Inbound HTTP is configured on steps rather than here: webhook_input, request_input (answered by a reply step) and form_input.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{}}`),
 		Handler: func(ctx context.Context, _ json.RawMessage) (ToolCallResult, error) {
 			var out map[string]any

@@ -423,8 +423,8 @@ at the rest. Per flow, three decode shapes:
 So the flow list can be **~2.8x cheaper** with no cache, no invalidation and no
 shared state — the cost is `map[string]any` params on ordinary steps, which no
 list caller reads. The third row is the one to build: `classifyTriggers` (via
-`FlowRunStatusPublished`) genuinely needs `cron`, `interval_seconds`,
-`public_form` and the webhook secrets, but only on trigger nodes — one or two
+`FlowRunStatusPublished`) genuinely needs `cron`, `interval_seconds`
+and the trigger secrets, but only on trigger nodes — one or two
 out of twenty-five.
 
 **Built** — see "The flow header projection" below.

@@ -19,12 +19,14 @@ file listing is not it.
 | 2 | [Build your first flow](first-flow.md) | End to end, from an empty canvas to a run you can watch. |
 | 3 | [Connect an app](connect-an-app.md) | Connections, OAuth and API keys, and where secrets live. |
 | 4 | [Triggers & schedules](triggers-and-schedules.md) | Starting a flow on a clock, or on something that happened. |
-| 5 | [Forms & webhooks](forms-and-webhooks.md) | Taking input from a person or another system. |
-| 6 | [Teams & approvals](teams-and-approvals.md) | Members, roles, and pausing a run for a human decision. |
-| 7 | [When a run fails](when-a-flow-fails.md) | Reading a failed run, retries, and failure notifications. |
-| 8 | [Runners](runners.md) | Running steps on your own machine, inside your own network. |
-| 9 | [MCP servers](mcp-servers.md) | Exposing a flow to an AI assistant, and calling MCP tools from one. |
-| 10 | [Web APIs](web-apis.md) | Calling an HTTP API that has no dedicated step. |
+| 5 | [Forms](forms.md) | A page Dazyflow hosts, for when the sender is a person. |
+| 6 | [Webhooks](webhooks.md) | An address another system posts to when something happened. |
+| 7 | [Request & reply](request-and-reply.md) | Answering a caller that is asking your flow a question. |
+| 8 | [Teams & approvals](teams-and-approvals.md) | Members, roles, and pausing a run for a human decision. |
+| 9 | [When a run fails](when-a-flow-fails.md) | Reading a failed run, retries, and failure notifications. |
+| 10 | [Runners](runners.md) | Running steps on your own machine, inside your own network. |
+| 11 | [MCP servers](mcp-servers.md) | Exposing a flow to an AI assistant, and calling MCP tools from one. |
+| 12 | [Web APIs](web-apis.md) | Calling an HTTP API that has no dedicated step. |
 | — | [Glossary](glossary.md) | Every term, defined once. Linked from everywhere. |
 
 The **step reference** — one page per step, generated from the drop manifests by

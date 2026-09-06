@@ -25,7 +25,9 @@ import { ForEachEditor } from "./ForEachEditor";
 import {
   TriggerScheduleField,
   browserTimeZone,
+  FormStatusLine,
   FormTab,
+  RequestTab,
   WebhookTab,
   WebhookStatusLine,
   CodeField,
@@ -139,7 +141,7 @@ type Props = {
   running?: boolean;
   cancelling?: boolean;
   onStopRun?: () => void;
-  // graphMeta gives the webhook_input config UI (FormTab/WebhookTab) the
+  // graphMeta gives the trigger config UI (FormTab/WebhookTab/RequestTab) the
   // tenant/workspace/id/name it needs to build the /trigger + /form URLs and
   // the curl/embed recipes. The Triggers menu is gone — this config lives on
   // the node now.
@@ -326,12 +328,12 @@ export function Inspector({
           nodeId: selected.id,
         }
       : undefined;
-  // Webhook input carries its own config (secret + hosted form) — the Triggers
-  // menu is gone. Render the same Webhook/Form panels the menu used, but bound
-  // to the node's params (same {secret, public_form, form_fields, form_title}
-  // shape the old GraphTrigger had). webhookGraph is the minimal Graph the
-  // panels read for building the /trigger + /form URLs.
+  // The inbound-HTTP triggers carry their own config on the node. Their
+  // panels read a minimal Graph for building the /trigger, /form and /call
+  // URLs; params are the same bag the old GraphTrigger was.
   const isWebhookInput = d.moduleID === "webhook_input";
+  const isRequestInput = d.moduleID === "request_input";
+  const isFormInput = d.moduleID === "form_input";
   const webhookGraph = ({
     id: graphMeta?.id ?? "",
     tenant: graphMeta?.tenant ?? "",
@@ -527,38 +529,51 @@ export function Inspector({
         )}
 
         {mode === "form" && isWebhookInput && graphMeta && (
-          // The webhook_input node's config, friendliest path first: a
-          // live "is anything able to reach this?" status line, then the
-          // hosted form (toggle/fields/URL/preview/submissions), and the
-          // developer surface (secret key, curl recipe, form-tool
-          // bridges) tucked into a collapsed disclosure — present for
-          // those who need it, invisible noise for everyone else.
+          // The Webhook step is one door now — the key that guards
+          // /trigger — so it renders flat. The hosted form is its own step.
           <>
             <WebhookStatusLine
               webhook={currentParams as GraphTrigger}
               triggerLive={triggerLive}
             />
-            <FormTab
+            <WebhookTab
               graph={webhookGraph}
               webhook={currentParams as GraphTrigger}
+              triggerLive={triggerLive}
               onChange={(patch) =>
                 onParamsChange(selected.id, { ...currentParams, ...patch })
               }
             />
-            <details className="webhook-dev">
-              <summary>{t("inspector.webhookDevSummary")}</summary>
-              <div className="webhook-dev-body">
-                <WebhookTab
-                  graph={webhookGraph}
-                  webhook={currentParams as GraphTrigger}
-                  triggerLive={triggerLive}
-                  onChange={(patch) =>
-                    onParamsChange(selected.id, { ...currentParams, ...patch })
-                  }
-                />
-              </div>
-            </details>
           </>
+        )}
+
+        {mode === "form" && isFormInput && graphMeta && (
+          // The Form step: the link people open, what it asks them, and
+          // how to put it on your own site.
+          <>
+            <FormStatusLine triggerLive={triggerLive} />
+            <FormTab
+              graph={webhookGraph}
+              form={currentParams as GraphTrigger}
+              onChange={(patch) =>
+                onParamsChange(selected.id, { ...currentParams, ...patch })
+              }
+            />
+          </>
+        )}
+
+        {mode === "form" && isRequestInput && graphMeta && (
+          // The Request step's config is one door — the keys guarding /call —
+          // so it renders flat rather than behind the webhook's form/developer
+          // split.
+          <RequestTab
+            graph={webhookGraph}
+            request={currentParams as GraphTrigger}
+            triggerLive={triggerLive}
+            onChange={(patch) =>
+              onParamsChange(selected.id, { ...currentParams, ...patch })
+            }
+          />
         )}
 
         {mode === "form" && isForEach && (
@@ -572,7 +587,14 @@ export function Inspector({
           />
         )}
 
-        {mode === "form" && canForm && schema && !isCronTrigger && !isWebhookInput && !isForEach && (
+        {mode === "form" &&
+          canForm &&
+          schema &&
+          !isCronTrigger &&
+          !isWebhookInput &&
+          !isRequestInput &&
+          !isFormInput &&
+          !isForEach && (
           // key={selected.id} forces a fresh SchemaForm instance per
           // node so internal text state in JSONField / ArrayField /
           // etc. picks up the new node's value as its initial state

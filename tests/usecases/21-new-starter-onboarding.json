@@ -5,7 +5,7 @@
   "workspace": "default",
   "name": "New starter → welcome mail, intro meeting, checklist, team notice",
   "nodes": [
-    {"id": "form", "module": "webhook_input", "params": {"public_form": true, "form_fields": ["name", "email", "role", "start_date"], "form_title": "New starter"}},
+    {"id": "form", "module": "form_input", "params": {"form_fields": ["name", "email", "role", "start_date"], "form_title": "New starter"}},
     {"id": "address", "module": "expression", "params": {"expr": "input.email"}},
     {"id": "letter", "module": "render_template", "params": {"template": "<p>Welcome {{.name}}!</p><p>You're starting with us as {{.role}} on {{.start_date}}. Your first meeting is at 09:00 that day — the invite is in your calendar.</p><p>Anything you need before then, just reply to this.</p>"}},
     {"id": "welcome", "module": "gmail_send_email", "params": {"account": "default", "subject": "Welcome — your first day", "format": "html"}},

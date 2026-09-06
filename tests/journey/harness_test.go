@@ -344,24 +344,6 @@ func (n *newcomer) publishFlow(id string) {
 	}
 }
 
-// fireWebhook posts to the public trigger URL with the flow's secret,
-// the way an inbound form/webhook would. Returns the run id.
-func (n *newcomer) fireWebhook(id, secret string, payload any) string {
-	path := "/trigger/" + n.tenant + "/" + n.workspace + "/" + id
-	r := n.s.call(n.t, "POST", path, secret, payload)
-	if r.status != http.StatusAccepted {
-		n.t.Fatalf("webhook trigger rejected: status=%d body=%s", r.status, r.body)
-	}
-	var out struct {
-		JobID string `json:"job_id"`
-	}
-	r.decode(&out)
-	if out.JobID == "" {
-		n.t.Fatalf("trigger returned no run id: %s", r.body)
-	}
-	return out.JobID
-}
-
 // eventually polls until cond holds, or fails with what was still wrong.
 // Needed wherever a run's side effect happens CONCURRENTLY with the state the
 // test can observe: a parked run publishes "awaiting" the moment it parks,
@@ -376,6 +358,43 @@ func eventually(t *testing.T, what string, cond func() bool) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("timed out waiting for %s", what)
+}
+
+// fireForm submits the flow's hosted form the way a visitor would: no token,
+// possession of the URL is the whole credential. The form answers with a page
+// rather than a run id, so the id comes from the flow's own runs list — which
+// is also how the owner would find it.
+func (n *newcomer) fireForm(id string, fields map[string]any) string {
+	path := "/form/" + n.tenant + "/" + n.workspace + "/" + id
+	r := n.s.call(n.t, "POST", path, "", fields)
+	if r.status != http.StatusOK {
+		n.t.Fatalf("form submission rejected: status=%d body=%s", r.status, r.body)
+	}
+	return n.latestRun(id)
+}
+
+// latestRun returns the newest run of a flow, waiting briefly for it to
+// appear — the form answers the visitor before the record is necessarily
+// visible to a list query.
+func (n *newcomer) latestRun(id string) string {
+	deadline := time.Now().Add(journeyWaitCeiling)
+	for time.Now().Before(deadline) {
+		r := n.s.call(n.t, "GET", n.flowPath(id)+"/runs?limit=1", n.token, nil)
+		if r.status == http.StatusOK {
+			var out struct {
+				Runs []struct {
+					ID string `json:"id"`
+				} `json:"runs"`
+			}
+			r.decode(&out)
+			if len(out.Runs) > 0 && out.Runs[0].ID != "" {
+				return out.Runs[0].ID
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	n.t.Fatalf("the form submission started no run of flow %q", id)
+	return ""
 }
 
 // tapApprovalLink follows the URL a notification carried, the way the person

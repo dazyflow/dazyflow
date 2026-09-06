@@ -5,7 +5,7 @@
   "workspace": "default",
   "name": "Time off: request → manager approves → calendar and team",
   "nodes": [
-    {"id": "form", "module": "webhook_input", "params": {"public_form": true, "form_fields": ["name", "email", "from_date", "to_date", "reason"], "form_title": "Request time off"}},
+    {"id": "form", "module": "form_input", "params": {"form_fields": ["name", "email", "from_date", "to_date", "reason"], "form_title": "Request time off"}},
     {"id": "approve", "module": "await_approval", "params": {"prompt": "Time-off request — approve?"}},
     {"id": "ask", "module": "ntfy", "params": {"topic": "acme-chef-8f2k", "title": "Time-off request", "message": "Someone has asked for time off. Tap to approve or reject.", "priority": "4"}},
     {"id": "title", "module": "expression", "params": {"expr": "input.name + ' — time off'"}},

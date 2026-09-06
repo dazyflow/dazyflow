@@ -81,6 +81,9 @@ export const SV_LABELS: Record<string, string> = {
   "Read JSON": "Läs JSON",
   "Read XML": "Läs XML",
   "Remove duplicates": "Ta bort dubbletter",
+  Reply: "Svara",
+  Form: "Formulär",
+  Request: "Förfrågan",
   "Reusable flow": "Återanvändbart flöde",
   "Route rows": "Dirigera rader",
   // "Runner" is "körnod" throughout the UI (see the runners.* block in
@@ -230,6 +233,8 @@ export const SV_PORTS: Record<string, string> = {
   "Amount (smallest unit)": "Belopp (minsta enhet)",
   "Approval link": "Godkännandelänk",
   Approved: "Godkänt",
+  "Reply body": "Svarets innehåll",
+  Sent: "Skickat",
   Approver: "Godkännare",
   Attachments: "Bilagor",
   Attendees: "Deltagare",

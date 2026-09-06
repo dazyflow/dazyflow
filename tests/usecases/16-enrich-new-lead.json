@@ -5,7 +5,7 @@
   "workspace": "default",
   "name": "New lead → look up their company → CRM",
   "nodes": [
-    {"id": "form", "module": "webhook_input", "params": {"public_form": true, "form_fields": ["name", "email", "org_number"], "form_title": "Talk to sales"}},
+    {"id": "form", "module": "form_input", "params": {"form_fields": ["name", "email", "org_number"], "form_title": "Talk to sales"}},
     {"id": "org_number", "module": "expression", "params": {"expr": "input.org_number"}},
     {"id": "company", "module": "roaring_company_overview", "params": {"country": "SE"}},
     {"id": "both", "module": "merge", "params": {}},

@@ -19,10 +19,12 @@ func TestTriggerEndpoints_Cov(t *testing.T) {
 	g := core.Graph{
 		ID: "flow", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
-			{ID: "hook", Module: webhookInputModuleID, Params: map[string]any{
-				"secrets":     []string{"bearer-abc"},
-				"public_form": true,
+			// One door each now: the Webhook step carries the key, the Form
+			// step is its own trigger.
+			{ID: "hook", Module: "webhook_input", Params: map[string]any{
+				"secrets": []string{"bearer-abc"},
 			}},
+			{ID: "intake", Module: "form_input", Params: map[string]any{}},
 			{ID: "cronN", Module: "cron_trigger", Params: map[string]any{"cron": "0 9 * * *"}},
 			{ID: "pollN", Module: "poll_trigger", Params: map[string]any{"interval_seconds": 300}},
 		},

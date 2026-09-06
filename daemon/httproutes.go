@@ -557,8 +557,8 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/auth/handoff", h.rateLimitWebhook(authapi.authHandoff))
 
 	// Webhook trigger + hosted-form endpoints. Authenticated per-graph
-	// (per-trigger bearer secret for /trigger; opt-in public_form for
-	// /form) rather than via the daemon's API-key chain, so they sit
+	// (per-step bearer secret for /trigger and /call; the Form step's mere
+	// presence for /form) rather than via the daemon's API-key chain, so they sit
 	// outside requireAuth. Mounting on the main HTTP gateway means a
 	// default --http-only deploy serves these routes without the
 	// operator having to spin up the optional standalone --webhook
@@ -573,7 +573,13 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	if h.Webhook == nil {
 		h.Webhook = NewWebhookListener(h.svc)
 	}
+	// /call honours Idempotency-Key, and shares the gateway's cache so the
+	// TTL and eviction budget are the daemon's, not a second one.
+	h.Webhook.idempotency = h.idempotency
 	mux.HandleFunc("POST /trigger/", h.rateLimitWebhook(h.Webhook.handleTrigger))
+	// /call/ is the answering sibling of /trigger/: same per-graph key auth,
+	// but it holds the connection until the flow's Reply step responds.
+	mux.HandleFunc("POST /call/", h.rateLimitWebhook(h.Webhook.handleCall))
 	// /form/ is unauthenticated (public forms submit real runs), so it needs the
 	// same per-IP throttle as /trigger/ to bound a flood of submissions.
 	mux.HandleFunc("GET /form/", h.rateLimitWebhook(h.Webhook.handleForm))

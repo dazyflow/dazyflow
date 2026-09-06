@@ -36,7 +36,7 @@ func TestForm_GETRendersOptedInForm(t *testing.T) {
 	_, wh, _, _, wsStore := startWebhookHarness(t)
 	g := core.Graph{
 		ID: "contact", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}, "public_form": true, "form_title": "Contact us"}}},
+		Nodes: []core.Node{{ID: "in", Module: "form_input", Params: map[string]any{"form_title": "Contact us"}}},
 	}
 	savePublished(t, wsStore, g)
 	ts := formServer(t, wh)
@@ -79,7 +79,7 @@ func TestForm_UnpublishedRendersAPage(t *testing.T) {
 	// Saved as a DRAFT only — savePublished is deliberately not called.
 	g := core.Graph{
 		ID: "draft-only", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"public_form": true}}},
+		Nodes: []core.Node{{ID: "in", Module: "form_input", Params: map[string]any{}}},
 	}
 	if _, err := wsStore.Save(g, "test"); err != nil {
 		t.Fatalf("save draft: %v", err)
@@ -212,7 +212,7 @@ func TestForm_POSTSubmitsRun(t *testing.T) {
 	_, wh, jobs, _, wsStore := startWebhookHarness(t)
 	g := core.Graph{
 		ID: "contact2", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}, "public_form": true}}},
+		Nodes: []core.Node{{ID: "in", Module: "form_input", Params: map[string]any{"secrets": []any{"s"}}}},
 	}
 	savePublished(t, wsStore, g)
 	ts := formServer(t, wh)
@@ -248,7 +248,7 @@ func TestForm_DisabledGraphIs404(t *testing.T) {
 	_, wh, _, _, wsStore := startWebhookHarness(t)
 	g := core.Graph{
 		ID: "paused", Tenant: "acme", Workspace: "ws1", Disabled: true,
-		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}, "public_form": true}}},
+		Nodes: []core.Node{{ID: "in", Module: "form_input", Params: map[string]any{"secrets": []any{"s"}}}},
 	}
 	savePublished(t, wsStore, g)
 	ts := formServer(t, wh)
@@ -298,7 +298,7 @@ func TestForm_CustomFieldsRendered(t *testing.T) {
 	_, wh, _, _, wsStore := startWebhookHarness(t)
 	g := core.Graph{
 		ID: "custom", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}, "public_form": true, "form_fields": []string{"phone", "company"}}}},
+		Nodes: []core.Node{{ID: "in", Module: "form_input", Params: map[string]any{"form_fields": []string{"phone", "company"}}}},
 	}
 	savePublished(t, wsStore, g)
 	ts := formServer(t, wh)
@@ -326,9 +326,7 @@ func TestForm_FieldNameAndTitleEscaped(t *testing.T) {
 	_, wh, _, _, wsStore := startWebhookHarness(t)
 	g := core.Graph{
 		ID: "xss", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{
-			"secrets":     []any{"s"},
-			"public_form": true,
+		Nodes: []core.Node{{ID: "in", Module: "form_input", Params: map[string]any{
 			"form_title":  "<script>alert(1)</script>",
 			"form_fields": []string{"<img src=x onerror=alert(2)>"},
 		}}},
@@ -362,8 +360,7 @@ func TestForm_LabelsKeepWhatTheOwnerTyped(t *testing.T) {
 	_, wh, _, _, wsStore := startWebhookHarness(t)
 	g := core.Graph{
 		ID: "labels", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{
-			"public_form": true,
+		Nodes: []core.Node{{ID: "in", Module: "form_input", Params: map[string]any{
 			"form_fields": []any{"E-post", "Ärende", "first_name", "what you love about our tea"},
 		}}},
 	}
@@ -420,8 +417,8 @@ func TestForm_InputTypeFollowsTheFieldName(t *testing.T) {
 	}
 	g := core.Graph{
 		ID: "types", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{
-			"public_form": true, "form_fields": fields,
+		Nodes: []core.Node{{ID: "in", Module: "form_input", Params: map[string]any{
+			"form_fields": fields,
 		}}},
 	}
 	savePublished(t, wsStore, g)
@@ -472,13 +469,13 @@ func TestForm_SpeaksTheFlowsLanguage(t *testing.T) {
 	_, wh, _, _, wsStore := startWebhookHarness(t)
 	sv := core.Graph{
 		ID: "kontakt", Tenant: "acme", Workspace: "ws1", Language: "sv",
-		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}, "public_form": true, "form_title": "Kontakta oss"}}},
+		Nodes: []core.Node{{ID: "in", Module: "form_input", Params: map[string]any{"form_title": "Kontakta oss"}}},
 	}
 	savePublished(t, wsStore, sv)
 	// Language empty means English — the same fallback For() gives.
 	en := core.Graph{
 		ID: "contact-en", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}, "public_form": true}}},
+		Nodes: []core.Node{{ID: "in", Module: "form_input", Params: map[string]any{"secrets": []any{"s"}}}},
 	}
 	savePublished(t, wsStore, en)
 	ts := formServer(t, wh)
@@ -541,7 +538,7 @@ func TestForm_FailedSubmitKeepsWhatTheVisitorTyped(t *testing.T) {
 	_, wh, _, _, wsStore := startWebhookHarness(t)
 	g := core.Graph{
 		ID: "broken", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}, "public_form": true}}},
+		Nodes: []core.Node{{ID: "in", Module: "form_input", Params: map[string]any{"secrets": []any{"s"}}}},
 		Edges: []core.Edge{{From: "in", FromPort: "body", To: "nope", ToPort: "in"}},
 	}
 	savePublished(t, wsStore, g)
@@ -587,7 +584,7 @@ func TestForm_UnreadableBodyStillRendersAPage(t *testing.T) {
 	_, wh, _, _, wsStore := startWebhookHarness(t)
 	g := core.Graph{
 		ID: "unreadable", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}, "public_form": true}}},
+		Nodes: []core.Node{{ID: "in", Module: "form_input", Params: map[string]any{"secrets": []any{"s"}}}},
 	}
 	savePublished(t, wsStore, g)
 	ts := formServer(t, wh)
@@ -622,7 +619,7 @@ func TestForm_RefilledValuesAreEscaped(t *testing.T) {
 	_, wh, _, _, wsStore := startWebhookHarness(t)
 	g := core.Graph{
 		ID: "reflect", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}, "public_form": true}}},
+		Nodes: []core.Node{{ID: "in", Module: "form_input", Params: map[string]any{"secrets": []any{"s"}}}},
 		// Invalid on purpose, so the submit fails and the values come back.
 		Edges: []core.Edge{{From: "in", FromPort: "body", To: "nope", ToPort: "in"}},
 	}
@@ -657,7 +654,7 @@ func TestForm_JSONBodyIsAcceptedAsFields(t *testing.T) {
 	_, wh, jobs, _, wsStore := startWebhookHarness(t)
 	g := core.Graph{
 		ID: "jsonform", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}, "public_form": true}}},
+		Nodes: []core.Node{{ID: "in", Module: "form_input", Params: map[string]any{"secrets": []any{"s"}}}},
 	}
 	savePublished(t, wsStore, g)
 	ts := formServer(t, wh)
@@ -756,7 +753,7 @@ func TestForm_UnsupportedContentTypeIsRefused(t *testing.T) {
 	_, wh, jobs, _, wsStore := startWebhookHarness(t)
 	g := core.Graph{
 		ID: "xmlform", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}, "public_form": true}}},
+		Nodes: []core.Node{{ID: "in", Module: "form_input", Params: map[string]any{"secrets": []any{"s"}}}},
 	}
 	savePublished(t, wsStore, g)
 	ts := formServer(t, wh)
@@ -788,7 +785,7 @@ func TestForm_HoneypotDropsSubmission(t *testing.T) {
 	_, wh, jobs, _, wsStore := startWebhookHarness(t)
 	g := core.Graph{
 		ID: "hp", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}, "public_form": true}}},
+		Nodes: []core.Node{{ID: "in", Module: "form_input", Params: map[string]any{"secrets": []any{"s"}}}},
 	}
 	savePublished(t, wsStore, g)
 	ts := formServer(t, wh)
@@ -834,9 +831,7 @@ func TestForm_LongAnswerFieldsGetATextarea(t *testing.T) {
 	_, wh, _, _, wsStore := startWebhookHarness(t)
 	g := core.Graph{
 		ID: "areas", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{
-			"secrets":     []any{"s"},
-			"public_form": true,
+		Nodes: []core.Node{{ID: "in", Module: "form_input", Params: map[string]any{
 			"form_fields": []any{"Name", "Email", "What you like about us", "Your feedback"},
 		}}},
 	}
@@ -967,8 +962,8 @@ func TestForm_RefusesDeepTriggerChain(t *testing.T) {
 	_, wh, jobs, _, wsStore := startWebhookHarness(t)
 	g := core.Graph{
 		ID: "form-loop", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{
-			"public_form": true, "form_fields": []string{"name"},
+		Nodes: []core.Node{{ID: "in", Module: "form_input", Params: map[string]any{
+			"form_fields": []string{"name"},
 		}}},
 	}
 	savePublished(t, wsStore, g)
@@ -1028,8 +1023,8 @@ func TestForm_DeclaredFieldsAreCapped(t *testing.T) {
 	}
 	g := core.Graph{
 		ID: "form-wide", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{
-			"public_form": true, "form_fields": fields,
+		Nodes: []core.Node{{ID: "in", Module: "form_input", Params: map[string]any{
+			"form_fields": fields,
 		}}},
 	}
 	savePublished(t, wsStore, g)
@@ -1067,8 +1062,7 @@ func TestForm_LongFieldNamesAreDropped(t *testing.T) {
 	long := strings.Repeat("n", core.MaxHostedFormFieldLen+1)
 	g := core.Graph{
 		ID: "form-longnames", Tenant: "acme", Workspace: "ws1",
-		Nodes: []core.Node{{ID: "in", Module: "webhook_input", Params: map[string]any{
-			"public_form": true,
+		Nodes: []core.Node{{ID: "in", Module: "form_input", Params: map[string]any{
 			"form_fields": []string{"email", long, "message"},
 			"form_title":  strings.Repeat("T", core.MaxHostedFormTitleLen*4),
 		}}},

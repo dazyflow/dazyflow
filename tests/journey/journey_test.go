@@ -118,7 +118,7 @@ func TestJourney_LeadIntake_RunsEndToEnd(t *testing.T) {
 		"email":  "dana@example.com",
 		"source": "contact form",
 	}
-	runID := me.fireWebhook(flowID, "journey-secret", lead)
+	runID := me.fireForm(flowID, lead)
 
 	if status := me.waitForRun(runID); status != "succeeded" {
 		t.Fatalf("the lead-intake run did not succeed: status=%q", status)

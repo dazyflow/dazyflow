@@ -29,7 +29,7 @@ func TestExecuteWebhookInput_ErrorsWithoutTrigger(t *testing.T) {
 	if res.Error == nil || res.Error.Code != "no_trigger_data" {
 		t.Fatalf("error = %+v", res.Error)
 	}
-	if !strings.Contains(res.Error.Message, "form or web address") {
+	if !strings.Contains(res.Error.Message, "web address") {
 		t.Errorf("message = %q", res.Error.Message)
 	}
 }

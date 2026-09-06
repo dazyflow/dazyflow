@@ -50,11 +50,8 @@ export type GraphTrigger = {
   // secrets is the multi-key bearer list (zero-downtime rotation — the
   // /trigger endpoint accepts any listed key).
   secrets?: string[];
-  // public_form opts a webhook trigger into a hosted intake form at
-  // /form/<tenant>/<workspace>/<id> that visitors submit without any
-  // bearer token. form_fields names the fields (defaults to
+  // form_fields names the Form step's questions (defaults to
   // name/email/message); form_title overrides the page heading.
-  public_form?: boolean;
   form_fields?: string[];
   form_title?: string;
 };
@@ -1685,7 +1682,6 @@ type BundleTrigger = {
   cron?: string;
   tz?: string;
   interval_seconds?: number;
-  public_form?: boolean;
   form_fields?: string[];
   form_title?: string;
   has_secret?: boolean;

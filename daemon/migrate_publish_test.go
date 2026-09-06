@@ -166,6 +166,8 @@ func TestEventTriggerModulesMatchCatalog(t *testing.T) {
 		"poll_trigger":        true, // scheduler
 		"google_form_trigger": true, // scheduler (interval)
 		"webhook_input":       true, // inbound HTTP, checked for a secret/form
+		"request_input":       true, // inbound HTTP that waits for a Reply, checked for a secret
+		"form_input":          true, // the hosted form; its presence is the opt-in
 	}
 	var missing []string
 	for id, m := range engine.Default.Manifests() {

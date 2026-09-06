@@ -71,6 +71,12 @@ type idempotentResponse struct {
 	// a concurrent retry of the SAME key cannot also run the handler —
 	// closing the get-then-put TOCTOU that let an action fire twice.
 	done bool
+	// runID is set by /call once its reservation has actually started a
+	// run. It turns the in-flight case from a refusal into a JOIN: a caller
+	// whose HTTP client timed out and retried waits on the run its first
+	// request started, instead of being told to come back later without an
+	// answer. Empty for every other route.
+	runID string
 }
 
 // idempotencyStore is a thread-safe map of cached responses. Cap on
@@ -130,12 +136,26 @@ func (s *idempotencyStore) commit(key string, e *idempotentResponse) {
 		if e.reqHash == "" {
 			e.reqHash = prev.reqHash
 		}
+		if e.runID == "" {
+			e.runID = prev.runID
+		}
 	} else {
 		// Reservation was evicted under cache pressure; re-add it.
 		s.order = append(s.order, key)
 	}
 	s.entries[key] = e
 	s.evictLocked()
+}
+
+// attach records the run a reservation started, so a retry of the same key
+// joins that run rather than starting another. No-op if the reservation is
+// gone (evicted under cache pressure) or already resolved.
+func (s *idempotencyStore) attach(key, runID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if e, ok := s.entries[key]; ok && !e.done {
+		e.runID = runID
+	}
 }
 
 // abort releases a reservation without caching a response, so the client

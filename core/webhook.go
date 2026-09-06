@@ -5,6 +5,14 @@ package core
 
 import "strings"
 
+// The two inbound-delivery triggers that are NOT the answering pair: a
+// webhook, which acknowledges and returns, and the hosted form, which a person
+// fills in. One door each — see core/request.go for Request/Reply.
+const (
+	WebhookInputModule = "webhook_input"
+	FormInputModule    = "form_input"
+)
+
 // WebhookSecrets returns every bearer key configured on a webhook_input
 // node's params: the `secrets` list, each trimmed and non-empty, in order.
 //
@@ -41,7 +49,7 @@ func WebhookSecrets(params map[string]any) []string {
 func GraphWebhookSecrets(g Graph) []string {
 	var out []string
 	for _, n := range g.Nodes {
-		if n.Module == "webhook_input" {
+		if n.Module == WebhookInputModule {
 			out = append(out, WebhookSecrets(n.Params)...)
 		}
 	}

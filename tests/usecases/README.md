@@ -141,7 +141,7 @@ submission landing as a row — plus a heads-up so nobody has to watch the sheet
 submission appends a row to their Google Sheet, and a ping lands in Slack.
 
 **Verdict: Supported.** `tests/usecases/01-web-form-to-sheet.json`. The
-`webhook_input` step hosts the form itself (`public_form` + `form_fields`), and
+`form_input` step hosts the form itself (its `form_fields` are the columns), and
 its body wires straight into `sheets_append_row` — a single JSON object is
 accepted as one row. This one also ships as the `form-to-sheet` template, so a
 newcomer forks it rather than building it.

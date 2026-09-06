@@ -3,6 +3,8 @@
 
 import {
   Webhook,
+  ArrowLeftRight,
+  CornerUpLeft,
   Globe,
   GitBranch,
   GitMerge,
@@ -92,6 +94,8 @@ import { isImageIcon } from "./lib/iconImage";
 // uniformly.
 const iconRegistry: Record<string, LucideIcon> = {
   webhook: Webhook,
+  "arrow-left-right": ArrowLeftRight,
+  "corner-up-left": CornerUpLeft,
   globe: Globe,
   git: GitIcon as unknown as LucideIcon,
   ntfy: NtfyIcon as unknown as LucideIcon,

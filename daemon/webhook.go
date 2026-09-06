@@ -42,6 +42,12 @@ type WebhookListener struct {
 	svc    *Service
 	logger *log.Logger
 
+	// idempotency backs the Idempotency-Key contract on /call. Owned by the
+	// listener so a standalone one honours the header too; the gateway
+	// replaces it with the daemon's shared cache so there is one TTL and one
+	// eviction budget.
+	idempotency *idempotencyStore
+
 	// MaxBodyBytes caps the inline body included in graph input.
 	MaxBodyBytes int64
 }
@@ -51,6 +57,7 @@ func NewWebhookListener(svc *Service) *WebhookListener {
 		svc:          svc,
 		logger:       log.New(log.Writer(), "webhook: ", log.LstdFlags),
 		MaxBodyBytes: 1 * 1024 * 1024, // 1 MiB default
+		idempotency:  newIdempotencyStore(),
 	}
 }
 
@@ -99,17 +106,7 @@ func (w *WebhookListener) handleTrigger(rw http.ResponseWriter, r *http.Request)
 		http.Error(rw, unauthorized, http.StatusUnauthorized)
 		return
 	}
-	// Accept the request if the bearer token matches ANY active key.
-	// Every candidate is compared (no early break) so the work — and
-	// thus the timing — doesn't depend on which key matched or how many
-	// there are. This multi-key acceptance is what enables zero-downtime
-	// rotation: add a new key, migrate callers, revoke the old one.
-	provided := stripBearer(r.Header.Get("Authorization"))
-	matched := 0
-	for _, k := range keys {
-		matched |= subtle.ConstantTimeCompare([]byte(k), []byte(provided))
-	}
-	if matched != 1 {
+	if !anyKeyMatches(keys, stripBearer(r.Header.Get("Authorization"))) {
 		http.Error(rw, unauthorized, http.StatusUnauthorized)
 		return
 	}
@@ -196,6 +193,19 @@ func (w *WebhookListener) handleTrigger(rw http.ResponseWriter, r *http.Request)
 	rw.Header().Set("Content-Type", "application/json")
 	rw.WriteHeader(http.StatusAccepted)
 	_ = json.NewEncoder(rw).Encode(map[string]string{"job_id": runID})
+}
+
+// anyKeyMatches reports whether provided equals any active key. Every
+// candidate is compared (no early break) so the work — and thus the timing —
+// doesn't depend on which key matched or how many there are. Multi-key
+// acceptance is what enables zero-downtime rotation: add a new key, migrate
+// callers, revoke the old one.
+func anyKeyMatches(keys []string, provided string) bool {
+	matched := 0
+	for _, k := range keys {
+		matched |= subtle.ConstantTimeCompare([]byte(k), []byte(provided))
+	}
+	return matched == 1
 }
 
 // buildWebhookSeed constructs the Result that the webhook handler

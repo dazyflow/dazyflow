@@ -48,8 +48,8 @@ func TestReferences_UpstreamAncestorsTriggerAndSecrets(t *testing.T) {
 	g := core.Graph{
 		ID: "leads", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
-			{ID: "trigger", Module: "webhook_input", Params: map[string]any{
-				"public_form": true, "form_fields": []any{"name", "email"},
+			{ID: "trigger", Module: "form_input", Params: map[string]any{
+				"form_fields": []any{"name", "email"},
 			}},
 			{ID: "read", Module: "sheets_read_range", Params: map[string]any{"spreadsheet_id": "S"}},
 			{ID: "append", Module: "sheets_append_row", Params: map[string]any{"spreadsheet_id": "S"}},

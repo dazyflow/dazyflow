@@ -741,9 +741,21 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     en: "3bdc7a9c",
     sv: "Håll ett öga på en webbsida och låt flödet köra bara när den faktiskt ändras — ett pris, en statussida, en upphandlingslista, en jobbannonssida. Kombinera med en Intervall-trigger. Första kontrollen registrerar tyst vad sidan säger idag; från och med då jämför varje kontroll. Steg som är kopplade till Vid ändring ligger vilande så länge inget ändras, så ett larm går bara ut när det finns något att säga. Som standard jämförs orden på sidan, inte HTML:en bakom dem, vilket hindrar osynliga ändringar i markup från att slå falskt alarm. Vill du bevaka ett enda tal i stället för hela sidan anger du ett mönster i 'Bevaka bara detta'. Ett undantag är värt att känna till: genomsläppsstiftet för vidare sitt värde vid varje kontroll, ändrad eller inte — koppla därför från Vid ändring när du menar \"bara när något ändrades\".",
   },
+  reply: {
+    en: "3f68eafb",
+    sv: "Svarar den som anropade flödets Förfrågan-adress och låter sedan flödet fortsätta — så att en anropare med kort timeout kan få kvittens innan de långsamma stegen körs. Koppla in värdet på Innehåll, eller skriv in det i parametern; ett inkopplat värde behåller sin egen typ (en lista eller en post skickas som JSON), inskriven text skickas som text. Bara det första Svara-steget en körning når svarar; när en körning inte når något alls får anroparen körningens status i stället.",
+  },
+  form_input: {
+    en: "bd3a2952",
+    sv: "Startar flödet när någon fyller i formuläret som Dazyflow publicerar åt dig — ingen webbplats och ingen nyckel behövs, bara en länk du kan dela. Innehåll bär det de skrev, ett fält per fråga. Alla med länken kan skicka in, så behandla den som offentlig.",
+  },
+  request_input: {
+    en: "8d38b69d",
+    sv: "Startar flödet när ett annat system anropar dess adress OCH väntar på ett svar. Innehåll är det som skickades (JSON eller text); Rubriker bär förfrågans metadata. Kombinera med ett Svara-steg — det Svara skapar skickas tillbaka som svaret. Använd Webhook-steget i stället när anroparen bara meddelar dig och vill ha en omedelbar kvittens.",
+  },
   webhook_input: {
-    en: "793f69eb",
-    sv: "Startar flödet när något skickas till dess webbadress — ett inskickat svar från flödets publicerade formulär, eller en HTTP-förfrågan från ett annat system. Innehåll är det som skickades (formulärfält / JSON); Rubriker bär förfrågans metadata.",
+    en: "fe244ad0",
+    sv: "Startar flödet när ett annat system skickar något till dess webbadress, och kvitterar leveransen direkt. Innehåll är det som skickades (JSON eller text); Rubriker bär förfrågans metadata. Använd Formulär-steget när avsändaren är en människa, och Förfrågan-steget när anroparen väntar på ett svar.",
   },
   webhook_send: {
     en: "fa973403",
