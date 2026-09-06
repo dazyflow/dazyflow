@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.38.0] - 2026-09-06
+
 ### Changed
 
 - **BREAKING: the hosted form is its own step.** `public_form`, `form_fields`
