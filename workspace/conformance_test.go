@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"testing"
 	"time"
 
@@ -99,6 +100,80 @@ func runWorkspaceConformance(t *testing.T, mk func(t *testing.T) *Store) {
 		}
 		if byID["alpha"].EnvCommit != "" {
 			t.Errorf("alpha is unpublished but ListAtHead reports %q", byID["alpha"].EnvCommit)
+		}
+	})
+
+	// The header read must return the same flows with the same pointers as
+	// the full one, differing only in the params of ordinary steps. That
+	// equality is the whole safety argument: the flow list, the schedules
+	// list and the visibility filter all read headers, and a header that
+	// disagreed about which flows exist — or about a trigger's schedule, or
+	// about who owns a private flow — would make the product behave
+	// differently depending on which backend an install runs.
+	t.Run("ListHeadersAtHead", func(t *testing.T) {
+		s := mk(t)
+		// A flow with a real trigger and a real ordinary step, so the test
+		// covers both sides of the elision.
+		g := core.Graph{
+			ID: "sched", Version: "1", Name: "Scheduled", Owner: "ada@example.com",
+			Visibility: core.VisibilityPrivate,
+			Nodes: []core.Node{
+				{ID: "cron", Module: "cron_trigger", Params: map[string]any{
+					"cron": "*/5 * * * *", "tz": "Europe/Stockholm"}},
+				{ID: "call", Module: "http_request", Params: map[string]any{
+					"url": "https://api.example.com/v1/resource"}},
+			},
+		}
+		rev := mustSave(t, s, g, "u")
+		mustSave(t, s, flow("plain", "Plain"), "u")
+		if err := s.PromoteToEnvironment("sched", PublishedEnv, rev); err != nil {
+			t.Fatalf("publish: %v", err)
+		}
+
+		full, err := s.ListAtHead(PublishedEnv)
+		if err != nil {
+			t.Fatalf("ListAtHead: %v", err)
+		}
+		headers, err := s.ListHeadersAtHead(PublishedEnv)
+		if err != nil {
+			t.Fatalf("ListHeadersAtHead: %v", err)
+		}
+		if len(headers) != len(full) {
+			t.Fatalf("headers returned %d flows, full read %d", len(headers), len(full))
+		}
+		for i, h := range headers {
+			f := full[i]
+			if h.ID != f.ID || h.EnvCommit != f.EnvCommit {
+				t.Errorf("row %d: header (%q,%q) != full (%q,%q)",
+					i, h.ID, h.EnvCommit, f.ID, f.EnvCommit)
+			}
+			want := f.Graph
+			want.Nodes = make([]core.Node, len(f.Graph.Nodes))
+			copy(want.Nodes, f.Graph.Nodes)
+			for j := range want.Nodes {
+				if !core.IsTriggerModule(want.Nodes[j].Module) {
+					want.Nodes[j].Params = nil
+				}
+			}
+			if !reflect.DeepEqual(h.Graph, want) {
+				t.Errorf("%s: header graph differs from the full one with ordinary params dropped\n got %+v\nwant %+v",
+					h.ID, h.Graph, want)
+			}
+		}
+		// Spot-check the two halves by name, so a projection that dropped
+		// everything (or nothing) cannot pass the comparison above.
+		byID := map[string]workspaceHeaderNodes{}
+		for _, h := range headers {
+			byID[h.ID] = headerNodes(h)
+		}
+		if got := byID["sched"].params["cron"]; got == nil {
+			t.Error("header dropped the cron trigger's params, which the schedules list reads")
+		}
+		if got := byID["sched"].params["call"]; got != nil {
+			t.Errorf("header kept an ordinary step's params: %v", got)
+		}
+		if byID["sched"].owner != "ada@example.com" || byID["sched"].visibility != core.VisibilityPrivate {
+			t.Error("header lost the fields AuthorizeGraphView decides on")
 		}
 	})
 
@@ -490,4 +565,24 @@ func TestConformance_PostgresBackend(t *testing.T) {
 		})
 		return s
 	})
+}
+
+// workspaceHeaderNodes is the per-flow slice the header spot-check reads:
+// each step's params by node id, plus the two fields visibility turns on.
+type workspaceHeaderNodes struct {
+	params     map[string]map[string]any
+	owner      string
+	visibility core.Visibility
+}
+
+func headerNodes(h FlowHeader) workspaceHeaderNodes {
+	out := workspaceHeaderNodes{
+		params:     map[string]map[string]any{},
+		owner:      h.Graph.Owner,
+		visibility: h.Graph.Visibility,
+	}
+	for _, n := range h.Graph.Nodes {
+		out.params[n.ID] = n.Params
+	}
+	return out
 }

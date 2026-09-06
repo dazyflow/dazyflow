@@ -1188,7 +1188,9 @@ func (s *Service) ListGraphs(ctx context.Context, p core.Principal, tenant, ws s
 	// a flow at a time. An unloadable flow is absent from that read, which is
 	// the same "hide rather than list what the user cannot open" outcome the
 	// per-flow path reached by skipping its error.
-	flows, err := store.ListAtHead("")
+	//
+	// Headers: this reads two fields off each flow and no step's params.
+	flows, err := store.ListHeadersAtHead("")
 	if err != nil {
 		return nil, err
 	}
@@ -1240,7 +1242,11 @@ func (s *Service) ListFlowSummaries(ctx context.Context, p core.Principal, tenan
 	// lookup per flow: on the Postgres store that was three round trips per
 	// flow, and on the git one it re-resolved the same HEAD, commit and tree
 	// every time.
-	flows, err := store.ListAtHead(workspace.PublishedEnv)
+	// Headers: the summary is name/icon/description/owner/visibility plus a
+	// run status, and the status only reads TRIGGER params — which a header
+	// keeps. Ordinary steps' params are the bulk of the decode and nothing
+	// here looks at them.
+	flows, err := store.ListHeadersAtHead(workspace.PublishedEnv)
 	if err != nil {
 		return nil, err
 	}
@@ -1320,7 +1326,9 @@ func (s *Service) DropSuggestions(ctx context.Context, p core.Principal, tenant,
 	}
 	s.suggestMu.Unlock()
 
-	flows, err := store.ListAtHead("")
+	// Headers: the miner reads each step's id and module and the edges
+	// between them — never a param.
+	flows, err := store.ListHeadersAtHead("")
 	if err != nil {
 		return nil, err
 	}
@@ -1968,6 +1976,29 @@ func approvalContextPreview(ref core.Ref) (any, bool) {
 //     optional `narrowWorkspace` argument is used (admin switcher).
 //     Pass "" to see across every workspace in the tenant.
 func (s *Service) ListPendingApprovals(ctx context.Context, p core.Principal, narrowTenant, narrowWorkspace string) ([]PendingApproval, error) {
+	tenant, ws := approvalScope(p, narrowTenant, narrowWorkspace)
+	recs, err := s.Jobs.ListNodeRecords(ctx, pendingApprovalsQuery(tenant, ws))
+	if err != nil {
+		return nil, err
+	}
+	return buildPendingApprovals(recs), nil
+}
+
+// CountPendingApprovals answers the sidebar badge, which renders one integer
+// and nothing else. The list above is capped at 200 and so is this, by the
+// shared query — the badge counts what the inbox would show, not what exists.
+//
+// Its own endpoint rather than a flag on the list, because it is a different
+// read: every signed-in browser re-asks for it on a timer and on every
+// navigation, while the list is fetched when someone opens the inbox.
+func (s *Service) CountPendingApprovals(ctx context.Context, p core.Principal, narrowTenant, narrowWorkspace string) (int, error) {
+	tenant, ws := approvalScope(p, narrowTenant, narrowWorkspace)
+	return core.CountNodeRecords(ctx, s.Jobs, pendingApprovalsQuery(tenant, ws))
+}
+
+// approvalScope resolves the tenant and workspace an approval read runs
+// against. Shared so the badge and the inbox cannot scope differently.
+func approvalScope(p core.Principal, narrowTenant, narrowWorkspace string) (string, string) {
 	tenant := p.Tenant
 	if p.Has(core.PermPlatformAdmin) && narrowTenant != "" {
 		tenant = narrowTenant
@@ -1976,20 +2007,30 @@ func (s *Service) ListPendingApprovals(ctx context.Context, p core.Principal, na
 	if ws == "" {
 		ws = narrowWorkspace
 	}
-	recs, err := s.Jobs.ListNodeRecords(ctx, core.ListNodeRecordsOpts{
+	return tenant, ws
+}
+
+// pendingApprovalsQuery is the one definition of "a parked approval", shared
+// by the inbox list and the sidebar badge's count. They must select the same
+// rows or the badge reports a number the inbox does not show.
+func pendingApprovalsQuery(tenant, ws string) core.ListNodeRecordsOpts {
+	return core.ListNodeRecordsOpts{
 		Tenant:    tenant,
 		Workspace: ws,
 		Status:    core.JobStatusAwaiting,
 		// Only await_approval nodes: a subgraph caller parks too, and it is
 		// the `pending_url` port that tells the two apart. The Go-side check
-		// below stays — it has to read the value anyway — but the query no
-		// longer spends its 200-row budget on rows it will discard.
+		// in buildPendingApprovals stays — it has to read the value anyway —
+		// but the query no longer spends its 200-row budget on rows it will
+		// discard. It is also what lets the badge COUNT this query: the
+		// filter is in the store, so a count needs no records to apply it.
 		HasOutputPort: approvalMarkerPort,
 		Limit:         200,
-	})
-	if err != nil {
-		return nil, err
 	}
+}
+
+// buildPendingApprovals projects the parked records onto the inbox rows.
+func buildPendingApprovals(recs []core.JobRecord) []PendingApproval {
 	out := make([]PendingApproval, 0, len(recs))
 	for _, rec := range recs {
 		if rec.Result == nil || rec.Result.Output == nil {
@@ -2036,7 +2077,7 @@ func (s *Service) ListPendingApprovals(ctx context.Context, p core.Principal, na
 			Workspace:       rec.Workspace,
 		})
 	}
-	return out, nil
+	return out
 }
 
 // approvalMarkerPort is the output port that identifies an await_approval

@@ -566,7 +566,7 @@ func (s *gitBackend) envCommitLocked(id, env string) (string, error) {
 // the env tags in one pass over the references. Done per flow instead, each
 // load re-reads .git/HEAD and its branch ref from disk and re-decodes the same
 // commit and tree, and each env lookup opens another ref file.
-func (s *gitBackend) listAtHead(env string) ([]FlowAtHead, error) {
+func (s *gitBackend) listAtHead(env string, headersOnly bool) ([]FlowAtHead, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	head, err := s.repo.Head()
@@ -621,8 +621,8 @@ func (s *gitBackend) listAtHead(env string) ([]FlowAtHead, error) {
 			return err
 		}
 		id := strings.TrimSuffix(base, ".json")
-		var g core.Graph
-		if err := json.Unmarshal([]byte(contents), &g); err != nil {
+		g, err := decodeFlow([]byte(contents), headersOnly)
+		if err != nil {
 			// One unreadable flow must not hide the rest of the list; the
 			// per-flow load path reports it when that flow is opened.
 			return nil

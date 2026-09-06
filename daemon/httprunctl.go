@@ -55,6 +55,28 @@ func (h *runCtlAPI) listPendingApprovals(rw http.ResponseWriter, r *http.Request
 	writeJSON(rw, http.StatusOK, map[string]any{"approvals": approvals})
 }
 
+// countPendingApprovals is the sidebar badge's read: the same query as the
+// list above, answered as one integer.
+//
+// It exists because the badge is the most repeated authenticated request the
+// product makes — every signed-in tab, every 30 seconds, and again on each
+// navigation — and it was being served by the list, which carries each parked
+// step's stashed context so the inbox can render it. Nothing on that response
+// reached the badge except its length.
+func (h *runCtlAPI) countPendingApprovals(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	n, err := h.svc.CountPendingApprovals(
+		r.Context(),
+		p,
+		r.URL.Query().Get("tenant"),
+		r.URL.Query().Get("workspace"),
+	)
+	if err != nil {
+		writeJSONError(rw, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{"count": n})
+}
+
 // listDecidedApprovals returns the history that sits beneath the inbox:
 // await_approval nodes that have been settled, newest decision first.
 //

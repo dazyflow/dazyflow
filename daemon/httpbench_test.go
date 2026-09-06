@@ -16,6 +16,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -328,3 +329,79 @@ func BenchmarkListRunNodes(b *testing.B) {
 	handler, token, runID := benchRunDetailGateway(b)
 	benchGET(b, handler, token, "/api/v1/me/runs/"+runID+"/nodes")
 }
+
+// The approvals badge in the sidebar polls every 30 seconds on every page,
+// for every signed-in browser, and re-fires on each navigation — so it is
+// the most repeated authenticated request the product makes. It renders one
+// integer. These benchmarks measure what producing that integer costs.
+//
+// Postgres-gated for the same reason the run-list ones are: over the memory
+// store both paths read the same objects, so the cost this is about —
+// transferring and decoding each parked step's stashed context — does not
+// exist there.
+func benchApprovalsGateway(b *testing.B, pending int) (http.Handler, string) {
+	b.Helper()
+	url := os.Getenv("DAZYFLOW_TEST_DB")
+	if url == "" {
+		b.Skip("set DAZYFLOW_TEST_DB to run the Postgres request benchmarks")
+	}
+	ctx := context.Background()
+	store, err := jobstore.OpenPostgres(ctx, url)
+	if err != nil {
+		b.Fatalf("OpenPostgres: %v", err)
+	}
+	b.Cleanup(store.Close)
+	handler, token, _ := buildBenchGatewayWith(b, store)
+	if _, err := store.DeleteByTenant(ctx, "t"); err != nil {
+		b.Fatalf("clear tenant: %v", err)
+	}
+	// A parked approval stashes whatever the flow wired into its Value port,
+	// which is what the inbox renders — an order, a refund, a draft reply.
+	// Sized just under the 4 KB preview cap, because that is the case the
+	// list path pays for in full.
+	approvalCtx := map[string]any{
+		"order_id": "ord_01HQ8ZK3M9",
+		"customer": map[string]any{"name": "Ada Lovelace", "email": "ada@example.com"},
+		"total":    "1249.00",
+		"reason":   strings.Repeat("customer requested a refund; agent notes follow. ", 60),
+	}
+	for i := range pending {
+		if err := store.Enqueue(ctx, core.JobRecord{
+			ID: fmt.Sprintf("appr-%06d", i), Kind: core.JobKindNode,
+			GraphRunID: fmt.Sprintf("apprun-%06d", i), GraphID: "bench-flow",
+			NodeID: "approve", Tenant: "t", Workspace: "ws",
+			Status: core.JobStatusAwaiting,
+			Result: &core.Result{Status: core.StatusOK, Output: map[string]core.Ref{
+				"pending_url": {Inline: "https://dazyflow.example/approve/apprun-" + strconv.Itoa(i)},
+				"prompt":      {Inline: "Approve this refund?"},
+				"context":     {Inline: approvalCtx},
+			}},
+		}); err != nil {
+			b.Fatalf("seed approval %d: %v", i, err)
+		}
+	}
+	return handler, token
+}
+
+func benchApprovalsAt(b *testing.B, pending int) {
+	handler, token := benchApprovalsGateway(b, pending)
+	benchGET(b, handler, token, "/api/v1/approvals/pending")
+}
+
+// BenchmarkApprovalsPending25 is an ordinary workspace with a handful parked.
+func BenchmarkApprovalsPending25(b *testing.B) { benchApprovalsAt(b, 25) }
+
+// BenchmarkApprovalsPending200 is the query's own limit — the most the badge
+// can ever be counting.
+func BenchmarkApprovalsPending200(b *testing.B) { benchApprovalsAt(b, 200) }
+
+// The same badge, served by the count endpoint. Compare against
+// BenchmarkApprovalsPending* above: the number rendered is identical, so the
+// difference is the whole cost of the rows the badge never looked at.
+func benchApprovalsCountAt(b *testing.B, pending int) {
+	handler, token := benchApprovalsGateway(b, pending)
+	benchGET(b, handler, token, "/api/v1/approvals/pending/count")
+}
+
+func BenchmarkApprovalsCount25(b *testing.B)  { benchApprovalsCountAt(b, 25) }
+func BenchmarkApprovalsCount200(b *testing.B) { benchApprovalsCountAt(b, 200) }

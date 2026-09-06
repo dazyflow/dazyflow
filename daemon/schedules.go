@@ -58,18 +58,26 @@ func (s *Service) ListSchedules(ctx context.Context, p core.Principal, tenant, w
 	if err != nil {
 		return nil, err
 	}
-	ids, err := store.ListGraphs()
+	// One pass over the workspace rather than a Load per flow: per-flow that
+	// re-reads .git/HEAD and re-decodes the same commit and tree each time on
+	// the git backend, or costs a round trip per flow on the Postgres one.
+	// Empty env because no pointer is needed here: a schedule is read off the
+	// flow's current content, the same revision Load returned. An unloadable
+	// flow is absent from this read, which is the outcome the per-flow loop
+	// reached by skipping its error.
+	//
+	// Headers, even though this is the one list caller that DOES read params:
+	// the ones it reads (cron, tz, interval_seconds, and the per-node disabled
+	// switch) all sit on trigger steps, which is exactly what a header keeps.
+	flows, err := store.ListHeadersAtHead("")
 	if err != nil {
 		return nil, err
 	}
 	isAdmin := core.IsFlowAdminPrincipal(p)
 	now := time.Now()
 	out := []scheduleEntry{}
-	for _, id := range ids {
-		g, err := store.Load(id)
-		if err != nil {
-			continue
-		}
+	for _, f := range flows {
+		id, g := f.ID, f.Graph
 		if !isAdmin && core.AuthorizeGraphView(p, g) != nil {
 			continue
 		}

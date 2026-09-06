@@ -1530,6 +1530,24 @@ export const api = {
       "/approvals/pending" + (q ? "?" + q : ""),
     );
   },
+  // countPendingApprovals is what the sidebar badge polls. Same scope params
+  // and the same 200 ceiling as the list, so the badge cannot claim a number
+  // the inbox does not show — it just doesn't drag back each parked step's
+  // stashed context to arrive at it.
+  countPendingApprovals: (
+    token: string,
+    opts: { workspace?: string; tenant?: string } = {},
+  ) => {
+    const qs = new URLSearchParams();
+    if (opts.workspace) qs.set("workspace", opts.workspace);
+    if (opts.tenant) qs.set("tenant", opts.tenant);
+    const q = qs.toString();
+    return request<{ count: number }>(
+      token,
+      "GET",
+      "/approvals/pending/count" + (q ? "?" + q : ""),
+    );
+  },
   // The history companion to listPendingApprovals: settled approvals, newest
   // decision first. Not polled — a decided approval doesn't change again.
   listDecidedApprovals: (

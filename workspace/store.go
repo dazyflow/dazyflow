@@ -18,6 +18,7 @@ package workspace
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -43,7 +44,12 @@ type backend interface {
 	// one pass. The flow list is what needs it: done a flow at a time it is
 	// three round trips per flow on Postgres, and on git it re-resolves the
 	// same HEAD, commit and tree once per flow.
-	listAtHead(env string) ([]FlowAtHead, error)
+	//
+	// headersOnly decodes each flow with core.UnmarshalGraphHeader instead of
+	// whole — same flows, same pointers, but ordinary steps carry no params.
+	// The backends share the parameter rather than having two methods because
+	// the reading is identical; only the decode differs.
+	listAtHead(env string, headersOnly bool) ([]FlowAtHead, error)
 	history(graphID string, limit int) ([]Revision, error)
 
 	// head is a token that changes whenever anything in the workspace does.
@@ -80,6 +86,22 @@ type gitMirrorer interface {
 // FlowAtHead is one flow as the flow list needs it: its current content and
 // whether — and at which revision — it is published.
 type FlowAtHead struct {
+	ID        string
+	Graph     core.Graph
+	EnvCommit string
+}
+
+// FlowHeader is what ListHeadersAtHead returns: the same three fields as
+// FlowAtHead, but its Graph came through core.UnmarshalGraphHeader, so the
+// params of every non-trigger step are nil whether or not the stored flow has
+// any.
+//
+// It is a distinct type rather than a flag on FlowAtHead so that the elision
+// is visible where the value is used. These graphs reach AuthorizeGraphView,
+// whose Visibility and Owner decide who may see a flow, and a value that is
+// "a flow, except sometimes missing part of itself" should not be able to
+// stand in silently for one that is whole.
+type FlowHeader struct {
 	ID        string
 	Graph     core.Graph
 	EnvCommit string
@@ -178,7 +200,34 @@ func (s *Store) ClearEnvironment(graphID, env string) error {
 // ListAtHead reads every flow in the workspace at head, each with its pointer
 // for env (use PublishedEnv for the published revision). One pass over the
 // workspace instead of a load and an env lookup per flow.
-func (s *Store) ListAtHead(env string) ([]FlowAtHead, error) { return s.b.listAtHead(env) }
+func (s *Store) ListAtHead(env string) ([]FlowAtHead, error) { return s.b.listAtHead(env, false) }
+
+// ListHeadersAtHead is ListAtHead for the LIST views: the same flows with the
+// same env pointers, but each decoded by core.UnmarshalGraphHeader, so the
+// params of ordinary steps are never built.
+//
+// It is the read the flow list, the schedules list and the drop-suggestion
+// miner want. Decoding those params is ~78% of a full list read, and on the
+// git backend the read runs under the mutex that serializes the entire
+// workspace — so it is not one caller's latency but the workspace's read
+// throughput. See core.UnmarshalGraphHeader for what is kept and why.
+//
+// USE THE FULL ListAtHead to run, edit or validate a flow: an elided step has
+// Params == nil, which is indistinguishable from a step that has none.
+func (s *Store) ListHeadersAtHead(env string) ([]FlowHeader, error) {
+	flows, err := s.b.listAtHead(env, true)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]FlowHeader, len(flows))
+	for i, f := range flows {
+		// Same fields, different name — the conversion is the whole point:
+		// what a header is missing is not visible in its shape, so the type
+		// is what carries it to the call site.
+		out[i] = FlowHeader(f)
+	}
+	return out, nil
+}
 
 // PublishedCommit returns the revision a flow is published at, or "" when it
 // has never been published.
@@ -275,4 +324,19 @@ type Revision struct {
 func (s *Store) git() *gitBackend {
 	b, _ := s.b.(*gitBackend)
 	return b
+}
+
+// decodeFlow decodes one stored flow document, either whole or as a header.
+// Both backends call it so the two reads cannot decode differently — the
+// conformance suite asserts a header list matches the full list with ordinary
+// params dropped, and that only holds if there is one definition of each.
+func decodeFlow(data []byte, headersOnly bool) (core.Graph, error) {
+	if headersOnly {
+		return core.UnmarshalGraphHeader(data)
+	}
+	var g core.Graph
+	if err := json.Unmarshal(data, &g); err != nil {
+		return core.Graph{}, err
+	}
+	return g, nil
 }

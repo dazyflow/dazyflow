@@ -12,6 +12,72 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ### Performance
 
+- **Listing a workspace's flows no longer decodes every step's configuration.**
+  Four reads list flows — the sidebar's list, the schedules list, the
+  drop-suggestion miner and the visibility filter — and each decoded every flow
+  whole, building a `map[string]any` for the params of every ordinary step,
+  which none of them reads. On the git backend that runs under the mutex that
+  serializes the entire workspace, so it was not one caller's latency but the
+  workspace's read throughput.
+
+  New `workspace.Store.ListHeadersAtHead`, backed by
+  `core.UnmarshalGraphHeader`: params are kept as raw bytes and decoded only
+  for trigger steps, which is exactly where the list callers read them (the
+  cron expression and timezone, the poll interval, the webhook secret and
+  public-form flag, and the per-node pause switch).
+
+  Store level, 30 flows of 25 steps: **15.9ms → 8.8ms (-45%)**, allocations
+  **17,164 → 2,914**. Live at 8 concurrent: `GET /me/flows` **93.2 → 132.1 rps**
+  (86.6 → 60.9ms mean), `GET /me/schedules` **91.1 → 126.7 rps**. The workspace
+  read ceiling itself moved **94.8 → 131.5 rps**.
+
+  Responses are unchanged, and checked to be: `/me/flows`, `/me/schedules` and
+  `/me/flows/suggestions` return byte-identical bodies before and after. The
+  projection is pinned by an equality test against the full decode, a
+  reflection test that fails when a new field on `Graph` or `Node` is not
+  covered by the fixture, and the workspace conformance suite on both backends.
+
+- **The schedules list loaded every flow one at a time.** `GET
+  /api/v1/me/schedules` used a `Load` per flow — the loop
+  `workspace.Store.ListAtHead` exists to replace, which two other callers had
+  already moved to. Live against a real `dzd` at 8 concurrent, 30 flows of 25
+  steps: **148.0ms → 82.1ms (-45%)**, throughput **54.2 → 98.3 rps**.
+
+- **The sidebar asked before the answer could be right.** Its flow list and
+  approvals badge both fired on every page against an unresolved org —
+  `activeWorkspace` falls back to the default as soon as a token exists, before
+  `whoami` lands — so each ran once for the wrong scope and again for the real
+  one, and the first answer was always discarded. The flow list is the most
+  expensive read on the page, and this ran on every navigation. Both now wait
+  for `me`: **four fewer API calls per page** (Dashboard 22 → 18, Editor
+  14 → 10), and the unscoped flow-list read happens once at boot rather than on
+  every navigation.
+
+- **The sidebar's approvals badge fetched the whole inbox to render a number.**
+  It is the most repeated authenticated request the product makes — every
+  signed-in tab, every 30 seconds, and again on each navigation — and it was
+  served by the inbox listing, which carries for each parked step the value the
+  flow stashed on it (the refund, the submission, the draft reply). Up to 200 of
+  those, each marshalled once just to size it against the preview cap and again
+  into the response. Nothing on it reached the badge except the count.
+
+  New `GET /api/v1/approvals/pending/count`. Over a real Postgres, at 200 parked
+  approvals: **19.1ms → 0.875ms (-95%)**, and **6.67 MB → 11.2 KB allocated**.
+  Live against a real `dzd` at 24 concurrent: **146.5 → 1702 rps (11.6x)**, mean
+  latency **165.0ms → 14.1ms**, p95 244ms → 23.2ms.
+
+  The list is linear in what is parked; the count is flat in allocations (68
+  either way), so the old cost grew exactly as a workspace's approval queue did
+  — which is when it was polled hardest.
+
+  The badge keeps the list's 200 ceiling, so it still counts what the inbox
+  would show rather than what exists, and the store conformance suite pins the
+  count to the length of the list it counts, filter for filter, on both
+  backends. The dashboard's "approvals waiting" tile moved to the same read.
+  The support badge, for an agent, now reads the queue summary that already
+  existed and is already cached — cheaper, and more correct, since counting a
+  page of tickets under-reported a queue longer than the page limit.
+
 - **The run viewer's timeline stopped re-reading and re-parsing the flow on
   every poll, and stopped reading twelve columns to render eight fields.**
   `GET /api/v1/me/runs/{id}/nodes` is the endpoint an open run view re-asks

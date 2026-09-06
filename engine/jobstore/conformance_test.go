@@ -1221,6 +1221,39 @@ func conformanceNodeRuns(t *testing.T, mk func(t *testing.T) core.JobStore) {
 		if len(empty) != 0 {
 			t.Errorf("ListNodeRuns(missing) = %+v, want empty", empty)
 		}
+
+		// CountNodeRecords must agree with the length of the list it counts,
+		// for every filter — a count that selected differently from its list
+		// would render a sidebar badge disagreeing with the page it links to,
+		// and would do it on only one of the two backends. The fixture holds
+		// four node records, comfortably under the store's default page, so
+		// an unset Limit compares honestly here.
+		for _, opts := range []core.ListNodeRecordsOpts{
+			{},
+			{GraphRunID: "run1"},
+			{GraphRunID: "run1", Status: core.JobStatusSucceeded},
+			{Tenant: "t", Workspace: "ws"},
+			{Workspace: "no-such-ws"},
+			{GraphID: "g1"},
+			// The approval badge's own query: records carrying one output port.
+			{HasOutputPort: "out"},
+			{HasOutputPort: "no-such-port"},
+			// Limit is a ceiling on the count, as it is on the list.
+			{GraphRunID: "run1", Limit: 2},
+			{GraphRunID: "run1", Offset: 1},
+		} {
+			recs, err := s.ListNodeRecords(ctx, opts)
+			if err != nil {
+				t.Fatalf("ListNodeRecords(%+v): %v", opts, err)
+			}
+			n, err := reader.CountNodeRecords(ctx, opts)
+			if err != nil {
+				t.Fatalf("CountNodeRecords(%+v): %v", opts, err)
+			}
+			if n != len(recs) {
+				t.Errorf("CountNodeRecords(%+v) = %d, want %d (the list's length)", opts, n, len(recs))
+			}
+		}
 	})
 }
 

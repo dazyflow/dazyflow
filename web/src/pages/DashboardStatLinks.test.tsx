@@ -29,7 +29,7 @@ vi.mock("../api", () => ({
   api: {
     listAllRuns: vi.fn().mockResolvedValue({ runs: [] }),
     listGraphs: vi.fn().mockResolvedValue({ graphs: [] }),
-    listPendingApprovals: vi.fn().mockResolvedValue({ approvals: [] }),
+    countPendingApprovals: vi.fn().mockResolvedValue({ count: 0 }),
   },
 }));
 

@@ -525,36 +525,65 @@ func (m *Memory) ListNodeRuns(ctx context.Context, graphRunID string, limit int)
 	return out, nil
 }
 
+// matchesNodeRecord is the ListNodeRecordsOpts predicate, shared by
+// ListNodeRecords and CountNodeRecords so the two cannot drift — the same
+// reason the Postgres store builds one WHERE clause for both.
+func matchesNodeRecord(r *core.JobRecord, opts core.ListNodeRecordsOpts) bool {
+	if r.Kind != core.JobKindNode {
+		return false
+	}
+	if opts.Tenant != "" && r.Tenant != opts.Tenant {
+		return false
+	}
+	if opts.Workspace != "" && r.Workspace != opts.Workspace {
+		return false
+	}
+	if opts.Status != "" && r.Status != opts.Status {
+		return false
+	}
+	if opts.GraphRunID != "" && r.GraphRunID != opts.GraphRunID {
+		return false
+	}
+	if opts.GraphID != "" && r.GraphID != opts.GraphID {
+		return false
+	}
+	if opts.HasOutputPort != "" {
+		if r.Result == nil {
+			return false
+		}
+		if _, ok := r.Result.Output[opts.HasOutputPort]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// CountNodeRecords implements core.NodeRunReader. No sort and no record copy:
+// the order the list needs decides WHICH rows a limit keeps, but a count only
+// needs how many there are, and the ceiling clips the same total either way.
+func (m *Memory) CountNodeRecords(_ context.Context, opts core.ListNodeRecordsOpts) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := 0
+	for _, r := range m.records {
+		if matchesNodeRecord(r, opts) {
+			n++
+		}
+	}
+	n = max(n-opts.Offset, 0)
+	if opts.Limit > 0 && n > opts.Limit {
+		n = opts.Limit
+	}
+	return n, nil
+}
+
 func (m *Memory) ListNodeRecords(_ context.Context, opts core.ListNodeRecordsOpts) ([]core.JobRecord, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var out []core.JobRecord
 	for _, r := range m.records {
-		if r.Kind != core.JobKindNode {
+		if !matchesNodeRecord(r, opts) {
 			continue
-		}
-		if opts.Tenant != "" && r.Tenant != opts.Tenant {
-			continue
-		}
-		if opts.Workspace != "" && r.Workspace != opts.Workspace {
-			continue
-		}
-		if opts.Status != "" && r.Status != opts.Status {
-			continue
-		}
-		if opts.GraphRunID != "" && r.GraphRunID != opts.GraphRunID {
-			continue
-		}
-		if opts.GraphID != "" && r.GraphID != opts.GraphID {
-			continue
-		}
-		if opts.HasOutputPort != "" {
-			if r.Result == nil {
-				continue
-			}
-			if _, ok := r.Result.Output[opts.HasOutputPort]; !ok {
-				continue
-			}
 		}
 		out = append(out, *r)
 	}

@@ -907,38 +907,9 @@ func (s *Postgres) ListNodeRecords(ctx context.Context, opts core.ListNodeRecord
 	if limit <= 0 {
 		limit = 100
 	}
-	q := `SELECT id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result,
+	q, args := nodeRecordWhere(`SELECT id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result,
 	             enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id, parent_node_rec_id, manual
-	        FROM jobs WHERE kind = 'node'`
-	args := []any{}
-	if opts.Tenant != "" {
-		args = append(args, opts.Tenant)
-		q += fmt.Sprintf(" AND tenant = $%d", len(args))
-	}
-	if opts.Workspace != "" {
-		args = append(args, opts.Workspace)
-		q += fmt.Sprintf(" AND workspace = $%d", len(args))
-	}
-	if opts.Status != "" {
-		args = append(args, string(opts.Status))
-		q += fmt.Sprintf(" AND status = $%d", len(args))
-	}
-	if opts.GraphRunID != "" {
-		args = append(args, opts.GraphRunID)
-		q += fmt.Sprintf(" AND graph_run_id = $%d", len(args))
-	}
-	if opts.GraphID != "" {
-		args = append(args, opts.GraphID)
-		q += fmt.Sprintf(" AND graph_id = $%d", len(args))
-	}
-	if opts.HasOutputPort != "" {
-		args = append(args, opts.HasOutputPort)
-		// jsonb_exists, not the `?` operator: `?` is a placeholder in most
-		// drivers and reads as one to every human skimming the query, and the
-		// function form is what the matching partial index in schema.sql is
-		// declared with.
-		q += fmt.Sprintf(" AND jsonb_exists(result->'output', $%d)", len(args))
-	}
+	        FROM jobs WHERE kind = 'node'`, opts)
 	args = append(args, limit)
 	// id DESC is a deterministic tiebreaker: enqueued_at ties are common (a
 	// scheduler/webhook fan-out submits many runs in the same instant), and
@@ -968,6 +939,68 @@ func (s *Postgres) ListNodeRecords(ctx context.Context, opts core.ListNodeRecord
 		out = append(out, rec)
 	}
 	return out, rows.Err()
+}
+
+// nodeRecordWhere appends the ListNodeRecordsOpts predicate to a SELECT whose
+// FROM already restricts to node-kind rows, returning the query and its
+// arguments. Shared by ListNodeRecords and CountNodeRecords so the two cannot
+// drift: a count that filtered differently from the list it counts would
+// render a badge disagreeing with the page it links to, which is the one
+// mistake this projection must not make.
+func nodeRecordWhere(q string, opts core.ListNodeRecordsOpts) (string, []any) {
+	args := []any{}
+	if opts.Tenant != "" {
+		args = append(args, opts.Tenant)
+		q += fmt.Sprintf(" AND tenant = $%d", len(args))
+	}
+	if opts.Workspace != "" {
+		args = append(args, opts.Workspace)
+		q += fmt.Sprintf(" AND workspace = $%d", len(args))
+	}
+	if opts.Status != "" {
+		args = append(args, string(opts.Status))
+		q += fmt.Sprintf(" AND status = $%d", len(args))
+	}
+	if opts.GraphRunID != "" {
+		args = append(args, opts.GraphRunID)
+		q += fmt.Sprintf(" AND graph_run_id = $%d", len(args))
+	}
+	if opts.GraphID != "" {
+		args = append(args, opts.GraphID)
+		q += fmt.Sprintf(" AND graph_id = $%d", len(args))
+	}
+	if opts.HasOutputPort != "" {
+		args = append(args, opts.HasOutputPort)
+		// jsonb_exists, not the `?` operator: `?` is a placeholder in most
+		// drivers and reads as one to every human skimming the query, and the
+		// function form is what the matching partial index in schema.sql is
+		// declared with.
+		q += fmt.Sprintf(" AND jsonb_exists(result->'output', $%d)", len(args))
+	}
+	return q, args
+}
+
+// CountNodeRecords implements core.NodeRunReader. The ceiling is applied as a
+// LIMIT inside a subquery rather than as a bound on COUNT, so Postgres stops
+// walking the index once it has enough — the badge's answer is "how many, up
+// to 200", and counting a workspace's whole approval history to render "200"
+// is work with no reader.
+func (s *Postgres) CountNodeRecords(ctx context.Context, opts core.ListNodeRecordsOpts) (int, error) {
+	q, args := nodeRecordWhere(`SELECT 1 FROM jobs WHERE kind = 'node'`, opts)
+	if opts.Offset > 0 {
+		args = append(args, opts.Offset)
+		q += fmt.Sprintf(" OFFSET $%d", len(args))
+	}
+	if opts.Limit > 0 {
+		args = append(args, opts.Limit)
+		q += fmt.Sprintf(" LIMIT $%d", len(args))
+	}
+	var n int
+	err := s.pool.QueryRow(ctx, `SELECT count(*) FROM (`+q+`) AS capped`, args...).Scan(&n)
+	if err != nil {
+		return 0, wrapPgErr(err)
+	}
+	return n, nil
 }
 
 // Row covers both pgx.Row (QueryRow) and pgx.Rows (Query) so scanRecord can

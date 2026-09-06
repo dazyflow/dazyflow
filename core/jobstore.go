@@ -438,6 +438,17 @@ func SummarizeNodeRun(rec JobRecord) NodeRun {
 // and see the same steps in the same order.
 type NodeRunReader interface {
 	ListNodeRuns(ctx context.Context, graphRunID string, limit int) ([]NodeRun, error)
+	// CountNodeRecords counts the records ListNodeRecords would return for
+	// the same opts, without materializing any of them. Its caller is a
+	// badge: a number rendered in the sidebar, re-asked for on a timer by
+	// every open tab, where the rows themselves have no reader.
+	//
+	// Limit is a CEILING, not a page size, matching CountGraphRuns — and
+	// here it is load-bearing rather than a saving. The list the badge used
+	// to count was capped at the same Limit, so counting past it would make
+	// the badge claim a number the inbox does not show. Limit <= 0 counts
+	// every match.
+	CountNodeRecords(ctx context.Context, opts ListNodeRecordsOpts) (int, error)
 }
 
 // ListNodeRuns reads one run's node timeline, using the store's narrow
@@ -511,6 +522,35 @@ func CountRuns(ctx context.Context, store JobStore, opts ListGraphRunsOpts) (int
 			opts.Limit = ceiling - total
 		}
 		recs, err := store.ListGraphRuns(ctx, opts)
+		if err != nil {
+			return 0, err
+		}
+		total += len(recs)
+		if len(recs) < opts.Limit || (ceiling > 0 && total >= ceiling) {
+			return total, nil
+		}
+		opts.Offset += len(recs)
+	}
+}
+
+// CountNodeRecords counts the node records matching opts, capped at
+// opts.Limit when that is positive. Same fallback arrangement as
+// ListNodeRuns, and the fallback PAGES for the same reason CountRuns does:
+// ListNodeRecords defaults an unset Limit to a page, so returning that
+// page's length would report the page size as the answer.
+func CountNodeRecords(ctx context.Context, store JobStore, opts ListNodeRecordsOpts) (int, error) {
+	if r, ok := store.(NodeRunReader); ok {
+		return r.CountNodeRecords(ctx, opts)
+	}
+	const page = 200
+	ceiling := opts.Limit
+	opts.Limit = page
+	total := 0
+	for {
+		if ceiling > 0 && ceiling-total < page {
+			opts.Limit = ceiling - total
+		}
+		recs, err := store.ListNodeRecords(ctx, opts)
 		if err != nil {
 			return 0, err
 		}

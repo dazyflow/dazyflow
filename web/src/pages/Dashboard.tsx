@@ -19,7 +19,7 @@ import { api } from "../api";
 import { formatRelative, formatDateTime, formatDate } from "../lib/datetime";
 import { ShareOverviewModal } from "../components/dialogs/ShareOverviewModal";
 import { Button } from "../components/ui/Button";
-import type { FlowSummary, PendingApproval, RunSummary } from "../types";
+import type { FlowSummary, RunSummary } from "../types";
 import { ICON } from "../icons";
 import { StatCard } from "../components/ui/StatCard";
 
@@ -45,7 +45,7 @@ export function Dashboard() {
   const { token, me, activeTenant, activeWorkspace } = useAuth();
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [flows, setFlows] = useState<FlowSummary[]>([]);
-  const [approvals, setApprovals] = useState<PendingApproval[]>([]);
+  const [approvalCount, setApprovalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [shareOpen, setShareOpen] = useState(false);
 
@@ -58,12 +58,14 @@ export function Dashboard() {
     Promise.allSettled([
       api.listAllRuns(token, { limit: RUN_WINDOW, workspace, tenant }),
       api.listGraphs(token, activeTenant, activeWorkspace),
-      api.listPendingApprovals(token, { workspace, tenant }),
+      // The tile renders a number, so it asks for one — the inbox rows carry
+      // each parked step's stashed context, which nothing here reads.
+      api.countPendingApprovals(token, { workspace, tenant }),
     ]).then(([r, g, a]) => {
       if (cancelled) return;
       if (r.status === "fulfilled") setRuns(r.value.runs ?? []);
       if (g.status === "fulfilled") setFlows(g.value.graphs ?? []);
-      if (a.status === "fulfilled") setApprovals(a.value.approvals ?? []);
+      if (a.status === "fulfilled") setApprovalCount(a.value.count ?? 0);
       setLoading(false);
     });
     return () => {
@@ -209,8 +211,8 @@ export function Dashboard() {
         <StatCard
           icon={<Inbox size={ICON.lg} />}
           label={t("dashboard.approvalsWaiting")}
-          value={loading ? "—" : String(approvals.length)}
-          tone={approvals.length > 0 ? "warn" : "good"}
+          value={loading ? "—" : String(approvalCount)}
+          tone={approvalCount > 0 ? "warn" : "good"}
           to="/approvals"
         />
       </div>

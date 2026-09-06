@@ -370,6 +370,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/events/stripe", h.rateLimitWebhook(billing.stripeEvents))
 	mux.HandleFunc("POST /api/v1/events/stripe/{tenant}", h.rateLimitWebhook(runctl.stripeTenantEvents))
 	mux.HandleFunc("GET /api/v1/approvals/pending", h.requireAuth(runctl.listPendingApprovals))
+	mux.HandleFunc("GET /api/v1/approvals/pending/count", h.requireAuth(runctl.countPendingApprovals))
 	mux.HandleFunc("GET /api/v1/approvals/decided", h.requireAuth(runctl.listDecidedApprovals))
 	mux.HandleFunc("POST /api/v1/approvals/{runID}/{nodeID}", h.requireAuth(runctl.approveAuthed))
 	mux.HandleFunc("GET /api/v1/admin/api-keys", h.requireAuth(apikeys.listAPIKeys))

@@ -401,7 +401,7 @@ func (p *pgBackend) listGraphs() ([]string, error) {
 // so a workspace of fifty flows cost 151 round trips to render a sidebar.
 // The env pointer is an outer join because an unpublished flow still belongs
 // in the list.
-func (p *pgBackend) listAtHead(env string) ([]FlowAtHead, error) {
+func (p *pgBackend) listAtHead(env string, headersOnly bool) ([]FlowAtHead, error) {
 	rows, err := p.pool.Query(p.ctx(),
 		`SELECT h.graph_id, r.content, COALESCE(e.revision, '')
 		   FROM flow_heads h
@@ -428,8 +428,8 @@ func (p *pgBackend) listAtHead(env string) ([]FlowAtHead, error) {
 		if err := rows.Scan(&id, &content, &rev); err != nil {
 			return nil, err
 		}
-		var g core.Graph
-		if err := json.Unmarshal(content, &g); err != nil {
+		g, err := decodeFlow(content, headersOnly)
+		if err != nil {
 			// Same rule as the git backend: one unreadable flow does not
 			// take the list down with it.
 			continue

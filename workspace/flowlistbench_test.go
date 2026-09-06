@@ -167,3 +167,53 @@ func BenchmarkFlowListLoad(b *testing.B) {
 		})
 	}
 }
+
+// The flow list serializes on the workspace mutex — deliberately, since
+// go-git's object cache mutates during reads — so what a reader holds that
+// lock for is the workspace's whole read throughput, not just its own
+// latency. These split the two halves of listAtHead: resolving HEAD, and
+// walking its tree to decode every flow.
+func BenchmarkFlowListHeadOnly(b *testing.B) {
+	s := benchWorkspace(b, 30, 25)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		if _, err := s.Head(); err != nil {
+			b.Fatalf("head: %v", err)
+		}
+	}
+}
+
+// BenchmarkFlowListHeadersAtHead30 is the same read as BenchmarkFlowListAtHead30
+// through the header projection — the difference is the params of ordinary
+// steps, which no list caller reads and which the profile put at 78% of the
+// decode.
+func BenchmarkFlowListHeadersAtHead30(b *testing.B) {
+	s := benchWorkspace(b, 30, 25)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		got, err := s.ListHeadersAtHead("")
+		if err != nil {
+			b.Fatalf("list: %v", err)
+		}
+		if len(got) != 30 {
+			b.Fatalf("got %d flows", len(got))
+		}
+	}
+}
+
+func BenchmarkFlowListAtHead30(b *testing.B) {
+	s := benchWorkspace(b, 30, 25)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		got, err := s.ListAtHead("")
+		if err != nil {
+			b.Fatalf("list: %v", err)
+		}
+		if len(got) != 30 {
+			b.Fatalf("got %d flows", len(got))
+		}
+	}
+}

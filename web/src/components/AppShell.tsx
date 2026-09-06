@@ -178,19 +178,24 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
   });
   useEffect(() => {
-    if (!token) return;
+    // `me` for the same reason refreshFlows waits for it: before whoami lands
+    // the org is unresolved, and asking then answers for the wrong scope and
+    // is immediately superseded.
+    if (!token || !me) return;
     let cancelled = false;
     const fetch = () =>
       api
         // Match the inbox's workspace narrow so the badge count
         // doesn't disagree with what the user sees when they click it.
-        .listPendingApprovals(token, {
+        // Counted server-side: this fires on every page, on a timer and
+        // again on each navigation, and a number is all it renders.
+        .countPendingApprovals(token, {
           workspace: activeWorkspace || undefined,
           tenant: activeTenant || undefined,
         })
         .then((r) => {
           if (cancelled) return;
-          const n = r.approvals?.length ?? 0;
+          const n = r.count ?? 0;
           setPendingCount(n);
           if (n > 0 && !everHadApproval) {
             setEverHadApproval(true);
@@ -212,6 +217,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     };
   }, [
     token,
+    me,
     location.pathname,
     activeTenant,
     activeWorkspace,
@@ -231,11 +237,20 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
     let cancelled = false;
     const fetch = () => {
+      // Agents count the whole cross-org queue, which is what the summary
+      // aggregate answers — and it is both cheaper and more correct than
+      // counting a page of full ticket rows, since the listing is capped by
+      // the store's page limit and a busy queue exceeds it. A requester's own
+      // tickets are few enough that the list is the count.
       const p = isAgent
-        ? api.listTicketQueue(token, { status: "awaiting_support" })
-        : api.listMyTickets(token, "awaiting_user");
-      p.then((r) => {
-        if (!cancelled) setSupportUnread(r.tickets?.length ?? 0);
+        ? api
+            .ticketQueueSummary(token)
+            .then((r) => r.summary?.by_status?.awaiting_support ?? 0)
+        : api
+            .listMyTickets(token, "awaiting_user")
+            .then((r) => r.tickets?.length ?? 0);
+      p.then((n) => {
+        if (!cancelled) setSupportUnread(n);
       }).catch(() => {
         /* ignore — non-essential */
       });
@@ -248,8 +263,16 @@ export function AppShell({ children }: { children: ReactNode }) {
     };
   }, [token, supportOn, isAgent, location.pathname]);
   // Load the workspace's flows for the sidebar list.
+  // Wait for `me` before asking, not just for a token. activeWorkspace falls
+  // back to the DEFAULT the moment a token exists — before whoami has landed
+  // — so without this the sidebar fires once against an unresolved org and
+  // again when the real one arrives. The flow list is the most expensive read
+  // on the page (it decodes every flow in the workspace, under the lock that
+  // serializes the workspace), and this runs on every navigation, so the
+  // discarded first answer was the single most repeated piece of waste in the
+  // app.
   const refreshFlows = useCallback(() => {
-    if (!token || !activeWorkspace) {
+    if (!token || !me || !activeWorkspace) {
       setFlows([]);
       return;
     }
@@ -259,7 +282,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       .catch(() => {
         /* ignore — sidebar list is non-essential */
       });
-  }, [token, activeTenant, activeWorkspace]);
+  }, [token, me, activeTenant, activeWorkspace]);
   // Refetch on navigation (covers create/delete via the flow list).
   useEffect(refreshFlows, [refreshFlows, location.pathname]);
   // Refetch immediately when a flow's name/icon is saved in the editor —
