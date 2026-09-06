@@ -390,6 +390,12 @@ function EditorInner() {
   const nodeDataCacheRef = useRef<
     Map<string, { deps: unknown[]; node: FlowNode<DazyNodeData> }>
   >(new Map());
+  // Per-edge memo cache backing coloredEdges, for the same reason and pruned
+  // the same way. It is what lets the memoised RerouteEdge actually skip: memo
+  // compares props shallowly, and this memo rebuilds each wire's `style` and
+  // `data` objects, so without a cache every wire gets fresh ones on every
+  // frame of a drag and re-renders however well it is memoised.
+  const edgeCacheRef = useRef<Map<string, { deps: unknown[]; edge: FlowEdge }>>(new Map());
   const [selectedID, setSelectedID] = useState<string | null>(null);
   // Opens the "N to configure" modal — a click-to-jump checklist of every
   // node still missing required values (ConfigChecklistModal handles its own
@@ -1269,19 +1275,34 @@ function EditorInner() {
   // async. Selected edges thicken; color stays full-strength.
   const coloredEdges = useMemo<FlowEdge[]>(() => {
     const byId = new Map(nodes.map((n) => [n.id, n]));
-    return edges.map((e) => {
-      const out = byId
-        .get(e.source)
-        ?.data.manifest?.outputs?.find((p) => p.port === (e.sourceHandle ?? "out"));
+    // Granular per-edge memoisation, mirroring displayNodes below. This memo
+    // depends on `nodes`, so it re-runs on every frame of a node drag — but
+    // what a wire reads off a node is its manifest (port colour) and its run
+    // status (flow pulse), neither of which dragging changes.
+    const cache = edgeCacheRef.current;
+    const seen = new Set<string>();
+    const result = edges.map((e) => {
+      seen.add(e.id);
+      const srcNode = byId.get(e.source);
+      const manifest = srcNode?.data.manifest;
+      const out = manifest?.outputs?.find((p) => p.port === (e.sourceHandle ?? "out"));
       // Animate the wire while either end is running — data is flowing into
       // the wire (source running) or out of it (target running). Lighting
       // both ends keeps the pulse continuous as the run walks the graph, and
       // means fast in-process nodes still show flow via their slower
       // neighbour. Node status is set live from the run's SSE stream.
       const active =
-        byId.get(e.source)?.data.status === "running" ||
+        srcNode?.data.status === "running" ||
         byId.get(e.target)?.data.status === "running";
-      return {
+      const drawDelay = animApply?.draw.get(e.id);
+      // The exact set the built wire below reads. setEdges and setDirty are
+      // stable, so they are not listed.
+      const deps: unknown[] = [e, manifest, active, drawDelay];
+      const hit = cache.get(e.id);
+      if (hit && hit.deps.length === deps.length && hit.deps.every((v, i) => v === deps[i])) {
+        return hit.edge;
+      }
+      const built: FlowEdge = {
         ...e,
         type: "reroute",
         style: {
@@ -1296,7 +1317,7 @@ function EditorInner() {
           active,
           // Set only while a build animation plays — drives the wire's
           // draw-in (see applyGraphAnimated). undefined the rest of the time.
-          drawDelay: animApply?.draw.get(e.id),
+          drawDelay,
           updateWaypoints: (wps: { x: number; y: number }[]) => {
             setEdges((eds) =>
               eds.map((x) =>
@@ -1307,7 +1328,12 @@ function EditorInner() {
           },
         },
       };
+      cache.set(e.id, { deps, edge: built });
+      return built;
     });
+    // Drop cache entries for wires that no longer exist.
+    for (const id of cache.keys()) if (!seen.has(id)) cache.delete(id);
+    return result;
   }, [edges, nodes, animApply]);
 
   const onConnect = useCallback(
@@ -2279,6 +2305,21 @@ function EditorInner() {
   // tokenLabels: "nodeId.port" → "Gmail · Matching emails" — lets fields
   // whose value is one ${upstream.…} token render the friendly chip the
   // {} menu words it with.
+  //
+  // The result is IDENTITY-STABLE while its content is unchanged, and that is
+  // load-bearing rather than tidiness. It depends on `nodes`, so it rebuilds on
+  // every frame of a node drag — but nothing it reads (id, label, module,
+  // manifest) is affected by dragging, so every rebuild during a drag produced
+  // an identical object with a fresh identity. That identity is one of the
+  // deps of the per-node data cache in displayNodes, so a new one invalidated
+  // EVERY card, and the whole canvas re-rendered on every pointermove.
+  // Measured in a real browser at 60 steps: 57 node re-renders per move.
+  //
+  // Recomputed every time and then compared, rather than memoised on a
+  // signature of its inputs: a signature that missed a field would go stale
+  // and word a token chip wrongly, where this can only ever return content it
+  // just derived — which also makes it safe if React discards the render.
+  const tokenLabelsRef = useRef<Record<string, string>>({});
   const tokenLabels = useMemo(() => {
     const m: Record<string, string> = {};
     for (const n of nodes) {
@@ -2293,6 +2334,12 @@ function EditorInner() {
         m[`${n.id}.${p.port}`] = `${nodeLabel} · ${p.label ?? p.port}`;
       }
     }
+    const prev = tokenLabelsRef.current;
+    const prevKeys = Object.keys(prev);
+    if (prevKeys.length === Object.keys(m).length && prevKeys.every((k) => prev[k] === m[k])) {
+      return prev;
+    }
+    tokenLabelsRef.current = m;
     return m;
   }, [nodes, manifestByID]);
 

@@ -9,9 +9,12 @@ package daemon
 // rather than the handler.
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -63,11 +66,19 @@ func buildBenchGatewayWith(b testing.TB, jobs core.JobStore) (http.Handler, stri
 		AdminKeys:  ks,
 	}
 	gw := NewHTTPGateway(svc)
+	benchLastGateway = gw
 	mux := http.NewServeMux()
 	gw.mountRoutes(mux)
 	handler := gw.withCORSAndLogging(gw.verifyCookieOrigin(limitRequestBody(gzipResponses(true, jsonErrors(mux)))))
 	return handler, token, svc
 }
+
+// benchLastGateway is the gateway the most recent builder produced, so a
+// benchmark can reach past the handler to the gateway's own knobs. Used by the
+// webhook benchmark to lift the per-IP throttle: every request there comes
+// from the same synthetic address, so the limiter — which exists to stop a
+// flood from one caller — would otherwise be the only thing measured.
+var benchLastGateway *HTTPGateway
 
 func benchRequest(b *testing.B, method, path string) {
 	handler, token := benchGateway(b)
@@ -428,3 +439,158 @@ func benchRequestParallel(b *testing.B, method, path string) {
 }
 
 func BenchmarkGetMeParallel(b *testing.B) { benchRequestParallel(b, "GET", "/api/v1/me") }
+
+// benchSaveFlowAt is the write path, which nothing here measured before: every
+// benchmark above reads. The editor autosaves while a person is typing, so a
+// save is not a rare event — it is the request most often in flight while
+// someone works, and it validates, lints and commits the whole flow each time.
+func benchSaveFlowAt(b *testing.B, steps int) {
+	handler, token := benchGateway(b)
+	g := core.Graph{
+		ID: "bench", Tenant: "t", Workspace: "ws", Name: "Bench",
+		Description: "a flow the size a real one is",
+	}
+	for i := range steps {
+		g.Nodes = append(g.Nodes, core.Node{
+			ID: fmt.Sprintf("n%d", i), Module: "http_request",
+			Params: map[string]any{
+				"url":    "https://api.example.com/v1/resource/" + fmt.Sprint(i),
+				"method": "POST",
+				"body": map[string]any{
+					"note": "a realistic amount of configuration on every step",
+					"idx":  i,
+				},
+			},
+		})
+		if i > 0 {
+			g.Edges = append(g.Edges, core.Edge{
+				From: fmt.Sprintf("n%d", i-1), FromPort: "pass",
+				To: fmt.Sprintf("n%d", i), ToPort: "pass",
+			})
+		}
+	}
+	payload, err := json.Marshal(g)
+	if err != nil {
+		b.Fatalf("marshal: %v", err)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		req := httptest.NewRequest("PUT", "/api/v1/me/flows/t%2Fws%2Fbench", bytes.NewReader(payload))
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
+		rw := &discardWriter{}
+		handler.ServeHTTP(rw, req)
+		if rw.status != http.StatusOK {
+			b.Fatalf("save = %d", rw.status)
+		}
+	}
+}
+
+func BenchmarkSaveFlow8(b *testing.B)  { benchSaveFlowAt(b, 8) }
+func BenchmarkSaveFlow30(b *testing.B) { benchSaveFlowAt(b, 30) }
+func BenchmarkSaveFlow60(b *testing.B) { benchSaveFlowAt(b, 60) }
+
+// BenchmarkWebhookTrigger is the path an external system takes to fire a flow:
+// POST /trigger/{tenant}/{workspace}/{flow}. It is a write (it submits a run)
+// and the caller waits on it, and it was unbenchmarked — like every other
+// write here. It loads the PUBLISHED flow from the workspace on every
+// delivery, so its cost scales with the flow, not with the payload.
+func benchWebhookTriggerAt(b *testing.B, steps int, wide bool) {
+	// Over a real Postgres, not the in-memory store. The memory store's
+	// Enqueue scans every record it holds to find the tenant's queue tail
+	// (Postgres does it with an index), so a benchmark that submits a run per
+	// iteration measures that scan growing — 96% of the profile — and nothing
+	// about the handler.
+	url := os.Getenv("DAZYFLOW_TEST_DB")
+	if url == "" {
+		b.Skip("set DAZYFLOW_TEST_DB to run the Postgres request benchmarks")
+	}
+	store, err := jobstore.OpenPostgres(context.Background(), url)
+	if err != nil {
+		b.Fatalf("OpenPostgres: %v", err)
+	}
+	b.Cleanup(store.Close)
+	// Every iteration submits a run, so this benchmark writes rows to the
+	// shared test database. Clear them at the end, or a later run of any
+	// benchmark against the same database measures this one's leftovers.
+	b.Cleanup(func() {
+		if _, derr := store.DeleteByTenant(context.Background(), "t"); derr != nil {
+			b.Logf("cleanup: %v", derr)
+		}
+	})
+	// Before the gateway is built, not after: the listener takes log.Writer()
+	// at construction, so muting the default logger later leaves it holding
+	// the old one. It logs a line per delivery, which at benchmark rates is
+	// both the dominant I/O and enough noise to make `go test -bench` output
+	// unparseable by benchstat, which reads the same stream.
+	log.SetOutput(io.Discard)
+	b.Cleanup(func() { log.SetOutput(os.Stderr) })
+	handler, token, _ := buildBenchGatewayWith(b, store)
+	benchLastGateway.WebhookRateLimit = nil
+	const secret = "whsec_bench_0123456789"
+
+	g := core.Graph{
+		ID: "hook", Tenant: "t", Workspace: "ws", Name: "Hook",
+		Nodes: []core.Node{{
+			ID: "in", Module: "webhook_input",
+			Params: map[string]any{"secrets": []string{secret}},
+		}},
+	}
+	for i := 1; i < steps; i++ {
+		g.Nodes = append(g.Nodes, core.Node{
+			ID: fmt.Sprintf("n%d", i), Module: "http_request",
+			Params: map[string]any{
+				"url":    "https://api.example.com/v1/resource/" + fmt.Sprint(i),
+				"method": "POST",
+				"body":   map[string]any{"note": "realistic step configuration", "idx": i},
+			},
+		})
+		// chain: every step hangs off the one before, so a submit dispatches
+		// exactly one root. wide: every step hangs off the trigger, so a submit
+		// dispatches all of them at once. The two shapes cost very different
+		// things at submit, and only the second shows it.
+		from, fromPort := fmt.Sprintf("n%d", i-1), "pass"
+		if i == 1 || wide {
+			from, fromPort = "in", "body"
+		}
+		g.Edges = append(g.Edges, core.Edge{
+			From: from, FromPort: fromPort,
+			To: fmt.Sprintf("n%d", i), ToPort: "pass",
+		})
+	}
+	payload, merr := json.Marshal(g)
+	if merr != nil {
+		b.Fatalf("marshal: %v", merr)
+	}
+	do := func(method, path string, body []byte, auth string) int {
+		req := httptest.NewRequest(method, path, bytes.NewReader(body))
+		if auth != "" {
+			req.Header.Set("Authorization", auth)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		rw := &discardWriter{}
+		handler.ServeHTTP(rw, req)
+		return rw.status
+	}
+	if code := do("PUT", "/api/v1/me/flows/t%2Fws%2Fhook", payload, "Bearer "+token); code != http.StatusOK {
+		b.Fatalf("save = %d", code)
+	}
+	// Only the PUBLISHED revision fires, so publish before triggering.
+	if code := do("POST", "/api/v1/me/flows/t%2Fws%2Fhook/publish", nil, "Bearer "+token); code != http.StatusOK {
+		b.Fatalf("publish = %d", code)
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		if code := do("POST", "/trigger/t/ws/hook", []byte(`{"event":"bench"}`), "Bearer "+secret); code != http.StatusAccepted && code != http.StatusOK {
+			b.Fatalf("trigger = %d", code)
+		}
+	}
+}
+
+func BenchmarkWebhookTrigger8(b *testing.B)      { benchWebhookTriggerAt(b, 8, false) }
+func BenchmarkWebhookTrigger60(b *testing.B)     { benchWebhookTriggerAt(b, 60, false) }
+func BenchmarkWebhookTriggerWide8(b *testing.B)  { benchWebhookTriggerAt(b, 8, true) }
+func BenchmarkWebhookTriggerWide60(b *testing.B) { benchWebhookTriggerAt(b, 60, true) }

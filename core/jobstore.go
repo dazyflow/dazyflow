@@ -225,6 +225,71 @@ type Advance struct {
 	Enqueued int
 }
 
+// NodeBatchEnqueuer is an optional JobStore extension that queues several
+// PLAIN QUEUED NODE records — the roots of a run, or the dependents one
+// completed step released — as ONE write.
+//
+// Done one at a time they are one statement and one COMMIT each, which is what
+// a submit pays for its width: a flow whose steps all hang off the trigger
+// dispatches every one of them at once, and the caller (a webhook sender) waits
+// through the lot. Measured at ~2.2ms per record against a local Postgres, so
+// it is fsync, not network — a 60-way fan-out cost ~134ms of which 56% was
+// this loop. A chain is unaffected: it dispatches a single root.
+//
+// It is ALL OR NOTHING, and that is what makes it safe to try first: on any
+// error nothing was written, so the caller can fall back to enqueuing one at a
+// time and get exactly the behaviour — including the per-record errors — it
+// had before. See TryEnqueueNodes.
+//
+// Records must satisfy BatchableNode and share a tenant; the batch write
+// carries only the columns such a record uses.
+type NodeBatchEnqueuer interface {
+	EnqueueNodes(ctx context.Context, recs []JobRecord) (int, error)
+}
+
+// BatchableNode reports whether rec is the plain queued node record
+// NodeBatchEnqueuer handles: no stashed result, no pinned graph payload, no
+// parent, no pre-set timestamps, and the default queued status. Anything else
+// goes through Enqueue, which carries every column.
+func BatchableNode(rec JobRecord) bool {
+	return rec.Kind == JobKindNode &&
+		(rec.Status == "" || rec.Status == JobStatusQueued) &&
+		rec.Result == nil && len(rec.GraphPayload) == 0 &&
+		rec.ParentNodeRecID == "" && !rec.Manual &&
+		rec.EnqueuedAt.IsZero() && rec.AvailableAt == nil &&
+		rec.StartedAt == nil && rec.FinishedAt == nil &&
+		rec.LeaseUntil == nil && rec.WorkerID == "" && rec.Attempt == 0
+}
+
+// TryEnqueueNodes queues recs in one write when the store can.
+//
+// ok is false when the store has no batch write, when a record is not
+// BatchableNode, when the records span tenants, or when the write failed — and
+// in every one of those cases NOTHING was written, so the caller must enqueue
+// them one at a time. That fallback is not a formality: it is the only path
+// that reports which record failed, and callers differ on what they do about
+// it (a duplicate root fails a run; a duplicate dependent is simply someone
+// else having got there first).
+func TryEnqueueNodes(ctx context.Context, store JobStore, recs []JobRecord) (int, bool) {
+	if len(recs) < 2 {
+		return 0, false // one record is already one write
+	}
+	b, okStore := store.(NodeBatchEnqueuer)
+	if !okStore {
+		return 0, false
+	}
+	for _, r := range recs {
+		if !BatchableNode(r) || r.Tenant != recs[0].Tenant {
+			return 0, false
+		}
+	}
+	n, err := b.EnqueueNodes(ctx, recs)
+	if err != nil {
+		return 0, false
+	}
+	return n, true
+}
+
 // JobCounter is an optional JobStore extension exposing aggregate
 // node-job counts for metrics — queue depth (queued) and in-flight
 // (running) are the load-bearing signals. Implemented by the Memory and

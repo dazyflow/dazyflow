@@ -12,6 +12,168 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ### Performance
 
+- **Starting a run queues all its ready steps in one write.** A flow whose
+  steps hang off the trigger dispatches every one of them at submit, and
+  `dispatchRoots` / `enqueueReadyDependents` called `Enqueue` once per record —
+  one statement and one **commit** each. Measured at ~2.2ms apiece against a
+  local Postgres, so it is fsync, not network: a webhook fanning out to 60
+  steps spent 56% of its time in that loop, and the sender waited through it.
+
+  New optional store extension `core.NodeBatchEnqueuer`, implemented by both
+  backends. On Postgres it is one statement over
+  `unnest(…) WITH ORDINALITY` — the same shape `CompleteAndEnqueue` already
+  uses for the dependents it releases.
+
+  `BenchmarkWebhookTrigger*` over a real Postgres, n=6:
+
+  | Trigger shape | Before | After |
+  |---|---:|---:|
+  | fan-out, 60 steps | 160.3ms | **26.3ms** (-83.6%, p=0.002) |
+  | fan-out, 8 steps | 23.2ms | **10.9ms** (-53.3%, p=0.002) |
+  | chain, 60 steps | 8.50ms | 7.84ms |
+  | chain, 8 steps | 7.41ms | 7.07ms |
+
+  A chain is unaffected by construction — it has a single root, so there is
+  nothing to batch and the small deltas above are run-to-run drift, not the
+  change. The fan-out pays ~17% more bytes building the arrays the one
+  statement takes, which is the trade.
+
+  **The batch is all-or-nothing, and that is what makes it safe to try first.**
+  On any failure — a store without the extension, a record that is not a plain
+  queued node, records spanning tenants, or a conflict — nothing was written
+  and the caller falls back to enqueuing one at a time. That fallback is not a
+  formality: it is the only path that can report *which* record failed, and the
+  two callers disagree about what that means (a duplicate root fails a run; a
+  duplicate dependent just means another path got there first). For the same
+  reason the insert is deliberately **not** `ON CONFLICT DO NOTHING`, which
+  would have swallowed a duplicate root and silently changed that.
+
+  `slot_at` is assigned exactly as the per-record path assigns it: one spacing
+  behind the org's queue tail and one spacing apart by ordinality. The
+  conformance suite pins that on both backends by comparing **claim order**
+  against enqueuing the same records one at a time — a batch that took
+  different places in the queue would not fail an equality check on rows, it
+  would quietly let one org's burst overtake everyone else — and pins the
+  all-or-nothing contract by requiring that a batch containing a duplicate
+  writes nothing, including a duplicate repeated within the batch itself.
+
+- **Saving a flow spent a fifth of its time backtracking a regex.** Nothing in
+  the tree benchmarked a write before — every existing benchmark is a read —
+  so the request the editor makes most often while someone is *working* had
+  never been measured. It autosaves as you type, and each save validates, lints
+  and commits the whole flow.
+
+  A CPU profile put **20% of a save in `regexp.tryBacktrack`**, nearly all of
+  it `knownSecretValue`: the hardcoded-credential lint runs that eight-way
+  alternation over every param string of every step.
+
+  Every alternative of that pattern must contain one of six literal substrings
+  (`sk_`, `gh`, `xox`, `AKIA`, `AIza`, `-----BEGIN `), and none can match a
+  string shorter than 15 characters, so both are sound pre-filters rather than
+  heuristics. Six substring scans replace the backtracking alternation for the
+  overwhelming majority of strings, which contain none of them.
+
+  Over a realistic set of param strings the check goes **32.7µs → 1.7µs (19x)**.
+  Through the real handler stack (`BenchmarkSaveFlow*`, n=6, all p=0.004):
+
+  | Flow size | Before | After |
+  |---|---:|---:|
+  | 8 steps | 1.290ms | **1.116ms** (-13.5%) |
+  | 30 steps | 3.470ms | **2.689ms** (-22.5%) |
+  | 60 steps | 5.916ms | **4.817ms** (-18.6%) |
+
+  Allocations are unchanged — this is pure CPU. Regex fell from 20% of a save
+  to 4.3%, and `matchesKnownSecret` itself from the bulk of it to 0.23%.
+
+  **This is a security lint, so the pre-filter is fuzzed rather than reasoned
+  about.** `FuzzKnownSecretPrefilter` requires it to agree with the regex on
+  every input, seeded with a real example of each of the eight credential
+  shapes plus the near-misses that carry a marker without being a credential
+  (`https://github.com/…`, "a thought that runs right through…"). It survived
+  121,836 executions. The failure that matters here is silent — a lint that
+  quietly stops reporting a pasted credential — and editing the pattern without
+  editing the markers is exactly what this catches.
+
+  Two things measured and NOT done: a length floor alone buys nothing (real
+  param strings are mostly over 15 characters), and expressing the pre-filter
+  as its own regex buys nothing either (32.7µs → 30.4µs) — a regex is a regex.
+  What remains is `secretKeyName` at 4.6% of a save; reordering its `&&` to put
+  the cheap length test first would be *worse*, because it would run
+  `templatePattern` over every long value where the key check currently bails
+  out first.
+
+- **Editing a step no longer re-renders every wire on the canvas.** Companion
+  to the node fix below, found by the same instrumentation pointed at the edge
+  component. Typing one character into a step's field re-rendered **118 wires**
+  in a 60-step flow; dragging re-rendered 112 per pointermove.
+
+  Two changes, and the measurement is what showed that neither works alone:
+
+  - `RerouteEdge` is now `memo`'d. `<ReactFlow>` is handed a freshly spread
+    `nodes` array on every render, so React Flow re-renders internally and
+    every un-memoised wire went with it regardless of its own props. This
+    alone took typing from 118 wire renders per character to **0**, but left
+    dragging at 56.
+  - `coloredEdges` gained the per-edge cache `displayNodes` already has. It
+    rebuilt each wire's `style` and `data` objects on every run — and it runs
+    on every frame of a drag, because it depends on `nodes` — so `memo`'s
+    shallow prop compare failed every time. The cache alone did nothing (112 →
+    109) because without `memo` the wrapper re-rendered anyway.
+
+  Together, at 60 steps, dragging one step:
+
+  | | Before | After |
+  |---|---:|---:|
+  | Node re-renders per move | 57.0 | **1.0** |
+  | Wire re-renders per move | 112.1 | **0.9** |
+  | Main thread blocked per move | 35.3ms | **1.9ms** |
+  | Long tasks over a 40-move drag | 23 | **1** |
+
+  Both counts are now flat in flow size, and typing costs zero wire renders at
+  any size. What remains of the per-keystroke cost that still scales with flow
+  size is inside React Flow's own node wrappers and the browser's style and
+  layout for 60 DOM subtrees; it no longer produces a long task.
+
+- **Dragging a step no longer re-renders every card on the canvas.** The
+  editor's per-node data cache (`displayNodes`) exists precisely to stop that,
+  and it was being defeated by a single dependency: `tokenLabels`, the
+  "nodeId.port → friendly name" map the token chips read. It is memoised on
+  `nodes`, so it rebuilt on every frame of a drag — but nothing it reads (a
+  step's id, label, module, manifest) is affected by dragging, so each rebuild
+  produced a byte-identical object with a **fresh identity**, which invalidated
+  every node's cache entry and re-rendered the whole canvas on every
+  pointermove.
+
+  It now reuses the previous object when the content is unchanged.
+
+  Measured against a real `dzd` in a real browser (headless Chrome via
+  playwright-core, production build, three flows at 6 / 20 / 60 steps, dragging
+  one step across 20-40 pointermoves):
+
+  | Steps in flow | Node re-renders per move | Main thread blocked per move |
+  |---|---:|---:|
+  | 6 | 5.8 → **1.0** | 5.3ms → **3.6ms** |
+  | 20 | 19.1 → **1.0** | 1.8ms → **5.2ms** |
+  | 60 | 57.0 → **1.0** | 35.3ms → **3.0ms** |
+
+  The re-render count is the deterministic half, and its shape is the point: it
+  was one render per step per frame, and is now **one render per frame at any
+  flow size** — the dragged card, which is the only one that moved. Long tasks
+  during a 40-move drag of the 60-step flow went from 23 to 2.
+
+  Blocking time is noisy at small sizes (a few long tasks from the tail of page
+  load land in the window), so read the 60-step row: that is where the defect
+  was, and it is where it went.
+
+  The instrumentation that found it compared each of the node cache's 23
+  dependencies on every miss, so `tokenLabels` is not a guess and, just as
+  usefully, nothing else in that list was contributing.
+
+  Identity is reused only after comparing the freshly derived content, never
+  from a signature of the inputs. A signature that missed a field would word a
+  token chip wrongly; this can only return content it just computed, which also
+  makes it safe if React discards the render.
+
 - **Reading one manifest no longer materializes the whole catalog.** Several
   call sites asked `ListDrops` for the tenant's entire drop catalog and then
   did a handful of point lookups in it. That call clones the 182-entry built-in

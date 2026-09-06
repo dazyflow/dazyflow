@@ -195,6 +195,62 @@ func (s *Postgres) Enqueue(ctx context.Context, rec core.JobRecord) error {
 	return nil
 }
 
+// EnqueueNodes writes several plain queued node records as ONE statement, and
+// therefore one commit — see core.NodeBatchEnqueuer for why that matters.
+//
+// slot_at is assigned exactly as Enqueue and CompleteAndEnqueue assign it: one
+// spacing behind the org's queue tail, and one spacing apart from each other by
+// ordinality, so a batch takes the same places in the queue that the same
+// records would have taken one at a time. Getting that wrong would not show up
+// as breakage — it would show up as one org's burst jumping the queue.
+//
+// Deliberately NOT `ON CONFLICT DO NOTHING`: a duplicate must fail the whole
+// statement so the caller falls back and finds out which record it was. The
+// submit path fails a run on a duplicate root, and silently swallowing it here
+// would change that without anyone noticing.
+func (s *Postgres) EnqueueNodes(ctx context.Context, recs []core.JobRecord) (int, error) {
+	if len(recs) == 0 {
+		return 0, nil
+	}
+	ids := make([]string, len(recs))
+	runs := make([]string, len(recs))
+	graphs := make([]string, len(recs))
+	nodes := make([]string, len(recs))
+	works := make([]string, len(recs))
+	jobs := make([]string, len(recs))
+	for i, r := range recs {
+		b, err := json.Marshal(r.Job)
+		if err != nil {
+			return 0, fmt.Errorf("marshal job: %w", err)
+		}
+		ids[i], runs[i], graphs[i], nodes[i], works[i], jobs[i] =
+			r.ID, r.GraphRunID, r.GraphID, r.NodeID, r.Workspace, string(b)
+	}
+	const q = `
+		WITH tail AS (
+			SELECT max(b.slot_at) AS at FROM jobs b
+			 WHERE b.kind = 'node' AND b.status = 'queued' AND b.tenant = $1
+		), ins AS (
+			INSERT INTO jobs (id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, enqueued_at, slot_at)
+			SELECT d.id, 'node', d.run, d.graph, d.node, $1, d.workspace, 'queued', d.job::jsonb, now(),
+			       CASE WHEN $8::interval > '0s'::interval
+			            THEN GREATEST(now(), (SELECT at FROM tail) + $8::interval) + $8::interval * (d.ord - 1)
+			            ELSE now() END
+			  FROM unnest($2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[])
+			       WITH ORDINALITY AS d(id, run, graph, node, workspace, job, ord)
+			RETURNING id
+		)
+		SELECT count(*) FROM ins
+	`
+	var n int
+	if err := s.pool.QueryRow(ctx, q,
+		recs[0].Tenant, ids, runs, graphs, nodes, works, jobs, s.burstSpacing.String(),
+	).Scan(&n); err != nil {
+		return 0, wrapPgErr(err)
+	}
+	return n, nil
+}
+
 func (s *Postgres) Claim(ctx context.Context, worker string, lease time.Duration) (core.JobRecord, error) {
 	var row pgx.Row
 	if s.maxConcurrent > 0 {

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -24,6 +25,7 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 	conformanceOutcomes(t, mk)
 	conformanceRunSummaries(t, mk)
 	conformanceNodeRuns(t, mk)
+	conformanceNodeBatchEnqueue(t, mk)
 	t.Run("CountsByStatus", func(t *testing.T) {
 		s := mk(t)
 		ctx := t.Context()
@@ -1342,4 +1344,110 @@ func sameIDs(got []core.JobRecord, want []string) bool {
 // in-memory store. Always runs (no DB needed).
 func TestMemory_Conformance(t *testing.T) {
 	runConformance(t, func(t *testing.T) core.JobStore { return NewMemory() })
+}
+
+// conformanceNodeBatchEnqueue pins core.NodeBatchEnqueuer on both backends.
+//
+// The batch exists to turn a run's fan-out into one commit, and it is only
+// substitutable for the loop it replaces if it puts the same records in the
+// same QUEUE ORDER — slot_at decides who a worker claims next, so a batch that
+// took different places would not fail a test, it would quietly let one org's
+// burst overtake everyone else. The check is therefore claim order, not row
+// contents.
+func conformanceNodeBatchEnqueue(t *testing.T, mk func(t *testing.T) core.JobStore) {
+	t.Helper()
+
+	rec := func(id string) core.JobRecord {
+		return core.JobRecord{
+			ID: id, Kind: core.JobKindNode, GraphRunID: "run", GraphID: "g",
+			NodeID: id, Tenant: "t", Workspace: "ws",
+			Job: core.Job{GraphID: "g", NodeID: id},
+		}
+	}
+	claimAll := func(t *testing.T, s core.JobStore) []string {
+		t.Helper()
+		var got []string
+		for {
+			r, err := s.Claim(t.Context(), "w", time.Minute)
+			if errors.Is(err, core.ErrNoJobs) {
+				return got
+			}
+			if err != nil {
+				t.Fatalf("Claim: %v", err)
+			}
+			got = append(got, r.ID)
+		}
+	}
+
+	t.Run("BatchMatchesSequentialOrder", func(t *testing.T) {
+		// mk resets the store rather than handing out an independent one — the
+		// Postgres factory TRUNCATEs and returns the same handle — so the two
+		// halves run one after the other, not side by side.
+		batched := mk(t)
+		b, ok := batched.(core.NodeBatchEnqueuer)
+		if !ok {
+			t.Skip("store has no batch enqueue")
+		}
+		ids := []string{"a", "b", "c", "d", "e"}
+		recs := make([]core.JobRecord, len(ids))
+		for i, id := range ids {
+			recs[i] = rec(id)
+		}
+		n, err := b.EnqueueNodes(t.Context(), recs)
+		if err != nil {
+			t.Fatalf("EnqueueNodes: %v", err)
+		}
+		if n != len(recs) {
+			t.Fatalf("EnqueueNodes returned %d, want %d", n, len(recs))
+		}
+		gotBatch := claimAll(t, batched)
+
+		oneAtATime := mk(t)
+		for _, id := range ids {
+			mustEnqueue(t, oneAtATime, t.Context(), rec(id))
+		}
+		gotSeq := claimAll(t, oneAtATime)
+		if !slices.Equal(gotBatch, gotSeq) {
+			t.Errorf("claim order differs from enqueuing one at a time:\n batch %v\n loop  %v", gotBatch, gotSeq)
+		}
+		if !slices.Equal(gotBatch, ids) {
+			t.Errorf("claim order = %v, want the order they were queued %v", gotBatch, ids)
+		}
+	})
+
+	t.Run("ConflictWritesNothing", func(t *testing.T) {
+		s := mk(t)
+		b, ok := s.(core.NodeBatchEnqueuer)
+		if !ok {
+			t.Skip("store has no batch enqueue")
+		}
+		mustEnqueue(t, s, t.Context(), rec("taken"))
+		// All or nothing is the whole safety argument: the caller falls back to
+		// the per-record loop after a failure, and would double-enqueue
+		// anything a partial batch had already written.
+		if _, err := b.EnqueueNodes(t.Context(), []core.JobRecord{rec("fresh1"), rec("taken"), rec("fresh2")}); err == nil {
+			t.Fatal("EnqueueNodes with a duplicate id returned no error")
+		}
+		for _, id := range []string{"fresh1", "fresh2"} {
+			if _, err := s.Get(t.Context(), id); !errors.Is(err, core.ErrNotFound) {
+				t.Errorf("%s exists after a failed batch: err=%v — the batch was not atomic", id, err)
+			}
+		}
+	})
+
+	t.Run("DuplicateWithinBatchWritesNothing", func(t *testing.T) {
+		s := mk(t)
+		b, ok := s.(core.NodeBatchEnqueuer)
+		if !ok {
+			t.Skip("store has no batch enqueue")
+		}
+		if _, err := b.EnqueueNodes(t.Context(), []core.JobRecord{rec("x"), rec("y"), rec("x")}); err == nil {
+			t.Fatal("EnqueueNodes with a repeated id returned no error")
+		}
+		for _, id := range []string{"x", "y"} {
+			if _, err := s.Get(t.Context(), id); !errors.Is(err, core.ErrNotFound) {
+				t.Errorf("%s exists after a batch holding a repeat: err=%v", id, err)
+			}
+		}
+	})
 }

@@ -80,6 +80,37 @@ func (m *Memory) Enqueue(_ context.Context, rec core.JobRecord) error {
 	return m.enqueueLocked(rec)
 }
 
+// EnqueueNodes is core.NodeBatchEnqueuer over the in-memory store: the same
+// all-or-nothing contract as the Postgres one, so the conformance suite can
+// hold both to it. Every record is checked before any is written, because a
+// caller that falls back after a partial write would enqueue some of them
+// twice.
+func (m *Memory) EnqueueNodes(_ context.Context, recs []core.JobRecord) (int, error) {
+	if len(recs) == 0 {
+		return 0, nil
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	seen := make(map[string]struct{}, len(recs))
+	for _, r := range recs {
+		if _, exists := m.records[r.ID]; exists {
+			return 0, core.ErrConflict
+		}
+		// A duplicate WITHIN the batch would pass the check above and then
+		// overwrite its twin, so the returned count would be a lie.
+		if _, dup := seen[r.ID]; dup {
+			return 0, core.ErrConflict
+		}
+		seen[r.ID] = struct{}{}
+	}
+	for _, r := range recs {
+		if err := m.enqueueLocked(r); err != nil {
+			return 0, err
+		}
+	}
+	return len(recs), nil
+}
+
 func (m *Memory) enqueueLocked(rec core.JobRecord) error {
 	if _, exists := m.records[rec.ID]; exists {
 		return core.ErrConflict

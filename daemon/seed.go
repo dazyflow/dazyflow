@@ -33,7 +33,7 @@ func enqueueReadyDependents(ctx context.Context, store core.JobStore, graph core
 			dependents[e.To] = struct{}{}
 		}
 	}
-	var queued int
+	var ready []core.JobRecord
 	for nodeID := range dependents {
 		if _, owned := bodyOwners[nodeID]; owned {
 			continue
@@ -41,7 +41,7 @@ func enqueueReadyDependents(ctx context.Context, store core.JobStore, graph core
 		if !allPredsSucceeded(ctx, store, graph, graphRunID, nodeID) {
 			continue
 		}
-		rec := core.JobRecord{
+		ready = append(ready, core.JobRecord{
 			ID:         NodeJobID(graphRunID, nodeID),
 			Kind:       core.JobKindNode,
 			GraphRunID: graphRunID,
@@ -50,7 +50,16 @@ func enqueueReadyDependents(ctx context.Context, store core.JobStore, graph core
 			Tenant:     graph.Tenant,
 			Workspace:  graph.Workspace,
 			Job:        core.Job{GraphID: graph.ID, NodeID: nodeID},
-		}
+		})
+	}
+	// One write for the whole fan-out where the store can. On anything but
+	// success nothing was written, so the loop below still runs and still
+	// decides per record.
+	if n, ok := core.TryEnqueueNodes(ctx, store, ready); ok {
+		return n
+	}
+	var queued int
+	for _, rec := range ready {
 		// Idempotent: conflict means another path enqueued this node
 		// first, which is fine.
 		if err := store.Enqueue(ctx, rec); err == nil {
@@ -382,6 +391,7 @@ func dispatchRoots(
 	for _, e := range g.Edges {
 		hasIncoming[e.To] = true
 	}
+	var roots []core.JobRecord
 	for _, node := range g.Nodes {
 		if hasIncoming[node.ID] {
 			continue
@@ -389,7 +399,7 @@ func dispatchRoots(
 		if _, isSeed := seededNodeIDs[node.ID]; isSeed {
 			continue
 		}
-		nodeRec := core.JobRecord{
+		roots = append(roots, core.JobRecord{
 			ID:         NodeJobID(graphRunID, node.ID),
 			Kind:       core.JobKindNode,
 			GraphRunID: graphRunID,
@@ -398,12 +408,21 @@ func dispatchRoots(
 			Tenant:     g.Tenant,
 			Workspace:  g.Workspace,
 			Job:        core.Job{GraphID: g.ID, NodeID: node.ID},
+		})
+	}
+	// One write for every root where the store can. The loop is still the
+	// fallback, and still the only thing that can say WHICH root failed —
+	// which matters here, because the caller fails the run on an enqueue error.
+	if n, ok := core.TryEnqueueNodes(ctx, store, roots); ok {
+		queued = n
+	} else {
+		for _, nodeRec := range roots {
+			if err := store.Enqueue(ctx, nodeRec); err != nil {
+				enqueueErrs = append(enqueueErrs, fmt.Errorf("root %q: %w", nodeRec.NodeID, err))
+				continue
+			}
+			queued++
 		}
-		if err := store.Enqueue(ctx, nodeRec); err != nil {
-			enqueueErrs = append(enqueueErrs, fmt.Errorf("root %q: %w", node.ID, err))
-			continue
-		}
-		queued++
 	}
 	for seedID := range seededNodeIDs {
 		queued += enqueueReadyDependents(ctx, store, g, graphRunID, seedID)

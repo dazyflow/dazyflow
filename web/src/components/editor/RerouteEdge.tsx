@@ -3,6 +3,7 @@
 
 import { BaseEdge, getBezierPath, useReactFlow, type EdgeProps } from "@xyflow/react";
 import {
+  memo,
   useCallback,
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
@@ -71,7 +72,7 @@ function distToSeg(p: WP, a: WP, b: WP): number {
   return (p.x - cx) ** 2 + (p.y - cy) ** 2;
 }
 
-export function RerouteEdge({
+function RerouteEdgeImpl({
   id,
   source,
   target,
@@ -211,3 +212,9 @@ export function RerouteEdge({
     </g>
   );
 }
+
+// Memoised: React Flow renders one of these per wire, and FlowEditor hands
+// <ReactFlow> a freshly spread `nodes` array on every render — so without this
+// every wire re-rendered on every keystroke and every drag frame, whatever its
+// own props said. Measured at 60 steps: 118 edge renders per character typed.
+export const RerouteEdge = memo(RerouteEdgeImpl);
