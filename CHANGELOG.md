@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.37.3] - 2026-09-06
+
 ### Performance
 
 - **Starting a run queues all its ready steps in one write.** A flow whose
