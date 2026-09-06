@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.37.2] - 2026-09-06
+
 ### Performance
 
 - **Listing a workspace's flows no longer decodes every step's configuration.**
