@@ -216,7 +216,8 @@ const PRODUCT_NAMES = new Set([
   "JavaScript", "Klarna", "MySQL", "Node.js", "Notion", "Ollama", "Open-Meteo",
   "OpenStreetMap", "OpenWeather", "PowerPoint (.pptx)", "PowerShell",
   "Postgres", "Python", "Python 3", "Roaring", "SMHI", "SQLite", "Slack",
-  "Spotify", "Stripe", "Twilio", "Word (.docx)", "bash", "nShift", "ntfy",
+  "Spotify", "Stripe", "Ticketmaster", "Twilio", "Word (.docx)", "bash",
+  "nShift", "ntfy",
 ]);
 
 // 2. The same word in Swedish. Loanwords Swedish uses unchanged, formats and
@@ -224,7 +225,8 @@ const PRODUCT_NAMES = new Set([
 //    "Svenska", which is already Swedish.
 const SAME_WORD = new Set([
   "A", "A < B", "A = B", "A > B", "A ≠ B", "A ≤ B", "A ≥ B", "B", "Base64",
-  "CSV", "Data", "Diff", "EUR — Euro", "Format", "HTML", "HTTP", "Hash", "Hex",
+  "CSV", "Data", "Diff", "EUR — Euro", "Film", "Format", "HTML", "HTTP", "Hash",
+  "Hex",
   "JSON", "Kelvin (K, m/s)", "MD5", "MQTT", "Metadata", "PDF", "Port",
   "Prompt", "QoS", "Regex", "Region", "SFTP", "SHA-1", "SHA-256", "SHA-512",
   "SQL", "Server", "Standard", "Start", "Status", "Svenska", "Test", "Text",

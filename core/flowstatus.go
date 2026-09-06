@@ -111,7 +111,8 @@ var EventTriggerModules = map[string]bool{
 func IsTriggerModule(module string) bool {
 	switch module {
 	case WebhookInputModule, FormInputModule, RequestInputModule,
-		"cron_trigger", "poll_trigger", "google_form_trigger":
+		"cron_trigger", "poll_trigger", "google_form_trigger",
+		"ticketmaster_on_new_event":
 		return true
 	}
 	return EventTriggerModules[module]
@@ -148,7 +149,7 @@ func classifyTriggers(g Graph) (hasScheduler, hasWebhook, hasEvent bool) {
 			if expr, _ := n.Params["cron"].(string); strings.TrimSpace(expr) != "" {
 				hasScheduler = true
 			}
-		case "poll_trigger", "google_form_trigger":
+		case "poll_trigger", "google_form_trigger", "ticketmaster_on_new_event":
 			if secs, ok := paramInt(n.Params, "interval_seconds"); ok && secs > 0 && secs <= MaxPollIntervalSeconds {
 				hasScheduler = true
 			}

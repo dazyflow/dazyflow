@@ -5099,6 +5099,103 @@
       "YAML"
     ]
   },
+  "ticketmaster_on_new_event": {
+    "description": "Watches a Ticketmaster search and starts the flow when an event appears in it that this step hasn't seen before — a tour date announced, a second night added. The new events come out as a list, ready for For each.\n\nThe first check after you publish learns what's already on sale and fires nothing, so you aren't paged about a hundred existing events. After that, only genuinely new ones fire.\n\nTicketmaster has no webhooks, so this polls. Announcements happen on a daily rhythm and the free key allows 5000 calls a day, so once a day is the right setting and the default.",
+    "ports": [
+      "Count",
+      "New events",
+      "Time"
+    ],
+    "label": "Ticketmaster",
+    "subtitle": "When an event is announced",
+    "integration": "Ticketmaster",
+    "titles": [
+      "Attraction ID",
+      "Check every",
+      "City",
+      "Country",
+      "From",
+      "Kind of event",
+      "Max results",
+      "Search for",
+      "Until"
+    ],
+    "help": [
+      "Artist, team or event name to search for — e.g. \"Robyn\". Leave empty to list everything matching the other filters.",
+      "City to search in — e.g. Stockholm. Combine with the country code for the tightest result.",
+      "Hard deadline for the request, in milliseconds.",
+      "How many events each check looks at. Raise it if the watched search has more results than this — anything past the cut is never seen.",
+      "How often to check once the flow is published. Daily is right for announcements and kind to the 5000-a-day quota. Leave blank to only check when you press Run (for testing).",
+      "Only events starting after this. Takes a date (2026-10-01), a full timestamp, or a relative form like now or +7d. Empty means from now on.",
+      "Only events starting before this. Takes the same forms as From — e.g. +90d for the next three months.",
+      "Override the API host (testing).",
+      "Restrict to one kind of event. Empty means all of them.",
+      "Ticketmaster's own id for one artist or team (e.g. K8vZ9171C-f). More exact than a name search when you have it.",
+      "Two-letter country code to search in — SE, NO, DK, FI, GB, US. Strongly recommended: without it the search is worldwide."
+    ],
+    "enum_names": [
+      "Anything",
+      "Arts \u0026 theatre",
+      "Film",
+      "Music",
+      "Other",
+      "Sports"
+    ],
+    "connection": [
+      "API key",
+      "The Consumer Key of an app created at developer.ticketmaster.com. The free tier allows 5000 calls a day."
+    ]
+  },
+  "ticketmaster_search_events": {
+    "description": "Search Ticketmaster for live events and get one row each: what it is, which artist, the venue and city, the date, and a link to the tickets. Filter by artist or team, by country and city, and by a date window.\n\nPair it with Spotify · Followed artists to turn someone's listening into a gig list: loop over the artists, search each name, and mail or post what comes back.\n\nThis searches Ticketmaster's own inventory — Ticketmaster, TicketWeb, Universe and resale. A club show sold somewhere else won't be in it.",
+    "ports": [
+      "Count",
+      "Details",
+      "Events found",
+      "Pass-through",
+      "Search for",
+      "Total found"
+    ],
+    "label": "Ticketmaster",
+    "subtitle": "Search events",
+    "integration": "Ticketmaster",
+    "titles": [
+      "Attraction ID",
+      "City",
+      "Country",
+      "From",
+      "Kind of event",
+      "Max results",
+      "Page",
+      "Search for",
+      "Until"
+    ],
+    "help": [
+      "Artist, team or event name to search for — e.g. \"Robyn\". Leave empty to list everything matching the other filters.",
+      "City to search in — e.g. Stockholm. Combine with the country code for the tightest result.",
+      "Hard deadline for the request, in milliseconds.",
+      "How many events to return at most (Ticketmaster caps a page at 200).",
+      "Only events starting after this. Takes a date (2026-10-01), a full timestamp, or a relative form like now or +7d. Empty means from now on.",
+      "Only events starting before this. Takes the same forms as From — e.g. +90d for the next three months.",
+      "Override the API host (testing).",
+      "Restrict to one kind of event. Empty means all of them.",
+      "Ticketmaster's own id for one artist or team (e.g. K8vZ9171C-f). More exact than a name search when you have it.",
+      "Two-letter country code to search in — SE, NO, DK, FI, GB, US. Strongly recommended: without it the search is worldwide.",
+      "Zero-based page number. Ticketmaster stops paging at the 1000th result."
+    ],
+    "enum_names": [
+      "Anything",
+      "Arts \u0026 theatre",
+      "Film",
+      "Music",
+      "Other",
+      "Sports"
+    ],
+    "connection": [
+      "API key",
+      "The Consumer Key of an app created at developer.ticketmaster.com. The free tier allows 5000 calls a day."
+    ]
+  },
   "twilio_send_sms": {
     "description": "Send an SMS via Twilio. The recipient ('To') and message ('Body') can be typed on the step or connected from an earlier step (the matching input port overrides the param). Send from one of your Twilio numbers ('From', in E.164 like +15551234567) or set a Messaging Service SID instead. Connect your Twilio account once on the Apps page.",
     "ports": [

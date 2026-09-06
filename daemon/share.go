@@ -467,7 +467,7 @@ func nextScheduledFire(g core.Graph, now time.Time) *time.Time {
 			if sched, err := parseCronInTZ(cronValidator, expr, tz); err == nil {
 				consider(sched.Next(now))
 			}
-		case "poll_trigger", "google_form_trigger":
+		case "poll_trigger", "google_form_trigger", "ticketmaster_on_new_event":
 			secs := paramSeconds(node.Params, "interval_seconds")
 			if secs <= 0 || secs > core.MaxPollIntervalSeconds {
 				continue

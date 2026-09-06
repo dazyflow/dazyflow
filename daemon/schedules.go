@@ -109,7 +109,7 @@ func (s *Service) ListSchedules(ctx context.Context, p core.Principal, tenant, w
 					}
 				}
 				out = append(out, e)
-			case "poll_trigger", "google_form_trigger":
+			case "poll_trigger", "google_form_trigger", "ticketmaster_on_new_event":
 				secs := paramSeconds(node.Params, "interval_seconds")
 				if secs <= 0 || secs > core.MaxPollIntervalSeconds {
 					continue

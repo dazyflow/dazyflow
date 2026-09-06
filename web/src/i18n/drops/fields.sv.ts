@@ -306,6 +306,16 @@ export const SV_FIELD_TITLES: Record<string, string> = {
   "When to use it": "När man använder det",
   "Where": "Var",
   "Which channels": "Vilka kanaler",
+  "Attraction ID":
+    "Attraktions-ID",
+  "City":
+    "Stad",
+  "Kind of event":
+    "Typ av evenemang",
+  "Search for":
+    "Sök efter",
+  "Until":
+    "Till",
 };
 
 // Per-field help text, shown behind the (i) on a field.
@@ -817,6 +827,28 @@ export const SV_FIELD_HELP: Record<string, string> = {
     "Hur många artister som som mest ska hämtas (Spotify tillåter högst 50).",
   "Which connected Spotify account to use (for multiple connections).":
     "Vilket anslutet Spotify-konto som ska användas (om du har flera anslutningar).",
+  "Artist, team or event name to search for — e.g. \"Robyn\". Leave empty to list everything matching the other filters.":
+    "Artist, lag eller evenemangsnamn att söka efter — t.ex. \"Robyn\". Lämna tomt för att lista allt som matchar övriga filter.",
+  "City to search in — e.g. Stockholm. Combine with the country code for the tightest result.":
+    "Stad att söka i — t.ex. Stockholm. Kombinera med landskoden för smalast träfflista.",
+  "How many events each check looks at. Raise it if the watched search has more results than this — anything past the cut is never seen.":
+    "Hur många evenemang varje kontroll tittar på. Höj värdet om den bevakade sökningen ger fler träffar än så — allt bortom gränsen syns aldrig.",
+  "How many events to return at most (Ticketmaster caps a page at 200).":
+    "Hur många evenemang som som mest ska hämtas (Ticketmaster tillåter högst 200 per sida).",
+  "How often to check once the flow is published. Daily is right for announcements and kind to the 5000-a-day quota. Leave blank to only check when you press Run (for testing).":
+    "Hur ofta det ska kontrolleras när flödet är publicerat. En gång om dygnet passar annonseringar och är snällt mot kvoten på 5000 anrop per dygn. Lämna tomt för att bara kontrollera när du trycker Kör (för test).",
+  "Only events starting after this. Takes a date (2026-10-01), a full timestamp, or a relative form like now or +7d. Empty means from now on.":
+    "Bara evenemang som börjar efter detta. Tar ett datum (2026-10-01), en fullständig tidsstämpel, eller en relativ form som now eller +7d. Tomt betyder från och med nu.",
+  "Only events starting before this. Takes the same forms as From — e.g. +90d for the next three months.":
+    "Bara evenemang som börjar före detta. Tar samma former som Från — t.ex. +90d för de närmaste tre månaderna.",
+  "Restrict to one kind of event. Empty means all of them.":
+    "Begränsa till en typ av evenemang. Tomt betyder alla.",
+  "Ticketmaster's own id for one artist or team (e.g. K8vZ9171C-f). More exact than a name search when you have it.":
+    "Ticketmasters eget id för en artist eller ett lag (t.ex. K8vZ9171C-f). Mer exakt än en namnsökning när du har det.",
+  "Two-letter country code to search in — SE, NO, DK, FI, GB, US. Strongly recommended: without it the search is worldwide.":
+    "Tvåbokstavig landskod att söka i — SE, NO, DK, FI, GB, US. Rekommenderas starkt: utan den söker steget över hela världen.",
+  "Zero-based page number. Ticketmaster stops paging at the 1000th result.":
+    "Sidnummer som börjar på noll. Ticketmaster slutar bläddra vid den 1000:e träffen.",
 };
 
 // Dropdown option labels (schema.enumNames), including the currency list.
@@ -1102,6 +1134,16 @@ export const SV_ENUM_LABELS: Record<string, string> = {
   "Yes/No": "Ja/Nej",
   "ZAR — South African Rand": "ZAR — Sydafrikansk rand",
   "ZMW — Zambian Kwacha": "ZMW — Zambisk kwacha",
+  "Anything":
+    "Allt",
+  "Arts & theatre":
+    "Konst och teater",
+  "Music":
+    "Musik",
+  "Other":
+    "Övrigt",
+  "Sports":
+    "Sport",
 };
 
 // Connection-field labels and help on the Apps pages. Placeholders and
@@ -1176,6 +1218,8 @@ export const SV_CONNECTION_TEXT: Record<string, string> = {
   "tk_… (for protected topics)": "tk_… (för skyddade ämnen)",
   "usually your email address": "oftast din e-postadress",
   "From the 46elks dashboard.": "Från 46elks kontrollpanel.",
+  "The Consumer Key of an app created at developer.ticketmaster.com. The free tier allows 5000 calls a day.":
+    "Consumer Key för en app skapad på developer.ticketmaster.com. Den kostnadsfria nivån tillåter 5000 anrop per dygn.",
 };
 
 // The "keeps state" chip and its reset explanation on a node card.

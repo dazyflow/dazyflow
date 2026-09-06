@@ -230,6 +230,15 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     docs_url: "https://developer.spotify.com/documentation/web-api",
     brand_logo: "/brands/spotify.svg",
   },
+  ticketmaster: {
+    name: "Ticketmaster",
+    description:
+      "Search live events — concerts, matches, shows — by artist, city and date, and get one tidy row each with the venue, the date and a link to the tickets. Or watch a search and let the flow tell you when something new is announced: a tour date, a second night, a support slot. Pair it with Spotify to turn the artists someone follows into a gig list that keeps itself up to date.",
+    technical_notes:
+      "Ticketmaster's Discovery API v2, authenticated with the Consumer Key of an app created at developer.ticketmaster.com. The key is a query parameter rather than a header, which is Ticketmaster's design, so no error message from these steps ever quotes the request URL. The free tier is 5000 calls a day at 5 a second, shared by every flow using the key — which is why the watch step defaults to checking once a day, and why watching a long artist list is better built as Schedule → For each → Search events than as many watch steps.\n\nCoverage is Ticketmaster's own inventory — Ticketmaster, TicketWeb, Universe, Frontgate and resale. Strong across the Nordics, where Ticketmaster sells most arena and festival tickets; a club show sold through DICE, Tickster or Billetto will not appear, and no query will make it.\n\nThere are no webhooks, so the watch step polls and remembers the event ids it has already reported (per flow and step, in the encrypted cursor store, capped at the most recent 1000). The first check after publishing records what is already on sale without firing, so switching a watch on doesn't announce a hundred events that were already there.",
+    docs_url:
+      "https://developer.ticketmaster.com/products-and-docs/apis/discovery-api/v2/",
+  },
   stripe: {
     name: "Stripe",
     description:

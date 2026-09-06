@@ -53,6 +53,7 @@ import (
 	_ "github.com/dazyflow/dazyflow/drops/smhi"
 	_ "github.com/dazyflow/dazyflow/drops/spotify"
 	_ "github.com/dazyflow/dazyflow/drops/stripe"
+	_ "github.com/dazyflow/dazyflow/drops/ticketmaster"
 	_ "github.com/dazyflow/dazyflow/drops/transform"
 	_ "github.com/dazyflow/dazyflow/drops/trigger"
 	_ "github.com/dazyflow/dazyflow/drops/trigger/gform"

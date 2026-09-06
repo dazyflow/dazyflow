@@ -25,6 +25,24 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
   which is fine for a household or a small team and fatal for anything wider.
   Spotify also has no webhooks, so anything event-shaped polls.
 
+- **Ticketmaster.** Search live events by artist, city and date — one row each
+  with the venue, the date and a link to the tickets — and a **When an event is
+  announced** trigger that watches a search and fires only on what it hasn't
+  reported before. Connect it with a Discovery API key on the Apps page; the
+  free tier allows 5000 calls a day.
+
+  This is what makes the Spotify watch list worth keeping: Schedule → Followed
+  artists → For each → Search events → notify. Ticketmaster has no webhooks, so
+  the trigger polls, and it defaults to once a day — announcements happen on a
+  daily rhythm and the quota is shared by every flow using the key. The first
+  check after publishing records what is already on sale without firing, so
+  switching a watch on doesn't announce a hundred events that were already
+  there.
+
+  Coverage is Ticketmaster's own inventory (Ticketmaster, TicketWeb, Universe,
+  Frontgate, resale) — strong across the Nordics. A club show sold through
+  DICE, Tickster or Billetto will not appear.
+
 ## [0.38.0] - 2026-09-06
 
 ### Changed

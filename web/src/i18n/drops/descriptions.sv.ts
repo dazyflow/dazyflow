@@ -717,6 +717,14 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     en: "02a7e5ff",
     sv: "Dirigerar nyttolasten på `in` till en av N fallportar genom att matcha en nyckel mot varje falls värde. Parametern `cases` är en ordnad lista med {slot, equals} — det FÖRSTA fallet vars värde matchar nyckeln vinner, och hela nyttolasten går ut på den utgången; en nyckel som inte matchar något fall går till `default`. Matcha hela indatat, eller ett fält i det med parametern `field`. Ett `equals` som är en lista matchar om nyckeln är lika med något element (som Jämförs one_of). Flervalssyskonet till Förgrening — ta det i stället för att kedja Förgreningar när du ska dela upp en nyttolast på status/enum/kategori.",
   },
+  ticketmaster_on_new_event: {
+    en: "e916ca6d",
+    sv: "Bevakar en sökning hos Ticketmaster och startar flödet när ett evenemang dyker upp som steget inte har sett förut — ett turnédatum som annonseras, en extrakväll som läggs till. De nya evenemangen kommer ut som en lista, redo för För varje.\n\nDen första kontrollen efter att du publicerat lär sig vad som redan är släppt och utlöser ingenting, så du blir inte larmad om hundra befintliga evenemang. Därefter är det bara genuint nya som utlöser.\n\nTicketmaster har inga webhooks, så det här pollar. Annonseringar sker i dygnsrytm och den kostnadsfria nyckeln tillåter 5000 anrop per dygn, så en gång om dygnet är rätt inställning och även standard.",
+  },
+  ticketmaster_search_events: {
+    en: "2bc21c83",
+    sv: "Sök efter liveevenemang hos Ticketmaster och få en rad var: vad det är, vilken artist, vilken lokal och stad, datumet, och en länk till biljetterna. Filtrera på artist eller lag, på land och stad, och på ett datumfönster.\n\nKombinera med Spotify · Följda artister för att göra någons lyssnande till en spellista över konserter: loopa över artisterna, sök på varje namn, och mejla eller posta det som kommer tillbaka.\n\nDet här söker i Ticketmasters eget utbud — Ticketmaster, TicketWeb, Universe och andrahandsförsäljning. En klubbspelning som säljs någon annanstans finns inte med.",
+  },
   text: {
     en: "9081444e",
     sv: "Skickar ut ett fast textvärde. Parametern 'text' kan vara flera rader; senare steg ser det som text/plain på porten 'out'. Sätt 'Skrivet i' till ett språk så blir rutan en kodredigerare — fast bredd, färgad syntax, och den slutar radbryta långa rader — vilket är så du håller en SQL-fråga, ett skalskript eller en bit YAML i ett flöde. Det är fortfarande en vanlig sträng på vägen ut; det är JSON-steget som tolkar.",

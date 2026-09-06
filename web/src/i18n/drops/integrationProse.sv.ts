@@ -333,6 +333,14 @@ export const SV_INTEGRATION_PROSE: DescriptionMap = {
     en: "925a9244",
     sv: "Åtgärderna autentiseras med din hemliga Stripe-nyckel, som anges en gång som Stripe-anslutningen på den här sidan (lagras krypterad som conn.stripe.api_key) och matas in vid körning — ingen nyckel på steget eller i flödet. Triggrarna för betalning, misslyckad betalning och avslutad prenumeration är Stripe-webhooks: peka en ändpunkt på /api/v1/events/stripe/<tenant>, prenumerera på motsvarande händelser (payment_intent.succeeded, payment_intent.payment_failed, customer.subscription.deleted) och spara ändpunktens signeringshemlighet (whsec_…) som STRIPE_WEBHOOK_SECRET — varje leverans Stripe-Signature verifieras mot den. Föredrar du pollning framför webhooks? Bygg Schema → Lista händelser i stället.",
   },
+  "ticketmaster.description": {
+    en: "23474d45",
+    sv: "Sök efter liveevenemang — konserter, matcher, föreställningar — på artist, stad och datum, och få en prydlig rad var med lokalen, datumet och en länk till biljetterna. Eller bevaka en sökning och låt flödet säga till när något nytt annonseras: ett turnédatum, en extrakväll, ett förband. Kombinera med Spotify för att göra artisterna någon följer till en konsertlista som håller sig uppdaterad av sig själv.",
+  },
+  "ticketmaster.technical_notes": {
+    en: "45d86077",
+    sv: "Ticketmasters Discovery API v2, autentiserat med Consumer Key för en app skapad på developer.ticketmaster.com. Nyckeln skickas som frågeparameter i stället för som rubrik, vilket är Ticketmasters egen utformning, så inget felmeddelande från de här stegen återger någonsin anrops-URL:en. Den kostnadsfria nivån är 5000 anrop per dygn och 5 per sekund, delade av alla flöden som använder nyckeln — därför kontrollerar bevakningssteget en gång om dygnet som standard, och därför byggs bevakning av en lång artistlista hellre som Schema → För varje → Sök evenemang än som många bevakningssteg.\n\nTäckningen är Ticketmasters eget utbud — Ticketmaster, TicketWeb, Universe, Frontgate och andrahandsförsäljning. Stark i Norden, där Ticketmaster säljer merparten av arena- och festivalbiljetterna; en klubbspelning som säljs via DICE, Tickster eller Billetto dyker inte upp, och ingen sökning får den att göra det.\n\nDet finns inga webhooks, så bevakningssteget pollar och kommer ihåg de evenemangs-id:n det redan rapporterat (per flöde och steg, i den krypterade markörlagringen, begränsat till de senaste 1000). Den första kontrollen efter publicering registrerar vad som redan är släppt utan att utlösa, så att slå på en bevakning annonserar inte hundra evenemang som redan fanns.",
+  },
   "twilio.description": {
     en: "43d2e415",
     sv: "Skicka SMS till vilken telefon som helst, direkt från ett flöde. Ta det när en avisering behöver landa i någons ficka — ett \"ordern är skickad\" eller en tidspåminnelse till en kund, en verifieringskod, ett jourlarm, eller ett tips i samma stund en trigger utlöses.",

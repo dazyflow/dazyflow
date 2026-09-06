@@ -150,10 +150,11 @@ func DeriveScheduleSpecs(parser cron.Parser, tenant, workspace string, g core.Gr
 				TZ:        tz,
 			})
 
-		// google_form_trigger uses the identical interval mechanism: the
-		// scheduler fires the graph on the node's interval, and the node
-		// fetches responses since its stored cursor at execute time.
-		case "poll_trigger", "google_form_trigger":
+		// google_form_trigger and ticketmaster_on_new_event use the identical
+		// interval mechanism: the scheduler fires the graph on the node's
+		// interval, and the node reads what is new since its stored cursor at
+		// execute time.
+		case "poll_trigger", "google_form_trigger", "ticketmaster_on_new_event":
 			secs := paramSeconds(node.Params, "interval_seconds")
 			if secs == 0 {
 				continue // unset — runs only on manual Run

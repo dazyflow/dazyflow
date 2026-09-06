@@ -162,12 +162,13 @@ func TestEventTriggerModulesMatchCatalog(t *testing.T) {
 	// The trigger modules that fire some other way and are handled explicitly
 	// by classifyTriggers.
 	notEvents := map[string]bool{
-		"cron_trigger":        true, // scheduler
-		"poll_trigger":        true, // scheduler
-		"google_form_trigger": true, // scheduler (interval)
-		"webhook_input":       true, // inbound HTTP, checked for a secret/form
-		"request_input":       true, // inbound HTTP that waits for a Reply, checked for a secret
-		"form_input":          true, // the hosted form; its presence is the opt-in
+		"cron_trigger":              true, // scheduler
+		"poll_trigger":              true, // scheduler
+		"google_form_trigger":       true, // scheduler (interval)
+		"ticketmaster_on_new_event": true, // scheduler (interval)
+		"webhook_input":             true, // inbound HTTP, checked for a secret/form
+		"request_input":             true, // inbound HTTP that waits for a Reply, checked for a secret
+		"form_input":                true, // the hosted form; its presence is the opt-in
 	}
 	var missing []string
 	for id, m := range engine.Default.Manifests() {
