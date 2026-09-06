@@ -4447,6 +4447,32 @@
       "CEL expression that must return a bool. Rows where it's true land on 'matched', false on 'unmatched'."
     ]
   },
+  "spotify_followed_artists": {
+    "description": "Read the artists the connected Spotify account follows. Each artist comes out as a simple record — name, genres, id and a link to open it in Spotify — ready to loop over with For each, log to a sheet, or use as the watch list for a 'tell me when they play near me' flow.\n\nThe list is paged: ask for up to 50 at a time and thread the 'Next cursor' output back into the 'After ID' input to walk the rest.",
+    "ports": [
+      "After ID",
+      "Artists",
+      "Details",
+      "Has more",
+      "Next cursor",
+      "Pass-through"
+    ],
+    "label": "Spotify",
+    "subtitle": "Followed artists",
+    "integration": "Spotify",
+    "titles": [
+      "Account",
+      "After id",
+      "Max results"
+    ],
+    "help": [
+      "Artist id to continue from — the previous run's 'Next cursor'. Overridden by the 'After ID' input when connected. Leave empty to start at the beginning.",
+      "Hard deadline for the request, in milliseconds.",
+      "How many artists to return at most (Spotify caps this at 50).",
+      "Override the API host (testing).",
+      "Which connected Spotify account to use (for multiple connections)."
+    ]
+  },
   "sqlite_insert_rows": {
     "description": "Save rows into a database file kept in your workspace — no server, connection string, or setup needed (this is the easy database; use Postgres/MySQL only if you already have one). The table is auto-created from the row shape by default; flip create_table off if you've already set up a schema you don't want overwritten.",
     "ports": [

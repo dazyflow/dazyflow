@@ -10,6 +10,21 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Added
+
+- **Spotify.** Connect a Spotify account under Apps and read the artists it
+  follows — name, genres, id and a link each, paged with a cursor. The natural
+  use is as a watch list a flow keeps up to date by itself instead of by hand:
+  loop over it, log it, or check it against a concert search.
+
+  Read the setup help before wiring anything to it. A Spotify app stays in
+  **development mode** unless its owner is a registered business with 250k
+  monthly users, and development mode allows **5 listeners**, each allowlisted
+  by hand in Spotify's dashboard, with Premium required for the app owner.
+  That ceiling is Spotify's, not Dazyflow's, and there is no way around it —
+  which is fine for a household or a small team and fatal for anything wider.
+  Spotify also has no webhooks, so anything event-shaped polls.
+
 ## [0.38.0] - 2026-09-06
 
 ### Changed

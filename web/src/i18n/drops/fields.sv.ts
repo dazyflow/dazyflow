@@ -811,6 +811,12 @@ export const SV_FIELD_HELP: Record<string, string> = {
   "map of parent input port → child step ID (the step receives the Ref as its only input)": "tabell över förälderns ingång → steg-ID i barnflödet (steget får referensen som sitt enda indata)",
   "map of parent output port → {node, port} in the child": "tabell över förälderns utgång → {node, port} i barnflödet",
   "standard Base64, or the URL-safe alphabet (- and _ instead of + and /).": "vanlig Base64, eller det URL-säkra alfabetet (- och _ i stället för + och /).",
+  "Artist id to continue from — the previous run's 'Next cursor'. Overridden by the 'After ID' input when connected. Leave empty to start at the beginning.":
+    "Artist-id att fortsätta från — föregående körnings Nästa markör. Ingången After ID vinner över detta när den är kopplad. Lämna tomt för att börja från början.",
+  "How many artists to return at most (Spotify caps this at 50).":
+    "Hur många artister som som mest ska hämtas (Spotify tillåter högst 50).",
+  "Which connected Spotify account to use (for multiple connections).":
+    "Vilket anslutet Spotify-konto som ska användas (om du har flera anslutningar).",
 };
 
 // Dropdown option labels (schema.enumNames), including the currency list.

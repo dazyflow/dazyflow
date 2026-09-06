@@ -134,6 +134,21 @@ var KnownOAuthProviderDefaults = []OAuthProviderDefault{
 		TokenAuthStyle: "basic",
 		SetupHelp:      "Create an app in the Fortnox Developer Portal (developer.fortnox.se); copy its Client ID and Client Secret and add the daemon's /api/v1/oauth/fortnox/callback URL as the redirect URI.",
 	},
+	{
+		Name:         "spotify",
+		DisplayName:  "Spotify",
+		AuthorizeURL: "https://accounts.spotify.com/authorize",
+		TokenURL:     "https://accounts.spotify.com/api/token",
+		// Scopes are per-capability and cover the shipped drops only; widen
+		// as the connector grows (playlist-*, user-library-*, user-read-*).
+		Scopes: []string{"user-follow-read"},
+		// Spotify's token endpoint wants client_secret_basic, like Fortnox.
+		TokenAuthStyle: "basic",
+		// The user cap is the fact that decides whether Spotify is usable at
+		// all here, and it is invisible in the dashboard until a sixth person
+		// fails to connect, so it goes in front of the operator up front.
+		SetupHelp: "Create an app at developer.spotify.com/dashboard; add the daemon's /api/v1/oauth/spotify/callback URL as a redirect URI. A Spotify app stays in development mode unless its owner qualifies for extended quota (a registered business with 250k monthly users), which means at most 5 listeners — each allowlisted by hand in the dashboard — and the app owner needs Spotify Premium.",
+	},
 }
 
 // googleScopeGroups maps a connector's Integration label (Manifest.Integration)

@@ -95,6 +95,10 @@ const oauthProviderMeta: Record<string, OAuthProviderMeta> = {
     name: "Fortnox",
     brand_logo: "/brands/fortnox.svg",
   },
+  spotify: {
+    name: "Spotify",
+    brand_logo: "/brands/spotify.svg",
+  },
 };
 
 // integrationToProvider maps an integration slug (Manifest.integration,
@@ -112,6 +116,7 @@ const integrationToProvider: Record<string, string> = {
   github: "github",
   notion: "notion",
   fortnox: "fortnox",
+  spotify: "spotify",
 };
 
 // oauthProviderForIntegration returns the OAuth provider name for a
@@ -215,6 +220,15 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
       "Fortnox OAuth 2.0 (authorize at apps.fortnox.se/oauth-v1) with per-resource scopes — customer, invoice and companyinformation cover the shipped steps. The token endpoint uses client_secret_basic (credentials in an HTTP Basic header), and refresh tokens rotate on every refresh; the daemon persists the rotated token and refreshes on expiry, so long-running flows keep working — but an account idle past Fortnox's refresh-token window (~31 days) must reconnect. Request and response bodies use Fortnox's singular PascalCase envelope ({\"Customer\":…}, {\"Invoice\":…}). Fortnox has no idempotency key, so the create steps don't auto-retry (a retry would duplicate); and no webhooks, so 'fire on paid invoice' composes as Schedule → List invoices (filter=fullypaid) → For each → dedupe on DocumentNumber.",
     docs_url: "https://www.fortnox.se/developer",
     brand_logo: "/brands/fortnox.svg",
+  },
+  spotify: {
+    name: "Spotify",
+    description:
+      "Read what a connected Spotify account follows. The artists someone follows come out as a plain list of records — name, genres, a link to open each one — so a flow can work from the music they actually listen to instead of a watch list kept by hand: check it against a concert search, log it to a sheet, or mail a weekly digest of what's new.",
+    technical_notes:
+      "Spotify OAuth 2.0 (authorize at accounts.spotify.com), token endpoint client_secret_basic, scope user-follow-read for the shipped step. Access tokens last an hour and refresh automatically, so no step offers a paste-a-token field.\n\nTwo limits decide what is worth building. A Spotify app stays in **development mode** unless its owner qualifies for extended quota — a registered business with a launched service and 250,000 monthly users — and development mode allows at most **5 listeners**, each allowlisted by hand in the Spotify dashboard, with Premium required for the app owner. And Spotify has no webhooks, so anything event-shaped polls: Schedule → Followed artists → For each → dedupe. Quota is counted per developer account (5,000 calls/day, 5/s), so a daily cadence beats an hourly one.\n\nSpotify also withdrew a large part of the API in November 2024 and February 2026 — audio features and analysis, recommendations, related artists, new releases, every batch getter, and the popularity and follower fields — so listening-analysis flows are not buildable on the current API at any quota level.",
+    docs_url: "https://developer.spotify.com/documentation/web-api",
+    brand_logo: "/brands/spotify.svg",
   },
   stripe: {
     name: "Stripe",

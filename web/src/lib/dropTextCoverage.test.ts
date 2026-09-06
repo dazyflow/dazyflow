@@ -216,7 +216,7 @@ const PRODUCT_NAMES = new Set([
   "JavaScript", "Klarna", "MySQL", "Node.js", "Notion", "Ollama", "Open-Meteo",
   "OpenStreetMap", "OpenWeather", "PowerPoint (.pptx)", "PowerShell",
   "Postgres", "Python", "Python 3", "Roaring", "SMHI", "SQLite", "Slack",
-  "Stripe", "Twilio", "Word (.docx)", "bash", "nShift", "ntfy",
+  "Spotify", "Stripe", "Twilio", "Word (.docx)", "bash", "nShift", "ntfy",
 ]);
 
 // 2. The same word in Swedish. Loanwords Swedish uses unchanged, formats and

@@ -63,6 +63,7 @@ import (
 	secretsdrop "github.com/dazyflow/dazyflow/drops/secrets"
 	"github.com/dazyflow/dazyflow/drops/sheets"
 	"github.com/dazyflow/dazyflow/drops/slack"
+	"github.com/dazyflow/dazyflow/drops/spotify"
 	"github.com/dazyflow/dazyflow/drops/stripe"
 	"github.com/dazyflow/dazyflow/drops/trigger/gform"
 	"github.com/dazyflow/dazyflow/engine"
@@ -2671,6 +2672,7 @@ func wireConnectorTokenHooks(reg *daemon.OAuthRegistry) {
 	drive.SetTokenLookup(bind("google"))
 	gform.SetTokenLookup(bind("google"))
 	notion.SetTokenLookup(bind("notion"))
+	spotify.SetTokenLookup(bind("spotify"))
 	fortnox.SetTokenLookup(bind("fortnox"))
 	// Fortnox customer picker: lists the connected account's customers for the
 	// "fortnox-customer" param format (fortnox_create_invoice's customer).

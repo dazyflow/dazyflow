@@ -85,6 +85,14 @@ export const SV_INTEGRATION_PROSE: DescriptionMap = {
     en: "0f749f7f",
     sv: "Fortnox OAuth 2.0 (authorize hos apps.fortnox.se/oauth-v1) med scope per resurs — customer, invoice och companyinformation täcker de steg som finns. Token-ändpunkten använder client_secret_basic (uppgifterna i en HTTP Basic-rubrik), och refresh-tokens roterar vid varje förnyelse; daemonen sparar den roterade token och förnyar vid utgång, så långlivade flöden fortsätter fungera — men ett konto som stått stilla längre än Fortnox fönster för refresh-tokens (~31 dagar) måste anslutas om. Anrop och svar använder Fortnox singulara PascalCase-hölje ({\"Customer\":…}, {\"Invoice\":…}). Fortnox har ingen idempotensnyckel, så skapa-stegen gör inga automatiska omförsök (ett omförsök skulle ge dubbletter); och inga webhooks, så 'utlös vid betald faktura' byggs som Schema → Lista fakturor (filter=fullypaid) → För varje → dubblettrensning på DocumentNumber.",
   },
+  "spotify.description": {
+    en: "d0b8cc59",
+    sv: "Läs vad ett anslutet Spotify-konto följer. Artisterna någon följer kommer ut som en vanlig lista med poster — namn, genrer, en länk att öppna var och en — så att ett flöde kan utgå från musiken de faktiskt lyssnar på i stället för en bevakningslista som förts för hand: stäm av den mot en konsertsökning, logga den till ett kalkylblad, eller mejla ett veckobrev om vad som är nytt.",
+  },
+  "spotify.technical_notes": {
+    en: "ea71769a",
+    sv: "Spotify OAuth 2.0 (authorize hos accounts.spotify.com), token-ändpunkten använder client_secret_basic, och scopet user-follow-read täcker det steg som finns. Access-tokens lever en timme och förnyas automatiskt, så inget steg erbjuder en ruta att klistra in en token i.\n\nTvå gränser avgör vad som är värt att bygga. En Spotify-app stannar i **development mode** om inte ägaren kvalificerar sig för extended quota — ett registrerat företag med en lanserad tjänst och 250 000 månatliga användare — och development mode tillåter som mest **5 lyssnare**, var och en manuellt tillagd i Spotifys dashboard, med Premium som krav för appens ägare. Och Spotify har inga webhooks, så allt som är händelseformat måste pollas: Schema → Följda artister → För varje → dubblettrensning. Kvoten räknas per utvecklarkonto (5 000 anrop/dygn, 5/s), så en daglig takt är bättre än en timvis.\n\nSpotify drog också in en stor del av API:et i november 2024 och februari 2026 — audio features och analysis, rekommendationer, relaterade artister, nya släpp, alla batch-hämtningar, och fälten popularity och followers — så flöden som analyserar lyssnande går inte att bygga på dagens API, oavsett kvot.",
+  },
   "gemini.description": {
     en: "6b44b880",
     sv: "Kör prompter genom Gemini, Googles AI-modell. Använd den på samma sätt som Claude eller ChatGPT — sammanfatta text, klassificera indata, extrahera fält, skriv utkast till svar — när du hellre vill använda en Google-modell, eller redan har en nyckel från Google AI Studio.",

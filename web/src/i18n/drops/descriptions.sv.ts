@@ -645,6 +645,10 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     en: "8d782402",
     sv: "Dela en radström i två med ett CEL-villkor. Rader där filtret blir sant går ut på 'matched'; resten går ut på 'unmatched'. Samma formel som filtret i steget Lägg till en beräknad kolumn — `row.active && row.score >= 50` och liknande. Använd det när du annars skulle behöva Välj och byt namn på kolumner två gånger (en gång med filtret, en gång med dess negation): det här steget går igenom indatat en gång och ger dig båda halvorna utan extra kostnad.",
   },
+  spotify_followed_artists: {
+    en: "db237ab1",
+    sv: "L\u00e4s vilka artister det anslutna Spotify-kontot f\u00f6ljer. Varje artist kommer ut som en enkel post \u2014 namn, genrer, id och en l\u00e4nk att \u00f6ppna den i Spotify \u2014 redo att loopa \u00f6ver med F\u00f6r varje, logga till ett kalkylblad, eller anv\u00e4nda som bevakningslista f\u00f6r ett fl\u00f6de av typen \"s\u00e4g till n\u00e4r de spelar i n\u00e4rheten\".\n\nListan \u00e4r sidindelad: h\u00e4mta upp till 50 \u00e5t g\u00e5ngen och koppla utg\u00e5ngen N\u00e4sta mark\u00f6r tillbaka till ing\u00e5ngen After ID f\u00f6r att g\u00e5 igenom resten.",
+  },
   sqlite_insert_rows: {
     en: "3ac6f43f",
     sv: "Spara rader i en databasfil som ligger i din arbetsyta — ingen server, ingen anslutningssträng och ingen uppsättning behövs (det här är den enkla databasen; ta Postgres/MySQL bara om du redan har en). Tabellen skapas som standard automatiskt utifrån radernas form; slå av create_table om du redan satt upp ett schema du inte vill skriva över.",
