@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.39.0] - 2026-09-07
+
 ### Added
 
 - **Spotify.** Connect a Spotify account under Apps and read the artists it
