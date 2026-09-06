@@ -381,6 +381,10 @@ func NewHTTPGateway(svc *Service) *HTTPGateway {
 // bind failure can fail-loud at startup) and hand the live listener
 // here to serve in the background.
 func (h *HTTPGateway) ServeListener(ctx context.Context, ln net.Listener) error {
+	// Off the request path, and off startup's: the sign-in timing equalizer
+	// costs a full bcrypt derivation to mint, and only a process that serves
+	// sign-ins ever needs it.
+	go auth.WarmPasswordTiming()
 	mux := http.NewServeMux()
 	h.mountRoutes(mux)
 	srv := &http.Server{

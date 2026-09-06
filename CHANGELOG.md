@@ -10,6 +10,52 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Performance
+
+- **Starting any dazyflow binary no longer waits on a bcrypt derivation.**
+  `auth` minted its sign-in timing equalizer — a full bcrypt hash at cost 12,
+  a quarter-second of key stretching by design — in a package-level variable,
+  so it ran during package initialization in every process that links `auth`,
+  whether or not that process ever verifies a password.
+
+  It is minted lazily now, and `auth.WarmPasswordTiming` moves it off the
+  request path for a process that does serve sign-ins (`ServeListener` calls
+  it in the background). Package init **577ms → 92ms**; `dzd --version`
+  **587ms → 101ms**; `dzctl --help` **511ms → 25ms**, which every CLI
+  invocation paid before doing any work.
+
+  No test could have caught this: `activeHashCost` drops to `bcrypt.MinCost+1`
+  under `go test`, so the cost existed only in released binaries.
+
+- **Reading a workspace's flows no longer holds the workspace mutex through
+  JSON decoding.** `gitBackend.mu` serializes every reader of a workspace and
+  must stay a full mutex, because go-git mutates its object cache during reads
+  — so what bounds concurrent throughput is not how long a read takes but how
+  much of it happens under the lock. Decoding the flows is the majority of the
+  work and touches no repository state.
+
+  The list read and the single-flow read are each split: the lock now covers
+  resolving HEAD, reading the env refs and inflating the blobs, and nothing
+  else. Blobs are also read into a blob-sized buffer instead of through
+  `File.Contents`, which inflates into a `bytes.Buffer` and copies that to a
+  string for the caller to copy back to bytes — three copies of every flow's
+  JSON, all under the lock.
+
+  Store level, 30 flows of 25 steps, `-count=8`, all p=0.000:
+
+  | | 1 core | 2 cores | 4 cores | Allocated |
+  |---|---:|---:|---:|---:|
+  | Flow list, before | 5.59ms | 7.73ms | 8.67ms | 2.09 MiB |
+  | Flow list, after | **4.16ms** | **2.65ms** | **2.34ms** (-73%) | **919 KiB** (-57%) |
+  | Single flow, before | 488µs | 836µs | 808µs | 100.5 KiB |
+  | Single flow, after | **440µs** | **390µs** (-53%) | **425µs** (-47%) | **59.7 KiB** (-41%) |
+
+  The shape is the point: both reads previously got *slower* as cores were
+  added, which is queueing rather than work. Behaviour is unchanged — the
+  conformance suite covers both backends, and the empty-workspace read still
+  returns a nil slice rather than an empty one, since the two are different
+  documents once a caller marshals the list.
+
 ## [0.37.2] - 2026-09-06
 
 ### Performance

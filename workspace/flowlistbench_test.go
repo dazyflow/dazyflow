@@ -217,3 +217,48 @@ func BenchmarkFlowListAtHead30(b *testing.B) {
 		}
 	}
 }
+
+// BenchmarkFlowListHeadersParallel is the one that sees the defect the serial
+// benchmarks above cannot: every reader of a workspace serializes on one
+// mutex, so what matters is how much of the read is held under it, not how
+// long the read takes alone. Run it across -cpu to watch the ceiling.
+func BenchmarkFlowListHeadersParallel(b *testing.B) {
+	s := benchWorkspace(b, 30, 25)
+	b.ReportAllocs()
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			got, err := s.ListHeadersAtHead("")
+			if err != nil {
+				b.Fatalf("list: %v", err)
+			}
+			if len(got) != 30 {
+				b.Fatalf("got %d flows", len(got))
+			}
+		}
+	})
+}
+
+// BenchmarkFlowLoadParallel is the single-flow read — opening a flow in the
+// editor, and LoadPublished on every trigger fire — under the contention the
+// serial benchmarks cannot show. It shares the workspace mutex with every
+// list above, so what it holds under the lock bounds them too.
+func BenchmarkFlowLoadParallel(b *testing.B) {
+	s := benchWorkspace(b, 30, 25)
+	b.ReportAllocs()
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		i := 0
+		for pb.Next() {
+			// Rotate the flow read so the benchmark is not one hot blob.
+			g, err := s.Load(fmt.Sprintf("flow-%02d", i%30))
+			if err != nil {
+				b.Fatalf("load: %v", err)
+			}
+			if len(g.Nodes) != 25 {
+				b.Fatalf("got %d nodes", len(g.Nodes))
+			}
+			i++
+		}
+	})
+}

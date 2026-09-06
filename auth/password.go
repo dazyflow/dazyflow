@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -188,7 +189,25 @@ var ErrUnknownUser = errors.New("unknown user")
 //
 // Minted at activeHashCost, not DefaultCost: the point is to spend what a
 // genuine compare spends, and genuine hashes are minted at activeHashCost.
-var timingDummyHash, _ = bcrypt.GenerateFromPassword([]byte("dazyflow-timing-equalizer"), activeHashCost)
+//
+// Minted lazily, because minting it is a full bcrypt derivation — a quarter of
+// a second at PasswordHashCost, by design. As a package-level initializer that
+// landed on the init path of every binary linking this package, so `dzctl`
+// spent half a second before printing its help and every dzd pod spent it
+// before binding. Nothing outside VerifyPassword's unknown-user branch needs
+// the value. WarmPasswordTiming keeps that branch honest for a process that
+// does serve sign-ins.
+var timingDummyHash = sync.OnceValue(func() []byte {
+	h, _ := bcrypt.GenerateFromPassword([]byte("dazyflow-timing-equalizer"), activeHashCost)
+	return h
+})
+
+// WarmPasswordTiming precomputes the equalizing hash off the request path.
+// Call it in the background from anything that serves sign-ins: without it the
+// first unknown-user attempt in a process pays a mint on top of its compare,
+// which is a timing difference in the safe direction (missing account looks
+// *slower*) but a difference all the same.
+func WarmPasswordTiming() { _ = timingDummyHash() }
 
 // VerifyPassword normalizes email and bcrypt-compares the password.
 // Returns the User on success; ErrInvalidCredential on any failure
@@ -204,7 +223,7 @@ func VerifyPassword(ctx context.Context, store UserStore, email, password string
 		// Equalize timing: spend the bcrypt cost even when there's no account
 		// (or no password set, e.g. an SSO-only user) so the response time
 		// doesn't betray account existence.
-		_ = bcrypt.CompareHashAndPassword(timingDummyHash, []byte(password))
+		_ = bcrypt.CompareHashAndPassword(timingDummyHash(), []byte(password))
 		return User{}, ErrInvalidCredential
 	}
 	if bcrypt.CompareHashAndPassword(u.PasswordHash, []byte(password)) != nil {
