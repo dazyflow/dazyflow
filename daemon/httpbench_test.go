@@ -405,3 +405,26 @@ func benchApprovalsCountAt(b *testing.B, pending int) {
 
 func BenchmarkApprovalsCount25(b *testing.B)  { benchApprovalsCountAt(b, 25) }
 func BenchmarkApprovalsCount200(b *testing.B) { benchApprovalsCountAt(b, 200) }
+
+// benchRequestParallel is benchRequest under concurrency. The serial
+// benchmarks above price one request; this one prices the ones a fleet
+// serves at the same time, which is where a shared lock in the request
+// path shows up and where a serial benchmark is blind by construction.
+func benchRequestParallel(b *testing.B, method, path string) {
+	handler, token := benchGateway(b)
+	b.ReportAllocs()
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			req := httptest.NewRequest(method, path, nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			rw := &discardWriter{}
+			handler.ServeHTTP(rw, req)
+			if rw.status != http.StatusOK {
+				b.Fatalf("%s %s = %d", method, path, rw.status)
+			}
+		}
+	})
+}
+
+func BenchmarkGetMeParallel(b *testing.B) { benchRequestParallel(b, "GET", "/api/v1/me") }

@@ -356,6 +356,12 @@ type Service struct {
 	Bus       Bus
 	WorkerID  string // identifies this dzd instance in JobStore records
 
+	// Wake, when set, is signalled after this Service enqueues runnable work
+	// so an idle worker in this process starts on it immediately rather than
+	// on its next poll. Share the pointer with WorkerConfig.Wake. Nil-safe:
+	// without it the workers simply poll. See WorkSignal.
+	Wake *WorkSignal
+
 	// AdminKeys, when set, powers the API key admin endpoints. Without
 	// it those endpoints return 501. Splitting from Auth keeps the
 	// read-only Authenticator interface minimal; the admin path needs
@@ -2395,4 +2401,32 @@ func newID() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(buf), nil
+}
+
+// manifestsForModules resolves port metadata for exactly the modules a graph
+// uses. See NodeResolver.ManifestsForSubset for why this is not ListDrops.
+//
+// Returns nil when there is no resolver, or one that predates the subset API:
+// callers degrade to structural edge resolution, which is what they already do
+// when ListDrops fails.
+func (s *Service) manifestsForModules(tenant string, ids ...string) map[string]core.Manifest {
+	if s.Engine == nil || s.Engine.Resolver == nil {
+		return nil
+	}
+	mp, ok := s.Engine.Resolver.(interface {
+		ManifestsForSubset(string, []string) map[string]core.Manifest
+	})
+	if !ok {
+		return nil
+	}
+	return mp.ManifestsForSubset(tenant, ids)
+}
+
+// manifestsForGraph is manifestsForModules over every module a graph uses.
+func (s *Service) manifestsForGraph(tenant string, g core.Graph) map[string]core.Manifest {
+	ids := make([]string, 0, len(g.Nodes))
+	for _, n := range g.Nodes {
+		ids = append(ids, n.Module)
+	}
+	return s.manifestsForModules(tenant, ids...)
 }

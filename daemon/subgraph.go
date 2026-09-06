@@ -192,6 +192,9 @@ func (s *Service) submitGraphWithParent(
 		return "", fmt.Errorf("enqueue child graph: %w", err)
 	}
 	queued, errs := populateSeededRun(ctx, s.Jobs, g, graphRunID, seeds)
+	if queued > 0 {
+		s.Wake.Notify()
+	}
 	if len(errs) > 0 {
 		return graphRunID, fmt.Errorf("enqueue child roots: %v", errs)
 	}

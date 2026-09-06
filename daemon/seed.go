@@ -274,6 +274,11 @@ func (s *Service) SubmitGraphOpts(
 	}
 
 	queued, enqueueErrs := populateSeededRun(ctx, s.Jobs, g, graphRunID, seeds)
+	// Wake an idle worker now rather than leaving the run to be discovered on
+	// somebody's next poll: that wait is the whole of a small run's latency.
+	if queued > 0 {
+		s.Wake.Notify()
+	}
 	if len(enqueueErrs) > 0 {
 		merged := errors.Join(enqueueErrs...)
 		_ = s.Jobs.Complete(ctx, graphRunID, core.JobStatusFailed, &core.Result{

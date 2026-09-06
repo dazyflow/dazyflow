@@ -166,10 +166,11 @@ func (h *flowAPI) inputFieldsFor(ctx context.Context, p core.Principal, g core.G
 		return nil, nil
 	}
 	info := &rowSourceInfo{NodeID: fromID, Module: n.Module, Label: n.Module}
-	if manifests, err := h.svc.ListDrops(ctx, p); err == nil {
-		if m, ok := manifests[n.Module]; ok && m.Label != "" {
-			info.Label = m.Label
-		}
+	// One module's label, so one lookup — ListDrops here built the whole
+	// tenant-filtered catalog, 182 manifests cloned and walked twice, to read
+	// a single string off one of them.
+	if m, ok := h.svc.manifestsForModules(p.Tenant, n.Module)[n.Module]; ok && m.Label != "" {
+		info.Label = m.Label
 	}
 	src, ok := rowSources[n.Module]
 	if !ok {

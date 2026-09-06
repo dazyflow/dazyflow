@@ -36,7 +36,8 @@ func (h *flowAPI) sampleNode(rw http.ResponseWriter, r *http.Request, p core.Pri
 	// fail with no_trigger_data (a trigger has no data outside a real firing).
 	// Detect that here and return an actionable error pointing at test-trigger,
 	// instead of submitting a run that dies cryptically.
-	if mans, mErr := h.svc.ListDrops(r.Context(), p); mErr == nil {
+	{
+		mans := h.svc.manifestsForGraph(p.Tenant, sub)
 		for _, n := range sub.Nodes {
 			if m, ok := mans[n.Module]; ok && m.ExecutionModel == core.ExecutionTrigger {
 				writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf(

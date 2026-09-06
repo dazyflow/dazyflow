@@ -214,6 +214,14 @@ func (s *Service) Approve(
 	}
 	disp := NewDispatcher(s.Jobs, s.bus(), s.Engine, log.New(log.Writer(), "approve: ", log.LstdFlags))
 	disp.AdvanceAfterCompletion(ctx, g, graphRunID, nodeID, core.JobStatusSucceeded, nil)
+	// Wake a worker for whatever that unblocked. Unlike a step finishing on a
+	// worker — which goes straight back and claims its own successor — this
+	// dispatch happens on an HTTP goroutine while the fleet may be entirely
+	// idle, so without this the approver waits out somebody's poll interval
+	// (measured at 50.7ms mean) for work that was ready the moment they
+	// clicked. Unconditional: a decision is a human action at human rates, so
+	// a broadcast that turns out to have unblocked nothing costs nothing.
+	s.Wake.Notify()
 	// The run was showing "Waiting for approval"; put it back to Running now
 	// that it has somewhere to go — unless another step in the same run is
 	// still parked on its own approver, in which case the run genuinely is

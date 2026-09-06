@@ -735,6 +735,9 @@ func main() {
 		Auth:       authChain,
 		Workspaces: workspaces,
 		Jobs:       jobs,
+		// Shared with every worker below, so a submit starts a run now rather
+		// than on somebody's next 100ms poll. See daemon.WorkSignal.
+		Wake: daemon.NewWorkSignal(),
 		// Schedules is what the scheduler rescans. Without it every rescan
 		// re-reads every flow of every tenant from git.
 		Schedules: stores.schedules,
@@ -1373,6 +1376,8 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 			// flow from pausing.
 			OnNodeAwaiting: d.svc.HandleNodeAwaiting,
 			Runs:           runs,
+			// The same signal the Service notifies on enqueue.
+			Wake: d.svc.Wake,
 		}, d.jobs, d.eng, d.bus)
 		// Enable subgraph execution: the worker hands a parked subgraph
 		// node's child graph to the Service to submit and run. Without this,

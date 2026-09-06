@@ -270,35 +270,60 @@ func (h *authAPI) whoami(rw http.ResponseWriter, r *http.Request, p core.Princip
 	// hides itself.
 	memberships := h.collectMemberships(r.Context(), p)
 	emailVerified, verificationPending := h.verificationStatus(r, p)
-	writeJSON(rw, http.StatusOK, map[string]any{
-		"subject":     p.Subject,
-		"tenant":      p.Tenant,
-		"workspace":   p.Workspace,
-		"roles":       p.Roles,
-		"permissions": perms,
-		"memberships": memberships,
-		// email_verified / verification_pending drive the "confirm your
-		// email" banner. pending is false on deployments without a
-		// mailer (nothing to verify against) and for API-key callers.
-		"email_verified":       emailVerified,
-		"verification_pending": verificationPending,
-		// public_base_url lets the UI build externally-correct webhook /
-		// hosted-form URLs instead of guessing the host. Empty when the
-		// operator hasn't set --public-base-url; the UI falls back to a
-		// localhost hint in that case.
-		"public_base_url": h.svc.PublicBaseURL,
-		// support_contact surfaces an operator-set email/URL on UI
-		// surfaces that depend on server-side setup the end user can't
-		// fix themselves (e.g. OAuth/secret-store not configured on the
-		// Connections page). Empty = the UI shows a generic "contact
-		// your administrator" message with no link.
-		"support_contact": h.svc.SupportContact,
-		// support_tickets_enabled tells the UI whether the native ticket
-		// surface is wired (DAZYFLOW_SUPPORT_ENABLED). The UI hides "Report
-		// a problem" / the Support page when off, rather than letting the
-		// user hit a 501.
-		"support_tickets_enabled": h.ticketsEnabled(),
+	writeJSON(rw, http.StatusOK, meResponse{
+		Subject:               p.Subject,
+		Tenant:                p.Tenant,
+		Workspace:             p.Workspace,
+		Roles:                 p.Roles,
+		Permissions:           perms,
+		Memberships:           memberships,
+		EmailVerified:         emailVerified,
+		VerificationPending:   verificationPending,
+		PublicBaseURL:         h.svc.PublicBaseURL,
+		SupportContact:        h.svc.SupportContact,
+		SupportTicketsEnabled: h.ticketsEnabled(),
 	})
+}
+
+// meResponse is the wire shape of GET /api/v1/me and /api/v1/whoami.
+//
+// It is a struct rather than the map[string]any it was built as, because this
+// is the most repeated authenticated request the product makes and marshalling
+// a map is the expensive way to write eleven known fields: every key is
+// hashed, every value is boxed into an interface and dispatched through
+// reflection, and the key set is sorted on each call. A CPU profile of the
+// endpoint put 39% of it in the map marshaller.
+//
+// FIELD ORDER IS LOAD-BEARING. encoding/json emits a map's keys sorted and a
+// struct's fields in declaration order, so these are declared in the order the
+// map's keys sorted into and the bytes on the wire are unchanged.
+// TestWhoamiWireShapeUnchanged pins that against the original map, and will
+// fail if a field is added anywhere but its alphabetical place.
+type meResponse struct {
+	// EmailVerified and VerificationPending drive the "confirm your email"
+	// banner. Pending is false on deployments without a mailer (nothing to
+	// verify against) and for API-key callers.
+	EmailVerified bool               `json:"email_verified"`
+	Memberships   []orgMembershipDTO `json:"memberships"`
+	Permissions   []core.Permission  `json:"permissions"`
+	// PublicBaseURL lets the UI build externally-correct webhook / hosted-form
+	// URLs instead of guessing the host. Empty when the operator hasn't set
+	// --public-base-url; the UI falls back to a localhost hint in that case.
+	PublicBaseURL string      `json:"public_base_url"`
+	Roles         []core.Role `json:"roles"`
+	Subject       string      `json:"subject"`
+	// SupportContact surfaces an operator-set email/URL on UI surfaces that
+	// depend on server-side setup the end user can't fix themselves (e.g.
+	// OAuth/secret-store not configured on the Connections page). Empty = the
+	// UI shows a generic "contact your administrator" message with no link.
+	SupportContact string `json:"support_contact"`
+	// SupportTicketsEnabled tells the UI whether the native ticket surface is
+	// wired (DAZYFLOW_SUPPORT_ENABLED). The UI hides "Report a problem" / the
+	// Support page when off, rather than letting the user hit a 501.
+	SupportTicketsEnabled bool   `json:"support_tickets_enabled"`
+	Tenant                string `json:"tenant"`
+	VerificationPending   bool   `json:"verification_pending"`
+	Workspace             string `json:"workspace"`
 }
 
 // orgMembershipDTO is the wire shape whoami emits per membership. The

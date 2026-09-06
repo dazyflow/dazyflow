@@ -136,6 +136,9 @@ func (s *Service) startPendingRun(ctx context.Context, run core.JobRecord) {
 	seededSet := s.seededNodes(ctx, run.ID, len(g.Nodes))
 
 	queued, errs := dispatchRoots(ctx, s.Jobs, g, run.ID, seededSet)
+	if queued > 0 {
+		s.Wake.Notify()
+	}
 	if len(errs) > 0 {
 		merged := errs[0]
 		_ = s.Jobs.Complete(ctx, run.ID, core.JobStatusFailed, &core.Result{

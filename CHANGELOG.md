@@ -12,6 +12,101 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ### Performance
 
+- **Reading one manifest no longer materializes the whole catalog.** Several
+  call sites asked `ListDrops` for the tenant's entire drop catalog and then
+  did a handful of point lookups in it. That call clones the 182-entry built-in
+  derivation (the clone exists because the palette *deletes* from its copy) and
+  then walks it twice more to stamp flags and apply drop switches.
+
+  The worst of them was on a request a browser repeats: the run timeline
+  (`GET /api/v1/me/runs/{id}/nodes`, polled every couple of seconds per open
+  tab) built the whole catalog so `AssembleInput` could read one field —
+  whether a target port is variadic. The row-source hint built it to read a
+  single step's `Label`.
+
+  New `NodeResolver.ManifestsForSubset` resolves only the ids asked for:
+  built-ins are point lookups into the registry's cached derivation, and only a
+  graph using a remote, MCP or web-API drop falls back to the full map.
+
+  `BenchmarkListRunNodes`, n=8: allocated **430.3 KiB → 310.9 KiB (-28%)**,
+  allocations **3,163 → 2,910 (-8%)**, both p=0.000. Wall time is unchanged
+  within noise on the bench machine — this is a GC-pressure change, and the
+  endpoint's remaining cost is its Postgres round trip.
+
+  It is also the more correct source for the timeline. `ListDrops` removes a
+  drop a platform admin has since switched off, so a run that used one rendered
+  with no port metadata at all — for a step that had already executed, whose
+  ports are a matter of record rather than of policy.
+
+  `TestManifestsForSubsetAgreesWithFullMap` pins the subset to the full map it
+  replaces — same manifests and the same answer about which ids exist, across
+  built-in, remote and absent ids, since the two take different routes.
+
+- **Approving a parked run resumes it immediately.** `Service.Approve`
+  completes the gate and dispatches what it unblocked, but that dispatch runs
+  on an HTTP goroutine while the fleet may be entirely idle — so unlike a step
+  finishing on a worker, which goes straight back for its own successor, there
+  was nobody awake to notice. The approver waited out a poll interval for work
+  that was ready the moment they clicked.
+
+  `TestApprovalResumeLatency`, decision to the unblocked step completing, idle
+  four-worker pool at the 100ms default, mean of 5: **50.6ms → 1.6ms**.
+
+- **A run now starts when it is submitted, not on the next poll.** Workers
+  discovered queued work only by polling (`PollInterval`, 100ms in production),
+  so on an idle fleet a run waited for a worker to wake up before its first
+  step ran. Idle workers also *synchronize* — they wake together, all find
+  nothing, and sleep together — so the wait sat near the full interval rather
+  than the half one an independent-phase model predicts.
+
+  `daemon.WorkSignal` lets the enqueue paths wake idle workers directly. The
+  poll stays, and stays the mechanism correctness rests on: it still covers
+  work enqueued by another replica, a retry whose backoff expires, and a lease
+  that lapses. A missed signal costs one poll interval, not a stuck run.
+
+  End-to-end, submit to terminal, on an idle four-worker pool at the production
+  100ms default (`TestRunLatencyByPollInterval`, mean of 5):
+
+  | Chain length | Before | After |
+  |---|---:|---:|
+  | 1 step | 100.9ms | **1.5ms** |
+  | 4 steps | 81.0ms | **1.5ms** |
+  | 12 steps | 80.8ms | **2.9ms** |
+
+  Almost all of it was a single sleep at the front: after the first claim a
+  worker goes straight back for the successor it just enqueued, which is why a
+  twelve-step run cost no more than a one-step run. The poll interval is now
+  close to irrelevant to run latency, which is the property worth having.
+
+  **The trade, measured:** under saturation this costs a little throughput —
+  the stress rig gave 395 steps/s before and 380 after (paired runs, ~3%
+  lower), because a woken worker re-claims sooner and those claims compete with
+  real work. Transactions per step are unchanged at 4.0, so nothing about the
+  database work per step moved. It is opt-in and nil-safe: a `Service` or
+  worker wired without a `WorkSignal` simply polls as before.
+
+- **`GET /api/v1/me` builds its response as a struct, not a map.** It is the
+  fixed cost every authenticated page load pays, and it was assembling eleven
+  known fields into a `map[string]any` — so encoding/json hashed every key,
+  boxed every value into an interface, sorted the key set and dispatched each
+  value through reflection. A CPU profile of the endpoint put **39%** of it in
+  the map marshaller alone.
+
+  | | Before | After |
+  |---|---:|---:|
+  | Serial (`BenchmarkGetMe`) | 40.80µs | **28.11µs** (-31%) |
+  | Concurrent, 4 cores | 18.51µs | **12.02µs** (-35%) |
+  | Allocations | 78 | **42** (-46%) |
+  | Allocated | 9.64 KiB | **8.78 KiB** (-9%) |
+
+  All p=0.000, n=8. The bytes on the wire are unchanged, and
+  `TestWhoamiWireShapeUnchanged` pins that against the original map literal —
+  necessary because encoding/json emits a map's keys sorted but a struct's
+  fields in declaration order, so `meResponse`'s fields have to stay in
+  alphabetical order of their JSON names. The same test reflects over the
+  struct and fails if a field is left zero in the fixture, since a field absent
+  from both sides would agree without being checked.
+
 - **Starting any dazyflow binary no longer waits on a bcrypt derivation.**
   `auth` minted its sign-in timing equalizer — a full bcrypt hash at cost 12,
   a quarter-second of key stretching by design — in a package-level variable,

@@ -74,6 +74,11 @@ type WorkerConfig struct {
 	// run is read once per process rather than once per worker that touches
 	// it. nil gives the worker a small private one.
 	Runs *RunCache
+
+	// Wake, when set, lets an enqueue cut short the poll this worker would
+	// otherwise sleep out — see WorkSignal for what that is worth and why the
+	// poll stays. Shared with the Service that enqueues. nil means poll only.
+	Wake *WorkSignal
 }
 
 func (c *WorkerConfig) withDefaults() WorkerConfig {
@@ -163,15 +168,21 @@ func (w *Worker) Run(ctx context.Context) error {
 			w.cfg.Logger.Printf("[%s] stopping: %v", w.cfg.ID, err)
 			return err
 		}
+		// Taken BEFORE the claim: a waiter captured after an empty claim can
+		// miss a Notify that landed in between, and the worker would sleep the
+		// full interval with work already queued. See WorkSignal.Waiter.
+		wake := w.cfg.Wake.Waiter()
 		rec, err := w.store.Claim(ctx, w.cfg.ID, w.cfg.LeaseDuration)
 		if errors.Is(err, core.ErrNoJobs) {
-			if !sleepOrDone(ctx, w.cfg.PollInterval) {
+			if !waitForWork(ctx, wake, w.cfg.PollInterval) {
 				return ctx.Err()
 			}
 			continue
 		}
 		if err != nil {
 			w.cfg.Logger.Printf("[%s] claim error: %v", w.cfg.ID, err)
+			// A failing store is not woken by an enqueue, so this one backs
+			// off on the timer alone rather than spinning on every Notify.
 			if !sleepOrDone(ctx, w.cfg.PollInterval) {
 				return ctx.Err()
 			}
@@ -182,10 +193,27 @@ func (w *Worker) Run(ctx context.Context) error {
 }
 
 func sleepOrDone(ctx context.Context, d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
 	select {
 	case <-ctx.Done():
 		return false
-	case <-time.After(d):
+	case <-t.C:
+		return true
+	}
+}
+
+// waitForWork blocks until there may be work, the poll interval expires, or
+// the worker is shutting down. Returns false only on shutdown.
+func waitForWork(ctx context.Context, wake <-chan struct{}, d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-wake:
+		return true
+	case <-t.C:
 		return true
 	}
 }

@@ -1345,10 +1345,17 @@ func (h *flowAPI) fillRunNodeInputs(
 	if err != nil {
 		return
 	}
-	manifests, err := h.svc.ListDrops(ctx, p)
-	if err != nil {
-		manifests = nil // no port metadata: variadic/list ports degrade, edges still resolve
-	}
+	// Just the modules this run used, not the whole catalog. AssembleInput
+	// reads one thing off a manifest — whether the target port is variadic —
+	// so the tenant-filtered, switch-filtered, verifier-stamped map that
+	// ListDrops builds is 182 entries of copying to answer a handful of point
+	// lookups, on a request polled every couple of seconds per open tab.
+	//
+	// It is also the more correct source here. ListDrops DELETES a drop a
+	// platform admin has since switched off, so a run that used one rendered
+	// its timeline with no port metadata at all — for a step that had already
+	// executed, whose ports are a matter of record rather than of policy.
+	manifests := h.svc.manifestsForGraph(p.Tenant, graph)
 	prior := make(map[string]core.Result, len(recs))
 	for _, rec := range recs {
 		if rec.Result != nil {

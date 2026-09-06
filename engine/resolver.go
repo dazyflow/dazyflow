@@ -187,6 +187,50 @@ func (r *NodeResolver) ManifestsForTenant(tenant string) map[string]core.Manifes
 	return out
 }
 
+// ManifestsForSubset resolves just the ids asked for, rather than materializing
+// the whole catalog to look a handful of them up.
+//
+// ManifestsForTenant has to clone the built-in derivation because its callers
+// edit their own view — the palette deletes drops a platform admin switched
+// off. A caller that only READS a few manifests pays 182 entries of copying
+// for nothing, and the run-timeline poll was doing exactly that on every
+// request, every couple of seconds per open tab.
+//
+// The fast path is allocation-free beyond the result: built-ins are point
+// lookups into the registry's cached derivation. Only a graph that uses a
+// remote, MCP or web-API drop falls back to building the tenant-scoped map,
+// and that path is the same one it took before.
+func (r *NodeResolver) ManifestsForSubset(tenant string, ids []string) map[string]core.Manifest {
+	out := make(map[string]core.Manifest, len(ids))
+	var derived map[string]core.Manifest
+	if r.Native != nil {
+		derived = r.Native.DerivedManifests()
+	}
+	var missing []string
+	for _, id := range ids {
+		if _, done := out[id]; done {
+			continue
+		}
+		if m, ok := derived[id]; ok {
+			out[id] = m
+			continue
+		}
+		missing = append(missing, id)
+	}
+	if len(missing) == 0 {
+		return out
+	}
+	// Something outside the built-in catalog: resolve it exactly as the
+	// full-map path would, so precedence and tenant scoping cannot drift.
+	all := r.ManifestsForTenant(tenant)
+	for _, id := range missing {
+		if m, ok := all[id]; ok {
+			out[id] = m
+		}
+	}
+	return out
+}
+
 // addKeeping merges src into dst without overwriting an id dst already holds,
 // so the map agrees with lookup()'s Native → Remote → MCP precedence.
 func addKeeping(dst, src map[string]core.Manifest) {
