@@ -2962,14 +2962,6 @@ button.warning:hover:not(:disabled) {
   gap: var(--space-1);
   min-width: 0;
 }
-/* The "Connect to run this flow:" line with one chip per required
-   connection — each chip carries the provider's brand icon + name. */
-.editor-conn-banner-needs {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-1h);
-}
 .editor-conn-chip {
   display: inline-flex;
   align-items: center;
@@ -2986,10 +2978,6 @@ button.warning:hover:not(:disabled) {
   width: 14px;
   height: 14px;
   object-fit: contain;
-}
-.editor-conn-banner-admin {
-  color: var(--muted);
-  font-size: var(--text-sm);
 }
 /* Admin-blocked rows inside the pre-run modal. Borderless list keeps it
    visually distinct from the actionable "Connect this" rows above it. */
@@ -5697,8 +5685,12 @@ button.warning:hover:not(:disabled) {
   object-fit: contain;
   flex-shrink: 0;
 }
-/* Toolbar heads-up: how many drops still need configuration. */
-.editor-config-warn {
+/* ---- the editor's issue buttons + panels (IssuesPopover.tsx) -----------
+   A count in the toolbar, the words in a panel under it. This replaced a
+   column of banners over the canvas (.editor-banner-stack), which hid the
+   flow at the moment its author was working on it. Tone comes from
+   data-kind, so the two buttons share every rule but their colour. */
+.editor-issues-btn {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1h);
@@ -5709,12 +5701,106 @@ button.warning:hover:not(:disabled) {
   font-size: var(--text-md);
   font-weight: 500;
   white-space: nowrap;
+  cursor: pointer;
   color: var(--danger);
   background: color-mix(in srgb, var(--danger) 12%, transparent);
-  cursor: pointer;
 }
-.editor-config-warn:hover {
+.editor-issues-btn[data-kind="warning"] {
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+}
+.editor-issues-btn:hover {
   background: color-mix(in srgb, var(--danger) 20%, transparent);
+}
+.editor-issues-btn[data-kind="warning"]:hover {
+  background: color-mix(in srgb, var(--warning) 20%, transparent);
+}
+.editor-issues-btn[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--danger) 24%, transparent);
+}
+.editor-issues-btn[data-kind="warning"][aria-expanded="true"] {
+  background: color-mix(in srgb, var(--warning) 24%, transparent);
+}
+/* The count is the standing signal, so it reads as a number rather than as
+   part of a sentence — tabular figures keep the button from twitching as it
+   goes 9 → 10. */
+.editor-issues-count {
+  font-variant-numeric: tabular-nums;
+}
+/* Portaled to <body> with fixed left/top from useAnchoredPop, which clamps it
+   to the viewport: the toolbar scrolls horizontally, and an absolutely
+   positioned panel would be clipped by it. */
+.editor-issues-pop {
+  position: fixed;
+  z-index: var(--z-issues-pop);
+  display: flex;
+  flex-direction: column;
+  width: max-content;
+  /* Wide enough for a full explanation, never wider than a phone. */
+  max-width: min(52ch, calc(100vw - var(--space-4)));
+  max-height: min(60vh, 520px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: 2px solid var(--danger);
+  border-radius: var(--r-2);
+  box-shadow: var(--shadow-pop);
+  text-align: left;
+}
+.editor-issues-pop[data-kind="warning"] {
+  border-top-color: var(--warning);
+}
+.editor-issues-pop-head {
+  flex: 0 0 auto;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--muted);
+}
+.editor-issues-pop-body {
+  overflow-y: auto;
+  padding: var(--space-1) 0;
+}
+/* One row per message. The actions sit under the prose rather than beside it:
+   a sentence long enough to need this panel does not also leave a column
+   free, and a wrapped Connect button reads as part of the next row. */
+.editor-issues-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1h);
+  padding: var(--space-2) var(--space-3);
+}
+.editor-issues-row + .editor-issues-row {
+  border-top: 1px solid var(--border);
+}
+.editor-issues-row-text {
+  font-size: var(--text-md);
+  line-height: 1.4;
+  color: var(--ink);
+}
+.editor-issues-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+/* "Report a problem" / the support link, inline at the end of the sentence. */
+.editor-issues-link {
+  color: var(--danger);
+  text-decoration: underline;
+  white-space: nowrap;
+}
+/* The "Connect to run this flow:" line with one chip per required connection —
+   each chip carries the provider's brand icon + name. */
+.editor-issues-needs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1h);
+}
+.editor-issues-admin {
+  color: var(--muted);
+  font-size: var(--text-sm);
 }
 /* Org switcher dialog (OrgSwitcherModal): a centered list of the orgs you can
    act in + an inline create form. Shares the .modal modal shell and
@@ -9694,60 +9780,13 @@ a.pa-card:hover {
   align-items: center;
   justify-content: center;
 }
-/* Connection-refused hint — shown when the editor blocks an incompatible wire.
-   Lives in .editor-banner-stack (which positions the stack), so it's a plain
-   flex-row banner with a warning tone. */
-.editor-conn-hint {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  max-width: min(560px, calc(100vw - 24px));
-  padding: var(--space-2) var(--space-2) var(--space-2) 14px;
-  background: var(--surface);
-  border: 1px solid color-mix(in srgb, var(--warning) 55%, var(--border));
-  color: var(--ink);
-  border-radius: var(--r-3);
-  box-shadow: var(--shadow-pop);
-  /* Soft slide+fade in so the explanation arrives gently, not with a pop. */
-  animation: dz-conn-hint-in 180ms cubic-bezier(0.2, 0.7, 0.3, 1);
-}
-@keyframes dz-conn-hint-in {
-  from {
-    opacity: 0;
-    transform: translateY(-8px) scale(0.99);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-/* Respect users who prefer less motion: drop the pulse + entry animations and
-   fall back to a static ring. */
+/* Respect users who prefer less motion: drop the entry animation and fall
+   back to a static ring on the handle that refused the wire. */
 @media (prefers-reduced-motion: reduce) {
-  .editor-conn-hint {
-    animation: none;
-  }
   .react-flow__handle.connectingto:not(.valid) {
     animation: none;
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 55%, transparent);
   }
-}
-.editor-conn-hint-icon {
-  flex: 0 0 auto;
-  color: var(--warning);
-}
-.editor-conn-hint-text {
-  font-size: var(--text-md);
-  line-height: 1.35;
-}
-.editor-conn-hint-x {
-  flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
 }
 
 /* Comment frame (#3): a resizable, titled box behind the nodes. The box

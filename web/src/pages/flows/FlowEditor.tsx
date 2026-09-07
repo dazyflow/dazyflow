@@ -64,7 +64,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Group,
-  AlertCircle,
   CircleDot,
   StepForward,
   CircleOff,
@@ -151,6 +150,7 @@ import { CommentNode, FRAME_COLOR_DEFAULT } from "../../components/editor/Commen
 import { RerouteEdge } from "../../components/editor/RerouteEdge";
 import { SettingsModal } from "../../components/dialogs/SettingsModal";
 import { ConfigChecklistModal } from "../../components/editor/ConfigChecklistModal";
+import { IssuesButton, IssueRow } from "../../components/editor/IssuesPopover";
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import { PublishCelebration } from "../../components/editor/PublishCelebration";
 import { QuickDropPalette } from "../../components/editor/QuickDropPalette";
@@ -471,9 +471,11 @@ function EditorInner() {
   const [testEventOpen, setTestEventOpen] = useState(false);
   const [testEventJSON, setTestEventJSON] = useState("");
   const [testEventErr, setTestEventErr] = useState<string | null>(null);
-  // connBannerDismissed hides the proactive "needs setup" banner for the
-  // current flow once the user dismisses it. Reset per flow.
-  const [connBannerDismissed, setConnBannerDismissed] = useState(false);
+  // issuePanel is which of the two toolbar issue panels is open, if either.
+  // Controlled here rather than inside the buttons because opening is not
+  // always the user's doing: a refused wire opens the Warnings panel by
+  // itself, and both panels close when their last row goes away.
+  const [issuePanel, setIssuePanel] = useState<"error" | "warning" | null>(null);
   // lintIssues holds the most recent save's advisory findings. Cleared
   // when the user makes a new edit (so resolving a finding by editing
   // dismisses the warning visually until the next save confirms) or
@@ -1054,9 +1056,9 @@ function EditorInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, meReady, id, activeTenant, activeWorkspace, hydrateGraph]);
 
-  // A fresh flow gets a fresh shot at showing the connections banner.
+  // A panel belongs to the flow it was opened over; switching flows shuts it.
   useEffect(() => {
-    setConnBannerDismissed(false);
+    setIssuePanel(null);
   }, [id]);
 
   // Load the tenant's connected OAuth accounts so Run can warn before a
@@ -3577,6 +3579,36 @@ function EditorInner() {
       ),
     [setupNeededByNode, userFixableSetup, missingSecrets],
   );
+  // --- the two toolbar issue panels -------------------------------------
+  //
+  // Every message these count used to be a banner in a column over the canvas.
+  // The counts are what stands in the toolbar; the prose lives in the panels
+  // (IssuesPopover).
+  //
+  // A row is worth what it is worth: one lint pass finds several things and
+  // several steps can need setup, so those count their items, while the error
+  // and the missing-apps row are one each.
+  const errorCount = error ? 1 : 0;
+  const warningCount =
+    (connHint ? 1 : 0) +
+    lintIssues.length +
+    (needsSetup ? 1 : 0) +
+    configErrorsByNode.size;
+  // A refused wire explains something the author just tried, so it cannot wait
+  // to be asked for: the panel opens itself. The hint still self-clears after a
+  // few seconds, and the effect below closes the panel with it when there is
+  // nothing else left in the list.
+  useEffect(() => {
+    if (connHint) setIssuePanel("warning");
+  }, [connHint]);
+  // Close a panel the moment it would be empty — the last warning fixed, the
+  // error dismissed — rather than leave an empty box anchored to a button that
+  // is no longer rendered.
+  useEffect(() => {
+    if (issuePanel === "error" && errorCount === 0) setIssuePanel(null);
+    if (issuePanel === "warning" && warningCount === 0) setIssuePanel(null);
+  }, [issuePanel, errorCount, warningCount]);
+
   // setupBlockerNames lists what's unconfigured in the words the user sees
   // elsewhere (app display names, ${secret} refs). Feeds the publish gate's
   // warning so it names the actual gap instead of saying "something is
@@ -4242,22 +4274,256 @@ function EditorInner() {
               alone would mislead. */}
           {chipAddsInfo && <FlowStatusChip status={runStatus} />}
 
-          {/* Config verification (#13): how many drops are still missing
-              required values. Sits next to Run as a non-blocking heads-up. */}
-          {configErrorsByNode.size > 0 && (
-            <Button
-              className="editor-config-warn"
-              title={t("editor.configWarnTitle")}
-              onClick={() => setShowConfigList(true)}
-              aria-haspopup="dialog"
-              aria-expanded={showConfigList}
-            >
-              <AlertCircle size={ICON.sm} />
-              <span className="toolbar-label">
-                {t("editor.configWarn", { count: configErrorsByNode.size })}
-              </span>
-            </Button>
-          )}
+          {/* The editor's two issue affordances, and the only ones: a count in
+              the toolbar, the words in a panel under it.
+
+              Each of these was a banner in a column over the canvas — the
+              error, the lint findings, the apps still to connect, the steps
+              still missing values, and a six-second explanation of a refused
+              wire that covered the wire it was about. The messages were worth
+              keeping and the placement was not: they hid the flow at the
+              moment its author was working on it, and the reflex they trained
+              was Dismiss. */}
+          <IssuesButton
+            kind="error"
+            count={errorCount}
+            title={t("editor.issuesErrorsTitle", { count: errorCount })}
+            heading={t("editor.issuesErrorsHeading", { count: errorCount })}
+            open={issuePanel === "error"}
+            onOpenChange={(o) => setIssuePanel(o ? "error" : null)}
+          >
+            {error && (
+              <IssueRow
+                text={
+                  <>
+                    {error}{" "}
+                    {/* "…contact support" becomes the real thing. Two tiers,
+                        the same as the run-detail failure banner: file a ticket
+                        in-app when the deployment has that surface, which
+                        attaches a redacted diagnostic bundle for this flow;
+                        otherwise the operator-configured email/URL.
+                        ContactSupportLink renders nothing when neither is
+                        configured, so no dead affordance appears either way. */}
+                    {me?.support_tickets_enabled ? (
+                      <Button
+                        variant="link"
+                        className="editor-issues-link"
+                        onClick={() => setReporting(true)}
+                      >
+                        {t("report.title")}
+                      </Button>
+                    ) : (
+                      <ContactSupportLink className="editor-issues-link" />
+                    )}
+                  </>
+                }
+                actions={
+                  <>
+                    {/* The same recovery the runs list and run-detail page
+                        offer, but only when this row is about a failed RUN —
+                        the message also carries save, permission and config
+                        errors, and none of those has a run to resume. Hidden
+                        while a run is in flight so it can't fire twice, and
+                        gated on graph:run like Run and Stop are: opening
+                        someone else's failed run via ?run=… replays its
+                        terminal frames, so a viewer who cannot start a run can
+                        still reach this. */}
+                    {failedRun && !running && hasPerm("graph:run") && (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => void run.retryFailedRun()}
+                        title={t("runAction.retryTitle")}
+                      >
+                        <RotateCcw size={ICON.sm} />
+                        {t("runAction.retry")}
+                      </Button>
+                    )}
+                    <Button variant="ghost" size="sm" onClick={run.dismissFailure}>
+                      {t("common.dismiss")}
+                    </Button>
+                  </>
+                }
+              />
+            )}
+          </IssuesButton>
+          <IssuesButton
+            kind="warning"
+            count={warningCount}
+            title={t("editor.issuesWarningsTitle", { count: warningCount })}
+            heading={t("editor.issuesWarningsHeading", { count: warningCount })}
+            open={issuePanel === "warning"}
+            onOpenChange={(o) => setIssuePanel(o ? "warning" : null)}
+          >
+            {connHint && (
+              <IssueRow
+                text={connHint}
+                actions={
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setConnHint(null)}
+                  >
+                    {t("common.dismiss")}
+                  </Button>
+                }
+              />
+            )}
+            {/* Just the sentence — the machine code (issue.code) stays out of
+                the visible text and rides along as hover text for bug reports
+                and grepping. The sentence names the offending input the way the
+                Inspector does (schema title), so no node/module/field slugs
+                surface here. */}
+            {lintIssues.map((issue, i) => {
+              const manifest = nodes.find(
+                (n) => n.id === issue.node_ids?.[0],
+              )?.data.manifest;
+              return (
+                <IssueRow
+                  key={`lint-${i}`}
+                  title={issue.code}
+                  text={describeLint(issue, manifest)}
+                  actions={
+                    // One Dismiss for the whole pass, on its first row: they
+                    // arrive together from one save and go together on the
+                    // next edit.
+                    i === 0 ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setLintIssues([])}
+                        aria-label={t("editor.dismissLint")}
+                      >
+                        {t("common.dismiss")}
+                      </Button>
+                    ) : undefined
+                  }
+                />
+              );
+            })}
+            {needsSetup && (
+              <IssueRow
+                text={
+                  <>
+                    {userFixableSetup && (
+                      <span className="editor-issues-needs">
+                        <span>{t("editor.connNeededLead")}</span>
+                        {[
+                          ...new Map(
+                            missingConnections.map((m) => [m.provider, m]),
+                          ).values(),
+                        ].map((m) => {
+                          const meta = oauthProviderDisplay(m.provider);
+                          return (
+                            <span key={m.provider} className="editor-conn-chip">
+                              {meta.brand_logo && (
+                                <img
+                                  src={meta.brand_logo}
+                                  alt=""
+                                  className="editor-conn-chip-logo"
+                                  draggable={false}
+                                />
+                              )}
+                              {meta.name}
+                            </span>
+                          );
+                        })}
+                        {missingSetups.map((s) => {
+                          const SetupIcon = iconFor(s.icon);
+                          return (
+                            <span key={s.slug} className="editor-conn-chip">
+                              {s.brandLogo ? (
+                                <img
+                                  src={s.brandLogo}
+                                  alt=""
+                                  className="editor-conn-chip-logo"
+                                  draggable={false}
+                                />
+                              ) : (
+                                <SetupIcon
+                                  size={ICON.sm}
+                                  className="editor-conn-chip-logo"
+                                />
+                              )}
+                              {integrationName(s.integration, i18nLanguage)}
+                            </span>
+                          );
+                        })}
+                        {missingSecrets.map((s) => (
+                          <span key={s} className="editor-conn-chip">
+                            {s}
+                          </span>
+                        ))}
+                      </span>
+                    )}
+                    {adminBlockedSetup && (
+                      <span className="editor-issues-admin">
+                        {t(
+                          userFixableSetup
+                            ? "editor.adminBlockedAppend"
+                            : "editor.adminBlockedOnly",
+                          {
+                            items: [
+                              ...adminBlockedProviders.map(
+                                (pr) => oauthProviderDisplay(pr).name,
+                              ),
+                              ...adminBlockedSecretRefs,
+                            ].join(", "),
+                          },
+                        )}
+                      </span>
+                    )}
+                  </>
+                }
+                actions={
+                  /* Route to the Apps page, where each app needing setup is
+                     connected (OAuth) or keyed. When the blockage is
+                     admin-side, the same page surfaces the per-app "ask your
+                     admin" note; we just relabel the CTA as a status-check
+                     rather than a fixable action. A user without secret:write
+                     can't connect anything, so we drop the button for an "ask
+                     an admin" note rather than send them to a dead end. */
+                  canConnect ? (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => navigate(setupTarget)}
+                    >
+                      {userFixableSetup
+                        ? t("common.connect")
+                        : t("editor.adminBlockedCta")}
+                    </Button>
+                  ) : (
+                    <span className="editor-issues-admin">
+                      {t("editor.connNeededAskAdmin")}
+                    </span>
+                  )
+                }
+              />
+            )}
+            {/* Config verification (#13): how many steps are still missing
+                required values. The per-step list is a bigger thing than a
+                panel row — it jumps the canvas to the step — so the row opens
+                the checklist it always did. */}
+            {configErrorsByNode.size > 0 && (
+              <IssueRow
+                text={t("editor.configWarn", { count: configErrorsByNode.size })}
+                actions={
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    aria-haspopup="dialog"
+                    onClick={() => {
+                      setIssuePanel(null);
+                      setShowConfigList(true);
+                    }}
+                  >
+                    {t("editor.configWarnOpen")}
+                  </Button>
+                }
+              />
+            )}
+          </IssuesButton>
           {showConfigList && (
             <ConfigChecklistModal
               entries={[...configErrorsByNode.entries()].map(([nodeID, errs]) => {
@@ -4458,245 +4724,8 @@ function EditorInner() {
           )}
         </div>
         <div className="editor-banner-stack">
-        {connHint && (
-          <div className="editor-conn-hint" role="status">
-            <AlertCircle size={ICON.sm} className="editor-conn-hint-icon" />
-            <span className="editor-conn-hint-text">{connHint}</span>
-            <Button
-              variant="ghost"
-              className="editor-conn-hint-x"
-              onClick={() => setConnHint(null)}
-              title={t("common.dismiss")}
-              aria-label={t("common.dismiss")}
-            >
-              <X size={ICON.sm} />
-            </Button>
-          </div>
-        )}
-        {error && (
-          <div
-            role="alert"
-            style={{
-              background: "var(--surface)",
-              border: "1px solid var(--danger)",
-              color: "var(--danger)",
-              padding: "var(--space-3) var(--space-4)",
-              borderRadius: "var(--r-2)",
-              fontSize: "var(--text-md)",
-              boxShadow: "0 2px 8px color-mix(in srgb, var(--danger) 25%, transparent)",
-              display: "flex",
-              alignItems: "flex-start",
-              justifyContent: "space-between",
-              gap: "var(--space-2)",
-            }}
-          >
-            <span style={{ flex: 1 }}>
-              {error}{" "}
-              {/* "…contact support" becomes the real thing. Two tiers, the
-                  same as the run-detail failure banner: file a ticket in-app
-                  when the deployment has that surface, which attaches a
-                  redacted diagnostic bundle for this flow; otherwise the
-                  operator-configured email/URL. ContactSupportLink renders
-                  nothing when neither is configured, so no dead affordance
-                  appears either way. */}
-              {me?.support_tickets_enabled ? (
-                <Button
-                  variant="link"
-                  onClick={() => setReporting(true)}
-                  style={{
-                    color: "var(--danger)",
-                    textDecoration: "underline",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {t("report.title")}
-                </Button>
-              ) : (
-                <ContactSupportLink
-                  style={{
-                    color: "var(--danger)",
-                    textDecoration: "underline",
-                    whiteSpace: "nowrap",
-                  }}
-                />
-              )}
-            </span>
-            {/* Offer the same recovery the runs list and run-detail page do,
-                but only when this banner is about a failed RUN — the same
-                banner also carries save, permission and config errors, and
-                none of those has a run to resume. Hidden while a run is in
-                flight so it can't fire twice, and gated on graph:run like Run
-                and Stop are: opening someone else's failed run here via
-                ?run=… replays its terminal frames, so a viewer who cannot
-                start a run can still reach this banner. */}
-            {failedRun && !running && hasPerm("graph:run") && (
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => void run.retryFailedRun()}
-                title={t("runAction.retryTitle")}
-                style={{ flexShrink: 0 }}
-              >
-                <RotateCcw size={ICON.sm} />
-                {t("runAction.retry")}
-              </Button>
-            )}
-            <Button
-              variant="ghost"
-              onClick={run.dismissFailure}
-              style={{ fontSize: "var(--text-xs)", padding: "var(--space-0) var(--space-2)", color: "var(--danger)" }}
-              aria-label={t("common.dismiss")}
-            >
-              {t("common.dismiss")}
-            </Button>
-          </div>
-        )}
         {runDone && (
           <RunSucceededToast run={runDone} onDismiss={() => setRunDone(null)} />
-        )}
-        {lintIssues.length > 0 && (
-          <div
-            style={{
-              background: "var(--surface)",
-              border: "1px solid var(--warning)",
-              padding: "var(--space-3) var(--space-4)",
-              borderRadius: "var(--r-2)",
-              fontSize: "var(--text-md)",
-              color: "var(--ink)",
-              boxShadow: "0 2px 8px color-mix(in srgb, var(--warning) 25%, transparent)",
-            }}
-            role="alert"
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "var(--space-2)", marginBottom: "var(--space-1h)" }}>
-              <strong style={{ color: "var(--warning)" }}>
-                {t("editor.lintWarning", { count: lintIssues.length })}
-              </strong>
-              <Button
-                variant="ghost"
-                onClick={() => setLintIssues([])}
-                style={{ fontSize: "var(--text-xs)", padding: "var(--space-0) var(--space-2)" }}
-                aria-label={t("editor.dismissLint")}
-              >
-                {t("common.dismiss")}
-              </Button>
-            </div>
-            <ul style={{ margin: 0, paddingLeft: "var(--space-4)", display: "flex", flexDirection: "column", gap: "var(--space-1h)" }}>
-              {/* Just the sentence — the machine code (issue.code) stays
-                  out of the visible text and rides along as a hover
-                  tooltip for bug reports and grepping. The sentence names the
-                  offending input the way the Inspector does (schema title), so
-                  no node/module/field slugs surface here. */}
-              {lintIssues.map((issue, i) => {
-                const manifest = nodes.find(
-                  (n) => n.id === issue.node_ids?.[0],
-                )?.data.manifest;
-                return (
-                  <li key={i} title={issue.code}>
-                    {describeLint(issue, manifest)}
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        )}
-        {!connBannerDismissed && needsSetup && (
-          <div className="editor-conn-banner" role="alert">
-            <span className="editor-conn-banner-text">
-              {userFixableSetup && (
-                <span className="editor-conn-banner-needs">
-                  <span>{t("editor.connNeededLead")}</span>
-                  {[
-                    ...new Map(
-                      missingConnections.map((m) => [m.provider, m]),
-                    ).values(),
-                  ].map((m) => {
-                    const meta = oauthProviderDisplay(m.provider);
-                    return (
-                      <span key={m.provider} className="editor-conn-chip">
-                        {meta.brand_logo && (
-                          <img
-                            src={meta.brand_logo}
-                            alt=""
-                            className="editor-conn-chip-logo"
-                            draggable={false}
-                          />
-                        )}
-                        {meta.name}
-                      </span>
-                    );
-                  })}
-                  {missingSetups.map((s) => {
-                    const SetupIcon = iconFor(s.icon);
-                    return (
-                      <span key={s.slug} className="editor-conn-chip">
-                        {s.brandLogo ? (
-                          <img
-                            src={s.brandLogo}
-                            alt=""
-                            className="editor-conn-chip-logo"
-                            draggable={false}
-                          />
-                        ) : (
-                          <SetupIcon size={ICON.sm} className="editor-conn-chip-logo" />
-                        )}
-                        {integrationName(s.integration, i18nLanguage)}
-                      </span>
-                    );
-                  })}
-                  {missingSecrets.map((s) => (
-                    <span key={s} className="editor-conn-chip">
-                      {s}
-                    </span>
-                  ))}
-                </span>
-              )}
-              {adminBlockedSetup && (
-                <span className="editor-conn-banner-admin">
-                  {t(
-                    userFixableSetup
-                      ? "editor.adminBlockedAppend"
-                      : "editor.adminBlockedOnly",
-                    {
-                      items: [
-                        ...adminBlockedProviders.map(
-                          (p) => oauthProviderDisplay(p).name,
-                        ),
-                        ...adminBlockedSecretRefs,
-                      ].join(", "),
-                    },
-                  )}
-                </span>
-              )}
-            </span>
-            <span className="editor-conn-banner-actions">
-              {/* Route to the Apps page, where each app needing setup is
-                  connected (OAuth) or keyed. When the blockage is
-                  admin-side, the same page surfaces the per-app "ask your
-                  admin" note; we just relabel the CTA as a status-check
-                  rather than a fixable action. A user without secret:write
-                  can't connect anything, so we drop the button for an
-                  "ask an admin" note rather than send them to a dead-end. */}
-              {canConnect ? (
-                <Button
-                  variant="primary"
-                  onClick={() => navigate(setupTarget)}
-                >
-                  {userFixableSetup
-                    ? t("common.connect")
-                    : t("editor.adminBlockedCta")}
-                </Button>
-              ) : (
-                <span className="editor-conn-banner-admin">{t("editor.connNeededAskAdmin")}</span>
-              )}
-              <Button
-                variant="ghost"
-                onClick={() => setConnBannerDismissed(true)}
-                aria-label={t("common.dismiss")}
-              >
-                {t("common.dismiss")}
-              </Button>
-            </span>
-          </div>
         )}
         {/* Publish discoverability: the #1 "why didn't my flow run?" trap is a
             triggered flow left unpublished. A draft with a trigger never fires

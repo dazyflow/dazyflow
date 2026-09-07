@@ -128,8 +128,9 @@ async function emit(kind: string, data: unknown) {
   });
 }
 
-// Run the flow and let one step fail, which is the only way this banner
-// appears with a run behind it.
+// Run the flow and let one step fail, which is the only way this message
+// appears with a run behind it — then open the toolbar's Errors panel, which
+// is where it lives now (it used to be a banner over the canvas).
 async function failARun() {
   getNodeRecord.mockResolvedValue({
     Result: { error: { message: "no topic configured" } },
@@ -139,6 +140,9 @@ async function failARun() {
   await waitFor(() => expect(stream.latest()?.runID).toBe("run-1"));
   await emit(...frame.node("ntfy_1", "failed"));
   await emit(...frame.terminal("failed"));
+  await userEvent.click(
+    await screen.findByRole("button", { name: /editor.issuesErrorsTitle/ }),
+  );
   return screen.findByText(/editor.runFailed/);
 }
 

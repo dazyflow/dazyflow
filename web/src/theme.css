@@ -248,6 +248,9 @@
   --z-sidebar: 50;
   --z-popover: 110;
   --z-help-popover: 120;
+  /* The editor's Errors/Warnings panels: above the canvas and the inspector
+     sheet, below every modal — a row can open one. */
+  --z-issues-pop: 130;
   --z-modal: 200;
   --z-context-menu: 210;
   --z-palette: 300;

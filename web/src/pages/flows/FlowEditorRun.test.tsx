@@ -145,6 +145,15 @@ beforeEach(() => {
   cancelRun.mockResolvedValue({});
 });
 
+// openErrors clicks the toolbar's Errors button, where a run failure is
+// reported now. It used to be a banner over the canvas; the count is what
+// stands in the toolbar and the words are one click away.
+async function openErrors() {
+  await userEvent.click(
+    await screen.findByRole("button", { name: /editor.issuesErrorsTitle/ }),
+  );
+}
+
 describe("editor run lifecycle", () => {
   it("mounts the flow and offers Run", async () => {
     mount();
@@ -176,7 +185,7 @@ describe("editor run lifecycle", () => {
     expect(await screen.findByText(succeededHeadline)).toBeInTheDocument();
   });
 
-  it("raises the failure banner naming the step that failed", async () => {
+  it("reports the failure in the Errors panel, naming the step that failed", async () => {
     getNodeRecord.mockResolvedValue({
       Result: { error: { message: "no topic configured" } },
     });
@@ -187,10 +196,11 @@ describe("editor run lifecycle", () => {
     await emit(...frame.node("ntfy_1", "failed"));
     await waitFor(() => expect(getNodeRecord).toHaveBeenCalled());
 
+    await openErrors();
     expect(await screen.findByText(/editor.runFailed/)).toBeInTheDocument();
   });
 
-  it("offers Retry on the failure banner, and resumes the failed run", async () => {
+  it("offers Retry in the Errors panel, and resumes the failed run", async () => {
     getNodeRecord.mockResolvedValue({
       Result: { error: { message: "no topic configured" } },
     });
@@ -201,6 +211,7 @@ describe("editor run lifecycle", () => {
     await emit(...frame.node("ntfy_1", "failed"));
     await emit(...frame.terminal("failed"));
 
+    await openErrors();
     const retry = await screen.findByText("runAction.retry");
     await userEvent.click(retry);
     // Resumes THIS run rather than starting a fresh one, and keeps watching on
@@ -221,7 +232,8 @@ describe("editor run lifecycle", () => {
     await emit(...frame.node("ntfy_1", "failed"));
     await emit(...frame.terminal("failed", { message: "graph failed" }));
 
-    // The node banner names the step; the terminal handler must stay quiet.
+    // The node's message names the step; the terminal handler must stay quiet.
+    await openErrors();
     expect(screen.queryByText(/editor.runFailedGraph/)).not.toBeInTheDocument();
     expect(await screen.findByText(/editor.runFailed/)).toBeInTheDocument();
   });
@@ -235,6 +247,7 @@ describe("editor run lifecycle", () => {
     // any per-node frame; without this branch the canvas just goes quiet.
     await emit(...frame.terminal("failed", { message: "timeout" }));
 
+    await openErrors();
     expect(
       await screen.findByText(/editor.runFailedGraph/),
     ).toBeInTheDocument();

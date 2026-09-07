@@ -70,6 +70,23 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
   the codebase read either one. A saved flow still carrying them is unaffected:
   an unrecognized param is ignored, not rejected.
 
+### Changed
+
+- **The editor's messages moved out of the canvas and into the toolbar.** The
+  error, the lint findings, the apps still to connect, the steps still missing
+  values and the explanation of a refused wire were five banners in a column
+  over the flow — covering the steps their author was working on, and training
+  the reflex to hit Dismiss. They are now two counts next to Run, **Errors** and
+  **Warnings**, each opening a panel under itself; every action they carried
+  (Retry, Report a problem, Connect, the per-step checklist) came with them, and
+  a button renders only when it has something to say.
+
+  A refused wire still explains itself the moment it is refused — that message
+  answers something the author just tried, so the Warnings panel opens itself
+  for it — and a panel closes as soon as its last row is gone. The canvas keeps
+  only what is state rather than message: not published, paused, viewing an old
+  revision, and the run-succeeded toast.
+
 ### Fixed
 
 - **Two messages stop pointing at a menu that isn't there.** The double-schedule

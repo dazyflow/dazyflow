@@ -239,6 +239,11 @@ describe("editor go live", () => {
     mount();
     await flipSwitch();
     await confirmIn("alertdialog", "editor.pause");
+    // Reported in the toolbar's Errors panel, where every editor error lives
+    // now rather than in a banner over the canvas.
+    await userEvent.click(
+      await screen.findByRole("button", { name: /editor.issuesErrorsTitle/ }),
+    );
     expect(await screen.findByText("editor.pauseSaveFirst")).toBeInTheDocument();
   });
 });
