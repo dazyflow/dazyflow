@@ -10,6 +10,197 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Run history no longer deletes the steps of a run that is still going.** The
+  retention sweep asked of each ROW "is this terminal and older than the
+  window?", which is true of the succeeded steps of a run that has not finished
+  — one parked on an approval, or waiting out a `delay` (which accepts up to a
+  year). Past the window those steps were deleted out from under the live run.
+
+  What that cost was not only history. The completion check reads a missing
+  step record as "not done yet", so the run could never finish and the
+  orphan reaper could never close it: it sat in the Runs list as running for
+  ever. A step whose predecessor had been pruned failed with a bare
+  `predecessor "x": not found`. And a second bug lived in the same query —
+  step records finish BEFORE the run record that owns them, so a cutoff
+  landing between the two stripped the steps off an already-completed run and
+  left the run listed with nothing in it.
+
+  Retention is now scoped to the run: a run's history is deleted whole, N days
+  after the RUN finished, and a run that has not finished is never touched. The
+  window is therefore measured from the end of processing rather than the
+  beginning. Because an unfinished run is now never swept, a run that can never
+  finish is closed by the reaper instead (see the abandoned-run entry below).
+
+- **A form submission refused by a plan limit is kept instead of thrown away.**
+  Someone filling in a hosted form while the organisation was over its monthly
+  run allowance, suspended, or running a flow that no longer validates got
+  "this form is closed" — and what they typed became one line in the daemon
+  log. No run, no marker, no email. The owner had no way to learn the form had
+  stopped collecting, and the visitor was not coming back.
+
+  The submission is now kept as a failed run carrying the data itself, so it
+  shows in the Runs list with the reason, the run page shows what was
+  submitted, and **Retry** processes it once the cause is fixed. The owner is
+  emailed. A flow keeps up to 20 refused deliveries an hour; past that one run
+  records how many more were refused and NOT kept, so a gap in the record is
+  stated rather than left to be inferred.
+
+  Inbound webhooks are handled the same way, and the status code now says which
+  happened: a 4xx when the delivery is stored (do not resend — we hold it) and
+  503 when it is not (please retry). It used to be a blanket 500, so a sender
+  like Stripe burned its retry budget and then dropped the event for good.
+
+- **A poll trigger that cannot read its own position stops instead of guessing.**
+  Every "only new since last run" step keeps a watermark. Reading it returned
+  the empty string on *failure* as well as on "nothing stored yet", and every
+  step reads the latter as a first run — so one transient hiccup in the secret
+  store made a poller re-baseline to whatever was in front of it, silently
+  marking as handled everything that had arrived since the last poll, emitting
+  nothing, and reporting success. The mail, feed items or files in that window
+  were skipped permanently.
+
+  Such a step now fails, which loses nothing: the stored position is untouched,
+  so the next poll resumes from it. Two related holes closed with it. On a
+  deployment with no `DAZYFLOW_MASTER_KEY` there is nowhere to keep a position
+  at all, and those steps concluded "first run" on every run, for ever, emitting
+  nothing while the runs looked green — they now say so plainly. And a failure
+  to write the FIRST position is no longer ignored: nothing was emitted, so the
+  next run baselines too, and a write that kept failing parked the flow on its
+  first run permanently.
+
+- **Gmail stops losing an email whose fetch failed.** A search returns id stubs
+  that are expanded one call each; an expansion that failed left that entry
+  undateable, so it could not be emitted — and the watermark still advanced
+  past it as soon as any newer email in the same page expanded cleanly. One
+  unlucky API call, one email silently never processed, on a green run.
+
+  Any unread email now holds the watermark where it is, so it comes back around
+  next poll; the emails that did read are emitted again with it, which is the
+  same duplicates-over-silent-drops trade this step already documents for a
+  failed cursor write. A page where NOTHING could be fetched fails outright,
+  because an outage and a quiet poll are indistinguishable downstream.
+
+- **A burst bigger than "Max emails" is delayed rather than truncated.** Gmail
+  and Mailbox searches return the NEWEST matches up to the cap. With "only new"
+  on, a poll therefore emitted the newest 50 of 200 new emails and advanced the
+  watermark to the newest of them, putting the other 150 permanently behind it.
+
+  The poll now asks the mail server for the backlog rather than for the newest
+  mail, and works through it from the OLDEST end, in arrival order, so the
+  remainder stays in front of the watermark for the next poll. A backlog too
+  deep to scan in one go refuses rather than draining part of it, leaving the
+  whole thing waiting.
+
+- **A run that fails while nobody is looking now reports itself.** Failure
+  notification was a goroutine armed when the run was submitted, subscribed to
+  that run, bounded to an hour. Every shape of that lost the notifications most
+  worth having: a restart or deploy killed every watcher, so anything in flight
+  at that moment failed silently for ever; a run recovered from an expired lease
+  by another replica had no watcher on the replica that finished it; runs the
+  orphan reaper closes had none either; and the one-hour ceiling meant every
+  approval, every long delay and every retry backoff outlived its own watcher.
+
+  Notification is now a sweep over the runs the store says are owed one, which
+  no process can forget, and a startup pass sends anything the previous process
+  was mid-way through. A send that fails is retried a bounded number of times
+  instead of being dropped — a mail host having a bad minute used to mean the
+  notification was simply gone. `DAZYFLOW_NOTIFY_INTERVAL` and
+  `DAZYFLOW_NOTIFY_LOOKBACK` tune it; the lookback is what stops the first
+  sweep after a weekend of downtime being a mailstorm.
+
+  Three consequences fall out. A run the platform stops on its wall-clock
+  timeout is reported: it ends as *cancelled*, which the old watcher ignored
+  entirely, so the one failure the platform itself causes was the one nobody was
+  told about — and the Runs list only said "cancelled", which reads as though
+  somebody meant it. A submission whose work could not be queued is reported,
+  where before it was failed before its notifier was even armed. And a run
+  started through the API or `dzctl` is reported (see Changed).
+
+- **A flow whose schedule has quietly died leaves a record.** Every failure
+  path in the scheduler's fire was one line in the daemon log and a return: a
+  workspace that would not open, a published-revision lookup that failed, a
+  published flow that would not decode, a submission refused for a reason the
+  owner has to act on. A flow whose published revision no longer decodes was
+  dead on every tick, for ever, and from inside the app looked exactly like a
+  flow that was running fine.
+
+  These now write a failed run naming the cause, which puts them in the Runs
+  list and hands them to the notification sweep. Deliberate states still leave
+  nothing behind — unpublishing a flow and pausing it are how you turn a
+  schedule off. Fires the scheduler owed and did not make (a stalled tick loop,
+  a takeover from a dead leader) are recorded with the count.
+
+- **Running out of the monthly run allowance sends an email.** The signals were
+  an in-app Usage banner and a coalesced marker in the Runs list, both of which
+  need somebody to be looking at the app — which is what the users of an
+  automation product are precisely not doing. Flows stopped, everything looked
+  calm, and the way people found out was from a customer. One email per
+  organisation per day now says the flows have stopped, that nothing was
+  deleted, and that they start again on their own at the monthly reset.
+
+- **A run that can never finish is closed instead of sitting there for ever.**
+  Now that an unfinished run is never pruned, one that cannot progress would be
+  immortal: in the Runs list as running for ever, holding one of the
+  organisation's simultaneous-run slots for ever, and notifying nobody, because
+  it never reaches a terminal state. After enough of them a capped organisation
+  admits every new run as pending and starts none.
+
+  The reaper now fails such a run with a reason. The test is "nothing is
+  pending", not "old": a run with any queued, running or awaiting step is
+  waiting for something real — an approval parked for three weeks, a delay
+  counting down 90 days — and is never touched however ancient it looks.
+  `DAZYFLOW_ABANDON_RUNS_AFTER` tunes the window, which exists only so a run
+  mid-transition is not mistaken for an abandoned one.
+
+- **A repeating failure stops going quiet after the first email.** The throttle
+  asked "has any other run of this flow failed in the last hour?", which a
+  broken flow always answers yes to — so an outage sent one email at its start
+  and then nothing, however long it lasted. A flow broken for a week produced a
+  single email, sent a week ago, with the Runs list as the documented fallback.
+  The window now tumbles, so a continuing outage is reported once per window,
+  and each message says how many runs failed in the window before it.
+
+- **Smaller ones.** A run refused before anything was written no longer costs a
+  run out of the monthly allowance. A form or webhook submission is no longer
+  abandoned half-written when the sender hangs up mid-request, which could
+  leave a run stuck running with no work in it. A Mailbox search whose server
+  returns fewer messages than it matched no longer advances its position past
+  the ones that did not arrive.
+
+### Changed
+
+- **A flow started from the app, the API or `dzctl` now emails on failure.** The
+  email was suppressed for any run marked as started by a person, on the
+  reasoning that they were watching the canvas turn red. But the same endpoints
+  serve `dzctl`, the MCP server and anybody's own cron, and nothing distinguishes
+  those callers once a submission arrives — so the flag meant "tell nobody" for
+  exactly the unattended runs that need telling. Suppression is gone; the
+  per-flow throttle covers the case it was for, so iterating on a broken flow
+  costs one email per window, not one per attempt.
+
+- **For each fails when most of the items fail.** Carrying on past a bad row is
+  the point of the step and has not changed, but the step reported SUCCESS for
+  any mix short of total failure — so 99 failures out of 100 was a green run,
+  no notification, and a following step recording the work as done. Past half,
+  the step now fails. The rows that succeeded are still on `results` and the
+  failures still on `errors`, so nothing is thrown away; what changes is that
+  somebody is told. The failure count now goes to the run log either way.
+
+- **The first Google Forms check after publishing no longer processes the whole
+  back catalogue.** Every other watcher records where it is up to and fires
+  nothing on its first check; this one treated every existing response as new,
+  so publishing a flow against a form with 500 responses put all 500 through
+  the step that acts on each one. It now baselines like its siblings. This also
+  removed a way to lose the lot: emitting a backlog and then failing to record
+  it meant re-emitting the same backlog on every check, for ever.
+
+- **"Max emails" on the two mail searches takes the oldest waiting mail when
+  "only new" is on.** An ad-hoc search still returns the newest matches, which
+  is what someone asking a big mailbox for 50 results wants. A poll needs the
+  other end — see the burst entry above.
+
 ## [0.41.1] - 2026-09-07
 
 ### Changed
