@@ -54,7 +54,7 @@ func celProgram(env *cel.Env, ast *cel.Ast) (cel.Program, error) {
 	return env.Program(ast, cel.CostLimit(rowcel.CostLimit))
 }
 
-// normalizeRows / coerceRowMap / normalizeHeaders / deriveHeaders are
+// normalizeRows / coerceRowMap / deriveHeaders are
 // thin aliases over the shared drops/internal/rows package. The
 // transform variant caps the input against the row ceiling (so a
 // transform can't be made to hold an unbounded list) and accepts a
@@ -64,17 +64,13 @@ func normalizeRows(inline any) ([]map[string]any, error) {
 	return rows.Normalize(inline, rows.Options{Cap: capRows, AllowSingleObject: true})
 }
 
-func normalizeHeaders(inline any) ([]string, error) {
-	return rows.NormalizeHeaders(inline)
-}
-
 func deriveHeaders(r []map[string]any) []string {
 	return rows.DeriveHeaders(r)
 }
 
 // loadRowsAndHeaders is the shared prologue for the row-shaping drops:
-// read the required `rows` input and normalize it, then read the
-// optional `headers` input (deriving from the rows when none is wired).
+// read the required `rows` input, normalize it, and take the column order off
+// the value (deriving it from the row keys when the value carries none).
 // On a bad input it returns a fully-formed error Result and ok=false,
 // which callers return verbatim. This collapses the ~15-line read /
 // normalize / derive block every transform drop opened with.
@@ -88,21 +84,10 @@ func loadRowsAndHeaders(job core.Job) (rowsOut []map[string]any, headers []strin
 		return nil, nil, params.Err(job, "bad_input", err.Error()), false
 	}
 	// Folded-headers model: the column order travels ON the rows value
-	// (rowsRef.Headers), so there's one wire, not parallel rows + headers
-	// ports. Fall back to a legacy separate `headers` input (for graphs/drops
-	// not yet migrated), then derive from the row keys.
-	switch {
-	case len(rowsRef.Headers) > 0:
-		headers = rowsRef.Headers
-	default:
-		if h, ok := job.Input["headers"]; ok && h.Inline != nil {
-			headers, err = normalizeHeaders(h.Inline)
-			if err != nil {
-				return nil, nil, params.Err(job, "bad_input", err.Error()), false
-			}
-		}
-	}
-	if headers == nil {
+	// (rowsRef.Headers), so there is one wire, not parallel rows + headers
+	// ports. No drop declares a `headers` input any more, so there is nothing
+	// to fall back to: an absent order is derived from the row keys.
+	if headers = rowsRef.Headers; len(headers) == 0 {
 		headers = deriveHeaders(rowsOut)
 	}
 	return rowsOut, headers, core.Result{}, true

@@ -247,7 +247,7 @@ func lintTriggers(g Graph) []LintIssue {
 	}
 	if hasCronNode && hasGraphCron {
 		issues = append(issues, triggerIssue("trigger_cron_duplicate_source",
-			"This flow has both a Schedule step and a graph-level schedule, so it will run twice at each scheduled time. Keep the Schedule step and remove the graph-level schedule on the Triggers → Schedule tab."))
+			"This flow has both a Schedule step and a graph-level schedule, so it will run twice at each scheduled time. Keep the Schedule step — the graph-level schedule has no editor (the Triggers menu it lived on is gone) and has to be cleared through the API."))
 	}
 	return issues
 }

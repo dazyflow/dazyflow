@@ -40,7 +40,7 @@
     {
       "id": "write_summary",
       "module": "excel_write",
-      "params": {"path": "payroll/week.xlsx", "sheet": "Payroll", "mkdirs": true, "autosize": true}
+      "params": {"path": "payroll/week.xlsx", "sheet": "Payroll", "mkdirs": true}
     },
     {
       "id": "email_bookkeeper",

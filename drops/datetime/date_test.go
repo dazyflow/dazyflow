@@ -76,14 +76,16 @@ func TestDate_NegativeOffset(t *testing.T) {
 
 func TestDate_Timezone(t *testing.T) {
 	// 2026-01-15T12:00:00Z in New York (EST, UTC-5) is 07:00.
-	res := runDate(t, "2026-01-15T12:00:00Z", map[string]any{"tz": "America/New_York", "format": "time"})
+	res := runDate(t, "2026-01-15T12:00:00Z", map[string]any{"tz": "America/New_York", "format": "time24"})
 	if got := outOf(t, res); got != "07:00:00" {
 		t.Errorf("ny time = %q, want 07:00:00", got)
 	}
 }
 
 func TestDate_CustomLayout(t *testing.T) {
-	res := runDate(t, "2026-07-02T00:00:00Z", map[string]any{"format": "Mon 2 Jan 2006"})
+	res := runDate(t, "2026-07-02T00:00:00Z", map[string]any{
+		"format": "custom", "custom_format": "ddd D MMM YYYY",
+	})
 	if got := outOf(t, res); got != "Thu 2 Jul 2026" {
 		t.Errorf("custom = %q, want Thu 2 Jul 2026", got)
 	}
@@ -245,31 +247,23 @@ func TestDate_CustomWithNoFormatIsAnError(t *testing.T) {
 	}
 }
 
-// Graphs saved before Format became a dropdown carry a Go reference layout in
-// `format` itself. They must keep rendering exactly as they did.
-func TestDate_LegacyGoLayoutInFormatParam(t *testing.T) {
-	res := runDate(t, "2026-08-27T13:45:07Z", map[string]any{"format": "Mon 2 Jan 2006"})
-	if got := outOf(t, res); got != "Thu 27 Aug 2026" {
-		t.Errorf("got %q, want Thu 27 Aug 2026", got)
-	}
-}
-
-// And the bug that was in that field: a format time.Format could not read came
-// back verbatim. Now the token vocabulary gets a turn at it.
-func TestDate_LegacyFormatParamAcceptsTokens(t *testing.T) {
-	res := runDate(t, "2026-08-27T13:45:07Z", map[string]any{"format": "DD/MM/YYYY"})
-	if got := outOf(t, res); got != "27/08/2026" {
-		t.Errorf("got %q, want 27/08/2026 — the format string must not be echoed", got)
+// A format outside the dropdown is a misconfiguration, not a format string:
+// rendering it there is how "2006-01-02" used to come back as itself. The
+// error names Custom, which is where a pattern belongs.
+func TestDate_OffEnumFormatIsAnError(t *testing.T) {
+	for _, f := range []string{"Mon 2 Jan 2006", "DD/MM/YYYY", "2006-01-02", "sometime soon", "kitchen"} {
+		res := runDate(t, "2026-08-27T13:45:07Z", map[string]any{"format": f})
+		if res.Status != core.StatusError || res.Error.Code != "bad_param" {
+			t.Errorf("format %q: res = %+v, want error/bad_param", f, res)
+		}
 	}
 }
 
 func TestDate_TimeFormats(t *testing.T) {
-	// The 12/24-hour pair, and the names they had when they weren't a pair.
+	// The 12/24-hour pair.
 	for _, c := range []struct{ format, want string }{
 		{"time24", "14:05:09"},
 		{"time12", "2:05:09 PM"},
-		{"time", "14:05:09"},  // legacy name for time24
-		{"kitchen", "2:05PM"}, // legacy name for time12
 	} {
 		res := runDate(t, "2026-08-27T14:05:09Z", map[string]any{"format": c.format})
 		if got := outOf(t, res); got != c.want {

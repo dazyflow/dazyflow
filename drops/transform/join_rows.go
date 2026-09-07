@@ -305,18 +305,11 @@ func loadSide(job core.Job, name string) ([]map[string]any, []string, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("%s_rows: %w", name, err)
 	}
-	// Folded-headers model: prefer the column order carried on the rows Ref,
-	// then a legacy separate `<side>_headers` input, then derive.
+	// Folded-headers model: the column order is carried on the rows Ref. There
+	// is no `<side>_headers` input to fall back to — that port is gone — so an
+	// absent order is derived from the row keys.
 	headers := rowsRef.Headers
 	if len(headers) == 0 {
-		if h, ok := job.Input[name+"_headers"]; ok && h.Inline != nil {
-			headers, err = normalizeHeaders(h.Inline)
-			if err != nil {
-				return nil, nil, fmt.Errorf("%s_headers: %w", name, err)
-			}
-		}
-	}
-	if headers == nil {
 		headers = deriveHeaders(rows)
 	}
 	return rows, headers, nil

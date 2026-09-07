@@ -161,15 +161,26 @@ func dedupeRecipients(lists ...[]string) []string {
 }
 
 // smtpPort resolves the mail-server port. ConnectionFields inject it as a
-// string ("587"); older flows may carry it as a JSON number. Try the string
-// form first, fall back to the numeric form, then to 587 (STARTTLS default).
-func smtpPort(job core.Job) int {
-	if s := strings.TrimSpace(params.StringDefault(job.Params, "port", "")); s != "" {
-		if n, err := strconv.Atoi(s); err == nil && n > 0 {
-			return n
-		}
+// string ("587"); an absent one means 587, the STARTTLS default. A value that
+// is not a usable number is reported, not silently replaced by the default —
+// mail delivered on the wrong port fails in a way nothing here would explain.
+func smtpPort(job core.Job) (int, error) {
+	raw, present := job.Params["port"]
+	if !present {
+		return 587, nil
 	}
-	return params.IntDefault(job.Params, "port", 587)
+	s, ok := raw.(string)
+	if !ok {
+		return 0, fmt.Errorf("port must be a number written as text, e.g. \"587\" — re-save the mail server on the Email integration page")
+	}
+	if s = strings.TrimSpace(s); s == "" {
+		return 587, nil
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil || n <= 0 {
+		return 0, fmt.Errorf("port %q isn't a number — write it as 587, 465 or 25 on the Email integration page", s)
+	}
+	return n, nil
 }
 
 func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
@@ -194,12 +205,15 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 	// when one is wired, otherwise from the param (the "input overrides param"
 	// pattern). A non-text value wired into To or Subject is a mistake we
 	// reject.
-	// To is a comma-separated string param; older flows may have stored it as a
-	// JSON array, so fall back to StringSlice when the string form is empty.
-	to := splitRecipients(params.StringDefault(job.Params, "to", ""))
-	if len(to) == 0 {
-		to = params.StringSlice(job.Params, "to")
+	// To is a comma-separated string. A value in some other shape is named as
+	// such rather than reported as missing, which is what it looks like once
+	// the string read comes back empty.
+	if raw, present := job.Params["to"]; present {
+		if _, ok := raw.(string); !ok {
+			return params.Err(job, "bad_param", "'to' must be one comma-separated string of addresses, e.g. \"a@x.test, b@x.test\""), nil
+		}
 	}
+	to := splitRecipients(params.StringDefault(job.Params, "to", ""))
 	if wired, ok := params.TextInputOr(job, "to", ""); !ok {
 		return params.Err(job, "bad_input", "'To' input must be text"), nil
 	} else if wired != "" {
@@ -222,7 +236,10 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 		return params.Err(job, "bad_input", "'Subject' input must be text"), nil
 	}
 
-	port := smtpPort(job)
+	port, portErr := smtpPort(job)
+	if portErr != nil {
+		return params.Err(job, "bad_param", portErr.Error()), nil
+	}
 	tlsMode := params.StringDefault(job.Params, "tls", "starttls")
 	username := params.StringDefault(job.Params, "username", "")
 	password := params.StringDefault(job.Params, "password", "")

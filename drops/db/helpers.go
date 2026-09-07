@@ -95,7 +95,7 @@ func parseColumnTypes(params map[string]any) (map[string]string, error) {
 	return m, nil
 }
 
-// normalizeRows / coerceRowMap / normalizeHeaders / deriveHeaders are
+// normalizeRows / coerceRowMap / deriveHeaders are
 // thin aliases over the shared drops/internal/rows package. The db
 // drops only accept list shapes (a bare object is rejected) and do not
 // pre-cap the input here, so they pass the zero-value Options.

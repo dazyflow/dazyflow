@@ -723,9 +723,12 @@ func (f *fakeSaaS) serveSMTP(conn net.Conn) {
 }
 
 // smtpHostPort is what the Email step's connection fields are pointed at.
-func (f *fakeSaaS) smtpHostPort() (string, int) {
+// The port comes back as a string because that is the shape ConnectionFields
+// inject into a job's params — a number there is rejected, so a harness that
+// handed one would be testing a call production never makes.
+func (f *fakeSaaS) smtpHostPort() (host, port string) {
 	addr := f.smtp.Addr().(*net.TCPAddr)
-	return "127.0.0.1", addr.Port
+	return "127.0.0.1", strconv.Itoa(addr.Port)
 }
 
 // --- helpers --------------------------------------------------------------

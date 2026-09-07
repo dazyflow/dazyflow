@@ -157,14 +157,6 @@ func TestCov_ComputeMapResultUnwrapped(t *testing.T) {
 
 // ===== sort_rows.go ===================================================
 
-func TestCov_SortKeysFromStringSlice(t *testing.T) {
-	// Native []string shape for `by`.
-	keys, err := parseSortKeys(map[string]any{"by": []string{"a", "b"}})
-	if err != nil || len(keys) != 2 || keys[0].column != "a" {
-		t.Fatalf("keys=%v err=%v", keys, err)
-	}
-}
-
 func TestCov_SortKeysErrors(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -172,7 +164,8 @@ func TestCov_SortKeysErrors(t *testing.T) {
 	}{
 		{"missing by", map[string]any{}},
 		{"by wrong type", map[string]any{"by": 5}},
-		{"empty by list", map[string]any{"by": []any{}}},
+		{"by as a list", map[string]any{"by": []any{"a"}}},
+		{"empty by string", map[string]any{"by": ""}},
 		{"object missing column", map[string]any{"by": []any{map[string]any{"desc": true}}}},
 		{"bad element type", map[string]any{"by": []any{5}}},
 	}
@@ -213,7 +206,7 @@ func TestCov_CompareCellsNilAndBool(t *testing.T) {
 func TestCov_SortFloatVariants(t *testing.T) {
 	// Exercise sort over many numeric Go types via toFloat.
 	got := runSort(t,
-		map[string]any{"by": []any{"n"}},
+		map[string]any{"by": "n"},
 		[]map[string]any{
 			{"n": int(3)}, {"n": int8(1)}, {"n": int16(2)},
 			{"n": float64(0.5)}, {"n": uint(10)},

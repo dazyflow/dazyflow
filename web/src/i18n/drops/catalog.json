@@ -1076,7 +1076,6 @@
       "Sheet"
     ],
     "help": [
-      "Accepted for compatibility; not applied.",
       "Add the rows under what's already on the sheet instead of replacing it.",
       "The sheet (tab) to write.",
       "Where to save the .xlsx in the workspace. Ignored when a 'File' input is connected."
@@ -4419,7 +4418,7 @@
     ]
   },
   "sort_rows": {
-    "description": "Sort rows by one or more columns. The 'by' param is a comma-separated list of column names in priority order — earlier names win, later ones break ties. The Direction param ('sort_dir') sets ascending or descending for the whole sort. To mix directions in a multi-column sort, prefix a name with '-' for descending or '+' for ascending: with Direction ascending, \"revenue,-created_at\" is revenue ascending, then newest first. A prefixed name always keeps its own direction, whatever Direction says. (A legacy array of names / {column,desc:true} objects is still accepted for older flows.)",
+    "description": "Sort rows by one or more columns. The 'by' param is a comma-separated list of column names in priority order — earlier names win, later ones break ties. The Direction param ('sort_dir') sets ascending or descending for the whole sort. To mix directions in a multi-column sort, prefix a name with '-' for descending or '+' for ascending: with Direction ascending, \"revenue,-created_at\" is revenue ascending, then newest first. A prefixed name always keeps its own direction, whatever Direction says.",
     "ports": [
       "Pass-through",
       "Rows"

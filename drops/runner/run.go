@@ -405,13 +405,9 @@ func execute(ctx context.Context, job core.Job, progress chan<- core.Progress) (
 	}, nil
 }
 
-// targetTags reads where this step should run.
-//
-// Two older shapes are still honoured, and have to be: a flow saved before this
-// step took tags carries `runner` (one machine, by name) or `label` (any machine
-// carrying it), and those flows keep running. Both collapse to a single tag,
-// because a machine's own name is now one of its tags — which is exactly why the
-// two fields could be replaced by one in the first place.
+// targetTags reads where this step should run: the `tags` field, and only that
+// one. The `runner` and `label` fields it replaced are not read — a machine's
+// own name is one of its tags, which is why one field could replace two.
 //
 // Normalized the same way registration normalizes labels: lower-cased and
 // trimmed. A runner installed with `--labels Linux,Build` is stored (and listed
@@ -421,15 +417,6 @@ func execute(ctx context.Context, job core.Job, progress chan<- core.Progress) (
 // validRunnerName only ever allows lower-case.
 func targetTags(job core.Job) []string {
 	raw := params.StringSlice(job.Params, "tags")
-	if len(raw) == 0 {
-		// The pre-tags params. Read in a fixed order rather than merged: they
-		// were mutually exclusive, so at most one is ever set.
-		for _, key := range []string{"runner", "label"} {
-			if v := params.StringDefault(job.Params, key, ""); v != "" {
-				raw = append(raw, v)
-			}
-		}
-	}
 	seen := map[string]struct{}{}
 	out := make([]string, 0, len(raw))
 	for _, t := range raw {

@@ -60,9 +60,7 @@ func init() {
 				"properties":{
 					"path":{"type":"string","title":"File","examples":["reports/sales.xlsx"],"description":"Where to save the .xlsx in the workspace. Ignored when a 'File' input is connected."},
 					"sheet":{"type":"string","title":"Sheet","default":"Sheet1","description":"The sheet (tab) to write."},
-					"append":{"type":"boolean","title":"Add to existing sheet","default":false,"description":"Add the rows under what's already on the sheet instead of replacing it."},
-					"autosize":{"type":"boolean","description":"Accepted for compatibility; not applied.","x_advanced":true},
-					"freezeRow":{"type":"integer","description":"Accepted for compatibility; not applied.","x_advanced":true}
+					"append":{"type":"boolean","title":"Add to existing sheet","default":false,"description":"Add the rows under what's already on the sheet instead of replacing it."}
 				},
 				"required":["path"]
 			}`),

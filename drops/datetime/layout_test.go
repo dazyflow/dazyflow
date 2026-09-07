@@ -93,43 +93,6 @@ func TestRenderCustom_UnclosedBracket(t *testing.T) {
 	}
 }
 
-// Go reference layouts are what the format field took before it became a
-// dropdown, and saved graphs still carry them.
-func TestRenderLegacyFormat_KeepsGoLayouts(t *testing.T) {
-	cases := []struct{ format, want string }{
-		{"2006-01-02", "2026-08-27"},
-		{"02/01/2006", "27/08/2026"},
-		{"Mon 2 Jan 2006", "Thu 27 Aug 2026"},
-		{"15:04", "14:05"},
-	}
-	for _, c := range cases {
-		got, err := renderLegacyFormat(ref, c.format, datenames.English)
-		if err != nil {
-			t.Fatalf("renderLegacyFormat(%q): %v", c.format, err)
-		}
-		if got != c.want {
-			t.Errorf("renderLegacyFormat(%q) = %q, want %q", c.format, got, c.want)
-		}
-	}
-}
-
-// The silent echo, fixed: time.Format consumed nothing from "YYYY-MM-DD", so
-// it used to come back as itself and land in the message. Now the token
-// vocabulary gets a turn.
-func TestRenderLegacyFormat_FallsBackToTokens(t *testing.T) {
-	got, err := renderLegacyFormat(ref, "YYYY-MM-DD", datenames.English)
-	if err != nil {
-		t.Fatalf("renderLegacyFormat: %v", err)
-	}
-	if got != "2026-08-27" {
-		t.Errorf("got %q, want 2026-08-27 (not the format string itself)", got)
-	}
-	// And a format that is neither errors rather than shipping itself.
-	if out, err := renderLegacyFormat(ref, "sometime soon", datenames.English); err == nil {
-		t.Errorf("got %q, want an error", out)
-	}
-}
-
 func TestParseClock(t *testing.T) {
 	cases := []struct {
 		in      string

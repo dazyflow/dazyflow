@@ -102,15 +102,3 @@ func TestDate_StepLocaleOverridesTheFlow(t *testing.T) {
 		t.Errorf("got %q, want Thursday (the step's own choice)", got)
 	}
 }
-
-// A Go reference layout saved in an older flow asked for English by
-// construction ("Mon 2 Jan 2006" names English months). Localizing it would
-// silently change what those flows already send.
-func TestDate_LegacyGoLayoutStaysEnglish(t *testing.T) {
-	res := runDate(t, "2026-08-27T14:05:09Z", map[string]any{
-		"format": "Mon 2 Jan 2006", "locale": "sv",
-	})
-	if got := outOf(t, res); got != "Thu 27 Aug 2026" {
-		t.Errorf("got %q, want Thu 27 Aug 2026", got)
-	}
-}

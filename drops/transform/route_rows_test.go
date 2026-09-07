@@ -13,10 +13,7 @@ import (
 // package — pass params + rows, get back a Result.
 func runRoute(t *testing.T, params map[string]any, rows []map[string]any, headers []string) core.Result {
 	t.Helper()
-	in := map[string]core.Ref{"rows": {Inline: rows}}
-	if headers != nil {
-		in["headers"] = core.Ref{Inline: headers}
-	}
+	in := map[string]core.Ref{"rows": {Inline: rows, Headers: headers}}
 	res, err := executeRouteRows(t.Context(), core.Job{ID: "j", Params: params, Input: in}, nil)
 	if err != nil {
 		t.Fatalf("execute: %v", err)

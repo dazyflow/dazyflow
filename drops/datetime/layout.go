@@ -197,28 +197,6 @@ func letterRun(s string) string {
 	return s[:n]
 }
 
-// renderLegacyFormat renders a format typed into the `format` param itself,
-// which before the Format dropdown existed meant a Go reference layout. Those
-// are saved in existing graphs, so they keep working exactly as they did: the
-// layout goes to time.Format verbatim.
-//
-// The fallback is the fix for the silent echo. When time.Format consumed
-// NOTHING — the output is the format string, character for character, which is
-// what happened to every `YYYY-MM-DD` ever typed here — the format is tried
-// again as the custom vocabulary. So the spelling that used to leak into the
-// message now renders, and a format that is neither reports an error instead
-// of shipping itself.
-func renderLegacyFormat(t time.Time, format string, names datenames.Names) (string, error) {
-	// A Go reference layout is English by construction ("Mon 2 Jan 2006" names
-	// English months), and a graph that saved one asked for exactly that
-	// output. Localizing it would silently change what those flows send, so
-	// the legacy path stays English; only the token vocabulary localizes.
-	if out := t.Format(format); out != format {
-		return out, nil
-	}
-	return renderCustom(t, format, names)
-}
-
 // parseClock reads a time of day: "9:00", "09:00", "17:30:15". Seconds are
 // optional; anything out of range is an error rather than a rollover, since
 // "25:00" is a typo and not a request for tomorrow at one.

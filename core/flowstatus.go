@@ -60,25 +60,6 @@ func FlowRunStatusPublished(g Graph, published bool) FlowRunStatus {
 	return s
 }
 
-// HasConfiguredWebhookTrigger reports whether the flow has a REACHABLE inbound
-// HTTP trigger: a Webhook or Request step carrying a secret key, or a Form
-// step (which needs none). A key-less Webhook is inert — the endpoint rejects
-// every inbound call, so it does not make the flow live.
-func HasConfiguredWebhookTrigger(g Graph) bool {
-	_, hasWebhook, _ := classifyTriggers(g)
-	return hasWebhook
-}
-
-// HasEventTrigger reports whether the flow carries an inbound provider-event
-// trigger (a Slack mention, a GitHub push, a Stripe payment …) — the nodes the
-// daemon's event fan-outs pre-complete when a provider calls in. Used by the
-// upgrade migration to identify flows that were firing through the old
-// fall-back-to-HEAD behaviour.
-func HasEventTrigger(g Graph) bool {
-	_, _, hasEvent := classifyTriggers(g)
-	return hasEvent
-}
-
 // EventTriggerModules are the trigger drops fired by an inbound provider
 // event rather than by the scheduler or the /trigger webhook. They carry no
 // interval or secret to check — the node's mere presence makes the flow live,

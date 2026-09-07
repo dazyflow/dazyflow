@@ -53,12 +53,7 @@
       "id": "ranked",
       "module": "sort_rows",
       "params": {
-        "by": [
-          {
-            "column": "revenue",
-            "desc": true
-          }
-        ]
+        "by": "-revenue"
       }
     },
     {

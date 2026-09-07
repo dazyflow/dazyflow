@@ -165,32 +165,6 @@ func TestParamStringArray(t *testing.T) {
 	})
 }
 
-func TestNormalizeHeaders(t *testing.T) {
-	t.Run("[]string passes through", func(t *testing.T) {
-		got, err := rows.NormalizeHeaders([]string{"a", "b"})
-		if err != nil || !reflect.DeepEqual(got, []string{"a", "b"}) {
-			t.Fatalf("got (%v, %v)", got, err)
-		}
-	})
-	t.Run("[]any of strings", func(t *testing.T) {
-		got, err := rows.NormalizeHeaders([]any{"a", "b"})
-		if err != nil || !reflect.DeepEqual(got, []string{"a", "b"}) {
-			t.Fatalf("got (%v, %v)", got, err)
-		}
-	})
-	t.Run("[]any with non-string names the index", func(t *testing.T) {
-		_, err := rows.NormalizeHeaders([]any{"a", 9})
-		if err == nil || !strings.Contains(err.Error(), "headers[1]") {
-			t.Errorf("err = %v", err)
-		}
-	})
-	t.Run("unsupported type errors", func(t *testing.T) {
-		if _, err := rows.NormalizeHeaders(42); err == nil {
-			t.Error("want error")
-		}
-	})
-}
-
 func TestParamInt(t *testing.T) {
 	cases := []struct {
 		name   string

@@ -258,29 +258,21 @@ func TestExecute_NormalizesTheTarget(t *testing.T) {
 	}
 }
 
-// A flow saved before this step took tags carries `runner` (one machine) or
-// `label` (any machine with it), and has to keep running: those flows are in
-// production, and the whole reason one field could replace two is that a
-// machine's name is now itself a tag.
-func TestExecute_HonoursThePreTagsParams(t *testing.T) {
-	f := install(t, &fakeDispatcher{})
+// `runner` and `label` were the two fields tags replaced. They are not read
+// any more: a step still carrying one has no target, which is a no_target
+// failure naming the empty field rather than a script dispatched to a machine
+// nobody named in the step as it stands.
+func TestExecute_PreTagsParamsAreNotATarget(t *testing.T) {
+	install(t, &fakeDispatcher{})
 
-	run(t, map[string]any{"runner": "Invoices-Box", "script": "x"}, nil)
-	if strings.Join(f.got.Tags, ",") != "invoices-box" {
-		t.Errorf("tags = %v, want the old `runner` read as one tag", f.got.Tags)
-	}
-
-	run(t, map[string]any{"label": "build", "script": "x"}, nil)
-	if strings.Join(f.got.Tags, ",") != "build" {
-		t.Errorf("tags = %v, want the old `label` read as one tag", f.got.Tags)
-	}
-
-	// A step re-saved with tags ignores the leftovers rather than quietly adding
-	// them as extra requirements — which, since every tag must match, would
-	// narrow the step to nothing.
-	run(t, map[string]any{"tags": []any{"gpu"}, "runner": "old-box", "label": "stale", "script": "x"}, nil)
-	if strings.Join(f.got.Tags, ",") != "gpu" {
-		t.Errorf("tags = %v, want only the new field once it is set", f.got.Tags)
+	for _, params := range []map[string]any{
+		{"runner": "Invoices-Box", "script": "x"},
+		{"label": "build", "script": "x"},
+	} {
+		res := run(t, params, nil)
+		if res.Status != core.StatusError || res.Error.Code != "no_target" {
+			t.Errorf("params %v: result = %+v, want a no_target failure", params, res)
+		}
 	}
 }
 

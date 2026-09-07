@@ -284,15 +284,12 @@ func loadLocation(tz string) (*time.Location, error) {
 	return loc, nil
 }
 
-// renderFormat resolves the Format field and renders t. Three cases, tried in
-// this order:
-//
-//	a named format → its preset rendering
-//	"custom"       → the Custom format field, in the token vocabulary
-//	anything else  → a format typed into `format` itself, which is what this
-//	                 drop took before Format became a dropdown; saved graphs
-//	                 still carry Go reference layouts there, so they keep
-//	                 working (see renderLegacyFormat).
+// renderFormat resolves the Format field and renders t. Format names one of
+// the presets, or "custom" and the Custom format field carries the token
+// vocabulary. Anything else is a misconfiguration and says so: a format string
+// typed into `format` itself used to be rendered there, which meant a
+// digit-only layout ("2006-01-02") came back as itself and shipped in the
+// message with nothing pointing at it.
 func localeFor(job core.Job) string {
 	if l := strings.TrimSpace(params.StringDefault(job.Params, "locale", "")); l != "" {
 		return l
@@ -312,7 +309,9 @@ func renderFormat(t time.Time, job core.Job, names datenames.Names) (string, err
 	if out, ok := renderPreset(t, format, names); ok {
 		return out, nil
 	}
-	return renderLegacyFormat(t, format, names)
+	return "", fmt.Errorf("%q isn't a format — pick one of iso, date, datetime, time24, time12, "+
+		"weekday, weekday_short, unix, unixms, rfc1123, or set Format to Custom and write the "+
+		"pattern (e.g. \"DD/MM/YYYY\") in the Custom format field", format)
 }
 
 // renderPreset formats t per a named format, reporting false for a name it
@@ -342,15 +341,6 @@ func renderPreset(t time.Time, format string, names datenames.Names) (string, bo
 		return names.Days[int(t.Weekday())], true
 	case "weekday_short":
 		return names.DaysShort[int(t.Weekday())], true
-	// "time" and "kitchen" are what the 24- and 12-hour options were called
-	// before they were a pair, and saved graphs still carry them. Kept
-	// renderable, and out of the dropdown: the two names said nothing about
-	// each other, which is what sent people to a custom format to get a
-	// 12-hour clock the step already had.
-	case "time":
-		return t.Format("15:04:05"), true
-	case "kitchen":
-		return t.Format(time.Kitchen), true
 	case "unix":
 		return strconv.FormatInt(t.Unix(), 10), true
 	case "unixms":

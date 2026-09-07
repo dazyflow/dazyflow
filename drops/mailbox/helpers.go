@@ -88,17 +88,10 @@ func configFromJob(job core.Job) (imaputil.Config, error) {
 	if err != nil {
 		return imaputil.Config{}, err
 	}
-	// ConnectionFields inject the port as a string ("993"); a graph saved
-	// before the field existed may carry it as a JSON number. Try the string
-	// form first, then the numeric one — the same two-step the Email drop's
-	// smtpPort makes, for the same reason.
-	portStr := strings.TrimSpace(params.StringDefault(job.Params, "port", ""))
-	if portStr == "" {
-		if n := params.IntDefault(job.Params, "port", 0); n > 0 {
-			portStr = strconv.Itoa(n)
-		}
-	}
-	port, err := imaputil.ParsePort(portStr, mode)
+	// ConnectionFields inject the port as a string ("993"). ParsePort defaults
+	// it by TLS mode when it is empty and rejects anything that isn't a number,
+	// so a port stored in some other shape is reported rather than guessed at.
+	port, err := imaputil.ParsePort(params.StringDefault(job.Params, "port", ""), mode)
 	if err != nil {
 		return imaputil.Config{}, err
 	}

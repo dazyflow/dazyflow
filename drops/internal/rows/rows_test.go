@@ -134,21 +134,6 @@ func TestCoerceRowMap(t *testing.T) {
 	}
 }
 
-func TestNormalizeHeaders(t *testing.T) {
-	if h, err := NormalizeHeaders([]string{"a", "b"}); err != nil || len(h) != 2 {
-		t.Errorf("[]string = %v, %v", h, err)
-	}
-	if h, err := NormalizeHeaders([]any{"a", "b"}); err != nil || h[1] != "b" {
-		t.Errorf("[]any = %v, %v", h, err)
-	}
-	if _, err := NormalizeHeaders([]any{"a", 2}); err == nil {
-		t.Error("expected error for non-string header element")
-	}
-	if _, err := NormalizeHeaders(42); err == nil {
-		t.Error("expected error for unsupported headers type")
-	}
-}
-
 func TestDeriveHeaders(t *testing.T) {
 	rows := []map[string]any{
 		{"b": 1, "a": 2},

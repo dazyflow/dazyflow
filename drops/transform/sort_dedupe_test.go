@@ -14,10 +14,7 @@ import (
 
 func runSort(t *testing.T, params map[string]any, rows []map[string]any, headers []string) []map[string]any {
 	t.Helper()
-	input := map[string]core.Ref{"rows": {Inline: rows}}
-	if headers != nil {
-		input["headers"] = core.Ref{Inline: headers}
-	}
+	input := map[string]core.Ref{"rows": {Inline: rows, Headers: headers}}
 	res, err := executeSortRows(t.Context(), core.Job{Params: params, Input: input}, nil)
 	if err != nil {
 		t.Fatalf("execute: %v", err)
@@ -26,16 +23,6 @@ func runSort(t *testing.T, params map[string]any, rows []map[string]any, headers
 		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
 	}
 	return res.Output["rows"].Inline.([]map[string]any)
-}
-
-func TestSortRows_AscendingString(t *testing.T) {
-	got := runSort(t,
-		map[string]any{"by": []any{"name"}},
-		[]map[string]any{{"name": "Carol"}, {"name": "Alice"}, {"name": "Bob"}},
-		nil)
-	if got[0]["name"] != "Alice" || got[1]["name"] != "Bob" || got[2]["name"] != "Carol" {
-		t.Errorf("got %+v", got)
-	}
 }
 
 func TestSortRows_CommaStringSingle(t *testing.T) {
@@ -78,25 +65,11 @@ func TestSortRows_CommaStringMultiKeyWithWhitespace(t *testing.T) {
 	}
 }
 
-func TestSortRows_DescendingViaObject(t *testing.T) {
-	got := runSort(t,
-		map[string]any{"by": []any{map[string]any{"column": "score", "desc": true}}},
-		[]map[string]any{
-			{"name": "A", "score": int64(50)},
-			{"name": "B", "score": int64(90)},
-			{"name": "C", "score": int64(70)},
-		},
-		nil)
-	if got[0]["name"] != "B" || got[1]["name"] != "C" || got[2]["name"] != "A" {
-		t.Errorf("got %+v", got)
-	}
-}
-
 func TestSortRows_NumericComparisonOnStrings(t *testing.T) {
 	// Critical: "10" must sort AFTER "2" — Excel rows arrive as
 	// strings and lex sort would be the obvious bug.
 	got := runSort(t,
-		map[string]any{"by": []any{"n"}},
+		map[string]any{"by": "n"},
 		[]map[string]any{{"n": "10"}, {"n": "2"}, {"n": "1"}, {"n": "100"}},
 		nil)
 	want := []string{"1", "2", "10", "100"}
@@ -108,27 +81,9 @@ func TestSortRows_NumericComparisonOnStrings(t *testing.T) {
 	}
 }
 
-func TestSortRows_MultiKeyTieBreak(t *testing.T) {
-	// Primary key: country ascending; tie-break: age descending.
-	got := runSort(t,
-		map[string]any{"by": []any{
-			"country",
-			map[string]any{"column": "age", "desc": true},
-		}},
-		[]map[string]any{
-			{"name": "SE-young", "country": "SE", "age": int64(20)},
-			{"name": "NO-old", "country": "NO", "age": int64(60)},
-			{"name": "SE-old", "country": "SE", "age": int64(50)},
-		},
-		nil)
-	if got[0]["name"] != "NO-old" || got[1]["name"] != "SE-old" || got[2]["name"] != "SE-young" {
-		t.Errorf("got %+v", got)
-	}
-}
-
 func TestSortRows_NilsSortFirst(t *testing.T) {
 	got := runSort(t,
-		map[string]any{"by": []any{"score"}},
+		map[string]any{"by": "score"},
 		[]map[string]any{
 			{"name": "A", "score": int64(50)},
 			{"name": "B", "score": nil},
@@ -144,7 +99,7 @@ func TestSortRows_Stability(t *testing.T) {
 	// Two rows with identical sort key — input order must be
 	// preserved (sort.SliceStable).
 	got := runSort(t,
-		map[string]any{"by": []any{"group"}},
+		map[string]any{"by": "group"},
 		[]map[string]any{
 			{"id": int64(1), "group": "x"},
 			{"id": int64(2), "group": "x"},
@@ -160,11 +115,15 @@ func TestSortRows_Stability(t *testing.T) {
 }
 
 func TestSortRows_HeadersPassThrough(t *testing.T) {
+	// The column order rides on the rows value and comes out the far side
+	// unchanged — sorting reorders rows, never columns.
 	res, _ := executeSortRows(t.Context(), core.Job{
-		Params: map[string]any{"by": []any{"a"}},
+		Params: map[string]any{"by": "a"},
 		Input: map[string]core.Ref{
-			"rows":    {Inline: []map[string]any{{"a": "2"}, {"a": "1"}}},
-			"headers": {Inline: []string{"a", "b", "c"}},
+			"rows": {
+				Inline:  []map[string]any{{"a": "2"}, {"a": "1"}},
+				Headers: []string{"a", "b", "c"},
+			},
 		},
 	}, nil)
 	got := res.Output["rows"].Headers
@@ -175,7 +134,7 @@ func TestSortRows_HeadersPassThrough(t *testing.T) {
 
 func TestSortRows_InputNotMutated(t *testing.T) {
 	input := []map[string]any{{"n": "3"}, {"n": "1"}, {"n": "2"}}
-	_ = runSort(t, map[string]any{"by": []any{"n"}}, input, nil)
+	_ = runSort(t, map[string]any{"by": "n"}, input, nil)
 	// Original slice order must survive.
 	if input[0]["n"] != "3" || input[2]["n"] != "2" {
 		t.Errorf("input mutated: %+v", input)
@@ -259,32 +218,6 @@ func TestSortRows_MinusPrefixSurvivesAscendingDirection(t *testing.T) {
 	}
 }
 
-func TestSortRows_LegacyObjectDescWinsOverDirection(t *testing.T) {
-	// {column,desc:false} states ascending. Direction must not flip it — a
-	// saved flow that spelled its direction out keeps sorting the same way.
-	got := runSort(t,
-		map[string]any{
-			"by":       []any{map[string]any{"column": "name", "desc": false}},
-			"sort_dir": "desc",
-		},
-		[]map[string]any{{"name": "Carol"}, {"name": "Alice"}}, nil)
-	if got[0]["name"] != "Alice" {
-		t.Errorf("got %+v, want Alice first", got)
-	}
-}
-
-func TestSortRows_LegacyObjectWithoutDescFollowsDirection(t *testing.T) {
-	got := runSort(t,
-		map[string]any{
-			"by":       []any{map[string]any{"column": "name"}},
-			"sort_dir": "desc",
-		},
-		[]map[string]any{{"name": "Alice"}, {"name": "Carol"}}, nil)
-	if got[0]["name"] != "Carol" {
-		t.Errorf("got %+v, want Carol first", got)
-	}
-}
-
 func TestSortRows_DirectionLongSpelling(t *testing.T) {
 	got := runSort(t,
 		map[string]any{"by": "name", "sort_dir": "Descending"},
@@ -324,7 +257,7 @@ func TestSortRows_MissingBy(t *testing.T) {
 
 func TestSortRows_EmptyBy(t *testing.T) {
 	res, _ := executeSortRows(t.Context(), core.Job{
-		Params: map[string]any{"by": []any{}},
+		Params: map[string]any{"by": ""},
 		Input: map[string]core.Ref{
 			"rows": {Inline: []map[string]any{{"a": "1"}}},
 		},
@@ -335,7 +268,7 @@ func TestSortRows_EmptyBy(t *testing.T) {
 }
 
 func TestSortRows_EmptyRows(t *testing.T) {
-	got := runSort(t, map[string]any{"by": []any{"x"}}, []map[string]any{}, nil)
+	got := runSort(t, map[string]any{"by": "x"}, []map[string]any{}, nil)
 	if len(got) != 0 {
 		t.Errorf("got %+v, want empty", got)
 	}
@@ -345,10 +278,7 @@ func TestSortRows_EmptyRows(t *testing.T) {
 
 func runDedupe(t *testing.T, params map[string]any, rows []map[string]any, headers []string) (out []map[string]any, dropped int) {
 	t.Helper()
-	input := map[string]core.Ref{"rows": {Inline: rows}}
-	if headers != nil {
-		input["headers"] = core.Ref{Inline: headers}
-	}
+	input := map[string]core.Ref{"rows": {Inline: rows, Headers: headers}}
 	res, err := executeDedupeRows(t.Context(), core.Job{Params: params, Input: input}, nil)
 	if err != nil {
 		t.Fatalf("execute: %v", err)

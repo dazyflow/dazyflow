@@ -12,10 +12,7 @@ import (
 
 func runSplit(t *testing.T, params map[string]any, rows []map[string]any, headers []string) (matched, unmatched []map[string]any, outHeaders []string) {
 	t.Helper()
-	input := map[string]core.Ref{"rows": {Inline: rows}}
-	if headers != nil {
-		input["headers"] = core.Ref{Inline: headers}
-	}
+	input := map[string]core.Ref{"rows": {Inline: rows, Headers: headers}}
 	res, err := executeSplitRows(t.Context(), core.Job{Params: params, Input: input}, nil)
 	if err != nil {
 		t.Fatalf("execute: %v", err)

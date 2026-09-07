@@ -18,8 +18,8 @@
 //   - drops/transform accepts a single object (a webhook/form JSON
 //     body) as a one-row list; drops/db only accepts list shapes.
 //
-// Everything else — CoerceRowMap, NormalizeHeaders, DeriveHeaders — is
-// byte-for-byte identical across the two and exported as-is.
+// Everything else — CoerceRowMap, DeriveHeaders — is byte-for-byte
+// identical across the two and exported as-is.
 package rows
 
 import (
@@ -156,28 +156,8 @@ func CoerceRowMap(item any) (map[string]any, error) {
 	return nil, fmt.Errorf("expected object, got %T", item)
 }
 
-// NormalizeHeaders coerces a headers input ([]string native, or []any of
-// strings post-JSON) into []string.
-func NormalizeHeaders(inline any) ([]string, error) {
-	switch v := inline.(type) {
-	case []string:
-		return v, nil
-	case []any:
-		out := make([]string, len(v))
-		for i, h := range v {
-			s, ok := h.(string)
-			if !ok {
-				return nil, fmt.Errorf("headers[%d]: expected string, got %T", i, h)
-			}
-			out[i] = s
-		}
-		return out, nil
-	}
-	return nil, fmt.Errorf("headers: unsupported input type %T", inline)
-}
-
-// DeriveHeaders gives a stable column ordering when the user didn't wire
-// a "headers" input — the union of row keys, sorted alphabetically.
+// DeriveHeaders gives a stable column ordering when the rows value carries
+// none — the union of row keys, sorted alphabetically.
 func DeriveHeaders(rows []map[string]any) []string {
 	seen := map[string]struct{}{}
 	for _, r := range rows {

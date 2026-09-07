@@ -122,7 +122,7 @@ func TestExecuteEmail_FromDefaultsToUsername(t *testing.T) {
 		Params: map[string]any{
 			"host":     "127.0.0.1",
 			"username": "me@x.test",
-			"to":       []any{"you@x.test"},
+			"to":       "you@x.test",
 		},
 	}, nil)
 	if err != nil {
@@ -154,18 +154,16 @@ func TestExecuteEmail_ToAcceptsCommaSeparatedString(t *testing.T) {
 }
 
 func TestSMTPPort(t *testing.T) {
-	// ConnectionFields inject the port as a string; older flows carry a number.
-	// Both must resolve, and an unset/garbage value falls back to 587.
+	// ConnectionFields inject the port as a string. Absent or blank means the
+	// STARTTLS default; anything that is not a usable number is an error rather
+	// than a silent 587, which would deliver on a port nobody chose.
 	cases := []struct {
 		name string
 		port any
 		want int
 	}{
 		{"connection string", "465", 465},
-		{"legacy int", 587, 587},
-		{"legacy float", float64(2525), 2525},
 		{"blank string", "", 587},
-		{"garbage string", "smtp", 587},
 		{"unset", nil, 587},
 	}
 	for _, c := range cases {
@@ -174,10 +172,19 @@ func TestSMTPPort(t *testing.T) {
 			if c.port != nil {
 				p["port"] = c.port
 			}
-			if got := smtpPort(core.Job{Params: p}); got != c.want {
+			got, err := smtpPort(core.Job{Params: p})
+			if err != nil {
+				t.Fatalf("smtpPort(%v): %v", c.port, err)
+			}
+			if got != c.want {
 				t.Errorf("smtpPort(%v) = %d, want %d", c.port, got, c.want)
 			}
 		})
+	}
+	for _, bad := range []any{587, float64(2525), "smtp", "0", true} {
+		if got, err := smtpPort(core.Job{Params: map[string]any{"port": bad}}); err == nil {
+			t.Errorf("smtpPort(%#v) = %d, want an error", bad, got)
+		}
 	}
 }
 
@@ -187,7 +194,7 @@ func TestExecuteEmail_Validation(t *testing.T) {
 			"host":    "smtp.x.test",
 			"from":    "me@x.test",
 			"subject": "hi",
-			"to":      []any{"you@x.test"},
+			"to":      "you@x.test",
 		}
 	}
 	cases := []struct {
@@ -226,7 +233,7 @@ func TestExecuteEmail_RejectsNonTextInputs(t *testing.T) {
 	base := map[string]any{
 		"host": "smtp.x.test",
 		"from": "me@x.test",
-		"to":   []any{"you@x.test"},
+		"to":   "you@x.test",
 	}
 	cases := []struct {
 		name string
@@ -290,7 +297,7 @@ func TestExecuteEmail_SSRFBlocked(t *testing.T) {
 			"host":    "127.0.0.1",
 			"from":    "me@x.test",
 			"subject": "hi",
-			"to":      []any{"you@x.test"},
+			"to":      "you@x.test",
 		},
 	}, nil)
 	if err != nil {

@@ -35,20 +35,19 @@ func TestFoldedHeaders_ReadFromRowsRef(t *testing.T) {
 	}
 }
 
-// TestFoldedHeaders_LegacyInputFallback keeps a not-yet-migrated graph working:
-// when the rows Ref carries no Headers, a separate legacy `headers` input is
-// still honored.
-func TestFoldedHeaders_LegacyInputFallback(t *testing.T) {
+// TestFoldedHeaders_DerivedWhenValueCarriesNone: no `headers` input exists to
+// fall back to, so an order the value doesn't carry is derived from the row
+// keys — alphabetically, which is what makes it stable.
+func TestFoldedHeaders_DerivedWhenValueCarriesNone(t *testing.T) {
 	job := core.Job{
 		ID: "j",
 		Input: map[string]core.Ref{
-			"rows":    {Inline: []map[string]any{{"a": 1, "b": 2}}},
-			"headers": {Inline: []any{"b", "a"}},
+			"rows": {Inline: []map[string]any{{"b": 2, "a": 1}}},
 		},
 	}
 	_, headers, _, ok := loadRowsAndHeaders(job)
-	if !ok || len(headers) != 2 || headers[0] != "b" {
-		t.Fatalf("legacy headers input should still be honored, got %v (ok=%v)", headers, ok)
+	if !ok || len(headers) != 2 || headers[0] != "a" || headers[1] != "b" {
+		t.Fatalf("headers should be derived as [a b], got %v (ok=%v)", headers, ok)
 	}
 }
 

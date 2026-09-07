@@ -196,26 +196,23 @@ func TestExecuteEmail_BodyFromInput(t *testing.T) {
 	}
 }
 
-// TestExecuteEmail_ToFromArrayParam covers the legacy StringSlice fallback when
-// the 'to' param is stored as a JSON array rather than a comma string.
-func TestExecuteEmail_ToFromArrayParam(t *testing.T) {
-	hfnet.SetAllowPrivateEgress(true)
-	defer hfnet.SetAllowPrivateEgress(false)
-
-	var sent string
-	host, port, _ := net.SplitHostPort(scriptedSMTP(t, &sent))
+// TestExecuteEmail_ToAsArrayIsRejected: 'to' is one comma-separated string. An
+// array is named as the wrong shape rather than read as a list — and rather
+// than reported as a missing recipient, which is what the string read alone
+// makes it look like.
+func TestExecuteEmail_ToAsArrayIsRejected(t *testing.T) {
 	res, err := executeEmail(context.Background(), core.Job{
 		ID: "j",
 		Params: map[string]any{
-			"host": host, "port": port, "tls": "none",
+			"host": "127.0.0.1", "port": "2525", "tls": "none",
 			"from": "me@x.test", "to": []any{"a@x.test", "b@x.test"}, "format": "text",
 		},
 	}, nil)
-	if err != nil || res.Status != core.StatusOK {
-		t.Fatalf("res = %+v err=%v", res, err)
+	if err != nil || res.Status != core.StatusError || res.Error.Code != "bad_param" {
+		t.Fatalf("res = %+v err=%v, want error/bad_param", res, err)
 	}
-	if !strings.Contains(sent, "To: a@x.test, b@x.test") {
-		t.Errorf("array recipients not honored:\n%s", sent)
+	if !strings.Contains(res.Error.Message, "comma-separated") {
+		t.Errorf("message should name the shape, got %q", res.Error.Message)
 	}
 }
 

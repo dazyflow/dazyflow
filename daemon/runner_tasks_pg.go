@@ -141,7 +141,7 @@ func NewPgRunnerTaskStore(ctx context.Context, pool *pgxpool.Pool) (*PgRunnerTas
 // shell sits with script rather than among the sealed columns because it is not
 // secret-bearing: it is one of a fixed handful of words, and sealing it would
 // cost a decrypt on the hot claim path to learn "bash".
-const runnerTaskColumns = `id, tenant, runner, label, tags, script, shell, env, stdin, timeout_ms,
+const runnerTaskColumns = `id, tenant, tags, script, shell, env, stdin, timeout_ms,
 		state, claimed_by, progress, lease_until, result, created_at, finished_at`
 
 func scanRunnerTask(row pgx.Row) (RunnerTask, error) {
@@ -149,22 +149,10 @@ func scanRunnerTask(row pgx.Row) (RunnerTask, error) {
 	var env, result []byte
 	var timeoutMS int64
 	var leaseUntil, finishedAt *time.Time
-	// runner and label are the pre-tags columns; nothing writes them any more.
-	var legacyRunner, legacyLabel string
-	if err := row.Scan(&t.ID, &t.Tenant, &legacyRunner, &legacyLabel, &t.Tags, &t.Script,
+	if err := row.Scan(&t.ID, &t.Tenant, &t.Tags, &t.Script,
 		&t.Shell, &env, &t.Stdin, &timeoutMS, &t.State, &t.ClaimedBy, &t.Progress,
 		&leaseUntil, &result, &t.CreatedAt, &finishedAt); err != nil {
 		return RunnerTask{}, err
-	}
-	// A task queued by the previous version, claimed by this one moments later
-	// across a rolling deploy. Both old shapes are one tag now — a machine's
-	// name is a tag, so the name column needs no special case.
-	if len(t.Tags) == 0 {
-		for _, legacy := range []string{legacyRunner, legacyLabel} {
-			if legacy != "" {
-				t.Tags = append(t.Tags, legacy)
-			}
-		}
 	}
 	t.Timeout = time.Duration(timeoutMS) * time.Millisecond
 	if leaseUntil != nil {
@@ -252,11 +240,6 @@ func (s *PgRunnerTaskStore) sealEnv(ctx context.Context, t RunnerTask) ([]byte, 
 // with no tags would match EVERY machine — and a task with no target is a bug
 // upstream whose wrong answer is to run someone's script on an arbitrary
 // machine.
-//
-// The ELSE branch is the pre-tags shape, for a task queued by the previous
-// version and claimed by this one across a rolling deploy. Both old columns
-// resolve against the same tag array, because a machine's name is now one of its
-// tags.
 const claimRunnerTaskQuery = `
 		UPDATE runner_tasks
 		   SET state = 'running', claimed_by = $2, lease_until = $4
@@ -264,11 +247,8 @@ const claimRunnerTaskQuery = `
 		     SELECT id FROM runner_tasks
 		      WHERE tenant = $1
 		        AND state = 'queued'
-		        AND CASE WHEN cardinality(tags) > 0
-		                 THEN tags <@ $3::text[]
-		                 ELSE (runner <> '' AND runner = ANY($3::text[]))
-		                   OR (runner = '' AND label <> '' AND label = ANY($3::text[]))
-		            END
+		        AND cardinality(tags) > 0
+		        AND tags <@ $3::text[]
 		      ORDER BY created_at
 		      FOR UPDATE SKIP LOCKED
 		      LIMIT 1

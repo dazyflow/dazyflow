@@ -10,7 +10,74 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Removed
+
+- **A restart no longer publishes your drafts.** `MigrateWebhookPublish` ran on
+  every boot, walked every workspace, and published any flow that had no
+  published revision, was not paused, and carried a configured webhook or an
+  event-trigger node. It was written as a one-shot upgrade courtesy — flows that
+  had been firing through the old fall-back-to-HEAD behaviour would have gone
+  dark — but the predicate cannot tell such a flow from a draft written
+  yesterday, and for an event trigger the node's mere presence is enough. So
+  dropping a GitHub-push or Slack-mention step on a canvas, leaving it
+  unpublished, and restarting `dzd` published it and made it live.
+
+  Publishing is now only ever explicit. If you are upgrading from before the
+  publish rule tightened and still have a webhook or event flow that has never
+  been published, publish it once — until you do, its endpoint answers 401,
+  which is the same rule the scheduler has always applied.
+
+- **A step's settings have one shape each.** Six compatibility readers are gone.
+  Each accepted a second spelling of something the schema already describes one
+  way, so a flow could be right in a shape the editor never writes and the
+  reference never documents — and two of them turned a wrong value into a quiet
+  default rather than an error.
+
+  - Sort rows' `by` takes the documented comma-separated string
+    ("revenue,-created_at"). The array of names / `{column,desc}` objects it
+    also took is gone; so is the escape hatch that form gave a column whose
+    name literally starts with `-` or `+`.
+  - The Date step's `format` names a preset or `custom`. A format string typed
+    into `format` itself is no longer rendered there — which is what made
+    `"2006-01-02"` come back as itself and ship in the message — and the
+    pre-pair names `time` and `kitchen` are gone in favour of `time24` and
+    `time12`. An off-list value now says so and names Custom.
+  - Email's `to` is one comma-separated string; an array is reported as the
+    wrong shape rather than read as a list. Its `port` must be the string
+    ConnectionFields injects: a number, or anything unparseable, was silently
+    becoming 587, which delivers mail on a port nobody chose.
+  - Run a script's target is `tags`. The `runner` and `label` fields it
+    replaced are not read, so a step still carrying one fails with `no_target`
+    instead of dispatching somewhere the step doesn't name.
+  - The IMAP `port` follows the same rule as Email's.
+
+- **The row-shaping steps no longer look for a `headers` input.** No step has
+  declared one since the column order moved onto the rows value, and the
+  migration that has just been removed deleted the only edges that could have
+  fed one — so both fallbacks (and the `left_headers`/`right_headers` pair in
+  Join rows) were unreachable by construction.
+
+- **The runner queue's pre-tags columns are gone.** `runner` and `label` were
+  read as a fallback so a task queued by the previous version survived a
+  rolling deploy — a window measured in minutes, years past. Nothing writes
+  them; the claim query no longer reads them. Existing tables keep the columns
+  (they default to empty and nothing inserts into them), so there is no
+  schema change to apply.
+
+- **Excel's `autosize` and `freezeRow` params are gone.** They were declared in
+  the step's schema and described as "Accepted for compatibility; not applied" —
+  so the inspector drew two advanced knobs that did nothing at all. Nothing in
+  the codebase read either one. A saved flow still carrying them is unaffected:
+  an unrecognized param is ignored, not rejected.
+
 ### Fixed
+
+- **Two messages stop pointing at a menu that isn't there.** The double-schedule
+  lint told the author to "remove the graph-level schedule on the Triggers →
+  Schedule tab", and the flow generator's dropped-schedule warning said to "open
+  the flow's trigger settings" — both naming the Triggers menu that went away
+  when trigger config moved onto the steps. A graph-level schedule now says
+  plainly that it has no editor left.
 
 - **A wire from a step's Headers output sticks.** The Webhook trigger, HTTP
   request and every Web API step declare a `headers` output, but a data-model

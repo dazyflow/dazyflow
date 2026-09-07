@@ -144,14 +144,6 @@ const pgRunnerTaskSchema = `
 CREATE TABLE IF NOT EXISTS runner_tasks (
     id           TEXT PRIMARY KEY,
     tenant       TEXT NOT NULL,
-    -- runner and label are the pre-tags targeting columns. They stay because a
-    -- task queued by the previous version is claimed by this one moments later,
-    -- across a rolling deploy: dropping them would strand whatever was in the
-    -- queue at that instant, and a stranded task fails a live run with "the
-    -- runner stopped responding" about a machine that is fine. Nothing writes
-    -- them any more; scanRunnerTask reads them as a fallback.
-    runner       TEXT NOT NULL DEFAULT '',
-    label        TEXT NOT NULL DEFAULT '',
     tags         TEXT[] NOT NULL DEFAULT '{}',
     script       TEXT NOT NULL,
     shell        TEXT NOT NULL DEFAULT '',

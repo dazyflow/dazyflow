@@ -98,8 +98,9 @@ func init() {
 
 // executeSlackSendMessage posts to chat.postMessage as the connected bot.
 // channel / text each take their value from the matching input port when one
-// is wired, otherwise from the param (the "input overrides param" pattern);
-// the legacy 'body' port still feeds text for flows saved before the rename.
+// is wired, otherwise from the param (the "input overrides param" pattern).
+// The pre-rename 'body' port is gone, not aliased: a flow still wiring it has
+// a dead edge, which the editor prunes and names so it can be re-drawn.
 // Slack's logical failures (HTTP 200 + {ok:false}) surface as slack_error.
 func executeSlackSendMessage(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	token, err := resolveToken(ctx, job)

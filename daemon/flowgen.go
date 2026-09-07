@@ -512,7 +512,7 @@ func finalizeTriggers(g core.Graph, tz string) (core.Graph, []core.LintIssue) {
 			warns = append(warns, core.LintIssue{
 				Code:     "trigger_dropped",
 				Severity: core.LintWarn,
-				Message:  "Couldn't set the schedule automatically — open the flow's trigger settings to add it.",
+				Message:  "Couldn't set the schedule automatically — add a Schedule step and set the schedule on it.",
 			})
 			continue // drop the bad trigger
 		}
