@@ -30,6 +30,25 @@ func GraphRequestSecrets(g Graph) []string {
 	return out
 }
 
+// GraphRequestPublic reports whether any request_input node in the graph
+// accepts calls with no key. Reads the same `public` param as the Webhook step
+// (WebhookPublic), for the same reason GraphRequestSecrets reuses
+// WebhookSecrets: one spelling of "keys and who may skip them" across both
+// inbound doors.
+//
+// The bargain is not identical, though, and the step's own copy says so: a
+// public /trigger lets a stranger START a flow, while a public /call also
+// hands them whatever the flow's Reply produces. Opening one is a decision
+// about execution; opening the other is a decision about output.
+func GraphRequestPublic(g Graph) bool {
+	for _, n := range g.Nodes {
+		if n.Module == RequestInputModule && WebhookPublic(n.Params) {
+			return true
+		}
+	}
+	return false
+}
+
 // ReplyNodeIDs returns the graph's Reply steps, in node order. The /call
 // handler watches all of them: whichever finishes first answers the caller.
 func ReplyNodeIDs(g Graph) []string {

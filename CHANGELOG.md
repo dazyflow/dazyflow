@@ -10,6 +10,39 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Changed
+
+- **A webhook key can now travel in the address, and is no longer mandatory.**
+  The `/trigger` endpoint reads `?key=<key>` as well as `Authorization:
+  Bearer`, because a great many services that post webhooks give you one field
+  — the URL — and no way to set a header at all. Those senders could not call
+  a Dazyflow webhook before; now they paste the address with the key on the
+  end. The header still wins when both are present, so a sender that can set
+  one is never downgraded by a stale URL someone left lying around.
+
+  For a sender that can carry neither, the Webhook step has a new **Accept
+  calls with no key** switch. It is off by default, and deliberately a switch
+  rather than an inference from "no keys set": every freshly added Webhook step
+  has no keys, and publishing an open endpoint the author never chose is not a
+  default anyone wants. With it on, possession of the address is the only
+  credential — the same bargain the hosted Form step already makes, behind the
+  same per-IP throttle.
+
+  A public step now also counts as a live trigger, so the flow reports as
+  scheduled rather than manual-only, and the "generate a key" warning no longer
+  fires on a step that is deliberately open. The flow's endpoint listing gained
+  a paste-ready `url_with_key`.
+
+- **The Request step got the same two doors.** `/call` reads `?key=<key>` as
+  well as the header, and an **Answer calls with no key** switch opens it for a
+  caller that can send neither.
+
+  The switch is worded differently on purpose, and worth more thought than its
+  Webhook twin: an open `/trigger` lets a stranger start a flow, while an open
+  `/call` also hands them whatever the Reply produces. Opening one is a decision
+  about execution; opening the other is a decision about output. Both default
+  to off, and a key-less step of either kind stays inert.
+
 ## [0.39.0] - 2026-09-07
 
 ### Added

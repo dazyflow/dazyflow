@@ -43,3 +43,113 @@ func TestGraphWebhookSecrets(t *testing.T) {
 		t.Errorf("empty graph should yield nil, got %v", got)
 	}
 }
+
+// A public webhook step makes the flow live: it can receive, so reporting it
+// as manual-only would be a lie the chip tells on every canvas.
+func TestFlowStatus_PublicWebhookCountsAsLive(t *testing.T) {
+	g := Graph{Nodes: []Node{
+		{ID: "in", Module: WebhookInputModule, Params: map[string]any{"public": true}},
+	}}
+	if !HasConfiguredAutoTrigger(g) {
+		t.Error("a public webhook step should count as a configured trigger")
+	}
+}
+
+func TestFlowStatus_KeylessPrivateWebhookIsNotLive(t *testing.T) {
+	g := Graph{Nodes: []Node{
+		{ID: "in", Module: WebhookInputModule, Params: map[string]any{}},
+	}}
+	if HasConfiguredAutoTrigger(g) {
+		t.Error("a key-less, non-public webhook step is inert and must not count")
+	}
+}
+
+// The lint's job is to catch a step that cannot receive. A public one can, so
+// telling its author to generate a key would be wrong.
+func TestTriggerLint_PublicWebhookIsNotFlagged(t *testing.T) {
+	g := Graph{Nodes: []Node{
+		{ID: "in", Module: WebhookInputModule, Params: map[string]any{"public": true}},
+	}}
+	for _, issue := range lintTriggers(g) {
+		if issue.Code == "trigger_webhook_no_secret" {
+			t.Errorf("public step flagged as unable to receive: %+v", issue)
+		}
+	}
+}
+
+func TestWebhookPublic_DefaultsOff(t *testing.T) {
+	if WebhookPublic(map[string]any{}) {
+		t.Error("public must default to off — a fresh Webhook step has no keys either")
+	}
+	if WebhookPublic(map[string]any{"public": false}) {
+		t.Error("public:false is off")
+	}
+	if !WebhookPublic(map[string]any{"public": true}) {
+		t.Error("public:true is on")
+	}
+}
+
+func TestGraphWebhookPublic_OneOpenStepOpensTheAddress(t *testing.T) {
+	// One /trigger address is shared by a graph's webhook steps, so one step
+	// marked public opens it.
+	g := Graph{Nodes: []Node{
+		{ID: "a", Module: WebhookInputModule, Params: map[string]any{"secrets": []any{"k"}}},
+		{ID: "b", Module: WebhookInputModule, Params: map[string]any{"public": true}},
+	}}
+	if !GraphWebhookPublic(g) {
+		t.Error("a graph with any public webhook step is public")
+	}
+}
+
+// The Request step gets the same two doors, so its status and lint have to
+// agree with /call's auth exactly as the Webhook step's do.
+func TestFlowStatus_PublicRequestCountsAsLive(t *testing.T) {
+	g := Graph{Nodes: []Node{
+		{ID: "in", Module: RequestInputModule, Params: map[string]any{"public": true}},
+	}}
+	if !HasConfiguredAutoTrigger(g) {
+		t.Error("a public Request step should count as a configured trigger")
+	}
+}
+
+func TestFlowStatus_KeylessPrivateRequestIsNotLive(t *testing.T) {
+	g := Graph{Nodes: []Node{
+		{ID: "in", Module: RequestInputModule, Params: map[string]any{}},
+	}}
+	if HasConfiguredAutoTrigger(g) {
+		t.Error("a key-less, non-public Request step is inert and must not count")
+	}
+}
+
+func TestTriggerLint_PublicRequestIsNotFlagged(t *testing.T) {
+	g := Graph{Nodes: []Node{
+		{ID: "in", Module: RequestInputModule, Params: map[string]any{"public": true}},
+		{ID: "out", Module: ReplyModule},
+	}}
+	for _, issue := range lintTriggers(g) {
+		if issue.Code == "trigger_request_no_secret" {
+			t.Errorf("public Request step flagged as unable to receive: %+v", issue)
+		}
+	}
+}
+
+func TestGraphRequestPublic_OneOpenStepOpensTheAddress(t *testing.T) {
+	g := Graph{Nodes: []Node{
+		{ID: "a", Module: RequestInputModule, Params: map[string]any{"secrets": []any{"k"}}},
+		{ID: "b", Module: RequestInputModule, Params: map[string]any{"public": true}},
+	}}
+	if !GraphRequestPublic(g) {
+		t.Error("a graph with any public Request step is public")
+	}
+	// A public Webhook step must not open /call, and vice versa: the two
+	// addresses are separate doors with separate promises.
+	w := Graph{Nodes: []Node{
+		{ID: "a", Module: WebhookInputModule, Params: map[string]any{"public": true}},
+	}}
+	if GraphRequestPublic(w) {
+		t.Error("a public Webhook step must not open the /call address")
+	}
+	if GraphWebhookPublic(g) {
+		t.Error("a public Request step must not open the /trigger address")
+	}
+}

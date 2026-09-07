@@ -35,8 +35,22 @@ and the panel shows you the address plus a ready-made `curl`. The caller sends:
 Authorization: Bearer <a key>
 ```
 
+Or on the end of the address, for a caller whose settings are a URL box and
+nothing else:
+
+```
+https://your.dazyflow/call/<tenant>/<workspace>/<flow>?key=<a key>
+```
+
 Same key rules as the webhook: a step can hold several, any listed key works, and
-revoking one is immediate — so you can rotate without a maintenance window.
+revoking one is immediate — so you can rotate without a maintenance window. The
+header wins if a caller sends both.
+
+If a caller can send neither, **Answer calls with no key** on the Request step
+opens the address to anyone. Think harder about this one than about the same
+switch on a Webhook step: an open `/trigger` lets a stranger start a flow, while
+an open `/call` also hands them whatever your Reply produces. It is off until
+you turn it on.
 
 What arrives, arrives on the Request step's output, exactly like the webhook: a
 JSON body comes through as structured data, plain text as text, and **Headers**

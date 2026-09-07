@@ -762,12 +762,12 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     sv: "Startar flödet när någon fyller i formuläret som Dazyflow publicerar åt dig — ingen webbplats och ingen nyckel behövs, bara en länk du kan dela. Innehåll bär det de skrev, ett fält per fråga. Alla med länken kan skicka in, så behandla den som offentlig.",
   },
   request_input: {
-    en: "8d38b69d",
-    sv: "Startar flödet när ett annat system anropar dess adress OCH väntar på ett svar. Innehåll är det som skickades (JSON eller text); Rubriker bär förfrågans metadata. Kombinera med ett Svara-steg — det Svara skapar skickas tillbaka som svaret. Använd Webhook-steget i stället när anroparen bara meddelar dig och vill ha en omedelbar kvittens.",
+    en: "a8c13e26",
+    sv: "Startar flödet när ett annat system anropar dess adress OCH väntar på ett svar. Innehåll är det som skickades (JSON eller text); Rubriker bär förfrågans metadata. Kombinera med ett Svara-steg — det Svara skapar skickas tillbaka som svaret. Anropare legitimerar sig med en av nycklarna nedan, skickad antingen som en rubrik eller som ?key=… sist i adressen. Använd Webhook-steget i stället när anroparen bara meddelar dig och vill ha en omedelbar kvittens.",
   },
   webhook_input: {
-    en: "fe244ad0",
-    sv: "Startar flödet när ett annat system skickar något till dess webbadress, och kvitterar leveransen direkt. Innehåll är det som skickades (JSON eller text); Rubriker bär förfrågans metadata. Använd Formulär-steget när avsändaren är en människa, och Förfrågan-steget när anroparen väntar på ett svar.",
+    en: "581eb267",
+    sv: "Startar flödet när ett annat system skickar något till dess webbadress, och kvitterar leveransen direkt. Innehåll är det som skickades (JSON eller text); Rubriker bär förfrågans metadata. Avsändare legitimerar sig med en av nycklarna nedan, skickad antingen som en rubrik eller som ?key=… sist i adressen — så en tjänst vars inställningar bara är en URL-ruta fungerar också. Använd Formulär-steget när avsändaren är en människa, och Förfrågan-steget när anroparen väntar på ett svar.",
   },
   webhook_send: {
     en: "fa973403",

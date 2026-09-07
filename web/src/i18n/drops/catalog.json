@@ -3839,17 +3839,19 @@
     ]
   },
   "request_input": {
-    "description": "Starts the flow when another system calls its address AND waits for an answer. Body is what was sent (JSON or text); Headers carries the request's metadata. Pair it with a Reply step — what Reply produces is sent back as the response. Use the Webhook step instead when the caller only notifies you and wants an immediate acknowledgement.",
+    "description": "Starts the flow when another system calls its address AND waits for an answer. Body is what was sent (JSON or text); Headers carries the request's metadata. Pair it with a Reply step — what Reply produces is sent back as the response. Callers prove themselves with one of the keys below, sent either as a header or as ?key=… on the end of the address. Use the Webhook step instead when the caller only notifies you and wants an immediate acknowledgement.",
     "ports": [
       "Body",
       "Headers"
     ],
     "label": "Request",
     "titles": [
+      "Answer calls with no key",
       "Secret keys"
     ],
     "help": [
-      "Bearer tokens callers may send (Authorization: Bearer …) to POST this flow's /call endpoint. The endpoint accepts ANY listed key, so you can add a new key, migrate callers, then revoke the old one with zero downtime. With no key the endpoint rejects every call."
+      "Keys a caller may send to call this flow, either as an Authorization: Bearer header or as ?key=… on the end of the address — use the address form for systems that only let you paste a URL. The endpoint accepts ANY listed key, so you can add a new key, migrate callers, then revoke the old one with zero downtime.",
+      "Let anyone who knows this flow's address call it, with no key at all. Weigh this more carefully than on a Webhook step: this address answers, so an open one hands your Reply to whoever asks. Only for a caller that can send neither a header nor a key in the URL. Off by default, and a key-less step stays inert until you turn this on."
     ]
   },
   "roaring_company_overview": {
@@ -5362,17 +5364,19 @@
     ]
   },
   "webhook_input": {
-    "description": "Starts the flow when another system sends something to its web address, and acknowledges the delivery straight away. Body is what was sent (JSON or text); Headers carries the request's metadata. Use the Form step when the sender is a person, and the Request step when the caller waits for an answer.",
+    "description": "Starts the flow when another system sends something to its web address, and acknowledges the delivery straight away. Body is what was sent (JSON or text); Headers carries the request's metadata. Callers prove themselves with one of the keys below, sent either as a header or as ?key=… on the end of the address — so a service whose settings are just a URL box works too. Use the Form step when the sender is a person, and the Request step when the caller waits for an answer.",
     "ports": [
       "Body",
       "Headers"
     ],
     "label": "Webhook",
     "titles": [
+      "Accept calls with no key",
       "Secret keys"
     ],
     "help": [
-      "Bearer tokens callers may send (Authorization: Bearer …) to POST this flow's /trigger endpoint. The endpoint accepts ANY listed key, so you can add a new key, migrate callers, then revoke the old one with zero downtime. With no key the endpoint rejects every delivery."
+      "Keys a caller may send to start this flow, either as an Authorization: Bearer header or as ?key=… on the end of the address — use the address form for senders that only let you paste a URL. The endpoint accepts ANY listed key, so you can add a new key, migrate callers, then revoke the old one with zero downtime.",
+      "Let anyone who knows this flow's address start it, with no key at all. Only for senders that can carry neither a header nor a key in the URL — the address becomes the only thing standing between the flow and the internet. Off by default, and a key-less step stays inert until you turn this on."
     ]
   },
   "webhook_send": {

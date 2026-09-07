@@ -395,3 +395,81 @@ func TestForm_ReplyIsNotRequiredForTheFormToWork(t *testing.T) {
 		return false
 	}, "the form submission never reached the Reply step")
 }
+
+// Same story as the Webhook step: a caller that can only be given a URL has
+// nowhere to put a header, so /call reads the key from the query string too.
+func TestCall_AcceptsKeyInTheURL(t *testing.T) {
+	t.Parallel()
+	_, wh, _, _, wsStore := startWebhookHarness(t)
+	savePublished(t, wsStore, core.Graph{
+		ID: "call-url-key", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{
+			requestNode("in"),
+			{ID: "out", Module: "reply", Params: map[string]any{"body": "hi"}},
+		},
+		Edges: []core.Edge{{From: "in", FromPort: "body", To: "out", ToPort: core.PassPort}},
+	})
+
+	code, body, _ := callPost(t, wh, "call-url-key", "", "?key=s3cr3t")
+	if code != http.StatusOK {
+		t.Fatalf("key in the URL: status=%d, want 200; body=%s", code, body)
+	}
+	// A wrong key in the URL is still a stranger.
+	if code, _, _ := callPost(t, wh, "call-url-key", "", "?key=wrong"); code != http.StatusUnauthorized {
+		t.Errorf("wrong key in the URL: status=%d, want 401", code)
+	}
+}
+
+// The header is what gets checked when both are present, so a caller that can
+// set one is never admitted by a stale key left in a URL.
+func TestCall_HeaderWinsOverURLKey(t *testing.T) {
+	t.Parallel()
+	_, wh, _, _, wsStore := startWebhookHarness(t)
+	savePublished(t, wsStore, core.Graph{
+		ID: "call-both", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{requestNode("in"), {ID: "out", Module: "reply"}},
+	})
+	if code, _, _ := callPost(t, wh, "call-both", "stale", "?key=s3cr3t"); code != http.StatusUnauthorized {
+		t.Errorf("status=%d, want 401 — the header is the one that counts", code)
+	}
+}
+
+// A caller that can carry neither. The author opens the step and the address
+// becomes the credential — a heavier decision here than on /trigger, because
+// this endpoint hands back the flow's Reply.
+func TestCall_PublicStepAnswersWithNoKey(t *testing.T) {
+	t.Parallel()
+	_, wh, _, _, wsStore := startWebhookHarness(t)
+	savePublished(t, wsStore, core.Graph{
+		ID: "call-public", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{
+			{ID: "in", Module: "request_input", Params: map[string]any{"public": true}},
+			{ID: "out", Module: "reply", Params: map[string]any{"body": "open"}},
+		},
+		Edges: []core.Edge{{From: "in", FromPort: "body", To: "out", ToPort: core.PassPort}},
+	})
+	code, body, _ := callPost(t, wh, "call-public", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("status=%d, want 200; body=%s", code, body)
+	}
+	if !strings.Contains(body, "open") {
+		t.Errorf("body=%q, want the Reply value", body)
+	}
+}
+
+// And without the switch it stays shut, so a half-built Request step never
+// publishes its Reply to the internet by omission.
+func TestCall_KeylessStepIsInertUnlessPublic(t *testing.T) {
+	t.Parallel()
+	_, wh, _, _, wsStore := startWebhookHarness(t)
+	savePublished(t, wsStore, core.Graph{
+		ID: "call-keyless", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{
+			{ID: "in", Module: "request_input", Params: map[string]any{}},
+			{ID: "out", Module: "reply"},
+		},
+	})
+	if code, _, _ := callPost(t, wh, "call-keyless", "", ""); code != http.StatusUnauthorized {
+		t.Errorf("status=%d, want 401", code)
+	}
+}

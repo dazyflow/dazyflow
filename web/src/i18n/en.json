@@ -540,7 +540,13 @@
       "bearerSecret": "Secret keys",
       "generateTitle": "Add a new random key (the existing keys keep working)",
       "generate": "Generate a key",
-      "bearerSecretDesc": "Callers send <0>Authorization: Bearer …</0> with every request. Any listed key works — add a new one, switch your callers over, then revoke the old one without downtime.",
+      "bearerSecretDesc": "Callers send <0>Authorization: Bearer …</0> with every request, or put the key on the end of the address. Any listed key works — add a new one, switch your callers over, then revoke the old one without downtime.",
+      "requestUrlLabel": "Request address",
+      "urlWithKeyLabel": "Address with the key in it",
+      "publicLabel": "Accept calls with no key",
+      "publicDesc": "For a sender that can send neither a header nor a key in the address. Anyone who knows the address can then start this flow.",
+      "publicRequestLabel": "Answer calls with no key",
+      "publicRequestDesc": "For a caller that can send neither a header nor a key in the address. Anyone who knows the address then gets this flow's Reply — a bigger step than opening a Webhook, which only starts a run.",
       "curlLabel": "Example request (curl)",
       "curlDesc": "A plain-text body arrives on the step's Body output as text; a JSON body (Content-Type: application/json) arrives as structured data you can pick fields from.",
       "requestCurlDesc": "The command prints what your Reply step sends back. Add <0>?wait=0</0> to the address to get an immediate acknowledgement instead of waiting for the answer.",
@@ -1952,8 +1958,9 @@
     "resetState": "Reset {{label}}",
     "deleteConfirm": "Delete step \"{{id}}\" and its connections?",
     "webhookStatus": {
-      "off": "Not receiving yet — press Generate below to create the secret key senders must include.",
+      "off": "Not receiving yet — press Generate below to create a key senders include, as a header or on the end of the address.",
       "on": "Receiving — systems that send the secret key can start this flow.",
+      "open": "Receiving — this step takes calls with no key, so anyone who knows the address can start this flow.",
       "pending": "Not receiving yet — the secret key is rejected until you publish this flow.",
       "stale": "Receiving — but senders still reach the last published version. Publish to make your latest changes live."
     },
@@ -1963,8 +1970,9 @@
       "stale": "Open — but visitors still get the last published version. Publish to make your latest changes live."
     },
     "requestStatus": {
-      "off": "Not answering yet — press Generate below to create the secret key callers must send.",
+      "off": "Not answering yet — press Generate below to create a key callers send, as a header or on the end of the address.",
       "on": "Answering — systems that send the secret key get your Reply back.",
+      "open": "Answering — this step takes calls with no key, so anyone who knows the address gets your Reply.",
       "pending": "Not answering yet — the secret key is rejected until you publish this flow.",
       "stale": "Answering — but callers still get the last published version. Publish to make your latest changes live."
     },

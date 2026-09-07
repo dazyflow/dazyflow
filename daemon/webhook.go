@@ -24,12 +24,12 @@ const webhookInputModuleID = "webhook_input"
 // trigger. Layout:
 //
 //	POST /trigger/<tenant>/<workspace>/<graph-id>
-//	Authorization: Bearer <secret-from-graph-trigger>
+//	Authorization: Bearer <secret-from-graph-trigger>   (or ?key=<secret>)
 //	(body — passed to the graph as a webhook_input record if present)
 //
 // Responses:
 //
-//	200 + JSON {job_id: "..."} on accepted fire
+//	202 + JSON {job_id: "..."} on accepted fire
 //	401 on bad secret
 //	404 on unknown graph or graph without webhook trigger
 //	400 on malformed paths
@@ -102,11 +102,17 @@ func (w *WebhookListener) handleTrigger(rw http.ResponseWriter, r *http.Request)
 	}
 
 	keys := core.GraphWebhookSecrets(g)
-	if len(keys) == 0 {
-		http.Error(rw, unauthorized, http.StatusUnauthorized)
-		return
-	}
-	if !anyKeyMatches(keys, stripBearer(r.Header.Get("Authorization"))) {
+	switch {
+	case len(keys) > 0:
+		if !anyKeyMatches(keys, webhookKey(r)) {
+			http.Error(rw, unauthorized, http.StatusUnauthorized)
+			return
+		}
+	case core.GraphWebhookPublic(g):
+		// The author marked this address open. Possession of the URL is the
+		// only credential, exactly like the hosted form — and, like the form,
+		// it sits behind the per-IP throttle on the route.
+	default:
 		http.Error(rw, unauthorized, http.StatusUnauthorized)
 		return
 	}
@@ -294,9 +300,27 @@ func buildWebhookSeed(rawBody []byte, r *http.Request) core.Result {
 	}
 }
 
-// webhookSecret returns the bearer token guarding the graph's /trigger
-// endpoint. Config lives on the webhook_input node now (the Triggers menu is
-// gone); the secret is the node's `secret` param.
+// webhookKey reads the caller's key from either place a sender can put one:
+// the Authorization header, or a `key` query parameter.
+//
+// The query parameter is not a convenience. A large share of the services that
+// post webhooks give you one field — the URL — and no way to set a header at
+// all, so a header-only endpoint is one those senders simply cannot call. With
+// the key in the URL the endpoint is still authenticated: the address itself
+// is the credential, which is why the flow's own address is never enough on
+// its own.
+//
+// The header wins when both are present, so a sender that can set one is never
+// downgraded by a stale URL someone left lying around.
+func webhookKey(r *http.Request) string {
+	if h := stripBearer(r.Header.Get("Authorization")); h != "" {
+		return h
+	}
+	return strings.TrimSpace(r.URL.Query().Get("key"))
+}
+
+// stripBearer takes the token out of an Authorization header value, tolerating
+// a bare token without the "Bearer " prefix.
 func stripBearer(h string) string {
 	const prefix = "Bearer "
 	if strings.HasPrefix(h, prefix) {

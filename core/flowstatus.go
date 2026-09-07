@@ -154,9 +154,11 @@ func classifyTriggers(g Graph) (hasScheduler, hasWebhook, hasEvent bool) {
 				hasScheduler = true
 			}
 		case WebhookInputModule:
-			// A key-less webhook step is inert: /trigger rejects every
-			// unauthenticated POST.
-			if len(WebhookSecrets(n.Params)) > 0 {
+			// A webhook step is live once it can actually receive: a key to
+			// check, or the author's explicit choice to accept calls without
+			// one. Key-less and not public is inert — /trigger rejects every
+			// such POST.
+			if len(WebhookSecrets(n.Params)) > 0 || WebhookPublic(n.Params) {
 				hasWebhook = true
 			}
 		case FormInputModule:
@@ -164,9 +166,10 @@ func classifyTriggers(g Graph) (hasScheduler, hasWebhook, hasEvent bool) {
 			// there is nothing further to configure before it can receive.
 			hasWebhook = true
 		case RequestInputModule:
-			// Same reachability rule as the webhook, minus the form: the
-			// /call endpoint rejects every key-less call.
-			if len(WebhookSecrets(n.Params)) > 0 {
+			// Same reachability rule as the webhook, minus the form: a key to
+			// check, or the author's explicit choice to answer callers who
+			// carry none.
+			if len(WebhookSecrets(n.Params)) > 0 || WebhookPublic(n.Params) {
 				hasWebhook = true
 			}
 		default:

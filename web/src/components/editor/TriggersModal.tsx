@@ -21,10 +21,11 @@ import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { ConfirmModal } from "../ui/ConfirmModal";
 import { Button } from "../ui/Button";
-import { webhookKeys } from "../../flowStatus";
+import { webhookKeys, webhookPublic } from "../../flowStatus";
 import { formatDateTime } from "../../lib/datetime";
 import { ICON } from "../../icons";
 import { EmptyState } from "../ui/EmptyState";
+import { Switch } from "../ui/Switch";
 
 // TriggerEmpty is the per-tab "nothing set up yet" state with a single
 // call-to-action that creates the trigger of that type.
@@ -231,7 +232,18 @@ export function WebhookTab({
         method="POST"
         value={buildWebhookURL(graph, baseURL)}
       />
-      <WebhookKeys webhook={webhook} onChange={onChange} />
+      {/* The same address with the key already on it. Shown only once a key
+          exists, because it is the form to paste into the many services whose
+          webhook settings are a URL box and nothing else — for those, the
+          plain address above is not enough on its own. */}
+      {webhookKeys(webhook).length > 0 && (
+        <CodeField
+          label={t("settings.triggers.urlWithKeyLabel")}
+          method="POST"
+          value={buildWebhookURLWithKey(graph, webhookKeys(webhook)[0], baseURL)}
+        />
+      )}
+      <WebhookKeys webhook={webhook} onChange={onChange} kind="webhook" />
       {/* The full curl invocation and its body-handling note are detail,
           not the headline — collapsed like the recipes block below. */}
       <details className="webhook-recipes">
@@ -275,11 +287,22 @@ export function RequestTab({
       <RequestStatusLine request={request} triggerLive={triggerLive} />
       <p className="settings-help">{t("triggers.request.help")}</p>
       <CodeField
-        label={t("settings.triggers.recipes.urlLabel")}
+        label={t("settings.triggers.requestUrlLabel")}
         method="POST"
         value={buildRequestURL(graph, baseURL)}
       />
-      <WebhookKeys webhook={request} onChange={onChange} />
+      {webhookKeys(request).length > 0 && (
+        <CodeField
+          label={t("settings.triggers.urlWithKeyLabel")}
+          method="POST"
+          value={buildRequestURLWithKey(
+            graph,
+            webhookKeys(request)[0],
+            baseURL,
+          )}
+        />
+      )}
+      <WebhookKeys webhook={request} onChange={onChange} kind="request" />
       <details className="webhook-recipes">
         <summary>{t("settings.triggers.curlLabel")}</summary>
         <div className="webhook-recipes-body">
@@ -314,11 +337,21 @@ export function RequestStatusLine({
 }) {
   const { t } = useTranslation();
   const hasKey = webhookKeys(request).length > 0;
+  const isOpen = !hasKey && webhookPublic(request);
+  const canAnswer = hasKey || isOpen;
   const pending = triggerLive !== undefined && !triggerLive.published;
   const stale =
     triggerLive !== undefined && triggerLive.published && triggerLive.dirty;
-  const key = !hasKey ? "off" : pending ? "pending" : stale ? "stale" : "on";
-  const ok = hasKey && !pending;
+  const key = !canAnswer
+    ? "off"
+    : pending
+      ? "pending"
+      : stale
+        ? "stale"
+        : isOpen
+          ? "open"
+          : "on";
+  const ok = canAnswer && !pending;
   return (
     <div
       className={"webhook-status" + (ok ? " ok" : "") + (stale ? " stale" : "")}
@@ -405,15 +438,28 @@ export function WebhookStatusLine({
 }) {
   const { t } = useTranslation();
   const hasSecret = webhookKeys(webhook).length > 0;
+  // A step with no key is still receiving when the author opened it — saying
+  // "press Generate" over an endpoint the whole internet can already POST to
+  // would be the most misleading line on the page.
+  const isOpen = !hasSecret && webhookPublic(webhook);
+  const canReceive = hasSecret || isOpen;
   // Undefined publish state (still loading, or a surface that doesn't pass it)
   // keeps the door-only answer rather than inventing a warning.
   const pending = triggerLive !== undefined && !triggerLive.published;
   // Published, but the draft has moved on: the door IS open, it just leads to
   // the last published version.
   const stale = triggerLive !== undefined && triggerLive.published && triggerLive.dirty;
-  const key = !hasSecret ? "off" : pending ? "pending" : stale ? "stale" : "on";
+  const key = !canReceive
+    ? "off"
+    : pending
+      ? "pending"
+      : stale
+        ? "stale"
+        : isOpen
+          ? "open"
+          : "on";
   // Green is reserved for "a caller can use this right now".
-  const ok = hasSecret && !pending;
+  const ok = canReceive && !pending;
   return (
     <div className={"webhook-status" + (ok ? " ok" : "") + (stale ? " stale" : "")}>
       {ok ? <Check size={ICON.sm} aria-hidden="true" /> : <Info size={ICON.sm} aria-hidden="true" />}
@@ -486,6 +532,18 @@ function buildWebhookURL(graph: Graph, baseURL: string): string {
   return `${host}/trigger/${graph.tenant}/${graph.workspace}/${graph.id}`;
 }
 
+// buildWebhookURLWithKey is the same address with the key in the query string —
+// the whole credential in one pasteable string, for a sender that cannot set a
+// header. Encoded because a generated key is hex today but the field takes
+// whatever an operator types.
+function buildWebhookURLWithKey(
+  graph: Graph,
+  key: string,
+  baseURL: string,
+): string {
+  return `${buildWebhookURL(graph, baseURL)}?key=${encodeURIComponent(key)}`;
+}
+
 // buildRequestURL returns the public address callers POST to when they want an
 // answer back. Distinct path from /trigger on purpose: one URL shape, one
 // contract.
@@ -496,6 +554,16 @@ function buildRequestURL(graph: Graph, baseURL: string): string {
 
 // buildRequestCurl prints the call AND what comes back — JSON by default,
 // since a system asking a question is the audience here.
+// buildRequestURLWithKey is the /call address with the key in the query string
+// — one pasteable credential for a caller that cannot set a header.
+function buildRequestURLWithKey(
+  graph: Graph,
+  key: string,
+  baseURL: string,
+): string {
+  return `${buildRequestURL(graph, baseURL)}?key=${encodeURIComponent(key)}`;
+}
+
 function buildRequestCurl(
   graph: Graph,
   secret: string,
@@ -699,9 +767,14 @@ export function CodeField({
 function WebhookKeys({
   webhook,
   onChange,
+  kind,
 }: {
   webhook: GraphTrigger;
   onChange: (patch: Partial<GraphTrigger>) => void;
+  // Which door these keys guard. Both take keys the same way, but opening
+  // them is not the same decision — /trigger lets a stranger start the flow,
+  // /call also hands them its Reply — so the switch says different things.
+  kind: "webhook" | "request";
 }) {
   const { t } = useTranslation();
   const keys = webhookKeys(webhook);
@@ -755,6 +828,25 @@ function WebhookKeys({
         <Trans
           i18nKey="settings.triggers.bearerSecretDesc"
           components={[<code />]}
+        />
+      </div>
+      {/* Last resort, and placed after the keys so it reads as one: the key is
+          how this is meant to work, and no key at all is the exception for a
+          sender that can carry neither a header nor a query string. */}
+      <div className="sf-field" style={{ marginTop: "var(--space-3)" }}>
+        <Switch
+          checked={webhookPublic(webhook)}
+          onChange={(on) => onChange({ public: on })}
+          label={t(
+            kind === "request"
+              ? "settings.triggers.publicRequestLabel"
+              : "settings.triggers.publicLabel",
+          )}
+          description={t(
+            kind === "request"
+              ? "settings.triggers.publicRequestDesc"
+              : "settings.triggers.publicDesc",
+          )}
         />
       </div>
       {pendingRevoke !== null && (

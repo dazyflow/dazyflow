@@ -25,7 +25,11 @@ vi.mock("../../i18n", () => ({
   default: { language: "en", t: (k: string) => k },
 }));
 
-import { FormStatusLine, WebhookStatusLine } from "./TriggersModal";
+import {
+  FormStatusLine,
+  RequestStatusLine,
+  WebhookStatusLine,
+} from "./TriggersModal";
 import type { GraphTrigger } from "../../types";
 
 const keyed = { secrets: ["s"] } as unknown as GraphTrigger;
@@ -120,5 +124,70 @@ describe("FormStatusLine", () => {
     expect(line("formStatus")).toBe("inspector.formStatus.stale");
     expect(classes(container).contains("ok")).toBe(true);
     expect(classes(container).contains("stale")).toBe(true);
+  });
+});
+
+// A step the author opened is receiving. Saying "press Generate" over an
+// endpoint the whole internet can already POST to would be the most misleading
+// line on the page.
+describe("an open webhook step", () => {
+  const open = { public: true } as unknown as GraphTrigger;
+
+  it("reads as receiving, not as unconfigured", () => {
+    const { container } = render(
+      <WebhookStatusLine
+        webhook={open}
+        triggerLive={{ published: true, dirty: false }}
+      />,
+    );
+    expect(line("webhookStatus")).toBe("inspector.webhookStatus.open");
+    expect(classes(container).contains("ok")).toBe(true);
+  });
+
+  it("still waits on publish like any other door", () => {
+    render(
+      <WebhookStatusLine
+        webhook={open}
+        triggerLive={{ published: false, dirty: false }}
+      />,
+    );
+    expect(line("webhookStatus")).toBe("inspector.webhookStatus.pending");
+  });
+
+  it("is off when the switch is off and there is no key", () => {
+    render(
+      <WebhookStatusLine
+        webhook={bare}
+        triggerLive={{ published: true, dirty: false }}
+      />,
+    );
+    expect(line("webhookStatus")).toBe("inspector.webhookStatus.off");
+  });
+});
+
+// The Request step gets the same two doors, and the same duty not to claim a
+// closed one works — with its own words, because /call answers.
+describe("an open Request step", () => {
+  const open = { public: true } as unknown as GraphTrigger;
+
+  it("reads as answering, not as unconfigured", () => {
+    const { container } = render(
+      <RequestStatusLine
+        request={open}
+        triggerLive={{ published: true, dirty: false }}
+      />,
+    );
+    expect(line("requestStatus")).toBe("inspector.requestStatus.open");
+    expect(classes(container).contains("ok")).toBe(true);
+  });
+
+  it("is off when the switch is off and there is no key", () => {
+    render(
+      <RequestStatusLine
+        request={bare}
+        triggerLive={{ published: true, dirty: false }}
+      />,
+    );
+    expect(line("requestStatus")).toBe("inspector.requestStatus.off");
   });
 });

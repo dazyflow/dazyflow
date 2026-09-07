@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -558,8 +559,14 @@ func (h *flowAPI) triggerEndpoints(base string, g core.Graph) []map[string]any {
 				"url":    base + "/trigger/" + scope,
 			}
 			if keys := core.WebhookSecrets(n.Params); len(keys) > 0 {
-				// Any active key authenticates; show the first.
+				// Any active key authenticates; show the first. Both forms are
+				// offered because the sender decides which is possible: a
+				// service whose webhook settings are one URL box can only use
+				// url_with_key, and it is the paste-ready string.
 				ep["auth"] = "Authorization: Bearer " + keys[0]
+				ep["url_with_key"] = base + "/trigger/" + scope + "?key=" + url.QueryEscape(keys[0])
+			} else if core.WebhookPublic(n.Params) {
+				ep["note"] = "Open endpoint — possession of the URL is the only credential."
 			}
 			out = append(out, ep)
 		case core.FormInputModule:
@@ -578,6 +585,9 @@ func (h *flowAPI) triggerEndpoints(base string, g core.Graph) []map[string]any {
 			}
 			if keys := core.WebhookSecrets(n.Params); len(keys) > 0 {
 				ep["auth"] = "Authorization: Bearer " + keys[0]
+				ep["url_with_key"] = base + "/call/" + scope + "?key=" + url.QueryEscape(keys[0])
+			} else if core.WebhookPublic(n.Params) {
+				ep["note"] = ep["note"].(string) + " Open endpoint — possession of the URL is the only credential, and it answers with the flow's Reply."
 			}
 			out = append(out, ep)
 		case "cron_trigger":

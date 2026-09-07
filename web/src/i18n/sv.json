@@ -540,7 +540,13 @@
       "bearerSecret": "Hemliga nycklar",
       "generateTitle": "Lägg till en ny slumpmässig nyckel (befintliga nycklar fortsätter fungera)",
       "generate": "Skapa en nyckel",
-      "bearerSecretDesc": "Anroparen skickar <0>Authorization: Bearer …</0> i varje anrop. Vilken som helst av nycklarna fungerar — lägg till en ny, ställ om dina anropare och återkalla sedan den gamla utan avbrott.",
+      "bearerSecretDesc": "Anroparen skickar <0>Authorization: Bearer …</0> i varje anrop, eller lägger nyckeln sist i adressen. Vilken som helst av nycklarna fungerar — lägg till en ny, ställ om dina anropare och återkalla sedan den gamla utan avbrott.",
+      "requestUrlLabel": "Förfrågansadress",
+      "urlWithKeyLabel": "Adress med nyckeln i",
+      "publicLabel": "Ta emot anrop utan nyckel",
+      "publicDesc": "För en avsändare som varken kan skicka en rubrik eller en nyckel i adressen. Vem som helst som känner till adressen kan då starta flödet.",
+      "publicRequestLabel": "Svara på anrop utan nyckel",
+      "publicRequestDesc": "För en anropare som varken kan skicka en rubrik eller en nyckel i adressen. Vem som helst som känner till adressen får då flödets Svar — ett större steg än att öppna en Webhook, som bara startar en körning.",
       "curlLabel": "Exempelanrop (curl)",
       "curlDesc": "En body i klartext landar som text på stegets Body-utgång; en JSON-body (Content-Type: application/json) kommer in som strukturerad data du kan plocka fält ur.",
       "requestCurlDesc": "Kommandot skriver ut det som ditt Svara-steg skickar tillbaka. Lägg till <0>?wait=0</0> i adressen för att få en direkt kvittens i stället för att vänta på svaret.",
@@ -1952,8 +1958,9 @@
     "resetState": "Återställ {{label}}",
     "deleteConfirm": "Ta bort steg \"{{id}}\" och dess kopplingar?",
     "webhookStatus": {
-      "off": "Tar inte emot än — tryck på Generera nedan för att skapa den hemliga nyckel avsändarna måste skicka med.",
+      "off": "Tar inte emot än — tryck på Generera nedan för att skapa en nyckel avsändarna skickar med, som rubrik eller sist i adressen.",
       "on": "Tar emot — system som skickar den hemliga nyckeln kan starta det här flödet.",
+      "open": "Tar emot — det här steget tar anrop utan nyckel, så alla som känner till adressen kan starta flödet.",
       "pending": "Tar inte emot än — den hemliga nyckeln avvisas tills du publicerar flödet.",
       "stale": "Tar emot — men avsändarna når fortfarande den senast publicerade versionen. Publicera för att göra dina ändringar live."
     },
@@ -1963,8 +1970,9 @@
       "stale": "Öppet — men besökarna får fortfarande den senast publicerade versionen. Publicera för att göra dina ändringar live."
     },
     "requestStatus": {
-      "off": "Svarar inte än — tryck på Generera nedan för att skapa den hemliga nyckel anroparna måste skicka.",
+      "off": "Svarar inte än — tryck på Generera nedan för att skapa en nyckel anroparna skickar, som rubrik eller sist i adressen.",
       "on": "Svarar — system som skickar den hemliga nyckeln får ditt Svara-steg tillbaka.",
+      "open": "Svarar — det här steget tar anrop utan nyckel, så alla som känner till adressen får ditt Svar.",
       "pending": "Svarar inte än — den hemliga nyckeln avvisas tills du publicerar flödet.",
       "stale": "Svarar — men anroparna får fortfarande den senast publicerade versionen. Publicera för att göra dina ändringar live."
     },

@@ -49,6 +49,14 @@ export function webhookKeys(
   return out;
 }
 
+// webhookPublic reports whether a Webhook step takes calls with no key.
+// Mirrors core.WebhookPublic (Go): off unless explicitly turned on, because a
+// freshly added step has no keys either and "no keys" must not silently mean
+// "open to the internet".
+export function webhookPublic(src: { public?: unknown } | undefined): boolean {
+  return src?.public === true;
+}
+
 // EVENT_TRIGGER_MODULES mirrors core.EventTriggerModules — trigger drops fired
 // by an inbound provider event rather than the scheduler or the /trigger
 // webhook. Kept in lockstep by TestEventTriggerModulesMatchCatalog on the Go
@@ -78,17 +86,22 @@ function hasConfiguredAutoTrigger(
         if (readString(n.params, "cron").trim() !== "") return true;
         break;
       case "poll_trigger":
-      case "google_form_trigger": {
+      case "google_form_trigger":
+      case "ticketmaster_on_new_event": {
         const secs = readNumber(n.params, "interval_seconds");
         if (secs !== undefined && secs > 0 && secs <= MAX_POLL_INTERVAL_SECONDS)
           return true;
         break;
       }
       case "webhook_input":
+        // A key to check, or the author's explicit choice to take calls
+        // without one. Key-less and not public is inert.
+        if (webhookKeys(n.params).length > 0 || webhookPublic(n.params)) return true;
+        break;
       case "request_input":
-        // A key-less step is inert — /trigger and /call both reject an
-        // unauthenticated caller.
-        if (webhookKeys(n.params).length > 0) return true;
+        // Same two doors as the webhook. Opening this one is the bigger
+        // decision — /call answers — but the reachability rule is identical.
+        if (webhookKeys(n.params).length > 0 || webhookPublic(n.params)) return true;
         break;
       case "form_input":
         // The step's presence IS the opt-in: a hosted form takes no key.

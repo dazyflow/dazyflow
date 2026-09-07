@@ -26,13 +26,23 @@ func init() {
 			Category:    "trigger",
 			Provider:    "internal",
 			Tags:        []string{"webhook", "trigger", "http", "event"},
-			Description: "Starts the flow when another system sends something to its web address, and acknowledges the delivery straight away. Body is what was sent (JSON or text); Headers carries the request's metadata. Use the Form step when the sender is a person, and the Request step when the caller waits for an answer.",
+			Description: "Starts the flow when another system sends something to its web address, and acknowledges the delivery straight away. Body is what was sent (JSON or text); Headers carries the request's metadata. Callers prove themselves with one of the keys below, sent either as a header or as ?key=… on the end of the address — so a service whose settings are just a URL box works too. Use the Form step when the sender is a person, and the Request step when the caller waits for an answer.",
 			Summary:     "Starts the flow when another system posts to its web address.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Webhook with one key",
 					Params: json.RawMessage(`{"secrets":["${secret.FLOW_WEBHOOK_KEY}"]}`),
 					Notes:  "Senders POST the flow's /trigger address with Authorization: Bearer <key>. The address is provisioned per flow; the body and headers come from the inbound request.",
+				},
+				{
+					Title:  "Sender that can only paste a URL",
+					Params: json.RawMessage(`{"secrets":["${secret.FLOW_WEBHOOK_KEY}"]}`),
+					Notes:  "Same key, sent as ?key=<key> on the end of the /trigger address. Identical to the header, for the many services whose webhook settings are a URL box and nothing else.",
+				},
+				{
+					Title:  "No key at all",
+					Params: json.RawMessage(`{"public":true}`),
+					Notes:  "Anyone who knows the address can start the flow. Last resort, for a sender that can carry neither a header nor a key in the URL.",
 				},
 			},
 			ExecutionModel: core.ExecutionTrigger,
@@ -52,7 +62,13 @@ func init() {
 						"type":"array",
 						"items":{"type":"string"},
 						"title":"Secret keys",
-						"description":"Bearer tokens callers may send (Authorization: Bearer …) to POST this flow's /trigger endpoint. The endpoint accepts ANY listed key, so you can add a new key, migrate callers, then revoke the old one with zero downtime. With no key the endpoint rejects every delivery."
+						"description":"Keys a caller may send to start this flow, either as an Authorization: Bearer header or as ?key=… on the end of the address — use the address form for senders that only let you paste a URL. The endpoint accepts ANY listed key, so you can add a new key, migrate callers, then revoke the old one with zero downtime."
+					},
+					"public":{
+						"type":"boolean",
+						"title":"Accept calls with no key",
+						"default":false,
+						"description":"Let anyone who knows this flow's address start it, with no key at all. Only for senders that can carry neither a header nor a key in the URL — the address becomes the only thing standing between the flow and the internet. Off by default, and a key-less step stays inert until you turn this on."
 					}
 				}
 			}`),

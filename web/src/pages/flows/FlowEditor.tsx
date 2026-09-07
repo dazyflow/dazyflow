@@ -3836,6 +3836,7 @@ function EditorInner() {
         m === "cron_trigger" ||
         m === "poll_trigger" ||
         m === "google_form_trigger" ||
+        m === "ticketmaster_on_new_event" ||
         m === "webhook_input" ||
         m === "request_input" ||
         m === "form_input"

@@ -50,6 +50,10 @@ export type GraphTrigger = {
   // secrets is the multi-key bearer list (zero-downtime rotation — the
   // /trigger endpoint accepts any listed key).
   secrets?: string[];
+  // public opts a Webhook step into accepting calls that carry no key at all,
+  // for senders that can send neither a header nor a key in the URL. Mirrors
+  // core.WebhookPublic (Go).
+  public?: boolean;
   // form_fields names the Form step's questions (defaults to
   // name/email/message); form_title overrides the page heading.
   form_fields?: string[];

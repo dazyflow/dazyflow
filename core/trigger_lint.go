@@ -179,9 +179,9 @@ func lintTriggers(g Graph) []LintIssue {
 	// webhook_input nodes carry the secret. Without one the /trigger endpoint
 	// rejects every unauthenticated POST, so the flow never starts on its own.
 	for _, n := range webhookNodes {
-		if len(WebhookSecrets(n.Params)) == 0 {
+		if len(WebhookSecrets(n.Params)) == 0 && !WebhookPublic(n.Params) {
 			issues = append(issues, nodeTriggerIssue("trigger_webhook_no_secret", n.ID,
-				"This Webhook step can't receive anything yet, so the flow will never start on its own. Open it and press Generate to create the secret key other systems must send when they call this flow."))
+				"This Webhook step can't receive anything yet, so the flow will never start on its own. Open it and press Generate to create a key callers send — as a header, or as ?key=… on the end of the address if the sending service only lets you paste a URL. If it can send neither, turn on 'Accept calls with no key'."))
 		}
 	}
 
@@ -212,9 +212,9 @@ func lintTriggers(g Graph) []LintIssue {
 	// request_input carries only keys — there is no hosted form to fall back
 	// on, so a key-less Request step can never be called.
 	for _, n := range requestNodes {
-		if len(WebhookSecrets(n.Params)) == 0 {
+		if len(WebhookSecrets(n.Params)) == 0 && !WebhookPublic(n.Params) {
 			issues = append(issues, nodeTriggerIssue("trigger_request_no_secret", n.ID,
-				"This Request step can't receive anything yet, so the flow will never start on its own. Open it and press Generate to create the secret key the systems calling this flow must send."))
+				"This Request step can't receive anything yet, so the flow will never start on its own. Open it and press Generate to create a key callers send — as a header, or as ?key=… on the end of the address if the calling system only lets you paste a URL. If it can send neither, turn on 'Answer calls with no key'."))
 		}
 	}
 

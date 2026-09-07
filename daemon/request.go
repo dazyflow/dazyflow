@@ -47,6 +47,9 @@ const (
 //	200/502 + {run_id, status} when the run ends without reaching a Reply
 //	202 + {run_id, status} when the wait elapses first — the run continues
 //	401 on an unknown endpoint or a bad key, 403 when the flow is paused
+//
+// The key comes from Authorization: Bearer or ?key=, and a step the author
+// marked public needs neither.
 func (w *WebhookListener) handleCall(rw http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(rw, "method not allowed", http.StatusMethodNotAllowed)
@@ -75,7 +78,19 @@ func (w *WebhookListener) handleCall(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	keys := core.GraphRequestSecrets(g)
-	if len(keys) == 0 || !anyKeyMatches(keys, stripBearer(r.Header.Get("Authorization"))) {
+	switch {
+	case len(keys) > 0:
+		// webhookKey reads the header first, then ?key= — a caller that can
+		// set neither has nowhere to put a key at all.
+		if !anyKeyMatches(keys, webhookKey(r)) {
+			http.Error(rw, unauthorized, http.StatusUnauthorized)
+			return
+		}
+	case core.GraphRequestPublic(g):
+		// Open by the author's explicit choice. Worth more thought here than
+		// on /trigger: this endpoint answers, so an open one publishes the
+		// flow's Reply to anyone holding the address.
+	default:
 		http.Error(rw, unauthorized, http.StatusUnauthorized)
 		return
 	}

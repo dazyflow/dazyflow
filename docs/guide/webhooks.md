@@ -24,6 +24,17 @@ it as a header:
 Authorization: Bearer <a key>
 ```
 
+**Or on the end of the address**, which is what you want when the sending
+service gives you a URL box and nothing else — no header field anywhere in its
+settings. Plenty of them are like that:
+
+```
+https://your.dazyflow/trigger/<tenant>/<workspace>/<flow>?key=<a key>
+```
+
+Both are the same key and the same check. The header wins if a caller somehow
+sends both, so a sender that can set one is never let in by a stale URL.
+
 The panel shows a ready-made **curl** command with your key already in it, so
 you can check the whole path end to end before wiring up the real caller. Two
 things have to be true before it is accepted, and the panel says so when they
@@ -52,12 +63,24 @@ Revoking is immediate: anything still calling with that key stops working at
 once. Other keys keep going. Revoke the *only* key and the flow stops accepting
 webhook deliveries entirely.
 
+## When the sender can't send a key at all
+
+Some can't — not a header, not a query string on the URL. For those, turn on
+**Accept calls with no key** on the Webhook step. Anyone who knows the flow's
+address can then start it, which is the same bargain the hosted Form step
+makes, and the address is the only thing protecting it.
+
+It is off until you turn it on, on purpose: every new Webhook step starts with
+no key, and treating that as "open" would put a public endpoint on the internet
+that nobody decided to put there. Reach for it last — a key in the URL covers
+almost every sender that can't do headers.
+
 ## Is it actually receiving?
 
 The step tells you, in one line:
 
-- **Not receiving yet** — no key has been generated, so every delivery is
-  rejected.
+- **Not receiving yet** — no key has been generated and the step isn't open, so
+  every delivery is rejected.
 - **Receiving** — systems that send the key can start this flow.
 - **Receiving, but** — senders reach the last published version, because your
   draft has moved on since.

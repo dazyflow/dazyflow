@@ -755,3 +755,114 @@ func TestWebhook_RefusesDeepTriggerChain(t *testing.T) {
 		t.Errorf("stored trigger depths = %v, want three runs with a max of 1", depths)
 	}
 }
+
+// webhookStatus posts to a published graph's /trigger address and returns the
+// status, so the key-placement cases below read as a table rather than five
+// copies of the same eight lines.
+func webhookStatus(t *testing.T, wh *daemon.WebhookListener, path string, setAuth func(*http.Request)) int {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/trigger/", func(rw http.ResponseWriter, r *http.Request) {
+		callPrivateHandler(t, wh, rw, r)
+	})
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	req, _ := http.NewRequest("POST", ts.URL+path, nil)
+	if setAuth != nil {
+		setAuth(req)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	return resp.StatusCode
+}
+
+// A great many services that post webhooks give you a URL field and nothing
+// else — no header anywhere in their settings. A header-only endpoint is one
+// those senders cannot call at all, so the key is read from the query string
+// too.
+func TestWebhook_AcceptsKeyInTheURL(t *testing.T) {
+	t.Parallel()
+	_, wh, _, _, wsStore := startWebhookHarness(t)
+	savePublished(t, wsStore, core.Graph{
+		ID: "wh-url-key", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{
+			{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s3cr3t"}}},
+			{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}},
+		},
+	})
+
+	if got := webhookStatus(t, wh, "/trigger/acme/ws1/wh-url-key?key=s3cr3t", nil); got != http.StatusAccepted {
+		t.Errorf("key in the URL: status=%d, want 202", got)
+	}
+	// The same key still works in the header, and a wrong one in the URL is
+	// still a stranger — the query parameter is another place to put the key,
+	// not a way around it.
+	if got := webhookStatus(t, wh, "/trigger/acme/ws1/wh-url-key?key=wrong", nil); got != http.StatusUnauthorized {
+		t.Errorf("wrong key in the URL: status=%d, want 401", got)
+	}
+	if got := webhookStatus(t, wh, "/trigger/acme/ws1/wh-url-key", func(r *http.Request) {
+		r.Header.Set("Authorization", "Bearer s3cr3t")
+	}); got != http.StatusAccepted {
+		t.Errorf("key in the header: status=%d, want 202", got)
+	}
+}
+
+// A sender that can set a header is never downgraded by a stale key someone
+// left in the URL: the header is what gets checked when both are present.
+func TestWebhook_HeaderWinsOverURLKey(t *testing.T) {
+	t.Parallel()
+	_, wh, _, _, wsStore := startWebhookHarness(t)
+	savePublished(t, wsStore, core.Graph{
+		ID: "wh-both", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{
+			{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"good"}}},
+			{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}},
+		},
+	})
+	got := webhookStatus(t, wh, "/trigger/acme/ws1/wh-both?key=good", func(r *http.Request) {
+		r.Header.Set("Authorization", "Bearer stale")
+	})
+	if got != http.StatusUnauthorized {
+		t.Errorf("status=%d, want 401 — the header is the one that counts", got)
+	}
+}
+
+// The last-resort case: a sender that can carry neither a header nor a key in
+// the URL. The author turns the step public and the address is the credential.
+func TestWebhook_PublicStepAcceptsNoKey(t *testing.T) {
+	t.Parallel()
+	_, wh, _, _, wsStore := startWebhookHarness(t)
+	savePublished(t, wsStore, core.Graph{
+		ID: "wh-public", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{
+			{ID: "in", Module: "webhook_input", Params: map[string]any{"public": true}},
+			{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}},
+		},
+	})
+	if got := webhookStatus(t, wh, "/trigger/acme/ws1/wh-public", nil); got != http.StatusAccepted {
+		t.Errorf("status=%d, want 202 — a public step takes calls with no key", got)
+	}
+}
+
+// Without that switch a key-less step stays shut. Every freshly added Webhook
+// step has no keys, so inferring "open" from their absence would publish an
+// endpoint the author never chose to expose.
+func TestWebhook_KeylessStepIsInertUnlessPublic(t *testing.T) {
+	t.Parallel()
+	_, wh, _, _, wsStore := startWebhookHarness(t)
+	savePublished(t, wsStore, core.Graph{
+		ID: "wh-keyless", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{
+			{ID: "in", Module: "webhook_input", Params: map[string]any{}},
+			{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}},
+		},
+	})
+	if got := webhookStatus(t, wh, "/trigger/acme/ws1/wh-keyless", nil); got != http.StatusUnauthorized {
+		t.Errorf("status=%d, want 401", got)
+	}
+}
