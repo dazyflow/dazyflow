@@ -9737,7 +9737,8 @@ a.pa-card:hover {
    pushed below the strip: the strip's height varies with its contents, and a
    tip that jitters down the canvas as banners come and go is worse than one
    that waits its turn.) */
-.canvas:has(.editor-banner-stack:not(:empty)) .editor-trigger-hint {
+.canvas:has(.editor-banner-stack:not(:empty)) .editor-trigger-hint,
+.canvas:has(.editor-run-done) .editor-trigger-hint {
   display: none;
 }
 .editor-trigger-hint {
@@ -13001,17 +13002,81 @@ button:active,
 }
 
 /* The toast that confirms a run finished, floating over the canvas. */
+/* "It worked" — a floating overlay, not a docked banner.
+   It shared .editor-banner-stack with everything else, and that strip grows to
+   40vh: announcing a success shrank the canvas its author was looking at, and
+   the last step's raw output was printed straight into it. Same geometry and
+   the same click-through rule as .editor-trigger-hint, which solved this for
+   the teaching tip; the two take turns in the top slot (see below). */
 .editor-run-done {
+  position: absolute;
+  top: 62px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  /* Click-through: it floats over the top of the canvas, so taps reach a node
+     beneath it. Its own controls re-enable them. */
+  pointer-events: none;
   display: flex;
   flex-direction: column;
   gap: var(--space-1h);
-  padding: var(--space-3) var(--space-4);
+  max-width: min(620px, calc(100% - 24px));
+  padding: var(--space-2) var(--space-2) var(--space-2) 14px;
   background: var(--surface);
-  border: 1px solid var(--success);
-  border-radius: var(--r-2);
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--success) 25%, transparent);
+  border: 1px solid color-mix(in srgb, var(--success) 55%, var(--border));
+  border-radius: var(--r-3);
+  box-shadow: var(--shadow-pop);
   color: var(--ink);
   font-size: var(--text-md);
+}
+/* The inspector is an absolute panel on the right; centring on the whole
+   editor would push this half under it. Centre on what is left instead —
+   the same correction the banner strip makes with its padding. */
+@media (min-width: 769px) {
+  .editor[data-has-selection="true"] .editor-run-done {
+    transform: translateX(calc(-50% - var(--inspector-w) / 2));
+  }
+}
+.editor-run-done-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.editor-run-done-head {
+  color: var(--success);
+}
+/* Every control inside is clickable; the panel around them is not. */
+.editor-run-done-toggle,
+.editor-run-done-link,
+.editor-run-done-x {
+  pointer-events: auto;
+  flex: 0 0 auto;
+}
+.editor-run-done-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+}
+.editor-run-done-link {
+  font-size: var(--text-sm);
+}
+.editor-run-done-x {
+  font-size: var(--text-xs);
+  padding: var(--space-0) var(--space-2);
+}
+/* Folded away until asked for: raw port data, which for most of the people
+   this product is for is syntax rather than an answer. */
+.editor-run-done-output {
+  pointer-events: auto;
+  margin: 0;
+  max-height: 160px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: var(--text-sm);
+  color: var(--muted);
 }
 
 /* ---- Runners (AdminRunners.tsx) ------------------------------------------ */

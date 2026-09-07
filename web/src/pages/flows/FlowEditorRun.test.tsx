@@ -170,6 +170,20 @@ describe("editor run lifecycle", () => {
     expect(screen.queryByText("editor.run")).not.toBeInTheDocument();
   });
 
+  it("floats over the canvas instead of taking a bite out of it", async () => {
+    mount();
+    await userEvent.click(await screen.findByText("editor.run"));
+    await waitFor(() => expect(stream.latest()?.runID).toBe("run-1"));
+    await emit(...frame.terminal("succeeded"));
+
+    await screen.findByText(succeededHeadline);
+    const toast = document.querySelector(".editor-run-done");
+    if (!toast) throw new Error("success toast not rendered");
+    // The docked strip is what resizes the editor; an overlay does not.
+    expect(toast.closest(".editor-banner-stack")).toBeNull();
+    expect(toast.closest(".canvas")).not.toBeNull();
+  });
+
   it("reports success with the finishing step's label once the run terminates", async () => {
     mount();
     await userEvent.click(await screen.findByText("editor.run"));

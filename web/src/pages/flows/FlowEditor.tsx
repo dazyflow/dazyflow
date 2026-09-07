@@ -4724,9 +4724,6 @@ function EditorInner() {
           )}
         </div>
         <div className="editor-banner-stack">
-        {runDone && (
-          <RunSucceededToast run={runDone} onDismiss={() => setRunDone(null)} />
-        )}
         {/* Publish discoverability: the #1 "why didn't my flow run?" trap is a
             triggered flow left unpublished. A draft with a trigger never fires
             until it's live, and the only other hint is a hover tooltip. Surface
@@ -5189,6 +5186,13 @@ function EditorInner() {
           >
             {t("editor.loadingGraph")}
           </div>
+        )}
+        {/* "It worked" — floating over the canvas rather than in the docked
+            strip, which grows to 40vh and so took a bite out of the flow to
+            announce a success. What the last step produced is folded away
+            inside it; see RunSucceededToast. */}
+        {runDone && (
+          <RunSucceededToast run={runDone} onDismiss={() => setRunDone(null)} />
         )}
         {/* Trigger discoverability: a flow with steps but no trigger only
             ever runs on a manual click. First-timers don't know "run it

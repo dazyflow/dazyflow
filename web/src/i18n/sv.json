@@ -2138,8 +2138,10 @@
     "ctxDeleteEdge": "Ta bort koppling",
     "publishNeedsSetup": "Flödet kan inte köras än — {{apps}} måste konfigureras först. Publicerar du nu kommer de automatiska körningarna att misslyckas.",
     "runSucceeded": "Klart — flödet kördes.",
-    "runSucceededWith": "Klart — flödet kördes. ”{{label}}” gav:",
+    "runSucceededWith": "Klart — flödet kördes och ”{{label}}” gav ett resultat.",
     "runSucceededDetails": "Visa hela körningen",
+    "runSucceededShow": "Visa vad det gav",
+    "runSucceededHide": "Dölj det",
     "edgeError": {
       "head": "När körs nästa steg?",
       "abort": "Bara om det här steget lyckas",

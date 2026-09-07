@@ -10,6 +10,21 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Changed
+
+- **The "it worked" panel stops taking a bite out of the canvas, and stops
+  opening with a wall of JSON.** It shared the docked banner strip with
+  everything else, and that strip grows to 40vh — so announcing a success
+  shrank the flow its author was looking at — and it printed the last step's
+  raw port value into it, `JSON.stringify` and all, in a scroll box.
+
+  It now floats over the canvas, click-through, with the same geometry as the
+  trigger hint (the two take turns in that slot). What the step produced is
+  folded away behind **Show what it produced**; the headline says a result came
+  out, and "See the full run" is still there for anyone who wants the detail.
+  Raw port data is rarely an answer to "did it work?" for the people this
+  product is for.
+
 ## [0.41.0] - 2026-09-07
 
 ### Removed
