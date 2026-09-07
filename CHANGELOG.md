@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.40.0] - 2026-09-07
+
 ### Fixed
 
 - **The approval link in the email now opens a page you can decide on.** It
