@@ -12,6 +12,23 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ### Changed
 
+- **The publish confirmation was rewritten.** It was a 44px rocket that flew
+  220px up the middle of the screen through two expanding coloured rings, under
+  the word "Published!", for 1.6 seconds. Publishing is the most consequential
+  button in the product — it is what makes a flow start receiving — and that
+  read as a consumer-app flourish over the top of the flow.
+
+  Now: a small card in the top slot under the toolbar, a check that draws
+  itself, one quiet halo, and two lines that say what changed rather than
+  congratulating anybody — "Published" over "This flow is live and will
+  receive." Everything moves a short distance on an ease-out curve; nothing
+  bounces, overshoots or spins, and it is done in a bit over a second. The
+  reduced-motion path is a plain fade with the check already made.
+
+  Dev builds can replay it with **Shift+P** in the editor (compiled out of a
+  production bundle): judging an animation means watching it a dozen times, and
+  the real path needs a fresh draft to promote for each one.
+
 - **The "it worked" panel stops taking a bite out of the canvas, and stops
   opening with a wall of JSON.** It shared the docked banner strip with
   everything else, and that strip grows to 40vh — so announcing a success

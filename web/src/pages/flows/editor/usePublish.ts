@@ -10,7 +10,10 @@ import type { Permission, PublishInfo } from "../../../types";
 // How long the launch animation stays up. Mirrors the `publish-launch` keyframes
 // in app.css (1.5s) plus a beat, so the overlay leaves just after the rocket
 // finishes rather than clipping it. Retime the CSS and this moves with it.
-const CELEBRATION_MS = 1600;
+// How long the publish confirmation stays up: the card's own in/hold/out
+// animation (see .publish-live-card) plus a few frames, so it is unmounted
+// after it has faded rather than cut off mid-fade.
+const CELEBRATION_MS = 1200;
 
 // usePublish owns going live, pausing, and the draft-vs-live status behind the
 // toolbar switch.
@@ -204,6 +207,11 @@ export function usePublish({
     publishInfo,
     publishing,
     justPublished,
+    // Exposed so a dev build can fire the confirmation on its own, without
+    // publishing anything — see the shortcut in FlowEditor. Judging an
+    // animation means replaying it, and the real path needs a live flow and a
+    // draft to promote each time.
+    celebrate,
     diffOpen,
     setDiffOpen,
     diff,

@@ -808,6 +808,7 @@ function EditorInner() {
     publishRef,
     setLive,
     openDiff,
+    celebrate,
   } = publish;
 
 
@@ -3291,6 +3292,29 @@ function EditorInner() {
     setHistory(step.state);
     applyHistoryDoc(step.doc);
   }, [history, applyHistoryDoc, lockedRunID, hasPerm]);
+
+  // Shift+P replays the publish confirmation, in dev builds only.
+  //
+  // Judging an animation means watching it a dozen times, and the real path
+  // needs a live flow and a fresh draft to promote for each one. Gated on
+  // import.meta.env.DEV so it is compiled out of a production bundle rather
+  // than shipped as an undocumented key that fires a "published" overlay at
+  // someone who has published nothing.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key !== "P") return;
+      const el = document.activeElement as HTMLElement | null;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) {
+        return;
+      }
+      e.preventDefault();
+      celebrate();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [celebrate]);
 
   // Cmd/Ctrl+Z undoes, Cmd/Ctrl+Shift+Z and Ctrl+Y redo (Shift+Z is the
   // Mac/Adobe convention, Ctrl+Y the Windows one — both are muscle memory for
