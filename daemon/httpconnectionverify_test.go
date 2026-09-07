@@ -6,6 +6,7 @@ package daemon
 import (
 	"context"
 	"net/http"
+	"sync"
 	"testing"
 
 	"github.com/dazyflow/dazyflow/core"
@@ -69,12 +70,32 @@ func TestVerifyConnection_NotVerifiable(t *testing.T) {
 	}
 }
 
+// testConnToggles holds the live verdict toggle of each integration registered
+// by registerTestConnectable, keyed by integration name.
+var (
+	testConnMu      sync.Mutex
+	testConnToggles = map[string]*bool{}
+)
+
 // registerTestConnectable registers a unique connectable integration (with one
 // required field) and a verifier whose verdict the test controls, returning the
 // integration name + slug. The verifier reads a package-level toggle so the
 // same registration can be flipped between success and failure across cases.
+//
+// The engine registries are process-global with no way to unregister, so the
+// registration happens once per name while the toggle is rebound on every
+// call. Both halves matter under `-count=2`: a second Register of the same
+// module ID panics, and a verifier closing over the first run's variable would
+// read a finished test's state.
 func registerTestConnectable(t *testing.T, name string, fail *bool) (integration, slug string) {
 	t.Helper()
+	testConnMu.Lock()
+	_, registered := testConnToggles[name]
+	testConnToggles[name] = fail
+	testConnMu.Unlock()
+	if registered {
+		return name, core.ConnectionSlug(name)
+	}
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
 			ID: "test_conn_" + name, Version: "1.0", Summary: "test connectable",
@@ -89,8 +110,11 @@ func registerTestConnectable(t *testing.T, name string, fail *bool) (integration
 			return core.Result{JobID: j.ID, Status: core.StatusOK}, nil
 		},
 	})
-	engine.RegisterConnectionVerifier(name, func(_ context.Context, conn map[string]string) error {
-		if *fail {
+	engine.RegisterConnectionVerifier(name, func(_ context.Context, _ map[string]string) error {
+		testConnMu.Lock()
+		toggle := testConnToggles[name]
+		testConnMu.Unlock()
+		if *toggle {
 			return &core.JobError{Code: "bad", Message: "creds rejected"}
 		}
 		return nil
