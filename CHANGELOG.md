@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.41.3] - 2026-09-07
+
 ### Developer
 
 - The changelog is one line per change, down from 8,000 lines of prose.
