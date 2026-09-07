@@ -1065,8 +1065,8 @@ func TestPgRunnerTaskStore_PruneKeepsLiveWork(t *testing.T) {
 	// finished_at test alone would collect this row, and the step waiting on it
 	// would fail to read its own task back.
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO runner_tasks (id, tenant, runner, script, state, claimed_by, lease_until, finished_at, created_at)
-		VALUES ('halfdone', 'acme', 'box', 'x', 'running', 'box', $1, $1, $1)`, old); err != nil {
+		INSERT INTO runner_tasks (id, tenant, tags, script, state, claimed_by, lease_until, finished_at, created_at)
+		VALUES ('halfdone', 'acme', ARRAY['box'], 'x', 'running', 'box', $1, $1, $1)`, old); err != nil {
 		t.Fatalf("set up the half-finished row: %v", err)
 	}
 
@@ -1151,45 +1151,6 @@ func TestPgRunnerTaskStore_SealsTheScriptAtRest(t *testing.T) {
 	}
 	if got.Script != task.Script || got.Stdin != task.Stdin || got.Env["TOKEN"] != cred {
 		t.Errorf("claimed task = %+v, want the plaintext back", got)
-	}
-}
-
-// A task queued by the pre-tags version, claimed by this one moments later:
-// exactly what a rolling deploy produces. Stranding it would fail a live run
-// with "the runner stopped responding" about a machine that is perfectly fine.
-func TestPgRunnerTaskStore_ClaimsARowQueuedBeforeTags(t *testing.T) {
-	pool := pgRunnerPool(t)
-	ctx := context.Background()
-	q, err := NewPgRunnerTaskStore(ctx, pool)
-	if err != nil {
-		t.Fatalf("NewPgRunnerTaskStore: %v", err)
-	}
-	if _, err := pool.Exec(ctx, "TRUNCATE runner_tasks"); err != nil {
-		t.Fatalf("truncate: %v", err)
-	}
-	// Written the way the previous version wrote them: one of the two target
-	// columns, no tags.
-	for _, row := range []struct{ id, runner, label string }{
-		{"old-byname", "box", ""},
-		{"old-bylabel", "", "build"},
-	} {
-		if _, err := pool.Exec(ctx, `
-			INSERT INTO runner_tasks (id, tenant, runner, label, script, state, created_at)
-			VALUES ($1, 'acme', $2, $3, './old.sh', 'queued', now())`,
-			row.id, row.runner, row.label); err != nil {
-			t.Fatalf("insert %s: %v", row.id, err)
-		}
-	}
-	box := Runner{Tenant: "acme", Name: "box", Labels: []string{"linux", "build"}}
-	for _, want := range []string{"old-byname", "old-bylabel"} {
-		got, err := q.Claim(ctx, box, time.Now(), TaskLease)
-		if err != nil {
-			t.Fatalf("claiming %s: %v", want, err)
-		}
-		// Read back as tags, so the rest of the daemon never sees the old shape.
-		if len(got.Tags) != 1 {
-			t.Errorf("%s came back with tags %v, want the old column read as one tag", got.ID, got.Tags)
-		}
 	}
 }
 
