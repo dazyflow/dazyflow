@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.41.0] - 2026-09-07
+
 ### Removed
 
 - **A restart no longer publishes your drafts.** `MigrateWebhookPublish` ran on
