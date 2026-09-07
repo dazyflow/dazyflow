@@ -48,3 +48,6 @@ hazy-key
 /.claude/
 /.mcp.json
 /memory
+
+# Business material — never commit (this repo is public)
+/pitch-deck.html
