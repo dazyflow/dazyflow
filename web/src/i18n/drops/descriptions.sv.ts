@@ -190,8 +190,8 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     sv: "Spara inkommande data som en fil i arbetsytan. Koppla in vad som helst i ingången Data — text, JSON eller en fil från ett annat steg — och det skrivs till den sökväg du väljer. Arbetsytans lagringsgränser respekteras.",
   },
   for_each: {
-    en: "fe2be376",
-    sv: "Kör Loopens innehåll — de steg som är kopplade till utgången Loopens innehåll — en gång per post i en inkommande lista. Posterna körs parallellt upp till inställningen för samtidighet. Skickar ut `results` (en post per element, i ordning) och `errors` (en lista med misslyckade rader: {row, data, error}, där row börjar på 1). Sätt fail_fast=true för att avbryta vid första felet; annars fortsätter körningen och felen kommer ut på errors-porten. Om VARJE post misslyckas misslyckas steget ändå — det är ett driftavbrott, inte en delvis lyckad körning, och ett senare steg ska inte registrera arbetet som utfört.",
+    en: "02f6eaea",
+    sv: "Kör Loopens innehåll — de steg som är kopplade till utgången Loopens innehåll — en gång per post i en inkommande lista. Posterna körs parallellt upp till inställningen för samtidighet. Skickar ut `results` (en post per element, i ordning) och `errors` (en lista med misslyckade rader: {row, data, error}, där row börjar på 1). Sätt fail_fast=true för att avbryta vid första felet; annars fortsätter körningen och felen kommer ut på errors-porten. Om DE FLESTA posterna misslyckas misslyckas steget ändå — det är ett driftavbrott, inte en delvis lyckad körning, och ett senare steg ska inte registrera arbetet som utfört. Ett fåtal fel bland många lyckas fortfarande, och antalet skrivs till körningsloggen i båda fallen.",
   },
   fortnox_create_customer: {
     en: "e483ad73",
@@ -298,8 +298,8 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     sv: "Skicka ett mejl från den anslutna brevlådan. Till, Ämne och Innehåll kan skrivas som parametrar eller kopplas in från ett tidigare steg (motsvarande ingång vinner över parametern) — praktiskt för utskick per mottagare. Bifoga filer genom att koppla filproducerande steg (t.ex. Exportera blad som PDF) till den variadiska ingången Bilagor.",
   },
   google_form_trigger: {
-    en: "399df000",
-    sv: "Bevakar ett Google-formulär och utlöses när nya svar kommer in (varje svar exakt en gång). `responses` är en lista med objekt där frågans rubrik är nyckeln — koppla den direkt till en tillägg i Sheets. Varje svar bär också `email` (svarandens adress) när formuläret samlar in e-postadresser, så att du kan svara dem. När en kontroll inte hittar något nytt hoppas resten av flödet över. Publicera flödet så att det körs automatiskt enligt schemat nedan — att trycka Kör gör bara en kontroll, för test.",
+    en: "acd89b3a",
+    sv: "Bevakar ett Google-formulär och utlöses när nya svar kommer in (varje svar exakt en gång). Den första kontrollen efter att du publicerat registrerar det som redan finns och utlöser ingenting, så att flödet inte behandlar formulärets hela historik när du slår på det. `responses` är en lista med objekt där frågans rubrik är nyckeln — koppla den direkt till en tillägg i Sheets. Varje svar bär också `email` (svarandens adress) när formuläret samlar in e-postadresser, så att du kan svara dem. När en kontroll inte hittar något nytt hoppas resten av flödet över. Publicera flödet så att det körs automatiskt enligt schemat nedan — att trycka Kör gör bara en kontroll, för test.",
   },
   gpt_classify: {
     en: "0c748850",

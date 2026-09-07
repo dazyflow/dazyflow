@@ -1153,7 +1153,7 @@
     ]
   },
   "for_each": {
-    "description": "Run the loop body — the steps connected to the Loop body input — once per item in an input list. Items execute in parallel up to the concurrency setting. Outputs `results` (one entry per item, in order) and `errors` (a list of failed rows: {row, data, error}, row is 1-based). Set fail_fast=true to abort on the first failure; otherwise the iteration continues and failures surface on the errors port. If EVERY item fails the step fails anyway — that is an outage, not a partial success, and a later step shouldn't record the work as done.",
+    "description": "Run the loop body — the steps connected to the Loop body input — once per item in an input list. Items execute in parallel up to the concurrency setting. Outputs `results` (one entry per item, in order) and `errors` (a list of failed rows: {row, data, error}, row is 1-based). Set fail_fast=true to abort on the first failure; otherwise the iteration continues and failures surface on the errors port. If MOST items fail the step fails anyway — that is an outage, not a partial success, and a later step shouldn't record the work as done. A few failures among many still succeed, and the count is written to the run log either way.",
     "ports": [
       "Failed rows",
       "List",
@@ -1975,6 +1975,7 @@
     ],
     "help": [
       "Hard deadline for the request, in milliseconds.",
+      "How many emails to bring back at most. An ad-hoc search returns the newest ones. With 'Only new since last run' on it works through the OLDEST waiting emails first, in the order they arrived, and the rest follow on the next polls — so a burst bigger than this is delayed, never skipped.",
       "Override the API host (testing).",
       "Pagination token from a prior run's next_page_token output (advanced).",
       "Raw access token; overrides 'account'.",
@@ -2019,7 +2020,7 @@
     ]
   },
   "google_form_trigger": {
-    "description": "Watches a Google Form and fires when new responses arrive (each response exactly once). `responses` is a list of objects keyed by question title — connect it straight into a Sheets append. Each response also carries `email` (the respondent's address) when the form collects email addresses, so you can reply to them. When a check finds nothing new, the rest of the flow is skipped. Publish the flow so it runs automatically on the schedule below — pressing Run only checks once, for testing.",
+    "description": "Watches a Google Form and fires when new responses arrive (each response exactly once). The first check after you publish records what is already there and fires nothing, so turning the flow on doesn't process a form's whole back catalogue. `responses` is a list of objects keyed by question title — connect it straight into a Sheets append. Each response also carries `email` (the respondent's address) when the form collects email addresses, so you can reply to them. When a check finds nothing new, the rest of the flow is skipped. Publish the flow so it runs automatically on the schedule below — pressing Run only checks once, for testing.",
     "ports": [
       "Count",
       "New responses",
@@ -2645,7 +2646,7 @@
     ],
     "help": [
       "Hard deadline for the whole search, in milliseconds.",
-      "How many matches to bring back at most, newest first.",
+      "How many matches to bring back at most. An ad-hoc search returns the newest ones. With 'Only new since last run' on it takes the OLDEST waiting emails instead, in arrival order, and the rest follow on the next polls — so a burst bigger than this is delayed, never skipped.",
       "Ignore anything older than this many days. Leave blank to search the whole folder.",
       "Match a recipient — useful on a shared mailbox that receives several addresses.",
       "Match the sender. Any part of the address or name counts, so \"@customer.com\" finds everyone at that company. Overridden by the 'From' input.",

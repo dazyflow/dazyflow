@@ -405,7 +405,10 @@ export const SV_FIELD_HELP: Record<string, string> = {
   "How long to wait before calling it down, in milliseconds.": "Hur länge det ska väntas innan sajten räknas som nere, i millisekunder.",
   "How many events to bring back at most, earliest first.": "Hur många händelser som som mest hämtas, tidigast först.",
   "How many files to bring back at most, oldest first.": "Hur många filer som som mest hämtas, äldst först.",
-  "How many matches to bring back at most, newest first.": "Hur många träffar som som mest hämtas, nyast först.",
+  "How many emails to bring back at most. An ad-hoc search returns the newest ones. With 'Only new since last run' on it works through the OLDEST waiting emails first, in the order they arrived, and the rest follow on the next polls — so a burst bigger than this is delayed, never skipped.":
+    "Hur många e-postmeddelanden som som mest hämtas. En tillfällig sökning returnerar de nyaste. Med ”Bara nya sedan förra körningen” påslaget arbetar steget i stället av de ÄLDSTA väntande meddelandena först, i den ordning de kom in, och resten följer vid nästa kontroller — så en skur som är större än detta fördröjs, den hoppas aldrig över.",
+  "How many matches to bring back at most. An ad-hoc search returns the newest ones. With 'Only new since last run' on it takes the OLDEST waiting emails instead, in arrival order, and the rest follow on the next polls — so a burst bigger than this is delayed, never skipped.":
+    "Hur många träffar som som mest hämtas. En tillfällig sökning returnerar de nyaste. Med ”Bara nya sedan förra körningen” påslaget tas i stället de ÄLDSTA väntande meddelandena, i ankomstordning, och resten följer vid nästa kontroller — så en skur som är större än detta fördröjs, den hoppas aldrig över.",
   "How many pages each piece gets. 1 makes a file per page.": "Hur många sidor varje del får. 1 ger en fil per sida.",
   "How many spaces each level is indented by. 2 is the convention almost everything uses.": "Hur många blanksteg varje nivå dras in med. 2 är den konvention nästan allt använder.",
   "How to test the Value against Compare to.": "Hur värdet ska testas mot Jämför med.",
