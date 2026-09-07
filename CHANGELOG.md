@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.41.1] - 2026-09-07
+
 ### Changed
 
 - **The publish confirmation was rewritten.** It was a 44px rocket that flew
