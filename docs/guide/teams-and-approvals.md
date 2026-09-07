@@ -121,8 +121,19 @@ To reach them sooner, you have two options:
 
 ### What the approver sees
 
-Anything waiting shows up on the **Approvals** page, which appears in the
-sidebar once you have something pending. Each card shows the question, the value
+**From the emailed link**, whoever opens it gets a page with the question, a
+comment box and two buttons — Approve and Reject — and a short confirmation
+once they pick one. No account, no sign-in: the link is the credential, which
+is why the mail says not to forward it. It speaks the flow's own language, and
+says so plainly when a link has expired or somebody else already decided.
+
+Opening the link never decides anything by itself. That matters more than it
+sounds: mail scanners and link previewers fetch the URLs in a message before a
+human ever sees them, so a one-click approval that happened on open would be
+decided by a virus scanner.
+
+**From inside Dazyflow**, anything waiting shows up on the **Approvals** page,
+which appears in the sidebar once you have something pending. Each card shows the question, the value
 you connected, which flow it came from and how long it's been waiting, with
 **Approve** and **Reject** and a box for an optional comment that travels with
 the decision.
@@ -146,6 +157,36 @@ somebody handled it.
 
 > A run parked at an approval keeps whatever it had already worked out. That's
 > why the approver can be a different person, hours later, on a phone.
+
+### Letting a machine decide
+
+Sometimes the thing that should decide isn't a person — a policy service that
+knows the refund limits, or a build system that knows whether the tests passed.
+An API key can work the same approvals API the inbox does:
+
+```
+GET  /api/v1/approvals/pending
+POST /api/v1/approvals/<run>/<node>?decision=approve&comment=under+the+limit
+```
+
+**A step has to allow that first.** Turn on **Let an API key approve this** on
+the Wait for approval step. It's off by default, and deliberately: the endpoint
+accepts any key with access to the workspace, so without the switch a key
+minted to run a flow could also wave through the gate that was put there to
+stop it. A person working the Approvals inbox can always decide either way —
+the switch only governs keys.
+
+The decision is attributed to the key's own subject, never to a name the caller
+supplies, so **Recent decisions** shows which key decided and the audit log
+records it.
+
+Two things worth knowing before you reach for this. The switch cannot restrict
+the **Approval link** — that's a URL, and a script holding one looks exactly
+like the person it was sent to, so don't pipe the link of a
+must-be-human gate anywhere a script can read it. And a gate a machine always
+approves isn't a gate: if the rule can be written down, an **If** step in front
+of the approval is the honest shape — auto-handle what's routine, park only
+what genuinely needs a person.
 
 ---
 

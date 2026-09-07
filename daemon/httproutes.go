@@ -602,7 +602,12 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	// the route 404s when Approval is nil (i.e. the operator hasn't
 	// configured DAZYFLOW_APPROVAL_HMAC_SECRET + PUBLIC_BASE_URL).
 	if h.Approval != nil {
-		mux.HandleFunc("POST /approve/", h.Approval.handle)
+		// GET renders the decision page the emailed link opens; POST takes the
+		// decision, from that page's buttons or from a script. Both are
+		// throttled per IP like the other token-is-the-credential endpoints —
+		// the token is unguessable, but nothing should be free to hammer it.
+		mux.HandleFunc("GET /approve/", h.rateLimitWebhook(h.Approval.handleApprovalPage))
+		mux.HandleFunc("POST /approve/", h.rateLimitWebhook(h.Approval.handle))
 	}
 
 	// Static frontend bundle. Registered LAST so all explicit API

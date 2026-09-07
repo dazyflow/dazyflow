@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/internal/maillang"
 )
 
 // approvalTokenTTL bounds how long a signed approval link stays valid.
@@ -300,42 +301,33 @@ func (a *ApprovalListener) handle(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/approve/"), "/")
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		http.Error(rw, "expected /approve/<graphRunID>/<nodeID>", http.StatusBadRequest)
+	graphRunID, nodeID, ok := parseApprovalPath(rw, r)
+	if !ok {
 		return
 	}
-	graphRunID, nodeID := parts[0], parts[1]
-	// The expiry is signed into the token, so we read it from the query and
-	// verify the signature covers (run, node, exp): a link holder can't
-	// extend the expiry or forge a link for another pause. The decision is
-	// the approver's choice at click time and is intentionally not signed.
-	decision := r.URL.Query().Get("decision")
+	if !a.tokenOK(r, graphRunID, nodeID) {
+		a.denyApproval(rw, r, http.StatusUnauthorized, "invalid or expired token")
+		return
+	}
+	// The decision is the approver's choice at click time and is intentionally
+	// not signed. It arrives in the query from a script, or in the form body
+	// from the page's own buttons.
+	decision := approvalField(r, "decision")
 	if decision == "" {
 		decision = "approve"
-	}
-	exp, err := strconv.ParseInt(r.URL.Query().Get("exp"), 10, 64)
-	if err != nil {
-		http.Error(rw, "invalid or missing exp", http.StatusUnauthorized)
-		return
-	}
-	token := r.URL.Query().Get("token")
-	if token == "" || !a.signer.verifyToken(graphRunID, nodeID, exp, token) {
-		http.Error(rw, "invalid or expired token", http.StatusUnauthorized)
-		return
 	}
 	// Only after proving possession of the token do we start reporting request
 	// shape: an unsigned caller gets the same generic 401 either way. Service
 	// .Approve guards this too (it serves non-HTTP callers), but rejecting here
 	// turns a client typo into a 400 instead of a 500.
 	if decision != "approve" && decision != "reject" {
-		http.Error(rw, "decision must be approve or reject", http.StatusBadRequest)
+		a.denyApproval(rw, r, http.StatusBadRequest, "decision must be approve or reject")
 		return
 	}
 	// approver is a display label only; it is NOT part of the signed
 	// payload and must never be trusted to authorize the action.
-	approver := r.URL.Query().Get("approver")
-	comment := r.URL.Query().Get("comment")
+	approver := approvalField(r, "approver")
+	comment := approvalField(r, "comment")
 
 	if err := a.svc.Approve(r.Context(), graphRunID, nodeID, ApprovalDecision{
 		Decision: decision,
@@ -352,16 +344,36 @@ func (a *ApprovalListener) handle(rw http.ResponseWriter, r *http.Request) {
 		// to read "job not found".
 		switch {
 		case errors.Is(err, core.ErrConflict):
+			// A duplicate click is the commonest failure here by far: two
+			// people opened the same mail. Say so in words on the page rather
+			// than handing a person a 409.
+			if wantsHTML(r) {
+				lang, _, _ := a.approvalPageState(r, graphRunID, nodeID)
+				renderApproval(rw, http.StatusConflict, approvalView{
+					Lang: maillang.Primary(lang), M: maillang.For(lang), Already: true,
+				})
+				return
+			}
 			http.Error(rw, err.Error(), http.StatusConflict)
 		case errors.Is(err, core.ErrNotFound):
-			http.Error(rw, err.Error(), http.StatusNotFound)
+			a.denyApproval(rw, r, http.StatusNotFound, err.Error())
 		default:
-			http.Error(rw, err.Error(), http.StatusInternalServerError)
+			a.denyApproval(rw, r, http.StatusInternalServerError, err.Error())
 		}
 		return
 	}
 	a.auditDecision(r.Context(), graphRunID, nodeID, decision, approver)
 	a.logger.Printf("resumed %s/%s decision=%s approver=%s", graphRunID, nodeID, decision, approver)
+	// A person who just clicked a button gets a page saying what happened; a
+	// script gets the JSON it has always parsed.
+	if wantsHTML(r) {
+		lang, _, _ := a.approvalPageState(r, graphRunID, nodeID)
+		renderApproval(rw, http.StatusOK, approvalView{
+			Lang: maillang.Primary(lang), M: maillang.For(lang),
+			Done: true, Decision: decision,
+		})
+		return
+	}
 	rw.Header().Set("Content-Type", "application/json")
 	rw.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(rw).Encode(map[string]string{
@@ -370,8 +382,67 @@ func (a *ApprovalListener) handle(rw http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// parseApprovalPath splits /approve/<run>/<node>, answering the 400 itself on
+// a malformed path. Shared by the page and the decision so the two can never
+// disagree about what a valid approval URL looks like.
+func parseApprovalPath(rw http.ResponseWriter, r *http.Request) (graphRunID, nodeID string, ok bool) {
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/approve/"), "/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		http.Error(rw, "expected /approve/<graphRunID>/<nodeID>", http.StatusBadRequest)
+		return "", "", false
+	}
+	return parts[0], parts[1], true
+}
+
+// tokenOK verifies the signed link. The expiry is signed into the token, so it
+// is read from the query and the signature checked over (run, node, exp): a
+// link holder can neither extend the expiry nor forge a link for another
+// pause.
+func (a *ApprovalListener) tokenOK(r *http.Request, graphRunID, nodeID string) bool {
+	exp, err := strconv.ParseInt(r.URL.Query().Get("exp"), 10, 64)
+	if err != nil {
+		return false
+	}
+	token := r.URL.Query().Get("token")
+	return token != "" && a.signer.verifyToken(graphRunID, nodeID, exp, token)
+}
+
+// approvalField reads one of the unsigned fields from wherever this caller put
+// it: the form body (the page's buttons) or the query string (every script
+// that has been posting this URL). Query wins so a scripted call whose body
+// happens to parse is not reinterpreted.
+func approvalField(r *http.Request, name string) string {
+	if v := r.URL.Query().Get(name); v != "" {
+		return v
+	}
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/x-www-form-urlencoded") {
+		if err := r.ParseForm(); err == nil {
+			return r.PostFormValue(name)
+		}
+	}
+	return ""
+}
+
+// denyApproval answers a refusal in the caller's own terms: the dead-end page
+// for a browser, the plain-text status a script already handles otherwise.
+// Every browser refusal renders the same "not valid" page, so the URL cannot
+// be used to tell an expired link from a run that never existed.
+func (a *ApprovalListener) denyApproval(rw http.ResponseWriter, r *http.Request, status int, msg string) {
+	if wantsHTML(r) {
+		renderApproval(rw, status, approvalView{Lang: "en", M: maillang.English, Gone: true})
+		return
+	}
+	http.Error(rw, msg, status)
+}
+
 // ServeApprovalForTest exposes the listener's handler without binding a
 // port — analogous to ServeWebhookForTest. Production code uses Serve.
 func ServeApprovalForTest(a *ApprovalListener, rw http.ResponseWriter, r *http.Request) {
 	a.handle(rw, r)
+}
+
+// ServeApprovalPageForTest is the GET counterpart: the page the emailed link
+// opens, without binding a port.
+func ServeApprovalPageForTest(a *ApprovalListener, rw http.ResponseWriter, r *http.Request) {
+	a.handleApprovalPage(rw, r)
 }

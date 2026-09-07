@@ -8,7 +8,7 @@
     "label": "A AND B"
   },
   "await_approval": {
-    "description": "Pause the flow until someone approves. Fill in 'Email these people' and Dazyflow mails them the approval link when the flow gets here, and tells them the outcome once it is decided; leave it blank and no mail is sent. To notify some other way — or instead — put this step BEFORE a notify step — it hands you an `Approval link` (the `pending_url` output) to put in that message (e.g. ntfy's 'Link to open', or an email body). Anyone who has the link can approve or reject — there's no per-person targeting, so send it only to the people who should decide; the flow records who clicked on the `Approver` output. The person taps the link to approve or reject; only then does the rest of the flow continue. On resume, the input `Value` comes out the `Approved` or `Rejected` port matching the decision (connect each to its follow-up — no separate Branch needed), alongside the `Approver` who decided and their `Comment`.",
+    "description": "Pause the flow until someone approves. Fill in 'Email these people' and Dazyflow mails them the approval link when the flow gets here, and tells them the outcome once it is decided; leave it blank and no mail is sent. To notify some other way — or instead — put this step BEFORE a notify step — it hands you an `Approval link` (the `pending_url` output) to put in that message (e.g. ntfy's 'Link to open', or an email body). Anyone who has the link can approve or reject — there's no per-person targeting, so send it only to the people who should decide; the flow records who clicked on the `Approver` output. The person taps the link to approve or reject; only then does the rest of the flow continue. Only a person can decide it by default — turn on 'Let an API key approve this' to let a script decide it through the API instead. On resume, the input `Value` comes out the `Approved` or `Rejected` port matching the decision (connect each to its follow-up — no separate Branch needed), alongside the `Approver` who decided and their `Comment`.",
     "ports": [
       "Approval link",
       "Approved",
@@ -20,9 +20,11 @@
     "label": "Wait for approval",
     "titles": [
       "Email these people",
+      "Let an API key approve this",
       "Question to ask"
     ],
     "help": [
+      "Allow a script or an agent holding an API key to decide this gate through the approvals API, instead of a person. Off by default: a pause here means a human looks first, and any key with workspace access would otherwise be able to wave it through. A person working the Approvals inbox can always decide it either way. Note this cannot restrict the Approval link — that is a URL, and a script holding one looks exactly like the person it was sent to.",
       "Comma-separated email addresses to notify when the flow reaches this step, and again once someone decides. Leave blank and no email is sent — deliver the Approval link yourself, or let people work the Approvals inbox. The email carries the same Approval link the pending_url output does — anyone who opens it can decide, so list only the people who should.",
       "The question shown on the approval page — e.g. 'A reply is ready to send. Approve?'. Note: anyone who opens the Approval link can approve or reject; the link is the only key, so share it only with the people who should decide. The flow records who clicked on the Approver output."
     ]

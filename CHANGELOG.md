@@ -10,7 +10,49 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The approval link in the email now opens a page you can decide on.** It
+  never did: the mail renders "Open the approval" as a button, opening a button
+  is a GET, and the only method `/approve/` answered was POST — so tapping it
+  showed the approver a raw `method_not_allowed` JSON body. The one-click
+  approval the mail has been promising did not exist.
+
+  `GET /approve/<run>/<node>` now serves a small self-contained page — the
+  step's question, a comment box, Approve and Reject — that posts back to the
+  same signed URL. No account and no sign-in, since the link is the credential.
+  It is rendered in the flow's own language, like the hosted form and the mail
+  itself, and it says so in words when a link has expired, when the request is
+  already settled, and when somebody clicks twice.
+
+  **Opening the link still decides nothing.** GET is deliberately free of side
+  effects: mail scanners and link previewers fetch URLs out of messages before
+  a human sees them, and an approval taken on GET would be made by a virus
+  scanner.
+
+  The POST contract is unchanged for scripts — it answers the same JSON it
+  always did, and only replies with a page when the caller asks for HTML.
+
 ### Changed
+
+- **BREAKING: an API key can no longer approve an approval step unless the step
+  allows it.** `POST /api/v1/approvals/<run>/<node>` accepts any key with access
+  to the workspace, which meant a key minted to *run* a flow could also wave
+  through the gate that was put there to stop it. A pause on Wait for approval
+  now means a person, unless the step turns on the new **Let an API key approve
+  this**.
+
+  The gate is on the credential kind, not on permissions: a session is somebody
+  working the Approvals inbox and always decides; a key is a script and decides
+  only a step that opted in. Refusals are a 403 naming the switch. If you have
+  a script approving today, turn the switch on for that step.
+
+  The opt-in is read from the graph the run pinned at submit, so the policy a
+  parked run was started under is the one that governs it. It cannot restrict
+  the signed **Approval link** — that is a URL sent to a human, and nothing
+  about an inbound POST distinguishes the person who clicked from a script
+  holding the same link.
+
 
 - **A webhook key can now travel in the address, and is no longer mandatory.**
   The `/trigger` endpoint reads `?key=<key>` as well as `Authorization:

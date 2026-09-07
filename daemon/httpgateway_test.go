@@ -670,7 +670,7 @@ func TestHTTPGateway_ApproveAuthedResumesAwaitingNode(t *testing.T) {
 		ID: "run-1", Kind: core.JobKindGraph,
 		GraphID: "g1", Tenant: "t", Workspace: "ws",
 		Status:       core.JobStatusRunning,
-		GraphPayload: []byte(`{"id":"g1","tenant":"t","workspace":"ws","nodes":[{"id":"a","module":"await_approval"}]}`),
+		GraphPayload: []byte(`{"id":"g1","tenant":"t","workspace":"ws","nodes":[{"id":"a","module":"await_approval","params":{"allow_api":true}}]}`),
 	})
 	_ = h.store.Enqueue(t.Context(), core.JobRecord{
 		ID: NodeJobID("run-1", "a"), Kind: core.JobKindNode,
@@ -727,7 +727,7 @@ func TestHTTPGateway_ApproveAuthedIgnoresSpoofedApprover(t *testing.T) {
 		ID: "run-spoof", Kind: core.JobKindGraph,
 		GraphID: "g1", Tenant: "t", Workspace: "ws",
 		Status:       core.JobStatusRunning,
-		GraphPayload: []byte(`{"id":"g1","tenant":"t","workspace":"ws","nodes":[{"id":"a","module":"await_approval"}]}`),
+		GraphPayload: []byte(`{"id":"g1","tenant":"t","workspace":"ws","nodes":[{"id":"a","module":"await_approval","params":{"allow_api":true}}]}`),
 	})
 	_ = h.store.Enqueue(t.Context(), core.JobRecord{
 		ID: NodeJobID("run-spoof", "a"), Kind: core.JobKindNode,

@@ -318,6 +318,7 @@ export const SV_FIELD_TITLES: Record<string, string> = {
     "Till",
   "Accept calls with no key": "Ta emot anrop utan nyckel",
   "Answer calls with no key": "Svara på anrop utan nyckel",
+  "Let an API key approve this": "Låt en API-nyckel godkänna det här",
 };
 
 // Per-field help text, shown behind the (i) on a field.
@@ -857,6 +858,8 @@ export const SV_FIELD_HELP: Record<string, string> = {
     "Tvåbokstavig landskod att söka i — SE, NO, DK, FI, GB, US. Rekommenderas starkt: utan den söker steget över hela världen.",
   "Zero-based page number. Ticketmaster stops paging at the 1000th result.":
     "Sidnummer som börjar på noll. Ticketmaster slutar bläddra vid den 1000:e träffen.",
+  "Allow a script or an agent holding an API key to decide this gate through the approvals API, instead of a person. Off by default: a pause here means a human looks first, and any key with workspace access would otherwise be able to wave it through. A person working the Approvals inbox can always decide it either way. Note this cannot restrict the Approval link — that is a URL, and a script holding one looks exactly like the person it was sent to.":
+    "Låt ett skript eller en agent med en API-nyckel besluta den här grinden via godkännande-API:et i stället för en människa. Av som standard: en paus här betyder att en människa tittar först, och annars skulle vilken nyckel som helst med åtkomst till arbetsytan kunna vinka igenom den. En människa som arbetar i Godkännanden kan alltid besluta den ändå. Observera att det här inte kan begränsa Godkännandelänken — den är en URL, och ett skript som har den ser precis ut som personen den skickades till.",
 };
 
 // Dropdown option labels (schema.enumNames), including the currency list.

@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/dazyflow/dazyflow/auth"
 	"github.com/dazyflow/dazyflow/core"
 )
 
@@ -117,6 +118,13 @@ func (h *runCtlAPI) listDecidedApprovals(rw http.ResponseWriter, r *http.Request
 // The HMAC-based /approve/{runID}/{nodeID} endpoint stays available
 // for the email/Slack notification flow where the approver doesn't
 // have a session.
+//
+// Two callers, one route, and the policy differs by credential KIND rather
+// than by permission (the same split deleteFlowMe makes): a session is a
+// person working the inbox and always decides, while an API key is a script
+// and decides only a step that opted in with `allow_api`. Workspace
+// membership alone is too weak a gate for the step whose whole purpose is
+// putting a human in the way.
 func (h *runCtlAPI) approveAuthed(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	runID := r.PathValue("runID")
 	nodeID := r.PathValue("nodeID")
@@ -127,12 +135,24 @@ func (h *runCtlAPI) approveAuthed(rw http.ResponseWriter, r *http.Request, p cor
 	// Tenant scope: load the parent graph through GetJob, which already
 	// enforces the principal's tenant. Prevents a malicious-but-valid
 	// API key from approving someone else's pending node.
-	if _, err := h.svc.GetJob(r.Context(), p, runID); err != nil {
+	runRec, err := h.svc.GetJob(r.Context(), p, runID)
+	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
 			writeJSONError(rw, http.StatusNotFound, err.Error())
 			return
 		}
 		writeJSONError(rw, http.StatusForbidden, err.Error())
+		return
+	}
+	// A key decides only a step that says a machine may. Read from the run's
+	// own pinned graph, not the flow's current draft: the policy that governs
+	// a parked run is the one it was submitted under, the same rule /trigger
+	// follows in serving the published revision.
+	if auth.IsAPIKeyCredential(credentialFromRequest(r)) && approvalNeedsHuman(runRec, nodeID) {
+		writeJSONError(rw, http.StatusForbidden,
+			"this approval step is for a person to decide, so an API key may not approve it. "+
+				"To let a machine decide this gate, turn on 'Let an API key approve this' on the step. "+
+				"A human can always decide it from the Approvals inbox.")
 		return
 	}
 	// Always attribute the approval to the authenticated principal — never a
@@ -166,6 +186,21 @@ func (h *runCtlAPI) approveAuthed(rw http.ResponseWriter, r *http.Request, p cor
 	}
 	h.audit(r.Context(), p, "approval", runID+"/"+nodeID, decision)
 	writeJSON(rw, http.StatusOK, map[string]string{"status": "resumed", "decision": decision})
+}
+
+// approvalNeedsHuman reads the opt-in off the graph the run pinned at submit.
+// A payload that is missing or unreadable answers false, leaving the request
+// to the normal path — which needs an awaiting record to do anything, so a run
+// whose graph cannot be read still decides nothing.
+func approvalNeedsHuman(runRec core.JobRecord, nodeID string) bool {
+	if len(runRec.GraphPayload) == 0 {
+		return false
+	}
+	var g core.Graph
+	if err := json.Unmarshal(runRec.GraphPayload, &g); err != nil {
+		return false
+	}
+	return core.ApprovalStepRequiresHuman(g, nodeID)
 }
 
 // cancelRun aborts an in-flight run. Body is an optional

@@ -21,7 +21,7 @@ func init() {
 			Category:    "flow_control",
 			Provider:    "internal",
 			Tags:        []string{"human_in_the_loop", "approval", "pause", "wait"},
-			Description: "Pause the flow until someone approves. Fill in 'Email these people' and Dazyflow mails them the approval link when the flow gets here, and tells them the outcome once it is decided; leave it blank and no mail is sent. To notify some other way — or instead — put this step BEFORE a notify step — it hands you an `Approval link` (the `pending_url` output) to put in that message (e.g. ntfy's 'Link to open', or an email body). Anyone who has the link can approve or reject — there's no per-person targeting, so send it only to the people who should decide; the flow records who clicked on the `Approver` output. The person taps the link to approve or reject; only then does the rest of the flow continue. On resume, the input `Value` comes out the `Approved` or `Rejected` port matching the decision (connect each to its follow-up — no separate Branch needed), alongside the `Approver` who decided and their `Comment`.",
+			Description: "Pause the flow until someone approves. Fill in 'Email these people' and Dazyflow mails them the approval link when the flow gets here, and tells them the outcome once it is decided; leave it blank and no mail is sent. To notify some other way — or instead — put this step BEFORE a notify step — it hands you an `Approval link` (the `pending_url` output) to put in that message (e.g. ntfy's 'Link to open', or an email body). Anyone who has the link can approve or reject — there's no per-person targeting, so send it only to the people who should decide; the flow records who clicked on the `Approver` output. The person taps the link to approve or reject; only then does the rest of the flow continue. Only a person can decide it by default — turn on 'Let an API key approve this' to let a script decide it through the API instead. On resume, the input `Value` comes out the `Approved` or `Rejected` port matching the decision (connect each to its follow-up — no separate Branch needed), alongside the `Approver` who decided and their `Comment`.",
 			Summary:     "Pause until a person approves: optionally email them a link, then continue on their decision.",
 			Examples: []core.ParamsExample{
 				{
@@ -37,6 +37,11 @@ func init() {
 				{
 					Title:  "Gate a production deploy",
 					Params: json.RawMessage(`{"prompt":"Promote build 1.42.0 to production?"}`),
+				},
+				{
+					Title:  "Let a policy service decide",
+					Params: json.RawMessage(`{"prompt":"Refund $230 — approve?","allow_api":true}`),
+					Notes:  "With allow_api on, a script holding an API key can decide this through POST /api/v1/approvals/<run>/<node>?decision=approve — the decision is attributed to that key. Leave it off for any gate that must have a person behind it.",
 				},
 			},
 			ExecutionModel: core.ExecutionBatch,
@@ -78,6 +83,13 @@ func init() {
 						"title":"Question to ask",
 						"description":"The question shown on the approval page — e.g. 'A reply is ready to send. Approve?'. Note: anyone who opens the Approval link can approve or reject; the link is the only key, so share it only with the people who should decide. The flow records who clicked on the Approver output.",
 						"examples":["A reply is ready to send. Approve?"]
+					},
+					"allow_api":{
+						"type":"boolean",
+						"title":"Let an API key approve this",
+						"default":false,
+						"description":"Allow a script or an agent holding an API key to decide this gate through the approvals API, instead of a person. Off by default: a pause here means a human looks first, and any key with workspace access would otherwise be able to wave it through. A person working the Approvals inbox can always decide it either way. Note this cannot restrict the Approval link — that is a URL, and a script holding one looks exactly like the person it was sent to.",
+						"x_advanced":true
 					},
 					"approvers":{
 						"type":"string",

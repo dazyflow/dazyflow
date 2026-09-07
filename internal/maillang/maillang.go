@@ -91,6 +91,22 @@ type Messages struct {
 	ApprovalShareWarning string
 	ApprovalOpenLink     string // button, signed link
 	ApprovalOpenInbox    string // button, the Approvals page
+	// The decision PAGE the signed link opens — the only place an approver
+	// without an account ever decides anything. Its own words, because the
+	// email's are written for an inbox and these for a page with two buttons
+	// on it.
+	ApprovalPageTitle    string
+	ApprovalPageIntro    string // above the question, when the step asked one
+	ApprovalCommentLabel string
+	ApprovalApprove      string // button
+	ApprovalReject       string // button
+	ApprovalDoneApproved string // confirmation heading
+	ApprovalDoneRejected string
+	ApprovalDoneBody     string // under either confirmation
+	ApprovalAlreadyTitle string // somebody already decided this one
+	ApprovalAlreadyBody  string
+	ApprovalGoneTitle    string // the link is expired, wrong, or for a run that is gone
+	ApprovalGoneBody     string
 
 	// ── An approval was decided ──
 	DecidedEyebrow           string
@@ -221,6 +237,18 @@ var English = Messages{
 	ApprovalShareWarning: "Anyone with this link can approve or reject, so please don't forward it.",
 	ApprovalOpenLink:     "Open the approval",
 	ApprovalOpenInbox:    "Open Approvals",
+	ApprovalPageTitle:    "A decision is waiting on you",
+	ApprovalPageIntro:    "A flow has paused and needs your decision before it can carry on.",
+	ApprovalCommentLabel: "Comment (optional)",
+	ApprovalApprove:      "Approve",
+	ApprovalReject:       "Reject",
+	ApprovalDoneApproved: "Approved.",
+	ApprovalDoneRejected: "Rejected.",
+	ApprovalDoneBody:     "Thanks — the flow has been told, and you can close this page.",
+	ApprovalAlreadyTitle: "Already decided.",
+	ApprovalAlreadyBody:  "Someone got to this one before you, so there is nothing left to do here.",
+	ApprovalGoneTitle:    "This approval link isn't valid.",
+	ApprovalGoneBody:     "It may have expired, or the request may already be settled. Approval links last two weeks. If someone sent you here, let them know.",
 
 	DecidedEyebrow:           "Decision made",
 	DecidedButton:            "View run details",
@@ -342,6 +370,18 @@ var Swedish = Messages{
 	ApprovalShareWarning: "Vem som helst med den här länken kan godkänna eller avslå, så vidarebefordra den inte.",
 	ApprovalOpenLink:     "Öppna godkännandet",
 	ApprovalOpenInbox:    "Öppna Godkännanden",
+	ApprovalPageTitle:    "Ett beslut väntar på dig",
+	ApprovalPageIntro:    "Ett flöde har pausat och behöver ditt beslut för att kunna fortsätta.",
+	ApprovalCommentLabel: "Kommentar (frivillig)",
+	ApprovalApprove:      "Godkänn",
+	ApprovalReject:       "Avslå",
+	ApprovalDoneApproved: "Godkänt.",
+	ApprovalDoneRejected: "Avslaget.",
+	ApprovalDoneBody:     "Tack — flödet har fått beslutet, och du kan stänga den här sidan.",
+	ApprovalAlreadyTitle: "Redan beslutat.",
+	ApprovalAlreadyBody:  "Någon hann före dig, så det finns inget kvar att göra här.",
+	ApprovalGoneTitle:    "Den här godkännandelänken gäller inte.",
+	ApprovalGoneBody:     "Den kan ha gått ut, eller så är begäran redan avgjord. Godkännandelänkar gäller i två veckor. Om någon skickade dig hit, hör av dig till dem.",
 
 	DecidedEyebrow:           "Beslut fattat",
 	DecidedButton:            "Visa körningen",
