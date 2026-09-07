@@ -9,10 +9,9 @@ and first-class Nordic/EU connectors (Fortnox, Klarna, Roaring, 46elks, nShift,
 SMHI) alongside the usual Google, Slack, Stripe and GitHub. English and Swedish
 UI. AGPL, no feature gates, no seat limits.
 
-<!-- TODO(screenshot): a shot of the editor canvas belongs here, above the
-     fold — it is the single biggest thing missing from this page for anyone
-     deciding whether to try a visual flow builder. Save it to `docs/img/`
-     and link it as an image at the top of this section. -->
+![The Dazyflow editor: a Stripe "on payment" trigger fanning out to a Gmail
+thank-you, a Slack message and a row saved to a sales collection, wired field by
+field on the canvas](docs/img/editor-canvas.png)
 
 ## Try it in 60 seconds
 
