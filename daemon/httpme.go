@@ -963,9 +963,6 @@ func (h *flowAPI) validateGraphLiteral(rw http.ResponseWriter, r *http.Request, 
 	if g.Workspace == "" {
 		g.Workspace = p.Workspace
 	}
-	// Drop obsolete edges (e.g. folded-away `headers` wires) before validating,
-	// so a graph authored against an older model lints against the current one.
-	g = core.MigrateGraph(g)
 	// Run the SAME two gates the AI generator applies (core.ValidateGraphFull:
 	// the security/placeholder linter PLUS the manifest-level structural
 	// validator) so a graph an MCP host hand-authors here validates identically

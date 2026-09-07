@@ -133,9 +133,6 @@ func (s *Service) SubmitGraphOpts(
 	if err := core.AuthorizeGraphRun(p, g); err != nil {
 		return "", err
 	}
-	// Same migration the save path applies: a run submitted straight from an
-	// older client's payload should not fail on a wire the model no longer has.
-	g = core.MigrateGraph(g)
 	// Counting nodes and wires is O(1) per element and validating is not, so
 	// the size ceilings come first: an oversized graph is refused without
 	// being walked at all.

@@ -144,7 +144,7 @@ func loadReferences(t *testing.T, dir string) map[int][]core.Graph {
 		if jerr := json.Unmarshal(data, &g); jerr != nil {
 			t.Fatalf("parse %s: %v", f, jerr)
 		}
-		out[n] = append(out[n], core.MigrateGraph(g))
+		out[n] = append(out[n], g)
 	}
 	return out
 }

@@ -10,6 +10,23 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A wire from a step's Headers output sticks.** The Webhook trigger, HTTP
+  request and every Web API step declare a `headers` output, but a data-model
+  migration deleted every edge whose port was *named* `headers` — matched by
+  name, with no manifest check — on every save and every load. The canvas
+  accepted the wire and the autosave returned 200, so the flow looked wired
+  while the stored graph had no edge at all, and the run failed with
+  `missing_input` on an input the author had just connected.
+
+  The migration is gone rather than narrowed: ports leave the catalog by leaving
+  a manifest, and an edge naming a port that no longer exists is pruned in the
+  editor, which tells the author which wire went so they can re-draw it. A flow
+  still carrying such a wire from the table connectors' old `headers` /
+  `left_headers` / `right_headers` pins will report it on the next save; open the
+  flow, accept the prune, and re-drag anything you still want.
+
 ## [0.40.0] - 2026-09-07
 
 ### Fixed
@@ -1097,6 +1114,7 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
   (A org that merely deleted all its flows is not swept: a deletion writes a
   tombstone revision rather than removing rows, so "no rows" means erased.)
 
+||||||| parent of a3c2c76c (Remove migration)
 ## [0.35.0] - 2026-09-04
 
 ### Added

@@ -139,7 +139,6 @@ func TestUseCaseGraphsValidate(t *testing.T) {
 			}
 			// Validate the graph as it would actually run — after the same
 			// data-model migration the daemon applies on load.
-			g = core.MigrateGraph(g)
 
 			// The authoring gate: everything the app itself refuses to save.
 			for _, is := range core.ValidateGraphFull(g, manifests) {

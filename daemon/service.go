@@ -948,11 +948,6 @@ func (s *Service) saveGraph(ctx context.Context, p core.Principal, g core.Graph,
 	if err := core.ValidGraphID(g.ID); err != nil {
 		return "", err
 	}
-	// Drop obsolete edges (the folded-away `headers` wires) before validating,
-	// so a flow authored against an older model is brought up to the current
-	// one here rather than in each entry path — the HTTP save handler already
-	// did this, and every other caller of SaveGraph did not.
-	g = core.MigrateGraph(g)
 	// Counting nodes and wires is O(1) per element and validating is not, so
 	// the size ceilings come first: an oversized graph is refused without
 	// being walked at all.
@@ -1095,10 +1090,7 @@ func (s *Service) LoadGraph(ctx context.Context, p core.Principal, tenant, ws, i
 		// existence of private flows doesn't leak via 403 vs 404.
 		return core.Graph{}, fmt.Errorf("graph %q: %w", id, core.ErrNotFound)
 	}
-	// Bring stored graphs up to the current data model (e.g. drop the folded-
-	// away `headers` edges) so a flow saved before a model change still loads
-	// and validates.
-	return core.MigrateGraph(g), nil
+	return g, nil
 }
 
 // LoadGraphForSupport loads a graph by identity WITHOUT the normal
@@ -1107,7 +1099,7 @@ func (s *Service) LoadGraph(ctx context.Context, p core.Principal, tenant, ws, i
 // not the principal's tenant, is the authority on the support path. This is the
 // only load path that bypasses the ownership/visibility gate; it exists so a
 // support agent (whose own tenant differs) can reach the flow the org consented
-// to. The graph is still migrated to the current data model, like LoadGraph.
+// to.
 func (s *Service) LoadGraphForSupport(_ context.Context, tenant, ws, id string) (core.Graph, error) {
 	store, err := s.Workspaces.Open(tenant, ws)
 	if err != nil {
@@ -1117,7 +1109,7 @@ func (s *Service) LoadGraphForSupport(_ context.Context, tenant, ws, id string) 
 	if err != nil {
 		return core.Graph{}, err
 	}
-	return core.MigrateGraph(g), nil
+	return g, nil
 }
 
 // FlowHistory returns the commit history of a flow, newest first. Gated on

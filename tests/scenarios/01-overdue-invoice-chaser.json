@@ -46,7 +46,6 @@
   ],
   "edges": [
     {"from": "read_invoices", "from_port": "rows", "to": "mark_overdue", "to_port": "rows"},
-    {"from": "read_invoices", "from_port": "headers", "to": "mark_overdue", "to_port": "headers"},
     {"from": "mark_overdue", "from_port": "rows", "to": "only_overdue", "to_port": "rows"},
     {"from": "only_overdue", "from_port": "rows_1", "to": "send_reminders", "to_port": "items"},
     {"from": "send_reminders", "from_port": "body", "to": "send_email", "to_port": "pass"},
