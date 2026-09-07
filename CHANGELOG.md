@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.41.2] - 2026-09-07
+
 ### Fixed
 
 - **Run history no longer deletes the steps of a run that is still going.** The
