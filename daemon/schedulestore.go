@@ -33,7 +33,12 @@ type ScheduleStore interface {
 	// PruneMissingFlows removes rows for flows absent from live, keyed
 	// tenant/workspace/graphID. It is the delete half of a reconcile: a flow
 	// deleted while this dzd was down leaves rows nothing else will clear.
-	PruneMissingFlows(ctx context.Context, live map[string]struct{}) (int, error)
+	//
+	// scope holds the tenant/workspace keys the caller could actually read;
+	// rows outside it are left alone. A workspace that failed to list has no
+	// live flows to offer, and without this its whole schedule set would look
+	// deleted. nil scope means every workspace was read.
+	PruneMissingFlows(ctx context.Context, live, scope map[string]struct{}) (int, error)
 }
 
 // MemScheduleStore is the in-memory ScheduleStore used by tests and by
@@ -51,6 +56,22 @@ func NewMemScheduleStore() *MemScheduleStore {
 
 func flowKey(tenant, workspace, graphID string) string {
 	return tenant + "/" + workspace + "/" + graphID
+}
+
+// wsKey is the tenant/workspace prefix of a flow key — the unit a workspace
+// enumeration either succeeds or fails at, and therefore the unit a prune is
+// scoped to.
+func wsKey(tenant, workspace string) string {
+	return tenant + "/" + workspace
+}
+
+// inScope reports whether a flow's workspace was readable this pass.
+func inScope(scope map[string]struct{}, tenant, workspace string) bool {
+	if scope == nil {
+		return true
+	}
+	_, ok := scope[wsKey(tenant, workspace)]
+	return ok
 }
 
 func (m *MemScheduleStore) ListSchedules(context.Context) ([]ScheduleSpec, error) {
@@ -91,15 +112,19 @@ func (m *MemScheduleStore) DeleteByTenant(_ context.Context, tenant string) (int
 	return n, nil
 }
 
-func (m *MemScheduleStore) PruneMissingFlows(_ context.Context, live map[string]struct{}) (int, error) {
+func (m *MemScheduleStore) PruneMissingFlows(_ context.Context, live, scope map[string]struct{}) (int, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	n := 0
 	for k, specs := range m.byFlow {
-		if _, ok := live[k]; !ok {
-			n += len(specs)
-			delete(m.byFlow, k)
+		if _, ok := live[k]; ok {
+			continue
 		}
+		if len(specs) > 0 && !inScope(scope, specs[0].Tenant, specs[0].Workspace) {
+			continue
+		}
+		n += len(specs)
+		delete(m.byFlow, k)
 	}
 	return n, nil
 }

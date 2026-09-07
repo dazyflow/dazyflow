@@ -113,27 +113,42 @@ func TestPgRunLogStore_TenantMethods(t *testing.T) {
 		t.Fatalf("truncate run_logs: %v", err)
 	}
 
-	// Seed two jobs owned by different tenants.
-	mustEnqueue := func(id, tenant string) {
+	// Seed jobs owned by different tenants. Retention is run-scoped, so what
+	// decides a log's fate is the RUN's finished_at, not the line's ts.
+	old := time.Now().Add(-72 * time.Hour).UTC()
+	now := time.Now().UTC()
+	mustEnqueue := func(id, tenant string, finishedAt *time.Time) {
 		t.Helper()
+		status := core.JobStatusRunning
+		if finishedAt != nil {
+			status = core.JobStatusSucceeded
+		}
 		if err := js.Enqueue(ctx, core.JobRecord{
 			ID: id, Kind: core.JobKindGraph, Tenant: tenant, Workspace: "ws",
-			GraphID: "g", NodeID: "*", Status: core.JobStatusSucceeded,
+			GraphID: "g", NodeID: "*", Status: status,
 			Job: core.Job{ID: id, GraphID: "g"},
 		}); err != nil {
 			t.Fatalf("enqueue %s: %v", id, err)
 		}
+		if finishedAt != nil {
+			if _, err := pool.Exec(ctx,
+				`UPDATE jobs SET status = 'succeeded', finished_at = $2 WHERE id = $1`,
+				id, *finishedAt); err != nil {
+				t.Fatalf("backdate %s: %v", id, err)
+			}
+		}
 	}
-	mustEnqueue("run-acme", "acme")
-	mustEnqueue("run-other", "elsewhere")
+	mustEnqueue("run-acme", "acme", &old)  // finished 72h ago
+	mustEnqueue("run-parked", "acme", nil) // still running (an approval)
+	mustEnqueue("run-other", "elsewhere", &old)
 
-	old := time.Now().Add(-72 * time.Hour).UTC()
-	now := time.Now().UTC()
-	// Two old + one fresh line for acme; one line for elsewhere.
+	// Two old + one fresh line for acme's finished run; one old line for the
+	// run still going; one for elsewhere.
 	for _, e := range []RunLogEntry{
 		{RunID: "run-acme", TS: old, Kind: "progress", Message: "old-1"},
 		{RunID: "run-acme", TS: old, Kind: "progress", Message: "old-2"},
 		{RunID: "run-acme", TS: now, Kind: "terminal", Message: "fresh"},
+		{RunID: "run-parked", TS: old, Kind: "progress", Message: "parked"},
 		{RunID: "run-other", TS: old, Kind: "progress", Message: "other"},
 	} {
 		if err := store.AppendRunLog(ctx, e); err != nil {
@@ -161,22 +176,25 @@ func TestPgRunLogStore_TenantMethods(t *testing.T) {
 	if n, err := store.PruneTenant(ctx, "", time.Hour, 0); err != nil || n != 0 {
 		t.Fatalf("PruneTenant(empty tenant) = %d / %v, want 0", n, err)
 	}
-	// PruneTenant removes only acme's OLD lines (the two), not the fresh one
-	// and not elsewhere's.
+	// PruneTenant takes acme's finished run WHOLE — the fresh line included,
+	// because the run it belongs to is past the window — and does not touch
+	// the run still going, nor elsewhere's.
 	pruned, err := store.PruneTenant(ctx, "acme", 24*time.Hour, 0)
-	if err != nil || pruned != 2 {
-		t.Fatalf("PruneTenant = %d / %v, want 2", pruned, err)
+	if err != nil || pruned != 3 {
+		t.Fatalf("PruneTenant = %d / %v, want 3", pruned, err)
 	}
-	rem, _ := store.ListRunLogs(ctx, "run-acme", 0, 0)
-	if len(rem) != 1 || rem[0].Message != "fresh" {
-		t.Fatalf("after PruneTenant acme has %+v, want only 'fresh'", rem)
+	if rem, _ := store.ListRunLogs(ctx, "run-acme", 0, 0); len(rem) != 0 {
+		t.Fatalf("after PruneTenant acme's finished run has %+v, want none", rem)
+	}
+	if parked, _ := store.ListRunLogs(ctx, "run-parked", 0, 0); len(parked) != 1 {
+		t.Fatalf("a run that has not finished lost its log: %+v", parked)
 	}
 	if other, _ := store.ListRunLogs(ctx, "run-other", 0, 0); len(other) != 1 {
 		t.Fatalf("elsewhere's logs were pruned: %+v", other)
 	}
 
 	// DeleteRun clears one run's lines.
-	d, err := store.DeleteRun(ctx, "run-acme")
+	d, err := store.DeleteRun(ctx, "run-parked")
 	if err != nil || d != 1 {
 		t.Fatalf("DeleteRun = %d / %v, want 1", d, err)
 	}
@@ -742,7 +760,7 @@ func TestPgScheduleStore_Projection(t *testing.T) {
 	}
 
 	// PruneMissingFlows drops rows for flows the workspaces no longer hold.
-	n, err := store.PruneMissingFlows(ctx, map[string]struct{}{"t2/ws/f2": {}})
+	n, err := store.PruneMissingFlows(ctx, map[string]struct{}{"t2/ws/f2": {}}, nil)
 	if err != nil || n != 1 {
 		t.Fatalf("PruneMissingFlows = %d / %v, want 1", n, err)
 	}

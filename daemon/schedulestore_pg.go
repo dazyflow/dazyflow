@@ -104,9 +104,10 @@ func (s *PgScheduleStore) DeleteByTenant(ctx context.Context, tenant string) (in
 }
 
 // PruneMissingFlows removes rows for flows absent from live, the set of flow
-// keys the workspaces actually hold. It is the delete half of a reconcile: a
-// flow deleted while its dzd was down leaves rows nothing else will clear.
-func (s *PgScheduleStore) PruneMissingFlows(ctx context.Context, live map[string]struct{}) (int, error) {
+// keys the workspaces actually hold, within the workspaces scope says were
+// readable. It is the delete half of a reconcile: a flow deleted while its dzd
+// was down leaves rows nothing else will clear.
+func (s *PgScheduleStore) PruneMissingFlows(ctx context.Context, live, scope map[string]struct{}) (int, error) {
 	rows, err := s.pool.Query(ctx, `SELECT DISTINCT tenant, workspace, graph_id FROM flow_schedules`)
 	if err != nil {
 		return 0, err
@@ -119,9 +120,15 @@ func (s *PgScheduleStore) PruneMissingFlows(ctx context.Context, live map[string
 			rows.Close()
 			return 0, err
 		}
-		if _, ok := live[flowKey(f.tenant, f.workspace, f.graphID)]; !ok {
-			stale = append(stale, f)
+		if _, ok := live[flowKey(f.tenant, f.workspace, f.graphID)]; ok {
+			continue
 		}
+		// A workspace this pass could not read offers no live flows, so its
+		// rows are not evidence of a deleted flow.
+		if !inScope(scope, f.tenant, f.workspace) {
+			continue
+		}
+		stale = append(stale, f)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {

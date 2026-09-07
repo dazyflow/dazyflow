@@ -50,6 +50,9 @@ type gitBackend struct {
 	mu   *sync.Mutex
 	repo *git.Repository
 	fs   billy.Filesystem
+	// dir is the working tree on disk, empty for the in-memory backend. Kept
+	// so listGraphs can tell "no flows yet" from "this workspace is gone".
+	dir string
 }
 
 // dirLocks maps an absolute workspace directory to the mutex that serializes
@@ -127,7 +130,7 @@ func openDisk(dir string) (*gitBackend, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &gitBackend{mu: dirMutex(filepath.Clean(abs)), repo: repo, fs: wt}, nil
+	return &gitBackend{mu: dirMutex(filepath.Clean(abs)), repo: repo, fs: wt, dir: abs}, nil
 }
 
 func openOrInit(storer storage.Storer, wt billy.Filesystem) (*git.Repository, error) {
@@ -700,6 +703,13 @@ func (s *gitBackend) listGraphs() ([]string, error) {
 	defer s.mu.Unlock()
 	head, err := s.repo.Head()
 	if errors.Is(err, plumbing.ErrReferenceNotFound) {
+		// A repo with no commits and a workspace whose directory has gone both
+		// resolve no HEAD. Only the first is "no flows yet": callers that
+		// delete on absence — the schedule reconcile prunes rows for flows it
+		// did not see — must not be told a missing volume holds nothing.
+		if err := s.rootPresent(); err != nil {
+			return nil, err
+		}
 		return nil, nil
 	}
 	if err != nil {
@@ -721,6 +731,18 @@ func (s *gitBackend) listGraphs() ([]string, error) {
 		return nil
 	})
 	return ids, err
+}
+
+// rootPresent reports whether the workspace's working tree is still on disk.
+// The in-memory backend has none and is always present.
+func (s *gitBackend) rootPresent() error {
+	if s.dir == "" {
+		return nil
+	}
+	if _, err := os.Stat(s.dir); err != nil {
+		return fmt.Errorf("workspace %s: %w", s.dir, err)
+	}
+	return nil
 }
 
 // Head returns the current HEAD commit hash as a hex string, or "" when

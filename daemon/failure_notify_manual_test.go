@@ -158,6 +158,20 @@ func seedFailedRun(t *testing.T, svc *Service, graph core.Graph, id string, enqu
 	}
 }
 
+// inThisWindow returns a time d ago, clamped to the start of the throttle's
+// current tumbling window (failure_notify.go truncates now to
+// FailureEmailWindow). A bare time.Now().Add(-d) silently lands in the
+// PREVIOUS window whenever the clock is within d of the hour, so these tests
+// failed for the first ten minutes of every hour — including one release run.
+func inThisWindow(d time.Duration) time.Time {
+	now := time.Now()
+	at := now.Add(-d)
+	if start := now.Truncate(FailureEmailWindow); at.Before(start) {
+		return start
+	}
+	return at
+}
+
 func throttleHarness(t *testing.T) (*Service, *fakeSMTP, core.Graph) {
 	t.Helper()
 	svc := newFailureNotifyHarness(t)
@@ -185,7 +199,7 @@ func TestFailureEmailThrottle_FirstFailureMails(t *testing.T) {
 
 func TestFailureEmailThrottle_RepeatWithinTheWindowIsSilent(t *testing.T) {
 	svc, srv, graph := throttleHarness(t)
-	seedFailedRun(t, svc, graph, "run-1", time.Now().Add(-10*time.Minute))
+	seedFailedRun(t, svc, graph, "run-1", inThisWindow(10*time.Minute))
 	seedFailedRun(t, svc, graph, "run-2", time.Now())
 
 	svc.fireFailureNotification(t.Context(), graph, FailurePayload{
@@ -203,11 +217,11 @@ func TestFailureEmailThrottle_RepeatWithinTheWindowIsSilent(t *testing.T) {
 // the streak version of this rule entirely.
 func TestFailureEmailThrottle_CatchesAFlappingFlow(t *testing.T) {
 	svc, srv, graph := throttleHarness(t)
-	seedFailedRun(t, svc, graph, "run-1", time.Now().Add(-10*time.Minute))
+	seedFailedRun(t, svc, graph, "run-1", inThisWindow(10*time.Minute))
 	if err := svc.Jobs.Enqueue(t.Context(), core.JobRecord{
 		ID: "run-2", Kind: core.JobKindGraph, GraphID: graph.ID,
 		Tenant: graph.Tenant, Workspace: graph.Workspace,
-		Status: core.JobStatusSucceeded, EnqueuedAt: time.Now().Add(-5 * time.Minute),
+		Status: core.JobStatusSucceeded, EnqueuedAt: inThisWindow(5 * time.Minute),
 	}); err != nil {
 		t.Fatalf("seed success: %v", err)
 	}
@@ -243,8 +257,8 @@ func TestFailureEmailThrottle_MailsAgainOnceTheWindowHasPassed(t *testing.T) {
 func TestFailureEmailThrottle_IsPerFlow(t *testing.T) {
 	svc, srv, graph := throttleHarness(t)
 	noisy := core.Graph{ID: "noisy", Tenant: "t", Workspace: "ws", Owner: "owner@example.com"}
-	seedFailedRun(t, svc, noisy, "noisy-1", time.Now().Add(-10*time.Minute))
-	seedFailedRun(t, svc, noisy, "noisy-2", time.Now().Add(-5*time.Minute))
+	seedFailedRun(t, svc, noisy, "noisy-1", inThisWindow(10*time.Minute))
+	seedFailedRun(t, svc, noisy, "noisy-2", inThisWindow(5*time.Minute))
 	seedFailedRun(t, svc, graph, "quiet-1", time.Now())
 
 	svc.fireFailureNotification(t.Context(), graph, FailurePayload{
@@ -265,7 +279,7 @@ func TestFailureEmailThrottle_DoesNotThrottleTheWebhook(t *testing.T) {
 		ID: "hooked", Tenant: "t", Workspace: "ws",
 		FailureNotify: &core.FailureNotify{Webhook: fw.server.URL},
 	}
-	seedFailedRun(t, svc, graph, "run-1", time.Now().Add(-10*time.Minute))
+	seedFailedRun(t, svc, graph, "run-1", inThisWindow(10*time.Minute))
 	seedFailedRun(t, svc, graph, "run-2", time.Now())
 
 	svc.fireFailureNotification(t.Context(), graph, FailurePayload{
@@ -293,7 +307,7 @@ func TestFailureEmailThrottle_TurnsOffAtZero(t *testing.T) {
 	t.Cleanup(func() { FailureEmailWindow = prev })
 
 	svc, srv, graph := throttleHarness(t)
-	seedFailedRun(t, svc, graph, "run-1", time.Now().Add(-10*time.Minute))
+	seedFailedRun(t, svc, graph, "run-1", inThisWindow(10*time.Minute))
 	seedFailedRun(t, svc, graph, "run-2", time.Now())
 
 	svc.fireFailureNotification(t.Context(), graph, FailurePayload{

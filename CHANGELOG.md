@@ -10,6 +10,40 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Run logs are no longer deleted out from under a run that is still going.**
+  Retention asked of each LINE "is this older than the window?", but a run
+  parked on an approval, or waiting out a `delay`, writes its first lines on day
+  one and finishes weeks later — so past the window the start of its log was
+  deleted while it was still being written. The window is now measured from the
+  RUN's finish, like the run history it accompanies: a finished run's log goes
+  whole, and a run that has not finished is never touched. Same defect the run
+  history had in 0.41.2, in the table beside it.
+
+- **A workspace dzd could not read no longer loses its schedules.** The hourly
+  reconcile lists every workspace's flows, then deletes projection rows for
+  flows it did not see. A workspace whose listing FAILED contributed no flows,
+  so that silence read as "every flow here was deleted" and the whole
+  workspace's schedules went — its scheduled flows stopping until a later pass
+  rebuilt them. The prune is now scoped to the workspaces the pass actually
+  read; the ones that failed are left alone, and a genuinely deleted flow is
+  still pruned as before.
+
+- **A workspace whose directory has vanished no longer reports "no flows".**
+  `ListGraphs` resolved no HEAD for a missing working tree exactly as it does
+  for a repo with no commits, so an unmounted volume read as an empty
+  workspace — and anything deleting on absence, the schedule reconcile
+  included, acted on it. It now returns an error; an empty workspace still
+  reports no flows, and the in-memory backend is unaffected.
+
+### Developer
+
+- Two failure-email throttle tests seeded a prior failure at `now - 10min`
+  against an hourly TUMBLING window, so they failed for the first ten minutes
+  of every hour — about one CI run in six, the 0.41.2 release run among them.
+  The seeds are clamped into the current window.
+
 ## [0.41.3] - 2026-09-07
 
 ### Developer

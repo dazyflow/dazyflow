@@ -99,9 +99,12 @@ func (s *PgRunLogStore) DeleteByTenant(ctx context.Context, tenant string) (int,
 	return int(tag.RowsAffected()), nil
 }
 
-// Prune deletes entries older than the cutoff in batches, returning the
-// total removed. Same shape as the jobs/audit retention pruners; wired
-// into dzd's hourly retention sweep behind DAZYFLOW_RUN_LOG_RETENTION.
+// Prune deletes the logs of runs that finished before the cutoff, in batches,
+// returning the total removed. The unit is the RUN, not the line: a run parked
+// on an approval (or waiting out a delay, which accepts up to a year) writes
+// its first lines on day one and finishes weeks later, so keying on each
+// line's own ts deletes the beginning of a log the run is still writing.
+// Mirrors the jobs pruner, including its orphan pass.
 func (s *PgRunLogStore) Prune(ctx context.Context, olderThan time.Duration, batch int) (int, error) {
 	if olderThan <= 0 {
 		return 0, nil
@@ -114,7 +117,45 @@ func (s *PgRunLogStore) Prune(ctx context.Context, olderThan time.Duration, batc
 	for {
 		tag, err := s.pool.Exec(ctx,
 			`DELETE FROM run_logs WHERE seq IN (
-			     SELECT seq FROM run_logs WHERE ts < $1 LIMIT $2)`, cutoff, batch)
+			     SELECT rl.seq FROM run_logs rl
+			     JOIN jobs j ON j.id = rl.run_id
+			      WHERE j.kind = 'graph'
+			        AND j.finished_at IS NOT NULL AND j.finished_at < $1
+			        AND j.status IN ('succeeded','failed','cancelled','skipped')
+			      LIMIT $2)`, cutoff, batch)
+		if err != nil {
+			return total, err
+		}
+		n := int(tag.RowsAffected())
+		total += n
+		if n < batch {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return total, ctx.Err()
+		default:
+		}
+	}
+	n, err := s.pruneOrphanLogs(ctx, cutoff, batch)
+	return total + n, err
+}
+
+// pruneOrphanLogs deletes old lines whose run record is already gone. The
+// retention sweep prunes jobs before run logs, so with the windows at their
+// shared default the run row usually disappears first and this pass — not the
+// join above — collects the log. A line is only ever written before its run
+// finishes, so an orphan older than the cutoff belongs to a run that finished
+// before it too.
+func (s *PgRunLogStore) pruneOrphanLogs(ctx context.Context, cutoff time.Time, batch int) (int, error) {
+	total := 0
+	for {
+		tag, err := s.pool.Exec(ctx,
+			`DELETE FROM run_logs WHERE seq IN (
+			     SELECT rl.seq FROM run_logs rl
+			      WHERE rl.ts < $1
+			        AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.id = rl.run_id)
+			      LIMIT $2)`, cutoff, batch)
 		if err != nil {
 			return total, err
 		}
@@ -123,14 +164,21 @@ func (s *PgRunLogStore) Prune(ctx context.Context, olderThan time.Duration, batc
 		if n < batch {
 			return total, nil
 		}
+		select {
+		case <-ctx.Done():
+			return total, ctx.Err()
+		default:
+		}
 	}
 }
 
-// PruneTenant deletes a single tenant's run-log entries older than the cutoff,
-// in batches. run_logs has no tenant column, so it scopes through the jobs
-// join (same as DeleteByTenant). The retention sweep uses it to apply a
-// shorter per-tenant window than the global cap (free tenants keep less
-// history than paying ones).
+// PruneTenant deletes a single tenant's finished runs' logs, in batches.
+// run_logs has no tenant column, so it scopes through the jobs join (same as
+// DeleteByTenant). The retention sweep uses it to apply a shorter per-tenant
+// window than the global cap (free tenants keep less history than paying ones).
+//
+// Run-scoped like Prune. It cannot collect orphans — a line whose run record is
+// gone has no tenant to match — so the global pass is what reaches those.
 func (s *PgRunLogStore) PruneTenant(ctx context.Context, tenant string, olderThan time.Duration, batch int) (int, error) {
 	if olderThan <= 0 || tenant == "" {
 		return 0, nil
@@ -144,7 +192,11 @@ func (s *PgRunLogStore) PruneTenant(ctx context.Context, tenant string, olderTha
 		tag, err := s.pool.Exec(ctx,
 			`DELETE FROM run_logs WHERE seq IN (
 			     SELECT rl.seq FROM run_logs rl JOIN jobs j ON j.id = rl.run_id
-			     WHERE rl.ts < $1 AND j.tenant = $2 LIMIT $3)`, cutoff, tenant, batch)
+			      WHERE j.tenant = $2
+			        AND j.kind = 'graph'
+			        AND j.finished_at IS NOT NULL AND j.finished_at < $1
+			        AND j.status IN ('succeeded','failed','cancelled','skipped')
+			      LIMIT $3)`, cutoff, tenant, batch)
 		if err != nil {
 			return total, err
 		}

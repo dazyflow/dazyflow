@@ -95,6 +95,11 @@ func (s *Service) ReconcileSchedules(ctx context.Context) (int, error) {
 		}
 	}
 	live := make(map[string]struct{})
+	// Only workspaces this pass actually read may have rows pruned. A
+	// workspace whose listing failed contributes no live flows, and pruning on
+	// that would delete every schedule it owns — the flows silently stop
+	// firing until a later pass rebuilds them.
+	scope := make(map[string]struct{})
 	flows := 0
 	for key, store := range enum.All() {
 		if err := ctx.Err(); err != nil {
@@ -109,6 +114,7 @@ func (s *Service) ReconcileSchedules(ctx context.Context) (int, error) {
 			s.logf("schedule reconcile: list %s/%s: %v", tenant, ws, err)
 			continue
 		}
+		scope[wsKey(tenant, ws)] = struct{}{}
 		for _, id := range ids {
 			flows++
 			key := flowKey(tenant, ws, id)
@@ -128,7 +134,7 @@ func (s *Service) ReconcileSchedules(ctx context.Context) (int, error) {
 	}
 	// Rows whose flow no longer exists: a delete that landed while this dzd
 	// was down leaves nothing else to clear them.
-	if n, err := s.Schedules.PruneMissingFlows(ctx, live); err != nil {
+	if n, err := s.Schedules.PruneMissingFlows(ctx, live, scope); err != nil {
 		s.logf("schedule reconcile: prune: %v", err)
 	} else if n > 0 {
 		s.logf("schedule reconcile: pruned %d row(s) for deleted flows", n)

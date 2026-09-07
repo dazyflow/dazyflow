@@ -9,6 +9,8 @@ import (
 	"log"
 	"sync"
 	"time"
+
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // Run logs: the persisted, replayable record of what a run SAID while it
@@ -68,6 +70,12 @@ type MemRunLogStore struct {
 	mu      sync.Mutex
 	nextSeq int64
 	byRun   map[string][]RunLogEntry
+
+	// Jobs answers "has this run finished, and when?". Set it and Prune is
+	// run-scoped like the Postgres store; left nil it falls back to the
+	// line's own age, which is dev-only behaviour — it deletes the start of
+	// a log that a parked run is still writing.
+	Jobs core.JobStore
 }
 
 func NewMemRunLogStore() *MemRunLogStore {
@@ -242,7 +250,7 @@ var _ Bus = (*RecordingBus)(nil)
 
 // Prune mirrors the Pg store's retention hook for the in-memory store
 // (tests, dev): drop entries older than the cutoff.
-func (m *MemRunLogStore) Prune(_ context.Context, olderThan time.Duration, _ int) (int, error) {
+func (m *MemRunLogStore) Prune(ctx context.Context, olderThan time.Duration, _ int) (int, error) {
 	if olderThan <= 0 {
 		return 0, nil
 	}
@@ -251,6 +259,22 @@ func (m *MemRunLogStore) Prune(_ context.Context, olderThan time.Duration, _ int
 	defer m.mu.Unlock()
 	total := 0
 	for runID, entries := range m.byRun {
+		// A run still going keeps its whole log however old the lines are;
+		// a finished one goes whole, once the RUN is past the cutoff.
+		if m.Jobs != nil {
+			rec, err := m.Jobs.Get(ctx, runID)
+			if err == nil {
+				finished := rec.FinishedAt != nil && rec.FinishedAt.Before(cutoff)
+				if !core.IsTerminalStatus(rec.Status) || !finished {
+					continue
+				}
+				total += len(entries)
+				delete(m.byRun, runID)
+				continue
+			}
+			// Unknown run: the record is already gone, so fall through and
+			// age the orphaned lines out on their own ts.
+		}
 		kept := entries[:0:0]
 		for _, e := range entries {
 			if e.TS.Before(cutoff) {

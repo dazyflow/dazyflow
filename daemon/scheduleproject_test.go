@@ -397,9 +397,9 @@ func (c *countingSchedules) ReplaceFlowSchedules(ctx context.Context, tenant, ws
 	return c.ScheduleStore.ReplaceFlowSchedules(ctx, tenant, ws, graphID, specs)
 }
 
-func (c *countingSchedules) PruneMissingFlows(ctx context.Context, live map[string]struct{}) (int, error) {
+func (c *countingSchedules) PruneMissingFlows(ctx context.Context, live, scope map[string]struct{}) (int, error) {
 	c.prunes++
-	return c.ScheduleStore.PruneMissingFlows(ctx, live)
+	return c.ScheduleStore.PruneMissingFlows(ctx, live, scope)
 }
 
 // The reconcile is an hourly pass over every flow in the install. It only earns
