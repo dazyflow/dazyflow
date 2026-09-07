@@ -18,7 +18,7 @@ func TestRecordSkippedFire(t *testing.T) {
 	jobs := jobstore.NewMemory()
 	svc := &Service{Jobs: jobs}
 
-	svc.recordSkippedFire(t.Context(), "t", "ws", "daily")
+	svc.recordSkippedFire(t.Context(), "t", "ws", "daily", "plan_run_cap", "over the limit")
 
 	recs, err := jobs.ListGraphRuns(t.Context(), core.ListGraphRunsOpts{
 		Tenant: "t", Status: core.JobStatusSkipped, Limit: 10,
@@ -33,7 +33,7 @@ func TestRecordSkippedFire(t *testing.T) {
 		t.Errorf("marker = %+v, want graph=daily ws=ws", recs[0])
 	}
 	// No Jobs store → no-op, no panic.
-	(&Service{}).recordSkippedFire(t.Context(), "t", "ws", "daily")
+	(&Service{}).recordSkippedFire(t.Context(), "t", "ws", "daily", "plan_run_cap", "x")
 }
 
 // The Runs-list marker is coalesced to one per flow per window so a
@@ -45,17 +45,23 @@ func TestSchedulerSkipMarkerCoalesces(t *testing.T) {
 	now := time.Date(2026, 6, 10, 12, 0, 0, 0, time.UTC)
 	sched.SetClock(func() time.Time { return now })
 
-	if !sched.markSkip("t", "ws", "g") {
+	if !sched.markOnce("cap", "t", "ws", "g") {
 		t.Fatal("first mark should write")
 	}
-	if sched.markSkip("t", "ws", "g") {
+	if sched.markOnce("cap", "t", "ws", "g") {
 		t.Fatal("second mark within window should coalesce to false")
 	}
-	if !sched.markSkip("t", "ws", "other") {
+	if !sched.markOnce("cap", "t", "ws", "other") {
 		t.Fatal("a different flow marks independently")
 	}
+	// A different PROBLEM with the same flow marks independently too: a flow
+	// that is both over its cap and unloadable has to say both things, rather
+	// than whichever happened first silencing the other.
+	if !sched.markOnce("published_flow_unreadable", "t", "ws", "g") {
+		t.Fatal("a different problem with the same flow should mark independently")
+	}
 	now = now.Add(skipMarkerWindow + time.Minute)
-	if !sched.markSkip("t", "ws", "g") {
+	if !sched.markOnce("cap", "t", "ws", "g") {
 		t.Fatal("after the window elapses, marks again")
 	}
 }

@@ -26,7 +26,7 @@ func init() {
 			Category:    "flow_control",
 			Provider:    "internal",
 			Tags:        []string{"iterate", "loop", "fan_out", "map"},
-			Description: "Run the loop body — the steps connected to the Loop body input — once per item in an input list. Items execute in parallel up to the concurrency setting. Outputs `results` (one entry per item, in order) and `errors` (a list of failed rows: {row, data, error}, row is 1-based). Set fail_fast=true to abort on the first failure; otherwise the iteration continues and failures surface on the errors port. If EVERY item fails the step fails anyway — that is an outage, not a partial success, and a later step shouldn't record the work as done.",
+			Description: "Run the loop body — the steps connected to the Loop body input — once per item in an input list. Items execute in parallel up to the concurrency setting. Outputs `results` (one entry per item, in order) and `errors` (a list of failed rows: {row, data, error}, row is 1-based). Set fail_fast=true to abort on the first failure; otherwise the iteration continues and failures surface on the errors port. If MOST items fail the step fails anyway — that is an outage, not a partial success, and a later step shouldn't record the work as done. A few failures among many still succeed, and the count is written to the run log either way.",
 			Summary:     "Fan out a list and run the connected Loop body on every item, optionally in parallel, collecting results in order.",
 			Examples: []core.ParamsExample{
 				{
@@ -250,6 +250,15 @@ func runForEachItems(
 		failedRows[i] = f.entry
 	}
 
+	// Say what happened in the run log whatever the outcome. A partial failure
+	// used to be invisible unless the author had wired the `errors` port:
+	// the step was green, the run was green, and "3 of 400 invoices were not
+	// sent" was discoverable only by someone who already suspected it.
+	if len(failures) > 0 {
+		params.EmitProgress(progress, job, 1, fmt.Sprintf(
+			"%d of %d item(s) failed — see the Failed rows output", len(failures), len(items)))
+	}
+
 	status := core.StatusOK
 	var jobErr *core.JobError
 	switch {
@@ -264,11 +273,29 @@ func runForEachItems(
 		// default for one bad row among many; reporting SUCCESS when every
 		// single item failed is not — that is an outage, and a flow whose
 		// next step marks the work done would mark work that never happened.
-		// A partial failure still continues and surfaces on `errors`.
 		status = core.StatusError
 		jobErr = &core.JobError{
 			Code:    "all_items_failed",
 			Message: fmt.Sprintf("every item failed (%d/%d) — see the failed rows", len(failures), len(items)),
+		}
+	case len(failures)*2 > len(items):
+		// MOST of it failed. The all-or-nothing guard above already conceded
+		// that there is a line past which "partial success" is the wrong
+		// word; it just drew that line at 100%, which left 99 failures out of
+		// 100 reported as a successful run — green in the Runs list, no
+		// notification, and the next step marking the work done. Half is the
+		// honest place for the line: below it a few bad rows among many, above
+		// it something is broken and the run should say so.
+		//
+		// The rows that DID succeed are still on `results`, and `errors` still
+		// carries the failures, so nothing is thrown away by failing here —
+		// what changes is that somebody is told.
+		status = core.StatusError
+		jobErr = &core.JobError{
+			Code: "most_items_failed",
+			Message: fmt.Sprintf("%d of %d items failed — see the failed rows. "+
+				"The %d that succeeded are on the results output.",
+				len(failures), len(items), len(items)-len(failures)),
 		}
 	}
 

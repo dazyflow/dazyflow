@@ -49,7 +49,7 @@ func TestFailureNotify_CarriesTheRunsTriggerDepth(t *testing.T) {
 		svc.fireFailureNotification(ctx, core.Graph{
 			ID: "f", Tenant: "t", Workspace: "ws",
 			FailureNotify: &core.FailureNotify{Webhook: webhook},
-		}, FailurePayload{GraphID: "f", RunID: "run-1", ErrorMessage: "boom"}, false)
+		}, FailurePayload{GraphID: "f", RunID: "run-1", ErrorMessage: "boom"})
 		if got == nil {
 			t.Fatal("the webhook was never called")
 		}

@@ -186,3 +186,48 @@ func TestMemPlanStore_MarkStripeEvent(t *testing.T) {
 		t.Errorf("different event should be first")
 	}
 }
+
+// The reservation has to precede the write (the cap check and the increment
+// must be atomic), which leaves a window: the write fails and the tenant has
+// been charged for a run that exists nowhere — no record, no history, nothing
+// to retry. It must be given back.
+func TestReleaseRun_GivesBackAReservationWhoseWriteFailed(t *testing.T) {
+	usage := NewMemUsageStore()
+	svc := &Service{Usage: usage}
+	ctx := t.Context()
+
+	if _, err := usage.AddRunIfUnder(ctx, "acme", time.Now(), 10); err != nil {
+		t.Fatalf("reserve: %v", err)
+	}
+	if used := runsUsed(t, usage, "acme"); used != 1 {
+		t.Fatalf("reserved %d runs, want 1", used)
+	}
+
+	svc.releaseRun(ctx, "acme")
+	if used := runsUsed(t, usage, "acme"); used != 0 {
+		t.Errorf("after release the tenant is still charged %d run(s)", used)
+	}
+}
+
+// A release with nothing reserved must not drive the counter negative and
+// make the Usage page nonsense.
+func TestReleaseRun_FloorsAtZero(t *testing.T) {
+	usage := NewMemUsageStore()
+	svc := &Service{Usage: usage}
+	svc.releaseRun(t.Context(), "acme")
+	if used := runsUsed(t, usage, "acme"); used != 0 {
+		t.Errorf("counter went to %d, want 0", used)
+	}
+}
+
+func runsUsed(t *testing.T, usage UsageStore, tenant string) int64 {
+	t.Helper()
+	buckets, err := usage.Usage(t.Context(), tenant, 1)
+	if err != nil {
+		t.Fatalf("usage: %v", err)
+	}
+	if len(buckets) == 0 {
+		return 0
+	}
+	return buckets[0].GraphRuns
+}

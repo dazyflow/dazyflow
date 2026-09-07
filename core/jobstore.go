@@ -170,6 +170,26 @@ type JobStore interface {
 	ListNodeRecords(ctx context.Context, opts ListNodeRecordsOpts) ([]JobRecord, error)
 }
 
+// FailureNotifier is an optional JobStore extension backing the durable
+// failure-notification sweep. Notification used to be a per-run goroutine
+// armed at submit time, which meant it was lost on every restart, every lease
+// recovery, every reaped run, and every run that outlived its watcher — the
+// failures most worth hearing about were the ones least likely to be reported.
+// Persisting the "has this been notified?" bit moves it off process memory.
+type FailureNotifier interface {
+	// ClaimUnnotified atomically claims up to limit terminal-and-bad graph
+	// runs that finished within lookback and have not been notified, marking
+	// each claimed before returning it so a second replica sweeping the same
+	// moment cannot mail about the same run. Rows whose attempts have reached
+	// maxAttempts are left alone: a notification that keeps failing must not
+	// become an infinite retry.
+	ClaimUnnotified(ctx context.Context, lookback time.Duration, maxAttempts, limit int) ([]JobRecord, error)
+
+	// ReleaseNotifyClaim clears a claim so a later sweep retries it, for a
+	// send that failed. The attempt already counted, so the retry is bounded.
+	ReleaseNotifyClaim(ctx context.Context, jobID string) error
+}
+
 // OwnedCompleter is an optional JobStore extension that fences a Complete
 // on lease ownership: the write only lands if worker still holds the
 // job's lease. The worker uses it for node terminal/awaiting writes so a

@@ -29,14 +29,21 @@ type Memory struct {
 	// store's slot_at; see Postgres.Enqueue for the reasoning.
 	slots        map[string]time.Time
 	burstSpacing time.Duration
+	// notified / notifyAttempts mirror the Postgres notified_at +
+	// notify_attempts columns: which runs have had a failure notification
+	// claimed, and how many times each has been tried.
+	notified       map[string]bool
+	notifyAttempts map[string]int
 }
 
 func NewMemory() *Memory {
 	return &Memory{
-		records:      make(map[string]*core.JobRecord),
-		slots:        make(map[string]time.Time),
-		clock:        time.Now,
-		burstSpacing: DefaultBurstSpacing,
+		records:        make(map[string]*core.JobRecord),
+		slots:          make(map[string]time.Time),
+		clock:          time.Now,
+		burstSpacing:   DefaultBurstSpacing,
+		notified:       make(map[string]bool),
+		notifyAttempts: make(map[string]int),
 	}
 }
 
@@ -291,6 +298,57 @@ func (m *Memory) Complete(_ context.Context, jobID string, status core.JobStatus
 // worker still owns the record (ErrConflict otherwise).
 func (m *Memory) CompleteOwned(_ context.Context, jobID, worker string, status core.JobStatus, result *core.Result) error {
 	return m.complete(jobID, worker, status, result)
+}
+
+// ClaimUnnotified implements core.FailureNotifier. The lock is this store's
+// transaction, so the claim is atomic the same way the Postgres CTE is.
+func (m *Memory) ClaimUnnotified(_ context.Context, lookback time.Duration, maxAttempts, limit int) ([]core.JobRecord, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if maxAttempts <= 0 {
+		maxAttempts = 3
+	}
+	since := m.clock().Add(-lookback)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var due []*core.JobRecord
+	for _, rec := range m.records {
+		if rec.Kind != core.JobKindGraph || rec.FinishedAt == nil {
+			continue
+		}
+		if rec.Status != core.JobStatusFailed && rec.Status != core.JobStatusCancelled {
+			continue
+		}
+		if m.notified[rec.ID] || m.notifyAttempts[rec.ID] >= maxAttempts {
+			continue
+		}
+		if rec.FinishedAt.Before(since) {
+			continue
+		}
+		due = append(due, rec)
+	}
+	// Oldest finish first, so a backlog is worked through in the order it
+	// happened rather than in map order.
+	sort.Slice(due, func(a, b int) bool { return due[a].FinishedAt.Before(*due[b].FinishedAt) })
+	if len(due) > limit {
+		due = due[:limit]
+	}
+	out := make([]core.JobRecord, 0, len(due))
+	for _, rec := range due {
+		m.notified[rec.ID] = true
+		m.notifyAttempts[rec.ID]++
+		out = append(out, *rec)
+	}
+	return out, nil
+}
+
+// ReleaseNotifyClaim implements core.FailureNotifier.
+func (m *Memory) ReleaseNotifyClaim(_ context.Context, jobID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.notified, jobID)
+	return nil
 }
 
 // CompleteAndEnqueue implements core.CompleteEnqueuer under one lock hold,

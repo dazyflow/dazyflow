@@ -6,6 +6,7 @@ package daemon_test
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/daemon"
@@ -144,5 +145,138 @@ func TestReaper_RecoversFailedRun(t *testing.T) {
 	}
 	if rec.Status != core.JobStatusFailed {
 		t.Errorf("graph run status = %q, want failed", rec.Status)
+	}
+}
+
+// The zombie. Retention is run-scoped now, so an unfinished run is never
+// pruned — right, since deleting a live run is a data-loss bug — but that
+// makes a run which can NEVER finish immortal. It sits in the Runs list as
+// running for ever, holds a concurrency slot for ever (so a capped tenant
+// eventually admits every new run as pending and never starts one), and
+// notifies nobody, because it never reaches a terminal state.
+//
+// The shape here is the one the OLD row-scoped retention produced: a live run
+// whose node records were deleted out from under it. maybeCompleteGraph reads
+// a missing record as "not done yet", so the completion check can never
+// finalize it and the reaper could never close it.
+func TestReaper_AbandonsARunThatCanNeverFinish(t *testing.T) {
+	jobs := jobstore.NewMemory()
+	g := reapGraph()
+	// A graph record with NO node records at all: nothing pending, nothing
+	// terminal, nothing that could ever advance it.
+	payload, err := json.Marshal(g)
+	if err != nil {
+		t.Fatal(err)
+	}
+	long := time.Now().Add(-48 * time.Hour)
+	if err := jobs.Enqueue(t.Context(), core.JobRecord{
+		ID: "zombie", Kind: core.JobKindGraph, GraphID: g.ID, NodeID: "*",
+		Tenant: g.Tenant, Workspace: g.Workspace,
+		Status: core.JobStatusRunning, GraphPayload: payload,
+		EnqueuedAt: long,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	d := daemon.NewDispatcher(jobs, daemon.NewMemoryBus(), nil, nil)
+	if _, err := d.ReapStuckGraphRuns(t.Context()); err != nil {
+		t.Fatalf("reap: %v", err)
+	}
+
+	rec, err := jobs.Get(t.Context(), "zombie")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if rec.Status != core.JobStatusFailed {
+		t.Fatalf("status = %q, want failed — an unfinishable run must not be immortal", rec.Status)
+	}
+	if rec.Result == nil || rec.Result.Error == nil || rec.Result.Error.Code != "run_abandoned" {
+		t.Errorf("no reason recorded: %+v", rec.Result)
+	}
+	// Terminal, so it stops counting against concurrency, the notification
+	// sweep reports it, and retention can finally age it out.
+	if rec.FinishedAt == nil {
+		t.Error("no finish time: retention keys a run's age on it")
+	}
+}
+
+// A run WAITING on something real must never be abandoned, however old. This
+// is the case that makes "old" the wrong test on its own: an approval parked
+// for three weeks and a delay counting down 90 days are both correct
+// behaviour, and both look ancient.
+func TestReaper_LeavesAWaitingRunAlone(t *testing.T) {
+	for _, pending := range []core.JobStatus{
+		core.JobStatusAwaiting, core.JobStatusQueued, core.JobStatusRunning,
+	} {
+		t.Run(string(pending), func(t *testing.T) {
+			jobs := jobstore.NewMemory()
+			g := reapGraph()
+			// Old enough to be past the abandonment window, with step "b"
+			// still pending.
+			payload, err := json.Marshal(g)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := jobs.Enqueue(t.Context(), core.JobRecord{
+				ID: "waiting", Kind: core.JobKindGraph, GraphID: g.ID, NodeID: "*",
+				Tenant: g.Tenant, Workspace: g.Workspace,
+				Status: core.JobStatusRunning, GraphPayload: payload,
+				EnqueuedAt: time.Now().Add(-48 * time.Hour),
+			}); err != nil {
+				t.Fatal(err)
+			}
+			for id, st := range map[string]core.JobStatus{
+				"a": core.JobStatusSucceeded, "b": pending,
+			} {
+				rec := core.JobRecord{
+					ID: daemon.NodeJobID("waiting", id), Kind: core.JobKindNode,
+					GraphRunID: "waiting", GraphID: g.ID, NodeID: id,
+					Tenant: g.Tenant, Workspace: g.Workspace, Status: st,
+				}
+				if core.IsTerminalStatus(st) {
+					rec.Result = &core.Result{Status: core.StatusOK}
+				}
+				if err := jobs.Enqueue(t.Context(), rec); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			d := daemon.NewDispatcher(jobs, daemon.NewMemoryBus(), nil, nil)
+			if _, err := d.ReapStuckGraphRuns(t.Context()); err != nil {
+				t.Fatalf("reap: %v", err)
+			}
+			rec, err := jobs.Get(t.Context(), "waiting")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if core.IsTerminalStatus(rec.Status) {
+				t.Fatalf("a run with a %s step was abandoned (status %q); it is waiting, not stuck",
+					pending, rec.Status)
+			}
+		})
+	}
+}
+
+// A young run with nothing pending is mid-transition, not abandoned: a node
+// has gone terminal and its successor is not enqueued yet. The window exists
+// for exactly that instant.
+func TestReaper_LeavesAYoungRunAlone(t *testing.T) {
+	jobs := jobstore.NewMemory()
+	g := reapGraph()
+	payload, _ := json.Marshal(g)
+	if err := jobs.Enqueue(t.Context(), core.JobRecord{
+		ID: "young", Kind: core.JobKindGraph, GraphID: g.ID, NodeID: "*",
+		Tenant: g.Tenant, Workspace: g.Workspace,
+		Status: core.JobStatusRunning, GraphPayload: payload,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	d := daemon.NewDispatcher(jobs, daemon.NewMemoryBus(), nil, nil)
+	if _, err := d.ReapStuckGraphRuns(t.Context()); err != nil {
+		t.Fatalf("reap: %v", err)
+	}
+	rec, _ := jobs.Get(t.Context(), "young")
+	if core.IsTerminalStatus(rec.Status) {
+		t.Errorf("a run seconds old was abandoned (status %q)", rec.Status)
 	}
 }

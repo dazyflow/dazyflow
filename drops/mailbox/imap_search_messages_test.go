@@ -259,6 +259,9 @@ func TestIMAPSearch_DoesNotMarkMailRead(t *testing.T) {
 // Newest-first capping: a limit smaller than the match count must return the
 // most recent mail, not the oldest. IMAP hands back ascending UIDs, so the
 // naive read of that list is exactly wrong.
+// An ad-hoc search keeps the NEWEST matches: someone asking a big folder for
+// two matches wants the two most recent, and no watermark moves, so nothing is
+// lost by ignoring the rest.
 func TestIMAPSearch_LimitKeepsTheNewest(t *testing.T) {
 	host, port, _ := startIMAP(t,
 		rawMessage("a@x.test", "Note 1", "one"),
@@ -273,6 +276,51 @@ func TestIMAPSearch_LimitKeepsTheNewest(t *testing.T) {
 	subjects := []string{got[0]["subject"].(string), got[1]["subject"].(string)}
 	if subjects[0] != "Note 2" || subjects[1] != "Note 3" {
 		t.Errorf("kept %v, want the two newest (Note 2, Note 3)", subjects)
+	}
+}
+
+// A POLL caps the other way round, and this is the data-loss case: the
+// watermark advances to the newest UID emitted, so keeping the NEWEST 2 of a
+// 3-message backlog would step the watermark over the oldest one and it would
+// never be offered again — silently, on a green run. Draining oldest-first
+// means each poll takes the next `limit` in arrival order and the backlog
+// empties over the following polls.
+func TestIMAPSearch_OnlyNew_LimitDrainsOldestFirst(t *testing.T) {
+	store := memCursors(t)
+	host, port, add := startIMAP(t, rawMessage("a@x.test", "Baseline", "b"))
+
+	// Baseline run: records where the folder is up to, emits nothing.
+	if got := messages(t, runSearch(t, searchJob(host, port, map[string]any{"only_new": true, "limit": 2}))); len(got) != 0 {
+		t.Fatalf("baseline emitted %d message(s)", len(got))
+	}
+	if len(store) == 0 {
+		t.Fatal("baseline recorded no watermark")
+	}
+
+	// Three arrive between polls, with a limit of 2.
+	add(t, rawMessage("a@x.test", "New 1", "one"))
+	add(t, rawMessage("a@x.test", "New 2", "two"))
+	add(t, rawMessage("a@x.test", "New 3", "three"))
+
+	got := messages(t, runSearch(t, searchJob(host, port, map[string]any{"only_new": true, "limit": 2})))
+	if len(got) != 2 {
+		t.Fatalf("want 2 this poll, got %d", len(got))
+	}
+	if got[0]["subject"] != "New 1" || got[1]["subject"] != "New 2" {
+		t.Fatalf("drained %v, %v; want the oldest two (New 1, New 2)",
+			got[0]["subject"], got[1]["subject"])
+	}
+
+	// The next poll picks up the one that was held back, rather than it being
+	// lost behind an advanced watermark.
+	got = messages(t, runSearch(t, searchJob(host, port, map[string]any{"only_new": true, "limit": 2})))
+	if len(got) != 1 || got[0]["subject"] != "New 3" {
+		t.Fatalf("second poll got %+v, want just New 3", got)
+	}
+
+	// And then it is genuinely done.
+	if got := messages(t, runSearch(t, searchJob(host, port, map[string]any{"only_new": true, "limit": 2}))); len(got) != 0 {
+		t.Fatalf("third poll re-emitted %+v", got)
 	}
 }
 
@@ -432,5 +480,33 @@ func TestIMAPSearch_RejectsABadFolder(t *testing.T) {
 	}
 	if !strings.Contains(res.Error.Message, "Nope/Missing") {
 		t.Errorf("error should name the folder someone typed: %q", res.Error.Message)
+	}
+}
+
+// The watermark may only move over mail that actually arrived. It used to be
+// computed from what the SEARCH matched, so a server answering with fewer
+// messages than were asked for — a UID expunged between the search and the
+// fetch returns no data, with no error — stepped the watermark over whatever
+// was missing, and that mail was never offered again.
+func TestSafeAdvance_StopsAtTheFirstMissingUID(t *testing.T) {
+	requested := []imap.UID{10, 11, 12, 13}
+
+	// Everything arrived: advance over all of it.
+	if got := safeAdvance(requested, requested); len(got) != 4 {
+		t.Errorf("all fetched → advanced over %d, want 4", len(got))
+	}
+	// 12 did not come back: 10 and 11 are safe, and 13 must wait rather than
+	// be jumped over.
+	got := safeAdvance(requested, []imap.UID{10, 11, 13})
+	if len(got) != 2 || got[len(got)-1] != 11 {
+		t.Fatalf("advanced over %v, want up to 11 only", got)
+	}
+	// Nothing arrived: the watermark must not move at all.
+	if got := safeAdvance(requested, nil); len(got) != 0 {
+		t.Errorf("nothing fetched → advanced over %v, want nothing", got)
+	}
+	// The oldest one missing blocks the rest, which is the point.
+	if got := safeAdvance(requested, []imap.UID{11, 12, 13}); len(got) != 0 {
+		t.Errorf("oldest missing → advanced over %v, want nothing", got)
 	}
 }

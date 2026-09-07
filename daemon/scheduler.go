@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"log"
+	"strconv"
 	"sync"
 	"time"
 
@@ -331,7 +332,7 @@ func (s *Scheduler) Run(ctx context.Context) error {
 				// the leaderless gap is skipped (matching the documented
 				// at-most-one-catch-up semantics) rather than duplicated — the
 				// safer choice for non-idempotent flows.
-				s.reanchor(s.clock())
+				s.reanchor(ctx, s.clock())
 			}
 			wasLeader = isLeader
 			if isLeader {
@@ -471,12 +472,74 @@ func (s *Scheduler) entryFromSpec(spec ScheduleSpec) (*scheduledGraph, error) {
 // read, so without the offset a promoted leader would fire every poll flow
 // sharing a cadence on the same tick — the thundering herd pollJitter exists to
 // prevent, arriving at the worst moment, right as a node has just gone down.
-func (s *Scheduler) reanchor(now time.Time) {
+func (s *Scheduler) reanchor(ctx context.Context, now time.Time) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	stale := make([]*scheduledGraph, 0, len(s.tracked))
 	for k, e := range s.tracked {
+		// A frozen scheduleAt in the past is a fire the dead leader owed and
+		// nobody delivered. Re-anchoring discards it, which is the right call
+		// (better a missed fire than a duplicate on a non-idempotent flow) —
+		// but discarding it SILENTLY is how "the 08:00 report just didn't
+		// happen" became untraceable.
+		if !e.scheduleAt.IsZero() && !e.scheduleAt.After(now) {
+			carried := *e
+			stale = append(stale, &carried)
+		}
 		e.scheduleAt = e.staggeredNextFire(k, now)
 	}
+	s.mu.Unlock()
+	for _, e := range stale {
+		s.recordMissedFires(ctx, e, now)
+	}
+}
+
+// maxCountedMissedFires bounds the walk in recordMissedFires. Past it the
+// message says "at least N", which is all a reader needs: the difference
+// between 200 missed fires and 2000 changes nothing about what to do.
+const maxCountedMissedFires = 500
+
+// recordMissedFires notes the fires that were due and never happened, when the
+// scheduler can be CERTAIN of it — which is the whole reason this is not
+// simply "compare the last run against the schedule".
+//
+// Certain means: this entry carried a next-fire time, that time is in the
+// past, and stepping the schedule forward from it lands on further times also
+// in the past. Those are fires this scheduler owed and did not make. It covers
+// a stalled tick loop and a takeover from a dead leader.
+//
+// It does NOT cover a cold start. After a restart every entry is anchored to a
+// fresh future time, so the process has no memory of what it owed while it was
+// down — and reconstructing that from run history would mean guessing: a flow
+// published five minutes ago, or one paused and resumed, has no recent run for
+// entirely legitimate reasons and would be reported as having missed its
+// schedule. A marker that cries wolf trains people to ignore markers, which is
+// the same failure this whole area is about, so the gap is left honest and
+// documented rather than filled in with a guess.
+func (s *Scheduler) recordMissedFires(ctx context.Context, e *scheduledGraph, now time.Time) {
+	if e.scheduleAt.IsZero() {
+		return
+	}
+	missed := 0
+	for t := e.nextFireFrom(e.scheduleAt); !t.After(now) && missed < maxCountedMissedFires; t = e.nextFireFrom(t) {
+		if t.IsZero() {
+			return // an impossible schedule; nextFireFrom gave up
+		}
+		missed++
+	}
+	if missed == 0 {
+		return
+	}
+	count := strconv.Itoa(missed)
+	if missed >= maxCountedMissedFires {
+		count = "at least " + count
+	}
+	due, reached := e.scheduleAt.UTC().Format(time.RFC3339), now.UTC().Format(time.RFC3339)
+	s.logger.Printf("missed %s fire(s) of %s/%s/%s (due %s, reached %s)",
+		count, e.tenant, e.workspace, e.graphID, due, reached)
+	s.markBroken(ctx, e, "schedule_fires_missed",
+		fmt.Sprintf("This flow's schedule missed %s run(s): one was due at %s and the scheduler "+
+			"only reached it at %s. Missed runs are not made up — the schedule continues from now.",
+			count, due, reached))
 }
 
 func (s *Scheduler) fireDue(ctx context.Context) {
@@ -497,6 +560,11 @@ func (s *Scheduler) fireDue(ctx context.Context) {
 			continue
 		}
 		if !e.scheduleAt.After(now) {
+			// Late enough that whole fires fell in the gap? Say so. The fire
+			// below still happens; what is recorded here is the ones that did
+			// not. A stalled scheduler (a long GC pause, a wedged store, a
+			// host that slept) silently swallowed them.
+			s.recordMissedFires(ctx, e, now)
 			s.fireGraph(ctx, e)
 			// Adaptive backoff: fold the latest poll outcome into the empty
 			// streak BEFORE computing the next fire, so a consistently-empty
@@ -565,11 +633,22 @@ func (s *Scheduler) fireGraph(ctx context.Context, e *scheduledGraph) {
 	// applies on top for pro-allowed fires.
 	if err := s.svc.checkTriggerQuota(ctx, e.tenant); err != nil {
 		s.logger.Printf("skip %s/%s/%s: %v", e.tenant, e.workspace, e.graphID, err)
+		if s.markOnce("quota", e.tenant, e.workspace, e.graphID) {
+			s.svc.recordSkippedFire(ctx, e.tenant, e.workspace, e.graphID, "plan_polling_off",
+				"Scheduled run skipped — this plan does not include scheduled and polling triggers. "+
+					"Manual runs still work.")
+		}
 		return
 	}
 	store, err := s.svc.Workspaces.Open(e.tenant, e.workspace)
 	if err != nil {
+		// The flow cannot be reached at all, so it is not running and nobody
+		// has been told. Every path in this function used to end here: one log
+		// line and a return, with the schedule quietly dead.
 		s.logger.Printf("open ws %s/%s: %v", e.tenant, e.workspace, err)
+		s.markBroken(ctx, e, "workspace_unavailable",
+			"This flow's schedule could not run: its workspace could not be opened. "+
+				"The flow has not run since. Error: "+err.Error())
 		return
 	}
 	// Require published: never auto-fire a flow that hasn't been published.
@@ -579,7 +658,13 @@ func (s *Scheduler) fireGraph(ctx context.Context, e *scheduledGraph) {
 	if pub, err := store.PublishedCommit(e.graphID); err != nil || pub == "" {
 		if err != nil {
 			s.logger.Printf("skip %s/%s/%s: published lookup: %v", e.tenant, e.workspace, e.graphID, err)
+			s.markBroken(ctx, e, "publish_lookup_failed",
+				"This flow's schedule could not run: its published revision could not be looked up. "+
+					"The flow has not run since. Error: "+err.Error())
 		} else {
+			// Deliberate: unpublishing a flow is how you turn its schedule
+			// off, so this needs no marker. rescan drops these from the
+			// enrollment set anyway; reaching here is a race with an unpublish.
 			s.logger.Printf("skip %s/%s/%s: not published (publish to enable its schedule)", e.tenant, e.workspace, e.graphID)
 		}
 		return
@@ -592,7 +677,12 @@ func (s *Scheduler) fireGraph(ctx context.Context, e *scheduledGraph) {
 	// content is pinned to the published version.
 	g, err := store.LoadPublished(e.graphID)
 	if err != nil {
+		// The one that hurts most: a published revision that will not decode
+		// means the flow is dead and stays dead, on every tick, for ever.
 		s.logger.Printf("load %s/%s/%s: %v", e.tenant, e.workspace, e.graphID, err)
+		s.markBroken(ctx, e, "published_flow_unreadable",
+			"This flow's schedule could not run: its published version could not be read. "+
+				"The flow has not run since it broke — re-publish it to fix. Error: "+err.Error())
 		return
 	}
 	// Paused flows are dropped when specs are derived, so reaching here means
@@ -610,12 +700,28 @@ func (s *Scheduler) fireGraph(ctx context.Context, e *scheduledGraph) {
 		// every skip for the usage banner, and write a Runs-list marker —
 		// coalesced to one per flow per window so a frequent cron doesn't
 		// flood the list. Other errors (load/publish) aren't plan skips.
-		if errors.Is(err, core.ErrPlanLimit) {
+		switch {
+		case errors.Is(err, core.ErrPlanLimit):
 			if s.svc.Usage != nil {
 				_ = s.svc.Usage.AddSkippedRun(ctx, e.tenant, s.clock())
 			}
-			if s.markSkip(e.tenant, e.workspace, e.graphID) {
-				s.svc.recordSkippedFire(ctx, e.tenant, e.workspace, e.graphID)
+			if s.markOnce("cap", e.tenant, e.workspace, e.graphID) {
+				s.svc.recordSkippedFire(ctx, e.tenant, e.workspace, e.graphID, "plan_run_cap",
+					"Scheduled run skipped — over the plan's monthly run limit.")
+			}
+			// And tell somebody. The Runs-list marker and the in-app Usage
+			// banner both need a person to be looking at the app, which is
+			// what the users of an automation product are not doing: their
+			// flows stop, everything looks calm, and they hear about it from a
+			// customer. Coalesced org-wide inside notifyRunCapReached.
+			s.svc.notifyRunCapReached(g)
+		default:
+			// Anything else — an invalid graph, a suspended org, a store
+			// error — is the flow not running for a reason its owner has to
+			// act on, and it used to be log-only.
+			if s.markOnce("submit", e.tenant, e.workspace, e.graphID) {
+				s.svc.recordBrokenSchedule(ctx, g, "schedule_submit_failed",
+					"This flow's schedule could not start a run: "+err.Error())
 			}
 		}
 		s.logger.Printf("fire %s/%s/%s: %v", e.tenant, e.workspace, e.graphID, err)
@@ -624,14 +730,39 @@ func (s *Scheduler) fireGraph(ctx context.Context, e *scheduledGraph) {
 	s.logger.Printf("fired %s/%s/%s → %s", e.tenant, e.workspace, e.graphID, runID)
 }
 
-// skipMarkerWindow bounds how often a cap-skipped flow writes a Runs-list
-// marker — see Scheduler.skipMarked.
+// markBroken records a schedule that could not fire because the flow itself is
+// unreachable or unreadable, coalesced to one marker per problem per flow per
+// window.
+//
+// It has to build its own graph stand-in, because these are exactly the paths
+// where the real flow could NOT be loaded. The draft is tried purely to
+// recover the owner's address — without it the marker lands in the Runs list
+// but reaches nobody, and reaching somebody is the point. A draft read failing
+// too is fine: the marker is still written, just without an owner.
+func (s *Scheduler) markBroken(ctx context.Context, e *scheduledGraph, code, message string) {
+	if !s.markOnce(code, e.tenant, e.workspace, e.graphID) {
+		return
+	}
+	g := core.Graph{ID: e.graphID, Tenant: e.tenant, Workspace: e.workspace}
+	if store, err := s.svc.Workspaces.Open(e.tenant, e.workspace); err == nil {
+		if draft, derr := store.Load(e.graphID); derr == nil {
+			g.Name, g.Owner, g.Language = draft.Name, draft.Owner, draft.Language
+			g.FailureNotify = draft.FailureNotify
+		}
+	}
+	s.svc.recordBrokenSchedule(ctx, g, code, message)
+}
+
+// skipMarkerWindow bounds how often one flow writes a Runs-list marker about
+// the same problem — see Scheduler.skipMarked.
 const skipMarkerWindow = time.Hour
 
-// markSkip reports whether to write a skip marker for this flow now,
-// coalescing to one per skipMarkerWindow.
-func (s *Scheduler) markSkip(tenant, workspace, graphID string) bool {
-	key := tenant + "/" + workspace + "/" + graphID
+// markOnce reports whether to write a marker of this kind for this flow now,
+// coalescing to one per skipMarkerWindow. The kind is part of the key so a
+// flow that is both over its cap and unloadable says both things once, rather
+// than whichever happened first silencing the other.
+func (s *Scheduler) markOnce(kind, tenant, workspace, graphID string) bool {
+	key := kind + "|" + tenant + "/" + workspace + "/" + graphID
 	now := s.clock()
 	s.mu.Lock()
 	defer s.mu.Unlock()

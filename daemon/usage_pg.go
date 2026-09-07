@@ -65,6 +65,17 @@ func (s *PgUsageStore) AddRun(ctx context.Context, tenant string, now time.Time)
 // (limit is always >= 1 here). When the row exists and is already at the cap,
 // the DO UPDATE … WHERE matches nothing, RETURNING yields no row (ErrNoRows),
 // and we report not-admitted without counting.
+// ReleaseRun implements runReleaser: give back a reserved run whose write
+// then failed. GREATEST(...,0) so a release without a matching reserve cannot
+// drive the counter negative.
+func (s *PgUsageStore) ReleaseRun(ctx context.Context, tenant string, now time.Time) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE usage_counters
+		   SET graph_runs = GREATEST(graph_runs - 1, 0), updated_at = now()
+		 WHERE tenant = $1 AND period = $2`, tenant, usagePeriod(now))
+	return err
+}
+
 func (s *PgUsageStore) AddRunIfUnder(ctx context.Context, tenant string, now time.Time, limit int) (bool, error) {
 	var n int64
 	err := s.pool.QueryRow(ctx, `

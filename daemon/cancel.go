@@ -30,7 +30,24 @@ import (
 //   - core.ErrConflict if the run is already in a terminal state
 //   - core.ErrUnauthorized when the principal lacks graph:run on the
 //     stored graph
+//
+// CancelCodeByPerson marks a cancel somebody asked for, as opposed to one the
+// platform imposed (CancelCodeTimeout). The failure-notification sweep reads
+// this to decide whether a cancelled run is worth an email: stopping your own
+// run needs no telling, but a run the platform stopped does — and it reads as
+// "cancelled" in the Runs list, which looks like somebody meant it.
+const (
+	CancelCodeByPerson = "cancelled"
+	CancelCodeTimeout  = "timeout"
+)
+
+// CancelGraphRun stops a run at a person's request. See cancelGraphRun for the
+// variant that records a different cause.
 func (s *Service) CancelGraphRun(ctx context.Context, p core.Principal, graphRunID, reason string) error {
+	return s.cancelGraphRun(ctx, p, graphRunID, CancelCodeByPerson, reason)
+}
+
+func (s *Service) cancelGraphRun(ctx context.Context, p core.Principal, graphRunID, code, reason string) error {
 	rec, err := s.Jobs.Get(ctx, graphRunID)
 	if err != nil {
 		return err
@@ -61,7 +78,7 @@ func (s *Service) CancelGraphRun(ctx context.Context, p core.Principal, graphRun
 	if reason == "" {
 		reason = fmt.Sprintf("cancelled by %s", p.Subject)
 	}
-	cancelErr := &core.JobError{Code: "cancelled", Message: reason}
+	cancelErr := &core.JobError{Code: code, Message: reason}
 	// cancelledResult stamps the cancel onto a node while keeping whatever it had
 	// already published. For a parked await_approval node that result is the only
 	// record of what it was waiting on (prompt, value, approval URL), and the run

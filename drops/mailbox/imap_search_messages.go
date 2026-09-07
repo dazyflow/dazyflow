@@ -85,7 +85,7 @@ func init() {
 					"unread_only":{"type":"boolean","title":"Unread only","default":false,"description":"Only emails still marked unread. Searching never marks anything read by itself."},
 					"since_days":{"type":"integer","title":"Only the last N days","minimum":1,"description":"Ignore anything older than this many days. Leave blank to search the whole folder."},
 					"only_new":{"type":"boolean","title":"Only new since last run","default":false,"description":"When on, each run emits only emails that arrived since the previous run — nothing on the first run (it just remembers where the folder is up to). Turn this on when a published, polling flow acts on each match, so it doesn't re-process the same emails on every poll. Leave off for ad-hoc searches that should return every match."},
-					"limit":{"type":"integer","title":"Max emails","default":50,"minimum":1,"maximum":500,"description":"How many matches to bring back at most, newest first."},
+					"limit":{"type":"integer","title":"Max emails","default":50,"minimum":1,"maximum":500,"description":"How many matches to bring back at most. An ad-hoc search returns the newest ones. With 'Only new since last run' on it takes the OLDEST waiting emails instead, in arrival order, and the rest follow on the next polls — so a burst bigger than this is delayed, never skipped."},
 					"timeout_ms":{"type":"integer","default":30000,"minimum":1,"description":"Hard deadline for the whole search, in milliseconds."}
 				}
 			}`),
@@ -95,7 +95,7 @@ func init() {
 	})
 }
 
-func executeIMAPSearch(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
+func executeIMAPSearch(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
 	cfg, err := configFromJob(job)
 	if err != nil {
 		return params.Err(job, "not_connected", err.Error()), nil
@@ -125,7 +125,15 @@ func executeIMAPSearch(ctx context.Context, job core.Job, _ chan<- core.Progress
 	onlyNew := params.BoolDefault(job.Params, "only_new", false)
 	var mark *watermark
 	if onlyNew {
-		mark = readWatermark(ctx, job, cfg.Folder, folder)
+		var rerr error
+		mark, rerr = readWatermark(ctx, job, cfg.Folder, folder)
+		if rerr != nil {
+			// Without the stored UID this run cannot ask the server for "mail
+			// after the last one I handled". Re-baselining would record the
+			// folder's current end as handled and skip everything that arrived
+			// since the last successful poll.
+			return cursor.FailRead(job, rerr), nil
+		}
 		if !mark.replay {
 			// Ask the server for nothing older than the last UID we emitted.
 			// This is the part that has no Gmail equivalent: the watermark is
@@ -162,15 +170,40 @@ func executeIMAPSearch(ctx context.Context, job core.Job, _ chan<- core.Progress
 		uids = kept
 	}
 
-	// Newest first, capped: IMAP returns matches in ascending UID order, so
-	// the tail of the list is the newest mail. Take that tail rather than the
-	// head — a 5000-message folder searched with a limit of 50 should give
-	// the 50 most recent matches, not the 50 oldest.
+	// Capped — and which END of the matches the cap keeps depends on what the
+	// step is being asked to do. IMAP returns matches in ascending UID order,
+	// so the head is the oldest mail and the tail the newest.
+	//
+	//	Ad-hoc search (only_new off): keep the TAIL. Someone asking a
+	//	5000-message folder for 50 matches wants the 50 most recent, not the 50
+	//	oldest, and no watermark moves so nothing is lost either way.
+	//
+	//	Poll (only_new on): keep the HEAD. The watermark advances to the newest
+	//	UID emitted, so keeping the newest 50 of a 200-message backlog would
+	//	step the watermark over the other 150 and they would never be offered
+	//	again — silently, on a green run. Draining from the oldest end instead
+	//	means each poll takes the next `limit` in order and the backlog empties
+	//	over the following polls, in the order the mail arrived. Same shape as
+	//	sftp_list_files, which caps oldest-first for exactly this reason.
+	truncated := 0
 	if len(uids) > limit {
-		uids = uids[len(uids)-limit:]
+		truncated = len(uids) - limit
+		if onlyNew {
+			uids = uids[:limit]
+		} else {
+			uids = uids[len(uids)-limit:]
+		}
+	}
+	if truncated > 0 && onlyNew {
+		params.EmitProgress(progress, job, 1, fmt.Sprintf(
+			"%d emails waiting; taking the oldest %d this run, the rest follow on the next polls",
+			truncated+limit, limit))
 	}
 
 	msgs := make([]any, 0, len(uids))
+	// fetched is the UIDs the server actually returned, which is what the
+	// watermark advances over. See the short-FETCH note below.
+	fetched := make([]imap.UID, 0, len(uids))
 	if len(uids) > 0 {
 		// One FETCH for the whole batch. Gmail's search needs a second HTTPS
 		// request per match to turn its {id} stubs into real emails; IMAP
@@ -181,11 +214,26 @@ func executeIMAPSearch(ctx context.Context, job core.Job, _ chan<- core.Progress
 		}
 		for _, buf := range bufs {
 			msgs = append(msgs, messageRecord(buf))
+			fetched = append(fetched, buf.UID)
+		}
+		// A server may answer with fewer messages than were asked for and no
+		// error — a UID expunged between the SEARCH and the FETCH returns no
+		// data at all. That is benign in itself (a deleted email needs no
+		// processing), but the watermark must not be advanced from the
+		// REQUESTED set on the strength of it: any UID that did not come back
+		// for some other reason would be stepped over and never offered again.
+		// So the watermark is computed from what actually arrived, and the
+		// gap is stated rather than inferred.
+		if len(bufs) != len(uids) {
+			params.EmitProgress(progress, job, 1, fmt.Sprintf(
+				"read %d of %d matching emails; the rest were not returned by the server "+
+					"(most likely deleted since the search) and are not counted as handled",
+				len(bufs), len(uids)))
 		}
 	}
 
 	if onlyNew {
-		return emitOnlyNew(ctx, job, msgs, uids, mark), nil
+		return emitOnlyNew(ctx, job, msgs, safeAdvance(uids, fetched), mark), nil
 	}
 
 	// An ad-hoc search reports an empty result as an empty list, not as a
@@ -291,10 +339,13 @@ func cursorName(job core.Job, folder string) string {
 // replays the whole folder into a flow that acts on each email, or skips mail
 // forever. So a UIDVALIDITY change re-baselines: emit nothing once, resume
 // cleanly after.
-func readWatermark(ctx context.Context, job core.Job, folder string, state *imap.SelectData) *watermark {
+func readWatermark(ctx context.Context, job core.Job, folder string, state *imap.SelectData) (*watermark, error) {
 	mark := &watermark{uidValidity: state.UIDValidity, folder: folder, uidNext: state.UIDNext}
 
-	stored := cursor.Read(ctx, job.Tenant, cursorName(job, folder))
+	stored, err := cursor.Read(ctx, job.Tenant, cursorName(job, folder))
+	if err != nil {
+		return nil, err
+	}
 	validity, uid, ok := parseWatermark(stored)
 	switch {
 	case !ok:
@@ -304,12 +355,46 @@ func readWatermark(ctx context.Context, job core.Job, folder string, state *imap
 	default:
 		mark.lastUID = uid
 	}
-	return mark
+	return mark, nil
+}
+
+// safeAdvance returns the leading run of requested UIDs that actually came
+// back, which is how far the watermark may move.
+//
+// The watermark used to be computed from the REQUESTED set. A server can
+// answer with fewer messages than were asked for and no error — a UID
+// expunged between the SEARCH and the FETCH simply returns no data — and
+// taking the maximum of the requested set then steps the watermark over
+// whatever did not arrive, so that mail is never offered again.
+//
+// Stopping at the first UID that did not come back means a hole is retried on
+// the next poll instead of skipped. It cannot stall: a genuinely expunged
+// message drops out of the next SEARCH too, so the run extends past it then.
+// The cost is re-emitting messages above a hole — at-least-once, which is the
+// direction this file chooses everywhere else.
+//
+// requested must be ascending, which is the order IMAP returns and the order
+// the caller preserves.
+func safeAdvance(requested, fetched []imap.UID) []imap.UID {
+	got := make(map[imap.UID]bool, len(fetched))
+	for _, uid := range fetched {
+		got[uid] = true
+	}
+	safe := make([]imap.UID, 0, len(fetched))
+	for _, uid := range requested {
+		if !got[uid] {
+			break
+		}
+		safe = append(safe, uid)
+	}
+	return safe
 }
 
 // parseWatermark reads a stored "<uidvalidity>:<uid>" position. Anything it
-// can't parse is treated as absent, which re-baselines — the same
-// fail-to-the-beginning stance cursor.Read takes on a failed read.
+// can't parse is treated as absent, which re-baselines: a corrupt value will
+// not heal itself, so there is no position to resume from. A failed READ is
+// handled separately by readWatermark, which stops rather than re-baselining
+// over a position that is probably still good.
 func parseWatermark(s string) (validity uint32, uid imap.UID, ok bool) {
 	before, after, found := strings.Cut(strings.TrimSpace(s), ":")
 	if !found {
@@ -334,6 +419,8 @@ func parseWatermark(s string) (validity uint32, uid imap.UID, ok bool) {
 // dormant and the rest of the flow is skipped — an empty poll is a non-event,
 // not an empty list. The cursor write is best-effort/at-least-once: a failed
 // write means at worst the next run re-emits this batch, never a silent drop.
+// uids here is what the run may safely advance over — see safeAdvance — not
+// everything the search matched.
 func emitOnlyNew(ctx context.Context, job core.Job, msgs []any, uids []imap.UID, mark *watermark) core.Result {
 	next := mark.lastUID
 	for _, uid := range uids {
@@ -354,8 +441,16 @@ func emitOnlyNew(ctx context.Context, job core.Job, msgs []any, uids []imap.UID,
 		msgs = nil
 	}
 	if next > mark.lastUID {
-		_ = cursor.Write(ctx, job.Tenant, cursorName(job, mark.folder),
+		// Ignorable once mail has been emitted — the next run re-emits it. On
+		// a baseline (first run, or a folder renumbered by UIDVALIDITY) nothing
+		// was emitted, so a failed write means the next run baselines again,
+		// and a persistent failure means this folder is never really watched.
+		// See cursor.FailBaseline.
+		werr := cursor.Write(ctx, job.Tenant, cursorName(job, mark.folder),
 			fmt.Sprintf("%d:%d", mark.uidValidity, next))
+		if werr != nil && mark.baseline {
+			return cursor.FailBaseline(job, werr)
+		}
 	}
 
 	pollstate.Report(ctx, job, len(msgs) > 0)

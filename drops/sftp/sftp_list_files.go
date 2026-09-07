@@ -172,20 +172,28 @@ func cursorName(job core.Job, dir string) string {
 }
 
 // readWatermark loads the stored position. Anything unparseable is treated as
-// absent, which re-baselines — the same fail-to-the-beginning stance
-// cursor.Read takes on a failed read.
-func readWatermark(ctx context.Context, job core.Job, dir string) *watermark {
+// absent, which re-baselines: the value will not heal itself, and there is
+// genuinely no position to resume from.
+//
+// A failed READ is different and returns an error. The position is probably
+// intact and readable next time, so re-baselining over it would throw away a
+// perfectly good watermark — and with it every file that arrived in the
+// meantime.
+func readWatermark(ctx context.Context, job core.Job, dir string) (*watermark, error) {
 	mark := &watermark{names: map[string]bool{}}
-	stored := cursor.Read(ctx, job.Tenant, cursorName(job, dir))
+	stored, err := cursor.Read(ctx, job.Tenant, cursorName(job, dir))
+	if err != nil {
+		return nil, err
+	}
 	secs, names, found := strings.Cut(stored, "|")
 	if !found {
 		mark.baseline = true
-		return mark
+		return mark, nil
 	}
-	unix, err := strconv.ParseInt(strings.TrimSpace(secs), 10, 64)
-	if err != nil {
+	unix, perr := strconv.ParseInt(strings.TrimSpace(secs), 10, 64)
+	if perr != nil {
 		mark.baseline = true
-		return mark
+		return mark, nil
 	}
 	mark.newest = time.Unix(unix, 0).UTC()
 	for _, n := range strings.Split(names, ",") {
@@ -193,7 +201,7 @@ func readWatermark(ctx context.Context, job core.Job, dir string) *watermark {
 			mark.names[n] = true
 		}
 	}
-	return mark
+	return mark, nil
 }
 
 // emitOnlyNew filters to files that appeared since the last run, advances the
@@ -209,7 +217,13 @@ func readWatermark(ctx context.Context, job core.Job, dir string) *watermark {
 // not an empty list. The cursor write is best-effort/at-least-once: a failed
 // write means at worst the next run re-emits this batch, never a silent drop.
 func emitOnlyNew(ctx context.Context, job core.Job, dir string, rows []map[string]any, limit int) core.Result {
-	mark := readWatermark(ctx, job, dir)
+	mark, rerr := readWatermark(ctx, job, dir)
+	if rerr != nil {
+		// Without the stored position, "which files are new" is unanswerable.
+		// Baselining instead would record every file now present as already
+		// handled, so anything uploaded since the last run is never picked up.
+		return cursor.FailRead(job, rerr)
+	}
 
 	fresh := make([]map[string]any, 0, len(rows))
 	if !mark.baseline {
@@ -263,7 +277,15 @@ func emitOnlyNew(ctx context.Context, job core.Job, dir string, rows []map[strin
 		}
 	}
 	if !next.IsZero() && (next.After(mark.newest) || len(names) != len(mark.names)) {
-		_ = cursor.Write(ctx, job.Tenant, cursorName(job, dir), formatWatermark(next, names))
+		// Safe to ignore once files have been emitted (the next run re-emits
+		// them at worst), but not on the baseline run: nothing was emitted and
+		// nothing recorded, so the next run baselines too. A write that keeps
+		// failing leaves the directory permanently unwatched while every run
+		// looks like a clean empty poll. See cursor.FailBaseline.
+		werr := cursor.Write(ctx, job.Tenant, cursorName(job, dir), formatWatermark(next, names))
+		if werr != nil && mark.baseline {
+			return cursor.FailBaseline(job, werr)
+		}
 	}
 
 	pollstate.Report(ctx, job, len(fresh) > 0)

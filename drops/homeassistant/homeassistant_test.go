@@ -481,8 +481,26 @@ func TestCovReadStoredCursorUnparseable(t *testing.T) {
 	reader := func(_ context.Context, _, _ string) (string, error) { return "not json", nil }
 	cursor.SetStore(reader, nil)
 	t.Cleanup(func() { cursor.SetStore(nil, nil) })
-	if c := readStoredCursor(context.Background(), "t", "n"); c != nil {
+	c, err := readStoredCursor(context.Background(), "t", "n")
+	if err != nil {
+		t.Fatalf("unparseable cursor is not a read failure, got err %v", err)
+	}
+	if c != nil {
 		t.Fatalf("unparseable cursor → nil, got %+v", c)
+	}
+}
+
+// A read that FAILS must not read as "no previous observation": that would
+// make the caller record the current state as the baseline and fire nothing,
+// overwriting a position that was fine and losing the change in between.
+func TestReadStoredCursorReadFailure(t *testing.T) {
+	reader := func(_ context.Context, _, _ string) (string, error) {
+		return "", errors.New("store down")
+	}
+	cursor.SetStore(reader, nil)
+	t.Cleanup(func() { cursor.SetStore(nil, nil) })
+	if _, err := readStoredCursor(context.Background(), "t", "n"); err == nil {
+		t.Fatal("a failed read reported no error")
 	}
 }
 

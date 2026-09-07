@@ -1572,6 +1572,12 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 	// by a prior crash) and then on an interval. Idempotent across replicas.
 	reaperDispatcher := daemon.NewDispatcher(d.jobs, d.bus, d.eng, log.New(log.Writer(), "reaper: ", log.LstdFlags))
 	reapInterval := envDuration("DAZYFLOW_REAP_INTERVAL", time.Minute)
+	// How long a run may sit non-terminal with nothing left that could advance
+	// it before the reaper fails it. Needed because retention is run-scoped:
+	// an unfinished run is never pruned, so one that can never finish would
+	// otherwise be immortal — holding a concurrency slot for ever and
+	// notifying nobody. 0 disables it (runs stay stuck).
+	daemon.AbandonRunsAfter = envDuration("DAZYFLOW_ABANDON_RUNS_AFTER", daemon.AbandonRunsAfter)
 	bgWg.Add(1)
 	go func() {
 		defer bgWg.Done()
@@ -1596,6 +1602,33 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 			}
 		}
 	}()
+
+	// Failure-notification sweep. Notification used to be a goroutine armed at
+	// submit time, which meant a restart, a lease recovery, a reaped run or
+	// simply a run lasting over an hour ended with nobody being told it had
+	// failed. This reads the runs that owe a notification out of the store,
+	// which no process can forget, and — like the reaper — makes a startup
+	// pass so anything the previous process was mid-way through still goes
+	// out. Claim-then-send inside the store keeps replicas from doubling up.
+	notifyInterval := envDuration("DAZYFLOW_NOTIFY_INTERVAL", 15*time.Second)
+	daemon.NotifySweepLookback = envDuration("DAZYFLOW_NOTIFY_LOOKBACK", daemon.NotifySweepLookback)
+	if notifyInterval > 0 && d.svc != nil {
+		bgWg.Add(1)
+		go func() {
+			defer bgWg.Done()
+			d.svc.SweepFailureNotifications(ctx)
+			t := time.NewTicker(notifyInterval)
+			defer t.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.C:
+					d.svc.SweepFailureNotifications(ctx)
+				}
+			}
+		}()
+	}
 
 	// Concurrency admission promoter. Runs over-cap free-tenant runs as
 	// PENDING (queued) at submit; this sweep starts them as slots free up

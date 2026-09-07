@@ -324,15 +324,33 @@ const claimCappedQuery = `
 		 )
 		 RETURNING ` + claimReturning
 
-// CountsByStatus implements core.JobCounter via a single GROUP BY over
-// the node-kind rows.
-// PruneTerminal deletes finished job rows whose finished_at is older
-// than the cutoff, in bounded batches so a large backlog doesn't lock
-// the table in one statement. Only terminal-status rows are removed;
-// queued/running rows (and any row without a finished_at) are never
-// touched, so an in-flight or reaper-recoverable run is safe. Returns
-// the total number of rows deleted. olderThan <= 0 is a no-op so callers
-// can pass a disabled-retention value straight through.
+// PruneTerminal enforces run history retention. The unit it deletes is a
+// RUN, not a row: it finds graph-records that finished before the cutoff and
+// removes each one together with every node-record underneath it, in bounded
+// batches so a large backlog doesn't lock the table in one statement. Returns
+// the total number of rows deleted. olderThan <= 0 is a no-op so callers can
+// pass a disabled-retention value straight through.
+//
+// The invariant is one sentence: a run's history is deleted whole, once the
+// RUN has been finished for longer than the window — and a run that hasn't
+// finished is never touched. Keying on each row's own finished_at instead,
+// which is what this used to do, broke that at both ends:
+//
+//   - A run parked on an approval, or sitting in a long delay, is non-terminal
+//     for as long as it waits, but its already-succeeded steps are terminal
+//     rows with a finished_at from the day they ran. Past the window they were
+//     deleted out from under a live run. What that costs is not just history:
+//     maybeCompleteGraph reads a missing node-record as "not done yet", so the
+//     run could never complete or be reaped, and a step whose predecessor had
+//     been pruned failed with a bare "predecessor not found".
+//
+//   - Node-records finish BEFORE the graph-record that owns them, so a cutoff
+//     landing between the two deleted the steps of an already-completed run
+//     and left the run itself listed, with nothing in it.
+//
+// Sub-graph runs are separate runs, linked by ParentNodeRecID rather than
+// graph_run_id, so they age out on their own finish time — a few minutes ahead
+// of the parent that waited for them.
 func (s *Postgres) PruneTerminal(ctx context.Context, olderThan time.Duration, batch int) (int, error) {
 	if olderThan <= 0 {
 		return 0, nil
@@ -343,19 +361,21 @@ func (s *Postgres) PruneTerminal(ctx context.Context, olderThan time.Duration, b
 	cutoff := time.Now().Add(-olderThan)
 	total := 0
 	for {
-		tag, err := s.pool.Exec(ctx,
-			`DELETE FROM jobs WHERE id IN (
-			     SELECT id FROM jobs
-			      WHERE finished_at IS NOT NULL AND finished_at < $1
-			        AND status IN ('succeeded','failed','cancelled','skipped')
-			      LIMIT $2)`, cutoff, batch)
+		ids, err := s.oldTerminalRunIDs(ctx, cutoff, batch)
 		if err != nil {
 			return total, err
 		}
-		n := int(tag.RowsAffected())
+		if len(ids) == 0 {
+			break
+		}
+		n, err := s.deleteRuns(ctx, ids)
 		total += n
-		if n < batch {
-			return total, nil
+		if err != nil {
+			return total, err
+		}
+		// Fewer runs than asked for means the index range is drained.
+		if len(ids) < batch {
+			break
 		}
 		// Yield between batches: bail promptly on shutdown rather than
 		// holding a connection through a long backlog drain.
@@ -365,6 +385,141 @@ func (s *Postgres) PruneTerminal(ctx context.Context, olderThan time.Duration, b
 		default:
 		}
 	}
+	n, err := s.pruneOrphanNodes(ctx, cutoff, batch)
+	return total + n, err
+}
+
+// oldTerminalRunIDs returns up to batch graph-record IDs whose RUN finished
+// before the cutoff. Served by jobs_prune_idx (finished_at, terminal statuses)
+// — the kind filter is applied on the rows the range scan yields, and the scan
+// stops at the limit, so a swept-clean table costs an empty range probe.
+func (s *Postgres) oldTerminalRunIDs(ctx context.Context, cutoff time.Time, batch int) ([]string, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT id FROM jobs
+		  WHERE kind = 'graph'
+		    AND finished_at IS NOT NULL AND finished_at < $1
+		    AND status IN ('succeeded','failed','cancelled','skipped')
+		  LIMIT $2`, cutoff, batch)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// deleteRuns removes the named graph-records and every node-record under
+// them. One statement, so a run is never left half-deleted: the id match is
+// the primary key and the graph_run_id match is jobs_graph_run_idx.
+//
+// Node-record status is deliberately NOT filtered here. The run is terminal,
+// so any non-terminal row left under it is a remnant of it (a step abandoned
+// by a cancel, say), and keeping such a row after its run is gone would leave
+// exactly the orphan the pass below has to clean up.
+func (s *Postgres) deleteRuns(ctx context.Context, ids []string) (int, error) {
+	tag, err := s.pool.Exec(ctx,
+		`DELETE FROM jobs WHERE id = ANY($1) OR graph_run_id = ANY($1)`, ids)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
+// pruneOrphanNodes deletes terminal, old-enough node-records whose graph-record
+// is gone. Two things produce them: rows left behind by the row-scoped sweep
+// this replaced, and a tenant erasure (DeleteByTenant) that raced a write.
+// Without their run there is nothing to key retention on but their own
+// finished_at, which is what this uses.
+//
+// A node-record whose parent still exists is never touched here — that run's
+// own age decides, in the pass above.
+func (s *Postgres) pruneOrphanNodes(ctx context.Context, cutoff time.Time, batch int) (int, error) {
+	total := 0
+	for {
+		tag, err := s.pool.Exec(ctx,
+			`DELETE FROM jobs WHERE id IN (
+			     SELECT j.id FROM jobs j
+			      WHERE j.kind = 'node'
+			        AND j.finished_at IS NOT NULL AND j.finished_at < $1
+			        AND j.status IN ('succeeded','failed','cancelled','skipped')
+			        AND NOT EXISTS (SELECT 1 FROM jobs p WHERE p.id = j.graph_run_id)
+			      LIMIT $2)`, cutoff, batch)
+		if err != nil {
+			return total, err
+		}
+		n := int(tag.RowsAffected())
+		total += n
+		if n < batch {
+			return total, nil
+		}
+		select {
+		case <-ctx.Done():
+			return total, ctx.Err()
+		default:
+		}
+	}
+}
+
+// ClaimUnnotified implements core.FailureNotifier.
+//
+// The claim and the read are ONE statement: a CTE picks the oldest eligible
+// rows, stamps notified_at on them, and returns them. Two replicas sweeping
+// the same instant therefore cannot both hand back the same run — the loser's
+// update matches nothing. Doing it as a SELECT then an UPDATE would leave
+// exactly that window, and the symptom (one duplicate alert) is the kind
+// nobody reports and everybody mistrusts.
+func (s *Postgres) ClaimUnnotified(ctx context.Context, lookback time.Duration, maxAttempts, limit int) ([]core.JobRecord, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if maxAttempts <= 0 {
+		maxAttempts = 3
+	}
+	since := time.Now().Add(-lookback)
+	rows, err := s.pool.Query(ctx, `
+		WITH due AS (
+			SELECT id FROM jobs
+			 WHERE kind = 'graph'
+			   AND notified_at IS NULL
+			   AND status IN ('failed','cancelled')
+			   AND finished_at IS NOT NULL
+			   AND finished_at >= $1
+			   AND notify_attempts < $2
+			 ORDER BY finished_at
+			 LIMIT $3
+			 FOR UPDATE SKIP LOCKED
+		), claimed AS (
+			UPDATE jobs SET notified_at = now(), notify_attempts = notify_attempts + 1
+			 WHERE id IN (SELECT id FROM due)
+			 RETURNING `+claimReturning+`
+		)
+		SELECT * FROM claimed`, since, maxAttempts, limit)
+	if err != nil {
+		return nil, wrapPgErr(err)
+	}
+	defer rows.Close()
+	var out []core.JobRecord
+	for rows.Next() {
+		rec, err := scanRecord(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	return out, rows.Err()
+}
+
+// ReleaseNotifyClaim implements core.FailureNotifier.
+func (s *Postgres) ReleaseNotifyClaim(ctx context.Context, jobID string) error {
+	_, err := s.pool.Exec(ctx, `UPDATE jobs SET notified_at = NULL WHERE id = $1`, jobID)
+	return err
 }
 
 // DeleteByTenant hard-deletes every job record (graph + node, terminal or

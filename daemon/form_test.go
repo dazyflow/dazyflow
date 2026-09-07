@@ -1091,3 +1091,70 @@ func TestForm_LongFieldNamesAreDropped(t *testing.T) {
 		t.Errorf("the page is %d bytes — an uncapped title is the same amplifier", len(html))
 	}
 }
+
+// TestForm_RefusedSubmissionIsKept is the visitor-side half of the refusal
+// record. Someone fills the form in and presses send; the flow can't run
+// because its published revision no longer validates. They are told the form
+// is closed — and their answers must not be gone. Before this, the submission
+// was a line in the daemon log and nothing else: no run, no marker, no mail,
+// and no way for the owner to learn the form had stopped collecting.
+func TestForm_RefusedSubmissionIsKept(t *testing.T) {
+	_, wh, jobs, _, wsStore := startWebhookHarness(t)
+	// A published flow that will not validate at submit time: the second step
+	// names a module that does not exist, so ValidateRuntime rejects the graph
+	// while publicFormConfig still finds a live form step to render.
+	g := core.Graph{
+		ID: "contact", Name: "Contact form", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{
+			{ID: "in", Module: "form_input"},
+			{ID: "broken", Module: "no_such_module_exists"},
+		},
+		Edges: []core.Edge{{From: "in", To: "broken"}},
+	}
+	savePublished(t, wsStore, g)
+	ts := formServer(t, wh)
+
+	res, err := http.PostForm(ts.URL+"/form/acme/ws1/contact", url.Values{
+		"name":    {"Vera"},
+		"email":   {"vera@example.com"},
+		"message": {"please call me back"},
+	})
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want 503", res.StatusCode)
+	}
+
+	runs, err := core.ListRunSummaries(context.Background(), jobs, core.ListGraphRunsOpts{
+		Tenant: "acme", Workspace: "ws1", GraphID: "contact", Limit: 10,
+	})
+	if err != nil {
+		t.Fatalf("list runs: %v", err)
+	}
+	if len(runs) != 1 {
+		t.Fatalf("got %d runs, want 1 recording the refused submission", len(runs))
+	}
+	if runs[0].Status != core.JobStatusFailed {
+		t.Errorf("run status = %q, want failed", runs[0].Status)
+	}
+	if runs[0].Error == nil || runs[0].Error.Code != "invalid_graph" {
+		t.Errorf("run error = %+v, want code invalid_graph", runs[0].Error)
+	}
+
+	// What she typed has to be in there, or the record is just a receipt for
+	// something nobody can recover.
+	seed, err := jobs.Get(context.Background(), runs[0].ID+":in")
+	if err != nil {
+		t.Fatalf("submission not stored: %v", err)
+	}
+	body, ok := seed.Result.Output["body"]
+	if !ok {
+		t.Fatal("stored run carries no form body")
+	}
+	values, _ := body.Inline.(map[string]any)
+	if values["email"] != "vera@example.com" || values["message"] != "please call me back" {
+		t.Errorf("submitted values not preserved: %#v", body.Inline)
+	}
+}

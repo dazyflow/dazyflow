@@ -77,9 +77,24 @@ type Messages struct {
 	FailurePreheader string
 	FailureEyebrow   string
 	FailureHeading   string
-	FailureIntro     string // %s = flow name
-	FailureOutro     string
-	FailureButton    string
+	// Run-cap notice: the organisation has used its monthly run allowance, so
+	// its scheduled flows have stopped firing. Told by email because the
+	// alternative signals (an in-app banner, a marker in the Runs list) both
+	// need somebody to be looking at the app, which is what the users of an
+	// automation product are precisely not doing.
+	RunCapSubject   string
+	RunCapPreheader string
+	RunCapEyebrow   string
+	RunCapHeading   string
+	RunCapIntro     string
+	RunCapOutro     string
+	RunCapButton    string
+	FailureIntro    string // %s = flow name
+	// FailureStillBroken is added to a repeat email. %d = how many other runs
+	// of this flow failed in the preceding window.
+	FailureStillBroken string // %d = prior failure count
+	FailureOutro       string
+	FailureButton      string
 
 	// ── An approval is waiting ──
 	ApprovalSubject      string // %s = flow name
@@ -224,9 +239,19 @@ var English = Messages{
 	FailurePreheader: "A run of your flow failed and needs your attention.",
 	FailureEyebrow:   "Run failed",
 	FailureHeading:   "A flow run needs your attention",
-	FailureIntro:     "Your flow “%s” failed on its last run. Here's what happened:",
-	FailureOutro:     "This run won't retry on its own. Open it to see the full log and fix the cause.",
-	FailureButton:    "View run details",
+	RunCapSubject:    "Your flows have stopped running — monthly limit reached",
+	RunCapPreheader:  "Scheduled flows are being skipped until the limit resets or you upgrade.",
+	RunCapEyebrow:    "Usage",
+	RunCapHeading:    "Your flows have stopped running",
+	RunCapIntro: "This organisation has used all of its runs for this month, so scheduled flows are " +
+		"no longer firing, and incoming webhooks and form submissions are being refused. " +
+		"Nothing has been deleted — the flows are intact and start again on their own when the limit resets.",
+	RunCapOutro:        "Upgrade to keep them running now, or wait for the monthly reset. The Usage page shows where you stand.",
+	RunCapButton:       "See usage",
+	FailureIntro:       "Your flow “%s” failed on its last run. Here's what happened:",
+	FailureStillBroken: "This is not a one-off: %d other runs of this flow also failed in the period before this one. It has been failing for a while.",
+	FailureOutro:       "This run won't retry on its own. Open it to see the full log and fix the cause.",
+	FailureButton:      "View run details",
 
 	ApprovalSubject:      "Approval needed: %s",
 	ApprovalPreheader:    "A flow has paused and is waiting for your decision.",
@@ -357,9 +382,19 @@ var Swedish = Messages{
 	FailurePreheader: "En körning av ditt flöde misslyckades och behöver din uppmärksamhet.",
 	FailureEyebrow:   "Körningen misslyckades",
 	FailureHeading:   "En flödeskörning behöver din uppmärksamhet",
-	FailureIntro:     "Ditt flöde ”%s” misslyckades vid den senaste körningen. Så här gick det till:",
-	FailureOutro:     "Körningen görs inte om av sig själv. Öppna den för att se hela loggen och åtgärda orsaken.",
-	FailureButton:    "Visa körningen",
+	RunCapSubject:    "Dina flöden har slutat köras — månadsgränsen är nådd",
+	RunCapPreheader:  "Schemalagda flöden hoppas över tills gränsen återställs eller du uppgraderar.",
+	RunCapEyebrow:    "Användning",
+	RunCapHeading:    "Dina flöden har slutat köras",
+	RunCapIntro: "Den här organisationen har använt alla sina körningar för månaden, så schemalagda " +
+		"flöden startar inte längre, och inkommande webhookar och formulärsvar avvisas. " +
+		"Ingenting har tagits bort — flödena finns kvar och börjar köras igen av sig själva när gränsen återställs.",
+	RunCapOutro:        "Uppgradera för att hålla dem igång nu, eller vänta på månadsåterställningen. Sidan Användning visar hur det ser ut.",
+	RunCapButton:       "Visa användning",
+	FailureIntro:       "Ditt flöde ”%s” misslyckades vid den senaste körningen. Så här gick det till:",
+	FailureStillBroken: "Det här är inte en engångshändelse: %d andra körningar av flödet misslyckades också under perioden före den här. Det har misslyckats en tid.",
+	FailureOutro:       "Körningen görs inte om av sig själv. Öppna den för att se hela loggen och åtgärda orsaken.",
+	FailureButton:      "Visa körningen",
 
 	ApprovalSubject:      "Godkännande behövs: %s",
 	ApprovalPreheader:    "Ett flöde har pausat och väntar på ditt beslut.",

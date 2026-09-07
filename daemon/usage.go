@@ -55,6 +55,21 @@ type UsageStore interface {
 	Usage(ctx context.Context, tenant string, months int) ([]UsageCounters, error)
 }
 
+// runReleaser is an optional UsageStore extension that gives back a reserved
+// run. The reservation happens BEFORE the run is written, because the cap
+// check and the increment have to be one atomic step or concurrent
+// submissions at the limit all pass — but that leaves a window where the
+// write then fails and the tenant has been charged for a run that does not
+// exist anywhere. Releasing closes it.
+//
+// Best-effort by nature: whatever broke the run's write may well have broken
+// this too. Worth having anyway — a jobs-table conflict with a healthy usage
+// table is exactly the case it recovers, and over-counting somebody's monthly
+// allowance is not a rounding error to them.
+type runReleaser interface {
+	ReleaseRun(ctx context.Context, tenant string, now time.Time) error
+}
+
 // runReserver is an optional UsageStore extension: atomically count a run only
 // if the tenant is still under its monthly cap. The real stores (Mem, Pg)
 // implement it so the run-cap gate is a single atomic check-and-increment
@@ -118,6 +133,19 @@ func (m *MemUsageStore) AddRunIfUnder(_ context.Context, tenant string, now time
 	return true, nil
 }
 
+// ReleaseRun implements runReleaser. Floored at zero: a release without a
+// matching reserve must not push a bucket negative and make the Usage page
+// nonsense.
+func (m *MemUsageStore) ReleaseRun(_ context.Context, tenant string, now time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	b := m.bucket(tenant, now)
+	if b.GraphRuns > 0 {
+		b.GraphRuns--
+	}
+	return nil
+}
+
 func (m *MemUsageStore) AddNodeExecutions(_ context.Context, tenant string, n int, now time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -174,6 +202,15 @@ func (b *BufferedUsage) AddRun(ctx context.Context, tenant string, now time.Time
 // AddRunIfUnder forwards to the inner store's atomic reserve. Runs are never
 // buffered (the comment above: they're rare and the gate reads them), so this
 // is a straight passthrough; a non-reserver inner falls back to read-then-add.
+// ReleaseRun implements runReleaser by delegating; a buffered store that
+// cannot release simply does not, and the reservation stands.
+func (b *BufferedUsage) ReleaseRun(ctx context.Context, tenant string, now time.Time) error {
+	if rl, ok := b.inner.(runReleaser); ok {
+		return rl.ReleaseRun(ctx, tenant, now)
+	}
+	return nil
+}
+
 func (b *BufferedUsage) AddRunIfUnder(ctx context.Context, tenant string, now time.Time, limit int) (bool, error) {
 	if rr, ok := b.inner.(runReserver); ok {
 		return rr.AddRunIfUnder(ctx, tenant, now, limit)

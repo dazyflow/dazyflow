@@ -74,7 +74,7 @@ func TestFailureNotify_OwnerEmailDefaultOn(t *testing.T) {
 	}
 	svc.fireFailureNotification(context.Background(), graph, FailurePayload{
 		GraphID: graph.ID, RunID: "run-1", ErrorMessage: "boom",
-	}, false)
+	})
 
 	data, to := waitForEmail(t, srv, 2*time.Second)
 	if data == "" {
@@ -100,7 +100,7 @@ func TestFailureNotify_OwnerEmailOptedOut(t *testing.T) {
 	}
 	svc.fireFailureNotification(context.Background(), graph, FailurePayload{
 		GraphID: graph.ID, RunID: "run-1",
-	}, false)
+	})
 
 	if data, to := waitForEmail(t, srv, 300*time.Millisecond); data != "" {
 		t.Errorf("opted-out owner still got mail: to=%v\n%s", to, data)
@@ -121,7 +121,7 @@ func TestFailureNotify_OwnerEmailDedupedAgainstPerFlow(t *testing.T) {
 	}
 	svc.fireFailureNotification(context.Background(), graph, FailurePayload{
 		GraphID: graph.ID, RunID: "run-1", ErrorMessage: "boom",
-	}, false)
+	})
 
 	// Give a possible second send time to (wrongly) arrive.
 	data, _ := waitForEmail(t, srv, 1*time.Second)
@@ -138,7 +138,7 @@ func TestFailureNotify_OwnerEmailDedupedAgainstPerFlow(t *testing.T) {
 // startFailureNotifier must spawn a watcher for an owner-only graph (no
 // FailureNotify) when a user store + mailer are present, so the
 // account-level email can fire off the bus.
-func TestFailureNotify_OwnerOnlySpawnsWatcher(t *testing.T) {
+func TestFailureNotify_OwnerOnlyStillGetsMailed(t *testing.T) {
 	t.Parallel()
 	owner := auth.User{Email: "owner@example.com", Subject: "owner@example.com", Tenant: "t", Workspace: "ws"}
 	svc := newFailureNotifyHarness(t) // full Service with a real bus + jobs
@@ -146,18 +146,10 @@ func TestFailureNotify_OwnerOnlySpawnsWatcher(t *testing.T) {
 
 	graph := core.Graph{ID: "g", Tenant: "t", Workspace: "ws", Owner: "owner@example.com"}
 	runID := "run-owner-only"
-	_ = svc.Jobs.Enqueue(t.Context(), core.JobRecord{
-		ID: runID, Kind: core.JobKindGraph, GraphID: "g", Tenant: "t", Workspace: "ws",
-		Status: core.JobStatusRunning,
-	})
-
-	svc.startFailureNotifier(graph, runID, false)
-	svc.bus().Publish(runID, BusEvent{Terminal: &TerminalEvent{
-		JobID: runID, Status: core.JobStatusFailed,
-		Error: &core.JobError{Code: "x", Message: "y"},
-	}})
+	terminateAndSweep(t, svc, graph, runID, core.JobStatusFailed,
+		&core.JobError{Code: "x", Message: "y"})
 
 	if data, _ := waitForEmail(t, srv, 2*time.Second); data == "" {
-		t.Fatal("owner-only graph never produced an account-level email (watcher not spawned?)")
+		t.Fatal("owner-only graph never produced an account-level email")
 	}
 }

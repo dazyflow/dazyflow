@@ -141,7 +141,7 @@ Retention sweeps run hourly and are **on by default** (`cmd/dzd/main.go`):
 
 | Data | Env var | Default |
 |---|---|---|
-| Terminal jobs | `DAZYFLOW_JOB_RETENTION` | 30 days |
+| Finished runs (and their steps) | `DAZYFLOW_JOB_RETENTION` | 30 days |
 | Run logs | `DAZYFLOW_RUN_LOG_RETENTION` | = job retention (30 days) |
 | Audit events (incl. IPs) | `DAZYFLOW_AUDIT_RETENTION` | 90 days |
 | Bus-event spool | — | 1 hour (fixed) |
@@ -150,6 +150,14 @@ A value `<= 0` disables that sweep (retain indefinitely) — only do this with a
 documented justification. Set each to the shortest period that meets your
 operational and legal needs. Note: user accounts, memberships, API keys and
 graphs are **not** swept — they persist until explicitly deleted (see Erasure).
+
+The job sweep's unit is a **run**, not a row: a run's steps are deleted with
+it, and the clock starts when the run finishes, not when each step ran. A run
+that has not finished — one parked on an approval, or waiting out a long delay
+— is never swept, so the window is measured from the end of processing rather
+than the beginning. A run that never reaches a terminal state is therefore not
+swept at all; the orphaned-run reaper (`DAZYFLOW_REAP_INTERVAL`) closes those,
+after which they age out normally.
 
 **Results boards (built-in store)** are likewise **not** swept by retention.
 Rows a flow saves via the *Built-in store · Save* step accumulate in the

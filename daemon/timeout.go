@@ -97,7 +97,10 @@ func (s *Service) runGraphTimeoutWatchdog(runID, tenant, workspace string, timeo
 			// a private flow whose owner isn't us.
 			sysP := SystemPrincipal("dazyflow-timeout", tenant, workspace)
 			ctx, cancelCtx := context.WithTimeout(context.Background(), 30*time.Second)
-			err := s.CancelGraphRun(ctx, sysP, runID, fmt.Sprintf("graph timeout after %s", timeout))
+			// CancelCodeTimeout, not a person's cancel: this is the platform
+			// stopping the run, so the notification sweep must tell the owner.
+			err := s.cancelGraphRun(ctx, sysP, runID, CancelCodeTimeout,
+				fmt.Sprintf("graph timeout after %s", timeout))
 			cancelCtx()
 			// ErrConflict means the run finished between the timer
 			// firing and our Get — totally fine, ignore. Any other

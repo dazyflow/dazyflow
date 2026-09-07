@@ -5,6 +5,7 @@ package rss
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -335,5 +336,118 @@ func TestAllRows(t *testing.T) {
 	}
 	if len(rows[0]) != len(itemHeaders) {
 		t.Errorf("row has %d keys, want exactly the %d itemHeaders", len(rows[0]), len(itemHeaders))
+	}
+}
+
+// A store that fails on read must not look like a first run. Baselining here
+// would fold every item currently in the feed into the seen-window and emit
+// none of them, so anything published since the last successful poll would be
+// skipped permanently — on a run that reported success.
+func TestDedupe_ReadFailureStopsAndKeepsTheWindow(t *testing.T) {
+	store := map[string]string{}
+	name := cursorName("g", "n")
+	store["t/"+name] = encodeIDs([]string{"old-1"})
+	failRead := true
+	cursor.SetStore(
+		func(_ context.Context, tenant, key string) (string, error) {
+			if failRead {
+				return "", errors.New("secret store unavailable")
+			}
+			return store[tenant+"/"+key], nil
+		},
+		func(_ context.Context, tenant, key, value string) error {
+			store[tenant+"/"+key] = value
+			return nil
+		},
+	)
+	t.Cleanup(func() { cursor.SetStore(nil, nil) })
+
+	job := core.Job{ID: "j", GraphID: "g", NodeID: "n", Tenant: "t"}
+	res := dedupeAndEmit(context.Background(), job, []feedItem{item("new-1"), item("new-2")}, nil)
+
+	if res.Status != core.StatusError {
+		t.Fatalf("status = %q, want error when the dedupe window can't be read", res.Status)
+	}
+	if res.Error == nil || res.Error.Code != "cursor_unavailable" {
+		t.Errorf("error = %+v, want cursor_unavailable", res.Error)
+	}
+	if len(res.Output) != 0 {
+		t.Errorf("failed poll emitted %d port(s); downstream must not run", len(res.Output))
+	}
+	// The stored window is untouched, so the next poll resumes from it and the
+	// two new items are still new.
+	if got := store["t/"+name]; got != encodeIDs([]string{"old-1"}) {
+		t.Fatalf("dedupe window was overwritten: %q", got)
+	}
+
+	// Recovery: once the store answers again, nothing has been lost.
+	failRead = false
+	res = dedupeAndEmit(context.Background(), job, []feedItem{item("new-1"), item("new-2")}, nil)
+	if res.Status != core.StatusOK {
+		t.Fatalf("recovery status = %q (%+v)", res.Status, res.Error)
+	}
+	got := freshIDs(res)
+	if len(got) != 2 {
+		t.Errorf("after recovery emitted %v, want both new items", got)
+	}
+}
+
+// With no store at all (no DAZYFLOW_MASTER_KEY) a dedupe poller can only ever
+// conclude "first run", every run. Emitting nothing for ever while reporting
+// success is the worst of the options, so it fails and names the cause.
+func TestDedupe_NoStoreFailsLoudly(t *testing.T) {
+	cursor.SetStore(nil, nil)
+	job := core.Job{ID: "j", GraphID: "g", NodeID: "n", Tenant: "t"}
+	res := dedupeAndEmit(context.Background(), job, []feedItem{item("a")}, nil)
+	if res.Status != core.StatusError {
+		t.Fatalf("status = %q, want error", res.Status)
+	}
+	if res.Error == nil || res.Error.Code != "cursor_no_store" {
+		t.Errorf("error = %+v, want cursor_no_store", res.Error)
+	}
+}
+
+// The baseline run is the one case where ignoring a failed cursor write is
+// wrong. Nothing was emitted and nothing was recorded, so the next run
+// baselines too: a write that keeps failing parks the feed watcher on its
+// first run for ever, emitting nothing while every run reports success.
+func TestDedupe_BaselineWriteFailureFails(t *testing.T) {
+	cursor.SetStore(
+		func(_ context.Context, _, _ string) (string, error) { return "", nil },
+		func(_ context.Context, _, _, _ string) error { return errors.New("store full") },
+	)
+	t.Cleanup(func() { cursor.SetStore(nil, nil) })
+
+	job := core.Job{ID: "j", GraphID: "g", NodeID: "n", Tenant: "t"}
+	res := dedupeAndEmit(context.Background(), job, []feedItem{item("a"), item("b")}, nil)
+
+	if res.Status != core.StatusError {
+		t.Fatalf("status = %q, want error when the baseline can't be recorded", res.Status)
+	}
+	if res.Error == nil || res.Error.Code != "cursor_baseline_failed" {
+		t.Errorf("error = %+v, want cursor_baseline_failed", res.Error)
+	}
+}
+
+// A failed write once items HAVE been emitted stays best-effort: the batch is
+// downstream already, and the next run re-emitting it is at-least-once, which
+// is the safe direction. Failing here would throw the batch away instead.
+func TestDedupe_SteadyStateWriteFailureStillEmits(t *testing.T) {
+	name := cursorName("g", "n")
+	backing := map[string]string{"t/" + name: encodeIDs([]string{"old-1"})}
+	cursor.SetStore(
+		func(_ context.Context, tenant, key string) (string, error) { return backing[tenant+"/"+key], nil },
+		func(_ context.Context, _, _, _ string) error { return errors.New("store full") },
+	)
+	t.Cleanup(func() { cursor.SetStore(nil, nil) })
+
+	job := core.Job{ID: "j", GraphID: "g", NodeID: "n", Tenant: "t"}
+	res := dedupeAndEmit(context.Background(), job, []feedItem{item("new-1")}, nil)
+
+	if res.Status != core.StatusOK {
+		t.Fatalf("status = %q (%+v), want ok — the item should still be emitted", res.Status, res.Error)
+	}
+	if got := freshIDs(res); len(got) != 1 || got[0] != "new-1" {
+		t.Errorf("emitted %v, want [new-1]", got)
 	}
 }

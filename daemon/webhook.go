@@ -4,6 +4,7 @@
 package daemon
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -14,6 +15,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/dazyflow/dazyflow/core"
 )
@@ -33,6 +35,12 @@ const webhookInputModuleID = "webhook_input"
 //	401 on bad secret
 //	404 on unknown graph or graph without webhook trigger
 //	400 on malformed paths
+//	402/403 + JSON {error, run} when the OWNER has to fix something (over the
+//	        run cap, suspended org, a flow that no longer validates) AND we
+//	        kept the delivery: it is stored on the named run for the owner to
+//	        retry, so the sender must not resend
+//	503 for the same refusals when we could NOT keep the delivery — the only
+//	        case where re-sending is the right thing to do
 //
 // The listener authenticates via the per-graph trigger secret rather
 // than the daemon's normal API-key chain. That's intentional: webhook
@@ -177,7 +185,15 @@ func (w *WebhookListener) handleTrigger(rw http.ResponseWriter, r *http.Request)
 	// authorization — graph:admin lets the principal fire private
 	// flows without owning them.
 	principal := SystemPrincipal("dazyflow-webhook", g.Tenant, g.Workspace)
-	runID, err := w.svc.SubmitGraphOpts(r.Context(), principal, g, SubmitOpts{
+	// Detached from the request, like /call: a sender that hangs up — a proxy
+	// timeout, a flaky mobile link, Stripe giving up at 20s — must not abandon
+	// the submit half-written. Cancelling mid-submit could leave a graph
+	// record whose node work never queued AND whose failure write also ran on
+	// the dead context, i.e. a run stuck `running` with nothing in it. The
+	// sender will retry a delivery it never got an answer for, so the cost of
+	// finishing the write is a duplicate at worst; the cost of not finishing
+	// it is a zombie.
+	runID, err := w.svc.SubmitGraphOpts(context.WithoutCancel(r.Context()), principal, g, SubmitOpts{
 		Seeds: seeds,
 		// Carried by a step of the run that called us (see
 		// core.TriggerDepthHeader); 0 for a delivery from anywhere else.
@@ -187,6 +203,36 @@ func (w *WebhookListener) handleTrigger(rw http.ResponseWriter, r *http.Request)
 		w.logger.Printf("refused %s/%s/%s: %v", tenant, workspace, graphID, err)
 		http.Error(rw, `{"error":{"code":"trigger_loop","message":"this delivery came from a run this flow started — the chain is too deep, so a flow is triggering itself"}}`,
 			http.StatusTooManyRequests)
+		return
+	}
+	// A refusal the OWNER has to fix (over the run cap, suspended org, a flow
+	// that no longer validates) will refuse the next delivery too, so a 500 was
+	// the worst of both worlds: the sender retried a while, gave up, and the
+	// event was gone with nothing on our side to show it ever arrived. Keep the
+	// delivery as a failed run the owner can Retry, and let whether we KEPT it
+	// pick the status — 4xx to stop a sender re-sending what we already hold,
+	// 503 to ask for the retry when we don't hold it.
+	if err != nil && ownerMustFix(err) {
+		w.logger.Printf("refused %s/%s/%s: %v", tenant, workspace, graphID, err)
+		capCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 15*time.Second)
+		refusedRunID, stored := w.svc.recordRefusedDelivery(capCtx, g, seeds,
+			refusalCode(err), refusalMessage(err))
+		cancel()
+		code, status := refusalCode(err), http.StatusServiceUnavailable
+		msg := "this flow is not accepting deliveries right now — the owner has been told; please retry"
+		if stored {
+			msg = "this flow is not accepting deliveries right now; the delivery has been kept and the owner has been told — do not resend"
+			status = http.StatusPaymentRequired
+			if !errors.Is(err, core.ErrPlanLimit) {
+				status = http.StatusForbidden
+			}
+		}
+		rw.Header().Set("Content-Type", "application/json")
+		rw.WriteHeader(status)
+		_ = json.NewEncoder(rw).Encode(map[string]any{
+			"error": map[string]string{"code": code, "message": msg},
+			"run":   refusedRunID,
+		})
 		return
 	}
 	if err != nil {

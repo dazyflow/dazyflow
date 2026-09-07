@@ -101,7 +101,13 @@ func executeOnNewEvent(ctx context.Context, job core.Job, _ chan<- core.Progress
 	// cursor.ticketmaster.<graph>.<node>: per-(flow,node) seen-set. The store
 	// hides the "cursor." prefix from the Credentials UI.
 	name := fmt.Sprintf("cursor.ticketmaster.%s.%s", job.GraphID, job.NodeID)
-	priorIDs, seen, first := readSeen(ctx, job.Tenant, name)
+	priorIDs, seen, first, rerr := readSeen(ctx, job.Tenant, name)
+	if rerr != nil {
+		// The seen-set could not be read. Treating that as a first check would
+		// re-learn the current listings as "already seen" and swallow every
+		// event that appeared since the last successful check.
+		return cursor.FailRead(job, rerr), nil
+	}
 
 	fresh := make([]map[string]any, 0, len(rows))
 	ids := make([]string, 0, len(rows))
@@ -120,7 +126,13 @@ func executeOnNewEvent(ctx context.Context, job core.Job, _ chan<- core.Progress
 	// nothing. Without this, turning the flow on pages you about every event
 	// that already existed.
 	if first {
-		_ = writeSeen(ctx, job.Tenant, name, ids, nil)
+		// Nothing fired, so there is no batch a later run could re-fire: a
+		// failed write here just means the next check is a first check too.
+		// Left unhandled, a persistent failure keeps re-learning the current
+		// listings for ever and never announces anything.
+		if werr := writeSeen(ctx, job.Tenant, name, ids, nil); werr != nil {
+			return cursor.FailBaseline(job, werr), nil
+		}
 		pollstate.Report(ctx, job, false)
 		return noNewEvents(job), nil
 	}
@@ -161,20 +173,27 @@ type seenState struct {
 // lookups, and whether this is the first check — nothing stored yet, or a
 // stored value that no longer parses, both of which mean "learn the current
 // state, don't fire".
-func readSeen(ctx context.Context, tenant, name string) ([]string, map[string]bool, bool) {
-	raw := cursor.Read(ctx, tenant, name)
+//
+// A failed READ is the case that must NOT collapse into "first check": the
+// set is probably still there and readable next time, so the error goes back
+// to the caller, which stops without overwriting it.
+func readSeen(ctx context.Context, tenant, name string) ([]string, map[string]bool, bool, error) {
+	raw, err := cursor.Read(ctx, tenant, name)
+	if err != nil {
+		return nil, nil, false, err
+	}
 	if raw == "" {
-		return nil, nil, true
+		return nil, nil, true, nil
 	}
 	var s seenState
 	if err := json.Unmarshal([]byte(raw), &s); err != nil {
-		return nil, nil, true
+		return nil, nil, true, nil
 	}
 	set := make(map[string]bool, len(s.IDs))
 	for _, id := range s.IDs {
 		set[id] = true
 	}
-	return s.IDs, set, false
+	return s.IDs, set, false, nil
 }
 
 // writeSeen stores the ids just observed after the ones already known, capped

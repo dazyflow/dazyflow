@@ -95,21 +95,8 @@ func TestFailureNotify_BlocksPrivateWebhook(t *testing.T) {
 		FailureNotify: &core.FailureNotify{Webhook: fw.server.URL},
 	}
 	runID := "run-ssrf"
-	_ = svc.Jobs.Enqueue(t.Context(), core.JobRecord{
-		ID: runID, Kind: core.JobKindGraph, GraphID: "g", Tenant: "t", Workspace: "ws",
-		Status: core.JobStatusRunning,
-	})
-
-	svc.startFailureNotifier(graph, runID, false)
-	svc.bus().Publish(runID, BusEvent{Terminal: &TerminalEvent{
-		JobID:  runID,
-		Status: core.JobStatusFailed,
-		Error:  &core.JobError{Code: "timeout", Message: "boom"},
-	}})
-
-	// The dial guard rejects the loopback address synchronously and fast; give
-	// the notifier goroutine ample time to (not) deliver.
-	time.Sleep(300 * time.Millisecond)
+	terminateAndSweep(t, svc, graph, runID, core.JobStatusFailed,
+		&core.JobError{Code: "timeout", Message: "boom"})
 	fw.mu.Lock()
 	defer fw.mu.Unlock()
 	if len(fw.received) != 0 {
@@ -126,21 +113,8 @@ func TestFailureNotify_FiresOnFailedTerminal(t *testing.T) {
 		FailureNotify: &core.FailureNotify{Webhook: fw.server.URL},
 	}
 	runID := "run-1"
-	// Seed a run-record so the notifier's race-recheck doesn't hit
-	// ErrNotFound and bail out before it sees the terminal event.
-	_ = svc.Jobs.Enqueue(t.Context(), core.JobRecord{
-		ID: runID, Kind: core.JobKindGraph, GraphID: "g", Tenant: "t", Workspace: "ws",
-		Status: core.JobStatusRunning,
-	})
-
-	svc.startFailureNotifier(graph, runID, false)
-
-	// Publish the terminal failure event.
-	svc.bus().Publish(runID, BusEvent{Terminal: &TerminalEvent{
-		JobID:  runID,
-		Status: core.JobStatusFailed,
-		Error:  &core.JobError{Code: "timeout", Message: "node 'enrich' exceeded 30s"},
-	}})
+	terminateAndSweep(t, svc, graph, runID, core.JobStatusFailed,
+		&core.JobError{Code: "timeout", Message: "node 'enrich' exceeded 30s"})
 
 	fw.wait(t, 1, 2*time.Second)
 	fw.mu.Lock()
@@ -178,18 +152,7 @@ func TestFailureNotify_DoesNotFireOnSuccess(t *testing.T) {
 		FailureNotify: &core.FailureNotify{Webhook: fw.server.URL},
 	}
 	runID := "run-ok"
-	_ = svc.Jobs.Enqueue(t.Context(), core.JobRecord{
-		ID: runID, Kind: core.JobKindGraph, Tenant: "t", Workspace: "ws",
-		Status: core.JobStatusRunning,
-	})
-	svc.startFailureNotifier(graph, runID, false)
-	svc.bus().Publish(runID, BusEvent{Terminal: &TerminalEvent{
-		JobID:  runID,
-		Status: core.JobStatusSucceeded,
-	}})
-
-	// Give the notifier a moment to (not) fire.
-	time.Sleep(100 * time.Millisecond)
+	terminateAndSweep(t, svc, graph, runID, core.JobStatusSucceeded, nil)
 	fw.mu.Lock()
 	defer fw.mu.Unlock()
 	if len(fw.received) != 0 {
@@ -197,22 +160,17 @@ func TestFailureNotify_DoesNotFireOnSuccess(t *testing.T) {
 	}
 }
 
-func TestFailureNotify_NoConfigSkipsGoroutine(t *testing.T) {
-	// FailureNotify nil → no watcher spawned. The check is "we
-	// returned without an error and didn't even subscribe" —
-	// observable as zero subscribers on the bus.
+func TestFailureNotify_NoConfigSendsNothing(t *testing.T) {
+	// No FailureNotify and no mailer/owner: the sweep claims the run, finds
+	// nothing to send, and moves on.
 	fw := newFakeWebhook(t)
 	svc := newFailureNotifyHarness(t)
 	graph := core.Graph{
 		ID: "g", Tenant: "t", Workspace: "ws",
 		// FailureNotify: intentionally nil
 	}
-	svc.startFailureNotifier(graph, "any-run", false)
-	// Publish — nothing should consume it.
-	svc.bus().Publish("any-run", BusEvent{Terminal: &TerminalEvent{
-		JobID: "any-run", Status: core.JobStatusFailed,
-	}})
-	time.Sleep(80 * time.Millisecond)
+	terminateAndSweep(t, svc, graph, "any-run", core.JobStatusFailed,
+		&core.JobError{Code: "boom"})
 	fw.mu.Lock()
 	defer fw.mu.Unlock()
 	if len(fw.received) != 0 {
@@ -220,18 +178,15 @@ func TestFailureNotify_NoConfigSkipsGoroutine(t *testing.T) {
 	}
 }
 
-func TestFailureNotify_EmptyWebhookSkipsGoroutine(t *testing.T) {
+func TestFailureNotify_EmptyWebhookSendsNothing(t *testing.T) {
 	fw := newFakeWebhook(t)
 	svc := newFailureNotifyHarness(t)
 	graph := core.Graph{
 		ID: "g", Tenant: "t", Workspace: "ws",
 		FailureNotify: &core.FailureNotify{Webhook: ""}, // explicit empty
 	}
-	svc.startFailureNotifier(graph, "any-run", false)
-	svc.bus().Publish("any-run", BusEvent{Terminal: &TerminalEvent{
-		JobID: "any-run", Status: core.JobStatusFailed,
-	}})
-	time.Sleep(80 * time.Millisecond)
+	terminateAndSweep(t, svc, graph, "any-run", core.JobStatusFailed,
+		&core.JobError{Code: "boom"})
 	fw.mu.Lock()
 	defer fw.mu.Unlock()
 	if len(fw.received) != 0 {
@@ -250,23 +205,15 @@ func TestFailureNotify_FailedNodePopulatedFromStore(t *testing.T) {
 		FailureNotify: &core.FailureNotify{Webhook: fw.server.URL},
 	}
 	runID := "run-with-failed-node"
-	_ = svc.Jobs.Enqueue(t.Context(), core.JobRecord{
-		ID: runID, Kind: core.JobKindGraph, Tenant: "t", Workspace: "ws",
-		Status: core.JobStatusRunning,
-	})
-	// Pre-seed a failed node record so the notifier's lookup finds it.
+	// Pre-seed a failed node record so the sweep's lookup finds it.
 	_ = svc.Jobs.Enqueue(t.Context(), core.JobRecord{
 		ID: NodeJobID(runID, "enrich"), Kind: core.JobKindNode,
 		GraphRunID: runID, GraphID: "g", NodeID: "enrich",
 		Tenant: "t", Workspace: "ws",
 		Status: core.JobStatusFailed,
 	})
-
-	svc.startFailureNotifier(graph, runID, false)
-	svc.bus().Publish(runID, BusEvent{Terminal: &TerminalEvent{
-		JobID: runID, Status: core.JobStatusFailed,
-		Error: &core.JobError{Code: "timeout", Message: "x"},
-	}})
+	terminateAndSweep(t, svc, graph, runID, core.JobStatusFailed,
+		&core.JobError{Code: "timeout", Message: "x"})
 
 	fw.wait(t, 1, 2*time.Second)
 	fw.mu.Lock()
@@ -278,11 +225,11 @@ func TestFailureNotify_FailedNodePopulatedFromStore(t *testing.T) {
 	}
 }
 
-func TestFailureNotify_RaceRecheckFiresIfAlreadyTerminal(t *testing.T) {
-	// If the run completed before startFailureNotifier got to
-	// subscribe, the notifier must read the record and fire anyway.
-	// Pre-set the record to failed BEFORE starting the notifier;
-	// no bus event will arrive because the worker is already done.
+// A run that was already terminal before anything looked at it — the shape of
+// every failure a restart used to swallow, since the watcher that would have
+// heard the terminal event died with the process that armed it. The sweep
+// reads the store, so it does not care that nobody was listening.
+func TestFailureNotify_FiresForARunNobodyWasWatching(t *testing.T) {
 	fw := newFakeWebhook(t)
 	svc := newFailureNotifyHarness(t)
 	graph := core.Graph{
@@ -290,18 +237,8 @@ func TestFailureNotify_RaceRecheckFiresIfAlreadyTerminal(t *testing.T) {
 		FailureNotify: &core.FailureNotify{Webhook: fw.server.URL},
 	}
 	runID := "run-already-done"
-	now := time.Now().UTC()
-	_ = svc.Jobs.Enqueue(t.Context(), core.JobRecord{
-		ID: runID, Kind: core.JobKindGraph, Tenant: "t", Workspace: "ws",
-		Status:     core.JobStatusFailed,
-		FinishedAt: &now,
-		Result: &core.Result{
-			Status: core.StatusError,
-			Error:  &core.JobError{Code: "boom", Message: "exploded"},
-		},
-	})
-
-	svc.startFailureNotifier(graph, runID, false)
+	terminateAndSweep(t, svc, graph, runID, core.JobStatusFailed,
+		&core.JobError{Code: "boom", Message: "exploded"})
 
 	fw.wait(t, 1, 2*time.Second)
 	fw.mu.Lock()
@@ -324,15 +261,8 @@ func TestFailureNotify_NonSuccessWebhookDoesNotPanic(t *testing.T) {
 		ID: "g", Tenant: "t", Workspace: "ws",
 		FailureNotify: &core.FailureNotify{Webhook: fw.server.URL},
 	}
-	_ = svc.Jobs.Enqueue(t.Context(), core.JobRecord{
-		ID: "run-500", Kind: core.JobKindGraph, Tenant: "t", Workspace: "ws",
-		Status: core.JobStatusRunning,
-	})
-	svc.startFailureNotifier(graph, "run-500", false)
-	svc.bus().Publish("run-500", BusEvent{Terminal: &TerminalEvent{
-		JobID: "run-500", Status: core.JobStatusFailed,
-		Error: &core.JobError{Code: "x", Message: "y"},
-	}})
+	terminateAndSweep(t, svc, graph, "run-500", core.JobStatusFailed,
+		&core.JobError{Code: "x", Message: "y"})
 	fw.wait(t, 1, 2*time.Second) // verifies the POST happened despite 500
 }
 
@@ -420,9 +350,37 @@ func TestFailureNotify_DefaultClientPostsRealJSON(t *testing.T) {
 			FailureNotify: &core.FailureNotify{Webhook: srv.URL},
 		},
 		FailurePayload{GraphID: "g", RunID: "r"},
-		false,
 	)
 	if !bytes.Contains(got.Bytes(), []byte(`"graph_id":"g"`)) {
 		t.Errorf("missing graph_id: %s", got.String())
 	}
+}
+
+// terminateAndSweep is the sweep-era replacement for "arm a watcher, then
+// publish a terminal event": it puts the run in the store in the state the
+// dispatcher would have left it, then runs one sweep pass. Notification now
+// reads the store rather than listening, so this is what drives it.
+func terminateAndSweep(t *testing.T, svc *Service, g core.Graph, runID string, status core.JobStatus, jerr *core.JobError) {
+	t.Helper()
+	payload, err := json.Marshal(g)
+	if err != nil {
+		t.Fatalf("marshal graph: %v", err)
+	}
+	if _, err := svc.Jobs.Get(t.Context(), runID); err != nil {
+		if err := svc.Jobs.Enqueue(t.Context(), core.JobRecord{
+			ID: runID, Kind: core.JobKindGraph, GraphID: g.ID, NodeID: "*",
+			Tenant: g.Tenant, Workspace: g.Workspace,
+			Status: core.JobStatusRunning, GraphPayload: payload,
+		}); err != nil {
+			t.Fatalf("enqueue run: %v", err)
+		}
+	}
+	res := &core.Result{JobID: runID, Status: core.StatusOK}
+	if jerr != nil {
+		res.Status, res.Error = core.StatusError, jerr
+	}
+	if err := svc.Jobs.Complete(t.Context(), runID, status, res); err != nil {
+		t.Fatalf("complete run: %v", err)
+	}
+	svc.SweepFailureNotifications(t.Context())
 }

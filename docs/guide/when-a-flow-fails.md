@@ -44,6 +44,8 @@ ones you'll actually meet:
 - *"Slack couldn't find the channel this flow tries to post in. The bot might also
   need to be invited to it."*
 - *"The step took too long and was stopped."*
+- *"Could not read what this step has already seen, so it stopped rather than
+  risk skipping or repeating items."*
 
 Most failures are one of a handful of causes, and nearly all of them are setup
 rather than logic — an app not connected, a Slack channel the bot was never
@@ -52,6 +54,15 @@ fixes for those.
 
 If a step won't retry by itself, the page says so directly: *"This step won't
 retry on its own — fix the cause above, then use Retry from failure."*
+
+That last cause is worth a word, because it's the one that looks like nothing
+happened. Steps with an **"only new"** option — Gmail, IMAP, RSS, Google Forms,
+SFTP, Home Assistant, Ticketmaster — remember where they got to, and a step that
+can't read its own position stops instead of guessing. It's the safe answer: the
+position is left alone, so the next poll picks up exactly where the last one
+finished and nothing is skipped or handled twice. Usually the next run just
+works. If it keeps happening, the store those positions live in is unreachable —
+check the daemon log and [DEPLOY.md](../DEPLOY.md).
 
 ## Retry, Replay, Stop
 
@@ -80,6 +91,29 @@ don't run. You can retry it afterwards.
 You can also select several failed runs on the **Runs** page and retry them
 together — useful after fixing one cause that broke a morning's worth of runs.
 The same side-effect warning applies, so read the count before you confirm.
+
+## A submission that arrived while the flow couldn't run
+
+Sometimes the flow was never able to start. Someone filled in your hosted form,
+or a service posted to your webhook, at a moment when Dazyflow had to refuse
+the work — the organisation was over its monthly run allowance, it had been
+suspended, or the published flow no longer validates.
+
+Whatever arrived is not thrown away. It's kept as a failed run that says why it
+was refused, with the submitted data inside it, so:
+
+- **Press Retry** once you've fixed the cause and the submission is processed
+  as if it had arrived just then.
+- The person who filled the form in is told the form isn't accepting
+  submissions right now, so they contact you another way rather than assuming
+  it went through.
+- A service posting to your webhook is told we've kept the delivery and it
+  shouldn't resend it, so you don't end up with duplicates once you fix things.
+
+There's one limit worth knowing: a flow keeps up to 20 refused deliveries an
+hour. A public form under a flood would otherwise fill your run history. Past
+that, Dazyflow records one run saying how many further deliveries were refused
+and **not** kept — so you can see there's a gap rather than having to guess.
 
 ## Some steps retry themselves, some never will
 

@@ -307,3 +307,51 @@ func TestForEach_PartialFailureStillSucceeds(t *testing.T) {
 		t.Fatalf("status = %q, want ok — one bad row among several is not an outage", res.Status)
 	}
 }
+
+// A run where most of the work failed used to be GREEN: the step succeeded,
+// the run succeeded, nothing was emailed, and a later step marked the work
+// done. The all-or-nothing guard conceded that there is a line past which
+// "partial success" is the wrong word — it just drew it at 100%.
+func TestForEach_MostItemsFailedIsAFailure(t *testing.T) {
+	job := core.Job{
+		Input: map[string]core.Ref{"items": {Inline: []any{"bad", "bad", "bad", "good"}}},
+	}
+	res, err := executeForEach(withRunner(failRunner), job, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if res.Status != core.StatusError {
+		t.Fatalf("status = %q, want error when 3 of 4 items failed", res.Status)
+	}
+	if res.Error == nil || res.Error.Code != "most_items_failed" {
+		t.Fatalf("error = %+v, want most_items_failed", res.Error)
+	}
+	// Nothing is thrown away by failing: the successes are still on results
+	// and the failures still on errors, so a downstream read of either port —
+	// or a Retry — sees everything.
+	if _, ok := res.Output["results"]; !ok {
+		t.Error("results port missing on a most-failed run")
+	}
+	if _, ok := res.Output["errors"]; !ok {
+		t.Error("errors port missing on a most-failed run")
+	}
+	if !strings.Contains(res.Error.Message, "3 of 4") {
+		t.Errorf("the message should say how many failed: %q", res.Error.Message)
+	}
+}
+
+// The other side of the line: a few bad rows among many is exactly the case
+// the carry-on default exists for, and must still succeed.
+func TestForEach_AFewFailuresAmongManyStillSucceed(t *testing.T) {
+	job := core.Job{
+		Input: map[string]core.Ref{"items": {Inline: []any{"bad", "good", "good", "good"}}},
+	}
+	res, err := executeForEach(withRunner(failRunner), job, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if res.Status != core.StatusOK {
+		t.Fatalf("status = %q (%+v), want ok — 1 of 4 is the documented default",
+			res.Status, res.Error)
+	}
+}

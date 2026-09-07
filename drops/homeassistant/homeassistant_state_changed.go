@@ -121,13 +121,25 @@ func executeStateChanged(ctx context.Context, job core.Job, _ chan<- core.Progre
 	// cursor.homeassistant.<graph>.<node>: per-(flow,node) watermark. The
 	// store hides the "cursor." prefix from the Credentials UI.
 	cursorName := fmt.Sprintf("cursor.homeassistant.%s.%s", job.GraphID, job.NodeID)
-	prev := readStoredCursor(ctx, job.Tenant, cursorName)
+	prev, rerr := readStoredCursor(ctx, job.Tenant, cursorName)
+	if rerr != nil {
+		// Without the previous observation this run cannot tell a change from a
+		// steady state, and calling it a first observation would overwrite the
+		// stored one — losing the change that happened in between.
+		return cursor.FailRead(job, rerr), nil
+	}
 
 	now := cursorState{LastChanged: cur.LastChanged, State: cur.State}
 
 	// First observation: remember the current state, fire nothing.
 	if prev == nil {
-		_ = writeStoredCursor(ctx, job.Tenant, cursorName, now)
+		// Nothing was emitted, so a failed write is not "re-emit next time" —
+		// it is a first observation that never landed, and the next run makes
+		// the same one. A persistent failure means the entity is never
+		// actually watched, on green runs. See cursor.FailBaseline.
+		if werr := writeStoredCursor(ctx, job.Tenant, cursorName, now); werr != nil {
+			return cursor.FailBaseline(job, werr), nil
+		}
 		pollstate.Report(ctx, job, false) // no change to act on yet
 		return noChange(job), nil
 	}
@@ -169,16 +181,24 @@ func noChange(job core.Job) core.Result {
 
 // readStoredCursor decodes the persisted cursorState, or nil when nothing is
 // stored yet (first observation) or the stored value is unparseable.
-func readStoredCursor(ctx context.Context, tenant, name string) *cursorState {
-	raw := cursor.Read(ctx, tenant, name)
+//
+// A failed READ returns an error instead of nil: nil means "no previous
+// observation", which makes the caller record the current state and fire
+// nothing, and doing that on a transient read failure would overwrite a
+// position that was fine.
+func readStoredCursor(ctx context.Context, tenant, name string) (*cursorState, error) {
+	raw, err := cursor.Read(ctx, tenant, name)
+	if err != nil {
+		return nil, err
+	}
 	if raw == "" {
-		return nil
+		return nil, nil
 	}
 	var c cursorState
 	if err := json.Unmarshal([]byte(raw), &c); err != nil {
-		return nil
+		return nil, nil
 	}
-	return &c
+	return &c, nil
 }
 
 func writeStoredCursor(ctx context.Context, tenant, name string, c cursorState) error {

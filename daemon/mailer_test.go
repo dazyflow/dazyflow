@@ -229,7 +229,7 @@ func TestFireFailureEmail(t *testing.T) {
 		GraphID: graph.ID, RunID: "run-1", FailedNode: "enrich",
 		ErrorCode: "timeout", ErrorMessage: "node exceeded 30s",
 		RunURL: "https://app.example/runs/run-1",
-	}, graph.FailureNotify.Email)
+	}, graph.FailureNotify.Email, 0)
 	deadline := time.Now().Add(2 * time.Second)
 	for {
 		_, _, data, to := srv.snapshot()

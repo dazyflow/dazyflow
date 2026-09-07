@@ -4,6 +4,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -167,7 +169,12 @@ func (w *WebhookListener) handleForm(rw http.ResponseWriter, r *http.Request) {
 		// counter seedRun refuses on never climbed, and this is the door that
 		// needs no secret — the /trigger breaker was reachable only by a caller
 		// who already had the flow's key.
-		runID, err := w.svc.SubmitGraphOpts(r.Context(), principal, g, SubmitOpts{
+		// Detached from the request, like /call and /trigger. A visitor who
+		// closes the tab, or a phone that loses signal between send and the
+		// confirmation page, must not abandon the submit half-written — that
+		// leaves a run stuck `running` with no work in it, and loses what they
+		// typed for nothing.
+		runID, err := w.svc.SubmitGraphOpts(context.WithoutCancel(r.Context()), principal, g, SubmitOpts{
 			Seeds:        seeds,
 			TriggerDepth: inboundTriggerDepth(r),
 		})
@@ -183,6 +190,20 @@ func (w *WebhookListener) handleForm(rw http.ResponseWriter, r *http.Request) {
 			if ownerMustFix(err) {
 				view.Error = view.M.FormErrorClosed
 				status = http.StatusServiceUnavailable
+				// Somebody just typed this and pressed send. The refusal is the
+				// owner's to fix, which means the visitor will not be back —
+				// so keep the submission as a failed run the owner can see and
+				// press Retry on, rather than dropping it on the floor with a
+				// log line. Detached from the request context: the visitor's
+				// connection is about to go away, and the record must not.
+				capCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 15*time.Second)
+				_, stored := w.svc.recordRefusedDelivery(capCtx, g, seeds,
+					refusalCode(err), refusalMessage(err))
+				cancel()
+				if !stored {
+					w.logger.Printf("form submit %s/%s/%s: submission NOT stored",
+						tenant, workspace, graphID)
+				}
 			}
 			renderForm(rw, status, view)
 			return
@@ -203,6 +224,9 @@ func (w *WebhookListener) handleForm(rw http.ResponseWriter, r *http.Request) {
 // again when they can't is a smaller wrong than telling them not to bother
 // when they could.
 func ownerMustFix(err error) bool {
+	if err == nil {
+		return false
+	}
 	return errors.Is(err, core.ErrPlanLimit) ||
 		errors.Is(err, core.ErrOrgSuspended) ||
 		errors.Is(err, core.ErrGraphTooLarge) ||

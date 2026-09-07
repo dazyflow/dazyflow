@@ -101,6 +101,19 @@ func withEnv(t *testing.T, base string) map[string]string {
 	return store
 }
 
+// withEnvWatching is withEnv plus a watermark old enough that every fixture
+// response counts as new — i.e. a flow that is already past its baseline.
+//
+// The FIRST fire deliberately emits nothing now (see the baseline branch in
+// executeGoogleFormTrigger), so a test about output SHAPE has to start from a
+// flow that is already watching, or it would be asserting on an empty batch.
+func withEnvWatching(t *testing.T, base string) map[string]string {
+	t.Helper()
+	store := withEnv(t, base)
+	store["acme/cursor.gform.flowA.trigger1"] = "2000-01-01T00:00:00Z"
+	return store
+}
+
 func runTrigger(t *testing.T, tenant string) core.Result {
 	t.Helper()
 	res, err := executeGoogleFormTrigger(context.Background(), core.Job{
@@ -127,7 +140,14 @@ func responsesOf(t *testing.T, res core.Result) []map[string]any {
 	return out
 }
 
-func TestFirstFire_EmitsAllAndWritesCursor(t *testing.T) {
+// The first fire records where the form is up to and emits NOTHING.
+//
+// It used to emit everything, which made this the only watcher in the product
+// that processed a form's whole back catalogue the moment you published: turn
+// the flow on against a form with 500 existing responses and all 500 went
+// through the step that acts on each one. Every sibling watcher baselines
+// silently, and two of them even carry comments claiming they mirror this one.
+func TestFirstFire_BaselinesSilently(t *testing.T) {
 	fs := formServer{
 		titles: map[string]string{"q1": "Full Name", "q2": "Email"},
 		pages: [][]map[string]any{{
@@ -139,18 +159,52 @@ func TestFirstFire_EmitsAllAndWritesCursor(t *testing.T) {
 	defer srv.Close()
 	store := withEnv(t, srv.URL)
 
-	out := responsesOf(t, runTrigger(t, "acme"))
-	if len(out) != 2 {
-		t.Fatalf("want 2 responses, got %d", len(out))
+	res := runTrigger(t, "acme")
+	if res.Status != core.StatusOK {
+		t.Fatalf("status = %q (%+v)", res.Status, res.Error)
 	}
-	if out[0]["Full Name"] != "Ada" || out[0]["Email"] != "ada@x" {
-		t.Errorf("row keyed by title wrong: %+v", out[0])
+	if _, ok := res.Output["responses"]; ok {
+		t.Error("the first fire emitted responses; it must baseline silently")
 	}
-	if out[0]["responseId"] != "r1" || out[0]["submittedTime"] != "2026-06-01T10:00:00Z" {
-		t.Errorf("missing responseId/submittedTime: %+v", out[0])
-	}
+	// It still records the position, so the NEXT response is picked up.
 	if got := store["acme/cursor.gform.flowA.trigger1"]; got != "2026-06-02T10:00:00Z" {
-		t.Errorf("cursor = %q, want newest", got)
+		t.Errorf("baseline cursor = %q, want the newest existing response", got)
+	}
+}
+
+// And once it is watching, a response that arrives AFTER the baseline comes
+// through — the baseline must not swallow anything but what was already there.
+func TestFirstFire_ThenEmitsWhatArrivesNext(t *testing.T) {
+	existing := resp("r1", "2026-06-01T10:00:00Z", map[string]string{"q1": "Old"})
+	before := formServer{
+		titles: map[string]string{"q1": "Name"},
+		pages:  [][]map[string]any{{existing}},
+	}
+	srv := httptest.NewServer(before.handler(t))
+	defer srv.Close()
+	withEnv(t, srv.URL)
+
+	if res := runTrigger(t, "acme"); res.Output["responses"].Inline != nil {
+		t.Fatal("the baseline fire emitted responses")
+	}
+
+	// A new response arrives. The fixture handler takes its pages by value, so
+	// the second state is a second server pointed at the same cursor store.
+	after := formServer{
+		titles: map[string]string{"q1": "Name"},
+		pages: [][]map[string]any{{
+			existing,
+			resp("r2", "2026-06-03T10:00:00Z", map[string]string{"q1": "New"}),
+		}},
+	}
+	srv2 := httptest.NewServer(after.handler(t))
+	defer srv2.Close()
+	clearTitleCache()
+	SetHTTPBase(srv2.URL)
+
+	out := responsesOf(t, runTrigger(t, "acme"))
+	if len(out) != 1 || out[0]["Name"] != "New" {
+		t.Fatalf("after the baseline, got %+v; want just the new response", out)
 	}
 }
 
@@ -212,7 +266,7 @@ func TestPagination_GathersAllPages(t *testing.T) {
 	}
 	srv := httptest.NewServer(fs.handler(t))
 	defer srv.Close()
-	store := withEnv(t, srv.URL)
+	store := withEnvWatching(t, srv.URL)
 
 	out := responsesOf(t, runTrigger(t, "acme"))
 	if len(out) != 2 {
@@ -241,7 +295,7 @@ func TestMultiValueAnswer_Joined(t *testing.T) {
 	}}
 	srv := httptest.NewServer(fs.handler(t))
 	defer srv.Close()
-	withEnv(t, srv.URL)
+	withEnvWatching(t, srv.URL)
 
 	out := responsesOf(t, runTrigger(t, "acme"))
 	if out[0]["Toppings"] != "cheese, ham" {
@@ -266,7 +320,7 @@ func TestRespondentEmail_SurfacedWhenPresent(t *testing.T) {
 	}}
 	srv := httptest.NewServer(fs.handler(t))
 	defer srv.Close()
-	withEnv(t, srv.URL)
+	withEnvWatching(t, srv.URL)
 
 	out := responsesOf(t, runTrigger(t, "acme"))
 	if out[0]["email"] != "alice@example.com" {
@@ -281,7 +335,7 @@ func TestRespondentEmail_OmittedWhenAbsent(t *testing.T) {
 	}
 	srv := httptest.NewServer(fs.handler(t))
 	defer srv.Close()
-	withEnv(t, srv.URL)
+	withEnvWatching(t, srv.URL)
 
 	out := responsesOf(t, runTrigger(t, "acme"))
 	if _, present := out[0]["email"]; present {
@@ -296,7 +350,7 @@ func TestUnknownQuestionFallsBackToID(t *testing.T) {
 	}
 	srv := httptest.NewServer(fs.handler(t))
 	defer srv.Close()
-	withEnv(t, srv.URL)
+	withEnvWatching(t, srv.URL)
 
 	out := responsesOf(t, runTrigger(t, "acme"))
 	if out[0]["qZ"] != "x" {
@@ -617,9 +671,11 @@ func TestFetchNewResponses_DecodeError(t *testing.T) {
 	}
 }
 
-// --- soft cursor-write failure ----------------------------------------------
+// --- cursor-write failure ---------------------------------------------------
 
-func TestExecute_CursorWriteFailure_StillEmits(t *testing.T) {
+// Once responses have been emitted, a failed cursor write is safe to carry on
+// past: the trigger is at-least-once, so the next fire re-emits this batch.
+func TestExecute_CursorWriteFailure_SteadyStateStillEmits(t *testing.T) {
 	fs := formServer{
 		titles: map[string]string{"q1": "Name"},
 		pages:  [][]map[string]any{{resp("r1", "2026-06-01T10:00:00Z", map[string]string{"q1": "Ada"})}},
@@ -629,10 +685,10 @@ func TestExecute_CursorWriteFailure_StillEmits(t *testing.T) {
 	clearTitleCache()
 	SetHTTPBase(srv.URL)
 	SetTokenLookup(func(_ context.Context, account string) (string, error) { return "ya29-" + account, nil })
-	// Reader returns nothing (first fire); writer always fails so the soft
-	// failure branch runs — data is still emitted.
+	// A watermark is already stored (so this is NOT a first fire), and the
+	// writer always fails.
 	cursor.SetStore(
-		func(_ context.Context, _, _ string) (string, error) { return "", nil },
+		func(_ context.Context, _, _ string) (string, error) { return "2026-05-01T00:00:00Z", nil },
 		func(_ context.Context, _, _, _ string) error { return context.Canceled },
 	)
 	t.Cleanup(func() {
@@ -645,6 +701,45 @@ func TestExecute_CursorWriteFailure_StillEmits(t *testing.T) {
 	out := responsesOf(t, res)
 	if len(out) != 1 || out[0]["Name"] != "Ada" {
 		t.Fatalf("expected data despite cursor write failure, got %+v", out)
+	}
+}
+
+// The FIRST fire is the exception, and this trigger's first fire is unlike its
+// siblings': with no stored watermark every response counts as new, so it
+// emits the form's entire existing backlog. Emitting that without recording
+// where it got to means the NEXT fire emits the same backlog again — and a
+// write that keeps failing does it for ever, against a step whose contract is
+// "each response exactly once". So it fails and emits nothing instead.
+func TestExecute_CursorWriteFailure_FirstFireRefusesToEmit(t *testing.T) {
+	fs := formServer{
+		titles: map[string]string{"q1": "Name"},
+		pages:  [][]map[string]any{{resp("r1", "2026-06-01T10:00:00Z", map[string]string{"q1": "Ada"})}},
+	}
+	srv := httptest.NewServer(fs.handler(t))
+	defer srv.Close()
+	clearTitleCache()
+	SetHTTPBase(srv.URL)
+	SetTokenLookup(func(_ context.Context, account string) (string, error) { return "ya29-" + account, nil })
+	// Nothing stored (first fire) and the writer always fails.
+	cursor.SetStore(
+		func(_ context.Context, _, _ string) (string, error) { return "", nil },
+		func(_ context.Context, _, _, _ string) error { return context.Canceled },
+	)
+	t.Cleanup(func() {
+		SetHTTPBase(formsAPIBase)
+		SetTokenLookup(nil)
+		cursor.SetStore(nil, nil)
+	})
+
+	res := runTrigger(t, "acme")
+	if res.Status != core.StatusError {
+		t.Fatalf("status = %q, want error on a first fire that could not record its position", res.Status)
+	}
+	if res.Error == nil || res.Error.Code != "cursor_baseline_failed" {
+		t.Errorf("error = %+v, want cursor_baseline_failed", res.Error)
+	}
+	if len(res.Output) != 0 {
+		t.Errorf("emitted %d port(s); a batch that cannot be recorded must not go downstream", len(res.Output))
 	}
 }
 

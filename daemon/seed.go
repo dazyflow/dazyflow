@@ -122,6 +122,40 @@ type SubmitOpts struct {
 	TriggerDepth int
 }
 
+// failSubmission marks a run failed when its own creation could not be
+// completed — the roots or the seeds would not enqueue.
+//
+// The Complete error used to be discarded here. It is the one that matters
+// most: whatever broke the enqueue (the store) is likely to break this write
+// too, and a graph record left `running` with no node work under it is a run
+// that can never finish and can never be reaped, because the completion check
+// finds no node records to declare done. It just sits in the Runs list as
+// running, for ever, holding a concurrency slot. So log it — an operator
+// chasing a stuck run needs the reason to exist somewhere.
+//
+// The failure notification is not fired here: the run is written failed, and
+// the sweep (SweepFailureNotifications) picks it up like any other. That is
+// the whole point of the sweep — this path used to fail the run BEFORE the
+// notifier was armed, so an enqueue failure, the most infrastructural failure
+// there is, was guaranteed to be silent.
+func (s *Service) failSubmission(ctx context.Context, graphRunID string, g core.Graph, cause error, publish bool) {
+	jobErr := &core.JobError{Code: "enqueue_failed", Message: cause.Error()}
+	if err := s.Jobs.Complete(ctx, graphRunID, core.JobStatusFailed, &core.Result{
+		Status: core.StatusError,
+		Error:  jobErr,
+	}); err != nil && s.Logger != nil {
+		s.Logger.Printf("submission [%s/%s/%s]: run %s could not be marked failed (%v) after: %v",
+			g.Tenant, g.Workspace, g.ID, graphRunID, err, cause)
+	}
+	if publish {
+		s.bus().Publish(graphRunID, BusEvent{Terminal: &TerminalEvent{
+			JobID:  graphRunID,
+			Status: core.JobStatusFailed,
+			Error:  jobErr,
+		}})
+	}
+}
+
 // SubmitGraphOpts is the one implementation the other two delegate to.
 func (s *Service) SubmitGraphOpts(
 	ctx context.Context,
@@ -247,6 +281,15 @@ func (s *Service) SubmitGraphOpts(
 		Job:          core.Job{ID: graphRunID, GraphID: g.ID},
 	}
 	if err := s.Jobs.Enqueue(ctx, graphRec); err != nil {
+		// The run was metered a moment ago — the cap check and the increment
+		// have to be one atomic step, so the reservation necessarily precedes
+		// the write. This is the window where the write then fails, and
+		// without the release the tenant has paid a run out of its monthly
+		// allowance for something that exists nowhere: no record, no history,
+		// nothing to retry. (Past this point a failed submission DOES leave a
+		// visible failed run — see failSubmission — and being charged for that
+		// is fair.)
+		s.releaseRun(ctx, g.Tenant)
 		return "", fmt.Errorf("enqueue graph: %w", err)
 	}
 
@@ -262,10 +305,7 @@ func (s *Service) SubmitGraphOpts(
 	if !admit {
 		if errs := persistSeedsOnly(ctx, s.Jobs, g, graphRunID, seeds); len(errs) > 0 {
 			merged := errors.Join(errs...)
-			_ = s.Jobs.Complete(ctx, graphRunID, core.JobStatusFailed, &core.Result{
-				Status: core.StatusError,
-				Error:  &core.JobError{Code: "enqueue_failed", Message: merged.Error()},
-			})
+			s.failSubmission(ctx, graphRunID, g, merged, false)
 			return graphRunID, fmt.Errorf("persist seeds: %w", merged)
 		}
 		return graphRunID, nil
@@ -287,15 +327,7 @@ func (s *Service) SubmitGraphOpts(
 	}
 	if len(enqueueErrs) > 0 {
 		merged := errors.Join(enqueueErrs...)
-		_ = s.Jobs.Complete(ctx, graphRunID, core.JobStatusFailed, &core.Result{
-			Status: core.StatusError,
-			Error:  &core.JobError{Code: "enqueue_failed", Message: merged.Error()},
-		})
-		s.bus().Publish(graphRunID, BusEvent{Terminal: &TerminalEvent{
-			JobID:  graphRunID,
-			Status: core.JobStatusFailed,
-			Error:  &core.JobError{Code: "enqueue_failed", Message: merged.Error()},
-		}})
+		s.failSubmission(ctx, graphRunID, g, merged, true)
 		return graphRunID, fmt.Errorf("enqueue roots: %w", merged)
 	}
 
@@ -322,11 +354,6 @@ func (s *Service) SubmitGraphOpts(
 	// early; the timer is the safety net when nothing completes in time.
 	s.startGraphTimeoutWatchdog(graphRunID, g.Tenant, g.Workspace, s.effectiveGraphTimeout(g))
 
-	// Arm the per-graph failure notifier. Same per-run pattern as the
-	// timeout watchdog — subscribes to the bus, exits on the first
-	// terminal event (firing the notification if status=failed).
-	// No-op when the graph has no FailureNotify configured.
-	s.startFailureNotifier(g, graphRunID, opts.Manual)
 	return graphRunID, nil
 }
 

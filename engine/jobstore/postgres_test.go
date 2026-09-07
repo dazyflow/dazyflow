@@ -307,6 +307,157 @@ func TestPostgres_PruneTerminal(t *testing.T) {
 	}
 }
 
+// seedRun writes a graph-record plus one succeeded node-record per name, then
+// backdates the run's finish to age days ago and the steps' to stepAge days
+// ago. A zero age leaves the graph-record non-terminal (still parked/running).
+func seedRun(t *testing.T, store *Postgres, ctx context.Context, runID string, status core.JobStatus, age, stepAge int, steps ...string) {
+	t.Helper()
+	// Enqueued live, then completed: Complete refuses a record that is
+	// already terminal, and the finished_at it stamps is what retention reads.
+	enqueued := status
+	if core.IsTerminalStatus(status) {
+		enqueued = core.JobStatusRunning
+	}
+	if err := store.Enqueue(ctx, core.JobRecord{
+		ID: runID, Kind: core.JobKindGraph, GraphID: "g", NodeID: "*", Tenant: "acme",
+		Status: enqueued,
+	}); err != nil {
+		t.Fatalf("enqueue run %s: %v", runID, err)
+	}
+	if core.IsTerminalStatus(status) {
+		if err := store.Complete(ctx, runID, status, &core.Result{Status: core.StatusOK}); err != nil {
+			t.Fatalf("complete run %s: %v", runID, err)
+		}
+		if _, err := store.pool.Exec(ctx,
+			`UPDATE jobs SET finished_at = now() - make_interval(days => $2) WHERE id = $1`,
+			runID, age); err != nil {
+			t.Fatalf("age run %s: %v", runID, err)
+		}
+	}
+	for _, n := range steps {
+		id := runID + ":" + n
+		if err := store.Enqueue(ctx, core.JobRecord{
+			ID: id, Kind: core.JobKindNode, GraphRunID: runID, GraphID: "g", NodeID: n, Tenant: "acme",
+		}); err != nil {
+			t.Fatalf("enqueue step %s: %v", id, err)
+		}
+		if err := store.Complete(ctx, id, core.JobStatusSucceeded, &core.Result{Status: core.StatusOK}); err != nil {
+			t.Fatalf("complete step %s: %v", id, err)
+		}
+		if _, err := store.pool.Exec(ctx,
+			`UPDATE jobs SET finished_at = now() - make_interval(days => $2) WHERE id = $1`,
+			id, stepAge); err != nil {
+			t.Fatalf("age step %s: %v", id, err)
+		}
+	}
+}
+
+func gone(t *testing.T, store *Postgres, ctx context.Context, id, why string) {
+	t.Helper()
+	if _, err := store.Get(ctx, id); !errors.Is(err, core.ErrNotFound) {
+		t.Errorf("%s should be pruned (%s): %v", id, why, err)
+	}
+}
+
+func kept(t *testing.T, store *Postgres, ctx context.Context, id, why string) {
+	t.Helper()
+	if _, err := store.Get(ctx, id); err != nil {
+		t.Errorf("%s should survive the prune (%s): %v", id, why, err)
+	}
+}
+
+// TestPostgres_PruneTerminal_RunScoped pins the retention unit: a RUN, whole.
+// The two cases in the middle are the ones row-scoped pruning got wrong — it
+// deleted the steps of runs that were still going, and the steps of runs whose
+// own finish was still inside the window.
+func TestPostgres_PruneTerminal_RunScoped(t *testing.T) {
+	store, ctx := openPG(t)
+	const window = 30 * 24 * time.Hour
+
+	// Finished 40 days ago: the whole thing goes.
+	seedRun(t, store, ctx, "old", core.JobStatusSucceeded, 40, 41, "a", "b")
+	// Parked on an approval since day 41 and STILL awaiting: nothing goes.
+	seedRun(t, store, ctx, "parked", core.JobStatusAwaiting, 0, 41, "a", "b")
+	// Ran for weeks and finished yesterday: its early steps are older than the
+	// window, but the run is not, so the run keeps all of itself.
+	seedRun(t, store, ctx, "long", core.JobStatusSucceeded, 1, 41, "a", "b")
+	// Finished 40 days ago but only just: inside the window, untouched.
+	seedRun(t, store, ctx, "recent", core.JobStatusSucceeded, 3, 4, "a")
+	// A node-record whose run is already gone, old enough to sweep.
+	if err := store.Enqueue(ctx, core.JobRecord{
+		ID: "orphan", Kind: core.JobKindNode, GraphRunID: "vanished", GraphID: "g", NodeID: "a", Tenant: "acme",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Complete(ctx, "orphan", core.JobStatusSucceeded, &core.Result{Status: core.StatusOK}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.pool.Exec(ctx,
+		`UPDATE jobs SET finished_at = now() - interval '40 days' WHERE id = 'orphan'`); err != nil {
+		t.Fatal(err)
+	}
+
+	n, err := store.PruneTerminal(ctx, window, 5000)
+	if err != nil {
+		t.Fatalf("PruneTerminal: %v", err)
+	}
+	// old (1 graph + 2 nodes) + orphan.
+	if n != 4 {
+		t.Errorf("pruned %d row(s), want 4", n)
+	}
+
+	gone(t, store, ctx, "old", "run finished before the cutoff")
+	gone(t, store, ctx, "old:a", "its run was pruned")
+	gone(t, store, ctx, "old:b", "its run was pruned")
+	gone(t, store, ctx, "orphan", "no run to key retention on")
+
+	kept(t, store, ctx, "parked", "run is still awaiting")
+	kept(t, store, ctx, "parked:a", "a live run's steps are its data")
+	kept(t, store, ctx, "parked:b", "a live run's steps are its data")
+	kept(t, store, ctx, "long", "run finished inside the window")
+	kept(t, store, ctx, "long:a", "history goes whole or not at all")
+	kept(t, store, ctx, "long:b", "history goes whole or not at all")
+	kept(t, store, ctx, "recent", "run finished inside the window")
+	kept(t, store, ctx, "recent:a", "run finished inside the window")
+
+	// A parked run that later finishes becomes prunable as a unit.
+	if err := store.Complete(ctx, "parked", core.JobStatusSucceeded, &core.Result{Status: core.StatusOK}); err != nil {
+		t.Fatalf("complete parked: %v", err)
+	}
+	if _, err := store.pool.Exec(ctx,
+		`UPDATE jobs SET finished_at = now() - interval '40 days' WHERE id = 'parked'`); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := store.PruneTerminal(ctx, window, 5000); err != nil || n != 3 {
+		t.Errorf("second prune = %d, %v; want 3 (graph + 2 steps), nil", n, err)
+	}
+	gone(t, store, ctx, "parked:a", "its run has now aged out")
+}
+
+// TestPostgres_PruneTerminal_Batches checks the run-at-a-time loop drains a
+// backlog that exceeds one batch, and still deletes each run whole.
+func TestPostgres_PruneTerminal_Batches(t *testing.T) {
+	store, ctx := openPG(t)
+	for _, id := range []string{"r1", "r2", "r3"} {
+		seedRun(t, store, ctx, id, core.JobStatusSucceeded, 40, 40, "a", "b")
+	}
+	// batch=1 forces three iterations; 3 runs × 3 rows.
+	n, err := store.PruneTerminal(ctx, 30*24*time.Hour, 1)
+	if err != nil {
+		t.Fatalf("PruneTerminal: %v", err)
+	}
+	if n != 9 {
+		t.Errorf("pruned %d row(s), want 9", n)
+	}
+	var left int
+	if err := store.pool.QueryRow(ctx, `SELECT count(*) FROM jobs`).Scan(&left); err != nil {
+		t.Fatal(err)
+	}
+	if left != 0 {
+		t.Errorf("%d row(s) left behind", left)
+	}
+}
+
 // TestPostgres_OldestQueuedEnqueuedAt covers the queue-latency probe.
 func TestPostgres_OldestQueuedEnqueuedAt(t *testing.T) {
 	store, ctx := openPG(t)
@@ -338,5 +489,125 @@ func TestPostgres_OldestQueuedEnqueuedAt(t *testing.T) {
 	}
 	if at.IsZero() {
 		t.Error("enqueued_at is zero")
+	}
+}
+
+// TestPostgres_ClaimUnnotified covers the failure-notification claim: what is
+// eligible, that a claim is exclusive (so two replicas cannot both mail about
+// one run), that a release makes it eligible again, and that attempts are
+// bounded.
+func TestPostgres_ClaimUnnotified(t *testing.T) {
+	store, ctx := openPG(t)
+	const window = time.Hour
+
+	mk := func(id string, status core.JobStatus, code string) {
+		t.Helper()
+		if err := store.Enqueue(ctx, core.JobRecord{
+			ID: id, Kind: core.JobKindGraph, GraphID: "g", NodeID: "*", Tenant: "acme",
+			Status: core.JobStatusRunning,
+		}); err != nil {
+			t.Fatalf("enqueue %s: %v", id, err)
+		}
+		if !core.IsTerminalStatus(status) {
+			return
+		}
+		res := &core.Result{JobID: id, Status: core.StatusError}
+		if code != "" {
+			res.Error = &core.JobError{Code: code, Message: "x"}
+		}
+		if err := store.Complete(ctx, id, status, res); err != nil {
+			t.Fatalf("complete %s: %v", id, err)
+		}
+	}
+
+	mk("failed", core.JobStatusFailed, "boom")
+	mk("cancelled", core.JobStatusCancelled, "cancelled")
+	mk("succeeded", core.JobStatusSucceeded, "")
+	mk("running", core.JobStatusRunning, "")
+
+	claimed, err := store.ClaimUnnotified(ctx, window, 3, 50)
+	if err != nil {
+		t.Fatalf("ClaimUnnotified: %v", err)
+	}
+	got := map[string]bool{}
+	for _, r := range claimed {
+		got[r.ID] = true
+	}
+	// Both bad endings are handed over; deciding whether a cancel is worth an
+	// email is the caller's job (a person's cancel is not).
+	if !got["failed"] || !got["cancelled"] {
+		t.Errorf("claimed %v, want the failed and cancelled runs", got)
+	}
+	if got["succeeded"] || got["running"] {
+		t.Errorf("claimed a run that owes no notification: %v", got)
+	}
+	// The claim carries the payload the caller needs to build a notification.
+	for _, r := range claimed {
+		if r.Result == nil || r.Result.Error == nil {
+			t.Errorf("claimed %s without its error; the notification has nothing to say", r.ID)
+		}
+		if r.FinishedAt == nil {
+			t.Errorf("claimed %s without a finish time", r.ID)
+		}
+	}
+
+	// Exclusive: a second sweep sees nothing.
+	again, err := store.ClaimUnnotified(ctx, window, 3, 50)
+	if err != nil {
+		t.Fatalf("second claim: %v", err)
+	}
+	if len(again) != 0 {
+		t.Fatalf("second sweep re-claimed %d run(s); two replicas would both mail", len(again))
+	}
+
+	// Released (a send that failed) → eligible again.
+	if err := store.ReleaseNotifyClaim(ctx, "failed"); err != nil {
+		t.Fatalf("release: %v", err)
+	}
+	retry, err := store.ClaimUnnotified(ctx, window, 3, 50)
+	if err != nil {
+		t.Fatalf("claim after release: %v", err)
+	}
+	if len(retry) != 1 || retry[0].ID != "failed" {
+		t.Fatalf("after release got %d run(s), want just the released one", len(retry))
+	}
+
+	// Bounded: attempts have now reached 2, so a ceiling of 2 stops it.
+	if err := store.ReleaseNotifyClaim(ctx, "failed"); err != nil {
+		t.Fatalf("release: %v", err)
+	}
+	capped, err := store.ClaimUnnotified(ctx, window, 2, 50)
+	if err != nil {
+		t.Fatalf("capped claim: %v", err)
+	}
+	if len(capped) != 0 {
+		t.Errorf("claimed a run past the attempt ceiling: %d", len(capped))
+	}
+}
+
+// A run older than the lookback is left alone, so the first sweep after a
+// weekend of downtime is not a mailstorm.
+func TestPostgres_ClaimUnnotified_Lookback(t *testing.T) {
+	store, ctx := openPG(t)
+	if err := store.Enqueue(ctx, core.JobRecord{
+		ID: "old", Kind: core.JobKindGraph, GraphID: "g", NodeID: "*", Tenant: "acme",
+		Status: core.JobStatusRunning,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Complete(ctx, "old", core.JobStatusFailed,
+		&core.Result{JobID: "old", Status: core.StatusError, Error: &core.JobError{Code: "boom"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.pool.Exec(ctx,
+		`UPDATE jobs SET finished_at = now() - interval '3 days' WHERE id = 'old'`); err != nil {
+		t.Fatal(err)
+	}
+	claimed, err := store.ClaimUnnotified(ctx, time.Hour, 3, 50)
+	if err != nil {
+		t.Fatalf("ClaimUnnotified: %v", err)
+	}
+	if len(claimed) != 0 {
+		t.Errorf("claimed a 3-day-old failure under a 1-hour lookback")
 	}
 }

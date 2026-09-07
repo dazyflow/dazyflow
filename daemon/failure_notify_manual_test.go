@@ -4,6 +4,7 @@
 package daemon
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -12,15 +13,23 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// A failure email is for a run that failed while nobody was looking. Someone
-// who pressed Run in the editor and is watching the canvas turn red does not
-// need to be told by email — and being told anyway is how people learn to
-// ignore the mail that does matter.
+// A failure email used to be suppressed for a "manual" run — one someone
+// started from the app — on the reasoning that they were watching the canvas
+// turn red and did not need telling twice.
 //
-// So: a manual run sends no email, on either channel. The webhook still fires,
-// because that is a machine channel the flow's author wired deliberately.
+// That reasoning did not survive the ways a run actually gets started. The
+// same endpoints serve dzctl, the MCP server and anybody's own cron, and all
+// of them submit as Manual, so the flag meant "tell nobody" for exactly the
+// unattended runs that need telling. Nothing separates those callers
+// server-side either: an API-key principal and a browser-session principal
+// look alike by the time a submission arrives.
+//
+// So the suppression is gone, and the hourly per-flow throttle carries the
+// job instead: someone iterating on a broken flow gets one email an hour, not
+// one per attempt. JobRecord.Manual still gates breakpoints, which is what it
+// was for.
 
-func TestFailureNotify_ManualRunSendsNoOwnerEmail(t *testing.T) {
+func TestFailureNotify_AppStartedRunStillEmailsTheOwner(t *testing.T) {
 	svc, srv := ownerEmailHarness(t, auth.User{Email: "owner@example.com"})
 	graph := core.Graph{
 		ID: "daily", Name: "Daily Report", Tenant: "t", Workspace: "ws",
@@ -28,19 +37,21 @@ func TestFailureNotify_ManualRunSendsNoOwnerEmail(t *testing.T) {
 	}
 	svc.fireFailureNotification(t.Context(), graph, FailurePayload{
 		GraphID: graph.ID, RunID: "run-1", ErrorMessage: "boom",
-	}, true)
+	})
 
-	// Nothing, and the wait has to be long enough that "nothing yet" is not
-	// what is being measured.
-	if data, _ := waitForEmail(t, srv, 700*time.Millisecond); data != "" {
-		t.Errorf("a run the author was watching still emailed them:\n%s", data)
+	data, to := waitForEmail(t, srv, 2*time.Second)
+	if data == "" {
+		t.Fatal("no email: a run started from the app or the API must still report its failure")
+	}
+	if !strings.Contains(strings.Join(to, ","), "owner@example.com") {
+		t.Errorf("email went to %v", to)
 	}
 }
 
-func TestFailureNotify_ManualRunSendsNoPerFlowEmail(t *testing.T) {
-	// The per-flow address is off too. It is usually a shared inbox or an
-	// on-call alias, which is exactly the audience that should not be paged
-	// because somebody was testing a flow.
+func TestFailureNotify_AppStartedRunStillEmailsThePerFlowAddress(t *testing.T) {
+	// The per-flow address is usually a shared inbox or an on-call alias. It
+	// was suppressed for manual runs too, which meant a flow driven entirely
+	// by API calls paged nobody, ever.
 	svc, srv := ownerEmailHarness(t, auth.User{Email: "owner@example.com"})
 	graph := core.Graph{
 		ID: "daily", Tenant: "t", Workspace: "ws",
@@ -48,37 +59,19 @@ func TestFailureNotify_ManualRunSendsNoPerFlowEmail(t *testing.T) {
 	}
 	svc.fireFailureNotification(t.Context(), graph, FailurePayload{
 		GraphID: graph.ID, RunID: "run-1", ErrorMessage: "boom",
-	}, true)
-
-	if data, to := waitForEmail(t, srv, 700*time.Millisecond); data != "" {
-		t.Errorf("manual run emailed %v:\n%s", to, data)
-	}
-}
-
-// The other half of the rule: an automatic run is unchanged. Worth its own test
-// because suppressing the email is one line, and suppressing it for everything
-// would look exactly the same in the tests above.
-func TestFailureNotify_AutomaticRunStillEmails(t *testing.T) {
-	svc, srv := ownerEmailHarness(t, auth.User{Email: "owner@example.com"})
-	graph := core.Graph{
-		ID: "daily", Name: "Daily Report", Tenant: "t", Workspace: "ws",
-		Owner: "owner@example.com",
-	}
-	svc.fireFailureNotification(t.Context(), graph, FailurePayload{
-		GraphID: graph.ID, RunID: "run-1", ErrorMessage: "boom",
-	}, false)
+	})
 
 	data, to := waitForEmail(t, srv, 2*time.Second)
 	if data == "" {
-		t.Fatal("a scheduled run's failure sent no email")
+		t.Fatal("the per-flow alert address was not emailed")
 	}
-	if !strings.Contains(strings.Join(to, ","), "owner@example.com") {
+	if !strings.Contains(strings.Join(to, ","), "alerts@example.com") {
 		t.Errorf("email went to %v", to)
 	}
 }
 
-// The webhook is a machine channel, not a person being interrupted, so a manual
-// run still fires it. This is the deliberate half of "no email".
+// The webhook was never suppressed, and still is not: it is a machine channel
+// the flow's author wired deliberately.
 func TestFailureNotify_ManualRunStillPostsTheWebhook(t *testing.T) {
 	fw := newFakeWebhook(t)
 	svc := newFailureNotifyHarness(t)
@@ -87,16 +80,8 @@ func TestFailureNotify_ManualRunStillPostsTheWebhook(t *testing.T) {
 		FailureNotify: &core.FailureNotify{Webhook: fw.server.URL},
 	}
 	runID := "run-manual-webhook"
-	_ = svc.Jobs.Enqueue(t.Context(), core.JobRecord{
-		ID: runID, Kind: core.JobKindGraph, GraphID: "g", Tenant: "t", Workspace: "ws",
-		Status: core.JobStatusRunning, Manual: true,
-	})
-
-	svc.startFailureNotifier(graph, runID, true)
-	svc.bus().Publish(runID, BusEvent{Terminal: &TerminalEvent{
-		JobID: runID, Status: core.JobStatusFailed,
-		Error: &core.JobError{Code: "boom", Message: "nope"},
-	}})
+	terminateAndSweep(t, svc, graph, runID, core.JobStatusFailed,
+		&core.JobError{Code: "boom", Message: "nope"})
 
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
@@ -109,32 +94,6 @@ func TestFailureNotify_ManualRunStillPostsTheWebhook(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Error("a manual run's failure did not reach the configured webhook")
-}
-
-// A manual run on an email-only flow must not even spawn the watcher: it has
-// nothing left to do, and these goroutines are per-run.
-func TestFailureNotify_ManualRunArmsNothingWhenEmailIsTheOnlyChannel(t *testing.T) {
-	// The full harness this time: it has a job store, so the watcher's
-	// race-recheck has a terminal record to find.
-	svc := newFailureNotifyHarness(t)
-	srv := attachOwnerEmail(t, svc, auth.User{Email: "owner@example.com"})
-	graph := core.Graph{
-		ID: "g", Tenant: "t", Workspace: "ws",
-		Owner:         "owner@example.com",
-		FailureNotify: &core.FailureNotify{Email: "alerts@example.com"},
-	}
-	runID := "run-nothing-to-do"
-	_ = svc.Jobs.Enqueue(t.Context(), core.JobRecord{
-		ID: runID, Kind: core.JobKindGraph, GraphID: "g", Tenant: "t", Workspace: "ws",
-		Status: core.JobStatusFailed, Manual: true,
-	})
-
-	// Already terminal and failed: the watcher's race-recheck would fire
-	// immediately if one were armed.
-	svc.startFailureNotifier(graph, runID, true)
-	if data, _ := waitForEmail(t, srv, 500*time.Millisecond); data != "" {
-		t.Errorf("watcher armed and delivered anyway:\n%s", data)
-	}
 }
 
 // ---- the flag has to survive the trip ----------------------------------
@@ -217,7 +176,7 @@ func TestFailureEmailThrottle_FirstFailureMails(t *testing.T) {
 
 	svc.fireFailureNotification(t.Context(), graph, FailurePayload{
 		GraphID: graph.ID, RunID: "run-1", ErrorMessage: "boom",
-	}, false)
+	})
 
 	if data, _ := waitForEmail(t, srv, 2*time.Second); data == "" {
 		t.Fatal("the first failure in the window sent no email")
@@ -231,7 +190,7 @@ func TestFailureEmailThrottle_RepeatWithinTheWindowIsSilent(t *testing.T) {
 
 	svc.fireFailureNotification(t.Context(), graph, FailurePayload{
 		GraphID: graph.ID, RunID: "run-2", ErrorMessage: "boom again",
-	}, false)
+	})
 
 	if data, _ := waitForEmail(t, srv, 700*time.Millisecond); data != "" {
 		t.Errorf("a repeat failure emailed anyway:\n%s", data)
@@ -256,7 +215,7 @@ func TestFailureEmailThrottle_CatchesAFlappingFlow(t *testing.T) {
 
 	svc.fireFailureNotification(t.Context(), graph, FailurePayload{
 		GraphID: graph.ID, RunID: "run-3", ErrorMessage: "boom",
-	}, false)
+	})
 
 	if data, _ := waitForEmail(t, srv, 700*time.Millisecond); data != "" {
 		t.Errorf("a flapping flow emailed on every failure:\n%s", data)
@@ -272,7 +231,7 @@ func TestFailureEmailThrottle_MailsAgainOnceTheWindowHasPassed(t *testing.T) {
 
 	svc.fireFailureNotification(t.Context(), graph, FailurePayload{
 		GraphID: graph.ID, RunID: "run-new", ErrorMessage: "boom",
-	}, false)
+	})
 
 	if data, _ := waitForEmail(t, srv, 2*time.Second); data == "" {
 		t.Fatal("a failure after a quiet window sent no email")
@@ -290,7 +249,7 @@ func TestFailureEmailThrottle_IsPerFlow(t *testing.T) {
 
 	svc.fireFailureNotification(t.Context(), graph, FailurePayload{
 		GraphID: graph.ID, RunID: "quiet-1", ErrorMessage: "boom",
-	}, false)
+	})
 
 	if data, _ := waitForEmail(t, srv, 2*time.Second); data == "" {
 		t.Fatal("another flow's failures silenced this one")
@@ -311,7 +270,7 @@ func TestFailureEmailThrottle_DoesNotThrottleTheWebhook(t *testing.T) {
 
 	svc.fireFailureNotification(t.Context(), graph, FailurePayload{
 		GraphID: graph.ID, RunID: "run-2", ErrorMessage: "boom",
-	}, false)
+	})
 
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
@@ -339,7 +298,7 @@ func TestFailureEmailThrottle_TurnsOffAtZero(t *testing.T) {
 
 	svc.fireFailureNotification(t.Context(), graph, FailurePayload{
 		GraphID: graph.ID, RunID: "run-2", ErrorMessage: "boom",
-	}, false)
+	})
 
 	if data, _ := waitForEmail(t, srv, 2*time.Second); data == "" {
 		t.Fatal("the throttle stayed on with the window disabled")
@@ -355,9 +314,66 @@ func TestFailureEmailThrottle_SendsWhenItCannotTell(t *testing.T) {
 
 	svc.fireFailureNotification(t.Context(), graph, FailurePayload{
 		GraphID: graph.ID, RunID: "run-1", ErrorMessage: "boom",
-	}, false)
+	})
 
 	if data, _ := waitForEmail(t, srv, 2*time.Second); data == "" {
 		t.Fatal("an unanswerable throttle check swallowed the email")
+	}
+}
+
+// The escalation. A flow that keeps failing used to send ONE email at the
+// start of the outage and then nothing, however long it lasted: the sliding
+// "any other failure in the last hour?" test is always true while a flow is
+// broken. So a flow down for a week produced a single email, sent a week ago,
+// and the documented fallback — somebody noticing in the Runs list — is
+// exactly the assumption this whole exercise exists to doubt.
+//
+// The window tumbles now, so a continuing outage mails once per window, and
+// the mail says how many runs failed in the window before it. "It failed" and
+// "it has failed 47 times and you have not noticed" want different reactions
+// and used to read identically.
+func TestFailureEmailThrottle_ContinuingOutageEscalates(t *testing.T) {
+	svc, srv, graph := throttleHarness(t)
+	window := time.Now().Truncate(FailureEmailWindow)
+
+	// A dozen failures in the PREVIOUS window: the outage the reader missed.
+	for i := 0; i < 12; i++ {
+		seedFailedRun(t, svc, graph, fmt.Sprintf("prev-%d", i),
+			window.Add(-FailureEmailWindow).Add(time.Duration(i)*time.Minute))
+	}
+	// The first failure of the CURRENT window — still broken.
+	seedFailedRun(t, svc, graph, "now-1", window.Add(time.Minute))
+
+	svc.fireFailureNotification(t.Context(), graph, FailurePayload{
+		GraphID: graph.ID, RunID: "now-1", ErrorMessage: "boom",
+	})
+
+	data, _ := waitForEmail(t, srv, 2*time.Second)
+	if data == "" {
+		t.Fatal("a continuing outage sent no email in the new window")
+	}
+	// The count has to be in the mail, or a repeat is indistinguishable from
+	// a first failure and the reader has no reason to treat it differently.
+	if !strings.Contains(data, "12") {
+		t.Errorf("email does not say how many other runs failed:\n%s", data)
+	}
+}
+
+// The first failure of an outage is not an escalation and must not claim to
+// be: nothing failed before it.
+func TestFailureEmailThrottle_FirstFailureSaysNothingAboutRepeats(t *testing.T) {
+	svc, srv, graph := throttleHarness(t)
+	seedFailedRun(t, svc, graph, "only-1", time.Now())
+
+	svc.fireFailureNotification(t.Context(), graph, FailurePayload{
+		GraphID: graph.ID, RunID: "only-1", ErrorMessage: "boom",
+	})
+
+	data, _ := waitForEmail(t, srv, 2*time.Second)
+	if data == "" {
+		t.Fatal("first failure sent no email")
+	}
+	if strings.Contains(data, "not a one-off") {
+		t.Errorf("a first failure claimed to be a repeat:\n%s", data)
 	}
 }

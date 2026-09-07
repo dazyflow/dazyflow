@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"time"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/engine"
@@ -104,12 +105,100 @@ func (d *Dispatcher) ReapStuckGraphRuns(ctx context.Context) (int, error) {
 		// runs the full all-terminal evaluation; if the run isn't actually
 		// done this returns without touching it.
 		d.maybeCompleteGraph(ctx, g, run.ID, "", core.JobStatusSucceeded, nil)
-		if rec, err := d.store.Get(ctx, run.ID); err == nil && core.IsTerminalStatus(rec.Status) {
+		rec, err := d.store.Get(ctx, run.ID)
+		if err == nil && core.IsTerminalStatus(rec.Status) {
 			reaped++
 			d.logger.Printf("reaper: recovered orphaned graph run %s → %s", run.ID, rec.Status)
+			continue
+		}
+		if err == nil && d.abandonIfStuck(ctx, g, rec) {
+			reaped++
 		}
 	}
 	return reaped, nil
+}
+
+// AbandonRunsAfter is how long a run may sit non-terminal with nothing left
+// that could ever advance it before the reaper gives up and fails it.
+//
+// Long enough that no legitimately slow run is caught by the clock alone —
+// but the clock is not what decides it. abandonIfStuck only considers a run
+// with NO pending step at all, which a waiting run always has. The window is
+// there so a run mid-transition (a node terminal-written, its successor not
+// yet enqueued) is never mistaken for an abandoned one.
+var AbandonRunsAfter = 6 * time.Hour
+
+// abandonIfStuck fails a run that can never finish, and reports whether it
+// did.
+//
+// This exists because of what retention stopped doing. Retention is
+// run-scoped now: an unfinished run is never pruned, which is right — quietly
+// deleting a live run is a data-loss bug — but it means a run that can NEVER
+// finish is immortal. It sits in the Runs list as running for ever, and for a
+// tenant with a concurrency cap it holds a slot for ever, so after a few of
+// them every new run is admitted as pending and never starts. Nothing
+// notifies, because the run never reaches a terminal state.
+//
+// Two things produce one: a node record deleted out from under a live run by
+// the old row-scoped retention (maybeCompleteGraph reads a missing record as
+// "not done yet", so the run can never complete and the reaper can never
+// close it), and a submission whose enqueue failed and whose Complete failed
+// too, leaving a graph record with no node work under it.
+//
+// The test is not "old" — it is "nothing is pending". A run with any queued,
+// running or awaiting node record is waiting for something real: an approval
+// parked for three weeks, a delay step counting down 90 days, a step whose
+// worker is about to pick it up. Those must never be touched, and they always
+// have a pending record. A run with none, that the completion check has just
+// refused to finalize, has nothing left that could ever advance it.
+func (d *Dispatcher) abandonIfStuck(ctx context.Context, graph core.Graph, run core.JobRecord) bool {
+	if AbandonRunsAfter <= 0 {
+		return false
+	}
+	// Measured from EnqueuedAt, not StartedAt: a graph record is enqueued
+	// already-running, so the two are milliseconds apart for every run this
+	// sweep can see (only running/awaiting runs are listed, and a
+	// concurrency-deferred one sits at `queued` until it is promoted).
+	// Preferring StartedAt would add a subtlety that buys nothing.
+	age := time.Since(run.EnqueuedAt)
+	if age < AbandonRunsAfter {
+		return false
+	}
+	recs, err := d.store.ListNodeRecords(ctx, core.ListNodeRecordsOpts{
+		Tenant:     run.Tenant,
+		Workspace:  run.Workspace,
+		GraphRunID: run.ID,
+		Limit:      len(graph.Nodes) + 1,
+	})
+	if err != nil {
+		return false // cannot tell; leave it alone
+	}
+	for _, r := range recs {
+		if !core.IsTerminalStatus(r.Status) {
+			return false // something is still pending: this run is alive
+		}
+	}
+	msg := fmt.Sprintf("This run was abandoned: it has been %s since it started and it has no step "+
+		"left that could finish it, so it can never complete. Its steps' records are gone or its "+
+		"work was never queued. Retry it if the work still needs doing.", age.Round(time.Minute))
+	if cerr := d.store.Complete(ctx, run.ID, core.JobStatusFailed, &core.Result{
+		JobID:  run.ID,
+		Status: core.StatusError,
+		Error:  &core.JobError{Code: "run_abandoned", Message: msg},
+	}); cerr != nil {
+		return false
+	}
+	d.logger.Printf("reaper: abandoned graph run %s (%s old, %d node record(s), none pending)",
+		run.ID, age.Round(time.Minute), len(recs))
+	// Terminal now, so three things unblock at once: it stops counting against
+	// the tenant's concurrency cap, the notification sweep tells the owner, and
+	// retention can finally age it out.
+	d.bus.Publish(run.ID, BusEvent{Terminal: &TerminalEvent{
+		JobID:  run.ID,
+		Status: core.JobStatusFailed,
+		Error:  &core.JobError{Code: "run_abandoned", Message: msg},
+	}})
+	return true
 }
 
 // AdvanceAfterCompletion is the single entry-point used by the worker

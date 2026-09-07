@@ -5,7 +5,6 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"sync"
@@ -196,49 +195,20 @@ func (s *Service) reserveRun(ctx context.Context, tenant string) (bool, error) {
 	return s.billing().reserveRun(ctx, tenant)
 }
 
-// recordSkippedFire writes a terminal "skipped" graph run so a cap-blocked
-// scheduled fire is visible in the Runs list, not just the server log. It
-// enqueues a bare graph record (no node work, so nothing dispatches) and
-// immediately completes it skipped with the reason. Best-effort: a write
-// failure is logged, never propagated — the fire already wasn't going to run.
-// The scheduler coalesces calls (one per flow per window); the precise count
-// lives in the usage counter.
-func (s *Service) recordSkippedFire(ctx context.Context, tenant, workspace, graphID string) {
-	if s.Jobs == nil {
+// releaseRun gives back a run reserved for a submission that then failed to
+// write, so the tenant is not charged for a run that exists nowhere. See
+// runReleaser: best-effort, and a store without it keeps the old behaviour.
+func (s *Service) releaseRun(ctx context.Context, tenant string) {
+	if s.Usage == nil {
 		return
 	}
-	id, err := newID()
-	if err != nil {
+	rl, ok := s.Usage.(runReleaser)
+	if !ok {
 		return
 	}
-	// A minimal (node-less) graph payload so the run-detail view renders
-	// safely rather than choking on an empty payload.
-	payload, _ := json.Marshal(core.Graph{ID: graphID, Tenant: tenant, Workspace: workspace})
-	rec := core.JobRecord{
-		ID:           id,
-		Kind:         core.JobKindGraph,
-		GraphID:      graphID,
-		NodeID:       "*",
-		Tenant:       tenant,
-		Workspace:    workspace,
-		Status:       core.JobStatusRunning,
-		GraphPayload: payload,
-		Job:          core.Job{ID: id, GraphID: graphID},
+	if err := rl.ReleaseRun(ctx, tenant, time.Now()); err != nil && s.Logger != nil {
+		s.Logger.Printf("usage metering [%s]: release reserved run: %v", tenant, err)
 	}
-	if err := s.Jobs.Enqueue(ctx, rec); err != nil {
-		if s.Logger != nil {
-			s.Logger.Printf("skipped-run marker [%s/%s/%s]: enqueue: %v", tenant, workspace, graphID, err)
-		}
-		return
-	}
-	_ = s.Jobs.Complete(ctx, id, core.JobStatusSkipped, &core.Result{
-		JobID:  id,
-		Status: core.StatusError,
-		Error: &core.JobError{
-			Code:    "plan_run_cap",
-			Message: "Scheduled run skipped — over the plan's monthly run limit.",
-		},
-	})
 }
 
 // concurrencyCapped reports the tenant's effective simultaneous-run limit when

@@ -162,7 +162,14 @@ func resolveURL(job core.Job) string {
 // forward — mirrors gmail_search_messages / google_form_trigger.
 func dedupeAndEmit(ctx context.Context, job core.Job, items []feedItem, progress chan<- core.Progress) core.Result {
 	name := cursorName(job.GraphID, job.NodeID)
-	raw := cursor.Read(ctx, job.Tenant, name)
+	raw, rerr := cursor.Read(ctx, job.Tenant, name)
+	if rerr != nil {
+		// Cannot tell what has already been emitted. Stopping here keeps the
+		// stored window intact for the next run; carrying on would read as a
+		// first run, re-baseline over it, and silently swallow every item
+		// published since the last successful poll.
+		return cursor.FailRead(job, rerr)
+	}
 	first := raw == ""
 	prev := decodeIDs(raw)
 	seen := make(map[string]bool, len(prev))
@@ -184,8 +191,16 @@ func dedupeAndEmit(ctx context.Context, job core.Job, items []feedItem, progress
 
 	// New window: current feed ids (newest) ahead of the prior window, deduped
 	// and capped. Best-effort write — a failed write re-emits next run at worst.
+	//
+	// Except on the baseline run, where "re-emits next run" is not what
+	// happens: nothing was emitted and nothing was recorded, so the next run
+	// baselines too. A write that keeps failing would leave the feed watcher
+	// stuck on its first run for ever, emitting nothing and reporting success
+	// every time. See cursor.FailBaseline.
 	newWindow := capIDs(dedupeIDs(append(append([]string{}, current...), prev...)), maxSeenIDs)
-	_ = cursor.Write(ctx, job.Tenant, name, encodeIDs(newWindow))
+	if werr := cursor.Write(ctx, job.Tenant, name, encodeIDs(newWindow)); werr != nil && first {
+		return cursor.FailBaseline(job, werr)
+	}
 
 	// Explain the outcome in the run log, so an empty Items output reads as a
 	// deliberate non-event (baseline / nothing new) rather than a silent

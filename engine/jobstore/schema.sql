@@ -76,6 +76,24 @@ CREATE INDEX IF NOT EXISTS jobs_graph_status_idx
     ON jobs (status, enqueued_at DESC)
     WHERE kind = 'graph';
 
+-- Failure-notification bookkeeping. notified_at is the claim: a sweep sets it
+-- before sending so two replicas can't both mail about one run, and clears it
+-- again if the send failed so a later pass retries (bounded by
+-- notify_attempts). Before this, notification was a per-run goroutine armed at
+-- submit — so a restart, a lease recovery, a reap, or simply a run that took
+-- longer than an hour meant nobody was ever told the run failed.
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS notified_at TIMESTAMPTZ;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS notify_attempts INTEGER NOT NULL DEFAULT 0;
+
+-- The sweep's predicate: unnotified, terminal-and-bad graph records, oldest
+-- first. Partial so it holds only the runs still owing a notification —
+-- normally none — which keeps a sweep every few seconds to an empty index
+-- probe rather than a scan of every run ever.
+CREATE INDEX IF NOT EXISTS jobs_notify_idx
+    ON jobs (finished_at)
+    WHERE kind = 'graph' AND notified_at IS NULL
+      AND status IN ('failed', 'cancelled');
+
 -- Retention's predicate. Terminal rows are almost the whole table, so without
 -- this the hourly sweep scans all of them to find the few old enough to
 -- delete — and scans all of them to prove there are none, which is what every

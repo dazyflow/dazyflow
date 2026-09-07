@@ -7,10 +7,13 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/dazyflow/dazyflow/core"
@@ -1071,5 +1074,451 @@ func TestGmailSend_TextWithCCBCCThread_Cov(t *testing.T) {
 	}
 	if threadID != "thread-99" {
 		t.Errorf("threadId = %q", threadID)
+	}
+}
+
+// The read-failure case, at the highest stakes in the product: a mailbox
+// watcher whose watermark cannot be read must NOT conclude "first run".
+// Doing so re-baselines to the newest message present and marks every email
+// that arrived since the last poll as handled — an invoice-filing or
+// auto-reply flow silently skips them all, and the run reports success.
+func TestGmailSearch_OnlyNew_ReadFailureStopsAndKeepsTheWatermark(t *testing.T) {
+	const stored = "1700000000000"
+	name := "cursor.gmail_search.g1.n1"
+	backing := map[string]string{"acme|" + name: stored}
+	failRead := true
+	cursor.SetStore(
+		func(_ context.Context, tenant, key string) (string, error) {
+			if failRead {
+				return "", errors.New("secret store unavailable")
+			}
+			return backing[tenant+"|"+key], nil
+		},
+		func(_ context.Context, tenant, key, value string) error {
+			backing[tenant+"|"+key] = value
+			return nil
+		},
+	)
+	t.Cleanup(func() { cursor.SetStore(nil, nil) })
+
+	// Two emails newer than the stored watermark: exactly the mail that would
+	// have been lost.
+	srv := searchServer(t, []string{"a", "b"}, map[string]string{
+		"a": "1700000009000", "b": "1700000005000",
+	})
+	defer srv.Close()
+	withGmailEnv(t, srv.URL)
+
+	job := core.Job{
+		Tenant: "acme", GraphID: "g1", NodeID: "n1",
+		Params: map[string]any{"query": "is:unread", "only_new": true},
+	}
+	res, err := executeGmailSearch(context.Background(), job, nil)
+	if err != nil {
+		t.Fatalf("unexpected transport error: %v", err)
+	}
+	if res.Status != core.StatusError {
+		t.Fatalf("status = %q, want error when the watermark can't be read", res.Status)
+	}
+	if res.Error == nil || res.Error.Code != "cursor_unavailable" {
+		t.Errorf("error = %+v, want cursor_unavailable", res.Error)
+	}
+	if len(res.Output) != 0 {
+		t.Errorf("failed poll emitted %d port(s); downstream must not run", len(res.Output))
+	}
+	if got := backing["acme|"+name]; got != stored {
+		t.Fatalf("watermark was overwritten: %q, want it left at %q", got, stored)
+	}
+
+	// Once the store answers again, both emails are still waiting.
+	failRead = false
+	res, err = executeGmailSearch(context.Background(), job, nil)
+	if err != nil || res.Status != core.StatusOK {
+		t.Fatalf("recovery status=%q err=%+v", res.Status, res.Error)
+	}
+	msgs, ok := res.Output["messages"]
+	if !ok {
+		t.Fatal("after recovery the emails were not emitted")
+	}
+	list, _ := msgs.Inline.([]any)
+	if len(list) != 2 {
+		t.Errorf("emitted %d email(s) after recovery, want 2", len(list))
+	}
+}
+
+// hydrationServer serves a search whose per-message expansion fails for the
+// ids in failIDs and succeeds for the rest. gets counts expansion calls.
+//
+// The failure is a 404 (a message deleted between the list and the fetch)
+// rather than a 503, purely for test speed: the shared egress client puts a
+// 5-second cooldown on a host that answers 503 without a Retry-After, so a
+// 503 fixture makes every one of these tests wait that out — real behaviour,
+// documented on hydrateMessage, but the code path under test is identical.
+func hydrationServer(t *testing.T, ids []string, dateByID map[string]string, failIDs map[string]bool, gets *int32) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/messages/") {
+			id := r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]
+			atomic.AddInt32(gets, 1)
+			if failIDs[id] {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"id": id, "threadId": "t-" + id, "internalDate": dateByID[id],
+				"payload": map[string]any{"headers": []any{
+					map[string]any{"name": "Subject", "value": "Hi " + id},
+				}},
+			})
+			return
+		}
+		stubs := make([]any, len(ids))
+		for i, id := range ids {
+			stubs[i] = map[string]any{"id": id}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"messages": stubs})
+	}))
+}
+
+// The silent-loss case: one email's expansion fails while a NEWER one in the
+// same page succeeds. The failed email has no date, so it can't be emitted —
+// and if the watermark advances to the newer email's date, it is newer than
+// the failed one and that email is never offered again. One unlucky API call,
+// one invoice never filed, on a run that reported success.
+//
+// The watermark must be held instead, so the next run picks it up.
+func TestGmailSearch_OnlyNew_UnfetchableEmailHoldsTheWatermark(t *testing.T) {
+	const startedAt = "1700000000000"
+	name := "cursor.gmail_search.g1.n1"
+	backing := map[string]string{"acme|" + name: startedAt}
+	cursor.SetStore(
+		func(_ context.Context, tenant, key string) (string, error) { return backing[tenant+"|"+key], nil },
+		func(_ context.Context, tenant, key, value string) error {
+			backing[tenant+"|"+key] = value
+			return nil
+		},
+	)
+	t.Cleanup(func() { cursor.SetStore(nil, nil) })
+
+	// "lost" arrived first, "newer" after it — both after the watermark.
+	dates := map[string]string{"lost": "1700000005000", "newer": "1700000009000"}
+	var gets int32
+	failing := map[string]bool{"lost": true}
+	srv := hydrationServer(t, []string{"newer", "lost"}, dates, failing, &gets)
+	defer srv.Close()
+	withGmailEnv(t, srv.URL)
+
+	job := core.Job{
+		Tenant: "acme", GraphID: "g1", NodeID: "n1",
+		Params: map[string]any{"query": "is:unread", "only_new": true},
+	}
+	res, err := executeGmailSearch(context.Background(), job, nil)
+	if err != nil || res.Status != core.StatusOK {
+		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
+	}
+	// The one that fetched is emitted.
+	list, _ := res.Output["messages"].Inline.([]any)
+	if len(list) != 1 {
+		t.Fatalf("emitted %d email(s), want the 1 that fetched", len(list))
+	}
+	// Both messages were attempted (no retry loop here on purpose — see
+	// hydrateMessage: the engine's retry scheduler owns that).
+	if n := atomic.LoadInt32(&gets); n != 2 {
+		t.Errorf("%d expansion call(s), want 2 (one per message, no in-step retry)", n)
+	}
+	// The watermark must NOT have moved past the email we couldn't read.
+	if got := backing["acme|"+name]; got != startedAt {
+		t.Fatalf("watermark advanced to %q past an unreadable email; it must stay at %q", got, startedAt)
+	}
+
+	// Next run, with Gmail healthy: the lost email is still offered.
+	srv2 := hydrationServer(t, []string{"newer", "lost"}, dates, map[string]bool{}, &gets)
+	defer srv2.Close()
+	withGmailEnv(t, srv2.URL)
+	res, err = executeGmailSearch(context.Background(), job, nil)
+	if err != nil || res.Status != core.StatusOK {
+		t.Fatalf("recovery status=%q err=%+v", res.Status, res.Error)
+	}
+	list, _ = res.Output["messages"].Inline.([]any)
+	if len(list) != 2 {
+		t.Fatalf("recovery emitted %d email(s), want both", len(list))
+	}
+	if got := backing["acme|"+name]; got != dates["newer"] {
+		t.Errorf("watermark = %q, want it advanced to %q once everything read", got, dates["newer"])
+	}
+}
+
+// Every email in the page failing is an outage, and it looks exactly like a
+// quiet poll from downstream — both emit nothing. It has to be visible.
+func TestGmailSearch_OnlyNew_AllUnfetchableFails(t *testing.T) {
+	store := memCursor(t)
+	store["acme|cursor.gmail_search.g1.n1"] = "1700000000000"
+	var gets int32
+	srv := hydrationServer(t, []string{"a", "b"},
+		map[string]string{"a": "1700000005000", "b": "1700000009000"},
+		map[string]bool{"a": true, "b": true}, &gets)
+	defer srv.Close()
+	withGmailEnv(t, srv.URL)
+
+	res, err := executeGmailSearch(context.Background(), core.Job{
+		Tenant: "acme", GraphID: "g1", NodeID: "n1",
+		Params: map[string]any{"query": "is:unread", "only_new": true},
+	}, nil)
+	if err != nil {
+		t.Fatalf("unexpected transport error: %v", err)
+	}
+	if res.Status != core.StatusError {
+		t.Fatalf("status = %q, want error when nothing could be fetched", res.Status)
+	}
+	if res.Error == nil || res.Error.Code != "gmail_unresolved" {
+		t.Errorf("error = %+v, want gmail_unresolved", res.Error)
+	}
+	if got := store["acme|cursor.gmail_search.g1.n1"]; got != "1700000000000" {
+		t.Errorf("watermark moved to %q during an outage", got)
+	}
+}
+
+// A baseline is the exception: it emits nothing by design, so an email that
+// couldn't be read loses nothing by being baselined over — and holding would
+// leave the watermark unwritten, so the flow would baseline for ever and never
+// emit anything (the trap cursor.FailBaseline exists for).
+func TestGmailSearch_OnlyNew_UnfetchableOnFirstRunStillBaselines(t *testing.T) {
+	store := memCursor(t)
+	var gets int32
+	srv := hydrationServer(t, []string{"newer", "lost"},
+		map[string]string{"newer": "1700000009000", "lost": "1700000005000"},
+		map[string]bool{"lost": true}, &gets)
+	defer srv.Close()
+	withGmailEnv(t, srv.URL)
+
+	res, err := executeGmailSearch(context.Background(), core.Job{
+		Tenant: "acme", GraphID: "g1", NodeID: "n1",
+		Params: map[string]any{"query": "is:unread", "only_new": true},
+	}, nil)
+	if err != nil || res.Status != core.StatusOK {
+		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
+	}
+	if _, ok := res.Output["messages"]; ok {
+		t.Error("a baseline run emitted messages")
+	}
+	if got := store["acme|cursor.gmail_search.g1.n1"]; got != "1700000009000" {
+		t.Fatalf("baseline = %q, want it recorded at the newest readable email", got)
+	}
+}
+
+// backlogServer emulates the two things about messages.list that made #5 a
+// silent loss: it returns matches NEWEST FIRST, and it honours `after:<epoch>`
+// so a poll can ask for just the backlog. maxResults caps each page and a
+// nextPageToken is issued when more remain.
+//
+// ids must be newest-first; dateByID gives each one an internalDate in ms.
+func backlogServer(t *testing.T, ids []string, dateByID map[string]string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/messages/") {
+			id := r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"id": id, "threadId": "t-" + id, "internalDate": dateByID[id],
+				"payload": map[string]any{"headers": []any{
+					map[string]any{"name": "Subject", "value": id},
+				}},
+			})
+			return
+		}
+		// Apply after:<epoch seconds> from the query, as Gmail would.
+		match := ids
+		if q := r.URL.Query().Get("q"); strings.Contains(q, "after:") {
+			after := q[strings.Index(q, "after:")+len("after:"):]
+			if sp := strings.IndexByte(after, ' '); sp >= 0 {
+				after = after[:sp]
+			}
+			secs, err := strconv.ParseInt(after, 10, 64)
+			if err != nil {
+				t.Fatalf("unparseable after: %q", after)
+			}
+			match = nil
+			for _, id := range ids {
+				ms, _ := strconv.ParseInt(dateByID[id], 10, 64)
+				if ms/1000 >= secs {
+					match = append(match, id)
+				}
+			}
+		}
+		// Page through the (newest-first) matches.
+		start := 0
+		if pt := r.URL.Query().Get("pageToken"); pt != "" {
+			n, err := strconv.Atoi(pt)
+			if err != nil {
+				t.Fatalf("unparseable pageToken: %q", pt)
+			}
+			start = n
+		}
+		size := 500
+		if mr := r.URL.Query().Get("maxResults"); mr != "" {
+			if n, err := strconv.Atoi(mr); err == nil && n > 0 {
+				size = n
+			}
+		}
+		end := min(start+size, len(match))
+		out := map[string]any{}
+		stubs := make([]any, 0, end-start)
+		for _, id := range match[start:end] {
+			stubs = append(stubs, map[string]any{"id": id})
+		}
+		out["messages"] = stubs
+		if end < len(match) {
+			out["nextPageToken"] = strconv.Itoa(end)
+		}
+		_ = json.NewEncoder(w).Encode(out)
+	}))
+}
+
+// #5, the silent one: more email arrived than max_results. messages.list hands
+// back the NEWEST max_results, so emitting those and advancing the watermark to
+// the newest of them puts everything older permanently behind the watermark —
+// gone, on a green run. The poll must drain from the OLDEST end instead, so a
+// burst is delayed across polls rather than truncated.
+//
+// The assertion is the invariant rather than per-poll batch sizes: polling
+// until it goes quiet must yield every email exactly once, in arrival order,
+// and must terminate. (Batch sizes are not exactly max_results every time —
+// the second-granular `after:` bound brings the boundary email back, where the
+// millisecond filter drops it, costing one slot. Correct, and not worth
+// freezing into a test.)
+func TestGmailSearch_OnlyNew_BacklogDrainsOldestFirst(t *testing.T) {
+	store := memCursor(t)
+	name := "acme|cursor.gmail_search.g1.n1"
+	store[name] = "1700000000000" // watermark: everything below is handled
+
+	// Five emails arrived since, newest first, one second apart.
+	ids := []string{"e5", "e4", "e3", "e2", "e1"}
+	dates := map[string]string{
+		"e1": "1700000001000", "e2": "1700000002000", "e3": "1700000003000",
+		"e4": "1700000004000", "e5": "1700000005000",
+	}
+	srv := backlogServer(t, ids, dates)
+	defer srv.Close()
+	withGmailEnv(t, srv.URL)
+
+	job := core.Job{
+		Tenant: "acme", GraphID: "g1", NodeID: "n1",
+		Params: map[string]any{"query": "is:unread", "only_new": true, "max_results": 2},
+	}
+	subjects := func(res core.Result) []string {
+		list, _ := res.Output["messages"].Inline.([]any)
+		out := make([]string, 0, len(list))
+		for _, m := range list {
+			rec, _ := m.(map[string]any)
+			out = append(out, str(rec["subject"]))
+		}
+		return out
+	}
+
+	var drained []string
+	const maxPolls = 8 // a stall or a duplicate loop trips this
+	for poll := 1; poll <= maxPolls; poll++ {
+		res, err := executeGmailSearch(context.Background(), job, nil)
+		if err != nil || res.Status != core.StatusOK {
+			t.Fatalf("poll %d: status=%q err=%+v", poll, res.Status, res.Error)
+		}
+		got := subjects(res)
+		if len(got) == 0 {
+			break
+		}
+		if len(got) > 2 {
+			t.Fatalf("poll %d emitted %d emails, over the cap of 2: %v", poll, len(got), got)
+		}
+		drained = append(drained, got...)
+		if poll == maxPolls {
+			t.Fatalf("still emitting after %d polls: %v", maxPolls, drained)
+		}
+	}
+
+	// Every email, exactly once, oldest first. The old behaviour emitted
+	// [e5,e4] and lost e1..e3 for good.
+	want := []string{"e1", "e2", "e3", "e4", "e5"}
+	if len(drained) != len(want) {
+		t.Fatalf("drained %v, want %v", drained, want)
+	}
+	for i := range want {
+		if drained[i] != want[i] {
+			t.Fatalf("drained %v, want %v (arrival order)", drained, want)
+		}
+	}
+	if got := store[name]; got != dates["e5"] {
+		t.Errorf("final watermark = %q, want e5's %q", got, dates["e5"])
+	}
+}
+
+// The poll asks Gmail for the backlog rather than for the newest mail, so the
+// email cap is spent on new mail instead of being filled with already-seen
+// messages. Without the `after:` bound a busy mailbox could return a full page
+// of old mail and starve the new.
+func TestGmailSearch_OnlyNew_QueryCarriesTheWatermark(t *testing.T) {
+	store := memCursor(t)
+	store["acme|cursor.gmail_search.g1.n1"] = "1700000000000"
+
+	var gotQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/messages/") {
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "x", "internalDate": "1700000009000"})
+			return
+		}
+		gotQuery = r.URL.Query().Get("q")
+		_ = json.NewEncoder(w).Encode(map[string]any{"messages": []any{}})
+	}))
+	defer srv.Close()
+	withGmailEnv(t, srv.URL)
+
+	_, err := executeGmailSearch(context.Background(), core.Job{
+		Tenant: "acme", GraphID: "g1", NodeID: "n1",
+		Params: map[string]any{"query": "is:unread", "only_new": true},
+	}, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	// 1700000000000 ms → after:1700000000 (floored to the second, which errs
+	// generous; the millisecond filter removes anything re-included).
+	if gotQuery != "is:unread after:1700000000" {
+		t.Errorf("query = %q, want the search ANDed with the watermark bound", gotQuery)
+	}
+}
+
+// A backlog deeper than the step will scan must not be part-drained: the scan
+// runs newest-first, so its oldest end — where a drain has to start — is
+// exactly what is missing. Refusing keeps the watermark untouched, so nothing
+// is skipped and the whole backlog is still waiting.
+func TestGmailSearch_OnlyNew_BacklogTooDeepRefuses(t *testing.T) {
+	store := memCursor(t)
+	name := "acme|cursor.gmail_search.g1.n1"
+	store[name] = "1700000000000"
+
+	total := backlogPageSize*maxBacklogPages + 10
+	ids := make([]string, 0, total)
+	dates := map[string]string{}
+	for i := total; i >= 1; i-- { // newest first
+		id := "e" + strconv.Itoa(i)
+		ids = append(ids, id)
+		dates[id] = strconv.FormatInt(1700000000000+int64(i)*1000, 10)
+	}
+	srv := backlogServer(t, ids, dates)
+	defer srv.Close()
+	withGmailEnv(t, srv.URL)
+
+	res, err := executeGmailSearch(context.Background(), core.Job{
+		Tenant: "acme", GraphID: "g1", NodeID: "n1",
+		Params: map[string]any{"query": "is:unread", "only_new": true, "max_results": 10},
+	}, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if res.Status != core.StatusError {
+		t.Fatalf("status = %q, want error on a backlog too deep to drain safely", res.Status)
+	}
+	if res.Error == nil || res.Error.Code != "gmail_backlog_too_deep" {
+		t.Errorf("error = %+v, want gmail_backlog_too_deep", res.Error)
+	}
+	if got := store[name]; got != "1700000000000" {
+		t.Errorf("watermark moved to %q; a refusal must leave the backlog intact", got)
 	}
 }

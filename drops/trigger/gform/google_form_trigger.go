@@ -26,7 +26,7 @@ func init() {
 			Label:       "Google Forms",
 			Subtitle:    "New responses",
 			Summary:     "Fires when a Google Form gets new responses, emitting each answer keyed by its question title.",
-			Description: "Watches a Google Form and fires when new responses arrive (each response exactly once). `responses` is a list of objects keyed by question title — connect it straight into a Sheets append. Each response also carries `email` (the respondent's address) when the form collects email addresses, so you can reply to them. When a check finds nothing new, the rest of the flow is skipped. Publish the flow so it runs automatically on the schedule below — pressing Run only checks once, for testing.",
+			Description: "Watches a Google Form and fires when new responses arrive (each response exactly once). The first check after you publish records what is already there and fires nothing, so turning the flow on doesn't process a form's whole back catalogue. `responses` is a list of objects keyed by question title — connect it straight into a Sheets append. Each response also carries `email` (the respondent's address) when the form collects email addresses, so you can reply to them. When a check finds nothing new, the rest of the flow is skipped. Publish the flow so it runs automatically on the schedule below — pressing Run only checks once, for testing.",
 			Integration: "Google Forms",
 			Category:    "trigger",
 			Icon:        "clipboard-list",
@@ -85,7 +85,7 @@ func init() {
 // poll is a non-event, not a run of the flow. The node runs in-band like
 // poll_trigger: the daemon scheduler only fires the graph on the interval;
 // all Google I/O and cursor bookkeeping happen here.
-func executeGoogleFormTrigger(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
+func executeGoogleFormTrigger(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
 	formID := extractFormID(params.StringDefault(job.Params, "form_id", ""))
 	if formID == "" {
 		return params.Err(job, "bad_param", "'form_id' is required"), nil
@@ -105,11 +105,46 @@ func executeGoogleFormTrigger(ctx context.Context, job core.Job, _ chan<- core.P
 	// lastSubmittedTime we've already emitted. The store hides the
 	// "cursor." prefix from the Credentials UI.
 	cursorName := fmt.Sprintf("cursor.gform.%s.%s", job.GraphID, job.NodeID)
-	last := cursor.Read(ctx, job.Tenant, cursorName)
+	last, rerr := cursor.Read(ctx, job.Tenant, cursorName)
+	if rerr != nil {
+		// Without the watermark this run cannot tell new responses from ones
+		// already emitted, and guessing "first run" would re-baseline over it
+		// — silently discarding every response submitted since the last poll.
+		return cursor.FailRead(job, rerr), nil
+	}
 
 	fresh, newCursor, err := fetchNewResponses(ctx, job, formID, token, timeout, last)
 	if err != nil {
 		return params.Err(job, "forms_error", err.Error()), nil
+	}
+
+	// First fire after publishing: record where the form is up to and emit
+	// NOTHING, so the flow starts watching from now.
+	//
+	// This step used to be the odd one out. With no stored watermark every
+	// response counts as new (see newerThan), so publishing a flow against a
+	// form that already had 500 responses fired all 500 into a step that acts
+	// on each one — 500 emails, 500 rows, 500 whatever. Every sibling watcher
+	// baselines silently for exactly this reason (gmail_search_messages,
+	// imap_search_messages, rss, sftp_list_files,
+	// homeassistant_state_changed, ticketmaster_on_new_event), and two of
+	// them carry comments claiming they mirror THIS one, which was the wrong
+	// way round.
+	//
+	// It also removes a way to lose the lot: emitting a backlog and then
+	// failing to record it meant re-emitting the same backlog on every fire,
+	// for ever, against a step whose contract is "each response exactly once".
+	if last == "" {
+		if newCursor != "" {
+			if werr := cursor.Write(ctx, job.Tenant, cursorName, newCursor); werr != nil {
+				return cursor.FailBaseline(job, werr), nil
+			}
+		}
+		params.EmitProgress(progress, job, 1, fmt.Sprintf(
+			"baseline: %d existing response(s) recorded, none emitted — now watching for new ones",
+			len(fresh)))
+		pollstate.Report(ctx, job, false)
+		return core.Result{JobID: job.ID, Status: core.StatusOK, Output: emitOutput(nil)}, nil
 	}
 
 	out := make([]map[string]any, 0, len(fresh))
@@ -122,19 +157,13 @@ func executeGoogleFormTrigger(ctx context.Context, job core.Job, _ chan<- core.P
 	// the moment a response arrives. Keyed by the flow (graph), see pollstate.
 	pollstate.Report(ctx, job, len(out) > 0)
 
-	// Advance the cursor only when it actually moved. A best-effort write:
-	// a failure means at worst the next fire re-emits this batch (the
-	// trigger is at-least-once — see the plan's failover note).
+	// Advance the cursor only when it actually moved. Best-effort from here on:
+	// the responses have gone downstream, so a failed write means at worst the
+	// next fire re-emits this batch, which is at-least-once and the safe
+	// direction. The baseline write is the one that must not be ignored, and
+	// it is handled in the first-fire branch above.
 	if newCursor != "" && newCursor != last {
-		if werr := cursor.Write(ctx, job.Tenant, cursorName, newCursor); werr != nil {
-			// Surface as a soft failure: we already have the data, so emit
-			// it, but the operator should know the cursor didn't persist.
-			return core.Result{
-				JobID:  job.ID,
-				Status: core.StatusOK,
-				Output: emitOutput(out),
-			}, nil
-		}
+		_ = cursor.Write(ctx, job.Tenant, cursorName, newCursor)
 	}
 
 	return core.Result{

@@ -866,3 +866,80 @@ func TestWebhook_KeylessStepIsInertUnlessPublic(t *testing.T) {
 		t.Errorf("status=%d, want 401", got)
 	}
 }
+
+// TestWebhook_RefusedDeliveryIsKeptAndNotRetried covers the sender-facing side
+// of a refusal the owner has to fix. A 500 used to be the answer, which is the
+// worst of both worlds: Stripe (or whoever) retries for a while, gives up, and
+// the event is gone with nothing on our side recording that it ever arrived.
+//
+// Now the delivery is kept as a failed run the owner can Retry, and the status
+// says so: a 4xx, because re-sending something we already hold would only
+// duplicate it.
+func TestWebhook_RefusedDeliveryIsKeptAndNotRetried(t *testing.T) {
+	_, wh, jobs, _, wsStore := startWebhookHarness(t)
+	// Published, secret-protected, and invalid at submit time (the second step
+	// names a module that does not exist), so the submission gate refuses it.
+	g := core.Graph{
+		ID: "wh-refused", Name: "Stripe payments", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{
+			{ID: "in", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s3cr3t"}}},
+			{ID: "broken", Module: "no_such_module_exists"},
+		},
+		Edges: []core.Edge{{From: "in", To: "broken"}},
+	}
+	savePublished(t, wsStore, g)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/trigger/", func(rw http.ResponseWriter, r *http.Request) {
+		callPrivateHandler(t, wh, rw, r)
+	})
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	req, _ := http.NewRequest("POST", ts.URL+"/trigger/acme/ws1/wh-refused",
+		bytes.NewReader([]byte(`{"id":"evt_123","amount":4200}`)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer s3cr3t")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+	// 403 for this class (not the plan cap, which answers 402); either way a
+	// 4xx, so the sender stops rather than burning its retry budget.
+	if resp.StatusCode != http.StatusForbidden {
+		body, _ := io.ReadAll(resp.Body)
+		t.Errorf("status = %d, want 403; body=%s", resp.StatusCode, body)
+	}
+	var out struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+		Run string `json:"run"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	if out.Error.Code != "invalid_graph" {
+		t.Errorf("error code = %q, want invalid_graph", out.Error.Code)
+	}
+	if out.Run == "" {
+		t.Error("response names no run, so the sender can't tell us the delivery was kept")
+	}
+	if !strings.Contains(out.Error.Message, "do not resend") {
+		t.Errorf("message = %q; a kept delivery must tell the sender not to resend", out.Error.Message)
+	}
+
+	// And the event body itself is recoverable.
+	rec, err := jobs.Get(context.Background(), out.Run+":in")
+	if err != nil {
+		t.Fatalf("delivery not stored: %v", err)
+	}
+	body, ok := rec.Result.Output["body"]
+	if !ok {
+		t.Fatal("stored run carries no webhook body")
+	}
+	payload, _ := body.Inline.(map[string]any)
+	if payload["id"] != "evt_123" {
+		t.Errorf("delivery payload not preserved: %#v", body.Inline)
+	}
+}
