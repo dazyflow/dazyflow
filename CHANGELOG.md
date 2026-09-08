@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.41.6] - 2026-09-09
+
 ### Fixed
 
 - **Swedish search vocabulary now serves both searches instead of one.** The
