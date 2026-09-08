@@ -142,8 +142,11 @@ func TestBehaviorEqual_FieldSetIsReviewed(t *testing.T) {
 			"ContinueOnError",
 		},
 		"Node": {
-			"ID", "Module", "Params", "Env", "Label", "Position", "TimeoutSeconds",
-			"Breakpoint", "Disabled", "ContinueOnError",
+			"ID", "Module", "Params", "Env", "Label", "Position",
+			// Editor-only, cleared in stripCosmetic: they change the drawing
+			// and the editor's own guards, never what a run does.
+			"Collapsed", "Locked",
+			"TimeoutSeconds", "Breakpoint", "Disabled", "ContinueOnError",
 		},
 		"Edge": {"From", "FromPort", "To", "ToPort", "OnError", "Waypoints"},
 	}

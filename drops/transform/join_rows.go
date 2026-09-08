@@ -49,7 +49,7 @@ func init() {
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"transform", "join", "merge", "lookup", "etl", "sql"},
-			Description: "SQL JOIN between two row streams. Param `on` maps left columns to right columns ({\"id\": \"user_id\"}). `kind` picks inner / left / right / outer / anti (anti = only the left rows with no match on the right, carrying just their own columns — the \"which of these haven't I processed yet?\" question). When the same key matches multiple right rows the output cartesians within that group (standard SQL behavior). Non-key right columns that collide with left column names get suffixed (default \"_right\", overridable via `right_suffix`). The right side's key columns are dropped from the output since they equal the left's by construction.",
+			Description: "Match up two lists of rows on a column they share — the lookup step. Say which column on the first list pairs with which column on the second (an order's customer_id with a customer's id, say), and each pair comes out as one row carrying both sides' columns.\n\nYou choose what comes out: only the rows that matched, every row from one list whether it matched or not, everything from both — or only the first-list rows with NO match on the second. That last one answers \"which of these haven't I dealt with yet?\": put today's rows on the first input and what you have already recorded on the second, and out come just the new ones.\n\nTwo details worth knowing. If both lists carry a column of the same name, the second list's copy gets \"_right\" added so neither is silently lost (change that suffix on the step). And when one row on the first list matches several on the second, you get one output row per match.",
 			Summary:     "SQL-style inner/left/right/outer join between two row streams keyed on one or more columns.",
 			Examples: []core.ParamsExample{
 				{
@@ -74,8 +74,8 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				{Port: "left_rows", Label: "Left rows", Required: true, MIME: []string{"application/json"}, List: true},
-				{Port: "right_rows", Label: "Right rows", Required: true, MIME: []string{"application/json"}, List: true},
+				{Port: "left_rows", Label: "First list", Required: true, MIME: []string{"application/json"}, List: true},
+				{Port: "right_rows", Label: "Second list", Required: true, MIME: []string{"application/json"}, List: true},
 			},
 			Outputs: []core.Port{
 				{Port: "rows", Label: "Rows", MIME: []string{"application/json"}},
@@ -83,9 +83,9 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"on":            {"type":"object","description":"Join key mapping {left_col: right_col}. Multiple entries = multi-column key.","additionalProperties":{"type":"string"}},
-					"kind":          {"type":"string","enum":["inner","left","right","outer","anti"],"enumNames":["Only matching rows","All left rows","All right rows","Everything from both","Only left rows with NO match"],"default":"inner","description":"Join flavor. inner = matched only. left = all left + matched right. right = all right + matched left. outer = full union. anti = the left rows that have no match on the right — the \"which of these are new?\" question — emitted with their own columns only."},
-					"right_suffix":  {"type":"string","default":"_right","description":"Suffix appended to right-side column names that collide with left-side column names (key columns excluded — they're dropped from the right output entirely)."}
+					"on":            {"type":"object","title":"Match on","description":"Which column on the first list pairs with which column on the second — {\"customer_id\": \"id\"} matches each order's customer_id against a customer's id. Add more entries to match on several columns at once.","additionalProperties":{"type":"string"}},
+					"kind":          {"type":"string","title":"What to keep","enum":["inner","left","right","outer","anti"],"enumNames":["Only rows that matched","Every row from the first list","Every row from the second list","Everything from both lists","Only first-list rows with NO match"],"default":"inner","description":"Which rows come out. \"Only rows that matched\" keeps the pairs. \"Every row from the first list\" keeps them all, filling in the second list's columns where there was a match. \"Everything from both lists\" keeps every row on either side. \"Only first-list rows with NO match\" answers \"which of these haven't I dealt with yet?\" — those rows come out carrying their own columns only."},
+					"right_suffix":  {"type":"string","title":"Suffix for repeated column names","default":"_right","description":"When both lists carry a column of the same name, this is added to the second list's copy so neither is lost. The columns you matched on are exempt — they hold the same value on both sides, so only the first list's copy comes out."}
 				},
 				"required":["on"]
 			}`),

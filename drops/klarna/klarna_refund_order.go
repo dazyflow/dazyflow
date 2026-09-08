@@ -38,17 +38,17 @@ func init() {
 			ProcessModel:     core.ProcessLongLived,
 			Inputs: []core.Port{
 				{Port: "order_id", Label: "Order ID", Required: true, MIME: []string{"text/plain"}},
-				{Port: "amount", Label: "Amount (smallest unit)", MIME: []string{"text/plain", "application/json"}},
+				{Port: "amount", Label: "Amount (cents/öre)", MIME: []string{"text/plain", "application/json"}},
 			},
 			Outputs: []core.Port{
 				{Port: "refund_id", Label: "Refund ID", MIME: []string{"text/plain"}, Example: json.RawMessage(`"ref_3c81de"`)},
-				{Port: "refunded_amount", Label: "Refunded amount (smallest unit)", MIME: []string{"text/plain"}, Example: json.RawMessage(`"24900"`)},
+				{Port: "refunded_amount", Label: "Refunded amount (cents/öre)", MIME: []string{"text/plain"}, Example: json.RawMessage(`"24900"`)},
 			},
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
 					"order_id":{"type":"string","title":"Order ID","description":"The Klarna order to refund. Overridden by the 'Order ID' input."},
-					"amount":{"type":"integer","title":"Amount (smallest unit)","minimum":1,"description":"Leave empty to refund the whole remaining refundable amount (captured minus already refunded). For a partial refund, enter the amount in the currency's smallest unit — e.g. 500 = 5.00. Overridden by the 'Amount' input."},
+					"amount":{"type":"integer","title":"Amount (cents/öre)","minimum":1,"description":"Leave empty to refund the whole remaining refundable amount (captured minus already refunded). For a partial refund, enter the amount in the currency's smallest unit — e.g. 500 = 5.00. Overridden by the 'Amount' input."},
 					"description":{"type":"string","title":"Description","description":"A note shown on the customer's Klarna statement (e.g. \"Returned\")."},
 					"base_url":{"type":"string","description":"Override the API host (testing)."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}

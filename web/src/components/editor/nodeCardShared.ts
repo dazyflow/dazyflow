@@ -194,6 +194,18 @@ export type DazyNodeData = {
   // run. Shown as a chip, because a step that cannot fail a flow is a fact
   // about the flow's shape and invisible otherwise.
   continueOnError?: boolean;
+  // Card folded to its icon and name (node.collapsed). The pins stay in the
+  // DOM — they stack at one point so every wire keeps its own handle id and
+  // simply converges; nothing about the graph's wiring changes when a card
+  // folds, which is what lets it fold and unfold with no edge bookkeeping.
+  collapsed?: boolean;
+  // Step guarded against edits (node.locked): inline fields render read-only
+  // and FlowEditor marks the node undraggable. Also drives the Inspector's
+  // read-only form.
+  locked?: boolean;
+  // Fold/unfold this card, and lock/unlock it — injected by FlowEditor so the
+  // card's own buttons write through to the graph the same way setParam does.
+  setCollapsed?: (collapsed: boolean) => void;
   // Downstream of a switched-off step: will be skipped by the cascade at
   // run time. Greyed (softer than the off node itself, no chip).
   offByCascade?: boolean;

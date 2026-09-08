@@ -42,13 +42,13 @@ func init() {
 	for i := 1; i <= routeSlotCount; i++ {
 		outputs = append(outputs, core.Port{
 			Port:  fmt.Sprintf("rows_%d", i),
-			Label: fmt.Sprintf("Routing slot %d", i),
+			Label: fmt.Sprintf("Route %d", i),
 			MIME:  []string{"application/json"},
 			List:  true, // carries rows — name isn't in the auto-list set, so flag it
 		})
 	}
 	outputs = append(outputs,
-		core.Port{Port: routeDefaultSlot, Label: "Default", MIME: []string{"application/json"}, List: true},
+		core.Port{Port: routeDefaultSlot, Label: "Everything else", MIME: []string{"application/json"}, List: true},
 	)
 
 	engine.Register(engine.NativeDrop{
@@ -60,7 +60,7 @@ func init() {
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"transform", "route", "branch", "fork", "etl"},
-			Description: "N-way split. Param `routes` is an ordered list of {slot, filter} entries — for each row, the FIRST filter that returns true wins and the row goes to that slot's output port. Rows matching no route land on `default`. Use this to fan one row stream into per-category pipelines (e.g. route SE/NO/UK orders to different later steps). Output slot names are fixed (rows_1..rows_8 + default) for V1; semantic naming via variadic ports is a future enhancement.",
+			Description: "Send each row down a different path depending on what is in it — the fan-out step. You give it an ordered list of rules, each one a condition plus the route it feeds: for every row the FIRST rule it satisfies wins, and the row leaves on that route's output. A row satisfying no rule leaves on Everything else.\n\nUse it to split one list into per-category paths — SE, NO and UK orders each going to their own later steps, or the high-value orders taking a different path from the rest. There are eight routes plus Everything else; if you need more, feed Everything else into a second Route rows step.\n\nBecause the first match wins, order the rules from most specific to least. A rule for \"score is 90 or more\" has to come BEFORE \"score is 50 or more\" — the other way round, the looser rule swallows the rows the strict one was meant to catch.",
 			Summary:     "Route each row to one of N output slots based on the first matching CEL filter; rest go to default.",
 			Examples: []core.ParamsExample{
 				{
@@ -85,17 +85,18 @@ func init() {
 				"properties":{
 					"routes": {
 						"type":"array",
-						"description":"Ordered list of routing rules. Each row is sent to the FIRST matching route; unmatched rows land on the default slot.",
+						"title":"Rules",
+						"description":"The rules, in order. Each row takes the FIRST rule it satisfies and leaves on that rule's route; a row satisfying none leaves on Everything else. Order matters — put the most specific rule first, or a looser one above it will swallow the rows it was meant to catch.",
 						"items": {
 							"type":"object",
 							"properties":{
-								"slot":   {"type":"string","description":"Output port name. One of rows_1..rows_8."},
-								"filter": {"type":"string","format":"row-condition","description":"CEL expression returning bool. Sees 'row' as map<string,dyn>."}
+								"slot":   {"type":"string","title":"Route to send it down","description":"Which output the matching rows leave on. \"rows_1\" is the pin labelled Route 1, \"rows_2\" is Route 2, and so on up to \"rows_8\"."},
+								"filter": {"type":"string","format":"row-condition","description":"The condition a row has to satisfy to take this route — row.country == 'SE', say, or row.total > 1000. Written as a CEL expression, in which 'row' is the row and row.<column name> is one of its columns."}
 							},
 							"required":["slot","filter"]
 						}
 					},
-					"default_slot": {"type":"string","default":"default","description":"Slot name that catches rows matching no route. Defaults to 'default'."}
+					"default_slot": {"type":"string","title":"Where the leftovers go","default":"default","description":"Which output catches the rows that satisfy no rule at all. \"default\" is the pin labelled Everything else; name one of rows_1..rows_8 here instead to fold the leftovers in with a route you are already using."}
 				},
 				"required":["routes"]
 			}`),

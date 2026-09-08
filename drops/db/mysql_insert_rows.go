@@ -20,7 +20,7 @@ func init() {
 			ID:          "mysql_insert_rows",
 			Version:     "1.0",
 			Label:       "MySQL",
-			Subtitle:    "Insert rows",
+			Subtitle:    "Add rows",
 			Color:       "#00758f",
 			Icon:        "database",
 			BrandLogo:   "/brands/mysql.svg",

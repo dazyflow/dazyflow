@@ -9,9 +9,10 @@ and first-class Nordic/EU connectors (Fortnox, Klarna, Roaring, 46elks, nShift,
 SMHI) alongside the usual Google, Slack, Stripe and GitHub. English and Swedish
 UI. AGPL, no feature gates, no seat limits.
 
-![The Dazyflow editor: a Stripe "on payment" trigger fanning out to a Gmail
-thank-you, a Slack message and a row saved to a sales collection, wired field by
-field on the canvas](docs/img/editor-canvas.png)
+![The Dazyflow editor: a "Monday sales summary" flow, published and live — a
+Monday-morning schedule reads a range from Google Sheets, Claude summarizes it,
+and the summary goes out as both a Gmail email and a Slack message, wired field
+by field on the canvas](docs/img/editor-canvas.png)
 
 ## Try it in 60 seconds
 

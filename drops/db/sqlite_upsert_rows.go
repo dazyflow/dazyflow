@@ -23,7 +23,7 @@ func init() {
 			ID:          "sqlite_upsert_rows",
 			Version:     "1.0",
 			Label:       "SQLite",
-			Subtitle:    "Upsert rows",
+			Subtitle:    "Add or update rows",
 			Color:       "#0a6abf",
 			Icon:        "database",
 			BrandLogo:   "/brands/sqlite.svg",

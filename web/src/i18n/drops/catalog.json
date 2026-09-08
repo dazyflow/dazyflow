@@ -2676,25 +2676,30 @@
     ]
   },
   "join_rows": {
-    "description": "SQL JOIN between two row streams. Param `on` maps left columns to right columns ({\"id\": \"user_id\"}). `kind` picks inner / left / right / outer / anti (anti = only the left rows with no match on the right, carrying just their own columns — the \"which of these haven't I processed yet?\" question). When the same key matches multiple right rows the output cartesians within that group (standard SQL behavior). Non-key right columns that collide with left column names get suffixed (default \"_right\", overridable via `right_suffix`). The right side's key columns are dropped from the output since they equal the left's by construction.",
+    "description": "Match up two lists of rows on a column they share — the lookup step. Say which column on the first list pairs with which column on the second (an order's customer_id with a customer's id, say), and each pair comes out as one row carrying both sides' columns.\n\nYou choose what comes out: only the rows that matched, every row from one list whether it matched or not, everything from both — or only the first-list rows with NO match on the second. That last one answers \"which of these haven't I dealt with yet?\": put today's rows on the first input and what you have already recorded on the second, and out come just the new ones.\n\nTwo details worth knowing. If both lists carry a column of the same name, the second list's copy gets \"_right\" added so neither is silently lost (change that suffix on the step). And when one row on the first list matches several on the second, you get one output row per match.",
     "ports": [
-      "Left rows",
+      "First list",
       "Pass-through",
-      "Right rows",
-      "Rows"
+      "Rows",
+      "Second list"
     ],
     "label": "Combine two lists",
+    "titles": [
+      "Match on",
+      "Suffix for repeated column names",
+      "What to keep"
+    ],
     "help": [
-      "Join flavor. inner = matched only. left = all left + matched right. right = all right + matched left. outer = full union. anti = the left rows that have no match on the right — the \"which of these are new?\" question — emitted with their own columns only.",
-      "Join key mapping {left_col: right_col}. Multiple entries = multi-column key.",
-      "Suffix appended to right-side column names that collide with left-side column names (key columns excluded — they're dropped from the right output entirely)."
+      "When both lists carry a column of the same name, this is added to the second list's copy so neither is lost. The columns you matched on are exempt — they hold the same value on both sides, so only the first list's copy comes out.",
+      "Which column on the first list pairs with which column on the second — {\"customer_id\": \"id\"} matches each order's customer_id against a customer's id. Add more entries to match on several columns at once.",
+      "Which rows come out. \"Only rows that matched\" keeps the pairs. \"Every row from the first list\" keeps them all, filling in the second list's columns where there was a match. \"Everything from both lists\" keeps every row on either side. \"Only first-list rows with NO match\" answers \"which of these haven't I dealt with yet?\" — those rows come out carrying their own columns only."
     ],
     "enum_names": [
-      "All left rows",
-      "All right rows",
-      "Everything from both",
-      "Only left rows with NO match",
-      "Only matching rows"
+      "Every row from the first list",
+      "Every row from the second list",
+      "Everything from both lists",
+      "Only first-list rows with NO match",
+      "Only rows that matched"
     ]
   },
   "json": {
@@ -2713,9 +2718,9 @@
   "klarna_capture_order": {
     "description": "Capture (charge) a Klarna order once you fulfil it — the money-movement step after a purchase is authorized. Give the order id (typed or connected from an earlier step); leave Amount empty to capture the whole remaining authorized amount, or set it in the currency's smallest unit (öre/cents) for a partial capture. A short Description shows on the customer's Klarna statement.\n\nThe new capture's id comes out on 'capture_id'. Capturing an order charges the customer, so this step runs once and is never retried automatically — Dazyflow won't charge the same order twice. Connect your Klarna account once on the Apps page.",
     "ports": [
-      "Amount (smallest unit)",
+      "Amount (cents/öre)",
       "Capture ID",
-      "Captured amount (smallest unit)",
+      "Captured amount (cents/öre)",
       "Order ID",
       "Pass-through"
     ],
@@ -2723,7 +2728,7 @@
     "subtitle": "Capture order",
     "integration": "Klarna",
     "titles": [
-      "Amount (smallest unit)",
+      "Amount (cents/öre)",
       "Description",
       "Order ID"
     ],
@@ -2751,13 +2756,13 @@
   "klarna_get_order": {
     "description": "Fetch one order from your connected Klarna account by its order id (from Klarna's checkout callback or the Merchant Portal). The order id can be typed on the step or connected from an earlier step (the 'Order ID' input overrides the param).\n\nOut come the order 'status' (ORDER_OPEN, PART_CAPTURED, CAPTURED, CANCELLED, EXPIRED, CLOSED), the 'order_amount', 'captured_amount' and 'remaining_authorized_amount' (all in the currency's smallest unit — öre/cents), the 'currency', and the whole order as JSON on the 'Order' output. This is a read — safe to retry. Connect your Klarna account once on the Apps page.",
     "ports": [
-      "Captured amount (smallest unit)",
+      "Captured amount (cents/öre)",
       "Currency",
       "Order",
       "Order ID",
-      "Order amount (smallest unit)",
+      "Order amount (cents/öre)",
       "Pass-through",
-      "Remaining authorized (smallest unit)",
+      "Remaining authorized (cents/öre)",
       "Status"
     ],
     "label": "Klarna",
@@ -2788,17 +2793,17 @@
   "klarna_refund_order": {
     "description": "Refund a captured Klarna order by its order id (typed or connected from an earlier step). Leave Amount empty to refund the full remaining refundable amount (captured minus already refunded), or set it in the currency's smallest unit (öre/cents) for a partial refund. A short Description shows on the customer's Klarna statement. Put an Approval step before this one for the classic 'approve in Slack → refund' flow.\n\nThe new refund's id comes out on 'refund_id'. Refunding pays money back, so this step runs once and is never retried automatically — Dazyflow won't refund the same order twice. Connect your Klarna account once on the Apps page.",
     "ports": [
-      "Amount (smallest unit)",
+      "Amount (cents/öre)",
       "Order ID",
       "Pass-through",
       "Refund ID",
-      "Refunded amount (smallest unit)"
+      "Refunded amount (cents/öre)"
     ],
     "label": "Klarna",
     "subtitle": "Refund order",
     "integration": "Klarna",
     "titles": [
-      "Amount (smallest unit)",
+      "Amount (cents/öre)",
       "Description",
       "Order ID"
     ],
@@ -2930,7 +2935,7 @@
       "Rows saved"
     ],
     "label": "MySQL",
-    "subtitle": "Insert rows",
+    "subtitle": "Add rows",
     "integration": "MySQL",
     "titles": [
       "Column mapping"
@@ -2979,7 +2984,7 @@
       "Rows saved"
     ],
     "label": "MySQL",
-    "subtitle": "Upsert rows",
+    "subtitle": "Add or update rows",
     "integration": "MySQL",
     "titles": [
       "Column mapping"
@@ -3665,7 +3670,7 @@
       "Rows saved"
     ],
     "label": "Postgres",
-    "subtitle": "Insert rows",
+    "subtitle": "Add rows",
     "integration": "Postgres",
     "titles": [
       "Column mapping"
@@ -3715,7 +3720,7 @@
       "Rows saved"
     ],
     "label": "Postgres",
-    "subtitle": "Upsert rows",
+    "subtitle": "Add or update rows",
     "integration": "Postgres",
     "titles": [
       "Column mapping"
@@ -3916,26 +3921,31 @@
     ]
   },
   "route_rows": {
-    "description": "N-way split. Param `routes` is an ordered list of {slot, filter} entries — for each row, the FIRST filter that returns true wins and the row goes to that slot's output port. Rows matching no route land on `default`. Use this to fan one row stream into per-category pipelines (e.g. route SE/NO/UK orders to different later steps). Output slot names are fixed (rows_1..rows_8 + default) for V1; semantic naming via variadic ports is a future enhancement.",
+    "description": "Send each row down a different path depending on what is in it — the fan-out step. You give it an ordered list of rules, each one a condition plus the route it feeds: for every row the FIRST rule it satisfies wins, and the row leaves on that route's output. A row satisfying no rule leaves on Everything else.\n\nUse it to split one list into per-category paths — SE, NO and UK orders each going to their own later steps, or the high-value orders taking a different path from the rest. There are eight routes plus Everything else; if you need more, feed Everything else into a second Route rows step.\n\nBecause the first match wins, order the rules from most specific to least. A rule for \"score is 90 or more\" has to come BEFORE \"score is 50 or more\" — the other way round, the looser rule swallows the rows the strict one was meant to catch.",
     "ports": [
-      "Default",
+      "Everything else",
       "Pass-through",
-      "Routing slot 1",
-      "Routing slot 2",
-      "Routing slot 3",
-      "Routing slot 4",
-      "Routing slot 5",
-      "Routing slot 6",
-      "Routing slot 7",
-      "Routing slot 8",
+      "Route 1",
+      "Route 2",
+      "Route 3",
+      "Route 4",
+      "Route 5",
+      "Route 6",
+      "Route 7",
+      "Route 8",
       "Rows"
     ],
     "label": "Route rows",
+    "titles": [
+      "Route to send it down",
+      "Rules",
+      "Where the leftovers go"
+    ],
     "help": [
-      "CEL expression returning bool. Sees 'row' as map\u003cstring,dyn\u003e.",
-      "Ordered list of routing rules. Each row is sent to the FIRST matching route; unmatched rows land on the default slot.",
-      "Output port name. One of rows_1..rows_8.",
-      "Slot name that catches rows matching no route. Defaults to 'default'."
+      "The condition a row has to satisfy to take this route — row.country == 'SE', say, or row.total \u003e 1000. Written as a CEL expression, in which 'row' is the row and row.\u003ccolumn name\u003e is one of its columns.",
+      "The rules, in order. Each row takes the FIRST rule it satisfies and leaves on that rule's route; a row satisfying none leaves on Everything else. Order matters — put the most specific rule first, or a looser one above it will swallow the rows it was meant to catch.",
+      "Which output catches the rows that satisfy no rule at all. \"default\" is the pin labelled Everything else; name one of rows_1..rows_8 here instead to fold the leftovers in with a route you are already using.",
+      "Which output the matching rows leave on. \"rows_1\" is the pin labelled Route 1, \"rows_2\" is Route 2, and so on up to \"rows_8\"."
     ]
   },
   "rss": {
@@ -4158,7 +4168,7 @@
       "Updated range"
     ],
     "label": "Google Sheets",
-    "subtitle": "Append rows",
+    "subtitle": "Add rows",
     "integration": "Google Sheets",
     "titles": [
       "Adding rows",
@@ -4485,7 +4495,7 @@
       "Rows saved"
     ],
     "label": "SQLite",
-    "subtitle": "Insert rows",
+    "subtitle": "Add rows",
     "integration": "SQLite",
     "titles": [
       "Column mapping",
@@ -4531,7 +4541,7 @@
       "Rows saved"
     ],
     "label": "SQLite",
-    "subtitle": "Upsert rows",
+    "subtitle": "Add or update rows",
     "integration": "SQLite",
     "titles": [
       "Column mapping",
@@ -4640,7 +4650,7 @@
   "stripe_create_refund": {
     "description": "Refund a payment by its payment_intent id (pi_…). Leave Amount empty for a full refund, or set it in the smallest currency unit (cents/öre) for a partial one — the id and the amount can both be connected from an earlier step, e.g. a support form's fields. Put an Approval step before this one for the classic 'approve in Slack → refund' flow. Retries reuse the same Idempotency-Key, so a flaky run can't refund twice.",
     "ports": [
-      "Amount (smallest unit)",
+      "Amount (cents/öre)",
       "Details",
       "Pass-through",
       "Payment intent",
@@ -4651,7 +4661,7 @@
     "subtitle": "Create refund",
     "integration": "Stripe",
     "titles": [
-      "Amount (smallest unit)",
+      "Amount (cents/öre)",
       "Payment",
       "Reason"
     ],
@@ -4781,8 +4791,8 @@
   "stripe_on_payment": {
     "description": "Starts the flow when a payment succeeds in your Stripe account (a payment_intent.succeeded webhook event). Setup: in the Stripe dashboard add a webhook endpoint pointing at https://\u003cyour-dazyflow-host\u003e/api/v1/events/stripe/\u003ctenant\u003e, subscribe it to payment_intent.succeeded, then save that endpoint's signing secret (whsec_…) as a secret named STRIPE_WEBHOOK_SECRET — each delivery's Stripe-Signature is verified against it. Outputs the amount (minor units and a display form like '49.99 USD'), currency, payer email, description, and the raw event. For polling instead of webhooks, compose Schedule → 'List events' instead.",
     "ports": [
+      "Amount (cents/öre)",
       "Amount (display)",
-      "Amount (smallest unit)",
       "Currency",
       "Customer email",
       "Description",
@@ -4800,8 +4810,8 @@
   "stripe_on_payment_failed": {
     "description": "Starts the flow when a payment attempt fails in your Stripe account (a payment_intent.payment_failed webhook event). Setup is the same endpoint as the payment trigger: point a Stripe webhook at https://\u003cyour-dazyflow-host\u003e/api/v1/events/stripe/\u003ctenant\u003e, subscribe it to payment_intent.payment_failed, and save the endpoint's signing secret (whsec_…) as a secret named STRIPE_WEBHOOK_SECRET. The 'Failure reason' output carries Stripe's decline message ('Your card was declined.') — connect it with the amount and payer email into a notify step.",
     "ports": [
+      "Amount (cents/öre)",
       "Amount (display)",
-      "Amount (smallest unit)",
       "Currency",
       "Customer email",
       "Description",
@@ -4865,7 +4875,7 @@
   "stripe_send_invoice": {
     "description": "Create a one-line invoice for a customer and have Stripe email it (a hosted page where they can pay by card or transfer). One step covers the whole API sequence — draft invoice, line item, finalize, send — and a retried run replays already-completed steps instead of double-billing. Amount is in the smallest currency unit (12000 = 120.00); customer, amount and description can all be connected from an earlier step, e.g. a new row in an orders sheet. The classic flow: new-order-row → Search customers (or Create customer) → Send invoice → notify. Note: Stripe only delivers invoice emails in live mode; in test mode check the dashboard.",
     "ports": [
-      "Amount (smallest unit)",
+      "Amount (cents/öre)",
       "Customer",
       "Description",
       "Details",
@@ -5051,31 +5061,31 @@
     ]
   },
   "switch": {
-    "description": "Route the payload on `in` to one of N case ports by matching a key against each case's value. Param `cases` is an ordered list of {slot, equals} — the FIRST case whose value matches the key wins and the whole payload rides out that slot; a key matching no case goes to `default`. Match the whole input, or a field of it via the `field` param. An `equals` that's a list matches if the key equals any element (like Compare's one_of). The multi-way sibling of Branch — reach for it instead of chaining Branches to fan one payload out by status/enum/category.",
+    "description": "Send one value down a different path depending on what it is — the multi-way version of Branch. Where Branch has a yes and a no, Switch has up to eight matches: you give each one a value to look for, and whatever comes in leaves on the first match whose value it equals. Anything equal to none of them leaves on Everything else.\n\nBy default the whole incoming value is what gets matched. Set \"What to match on\" to compare just one field of it instead — an order's status, say — and the whole order still travels onward; the field only decides which path it takes. A match can also hold a list of values, and then anything equal to ANY of them takes that path (200, 201 and 204 all going one way).\n\nFirst match wins, so if two of them could apply, the earlier one takes it. Reach for this instead of chaining Branch steps when you are fanning one payload out by a status, a category or a type.",
     "ports": [
-      "Case 1",
-      "Case 2",
-      "Case 3",
-      "Case 4",
-      "Case 5",
-      "Case 6",
-      "Case 7",
-      "Case 8",
-      "Default",
+      "Everything else",
+      "Match 1",
+      "Match 2",
+      "Match 3",
+      "Match 4",
+      "Match 5",
+      "Match 6",
+      "Match 7",
+      "Match 8",
       "Value"
     ],
     "label": "Switch",
     "titles": [
-      "Cases",
-      "Equals",
-      "Key field",
-      "Slot"
+      "Matches",
+      "Path to send it down",
+      "Value to look for",
+      "What to match on"
     ],
     "help": [
-      "Optional dot-path into the input to match on (e.g. status). Empty matches the whole input value. The full payload rides through regardless.",
-      "Ordered list of {slot, equals}. The FIRST case whose value matches the key wins; the payload rides out that slot. Unmatched payloads go to default.",
-      "Output port name. One of case_1..case_8.",
-      "Value to match the key against — a literal (\"paid\", 200, true) or a list ([200,201,204]) to match any element."
+      "The matches, in order. Whatever comes in leaves on the FIRST one whose value it equals; if it equals none of them it leaves on Everything else. Order matters when two could apply — the earlier one takes it.",
+      "What has to be equal for this path to be taken — one value (\"paid\", 200, true), or a list ([200,201,204]) if several values should all take the same path.",
+      "Which field of the incoming value to compare — status, say, or customer.country for a field inside a field. Leave it empty to compare the whole value. Either way the whole value travels onward; this only decides which path it takes.",
+      "Which output it leaves on when this match wins. \"case_1\" is the pin labelled Match 1, \"case_2\" is Match 2, and so on up to \"case_8\"."
     ]
   },
   "text": {
@@ -5153,12 +5163,12 @@
   "ticketmaster_search_events": {
     "description": "Search Ticketmaster for live events and get one row each: what it is, which artist, the venue and city, the date, and a link to the tickets. Filter by artist or team, by country and city, and by a date window.\n\nPair it with Spotify · Followed artists to turn someone's listening into a gig list: loop over the artists, search each name, and mail or post what comes back.\n\nThis searches Ticketmaster's own inventory — Ticketmaster, TicketWeb, Universe and resale. A club show sold somewhere else won't be in it.",
     "ports": [
-      "Count",
       "Details",
-      "Events found",
+      "Events",
+      "On this page",
       "Pass-through",
       "Search for",
-      "Total found"
+      "Total matches"
     ],
     "label": "Ticketmaster",
     "subtitle": "Search events",

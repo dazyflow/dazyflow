@@ -108,6 +108,24 @@ type Node struct {
 	// the UI on first open.
 	Position *Position `json:"position,omitempty"`
 
+	// Collapsed folds the step's card down to its icon and name on the
+	// canvas, with one pin standing in for all of them. Editor metadata like
+	// Position: the engine never reads it. It rides in the graph rather than
+	// in one browser's storage because it is a statement about the DIAGRAM —
+	// a twenty-step flow is readable only if the boring middle is folded, and
+	// that has to be true for whoever opens it next, not just for whoever
+	// folded it.
+	Collapsed bool `json:"collapsed,omitempty"`
+
+	// Locked marks the step as not-to-be-touched in the editor: its fields
+	// render read-only and the card will not drag. Editor metadata — the
+	// engine runs a locked node exactly as it runs any other, and the API
+	// does NOT refuse writes to one. It is a guard against the slip (nudging
+	// a card mid-review, typing into the wrong field), not a permission; the
+	// author can always clear it, and a client that ignores it is not doing
+	// anything the server considers wrong.
+	Locked bool `json:"locked,omitempty"`
+
 	// TimeoutSeconds bounds the per-execution wall-time of this node.
 	// On expiry the worker marks the node Failed with code=timeout —
 	// existing failure-propagation (on_error / fallback edges) then

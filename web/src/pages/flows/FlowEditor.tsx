@@ -344,6 +344,36 @@ function EditorInner() {
   // to hang one — which is exactly the "announce it everywhere" shape this is
   // for.
   const [continueOnError, setContinueOnError] = useState<Set<string>>(() => new Set());
+  // Folded cards (node.collapsed): the card shows its icon and name only, with
+  // one pin standing in for all of them. Saved with the graph rather than in
+  // this browser — see core.Node.Collapsed. A long flow is readable only if
+  // the boring middle is folded, and that has to hold for the next reader.
+  const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(() => new Set());
+  // Locked steps (node.locked): fields read-only, card won't drag. A guard
+  // against the slip, not a permission — the server honours writes either way.
+  const [lockedNodes, setLockedNodes] = useState<Set<string>>(() => new Set());
+
+  // hydrateNodeFlags replaces every per-node flag set from one node list, and
+  // clears them all when handed none.
+  //
+  // It is a function because the list had been enumerated in three places and
+  // had drifted in two: a revision restore rebuilt breakpoints and disabled but
+  // dropped continue_on_error, so restoring silently made a non-critical step
+  // critical again and the next save persisted that. Worse, the not-found reset
+  // cleared only breakpoints and disabled, leaving the others holding the
+  // PREVIOUS flow's node ids — and since node ids repeat across flows ("n1"),
+  // the serializer would then write a stale flag onto an unrelated step in the
+  // new flow. Both are the same bug: a list of flags maintained by hand in more
+  // than one place. Add a flag here and every path gets it.
+  const hydrateNodeFlags = useCallback((graphNodes: NonNullable<Graph["nodes"]>) => {
+    const idsWhere = (pick: (n: NonNullable<Graph["nodes"]>[number]) => unknown) =>
+      new Set(graphNodes.filter((n) => !!pick(n)).map((n) => n.id));
+    setBreakpoints(idsWhere((n) => n.breakpoint));
+    setDisabledNodes(idsWhere((n) => n.disabled));
+    setContinueOnError(idsWhere((n) => n.continue_on_error));
+    setCollapsedNodes(idsWhere((n) => n.collapsed));
+    setLockedNodes(idsWhere((n) => n.locked));
+  }, []);
   // Triggers live at graph-level (not per-node). Carried through so a
   // save doesn't accidentally drop the webhook secret / cron expression
   // a user configured in the settings modal.
@@ -722,9 +752,7 @@ function EditorInner() {
         connectable: false,
       })),
     );
-    setBreakpoints(new Set((g.nodes ?? []).filter((n) => n.breakpoint).map((n) => n.id)));
-    setDisabledNodes(new Set((g.nodes ?? []).filter((n) => n.disabled).map((n) => n.id)));
-    setContinueOnError(new Set((g.nodes ?? []).filter((n) => n.continue_on_error).map((n) => n.id)));
+    hydrateNodeFlags(g.nodes ?? []);
     setParamsByID(Object.fromEntries((g.nodes ?? []).map((n) => [n.id, n.params ?? {}])));
     setTriggers(g.triggers ?? []);
     setVisibility(g.visibility);
@@ -1032,8 +1060,7 @@ function EditorInner() {
           setNodes([]);
           setEdges([]);
           setFrameNodes([]);
-          setBreakpoints(new Set());
-          setDisabledNodes(new Set());
+          hydrateNodeFlags([]);
           setParamsByID({});
           setTriggers([]);
           setDirty(false);
@@ -2076,6 +2103,20 @@ function EditorInner() {
     },
     [],
   );
+  // Fold a card down, or open it back up. Takes the target state rather than
+  // toggling, because the card's own minimize/maximize buttons each know which
+  // way they go — and a fold-all over a mixed selection must not flip halves
+  // of it in opposite directions.
+  const setNodeCollapsed = useCallback((nodeID: string, collapsed: boolean) => {
+    setCollapsedNodes((prev) => {
+      if (prev.has(nodeID) === collapsed) return prev;
+      const next = new Set(prev);
+      if (collapsed) next.add(nodeID);
+      else next.delete(nodeID);
+      return next;
+    });
+    setDirty(true);
+  }, []);
   // Inject live params + the per-key setter into each node's data so the
   // selected card can render inline fields. Derived (like coloredEdges) so
   // it recomputes when params change; base `nodes` stays the source of
@@ -2411,6 +2452,8 @@ function EditorInner() {
       const off = offByCascade.has(n.id);
       const breakpoint = breakpoints.has(n.id);
       const keepGoing = continueOnError.has(n.id);
+      const collapsed = collapsedNodes.has(n.id);
+      const locked = lockedNodes.has(n.id);
       const paused = pausedAt === n.id;
       // Entrance delay while a build animation plays (see applyGraphAnimated);
       // undefined otherwise, so a node only rebuilds for it when it's actually
@@ -2433,6 +2476,8 @@ function EditorInner() {
         disabled,
         off,
         breakpoint,
+        collapsed,
+        locked,
         paused,
         canConnect,
         tokenLabels,
@@ -2450,6 +2495,10 @@ function EditorInner() {
       }
       const node: FlowNode<DazyNodeData> = {
         ...n,
+        // React Flow's own drag guard — cheaper and more reliable than
+        // fighting the drag in a handler, and it also stops the keyboard
+        // nudge, which a pointer-only guard would miss.
+        draggable: !locked,
         data: {
           ...n.data,
           params,
@@ -2474,6 +2523,9 @@ function EditorInner() {
           loopOwned,
           disabled,
           continueOnError: keepGoing,
+          collapsed,
+          locked,
+          setCollapsed: (v: boolean) => setNodeCollapsed(n.id, v),
           offByCascade: off,
           tokenLabels,
           breakpoint,
@@ -2505,6 +2557,9 @@ function EditorInner() {
     offByCascade,
     tokenLabels,
     breakpoints,
+    collapsedNodes,
+    lockedNodes,
+    setNodeCollapsed,
     pausedAt,
     approveFromCard,
     animApply,
@@ -2538,6 +2593,17 @@ function EditorInner() {
 
   const toggleNodeDisabled = useCallback((nodeID: string) => {
     setDisabledNodes((prev) => {
+      const next = new Set(prev);
+      if (next.has(nodeID)) next.delete(nodeID);
+      else next.add(nodeID);
+      return next;
+    });
+    setDirty(true);
+  }, []);
+
+
+  const toggleNodeLocked = useCallback((nodeID: string) => {
+    setLockedNodes((prev) => {
       const next = new Set(prev);
       if (next.has(nodeID)) next.delete(nodeID);
       else next.add(nodeID);
@@ -2992,6 +3058,8 @@ function EditorInner() {
       ...(breakpoints.has(n.id) ? { breakpoint: true } : {}),
       ...(disabledNodes.has(n.id) ? { disabled: true } : {}),
       ...(continueOnError.has(n.id) ? { continue_on_error: true } : {}),
+      ...(collapsedNodes.has(n.id) ? { collapsed: true } : {}),
+      ...(lockedNodes.has(n.id) ? { locked: true } : {}),
     })),
     edges: edges.map((e) => ({
       from: e.source,
@@ -3209,8 +3277,7 @@ function EditorInner() {
           }).items,
       );
       setParamsByID(Object.fromEntries(targetNodes.map((n) => [n.id, n.params ?? {}])));
-      setBreakpoints(new Set(targetNodes.filter((n) => n.breakpoint).map((n) => n.id)));
-      setDisabledNodes(new Set(targetNodes.filter((n) => n.disabled).map((n) => n.id)));
+      hydrateNodeFlags(targetNodes);
       setTriggers(g.triggers ?? []);
       setVisibility(g.visibility);
       setOwner(g.owner);
@@ -3231,7 +3298,12 @@ function EditorInner() {
   // that keeps this from rotting: a new feature that edits the graph is
   // undoable the moment buildGraph serializes it, with no history code to
   // update. The deps are the editable state — the same list autosave watches,
-  // plus the three it omits (frames, breakpoints, disabled steps).
+  // plus the ones it omits (frames, and every per-node flag).
+  //
+  // Every flag buildGraph serializes has to be in this list. Three were not:
+  // toggling continue_on_error, a fold or a lock recorded no snapshot, so the
+  // change was not undoable AND the next unrelated edit recorded a document
+  // that already carried it — making a single Ctrl+Z quietly revert both.
   useEffect(() => {
     // Don't record while the canvas doesn't represent the user's document.
     if (graphLoading || loadFailed || previewRef) return;
@@ -3258,6 +3330,9 @@ function EditorInner() {
     triggers,
     breakpoints,
     disabledNodes,
+    continueOnError,
+    collapsedNodes,
+    lockedNodes,
     visibility,
     owner,
     language,
@@ -5269,6 +5344,8 @@ function EditorInner() {
           }
           nodeDisabled={inspectorSelected ? disabledNodes.has(inspectorSelected.id) : false}
           onToggleDisabled={toggleNodeDisabled}
+          nodeLocked={inspectorSelected ? lockedNodes.has(inspectorSelected.id) : false}
+          onToggleLocked={canEdit ? toggleNodeLocked : undefined}
           onResetState={canEdit ? resetNodeStateAction : undefined}
           upstreamRows={inspectorUpstreamRows}
           rowsSource={inspectorRowsSource}
@@ -5420,6 +5497,20 @@ function EditorInner() {
                     disabled: !canEdit,
                     title: t("editor.ctxContinueOnErrorHint"),
                     onClick: () => toggleContinueOnError(menu.id),
+                  },
+                  {
+                    label: collapsedNodes.has(menu.id)
+                      ? t("editor.ctxExpand")
+                      : t("editor.ctxCollapse"),
+                    disabled: !canEdit,
+                    onClick: () => setNodeCollapsed(menu.id, !collapsedNodes.has(menu.id)),
+                  },
+                  {
+                    label: t("editor.ctxLock"),
+                    checked: lockedNodes.has(menu.id),
+                    disabled: !canEdit,
+                    title: t("editor.ctxLockHint"),
+                    onClick: () => toggleNodeLocked(menu.id),
                   },
                   {
                     label: breakpoints.has(menu.id)

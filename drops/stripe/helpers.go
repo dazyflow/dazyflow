@@ -183,7 +183,7 @@ func paymentTriggerOutputs() []core.Port {
 	// flow has any reason to template across.
 	return []core.Port{
 		{Port: "amount_display", Label: "Amount (display)", MIME: []string{"text/plain"}, Example: json.RawMessage(`"249.00 SEK"`)},
-		{Port: "amount", Label: "Amount (smallest unit)", MIME: []string{"text/plain"}, Example: json.RawMessage(`"24900"`)},
+		{Port: "amount", Label: "Amount (cents/öre)", MIME: []string{"text/plain"}, Example: json.RawMessage(`"24900"`)},
 		{Port: "currency", Label: "Currency", MIME: []string{"text/plain"}, Example: json.RawMessage(`"SEK"`)},
 		{Port: "customer_email", Label: "Customer email", MIME: []string{"text/plain"}, Example: json.RawMessage(`"anna@nordkraft.se"`)},
 		{Port: "description", Label: "Description", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Faktura 4471"`)},

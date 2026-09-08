@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import type { Node } from "@xyflow/react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { X, Trash2, Play, Square, BellRing, Repeat } from "lucide-react";
+import { X, Trash2, Play, Square, BellRing, Pin, PinOff, Repeat } from "lucide-react";
 import { HelpPopover } from "../ui/HelpPopover";
 import { DropIcon, ICON, iconFor } from "../../icons";
 import type { DazyNodeData } from "./nodeCardShared";
@@ -79,6 +79,12 @@ type Props = {
   // skipped at run time, along with everything downstream.
   nodeDisabled?: boolean;
   onToggleDisabled?: (id: string) => void;
+  // nodeLocked + onToggleLocked guard the step against edits: the form above
+  // goes inert and FlowEditor stops the card dragging. Editor-side only — the
+  // API happily writes a locked node, so this is a guard against the slip
+  // (nudging a card mid-review, typing into the wrong field), not a permission.
+  nodeLocked?: boolean;
+  onToggleLocked?: (id: string) => void;
   // tokenLabels: "nodeId.port" → friendly step·port names so fields holding
   // one ${upstream.…} token render as a readable chip.
   tokenLabels?: Record<string, string>;
@@ -176,6 +182,8 @@ export function Inspector({
   loopOwnerNodeId,
   nodeDisabled,
   onToggleDisabled,
+  nodeLocked,
+  onToggleLocked,
   onResetState,
   tokenLabels,
   currentRunID,
@@ -406,6 +414,23 @@ export function Inspector({
           )}
         </span>
         <span className="inspector-head-right">
+          {onToggleLocked && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={"inspector-lock" + (nodeLocked ? " on" : "")}
+              aria-pressed={!!nodeLocked}
+              aria-label={t(nodeLocked ? "inspector.unlockStep" : "inspector.lockStep")}
+              title={t(nodeLocked ? "inspector.unlockStepHint" : "inspector.lockStepHint")}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleLocked(selected.id);
+              }}
+            >
+              {nodeLocked ? <Pin size={ICON.md} /> : <PinOff size={ICON.md} />}
+            </Button>
+          )}
           {onToggleDisabled && (
             <span
               className="inspector-onoff"
@@ -511,6 +536,17 @@ export function Inspector({
           </div>
         )}
 
+        {/* Everything that EDITS this step, in one wrapper so a locked
+            step can be made read-only at a single point: the per-drop
+            editors, the schema form and the raw-JSON mode.
+
+            `inert` (React 19) blocks pointer and keyboard and drops the
+            subtree from the a11y tree — a pointer-events guard alone would
+            still let you Tab in and type into a locked step. Deliberately
+            does NOT cover Run step, the Connect CTA, the logs or Delete:
+            locking guards this step's VALUES, and it would be a strange
+            lock that stopped you running the flow or connecting an app. */}
+        <div className="inspector-edits" inert={nodeLocked || undefined}>
         {mode === "form" && canForm && schema && isCronTrigger && (
           // key forces a fresh picker per node so its internal preset
           // state re-derives from the new node's cron on selection.
@@ -758,6 +794,7 @@ export function Inspector({
             )}
           </div>
         )}
+        </div>
 
         {liveLogs && liveLogs.length > 0 && (
           <div className="inspector-section">

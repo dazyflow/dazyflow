@@ -144,6 +144,17 @@ function savedFrames(): number | undefined {
   return doc && (doc.frames?.length ?? 0);
 }
 
+// One node's flag in the most recent PUT. `undefined` is the real assertion
+// for "off": the Go side is omitempty, so the editor writes the key only when
+// the flag is set.
+function savedFlag(nodeID: string, key: string): unknown {
+  const call = saveGraph.mock.calls.at(-1);
+  const doc = call?.find((a) => a && typeof a === "object" && "nodes" in a) as
+    | { nodes?: Record<string, unknown>[] }
+    | undefined;
+  return doc?.nodes?.find((n) => n.id === nodeID)?.[key];
+}
+
 beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   stream.subs.length = 0;
@@ -209,6 +220,58 @@ describe("editor undo/redo", () => {
     await user.click(redoButton());
     await settle();
     await waitFor(() => expect(savedFrames()).toBe(1));
+  });
+
+  // Per-node flags are part of the undo contract, and they were only half
+  // wired: the observer's dep list watched breakpoints and disabled steps but
+  // not continue_on_error (nor, later, folds and locks), so toggling one
+  // recorded no snapshot; and applyHistoryDoc rebuilt only those same two, so
+  // applying a snapshot never restored the rest. Together that meant a flag
+  // could not be undone AND was silently carried across an unrelated undo.
+  //
+  // The fold is the flag reachable without React Flow's pointer surface — its
+  // button lives on the card — and it exercises exactly the two mechanisms.
+  it("makes a per-node flag its own undo step", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mount();
+    await ready();
+    await settle();
+    expect(savedFlag("ntfy_1", "collapsed")).toBeUndefined();
+
+    await user.click(screen.getAllByLabelText("nodeCard.minimize")[1]);
+    await settle();
+    await waitFor(() => expect(savedFlag("ntfy_1", "collapsed")).toBe(true));
+    expect(undoButton()).toBeEnabled();
+
+    // One undo, and the fold is gone from the document the server holds. With
+    // the flag missing from the dep list this button was still disabled; with
+    // it missing from applyHistoryDoc the PUT kept collapsed:true.
+    await user.click(undoButton());
+    await settle();
+    await waitFor(() => expect(savedFlag("ntfy_1", "collapsed")).toBeUndefined());
+  });
+
+  it("does not carry a flag across an undo of an unrelated edit", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mount();
+    await ready();
+    await settle();
+
+    await user.click(screen.getAllByLabelText("nodeCard.minimize")[1]);
+    await settle();
+    await waitFor(() => expect(savedFlag("ntfy_1", "collapsed")).toBe(true));
+
+    // An unrelated edit on top, then one undo. It must take back the frame and
+    // leave the fold alone — the failure mode when a flag is absent from the
+    // dep list is that both changes sit in ONE snapshot and revert together.
+    await user.click(addFrame());
+    await settle();
+    await waitFor(() => expect(savedFrames()).toBe(1));
+
+    await user.click(undoButton());
+    await settle();
+    await waitFor(() => expect(savedFrames()).toBe(0));
+    expect(savedFlag("ntfy_1", "collapsed")).toBe(true);
   });
 
   // The observer fires again on the document change an undo causes. If that

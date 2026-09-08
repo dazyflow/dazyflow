@@ -1634,7 +1634,14 @@
       "toggleTitle": "Show what this step produces",
       "expand": "Show all data",
       "modalTitle": "{{name}} — output"
-    }
+    },
+    "minimize": "Minimize {{name}}",
+    "minimizeTitle": "Fold this step down to its name",
+    "maximize": "Maximize {{name}}",
+    "maximizeTitle": "Open this step back up",
+    "collapsedLabel": "{{name}} ({{module}}) flow step, minimized",
+    "locked": "Locked",
+    "lockedHint": "This step is locked: its fields can't be edited and the card won't move. Unlock it in the inspector."
   },
   "issueKey": {
     "title": "Issue API key",
@@ -1976,7 +1983,11 @@
       "pending": "Not answering yet — the secret key is rejected until you publish this flow.",
       "stale": "Answering — but callers still get the last published version. Publish to make your latest changes live."
     },
-    "aboutStep": "What this step does"
+    "aboutStep": "What this step does",
+    "lockStep": "Lock step",
+    "unlockStep": "Unlock step",
+    "lockStepHint": "Lock this step: its fields become read-only and the card won't move on the canvas. It still runs exactly as before.",
+    "unlockStepHint": "Unlock this step so its fields can be edited and the card can be moved again."
   },
   "editor": {
     "loadFailedBlocked": "This flow couldn't be loaded, so saving is paused to avoid overwriting it. Reload the page to try again.",
@@ -2158,7 +2169,11 @@
     "dataView": "Data view",
     "dataViewTitle": "Fold every card open to show what each step produces",
     "strayEdgesDropped_one": "Removed 1 connection that pointed at a port the step hasn't got ({{steps}}). It could never carry data and was blocking every save.",
-    "strayEdgesDropped_other": "Removed {{count}} connections that pointed at ports their steps haven't got ({{steps}}). They could never carry data and were blocking every save."
+    "strayEdgesDropped_other": "Removed {{count}} connections that pointed at ports their steps haven't got ({{steps}}). They could never carry data and were blocking every save.",
+    "ctxCollapse": "Minimize step",
+    "ctxExpand": "Maximize step",
+    "ctxLock": "Lock step",
+    "ctxLockHint": "Make this step's fields read-only and stop the card being dragged. It still runs exactly as before."
   },
   "iconUpload": {
     "upload": "Upload image"

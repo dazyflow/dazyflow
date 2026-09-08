@@ -24,6 +24,8 @@ func richGraph() Graph {
 			Breakpoint:      true,
 			Disabled:        true,
 			ContinueOnError: true,
+			Collapsed:       true,
+			Locked:          true,
 		}
 	}
 	return Graph{

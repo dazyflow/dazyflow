@@ -3,7 +3,7 @@
 
 import { memo, useEffect, useState } from "react";
 import { Handle, Position, useStore, type NodeProps } from "@xyflow/react";
-import { AlertTriangle, Braces, Check, ChevronDown, ChevronRight, Database, FileCode, FileText, Plug, Repeat, ShieldOff, Terminal, Unplug, X } from "lucide-react";
+import { AlertTriangle, Braces, Check, ChevronDown, ChevronRight, Database, FileCode, FileText, Lock, Maximize2, Minimize2, Plug, Repeat, ShieldOff, Terminal, Unplug, X } from "lucide-react";
 import i18n from "../../i18n";
 import { portTypeLabel } from "../../lib/ports";
 import { telFieldFlag, regionDisplayName } from "../../lib/phoneFlag";
@@ -169,6 +169,23 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
       }}
     >
       <ChevronDown size={ICON.sm} strokeWidth={2.2} />
+    </button>
+  );
+
+  // Minimize, beside the data-face chevron. Only when FlowEditor supplied the
+  // setter (the support view renders the same card read-only and passes none).
+  const minimizeToggle = d.setCollapsed && (
+    <button
+      type="button"
+      className="dz-node-min nodrag"
+      aria-label={i18n.t("nodeCard.minimize", { name: d.label || d.moduleID })}
+      title={i18n.t("nodeCard.minimizeTitle")}
+      onClick={(e) => {
+        e.stopPropagation();
+        d.setCollapsed?.(true);
+      }}
+    >
+      <Minimize2 size={ICON.sm} strokeWidth={2.2} />
     </button>
   );
 
@@ -351,6 +368,120 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
     );
   }
 
+  // Folded card (node.collapsed): the icon, the name, and one pin a side.
+  //
+  // The real pins stay MOUNTED and stack — dotStyle already centres every pin
+  // at top:50%, so rendering them all with no per-row offset piles them at one
+  // point on the edge. That is the whole trick: each wire keeps the handle id
+  // it was drawn to and simply converges here, so folding and unfolding a card
+  // needs no edge bookkeeping and cannot lose a connection. They carry
+  // opacity:0 (which still takes pointer events, unlike visibility:hidden) and
+  // the one dot the reader sees is drawn beneath them by .dz-collapsed-pin.
+  if (d.collapsed) {
+    // Mirror the open card's rule for whether there is an input pin at all:
+    // value sources and triggers have nothing upstream to wire from.
+    const inPins = hasDeclaredInputs
+      ? inputs
+      : isValueSource || isTrigger
+        ? []
+        : [inputs[0]];
+    return (
+      <div
+        className={
+          "dz-node dz-node-collapsed" +
+          (selected ? " selected" : "") +
+          statusClass +
+          (isTrigger ? " dz-node-trigger" : "") +
+          (d.loopOwned ? " dz-loop-owned" : "") +
+          (d.disabled ? " dz-node-off" : "") +
+          (!d.disabled && d.offByCascade ? " dz-node-off-cascade" : "") +
+          (d.locked ? " dz-node-locked" : "") +
+          (d.lintMessage ? " lint-warn" : "") +
+          (d.configErrors?.length ? " config-err" : "") +
+          (d.setupNeeded ? " needs-setup" : "") +
+          (d.paused ? " paused" : "") +
+          (d.enterDelay != null ? " dz-enter" : "")
+        }
+        role="group"
+        aria-label={i18n.t("nodeCard.collapsedLabel", {
+          name: d.label || d.moduleID,
+          module: d.moduleID,
+        })}
+        aria-selected={selected}
+        style={
+          {
+            ...(isTrigger ? { "--node-accent": color } : {}),
+            ...(d.enterDelay != null ? { "--enter-delay": `${d.enterDelay}s` } : {}),
+          } as React.CSSProperties
+        }
+      >
+        {d.breakpoint && (
+          <div className="dz-node-bp" aria-label={i18n.t("nodeCard.breakpoint")} title={i18n.t("nodeCard.breakpointTitle")} />
+        )}
+        {inPins.map((p) => (
+          <Handle
+            key={p.port}
+            type="target"
+            position={Position.Left}
+            id={p.port}
+            style={{ ...dotStyle(portColor(p.mime), connectedInputs.includes(p.port), "in"), opacity: 0 }}
+            title={portTooltip(p)}
+          />
+        ))}
+        {outputs.map((p) => (
+          <Handle
+            key={p.port}
+            type="source"
+            position={Position.Right}
+            id={p.port}
+            style={{ ...dotStyle(portColor(p.mime), connectedOutputs.includes(p.port), "out"), opacity: 0 }}
+            title={portTooltip(p)}
+          />
+        ))}
+        {/* The stand-in dots. Drawn only on a side that has pins, and marked
+            .wired when anything is actually connected there, so a folded card
+            still shows at a glance that it is in the chain. */}
+        {inPins.length > 0 && (
+          <span
+            className={"dz-collapsed-pin in" + (connectedInputs.length ? " wired" : "")}
+            aria-hidden="true"
+          />
+        )}
+        {outputs.length > 0 && (
+          <span
+            className={"dz-collapsed-pin out" + (connectedOutputs.length ? " wired" : "")}
+            aria-hidden="true"
+          />
+        )}
+        <DropIcon
+          icon={d.manifest?.icon}
+          category={d.manifest?.category}
+          brandColor={d.manifest?.color}
+          brandLogo={d.manifest?.brand_logo}
+          glyphSize={ICON.md}
+        />
+        <span className="dz-collapsed-name">{d.label || d.moduleID}</span>
+        {d.locked && (
+          <Lock className="dz-collapsed-lock" size={ICON.xs} strokeWidth={2.2} aria-hidden="true" />
+        )}
+        {d.setCollapsed && (
+          <button
+            type="button"
+            className="dz-node-max nodrag"
+            aria-label={i18n.t("nodeCard.maximize", { name: d.label || d.moduleID })}
+            title={i18n.t("nodeCard.maximizeTitle")}
+            onClick={(e) => {
+              e.stopPropagation();
+              d.setCollapsed?.(false);
+            }}
+          >
+            <Maximize2 size={ICON.sm} strokeWidth={2.2} />
+          </button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div
       className={
@@ -361,6 +492,7 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
         (d.loopOwned ? " dz-loop-owned" : "") +
         (d.disabled ? " dz-node-off" : "") +
         (!d.disabled && d.offByCascade ? " dz-node-off-cascade" : "") +
+        (d.locked ? " dz-node-locked" : "") +
         (d.lintMessage ? " lint-warn" : "") +
         (d.configErrors?.length ? " config-err" : "") +
         (d.setupNeeded ? " needs-setup" : "") +
@@ -475,7 +607,17 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
                 {i18n.t("nodeCard.continueOnError")}
               </div>
             )}
+            {/* A locked step says so on the card. Without the chip the only
+                evidence is a field that won't take a keystroke, which reads as
+                a bug rather than as a state someone chose. */}
+            {d.locked && (
+              <div className="dz-node-chip dz-node-lockchip" title={i18n.t("nodeCard.lockedHint")}>
+                <Lock size={ICON.xs} strokeWidth={2.2} />
+                {i18n.t("nodeCard.locked")}
+              </div>
+            )}
           </div>
+          {minimizeToggle}
           {foldToggle}
         </div>
         <div className="dz-fold-data">
@@ -510,7 +652,7 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
         // nodrag: keep React Flow from dragging the node while the user
         // interacts with a field. nowheel similarly lets the field behave
         // like a normal input inside the canvas.
-        <div className="dz-node-params nodrag nowheel">
+        <div className="dz-node-params nodrag nowheel" inert={d.locked || undefined}>
           {visibleLiteralFields.map(({ key, label, schema: s }) => {
             // The map picker renders live on the card (not only in the
             // inspector): search/click/drag to set the point. A wired Place
@@ -744,7 +886,7 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
                     )}
                   </div>
                   {field && (
-                    <div className="dz-port-inline nodrag nowheel">
+                    <div className="dz-port-inline nodrag nowheel" inert={d.locked || undefined}>
                       <ParamInput
                         schema={field}
                         value={d.params?.[p.port] ?? field.default ?? ""}

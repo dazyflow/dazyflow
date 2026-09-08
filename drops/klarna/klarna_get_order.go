@@ -40,9 +40,9 @@ func init() {
 			},
 			Outputs: []core.Port{
 				{Port: "status", Label: "Status", MIME: []string{"text/plain"}, Example: json.RawMessage(`"CAPTURED"`)},
-				{Port: "order_amount", Label: "Order amount (smallest unit)", MIME: []string{"text/plain"}, Example: json.RawMessage(`"24900"`)},
-				{Port: "captured_amount", Label: "Captured amount (smallest unit)", MIME: []string{"text/plain"}, Example: json.RawMessage(`"24900"`)},
-				{Port: "remaining_authorized_amount", Label: "Remaining authorized (smallest unit)", MIME: []string{"text/plain"}, Example: json.RawMessage(`"0"`)},
+				{Port: "order_amount", Label: "Order amount (cents/öre)", MIME: []string{"text/plain"}, Example: json.RawMessage(`"24900"`)},
+				{Port: "captured_amount", Label: "Captured amount (cents/öre)", MIME: []string{"text/plain"}, Example: json.RawMessage(`"24900"`)},
+				{Port: "remaining_authorized_amount", Label: "Remaining authorized (cents/öre)", MIME: []string{"text/plain"}, Example: json.RawMessage(`"0"`)},
 				{Port: "currency", Label: "Currency", MIME: []string{"text/plain"}, Example: json.RawMessage(`"SEK"`)},
 				{Port: "order", Label: "Order", MIME: []string{"application/json"}},
 			},

@@ -43,10 +43,10 @@ func init() {
 	for i := 1; i <= switchSlotCount; i++ {
 		outputs = append(outputs, core.Port{
 			Port:  fmt.Sprintf("case_%d", i),
-			Label: fmt.Sprintf("Case %d", i),
+			Label: fmt.Sprintf("Match %d", i),
 		})
 	}
-	outputs = append(outputs, core.Port{Port: switchDefaultSlot, Label: "Default"})
+	outputs = append(outputs, core.Port{Port: switchDefaultSlot, Label: "Everything else"})
 
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
@@ -57,7 +57,7 @@ func init() {
 			Category:    "flow_control",
 			Provider:    "internal",
 			Tags:        []string{"conditional", "routing", "switch", "case", "multiway"},
-			Description: "Route the payload on `in` to one of N case ports by matching a key against each case's value. Param `cases` is an ordered list of {slot, equals} — the FIRST case whose value matches the key wins and the whole payload rides out that slot; a key matching no case goes to `default`. Match the whole input, or a field of it via the `field` param. An `equals` that's a list matches if the key equals any element (like Compare's one_of). The multi-way sibling of Branch — reach for it instead of chaining Branches to fan one payload out by status/enum/category.",
+			Description: "Send one value down a different path depending on what it is — the multi-way version of Branch. Where Branch has a yes and a no, Switch has up to eight matches: you give each one a value to look for, and whatever comes in leaves on the first match whose value it equals. Anything equal to none of them leaves on Everything else.\n\nBy default the whole incoming value is what gets matched. Set \"What to match on\" to compare just one field of it instead — an order's status, say — and the whole order still travels onward; the field only decides which path it takes. A match can also hold a list of values, and then anything equal to ANY of them takes that path (200, 201 and 204 all going one way).\n\nFirst match wins, so if two of them could apply, the earlier one takes it. Reach for this instead of chaining Branch steps when you are fanning one payload out by a status, a category or a type.",
 			Summary:     "Route the input payload to one of N case ports by matching a key against each case value; unmatched goes to default.",
 			Examples: []core.ParamsExample{
 				{
@@ -84,18 +84,18 @@ func init() {
 				"properties":{
 					"cases":{
 						"type":"array",
-						"title":"Cases",
-						"description":"Ordered list of {slot, equals}. The FIRST case whose value matches the key wins; the payload rides out that slot. Unmatched payloads go to default.",
+						"title":"Matches",
+						"description":"The matches, in order. Whatever comes in leaves on the FIRST one whose value it equals; if it equals none of them it leaves on Everything else. Order matters when two could apply — the earlier one takes it.",
 						"items":{
 							"type":"object",
 							"properties":{
-								"slot":{"type":"string","title":"Slot","description":"Output port name. One of case_1..case_8."},
-								"equals":{"title":"Equals","description":"Value to match the key against — a literal (\"paid\", 200, true) or a list ([200,201,204]) to match any element."}
+								"slot":{"type":"string","title":"Path to send it down","description":"Which output it leaves on when this match wins. \"case_1\" is the pin labelled Match 1, \"case_2\" is Match 2, and so on up to \"case_8\"."},
+								"equals":{"title":"Value to look for","description":"What has to be equal for this path to be taken — one value (\"paid\", 200, true), or a list ([200,201,204]) if several values should all take the same path."}
 							},
 							"required":["slot","equals"]
 						}
 					},
-					"field":{"type":"string","title":"Key field","description":"Optional dot-path into the input to match on (e.g. status). Empty matches the whole input value. The full payload rides through regardless.","x_advanced":true}
+					"field":{"type":"string","title":"What to match on","description":"Which field of the incoming value to compare — status, say, or customer.country for a field inside a field. Leave it empty to compare the whole value. Either way the whole value travels onward; this only decides which path it takes.","x_advanced":true}
 				},
 				"required":["cases"]
 			}`),

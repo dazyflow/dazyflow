@@ -1634,7 +1634,14 @@
       "toggleTitle": "Visa vad steget producerar",
       "expand": "Visa alla data",
       "modalTitle": "{{name}} — utdata"
-    }
+    },
+    "minimize": "Minimera {{name}}",
+    "minimizeTitle": "Fäll ihop steget till bara namnet",
+    "maximize": "Maximera {{name}}",
+    "maximizeTitle": "Fäll ut steget igen",
+    "collapsedLabel": "{{name}} ({{module}}) flödessteg, minimerat",
+    "locked": "Låst",
+    "lockedHint": "Det här steget är låst: fälten går inte att ändra och kortet kan inte flyttas. Lås upp det i inspektören."
   },
   "issueKey": {
     "title": "Skapa API-nyckel",
@@ -1976,7 +1983,11 @@
       "pending": "Svarar inte än — den hemliga nyckeln avvisas tills du publicerar flödet.",
       "stale": "Svarar — men anroparna får fortfarande den senast publicerade versionen. Publicera för att göra dina ändringar live."
     },
-    "aboutStep": "Vad det här steget gör"
+    "aboutStep": "Vad det här steget gör",
+    "lockStep": "Lås steg",
+    "unlockStep": "Lås upp steg",
+    "lockStepHint": "Lås det här steget: fälten blir skrivskyddade och kortet kan inte flyttas på arbetsytan. Det körs precis som förut.",
+    "unlockStepHint": "Lås upp steget så att fälten kan ändras och kortet kan flyttas igen."
   },
   "editor": {
     "loadFailedBlocked": "Det här flödet kunde inte läsas in, så sparandet är pausat för att inte skriva över det. Ladda om sidan för att försöka igen.",
@@ -2158,7 +2169,11 @@
     "dataView": "Datavy",
     "dataViewTitle": "Fäll upp alla kort för att se vad varje steg producerar",
     "strayEdgesDropped_one": "Tog bort 1 koppling som pekade på en port som steget inte har ({{steps}}). Den kunde aldrig föra data och blockerade varje sparning.",
-    "strayEdgesDropped_other": "Tog bort {{count}} kopplingar som pekade på portar som stegen inte har ({{steps}}). De kunde aldrig föra data och blockerade varje sparning."
+    "strayEdgesDropped_other": "Tog bort {{count}} kopplingar som pekade på portar som stegen inte har ({{steps}}). De kunde aldrig föra data och blockerade varje sparning.",
+    "ctxCollapse": "Minimera steg",
+    "ctxExpand": "Maximera steg",
+    "ctxLock": "Lås steg",
+    "ctxLockHint": "Gör stegets fält skrivskyddade och hindra att kortet dras. Det körs precis som förut."
   },
   "iconUpload": {
     "upload": "Ladda upp bild"

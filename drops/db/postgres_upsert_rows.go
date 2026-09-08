@@ -19,7 +19,7 @@ func init() {
 			ID:          "postgres_upsert_rows",
 			Version:     "1.0",
 			Label:       "Postgres",
-			Subtitle:    "Upsert rows",
+			Subtitle:    "Add or update rows",
 			Color:       "#336791",
 			Icon:        "database",
 			BrandLogo:   "/brands/postgres.svg",

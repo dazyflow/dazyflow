@@ -10,7 +10,40 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Added
+
+- **Steps fold down.** Minimize on a step's header collapses its card to the
+  icon and the name, with one pin a side standing in for all of them; hovering
+  a folded card reveals Maximize, and on a touch screen — where there is no
+  hover to reveal it with — the button is simply always there. Both are also on
+  the step's right-click menu. Folding is saved with the flow rather than in one
+  browser, because a long flow is readable only if the boring middle is folded
+  and that has to hold for whoever opens it next. Wires are untouched: every pin
+  stays mounted under its own id and they merely stack at one point, so a folded
+  card cannot lose a connection.
+
+- **Steps can be locked.** The pin button in the inspector's header makes a
+  step's fields read-only and stops its card being dragged — a guard against
+  the slip of nudging a card mid-review or typing into the wrong field. A locked
+  step carries a "Locked" chip on the canvas, so a field that won't take a
+  keystroke reads as a state someone chose rather than as a bug. It runs exactly
+  as before: this is an editor guard, not a permission, and the API still writes
+  to a locked node. Its pins also stay wireable — locking guards the step's
+  values, not the diagram.
+
 ### Fixed
+
+- **Undo now covers a step's own flags.** Marking a step "can't fail the run"
+  was not undoable: the editor's undo observer watched breakpoints and
+  switched-off steps but not `continue_on_error`, so toggling it recorded no
+  snapshot — and then the NEXT unrelated edit recorded a document that already
+  carried the flag, so a single Ctrl+Z quietly reverted both. Applying a
+  snapshot had the mirror of the same gap and never restored the flag. One
+  helper now hydrates every per-node flag, on every path that replaces the
+  document, so adding a flag can't half-wire itself again. The same hole meant
+  a flow whose load 404'd left the previous flow's flag sets in place — and
+  since node ids repeat between flows, the next save could write a stale flag
+  onto an unrelated step.
 
 - **Run logs are no longer deleted out from under a run that is still going.**
   Retention asked of each LINE "is this older than the window?", but a run
@@ -37,12 +70,55 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
   included, acted on it. It now returns an error; an empty workspace still
   reports no flows, and the in-memory backend is unaffected.
 
+### Changed
+
+- **Money pins say which unit they mean.** Every `Amount (smallest unit)` pin
+  and field across Stripe and Klarna now reads `Amount (cents/öre)`. "Smallest
+  unit" is only meaningful if you already knew currencies have subunits and
+  that the API wants them; someone who read it as kronor and typed `50` refunded
+  50 öre. The worked example stays in the field help, and the friendlier
+  `Amount (display)` pin beside it is unchanged.
+
+- **Ticketmaster · Search events had three pins nobody could tell apart.**
+  `Events found` was the list, `Count` was how many came back on this page, and
+  `Total found` was how many exist in total. They are now `Events`,
+  `On this page` and `Total matches`.
+
+- **Database steps stop speaking SQL.** `Upsert rows` is now
+  `Add or update rows`, and `Insert rows` (Postgres, MySQL, SQLite) and Google
+  Sheets' `Append rows` are all `Add rows` — one name for one idea, in words
+  that don't assume the reader has written a query.
+
+- **Route rows and Switch stop naming their own plumbing.** The eight pins read
+  `Routing slot 1…8` and `Case 1…8`; they are now `Route 1…8` and `Match 1…8`,
+  and both steps' catch-all pin says `Everything else` instead of `Default`.
+  Their fields followed — `Slot`, `Equals` and `Key field` are now `Path to send
+  it down`, `Value to look for` and `What to match on`, and Route rows' three
+  fields had no titles at all, so the editor labelled them `routes` and
+  `default_slot`. Each `slot` field now spells out which pin it feeds ("rows_1"
+  is the pin labelled Route 1), which the old `One of rows_1..rows_8` left you
+  to work out. Both descriptions were written for someone reading the params
+  rather than the canvas — Route rows' even shipped its own roadmap note
+  ("fixed for V1; semantic naming via variadic ports is a future enhancement")
+  — and are rewritten around first-match-wins, which is the actual trap.
+
+- **Combine two lists is no longer a SQL join wearing a friendly name.** Its
+  pins were `Left rows` and `Right rows`; they are now `First list` and
+  `Second list`, and its dropdown, its field help and its description follow.
+  Its three fields also had no titles at all, so the editor showed the raw
+  parameter keys `on`, `kind` and `right_suffix` — they are now `Match on`,
+  `What to keep` and `Suffix for repeated column names`. Port ids are unchanged,
+  so existing flows keep their wiring.
+
 ### Developer
 
 - Two failure-email throttle tests seeded a prior failure at `now - 10min`
   against an hourly TUMBLING window, so they failed for the first ten minutes
   of every hour — about one CI run in six, the 0.41.2 release run among them.
   The seeds are clamped into the current window.
+
+- The README's editor screenshot is a published dark-theme flow instead of a
+  draft with two unconnected accounts and a "not published" banner.
 
 ## [0.41.3] - 2026-09-07
 

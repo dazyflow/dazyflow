@@ -129,6 +129,7 @@ function graphWithBreakpoint() {
   };
 }
 
+
 // Make the graph dirty. The handler bails on any modifier or when focus sits in
 // a text field, so this is deliberately a bare keypress.
 async function makeDirty() {

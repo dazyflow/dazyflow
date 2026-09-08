@@ -40,7 +40,7 @@ func init() {
 			ProcessModel:     core.ProcessLongLived,
 			Inputs: []core.Port{
 				{Port: "payment_intent", Label: "Payment intent", Required: true, MIME: []string{"text/plain"}},
-				{Port: "amount", Label: "Amount (smallest unit)", MIME: []string{"text/plain", "application/json"}},
+				{Port: "amount", Label: "Amount (cents/öre)", MIME: []string{"text/plain", "application/json"}},
 			},
 			Outputs: []core.Port{
 				{Port: "refund_id", Label: "Refund ID", MIME: []string{"text/plain"}, Example: json.RawMessage(`"re_3QxPl2Fk9mNaB1cD"`)},
@@ -52,7 +52,7 @@ func init() {
 				"type":"object",
 				"properties":{
 					"payment_intent":{"type":"string","format":"stripe-payment-intent","title":"Payment","description":"Pick the payment to refund — your account's succeeded payments, listed once the STRIPE_API_KEY secret is set. Overridden by the 'Payment intent' input when connected."},
-					"amount":{"type":"integer","title":"Amount (smallest unit)","minimum":1,"description":"Leave empty to refund the whole payment. For a partial refund, enter the amount in the currency's smallest unit — e.g. 500 = 5.00 USD/EUR (cents), but 500 = 500 JPY (yen has no smaller unit). Overridden by the 'Amount' input when connected."},
+					"amount":{"type":"integer","title":"Amount (cents/öre)","minimum":1,"description":"Leave empty to refund the whole payment. For a partial refund, enter the amount in the currency's smallest unit — e.g. 500 = 5.00 USD/EUR (cents), but 500 = 500 JPY (yen has no smaller unit). Overridden by the 'Amount' input when connected."},
 					"reason":{"type":"string","title":"Reason","enum":["","duplicate","fraudulent","requested_by_customer"],"enumNames":["(none)","Duplicate","Fraudulent","Requested by customer"],"description":"Stripe's refund-reason label, shown in the dashboard."},
 					"base_url":{"type":"string","description":"Override the API host (testing)."},
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}

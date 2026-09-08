@@ -14,7 +14,12 @@ import "reflect"
 // Ignored as editor-only (mirror of the cosmetic set in
 // web/src/lib/diffGraphs.ts; keep the two in lockstep):
 //
-//	Node.Position, Node.Label, Edge.Waypoints, Graph.Frames
+//	Node.Position, Node.Label, Node.Collapsed, Node.Locked,
+//	Edge.Waypoints, Graph.Frames
+//
+// Collapsed and Locked are editor-only for the same reason Position is: they
+// change how the flow is DRAWN and how the editor guards it, not what a run
+// does. Publishing a folded or locked card must not read as pending drift.
 //
 // Graph.Name is NOT cosmetic: it reaches people through the flow list and
 // failure mail. Graph.Disabled is ignored for a different reason: the
@@ -46,6 +51,8 @@ func stripCosmetic(g Graph) Graph {
 		for i, n := range g.Nodes {
 			n.Position = nil
 			n.Label = ""
+			n.Collapsed = false
+			n.Locked = false
 			out.Nodes[i] = n
 		}
 	}

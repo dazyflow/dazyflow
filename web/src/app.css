@@ -5146,6 +5146,143 @@ button.warning:hover:not(:disabled) {
   opacity: 1;
   color: var(--status-warning);
 }
+/* A locked step (node.locked). Full opacity like the chips above: it answers
+   "why won't this field take my typing?", and a 60%-opacity answer is one
+   nobody reads before filing it as a bug. */
+.dz-node-lockchip {
+  opacity: 1;
+  color: var(--faint);
+}
+
+/* Minimize, beside the data-face chevron. Same geometry as .dz-fold-chev but
+   its own class on purpose: `.dz-fold.open .dz-fold-chev` rotates 180deg, and
+   sharing it would spin this button whenever the data face is open. */
+.dz-node-min {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--space-5);
+  height: var(--space-5);
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-1);
+  background: none;
+  color: var(--faint);
+  cursor: pointer;
+  transition:
+    color 140ms,
+    background 140ms;
+}
+.dz-node-min:hover {
+  color: var(--accent);
+  background: var(--surface-2);
+}
+
+/* ---------------------------------------------------------------------------
+   The folded card (node.collapsed): icon, name, and one pin a side.
+
+   Laid out as a row rather than the open card's column, and deliberately
+   narrower than .dz-node's 200px min-width — folding a card that stayed
+   200px wide would save a little height and no scanning effort, which is the
+   whole point of folding it. */
+.dz-node-collapsed {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+}
+.dz-collapsed-name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+.dz-collapsed-lock {
+  flex: none;
+  color: var(--faint);
+}
+
+/* The stand-in pin. The real handles stack invisibly on top of this (see
+   NodeCard's folded branch), so this is the only pin the reader sees and every
+   wire on that side converges into it. Same 12px geometry and edge offset as
+   dotStyle's, so a wire does not jump when a card folds. */
+.dz-collapsed-pin {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--faint) 22%, var(--surface));
+  border: 2px solid color-mix(in srgb, var(--faint) 80%, transparent);
+  pointer-events: none;
+}
+.dz-collapsed-pin.in {
+  left: 0;
+  transform: translate(calc(-50% - var(--space-3) - 1.5px), -50%);
+}
+.dz-collapsed-pin.out {
+  left: auto;
+  right: 0;
+  transform: translate(calc(50% + var(--space-3) + 1.5px), -50%);
+}
+/* Anything actually connected on that side fills the dot in, so a folded card
+   still reads as part of the chain rather than as an orphan. */
+.dz-collapsed-pin.wired {
+  background: var(--faint);
+  border-color: var(--faint);
+}
+
+/* Maximize: revealed on hover over the folded card, so a folded flow stays
+   clean until you reach for it. */
+.dz-node-max {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--space-5);
+  height: var(--space-5);
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-1);
+  background: none;
+  color: var(--faint);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    color 140ms,
+    background 140ms,
+    opacity 140ms;
+}
+.dz-node-collapsed:hover .dz-node-max,
+.dz-node-max:focus-visible {
+  opacity: 1;
+}
+.dz-node-max:hover {
+  color: var(--accent);
+  background: var(--surface-2);
+}
+/* No hover to reveal it with: on a touch screen the button is simply always
+   there. `hover: none` is the capability, not the width — a touch laptop gets
+   the hover reveal, a phone and a tablet get the permanent button. */
+@media (hover: none) {
+  .dz-node-max {
+    opacity: 1;
+  }
+}
+
+/* A locked card. Kept deliberately quiet — a dashed border would collide with
+   .dz-loop-owned, and a dimmed card would read as switched off, which is a
+   different state entirely. The chip carries the message; this is just enough
+   edge to see it without reading. */
+.dz-node-locked {
+  border-style: dashed;
+}
+.dz-node-locked .dz-node-params,
+.dz-node-locked .dz-port-inline {
+  opacity: 0.55;
+}
+
 /* What the text on this node is written in. Full opacity like the other two
    chips that answer a question about the node rather than decorate it. */
 .dz-node-lang {
@@ -5512,6 +5649,23 @@ button.warning:hover:not(:disabled) {
 }
 
 /* Inspector header on/off switch. */
+/* The lock, beside the step's on/off switch. Ghost until it is on, then it
+   holds the accent — a lock you have to look twice at to read the state of is
+   worse than none, since the whole point is explaining an inert form. */
+.inspector-lock {
+  color: var(--faint);
+}
+.inspector-lock.on {
+  color: var(--accent);
+}
+
+/* Everything in the inspector that edits the step, in one wrapper so `inert`
+   can switch it all off at once for a locked step. Run step, the Connect CTA,
+   the logs and Delete sit outside it on purpose. */
+.inspector-edits {
+  display: contents;
+}
+
 .inspector-onoff {
   display: inline-flex;
   align-items: center;

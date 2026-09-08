@@ -26,6 +26,15 @@ export type Node = {
   // shape — Discord being down is no reason for the Slack post not to go out.
   // The step's own dependents are still skipped; there is no output for them.
   continue_on_error?: boolean;
+  // Card folded down to its icon and name, with one pin standing in for all
+  // of them. Editor metadata like position — the engine never reads it, and
+  // it is deliberately not in diffGraphs: folding a card changes the diagram,
+  // not the flow.
+  collapsed?: boolean;
+  // Step guarded against edits in the editor: fields read-only, card won't
+  // drag. Editor metadata too — the server does not refuse writes to a locked
+  // node, it is a guard against the slip, not a permission.
+  locked?: boolean;
 };
 
 export type Edge = {

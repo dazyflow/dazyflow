@@ -19,7 +19,7 @@ func init() {
 			ID:          "mysql_upsert_rows",
 			Version:     "1.0",
 			Label:       "MySQL",
-			Subtitle:    "Upsert rows",
+			Subtitle:    "Add or update rows",
 			Color:       "#00758f",
 			Icon:        "database",
 			BrandLogo:   "/brands/mysql.svg",

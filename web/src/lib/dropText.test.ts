@@ -198,9 +198,7 @@ describe("portLabel", () => {
     expect(portLabel("Rows", "sv")).toBe("Rader");
     expect(portLabel("Body", "sv")).toBe("Innehåll");
     expect(portLabel("Attachments", "sv")).toBe("Bilagor");
-    expect(portLabel("Amount (smallest unit)", "sv")).toBe(
-      "Belopp (minsta enhet)",
-    );
+    expect(portLabel("Amount (cents/öre)", "sv")).toBe("Belopp (cent/öre)");
   });
 
   it("uses the same word for pass-through as the node-card copy", () => {
@@ -210,8 +208,8 @@ describe("portLabel", () => {
   });
 
   it("keeps the numbering aligned on the generated slots", () => {
-    expect(portLabel("Case 3", "sv")).toBe("Fall 3");
-    expect(portLabel("Routing slot 8", "sv")).toBe("Utgång 8");
+    expect(portLabel("Match 3", "sv")).toBe("Träff 3");
+    expect(portLabel("Route 8", "sv")).toBe("Rutt 8");
   });
 
   it("passes through what reads the same in Swedish", () => {
@@ -252,9 +250,7 @@ describe("dropLabelIsDefault", () => {
 describe("the params-schema surface", () => {
   it("translates field labels", () => {
     expect(fieldTitle("Body", "sv")).toBe("Innehåll");
-    expect(fieldTitle("Amount (smallest unit)", "sv")).toBe(
-      "Belopp (minsta enhet)",
-    );
+    expect(fieldTitle("Amount (cents/öre)", "sv")).toBe("Belopp (cent/öre)");
     expect(fieldTitle("Unique by", "sv")).toBe("Unik enligt");
   });
 

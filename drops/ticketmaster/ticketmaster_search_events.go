@@ -62,9 +62,9 @@ func init() {
 				{Port: "keyword", Label: "Search for", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				{Port: "events", Label: "Events found", MIME: []string{"application/json"}, Example: json.RawMessage(`[{"id":"Z698xZbpZ17q1RA","name":"Robyn","artist":"Robyn","venue":"Avicii Arena","city":"Stockholm","country":"SE","date":"2026-11-14","time":"20:00:00","url":"https://www.ticketmaster.se/event/Z698xZbpZ17q1RA"}]`)},
-				{Port: "count", Label: "Count", MIME: []string{"text/plain"}, Example: json.RawMessage(`"3"`)},
-				{Port: "total", Label: "Total found", MIME: []string{"text/plain"}, Example: json.RawMessage(`"41"`)},
+				{Port: "events", Label: "Events", MIME: []string{"application/json"}, Example: json.RawMessage(`[{"id":"Z698xZbpZ17q1RA","name":"Robyn","artist":"Robyn","venue":"Avicii Arena","city":"Stockholm","country":"SE","date":"2026-11-14","time":"20:00:00","url":"https://www.ticketmaster.se/event/Z698xZbpZ17q1RA"}]`)},
+				{Port: "count", Label: "On this page", MIME: []string{"text/plain"}, Example: json.RawMessage(`"3"`)},
+				{Port: "total", Label: "Total matches", MIME: []string{"text/plain"}, Example: json.RawMessage(`"41"`)},
 				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
