@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.41.5] - 2026-09-08
+
 ### Changed
 
 - **The "it worked" message moved into the toolbar and now fades by itself.**
