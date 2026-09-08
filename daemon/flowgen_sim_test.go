@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -448,22 +449,29 @@ func scoreGraph(t *testing.T, name string, g core.Graph) {
 // phrasings a plain-language request actually produces.
 func TestFlowGen_SearchRanksTheRightStepFirst(t *testing.T) {
 	mans := allManifests()
-	for _, c := range []struct{ query, want string }{
-		{"form", "form_input"},
-		{"web form", "form_input"},
-		{"public form", "form_input"},
-		{"hosted form page", "form_input"},
-		{"send email", "email"},
-		{"web page", "web_watch"},
+	// `want` lists every acceptable first hit: "send email" is answered as well
+	// by the SMTP step as by the Gmail one. It must NOT be answered by `email`,
+	// which validates an address — an earlier version of this test expected
+	// exactly that, having been written from what the broken search returned.
+	for _, c := range []struct {
+		query string
+		want  []string
+	}{
+		{"form", []string{"form_input"}},
+		{"web form", []string{"form_input"}},
+		{"public form", []string{"form_input"}},
+		{"hosted form page", []string{"form_input"}},
+		{"send email", []string{"email_send", "gmail_send_email"}},
+		{"web page", []string{"web_watch"}},
 	} {
 		out := searchDropsForModel(mans, c.query)
 		if strings.HasPrefix(out, "No steps") {
-			t.Errorf("query %q matched nothing; want %s", c.query, c.want)
+			t.Errorf("query %q matched nothing; want one of %v", c.query, c.want)
 			continue
 		}
 		first := firstSearchHit(out)
-		if first != c.want {
-			t.Errorf("query %q ranked %q first; want %s", c.query, first, c.want)
+		if !slices.Contains(c.want, first) {
+			t.Errorf("query %q ranked %q first; want one of %v", c.query, first, c.want)
 		}
 	}
 }
@@ -500,4 +508,42 @@ func firstSearchHit(out string) string {
 		}
 	}
 	return ""
+}
+
+// ${trigger.…} and ${upstream.…} are the only way to feed several scalar params
+// from one structured output — the shape every "form → calendar/SMS/sheet" flow
+// needs. Before this, the prompt taught ${item.…} seventeen times and never
+// named either of them: the word "upstream" appeared once, saying a loop body
+// has none, and ${trigger.body.…} appeared once inside a single catalogue
+// example's params. A model could only learn them by accident, or by tripping
+// the structured-into-text check — which is a warning, so it never came back
+// through the repair loop.
+// A Swedish request reaches an English catalogue, and nothing used to say so:
+// the word "language" appeared eleven times in the whole prompt, every one of
+// them a `language(string)` param on an AI step. A Swedish keyword finds nothing
+// in search_drops, so the model has to be told to search in English while
+// writing what the user reads in their own language.
+func TestFlowGen_PromptSaysTheCatalogueIsEnglish(t *testing.T) {
+	t.Parallel()
+	sys := flowGenSystemPrompt(compactCatalog(allManifests()))
+	for _, want := range []string{"catalog is written in English", "Search it with English keywords", "in THEIR language"} {
+		if !strings.Contains(sys, want) {
+			t.Errorf("system prompt no longer states the catalogue's language: missing %q", want)
+		}
+	}
+}
+
+func TestFlowGen_PromptTeachesValueReferences(t *testing.T) {
+	t.Parallel()
+	sys := flowGenSystemPrompt(compactCatalog(allManifests()))
+	for _, want := range []string{
+		"${trigger.body.<field>}",
+		"${upstream.<node id>.<port>.<field>}",
+		"[0] to index a",
+		"ONLY inside a loop body",
+	} {
+		if !strings.Contains(sys, want) {
+			t.Errorf("system prompt no longer teaches value references: missing %q", want)
+		}
+	}
 }

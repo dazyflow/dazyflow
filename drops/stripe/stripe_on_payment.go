@@ -26,7 +26,8 @@ func init() {
 			BrandLogo:   "/brands/stripe.svg",
 			Color:       "#635BFF",
 			Provider:    "internal",
-			Tags:        []string{"stripe", "trigger", "payment", "webhook", "events", "billing"},
+			Tags: []string{"stripe", "trigger", "payment", "webhook", "events", "billing",
+				"paid", "pays", "purchase", "sale", "order"},
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Default — fire on every successful payment",

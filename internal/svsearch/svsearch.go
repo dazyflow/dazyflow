@@ -1,0 +1,346 @@
+// SPDX-FileCopyrightText: 2026 Angels' Ware
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+// Package svsearch translates a Swedish search term into the English words the
+// step catalogue is written in.
+//
+// The catalogue is authored in English and stays that way — it is the contract
+// the HTTP API, the MCP tools and the AI flow generator all read, so
+// translating core.Manifest would change what every non-human consumer sees.
+// Instead the QUERY is translated: each token expands into English terms that
+// occur in the catalogue.
+//
+// This table is the source of truth for BOTH search paths. The web step
+// palette used to carry its own copy in TypeScript, which meant a Swedish word
+// added for a person searching the palette did nothing for the same person
+// asking the AI to build the flow. web/src/lib/dropSearchAliases.ts is
+// generated from here by `make sv-aliases`, and `make catalogs-check` fails
+// when it drifts.
+//
+// A brand name in the values expands to EVERY step of that brand, so a brand
+// belongs only in an alias whose Swedish word covers the brand's whole range
+// ("frakt" → nshift, but not "faktura" → fortnox). Values must occur in some
+// manifest's text.
+package svsearch
+
+import "strings"
+
+// AliasWeight keeps an alias hit strictly below the literal hit it mimics, so
+// adding vocabulary can never reshuffle results an English query already
+// ranked.
+const AliasWeight = 0.7
+
+// MaxTerms caps one token's expansion; a prefix key can otherwise reach a lot
+// of the table at once.
+const MaxTerms = 24
+
+// Aliases maps a natural Swedish word to English catalogue terms. Keys are
+// written as a person types them; Fold normalises both sides on lookup.
+var Aliases = map[string][]string{
+	"e-post":              {"email", "gmail", "smtp"},
+	"epost":               {"email", "gmail", "smtp"},
+	"mejl":                {"email", "gmail", "smtp"},
+	"mejla":               {"email", "send email", "gmail"},
+	"mail":                {"email", "gmail", "smtp"},
+	"brev":                {"email", "send email"},
+	"utkast":              {"draft reply", "draft"},
+	"svarsförslag":        {"draft reply", "reply"},
+	"meddelande":          {"message", "send message", "notification"},
+	"meddelanden":         {"message", "send message"},
+	"chatt":               {"chat", "slack", "discord", "message"},
+	"chatta":              {"chat", "slack", "discord"},
+	"kanal":               {"channels", "slack"},
+	"kanaler":             {"channels", "slack"},
+	"sms":                 {"sms", "twilio", "elks", "46elks"},
+	"textmeddelande":      {"sms", "twilio", "elks"},
+	"telefon":             {"phone", "sms"},
+	"mobil":               {"phone", "sms"},
+	"telefonnummer":       {"phone", "e164", "msisdn"},
+	"notis":               {"notification", "notify", "ntfy", "push"},
+	"notiser":             {"notification", "notify", "ntfy", "push"},
+	"avisering":           {"notification", "notify", "ntfy", "alert"},
+	"avisera":             {"notify", "notification", "ntfy"},
+	"påminnelse":          {"reminder", "ntfy", "notify"},
+	"larm":                {"alert", "notify", "ntfy"},
+	"schema":              {"schedule", "cron", "recurring", "timer"},
+	"schemalägg":          {"schedule", "cron", "recurring"},
+	"schemalagd":          {"schedule", "cron", "recurring"},
+	"tidsschema":          {"schedule", "cron", "timer"},
+	"tidplan":             {"schedule", "cron"},
+	"klockan":             {"schedule", "cron", "daily", "time"},
+	"dagligen":            {"daily", "schedule", "cron"},
+	"återkommande":        {"recurring", "schedule", "cron", "interval"},
+	"intervall":           {"interval", "poll", "schedule"},
+	"utlösare":            {"trigger", "webhook", "schedule"},
+	"händelse":            {"event", "trigger", "webhook"},
+	"händelser":           {"events", "trigger", "webhook"},
+	"formulär":            {"form", "webhook", "google forms", "responses"},
+	"blankett":            {"form", "webhook", "google forms"},
+	"datum":               {"date", "time", "timestamp", "format"},
+	"tidpunkt":            {"date", "time", "timestamp"},
+	"tidsstämpel":         {"timestamp", "date", "time"},
+	"tidszon":             {"timezone", "date"},
+	"fördröj":             {"delay", "wait", "sleep"},
+	"fördröjning":         {"delay", "wait", "sleep"},
+	"vänta":               {"wait", "delay", "sleep"},
+	"pausa":               {"pause", "delay", "wait"},
+	"godkännande":         {"approval", "wait for approval"},
+	"godkänn":             {"approval", "wait for approval"},
+	"attest":              {"approval", "wait for approval"},
+	"tabell":              {"table", "rows", "make a table"},
+	"rader":               {"rows", "table"},
+	"kolumn":              {"columns", "rename columns", "calculated column"},
+	"kolumner":            {"columns", "choose & rename columns"},
+	"kalkylblad":          {"spreadsheet", "sheets", "excel"},
+	"kalkylark":           {"spreadsheet", "sheets", "excel"},
+	"kalkyl":              {"spreadsheet", "sheets", "excel"},
+	"databas":             {"database", "sql", "postgres", "mysql", "sqlite", "collections"},
+	"fråga":               {"query", "select", "search"},
+	"förfrågan":           {"request", "query", "http"},
+	"sökning":             {"search", "query", "find"},
+	"söka":                {"search", "find", "query"},
+	"leta":                {"search", "find", "query"},
+	"hitta":               {"find", "search", "query"},
+	"sortera":             {"sort"},
+	"sortering":           {"sort"},
+	"filtrera":            {"filter", "route", "split"},
+	"urval":               {"filter", "select", "choose"},
+	"gruppera":            {"group", "aggregate", "pivot"},
+	"summera":             {"sum", "aggregate", "group", "summarize"},
+	"summa":               {"sum", "aggregate", "group"},
+	"räkna":               {"sum", "aggregate", "count", "compute"},
+	"antal":               {"count", "aggregate", "group"},
+	"sammanfoga":          {"merge", "join", "combine"},
+	"kombinera":           {"combine", "merge", "join"},
+	"dubbletter":          {"duplicates", "dedupe", "unique"},
+	"duplikat":            {"duplicates", "dedupe", "unique"},
+	"unika":               {"unique", "dedupe", "duplicates"},
+	"dela":                {"split", "route", "fork"},
+	"lista":               {"list", "rows"},
+	"slinga":              {"loop", "for each", "iterate"},
+	"upprepa":             {"loop", "for each", "iterate"},
+	"iterera":             {"iterate", "for each", "loop"},
+	"fil":                 {"file", "read", "write"},
+	"filer":               {"files", "file", "list files"},
+	"mapp":                {"folder", "drive", "files"},
+	"katalog":             {"folder", "drive", "files"},
+	"spara":               {"save", "write", "store", "append"},
+	"lagra":               {"store", "save", "write"},
+	"skriv":               {"write", "save"},
+	"läsa":                {"read", "get", "fetch"},
+	"hämta":               {"get", "fetch", "read", "download"},
+	"ladda":               {"download", "upload", "load"},
+	"nedladdning":         {"download", "file"},
+	"uppladdning":         {"upload", "file"},
+	"skicka":              {"send", "publish"},
+	"webbadress":          {"url", "link", "address"},
+	"länk":                {"link", "url", "address"},
+	"adress":              {"address", "url", "location"},
+	"webbanrop":           {"web request", "http", "api", "call a url"},
+	"anrop":               {"request", "http", "api", "call a url"},
+	"api":                 {"api", "http", "rest", "web request"},
+	"hemlighet":           {"secret"},
+	"hemligheter":         {"secrets", "secret"},
+	"lösenord":            {"secret", "secrets"},
+	"nyckel":              {"secret", "key", "hmac"},
+	"kryptera":            {"hash", "hmac", "checksum"},
+	"checksumma":          {"checksum", "hash"},
+	"mall":                {"template", "fill a template", "render"},
+	"mallar":              {"template", "render"},
+	"formel":              {"formula", "expression", "cel", "compute"},
+	"beräkna":             {"compute", "calculated", "expression", "formula"},
+	"beräkning":           {"compute", "calculated column", "expression"},
+	"uttryck":             {"expression", "formula", "cel"},
+	"villkor":             {"condition", "if", "branch", "predicate"},
+	"ifall":               {"if", "condition", "branch"},
+	"jämför":              {"compare", "condition"},
+	"större":              {"greater_than", "compare"},
+	"mindre":              {"less_than", "compare"},
+	"omvandla":            {"transform", "format", "convert"},
+	"översätt":            {"claude", "chatgpt", "ai"},
+	"sammanfatta":         {"summarize", "summary", "tldr"},
+	"sammanfattning":      {"summary", "summarize"},
+	"klassificera":        {"classify", "categorize", "label"},
+	"kategorisera":        {"classify", "categorize"},
+	"extrahera":           {"extract", "parse", "structured"},
+	"språkmodell":         {"ai", "llm", "claude", "chatgpt"},
+	"artificiell":         {"ai", "llm", "claude", "chatgpt"},
+	"faktura":             {"invoice", "billing"},
+	"fakturor":            {"invoice", "billing"},
+	"fakturera":           {"invoice", "send invoice"},
+	"bokföring":           {"accounting", "fortnox", "invoicing"},
+	"redovisning":         {"accounting", "fortnox", "invoicing"},
+	"kund":                {"customer", "create customer"},
+	"kunder":              {"customer", "search customers"},
+	"betalning":           {"payment", "billing"},
+	"betalningar":         {"payment", "billing"},
+	"betala":              {"payment", "payment link"},
+	"kassa":               {"payment link", "payment", "order"},
+	"återbetalning":       {"refund"},
+	"retur":               {"refund", "return"},
+	"order":               {"order"},
+	"prenumeration":       {"subscription", "billing"},
+	"abonnemang":          {"subscription", "billing"},
+	"frakt":               {"shipping", "shipment", "nshift", "carrier"},
+	"leverans":            {"shipping", "shipment", "parcel", "nshift"},
+	"paket":               {"parcel", "shipment", "shipping", "nshift"},
+	"försändelse":         {"shipment", "consignment", "shipping", "nshift"},
+	"spårning":            {"tracking", "shipment", "nshift"},
+	"organisationsnummer": {"org-number", "orgnr", "company", "roaring"},
+	"orgnummer":           {"org-number", "orgnr", "company", "roaring"},
+	"orgnr":               {"orgnr", "org-number", "company", "roaring"},
+	"företag":             {"company", "business", "roaring", "enrichment"},
+	"bolag":               {"company", "business", "roaring"},
+	"kalender":            {"calendar", "events"},
+	"möte":                {"calendar", "event", "create event"},
+	"bokning":             {"calendar", "event", "create event"},
+	"väder":               {"weather", "forecast", "temperature", "smhi"},
+	"temperatur":          {"temperature", "weather", "forecast"},
+	"prognos":             {"forecast", "weather"},
+	"regn":                {"rain", "weather", "forecast"},
+	"karta":               {"map", "location", "coordinate"},
+	"plats":               {"place", "location", "coordinate", "geocode"},
+	"koordinat":           {"coordinate", "location", "lat", "lon"},
+	"ärende":              {"issue", "github", "tracker"},
+	"uppgift":             {"issue", "github"},
+	"nyheter":             {"news", "rss", "feed"},
+	"flöde":               {"feed", "rss", "atom"},
+	"prenumerera":         {"subscribe", "rss", "feed"},
+	"smarta":              {"smart home", "home assistant", "hass"},
+	"hemautomation":       {"smart home", "home assistant", "hass"},
+	"lampa":               {"light", "home assistant"},
+	"belysning":           {"light", "home assistant"},
+	"strömbrytare":        {"switch", "home assistant"},
+	"sensor":              {"sensor", "home assistant", "get state"},
+	"samling":             {"collection", "collections", "store", "save rows"},
+	"samlingar":           {"collection", "collections", "store"},
+}
+
+// Endings are Swedish inflections stripped, longest first, when a token has no
+// reading of its own — so "fakturorna" reaches "faktura".
+var Endings = []string{
+	"arna",
+	"erna",
+	"orna",
+	"ande",
+	"ade",
+	"ar",
+	"er",
+	"or",
+	"en",
+	"et",
+	"na",
+	"n",
+	"t",
+	"a",
+}
+
+// Fold normalises a term for lookup: lower case, Swedish and common accented
+// vowels folded to ASCII, every separator dropped — so "E-post", "epost" and
+// "e post" all reach one key.
+func Fold(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(s) {
+		switch r {
+		case 'å', 'ä':
+			b.WriteByte('a')
+		case 'ö':
+			b.WriteByte('o')
+		case 'é', 'è', 'ê':
+			b.WriteByte('e')
+		default:
+			if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+				b.WriteRune(r)
+			}
+		}
+	}
+	return b.String()
+}
+
+var folded = func() map[string][]string {
+	m := make(map[string][]string, len(Aliases))
+	for k, terms := range Aliases {
+		key := Fold(k)
+		if key == "" {
+			continue
+		}
+		for _, t := range terms {
+			if !contains(m[key], t) {
+				m[key] = append(m[key], t)
+			}
+		}
+	}
+	return m
+}()
+
+func contains(list []string, want string) bool {
+	for _, s := range list {
+		if s == want {
+			return true
+		}
+	}
+	return false
+}
+
+// lookup collects alias terms for an already-folded token: an exact key, keys
+// the token is a prefix OF (so "fakt" reaches "faktura" while the user is still
+// typing), and keys that are a prefix of the token (so a compound like
+// "fakturamall" reaches "faktura").
+func lookup(n string) []string {
+	var out []string
+	push := func(terms []string) {
+		for _, t := range terms {
+			if len(out) >= MaxTerms {
+				return
+			}
+			if !contains(out, t) {
+				out = append(out, t)
+			}
+		}
+	}
+	push(folded[n])
+	if len(n) >= 3 {
+		for k, terms := range folded {
+			if k != n && strings.HasPrefix(k, n) {
+				push(terms)
+			}
+		}
+	}
+	for k, terms := range folded {
+		// Four characters minimum: a shorter key is a prefix of far too many
+		// words to expand a token safely ("or" would fire inside "order").
+		if len(k) >= 4 && k != n && strings.HasPrefix(n, k) {
+			push(terms)
+		}
+	}
+	return out
+}
+
+// Expand returns the English catalogue terms a query token should also be
+// matched against. Empty for a token with no Swedish reading, which is the
+// common case for an English query.
+func Expand(tok string) []string {
+	n := Fold(tok)
+	if n == "" {
+		return nil
+	}
+	if terms := lookup(n); len(terms) > 0 {
+		return terms
+	}
+	if len(n) < 5 {
+		return nil
+	}
+	for _, end := range Endings {
+		if !strings.HasSuffix(n, end) {
+			continue
+		}
+		stem := strings.TrimSuffix(n, end)
+		if len(stem) < 3 {
+			continue
+		}
+		if terms := lookup(stem); len(terms) > 0 {
+			return terms
+		}
+	}
+	return nil
+}

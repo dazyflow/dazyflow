@@ -30,7 +30,8 @@ func init() {
 			BrandLogo:   "/brands/twilio.svg",
 			Color:       "#F22F46",
 			Provider:    "internal",
-			Tags:        []string{"twilio", "sms", "text", "message", "notify"},
+			Tags: []string{"twilio", "sms", "text", "text me", "texting", "mobile", "phone",
+				"message", "notify"},
 			Examples: []core.ParamsExample{
 				{Title: "Alert to a phone number", Params: json.RawMessage(`{"to":"+15558675309","from":"+15551234567","body":"Your order has shipped."}`), Notes: "Connect a trigger's phone/message outputs into the 'To'/'Body' pins instead of typing them."},
 				{Title: "Send via a Messaging Service", Params: json.RawMessage(`{"to":"+15558675309","messaging_service_sid":"MGxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx","body":"Your order has shipped."}`)},

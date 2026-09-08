@@ -30,7 +30,7 @@ func init() {
 			BrandLogo:   "/brands/sheets.svg",
 			Color:       "#0F9D58",
 			Provider:    "internal",
-			Tags:        []string{"sheets", "google", "pdf", "export"},
+			Tags:        []string{"sheets", "google", "pdf", "export", "spreadsheet"},
 			Examples: []core.ParamsExample{
 				{Title: "Export a sheet to a daily PDF", Params: json.RawMessage(`{"account":"default","spreadsheet_id":"REPLACE_WITH_YOUR_SHEET_URL_OR_ID"}`)},
 			},

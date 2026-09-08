@@ -60,7 +60,7 @@ LDFLAGS := -s -w \
 
 .PHONY: help up down restart logs ps build rebuild env pg pg-down test-db dev web test vet fmt fmt-check env-check check ci \
 	runner-embed runner-test \
-        integration-catalog drop-catalog catalogs catalogs-check check-changelog flowgen-eval \
+        integration-catalog drop-catalog sv-aliases catalogs catalogs-check check-changelog flowgen-eval \
         links-check \
         docs-content docs-site docs-dev bin version latest major minor patch _bump upgrade
 
@@ -176,7 +176,11 @@ drop-catalog: ## Refresh the drop text the Swedish coverage guard checks (run af
 	go run ./scripts/droptext.go > web/src/i18n/drops/catalog.json
 	@echo "wrote web/src/i18n/drops/catalog.json"
 
-catalogs: integration-catalog drop-catalog ## Refresh both generated catalogues the web guards read
+sv-aliases: ## Regenerate the web's Swedish search vocabulary from internal/svsearch (run after changing the Go table)
+	go run ./scripts/svaliases.go > web/src/lib/dropSearchAliases.ts
+	@echo "wrote web/src/lib/dropSearchAliases.ts"
+
+catalogs: integration-catalog drop-catalog sv-aliases ## Refresh the generated catalogues and vocabulary the web reads
 
 # The web guards check the Swedish against these committed snapshots, so a
 # snapshot that is itself out of date makes them pass vacuously: add a drop,
@@ -194,8 +198,10 @@ catalogs-check: ## Fail if a generated catalogue is out of date (CI)
 	@tmp=$$(mktemp -d); rc=0; \
 	go run ./scripts/integrations.go > $$tmp/integrations.json; \
 	go run ./scripts/droptext.go    > $$tmp/droptext.json; \
+	go run ./scripts/svaliases.go   > $$tmp/svaliases.ts; \
 	diff -u web/src/integrationMeta.catalog.json $$tmp/integrations.json || rc=1; \
 	diff -u web/src/i18n/drops/catalog.json    $$tmp/droptext.json    || rc=1; \
+	diff -u web/src/lib/dropSearchAliases.ts   $$tmp/svaliases.ts     || rc=1; \
 	rm -rf $$tmp; \
 	if [ $$rc -ne 0 ]; then \
 	  echo; \

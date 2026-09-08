@@ -33,7 +33,7 @@ func init() {
 			Icon:        "file-spreadsheet",
 			BrandLogo:   "/brands/excel.svg",
 			Provider:    "internal",
-			Tags:        []string{"excel", "xlsx", "spreadsheet", "write"},
+			Tags:        []string{"excel", "xlsx", "spreadsheet", "write", "save"},
 			Examples: []core.ParamsExample{
 				{Title: "Write a report", Params: json.RawMessage(`{"path":"reports/sales-2026.xlsx","sheet":"Sales"}`)},
 				{Title: "Append to a log", Params: json.RawMessage(`{"path":"logs/audit.xlsx","sheet":"Events","append":true}`)},

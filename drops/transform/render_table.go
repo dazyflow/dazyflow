@@ -25,7 +25,7 @@ func init() {
 			Icon:        "table",
 			Category:    "transformation",
 			Provider:    "internal",
-			Tags:        []string{"transform", "table", "html", "render", "format", "email", "message", "report"},
+			Tags:        []string{"transform", "table", "html", "render", "format", "email", "report"},
 			Description: "Turn a rows list straight into a ready-to-send HTML table — the column names become the header row and every row becomes a table row. Unlike Make text there is no template to write and no column names to type: the headers come from whatever columns the data actually has, so it can't drift from the source (no \"no such key\" at run time). Connect a rows list into `rows` and the `html` output into a message step — e.g. a Send email step's Body. Headers are the data's own column names unless you rename them. `column_labels` is a plain {column: heading} map — {\"customer_email\":\"Customer\"} heads that column \"Customer\" and leaves every other column alone, so renaming one heading doesn't mean listing them all. `columns` can also carry a per-entry `label`, which wins over the map for that column. Set `title` to name the table and it renders as a caption above the header row — a ${upstream.…} reference works there, so the name can carry the run's data (\"Orders for 2026-08-26\"). With zero rows it emits `empty` (default \"\") so an empty result yields a chosen fallback instead of a blank table.",
 			Summary:     "Turn rows into a ready-to-send HTML table — columns become the header row, no template needed.",
 			Examples: []core.ParamsExample{

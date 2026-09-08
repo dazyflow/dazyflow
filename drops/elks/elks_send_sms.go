@@ -30,7 +30,8 @@ func init() {
 			BrandLogo:   "/brands/46elks.svg",
 			Color:       "#15115F",
 			Provider:    "internal",
-			Tags:        []string{"46elks", "elks", "sms", "text", "message", "notify", "sweden", "nordic"},
+			Tags: []string{"46elks", "elks", "sms", "text", "text me", "texting", "mobile",
+				"phone", "message", "notify", "sweden", "nordic"},
 			Examples: []core.ParamsExample{
 				{Title: "Alert from a sender name", Params: json.RawMessage(`{"to":"+46700000000","from":"Acme","message":"Your order has shipped."}`), Notes: "Connect a trigger's phone/message outputs into the 'To'/'Message' pins instead of typing them."},
 				{Title: "Reply-able, from a number", Params: json.RawMessage(`{"to":"+46700000000","from":"+46700000001","message":"Reply YES to confirm."}`), Notes: "Use one of your 46elks numbers as 'From' so the recipient can reply."},

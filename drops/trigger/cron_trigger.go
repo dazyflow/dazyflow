@@ -16,13 +16,15 @@ import (
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:          "cron_trigger",
-			Version:     "1.0",
-			Label:       "Schedule",
-			Icon:        "clock",
-			Category:    "trigger",
-			Provider:    "internal",
-			Tags:        []string{"cron", "schedule", "trigger", "daily", "recurring", "timer"},
+			ID:       "cron_trigger",
+			Version:  "1.0",
+			Label:    "Schedule",
+			Icon:     "clock",
+			Category: "trigger",
+			Provider: "internal",
+			Tags: []string{"cron", "schedule", "trigger", "daily", "weekly", "monthly", "hourly",
+				"morning", "every", "once", "regularly", "repeat", "time", "recurring",
+				"timer"},
 			Description: "Starts the flow on a recurring schedule — pick daily, weekly, monthly or hourly on the step (a custom cron expression also works). The Time output is when it fired. With no schedule set, the flow runs only when you press Run.",
 			Summary:     "Starts the flow on a schedule — daily, weekly, monthly or hourly.",
 			Examples: []core.ParamsExample{

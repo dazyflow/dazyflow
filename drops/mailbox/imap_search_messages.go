@@ -35,7 +35,8 @@ func init() {
 			Icon:        "search",
 			Color:       "#0ea5e9",
 			Provider:    "internal",
-			Tags:        []string{"imap", "email", "mailbox", "inbox", "search", "list"},
+			Tags: []string{"imap", "email", "mailbox", "inbox", "search", "list", "incoming",
+				"arrive", "receive", "poll", "trigger"},
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Unread mail from a customer, last day",

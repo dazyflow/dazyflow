@@ -36,7 +36,9 @@ func init() {
 			Category:    "io",
 			Provider:    "internal",
 			Integration: "Collections",
-			Tags:        []string{"collection", "collections", "store", "database", "save", "append", "no-setup", "results", "dashboard", "report"},
+			Tags: []string{"collection", "collections", "store", "database", "save", "append",
+				"no-setup", "no setup", "keep", "answers", "submissions", "table",
+				"results", "dashboard", "report"},
 			Description: "Save rows to a collection — no database to set up and no connection string to paste. Pick a collection name and the rows land there; the collection is created automatically the first time. Each workspace has its own private Collections, and the saved rows show up under Collections so you can browse them in-app. Every row is stamped with the time it was saved (a saved_at column) so you can sort newest-first. By default every run appends; set “Unique by” to a key column (like date) and a row with a matching key is updated in place instead of piling up a duplicate — so re-running the flow stays idempotent.",
 			Summary:     "Append rows to a workspace-local collection with zero setup; auto-creates the collection, evolves columns on the fly, and surfaces the rows under Collections.",
 			Examples: []core.ParamsExample{
@@ -88,7 +90,8 @@ func init() {
 			Category:    "io",
 			Provider:    "internal",
 			Integration: "Collections",
-			Tags:        []string{"collection", "collections", "store", "database", "read", "query", "select", "no-setup"},
+			Tags: []string{"collection", "collections", "store", "database", "read", "query",
+				"select", "no-setup", "stored", "lookup", "retrieve"},
 			Description: "Read rows back out of a collection with a SELECT — handy for building a report from data you saved earlier. Use ? placeholders and the params list for any user-supplied values.",
 			Summary:     "Run a SELECT against the workspace's Collections and emit rows plus column names; an empty collection returns an empty result.",
 			Examples: []core.ParamsExample{

@@ -32,7 +32,8 @@ func init() {
 			BrandLogo:   "/brands/sheets.svg",
 			Color:       "#0F9D58",
 			Provider:    "internal",
-			Tags:        []string{"sheets", "google", "update", "write", "mark", "status"},
+			Tags: []string{"sheets", "google", "update", "write", "mark", "status",
+				"spreadsheet", "done", "complete", "processed", "row"},
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Mark the rows you just invoiced",

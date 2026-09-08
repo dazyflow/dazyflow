@@ -319,3 +319,42 @@ func TestSearch_ContainsWordBoundaries(t *testing.T) {
 		}
 	}
 }
+
+// The MCP list_drops tool and the HTTP catalogue endpoint go through
+// searchManifests, not rankManifests, so the Swedish vocabulary has to reach
+// this path too — it is the one an agent asking about the catalogue uses.
+func TestSearch_SwedishQueryReachesTheEnglishCatalogue(t *testing.T) {
+	t.Parallel()
+	cat := map[string]core.Manifest{
+		"gmail_send_email": {
+			ID: "gmail_send_email", Label: "Send email", Category: "network",
+			Provider: "google", Tags: []string{"gmail", "email", "send"},
+			Summary: "Send an email as the connected Gmail account.",
+		},
+		"sheets_append_row": {
+			ID: "sheets_append_row", Label: "Append row", Category: "network",
+			Provider: "google", Tags: []string{"sheets", "spreadsheet", "append"},
+			Summary: "Append rows to a Google Sheet.",
+		},
+		"sleep": {
+			ID: "sleep", Label: "Sleep", Category: "flow_control",
+			Provider: "internal", Tags: []string{"delay", "wait"},
+			Summary: "Pause for a configurable duration.",
+		},
+	}
+	for _, c := range []struct{ query, want string }{
+		{"mejla", "gmail_send_email"},
+		{"e-post", "gmail_send_email"},
+		{"kalkylark", "sheets_append_row"},
+		{"fördröjning", "sleep"},
+	} {
+		got := searchManifests(cat, DropSearch{Query: c.query})
+		if len(got) == 0 {
+			t.Errorf("swedish query %q found nothing; want %s", c.query, c.want)
+			continue
+		}
+		if got[0].ID != c.want {
+			t.Errorf("swedish query %q ranked %q first; want %s", c.query, got[0].ID, c.want)
+		}
+	}
+}

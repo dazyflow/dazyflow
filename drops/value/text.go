@@ -21,6 +21,11 @@ func init() {
 			Icon:     "text",
 			Category: "transformation",
 			Provider: "internal",
+			// A literal you type on the step. Its id is a common noun, so in a
+			// sentence like "pull the invoice number out of the text" it scored
+			// as the best answer for two of the words. A one-word search for
+			// "text" still wins outright — matchScore returns before the boost.
+			SearchBoost: -60,
 			Tags: []string{
 				"text", "string", "constant", "literal",
 				"code", "script", "snippet", "sql", "yaml", "json", "shell",

@@ -63,6 +63,10 @@ type Config struct {
 	// host IS the configuration, and retyping it on every step is unusable.
 	// The field is plain (not secret) so it stays visible in node output, and
 	// injectConnectionDefaults leaves an author's per-step override alone.
+	// ExtraTags are search words true of this provider and not the others —
+	// Ollama runs on your own machine, which is the reason to pick it and was
+	// not a word you could find it by.
+	ExtraTags          []string
 	BaseURLLabel       string
 	BaseURLPlaceholder string
 	BaseURLHelp        string
@@ -311,5 +315,6 @@ func schemaJSON(props map[string]any, required []string) json.RawMessage {
 }
 
 func tags(cfg Config, extra ...string) []string {
-	return append([]string{"ai", strings.ToLower(cfg.Integration)}, extra...)
+	out := append([]string{"ai", strings.ToLower(cfg.Integration)}, extra...)
+	return append(out, cfg.ExtraTags...)
 }

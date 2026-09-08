@@ -150,6 +150,7 @@ func init() {
 		AskID:              "ollama",
 		TaskIDPrefix:       "ollama",
 		KeyOptional:        true,
+		ExtraTags:          []string{"local", "offline", "self-hosted", "own machine", "private", "on-premise", "no key"},
 		KeyPlaceholder:     "only if your instance is behind a proxy",
 		BaseURLLabel:       "Server URL",
 		BaseURLPlaceholder: defaultBase,

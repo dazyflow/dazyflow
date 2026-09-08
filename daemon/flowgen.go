@@ -145,6 +145,20 @@ func flowGenSystemPrompt(catalog string) string {
 		"EVENT (a form submission, an incoming email), DON'T set a cron trigger — instead make the first " +
 		"step the matching trigger node from the catalog (e.g. webhook_input). Otherwise use trigger.type=\"none\".\n" +
 		"- Every turn, answer by calling the `act` tool (see HOW TO WORK below).\n\n" +
+		"LANGUAGE: the catalog is written in English whatever language the request is in. " +
+		"Search it with English keywords — \"form\", \"send email\", \"invoice\" — even for a Swedish " +
+		"ask, because a Swedish word finds nothing here. Name the flow and write any text the user " +
+		"will read in THEIR language.\n\n" +
+		"REFERENCES — reading a value inside a step's OWN params:\n" +
+		"- ${trigger.body.<field>} is what the trigger delivered: a form's answers, a webhook's " +
+		"payload. Use it when several scalar params come from one trigger — a form's `when` into a " +
+		"calendar step's start, its `name` into the summary. A trigger's Body is ONE object, so " +
+		"wiring it into a text input hands that step raw JSON; a reference picks the field out.\n" +
+		"- ${upstream.<node id>.<port>.<field>} reads an earlier step's output, with [0] to index a " +
+		"list: ${upstream.sheet.rows[0].email}. The node id is the one you gave it in this flow.\n" +
+		"- Prefer WIRING an edge when a whole port feeds a whole input. Reach for a reference when one " +
+		"step needs SEVERAL fields of the same upstream value, which no single edge can express.\n" +
+		"- ${item.…} is the for_each equivalent and works ONLY inside a loop body (see PATTERNS).\n\n" +
 		"PATTERNS (compose these from catalog steps — they are not single steps):\n" +
 		"- Process a list one item at a time (each email, each row): wire the list into for_each.items, then " +
 		"wire for_each.body to the FIRST step of the body. `body` is a control pin — it marks that step and " +

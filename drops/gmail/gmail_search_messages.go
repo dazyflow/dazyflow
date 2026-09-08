@@ -34,7 +34,8 @@ func init() {
 			BrandLogo:   "/brands/gmail.svg",
 			Color:       "#D14836",
 			Provider:    "internal",
-			Tags:        []string{"gmail", "email", "search", "list"},
+			Tags: []string{"gmail", "email", "search", "list", "inbox", "incoming",
+				"arrive", "receive", "poll", "trigger"},
 			Examples: []core.ParamsExample{
 				{Title: "Unread from the last day", Params: json.RawMessage(`{"account":"default","query":"newer_than:1d is:unread","max_results":20}`)},
 			},

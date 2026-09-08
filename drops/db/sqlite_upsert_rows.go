@@ -30,7 +30,7 @@ func init() {
 			Category:    "io",
 			Provider:    "internal",
 			Integration: "SQLite",
-			Tags:        []string{"sqlite", "sql", "database", "upsert", "merge", "etl"},
+			Tags:        []string{"sqlite", "sql", "database", "upsert", "merge", "insert", "update", "duplicate", "duplicates", "etl"},
 			SearchBoost: 10,
 			Description: "Upsert (insert-or-update) rows into a SQLite table in your workspace. Set the conflict columns — SQLite matches existing rows on those, updating them in place, while new rows get inserted. Pick which columns get updated on a match if you want to preserve some existing values.",
 			Summary:     "Insert-or-update rows in a workspace-sandboxed SQLite file via INSERT ... ON CONFLICT, matching on the conflict columns.",

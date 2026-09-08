@@ -35,7 +35,8 @@ func init() {
 			Category:    "io",
 			Provider:    "internal",
 			Integration: "Collections",
-			Tags:        []string{"collection", "collections", "store", "database", "read", "find", "filter", "search", "no-setup", "no-code", "results"},
+			Tags: []string{"collection", "collections", "store", "database", "read", "find", "filter", "search", "no-setup", "no-code", "results", "stored", "lookup", "retrieve",
+				"earlier", "previous"},
 			Description: "Read rows back out of a collection without writing any SQL. Pick the collection, then add simple conditions — like status equals unpaid, or amount greater than 100 — with the visual editor, and the matching rows come out. Optionally sort by a column and cap how many rows you get. The friendly companion to “Save rows”; reach for “Query rows” when you want raw SQL.",
 			Summary:     "Read rows from one collection with no-code filters (column / operator / value), an optional sort and limit; emits rows plus column names.",
 			Examples: []core.ParamsExample{

@@ -12,6 +12,79 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ### Fixed
 
+- **Swedish search vocabulary now serves both searches instead of one.** The
+  Swedish → English table lived in `web/src/lib/dropSearch.ts`, so it reached
+  the editor's step palette and nothing else: a word added so a person could
+  find a step by typing it did nothing for the same person asking the AI to
+  build the flow, because the server-side search behind `search_drops` and the
+  MCP `list_drops` tool had never heard of it. The table moved to Go
+  (`internal/svsearch`), `make sv-aliases` generates the TypeScript from it, and
+  `make catalogs-check` fails when the two drift. Swedish retrieval went from
+  43% top-five to 93% on thirty asks; English is unchanged at 75% first-hit and
+  98% top-five.
+
+  The two sides keep different *policy* on purpose. The palette expands every
+  token, because "fakt" should reach "faktura" while someone is still typing.
+  The server expands only a token the catalogue cannot answer literally, which
+  is what makes "adding Swedish never reorders an English result" true instead
+  of merely intended — weighting alone did not, since English words
+  prefix-match Swedish keys: "check" reached "checksumma" and put `hash` in the
+  results for "check every five minutes", and "summarise" reached "summa" and
+  put `group_aggregate` first for "summarise it". Two words of Swedish filler
+  could also score thirty-one steps, because "för för" folds to "forfor", the
+  ending stripper cuts "or", and the remaining "forf" prefix-matches
+  "förfrågan". A guard now checks every alias value is a word some step
+  actually carries, which found one that was not (`uppgift → task`), and
+  `samling` — what the Swedish UI calls Collections — was missing entirely.
+
+- **A Swedish request met an English catalogue in silence.** The step catalogue
+  is authored in English by design — it is the contract the HTTP API, the MCP
+  tools and the AI generator are all grounded on, and only the human UI
+  localises. But nothing said so: the word "language" appeared eleven times in
+  the generator's prompt, every one of them a `language(string)` param on an AI
+  step. The prompt now states that the catalogue is English, to search it with
+  English keywords whatever language the request is in, and to write what the
+  user reads in their own. Worse than the silence, a Swedish query used to
+  return confidently wrong steps: filler words matched inside English step ids,
+  so "min" ("my") hit ge-min-i and "en" ("a") hit builtin_store_app-en-d and
+  caldav_create_ev-en-t, and four unrelated Swedish asks came back with the same
+  irrelevant block. A bare substring of an id now needs five characters, and
+  Swedish filler is ignored outright, so those asks return nothing rather than
+  nonsense. Measured on 30 Swedish asks: 43% top-five against 98% for English,
+  and every Swedish ask naming a brand — Fortnox, Klarna, nShift, SMHI — reaches
+  its step. Closing the rest means giving this side the Swedish alias table the
+  editor's step palette already has (`web/src/lib/dropSearch.ts`).
+
+- **The AI flow generator was never told how to read a value.** Its prompt
+  taught `${item.…}` (the for-each form) seventeen times and never named the
+  other two: the word "upstream" appeared once, to say a loop body has none,
+  and `${trigger.body.…}` appeared once inside a single catalogue example's
+  params. Those two are the only way to feed several scalar params from one
+  structured output — the shape behind every "form → calendar", "form → SMS"
+  and "email → sheet" flow — so the generator could only find them by accident,
+  or by tripping the structured-into-text check, which is a warning and so
+  never came back through the repair loop. The prompt now has a REFERENCES
+  section, and says to prefer an edge when a whole port feeds a whole input.
+  The MCP surface already documented both through its `flow_references` tool;
+  this brings the in-app generator up to it.
+
+- **Steps carried the wrong words to find them by.** A retrieval benchmark of
+  83 plain-language asks (`daemon/flowgen_retrieval_test.go`) put the catalogue
+  at 49% first-hit and 74% top-five. Searching now ignores the words an ask is
+  made of rather than about ("the" is a substring of "weather", which dragged
+  the forecast steps into eight unrelated asks), withholds the exact-name
+  jackpot from a word that merely appears in a sentence (`text` won "text me",
+  `email` won "when a new email arrives", `number` won "pull the invoice number
+  out"), accumulates across every matching tag instead of stopping at the
+  first, and stems a tag so "week" reaches "weekly". Alongside that, about
+  twenty steps gained the words people actually use — British spellings
+  (summarise, categorise), "spreadsheet" on the Sheets steps that lacked it
+  though a sibling had it, feedback/survey/contact/page on the Form trigger,
+  local/offline/own-machine on Ollama, duplicate on the upsert steps — and
+  `stripe_get_customer` lost an `email` tag it should never have had, since it
+  looks a customer up by Stripe id and was outranking the step that searches by
+  email. 75% first-hit, 98% top-five, with both floors now enforced.
+
 - **Searching the step catalogue missed the step you asked for.** Every word of
   a query had to appear, so any phrase collapsed — "web form" found only
   `http_upload` and "public form" found nothing, though `form_input` carries

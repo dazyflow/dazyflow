@@ -14,13 +14,15 @@ import (
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:          "form_input",
-			Version:     "1.0",
-			Label:       "Form",
-			Icon:        "clipboard-list",
-			Category:    "trigger",
-			Provider:    "internal",
-			Tags:        []string{"form", "trigger", "intake", "submission", "public"},
+			ID:       "form_input",
+			Version:  "1.0",
+			Label:    "Form",
+			Icon:     "clipboard-list",
+			Category: "trigger",
+			Provider: "internal",
+			Tags: []string{"form", "trigger", "intake", "submission", "public", "feedback",
+				"survey", "questionnaire", "contact", "page", "website", "link",
+				"respond", "answers"},
 			Description: "Starts the flow when someone fills in the form Dazyflow hosts for you — no website and no key needed, just a link you can share. Body carries what they typed, one entry per field. Anyone with the link can submit, so treat it as public.",
 			Summary:     "Starts the flow when someone submits the form Dazyflow hosts for you.",
 			Examples: []core.ParamsExample{

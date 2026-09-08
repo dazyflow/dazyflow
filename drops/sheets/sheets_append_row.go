@@ -31,7 +31,7 @@ func init() {
 			BrandLogo:   "/brands/sheets.svg",
 			Color:       "#0F9D58",
 			Provider:    "internal",
-			Tags:        []string{"sheets", "google", "append", "write"},
+			Tags:        []string{"sheets", "google", "append", "write", "save", "spreadsheet", "row"},
 			Examples: []core.ParamsExample{
 				{Title: "Append to a log sheet", Params: json.RawMessage(`{"account":"default","spreadsheet_id":"REPLACE_WITH_YOUR_SHEET_URL_OR_ID","range":"Inbox Log"}`)},
 			},

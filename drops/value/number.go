@@ -14,13 +14,18 @@ import (
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:          "number",
-			Version:     "1.0",
-			Label:       "Number",
-			Color:       "#888",
-			Icon:        "hash",
-			Category:    "transformation",
-			Provider:    "internal",
+			ID:       "number",
+			Version:  "1.0",
+			Label:    "Number",
+			Color:    "#888",
+			Icon:     "hash",
+			Category: "transformation",
+			Provider: "internal",
+			// A literal you type on the step. Its id is a common noun, so in a
+			// sentence like "pull the invoice number out of the text" it scored
+			// as the best answer for two of the words. A one-word search for
+			// "text" still wins outright — matchScore returns before the boost.
+			SearchBoost: -60,
 			Tags:        []string{"number", "numeric", "constant", "literal", "int", "float"},
 			Description: "Emit a literal numeric value. Later steps see it as a JSON number on the 'out' port — connect it into a comparison (In Range, Compare), an operator, or a numeric input like a Delay step's duration.",
 			Summary:     "Emit a fixed number you type on the step, on the 'out' port.",

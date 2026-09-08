@@ -2,206 +2,34 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import type { Manifest } from "../types";
+import {
+  ALIAS_WEIGHT,
+  MAX_TERMS,
+  SV_ALIASES,
+  SV_ENDINGS,
+} from "./dropSearchAliases";
 
 // Swedish → catalog vocabulary.
 //
 // The drop catalog is authored in English (label, subtitle, integration and
 // tags come off core.Manifest), so instead of translating every manifest the
-// QUERY is translated: each token expands through this table into English
-// terms that occur in the catalog. An alias hit scores a shade below a literal
-// hit (ALIAS_WEIGHT), so aliases can add results but never reorder English
-// ones. The table applies in every locale, since Swedish users often run the
-// English UI and none of these words collide with English catalog text.
+// QUERY is translated: each token expands through the table into English terms
+// that occur in the catalog. An alias hit scores a shade below a literal hit
+// (ALIAS_WEIGHT), so aliases can add results but never reorder English ones.
+// The table applies in every locale, since Swedish users often run the English
+// UI and none of these words collide with English catalog text.
 //
-// A brand name in the values expands to EVERY drop of that brand, so a brand
-// belongs only in an alias whose Swedish word covers the brand's whole range
-// ("frakt" → nshift, but not "faktura" → fortnox). Values must occur in some
-// manifest's text. Keys are natural Swedish; lookup folds both sides.
-const SV_ALIASES: Record<string, string[]> = {
-  "e-post": ["email", "gmail", "smtp"],
-  epost: ["email", "gmail", "smtp"],
-  mejl: ["email", "gmail", "smtp"],
-  mejla: ["email", "send email", "gmail"],
-  mail: ["email", "gmail", "smtp"],
-  brev: ["email", "send email"],
-  utkast: ["draft reply", "draft"],
-  svarsförslag: ["draft reply", "reply"],
-  meddelande: ["message", "send message", "notification"],
-  meddelanden: ["message", "send message"],
-  chatt: ["chat", "slack", "discord", "message"],
-  chatta: ["chat", "slack", "discord"],
-  kanal: ["channels", "slack"],
-  kanaler: ["channels", "slack"],
-  sms: ["sms", "twilio", "elks", "46elks"],
-  textmeddelande: ["sms", "twilio", "elks"],
-  telefon: ["phone", "sms"],
-  mobil: ["phone", "sms"],
-  telefonnummer: ["phone", "e164", "msisdn"],
-  notis: ["notification", "notify", "ntfy", "push"],
-  notiser: ["notification", "notify", "ntfy", "push"],
-  avisering: ["notification", "notify", "ntfy", "alert"],
-  avisera: ["notify", "notification", "ntfy"],
-  påminnelse: ["reminder", "ntfy", "notify"],
-  larm: ["alert", "notify", "ntfy"],
-  schema: ["schedule", "cron", "recurring", "timer"],
-  schemalägg: ["schedule", "cron", "recurring"],
-  schemalagd: ["schedule", "cron", "recurring"],
-  tidsschema: ["schedule", "cron", "timer"],
-  tidplan: ["schedule", "cron"],
-  klockan: ["schedule", "cron", "daily", "time"],
-  dagligen: ["daily", "schedule", "cron"],
-  återkommande: ["recurring", "schedule", "cron", "interval"],
-  intervall: ["interval", "poll", "schedule"],
-  utlösare: ["trigger", "webhook", "schedule"],
-  händelse: ["event", "trigger", "webhook"],
-  händelser: ["events", "trigger", "webhook"],
-  formulär: ["form", "webhook", "google forms", "responses"],
-  blankett: ["form", "webhook", "google forms"],
-  datum: ["date", "time", "timestamp", "format"],
-  tidpunkt: ["date", "time", "timestamp"],
-  tidsstämpel: ["timestamp", "date", "time"],
-  tidszon: ["timezone", "date"],
-  fördröj: ["delay", "wait", "sleep"],
-  fördröjning: ["delay", "wait", "sleep"],
-  vänta: ["wait", "delay", "sleep"],
-  pausa: ["pause", "delay", "wait"],
-  godkännande: ["approval", "wait for approval"],
-  godkänn: ["approval", "wait for approval"],
-  attest: ["approval", "wait for approval"],
-  tabell: ["table", "rows", "make a table"],
-  rader: ["rows", "table"],
-  kolumn: ["columns", "rename columns", "calculated column"],
-  kolumner: ["columns", "choose & rename columns"],
-  kalkylblad: ["spreadsheet", "sheets", "excel"],
-  kalkylark: ["spreadsheet", "sheets", "excel"],
-  kalkyl: ["spreadsheet", "sheets", "excel"],
-  databas: ["database", "sql", "postgres", "mysql", "sqlite", "collections"],
-  fråga: ["query", "select", "search"],
-  förfrågan: ["request", "query", "http"],
-  sökning: ["search", "query", "find"],
-  söka: ["search", "find", "query"],
-  leta: ["search", "find", "query"],
-  hitta: ["find", "search", "query"],
-  sortera: ["sort"],
-  sortering: ["sort"],
-  filtrera: ["filter", "route", "split"],
-  urval: ["filter", "select", "choose"],
-  gruppera: ["group", "aggregate", "pivot"],
-  summera: ["sum", "aggregate", "group", "summarize"],
-  summa: ["sum", "aggregate", "group"],
-  räkna: ["sum", "aggregate", "count", "compute"],
-  antal: ["count", "aggregate", "group"],
-  sammanfoga: ["merge", "join", "combine"],
-  kombinera: ["combine", "merge", "join"],
-  dubbletter: ["duplicates", "dedupe", "unique"],
-  duplikat: ["duplicates", "dedupe", "unique"],
-  unika: ["unique", "dedupe", "duplicates"],
-  dela: ["split", "route", "fork"],
-  lista: ["list", "rows"],
-  slinga: ["loop", "for each", "iterate"],
-  upprepa: ["loop", "for each", "iterate"],
-  iterera: ["iterate", "for each", "loop"],
-  fil: ["file", "read", "write"],
-  filer: ["files", "file", "list files"],
-  mapp: ["folder", "drive", "files"],
-  katalog: ["folder", "drive", "files"],
-  spara: ["save", "write", "store", "append"],
-  lagra: ["store", "save", "write"],
-  skriv: ["write", "save"],
-  läsa: ["read", "get", "fetch"],
-  hämta: ["get", "fetch", "read", "download"],
-  ladda: ["download", "upload", "load"],
-  nedladdning: ["download", "file"],
-  uppladdning: ["upload", "file"],
-  skicka: ["send", "publish"],
-  webbadress: ["url", "link", "address"],
-  länk: ["link", "url", "address"],
-  adress: ["address", "url", "location"],
-  webbanrop: ["web request", "http", "api", "call a url"],
-  anrop: ["request", "http", "api", "call a url"],
-  api: ["api", "http", "rest", "web request"],
-  hemlighet: ["secret"],
-  hemligheter: ["secrets", "secret"],
-  lösenord: ["secret", "secrets"],
-  nyckel: ["secret", "key", "hmac"],
-  kryptera: ["hash", "hmac", "checksum"],
-  checksumma: ["checksum", "hash"],
-  mall: ["template", "fill a template", "render"],
-  mallar: ["template", "render"],
-  formel: ["formula", "expression", "cel", "compute"],
-  beräkna: ["compute", "calculated", "expression", "formula"],
-  beräkning: ["compute", "calculated column", "expression"],
-  uttryck: ["expression", "formula", "cel"],
-  villkor: ["condition", "if", "branch", "predicate"],
-  ifall: ["if", "condition", "branch"],
-  jämför: ["compare", "condition"],
-  större: ["greater_than", "compare"],
-  mindre: ["less_than", "compare"],
-  omvandla: ["transform", "format", "convert"],
-  översätt: ["claude", "chatgpt", "ai"],
-  sammanfatta: ["summarize", "summary", "tldr"],
-  sammanfattning: ["summary", "summarize"],
-  klassificera: ["classify", "categorize", "label"],
-  kategorisera: ["classify", "categorize"],
-  extrahera: ["extract", "parse", "structured"],
-  språkmodell: ["ai", "llm", "claude", "chatgpt"],
-  artificiell: ["ai", "llm", "claude", "chatgpt"],
-  faktura: ["invoice", "billing"],
-  fakturor: ["invoice", "billing"],
-  fakturera: ["invoice", "send invoice"],
-  bokföring: ["accounting", "fortnox", "invoicing"],
-  redovisning: ["accounting", "fortnox", "invoicing"],
-  kund: ["customer", "create customer"],
-  kunder: ["customer", "search customers"],
-  betalning: ["payment", "billing"],
-  betalningar: ["payment", "billing"],
-  betala: ["payment", "payment link"],
-  kassa: ["payment link", "payment", "order"],
-  återbetalning: ["refund"],
-  retur: ["refund", "return"],
-  order: ["order"],
-  prenumeration: ["subscription", "billing"],
-  abonnemang: ["subscription", "billing"],
-  frakt: ["shipping", "shipment", "nshift", "carrier"],
-  leverans: ["shipping", "shipment", "parcel", "nshift"],
-  paket: ["parcel", "shipment", "shipping", "nshift"],
-  försändelse: ["shipment", "consignment", "shipping", "nshift"],
-  spårning: ["tracking", "shipment", "nshift"],
-  organisationsnummer: ["org-number", "orgnr", "company", "roaring"],
-  orgnummer: ["org-number", "orgnr", "company", "roaring"],
-  orgnr: ["orgnr", "org-number", "company", "roaring"],
-  företag: ["company", "business", "roaring", "enrichment"],
-  bolag: ["company", "business", "roaring"],
-  kalender: ["calendar", "events"],
-  möte: ["calendar", "event", "create event"],
-  bokning: ["calendar", "event", "create event"],
-  väder: ["weather", "forecast", "temperature", "smhi"],
-  temperatur: ["temperature", "weather", "forecast"],
-  prognos: ["forecast", "weather"],
-  regn: ["rain", "weather", "forecast"],
-  karta: ["map", "location", "coordinate"],
-  plats: ["place", "location", "coordinate", "geocode"],
-  koordinat: ["coordinate", "location", "lat", "lon"],
-  ärende: ["issue", "github", "tracker"],
-  uppgift: ["issue", "task", "github"],
-  nyheter: ["news", "rss", "feed"],
-  flöde: ["feed", "rss", "atom"],
-  prenumerera: ["subscribe", "rss", "feed"],
-  smarta: ["smart home", "home assistant", "hass"],
-  hemautomation: ["smart home", "home assistant", "hass"],
-  lampa: ["light", "home assistant"],
-  belysning: ["light", "home assistant"],
-  strömbrytare: ["switch", "home assistant"],
-  sensor: ["sensor", "home assistant", "get state"],
-};
-
-// ALIAS_WEIGHT keeps an alias hit strictly below the literal hit it mimics,
-// so adding vocabulary can never reshuffle results an English query already
-// ranked. 0.7 is enough separation that a weak literal hit (description,
-// score 60) still loses to a strong alias hit (label, 500 × 0.7 = 350) —
-// which is what we want: "mejl" should land on Email, not on whichever drop
-// happens to mention mail in prose.
-const ALIAS_WEIGHT = 0.7;
+// The table itself lives in Go (internal/svsearch) and dropSearchAliases.ts is
+// generated from it, because the server-side search behind search_drops and the
+// MCP list_drops tool needs the same vocabulary. It used to live here, which
+// meant a Swedish word added for someone searching this palette did nothing for
+// the same person asking the AI to build the flow.
+//
+// The two sides deliberately differ in POLICY, not vocabulary: this one expands
+// every token, so "fakt" reaches "faktura" while someone is still typing, while
+// the Go side expands only a token the catalogue cannot answer literally —
+// there is nothing being typed there, and eager expansion reordered English
+// results ("check" reaches the Swedish "checksumma").
 
 // fold normalizes a term for alias lookup: lowercase, Swedish and common
 // accented vowels folded to ASCII, and every separator dropped — so "E-post",
@@ -232,24 +60,6 @@ const FOLDED: Map<string, string[]> = (() => {
 
 const FOLDED_KEYS = [...FOLDED.keys()];
 
-const SV_ENDINGS = [
-  "arna",
-  "erna",
-  "orna",
-  "ande",
-  "ade",
-  "ar",
-  "er",
-  "or",
-  "en",
-  "et",
-  "na",
-  "n",
-  "t",
-  "a",
-];
-
-const MAX_TERMS = 24;
 
 // lookup collects alias terms for an already-folded token: an exact key hit,
 // keys the token is a prefix OF (so "fakt" reaches "faktura" while the user is

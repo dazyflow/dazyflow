@@ -17,14 +17,15 @@ import (
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:          "render_text",
-			Version:     "1.0",
-			Label:       "Make text",
-			Subtitle:    "Text from a list",
-			Icon:        "text",
-			Category:    "transformation",
-			Provider:    "internal",
-			Tags:        []string{"transform", "text", "render", "format", "join", "reduce", "message", "notify"},
+			ID:       "render_text",
+			Version:  "1.0",
+			Label:    "Make text",
+			Subtitle: "Text from a list",
+			Icon:     "text",
+			Category: "transformation",
+			Provider: "internal",
+			Tags: []string{"transform", "text", "render", "format", "join", "reduce", "message",
+				"notify", "line", "string", "sentence", "chat"},
 			Description: "Collapse a list of rows into one text string: render one line per row (a CEL expression or a single column), then join the lines with a separator. This is the bridge between the tabular steps and the message-sending steps — Send Slack message, Send email, and Create GitHub issue all want a single line of text in their Body/Text field, not a list of rows. Connect this step's text output into that field. With zero rows it emits `empty` (default \"\"), so you can post \"No new orders today.\" instead of failing on an empty message.",
 			Summary:     "Render rows into one text string — a templated line per row, joined with a separator.",
 			Examples: []core.ParamsExample{

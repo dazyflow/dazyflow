@@ -119,7 +119,7 @@ func summarizeDrop(cfg Config) engine.NativeDrop {
 			Summary:     "Turn long text into a short summary in the style you pick.",
 			Description: "Feed in any text — an email, a document, a row of notes — and get a concise summary back. Choose how short and whether you want a sentence, a paragraph, or bullet points." + fileHint(cfg),
 			Integration: cfg.Integration, Category: "ai", Icon: cfg.Icon, Color: cfg.Color, BrandLogo: cfg.BrandLogo,
-			Provider: "internal", Tags: tags(cfg, "summary", "summarize", "text", "tldr"),
+			Provider: "internal", Tags: tags(cfg, "summary", "summarize", "summarise", "shorten", "brief", "text", "tldr"),
 			Examples: []core.ParamsExample{
 				{Title: "One-sentence summary", Params: json.RawMessage(`{"style":"one_line"}`), Notes: "Connect the text to summarize into the Text input; " + unsetHint(cfg)},
 			},
@@ -204,7 +204,7 @@ func extractDrop(cfg Config) engine.NativeDrop {
 			Summary:     "Pull structured fields out of messy text into clean JSON.",
 			Description: "Describe the fields you want — like amount, due date, or customer name — and AI reads the text and fills them in. Great for turning invoices, emails, and form replies into rows.",
 			Integration: cfg.Integration, Category: "ai", Icon: cfg.Icon, Color: cfg.Color, BrandLogo: cfg.BrandLogo,
-			Provider: "internal", Tags: tags(cfg, "extract", "parse", "structured", "fields", "json"),
+			Provider: "internal", Tags: tags(cfg, "extract", "parse", "pull", "structured", "fields", "json", "invoice", "receipt"),
 			Examples: []core.ParamsExample{
 				{Title: "Parse an invoice email", Params: json.RawMessage(`{"fields":[{"name":"amount","description":"Total due","type":"number"},{"name":"vendor","description":"Who sent it"}]}`), Notes: "Connect the email body into Text. Output 'data' is {amount, vendor}."},
 				{Title: "Read the invoice PDF itself", Params: json.RawMessage(`{"fields":[{"name":"amount","description":"Total due","type":"number"},{"name":"due_date","description":"Payment due date, YYYY-MM-DD"}]}`), Notes: "Connect Download attachments' First file into Files — the model reads the document, so a scan works as well as a text PDF."},
@@ -318,7 +318,7 @@ func classifyDrop(cfg Config) engine.NativeDrop {
 			Summary:     "Sort text into one of your categories so you can route it.",
 			Description: "Give AI a list of categories and it picks the single best match — route support emails, tag leads, flag spam. Connect the Category output into a Branch.",
 			Integration: cfg.Integration, Category: "ai", Icon: cfg.Icon, Color: cfg.Color, BrandLogo: cfg.BrandLogo,
-			Provider: "internal", Tags: tags(cfg, "classify", "categorize", "route", "label", "tag"),
+			Provider: "internal", Tags: tags(cfg, "classify", "categorize", "categorise", "sort", "triage", "route", "label", "tag"),
 			Examples: []core.ParamsExample{
 				{Title: "Route a support email", Params: json.RawMessage(`{"categories":[{"name":"billing","description":"Payments, refunds"},{"name":"technical","description":"Bugs and how-to"}]}`), Notes: "Connect the email into Text; connect Category into a Branch."},
 			},

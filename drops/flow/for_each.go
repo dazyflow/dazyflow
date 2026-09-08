@@ -19,13 +19,14 @@ import (
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:          "for_each",
-			Version:     "1.0",
-			Label:       "For each",
-			Icon:        "repeat",
-			Category:    "flow_control",
-			Provider:    "internal",
-			Tags:        []string{"iterate", "loop", "fan_out", "map"},
+			ID:       "for_each",
+			Version:  "1.0",
+			Label:    "For each",
+			Icon:     "repeat",
+			Category: "flow_control",
+			Provider: "internal",
+			Tags: []string{"iterate", "loop", "fan_out", "map", "every", "each row",
+				"one at a time", "per row", "repeat"},
 			Description: "Run the loop body — the steps connected to the Loop body input — once per item in an input list. Items execute in parallel up to the concurrency setting. Outputs `results` (one entry per item, in order) and `errors` (a list of failed rows: {row, data, error}, row is 1-based). Set fail_fast=true to abort on the first failure; otherwise the iteration continues and failures surface on the errors port. If MOST items fail the step fails anyway — that is an outage, not a partial success, and a later step shouldn't record the work as done. A few failures among many still succeed, and the count is written to the run log either way.",
 			Summary:     "Fan out a list and run the connected Loop body on every item, optionally in parallel, collecting results in order.",
 			Examples: []core.ParamsExample{

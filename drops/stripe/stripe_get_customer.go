@@ -29,7 +29,7 @@ func init() {
 			BrandLogo:   "/brands/stripe.svg",
 			Color:       "#635BFF",
 			Provider:    "internal",
-			Tags:        []string{"stripe", "customer", "lookup", "email", "billing"},
+			Tags:        []string{"stripe", "customer", "lookup", "billing"},
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Who cancelled?",
