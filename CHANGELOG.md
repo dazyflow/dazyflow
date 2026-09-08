@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.41.4] - 2026-09-08
+
 ### Added
 
 - **Steps fold down.** Minimize on a step's header collapses its card to the
