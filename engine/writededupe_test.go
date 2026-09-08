@@ -5,6 +5,7 @@ package engine
 
 import (
 	"context"
+	"slices"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -282,5 +283,147 @@ func TestMemoryWriteDedupe_CapEviction(t *testing.T) {
 	}
 	if _, ok := d.Get(context.Background(), "k-"+strconv.Itoa(writeDedupeMaxItems+4)); !ok {
 		t.Fatal("newest entry should be retained")
+	}
+}
+
+// The TTL is a strict ceiling: an entry aged exactly writeDedupeTTL is
+// still a hit. Expiring one tick early would let a reclaim re-fire a
+// write that was in fact recorded.
+func TestMemoryWriteDedupe_ExactTTLAgeIsStillAHit(t *testing.T) {
+	d := NewMemoryWriteDedupe().(*memoryWriteDedupe)
+	clock := time.Unix(1_000_000, 0)
+	d.now = func() time.Time { return clock }
+	ctx := context.Background()
+
+	d.Put(ctx, "k", core.Result{Status: core.StatusOK})
+
+	clock = clock.Add(writeDedupeTTL) // exactly at the TTL, not past it
+	if _, ok := d.Get(ctx, "k"); !ok {
+		t.Error("entry aged exactly the TTL was treated as stale")
+	}
+	clock = clock.Add(time.Nanosecond) // one tick past
+	if _, ok := d.Get(ctx, "k"); ok {
+		t.Error("entry one tick past the TTL should be stale")
+	}
+}
+
+// Put stores a deep copy, so a mutation of the map the caller still holds
+// cannot reach back into the stored entry. Get clones on the way out too,
+// which is what makes the entry fully isolated — but Get's clone alone
+// cannot protect against a write through the caller's own reference.
+func TestMemoryWriteDedupe_PutStoresIsolatedCopy(t *testing.T) {
+	d := NewMemoryWriteDedupe()
+	ctx := context.Background()
+	out := map[string]core.Ref{"out": {Inline: "original"}}
+	d.Put(ctx, "k", core.Result{Status: core.StatusOK, Output: out})
+
+	// The caller still holds this map; the engine mutates results post-run.
+	out["out"] = core.Ref{Inline: "mutated"}
+	out["injected"] = core.Ref{Inline: "x"}
+
+	got, ok := d.Get(ctx, "k")
+	if !ok {
+		t.Fatal("Get miss after Put")
+	}
+	if got.Output["out"].Inline != "original" {
+		t.Errorf("stored output = %v, want original: the caller's map was aliased", got.Output["out"].Inline)
+	}
+	if _, leaked := got.Output["injected"]; leaked {
+		t.Error("the caller's later insertion reached the stored entry")
+	}
+}
+
+// The cap is inclusive: exactly writeDedupeMaxItems entries fit. Evicting
+// at the cap rather than past it would discard a live record, and with it
+// the protection against a re-fired write.
+func TestMemoryWriteDedupe_CapKeepsExactlyMaxItems(t *testing.T) {
+	d := NewMemoryWriteDedupe().(*memoryWriteDedupe)
+	ctx := context.Background()
+	for i := range writeDedupeMaxItems {
+		d.Put(ctx, "k-"+strconv.Itoa(i), core.Result{Status: core.StatusOK})
+	}
+
+	d.mu.Lock()
+	n := len(d.entries)
+	d.mu.Unlock()
+	if n != writeDedupeMaxItems {
+		t.Errorf("entries = %d, want %d (nothing evicted while at the cap)", n, writeDedupeMaxItems)
+	}
+	if _, ok := d.Get(ctx, "k-0"); !ok {
+		t.Error("oldest entry evicted while still exactly at the cap")
+	}
+}
+
+// A stale Get drops the key from the FIFO order list as well as the map.
+// Removing the wrong key would leave a dead name in the order and lose a
+// live entry's place, so the cap would later evict the wrong record.
+func TestMemoryWriteDedupe_StaleGetRemovesOnlyThatKeyFromOrder(t *testing.T) {
+	d := NewMemoryWriteDedupe().(*memoryWriteDedupe)
+	clock := time.Unix(1_000_000, 0)
+	d.now = func() time.Time { return clock }
+	ctx := context.Background()
+
+	d.Put(ctx, "a", core.Result{Status: core.StatusOK})
+	clock = clock.Add(time.Minute)
+	d.Put(ctx, "b", core.Result{Status: core.StatusOK})
+
+	// Age "a" past the TTL while "b" is still exactly at it.
+	clock = clock.Add(writeDedupeTTL)
+	if _, ok := d.Get(ctx, "a"); ok {
+		t.Fatal("a should be stale")
+	}
+
+	d.mu.Lock()
+	order := slices.Clone(d.order)
+	d.mu.Unlock()
+	if !slices.Equal(order, []string{"b"}) {
+		t.Errorf("order = %v, want [b]: the stale read removed the wrong key", order)
+	}
+	if _, ok := d.Get(ctx, "b"); !ok {
+		t.Error("b should still be present")
+	}
+}
+
+// The dedupe key is the job id plus a ZERO-BASED, ASCENDING fan index.
+// Its exact shape is a cross-version contract: a shared (Postgres) store
+// outlives any single binary, so a reclaim by a newer build has to look
+// up the very keys an older one wrote.
+func TestWriteDedupe_KeysAreJobIDWithAscendingFanIndex(t *testing.T) {
+	e := newEngineWith(t, NativeDrop{
+		Manifest: fanDedupeManifest,
+		Execute: func(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
+			item, _ := job.Input["item"].Inline.(string)
+
+			return core.Result{Status: core.StatusOK, Output: map[string]core.Ref{
+				"out": {MIME: "text/plain", Inline: item},
+			}}, nil
+		},
+	})
+	d := NewMemoryWriteDedupe().(*memoryWriteDedupe)
+	e.WriteDedupe = d
+
+	g := core.Graph{
+		ID: "g", Tenant: "t", Workspace: "ws",
+		Nodes: []core.Node{{ID: "src", Module: "send_fan"}, {ID: "n", Module: "send_fan"}},
+		Edges: []core.Edge{{From: "src", FromPort: "out", To: "n", ToPort: "item"}},
+	}
+	prior := map[string]core.Result{"src": {Status: core.StatusOK, Output: map[string]core.Ref{
+		"out": {Inline: []any{"a", "b", "c"}},
+	}}}
+
+	if r, _ := e.RunNode(context.Background(), g, g.ID, "n", "job-1", prior, nil); r.Status != core.StatusOK {
+		t.Fatalf("run status = %s, want ok", r.Status)
+	}
+
+	d.mu.Lock()
+	keys := make([]string, 0, len(d.entries))
+	for k := range d.entries {
+		keys = append(keys, k)
+	}
+	d.mu.Unlock()
+	slices.Sort(keys)
+
+	if want := []string{"job-1#0", "job-1#1", "job-1#2"}; !slices.Equal(keys, want) {
+		t.Errorf("dedupe keys = %v, want %v", keys, want)
 	}
 }

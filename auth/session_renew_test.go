@@ -115,3 +115,24 @@ func TestNextSessionExpiry_NoBackwardsStep(t *testing.T) {
 		t.Fatalf("expiry = %v, want unchanged %v", got, sess.ExpiresAt)
 	}
 }
+
+// A non-positive idle window disables renewal outright. The guard has to
+// catch idle == 0 as well as negatives: with a zero idle the renewal
+// arithmetic would otherwise hand back "now" for an already-expired
+// session and report it as worth persisting.
+func TestNextSessionExpiry_NonPositiveIdleDisablesRenewal(t *testing.T) {
+	created := time.Unix(1_000_000, 0)
+	exp := created.Add(time.Hour)
+	sess := Session{CreatedAt: created, ExpiresAt: exp}
+	now := exp.Add(time.Minute) // deliberately past the current expiry
+
+	for _, idle := range []time.Duration{0, -time.Minute} {
+		got, renew := NextSessionExpiry(sess, idle, 0, now)
+		if renew {
+			t.Errorf("idle %v: renew = true, want false (renewal disabled)", idle)
+		}
+		if !got.Equal(exp) {
+			t.Errorf("idle %v: expiry = %v, want %v unchanged", idle, got, exp)
+		}
+	}
+}

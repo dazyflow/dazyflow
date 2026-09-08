@@ -5,6 +5,7 @@ package engine
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"strings"
 	"sync"
@@ -273,4 +274,87 @@ func loadInput(t *testing.T, m *sync.Map, id string) map[string]core.Ref {
 		t.Fatalf("no captured input for %q", id)
 	}
 	return v.(map[string]core.Ref)
+}
+
+// cloneNodeIO must hand back a DEEP copy. Secret resolution writes the
+// resolved cleartext into the params it is given, and the graph those
+// params come from is shared by every step of the run and — via the
+// worker's run cache — by every concurrent run of the same flow. A
+// shallow clone leaves nested maps aliased, so one run's resolved secret
+// values land in another's graph.
+func TestCloneNodeIO_DeepCopiesNestedParams(t *testing.T) {
+	params := map[string]any{
+		"top":    "a",
+		"nested": map[string]any{"secret": "${secret.token}"},
+		"list":   []any{map[string]any{"k": "v"}},
+	}
+	env := map[string]string{"E": "1"}
+
+	gotParams, gotEnv := cloneNodeIO(params, env)
+
+	gotParams["nested"].(map[string]any)["secret"] = "resolved-cleartext"
+	if orig := params["nested"].(map[string]any)["secret"]; orig != "${secret.token}" {
+		t.Errorf("nested param leaked into the caller's map: %q", orig)
+	}
+
+	gotParams["list"].([]any)[0].(map[string]any)["k"] = "resolved-cleartext"
+	if orig := params["list"].([]any)[0].(map[string]any)["k"]; orig != "v" {
+		t.Errorf("nested list element leaked into the caller's map: %q", orig)
+	}
+
+	// Env is flat, so a shallow clone is exact — but it must still be a copy.
+	gotEnv["E"] = "2"
+	if env["E"] != "1" {
+		t.Errorf("env leaked into the caller's map: %q", env["E"])
+	}
+}
+
+// A failed entropy read has to surface as an error, never as an empty id:
+// an empty job id would collide across every run in the store.
+func TestNewJobID_IsHexAndUnique(t *testing.T) {
+	id, err := newJobID()
+	if err != nil {
+		t.Fatalf("newJobID: %v", err)
+	}
+	if len(id) != 32 {
+		t.Errorf("id = %q (len %d), want 32 hex chars for 16 bytes", id, len(id))
+	}
+	if _, err := hex.DecodeString(id); err != nil {
+		t.Errorf("id %q is not hex: %v", id, err)
+	}
+
+	other, err := newJobID()
+	if err != nil {
+		t.Fatalf("newJobID (second call): %v", err)
+	}
+	if id == other {
+		t.Error("two consecutive ids are identical; the entropy read is not reaching the id")
+	}
+}
+
+// Modules are not required to echo the job id back. The engine stamps it
+// on any result that arrives without one, because the job store and the
+// run-detail UI key on it.
+func TestEngine_StampsJobIDOnResultWithoutOne(t *testing.T) {
+	e := newEngineWith(t, NativeDrop{
+		Manifest: noopManifest,
+		Execute: func(_ context.Context, _ core.Job, _ chan<- core.Progress) (core.Result, error) {
+			// Deliberately leaves JobID unset.
+			return core.Result{
+				Status: core.StatusOK,
+				Output: map[string]core.Ref{"out": {Ref: "x"}},
+			}, nil
+		},
+	})
+
+	res, err := e.Run(t.Context(), core.Graph{
+		ID: "g", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{{ID: "a", Module: "noop"}},
+	}, nil)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if got := res.Nodes["a"].JobID; got == "" {
+		t.Error("node result carries no JobID; the engine must stamp the job's own id")
+	}
 }

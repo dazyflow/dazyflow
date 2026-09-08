@@ -5,6 +5,8 @@ package auth
 
 import (
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
@@ -14,6 +16,7 @@ import (
 	"time"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 )
 
@@ -384,5 +387,99 @@ func TestTOTPChallenge_OrgOverride(t *testing.T) {
 	}
 	if len(res.User.Roles) != 1 || res.User.Roles[0].Name != "editor" {
 		t.Errorf("role override not applied: %+v", res.User.Roles)
+	}
+}
+
+// codeForStep generates the code an authenticator would show during the
+// given time-step, so tests can address the edges of the skew window
+// explicitly instead of only the current step.
+func codeForStep(t *testing.T, secret string, step int64) string {
+	t.Helper()
+	code, err := totp.GenerateCodeCustom(secret, time.Unix(step*totpPeriodSeconds, 0), totp.ValidateOpts{
+		Period:    totpPeriodSeconds,
+		Skew:      totpSkewSteps,
+		Digits:    otp.DigitsSix,
+		Algorithm: otp.AlgorithmSHA1,
+	})
+	if err != nil {
+		t.Fatalf("generate code for step %d: %v", step, err)
+	}
+
+	return code
+}
+
+// The acceptance window is inclusive on BOTH sides of the current step —
+// that is what makes it ~90s wide with a ±1 skew. A window that stopped
+// short of cur+skew would still accept a freshly shown code, so only the
+// far edge pins the bound.
+func TestValidateTOTPStep_AcceptsBothSkewEdges(t *testing.T) {
+	const secret = "JBSWY3DPEHPK3PXP"
+	now := time.Unix(1_700_000_000, 0)
+	cur := now.Unix() / totpPeriodSeconds
+
+	for _, step := range []int64{cur - totpSkewSteps, cur, cur + totpSkewSteps} {
+		got, ok := validateTOTPStep(codeForStep(t, secret, step), secret, now)
+		if !ok {
+			t.Errorf("step cur%+d rejected, want accepted", step-cur)
+
+			continue
+		}
+		if got != step {
+			t.Errorf("step cur%+d: matched step = %d, want %d", step-cur, got, step)
+		}
+	}
+}
+
+// Step 0 is a real window (the epoch itself). The guard exists to skip
+// NEGATIVE steps, which cannot be rendered as a time; treating 0 as out
+// of range would silently drop a valid window.
+func TestValidateTOTPStep_AcceptsStepZero(t *testing.T) {
+	const secret = "JBSWY3DPEHPK3PXP"
+	now := time.Unix(5, 0) // cur == 0, so the window spans steps {-1, 0, 1}
+	if cur := now.Unix() / totpPeriodSeconds; cur != 0 {
+		t.Fatalf("precondition: cur = %d, want 0", cur)
+	}
+
+	got, ok := validateTOTPStep(codeForStep(t, secret, 0), secret, now)
+	if !ok {
+		t.Fatal("a code for step 0 must validate: the guard skips negative steps only")
+	}
+	if got != 0 {
+		t.Errorf("matched step = %d, want 0", got)
+	}
+}
+
+// The length guard rejects only blobs too short to hold a nonce. A blob
+// of exactly nonce length clears the guard and fails inside GCM instead,
+// so its error carries the cipher's cause rather than the bare sentinel —
+// which is the only way to observe where the rejection happened.
+func TestDecryptTOTPSecret_NonceSizedBlobReachesGCM(t *testing.T) {
+	key := testTOTPKey(t)
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		t.Fatalf("cipher: %v", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		t.Fatalf("gcm: %v", err)
+	}
+	nonceSize := gcm.NonceSize()
+
+	// One byte short of a nonce: the guard rejects it, bare sentinel.
+	_, err = decryptTOTPSecret(key, make([]byte, nonceSize-1))
+	if !errors.Is(err, ErrTOTPSecretCorrupt) {
+		t.Fatalf("short blob: err = %v, want ErrTOTPSecretCorrupt", err)
+	}
+	if err.Error() != ErrTOTPSecretCorrupt.Error() {
+		t.Errorf("short blob: err = %q, want the bare sentinel (rejected before GCM)", err)
+	}
+
+	// Exactly a nonce and nothing more: past the guard, so GCM reports it.
+	_, err = decryptTOTPSecret(key, make([]byte, nonceSize))
+	if !errors.Is(err, ErrTOTPSecretCorrupt) {
+		t.Fatalf("nonce-sized blob: err = %v, want ErrTOTPSecretCorrupt", err)
+	}
+	if err.Error() == ErrTOTPSecretCorrupt.Error() {
+		t.Error("nonce-sized blob: the guard rejected it; a blob with a full nonce must reach GCM")
 	}
 }

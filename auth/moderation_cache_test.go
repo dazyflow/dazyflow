@@ -258,3 +258,127 @@ func TestModerationCache_ConcurrentUse(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+// suspensionKeys reports which keys currently sit in the cache. Eviction
+// is not observable through the get/put API alone, so the bound and the
+// sweep are asserted on the map directly.
+func suspensionKeys(c *suspensionCache) map[string]bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make(map[string]bool, len(c.items))
+	for k := range c.items {
+		out[k] = true
+	}
+
+	return out
+}
+
+func TestSuspensionCache_NonPositiveMaxUsesDefaultBound(t *testing.T) {
+	// A bound of 0 must not be taken literally: every put would then clear
+	// the map, leaving a one-entry cache.
+	for _, max := range []int{0, -1} {
+		if c := newSuspensionCache(time.Minute, max); c.max != 50_000 {
+			t.Errorf("max %d: bound = %d, want 50000 default", max, c.max)
+		}
+	}
+}
+
+func TestSuspensionCache_ExactTTLAgeIsMiss(t *testing.T) {
+	now := time.Unix(1_000_000, 0)
+	c := newSuspensionCache(30*time.Second, 0)
+	c.clock = func() time.Time { return now }
+
+	c.put("k", true)
+	now = now.Add(29 * time.Second)
+	if v, ok := c.get("k"); !ok || !v {
+		t.Fatalf("within the TTL: got (%v,%v), want (true,true)", v, ok)
+	}
+
+	now = now.Add(time.Second) // exactly at the TTL, so no longer fresh
+	if _, ok := c.get("k"); ok {
+		t.Error("an entry aged exactly the TTL must be a miss")
+	}
+	// The stale read also evicts, rather than merely reporting a miss.
+	if keys := suspensionKeys(c); keys["k"] {
+		t.Error("a stale entry should be deleted on read")
+	}
+}
+
+func TestSuspensionCache_BoundedAtMaxEntries(t *testing.T) {
+	now := time.Unix(1_000_000, 0)
+	c := newSuspensionCache(30*time.Second, 2)
+	c.clock = func() time.Time { return now }
+
+	c.put("a", false)
+	c.put("b", false) // cache now at max
+	c.put("c", false) // must trigger the bound
+
+	// Every entry is fresh, so the expiry sweep frees nothing and the map
+	// is dropped wholesale, leaving only the entry just written.
+	if keys := suspensionKeys(c); len(keys) != 1 || !keys["c"] {
+		t.Errorf("cached keys = %v, want only {c} once max is reached", keys)
+	}
+}
+
+func TestSuspensionCache_SweepDropsEntriesExactlyAtTTL(t *testing.T) {
+	now := time.Unix(1_000_000, 0)
+	c := newSuspensionCache(30*time.Second, 2)
+	c.clock = func() time.Time { return now }
+
+	c.put("a", false)               // cached at t0
+	now = now.Add(30 * time.Second) // "a" is now exactly at the TTL
+	c.put("b", false)               // cached at t0+30, fills to max
+	c.put("c", false)               // triggers the sweep
+
+	// The sweep reclaims "a" (exactly at the TTL counts as expired) and
+	// keeps the still-fresh "b"; freeing a slot means the map is not
+	// dropped wholesale.
+	if keys := suspensionKeys(c); len(keys) != 2 || !keys["b"] || !keys["c"] {
+		t.Errorf("cached keys = %v, want {b,c} after the sweep", keys)
+	}
+}
+
+// A zero CacheTTL disables memoization outright — the caches are never
+// built. Building them with a zero TTL would also read through on every
+// request, so read counts alone cannot tell the two apart.
+func TestModerationGate_NonPositiveCacheTTLBuildsNoCaches(t *testing.T) {
+	for _, ttl := range []time.Duration{0, -time.Second} {
+		g, _, _ := cachedGateFixture(ttl)
+		g.initCaches()
+		if g.users != nil || g.orgs != nil {
+			t.Errorf("ttl %v: caches built (users=%v orgs=%v), want both nil",
+				ttl, g.users != nil, g.orgs != nil)
+		}
+	}
+}
+
+// Invalidating a tenant alone must enforce an org suspension on the next
+// request. The user stays active throughout, so ErrAccountSuspended can
+// only come from the org answer being dropped — unlike the combined case,
+// where an already-suspended user masks the org path entirely.
+func TestModerationCache_InvalidateOrgOnlyEnforcesImmediately(t *testing.T) {
+	g, users, orgs := cachedGateFixture(time.Hour)
+	ctx := context.Background()
+	if _, err := g.Authenticate(ctx, "tok"); err != nil {
+		t.Fatalf("warm: %v", err)
+	}
+
+	p := orgs.orgs["org_acme"]
+	p.Status = StatusSuspended
+	_ = orgs.PutOrgProfile(ctx, p)
+
+	// Within the window the memo still says active.
+	if _, err := g.Authenticate(ctx, "tok"); err != nil {
+		t.Fatalf("within the window the memo should still pass: %v", err)
+	}
+
+	readsBefore := users.count()
+	g.Invalidate("", "org_acme")
+	if _, err := g.Authenticate(ctx, "tok"); !errors.Is(err, ErrAccountSuspended) {
+		t.Fatalf("after Invalidate of the tenant want ErrAccountSuspended, got %v", err)
+	}
+	// Only the org answer was dropped; the user memo stays warm.
+	if got := users.count(); got != readsBefore {
+		t.Errorf("user reads = %d, want %d (subject memo must survive)", got, readsBefore)
+	}
+}

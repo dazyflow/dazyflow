@@ -4,7 +4,11 @@
 package auth
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"log"
+	"strings"
 	"testing"
 
 	"golang.org/x/crypto/bcrypt"
@@ -81,5 +85,62 @@ func TestNeedsPasswordRehash(t *testing.T) {
 	}
 	if NeedsPasswordRehash(nil) {
 		t.Error("nil hash should report false")
+	}
+}
+
+// putFailStore serves a real user but refuses writes, so the opportunistic
+// re-hash fails while the credential itself stays valid.
+type putFailStore struct {
+	UserStore
+	err error
+}
+
+func (p putFailStore) PutUser(context.Context, User) error { return p.err }
+
+// The cost upgrade is best-effort: a failure is logged and swallowed. Both
+// directions matter and neither shows up in the return value, so the log is
+// the only place the distinction is observable — operators watch for this
+// warning, and a login that silently stops re-hashing is a real regression.
+func TestVerifyPassword_UpgradeFailureIsLoggedAndSwallowed(t *testing.T) {
+	ctx := context.Background()
+	inner, err := OpenJSONUserStore("")
+	if err != nil {
+		t.Fatalf("OpenJSONUserStore: %v", err)
+	}
+	const pw = "correct-horse-battery-staple"
+	legacy, err := bcrypt.GenerateFromPassword([]byte(pw), activeHashCost-1)
+	if err != nil {
+		t.Fatalf("legacy hash: %v", err)
+	}
+	if err := inner.PutUser(ctx, User{
+		Email: "legacy@acme.test", Subject: "legacy@acme.test",
+		Tenant: "acme", Workspace: "main", PasswordHash: legacy,
+	}); err != nil {
+		t.Fatalf("PutUser: %v", err)
+	}
+
+	var buf bytes.Buffer
+	prev := log.Writer()
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(prev) })
+
+	// The write is refused, so the re-hash fails: the login must still
+	// succeed and the failure must reach the log.
+	store := putFailStore{UserStore: inner, err: errors.New("read-only store")}
+	if _, err := VerifyPassword(ctx, store, "legacy@acme.test", pw); err != nil {
+		t.Fatalf("a failed re-hash must not fail the login: %v", err)
+	}
+	if !strings.Contains(buf.String(), "could not re-hash password") {
+		t.Errorf("no warning logged for a failed re-hash; log = %q", buf.String())
+	}
+
+	// The write above never landed, so the stored hash is still legacy and
+	// the next login upgrades it for real — which must be silent.
+	buf.Reset()
+	if _, err := VerifyPassword(ctx, inner, "legacy@acme.test", pw); err != nil {
+		t.Fatalf("VerifyPassword: %v", err)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("a successful re-hash logged %q, want silence", buf.String())
 	}
 }

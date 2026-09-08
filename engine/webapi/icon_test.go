@@ -300,3 +300,112 @@ func TestResolveLogo_UnwiredDoer(t *testing.T) {
 		t.Errorf("logo = %.40q…, want none", got)
 	}
 }
+
+// The head window ends at </head>, and an EMPTY head means nothing is
+// scanned — not "scan the whole document". A page that closes its head
+// immediately must yield no icons even when the body declares some.
+func TestIconHrefs_EmptyHeadYieldsNothing(t *testing.T) {
+	page := []byte(`</head><body><link rel="icon" href="/body.png"></body>`)
+	if got := iconHrefs("https://example.com/", page); len(got) != 0 {
+		t.Errorf("hrefs = %v, want none: the head is empty", got)
+	}
+}
+
+// maxIconLinks bounds how many declared icons one page may cost us, and
+// the cap is inclusive.
+func TestIconHrefs_CapsAtMaxIconLinks(t *testing.T) {
+	var sb strings.Builder
+	sb.WriteString("<html><head>")
+	for i := range maxIconLinks + 2 {
+		fmt.Fprintf(&sb, `<link rel="icon" sizes="%dx%d" href="/i%d.png">`, 64+i, 64+i, i)
+	}
+	sb.WriteString("</head>")
+
+	if got := iconHrefs("https://example.com/", []byte(sb.String())); len(got) != maxIconLinks {
+		t.Errorf("returned %d hrefs (%v), want the cap of %d", len(got), got, maxIconLinks)
+	}
+}
+
+// attr returns the first NON-EMPTY capture group, because each attribute
+// regex offers one alternative per quoting style. Taking group 1
+// unconditionally reads an empty value for every single-quoted or
+// unquoted attribute, so those icons would vanish.
+func TestIconHrefs_ReadsHrefWhateverTheQuoting(t *testing.T) {
+	for _, tc := range []struct{ name, tag, want string }{
+		{"double", `<link rel="icon" href="/d.png">`, "https://example.com/d.png"},
+		{"single", `<link rel='icon' href='/s.png'>`, "https://example.com/s.png"},
+		{"unquoted", `<link rel=icon href=/u.png>`, "https://example.com/u.png"},
+	} {
+		page := []byte("<html><head>" + tc.tag + "</head>")
+		got := iconHrefs("https://example.com/", page)
+		if len(got) != 1 || got[0] != tc.want {
+			t.Errorf("%s-quoted: hrefs = %v, want [%s]", tc.name, got, tc.want)
+		}
+	}
+}
+
+// A declared pixel size IS the score, so a bigger declaration outranks a
+// smaller one. Dropping the parsed size collapses every raster icon onto
+// the same rel-based fallback and the largest-first choice stops working.
+func TestIconScore_UsesDeclaredSizes(t *testing.T) {
+	big := iconScore([]string{"icon"}, "180x180", "image/png", "/a.png")
+	small := iconScore([]string{"icon"}, "16x16", "image/png", "/b.png")
+	if big != 180 {
+		t.Errorf("180x180 scored %d, want 180", big)
+	}
+	if small != 16 {
+		t.Errorf("16x16 scored %d, want 16", small)
+	}
+	if big <= small {
+		t.Errorf("180x180 (%d) must outrank 16x16 (%d)", big, small)
+	}
+	// The largest of several declarations wins.
+	if got := iconScore([]string{"icon"}, "16x16 64x64 32x32", "image/png", "/c.png"); got != 64 {
+		t.Errorf("multi-size icon scored %d, want the largest (64)", got)
+	}
+}
+
+// A declared size is authoritative; the rel-based guess applies only when
+// nothing was declared. Letting the guess override a declaration makes a
+// large plain "icon" lose to a tiny apple-touch-icon.
+func TestIconScore_DeclaredSizeOverridesRelFallback(t *testing.T) {
+	bigIcon := iconScore([]string{"icon"}, "256x256", "image/png", "/a.png")
+	smallApple := iconScore([]string{"apple-touch-icon"}, "32x32", "image/png", "/b.png")
+	if bigIcon != 256 {
+		t.Errorf("256x256 icon scored %d, want 256", bigIcon)
+	}
+	if smallApple != 32 {
+		t.Errorf("32x32 apple-touch-icon scored %d, want 32", smallApple)
+	}
+	if bigIcon <= smallApple {
+		t.Errorf("the 256px icon (%d) must outrank the 32px apple-touch-icon (%d)", bigIcon, smallApple)
+	}
+
+	// With nothing declared, the rel does decide.
+	if got := iconScore([]string{"apple-touch-icon"}, "", "image/png", "/c.png"); got != 120 {
+		t.Errorf("apple-touch-icon with no sizes scored %d, want the 120 convention", got)
+	}
+	if got := iconScore([]string{"icon"}, "", "image/png", "/d.png"); got != 16 {
+		t.Errorf("bare icon with no sizes scored %d, want 16", got)
+	}
+}
+
+// paddedPNGDataURI builds a base64 data: URI for n bytes that sniff as a
+// PNG, so size-limit tests exercise the limit rather than the type check.
+func paddedPNGDataURI(n int) string {
+	raw := make([]byte, n)
+	copy(raw, []byte("\x89PNG\r\n\x1a\n"))
+
+	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(raw)
+}
+
+// The byte ceiling is inclusive: an icon of exactly maxLogoBytes is
+// accepted, and only one byte more is refused.
+func TestNormalizeLogo_SizeLimitIsInclusive(t *testing.T) {
+	if _, err := NormalizeLogo(paddedPNGDataURI(maxLogoBytes)); err != nil {
+		t.Errorf("an icon of exactly %d bytes was refused: %v", maxLogoBytes, err)
+	}
+	if _, err := NormalizeLogo(paddedPNGDataURI(maxLogoBytes + 1)); err == nil {
+		t.Errorf("an icon of %d bytes was accepted, one byte over the limit", maxLogoBytes+1)
+	}
+}

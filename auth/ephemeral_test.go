@@ -302,3 +302,33 @@ func TestEphemeralTOTPChallengeStore_ExpiredIsUnknown(t *testing.T) {
 		t.Fatalf("expired challenge = %v, want ErrChallengeUnknown", err)
 	}
 }
+
+// Sweep reports how many entries it reclaimed, and that count is its only
+// observable result — asserting the store is merely smaller does not pin
+// it down. Entries are written live (Put sweeps first, so an
+// already-expired entry would never survive the next Put) and then swept
+// at a later instant.
+func TestMemEphemeralStore_SweepReturnsReclaimedCount(t *testing.T) {
+	s := NewMemEphemeralStore()
+	ctx := context.Background()
+	base := time.Now().Add(time.Hour)
+
+	for i, exp := range []time.Time{base, base.Add(time.Minute), base.Add(2 * time.Hour)} {
+		if err := s.Put(ctx, "kind", fmt.Sprintf("t%d", i), []byte("p"), exp); err != nil {
+			t.Fatalf("put %d: %v", i, err)
+		}
+	}
+
+	// Past the first two expiries, short of the third.
+	s.mu.Lock()
+	n := s.sweepLocked(base.Add(30 * time.Minute))
+	remaining := len(s.items)
+	s.mu.Unlock()
+
+	if n != 2 {
+		t.Errorf("sweepLocked reclaimed %d, want 2", n)
+	}
+	if remaining != 1 {
+		t.Errorf("%d entries left, want 1", remaining)
+	}
+}

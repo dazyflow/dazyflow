@@ -5,9 +5,12 @@ package engine
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
@@ -74,4 +77,120 @@ func attrValue(s sdktrace.ReadOnlySpan, key string) string {
 		}
 	}
 	return ""
+}
+
+// recordSpans installs a recording tracer provider for the duration of a
+// test and hands back the recorder.
+func recordSpans(t *testing.T) *tracetest.SpanRecorder {
+	t.Helper()
+	recorder := tracetest.NewSpanRecorder()
+	prev := otel.GetTracerProvider()
+	otel.SetTracerProvider(sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder)))
+	t.Cleanup(func() { otel.SetTracerProvider(prev) })
+
+	return recorder
+}
+
+func nodeSpans(recorder *tracetest.SpanRecorder) []sdktrace.ReadOnlySpan {
+	var out []sdktrace.ReadOnlySpan
+	for _, s := range recorder.Ended() {
+		if s.Name() == "node.run" {
+			out = append(out, s)
+		}
+	}
+
+	return out
+}
+
+// A node that succeeds must leave no error on its span — the span status
+// is what a tracing backend surfaces as a failed step.
+func TestEngine_SuccessfulNodeSpanHasNoError(t *testing.T) {
+	recorder := recordSpans(t)
+	e := newEngineWith(t, NativeDrop{
+		Manifest: noopManifest,
+		Execute: func(_ context.Context, _ core.Job, _ chan<- core.Progress) (core.Result, error) {
+			return core.Result{
+				Status: core.StatusOK,
+				Output: map[string]core.Ref{"out": {Ref: "x"}},
+			}, nil
+		},
+	})
+	if _, err := e.Run(t.Context(), core.Graph{
+		ID: "g", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{{ID: "a", Module: "noop"}},
+	}, nil); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	spans := nodeSpans(recorder)
+	if len(spans) == 0 {
+		t.Fatal("no node.run span recorded")
+	}
+	for _, s := range spans {
+		if s.Status().Code == codes.Error {
+			t.Errorf("successful node span marked as error: %q", s.Status().Description)
+		}
+	}
+}
+
+// A step can fail without Execute returning a Go error: the failure rides
+// in the Result. That still has to mark the span, or a failed step is
+// invisible in the trace.
+func TestEngine_ErrorResultMarksNodeSpanFailed(t *testing.T) {
+	recorder := recordSpans(t)
+	e := newEngineWith(t, NativeDrop{
+		Manifest: noopManifest,
+		Execute: func(_ context.Context, _ core.Job, _ chan<- core.Progress) (core.Result, error) {
+			return core.Result{
+				Status: core.StatusError,
+				Error:  &core.JobError{Code: "boom", Message: "exploded"},
+			}, nil
+		},
+	})
+	_, _ = e.Run(t.Context(), core.Graph{
+		ID: "g", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{{ID: "a", Module: "noop"}},
+	}, nil)
+
+	spans := nodeSpans(recorder)
+	if len(spans) == 0 {
+		t.Fatal("no node.run span recorded")
+	}
+	for _, s := range spans {
+		if s.Status().Code != codes.Error {
+			t.Errorf("node span status = %v, want %v for an error result", s.Status().Code, codes.Error)
+		}
+		if !strings.Contains(s.Status().Description, "boom") {
+			t.Errorf("node span description = %q, want the result error's code in it", s.Status().Description)
+		}
+	}
+}
+
+// When Execute itself returns a Go error, THAT error is what the span
+// must carry — not whatever error result the engine synthesises from it.
+func TestEngine_ExecErrorIsRecordedOnNodeSpan(t *testing.T) {
+	recorder := recordSpans(t)
+	e := newEngineWith(t, NativeDrop{
+		Manifest: noopManifest,
+		Execute: func(_ context.Context, _ core.Job, _ chan<- core.Progress) (core.Result, error) {
+			return core.Result{}, errors.New("transport exploded")
+		},
+	})
+	_, _ = e.Run(t.Context(), core.Graph{
+		ID: "g", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{{ID: "a", Module: "noop"}},
+	}, nil)
+
+	spans := nodeSpans(recorder)
+	if len(spans) == 0 {
+		t.Fatal("no node.run span recorded")
+	}
+	for _, s := range spans {
+		if s.Status().Code != codes.Error {
+			t.Errorf("node span status = %v, want %v when Execute errors", s.Status().Code, codes.Error)
+		}
+		if !strings.Contains(s.Status().Description, "transport exploded") {
+			t.Errorf("node span description = %q, want Execute's own error text", s.Status().Description)
+		}
+	}
 }

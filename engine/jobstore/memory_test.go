@@ -5,6 +5,8 @@ package jobstore
 
 import (
 	"errors"
+	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -210,5 +212,194 @@ func TestMemory_CompleteOwned_FencesNonOwner(t *testing.T) {
 	}
 	if rec, _ := s.Get(t.Context(), "j1"); rec.Status != core.JobStatusSucceeded {
 		t.Errorf("status = %q, want succeeded", rec.Status)
+	}
+}
+
+// Enqueue stamps StartedAt only for records that never pass through Claim
+// — already-running graph records and already-terminal seeds. A queued
+// record has not started, so stamping it would make every job report a
+// run duration beginning at enqueue time.
+func TestMemory_EnqueueDoesNotStampQueuedRecord(t *testing.T) {
+	s := NewMemory()
+	now := time.Unix(1_000, 0)
+	s.clock = func() time.Time { return now }
+
+	if err := s.Enqueue(t.Context(), core.JobRecord{
+		ID: "j1", Kind: core.JobKindNode, Tenant: "t", Status: core.JobStatusQueued,
+	}); err != nil {
+		t.Fatalf("Enqueue: %v", err)
+	}
+	got, err := s.Get(t.Context(), "j1")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.StartedAt != nil {
+		t.Errorf("StartedAt = %v, want nil for a queued record", got.StartedAt)
+	}
+	if got.FinishedAt != nil {
+		t.Errorf("FinishedAt = %v, want nil for a queued record", got.FinishedAt)
+	}
+}
+
+// Enqueue fills in only what is missing: a record that arrives carrying
+// its own StartedAt keeps it, so a replayed or restored run does not have
+// its start time rewritten to "now".
+func TestMemory_EnqueueStampsOnlyMissingStartedAt(t *testing.T) {
+	s := NewMemory()
+	now := time.Unix(1_000, 0)
+	s.clock = func() time.Time { return now }
+	started := time.Unix(500, 0)
+
+	if err := s.Enqueue(t.Context(), core.JobRecord{
+		ID: "g1", Kind: core.JobKindGraph, Tenant: "t",
+		Status: core.JobStatusRunning, StartedAt: &started,
+	}); err != nil {
+		t.Fatalf("Enqueue g1: %v", err)
+	}
+	got, err := s.Get(t.Context(), "g1")
+	if err != nil {
+		t.Fatalf("Get g1: %v", err)
+	}
+	if got.StartedAt == nil || !got.StartedAt.Equal(started) {
+		t.Errorf("StartedAt = %v, want the supplied %v", got.StartedAt, started)
+	}
+
+	// A running record with no StartedAt does get one stamped.
+	if err := s.Enqueue(t.Context(), core.JobRecord{
+		ID: "g2", Kind: core.JobKindGraph, Tenant: "t", Status: core.JobStatusRunning,
+	}); err != nil {
+		t.Fatalf("Enqueue g2: %v", err)
+	}
+	got2, err := s.Get(t.Context(), "g2")
+	if err != nil {
+		t.Fatalf("Get g2: %v", err)
+	}
+	if got2.StartedAt == nil || !got2.StartedAt.Equal(now) {
+		t.Errorf("StartedAt = %v, want %v stamped at enqueue", got2.StartedAt, now)
+	}
+}
+
+// With burst spacing switched off, a record's queue slot is its own
+// enqueue time and nothing else, so claim order is strictly enqueue order
+// however the records happened to arrive. Borrowing another record's slot
+// when spacing is zero reorders the queue.
+func TestMemory_ZeroBurstSpacingClaimsInEnqueueOrder(t *testing.T) {
+	s := NewMemory()
+	base := time.Unix(1_000, 0)
+	s.clock = func() time.Time { return base }
+	s.SetBurstSpacing(0)
+
+	// Inserted out of order on purpose: j3 is the oldest despite arriving last.
+	for _, tc := range []struct {
+		id     string
+		offset time.Duration
+	}{
+		{"j1", 10 * time.Second},
+		{"j2", 20 * time.Second},
+		{"j3", 5 * time.Second},
+	} {
+		if err := s.Enqueue(t.Context(), core.JobRecord{
+			ID: tc.id, Kind: core.JobKindNode, Tenant: "t",
+			EnqueuedAt: base.Add(tc.offset),
+		}); err != nil {
+			t.Fatalf("Enqueue %s: %v", tc.id, err)
+		}
+	}
+
+	var order []string
+	for range 3 {
+		got, err := s.Claim(t.Context(), "w", time.Minute)
+		if err != nil {
+			t.Fatalf("Claim: %v", err)
+		}
+		order = append(order, got.ID)
+	}
+	if want := []string{"j3", "j1", "j2"}; !slices.Equal(order, want) {
+		t.Errorf("claim order = %v, want %v (oldest enqueue first)", order, want)
+	}
+}
+
+func TestMemory_ListGraphRunsFiltersByStatus(t *testing.T) {
+	s := NewMemory()
+	base := time.Unix(1_000, 0)
+	for i, st := range []core.JobStatus{
+		core.JobStatusRunning, core.JobStatusSucceeded, core.JobStatusRunning,
+	} {
+		if err := s.Enqueue(t.Context(), core.JobRecord{
+			ID: fmt.Sprintf("g%d", i), Kind: core.JobKindGraph, Tenant: "t",
+			Status: st, EnqueuedAt: base.Add(time.Duration(i) * time.Second),
+		}); err != nil {
+			t.Fatalf("Enqueue g%d: %v", i, err)
+		}
+	}
+
+	got, err := s.ListGraphRuns(t.Context(), core.ListGraphRunsOpts{
+		Tenant: "t", Status: core.JobStatusRunning,
+	})
+	if err != nil {
+		t.Fatalf("ListGraphRuns: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d runs, want 2 running", len(got))
+	}
+	// An inverted predicate returns the complement, which can have a
+	// plausible size — so check the status of every row too.
+	for _, r := range got {
+		if r.Status != core.JobStatusRunning {
+			t.Errorf("run %s has status %q, want running", r.ID, r.Status)
+		}
+	}
+}
+
+// An unset Limit means "count them all". It must not fall through to
+// ListGraphRuns' default page of 50, and the ceiling it substitutes has to
+// exceed the record count rather than land on it.
+func TestMemory_CountGraphRunsCountsPastTheDefaultPage(t *testing.T) {
+	s := NewMemory()
+	base := time.Unix(1_000, 0)
+	const n = 51 // deliberately above ListGraphRuns' default page of 50
+	for i := range n {
+		if err := s.Enqueue(t.Context(), core.JobRecord{
+			ID: fmt.Sprintf("g%02d", i), Kind: core.JobKindGraph, Tenant: "t",
+			EnqueuedAt: base.Add(time.Duration(i) * time.Second),
+		}); err != nil {
+			t.Fatalf("Enqueue %d: %v", i, err)
+		}
+	}
+
+	got, err := s.CountGraphRuns(t.Context(), core.ListGraphRunsOpts{Tenant: "t"})
+	if err != nil {
+		t.Fatalf("CountGraphRuns: %v", err)
+	}
+	if got != n {
+		t.Errorf("CountGraphRuns = %d, want %d", got, n)
+	}
+}
+
+// Equal enqueue times are broken by DESCENDING id, matching the Postgres
+// store's "enqueued_at DESC, id DESC". The direction is the point: it has
+// to be a stable total order, so a tie on a page boundary can neither
+// repeat nor drop a row across pages.
+func TestMemory_ListNodeRecordsBreaksTiesByDescendingID(t *testing.T) {
+	s := NewMemory()
+	at := time.Unix(1_000, 0)
+	for _, id := range []string{"a", "b", "c"} {
+		if err := s.Enqueue(t.Context(), core.JobRecord{
+			ID: id, Kind: core.JobKindNode, Tenant: "t", EnqueuedAt: at,
+		}); err != nil {
+			t.Fatalf("Enqueue %s: %v", id, err)
+		}
+	}
+
+	got, err := s.ListNodeRecords(t.Context(), core.ListNodeRecordsOpts{Tenant: "t"})
+	if err != nil {
+		t.Fatalf("ListNodeRecords: %v", err)
+	}
+	ids := make([]string, 0, len(got))
+	for _, r := range got {
+		ids = append(ids, r.ID)
+	}
+	if want := []string{"c", "b", "a"}; !slices.Equal(ids, want) {
+		t.Errorf("ids = %v, want %v", ids, want)
 	}
 }

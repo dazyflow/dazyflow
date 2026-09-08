@@ -85,3 +85,24 @@ func TestGraphFromPB_UnmarshalError(t *testing.T) {
 		t.Fatalf("GraphFromPB = %v, want unmarshal error", err)
 	}
 }
+
+// A node with no params is the common case — most modules take none — and
+// on the wire that arrives as an absent Params field, not as "null". The
+// length guard has to skip the decode entirely: handing empty input to
+// json.Unmarshal fails with "unexpected end of JSON input", which would
+// reject a perfectly valid graph.
+func TestGraphFromPB_NodeWithoutParams(t *testing.T) {
+	g, err := GraphFromPB(&controlpb.Graph{
+		Id: "g1", Version: "v1", Tenant: "acme", Workspace: "ws",
+		Nodes: []*controlpb.Node{{Id: "n1", Module: "noop"}},
+	})
+	if err != nil {
+		t.Fatalf("GraphFromPB with a param-less node: %v", err)
+	}
+	if len(g.Nodes) != 1 {
+		t.Fatalf("got %d nodes, want 1", len(g.Nodes))
+	}
+	if g.Nodes[0].Params != nil {
+		t.Errorf("Params = %v, want nil for a node that carries none", g.Nodes[0].Params)
+	}
+}

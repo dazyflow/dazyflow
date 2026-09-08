@@ -380,3 +380,18 @@ func TestMintInvitationToken_Cov(t *testing.T) {
 		t.Error("tokens should be unique")
 	}
 }
+
+// Stripping generic labels must never consume the last one: a domain that
+// is nothing but generic labels still has to yield a label, not fall back
+// to the local part.
+func TestDefaultOrgDisplayName_KeepsLastLabel(t *testing.T) {
+	for _, tc := range []struct{ email, want string }{
+		{"alice@mail", "Mail"},
+		{"alice@team.mail", "Mail"},
+		{"alice@mail.acme.test", "Acme"},
+	} {
+		if got := DefaultOrgDisplayName(tc.email); got != tc.want {
+			t.Errorf("DefaultOrgDisplayName(%q) = %q, want %q", tc.email, got, tc.want)
+		}
+	}
+}

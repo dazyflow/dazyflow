@@ -6,6 +6,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -131,5 +132,16 @@ func TestValidateKeyID_Cov(t *testing.T) {
 		if err := validateKeyID(id); err == nil {
 			t.Errorf("validateKeyID(%s) accepted invalid id", name)
 		}
+	}
+}
+
+// The documented cap is "max 64", so the limit is inclusive: an id of
+// exactly 64 characters is legal and only 65 is too long.
+func TestValidateKeyID_LengthBoundary(t *testing.T) {
+	if err := validateKeyID(strings.Repeat("a", 64)); err != nil {
+		t.Errorf("64-character id rejected: %v", err)
+	}
+	if err := validateKeyID(strings.Repeat("a", 65)); err == nil {
+		t.Error("65-character id accepted, want rejected (max 64)")
 	}
 }
