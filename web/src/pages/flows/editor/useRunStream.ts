@@ -59,6 +59,9 @@ export function useRunStream({
   const [failedRun, setFailedRun] = useState<string | null>(null);
   const [liveLogs, setLiveLogs] = useState<Record<string, string[]>>({});
   const streamAbortRef = useRef<AbortController | null>(null);
+  // Which flow this editor has already attached a run stream for, so the
+  // attach happens once per flow however the run id arrived.
+  const attachedRef = useRef<string | null>(null);
 
   const refreshLock = useCallback(async () => {
     // Resolved on a separate async path, so a read before they land is wrong.
@@ -259,11 +262,7 @@ export function useRunStream({
         const { job_id } = await start();
         setCurrentRunID(job_id);
         setLockedRunID(job_id);
-        try {
-          localStorage.setItem(`dazyflow.lastRun.${graphID}`, job_id);
-        } catch {
-          /* private mode — the sticky last-run is a convenience, not state */
-        }
+        attachedRef.current = graphID;
         subscribeToRun(job_id);
         return job_id;
       } catch (e) {
@@ -328,13 +327,25 @@ export function useRunStream({
     void refreshLock();
   }, [refreshLock]);
 
-  const attachedRef = useRef<string | null>(null);
   useEffect(() => {
     if (!currentRunID || attachedRef.current === graphID) return;
     attachedRef.current = graphID ?? null;
     return subscribeToRun(currentRunID);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [graphID, token]);
+
+  // A reload while a run is in flight carries no ?run=…, so the lock is the
+  // only pointer left to it; attaching keeps the live statuses and logs coming
+  // instead of leaving a locked editor with nothing moving. A run that has
+  // already finished is deliberately never restored this way.
+  useEffect(() => {
+    if (!lockedRunID || attachedRef.current === graphID) return;
+    attachedRef.current = graphID ?? null;
+    setCurrentRunID(lockedRunID);
+    setRunning(true);
+    return subscribeToRun(lockedRunID);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lockedRunID, graphID]);
 
   // From runs already on record, so a step shows its last output before running.
   useEffect(() => {

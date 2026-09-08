@@ -13,8 +13,7 @@
 // localStorage, keyed by flow, so it is per person and per browser. That is
 // the right scope for a scratch payload: it is not part of the flow, it is not
 // something a teammate should inherit, and it must not ride along in a publish
-// or show up in the draft-vs-published diff. It follows the same convention as
-// the sticky last-run id this editor already keeps (dazyflow.lastRun.<id>).
+// or show up in the draft-vs-published diff.
 
 const KEY_PREFIX = "dazyflow.testEvent.";
 

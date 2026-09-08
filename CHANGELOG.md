@@ -10,6 +10,18 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Changed
+
+- **Opening a flow no longer replays the last run over it.** The editor
+  remembered the last run you started per flow and re-attached to it on open,
+  so a flow you came back to greeted you with green borders on every step and a
+  finished run's outputs in the inspector — a canvas claiming steps had just
+  run when nothing had. Run statuses now appear only when the run is actually
+  yours to look at: following the `Edit` link from the runs list, a run's own
+  page or an approval, or a run still in flight when you reload (found through
+  the edit lock, so mid-run progress keeps arriving). Opening a flow to work on
+  it shows the flow.
+
 ## [0.41.5] - 2026-09-08
 
 ### Changed

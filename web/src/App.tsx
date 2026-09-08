@@ -416,8 +416,8 @@ function RootRedirect() {
 // KeyedFlowEditor remounts FlowEditor whenever the :id changes. Without
 // a key, react-router keeps the same FlowEditor instance mounted across
 // flow→flow navigation, so it would carry the previous flow's
-// currentRunID / SSE subscription / lastRun and node statuses into the
-// new flow. Keying on the id forces a fresh mount per flow.
+// currentRunID / SSE subscription and node statuses into the new flow.
+// Keying on the id forces a fresh mount per flow.
 function KeyedFlowEditor() {
   const { id } = useParams();
   return <FlowEditor key={id} />;

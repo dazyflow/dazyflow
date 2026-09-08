@@ -107,9 +107,9 @@ vi.mock("../../api", () => {
 
 import { FlowEditor } from "./FlowEditor";
 
-function mount(id = "coffee-reorder") {
+function mount(id = "coffee-reorder", search = "") {
   return render(
-    <MemoryRouter initialEntries={[`/flows/${id}`]}>
+    <MemoryRouter initialEntries={[`/flows/${id}${search}`]}>
       <Routes>
         <Route path="/flows/:id" element={<FlowEditor />} />
       </Routes>
@@ -290,6 +290,53 @@ describe("editor run lifecycle", () => {
     await waitFor(() =>
       expect(screen.queryByText(succeededHeadline)).not.toBeInTheDocument(),
     );
+  });
+
+  // Which run, if any, a freshly opened editor attaches to. Opening a flow to
+  // work on it must show the graph, not last week's node statuses painted over
+  // it: a green border means "this step just ran", and on a flow nobody has
+  // touched today it is a lie the canvas tells about itself.
+  describe("attaching on open", () => {
+    it("opens no run stream when the flow is opened on its own", async () => {
+      listRuns.mockResolvedValue({
+        runs: [{ id: "run-old", status: "succeeded" }],
+      });
+      // Earlier builds stuck the last run id here and replayed it on open;
+      // browsers that ran those builds still carry the key, and it must stay
+      // inert rather than colour the canvas again.
+      localStorage.setItem("dazyflow.lastRun.coffee-reorder", "run-old");
+      mount();
+      expect(await screen.findByText("editor.run")).toBeInTheDocument();
+      await waitFor(() => expect(listRuns).toHaveBeenCalled());
+      expect(stream.subs.length).toBe(0);
+    });
+
+    it("attaches to the run named by ?run=, the link the run pages hand over", async () => {
+      mount("coffee-reorder", "?run=run-7");
+      await waitFor(() => expect(stream.latest()?.runID).toBe("run-7"));
+    });
+
+    // Reloading mid-run drops the run id from nowhere else to recover it, and
+    // an editor locked by a run it is not watching shows no progress at all.
+    it("attaches to a run still in flight, found through the lock", async () => {
+      listRuns.mockResolvedValue({
+        runs: [{ id: "run-live", status: "running" }],
+      });
+      mount();
+      await waitFor(() => expect(stream.latest()?.runID).toBe("run-live"));
+      expect(await screen.findByText("runAction.stop")).toBeInTheDocument();
+    });
+
+    it("subscribes once when ?run= and the lock name the same run", async () => {
+      listRuns.mockResolvedValue({
+        runs: [{ id: "run-7", status: "running" }],
+      });
+      mount("coffee-reorder", "?run=run-7");
+      await waitFor(() => expect(stream.latest()?.runID).toBe("run-7"));
+      await waitFor(() => expect(listRuns).toHaveBeenCalled());
+      // Two readers of one run interleave their writes to the canvas.
+      expect(stream.subs.length).toBe(1);
+    });
   });
 
   it("stops an in-flight run through cancelRun", async () => {

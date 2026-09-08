@@ -353,11 +353,12 @@ function EditorInner() {
 
   const rfRef = useRef<ReactFlowInstance<FlowNode<DazyNodeData>, FlowEdge> | null>(null);
 
+  // Only ?run=… attaches this editor to a run — the link the runs list, run
+  // detail and approvals pages hand over. Opening a flow on its own must show
+  // the graph, not the coloured node statuses of whatever ran last.
   const initialRunIDRef = useRef<string | null>(null);
   if (initialRunIDRef.current === null) {
-    const fromURL = searchParams.get("run");
-    initialRunIDRef.current =
-      fromURL || (id ? localStorage.getItem(`dazyflow.lastRun.${id}`) : null);
+    initialRunIDRef.current = searchParams.get("run");
   }
 
   const run = useRunStream({
