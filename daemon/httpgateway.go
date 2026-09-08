@@ -347,6 +347,24 @@ type HTTPGateway struct {
 	// bare Ingress or direct bind has no proxy at all. Set it when
 	// something at the edge already encodes, to stop paying twice.
 	DisableCompression bool
+
+	// MapTileURL and MapGeocoderURL point the flow editor's map picker at a
+	// tile server and a Nominatim-compatible geocoder. Empty falls back to
+	// OpenStreetMap's public instances — free and key-less, but rate-limited
+	// and not for bulk use, so a busy deployment should self-host and set
+	// these. Wired from $DAZYFLOW_MAP_TILE_URL and $DAZYFLOW_MAP_GEOCODER_URL
+	// (which itself defaults to $DAZYFLOW_NOMINATIM_URL). Served to the
+	// browser by GET /api/v1/map/config, and — because the browser fetches
+	// them cross-origin — folded into appCSP. See mapconfig.go.
+	MapTileURL     string
+	MapGeocoderURL string
+
+	// csp caches the assembled Content-Security-Policy, which every response
+	// on the app surface carries. Built on first use rather than at
+	// construction because the Map* fields above are set by the caller after
+	// NewHTTPGateway returns; sync.Once because responses are concurrent.
+	cspOnce sync.Once
+	csp     string
 }
 
 func NewHTTPGateway(svc *Service) *HTTPGateway {

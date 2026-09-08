@@ -39,6 +39,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	idem := h.idempotencyAPI()
 	limitsapi := h.limitsAPI()
 	staticapi := h.staticAPI()
+	mapapi := h.mapAPI()
 	shareapi := h.shareAPI()
 	metricsapi := h.metricsAPI()
 	gitmirror := h.gitMirrorAPI()
@@ -540,6 +541,10 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/v1/admin/org/auth-config", h.requireAuth(orgapi.deleteOrgAuthConfig))
 	mux.HandleFunc("GET /api/v1/auth/sso/{tenant}", h.rateLimitWebhook(orgapi.getPublicSSOStatus))
 	mux.HandleFunc("GET /api/v1/auth/config", h.rateLimitWebhook(orgapi.getPublicAuthConfig))
+	// Public (pre-auth is irrelevant here — the map picker lives inside the
+	// authenticated app): where the flow editor should fetch map tiles and
+	// geocode place names. Two URLs, no secrets. See mapconfig.go.
+	mux.HandleFunc("GET /api/v1/map/config", h.rateLimitWebhook(mapapi.getMapConfig))
 	// Public (pre-auth): map a wildcard host label to a tenant for sign-in.
 	mux.HandleFunc("GET /api/v1/auth/resolve-subdomain", h.rateLimitWebhook(orgprofile.resolveSubdomain))
 	// Public (pre-auth): Caddy on-demand-TLS authorization for org subdomains.

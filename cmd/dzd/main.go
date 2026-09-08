@@ -1965,6 +1965,16 @@ func buildGateway(ctx context.Context, bgWg *sync.WaitGroup, d gatewayDeps) {
 	if d.noCompression {
 		log.Print("response compression disabled (DAZYFLOW_DISABLE_COMPRESSION)")
 	}
+	// Flow-editor map picker: where the BROWSER fetches tiles and geocodes.
+	// Distinct from the `geo` drop's run-time backend (DAZYFLOW_GEOCODER),
+	// which runs server-side and may speak Photon/LocationIQ — the picker only
+	// speaks Nominatim. It does default to DAZYFLOW_NOMINATIM_URL, though, so a
+	// deployment that already self-hosts Nominatim gets the editor pointed at
+	// it without a second setting. Empty → OpenStreetMap's public instances.
+	// These also widen the app's CSP to match; see daemon/mapconfig.go.
+	gw.MapTileURL = envStr("DAZYFLOW_MAP_TILE_URL", "")
+	gw.MapGeocoderURL = envStr("DAZYFLOW_MAP_GEOCODER_URL", envStr("DAZYFLOW_NOMINATIM_URL", ""))
+
 	gw.WebDist = d.webDist       // empty disables static frontend serving
 	gw.LandingDir = d.landingDir // empty disables the marketing landing; / serves the SPA
 	// Audit trail: Postgres-backed (durable). Powers GET /api/v1/admin/audit.

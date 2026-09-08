@@ -6,6 +6,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useTranslation } from "react-i18next";
 import { Button } from "../ui/Button";
+import { mapConfig } from "../../mapConfig";
 
 // GeoPointField is the editor widget behind a param with format:"geo-point"
 // (the Location drop's `point`). It renders an OpenStreetMap map: search for a
@@ -17,14 +18,16 @@ import { Button } from "../ui/Button";
 // behaviour where a Place overrides the map pin. In that mode manual picking is
 // off (the Place wins); clear the Place to pick on the map again.
 //
-// Tiles come from OpenStreetMap's public server and search from Nominatim —
-// both free and key-less, used here only at design time (one tile fetch per
-// pan, one search per place/typed query), within their fair-use policy.
-// Attribution ("© OpenStreetMap contributors") is shown, as their licence
-// requires.
-
-const OSM_TILES = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-const NOMINATIM = "https://nominatim.openstreetmap.org/search";
+// Tiles and search default to OpenStreetMap's public servers — both free and
+// key-less, used here only at design time (one tile fetch per pan, one search
+// per place/typed query), within their fair-use policy. Attribution
+// ("© OpenStreetMap contributors") is shown, as their licence requires.
+//
+// Neither URL is hardcoded: both come from the daemon (mapConfig), so a
+// deployment can self-host either one. That indirection is load-bearing rather
+// than decorative — the app's Content-Security-Policy is built from the same
+// two values, so a hardcoded host here would be a host the browser is not
+// allowed to reach (blank map, failing search). See daemon/mapconfig.go.
 
 function parsePoint(v: string): { lat: number; lon: number } | null {
   const m = v.split(",");
@@ -52,7 +55,8 @@ const markerIcon = L.divIcon({
 // geocodeQuery resolves a place name to its best match (or null). Used both by
 // the manual search box and by the Place-follow effect.
 async function geocodeQuery(q: string): Promise<{ lat: number; lon: number; name: string } | null> {
-  const r = await fetch(`${NOMINATIM}?format=jsonv2&limit=1&q=${encodeURIComponent(q)}`, {
+  const { geocoderUrl } = await mapConfig();
+  const r = await fetch(`${geocoderUrl}/search?format=jsonv2&limit=1&q=${encodeURIComponent(q)}`, {
     headers: { Accept: "application/json" },
   });
   const hits = (await r.json()) as Array<{ lat: string; lon: string; display_name?: string }>;
@@ -137,10 +141,18 @@ export function GeoPointField({
       [start.lat, start.lon],
       parsed ? 11 : 2,
     );
-    L.tileLayer(OSM_TILES, {
-      maxZoom: 19,
-      attribution: "© OpenStreetMap contributors",
-    }).addTo(map);
+    // The tile URL is config, so it arrives a tick late. The map is created
+    // and interactive immediately; the layer drops in when the config lands.
+    // `disposed` guards the case where the node is removed first — adding a
+    // layer to a removed map throws.
+    let disposed = false;
+    void mapConfig().then(({ tileUrl }) => {
+      if (disposed) return;
+      L.tileLayer(tileUrl, {
+        maxZoom: 19,
+        attribution: "© OpenStreetMap contributors",
+      }).addTo(map);
+    });
     map.on("click", (e: L.LeafletMouseEvent) => {
       if (readOnlyRef.current) return; // a Place owns the location; manual pick is off
       setMarker(e.latlng.lat, e.latlng.lng);
@@ -150,6 +162,7 @@ export function GeoPointField({
     if (parsed) setMarker(parsed.lat, parsed.lon);
     setTimeout(() => map.invalidateSize(), 0);
     return () => {
+      disposed = true;
       map.remove();
       mapRef.current = null;
       markerRef.current = null;

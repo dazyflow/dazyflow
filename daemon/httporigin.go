@@ -74,7 +74,7 @@ func (h *HTTPGateway) withCORSAndLogging(next http.Handler) http.Handler {
 		if !strings.HasPrefix(r.URL.Path, "/form/") {
 			rw.Header().Set("X-Frame-Options", "DENY")
 			rw.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-			rw.Header().Set("Content-Security-Policy", appCSP)
+			rw.Header().Set("Content-Security-Policy", h.appCSP())
 		}
 		if r.Method == http.MethodOptions {
 			rw.WriteHeader(http.StatusNoContent)
@@ -90,7 +90,18 @@ func (h *HTTPGateway) withCORSAndLogging(next http.Handler) http.Handler {
 // one standard header missing here, so an injected <script> or a stolen
 // stylesheet origin had nothing standing in its way.
 //
-// Each directive is tied to something the built bundle actually does:
+// Built once per gateway (the map origins below come from config that is
+// fixed by the time we serve) and cached, since this runs on every response.
+func (h *HTTPGateway) appCSP() string {
+	h.cspOnce.Do(func() {
+		m := h.mapAPI()
+		h.csp = buildAppCSP(cspOrigin(m.TileURL), cspOrigin(m.GeocoderURL))
+	})
+	return h.csp
+}
+
+// buildAppCSP assembles the policy. Each directive is tied to something the
+// built bundle actually does:
 //
 //   - script-src 'self' — web/dist/index.html loads exactly one external
 //     module script and no inline script, so no 'unsafe-inline' is needed.
@@ -99,24 +110,40 @@ func (h *HTTPGateway) withCORSAndLogging(next http.Handler) http.Handler {
 //     props, which are inline style attributes. Unavoidable without a
 //     rewrite, and far less dangerous than inline script.
 //   - img-src data: blob: — the CSS inlines small assets as data: URIs, and
-//     generated previews/downloads use blob:.
-//   - connect-src 'self' — no code path fetches a cross-origin API; SSE and
-//     the JSON API are same-origin.
+//     generated previews/downloads use blob:. Plus tileOrigin: the editor's
+//     map picker loads raster tiles cross-origin (see mapconfig.go).
+//   - connect-src 'self' + geocoderOrigin — the JSON API and SSE are
+//     same-origin; the map picker's place search is not. Nothing else in the
+//     bundle fetches cross-origin.
 //   - frame-ancestors 'none' — the modern equivalent of the X-Frame-Options
 //     DENY set above; both are sent so older browsers are covered too.
 //   - form-action 'self', base-uri 'self', object-src 'none' — close the
 //     usual injection escape hatches.
-const appCSP = "default-src 'self'; " +
-	"script-src 'self'; " +
-	"style-src 'self' 'unsafe-inline'; " +
-	"img-src 'self' data: blob:; " +
-	"font-src 'self' data:; " +
-	"connect-src 'self'; " +
-	"media-src 'self' blob:; " +
-	"object-src 'none'; " +
-	"base-uri 'self'; " +
-	"form-action 'self'; " +
-	"frame-ancestors 'none'"
+//
+// tileOrigin and geocoderOrigin are "" when the configured URL is same-origin
+// (a deployment proxying tiles under its own host) or unusable, in which case
+// the directive is left at 'self' — never widened by accident.
+func buildAppCSP(tileOrigin, geocoderOrigin string) string {
+	imgSrc := "'self' data: blob:"
+	if tileOrigin != "" {
+		imgSrc += " " + tileOrigin
+	}
+	connectSrc := "'self'"
+	if geocoderOrigin != "" {
+		connectSrc += " " + geocoderOrigin
+	}
+	return "default-src 'self'; " +
+		"script-src 'self'; " +
+		"style-src 'self' 'unsafe-inline'; " +
+		"img-src " + imgSrc + "; " +
+		"font-src 'self' data:; " +
+		"connect-src " + connectSrc + "; " +
+		"media-src 'self' blob:; " +
+		"object-src 'none'; " +
+		"base-uri 'self'; " +
+		"form-action 'self'; " +
+		"frame-ancestors 'none'"
+}
 
 // urlBuilder answers "what origin did this request arrive on", which is all a
 // handler needs to build a link back to itself. Kept narrow deliberately: the

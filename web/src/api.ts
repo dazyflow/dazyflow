@@ -2487,6 +2487,16 @@ export const api = {
       "/auth/config",
     ),
 
+  // getMapConfig returns the tile server + Nominatim-compatible geocoder the
+  // flow editor's map picker should use. Deployment config, no secrets — and
+  // no token, since the picker has none to hand. See web/src/mapConfig.ts.
+  getMapConfig: () =>
+    request<{ tile_url: string; geocoder_url: string }>(
+      null,
+      "GET",
+      "/map/config",
+    ),
+
   getOrgProfile: (token: string) =>
     request<OrgProfile>(token, "GET", "/admin/org/profile"),
   putOrgProfile: (token: string, display_name: string, icon?: string) =>
