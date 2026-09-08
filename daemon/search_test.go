@@ -243,3 +243,79 @@ func idsOf(ms []core.Manifest) []string {
 	}
 	return out
 }
+
+func TestSearch_MultiWordQueryMatchesAnyWord(t *testing.T) {
+	t.Parallel()
+	// AND-across-words returned nothing here: no manifest contains the phrase
+	// "read file", and requiring both words of a two-word query is what made
+	// every phrase a dead end.
+	got := searchManifests(catalog(), DropSearch{Query: "read file"})
+	if len(got) == 0 {
+		t.Fatal("multi-word query returned nothing")
+	}
+	if got[0].ID != "file_read" && got[0].ID != "mcp:fs:read_file" {
+		t.Errorf("first match = %q; want a file-read step", got[0].ID)
+	}
+}
+
+func TestSearch_MoreWordsMatchedRanksHigher(t *testing.T) {
+	t.Parallel()
+	// http_request matches both words; sleep matches neither; branch matches
+	// only "request" (through "Route input based on a structured condition"
+	// it does not, so it should be absent entirely).
+	got := searchManifests(catalog(), DropSearch{Query: "http request"})
+	if len(got) == 0 || got[0].ID != "http_request" {
+		t.Fatalf("got %v, want http_request first", idsOf(got))
+	}
+}
+
+func TestSearch_ShortWordsIgnoredInPhrase(t *testing.T) {
+	t.Parallel()
+	// "to" and "a" match a great deal and mean nothing; the result must be
+	// driven by "file" alone.
+	got := searchManifests(catalog(), DropSearch{Query: "write to a file"})
+	if len(got) == 0 || got[0].ID != "file_write" {
+		t.Fatalf("got %v, want file_write first", idsOf(got))
+	}
+}
+
+func TestSearch_ProseMatchesWholeWordsOnly(t *testing.T) {
+	t.Parallel()
+	// The bug this pins: as a substring, "form" matched "format" in a summary,
+	// so a search for it ranked formatting steps above the Form trigger.
+	formatter := core.Manifest{
+		ID: "build_csv", Label: "Build CSV",
+		Summary: "Format rows as CSV.", Description: "Formats rows.",
+	}
+	if s := matchScore(formatter, "form"); s != 0 {
+		t.Errorf(`matchScore(build_csv, "form") = %d; want 0 — "format" is not "form"`, s)
+	}
+	trigger := core.Manifest{
+		ID: "form_input", Label: "Form",
+		Summary: "Starts the flow when someone submits the form.",
+	}
+	if matchScore(trigger, "form") <= matchScore(formatter, "form") {
+		t.Error("form_input must outrank a formatting step for \"form\"")
+	}
+}
+
+func TestSearch_ContainsWordBoundaries(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		text, word string
+		want       bool
+	}{
+		{"format rows as csv", "form", false},
+		{"transform the rows", "form", false},
+		{"submits the form.", "form", true},
+		{"a form, hosted", "form", true},
+		{"form-input trigger", "form", true},
+		{"the forms are hosted", "form", false},
+		{"", "form", false},
+		{"form", "", false},
+	} {
+		if got := containsWord(c.text, c.word); got != c.want {
+			t.Errorf("containsWord(%q, %q) = %v; want %v", c.text, c.word, got, c.want)
+		}
+	}
+}

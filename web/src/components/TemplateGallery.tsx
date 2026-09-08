@@ -247,13 +247,10 @@ export function TemplateGallery() {
                 >
                   <div className="template-card-head">
                     <span className="template-icon">
-                      <Icon size={ICON.lg} strokeWidth={2.2} />
+                      <Icon size={ICON.xl} strokeWidth={2.2} />
                     </span>
                     <h3>{templateTitle(tpl, i18n.language)}</h3>
                   </div>
-                  {tpl.integrations && tpl.integrations.length > 0 && (
-                    <TemplateIntegrationRow slugs={tpl.integrations} />
-                  )}
                   <p className="template-desc">
                     {templateBlurb(tpl, i18n.language)}
                   </p>
@@ -265,24 +262,31 @@ export function TemplateGallery() {
                       })}
                     </p>
                   )}
-                  <Button
-                    variant="primary"
-                    className="template-cta"
-                    onClick={() => applyTemplate(tpl)}
-                    disabled={busy !== null || adminBlocked || !canEdit}
-                    title={
-                      adminBlocked
-                        ? t("templates.adminBlockedTitle", {
-                            count: missingIntegrationNames.length,
-                            names: missingIntegrationNames.join(", "),
-                          })
-                        : !canEdit
-                          ? t("flowList.needEdit")
-                          : undefined
-                    }
-                  >
-                    {busy === tpl.id ? t("templates.forking") : t("templates.useTemplate")}
-                  </Button>
+                  <div className="template-foot">
+                    {tpl.integrations && tpl.integrations.length > 0 ? (
+                      <TemplateIntegrationRow slugs={tpl.integrations} />
+                    ) : (
+                      <span />
+                    )}
+                    <Button
+                      variant="primary"
+                      className="template-cta"
+                      onClick={() => applyTemplate(tpl)}
+                      disabled={busy !== null || adminBlocked || !canEdit}
+                      title={
+                        adminBlocked
+                          ? t("templates.adminBlockedTitle", {
+                              count: missingIntegrationNames.length,
+                              names: missingIntegrationNames.join(", "),
+                            })
+                          : !canEdit
+                            ? t("flowList.needEdit")
+                            : undefined
+                      }
+                    >
+                      {busy === tpl.id ? t("templates.forking") : t("templates.useTemplate")}
+                    </Button>
+                  </div>
                 </div>
               );
             })}

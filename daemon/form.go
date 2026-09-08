@@ -414,35 +414,120 @@ var formTemplate = template.Must(template.New("form").Funcs(template.FuncMap{
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.Title}}</title>
 <style>
-:root{color-scheme:light dark}
-body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;max-width:480px;margin:0 auto;padding:48px 20px;color:#1a1730;background:#fbfaff}
-@media(prefers-color-scheme:dark){body{color:#e6e2f5;background:#0f0d1c}input,textarea{background:#1c1930;color:#e6e2f5;border-color:#332d52}}
-h1{font-size:22px}
-label{display:block;margin:16px 0 4px;font-weight:600;font-size:14px}
-input,textarea{width:100%;padding:10px 12px;border:1px solid #cfc7ea;border-radius:8px;font:inherit;box-sizing:border-box}
-textarea{min-height:120px;resize:vertical}
-button{margin-top:20px;padding:11px 18px;border:0;border-radius:8px;background:#6d5dff;color:#fff;font:inherit;font-weight:600;cursor:pointer}
-button:hover{background:#5a49e6}
-.done{padding:16px 18px;border-radius:8px;background:rgba(109,93,255,.1);border:1px solid rgba(109,93,255,.35)}
-.err{padding:14px 16px;border-radius:8px;background:rgba(201,68,68,.1);border:1px solid rgba(201,68,68,.4);margin-bottom:4px}
-.hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+/* Palette mirrors web/src/theme.css so the page a visitor lands on is
+   recognisably the same product as the editor that published it. Hardcoded
+   because this page ships without the app's stylesheet. */
+:root{
+  color-scheme:light dark;
+  --bg:#f6f7fb; --card:#ffffff; --ink:#1b2233; --soft:#39415a; --muted:#5b6577;
+  --line:#e4e8f0; --field:#ffffff; --accent:#6d28d9; --accent-ink:#ffffff;
+  --ring:rgba(109,40,217,.24); --err:#dc2626;
+  --lift:0 1px 2px rgba(27,34,51,.05),0 10px 30px rgba(27,34,51,.07);
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#070513; --card:#140d30; --ink:#e9ecf3; --soft:#d2caff; --muted:#9e9abb;
+  --line:#383451; --field:#0f0a24; --accent:#9f83fe; --accent-ink:#140d30;
+  --ring:rgba(159,131,254,.3); --err:#ff6464;
+  --lift:0 1px 2px rgba(8,2,30,.5),0 12px 34px rgba(8,2,30,.5);
+}}
+*{box-sizing:border-box}
+body{
+  margin:0; padding:40px 16px;
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  color:var(--ink); background:var(--bg);
+  -webkit-font-smoothing:antialiased;
+}
+/* Centred horizontally but NOT vertically: the page is deliberately frameable,
+   and viewport-height centring clips it inside a short iframe. */
+.card{
+  max-width:34rem; margin:0 auto; padding:36px 32px;
+  background:var(--card); border:1px solid var(--line);
+  border-radius:18px; box-shadow:var(--lift);
+}
+h1{margin:0 0 28px; font-size:1.5rem; font-weight:600; letter-spacing:-.015em; line-height:1.25}
+.field+.field{margin-top:20px}
+label{display:block; margin-bottom:6px; font-size:.875rem; font-weight:500; color:var(--soft)}
+input,textarea{
+  width:100%; padding:11px 13px;
+  border:1px solid var(--line); border-radius:10px;
+  /* 16px: anything smaller makes mobile Safari zoom the page on focus. */
+  font-family:inherit; font-size:16px; font-weight:400; line-height:1.5;
+  color:var(--ink); background:var(--field);
+  transition:border-color 160ms cubic-bezier(.22,.7,.3,1),box-shadow 160ms cubic-bezier(.22,.7,.3,1);
+}
+input::placeholder,textarea::placeholder{color:var(--muted)}
+input:hover,textarea:hover{border-color:var(--muted)}
+input:focus,textarea:focus{outline:0; border-color:var(--accent); box-shadow:0 0 0 3px var(--ring)}
+textarea{min-height:132px; resize:vertical}
+button{
+  margin-top:28px; padding:12px 22px;
+  border:0; border-radius:10px;
+  background:var(--accent); color:var(--accent-ink);
+  font-family:inherit; font-size:.9375rem; font-weight:600;
+  cursor:pointer;
+  transition:filter 160ms cubic-bezier(.22,.7,.3,1),transform 160ms cubic-bezier(.22,.7,.3,1);
+}
+button:hover{filter:brightness(1.08)}
+button:active{transform:translateY(1px)}
+button:focus-visible{outline:2px solid var(--accent); outline-offset:3px}
+.note{
+  margin:0 0 24px; padding:14px 16px;
+  border:1px solid color-mix(in srgb,var(--err) 40%,transparent);
+  border-radius:10px; background:color-mix(in srgb,var(--err) 9%,transparent);
+  font-size:.9375rem; line-height:1.5;
+}
+.note strong{display:block; margin-bottom:2px}
+/* Left-aligned like the heading: a centred block under a left-aligned title
+   puts two alignment systems on one small card. */
+.thanks{display:flex; gap:14px; align-items:flex-start}
+.tick{
+  flex:0 0 auto; width:38px; height:38px;
+  display:flex; align-items:center; justify-content:center;
+  border-radius:50%; background:color-mix(in srgb,var(--accent) 14%,transparent);
+  color:var(--accent);
+}
+.thanks-title{margin:0 0 4px; font-size:1.0625rem; font-weight:600; line-height:1.4}
+.thanks-body{margin:0; color:var(--muted); font-size:.9375rem; line-height:1.55}
+/* The confirmation replaces the form, so the heading needs less air under it. */
+.card-done h1{margin-bottom:22px}
+.hp{position:absolute; left:-9999px; width:1px; height:1px; overflow:hidden}
+@media(max-width:480px){
+  body{padding:20px 12px}
+  .card{padding:24px 20px; border-radius:14px}
+  h1{font-size:1.3125rem; margin-bottom:22px}
+  button{width:100%}
+}
+@media(prefers-reduced-motion:reduce){
+  input,textarea,button{transition:none}
+  button:active{transform:none}
+}
 </style></head><body>
+<main class="card{{if .Submitted}} card-done{{end}}">
 <h1>{{.Title}}</h1>
 {{if .Unavailable}}
-<div class="err" role="alert">{{.M.FormGoneBody}}</div>
+<p class="note" role="alert">{{.M.FormGoneBody}}</p>
 {{else if .Submitted}}
-<div class="done"><strong>{{.M.FormThanksTitle}}</strong> {{.M.FormThanksBody}}</div>
+<div class="thanks" role="status">
+<div class="tick" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg></div>
+<div>
+<p class="thanks-title">{{.M.FormThanksTitle}}</p>
+<p class="thanks-body">{{.M.FormThanksBody}}</p>
+</div>
+</div>
 {{else}}
-{{if .Error}}<div class="err" role="alert"><strong>{{.M.FormErrorTitle}}</strong> {{.Error}}</div>{{end}}
+{{if .Error}}<p class="note" role="alert"><strong>{{.M.FormErrorTitle}}</strong>{{.Error}}</p>{{end}}
 <form method="post">
 {{if .Honeypot}}<div class="hp" aria-hidden="true"><label for="{{.Honeypot}}">{{.M.FormHoneypot}}</label><input id="{{.Honeypot}}" name="{{.Honeypot}}" type="text" tabindex="-1" autocomplete="off"></div>{{end}}
 {{range .Fields}}
+<div class="field">
 <label for="{{.}}">{{label .}}</label>
 {{if isArea .}}<textarea id="{{.}}" name="{{.}}">{{index $.Values .}}</textarea>{{else}}<input id="{{.}}" name="{{.}}" type="{{inputType .}}" value="{{index $.Values .}}">{{end}}
+</div>
 {{end}}
 <button type="submit">{{.M.FormSubmit}}</button>
 </form>
 {{end}}
+</main>
 </body></html>`))
 
 var longAnswerWords = []string{

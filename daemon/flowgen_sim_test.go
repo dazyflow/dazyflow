@@ -442,3 +442,62 @@ func scoreGraph(t *testing.T, name string, g core.Graph) {
 	}
 	fmt.Println("##########################################")
 }
+
+// The in-loop search is the model's only way to narrow 189 steps, so a query
+// that buries or misses the right step sends it to the wrong one. These are the
+// phrasings a plain-language request actually produces.
+func TestFlowGen_SearchRanksTheRightStepFirst(t *testing.T) {
+	mans := allManifests()
+	for _, c := range []struct{ query, want string }{
+		{"form", "form_input"},
+		{"web form", "form_input"},
+		{"public form", "form_input"},
+		{"hosted form page", "form_input"},
+		{"send email", "email"},
+		{"web page", "web_watch"},
+	} {
+		out := searchDropsForModel(mans, c.query)
+		if strings.HasPrefix(out, "No steps") {
+			t.Errorf("query %q matched nothing; want %s", c.query, c.want)
+			continue
+		}
+		first := firstSearchHit(out)
+		if first != c.want {
+			t.Errorf("query %q ranked %q first; want %s", c.query, first, c.want)
+		}
+	}
+}
+
+// Search results must keep their ranking. compactCatalog sorts its rows, which
+// is right for the whole catalogue and silently discarded the ranking here.
+func TestFlowGen_SearchResultsAreNotAlphabetical(t *testing.T) {
+	out := searchDropsForModel(allManifests(), "form")
+	first := firstSearchHit(out)
+	if first == "" {
+		t.Fatal("no hits for \"form\"")
+	}
+	var ids []string
+	for _, ln := range strings.Split(out, "\n") {
+		if i := strings.Index(ln, " ["); i > 0 && !strings.HasPrefix(ln, "Matching") {
+			ids = append(ids, strings.TrimSpace(ln[:i]))
+		}
+	}
+	if len(ids) < 3 {
+		t.Fatalf("expected several hits, got %v", ids)
+	}
+	if sort.StringsAreSorted(ids) {
+		t.Errorf("hits came back alphabetical (%v) — the ranking was thrown away", ids)
+	}
+}
+
+func firstSearchHit(out string) string {
+	for _, ln := range strings.Split(out, "\n") {
+		if strings.HasPrefix(ln, "Matching") {
+			continue
+		}
+		if i := strings.Index(ln, " ["); i > 0 {
+			return strings.TrimSpace(ln[:i])
+		}
+	}
+	return ""
+}

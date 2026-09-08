@@ -532,33 +532,20 @@ func agentTurn(messages *[]any, act map[string]any, result string) {
 }
 
 func searchDropsForModel(mans []core.Manifest, query string) string {
-	q := strings.TrimSpace(strings.ToLower(query))
-	if q == "" {
+	if strings.TrimSpace(query) == "" {
 		return "Provide a query, e.g. {\"action\":\"search_drops\",\"query\":\"send email\"}."
 	}
-	tokens := strings.Fields(q)
-	matched := make([]core.Manifest, 0)
-	for _, m := range mans {
-		hay := strings.ToLower(m.ID + " " + m.Summary + " " + m.Category + " " + m.Integration)
-		ok := true
-		for _, t := range tokens {
-			if !strings.Contains(hay, t) {
-				ok = false
-				break
-			}
-		}
-		if ok {
-			matched = append(matched, m)
-		}
-	}
+	matched := rankManifests(mans, query)
 	if len(matched) == 0 {
-		return "No steps matched \"" + query + "\". Try different keywords, or use the catalog above."
+		return "No steps matched \"" + query + "\". Try the plainest word for the thing " +
+			"(\"form\" rather than \"survey\", \"email\" rather than \"inbox\"), or read the " +
+			"catalog above — every step you may use is already listed there."
 	}
 	const maxHits = 20
 	if len(matched) > maxHits {
 		matched = matched[:maxHits]
 	}
-	return "Matching steps:\n" + compactCatalog(matched)
+	return "Matching steps, most relevant first:\n" + rankedCatalog(matched)
 }
 
 // describeDropForModel renders one drop's full spec — params (type/required/
@@ -682,6 +669,19 @@ func stampGraph(g *core.Graph, tenant, workspace string) {
 }
 
 func compactCatalog(mans []core.Manifest) string {
+	rows := catalogRows(mans)
+	sort.Strings(rows)
+	return strings.Join(rows, "\n")
+}
+
+// rankedCatalog renders rows in the order given. compactCatalog sorts, which
+// is right for the whole catalogue and wrong for search results — it threw the
+// ranking away and handed the model an alphabetical list.
+func rankedCatalog(mans []core.Manifest) string {
+	return strings.Join(catalogRows(mans), "\n")
+}
+
+func catalogRows(mans []core.Manifest) []string {
 	rows := make([]string, 0, len(mans))
 	for _, m := range mans {
 		if m.ID == "" {
@@ -708,8 +708,7 @@ func compactCatalog(mans []core.Manifest) string {
 		}
 		rows = append(rows, b.String())
 	}
-	sort.Strings(rows)
-	return strings.Join(rows, "\n")
+	return rows
 }
 
 func compactPorts(ports []core.Port) string {

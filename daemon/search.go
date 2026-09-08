@@ -6,6 +6,7 @@ package daemon
 import (
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/dazyflow/dazyflow/core"
 )
@@ -27,15 +28,15 @@ func searchManifests(manifests map[string]core.Manifest, q DropSearch) []core.Ma
 		score int
 	}
 	out := make([]scored, 0, len(manifests))
-	needle := strings.ToLower(q.Query)
+	phrase, words := queryTerms(q.Query)
 
 	for _, m := range manifests {
 		if !filtersPass(m, q) {
 			continue
 		}
 		score := 0
-		if needle != "" {
-			score = matchScore(m, needle)
+		if phrase != "" {
+			score = scoreManifest(m, phrase, words)
 			if score == 0 {
 				continue
 			}
@@ -44,7 +45,7 @@ func searchManifests(manifests map[string]core.Manifest, q DropSearch) []core.Ma
 	}
 
 	sort.SliceStable(out, func(i, j int) bool {
-		if needle != "" && out[i].score != out[j].score {
+		if phrase != "" && out[i].score != out[j].score {
 			return out[i].score > out[j].score
 		}
 		return out[i].m.ID < out[j].m.ID
@@ -114,7 +115,13 @@ func matchScore(m core.Manifest, needle string) int {
 	if strings.Contains(label, needle) {
 		score += 50
 	}
-	if strings.Contains(desc, needle) {
+	// Prose matches on the WHOLE word. As a substring, "form" hit "format"
+	// and "transform", which is how a search for it ranked build_csv and
+	// dedupe_rows above form_input.
+	if containsWord(strings.ToLower(m.Summary), needle) {
+		score += 30
+	}
+	if containsWord(desc, needle) {
 		score += 20
 	}
 	for _, tag := range m.Tags {
@@ -141,6 +148,114 @@ func matchScore(m core.Manifest, needle string) int {
 		score = 1
 	}
 	return score
+}
+
+// queryTerms splits a search query into the phrase and the words worth scoring
+// on their own. Words under three characters are dropped: "to" and "my" match
+// half the catalogue and say nothing about intent.
+func queryTerms(query string) (phrase string, words []string) {
+	phrase = strings.ToLower(strings.TrimSpace(query))
+	if phrase == "" {
+		return "", nil
+	}
+	fields := strings.Fields(phrase)
+	if len(fields) < 2 {
+		return phrase, nil
+	}
+	for _, f := range fields {
+		if len([]rune(f)) >= 3 {
+			words = append(words, f)
+		}
+	}
+	return phrase, words
+}
+
+// scoreManifest ranks a manifest against a query. The whole phrase scores
+// first, so an exact id or label still wins outright; then each word scores on
+// its own and a coverage bonus rewards a manifest accounting for more of the
+// query.
+//
+// Any word may match, rather than all of them. Requiring every word is what
+// made multi-word queries collapse: "web form" found only http_upload and
+// "public form" found nothing at all, though form_input carries both words
+// between its id and its tags.
+func scoreManifest(m core.Manifest, phrase string, words []string) int {
+	score := matchScore(m, phrase)
+	if len(words) == 0 {
+		return score
+	}
+	hits := 0
+	for _, w := range words {
+		if s := matchScore(m, w); s > 0 {
+			score += s
+			hits++
+		}
+	}
+	if hits > 0 {
+		score += hits * 50
+	}
+	return score
+}
+
+// rankManifests returns the manifests matching query, most relevant first and
+// alphabetical within a tie so the order is stable across calls.
+func rankManifests(mans []core.Manifest, query string) []core.Manifest {
+	phrase, words := queryTerms(query)
+	if phrase == "" {
+		return nil
+	}
+	type scored struct {
+		m     core.Manifest
+		score int
+	}
+	hits := make([]scored, 0, len(mans))
+	for _, m := range mans {
+		if s := scoreManifest(m, phrase, words); s > 0 {
+			hits = append(hits, scored{m: m, score: s})
+		}
+	}
+	sort.SliceStable(hits, func(i, j int) bool {
+		if hits[i].score != hits[j].score {
+			return hits[i].score > hits[j].score
+		}
+		return hits[i].m.ID < hits[j].m.ID
+	})
+	out := make([]core.Manifest, len(hits))
+	for i, h := range hits {
+		out[i] = h.m
+	}
+	return out
+}
+
+// containsWord reports whether word appears in text delimited by something
+// other than a letter or digit, so "form" does not match "format".
+func containsWord(text, word string) bool {
+	if word == "" || text == "" {
+		return false
+	}
+	for i := 0; ; {
+		j := strings.Index(text[i:], word)
+		if j < 0 {
+			return false
+		}
+		start := i + j
+		end := start + len(word)
+		if !alphanumAt(text, start-1) && !alphanumAt(text, end) {
+			return true
+		}
+		i = start + 1
+		if i >= len(text) {
+			return false
+		}
+	}
+}
+
+func alphanumAt(s string, i int) bool {
+	if i < 0 || i >= len(s) {
+		return false
+	}
+	r := rune(s[i])
+	return unicode.IsLetter(r) || unicode.IsDigit(r)
 }
 
 func slicesContainsIgnoreCase(haystack []string, needle string) bool {

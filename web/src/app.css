@@ -2809,33 +2809,47 @@ button.warning:hover:not(:disabled) {
 }
 .template-card {
   border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: var(--space-4);
+  border-radius: var(--r-3);
+  padding: var(--space-5);
   background: var(--surface);
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  transition: border-color 0.1s ease;
+  gap: var(--space-3);
+  box-shadow: var(--shadow);
+  transition:
+    transform var(--dur-2) var(--ease-out),
+    box-shadow var(--dur-2) var(--ease-out),
+    border-color var(--dur-2) var(--ease-out);
 }
 .template-card:hover {
-  border-color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  box-shadow: var(--shadow-pop);
+  transform: translateY(-2px);
 }
 .template-card-head {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  /* Top, not centre: a two-line title would otherwise push the tile down and
+     the tiles would sit at a different height on every card. */
+  align-items: flex-start;
+  gap: var(--space-3);
 }
-.template-card-head h2 {
-  font-size: var(--text-base);
+/* h3, not h2: the card renders a level-3 heading, and the old h2 selector
+   matched nothing, so these titles were carrying UA defaults. */
+.template-card-head h3 {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
   margin: 0;
 }
 .template-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-2);
   background: linear-gradient(
     135deg,
     var(--accent),
@@ -2847,19 +2861,30 @@ button.warning:hover:not(:disabled) {
   color: var(--muted);
   font-size: var(--text-md);
   margin: 0;
-  line-height: 1.5;
+  line-height: 1.55;
   flex: 1;
+}
+/* Baseline row: the apps on the left, the action on the right, so the CTAs
+   line up across a grid of cards whatever the description's length. */
+.template-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--hairline);
 }
 .template-integrations {
   display: flex;
   align-items: center;
   gap: var(--space-1h);
-  margin: var(--space-1) 0 -2px;
+  margin: 0;
+  min-width: 0;
 }
 .template-integration-logo {
-  width: 18px;
-  height: 18px;
-  border-radius: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--r-1);
   background: var(--surface-2);
   padding: var(--space-0);
   object-fit: contain;
@@ -2871,41 +2896,39 @@ button.warning:hover:not(:disabled) {
   background: var(--surface-2);
   border: 1px solid var(--border);
   padding: 1px var(--space-1h);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   font-family: var(--font-mono);
 }
 
 .template-cta {
-  margin-top: var(--space-2);
-  align-self: flex-start;
-  padding: var(--space-2) var(--space-4);
-  border-radius: 6px;
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: var(--accent-ink);
-  font-size: var(--text-md);
-  font-weight: 500;
-  cursor: pointer;
-}
-.template-cta:disabled {
-  opacity: 0.6;
-  cursor: default;
+  flex-shrink: 0;
 }
 .template-card-admin-blocked {
   opacity: 0.65;
   border-style: dashed;
+  box-shadow: none;
 }
 .template-card-admin-blocked:hover {
   opacity: 0.85;
+  transform: none;
+  box-shadow: none;
 }
 .template-admin-blocked-note {
-  margin: var(--space-2) 0 0;
-  padding: var(--space-2) 10px;
-  border-radius: 6px;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--r-2);
   background: color-mix(in srgb, var(--muted) 12%, transparent);
   color: var(--muted);
   font-size: var(--text-sm);
-  line-height: 1.4;
+  line-height: 1.45;
+}
+@media (prefers-reduced-motion: reduce) {
+  .template-card {
+    transition: none;
+  }
+  .template-card:hover {
+    transform: none;
+  }
 }
 
 .back-link {

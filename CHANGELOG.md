@@ -10,7 +10,42 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Searching the step catalogue missed the step you asked for.** Every word of
+  a query had to appear, so any phrase collapsed — "web form" found only
+  `http_upload` and "public form" found nothing, though `form_input` carries
+  both words between its id and its tags. Words matched as substrings, so
+  "form" hit "format" and "transform" and ranked `base64` and `build_csv` above
+  the Form trigger. Any word may now match, a step accounting for more of the
+  query ranks higher, and prose fields match whole words. Words under three
+  characters are ignored: "to" and "my" match half the catalogue and say
+  nothing about intent. The AI flow generator had a second, weaker copy of this
+  search that also threw the ranking away by sorting its results
+  alphabetically; it now shares the one implementation and keeps the order.
+
+- **The four form templates handed out a form link that 404'd.** `form-to-sheet`,
+  `form-to-sms`, `form-to-collection` and `approve-before-refund` declared their
+  trigger as a Webhook step with a `public_form` param — the opt-in from before
+  the Form step existed. Nothing has read that param since, and the hosted form
+  is served only for `form_input`, so every one of them published a flow whose
+  public link served no form. They now use the Form step. A guard checks the
+  shipped templates, because a graph wired this way validates against the
+  catalogue and so passed every composition test.
+
 ### Changed
+
+- **The hosted form and the template gallery got a visual pass.** The public
+  form page was a plain 480px column on its own palette; it is now a single
+  elevated card that uses the app's own colours in both themes, with a real
+  type hierarchy, focus rings, 16px inputs (anything smaller makes mobile
+  Safari zoom on focus), a full-width button under 480px, and a confirmation
+  aligned to the heading instead of centred under it. Gallery cards gained
+  elevation, a larger app tile that top-aligns with the first line of the
+  title, and a hairline footer that puts the apps on the left and the action on
+  the right, so the buttons line up across the grid. Card titles were styled by
+  a `.template-card-head h2` rule while the markup renders an `h3`, so they had
+  been carrying browser defaults.
 
 - **Opening a flow no longer replays the last run over it.** The editor
   remembered the last run you started per flow and re-attached to it on open,

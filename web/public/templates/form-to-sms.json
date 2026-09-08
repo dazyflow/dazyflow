@@ -7,10 +7,9 @@
   "nodes": [
     {
       "id": "form",
-      "module": "webhook_input",
+      "module": "form_input",
       "label": "Form",
       "params": {
-        "public_form": true,
         "form_fields": [
           "name",
           "phone",
